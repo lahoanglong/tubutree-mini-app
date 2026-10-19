@@ -69,6 +69,10 @@ const POINTS_REASON_RULES: Record<string, ReasonRule> = {
   PANCAKE_CHAT_ORDER: { label: 'Tích điểm đơn đặt qua tư vấn viên' },
   MARKETPLACE_ORDER_REVERSED: { label: 'Thu hồi điểm đơn mua trên sàn' },
   MARKETPLACE_ORDER: { label: 'Tích điểm đơn mua trên sàn' },
+  RECYCLE: { label: 'Đổi rác lấy quà' },
+  RECYCLE_REVERSED: { label: 'Thu hồi điểm đổi rác' },
+  GIFT_REDEEM: { label: 'Đổi điểm lấy quà' },
+  GIFT_REFUND: { label: 'Hoàn điểm quà' },
 };
 
 const FALLBACK_POINTS_LABEL = 'Điều chỉnh Điểm Xanh';

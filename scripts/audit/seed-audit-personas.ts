@@ -576,7 +576,6 @@ async function cleanup() {
   await prisma.missionProgress.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userSeasonPass.deleteMany({ where: { userId: { in: ids } } });
   await prisma.gameProfile.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.bottleReturn.deleteMany({ where: { userId: { in: ids } } });
   // Seed không còn tạo dòng beta, nhưng DB audit dựng từ bản seed cũ có thể còn dòng của persona; bảng không DROP nên vẫn dọn được.
   await prisma.betaFeedback.deleteMany({ where: { userId: { in: ids } } });
   await prisma.betaTester.deleteMany({ where: { userId: { in: ids } } });
@@ -691,7 +690,6 @@ async function main() {
   const promo = async (key: string, brandId: string, data: Record<string, unknown>) =>
     prisma.brandPromotion.upsert({ where: { id: cid(`promo:${key}`) }, update: data, create: { id: cid(`promo:${key}`), brandId, ...data } });
   await promo('fuwa-week', FUWA_BRAND, { title: 'Tuần lễ Sạch Xanh Fuwa3e', subtitle: 'Giảm 15% toàn bộ nước giặt, nước rửa chén enzyme', themeColor: '#E8B72C', couponCode: 'FUWA15', startAt: at(3, 0), endAt: at(-10, 23, 59), isActive: true, sortOrder: 0 });
-  await promo('fuwa-refill', FUWA_BRAND, { title: 'Đổi vỏ can 5L — tặng 50 giọt nước', subtitle: 'Áp dụng tại trạm đổi vỏ chai', themeColor: '#509018', couponCode: null, startAt: at(-5, 0), endAt: at(-35, 23, 59), isActive: true, sortOrder: 1 });
   await promo('fuwa-summer', FUWA_BRAND, { title: 'Hè sạch khuẩn', subtitle: 'Đã kết thúc', themeColor: '#7CC0DB', couponCode: null, startAt: at(90, 0), endAt: at(40, 23, 59), isActive: false, sortOrder: 2 });
   await promo('visante-autumn', VIS_BRAND, { title: 'Visante — Dưỡng ẩm mùa thu', subtitle: 'Tặng mặt nạ rau má cho đơn từ 300k', themeColor: '#8B3A3A', couponCode: null, startAt: at(2, 0), endAt: at(-14, 23, 59), isActive: true, sortOrder: 0 });
 
@@ -1217,9 +1215,9 @@ async function main() {
   }
   await prisma.payrollMonth.create({ data: { staffId: S, year: prevY, month: prevM, totalMinutes: pTotalMin, gross: pGross, totalFines: 0, net: pGross, status: 'PAID', finalizedAt: plus(MONTH_START, 2 * DAY), paidAt: plus(MONTH_START, 4 * DAY), paidBy: ADMIN, note: 'Chuyển khoản VCB' } });
 
-  // ── 9) game, season pass, refill, wishlist, cart, subscription, brand follows ──
+  // ── 9) game, season pass, wishlist, cart, subscription, brand follows ──
   const game = async (userId: string, data: Record<string, unknown>) => prisma.gameProfile.create({ data: { userId, ...data } });
-  await game(A, { streakDays: 12, longestStreak: 21, lastCheckInAt: at(1, 20, 15), treeStage: 3, totalSeeds: 185, ecoImpact: { progress: 410, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 2 }, badges: ['FIRST_HARVEST', 'STREAK_7', 'REFILL_HERO'], lastWateredAt: at(1, 20, 20), streakFreezes: 1, lastDewAt: at(1, 7, 5) });
+  await game(A, { streakDays: 12, longestStreak: 21, lastCheckInAt: at(1, 20, 15), treeStage: 3, totalSeeds: 185, ecoImpact: { progress: 410, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 2 }, badges: ['FIRST_HARVEST', 'STREAK_7'], lastWateredAt: at(1, 20, 20), streakFreezes: 1, lastDewAt: at(1, 7, 5) });
   await game(CTV, { streakDays: 3, longestStreak: 9, lastCheckInAt: at(1, 21), treeStage: 2, totalSeeds: 60, ecoImpact: { progress: 180, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 1 }, badges: ['FIRST_HARVEST'], lastWateredAt: at(1, 21, 5) });
   await game(BG.linh.id, { streakDays: 28, longestStreak: 28, lastCheckInAt: at(1, 6, 50), treeStage: 4, totalSeeds: 420, ecoImpact: { progress: 520, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 6 }, badges: ['FIRST_HARVEST', 'STREAK_7', 'STREAK_21'], lastWateredAt: at(1, 7) });
   await game(BG.huy.id, { streakDays: 0, longestStreak: 4, lastCheckInAt: at(9, 21), treeStage: 1, totalSeeds: 35, ecoImpact: { progress: 90, target: 600, treeType: 'Cây Dứa Fuwa3e', treesPlanted: 0 }, badges: [], lastWateredAt: at(9, 21), brokenStreakDays: 4, brokenStreakAt: hoursAgo(30) });
@@ -1245,12 +1243,6 @@ async function main() {
   await prisma.userSeasonPass.create({ data: { userId: A, seasonId: 'se-audit-current', xp: 90, claimedFree: [0], claimedPremium: [0] } });
   await coins(A, 5000, 'SEASONPASS:se-audit-current:0:premium', at(12, 20), 'SEASONPASS', 'se-audit-current');
   await prisma.userSeasonPass.create({ data: { userId: CTV, seasonId: 'se-audit-current', xp: 30, claimedFree: [], claimedPremium: [] } });
-  // Refill / bottle returns.
-  await prisma.bottleReturn.create({ data: { userId: A, quantity: 3, seedsAwarded: 150, status: 'APPROVED', createdAt: at(20, 17) } });
-  await prisma.bottleReturn.create({ data: { userId: A, quantity: 2, seedsAwarded: 100, status: 'APPROVED', createdAt: at(8, 17) } });
-  await prisma.bottleReturn.create({ data: { userId: A, quantity: 4, seedsAwarded: 200, status: 'PENDING', createdAt: hoursAgo(26) } });
-  await prisma.bottleReturn.create({ data: { userId: A, quantity: 1, seedsAwarded: 50, status: 'REJECTED', createdAt: at(30, 17) } });
-  await prisma.bottleReturn.create({ data: { userId: BG.linh.id, quantity: 6, seedsAwarded: 300, status: 'PENDING', createdAt: hoursAgo(3) } });
   // Wishlist / cart / subscriptions / follows / flash reminder.
   for (const [pid, d] of [['p-visante-vitc', 20], ['p-leplateau-coldbrew', 12], ['p-sokfram-granola', 6], ['p-bhnong-cagaileo', 2]] as const) {
     await prisma.wishlist.create({ data: { userId: A, productId: pid, createdAt: at(d, 21) } });
@@ -1565,7 +1557,14 @@ function buildRoutes(c: RouteCtx) {
     { pattern: '/feed/:id', personas: ALL, examples: [`/feed/${c.postId}`, `/feed/${c.showcasePostId}`], notes: 'Question with accepted expert answer + product tag; showcase entered in the open event.' },
     { pattern: '/ai-advisor', personas: LOGGED, examples: ['/ai-advisor'], notes: 'AI keys are blank in the audit env → graceful "not available" state.' },
     { pattern: '/group-buy', personas: LOGGED, examples: ['/group-buy'] },
-    { pattern: '/refill', personas: LOGGED, examples: ['/refill'] },
+    { pattern: '/recycle', personas: LOGGED, examples: ['/recycle'] },
+    { pattern: '/recycle/rules', personas: LOGGED, examples: ['/recycle/rules'] },
+    { pattern: '/recycle/new', personas: LOGGED, examples: ['/recycle/new'] },
+    { pattern: '/recycle/points', personas: LOGGED, examples: ['/recycle/points'] },
+    { pattern: '/recycle/requests', personas: LOGGED, examples: ['/recycle/requests'] },
+    { pattern: '/rewards', personas: LOGGED, examples: ['/rewards'] },
+    { pattern: '/rewards/mine', personas: LOGGED, examples: ['/rewards/mine'] },
+    { pattern: '/recycle/desk', personas: ['staff', 'admin'], examples: ['/recycle/desk'] },
     { pattern: '/profile', personas: ALL, examples: ['/profile'] },
     { pattern: '/loyalty', personas: LOGGED, examples: ['/loyalty'] },
     { pattern: '/wallet', personas: LOGGED, examples: ['/wallet'] },

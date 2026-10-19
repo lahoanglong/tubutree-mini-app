@@ -3,4 +3,5 @@ export * from './auth';
 export * from './catalog';
 export * from './order';
 export * from './analytics';
+export * from './waste';
 export * from './external-points';

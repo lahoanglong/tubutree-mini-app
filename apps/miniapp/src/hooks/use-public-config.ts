@@ -11,12 +11,15 @@ export const PUBLIC_CONFIG_FALLBACK: PublicConfig = {
   affiliateWalletMultiplier: 1.5,
   affiliateMinWithdrawBank: 50_000,
   cashbackHoldDays: 30,
-  // Tắt cho tới khi server xác nhận (Gomdon đã cấu hình + admin bật) — không hứa dịch vụ thu gom
-  // khi chưa biết backend có làm được không.
-  recyclingEnabled: false,
+  waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
   // Không hứa ngày giao khi server chưa xác nhận cấu hình (dự án 4a, Ruling 9).
   shippingEta: null,
 };
+
+/** API cũ chưa trả `waste` → lấy cờ tắt từ fallback. */
+export function resolvePublicConfig(data: PublicConfig | undefined): PublicConfig {
+  return data ? { ...data, waste: data.waste ?? PUBLIC_CONFIG_FALLBACK.waste } : PUBLIC_CONFIG_FALLBACK;
+}
 
 /**
  * `isLoaded` = số liệu đến từ server thật. Màn nào hứa một con số cụ thể với user
@@ -28,7 +31,7 @@ export function usePublicConfig(): PublicConfig & { isLoaded: boolean } {
     queryFn: getPublicConfig,
     staleTime: 5 * 60_000,
   });
-  return { ...(q.data ?? PUBLIC_CONFIG_FALLBACK), isLoaded: q.data != null };
+  return { ...resolvePublicConfig(q.data), isLoaded: q.data != null };
 }
 
 /**

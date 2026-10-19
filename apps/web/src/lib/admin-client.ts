@@ -3,6 +3,14 @@
 import { apiDownload, apiFetch } from './client-api';
 import type { GomdonAlertView } from './recycling';
 import type {
+  AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
+  AdminWasteRequestQuery, AdminWasteRequestRowDTO, GiftRedemptionDTO, GiftRedemptionsQuery,
+  WasteCloseLostRequest, WasteConfirmRequest, WasteConfirmResultDTO, WasteCostRequest, WasteGiftCancelRequest,
+  WasteGiftUpsertRequest, WasteItemUpsertRequest, WastePerkReviewRequest, WastePointMonthlyReportDTO, WastePointStaffAddRequest,
+  WastePointUpsertRequest, WasteOverviewDTO, WasteReceiveRequest, WasteReceiveResultDTO, WasteRejectRequest,
+  WasteRejectResultDTO, WasteReopenRequest, WasteRequestAdminDetailDTO, WasteReverseRequest, WasteReverseResultDTO,
+  WasteUnmatchedCreateRequest, WasteUnmatchedDTO, WasteUnmatchedResolveRequest, WasteUnmatchedStatus,
+  WasteUserFlagsDTO, WasteUserFlagsUpdateRequest,
   AdminExternalAttemptListResponse,
   AdminExternalClaimListResponse,
   AdminAttachAttemptResponse,
@@ -675,6 +683,8 @@ export interface GomdonIntegrationStatus {
   webhookSecretSet: boolean;
   recyclingToggle: boolean;
   recyclingEnabled: boolean;
+  /** Cổng thật của khách: chương trình, đường Thu kèm đơn và Gomdon cùng bật. */
+  pickupVisible: boolean;
   /** Lần gọi Gomdon gần nhất của API (từ lúc khởi động). Bản API cũ không có. */
   connection?: GomdonConnectionHealth;
 }
@@ -1655,7 +1665,14 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
-  | 'refillPending'
+  | 'wasteToCount'
+  | 'wasteUnmatched'
+  | 'wasteBlockedPending'
+  | 'wastePointsPending'
+  | 'wastePerksPending'
+  | 'wasteTransitOverdue'
+  | 'wasteGiftOverdue'
+  | 'wasteOrderMismatch'
   | 'communityPending'
   | 'communityUnanswered'
   | 'invoicePending'
@@ -1839,51 +1856,108 @@ export const listLiveAttendance = () => apiFetch<LiveAttendance[]>('/admin/atten
 export const manualCheckout = (sessionId: string) =>
   apiFetch<{ checkedOut: boolean }>('/admin/attendance/manual-checkout', { method: 'POST', body: { sessionId } });
 
-// ── Đổi vỏ chai chờ duyệt (route chung với nhân viên quầy) ──
-export interface PendingRefill {
-  id: string;
-  quantity: number;
-  seedsAwarded: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  createdAt: string;
-  user: { id: string; fullName: string | null; phone?: string | null };
-  /** Điểm khách chọn lúc gửi; null ở yêu cầu cũ hoặc khi chưa có điểm nào được cấu hình. */
-  pickupLocation?: { id: string; name: string; address: string } | null;
-}
-export const listPendingRefills = () => apiFetch<PendingRefill[]>('/refill/admin/pending');
+// ── Đổi rác lấy quà (admin) ──
+const wasteQuery = (params: Record<string, string | number | boolean | undefined>): string => {
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === false) continue;
+    parts.push(`${k}=${encodeURIComponent(String(v))}`);
+  }
+  return parts.length ? `?${parts.join('&')}` : '';
+};
+export const getWasteOverview = () => apiFetch<WasteOverviewDTO>('/admin/waste/overview');
+export const downloadWasteMonthlyCsv = (month: string) =>
+  apiDownload(`/admin/waste/reports/monthly?month=${encodeURIComponent(month)}`, `doi-rac-${month}.csv`);
 
-// ── Điểm nhận vỏ chai (chỉ ADMIN; không xoá, tắt isActive để giữ lịch sử) ──
-export interface RefillLocation {
-  id: string;
-  name: string;
-  address: string;
-  hours: string | null;
-  phone: string | null;
-  isActive: boolean;
-  sortOrder: number;
-}
-export interface RefillLocationInput {
-  name: string;
-  address: string;
-  hours: string;
-  phone: string;
-  isActive: boolean;
-}
-export const listRefillLocations = () => apiFetch<RefillLocation[]>('/admin/refill-locations');
-export const createRefillLocation = (body: RefillLocationInput) =>
-  apiFetch<RefillLocation>('/admin/refill-locations', { method: 'POST', body });
-export const updateRefillLocation = (id: string, body: Partial<RefillLocationInput>) =>
-  apiFetch<RefillLocation>(`/admin/refill-locations/${encodeURIComponent(id)}`, { method: 'PATCH', body });
-/** `ids`: TOÀN BỘ điểm (cả đang tắt) theo thứ tự mới; API trả 409 khi danh sách đã cũ. */
-export const reorderRefillLocations = (ids: string[]) =>
-  apiFetch<RefillLocation[]>('/admin/refill-locations/order', { method: 'PUT', body: { ids } });
-export const approveRefill = (id: string, receivedQuantity?: number) =>
-  apiFetch<{ ok: boolean }>(`/refill/admin/${encodeURIComponent(id)}/approve`, {
+export const listWasteItems = () => apiFetch<AdminWasteItemDTO[]>('/admin/waste/items');
+export const createWasteItem = (body: WasteItemUpsertRequest) =>
+  apiFetch<AdminWasteItemDTO>('/admin/waste/items', { method: 'POST', body });
+export const updateWasteItem = (id: string, body: Partial<WasteItemUpsertRequest>) =>
+  apiFetch<AdminWasteItemDTO>(`/admin/waste/items/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+export const reorderWasteItems = (ids: string[]) =>
+  apiFetch<AdminWasteItemDTO[]>('/admin/waste/items/order', { method: 'PUT', body: { ids } });
+
+export const listWastePoints = (q: AdminWastePointQuery = {}) =>
+  apiFetch<AdminWastePointDTO[]>(`/admin/waste/points${wasteQuery({ status: q.status, perkPending: q.perkPending })}`);
+export const getWastePointReport = (id: string, month: string) =>
+  apiFetch<WastePointMonthlyReportDTO>(`/admin/waste/points/${encodeURIComponent(id)}/report${wasteQuery({ month })}`);
+export const createWastePoint = (body: WastePointUpsertRequest) =>
+  apiFetch<AdminWastePointDTO>('/admin/waste/points', { method: 'POST', body });
+export const updateWastePoint = (id: string, body: Partial<WastePointUpsertRequest>) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+export const reorderWastePoints = (ids: string[]) =>
+  apiFetch<AdminWastePointDTO[]>('/admin/waste/points/order', { method: 'PUT', body: { ids } });
+export const addWastePointStaff = (pointId: string, body: WastePointStaffAddRequest) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/staff`, { method: 'POST', body });
+export const removeWastePointStaff = (pointId: string, userId: string) =>
+  apiFetch<AdminWastePointDTO>(
+    `/admin/waste/points/${encodeURIComponent(pointId)}/staff/${encodeURIComponent(userId)}`,
+    { method: 'DELETE' },
+  );
+export const approveWastePerk = (pointId: string, expectedPendingText: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/approve`, {
     method: 'POST',
-    body: receivedQuantity === undefined ? {} : { receivedQuantity },
+    body: { expectedPendingText } satisfies WastePerkReviewRequest,
   });
-export const rejectRefill = (id: string, reason?: string) =>
-  apiFetch<{ ok: boolean }>(`/refill/admin/${encodeURIComponent(id)}/reject`, { method: 'POST', body: reason ? { reason } : {} });
+export const rejectWastePerk = (pointId: string, expectedPendingText: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/reject`, {
+    method: 'POST',
+    body: { expectedPendingText } satisfies WastePerkReviewRequest,
+  });
+export const clearWastePerk = (pointId: string) =>
+  apiFetch<AdminWastePointDTO>(`/admin/waste/points/${encodeURIComponent(pointId)}/perk/clear`, { method: 'POST' });
+
+export const listWasteRequests = (q: AdminWasteRequestQuery = {}) =>
+  apiFetch<{ rows: AdminWasteRequestRowDTO[]; nextCursor: string | null }>(
+    `/admin/waste/requests${wasteQuery({
+      method: q.method, status: q.status, filter: q.filter, userId: q.userId, pointId: q.pointId,
+      cursor: q.cursor, limit: q.limit,
+    })}`,
+  );
+export const lookupWasteRequests = (code: string) =>
+  apiFetch<AdminWasteRequestRowDTO[]>(`/admin/waste/requests/lookup${wasteQuery({ code })}`);
+export const getWasteRequest = (id: string) =>
+  apiFetch<WasteRequestAdminDetailDTO>(`/admin/waste/requests/${encodeURIComponent(id)}`);
+export const receiveWasteRequest = (id: string, body: WasteReceiveRequest) =>
+  apiFetch<WasteReceiveResultDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/receive`, { method: 'POST', body });
+export const confirmWasteRequest = (id: string, body: WasteConfirmRequest) =>
+  apiFetch<WasteConfirmResultDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/confirm`, { method: 'POST', body });
+export const rejectWasteRequest = (id: string, body: WasteRejectRequest) =>
+  apiFetch<WasteRejectResultDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/reject`, { method: 'POST', body });
+export const reverseWasteRequest = (id: string, body: WasteReverseRequest) =>
+  apiFetch<WasteReverseResultDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/reverse`, { method: 'POST', body });
+export const setWasteRequestCost = (id: string, body: WasteCostRequest) =>
+  apiFetch<WasteRequestAdminDetailDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/cost`, { method: 'PATCH', body });
+export const closeLostWasteRequest = (id: string, body: WasteCloseLostRequest) =>
+  apiFetch<WasteRequestAdminDetailDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/close-lost`, { method: 'POST', body });
+export const reopenWasteRequest = (id: string, body: WasteReopenRequest) =>
+  apiFetch<WasteRequestAdminDetailDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/reopen`, { method: 'POST', body });
+
+export const listWasteUnmatched = (status?: WasteUnmatchedStatus) =>
+  apiFetch<WasteUnmatchedDTO[]>(`/admin/waste/unmatched${wasteQuery({ status })}`);
+export const createWasteUnmatched = (body: WasteUnmatchedCreateRequest) =>
+  apiFetch<WasteUnmatchedDTO>('/admin/waste/unmatched', { method: 'POST', body });
+export const resolveWasteUnmatched = (id: string, body: WasteUnmatchedResolveRequest) =>
+  apiFetch<WasteUnmatchedDTO>(`/admin/waste/unmatched/${encodeURIComponent(id)}/resolve`, { method: 'POST', body });
+
+export const getWasteUserFlags = (userId: string) =>
+  apiFetch<WasteUserFlagsDTO>(`/admin/waste/users/${encodeURIComponent(userId)}/flags`);
+export const setWasteUserFlags = (userId: string, body: WasteUserFlagsUpdateRequest) =>
+  apiFetch<WasteUserFlagsDTO>(`/admin/waste/users/${encodeURIComponent(userId)}/flags`, { method: 'PUT', body });
+
+export const listWasteGifts = () => apiFetch<AdminWasteGiftDTO[]>('/admin/waste/gifts');
+export const createWasteGift = (body: WasteGiftUpsertRequest) =>
+  apiFetch<AdminWasteGiftDTO>('/admin/waste/gifts', { method: 'POST', body });
+export const updateWasteGift = (id: string, body: Partial<WasteGiftUpsertRequest>) =>
+  apiFetch<AdminWasteGiftDTO>(`/admin/waste/gifts/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+export const reorderWasteGifts = (ids: string[]) =>
+  apiFetch<AdminWasteGiftDTO[]>('/admin/waste/gifts/order', { method: 'PUT', body: { ids } });
+export const listGiftRedemptions = (q: GiftRedemptionsQuery = {}) =>
+  apiFetch<AdminGiftRedemptionRowDTO[]>(`/admin/waste/gift-redemptions${wasteQuery({ status: q.status, overdue: q.overdue })}`);
+export const fulfilGiftRedemption = (id: string, code: string) =>
+  apiFetch<GiftRedemptionDTO>(`/admin/waste/gift-redemptions/${encodeURIComponent(id)}/fulfil`, { method: 'POST', body: { code } });
+export const cancelGiftRedemption = (id: string, body: WasteGiftCancelRequest) =>
+  apiFetch<GiftRedemptionDTO>(`/admin/waste/gift-redemptions/${encodeURIComponent(id)}/cancel`, { method: 'POST', body });
 
 // ── Chi tiết người dùng (ADMINOPS-11) + nhóm việc nhân viên (ADMINOPS-10) ──
 export interface AdminUserEvent {
@@ -1942,22 +2016,9 @@ export interface AdminMission {
   isRepeatable: boolean;
   claimedCount: number;
 }
-export interface AdminRewardCatalogItem {
-  id: string;
-  title: string;
-  description: string;
-  pointsCost: number;
-  type: 'PERCENT' | 'AMOUNT' | 'FREESHIP' | string;
-  value: number;
-  minOrder?: number | null;
-  maxDiscount?: number | null;
-  redeemedCount: number;
-  redeemed30d: number;
-}
 export const listAdminMissions = () => apiFetch<AdminMission[]>('/admin/engagement/missions');
 export const updateAdminMission = (id: string, body: { title: string; description: string; rewardPoints: number }) =>
   apiFetch<AdminMission>(`/admin/engagement/missions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
-export const listAdminRewardCatalog = () => apiFetch<AdminRewardCatalogItem[]>('/admin/engagement/rewards');
 
 export interface DealerPriceChange {
   id: string;

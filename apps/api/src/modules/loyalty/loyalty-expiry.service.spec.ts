@@ -6,6 +6,7 @@ import {
   lotRecoverable,
   nextPointExpiry,
   orderLotKey,
+  recycleLotKey,
   reviewLotKey,
   type PointExpiryTxn,
 } from './loyalty-expiry.service';
@@ -1226,5 +1227,30 @@ describe('LoyaltyExpiryService.remindExpiringPoints (cron)', () => {
     });
     await svc.remindExpiringPoints();
     expect(notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('RECYCLE_RULE (đổi rác, theo mẫu ORDER_RULE)', () => {
+  const RC = (id: string, delta: number, createdAt: string, expiresAt: string | null, requestId: string) =>
+    tx(id, delta, createdAt, expiresAt, 'RECYCLE:TR-ABCDE', { refType: 'RECYCLE', refId: requestId });
+  const RV = (id: string, delta: number, createdAt: string, requestId: string) =>
+    tx(id, delta, createdAt, null, 'RECYCLE_REVERSED:TR-ABCDE', { refType: 'RECYCLE_REVERSED', refId: requestId });
+
+  it('recycleLotKey', () => expect(recycleLotKey('r1')).toBe('RECYCLE:r1'));
+  it('the reversal row eats its own lot, not the oldest one', () => {
+    expect(lotRecoverable([tx('a', 30_000, '2025-01-01'), RC('c', 20_000, '2026-06-01', '2027-06-01', 'r1'), RV('v', -12_000, '2026-06-05', 'r1')], recycleLotKey('r1'))).toBe(8_000);
+  });
+  it('after a full reversal the expiry cron finds nothing to expire (no double take)', () => {
+    const txns = [tx('a', 20_000, '2025-01-01'), RC('c', 30_000, '2026-01-01', '2026-06-01', 'r1'), RV('v', -30_000, '2026-02-01', 'r1')];
+    expect(computePointExpiry(txns, new Date('2026-07-01T00:00:00.000Z'), 0).expiredNow).toBe(0);
+  });
+  it('spending is not subtracted (lotRecoverable contract at :224-236); the balance cap in the caller limits the take', () => {
+    expect(lotRecoverable([RC('c', 50_000, '2026-06-01', '2027-06-01', 'r1'), tx('s', -35_000, '2026-06-02')], recycleLotKey('r1'))).toBe(50_000);
+  });
+  it('the expiry cron already took the expired recycle lot: nothing left to recover', () => {
+    expect(lotRecoverable([RC('c', 30_000, '2025-05-01', '2026-05-01', 'r1'), expired('x', 30_000, '2026-05-02')], recycleLotKey('r1'))).toBe(0);
+  });
+  it('a lot of another request is not touched', () => {
+    expect(lotRecoverable([RC('c', 20_000, '2026-06-01', null, 'r2'), RV('v', -5_000, '2026-06-05', 'r1')], recycleLotKey('r2'))).toBe(20_000);
   });
 });

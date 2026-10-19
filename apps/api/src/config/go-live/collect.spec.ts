@@ -44,7 +44,7 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
   return { prisma, tx, sql };
 }
 
-const ALL_TABLES = ['_prisma_migrations', 'orders', 'refill_pickup_locations', 'system_configs', 'users', 'role_grants', 'notification_templates'];
+const ALL_TABLES = ['_prisma_migrations', 'orders', 'waste_points', 'system_configs', 'users', 'role_grants', 'notification_templates'];
 
 describe('collectDbSnapshot', () => {
   it('mở transaction READ ONLY trước mọi câu lệnh khác và chỉ chạy SELECT', async () => {
@@ -66,7 +66,7 @@ describe('collectDbSnapshot', () => {
     expect(snap.unfinishedMigrations).toEqual(['m2']);
     expect(snap.expectedMigrations).toEqual(['m1', 'm2']);
     expect(snap.orderCount).toBe(321);
-    expect(snap.refill.tableExists).toBe(true);
+    expect(snap.waste.tableExists).toBe(true);
     expect(snap.adminCount).toBe(2);
     expect(snap.pendingAdminGrants).toBe(1);
     expect(snap.configs).toEqual({ 'merchant.commission_pct': 0.15 });
@@ -74,13 +74,22 @@ describe('collectDbSnapshot', () => {
     expect(snap.codMaxPerOrder).toBe(5_000_000);
   });
 
+  it('đếm waste_points: tổng và kho WAREHOUSE đang ACTIVE', async () => {
+    const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, counts: { waste_points: 2 } });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.waste).toEqual({ tableExists: true, totalPoints: 2, activeWarehouses: 2, activeWarehousesWithPhone: 2 });
+    expect(sql.some((q) => q.includes(`FROM "waste_points" WHERE "kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`))).toBe(true);
+    expect(sql.some((q) => q.includes(`"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`))).toBe(true);
+    expect(sql.some((q) => q.includes('refill_pickup_locations'))).toBe(false);
+  });
+
   it('DB trước khi áp migration mới: bảng chưa có thì bỏ qua, không truy vấn', async () => {
     const { prisma, sql, tx } = fakePrisma({ tables: ['_prisma_migrations', 'orders', 'users', 'system_configs'], counts: { orders: 10 } });
     const snap = await collectDbSnapshot(prisma, ['m1']);
-    expect(snap.refill).toEqual({ totalRows: 0, activeRows: 0, tableExists: false });
+    expect(snap.waste).toEqual({ tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0 });
     expect(snap.pendingAdminGrants).toBe(0);
     expect(snap.znsTemplates).toEqual([]);
-    expect(sql.some((q) => q.includes('FROM "refill_pickup_locations"'))).toBe(false);
+    expect(sql.some((q) => q.includes('FROM "waste_points"'))).toBe(false);
     expect(tx.notificationTemplate.findMany).not.toHaveBeenCalled();
   });
 

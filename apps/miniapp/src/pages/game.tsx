@@ -4,6 +4,7 @@ import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
@@ -40,6 +41,7 @@ export default function GamePage() {
   const phase = useAuthPhase();
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
+  const publicConfig = usePublicConfig();
   const authed = phase === 'authenticated';
 
   const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } =
@@ -159,13 +161,16 @@ export default function GamePage() {
 
           <LuckyWheelCard cost={profile?.spinCostPoints ?? 10_000} onSpin={handleSpin} onResult={wheelPrize.onResult} />
 
-          {/* Đổi vỏ chai lấy nước (§6.14.6) */}
-          <GameLinkRow
-            icon={Recycle}
-            title="Đổi vỏ chai lấy nước"
-            hint="Mang vỏ rỗng đến cửa hàng → nhận 💧 tưới vườn"
-            onClick={() => navigate('/refill')}
-          />
+          {/* Lối vào Đổi rác lấy quà (spec 4.9) */}
+          {publicConfig.waste.enabled && (
+            <GameLinkRow
+              icon={Recycle}
+              title="Đổi rác lấy quà"
+              badge="Mới"
+              hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm"
+              onClick={() => navigate('/recycle')}
+            />
+          )}
         </GameTabPanel>
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>

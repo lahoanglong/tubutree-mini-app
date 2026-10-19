@@ -20,7 +20,7 @@ Viết theo hệ thống ngày 17/10/2026, đối chiếu với mã nguồn. Hai
 | Nơi | Vào bằng | Dùng để |
 |---|---|---|
 | **Web Quản trị** | `app.tubutree.com/admin`, đăng nhập bằng Zalo | Đơn, đổi/trả, hoàn tiền, rút tiền, người dùng, voucher, cấu hình. Menu trái chia 9 nhóm, 30 mục. Sổ tay ghi tắt **Quản trị › Nhóm › Mục**. Dùng được trên điện thoại, nhưng làm trên máy tính thì dễ hơn. |
-| **Mini App Zalo, màn nhân sự** | Mở Mini App › **Cá nhân** › nhóm **Công việc** | Nhân viên: "Ca làm & chấm công", "Lương của tôi". Admin thêm "Quản trị nhân sự": Nhân sự, Duyệt ca, Lương, Duyệt đổi vỏ, Kiểm duyệt cộng đồng. |
+| **Mini App Zalo, màn nhân sự** | Mở Mini App › **Cá nhân** › nhóm **Công việc** | Nhân viên: "Ca làm & chấm công", "Lương của tôi". Admin thêm "Quản trị nhân sự": Nhân sự, Duyệt ca, Lương, Kiểm duyệt cộng đồng. |
 | **Pancake POS** | Tài khoản Pancake của kho | Sản phẩm, giá, tồn, nhập hàng, in vận đơn, đóng gói, giao hãng, bán tại quầy, đối soát COD. |
 | **Cổng người bán** | `app.tubutree.com/merchant` | Của đại lý và đối tác tự bán. Nhân viên không dùng, nhưng phải biết để hướng dẫn họ. Mini App chưa có nút dẫn tới đây. |
 | **Zalo OA Manager** | Zalo OA của Tubu Tree | Chat với khách, tin ZNS. Hệ thống chưa thay thế phần chat. |
@@ -30,7 +30,7 @@ Viết theo hệ thống ngày 17/10/2026, đối chiếu với mã nguồn. Hai
 - **Admin** (vai trò "Quản trị") thấy cả 30 mục.
 - **Nhân viên nhóm CSKH** thấy: Việc cần xử lý, Đơn hàng, Đổi / Trả, Người dùng, CSKH mẫu tin nhanh.
 - **Nhân viên nhóm Kho** thấy: Việc cần xử lý, Đơn hàng, Đổi / Trả.
-- **Mọi nhân viên** thấy thêm: Đổi vỏ chai, Màn thu ngân (tích điểm tại quầy), Ca làm & chấm công.
+- **Mọi nhân viên** thấy thêm: Đổi rác, Màn thu ngân (tích điểm tại quầy), Ca làm & chấm công.
 - **Marketing, kế toán, quản lý đại lý–CTV** chưa có nhóm riêng. **⏳ đang làm.** Đường tạm: cấp vai trò "Quản trị" cho đúng người tin cậy. Admin cấp quyền được cho người khác, sửa mọi cấu hình, bấm "Đã chuyển khoản", nên đừng cấp rộng.
 - Cấp nhóm: **Quản trị › Khách hàng › Người dùng**, ô "Cấp / đổi vai trò theo SĐT", chọn "Nhân viên". Rồi bấm tên người đó, ô "Nhóm việc nhân viên", tick CSKH hoặc Kho, bấm "Lưu nhóm việc". Nên cho người đó mở Mini App một lần trước, để tìm thấy tên trong danh sách.
 

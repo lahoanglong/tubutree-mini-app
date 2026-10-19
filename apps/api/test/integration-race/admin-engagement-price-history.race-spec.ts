@@ -5,7 +5,7 @@ import { createUser, randCode } from './helpers';
 
 /**
  * Trên Postgres THẬT: màn "Lịch sử giá đại lý" (ADMINOPS-17) lọc SKU không phân biệt hoa thường và kèm tên sản phẩm/bậc/người
- * đổi; màn "Nhiệm vụ & quà đổi điểm" (ENGAGE-22) đếm lượt nhận nhiệm vụ và lượt đổi quà từ sổ điểm.
+ * đổi; màn "Nhiệm vụ & quà đổi điểm" (ENGAGE-22) đếm lượt nhận nhiệm vụ.
  */
 describe('Admin — lịch sử giá đại lý, nhiệm vụ & quà đổi điểm (real Postgres)', () => {
   let prisma: PrismaService;
@@ -51,7 +51,7 @@ describe('Admin — lịch sử giá đại lý, nhiệm vụ & quà đổi đi�
     });
   });
 
-  it('nhiệm vụ đếm lượt đã nhận; quà đổi điểm đếm lượt đổi tổng và 30 ngày', async () => {
+  it('nhiệm vụ đếm lượt đã nhận và sửa được điểm thưởng', async () => {
     const tag = randCode(8);
     const u = await createUser(prisma);
     const mission = await prisma.mission.create({
@@ -68,18 +68,5 @@ describe('Admin — lịch sử giá đại lý, nhiệm vụ & quà đổi đi�
 
     const updated = await engagement.updateMission(mission.id, { rewardPoints: 25, title: 'Nhiệm vụ IT' });
     expect(updated).toMatchObject({ rewardPoints: 25, title: 'Nhiệm vụ IT', goal: 1 });
-
-    const before = (await engagement.rewardCatalog()).find((r) => r.id === 'reward-freeship')!;
-    const old = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
-    await prisma.pointsTransaction.createMany({
-      data: [
-        { userId: u.id, delta: -20, reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', refType: 'REWARD', refId: `c-${tag}-1` },
-        { userId: u.id, delta: -20, reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', refType: 'REWARD', refId: `c-${tag}-2`, createdAt: old },
-        { userId: u.id, delta: 20, reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', refType: 'REWARD_REFUND', refId: `c-${tag}-3` },
-      ],
-    });
-    const after = (await engagement.rewardCatalog()).find((r) => r.id === 'reward-freeship')!;
-    expect(after.redeemedCount - before.redeemedCount).toBe(2);
-    expect(after.redeemed30d - before.redeemed30d).toBe(1);
   });
 });

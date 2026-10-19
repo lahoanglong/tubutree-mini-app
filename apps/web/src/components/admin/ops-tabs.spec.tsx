@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
 import { AttendanceTab } from './attendance-tab';
-import { RefillTab } from './refill-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { scrollRegionProblems, smallTouchTargets } from '@/test-utils/a11y';
 
@@ -188,7 +187,7 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     const attention = c.querySelector('section[aria-label="Đơn cần xử lý tay trên Pancake"]')!;
     expect(attention.textContent).toContain('TUBU2026101414013');
     expect(attention.textContent).toContain('shipper không thu tiền lần nữa');
-    const gomdon = c.querySelector('section[aria-label="Gomdon (thu gom tái chế)"]')!;
+    const gomdon = c.querySelector('section[aria-label="Gomdon (thu kèm rác)"]')!;
     expect(gomdon.textContent).toContain('Lỗi 09:30 14/10/2026');
     expect(gomdon.textContent).toContain('Đơn thu gom chờ vận đơn quá 15 phút1');
     expect(c.querySelector('section[aria-label="Báo động Gomdon chưa đóng"]')!.textContent).toContain('tránh giao trùng');
@@ -838,44 +837,5 @@ describe('AttendanceTab — Chốt ra ca (ADMINOPS-17)', () => {
     answerConfirm(true);
     await flush();
     expect(c.querySelector('[role="alert"]')!.textContent).toContain('Tháng lương đã chốt');
-  });
-});
-
-describe('RefillTab — duyệt đổi vỏ chai trên web admin', () => {
-  const PENDING = [
-    { id: 'b1', quantity: 5, seedsAwarded: 50, status: 'PENDING', createdAt: '2026-10-14T01:00:00.000Z', user: { id: 'u1', fullName: 'Lê Cúc', phone: '0922000222' } },
-  ];
-
-  it('duyệt với số vỏ thực nhận ít hơn khai; số ngoài 1..khai thì khoá nút Duyệt', async () => {
-    const api = mockFetch({ '/refill/admin/pending': { body: PENDING }, '/refill/admin/b1/approve': { body: { ok: true } } });
-    vi.stubGlobal('fetch', vi.fn(api.fn));
-    const c = await mount(<RefillTab />);
-    expect(c.textContent).toContain('Lê Cúc');
-    expect(c.textContent).toContain('Khai 5 vỏ');
-    const input = c.querySelector('input')!;
-    typeInto(input, '9');
-    await flush();
-    const approve = byText(c, 'button', 'Duyệt') as HTMLButtonElement;
-    expect(approve.disabled).toBe(true);
-    expect(c.textContent).toContain('Số vỏ thực nhận từ 1 tới 5.');
-    typeInto(input, '3');
-    await flush();
-    click(approve);
-    await flush();
-    const post = api.calls.find((x) => x.url.includes('/refill/admin/b1/approve'))!;
-    expect(JSON.parse(String(post.init!.body))).toEqual({ receivedQuantity: 3 });
-  });
-
-  it('từ chối hỏi lý do rồi gửi kèm lý do', async () => {
-    const api = mockFetch({ '/refill/admin/pending': { body: PENDING }, '/refill/admin/b1/reject': { body: { ok: true } } });
-    vi.stubGlobal('fetch', vi.fn(api.fn));
-    const c = await mount(<RefillTab />);
-    click(byText(c, 'button', 'Từ chối'));
-    await flush();
-    typeInto(document.body.querySelector('[role="alertdialog"] textarea'), 'vỏ không đúng loại');
-    answerConfirm(true);
-    await flush();
-    const post = api.calls.find((x) => x.url.includes('/refill/admin/b1/reject'))!;
-    expect(JSON.parse(String(post.init!.body))).toEqual({ reason: 'vỏ không đúng loại' });
   });
 });

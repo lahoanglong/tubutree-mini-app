@@ -14,7 +14,6 @@ import {
   type OrderTabKey,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
-import { RecyclingStatus } from '@/components/recycling-status';
 import { formatDate } from '@/lib/format-date';
 import { formatCount } from '@/lib/checkout-points';
 
@@ -152,7 +151,6 @@ export function OrdersSection() {
                 </div>
                 <OrderItemsPreview items={o.items} />
                 <div className="mt-1 font-semibold text-stone-900">{formatVnd(o.total)}</div>
-                <RecyclingStatus order={o} />
                 {/* Đơn chuyển khoản còn chờ tiền: lối riêng "Thanh toán" vì đó là việc khách còn phải làm. */}
                 {canPayAgain(o) ? (
                   <Link href={orderDetailHref(o.code)} aria-label={`Thanh toán đơn ${o.code}`} className={`${ui.btnPrimary} mt-2`}>

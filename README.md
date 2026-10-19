@@ -39,7 +39,7 @@ pnpm --filter @tubutree/miniapp dev  # chạy mini app (cần zmp-cli login)
 
 ## Tiến độ tổng quan (cập nhật 2026-09-05, verify trực tiếp trên code)
 
-> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, refill, wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta (chỉ còn API; trang Beta Tester trên Mini App đã bỏ), faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1183/1183 unit test PASS** (verify trực tiếp).
+> **Backend: 38 module** (catalog, checkout, orders, loyalty, game/Vườn Xanh, affiliate, cashback (provider-agnostic), dealer B2B, flash-sale, groupbuy, subscriptions, storefront CTV, brand, staff (RBAC/ca làm/chấm công/lương), academy, content-kit, cskh (quick-reply/auto-reply Zalo OA), community feed, waste-exchange (Đổi rác lấy quà), wishlist, reviews, ai-advisor, notifications, vouchers, wallet, beta (chỉ còn API; trang Beta Tester trên Mini App đã bỏ), faq, lifecycle, v.v.) — **typecheck sạch, 85/85 test suite · 1183/1183 unit test PASS** (verify trực tiếp).
 > **Miniapp (36 trang): typecheck sạch, 6/6 test file · 36/36 unit test PASS** (Vitest).
 > **Web (Next.js 14): typecheck sạch, 1/1 test file · 9/9 unit test PASS** (Vitest).
 > **Tổng monorepo: 1228/1228 unit test PASS**, 0 lỗi lint/typecheck trên toàn bộ workspace.

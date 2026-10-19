@@ -5,7 +5,6 @@ import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { AdminEngagementController, UpdateMissionDto } from './admin-engagement.controller';
 import { AdminEngagementService } from './admin-engagement.service';
-import { DEFAULT_REWARD_CATALOG } from '../loyalty/loyalty.service';
 
 const mission = (over: Record<string, unknown> = {}) => ({
   id: 'm1',
@@ -67,18 +66,5 @@ describe('AdminEngagementService', () => {
     await svc.updateMission('m1', { rewardPoints: 40 });
     expect(update).toHaveBeenCalledWith({ where: { id: 'm1' }, data: { rewardPoints: 40 } });
     await expect(svc.updateMission('nope', { title: 'X' })).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it('danh mục quà đổi điểm kèm số lượt đổi (tổng và 30 ngày)', async () => {
-    const groupBy = jest
-      .fn()
-      .mockResolvedValueOnce([{ reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', _count: { _all: 12 } }])
-      .mockResolvedValueOnce([{ reason: 'LOYALTY_REDEEM_VOUCHER:reward-freeship', _count: { _all: 3 } }]);
-    const rows = await make({ pointsTransaction: { groupBy } }).rewardCatalog(new Date('2026-10-14T00:00:00Z'));
-    expect(rows).toHaveLength(DEFAULT_REWARD_CATALOG.length);
-    const ship = rows.find((r) => r.id === 'reward-freeship')!;
-    expect(ship).toMatchObject({ pointsCost: 20_000, redeemedCount: 12, redeemed30d: 3 });
-    expect(rows.find((r) => r.id === 'reward-discount-50k')).toMatchObject({ redeemedCount: 0, redeemed30d: 0 });
-    expect(groupBy.mock.calls[1][0].where.createdAt).toEqual({ gte: new Date('2026-09-14T00:00:00Z') });
   });
 });

@@ -104,6 +104,18 @@ describe('ConfigItem (tab Cấu hình)', () => {
       await flush();
       expect(puts).toEqual([{ key: 'payment.bank_account_no', value: '1234567890' }]);
     });
+
+    it('waste.customer_monthly_cap_points: khoá đổi rác cũng hỏi xác nhận (15.4)', async () => {
+      const { container, puts } = setup(row({ key: 'waste.customer_monthly_cap_points', value: 60_000, category: 'waste' }));
+      typeInto(container.querySelector('input'), '80000');
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      expect(confirmDialog()?.textContent).toContain('60000 → 80000');
+      expect(puts).toHaveLength(0);
+      answerConfirm(true);
+      await flush();
+      expect(puts).toEqual([{ key: 'waste.customer_monthly_cap_points', value: 80_000 }]);
+    });
   });
 });
 

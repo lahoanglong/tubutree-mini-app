@@ -93,7 +93,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const saveToggle = useMutation({
     mutationFn: (on: boolean) => setConfig(GOMDON_TOGGLE_KEY, on),
     onSuccess: (_r, on) => {
-      setMsg({ ok: true, text: on ? 'Đã BẬT lựa chọn thu gom ở checkout.' : 'Đã TẮT lựa chọn thu gom ở checkout.' });
+      setMsg({ ok: true, text: on ? 'Đã BẬT công tắc kỹ thuật Gomdon.' : 'Đã TẮT công tắc kỹ thuật Gomdon.' });
       refresh();
     },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được.' }),
@@ -131,7 +131,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Recycle className="h-4 w-4 text-forest-700" aria-hidden />
-          <h2 className="font-display text-sm font-semibold text-stone-900">Thu gom vật liệu tái chế (Gomdon)</h2>
+          <h2 className="font-display text-sm font-semibold text-stone-900">Thu kèm rác qua Gomdon (kỹ thuật)</h2>
         </div>
         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm sm:min-h-0">
           <input
@@ -146,7 +146,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
               saveToggle.mutate(e.target.checked);
             }}
           />
-          <span className="font-medium">Hiện lựa chọn thu gom ở checkout</span>
+          <span className="font-medium">Công tắc kỹ thuật Gomdon</span>
         </label>
       </div>
 
@@ -159,8 +159,8 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
             <StatusDot ok={st.webhookSecretSet} label="Webhook secret" />
             <span className="text-xs">
               Khách{' '}
-              <b className={st.recyclingEnabled ? 'text-success-fg' : 'text-stone-600'}>
-                {st.recyclingEnabled ? 'ĐANG thấy' : 'KHÔNG thấy'}
+              <b className={st.pickupVisible ? 'text-success-fg' : 'text-stone-600'}>
+                {st.pickupVisible ? 'ĐANG thấy' : 'KHÔNG thấy'}
               </b>{' '}
               lựa chọn thu gom
             </span>
@@ -182,6 +182,12 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       {checkMsg && (
         <p role={checkMsg.ok ? 'status' : 'alert'} className={`mt-1 text-xs ${checkMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {checkMsg.text}
+        </p>
+      )}
+
+      {st && (
+        <p className="mt-1 text-xs text-stone-600">
+          Khách chỉ thấy lựa chọn thu gom khi bật thêm &quot;Bật chương trình với khách&quot; và &quot;Cách Thu kèm đơn&quot; ở Khách hàng › Đổi rác › Cấu hình chung.
         </p>
       )}
 

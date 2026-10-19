@@ -24,7 +24,7 @@
     "@tubutree/api#test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/audit/**", "$TURBO_ROOT$/scripts/uiux/**"]
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/audit/**", "$TURBO_ROOT$/scripts/uiux/**", "$TURBO_ROOT$/docs/**", "$TURBO_ROOT$/README.md"]
     },
     "prisma:generate": {
       "cache": false

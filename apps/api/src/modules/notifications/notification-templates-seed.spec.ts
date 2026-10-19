@@ -119,6 +119,10 @@ describe('seed mẫu thông báo', () => {
     expect(byCode.size).toBe(templates.length);
   });
 
+  it('Refill đã gỡ: seed không còn mẫu REFILL_*', () => {
+    expect(seededTemplates().map((t) => t.code).filter((c) => c.startsWith('REFILL_'))).toEqual([]);
+  });
+
   describe('migration đưa mẫu thiếu lên prod (prod không chạy seed)', () => {
     const MIGRATION = join(__dirname, '../../../prisma/migrations/20261010150000_reference_data_templates_voucher_eta/migration.sql');
     const inserted = [...readFileSync(MIGRATION, 'utf-8').matchAll(/\('([^']+)', '([A-Z_]+)', '([A-Z]+)', '([^']*)'\)/g)].map((m) => ({
@@ -165,8 +169,6 @@ describe('seed mẫu thông báo', () => {
       'COMMUNITY_POST_LIKED',
       'COMMUNITY_POST_COMMENTED',
       'COMMUNITY_POST_HIDDEN',
-      'REFILL_APPROVED',
-      'REFILL_REJECTED',
       // P5 (D2/D3): tin chờ thanh toán, trả hàng theo dòng, hàng đợi hoàn tiền chuyển khoản.
       'ORDER_AWAITING_PAYMENT',
       'ORDER_PAYMENT_EXPIRED',
@@ -183,6 +185,17 @@ describe('seed mẫu thông báo', () => {
       'REFERRAL_REWARD_PAID',
       'REFERRAL_MILESTONE_PAID',
       'REFERRAL_REWARD_REVOKED',
+      // Đổi rác lấy quà (M1.5).
+      'WASTE_PARCEL_RECEIVED',
+      'WASTE_POINTS_CREDITED',
+      'WASTE_REQUEST_REJECTED',
+      'WASTE_REQUEST_EXPIRED',
+      'WASTE_PICKUP_STARTED',
+      'WASTE_PICKUP_CANCELLED',
+      'WASTE_POINTS_REVERSED',
+      'WASTE_SHIP_LOCKED',
+      'WASTE_GIFT_CANCELLED',
+      'WASTE_PERK_REVIEWED',
     ];
 
     it.each(CODES)('%s: prod (chỉ chạy migration) có đúng lời tin như seed', (code) => {

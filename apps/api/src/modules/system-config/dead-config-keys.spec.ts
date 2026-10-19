@@ -67,6 +67,11 @@ describe('khoá config chết (C-054)', () => {
     expect(unread).toEqual([]);
   });
 
+  it('mô tả công tắc Gomdon nói đúng đường Thu kèm đơn, không còn "tái chế"', () => {
+    const row = seededConfigs().find((r) => r.key === 'shipping.gomdon.recycling_enabled');
+    expect(row?.description).toBe('Công tắc kỹ thuật Gomdon. Khách chỉ thấy Thu kèm đơn khi bật thêm waste.enabled và waste.lane_pickup_enabled (cần Gomdon đã cấu hình env).');
+  });
+
   it('khoá voucher chào mừng seed đúng tên mà code đọc (voucher.welcome_*), không phải loyalty.welcome_voucher_*', () => {
     const keys = seededConfigs().map((r) => r.key);
     expect(keys).toEqual(expect.arrayContaining(['voucher.welcome_amount', 'voucher.welcome_min_order']));

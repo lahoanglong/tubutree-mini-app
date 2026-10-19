@@ -1,15 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   checkInView,
+  getLoyaltyRewards,
+  getMyRedemptions,
   lockedPointsNote,
   memberCardHint,
   pointsReasonLabel,
-  rewardButtonLabel,
+  redeemLoyaltyReward,
+  rewardCardState,
   tierProgressPercent,
   type CheckInStatusResponse,
   type LoyaltyOverview,
   type MemberCardResponse,
 } from './account-api';
+
+const http = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+vi.mock('./api', () => ({ api: http }));
 
 /**
  * View helper cho trang Hạng thành viên (loyalty.tsx). Tách thành hàm thuần để test được các lỗi
@@ -55,11 +61,17 @@ describe('pointsReasonLabel', () => {
     ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['REFERRAL_MILESTONE_DEBT:u1:3', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['MERGED:guest-1:ORDER_DELIVERED:TB123', 'Tích điểm từ đơn hàng'],
+    ['RECYCLE:TR-8K2M9', 'Đổi rác lấy quà'],
+    ['RECYCLE_REVERSED:TR-8K2M9', 'Thu hồi điểm đổi rác'],
+    ['GIFT_REDEEM:gift-seed', 'Đổi điểm lấy quà'],
+    ['GIFT_REFUND:QG-8K2M9P4T', 'Hoàn điểm quà'],
     ['PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
     ['PANCAKE_CHAT_ORDER_REVERSED:1234567', 'Thu hồi điểm đơn đặt qua tư vấn viên'],
     ['MARKETPLACE_ORDER:2610A1B2C3', 'Tích điểm đơn mua trên sàn'],
     ['MARKETPLACE_ORDER_REVERSED:2610A1B2C3', 'Thu hồi điểm đơn mua trên sàn'],
     ['MERGED:guest-1:PANCAKE_CHAT_ORDER:1234567', 'Tích điểm đơn đặt qua tư vấn viên'],
+    ['MERGED:guest-1:RECYCLE:TR-8K2M9', 'Đổi rác lấy quà'],
+    ['LOYALTY_REDEEM_VOUCHER:reward-freeship', 'Đổi điểm lấy mã giảm giá'],
   ])('%s → %s', (reason, label) => {
     expect(pointsReasonLabel(reason)).toBe(label);
   });
@@ -223,18 +235,31 @@ describe('lockedPointsNote', () => {
   });
 });
 
-describe('rewardButtonLabel', () => {
-  const r = { pointsCost: 50, canRedeem: false };
-  it('đổi được → "Đổi ngay"', () => {
-    expect(rewardButtonLabel({ ...r, canRedeem: true }, { pointsBalance: 100 })).toBe('Đổi ngay');
+describe('rewardCardState (§4.8, §16.1: dùng số máy chủ trả)', () => {
+  const c = { redeemablePoints: 14_000, pointsConvertedBalance: 40_000 };
+  it.each([
+    [{ kind: 'VOUCHER', pointsCost: 20_000, canRedeem: false, soldOut: true }, { kind: 'soldOut' }],
+    [{ kind: 'VOUCHER', pointsCost: 10_000, canRedeem: true, soldOut: false }, { kind: 'redeem' }],
+    [{ kind: 'VOUCHER', pointsCost: 20_000, canRedeem: false, soldOut: false }, { kind: 'need', missing: 6000 }],
+    [{ kind: 'GIFT', pointsCost: 5_000_000, canRedeem: false, soldOut: false }, { kind: 'need', missing: 4_986_000 }],
+    [{ kind: 'VOUCHER', pointsCost: 10_000, canRedeem: false, soldOut: false }, { kind: 'locked' }],
+    [{ kind: 'TREE', pointsCost: 50_000, canRedeem: false, soldOut: false }, { kind: 'locked' }],
+    [{ kind: 'TREE', pointsCost: 60_000, canRedeem: false, soldOut: false }, { kind: 'need', missing: 6000 }],
+  ] as const)('%o → %o', (r, want) => { expect(rewardCardState(r, c)).toEqual(want); });
+  it('đã hết thì không bao giờ tính "Cần thêm"', () => {
+    expect(rewardCardState({ kind: 'SEED_PACK', pointsCost: 999_000, canRedeem: false, soldOut: true }, { redeemablePoints: 0, pointsConvertedBalance: 0 })).toEqual({ kind: 'soldOut' });
   });
-  it('số dư chưa đủ → "Cần X điểm"', () => {
-    expect(rewardButtonLabel(r, { pointsBalance: 20 })).toBe('Cần 50 điểm');
+});
+
+describe('reward routes (§15.2)', () => {
+  beforeEach(() => { http.get.mockReset().mockResolvedValue({ data: 'D' }); http.post.mockReset().mockResolvedValue({ data: 'D' }); });
+  it('đổi quà gửi Idempotency-Key, id được mã hoá', async () => {
+    await redeemLoyaltyReward('gift/1', 'key-1');
+    expect(http.post).toHaveBeenCalledWith('/me/loyalty/rewards/gift%2F1/redeem', undefined, { headers: { 'Idempotency-Key': 'key-1' } });
   });
-  it('quà đắt có dấu nghìn: "Cần 5.000 điểm"', () => {
-    expect(rewardButtonLabel({ pointsCost: 5_000, canRedeem: false }, { pointsBalance: 20 })).toBe('Cần 5.000 điểm');
-  });
-  it('số dư đủ nhưng điểm đang khoá (đơn mới giao) → không nói "Cần X điểm" sai sự thật', () => {
-    expect(rewardButtonLabel(r, { pointsBalance: 100, redeemablePoints: 40 })).toBe('Chờ mở khoá điểm');
+  it('quà của tôi và danh mục', async () => {
+    await getMyRedemptions();
+    await getLoyaltyRewards();
+    expect(http.get.mock.calls.map((c) => c[0])).toEqual(['/me/loyalty/rewards/mine', '/me/loyalty/rewards']);
   });
 });

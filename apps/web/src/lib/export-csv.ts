@@ -62,7 +62,7 @@ export function generateOrdersCsvString(orders: AdminOrder[]): string {
     'Ghi chú',
     'Số sản phẩm',
     'Ngày tạo',
-    'Thu gom tái chế',
+    'Thu kèm Gomdon',
   ];
 
   const rows = orders.map((o) => {

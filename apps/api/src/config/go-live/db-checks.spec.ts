@@ -15,7 +15,7 @@ describe('evaluateDb', () => {
   });
 
   it('mọi WARN/FAIL đều có cách sửa, PASS thì không', () => {
-    const worst = dbWith({ adminCount: 0, unfinishedMigrations: ['x'], refill: { totalRows: 0, activeRows: 0, tableExists: true }, znsTemplates: [] });
+    const worst = dbWith({ adminCount: 0, unfinishedMigrations: ['x'], waste: { tableExists: true, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0 }, configs: { 'waste.enabled': true }, znsTemplates: [] });
     for (const r of run(worst)) {
       if (r.status === 'PASS') expect(r.hint).toBe('');
       else expect(r.hint.length).toBeGreaterThan(10);
@@ -135,21 +135,21 @@ describe('evaluateDb', () => {
       expect(byId(run(s, 'pre-deploy'), 'db.orders_lock').detail).toContain('~14 giây');
     });
 
-    it('năm migration của đợt (ba chính và hai migration nhỏ sau đó) chờ áp: db.pending_scope vẫn PASS', () => {
+    it('sáu migration của đợt (ba chính và hai migration nhỏ sau đó) chờ áp: db.pending_scope vẫn PASS', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
-      expect(extraSmall).toHaveLength(2);
+      expect(extraSmall).toHaveLength(3);
       const s = behind(1_000, extraSmall);
       const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('PASS');
-      expect(r.detail).toContain('(5)');
+      expect(r.detail).toContain('(6)');
     });
 
-    it('năm migration của đợt cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài đợt', () => {
+    it('sáu migration của đợt cộng một migration khác: db.pending_scope WARN, đếm đúng phần ngoài đợt', () => {
       const extraSmall = IMAGE_COMPATIBLE_MIGRATIONS.filter((m) => !required.includes(m));
       const s = behind(1_000, [...extraSmall, P1]);
       const r = byId(run(s, 'pre-deploy'), 'db.pending_scope');
       expect(r.status).toBe('WARN');
-      expect(r.detail).toContain('6 migration chờ áp, 1 cái nằm ngoài');
+      expect(r.detail).toContain('7 migration chờ áp, 1 cái nằm ngoài');
     });
 
     it('thêm p1, p4, p8, pd3: db.pending_scope WARN, nêu tên migration nặng và chỉ đường 7.3', () => {
@@ -186,59 +186,90 @@ describe('evaluateDb', () => {
     });
   });
 
-  describe('điểm nhận vỏ chai', () => {
-    it('có điểm đang bật thì PASS', () => expect(status(GOOD_DB, 'db.refill_location')).toBe('PASS'));
-    it('chỉ có địa chỉ cũ, bảng chưa có dòng nào thì WARN', () => {
-      const s = dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true }, configs: { 'refill.pickup_address': '12 Đường X, Quận 1' } });
-      expect(status(s, 'db.refill_location')).toBe('WARN');
-    });
-    it('bảng có điểm nhưng tắt hết thì FAIL dù còn địa chỉ cũ', () => {
-      const s = dbWith({ refill: { totalRows: 2, activeRows: 0, tableExists: true }, configs: { 'refill.pickup_address': '12 Đường X' } });
-      expect(status(s, 'db.refill_location')).toBe('FAIL');
-    });
-    it('không có gì thì FAIL', () => {
-      expect(status(dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true } }), 'db.refill_location')).toBe('FAIL');
-      const blank = dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true }, configs: { 'refill.pickup_address': '   ' } });
-      expect(status(blank, 'db.refill_location')).toBe('FAIL');
-    });
+  describe('điểm đổi rác (db.waste_point)', () => {
+    const noCreds = envWith({ GOMDON_PHONE: '', GOMDON_PASSWORD: '' });
+    const W = (waste: Partial<DbSnapshot['waste']>, configs: Record<string, unknown> = {}, phase: GoLivePhase = 'post-deploy', env: Env = GOOD_ENV) =>
+      byId(run(dbWith({ waste: { ...GOOD_DB.waste, ...waste }, configs }), phase, env), 'db.waste_point');
 
-    describe('DB cũ, bảng refill_pickup_locations chưa có (migration 20261015070000 chưa áp)', () => {
-      const noTable = (configs: Record<string, unknown> = {}, dropConfigs: string[] = []) =>
-        dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: false }, configs, dropConfigs });
-
-      it('trước deploy: WARN dù không có khoá refill.pickup_address', () => {
-        const r = byId(run(noTable({}, ['refill.pickup_address']), 'pre-deploy'), 'db.refill_location');
-        expect(r.status).toBe('WARN');
-        expect(r.detail).toContain('chưa có địa chỉ cũ');
-        expect(r.hint.length).toBeGreaterThan(10);
-      });
-      it('trước deploy: WARN khi khoá có nhưng rỗng (migration p9 tạo sẵn giá trị rỗng)', () => {
-        expect(status(noTable({ 'refill.pickup_address': '' }), 'db.refill_location', 'pre-deploy')).toBe('WARN');
-      });
-      it('trước deploy: WARN và nói địa chỉ cũ sẽ thành điểm đầu tiên khi có địa chỉ', () => {
-        const r = byId(run(noTable({ 'refill.pickup_address': '12 Đường X, Quận 1' }), 'pre-deploy'), 'db.refill_location');
-        expect(r.status).toBe('WARN');
-        expect(r.detail).toContain('điểm đầu tiên');
-      });
-      it('sau deploy: bảng vẫn chưa có và không có địa chỉ thì FAIL (migration không chạy là lỗi thật)', () => {
-        expect(status(noTable({}, ['refill.pickup_address']), 'db.refill_location', 'post-deploy')).toBe('FAIL');
-        expect(status(noTable({}, ['refill.pickup_address']), 'db.refill_location')).toBe('FAIL');
-      });
-      it('sau deploy: chỉ có địa chỉ cũ thì WARN như trước', () => {
-        expect(status(noTable({ 'refill.pickup_address': '12 Đường X' }), 'db.refill_location', 'post-deploy')).toBe('WARN');
-      });
+    it('chương trình tắt (khoá vắng): PASS dù chưa có kho, cả khi bảng chưa có trước deploy', () => {
+      expect(W({ totalPoints: 0, activeWarehouses: 0 }).status).toBe('PASS');
+      expect(W({ tableExists: false, totalPoints: 0, activeWarehouses: 0 }, {}, 'pre-deploy').status).toBe('PASS');
+      expect(W({ totalPoints: 0, activeWarehouses: 0 }, { 'waste.enabled': false }).status).toBe('PASS');
     });
-
-    describe('bảng đã có', () => {
-      const empty = dbWith({ refill: { totalRows: 0, activeRows: 0, tableExists: true }, dropConfigs: ['refill.pickup_address'] });
-      it('rỗng thì FAIL ở cả hai giai đoạn (admin thêm được điểm trước khi mở bán)', () => {
-        expect(status(empty, 'db.refill_location', 'pre-deploy')).toBe('FAIL');
-        expect(status(empty, 'db.refill_location', 'post-deploy')).toBe('FAIL');
-      });
-      it('có điểm đang bật thì PASS ở cả hai giai đoạn', () => {
-        expect(status(GOOD_DB, 'db.refill_location', 'pre-deploy')).toBe('PASS');
-        expect(status(GOOD_DB, 'db.refill_location', 'post-deploy')).toBe('PASS');
-      });
+    it('waste.enabled bật mà không có kho WAREHOUSE đang ACTIVE: FAIL ở cả hai giai đoạn, có cách sửa', () => {
+      for (const phase of ['pre-deploy', 'post-deploy'] as const) {
+        const r = W({ totalPoints: 3, activeWarehouses: 0 }, { 'waste.enabled': true }, phase);
+        expect(r.status).toBe('FAIL');
+        expect(r.detail).toContain('chưa có kho');
+        expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
+      }
+    });
+    it('waste.enabled bật và có một kho ACTIVE: PASS, nêu số kho và số điểm', () => {
+      const r = W({ totalPoints: 4, activeWarehouses: 1 }, { 'waste.enabled': true });
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('1 kho');
+      expect(r.detail).toContain('4 điểm');
+    });
+    it('waste.enabled bật, Gửi về kho bật, kho ACTIVE chưa có số điện thoại: FAIL, hint nêu màn hình và ô', () => {
+      const r = W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true });
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('số điện thoại');
+      expect(r.hint).toContain('Quản trị, Khách hàng, Đổi rác, Điểm nhận');
+      expect(r.hint).toContain('Số điện thoại');
+      expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.lane_mailin_enabled': true }).status).toBe('FAIL');
+    });
+    it('thiếu số điện thoại kho nhưng Gửi về kho tắt rõ ràng hoặc chương trình tắt: không FAIL', () => {
+      expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.lane_mailin_enabled': false }).status).toBe('PASS');
+      expect(W({ activeWarehouses: 1, activeWarehousesWithPhone: 0 }, { 'waste.enabled': false }).status).toBe('PASS');
+    });
+    it('kho có số điện thoại: PASS', () => {
+      expect(W({ activeWarehouses: 2, activeWarehousesWithPhone: 1 }, { 'waste.enabled': true }).status).toBe('PASS');
+    });
+    it('waste.enabled là chuỗi "true" không tính là bật: không FAIL', () => {
+      expect(W({ totalPoints: 0, activeWarehouses: 0 }, { 'waste.enabled': 'true' }).status).toBe('PASS');
+    });
+    it('waste.lane_pickup_enabled bật mà công tắc Gomdon tắt: WARN', () => {
+      const r = W({}, { 'waste.enabled': true, 'waste.lane_pickup_enabled': true, 'shipping.gomdon.recycling_enabled': false });
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('Gomdon');
+      expect(r.hint.length).toBeGreaterThan(10);
+      expect(r.hint).toContain('chạy đơn thử trên bản chưa mở cho khách thật');
+      expect(r.hint).toContain('cờ toàn cục');
+    });
+    it('waste.lane_pickup_enabled bật mà thiếu tài khoản Gomdon: WARN', () => {
+      expect(W({}, { 'waste.enabled': true, 'waste.lane_pickup_enabled': true }, 'post-deploy', noCreds).status).toBe('WARN');
+    });
+    it('waste.lane_pickup_enabled bật, Gomdon bật và có tài khoản: PASS', () => {
+      expect(W({}, { 'waste.enabled': true, 'waste.lane_pickup_enabled': true }).status).toBe('PASS');
+    });
+    it('waste.mailin_min_points lớn hơn trần tháng: WARN, nêu cả hai số', () => {
+      const r = W({}, { 'waste.mailin_min_points': 61_000, 'waste.customer_monthly_cap_points': 60_000 });
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('waste.mailin_min_points (61000)');
+      expect(r.detail).toContain('(60000)');
+    });
+    it('waste.pickup_min_points lớn hơn trần tháng: WARN, nêu cả hai số', () => {
+      const r = W({}, { 'waste.pickup_min_points': 61_000, 'waste.customer_monthly_cap_points': 60_000 });
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('waste.pickup_min_points (61000)');
+    });
+    it('ngưỡng bằng trần: PASS', () => {
+      expect(W({}, { 'waste.mailin_min_points': 60_000, 'waste.pickup_min_points': 60_000, 'waste.customer_monthly_cap_points': 60_000 }).status).toBe('PASS');
+    });
+    it('khoá vắng thì dùng mặc định 15000 / 10000 / 60000', () => {
+      expect(W({}, { 'waste.customer_monthly_cap_points': 12_000 }).detail).toContain('waste.mailin_min_points (15000)');
+      expect(W({}, { 'waste.customer_monthly_cap_points': 12_000 }).detail).not.toContain('waste.pickup_min_points');
+      expect(W({}, { 'waste.mailin_min_points': 61_000 }).detail).toContain('(60000)');
+    });
+    it('hai WARN cùng lúc gộp vào một dòng; FAIL thắng WARN', () => {
+      const both = W({}, { 'waste.mailin_min_points': 61_000, 'waste.pickup_min_points': 70_000, 'waste.customer_monthly_cap_points': 60_000 });
+      expect(both.status).toBe('WARN');
+      expect(both.detail).toContain('waste.mailin_min_points (61000)');
+      expect(both.detail).toContain('waste.pickup_min_points (70000)');
+      expect(W({ activeWarehouses: 0, activeWarehousesWithPhone: 0 }, { 'waste.enabled': true, 'waste.mailin_min_points': 61_000 }).status).toBe('FAIL');
+    });
+    it('không còn dòng db.refill_location', () => {
+      expect(run(GOOD_DB).some((r) => r.id === 'db.refill_location')).toBe(false);
     });
   });
 
@@ -347,6 +378,9 @@ describe('evaluateDb', () => {
   describe('công tắc thu gom Gomdon', () => {
     const noCreds = envWith({ GOMDON_PHONE: '', GOMDON_PASSWORD: '' });
     it('bật và có tài khoản thì PASS', () => expect(status(GOOD_DB, 'db.gomdon_toggle')).toBe('PASS'));
+    it('tiêu đề công tắc Gomdon nói đúng đường Thu kèm đơn', () => {
+      expect(byId(run(GOOD_DB), 'db.gomdon_toggle').title).toBe('Công tắc Gomdon (Thu kèm đơn)');
+    });
     it('bật mà chưa có tài khoản thì WARN', () => expect(status(GOOD_DB, 'db.gomdon_toggle', 'post-deploy', noCreds)).toBe('WARN'));
     it('tắt mà đã có tài khoản thì WARN', () => {
       expect(status(dbWith({ configs: { 'shipping.gomdon.recycling_enabled': false } }), 'db.gomdon_toggle')).toBe('WARN');

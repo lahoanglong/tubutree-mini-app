@@ -1,4 +1,5 @@
 import { parseConsignmentSettleFrom } from '../../modules/merchant/merchant-config';
+import { WASTE_CONFIG_KEYS } from '../../modules/waste-exchange/waste-config.keys';
 import { OPS_THRESHOLD_KEYS, type OpsThresholds } from '../../modules/ops/ops-alerts';
 import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
 import { envValue } from './secrets';
@@ -15,13 +16,15 @@ export const REQUIRED_MIGRATIONS = [
 const ORDERS_LOCK_MIGRATION = REQUIRED_MIGRATIONS[0];
 
 /**
- * Ba migration của đợt cộng hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một cột trên bảng trả hàng cũ). Image cũ
- * vẫn chạy được trên schema có đủ năm cái, nên quay lại bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ gồm năm cái này.
+ * Ba migration của đợt, hai migration nhỏ thêm sau đó (hai cột NULL trên variations, một cột trên bảng trả hàng cũ) và migration
+ * waste_exchange chỉ thêm bảng và cột mới mà image cũ không đọc. Image cũ vẫn chạy được trên schema có đủ sáu cái, nên quay lại
+ * bằng image (runbook 7.2) hợp lệ khi danh sách chờ áp chỉ gồm sáu cái này.
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   ...REQUIRED_MIGRATIONS,
   '20261015160000_r9_sync_stock_same_clock_markers',
   '20261015170000_r10_legacy_returns_received',
+  '20261020000000_waste_exchange',
 ];
 
 /**
@@ -69,8 +72,8 @@ export interface DbSnapshot {
   /** Tên migration trong thư mục prisma/migrations của image đang chạy. */
   expectedMigrations: string[];
   orderCount: number;
-  /** `tableExists`: bảng refill_pickup_locations (migration 20261015070000) đã có chưa; chưa có thì hai số đếm là 0 vì bảng vắng, không vì rỗng. */
-  refill: { totalRows: number; activeRows: number; tableExists: boolean };
+  /** `tableExists`: bảng waste_points (migration 20261020000000_waste_exchange) đã có chưa; chưa có thì hai số đếm là 0. */
+  waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
   adminCount: number;
@@ -82,11 +85,16 @@ export interface DbSnapshot {
 }
 
 export const CONFIG_KEYS_OF_INTEREST = [
-  'refill.pickup_address',
   'shipping.free_threshold',
   'shipping.flat_fee_below_threshold',
   'shipping.gomdon.config',
   'shipping.gomdon.recycling_enabled',
+  'waste.enabled',
+  'waste.lane_mailin_enabled',
+  'waste.lane_pickup_enabled',
+  'waste.mailin_min_points',
+  'waste.pickup_min_points',
+  'waste.customer_monthly_cap_points',
   'merchant.commission_pct',
   'merchant.default_shipping_fee',
   'merchant.settlement_hold_days',
@@ -153,7 +161,7 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
             'db.pending_scope',
             scopeTitle,
             `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, 6)}` : ''}`,
-            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài năm cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
+            'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài sáu cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
           ),
     );
   }
@@ -177,7 +185,7 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
   if (notInImage.length > 0) {
     out.push(fail(G_DB, 'db.required_migrations', reqTitle, `image không chứa: ${listNames([...notInImage])}`, 'Image chưa build từ mã mới nhất; build lại từ nhánh đã chốt.'));
   } else if (notApplied.length === 0) {
-    out.push(pass(G_DB, 'db.required_migrations', reqTitle, 'recipient_search, refill_locations, multi_reviews đều đã áp'));
+    out.push(pass(G_DB, 'db.required_migrations', reqTitle, 'cả ba migration bắt buộc (r6 recipient_search, r8 bảng điểm nhận cũ, r8 multi_reviews) đều đã áp'));
   } else if (phase === 'pre-deploy') {
     out.push(warn(G_DB, 'db.required_migrations', reqTitle, `chưa áp: ${listNames([...notApplied])}`, 'Bình thường trước khi deploy.'));
   } else {
@@ -202,26 +210,60 @@ function ordersLockCheck(s: DbSnapshot): CheckResult {
   return warn(G_DB, 'db.orders_lock', title, detail, 'Đặt hàng và webhook bị chặn suốt lúc khoá: chọn giờ vắng nhất, báo trước, xin cửa sổ theo số trên (runbook mục 3).');
 }
 
-function refillCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
-  const title = 'Điểm nhận vỏ chai (Refill)';
-  const legacy = typeof s.configs['refill.pickup_address'] === 'string' ? (s.configs['refill.pickup_address'] as string).trim() : '';
-  if (phase === 'pre-deploy' && !s.refill.tableExists) {
-    return warn(
+function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
+  const id = 'db.waste_point';
+  const title = 'Điểm đổi rác (kho và điểm nhận)';
+  const enabled = s.configs['waste.enabled'] === true;
+  if (enabled && s.waste.activeWarehouses === 0) {
+    return fail(
       G_DB,
-      'db.refill_location',
+      id,
       title,
-      legacy ? 'bảng điểm nhận vỏ chưa có (migration 20261015070000 chưa áp); địa chỉ cũ refill.pickup_address sẽ thành điểm đầu tiên' : 'bảng điểm nhận vỏ chưa có (migration 20261015070000 chưa áp) và chưa có địa chỉ cũ refill.pickup_address',
-      'Bình thường trước khi deploy. Sau deploy (--phase=post-deploy) phải có ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ.',
+      'waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động',
+      'Thêm một kho đang hoạt động ở Quản trị, Khách hàng, Đổi rác, Điểm nhận; nếu chưa kịp thì tắt waste.enabled ở Quản trị, Cấu hình, để khách không gửi được rác khi chưa có nơi nhận.',
     );
   }
-  if (s.refill.activeRows > 0) return pass(G_DB, 'db.refill_location', title, `${s.refill.activeRows} điểm đang bật trên ${s.refill.totalRows}`);
-  if (s.refill.totalRows === 0 && legacy) {
-    return warn(G_DB, 'db.refill_location', title, 'chỉ có địa chỉ cũ refill.pickup_address, chưa có điểm nào trong bảng', 'Thêm điểm ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ; địa chỉ cũ chỉ là dự phòng.');
+
+  // Khoá vắng nghĩa là đường Gửi về kho đang bật (mặc định true, như waste-public-config.ts).
+  const mailinOn = 'waste.lane_mailin_enabled' in s.configs ? s.configs['waste.lane_mailin_enabled'] === true : true;
+  if (enabled && mailinOn && s.waste.activeWarehousesWithPhone === 0) {
+    return fail(
+      G_DB,
+      id,
+      title,
+      'waste.enabled đang bật, đường Gửi về kho đang bật nhưng kho đang hoạt động chưa có số điện thoại (nhà vận chuyển cần số này để giao kiện)',
+      'Vào Quản trị, Khách hàng, Đổi rác, Điểm nhận, mở kho và điền ô Số điện thoại bằng số thật của kho; hoặc tắt waste.lane_mailin_enabled ở Quản trị, Cấu hình.',
+    );
   }
-  if (s.refill.totalRows > 0) {
-    return fail(G_DB, 'db.refill_location', title, `có ${s.refill.totalRows} điểm nhưng không điểm nào đang bật, địa chỉ cũ bị bỏ qua`, 'Bật ít nhất một điểm ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ; khách không có chỗ để mang vỏ tới.');
+
+  const warnings: string[] = [];
+  const hints: string[] = [];
+  const gomdonReady = s.configs['shipping.gomdon.recycling_enabled'] === true && Boolean(envValue(env, 'GOMDON_PHONE') && envValue(env, 'GOMDON_PASSWORD'));
+  if (s.configs['waste.lane_pickup_enabled'] === true && !gomdonReady) {
+    warnings.push('waste.lane_pickup_enabled bật nhưng Gomdon chưa sẵn sàng (công tắc shipping.gomdon.recycling_enabled hoặc GOMDON_PHONE/GOMDON_PASSWORD), nên đường Thu kèm đơn vẫn ẩn');
+    hints.push('Chỉ bật waste.lane_pickup_enabled để chạy đơn thử trên bản chưa mở cho khách thật (cờ toàn cục, không có danh sách theo khách); để bật lâu dài khi Gomdon đã trả lời bằng văn bản và đơn thử chạy đạt (spec 12.4), nếu không thì tắt lại. Muốn đơn thử chạy được thì bật công tắc Gomdon và đặt tài khoản Gomdon.');
   }
-  return fail(G_DB, 'db.refill_location', title, 'chưa có điểm nhận vỏ nào, cũng không có địa chỉ cũ', 'Thêm ít nhất một điểm đang bật ở Quản trị, Đổi vỏ chai, Điểm nhận vỏ.');
+
+  const numOr = (key: keyof typeof WASTE_CONFIG_KEYS): number => {
+    const v = s.configs[key];
+    return isNum(v) ? v : (WASTE_CONFIG_KEYS[key].default as number);
+  };
+  const cap = numOr('waste.customer_monthly_cap_points');
+  const mailin = numOr('waste.mailin_min_points');
+  const pickup = numOr('waste.pickup_min_points');
+  let capWarned = false;
+  if (mailin > cap) {
+    warnings.push(`waste.mailin_min_points (${mailin}) lớn hơn waste.customer_monthly_cap_points (${cap}): đường Gửi về kho đóng với mọi khách`);
+    capWarned = true;
+  }
+  if (pickup > cap) {
+    warnings.push(`waste.pickup_min_points (${pickup}) lớn hơn waste.customer_monthly_cap_points (${cap}): đường Thu kèm đơn đóng với mọi khách`);
+    capWarned = true;
+  }
+  if (capWarned) hints.push('Hạ ngưỡng tối thiểu hoặc nâng waste.customer_monthly_cap_points ở Quản trị, Cấu hình, nhóm waste.');
+
+  if (warnings.length > 0) return warn(G_DB, id, title, warnings.join('; '), hints.join(' '));
+  return pass(G_DB, id, title, enabled ? `${s.waste.activeWarehouses} kho đang hoạt động, ${s.waste.totalPoints} điểm trong bảng waste_points` : 'chương trình đang tắt (waste.enabled)');
 }
 
 const SANE: Record<keyof OpsThresholds, [number, number]> = {
@@ -335,7 +377,7 @@ function gomdonToggleChecks(s: DbSnapshot, env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const toggle = s.configs['shipping.gomdon.recycling_enabled'];
   const hasCreds = Boolean(envValue(env, 'GOMDON_PHONE') && envValue(env, 'GOMDON_PASSWORD'));
-  const title = 'Công tắc thu gom tái chế (Gomdon)';
+  const title = 'Công tắc Gomdon (Thu kèm đơn)';
   const on = toggle === true;
   if (typeof toggle === 'string' || typeof toggle === 'number') {
     out.push(warn(G_DB, 'db.gomdon_toggle', title, 'giá trị không phải true/false thật, nên tính năng đang TẮT', 'Đặt lại đúng kiểu boolean (true) ở Quản trị, Cấu hình, shipping.gomdon.recycling_enabled.'));
@@ -402,7 +444,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
   return [
     ...migrationChecks(s, ctx.phase),
     ordersLockCheck(s),
-    refillCheck(s, ctx.phase),
+    wastePointCheck(s, ctx.env),
     opsThresholdCheck(s),
     shippingRateCheck(s),
     commissionCheck(s),

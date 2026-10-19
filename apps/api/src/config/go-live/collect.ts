@@ -66,10 +66,11 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         unfinishedMigrations,
         expectedMigrations,
         orderCount: await count('orders'),
-        refill: {
-          totalRows: await count('refill_pickup_locations'),
-          activeRows: await count('refill_pickup_locations', '"isActive" = true'),
-          tableExists: await exists('refill_pickup_locations'),
+        waste: {
+          tableExists: await exists('waste_points'),
+          totalPoints: await count('waste_points'),
+          activeWarehouses: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`),
+          activeWarehousesWithPhone: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`),
         },
         configs,
         adminCount: await count('users', `"role" = 'ADMIN'`),

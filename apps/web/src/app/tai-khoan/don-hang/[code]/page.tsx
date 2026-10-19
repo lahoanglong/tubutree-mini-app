@@ -24,7 +24,6 @@ import {
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { reviewHref } from '@/lib/reviews-client';
-import { RecyclingStatus } from '@/components/recycling-status';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
@@ -248,7 +247,6 @@ export default function OrderDetailPage() {
       </section>
 
       <DeliverySection order={o} />
-      <RecyclingStatus order={o} />
 
       {o.note && (
         <section className={`mt-4 p-4 ${ui.card}`}>

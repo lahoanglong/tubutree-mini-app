@@ -79,7 +79,7 @@ describe('admin — vùng chạm và tràn ngang ở 390px', () => {
       vi.fn(
         mockFetch({
           '/admin/gomdon/status': {
-            body: { baseUrlSet: true, credentialsSet: true, configured: true, webhookSecretSet: true, recyclingToggle: true, recyclingEnabled: true },
+            body: { baseUrlSet: true, credentialsSet: true, configured: true, webhookSecretSet: true, recyclingToggle: true, recyclingEnabled: true, pickupVisible: true },
           },
         }).fn,
       ),

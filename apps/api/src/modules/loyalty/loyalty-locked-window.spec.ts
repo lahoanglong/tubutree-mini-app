@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { DEFAULT_REWARD_CATALOG, LoyaltyService } from './loyalty.service';
+import { LoyaltyService } from './loyalty.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -26,9 +26,18 @@ function setup(windowDays: unknown = 7) {
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       findUnique: jest.fn().mockResolvedValue({ pointsBalance: 0 }),
     },
+    wasteGiftRedemption: { findUnique: jest.fn().mockResolvedValue(null) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   const prisma = {
     $queryRaw: queryRaw,
+    wasteGift: {
+      findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
+        where.id === 'reward-freeship'
+          ? { id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', pointsCost: 20_000, status: 'ACTIVE', stock: null, voucherType: 'FREESHIP', voucherValue: 0, voucherMinOrder: 99000, voucherMaxDiscount: null, voucherValidDays: 30 }
+          : null,
+      ),
+    },
     $transaction: jest.fn(async (cb: (t: unknown) => unknown) => {
       events.push('tx:open');
       state.txOpen = true;
@@ -122,7 +131,7 @@ describe('PF-6a LoyaltyService.lockedOrderPoints: cửa sổ đổi/trả đọc
   it('(b) redeemReward: đọc cấu hình TRƯỚC khi mở transaction và không có lần get nào bên trong tx', async () => {
     const { svc, get, prisma, events, state } = setup(7);
 
-    await expect(svc.redeemReward('u1', DEFAULT_REWARD_CATALOG[0]!.id)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.redeemReward('u1', 'reward-freeship', 'key-00000001')).rejects.toBeInstanceOf(BadRequestException);
 
     expect(get).toHaveBeenCalledWith('returns.window_days', 7);
     expect(state.getsInsideTx).toBe(0);
@@ -134,9 +143,18 @@ describe('PF-6a LoyaltyService.lockedOrderPoints: cửa sổ đổi/trả đọc
   it('(b) redeemReward: mã quà không tồn tại thì không đọc cấu hình và không mở transaction', async () => {
     const { svc, get, prisma } = setup(7);
 
-    await expect(svc.redeemReward('u1', 'khong-co')).rejects.toThrow(/không tồn tại/);
+    await expect(svc.redeemReward('u1', 'khong-co', 'key-00000002')).rejects.toThrow(/không tồn tại/);
 
     expect(get).not.toHaveBeenCalled();
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('(b) redeemReward: waste.gift_claim_days cũng đọc TRƯỚC khi mở transaction', async () => {
+    const { svc, events, state } = setup(7);
+    await expect(svc.redeemReward('u1', 'reward-freeship', 'key-00000003')).rejects.toBeInstanceOf(BadRequestException);
+    expect(events.indexOf('get:waste.gift_claim_days')).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf('get:waste.gift_claim_days')).toBeLessThan(events.indexOf('tx:open'));
+    expect(state.getsInsideTx).toBe(0);
+    expect(events).not.toContain('get:waste.enabled');
   });
 });

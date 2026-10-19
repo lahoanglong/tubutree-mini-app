@@ -26,9 +26,6 @@ const mocks = vi.hoisted(() => ({
   reopenPayroll: vi.fn(),
   markPaid: vi.fn(),
   adminEditSession: vi.fn(),
-  getPendingRefillReturns: vi.fn(),
-  approveRefillReturn: vi.fn(),
-  rejectRefillReturn: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -57,11 +54,6 @@ vi.mock('../services/payroll-api', () => ({
   markPaid: mocks.markPaid,
 }));
 vi.mock('../services/attendance-api', () => ({ adminEditSession: mocks.adminEditSession }));
-vi.mock('../services/refill-api', () => ({
-  getPendingRefillReturns: mocks.getPendingRefillReturns,
-  approveRefillReturn: mocks.approveRefillReturn,
-  rejectRefillReturn: mocks.rejectRefillReturn,
-}));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
@@ -167,19 +159,6 @@ const DETAIL = {
   ],
 };
 
-const REFILLS = [
-  {
-    id: 'r1',
-    quantity: 3,
-    seedsAwarded: 30,
-    status: 'PENDING',
-    createdAt: '2026-03-10T03:00:00.000Z',
-    user: { id: 'k1', fullName: 'Hoa', phone: '0900000001' },
-    pickupLocation: { id: 'l2', name: 'Kho Thủ Đức', address: '5 Võ Văn Ngân' },
-  },
-  { id: 'r2', quantity: 1, seedsAwarded: 10, status: 'PENDING', createdAt: '2026-03-10T04:00:00.000Z', user: { id: 'k2', fullName: '=Độc', phone: '0900000002' } },
-];
-
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
@@ -217,9 +196,6 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     mocks.reopenPayroll.mockResolvedValue({ status: 'OPEN' });
     mocks.markPaid.mockResolvedValue({ paid: true });
     mocks.adminEditSession.mockResolvedValue({ updated: true });
-    mocks.getPendingRefillReturns.mockResolvedValue(REFILLS);
-    mocks.approveRefillReturn.mockResolvedValue({ ok: true });
-    mocks.rejectRefillReturn.mockResolvedValue({ ok: true });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -235,12 +211,13 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(mocks.listStaff).not.toHaveBeenCalled();
     });
 
-    it('ADMIN: một h1; bốn thẻ chuyển phần (tablist), mặc định "Nhân sự"; nút sang kiểm duyệt cộng đồng', async () => {
+    it('ADMIN: một h1; ba thẻ chuyển phần (tablist), mặc định "Nhân sự"; nút sang kiểm duyệt cộng đồng', async () => {
       renderPage();
       await screen.findByText('Lan');
       expect(h1s()).toEqual(['Quản trị nhân sự']);
       const tabs = screen.getAllByRole('tab');
-      expect(tabs.map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca', 'Lương', 'Duyệt đổi vỏ']);
+      expect(tabs.map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca', 'Lương']);
+      expect(screen.queryByRole('tab', { name: 'Duyệt đổi vỏ' })).toBeNull();
       expect(screen.getByRole('tab', { name: 'Nhân sự' })).toHaveAttribute('aria-selected', 'true');
       for (const tab of tabs) expect(tab.style.minHeight).toBe('44px');
       goTab('Lương');
@@ -697,121 +674,6 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(await screen.findByText('Mất kết nối')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
       expect(await screen.findByText('14h30 · 30.000đ/h · Đang tính')).toBeInTheDocument();
-    });
-  });
-
-  describe('Duyệt đổi vỏ', () => {
-    const openRefill = async () => {
-      renderPage();
-      await screen.findByText('Lan');
-      goTab('Duyệt đổi vỏ');
-      await screen.findByText('Hoa');
-    };
-
-    it('liệt kê yêu cầu chờ duyệt kèm số vỏ và số nước; tiêu đề có số lượng', async () => {
-      await openRefill();
-      expect(screen.getByRole('heading', { level: 2, name: 'Duyệt đổi vỏ chai (2)' })).toBeInTheDocument();
-      expect(screen.getByText(/0900000001 · Đổi/)).toBeInTheDocument();
-      expect(screen.getByText('3 vỏ')).toBeInTheDocument();
-      expect(screen.getByText('=Độc')).toBeInTheDocument();
-    });
-
-    it('mỗi yêu cầu hiện điểm khách sẽ mang vỏ tới; yêu cầu cũ chưa chọn điểm thì không có dòng đó', async () => {
-      await openRefill();
-      expect(screen.getByText('Mang tới: Kho Thủ Đức · 5 Võ Văn Ngân')).toBeInTheDocument();
-      expect(screen.getAllByText(/^Mang tới: /)).toHaveLength(1);
-    });
-
-    it('lọc theo tên hoặc SĐT; nút xoá từ khoá có tên; không khớp thì báo; trống thì báo khác', async () => {
-      await openRefill();
-      const search = screen.getByRole('searchbox', { name: 'Tìm theo tên hoặc SĐT' });
-      fireEvent.change(search, { target: { value: '0900000002' } });
-      expect(screen.getByRole('heading', { level: 2, name: 'Duyệt đổi vỏ chai (1)' })).toBeInTheDocument();
-      expect(screen.queryByText('Hoa')).not.toBeInTheDocument();
-      fireEvent.change(search, { target: { value: 'không có' } });
-      expect(screen.getByText('Không tìm thấy yêu cầu phù hợp')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Xoá từ khoá tìm' }));
-      expect(search).toHaveValue('');
-      expect(screen.getByText('Hoa')).toBeInTheDocument();
-    });
-
-    it('không có yêu cầu nào: báo trống', async () => {
-      mocks.getPendingRefillReturns.mockResolvedValue([]);
-      renderPage();
-      await screen.findByText('Lan');
-      goTab('Duyệt đổi vỏ');
-      expect(await screen.findByText('Không có yêu cầu đổi vỏ chai nào đang chờ duyệt')).toBeInTheDocument();
-    });
-
-    it('Duyệt gọi API đúng yêu cầu, báo thành công; Từ chối báo kiểu info', async () => {
-      await openRefill();
-      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
-      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 3));
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã duyệt yêu cầu đổi vỏ chai.', type: 'success' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Từ chối · =Độc' }));
-      await waitFor(() => expect(mocks.rejectRefillReturn).toHaveBeenCalledWith('r2'));
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã từ chối yêu cầu.', type: 'info' }));
-    });
-
-    it('nhân viên đếm thiếu vỏ: giảm "Vỏ thực nhận" rồi Duyệt gửi đúng số đếm, giọt nước xem trước theo số đó', async () => {
-      await openRefill();
-      expect(screen.getByText('Đếm tại điểm nhận · +30 giọt nước')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Giảm số lượng' }));
-      expect(screen.getByText('Đếm tại điểm nhận · +20 giọt nước')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
-      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r1', 2));
-    });
-
-    it('không cho nhập quá số khách khai; yêu cầu chỉ 1 vỏ thì không có bộ chọn và duyệt đúng 1', async () => {
-      await openRefill();
-      const plus = screen.getByRole('button', { name: 'Tăng số lượng' });
-      expect(plus).toHaveAttribute('aria-disabled', 'true');
-      expect(screen.getAllByRole('button', { name: 'Giảm số lượng' })).toHaveLength(1);
-      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · =Độc' }));
-      await waitFor(() => expect(mocks.approveRefillReturn).toHaveBeenCalledWith('r2', 1));
-    });
-
-    it('đang duyệt một yêu cầu thì nút Từ chối của yêu cầu khác bị khoá', async () => {
-      mocks.approveRefillReturn.mockReturnValue(new Promise(() => undefined));
-      await openRefill();
-      fireEvent.click(screen.getByRole('button', { name: 'Duyệt · Hoa' }));
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Từ chối · =Độc' })).toBeDisabled());
-    });
-
-    it('Xuất CSV chỉ gồm các dòng đang lọc, chống công thức Excel (dấu = đầu ô), kèm tên file', async () => {
-      const links: HTMLAnchorElement[] = [];
-      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-        links.push(this);
-      });
-      await openRefill();
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm theo tên hoặc SĐT' }), { target: { value: '0900000002' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Xuất CSV' }));
-      expect(links).toHaveLength(1);
-      expect(links[0]!.getAttribute('download')).toMatch(/^bao_cao_doi_vo_chai_\d+\.csv$/);
-      const csv = decodeURI(links[0]!.getAttribute('href')!);
-      expect(csv).toContain('ID,Khách hàng,SĐT,Số vỏ chai,Số nước,Thời gian,Điểm nhận');
-      expect(csv).toContain('r2,"\'=Độc","0900000002",1,10,');
-      expect(csv).not.toContain('\nr1,');
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xuất file báo cáo CSV!', type: 'success' }));
-    });
-
-    it('Xuất CSV có cột Điểm nhận (để trống ở yêu cầu cũ)', async () => {
-      const links: HTMLAnchorElement[] = [];
-      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-        links.push(this);
-      });
-      await openRefill();
-      fireEvent.click(screen.getByRole('button', { name: 'Xuất CSV' }));
-      const csv = decodeURI(links[0]!.getAttribute('href')!);
-      expect(csv).toMatch(/\nr1,"Hoa","0900000001",3,30,"[^"]*","Kho Thủ Đức"/);
-      expect(csv).toMatch(/\nr2,"'=Độc","0900000002",1,10,"[^"]*",""/);
-    });
-
-    it('Xuất CSV khi không có dòng nào: báo không có dữ liệu', async () => {
-      await openRefill();
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Tìm theo tên hoặc SĐT' }), { target: { value: 'không có' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Xuất CSV' }));
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Không có dữ liệu để xuất CSV', type: 'info' });
     });
   });
 });

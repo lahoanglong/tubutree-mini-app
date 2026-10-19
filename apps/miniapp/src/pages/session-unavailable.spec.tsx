@@ -22,7 +22,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api');
 vi.mock('../services/account-api');
 vi.mock('../services/wishlist-api');
-vi.mock('../services/refill-api');
+vi.mock('../services/waste-api');
 vi.mock('../services/affiliate-api');
 vi.mock('../services/feed-api');
 vi.mock('../services/game-api');
@@ -49,7 +49,7 @@ import { useAuthStore } from '../store/auth';
 import * as shopApi from '../services/shop-api';
 import * as accountApi from '../services/account-api';
 import * as wishlistApi from '../services/wishlist-api';
-import * as refillApi from '../services/refill-api';
+import * as wasteApi from '../services/waste-api';
 import * as feedApi from '../services/feed-api';
 
 interface PageCase {
@@ -65,7 +65,7 @@ const PAGES: PageCase[] = [
   { name: 'Thanh toán', load: () => import('./checkout'), forbidden: [/Giỏ còn trống đấy/] },
   { name: 'Thông báo', load: () => import('./notifications'), forbidden: [/Chưa có thông báo nào/] },
   { name: 'Yêu thích', load: () => import('./wishlist'), forbidden: [/Chưa có sản phẩm yêu thích/] },
-  { name: 'Đổi vỏ', load: () => import('./refill'), forbidden: [/Đã hết lượt đổi tháng này/, /Đăng nhập để đổi vỏ/] },
+  { name: 'Đổi rác', load: () => import('./recycle'), forbidden: [/Chương trình đang tạm dừng/, /Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác/] },
   { name: 'Sổ địa chỉ', load: () => import('./addresses'), forbidden: [/Bạn chưa có địa chỉ giao hàng nào/] },
   { name: 'Điểm Xanh', load: () => import('./loyalty'), forbidden: [/Chưa có giao dịch điểm nào/] },
   { name: 'Ví Tubu', load: () => import('./wallet'), forbidden: [/0\s?₫|0đ/] },
@@ -107,7 +107,7 @@ const DATA_CALLS = [
   accountApi.getLoyalty,
   accountApi.getWallet,
   wishlistApi.getWishlist,
-  refillApi.getRefillSummary,
+  wasteApi.getWasteMe,
   feedApi.getFeed,
 ];
 

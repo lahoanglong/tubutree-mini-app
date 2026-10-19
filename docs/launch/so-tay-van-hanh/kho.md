@@ -58,13 +58,17 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 4. Lời nhắc tự mất khi hàng đã nhận. Không tự mất thì mở đơn, ghi chú, bấm "Đã xử lý".
 5. Không hoàn tiền tay. Tiền và điểm do hệ thống tính lúc CSKH duyệt.
 
-**Thu gom vật liệu tái chế (Gomdon).** Đơn có thẻ GOMDON giao bằng vận đơn Gomdon (BestExpress). Mã vận đơn nằm ở chi tiết đơn Tubu, mục "Thu gom vật liệu tái chế (Gomdon)". Trạng thái giao theo Gomdon: bấm "Đã thu tiền" trên Pancake không chốt được đơn. Thẻ "Cần xử lý thu gom" là đơn có vận đơn lỗi. Mở đơn, đọc dòng giải thích trong mục này, rồi chọn:
+**Thu kèm rác (Gomdon).** Đơn có thẻ GOMDON giao bằng vận đơn Gomdon (BestExpress). Mã vận đơn nằm ở chi tiết đơn Tubu, khối "Thu kèm rác (Gomdon)". Trạng thái giao theo Gomdon: bấm "Đã thu tiền" trên Pancake không chốt được đơn. Thẻ "Cần xử lý thu gom" là đơn có vận đơn lỗi. Mở đơn, đọc dòng giải thích trong mục này, rồi chọn:
 - "Tạo lại vận đơn Gomdon": vận đơn lỗi hoặc chưa tạo.
 - "Huỷ vận đơn Gomdon": đơn đã huỷ mà vận đơn còn sống.
 - "Đã xử lý tay" (ghi chú): bạn đã xử lý ngoài hệ thống, ví dụ gọi hãng tạo vận đơn riêng.
 Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sau khi xong.
 
-**Đổi vỏ chai** (mọi nhân viên): **Quản trị › Khách hàng › Đổi vỏ chai**. Mở "Đổi vỏ chai chờ duyệt". Đối chiếu số vỏ khách khai với số vỏ thực nhận, nhập số thực nhận nếu ít hơn (bỏ trống nghĩa là nhận đủ), rồi duyệt. Từ chối thì ghi lý do, khách đọc được.
+**Đổi rác** (mọi nhân viên): **Quản trị › Khách hàng › Đổi rác › Yêu cầu**. Hai thẻ ở "Việc cần xử lý" mở thẳng tới đây: "Kiện đổi rác chờ đếm" và "Kiện không rõ chủ".
+- Mở yêu cầu: gõ mã vào ô "Mã yêu cầu, mã đơn hoặc mã vận đơn", bấm "Tra", rồi bấm "Mở" ở dòng kết quả.
+- Nhận kiện gửi về kho hoặc kiện thu kèm đơn: bấm "Nhận kiện", gõ "Mã TR- trên kiện", bấm "Xác nhận đã nhận kiện". Nhận theo mã TR-, không theo mã vận đơn của hãng. Kiện còn cước thu thì bấm "Từ chối tại cửa (chưa trả cước)".
+- Đếm: ở khối "Đếm hàng thực nhận", gõ số thực nhận của từng món (nhận thiếu thì chọn lý do), bấm "Xác nhận số đếm". Điểm cộng theo số thực nhận, không theo số khách khai.
+- Kiện không khớp yêu cầu nào: bấm "Hàng không rõ chủ", điền "Mô tả kiện", bấm "Ghi kiện". Chỉ mô tả kiện, không ghi tên hay số điện thoại người gửi.
 
 **Khách mua tại quầy.** Pancake POS không tự cộng Điểm Xanh. Bấm link **"Màn thu ngân (tích điểm tại quầy)"** góc trên bên phải trang Quản trị. Quét thẻ hoặc nhập SĐT, "Tra cứu". Nhập "Tổng tiền hoá đơn" và "Mã hoá đơn POS", bấm "Tích điểm". Mỗi hoá đơn tích một lần, không tự tích cho chính mình. Màn báo "đang TẮT": nhờ admin bật.
 

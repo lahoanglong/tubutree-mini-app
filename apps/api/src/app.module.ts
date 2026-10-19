@@ -27,7 +27,7 @@ import { FeedModule } from './modules/feed/feed.module';
 import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
 import { FaqModule } from './modules/faq/faq.module';
 import { GroupBuyModule } from './modules/groupbuy/groupbuy.module';
-import { RefillModule } from './modules/refill/refill.module';
+import { WasteExchangeModule } from './modules/waste-exchange/waste-exchange.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
@@ -87,7 +87,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     FaqModule,
     AiAdvisorModule,
     GroupBuyModule,
-    RefillModule,
+    WasteExchangeModule,
     ReviewsModule,
     WishlistModule,
     VouchersModule,

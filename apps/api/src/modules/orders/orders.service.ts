@@ -12,6 +12,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { OrderStatusService } from './order-status.service';
+import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
@@ -174,6 +175,8 @@ export class OrdersService {
     @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
     // Optional như trên: huỷ đơn đã lên Pancake phải hỏi/huỷ cả bên Pancake (D1).
     @Optional() private readonly orderStatus?: OrderStatusService,
+    // Optional như trên: call site dựng tay 7-9 tham số vẫn chạy.
+    @Optional() private readonly wastePickupHooks?: WastePickupHooks,
   ) {}
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
@@ -398,6 +401,7 @@ export class OrdersService {
       await this.orderStatus?.flagPancakeCancelDivergence(order.id, pancakeDecision, 'đơn đổi trạng thái trong lúc khách bấm huỷ');
       return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
     }
+    await this.wastePickupHooks?.onOrderCancelled(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (huỷ) lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`));
     await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);
     // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội
     // bộ) nên để ngoài tx được. Trước đây THIẾU reverseCommissionsForOrder ở luồng khách tự hủy

@@ -26,7 +26,6 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getAddresses: async () => [ADDR],
   checkoutQuote: async () => QUOTE,
   placeOrder: (...args: unknown[]) => m.placeOrder(...args),
-  getPublicConfig: async () => ({ recyclingEnabled: false }),
 }));
 
 import CheckoutPage from './page';

@@ -19,6 +19,8 @@ const DEPRECATED: Record<string, { delegate?: string; writes?: string[]; word?: 
   FunnelDailySnapshot: { delegate: 'funnelDailySnapshot', writes: [] },
   BetaTester: { delegate: 'betaTester', writes: [] },
   BetaFeedback: { delegate: 'betaFeedback', writes: [] },
+  BottleReturn: { delegate: 'bottleReturn', writes: [] },
+  RefillPickupLocation: { delegate: 'refillPickupLocation', writes: [] },
   AffiliateClick: { delegate: 'affiliateClick', writes: ['create'] },
   'AffiliateClick.convertedOrderId': { word: 'convertedOrderId' },
   'RetentionDailySnapshot.dauEventBased': { word: 'dauEventBased', allowed: /dauEventBased:\s*null/ },
@@ -81,7 +83,7 @@ describe('schema.prisma /// @deprecated (C-108)', () => {
   });
 
   it('bảng chết không còn bị gọi bằng SQL thô', () => {
-    for (const table of ['cohort_repeat_snapshot', 'funnel_daily_snapshot', 'beta_feedbacks', 'beta_testers', 'affiliate_clicks']) {
+    for (const table of ['cohort_repeat_snapshot', 'funnel_daily_snapshot', 'beta_feedbacks', 'beta_testers', 'affiliate_clicks', 'bottle_returns', 'refill_pickup_locations']) {
       expect(source).not.toContain(table);
     }
   });

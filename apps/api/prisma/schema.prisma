@@ -305,6 +305,10 @@ model User {
   groupBuysStarted       GroupBuy[]              @relation("GroupBuysStarted")
   groupBuyMemberships    GroupBuyMember[]
   bottleReturns          BottleReturn[]
+  wasteRequests          WasteRequest[]
+  wasteGiftRedemptions   WasteGiftRedemption[]
+  wastePointStaff        WastePointStaff[]
+  wasteFlags             WasteUserFlags?
   betaTester             BetaTester?
   betaFeedbacks          BetaFeedback[]
   subscriptions          Subscription[]
@@ -1060,6 +1064,7 @@ model Order {
   paymentAttempts        PaymentAttempt[]
   customerRefunds        OrderCustomerRefund[]
   merchantPayoutLines    MerchantPayoutLine[]
+  wasteRequest           WasteRequest?
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -1174,6 +1179,8 @@ model PointsTransaction {
   // *_referral_unique (reason) WHERE refType='REFERRAL', *_community_reason_key (reason) WHERE
   // refType='COMMUNITY', *_quest_unique (userId, reason) WHERE refType='QUEST',
   // *_converted_refund_unique (reason, refId) WHERE ORDER_REFUND_CONVERTED:% / ORDER_REFUND_XU:%.
+  // Đổi rác lấy quà (20261020000000_waste_exchange): points_transactions_recycle_ref_key, points_transactions_recycle_reverse_key
+  // và points_transactions_gift_refund_key, đều (refId) WHERE refType = 'RECYCLE' / 'RECYCLE_REVERSED' / 'GIFT_REFUND'.
   @@map("points_transactions")
 }
 
@@ -2179,6 +2186,7 @@ model GardenPlot {
   @@map("garden_plots")
 }
 
+// Chỉ còn cho bảng bottle_returns đã ngừng dùng (Refill đã gỡ). KHÔNG DROP.
 enum RefillStatus {
   PENDING
   APPROVED
@@ -2186,6 +2194,7 @@ enum RefillStatus {
 }
 
 // Refill / đổi vỏ chai (§6.14.6) — mỗi lần khách đổi vỏ chai rỗng lấy thưởng 💧.
+/// @deprecated Refill đã gỡ (Đổi rác lấy quà thay thế, spec 13). Không còn code nào đọc hay ghi; bản cũ khi quay lại vẫn dùng bảng này nên KHÔNG DROP.
 model BottleReturn {
   id               String                @id @default(cuid())
   userId           String
@@ -2212,6 +2221,7 @@ model BottleReturn {
   @@map("bottle_returns")
 }
 
+/// @deprecated Refill đã gỡ (Đổi rác lấy quà thay thế, spec 13). Điểm nhận mới ở waste_points, không chép dữ liệu cũ sang. KHÔNG DROP.
 /// Điểm nhận vỏ chai rỗng (admin quản lý ở tab Đổi vỏ chai). Thay cho ba khoá SystemConfig refill.pickup_*, các khoá đó
 /// vẫn được đọc khi bảng chưa có dòng nào. Không xoá cứng: tắt isActive để giữ lịch sử các yêu cầu đã chọn điểm này.
 model RefillPickupLocation {
@@ -3286,4 +3296,398 @@ model ExternalClaimEvent {
 
   @@index([claimId, createdAt])
   @@map("external_claim_events")
+}
+
+// ============================================================
+// Đổi rác lấy quà (spec 2026-10-17)
+// ============================================================
+
+enum WasteItemStatus {
+  ACTIVE
+  COMING_SOON
+  HIDDEN
+}
+
+enum WastePointKind {
+  WAREHOUSE
+  PARTNER
+}
+
+enum WastePointStatus {
+  ACTIVE
+  PAUSED
+  PENDING
+}
+
+enum WastePointStaffRole {
+  OWNER
+  STAFF
+}
+
+enum WasteMethod {
+  DROP_OFF
+  MAIL_IN
+  PICKUP
+}
+
+enum WasteRequestStatus {
+  OPEN
+  IN_TRANSIT
+  RECEIVED
+  COMPLETED
+  REJECTED
+  CANCELLED
+  EXPIRED
+  REVERSED
+}
+
+enum WasteCloseReason {
+  HOLD_EXPIRED
+  PICKUP_NO_SHOW
+  PICKUP_NOT_DISPATCHED
+  LOST
+  LOST_AT_WAREHOUSE
+  SHIP_LOCKED
+  ORDER_CANCELLED
+}
+
+enum WasteRejectionReason {
+  WET
+  DIRTY
+  FOREIGN_OBJECT
+  WRONG_TYPE
+  DAMAGED
+  NOT_ACCEPTED
+  OVERSIZE
+  HAZARDOUS
+  UNPAID_POSTAGE
+  OTHER
+}
+
+enum WasteShortfallReason {
+  WET
+  DIRTY
+  FOREIGN_OBJECT
+  WRONG_TYPE
+  DAMAGED
+  NOT_ACCEPTED
+  OTHER
+}
+
+enum WasteActorRole {
+  CUSTOMER
+  POINT_STAFF
+  STAFF
+  ADMIN
+  SYSTEM
+}
+
+enum WasteUnmatchedStatus {
+  OPEN
+  RESOLVED
+}
+
+enum WasteGiftKind {
+  VOUCHER
+  TREE
+  SEED_PACK
+  GIFT
+}
+
+enum WasteGiftStatus {
+  ACTIVE
+  HIDDEN
+}
+
+enum WasteGiftRedemptionStatus {
+  READY
+  FULFILLED
+  CANCELLED
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WasteItem {
+  id               String             @id @default(cuid())
+  code             String             @unique
+  name             String
+  unitLabel        String
+  unitsPerPoint    Int
+  pointsPerGroup   Int
+  dropsPerUnit     Int                @default(0)
+  dailyCapQty      Int?
+  monthlyCapQty    Int?
+  status           WasteItemStatus    @default(HIDDEN)
+  prepInstructions String?
+  imageUrl         String?
+  sortOrder        Int                @default(0)
+  gramsPerUnit     Int?
+  hazardous        Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  pointLinks       WastePointItem[]
+  requestLines     WasteRequestLine[]
+
+  @@index([status, sortOrder])
+  @@map("waste_items")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WastePoint {
+  id                  String            @id @default(cuid())
+  kind                WastePointKind
+  name                String
+  addressLine         String
+  provinceCode        String
+  provinceName        String
+  communeCode         String
+  communeName         String
+  lat                 Float?
+  lng                 Float?
+  phone               String?
+  openingHours        Json              @default("{}")
+  status              WastePointStatus  @default(PENDING)
+  monthlyQuotaPoints  Int?
+  perkText            String?
+  perkPendingText     String?
+  giftHandoverEnabled Boolean           @default(false)
+  note                String?
+  sortOrder           Int               @default(0)
+  activatedAt         DateTime?
+  lastConfirmedAt     DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  items               WastePointItem[]
+  staff               WastePointStaff[]
+  usage               WastePointUsage[]
+  requests            WasteRequest[]
+
+  @@index([kind, status])
+  @@index([provinceCode, status])
+  @@map("waste_points")
+}
+
+model WastePointItem {
+  pointId String
+  itemId  String
+  point   WastePoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  item    WasteItem  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@id([pointId, itemId])
+  @@index([itemId])
+  @@map("waste_point_items")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WastePointStaff {
+  id        String              @id @default(cuid())
+  pointId   String
+  userId    String
+  role      WastePointStaffRole @default(STAFF)
+  isActive  Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  point     WastePoint          @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([pointId, userId])
+  @@index([userId, isActive])
+  @@map("waste_point_staff")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WastePointUsage {
+  pointId       String
+  monthKey      String
+  pointsUsed    Int        @default(0)
+  confirmations Int        @default(0)
+  point         WastePoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+
+  @@id([pointId, monthKey])
+  @@map("waste_point_usage")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WasteRequest {
+  id                      String                @id @default(cuid())
+  code                    String                @unique
+  userId                  String
+  method                  WasteMethod
+  status                  WasteRequestStatus    @default(OPEN)
+  pointId                 String
+  orderId                 String?               @unique
+  carrier                 String?
+  trackingCode            String?
+  trackingNorm            String?
+  trackingConflict        Boolean               @default(false)
+  estimatedPoints         Int
+  estimatedDrops          Int                   @default(0)
+  capDayKey               String
+  capMonthKey             String
+  expiresAt               DateTime?
+  inTransitAt             DateTime?
+  receivedAt              DateTime?
+  completedAt             DateTime?
+  closedAt                DateTime?
+  closeReason             WasteCloseReason?
+  confirmedByUserId       String?
+  pointsAwarded           Int?
+  dropsAwarded            Int?
+  receivedWeightGrams     Int?
+  carrierCostVnd          Int?
+  rejectionReason         WasteRejectionReason?
+  rejectionNote           String?               @db.VarChar(500)
+  reversedAt              DateTime?
+  reversedByUserId        String?
+  reversalReason          String?
+  reversalShortfallPoints Int?
+  idempotencyKey          String
+  consentAt               DateTime
+  consentVersion          String
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+  lines                   WasteRequestLine[]
+  user                    User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  point                   WastePoint            @relation(fields: [pointId], references: [id], onDelete: Restrict)
+  order                   Order?                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@index([trackingNorm])
+  @@index([userId, status])
+  @@index([status, method])
+  @@index([capMonthKey])
+  @@index([confirmedByUserId, completedAt])
+  @@index([pointId, status])
+  @@index([status, expiresAt])
+  @@map("waste_requests")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WasteRequestLine {
+  id              String                @id @default(cuid())
+  requestId       String
+  itemId          String
+  itemCode        String
+  itemName        String
+  unitLabel       String
+  unitsPerPoint   Int
+  pointsPerGroup  Int
+  dropsPerUnit    Int
+  gramsPerUnit    Int?
+  declaredQty     Int
+  receivedQty     Int?
+  shortfallReason WasteShortfallReason?
+  pointsAwarded   Int?
+  request         WasteRequest          @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  item            WasteItem             @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, itemId])
+  @@index([itemId])
+  @@map("waste_request_lines")
+}
+
+model WasteEvent {
+  id               String         @id @default(cuid())
+  createdAt        DateTime       @default(now())
+  kind             String
+  requestId        String?
+  pointId          String?
+  giftRedemptionId String?
+  actorUserId      String?
+  actorRole        WasteActorRole
+  meta             Json?
+
+  @@index([requestId, createdAt])
+  @@index([pointId, kind, createdAt])
+  @@index([actorUserId, kind, createdAt])
+  @@map("waste_events")
+}
+
+model WasteUnmatchedParcel {
+  id               String               @id @default(cuid())
+  receivedAt       DateTime             @default(now())
+  createdByUserId  String
+  carrier          String?
+  trackingCode     String?
+  trackingNorm     String?
+  description      String               @db.VarChar(200)
+  reason           String
+  relatedRequestId String?
+  status           WasteUnmatchedStatus @default(OPEN)
+  matchedRequestId String?
+  resolvedByUserId String?
+  resolvedAt       DateTime?
+  resolveNote      String?
+
+  @@index([status, receivedAt])
+  @@index([trackingNorm])
+  @@map("waste_unmatched_parcels")
+}
+
+model WasteUserFlags {
+  userId         String    @id
+  shipLockedAt   DateTime?
+  shipUnlockedAt DateTime?
+  blockedAt      DateTime?
+  reason         String?
+  setByUserId    String?
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@map("waste_user_flags")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WasteGift {
+  id                 String                @id
+  kind               WasteGiftKind
+  name               String
+  description        String?
+  label              String?
+  pointsCost         Int
+  status             WasteGiftStatus       @default(HIDDEN)
+  sortOrder          Int                   @default(0)
+  imageUrl           String?
+  stock              Int?
+  claimInstructions  String?
+  voucherType        CouponType?
+  voucherValue       Int?
+  voucherMinOrder    Int?
+  voucherMaxDiscount Int?
+  voucherValidDays   Int?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  redemptions        WasteGiftRedemption[]
+
+  @@index([status, sortOrder])
+  @@map("waste_gifts")
+}
+
+// CHECK and partial unique indexes: migration 20261020000000_waste_exchange, section WASTE HAND-WRITTEN CONSTRAINTS
+model WasteGiftRedemption {
+  id                String                    @id @default(cuid())
+  userId            String
+  giftId            String
+  giftKind          WasteGiftKind
+  giftName          String
+  pointsCost        Int
+  status            WasteGiftRedemptionStatus
+  code              String?                   @unique
+  couponId          String?
+  idempotencyKey    String
+  claimExpiresAt    DateTime?
+  fulfilledAt       DateTime?
+  fulfilledByUserId String?
+  fulfilledPointId  String?
+  cancelledAt       DateTime?
+  cancelledByUserId String?
+  cancelReason      String?
+  refundedPoints    Int?
+  createdAt         DateTime                  @default(now())
+  user              User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  gift              WasteGift                 @relation(fields: [giftId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@index([status, claimExpiresAt])
+  @@index([userId, createdAt])
+  @@map("waste_gift_redemptions")
 }

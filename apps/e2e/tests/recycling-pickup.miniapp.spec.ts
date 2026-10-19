@@ -1,272 +1,151 @@
-import type { OrderDTO } from '@tubutree/shared-types';
-import { test, expect, makeOrder, makeUser, mockSession } from './support/mock-api';
+import { test, expect, makeOrder, mockSession, makeUser, reply, wasteMe } from './support/mock-api';
+import type { MockApi } from './support/mock-api';
 import { mockCheckout, publicConfig } from './support/checkout-mocks';
+import { wasteDetail, wasteSummary } from './support/waste-mocks';
 
 /**
- * Zalo Mini App E2E — Thu gom vật liệu tái chế (đơn đổi hàng Gomdon/BestExpress).
+ * Zalo Mini App E2E — Thu kèm rác (yêu cầu PICKUP gắn vào đơn đổi hàng).
  *
  * UI dưới test:
- *   - apps/miniapp/src/pages/checkout.tsx: khối #checkout-recycling, toggle role=checkbox
- *     aria-label "Gửi lại vật liệu tái chế". CHỈ hiện khi GET /config/public trả recyclingEnabled:true.
- *     Body POST /checkout/place-order chỉ có hasRecyclingPickup:true (+ recyclingNote đã trim) khi
- *     khách bật; ngược lại KHÔNG có hai key đó (utils/format.ts recyclingCheckoutFields — tương thích
- *     API bản cũ bật forbidNonWhitelisted).
- *   - apps/miniapp/src/pages/order-detail.tsx: khối #order-recycling, tiêu đề theo gomdonStatus
- *     (utils/format.ts recyclingPickupView), "Mã vận đơn BestExpress:" khi có gomdonPartnerCode.
+ *   - apps/miniapp/src/pages/checkout.tsx: khối #checkout-waste-pickup, công tắc role=checkbox "Thu kèm rác"
+ *     với thẻ tóm tắt yêu cầu PICKUP đang mở; chưa có yêu cầu thì là dòng dẫn tới /recycle/new. Body
+ *     POST /checkout/place-order mang wasteRequestId khi khách bật; hai trường thu gom cũ đã bỏ.
+ *   - apps/miniapp/src/pages/order-detail.tsx: dòng "Yêu cầu thu rác TR-…" dẫn tới trang theo dõi yêu cầu.
  */
 
-const TOGGLE_NAME = 'Gửi lại vật liệu tái chế';
-const NOTE_PLACEHOLDER = 'Ghi chú loại vật dụng muốn gửi';
+const PICKUP = wasteDetail({
+  id: 'wr-pk-1',
+  code: 'TR-PK9MV',
+  method: 'PICKUP',
+  status: 'OPEN',
+  pointName: 'Kho Tubu TP.HCM',
+  expiresAt: '2026-10-24T03:00:00.000Z',
+});
+const FLAGS_ON = { enabled: true, dropoff: true, mailin: true, pickup: true };
+const PLACE_BTN = /Đặt hàng · 149\.000đ/;
 
-test.describe('Checkout — lựa chọn gửi lại vật liệu tái chế', () => {
-  test('Tính năng TẮT (recyclingEnabled=false): không hiện lựa chọn, body đặt hàng không có trường thu gom', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: false });
+function setup(api: MockApi, me: Parameters<typeof wasteMe>[0] = {}, flags = FLAGS_ON): void {
+  mockSession(api, makeUser({ id: 'user-checkout' }));
+  mockCheckout(api);
+  api.get('/config/public', publicConfig({ waste: flags }));
+  api.get(
+    '/waste/me',
+    wasteMe({
+      programmeEnabled: true,
+      laneFlags: { dropoff: true, mailin: true, pickup: true },
+      openRequests: [wasteSummary(PICKUP)],
+      ...me,
+    }),
+  );
+}
+
+test.describe('Checkout — Thu kèm rác', () => {
+  test('cờ pickup bật + có yêu cầu PICKUP chưa gắn đơn: hiện công tắc Thu kèm rác và thẻ tóm tắt; bật thì đơn mang wasteRequestId', async ({ page, api }) => {
+    setup(api);
     await page.goto('/checkout');
-    const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
+    const placeBtn = page.getByRole('button', { name: PLACE_BTN });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
 
-    await expect(page.locator('#checkout-recycling')).toHaveCount(0);
-    await expect(page.getByRole('checkbox', { name: TOGGLE_NAME, exact: true })).toHaveCount(0);
-
-    const placed = api.waitForCall('POST', '/checkout/place-order');
-    await placeBtn.click();
-    const call = await placed;
-    expect(call.body).not.toHaveProperty('hasRecyclingPickup');
-    expect(call.body).not.toHaveProperty('recyclingNote');
-  });
-
-  test('API bản cũ không trả recyclingEnabled → coi như tắt, không hiện lựa chọn', async ({ page, api }) => {
-    mockCheckout(api);
-    const { recyclingEnabled: _omit, ...legacy } = publicConfig();
-    api.get('/config/public', legacy);
-    await page.goto('/checkout');
-    await expect(page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ })).toBeEnabled({ timeout: 15_000 });
-    expect(api.callsTo('GET', '/config/public').length).toBeGreaterThan(0);
-    await expect(page.locator('#checkout-recycling')).toHaveCount(0);
-  });
-
-  test('Tính năng BẬT: hiện lựa chọn (mặc định tắt) — không bấm thì body vẫn không có trường thu gom', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
-    await page.goto('/checkout');
-    const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
-    await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
-
-    const section = page.locator('#checkout-recycling');
-    await expect(section).toBeVisible();
-    const toggle = section.getByRole('checkbox', { name: TOGGLE_NAME, exact: true });
+    const toggle = page.getByRole('checkbox', { name: 'Thu kèm rác', exact: true });
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
-    // 2 × 600g → ~1.2 kg (cùng công thức BE gomdon-weight.ts).
-    await expect(section.getByText('Thu gom tối đa ~1.2 kg')).toBeVisible();
-    await expect(page.getByPlaceholder(NOTE_PLACEHOLDER)).toHaveCount(0);
+    await expect(page.getByText('TR-PK9MV')).toBeVisible();
+    await expect(page.getByText('Thùng carton cũ: 3 thùng')).toBeVisible();
+    await expect(page.getByText('Ước tính 3.000 điểm')).toBeVisible();
+    await expect(page.getByText(/quần áo cũ|cục pin/)).toHaveCount(0);
 
-    const placed = api.waitForCall('POST', '/checkout/place-order');
-    await placeBtn.click();
-    const call = await placed;
-    expect(call.body).toMatchObject({ paymentMethod: 'COD' });
-    expect(call.body).not.toHaveProperty('hasRecyclingPickup');
-    expect(call.body).not.toHaveProperty('recyclingNote');
-  });
-
-  test('Bật lựa chọn + ghi chú → gửi hasRecyclingPickup:true và recyclingNote đã trim', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
-    await page.goto('/checkout');
-    const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
-    await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
-
-    const toggle = page.getByRole('checkbox', { name: TOGGLE_NAME, exact: true });
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
 
-    const note = page.getByPlaceholder(NOTE_PLACEHOLDER);
-    await expect(note).toBeVisible();
-    await note.fill('  3 cục pin, vỏ hộp sữa  ');
-    // COD: không hiện lời nhắc "đặt lịch sau khi thanh toán".
-    await expect(page.getByText('Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.')).toHaveCount(0);
-
     const placed = api.waitForCall('POST', '/checkout/place-order');
     await placeBtn.click();
     const call = await placed;
-    expect(call.body).toMatchObject({
-      paymentMethod: 'COD',
-      hasRecyclingPickup: true,
-      recyclingNote: '3 cục pin, vỏ hộp sữa',
-    });
-    await expect(page.getByText('Cảm ơn bạn đã chọn Tubu')).toBeVisible({ timeout: 10_000 });
-  });
-
-  test('Bật rồi tắt lại → body không còn trường thu gom (kể cả ghi chú đã gõ)', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
-    await page.goto('/checkout');
-    const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
-    await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
-
-    const toggle = page.getByRole('checkbox', { name: TOGGLE_NAME, exact: true });
-    await toggle.click();
-    await page.getByPlaceholder(NOTE_PLACEHOLDER).fill('quần áo cũ');
-    await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-checked', 'false');
-    await expect(page.getByPlaceholder(NOTE_PLACEHOLDER)).toHaveCount(0);
-
-    const placed = api.waitForCall('POST', '/checkout/place-order');
-    await placeBtn.click();
-    const call = await placed;
+    expect(call.body).toMatchObject({ wasteRequestId: 'wr-pk-1' });
     expect(call.body).not.toHaveProperty('hasRecyclingPickup');
     expect(call.body).not.toHaveProperty('recyclingNote');
   });
 
-  test('Chuyển khoản + thu gom: nhắc lịch thu gom đặt sau khi nhận thanh toán, vẫn gửi hasRecyclingPickup', async ({ page, api }) => {
-    mockCheckout(api, { recyclingEnabled: true });
+  test('công tắc mặc định tắt: đơn không có wasteRequestId', async ({ page, api }) => {
+    setup(api);
     await page.goto('/checkout');
-    const placeBtn = page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ });
+    const placeBtn = page.getByRole('button', { name: PLACE_BTN });
     await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
-
-    await page.getByRole('radio', { name: 'Chuyển khoản ngân hàng' }).click();
-    await page.getByRole('checkbox', { name: TOGGLE_NAME, exact: true }).click();
-    await expect(page.getByText('Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Thu kèm rác', exact: true })).toBeVisible();
 
     const placed = api.waitForCall('POST', '/checkout/place-order');
     await placeBtn.click();
-    const call = await placed;
-    expect(call.body).toMatchObject({ paymentMethod: 'BANK_TRANSFER', hasRecyclingPickup: true });
-    // Không gõ ghi chú → không gửi recyclingNote rỗng.
-    expect(call.body).not.toHaveProperty('recyclingNote');
-    await expect(page.getByText('Quét QR để chuyển khoản')).toBeVisible({ timeout: 10_000 });
-  });
-});
-
-// ───────────────────────────── Chi tiết đơn ─────────────────────────────
-
-interface DetailCase {
-  name: string;
-  order: Partial<OrderDTO>;
-  title: string;
-  waybill: string | null;
-  /** Nút "Hủy đơn" ở action bar có hiện không. */
-  canCancel: boolean;
-  /** Câu chi tiết phải hiện đúng (bỏ trống = không kiểm). */
-  detail?: string;
-  /** Đơn đã rời hàng đợi CSKH → tuyệt đối không hứa "CSKH sẽ liên hệ". */
-  noCskhPromise?: boolean;
-}
-
-/** utils/format.ts NEUTRAL_PICKUP_DETAIL — cùng câu với web lib/recycling.ts. */
-const NEUTRAL_DETAIL = 'Nếu bưu tá chưa nhận vật liệu tái chế, nhắn Zalo OA Tubu để được hẹn lại.';
-
-const RECYCLING = { hasRecyclingPickup: true, recyclingNote: '3 cục pin, vỏ hộp sữa' } as const;
-
-const DETAIL_CASES: DetailCase[] = [
-  {
-    name: 'COD vừa đặt, chưa có vận đơn (gomdonStatus null)',
-    order: { ...RECYCLING, status: 'CONFIRMED', gomdonStatus: null },
-    title: 'Đang đặt lịch thu gom',
-    waybill: null,
-    canCancel: true,
-  },
-  {
-    name: 'Đã tạo vận đơn BestExpress (gomdonStatus "1")',
-    order: { ...RECYCLING, status: 'CONFIRMED', gomdonStatus: '1', gomdonPartnerCode: 'BEX000111' },
-    title: 'Đã đặt lịch thu gom',
-    waybill: 'BEX000111',
-    canCancel: true,
-  },
-  {
-    name: 'Chuyển khoản chưa trả (AWAITING_PAYMENT)',
-    order: {
-      ...RECYCLING,
-      status: 'PENDING_PAYMENT',
-      paymentMethod: 'BANK_TRANSFER',
-      paymentStatus: 'UNPAID',
-      gomdonStatus: 'AWAITING_PAYMENT',
-    },
-    title: 'Chờ thanh toán',
-    waybill: null,
-    canCancel: true,
-  },
-  {
-    name: 'Tạo vận đơn thất bại (FAILED) → CSKH liên hệ',
-    order: { ...RECYCLING, status: 'CONFIRMED', gomdonStatus: 'FAILED' },
-    title: 'CSKH sẽ liên hệ hẹn thu gom',
-    waybill: null,
-    canCancel: true,
-  },
-  {
-    name: 'Bưu tá đã lấy hàng (gomdonStatus "3") → không cho khách tự huỷ',
-    order: { ...RECYCLING, status: 'CONFIRMED', gomdonStatus: '3', gomdonPartnerCode: 'BEX000333' },
-    title: 'Bưu tá đang giao hàng',
-    waybill: 'BEX000333',
-    canCancel: false,
-  },
-  {
-    name: 'Giao thành công (gomdonStatus "7")',
-    order: { ...RECYCLING, status: 'DELIVERED', paymentStatus: 'PAID', gomdonStatus: '7', gomdonPartnerCode: 'BEX000777' },
-    title: 'Đã giao hàng',
-    waybill: 'BEX000777',
-    canCancel: false,
-  },
-  {
-    name: 'Đơn đã huỷ → ẩn mã vận đơn',
-    order: { ...RECYCLING, status: 'CANCELLED', gomdonStatus: '1', gomdonPartnerCode: 'BEX000999', gomdonCancelStatus: 'CANCELLED' },
-    title: 'Đã huỷ thu gom',
-    waybill: null,
-    canCancel: false,
-  },
-  {
-    name: 'Đã giao bằng vận đơn tay (DELIVERED, Gomdon FAILED) → trung tính, không hứa CSKH',
-    order: { ...RECYCLING, status: 'DELIVERED', paymentStatus: 'PAID', gomdonStatus: 'FAILED' },
-    title: 'Đã giao hàng',
-    waybill: null,
-    canCancel: false,
-    detail: NEUTRAL_DETAIL,
-    noCskhPromise: true,
-  },
-  {
-    name: 'Admin "Đã xử lý tay" (MANUAL_HANDLED) → trung tính, ẩn mã vận đơn cũ',
-    order: { ...RECYCLING, status: 'CONFIRMED', gomdonStatus: 'MANUAL_HANDLED', gomdonPartnerCode: 'BEX000444' },
-    title: 'Thu gom được xử lý riêng',
-    waybill: null,
-    canCancel: true,
-    detail: NEUTRAL_DETAIL,
-    noCskhPromise: true,
-  },
-];
-
-test.describe('Chi tiết đơn — trạng thái thu gom theo gomdonStatus', () => {
-  test.beforeEach(async ({ api }) => {
-    mockSession(api, makeUser({ id: 'user-recycle' }));
-    // Đơn DELIVERED tải thêm danh sách đổi/trả (orders.controller.ts @Get('me/returns')).
-    api.get('/orders/me/returns', []);
+    await placed;
+    expect(api.callsTo('POST', '/checkout/place-order')[0]!.body).not.toHaveProperty('wasteRequestId');
   });
 
-  for (const [i, c] of DETAIL_CASES.entries()) {
-    test(`#order-recycling: ${c.name}`, async ({ page, api }) => {
-      const code = `TUBU-RC-${i + 1}`;
-      api.get('/orders/:code', makeOrder({ code, ...c.order }));
-      await page.goto(`/order/${code}`);
+  test('cờ pickup tắt: không có công tắc', async ({ page, api }) => {
+    setup(api, {}, { ...FLAGS_ON, pickup: false });
+    await page.goto('/checkout');
+    const placeBtn = page.getByRole('button', { name: PLACE_BTN });
+    await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByRole('checkbox', { name: 'Thu kèm rác' })).toHaveCount(0);
+    expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);
 
-      const box = page.locator('#order-recycling');
-      await expect(box).toBeVisible({ timeout: 15_000 });
-      await expect(box.getByText('Thu gom vật liệu tái chế', { exact: true })).toBeVisible();
-      await expect(box.getByText(c.title, { exact: true })).toBeVisible();
-      await expect(box).toContainText(`Vật dụng gửi: ${RECYCLING.recyclingNote}`);
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await placeBtn.click();
+    await placed;
+    expect(api.callsTo('POST', '/checkout/place-order')[0]!.body).not.toHaveProperty('wasteRequestId');
+  });
 
-      if (c.waybill) {
-        await expect(box).toContainText(`Mã vận đơn BestExpress: ${c.waybill}`);
-      } else {
-        await expect(box).not.toContainText('Mã vận đơn BestExpress:');
-      }
-      if (c.detail) await expect(box).toContainText(c.detail);
-      if (c.noCskhPromise) await expect(box).not.toContainText('CSKH');
-
-      const cancelBtn = page.getByRole('button', { name: 'Hủy đơn', exact: true });
-      if (c.canCancel) await expect(cancelBtn).toBeVisible();
-      else await expect(cancelBtn).toHaveCount(0);
+  for (const [name, me] of [
+    ['shipLockedAt', { shipLockedAt: '2026-10-10T00:00:00.000Z' }],
+    ['blocked', { blocked: true }],
+  ] as const) {
+    test(`khách bị khoá gửi (${name}): không có công tắc`, async ({ page, api }) => {
+      setup(api, me);
+      await page.goto('/checkout');
+      await expect(page.getByRole('button', { name: PLACE_BTN })).toBeEnabled({ timeout: 15_000 });
+      await expect.poll(() => api.callsTo('GET', '/waste/me').length).toBeGreaterThan(0);
+      await expect(page.getByText('Thu kèm rác')).toHaveCount(0);
     });
   }
 
-  test('Đơn không chọn thu gom → không có khối #order-recycling', async ({ page, api }) => {
-    api.get('/orders/:code', makeOrder({ code: 'TUBU-RC-NONE', status: 'CONFIRMED', hasRecyclingPickup: false }));
-    await page.goto('/order/TUBU-RC-NONE');
+  test('chưa có yêu cầu: dòng dẫn tới màn Chọn món', async ({ page, api }) => {
+    setup(api, { openRequests: [] });
+    await page.goto('/checkout');
+    await expect(page.getByRole('button', { name: PLACE_BTN })).toBeEnabled({ timeout: 15_000 });
+    await page.getByRole('button', { name: /Thu kèm rác/ }).click();
+    await expect(page).toHaveURL(/\/recycle\/new/);
+  });
+
+  test('server báo yêu cầu đã hết hạn: hiện câu 409, không sang màn đơn thành công', async ({ page, api }) => {
+    setup(api);
+    api.post('/checkout/place-order', () => reply(409, { statusCode: 409, message: 'Yêu cầu thu rác đã hết hạn hoặc đã huỷ' }));
+    await page.goto('/checkout');
+    const placeBtn = page.getByRole('button', { name: PLACE_BTN });
+    await expect(placeBtn).toBeEnabled({ timeout: 15_000 });
+    await page.getByRole('checkbox', { name: 'Thu kèm rác', exact: true }).click();
+    await placeBtn.click();
+    await expect(page.getByText('Yêu cầu thu rác đã hết hạn hoặc đã huỷ')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Cảm ơn bạn đã chọn Tubu')).not.toBeVisible();
+  });
+});
+
+test.describe('Chi tiết đơn — yêu cầu thu rác gắn kèm', () => {
+  test.beforeEach(async ({ api }) => {
+    mockSession(api, makeUser({ id: 'user-recycle' }));
+    api.get('/orders/me/returns', []);
+  });
+
+  test('chi tiết đơn có yêu cầu gắn kèm: dòng dẫn tới trang theo dõi yêu cầu', async ({ page, api }) => {
+    api.get('/orders/:code', makeOrder({ code: 'TUBU-PK-1', id: 'ord-pk-1', status: 'CONFIRMED', hasRecyclingPickup: true }));
+    api.get('/waste/requests/by-order/:orderId', { ...PICKUP, orderId: 'ord-pk-1', orderCode: 'TUBU-PK-1' });
+    await page.goto('/order/TUBU-PK-1');
+    await page.getByRole('button', { name: /Yêu cầu thu rác TR-PK9MV/ }).click();
+    await expect(page).toHaveURL(/\/recycle\/r\/wr-pk-1/);
+  });
+
+  test('chi tiết đơn không gắn yêu cầu: không có dòng thu kèm', async ({ page, api }) => {
+    api.get('/orders/:code', makeOrder({ code: 'TUBU-PK-2', id: 'ord-pk-2', status: 'CONFIRMED', hasRecyclingPickup: true }));
+    api.get('/waste/requests/by-order/:orderId', () => reply(404, { statusCode: 404, message: 'Không tìm thấy mã' }));
+    await page.goto('/order/TUBU-PK-2');
     await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('#order-recycling')).toHaveCount(0);
+    await expect.poll(() => api.callsTo('GET', '/waste/requests/by-order/:orderId').length).toBeGreaterThan(0);
+    await expect(page.getByText(/Yêu cầu thu rác/)).toHaveCount(0);
+    await expect(page.getByText(/Không tìm thấy mã/)).toHaveCount(0);
   });
 });

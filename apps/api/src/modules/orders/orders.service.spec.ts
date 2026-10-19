@@ -43,6 +43,7 @@ function makeService(
     coinCreate?: jest.Mock;
     gomdonQueue?: { getJob: jest.Mock; add: jest.Mock };
     orderStatus?: { precheckPancakeCancel: jest.Mock; afterPancakeCancel: jest.Mock; flagPancakeCancelDivergence?: jest.Mock };
+    wastePickupHooks?: { onOrderCancelled: jest.Mock };
     /**
      * Trạng thái dòng `orders` ĐANG nằm trong DB lúc tx huỷ chạy — lệch ảnh chụp mà detail() đọc
      * trước đó (admin xác nhận chuyển khoản / webhook lật PAID, admin chuyển giao vận…). Mặc định = ảnh chụp.
@@ -100,7 +101,7 @@ function makeService(
     $transaction,
   } as unknown as PrismaService;
   return {
-    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never, spies.orderStatus as never),
+    svc: new OrdersService(prisma, loyalty, cart, notifications, config, affiliate, reversal, spies.gomdonQueue as never, spies.orderStatus as never, spies.wastePickupHooks as never),
     updateMany,
     userUpdate,
     executeRaw,
@@ -1208,5 +1209,40 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)] });
     await svc.repurchase('u1', 'TUBU1', { addSource: 'reorder_notification' });
     expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v1', quantity: 1, addSource: 'reorder_notification' });
+  });
+});
+
+describe('OrdersService.cancel — hook thu kèm rác (§12.2 bước 3, §17.3)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('khách tự huỷ thắng → onOrderCancelled(o1) trong cùng lần gọi, sau khi tx huỷ đã xong (spec 10.1), trước hoàn điểm thường', async () => {
+    const seen: string[] = [];
+    const wastePickupHooks = { onOrderCancelled: jest.fn(async () => { seen.push('onOrderCancelled'); }) };
+    const { svc, $transaction } = makeService({ ...baseOrder, status: 'CONFIRMED' }, { wastePickupHooks });
+    const run = $transaction.getMockImplementation()!;
+    $transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const r = await run(cb);
+      seen.push('tx end');
+      return r;
+    });
+    await svc.cancel('u1', 'TUBU1');
+    expect(wastePickupHooks.onOrderCancelled).toHaveBeenCalledWith('o1');
+    expect(seen.indexOf('tx end')).toBeGreaterThanOrEqual(0);
+    expect(seen.indexOf('tx end')).toBeLessThan(seen.indexOf('onOrderCancelled'));
+    expect(wastePickupHooks.onOrderCancelled.mock.invocationCallOrder[0]!).toBeLessThan((loyalty.reverseOrderPoints as jest.Mock).mock.invocationCallOrder[0]!);
+  });
+
+  it('thua đua (đơn đã bị huỷ bởi request khác) → không gọi hook', async () => {
+    const wastePickupHooks = { onOrderCancelled: jest.fn().mockResolvedValue(undefined) };
+    const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' }, { wastePickupHooks, updateMany: jest.fn().mockResolvedValue({ count: 0 }) });
+    await svc.cancel('u1', 'TUBU1');
+    expect(wastePickupHooks.onOrderCancelled).not.toHaveBeenCalled();
+  });
+
+  it('hook lỗi → huỷ vẫn xong và khách vẫn nhận ORDER_CANCELLED', async () => {
+    const wastePickupHooks = { onOrderCancelled: jest.fn().mockRejectedValue(new Error('hook')) };
+    const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' }, { wastePickupHooks });
+    await expect(svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
+    expect(notifications.notify as jest.Mock).toHaveBeenCalledWith('u1', 'ORDER_CANCELLED', expect.anything());
   });
 });

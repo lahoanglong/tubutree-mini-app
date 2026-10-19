@@ -53,7 +53,17 @@ const CommunityEventsPage = lazy(() => import('../pages/community-events'));
 const PostDetailPage = lazy(() => import('../pages/post-detail'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
 const GroupBuyPage = lazy(() => import('../pages/group-buy'));
-const RefillPage = lazy(() => import('../pages/refill'));
+const RecyclePage = lazy(() => import('../pages/recycle'));
+const RecycleRulesPage = lazy(() => import('../pages/recycle-rules'));
+const RecycleNewPage = lazy(() => import('../pages/recycle-new'));
+const RecyclePointsPage = lazy(() => import('../pages/recycle-points'));
+const RecycleRequestPage = lazy(() => import('../pages/recycle-request'));
+const RecycleEditPage = lazy(() => import('../pages/recycle-edit'));
+const RecycleRequestsPage = lazy(() => import('../pages/recycle-requests'));
+const RecycleDonePage = lazy(() => import('../pages/recycle-done'));
+const RecycleDeskPage = lazy(() => import('../pages/recycle-desk'));
+const RewardsPage = lazy(() => import('../pages/rewards'));
+const RewardsMinePage = lazy(() => import('../pages/rewards-mine'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
 const WalletPage = lazy(() => import('../pages/wallet'));
@@ -191,7 +201,18 @@ export default function MyApp() {
                     <Route path="/ai-advisor" element={<AiAdvisorPage />} />
                     <Route path="/group-buy" element={<GroupBuyPage />} />
                     <Route path="/group-buy/:id" element={<GroupBuyPage />} />
-                    <Route path="/refill" element={<RefillPage />} />
+                    <Route path="/refill" element={<Navigate to="/recycle" replace />} />
+                    <Route path="/recycle" element={<RecyclePage />} />
+                    <Route path="/recycle/rules" element={<RecycleRulesPage />} />
+                    <Route path="/recycle/new" element={<RecycleNewPage />} />
+                    <Route path="/recycle/points" element={<RecyclePointsPage />} />
+                    <Route path="/recycle/r/:id" element={<RecycleRequestPage />} />
+                    <Route path="/recycle/r/:id/edit" element={<RecycleEditPage />} />
+                    <Route path="/recycle/requests" element={<RecycleRequestsPage />} />
+                    <Route path="/recycle/done/:id" element={<RecycleDonePage />} />
+                    <Route path="/recycle/desk" element={<RecycleDeskPage />} />
+                    <Route path="/rewards" element={<RewardsPage />} />
+                    <Route path="/rewards/mine" element={<RewardsMinePage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/loyalty" element={<LoyaltyPage />} />
                     <Route path="/wallet" element={<WalletPage />} />

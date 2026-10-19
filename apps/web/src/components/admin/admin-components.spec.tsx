@@ -6,8 +6,6 @@ import { ClaimRow } from './dealer-claims-tab';
 import { PosScreen } from './pos-screen';
 import { GomdonConfigCard } from './gomdon-config-card';
 import { LoyaltyConfigCard } from './loyalty-config-card';
-import { RecyclingCheckoutSection } from '../recycling-checkout';
-import { RecyclingStatus } from '../recycling-status';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
@@ -481,6 +479,7 @@ describe('GomdonConfigCard', () => {
           webhookSecretSet: true,
           recyclingToggle: true,
           recyclingEnabled: false,
+          pickupVisible: false,
           connection: {
             lastOkAt: null,
             lastErrorAt: '2026-10-13T03:00:00.000Z',
@@ -519,7 +518,7 @@ describe('GomdonConfigCard', () => {
     const puts: unknown[] = [];
     const api = mockFetch({
       '/admin/gomdon/status': {
-        body: { baseUrlSet: true, credentialsSet: false, configured: false, webhookSecretSet: false, recyclingToggle: true, recyclingEnabled: false },
+        body: { baseUrlSet: true, credentialsSet: false, configured: false, webhookSecretSet: false, recyclingToggle: true, recyclingEnabled: false, pickupVisible: false },
       },
       '/admin/config': (init) => {
         if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
@@ -563,42 +562,50 @@ describe('GomdonConfigCard', () => {
   });
 });
 
-describe('Web shop — thu gom ở checkout & đơn của tôi', () => {
-  it('chuyển khoản → nói rõ lịch thu gom đặt SAU khi thanh toán; COD thì không', () => {
-    const props = { selected: true, onSelectedChange: () => {}, note: '', onNoteChange: () => {} };
-    const bank = mount(<RecyclingCheckoutSection {...props} paymentMethod="BANK_TRANSFER" />);
-    expect(bank.container.textContent).toContain('Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.');
-    const cod = mount(<RecyclingCheckoutSection {...props} paymentMethod="COD" />);
-    expect(cod.container.textContent).not.toContain('sau khi Tubu nhận được thanh toán');
+describe('GomdonConfigCard — cổng thật của khách', () => {
+  const statusBody = (over: Record<string, unknown>) => ({
+    baseUrlSet: true,
+    credentialsSet: true,
+    configured: true,
+    webhookSecretSet: true,
+    recyclingToggle: true,
+    recyclingEnabled: true,
+    pickupVisible: false,
+    ...over,
   });
 
-  it('chưa bật → không hiện ô ghi chú; bật → ô ghi chú giới hạn 500 ký tự', () => {
-    const off = mount(
-      <RecyclingCheckoutSection selected={false} onSelectedChange={() => {}} note="" onNoteChange={() => {}} paymentMethod="COD" />,
-    );
-    expect(off.container.querySelector('textarea')).toBeNull();
-    const on = mount(<RecyclingCheckoutSection selected onSelectedChange={() => {}} note="" onNoteChange={() => {}} paymentMethod="COD" />);
-    expect(on.container.querySelector('textarea')?.getAttribute('maxlength')).toBe('500');
+  it('công tắc Gomdon bật nhưng chương trình hoặc đường Thu kèm đơn tắt: KHÔNG thấy, nêu hai điều kiện còn thiếu, công tắc gọi là kỹ thuật', async () => {
+    const puts: unknown[] = [];
+    const api = mockFetch({
+      '/admin/gomdon/status': { body: statusBody({}) },
+      '/admin/config': (init) => {
+        if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
+        return { body: { ok: true } };
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const rows = [{ key: 'shipping.gomdon.recycling_enabled', value: false, description: null, category: 'shipping' }];
+    const { container } = mount(<GomdonConfigCard rows={rows} />);
+    await flush();
+    expect(container.textContent).toContain('Công tắc kỹ thuật Gomdon');
+    expect(container.textContent).not.toContain('Hiện lựa chọn thu gom ở checkout');
+    expect(container.textContent).toContain('KHÔNG thấy');
+    expect(container.textContent).not.toContain('ĐANG thấy');
+    expect(container.textContent).toContain('Bật chương trình với khách');
+    expect(container.textContent).toContain('Cách Thu kèm đơn');
+    expect(container.textContent).toContain('ở Khách hàng › Đổi rác › Cấu hình chung.');
+    click(container.querySelector('input[role="switch"]'));
+    await flush();
+    expect(puts).toEqual([{ key: 'shipping.gomdon.recycling_enabled', value: true }]);
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã BẬT công tắc kỹ thuật Gomdon.');
+    expect(container.textContent).not.toContain('lựa chọn thu gom ở checkout');
   });
 
-  it('đơn của tôi: trạng thái thu gom trung thực', () => {
-    const o = {
-      code: 'TB-1',
-      status: 'PENDING_PAYMENT',
-      subtotal: 0,
-      discount: 0,
-      shippingFee: 0,
-      total: 0,
-      paymentMethod: 'BANK_TRANSFER',
-      paymentStatus: 'UNPAID',
-      createdAt: '2026-09-27T00:00:00.000Z',
-      items: [],
-      hasRecyclingPickup: true,
-    };
-    const { container } = mount(<RecyclingStatus order={o} />);
-    expect(container.textContent).toContain('Chờ thanh toán');
-    const none = mount(<RecyclingStatus order={{ ...o, hasRecyclingPickup: false }} />);
-    expect(none.container.textContent).toBe('');
+  it('pickupVisible true: ĐANG thấy', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/gomdon/status': { body: statusBody({ pickupVisible: true }) } }).fn));
+    const { container } = mount(<GomdonConfigCard rows={[]} />);
+    await flush();
+    expect(container.textContent).toContain('ĐANG thấy');
   });
 });
 

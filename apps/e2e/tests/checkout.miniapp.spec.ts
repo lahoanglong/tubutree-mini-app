@@ -44,8 +44,9 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.getByRole('radio', { name: /(?<![\p{L}])xu(?![\p{L}])/iu })).toHaveCount(0);
     await expect(page.getByRole('radio', { name: /Thanh toán khi nhận hàng|Chuyển khoản ngân hàng|Ví Tubu/ })).toHaveCount(3);
 
-    // Tính năng thu gom tắt (recyclingEnabled=false) → không hiện lựa chọn.
+    // waste.pickup tắt (publicConfig mặc định) → không có mục Thu kèm rác, cũng không còn khối thu gom cũ.
     await expect(page.locator('#checkout-recycling')).toHaveCount(0);
+    await expect(page.locator('#checkout-waste-pickup')).toHaveCount(0);
   });
 
   // R5-BUYER-5: giỏ rỗng mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.
@@ -125,6 +126,8 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     expect(call.body).toMatchObject({ addressId: CHECKOUT_ADDRESS.id, paymentMethod: 'COD', pointsToUse: 0 });
     expect(call.body).not.toHaveProperty('hasRecyclingPickup');
     expect(call.body).not.toHaveProperty('recyclingNote');
+    // default publicConfig has waste.pickup false, so the checkout makes no /waste/* call and shows no switch
+    expect(call.body).not.toHaveProperty('wasteRequestId');
     expect(call.headers['idempotency-key'] ?? '').not.toBe('');
 
     // OrderSuccess (components/checkout/order-success.tsx): tiêu đề + mã đơn + nhắc tiền mặt COD.

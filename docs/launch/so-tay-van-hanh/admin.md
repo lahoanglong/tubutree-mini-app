@@ -17,7 +17,6 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 | Hàng trả chờ nhận về kho | Kho | Đổi / Trả |
 | Hoàn tiền khách, Lệnh rút tiền chờ duyệt, Phiếu đối soát chờ chuyển / thu | Kế toán | Hoàn tiền khách, Duyệt yêu cầu rút tiền, Đơn đối tác & đối soát |
 | Hồ sơ đại lý, Thưởng đại lý, Sản phẩm đối tác, Liên kết ký gửi, Đơn đối tác quá hạn, Gian hàng có khoản chờ lập phiếu | Quản lý đại lý–CTV | Đại lý, Thưởng đại lý, Duyệt SP đối tác, Đơn đối tác & đối soát |
-| Đổi vỏ chai chờ duyệt | Nhân viên bất kỳ | Đổi vỏ chai |
 
 3. Mở **Quản trị › Cấu hình & tích hợp › Sức khoẻ hệ thống**, bấm "Làm mới". Phải thấy: Pancake "Đã cấu hình"; "Đồng bộ danh mục" có giờ gần đây và không có chữ lỗi; "Webhook lỗi chưa xử lý" (tin Pancake báo về bị lỗi) bằng 0. Đỏ quá 15 phút: gọi kỹ thuật.
 4. Hệ thống tự gửi email báo động khi đơn kẹt hoặc Pancake lỗi. Mở hộp thư báo động (cần xác nhận email nhận đã cài).
@@ -26,7 +25,7 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 
 **Cấp quyền nhân viên**
 1. **Quản trị › Khách hàng › Người dùng**, ô "Cấp / đổi vai trò theo SĐT": nhập SĐT, chọn "Nhân viên", bấm "Cấp quyền".
-2. Bấm tên người đó, ô "Nhóm việc nhân viên": tick "CSKH" hoặc "Kho", bấm "Lưu nhóm việc". Không tick nhóm nào: người đó chỉ dùng quầy thu ngân, đổi vỏ chai, chấm công.
+2. Bấm tên người đó, ô "Nhóm việc nhân viên": tick "CSKH" hoặc "Kho", bấm "Lưu nhóm việc". Không tick nhóm nào: người đó chỉ dùng quầy thu ngân, đổi rác, chấm công.
 3. Cấp "Quản trị" chỉ cho người thật sự tin cậy (hộp xác nhận sẽ hỏi lại). Marketing và kế toán hiện phải dùng vai trò này (**⏳ đang làm**: nhóm riêng).
 4. Cách khác, trên Mini App: **Quản trị nhân sự › Nhân sự › Thêm**, chọn "Nhân viên" hoặc "Quản trị", bấm "Lưu quyền".
 

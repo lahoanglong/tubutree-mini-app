@@ -1,8 +1,11 @@
 import 'reflect-metadata';
+import { BadRequestException, RequestMethod } from '@nestjs/common';
+import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { LoyaltyController } from './loyalty.controller';
+import type { LoyaltyService } from './loyalty.service';
 import { PosCreditDto, PosCreditListQuery, ScanMemberDto } from './dto/loyalty-staff.dto';
 
 async function errorKeys<T extends object>(cls: new () => T, plain: Record<string, unknown>): Promise<string[]> {
@@ -21,9 +24,33 @@ describe('LoyaltyController — route nhân viên (POS)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.posCredits)).toEqual(['ADMIN']);
   });
 
+  it('GET me/loyalty/rewards/mine là route khách, không giới hạn role', () => {
+    const h = LoyaltyController.prototype.myRedemptions;
+    expect(Reflect.getMetadata(PATH_METADATA, h)).toBe('me/loyalty/rewards/mine');
+    expect(Reflect.getMetadata(METHOD_METADATA, h)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
+  });
+
   it('route khách (check-in/đổi quà) KHÔNG giới hạn role', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.checkIn)).toBeUndefined();
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.redeemReward)).toBeUndefined();
+  });
+});
+
+describe('LoyaltyController.redeemReward — Idempotency-Key', () => {
+  it('khoá thiếu hoặc quá ngắn → 400, không gọi service', () => {
+    const loyalty = { redeemReward: jest.fn() };
+    const ctrl = new LoyaltyController(loyalty as unknown as LoyaltyService);
+    expect(() => ctrl.redeemReward('u1', 'reward-freeship', 'ab')).toThrow(BadRequestException);
+    expect(() => ctrl.redeemReward('u1', 'reward-freeship', undefined)).toThrow(BadRequestException);
+    expect(loyalty.redeemReward).not.toHaveBeenCalled();
+  });
+
+  it('khoá hợp lệ → chuyển cho service cùng userId và rewardId', () => {
+    const loyalty = { redeemReward: jest.fn().mockReturnValue('ok') };
+    const ctrl = new LoyaltyController(loyalty as unknown as LoyaltyService);
+    expect(ctrl.redeemReward('u1', 'reward-freeship', 'key-00000001')).toBe('ok');
+    expect(loyalty.redeemReward).toHaveBeenCalledWith('u1', 'reward-freeship', 'key-00000001');
   });
 });
 

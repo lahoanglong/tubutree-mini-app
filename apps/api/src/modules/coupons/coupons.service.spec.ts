@@ -313,7 +313,7 @@ function makeRedeemService(opts: {
     $executeRaw: executeRaw,
   };
   // redeem() không tx → tự mở $transaction(cb) — mock chạy cb với chính client này (mirror
-  // refill.service.spec.ts / rbac.service.spec.ts) để logic bên trong dùng CHUNG mock ở trên.
+  // rbac.service.spec.ts) để logic bên trong dùng CHUNG mock ở trên.
   base.$transaction = jest.fn().mockImplementation((cb: (tx: unknown) => unknown) => cb(base));
   const prisma = base as unknown as PrismaService;
   const svc = new CouponsService(prisma);

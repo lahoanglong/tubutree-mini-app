@@ -1,5 +1,4 @@
 import type { SystemConfigService } from './system-config.service';
-import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
 import { toShippingEta } from './shipping-eta';
 import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../affiliate/affiliate.service';
 import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
@@ -11,6 +10,7 @@ import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLACE_EARN_PCT_KEY, MAX_MARKETPLACE_EARN_PCT } from '../loyalty/earn-rates';
 import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim.config';
+import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
@@ -34,7 +34,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     subscribeDiscountPct,
     affiliateMinWithdrawBank,
     cashbackHoldDays,
-    recyclingEnabled,
     etaMinDays,
     etaMaxDays,
     hotline,
@@ -62,14 +61,12 @@ export async function buildPublicConfig(config: SystemConfigService) {
     communityZaloGroupUrl,
     communityFacebookUrl,
     communityTiktokUrl,
+    waste,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', 200000),
     config.get<number>('subscribe.discount_pct', 0.12),
     config.get<number>('affiliate.min_withdraw_bank', 50000),
     config.get<number>('cashback.hold_days', 30),
-    // Chỉ trả boolean — KHÔNG lộ cấu hình/tài khoản Gomdon. true khi Gomdon đã cấu hình VÀ admin
-    // bật shipping.gomdon.recycling_enabled; miniapp chỉ hiện lựa chọn thu gom khi true.
-    isGomdonRecyclingEnabled(config).catch(() => false),
     config.get<number | null>('shipping.eta_min_days', null),
     config.get<number | null>('shipping.eta_max_days', null),
     config.get<unknown>('support.hotline', '0984 606 774'),
@@ -99,6 +96,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>('community.zalo_group_url', ''),
     config.get<unknown>('community.facebook_url', 'https://www.facebook.com/tubutree'),
     config.get<unknown>('community.tiktok_url', 'https://www.tiktok.com/@tubutree.com'),
+    computeWastePublicFlags(config).catch(() => ({ enabled: false, dropoff: false, mailin: false, pickup: false })),
   ]);
   return {
     freeshipThreshold,
@@ -109,7 +107,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     affiliateMinWithdrawBank,
     affiliatePitWithhold: { pct: pitPct, threshold: pitThreshold },
     cashbackHoldDays,
-    recyclingEnabled,
+    waste,
     shippingEta: toShippingEta(etaMinDays, etaMaxDays),
     groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
     returnWindowDays,
