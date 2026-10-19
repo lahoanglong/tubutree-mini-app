@@ -242,6 +242,8 @@ export function WastePointForm({
   const warehouse = f.kind === 'WAREHOUSE';
   // Điểm mới chưa có nhân sự nên chưa có chủ điểm: API từ chối ACTIVE.
   const needsOwner = !point && f.kind === 'PARTNER';
+  // API từ chối món chỉ kho nhận ở điểm đại lý; khoá ô để admin không phải đoán qua lỗi 400.
+  const warehouseOnlyIds = new Set(warehouse ? [] : items.filter((i) => i.warehouseOnly).map((i) => i.id));
 
   const onError = (e: unknown) => setErr(e instanceof Error ? e.message : 'Thao tác thất bại.');
   const create = useMutation({
@@ -258,6 +260,7 @@ export function WastePointForm({
   const save = () => {
     if (Object.keys(errors).length > 0) return;
     const full = toBody(f);
+    full.itemIds = (full.itemIds ?? []).filter((id) => !warehouseOnlyIds.has(id));
     if (point) {
       const body = diffBody(full, point, f, initial);
       if (Object.keys(body).length === 0) return;
@@ -378,13 +381,22 @@ export function WastePointForm({
       <fieldset className="space-y-1">
         <legend className="text-xs font-medium text-stone-700">Món điểm nhận</legend>
         <div className="grid gap-1 sm:grid-cols-2">
-          {items.map((i) => (
-            <label key={i.id} className="flex items-center gap-1.5 text-sm text-stone-800">
-              <input type="checkbox" aria-label={i.name} checked={f.itemIds.includes(i.id)} onChange={(e) => toggleItem(i.id, e.target.checked)} />
-              <span>{i.name}</span>
-              <span className="text-[11px] text-stone-500">{WASTE_ITEM_STATUS_LABELS[i.status]}</span>
-            </label>
-          ))}
+          {items.map((i) => {
+            const locked = warehouseOnlyIds.has(i.id);
+            return (
+              <label key={i.id} className="flex items-center gap-1.5 text-sm text-stone-800">
+                <input
+                  type="checkbox"
+                  aria-label={i.name}
+                  checked={!locked && f.itemIds.includes(i.id)}
+                  disabled={locked}
+                  onChange={(e) => toggleItem(i.id, e.target.checked)}
+                />
+                <span>{i.name}</span>
+                <span className="text-[11px] text-stone-500">{locked ? 'Chỉ kho Tubu HCMC nhận' : WASTE_ITEM_STATUS_LABELS[i.status]}</span>
+              </label>
+            );
+          })}
         </div>
       </fieldset>
 

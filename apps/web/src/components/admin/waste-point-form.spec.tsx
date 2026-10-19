@@ -260,3 +260,58 @@ describe('WastePointForm', () => {
     expect(c.querySelector('[role="alert"]')!.textContent).toContain(message);
   });
 });
+
+describe('WastePointForm, món chỉ kho Tubu HCMC nhận', () => {
+  const MILK = wasteItem({ id: 'i2', name: 'Vỏ hộp sữa', unitLabel: 'vỏ', warehouseOnly: true });
+  const ITEMS_WITH_MILK = [wasteItem(), MILK];
+  const MILK_BOX = 'input[aria-label="Vỏ hộp sữa"]';
+  const WHY = 'Chỉ kho Tubu HCMC nhận';
+
+  it('đại lý mới: ô món chỉ-kho bị khoá kèm lời giải thích, bấm không tick được, body không có món đó', async () => {
+    const { api, c } = await mount({ items: ITEMS_WITH_MILK });
+    expect(q(c, MILK_BOX)!.disabled).toBe(true);
+    expect(q(c, 'input[aria-label="Thùng carton cũ"]')!.disabled).toBe(false);
+    expect(c.textContent).toContain(WHY);
+    await fillNew(c);
+    click(q(c, MILK_BOX));
+    expect(q(c, MILK_BOX)!.checked).toBe(false);
+    click(btn(c, 'Đăng ký điểm'));
+    await flush();
+    expect(body(callsTo(api, '/admin/waste/points', 'POST')[0]!).itemIds).toEqual(['i1']);
+  });
+
+  it('chọn loại kho thì ô mở ra, tick được và body gửi món đó; quay lại đại lý thì khoá và bỏ tick', async () => {
+    const { api, c } = await mount({ items: ITEMS_WITH_MILK, warehouseExists: false });
+    click(q(c, 'input[name="kind"][value="WAREHOUSE"]'));
+    await flush();
+    expect(q(c, MILK_BOX)!.disabled).toBe(false);
+    expect(c.textContent).not.toContain(WHY);
+    click(q(c, MILK_BOX));
+    expect(q(c, MILK_BOX)!.checked).toBe(true);
+    click(q(c, 'input[name="kind"][value="PARTNER"]'));
+    await flush();
+    expect(q(c, MILK_BOX)!.disabled).toBe(true);
+    expect(q(c, MILK_BOX)!.checked).toBe(false);
+    expect(callsTo(api, '/admin/waste/points', 'POST')).toHaveLength(0);
+  });
+
+  it('sửa kho: món chỉ-kho đang tick vẫn tick và bấm bỏ tick được', async () => {
+    const { c } = await mount({
+      items: ITEMS_WITH_MILK,
+      point: wastePoint({ id: 'wh', kind: 'WAREHOUSE', name: 'Kho Tubu HCM', monthlyQuotaPoints: null, staff: [], acceptedItemIds: ['i1', 'i2'] }),
+    });
+    expect(q(c, MILK_BOX)!.disabled).toBe(false);
+    expect(q(c, MILK_BOX)!.checked).toBe(true);
+  });
+
+  it('sửa đại lý cũ đang dính món chỉ-kho: hiện bỏ tick, lưu gửi danh sách món đã bỏ món đó', async () => {
+    const { api, c } = await mount({ items: ITEMS_WITH_MILK, point: wastePoint({ acceptedItemIds: ['i1', 'i2'] }) });
+    expect(q(c, MILK_BOX)!.disabled).toBe(true);
+    expect(q(c, MILK_BOX)!.checked).toBe(false);
+    click(btn(c, 'Lưu điểm'));
+    await flush();
+    const patches = callsTo(api, '/admin/waste/points/p1', 'PATCH');
+    expect(patches).toHaveLength(1);
+    expect(body(patches[0]!)).toEqual({ itemIds: ['i1'] });
+  });
+});

@@ -96,7 +96,8 @@ export interface WastePerkSubmitRequest { perkText: string }
 export interface WastePointMonthlyReportDTO { pointId: string; month: string; confirmations: number; pointsAwarded: number; quotaUsed: number; units: { itemId: string; itemName: string; unitLabel: string; qty: number }[] }
 
 // admin
-export interface AdminWasteItemDTO extends WasteItemDTO { createdAt: string; updatedAt: string }
+/** warehouseOnly is optional so a client built before the field existed still type-checks; the API always sends it. */
+export interface AdminWasteItemDTO extends WasteItemDTO { warehouseOnly?: boolean; createdAt: string; updatedAt: string }
 export interface WasteItemUpsertRequest { code: string; name: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit?: number; dailyCapQty?: number | null; monthlyCapQty?: number | null; status?: WasteItemStatus; prepInstructions?: string | null; imageUrl?: string | null; sortOrder?: number; gramsPerUnit?: number | null; hazardous?: boolean }
 export interface WastePointStaffDTO { userId: string; role: WastePointStaffRole; isActive: boolean; fullName: string | null; phone: string | null }
 export interface AdminWastePointDTO extends WastePointDTO { status: WastePointStatus; monthlyQuotaPoints: number | null; monthUsage: { monthKey: string; pointsUsed: number; confirmations: number }; quotaFull: boolean; perkPendingText: string | null; giftHandoverEnabled: boolean; note: string | null; sortOrder: number; activatedAt: string | null; lastConfirmedAt: string | null; hiddenInactive: boolean; staff: WastePointStaffDTO[] }

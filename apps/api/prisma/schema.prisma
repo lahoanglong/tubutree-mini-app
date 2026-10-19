@@ -3424,6 +3424,7 @@ model WasteItem {
   sortOrder        Int                @default(0)
   gramsPerUnit     Int?
   hazardous        Boolean            @default(false)
+  warehouseOnly    Boolean            @default(false)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   pointLinks       WastePointItem[]

@@ -14,6 +14,7 @@ export interface WasteSeedItem {
   prepInstructions: string | null;
   sortOrder: number;
   hazardous: boolean;
+  warehouseOnly: boolean;
 }
 
 export interface WasteSeedGift {
@@ -33,12 +34,12 @@ export interface WasteSeedGift {
 }
 
 export const WASTE_SEED_ITEMS: readonly WasteSeedItem[] = [
-  { id: 'wi-carton', code: 'CARTON', name: 'Thùng carton cũ', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 10, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: 'Gấp phẳng, giữ khô và sạch.', sortOrder: 10, hazardous: false },
-  { id: 'wi-bubble-wrap', code: 'BUBBLE_WRAP', name: 'Nilon chống sốc', unitLabel: 'túi lớn', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 10, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', sortOrder: 20, hazardous: false },
-  { id: 'wi-milk-carton', code: 'MILK_CARTON', name: 'Vỏ hộp sữa sạch', unitLabel: 'vỏ', unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 50, monthlyCapQty: 300, status: 'ACTIVE', prepInstructions: 'Rửa sạch, để ráo, ép dẹt.', sortOrder: 30, hazardous: false },
-  { id: 'wi-tubu-bottle', code: 'TUBU_BOTTLE', name: 'Vỏ chai, hộp Tubu Tree', unitLabel: 'vỏ', unitsPerPoint: 1, pointsPerGroup: 2000, dropsPerUnit: 2, dailyCapQty: null, monthlyCapQty: 20, status: 'ACTIVE', prepInstructions: 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', sortOrder: 40, hazardous: false },
+  { id: 'wi-carton', code: 'CARTON', name: 'Thùng carton cũ', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 10, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: 'Gấp phẳng, giữ khô và sạch.', sortOrder: 10, hazardous: false, warehouseOnly: false },
+  { id: 'wi-bubble-wrap', code: 'BUBBLE_WRAP', name: 'Nilon chống sốc', unitLabel: 'túi lớn', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 10, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', sortOrder: 20, hazardous: false, warehouseOnly: false },
+  { id: 'wi-milk-carton', code: 'MILK_CARTON', name: 'Vỏ hộp sữa sạch', unitLabel: 'vỏ', unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 50, monthlyCapQty: 300, status: 'ACTIVE', prepInstructions: 'Rửa sạch, để ráo, ép dẹt.', sortOrder: 30, hazardous: false, warehouseOnly: true },
+  { id: 'wi-tubu-bottle', code: 'TUBU_BOTTLE', name: 'Vỏ chai, hộp Tubu Tree', unitLabel: 'vỏ', unitsPerPoint: 1, pointsPerGroup: 2000, dropsPerUnit: 2, dailyCapQty: null, monthlyCapQty: 20, status: 'ACTIVE', prepInstructions: 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', sortOrder: 40, hazardous: false, warehouseOnly: true },
   // The battery rate exists only to satisfy the CHECKs: a hazardous item can never be ACTIVE.
-  { id: 'wi-battery', code: 'BATTERY', name: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: null, monthlyCapQty: null, status: 'COMING_SOON', prepInstructions: null, sortOrder: 50, hazardous: true },
+  { id: 'wi-battery', code: 'BATTERY', name: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: null, monthlyCapQty: null, status: 'COMING_SOON', prepInstructions: null, sortOrder: 50, hazardous: true, warehouseOnly: false },
 ];
 
 export const WASTE_SEED_GIFTS: readonly WasteSeedGift[] = [
