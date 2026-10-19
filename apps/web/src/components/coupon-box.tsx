@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, Ticket, X } from 'lucide-react';
+import { ChevronRight, Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   applyCoupon,
@@ -64,6 +64,7 @@ export function CouponBox({
   disabled = false,
   preview,
   previewKey,
+  actionLabel = 'Chọn mã',
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -83,6 +84,8 @@ export function CouponBox({
    * dấu này là số xem trước cũ hết đúng và phải hỏi lại.
    */
   previewKey?: string;
+  /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán "Xem mã" như Mini App. */
+  actionLabel?: string;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -135,7 +138,7 @@ export function CouponBox({
   const busy = apply.isPending || drop.isPending || disabled;
 
   return (
-    <div className="mt-3 border-t border-stone-200 pt-3">
+    <div className="mt-3 border-t border-stone-200 pt-3 max-md:mt-0 max-md:rounded-card max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] max-md:p-3 max-md:shadow-[var(--elevation-1)]">
       {currentCode ? (
         <div className="flex items-center justify-between rounded-control border border-dashed border-promo-solid bg-promo-bg pl-3">
           <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">
@@ -160,13 +163,18 @@ export function CouponBox({
             aria-controls="coupon-panel"
             className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-stone-900"
           >
-            <span className="inline-flex items-center gap-2">
-              <Ticket className="h-4 w-4 text-promo-fg" aria-hidden="true" />
-              Mã giảm giá
+            <span className="inline-flex items-center gap-2 max-md:gap-2.5">
+              <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-[var(--clay-50)]">
+                <Ticket className="h-4 w-4 text-promo-fg max-md:h-5 max-md:w-5 max-md:text-[color:var(--clay-700)]" aria-hidden="true" />
+              </span>
+              <span className="flex flex-col">
+                Mã giảm giá
+                <span className="text-xs font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">Chọn hoặc nhập mã giảm giá</span>
+              </span>
             </span>
-            <span className="inline-flex items-center gap-1 font-medium text-forest-700">
-              {(couponsQ.data?.length ?? 0) > 0 ? `Bạn có ${couponsQ.data!.length} mã` : 'Thêm mã'}
-              <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-forest-700">
+              {actionLabel}
+              <ChevronRight className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
             </span>
           </button>
           <div id="coupon-panel" hidden={!open}>
