@@ -341,7 +341,7 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
       preview({ blocks: (b as WastePreviewRequest).method === 'MAIL_IN' ? [{ code: 'BELOW_MIN', missingPoints: 6000 }, { code: 'MAX_OPEN', openCount: 3 }] : [{ code: 'MAX_OPEN', openCount: 3 }] });
     atStep2();
     const c = await mount();
-    expect(c.textContent).toContain('cần thêm 6.000 điểm');
+    expect(c.textContent).toContain('Cần thêm 6.000 điểm');
     expect(Array.from(c.querySelectorAll('[role="radio"]')).every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(c.textContent).toContain('Bạn đang có 3 yêu cầu chưa xong');
   });
@@ -352,8 +352,8 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     };
     atStep2();
     const c = await mount();
-    expect(method(c, 'PICKUP').textContent).toContain('tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
-    expect(method(c, 'MAIL_IN').textContent).toContain('tháng này bạn không còn đủ trần cho một gói gửi kho');
+    expect(method(c, 'PICKUP').textContent).toContain('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
+    expect(method(c, 'MAIL_IN').textContent).toContain('Tháng này bạn không còn đủ trần cho một gói gửi kho');
     expect(method(c, 'PICKUP').textContent).not.toContain('gói gửi kho');
   });
   it('NEED_PROVINCE → ô chọn tỉnh trên thẻ Gửi về kho; chọn → preview lại với provinceCode', async () => {
