@@ -86,7 +86,7 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API điểm', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
     await page.goto('/tai-khoan/diem-xanh');
-    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
     expect(api.callsTo('GET', '/me/loyalty')).toHaveLength(0);
   });
 });
@@ -158,7 +158,7 @@ test.describe('Web khách: Ví Tubu', () => {
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API ví', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
     await page.goto('/tai-khoan/vi-tubu');
-    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
     expect(api.callsTo('GET', '/me/wallet')).toHaveLength(0);
   });
 });
@@ -251,7 +251,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API kho quà', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
     await page.goto('/kho-qua');
-    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
     expect(api.callsTo('GET', '/me/loyalty/rewards')).toHaveLength(0);
   });
 
