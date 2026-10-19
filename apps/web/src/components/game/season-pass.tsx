@@ -2,6 +2,7 @@ import { Check, Lock, Star, Ticket } from 'lucide-react';
 import type { SeasonPassReward, SeasonPassState, SeasonPassTier } from '@tubutree/app-core/api/game';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { GameCard } from './game-card';
 
@@ -92,7 +93,7 @@ export function SeasonPass({
                       type="button"
                       disabled={premiumLocked || busy('premium')}
                       onClick={() => onClaim(t.tier, 'premium')}
-                      className={`${ui.btnSecondary} mt-1 w-full gap-1`}
+                      className={`${miniBtnSecondary} mt-1 w-full gap-1`}
                     >
                       {premiumLocked && <Lock className="h-4 w-4" aria-hidden="true" />}
                       {premiumLocked ? 'Chưa mở' : 'Nhận'}

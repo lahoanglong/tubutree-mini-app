@@ -11,6 +11,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
+import { MiniBar } from '@/components/loyalty/mini-surface';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { CheckInStreak } from '@/components/game/checkin-streak';
 import { CommunityGoal } from '@/components/game/community-goal';
@@ -229,8 +230,10 @@ function GameBody() {
 export default function GamePage() {
   const phase = useAuthPhase();
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24">
-      <PageHeader title={TITLE} />
+    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pt-0">
+      <MiniBar>
+        <PageHeader title={TITLE} />
+      </MiniBar>
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}
         {phase === 'unavailable' && <SessionUnavailable />}

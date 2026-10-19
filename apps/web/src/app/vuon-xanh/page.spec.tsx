@@ -750,3 +750,31 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
     expect(keys()).not.toContain('["loyalty"]');
   });
 });
+
+describe('Vườn Xanh: giao diện điện thoại như Mini App', () => {
+  it('nút phụ (Mua vé giữ lửa, Hứng giọt sương, Góp quỹ) là nút ZaUI secondary ở điện thoại', async () => {
+    const c = await mount();
+    for (const label of ['Mua (', 'Hứng giọt sương', 'Góp quỹ trồng cây']) {
+      const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes(label));
+      expect(btn, label).toBeTruthy();
+      expect(btn!.className, label).toContain('max-md:bg-forest-50');
+    }
+  });
+
+  it('thẻ khối không viền; dòng lối vào là thẻ viền mảnh không bóng', async () => {
+    state.config = { waste: { enabled: true } };
+    state.wasteReady = true;
+    const c = await mount();
+    const sections = Array.from(c.querySelectorAll('section')).filter((s) => s.querySelector('h2'));
+    expect(sections.length).toBeGreaterThan(2);
+    expect(sections.filter((s) => s.classList.contains('border'))).toEqual([]);
+    expect(c.querySelector('a[href="/doi-rac"]')!.className).toContain('max-md:shadow-none');
+  });
+
+  it('trang bỏ đệm đỉnh và tiêu đề nằm trên thanh trắng', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')!.className).toContain('max-md:pt-0');
+    expect(c.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+  });
+});
+

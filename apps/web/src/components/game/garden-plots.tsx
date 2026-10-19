@@ -2,6 +2,7 @@ import { LockOpen, ShowerHead, Sprout } from 'lucide-react';
 import type { Garden } from '@tubutree/app-core/api/game';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops, formatNumber } from './format';
 import { GameCard } from './game-card';
 
@@ -56,7 +57,7 @@ export function GardenPlots({
                   type="button"
                   disabled={watering}
                   onClick={() => p.id && onWaterPlot(p.id)}
-                  className={`${ui.btnSecondary} flex-none gap-1.5`}
+                  className={`${miniBtnSecondary} flex-none gap-1.5`}
                 >
                   <ShowerHead className="h-4 w-4" aria-hidden="true" />
                   Tưới
