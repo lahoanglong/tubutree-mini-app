@@ -87,8 +87,8 @@ export const vi = {
     newGift: {
       title: 'Quà khách mới',
       voucherAmount: (amount: string) => `Mã giảm giá chào mừng ${amount}`,
-      voucherPercent: (pct: number) => `Mã giảm giá chào mừng giảm ${pct}%`,
-      voucherFreeship: 'Mã giảm giá chào mừng miễn phí giao hàng',
+      voucherPercent: (pct: number) => `Mã giảm giá chào mừng ${pct}%`,
+      voucherFreeship: 'Mã miễn phí giao hàng chào mừng',
       voucherMinOrder: (min: string) => `Cho đơn từ ${min}`,
       voucherExpires: (date: string) => `Dùng đến ${date}`,
       cta: 'Chọn sản phẩm',

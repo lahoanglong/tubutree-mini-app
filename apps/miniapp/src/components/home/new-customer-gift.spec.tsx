@@ -78,6 +78,17 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(await section()).toHaveTextContent('Miễn phí giao hàng cho đơn đầu tiên từ 99.000đ');
   });
 
+  it('voucher phần trăm và miễn phí giao: tên mã không lặp chữ "giảm"', async () => {
+    mocks.getNewCustomerOffer.mockResolvedValue({ ...OFFER, welcomeVoucher: { ...VOUCHER, type: 'PERCENT', value: 12 } });
+    const { unmount } = renderGift();
+    expect(await section()).toHaveTextContent('Mã giảm giá chào mừng 12%');
+    expect(await section()).not.toHaveTextContent(/giảm giá chào mừng giảm/);
+    unmount();
+    mocks.getNewCustomerOffer.mockResolvedValue({ ...OFFER, welcomeVoucher: { ...VOUCHER, type: 'FREESHIP', value: 0 } });
+    renderGift();
+    expect(await section()).toHaveTextContent('Mã miễn phí giao hàng chào mừng');
+  });
+
   it('voucher không có đơn tối thiểu → không in "Cho đơn từ 0đ"', async () => {
     mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: true, welcomeVoucher: { ...VOUCHER, minOrder: null } });
     renderGift();
