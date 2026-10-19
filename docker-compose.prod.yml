@@ -36,8 +36,9 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     logging: *default-logging
-    # BullMQ bắt buộc noeviction (Redis chỉ chứa job queue). Ghi rõ để không ai thêm maxmemory kèm policy LRU.
-    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    # BullMQ bắt buộc noeviction (Redis chỉ chứa job queue). Ghi rõ để không ai thêm maxmemory kèm policy LRU. 150mb giống
+    # docker-compose.vietnix.yml: go-live:check cảnh báo redis.maxmemory khi không đặt trần; đầy thì lệnh ghi lỗi OOM chứ không xoá key.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '150mb', '--maxmemory-policy', 'noeviction']
     volumes:
       - redis_data:/data
     healthcheck:
@@ -62,8 +63,8 @@ services:
       PORT: 3001
       # Cron/Date local theo giờ VN (cron còn có timeZone riêng, xem apps/api/src/common/cron-tz.ts).
       TZ: Asia/Ho_Chi_Minh
-      # Trỏ về service nội bộ — GHI ĐÈ giá trị trong .env.
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}
+      # Trỏ về service nội bộ — GHI ĐÈ giá trị trong .env. Pool giống docker-compose.vietnix.yml (mặc định của Prisma theo số CPU, cạn khi tải bùng nổ: P2028).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}?connection_limit=20&pool_timeout=30
       REDIS_URL: redis://redis:6379
       THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
     depends_on:
@@ -85,7 +86,8 @@ services:
       args:
         # NEXT_PUBLIC_* nhúng lúc build → phải truyền qua build args.
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
-        NEXT_PUBLIC_APP_URL: https://app.${WEB_DOMAIN}
+        NEXT_PUBLIC_SITE_URL: https://app.${WEB_DOMAIN}
+        NEXT_PUBLIC_TENANT_ROOT_DOMAIN: ${WEB_DOMAIN}
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
         NEXT_PUBLIC_ZALO_OA_ID: ${ZALO_OA_ID:-}
         NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
