@@ -1,6 +1,6 @@
-/* Bộ màu B2B của kênh đại lý, cùng giá trị với apps/miniapp/src/css/dealer-theme.css. Chỉ áp trong khung đại lý
- * (data-dealer-theme) để không lan sang trang khác; đây là nơi duy nhất của web giữ hex cho kênh này. */
-[data-dealer-theme] {
+/* Bộ màu B2B của kênh đại lý, cùng giá trị với apps/miniapp/src/css/dealer-theme.css. Khai ở :root vì Sheet render qua
+ * portal ra body, ngoài khung data-dealer-theme; tên biến đã có tiền tố dealer nên không đụng trang khác. Đây là nơi duy nhất của web giữ hex cho kênh này. */
+:root {
   --color-dealer-ink: #1f2a44;
   --color-dealer-ink-soft: #2e3b5e;
   --color-dealer-bg: #f4f6f9;

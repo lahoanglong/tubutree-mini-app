@@ -36,12 +36,14 @@ describe('skin.plain, outlineCard, dealerInkBtn, cardTitleSans', () => {
   it('outlineCard: giữ viền, bỏ bóng ở điện thoại như Card variant outline', () => {
     expect(skin.outlineCard).toContain(ui.card);
     expect(skin.outlineCard).toContain('max-md:shadow-none');
-    expect(skin.outlineCard).toContain('max-md:border-[color:var(--color-border-default)]');
+    expect(skin.outlineCard).not.toContain('border-[color:');
+    expect(skin.outlineCard).toContain('border-stone-200');
     expect(skin.outlineCard).not.toContain('max-md:border-transparent');
   });
   it('dealerInkBtn: chỉ nút đang bật mới navy, kể cả khi hover; nút khoá giữ kiểu khoá', () => {
-    expect(skin.dealerInkBtn).toContain('max-md:enabled:bg-[var(--color-dealer-ink)]');
-    expect(skin.dealerInkBtn).toContain('max-md:enabled:hover:bg-[var(--color-dealer-ink)]');
+    expect(skin.dealerInkBtn).toContain('max-md:enabled:bg-[var(--color-dealer-ink,');
+    expect(skin.dealerInkBtn).toContain('max-md:enabled:hover:bg-[var(--color-dealer-ink,');
+    expect(skin.dealerInkBtn).toContain('var(--color-dealer-ink,');
     expect(skin.dealerInkBtn).not.toMatch(/max-md:hover:bg/);
   });
   it('cardTitleSans: máy tính giữ sans 16px, chỉ điện thoại đổi serif title-sm', () => {

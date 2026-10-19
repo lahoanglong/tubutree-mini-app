@@ -680,8 +680,46 @@ describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)
   });
 });
 
+describe('/dai-ly — biến màu navy nhìn thấy được từ sheet (portal ra body)', () => {
+  it('dealer-theme.css khai báo biến ở :root vì Sheet render ngoài khung data-dealer-theme', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
+    expect(css).toMatch(/^:root\s*\{/m);
+    expect(css).not.toMatch(/^\[data-dealer-theme\]\s*\{/m);
+  });
+  it('nút Lưu mẫu và Thêm vào đơn có màu dự phòng khi biến không phân giải', async () => {
+    await mount();
+    click(plus());
+    click(button('Lưu mẫu'));
+    await flush();
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((b) => b.textContent === 'Lưu mẫu')!;
+    expect(save.className).toContain('var(--color-dealer-ink,');
+  });
+});
+
+describe('/dai-ly — chữ navy còn lại ở điện thoại', () => {
+  it('tổng giỏ, mẫu đơn đã lưu, tổng đơn ở tab Đơn hàng', async () => {
+    setup({
+      '/dealer/templates': [{ id: 'tp1', name: 'Đơn tháng', items: [{ variationId: 'v1', quantity: 2 }] }],
+      '/dealer/orders': [
+        { code: 'TUBU9', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', total: 500_000, createdAt: '2026-09-01T00:00:00.000Z', items: [] },
+      ],
+    });
+    const c = await mount();
+    const INK_TEXT = 'max-md:text-[var(--color-dealer-ink)]';
+    click(button(/Đơn tháng/));
+    expect(Array.from(c.querySelectorAll('span.font-bold')).find((e) => e.textContent?.includes('160.000đ'))!.className).toContain(INK_TEXT);
+    const pill = c.querySelector('ul[aria-label="Mẫu đơn đã lưu"] li')!;
+    expect(pill.className).toContain('max-md:border-[color:var(--color-dealer-ink)]');
+    expect(button(/Đơn tháng/).className).toContain(INK_TEXT);
+    mounted.pop()!.unmount();
+    await mount('tab=orders');
+    const total = Array.from(document.querySelectorAll('a[aria-label="Xem đơn TUBU9"] span.font-bold'))[0]!;
+    expect(total.className).toContain(INK_TEXT);
+  });
+});
+
 describe('/dai-ly — nút chính navy ở điện thoại như inkButton của Mini App', () => {
-  const INK = 'max-md:enabled:bg-[var(--color-dealer-ink)]';
+  const INK = 'max-md:enabled:bg-[var(--color-dealer-ink,';
 
   it('Ghi công nợ, Lưu mẫu, Thêm vào đơn (dán đơn) đều navy', async () => {
     await mount();

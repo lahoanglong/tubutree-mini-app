@@ -50,18 +50,18 @@ const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '
 function Shell({ children, showHistory = false }: { children: ReactNode; showHistory?: boolean }) {
   return (
     <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
-      <PageHeader
-        title="Đổi rác lấy quà"
-        backHref="/"
-        backLabel="Trang chủ"
-        actions={
-          showHistory ? (
-            <Link href="/doi-rac/yeu-cau" aria-label="Yêu cầu của tôi" className="inline-flex min-h-11 w-11 items-center justify-center rounded-control text-stone-800 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
-              <History className="h-5 w-5" aria-hidden="true" />
-            </Link>
-          ) : undefined
-        }
-      />
+      <div className="max-md:pl-12">
+        <PageHeader
+          title="Đổi rác lấy quà"
+          actions={
+            showHistory ? (
+              <Link href="/doi-rac/yeu-cau" aria-label="Yêu cầu của tôi" className="inline-flex min-h-11 w-11 items-center justify-center rounded-control text-stone-800 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
+                <History className="h-5 w-5" aria-hidden="true" />
+              </Link>
+            ) : undefined
+          }
+        />
+      </div>
       {children}
     </main>
   );

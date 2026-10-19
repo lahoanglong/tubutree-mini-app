@@ -287,6 +287,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     await press('Xoá khuyến mãi MUA 2 TẶNG 1');
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(Array.from(dialog.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Xoá khuyến mãi này?');
+    expect(byText(dialog, 'button', 'Huỷ')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     click(byText(dialog, 'button', 'Huỷ'));
     await flush();
     expect(document.querySelector('[role="dialog"]')).toBeNull();

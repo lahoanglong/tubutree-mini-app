@@ -63,7 +63,7 @@ export function OrdersTab() {
                 </div>
               )}
               <div className="mt-1 flex items-center justify-between gap-2">
-                <span className="text-base font-bold tabular-nums text-stone-900">{formatVnd(o.total)}</span>
+                <span className="text-base font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(o.total)}</span>
                 {needsPayment && <span className="text-xs font-semibold text-forest-700">Thanh toán ngay →</span>}
               </div>
             </Link>

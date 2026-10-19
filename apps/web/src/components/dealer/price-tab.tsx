@@ -194,7 +194,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
           <Save className="h-4 w-4" aria-hidden="true" />
           Lưu mẫu
         </button>
-        <span className="text-lg font-bold tabular-nums text-stone-900">{formatVnd(total)}</span>
+        <span className="text-lg font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(total)}</span>
       </div>
       {preorderLines > 0 && <p className="text-xs text-warning-fg">{preorderNote(preorderLines)}</p>}
       {overLimit && (
@@ -248,10 +248,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
       {templates.length > 0 && (
         <ul aria-label="Mẫu đơn đã lưu" className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {templates.map((t) => (
-            <li key={t.id} className="flex flex-none items-center rounded-full border border-stone-900 bg-stone-0">
+            <li key={t.id} className="flex flex-none items-center rounded-full border border-stone-900 bg-stone-0 max-md:border-[color:var(--color-dealer-ink)]">
               <button
                 type="button"
-                className="flex min-h-11 items-center gap-1.5 pl-3 pr-1 text-xs font-semibold text-stone-900"
+                className="flex min-h-11 items-center gap-1.5 pl-3 pr-1 text-xs font-semibold text-stone-900 max-md:text-[var(--color-dealer-ink)]"
                 onClick={() => setQty(Object.fromEntries(t.items.map((i) => [i.variationId, i.quantity])))}
               >
                 <ClipboardList className="h-4 w-4 flex-none" aria-hidden="true" />

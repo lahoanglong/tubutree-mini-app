@@ -197,7 +197,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
 
       <Sheet open={!!confirmDeleteId} onClose={() => setConfirmDeleteId(null)} title="Xoá khuyến mãi này?">
         <div className="flex flex-col gap-2.5 px-4 pb-4 pt-2">
-          <button type="button" className={`${ui.btnSecondary} w-full`} onClick={() => setConfirmDeleteId(null)}>
+          <button type="button" className={`${skin.btnSecondary} w-full`} onClick={() => setConfirmDeleteId(null)}>
             Huỷ
           </button>
           <button

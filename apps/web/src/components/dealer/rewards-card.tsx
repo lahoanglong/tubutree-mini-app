@@ -75,7 +75,7 @@ export function RewardsCard() {
                   {formatVnd(r.threshold)}/{r.period === 'YEAR' ? 'năm' : 'quý'}
                 </span>
               </div>
-              {!r.isCurrentPeriod && <div className="text-xs font-semibold text-stone-900">Kỳ trước · {r.periodLabel}</div>}
+              {!r.isCurrentPeriod && <div className="text-xs font-semibold text-stone-900 max-md:text-[var(--color-dealer-ink)]">Kỳ trước · {r.periodLabel}</div>}
               {r.description && <div className="text-xs text-stone-600">{r.description}</div>}
               <div className="mt-1.5">
                 <ProgressBar value={pct} max={100} label={`Tiến trình ${r.title}`} />
