@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import StorefrontPage from './page';
 
 const mocks = vi.hoisted(() => ({ sf: null as unknown }));
@@ -10,6 +11,7 @@ vi.mock('next/navigation', () => ({
   notFound: () => {
     throw new Error('NEXT_NOT_FOUND');
   },
+  useRouter: () => ({ push: () => undefined }),
 }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -34,7 +36,7 @@ const SF = {
 const html = async () => {
   const el = (await StorefrontPage({ params: Promise.resolve({ slug: 'linh' }) })) as ReactElement;
   const box = document.createElement('div');
-  box.innerHTML = renderToStaticMarkup(el);
+  box.innerHTML = renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}>{el}</QueryClientProvider>);
   return box;
 };
 
@@ -85,6 +87,59 @@ describe('trang gian hàng /s/[slug] — tin cậy chỉ khi đúng sự thật 
     expect(text).toContain('Theo dõi đơn trên Tubu Tree');
     expect(text).toContain('Đổi trả 7 ngày (hàng lỗi NSX)');
   });
+});
+
+// Kiểu Mini App ở điện thoại (StorePageShell + ProductTile): bìa tràn mép 84px, đầu trang phẳng không thẻ, không dải cam kết, thẻ sản phẩm chung.
+describe('trang gian hàng — kiểu Mini App ở điện thoại', () => {
+  it('trang hero: không đệm trang ở điện thoại; bìa 84px tràn mép, màu xanh đậm như Mini App (không theo màu chủ đề)', async () => {
+    const box = await html();
+    expect(box.querySelector('main')!.className).toContain('max-md:px-0');
+    const cover = box.querySelector<HTMLElement>('[data-testid="storefront-cover"]')!;
+    expect(cover.className).toContain('max-md:h-[84px]');
+    expect(cover.className).toContain('max-md:[--sf-theme:var(--forest-700)]');
+    expect(cover.parentElement!.className).toContain('max-md:rounded-none');
+  });
+
+  it('đầu trang phẳng ở điện thoại: không viền, không bóng, avatar tròn 58px đè lên bìa', async () => {
+    const box = await html();
+    const card = box.querySelector<HTMLElement>('[data-testid="storefront-header"]')!;
+    expect(card.className).toContain('max-md:border-0');
+    expect(card.className).toContain('max-md:bg-transparent');
+    expect(card.className).toContain('max-md:shadow-none');
+    const avatar = box.querySelector<HTMLElement>('[data-testid="storefront-avatar"]')!;
+    expect(avatar.className).toContain('max-md:h-[58px]');
+    expect(avatar.className).toContain('max-md:rounded-full');
+  });
+
+  it('dải cam kết chỉ cho máy tính; tiêu đề bộ sưu tập không thanh màu, không đếm sản phẩm ở điện thoại', async () => {
+    const box = await html();
+    expect(box.querySelector('section[aria-labelledby="cam-ket-gian-hang"]')!.className).toContain('max-md:hidden');
+    const head = Array.from(box.querySelectorAll('h2')).find((h) => h.textContent === 'Nổi bật')!.parentElement!;
+    expect(head.querySelector('[aria-hidden="true"]')!.className).toContain('max-md:hidden');
+    expect(Array.from(head.querySelectorAll('span')).find((x) => x.textContent === '(1 sản phẩm)')!.className).toContain('max-md:hidden');
+  });
+
+  it('thẻ sản phẩm là thẻ chung của web (có tim); ghi chú của chủ nằm dưới thẻ', async () => {
+    mocks.sf = { ...SF, collections: [{ id: 'c1', title: 'Nổi bật', items: [{ id: 'i1', note: 'Mình dùng hằng ngày', product: { ...PRODUCT, reviewCount: 8, ratingAvg: 4.5 } }] }] };
+    const box = await html();
+    const link = box.querySelector<HTMLAnchorElement>('a[href="/san-pham/binh-nuoc"]')!;
+    expect(link.textContent).toContain('4.5 (8)');
+    expect(link.parentElement!.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
+    expect(link.textContent).not.toContain('Mình dùng hằng ngày');
+    expect(box.textContent).toContain('Mình dùng hằng ngày');
+  });
+
+  // D15-01: màu chủ đề do CTV nhập đi thẳng vào style.
+  it.each(['red;background:url(https://evil.example/x)', '}body{display:none', 'url(javascript:alert(1))'])(
+    'màu chủ đề độc %j bị bỏ, dùng màu mặc định của token',
+    async (bad) => {
+      mocks.sf = { ...SF, themeColor: bad };
+      const box = await html();
+      expect(box.innerHTML).not.toContain('evil.example');
+      expect(box.innerHTML).not.toContain('display:none');
+      expect(box.innerHTML).toContain('var(--color-action-primary-bg)');
+    },
+  );
 });
 
 describe('trang gian hàng — trạng thái rỗng (D5-05)', () => {
