@@ -161,6 +161,8 @@ describe('/doi-rac/yeu-cau/[id]: Mang tới điểm nhận (§4.5, §4.6)', () =
     expect(c.textContent).toContain(PAUSED);
     expect(button(c, 'Xem mã QR')).toBeNull();
     expect(button(c, 'Huỷ yêu cầu')?.disabled).toBe(false);
+    expect(c.textContent).toContain('Đang tạm dừng');
+    expect(c.textContent).not.toContain('Chờ bạn mang tới');
   });
 
   it('khách bị khoá: cùng câu trung tính, không lộ việc bị khoá, vẫn huỷ được', async () => {
@@ -170,6 +172,7 @@ describe('/doi-rac/yeu-cau/[id]: Mang tới điểm nhận (§4.5, §4.6)', () =
     expect(button(c, 'Xem mã QR')).toBeNull();
     expect(button(c, 'Huỷ yêu cầu')?.disabled).toBe(false);
     expect(c.textContent).not.toMatch(/khoá/i);
+    expect(c.textContent).toContain('Đang tạm dừng');
   });
 
   it('bình thường: có "Xem mã QR" và không có câu tạm dừng', async () => {
@@ -319,12 +322,14 @@ describe('/doi-rac/yeu-cau/[id]: Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(c.textContent).toContain('Ghi mã này lên túi');
     expect(c.textContent).toContain('Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán');
     expect(byText(c, 'a', 'Đi mua hàng')?.getAttribute('href')).toBe('/');
+    expect(c.textContent).toContain('Chờ gắn vào đơn');
   });
 
   it.each([
     ['khoá đường kho', () => { state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }); }],
     ['bị khoá chương trình', () => { state.me = makeWasteMe({ blocked: true }); }],
     ['cờ pickup tắt', () => { state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } }; }],
+    ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => { state.me = makeWasteMe({ programmeEnabled: false }); }],
   ])('%s: câu tạm dừng trung tính + "Huỷ yêu cầu", không có lối đi mua hàng', async (_n, arrange) => {
     arrange();
     state.request = PICKUP();
@@ -333,6 +338,8 @@ describe('/doi-rac/yeu-cau/[id]: Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(c.textContent).not.toContain('Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán');
     expect(byText(c, 'a', 'Đi mua hàng')).toBeNull();
     expect(button(c, 'Huỷ yêu cầu')).not.toBeNull();
+    expect(c.textContent).toContain('Đang tạm dừng');
+    expect(c.textContent).not.toContain('Chờ gắn vào đơn');
   });
 
   it('đã gắn đơn: "Đã gắn vào đơn TUBU123", timeline ở "Chờ kho nhận"', async () => {
@@ -414,5 +421,60 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái đóng và kết quả (§4.6)', 
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
+  });
+});
+
+describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () => {
+  const step2 = (c: HTMLElement) => c.querySelector('[data-step="Mang tới điểm"]') as HTMLElement;
+  it('Mang tới + OPEN: nhãn trạng thái, bước 2 ghi điểm nhận, địa chỉ và hạn; dòng "Ước tính"', async () => {
+    const c = await mount();
+    expect(step2(c).textContent).toContain('Mang tới Đại lý Cô Ba trước 25/10');
+    expect(step2(c).textContent).toContain('12 Lê Lợi');
+    expect(c.textContent).toContain('Chờ bạn mang tới');
+    expect(c.textContent).toContain('Ước tính 5.000 điểm');
+  });
+  it('điểm nhận tạm ngừng: bước 2 không dặn mang tới điểm đó', async () => {
+    state.request = makeRequestDetail({ pointAvailable: false });
+    const c = await mount();
+    expect(step2(c).textContent).not.toContain('Mang tới Đại lý Cô Ba');
+  });
+  it('điểm hết hạn mức tháng: bước 2 không dặn mang tới điểm đó', async () => {
+    const r = makeRequestDetail();
+    state.request = r;
+    state.points = [makeWastePoint({ id: r.point!.id, quotaFull: true })];
+    const c = await mount();
+    expect(c.textContent).toContain('Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác');
+    expect(step2(c).textContent).not.toContain('Mang tới Đại lý Cô Ba');
+  });
+  it('chương trình tạm dừng: bước 2 không dặn mang tới điểm', async () => {
+    state.config = { isLoaded: true, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } };
+    const c = await mount();
+    expect(step2(c).textContent).not.toContain('Mang tới Đại lý Cô Ba');
+  });
+  it('REJECTED và COMPLETED: không còn dòng "Ước tính"', async () => {
+    state.request = makeRequestDetail({ status: 'REJECTED', rejectionReason: 'WET', editable: false, cancellable: false });
+    let c = await mount();
+    expect(c.textContent).not.toContain('Ước tính');
+    mounted.pop()!.unmount();
+    state.request = makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 2000, editable: false, cancellable: false });
+    c = await mount();
+    expect(c.textContent).not.toContain('Ước tính');
+  });
+  it('Gửi về kho + OPEN: có dòng "Ước tính", số điện thoại người nhận nhóm 4-3-3, tiêu đề trang không lặp mã', async () => {
+    state.request = MAIL({ point: makeWarehouseContact({ phone: '0984606774' }) });
+    const c = await mount();
+    expect(c.textContent).toContain('Ước tính 5.000 điểm');
+    expect(c.textContent).toContain('0984 606 774');
+    expect(c.querySelector('h1')?.textContent).toContain('Yêu cầu đổi rác');
+    expect(c.textContent?.match(/TR-8K2M9/g)).toHaveLength(1);
+  });
+  it('Thu kèm đơn + OPEN: tiêu đề trang không lặp mã; Mang tới giữ mã ở tiêu đề', async () => {
+    state.request = PICKUP();
+    let c = await mount();
+    expect(c.querySelector('h1')?.textContent).toContain('Yêu cầu đổi rác');
+    mounted.pop()!.unmount();
+    state.request = makeRequestDetail();
+    c = await mount();
+    expect(c.querySelector('h1')?.textContent).toContain('TR-8K2M9');
   });
 });
