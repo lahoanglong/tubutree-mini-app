@@ -50,7 +50,8 @@ async function main(prisma) {
   console.log(`OK: user mới (id=${user.id}) tạo với role=ADMIN.`);
 }
 
-if (require.main === module) {
+// ops.yml đẩy script qua stdin (`node < grant-admin.js`): lúc đó require.main là undefined và module.id là '[stdin]'.
+if (require.main === module || module.id === '[stdin]') {
   const prisma = new PrismaClient();
   main(prisma)
     .catch((e) => {

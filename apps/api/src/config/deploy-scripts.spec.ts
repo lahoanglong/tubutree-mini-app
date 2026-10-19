@@ -497,4 +497,12 @@ describe('docs/launch/deploy-rollback-runbook.md: seed-reference khớp quyết 
     expect(step).not.toMatch(/chủ dự án chưa quyết|CHỈ chạy lệnh có cờ sau khi|duyệt bảng giá trị ở mục 3\.2/);
     expect(step).not.toMatch(/mau_tin = 100/);
   });
+
+  it('bước 7b không hứa hạng có ngay sau khi nạp muộn, và nói đúng dòng cảnh báo khi thiếu cờ', () => {
+    const step = runbook.slice(runbook.indexOf('### Bước 7b'), runbook.indexOf('### Bước 7c'));
+    expect(step).not.toMatch(/muốn có ngay thì chờ/);
+    expect(step).not.toMatch(/chờ chủ dự án duyệt/);
+    expect(step).toMatch(/không có lệnh tính lại ngay/);
+    expect(step).toMatch(/thiếu --with-business-defaults/);
+  });
 });

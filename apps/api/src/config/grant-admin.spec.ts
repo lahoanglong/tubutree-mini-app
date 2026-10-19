@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizeZaloPhone } from '../common/phone';
 
@@ -39,5 +40,29 @@ describe('apps/api/scripts/grant-admin.js: chuẩn hoá ADMIN_PHONE', () => {
     expect(out).toMatch(/ADMIN_PHONE/);
     expect(out).toMatch(/10 số/);
     expect(out).not.toMatch(/Can't reach database|P1001/);
+  });
+
+  // ops.yml chạy `node < grant-admin.js`: khi mã đến từ stdin thì require.main là undefined, guard CLI không được bỏ qua main.
+  describe('chạy qua stdin như .github/workflows/ops.yml', () => {
+    function runViaStdin(phone: string): { status: number | null; out: string } {
+      const res = spawnSync(process.execPath, [], {
+        input: readFileSync(SCRIPT),
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH ?? '', ADMIN_PHONE: phone, DATABASE_URL: 'postgresql://x@127.0.0.1:1/x' },
+      });
+      return { status: res.status, out: `${res.stdout}${res.stderr}` };
+    }
+
+    it('SĐT sai định dạng: thoát mã 1 nêu 10 số', () => {
+      const { status, out } = runViaStdin('+84 12');
+      expect(status).toBe(1);
+      expect(out).toMatch(/10 số/);
+    });
+
+    it('SĐT đúng: main chạy tới DB (lỗi kết nối chứng minh điều đó)', () => {
+      const { status, out } = runViaStdin('+84912345678');
+      expect(status).toBe(1);
+      expect(out).toMatch(/Can't reach database|P1001|FAIL/);
+    });
   });
 });

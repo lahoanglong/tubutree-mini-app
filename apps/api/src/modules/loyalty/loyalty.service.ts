@@ -83,9 +83,9 @@ export class LoyaltyService {
   async creditOrderPoints(orderId: string): Promise<boolean> {
     const order = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     if (order.pointsEarned <= 0) {
-      // 0 điểm vẫn phải recalc: đơn DELIVERED đầu tiên (dù 0 điểm) là lúc DUY NHẤT user được
-      // gán hạng lần đầu (recalcAllTiers chỉ quét user ĐÃ có tierId). Bail sớm mà không recalc
-      // sẽ khiến user kẹt vĩnh viễn không có tier — xem candidate 2 trong audit loyalty.
+      // 0 điểm vẫn phải recalc: đơn DELIVERED đầu tiên (dù 0 điểm) là đường chính để user được gán hạng lần đầu;
+      // job đêm recalcAllTiers chỉ là lưới đỡ cho user còn tierId null nhưng đã có đơn DELIVERED (nạp hạng muộn).
+      // Bail sớm mà không recalc làm user chờ tới lần quét đêm — xem candidate 2 trong audit loyalty.
       await this.recalcTier(order.userId);
       return false;
     }

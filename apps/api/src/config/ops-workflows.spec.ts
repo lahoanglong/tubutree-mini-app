@@ -62,6 +62,16 @@ describe('ops.yml audit/set-env', () => {
   });
 });
 
+describe('ops.yml: ZALO_OA_WEBHOOK_SECRET đi từ GitHub Secret vào .env', () => {
+  const wf = read('.github/workflows/ops.yml');
+
+  it('secret được khai báo, chuyển qua SSH và set-env ghi được (GO-LIVE-KEYS mục 5 dặn đúng quy trình này)', () => {
+    expect(wf).toContain('ZALO_OA_WEBHOOK_SECRET: ${{ secrets.ZALO_OA_WEBHOOK_SECRET }}');
+    expect((/envs: ([^\n]*)/.exec(wf)?.[1] ?? '').split(',')).toContain('ZALO_OA_WEBHOOK_SECRET');
+    expect(wf).toContain('set_if ZALO_OA_WEBHOOK_SECRET ');
+  });
+});
+
 describe('docs/GO-LIVE-KEYS.md', () => {
   it('có mục Pancake và Gomdon', () => {
     const doc = read('docs/GO-LIVE-KEYS.md');

@@ -139,7 +139,7 @@ export function formatResults(results: GroupResult[]): string[] {
     });
   const skipped = results.filter((r) => r.skipped).map((r) => r.group);
   if (skipped.length > 0) {
-    lines.push(`[seed-reference] chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt): ${skipped.join(', ')}. Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG} sau khi duyệt.`);
+    lines.push(`[seed-reference] chưa nạp: ${skipped.join(', ')} (thiếu ${WITH_BUSINESS_DEFAULTS_FLAG}; A8 yêu cầu chạy có cờ ở lần deploy đầu). Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG}.`);
   }
   return lines;
 }
