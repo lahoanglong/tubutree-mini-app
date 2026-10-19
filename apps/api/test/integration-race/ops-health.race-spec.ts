@@ -165,6 +165,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
         'merchantPayoutsPending',
         'dealerApplications',
         'payouts',
+        'payoutsToPay',
+        'invoicePending',
         'externalPoints',
         'wasteToCount',
         'wasteUnmatched',
@@ -184,9 +186,17 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     const marketing = await inbox.counts({ role: 'STAFF', staffPermissions: ['MARKETING'] });
     expect(marketing.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'wasteToCount', 'wasteUnmatched']);
     const keToan = await inbox.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
-    expect(keToan.items.map((i) => i.key).sort()).toEqual(['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle', 'wasteToCount', 'wasteUnmatched']);
+    expect(keToan.items.map((i) => i.key).sort()).toEqual([
+      'customerRefunds',
+      'invoicePending',
+      'merchantPayoutsPending',
+      'merchantToSettle',
+      'payoutsToPay',
+      'wasteToCount',
+      'wasteUnmatched',
+    ]);
     const adminCount = (k: string) => after.items.find((i) => i.key === k)?.count;
-    for (const k of ['customerRefunds', 'merchantPayoutsPending', 'merchantToSettle']) {
+    for (const k of ['customerRefunds', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay']) {
       expect(keToan.items.find((i) => i.key === k)?.count).toBe(adminCount(k));
     }
     await prisma.wasteRequest.delete({ where: { id: noShow.id } });
