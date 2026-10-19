@@ -107,6 +107,13 @@ describe('/mua-chung — danh sách nhóm', () => {
     expect(mocks.get).toHaveBeenCalledWith('/group-buy');
   });
 
+  it('lưới nhóm có cột co được (minmax(0,1fr)) để tên dài cắt bằng dấu ba chấm thay vì đẩy trang tràn ngang ở 320px', async () => {
+    mocks.list = [GROUP('g1', { product: { name: 'Một sản phẩm có tên rất dài '.repeat(4), slug: 'sp', thumbnail: null } })];
+    const c = await mount();
+    const grid = c.querySelector('article')?.parentElement;
+    expect(grid?.className).toContain('grid-cols-[minmax(0,1fr)]');
+  });
+
   it('bấm ảnh/tên sản phẩm mở trang sản phẩm web', async () => {
     const c = await mount();
     expect(c.querySelector('a[href="/san-pham/sp-a"]')).not.toBeNull();
