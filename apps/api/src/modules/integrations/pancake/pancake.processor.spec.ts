@@ -1116,6 +1116,67 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
     expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'RETURNED' });
   });
 
+  // D12-01: DELIVERED trên đơn COD có thể do kho bấm "Đã nhận" hàng loạt/nhầm — không phải bằng chứng đã thu COD.
+  describe('"Đã hoàn" (5) trên đơn ĐÃ GIAO: tiền chỉ tự hoàn khi có bằng chứng đã nhận tiền', () => {
+    const refundSpy = () => jest.spyOn(OrderReversalService.prototype as unknown as { refundToWallet: () => Promise<boolean> }, 'refundToWallet').mockResolvedValue(true);
+    afterEach(() => jest.restoreAllMocks());
+
+    it('đơn COD chưa có bằng chứng đã thu → vẫn RETURNED, đảo điểm/hoa hồng, KHÔNG hoàn Ví, vào hàng cần xử lý', async () => {
+      const spy = refundSpy();
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const order = { ...base, total: 300000, paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' };
+      const { proc, prisma, txUpdateMany, loyalty, affiliate, notifications } = setup(order, undefined, alerts);
+      // Bản đọc lại sau commit: mock không chạy câu ghi thật nên dựng sẵn đúng như DB sẽ có.
+      (prisma.order.findUniqueOrThrow as jest.Mock).mockImplementation(async () => ({
+        ...order,
+        status: 'RETURNED',
+        pancakeAttention: (attentionFlags(txUpdateMany)[0] ?? null) as string | null,
+      }));
+      await proc.onStatusUpdated({ id: 'p1', status: 5 });
+      const flips = statusFlips(txUpdateMany);
+      expect(flips[0]!.data).toMatchObject({ status: 'RETURNED' });
+      expect(flips.some((f) => 'paymentStatus' in f.data)).toBe(false);
+      expect(spy).not.toHaveBeenCalled();
+      expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+      expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+      const flags = attentionFlags(txUpdateMany);
+      expect(flags).toHaveLength(1);
+      expect(flags[0]).toContain('COD');
+      expect(flags[0]).toContain('KHÔNG tự hoàn');
+      expect(alerts.alert).toHaveBeenCalledWith('TUBU1', flags[0], expect.any(String));
+      expect(prisma.orderCustomerRefund.createMany).toHaveBeenCalledTimes(1);
+      expect(prisma.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+        data: [expect.objectContaining({ kind: 'RETURN', refKey: 'cod-return-unverified', status: 'UNVERIFIED', amount: 300000, userId: 'u1' })],
+        skipDuplicates: true,
+      });
+      const notified = (notifications.notify as jest.Mock).mock.calls.find(([, event]) => event === 'ORDER_RETURNED');
+      expect(notified?.[2].refund_note).not.toContain('Ví Tubu');
+    });
+
+    it('đơn chuyển khoản đã PAID → vẫn tự hoàn đủ 300.000đ vào Ví, đảo điểm, không vào hàng cần xử lý', async () => {
+      const spy = refundSpy();
+      const { proc, prisma, txUpdateMany, loyalty } = setup({ ...base, total: 300000, paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', status: 'DELIVERED' });
+      await proc.onStatusUpdated({ id: 'p1', status: 5 });
+      expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'RETURNED' });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]).toEqual([expect.anything(), 'u1', expect.objectContaining({ id: 'o1' }), 300000]);
+      expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+      expect(attentionFlags(txUpdateMany)).toHaveLength(0);
+      const rows = (prisma.orderCustomerRefund.createMany as jest.Mock).mock.calls.flatMap(([a]) => a.data as { status: string }[]);
+      expect(rows.map((r) => r.status)).not.toContain('UNVERIFIED');
+    });
+
+    it('Pancake gửi lại "Đã hoàn" sau khi đơn đã RETURNED → không khoản thứ hai, không báo ADMIN lần nữa', async () => {
+      refundSpy();
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const { proc, prisma, txUpdateMany } = setup({ ...base, total: 300000, paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'RETURNED', pancakeAttention: 'x' }, undefined, alerts);
+      await proc.onStatusUpdated({ id: 'p1', status: 5 });
+      expect(prisma.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+      expect(statusFlips(txUpdateMany)).toHaveLength(0);
+      expect(alerts.alert).not.toHaveBeenCalled();
+    });
+  });
+
   // R2-LIFECYCLE-4 / R2-MONEY-3: "Đã hoàn" (cả đơn) sau một lần trả một phần đã duyệt thường là kho làm sai loại phiếu.
   it.each([
     ['APPROVED', 'đã duyệt trả một phần'],

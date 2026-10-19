@@ -8,6 +8,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { PANCAKE_RETURNING_PREFIX } from '../integrations/pancake/pancake-status.map';
 
 function makeOrder(overrides: Record<string, unknown> = {}) {
   return {
@@ -373,6 +374,139 @@ describe('OrderStatusService', () => {
     expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
     expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
     expect(loyalty.creditOrderPoints).not.toHaveBeenCalled();
+  });
+
+  describe('withholdCodRefund (D12-01): COD đã giao nhận "Đã hoàn" từ Pancake', () => {
+    const COD_REASON = 'KHÔNG tự hoàn';
+    function codTx(partial: { refundAmount: number; shippingRefund: number }[] = []) {
+      const tx = mockTx() as unknown as Record<string, any>;
+      tx.orderCustomerRefund = { createMany: jest.fn().mockResolvedValue({ count: 1 }) };
+      tx.returnRequest = { findMany: jest.fn().mockResolvedValue(partial.map((r) => ({ ...r, items: [] }))) };
+      return tx;
+    }
+    const attentionWrites = (tx: Record<string, any>) =>
+      (tx.order.updateMany as jest.Mock).mock.calls.map(([a]) => a).filter((a) => a?.data && 'pancakeAttention' in a.data);
+
+    it('cờ + COD DELIVERED→RETURNED: không để reversal hoàn Ví, ghi ĐÚNG MỘT khoản RETURN UNVERIFIED + hàng cần xử lý cùng tx', async () => {
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000 });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
+      const tx = codTx();
+
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+
+      expect(reversal.reverseFinancials).toHaveBeenCalledWith(tx, order, { withholdCodRefund: true });
+      const writes = attentionWrites(tx);
+      expect(writes).toHaveLength(1);
+      expect(writes[0].data.pancakeAttention).toContain(COD_REASON);
+      expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledTimes(1);
+      expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            orderId: 'o1',
+            orderCode: 'TUBU1',
+            kind: 'RETURN',
+            refKey: 'cod-return-unverified',
+            userId: 'u1',
+            amount: 300000,
+            method: 'MANUAL_TRANSFER',
+            status: 'UNVERIFIED',
+            reason: 'RETURNED',
+          }),
+        ],
+        skipDuplicates: true,
+      });
+      expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+      expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+    });
+
+    it('khoản chờ đối soát chỉ bằng phần CHƯA trả một phần (đã trả 40.000đ + ship 10.000đ thì còn 250.000đ)', async () => {
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000 });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
+      const tx = codTx([{ refundAmount: 40000, shippingRefund: 10000 }]);
+
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+
+      expect(tx.orderCustomerRefund.createMany.mock.calls[0][0].data[0].amount).toBe(250000);
+    });
+
+    it('đã trả hết tiền bằng các lần trả một phần → không có gì để kiểm: không khoản, không hàng cần xử lý', async () => {
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000 });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
+      const tx = codTx([{ refundAmount: 300000, shippingRefund: 0 }]);
+
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+
+      expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+      expect(attentionWrites(tx)).toHaveLength(0);
+    });
+
+    it('đơn CTV lên hộ: khoản của khách cuối (không chủ tài khoản), mang SĐT người nhận', async () => {
+      const order = makeOrder({
+        status: 'DELIVERED',
+        paymentMethod: 'COD',
+        paymentStatus: 'UNPAID',
+        total: 300000,
+        placedForCustomer: true,
+        endCustomerKey: '0900111222',
+      });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
+      const tx = codTx();
+
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+
+      expect(tx.orderCustomerRefund.createMany.mock.calls[0][0].data[0]).toMatchObject({ userId: null, phone: '0900111222' });
+    });
+
+    it('đã có lý do "Cần xử lý" khác (Pancake báo lệch tổng) → giữ lại, nối thêm lý do COD; riêng "ĐANG HOÀN" thì được thay', async () => {
+      const mismatch = 'Tổng tiền Pancake lệch với Tubu';
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000, pancakeAttention: mismatch });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
+      const tx = codTx();
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+      const merged = attentionWrites(tx)[0].data.pancakeAttention as string;
+      expect(merged).toContain(mismatch);
+      expect(merged).toContain(COD_REASON);
+
+      const returning = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000, pancakeAttention: `${PANCAKE_RETURNING_PREFIX} — chờ hàng về` });
+      prisma.order.findFirst.mockResolvedValue(returning);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...returning, status: 'RETURNED' });
+      const tx2 = codTx();
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+      const replaced = attentionWrites(tx2)[0].data.pancakeAttention as string;
+      expect(replaced).not.toContain(PANCAKE_RETURNING_PREFIX);
+      expect(replaced).toContain(COD_REASON);
+    });
+
+    it('cờ nhưng COD SHIPPING→CANCELLED (chưa giao, chưa thu tiền) → cờ vô hiệu: không khoản, không hàng cần xử lý', async () => {
+      const order = makeOrder({ status: 'SHIPPING', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000 });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'CANCELLED' });
+      const tx = codTx();
+
+      await service.setStatus('o1', 'CANCELLED' as never, { actorType: 'PANCAKE', returnedToSender: true, withholdCodRefund: true });
+
+      expect(reversal.reverseFinancials).toHaveBeenCalledWith(tx, order);
+      expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+      expect(attentionWrites(tx)).toHaveLength(0);
+    });
+
+    it('admin đổi tay COD DELIVERED→RETURNED (không cờ) → đường cũ: reversal hoàn như thường, không khoản chờ đối soát', async () => {
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', total: 300000 });
+      prisma.order.findFirst.mockResolvedValue(order);
+      prisma.order.findUniqueOrThrow.mockResolvedValue({ ...order, status: 'RETURNED' });
+      const tx = codTx();
+
+      await service.setStatus('o1', 'RETURNED' as never, { actorType: 'ADMIN', actorId: 'admin-1' });
+
+      expect(reversal.reverseFinancials).toHaveBeenCalledWith(tx, order);
+      expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+      expect(attentionWrites(tx)).toHaveLength(0);
+    });
   });
 
   it('ném InvalidOrderTransitionError khi chuyển DELIVERED → CONFIRMED (regression)', async () => {

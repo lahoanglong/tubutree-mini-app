@@ -12,6 +12,7 @@ import { gomdonOwnsShipping } from '../gomdon/gomdon-status';
 import { PANCAKE_RETURNING_PREFIX, resolvePancakeStatus, type PancakeStatusAction } from './pancake-status.map';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
+  ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_PARTIAL_RETURN_ACK,
   ATTENTION_RETURN_APPROVED,
   ATTENTION_TOTAL_MISMATCH,
@@ -571,7 +572,13 @@ export class PancakeProcessor extends WorkerHost {
   /** `returnedToSender`: Pancake "Đã hoàn" — hàng đã về kho, được huỷ/hoàn tiền dù đơn đã bàn giao vận chuyển (D1). */
   private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string, returnedToSender = false): Promise<void> {
     try {
-      const after = await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note, returnedToSender });
+      // COD không có "PAID" thật: DELIVERED có thể là kho bấm "Đã nhận" hàng loạt/nhầm, nên "Đã hoàn" không chứng minh khách đã trả tiền.
+      const withholdCodRefund = returnedToSender && status === 'RETURNED' && order.paymentMethod === 'COD' && order.paymentStatus !== 'PAID';
+      const after = await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note, returnedToSender, ...(withholdCodRefund ? { withholdCodRefund } : {}) });
+      if (withholdCodRefund && order.status !== status && after.status === 'RETURNED' && after.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
+        // Dòng "Cần xử lý" và khoản chờ Kế toán đối soát đã ghi cùng tx lật trạng thái; ở đây chỉ báo ADMIN.
+        await this.alerts.alert(order.code, ATTENTION_COD_RETURN_UNVERIFIED, PANCAKE_ALERT_TEMPLATE);
+      }
       // Hàng đã về và đơn đã huỷ/trả: việc "ĐANG HOÀN" trong hàng đợi đã tự xong.
       if (order.status !== status && after.status === status && (status === 'CANCELLED' || status === 'RETURNED')) {
         await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);

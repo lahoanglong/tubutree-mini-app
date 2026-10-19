@@ -13,7 +13,8 @@ import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
-import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
+import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
+import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -1252,6 +1253,17 @@ export class AdminService {
       select: { id: true, code: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
+    // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không.
+    if (order.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
+      const open = await this.prisma.orderCustomerRefund.findFirst({
+        where: { orderId: order.id, kind: 'RETURN', refKey: COD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
+        select: { id: true },
+      });
+      if (open) {
+        throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn COD chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
+      }
+    }
     const r = await this.prisma.order.updateMany({
       where: { id: order.id, pancakeAttentionAt: { not: null } },
       data: { pancakeAttention: null, pancakeAttentionAt: null },

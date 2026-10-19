@@ -29,6 +29,8 @@ export interface ReversalOptions {
   restock?: boolean;
   /** Yêu cầu trả hàng đang duyệt (lần trả nốt cả đơn) — khoá chống trùng của khoản hoàn ngân hàng. */
   returnRequestId?: string;
+  /** Đơn COD đã giao nhưng chưa có bằng chứng tiền COD về tay Tubu (Pancake báo hàng hoàn về kho): không tự hoàn Ví, admin hoàn tay sau khi kiểm. */
+  withholdCodRefund?: boolean;
 }
 
 /** Tiền lần đảo này trả khách và trả về đâu (để báo khách đúng số tiền, đúng nơi nhận). */
@@ -158,8 +160,9 @@ export class OrderReversalService {
     // Theo bảng chuyển trạng thái (order-transition.ts), DELIVERED chỉ có 1 đường tiếp là RETURNED —
     // nên order.status==='DELIVERED' ở đây tương đương "tài xế đã thu tiền COD". Huỷ đơn COD từ bất
     // kỳ mốc nào TRƯỚC DELIVERED (PENDING_PAYMENT..SHIPPING) thì tiền chưa từng thu — đúng là không
-    // có gì để hoàn.
-    const isCodCollected = order.paymentMethod === 'COD' && order.status === 'DELIVERED';
+    // có gì để hoàn. Ngoại lệ: caller có thể tắt bằng `withholdCodRefund` khi DELIVERED chưa phải bằng chứng đã thu (Pancake
+    // báo "Đã hoàn" cho đơn COD mà kho có thể đã bấm "Đã nhận" nhầm) — khi đó tiền hoàn chờ Kế toán đối soát.
+    const isCodCollected = order.paymentMethod === 'COD' && order.status === 'DELIVERED' && !opts.withholdCodRefund;
     const isRefundableChannel = isPrepaidRefundable || isCodCollected;
 
     // Đơn có THỰC SỰ đang PAID ngay trước lần đảo không — guard thắng (count=1) là bằng chứng

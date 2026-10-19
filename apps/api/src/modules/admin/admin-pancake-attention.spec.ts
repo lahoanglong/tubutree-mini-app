@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { buildAdminOrderWhere, recyclingAttentionWhere } from './admin-order-filter';
 import type { PrismaService } from '../../prisma/prisma.service';
+import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 
 function mkAdmin(prisma: Record<string, unknown>) {
   const none = {} as never;
@@ -38,6 +39,20 @@ describe('Hàng đợi "Cần xử lý Pancake" (admin)', () => {
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
     expect(res).toEqual({ ok: true, message: expect.stringContaining('TUBU1') });
+  });
+
+  it('lý do COD trả hàng chưa thu: còn khoản chờ kế toán đối soát thì "Đã xử lý" bị chặn (nhân viên kho không đóng được việc hoàn tiền)', async () => {
+    const order = { id: 'o1', code: 'TUBU1', pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED, pancakeAttentionAt: new Date() };
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const findFirst = jest.fn().mockResolvedValue({ id: 'r1' });
+    const prisma = { order: { findFirst: jest.fn().mockResolvedValue(order), updateMany }, orderCustomerRefund: { findFirst } };
+    await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).rejects.toThrow('Hoàn tiền khách');
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', kind: 'RETURN', refKey: 'cod-return-unverified', status: 'UNVERIFIED' } }));
+    expect(updateMany).not.toHaveBeenCalled();
+
+    findFirst.mockResolvedValue(null);
+    await expect(mkAdmin(prisma).resolvePancakeAttention('kho1', 'TUBU1')).resolves.toMatchObject({ ok: true });
+    expect(updateMany).toHaveBeenCalled();
   });
 
   it('đơn không còn trong hàng đợi → 400; đơn không tồn tại → 404', async () => {
