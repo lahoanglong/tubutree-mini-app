@@ -3,10 +3,11 @@
 ## Tóm tắt
 
 - Mọi màn của Mini App nay đã có trên web (`pnpm lint:parity`: 0 route còn thiếu). Hai màn cố ý không làm trên web: `/refill` (Mini App đã gỡ Refill, chỉ còn chuyển sang đổi rác) và `/points/scan` (cần SĐT đã xác minh qua Zalo, theo Q2).
-- Toàn bộ nằm trên nhánh `web/integration` (worktree `.claude/worktrees/web-parity`), tách từ `web/base`. **Đã push nhánh này lên origin (theo lệnh "làm tiếp rồi push"); chưa mở PR, chưa gộp vào `main`, chưa deploy.**
-- Nhánh đã gộp `feat/recycle-rewards` tới 80c0842a (gồm launch c6c4a3ac) và `origin/main` 3712ca08 (PR #20 đã merge), nên chạy trên mã Mini App và API mới nhất của hai phiên kia. Web đã theo cả các commit Mini App mới của nhánh đổi rác (integ6, integ7, 71908dac).
-- Gate tổng hợp trên `web/integration` 71908dac (đỉnh nhánh lúc push, chỉ thêm tài liệu sau đó) xanh trọn: web 6177 test (cả giờ VN và UTC), Mini App 4299, app-core 489, typecheck, lint, build web và Mini App. Web-parity không sửa `apps/api`; với Mini App chỉ chuyển hàm thuần sang `packages/app-core` (thân giống hệt) và thêm lớp gọi API dùng chung.
-- Playwright web (máy chủ `next build` + `next start`; phần lớn ca mock API, một số ca shop gọi API thật với Postgres tạm đã seed): trên 71908dac **286 passed, 0 failed, 6 skipped** (Web Customer 136, Web Customer Mobile 136, Web Admin 20). Lần chạy đầu trên 0e344645 đỏ 274 ca vì máy chủ `next dev` chết giữa chừng và vỏ web gọi API chưa mock; lane e2efix chuyển e2e sang bản build và sửa spec. Ca đỏ cuối cùng (mở lô vườn) là spec cũ chưa theo integ7, đã sửa ở 54bdd04a.
+- Toàn bộ nằm trên nhánh `web/integration` (worktree `.claude/worktrees/web-parity`), tách từ `web/base`. **Đã push lên origin và mở PR nháp vào `main` (chứa cả PR nháp #21 đổi rác, nên review sau khi #21 merge); chưa merge, chưa deploy.**
+- Nhánh đã gộp `feat/recycle-rewards` tới ffc21c3a (PR nháp #21) (gồm launch c6c4a3ac) và `origin/main` 3712ca08 (PR #20 đã merge), nên chạy trên mã Mini App và API mới nhất của hai phiên kia. Web đã theo cả các commit Mini App mới của nhánh đổi rác (integ6, integ7, 71908dac).
+- Gate tổng hợp trên `web/integration` 512db029 (sau khi gộp mafix; sau đó chỉ thêm tài liệu) xanh trọn: web 6178 test (cả giờ VN và UTC), Mini App 4313, app-core 489, typecheck, lint, build web và Mini App. Web-parity không sửa `apps/api`; với Mini App chỉ chuyển hàm thuần sang `packages/app-core` (thân giống hệt) và hai sửa lỗi chủ đã duyệt (lane `mafix`) và thêm lớp gọi API dùng chung.
+- Playwright web (máy chủ `next build` + `next start`; phần lớn ca mock API, một số ca shop gọi API thật với Postgres tạm đã seed): trên 512db029 **286 passed, 0 failed, 6 skipped** (Web Customer 136, Web Customer Mobile 136, Web Admin 20). Lần chạy đầu trên 0e344645 đỏ 274 ca vì máy chủ `next dev` chết giữa chừng và vỏ web gọi API chưa mock; lane e2efix chuyển e2e sang bản build và sửa spec. Ca đỏ cuối cùng (mở lô vườn) là spec cũ chưa theo integ7, đã sửa ở 54bdd04a.
+- Playwright Mini App (`E2E_SCOPE=miniapp`, mock API) trên mã đã gộp mafix: **170 passed, 0 failed**.
 
 ## Các lane đã làm
 
@@ -28,6 +29,7 @@ Mỗi lane: worker (Sonnet) viết code theo TDD trong worktree riêng, chạy g
 | integ6 | đồng bộ web đổi rác theo 20+ commit Mini App mới (dòng trạng thái, bước hiện tại, tạm dừng, phí gửi theo tỉnh, quầy) | 1ed08424 | chữ hạn mức cũ trong spec e2e; 3 lượt, lượt cuối không phát hiện |
 | integ7 | đồng bộ web game, Điểm Xanh, kho quà theo Mini App bản mới (`unlockPlot` gửi `slot`, giá vòng quay mặc định, khoá `tubu_last_tier_min_v2`, thẻ kho quà) | 562f8e92 | thiếu test lỗi 400 khi mở lô; lượt 2 không phát hiện |
 | e2efix g1–g3 | Playwright web chạy trên bản build (`next build` + `next start`), mock vỏ trang, sửa spec theo hành vi bản build | e0dfe13e, d898004a, 9663abcb | thay đổi app duy nhất 6a5456aa (lưới mua chung ở 320px như Mini App), Opus không phát hiện |
+| mafix | Mini App: không tạo đơn thứ hai sau lần đặt chưa rõ kết quả (đóng băng body và Idempotency-Key như web, `choiceRev`, màn "Kiểm tra lại" khi giỏ trống); hồ sơ chỉ gửi `dob` khi chưa có. Chủ duyệt 2026-10-19 | 512db029 | lượt 1: 3 MINOR (chạm lại cùng phương thức mở băng, thiếu khối báo cố định, nêu test cũ đã sửa), đã sửa; lượt 2 không phát hiện. Phiên chính đọc diff, chạy spec mới trên code cũ: 10 ca đỏ |
 
 Chi tiết từng lane: `impl/<lane>.md`. Dòng thời gian: `PROGRESS.md`. Ma trận màn: `00-ma-tran.md`.
 
