@@ -31,7 +31,7 @@ function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: nu
   const box = { width: size, height: size };
   if (!merchant.logoUrl) {
     return (
-      <span aria-hidden="true" style={box} className="mx-auto block flex-none rounded-full bg-[linear-gradient(45deg,#34b764,#99e5b5)]" />
+      <span aria-hidden="true" style={box} className="mx-auto block flex-none rounded-full bg-gradient-to-tr from-forest-500 to-forest-200" />
     );
   }
   // eslint-disable-next-line @next/next/no-img-element -- logo sàn từ API, miền không cố định nên next/image không cấu hình trước được

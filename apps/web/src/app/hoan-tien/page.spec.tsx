@@ -315,7 +315,7 @@ describe('/hoan-tien — giao diện điện thoại như Mini App', () => {
     const logo = tile(c, 'Shopee')!.querySelector('span[aria-hidden="true"]')!;
     expect(logo.textContent).toBe('');
     expect(logo.className).toContain('rounded-full');
-    expect(logo.className).toContain('#34b764');
+    expect(logo.className).toContain('from-forest-500');
   });
 
   it('tên sàn đậm; ô sàn và thẻ giao dịch không viền ở điện thoại', async () => {
