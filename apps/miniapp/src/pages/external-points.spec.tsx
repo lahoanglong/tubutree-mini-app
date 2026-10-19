@@ -202,6 +202,19 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     });
   });
 
+  it('tài khoản đã có SĐT mà máy chủ vẫn trả NOT_ELIGIBLE_USER (bị khoá): nói chưa đủ điều kiện, mời liên hệ CSKH, không bảo chia sẻ SĐT', async () => {
+    mocks.user = { phone: '0901234567' };
+    mocks.submitExternalClaim.mockRejectedValue(rejection('NOT_ELIGIBLE_USER'));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value: 'SPXVN123456789' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/chưa đủ điều kiện/);
+    expect(alert).toHaveTextContent(/CSKH/);
+    expect(alert).not.toHaveTextContent('cho phép Tubu xem số điện thoại');
+    expect(screen.queryByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeNull();
+  });
+
   it('mã trống: nhắc nhập, không gọi API', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Tích điểm' }));

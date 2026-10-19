@@ -33,6 +33,9 @@ const PAGE_SIZE = 10;
 const DEAD_STATES: readonly MyExternalClaimItem['state'][] = ['VOIDED', 'REVERSED', 'LAPSED'];
 const t = vi.externalPoints;
 
+// App đã có SĐT mà máy chủ vẫn không coi tài khoản đủ điều kiện (máy chủ thiếu SĐT hoặc tài khoản bị khoá): chia sẻ lại SĐT không giúp vì máy chủ giữ SĐT cũ, chỉ CSKH gỡ được.
+const ACCOUNT_NOT_ELIGIBLE = 'Tài khoản của bạn chưa đủ điều kiện tích điểm đơn ngoài app. Bạn liên hệ CSKH Tubu để được hỗ trợ nhé.';
+
 export function claimStateView(item: Pick<MyExternalClaimItem, 'state' | 'expectedCreditAt'>): { label: string; tone: BadgeTone } {
   switch (item.state) {
     case 'PENDING':
@@ -192,8 +195,9 @@ function ClaimForm() {
     onError: (e) => {
       setResult(null);
       const rejected = externalClaimRejectCode(e);
-      setError(rejected ? t.reject[rejected] : getErrorMessage(e));
-      setNeedPhone(rejected === 'NOT_ELIGIBLE_USER');
+      const blockedAccount = rejected === 'NOT_ELIGIBLE_USER' && hasPhone;
+      setError(blockedAccount ? ACCOUNT_NOT_ELIGIBLE : rejected ? t.reject[rejected] : getErrorMessage(e));
+      setNeedPhone(rejected === 'NOT_ELIGIBLE_USER' && !hasPhone);
     },
   });
 
