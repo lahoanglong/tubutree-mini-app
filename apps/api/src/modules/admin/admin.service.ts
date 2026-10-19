@@ -734,7 +734,7 @@ export class AdminService {
   static readonly DETAIL_TAKE = 30;
 
   async getDashboardStats() {
-    // Một lượt quét orders cho mọi số đếm theo trạng thái và ba tổng tiền (6 count + 3 aggregate là 9 lượt quét). "Doanh thu" và GMV
+    // Một lượt quét orders cho mọi số đếm theo trạng thái và ba tổng tiền. "Doanh thu" và GMV
     // dùng đúng mảnh SQL chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
     const [
       orderKpiRows,

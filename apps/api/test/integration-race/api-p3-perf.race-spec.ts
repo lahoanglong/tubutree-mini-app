@@ -121,7 +121,7 @@ describe('API P3 và hiệu năng (real Postgres)', () => {
       const out = await admin.listCoupons({ page: 1, limit: 20 });
       expect(out.meta.total).toBeGreaterThanOrEqual(30);
 
-      // Các truy vấn lọc theo scope trên coupons (bản cũ: findMany + count; bản mới: một truy vấn lấy cả trang và tổng).
+      // Các truy vấn lọc theo scope trên coupons phải đi bằng chỉ mục, không quét tuần tự.
       const couponQueries = queries.filter((q) => /FROM "(public"\.")?coupons"/.test(q.query) && /WHERE[\s\S]*"scope"/.test(q.query) && !/redemption|claim/i.test(q.query));
       expect(couponQueries.length).toBeGreaterThanOrEqual(1);
       for (const q of couponQueries) {
