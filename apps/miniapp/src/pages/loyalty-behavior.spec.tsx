@@ -222,6 +222,15 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
     expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
   });
 
+  it('ghi chú điểm danh nhắc "Vườn Xanh" đúng một lần (không lặp tên trong cùng câu)', async () => {
+    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
+    renderPage();
+    await screen.findByRole('button', { name: 'Điểm danh +3' });
+    const note = screen.getByText(/lỡ 1 ngày thì vòng 7 ngày bắt đầu lại/);
+    expect(note.textContent?.match(/Vườn Xanh/g) ?? []).toHaveLength(1);
+    expect(note.textContent).toContain('giọt nước điểm danh riêng trong Vườn Xanh');
+  });
+
   it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
     mocks.getDailyCheckInStatus.mockResolvedValue({ ...CHECK_IN, checkedInToday: true });
     renderPage();

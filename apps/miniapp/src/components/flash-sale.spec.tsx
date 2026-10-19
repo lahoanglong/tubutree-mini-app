@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import userEvent from '@testing-library/user-event';
 import type * as ZmpUi from 'zmp-ui';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -142,6 +143,16 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
   });
 
+  it('thẻ là liên kết dùng được bằng bàn phím: Tab tới, Enter mở sản phẩm (D8-8)', async () => {
+    mocks.fetchActive.mockResolvedValue([ITEM]);
+    renderFlash();
+    const card = await screen.findByRole('link', { name: /Nước rửa chén/ });
+    await userEvent.setup().tab();
+    expect(card).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
+  });
+
   it('bán quá suất: chữ và thanh "đã bán" cùng dừng ở 100%, không in 150%', async () => {
     mocks.fetchActive.mockResolvedValue([{ ...ITEM, quota: 10, soldCount: 15 }]);
     renderFlash();
@@ -279,6 +290,19 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
   it('"Nhắc tôi" đặt nhắc mà KHÔNG mở sản phẩm; bấm khi đã nhắc thì huỷ nhắc', async () => {
     renderUpcoming();
     fireEvent.click(await screen.findByRole('button', { name: /Nhắc tôi/ }));
+    await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledWith('u1'));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('nút nhắc dùng được bằng bàn phím: Space đặt nhắc, không mở sản phẩm (D8-8)', async () => {
+    renderUpcoming();
+    const user = userEvent.setup();
+    const remind = await screen.findByRole('button', { name: /Nhắc tôi/ });
+    await user.tab();
+    expect(screen.getByRole('link', { name: /Nước rửa chén/ })).toHaveFocus();
+    await user.tab();
+    expect(remind).toHaveFocus();
+    await user.keyboard(' ');
     await waitFor(() => expect(mocks.setReminder).toHaveBeenCalledWith('u1'));
     expect(mocks.navigate).not.toHaveBeenCalled();
   });

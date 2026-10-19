@@ -587,6 +587,8 @@ export default function CheckoutPage() {
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
           className="tubu-press"
+          role="button"
+          {...rowKeyboardProps()}
           onClick={() => {
             haptic('light');
             setVoucherSheetOpen(true);
@@ -939,6 +941,9 @@ export default function CheckoutPage() {
         p={4}
         mt={2}
         className="tubu-press"
+        // Lỗi báo giá có nút Thử lại nằm trong thẻ: lúc đó thẻ không là nút nữa (nút lồng nút) nhưng chạm vẫn mở như trước.
+        role={quote.isError ? undefined : 'button'}
+        {...(quote.isError ? null : rowKeyboardProps())}
         onClick={() => {
           haptic('light');
           setSummarySheetOpen(true);
@@ -973,6 +978,7 @@ export default function CheckoutPage() {
             </Box>
             <Text
               role="button"
+              {...rowKeyboardProps()}
               size="xSmall"
               bold
               className="tubu-hit-44"

@@ -78,7 +78,7 @@ describe('ProductDetailPage — dòng freeship theo hạng của khách (R3-UI-9
 
   it('khách chưa đăng nhập: ngưỡng chung của cửa hàng', async () => {
     renderPdp();
-    expect(await screen.findByText('Miễn phí vận chuyển cho đơn từ 200.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Miễn phí giao hàng cho đơn từ 200.000đ')).toBeInTheDocument();
     expect(mocks.getCart).not.toHaveBeenCalled();
   });
 
@@ -86,7 +86,7 @@ describe('ProductDetailPage — dòng freeship theo hạng của khách (R3-UI-9
     mocks.auth.status = 'authenticated';
     mocks.getCart.mockResolvedValue(cartWith(99_000));
     renderPdp();
-    expect(await screen.findByText('Miễn phí vận chuyển cho đơn từ 99.000đ')).toBeInTheDocument();
+    expect(await screen.findByText('Miễn phí giao hàng cho đơn từ 99.000đ')).toBeInTheDocument();
     expect(screen.queryByText(/200\.000đ/)).toBeNull();
   });
 
@@ -94,7 +94,7 @@ describe('ProductDetailPage — dòng freeship theo hạng của khách (R3-UI-9
     mocks.auth.status = 'authenticated';
     mocks.getCart.mockResolvedValue(cartWith(0));
     renderPdp();
-    expect(await screen.findByText('Miễn phí vận chuyển cho mọi đơn hàng')).toBeInTheDocument();
+    expect(await screen.findByText('Miễn phí giao hàng cho mọi đơn hàng')).toBeInTheDocument();
     expect(screen.queryByText(/từ 0đ/)).toBeNull();
   });
 
@@ -103,13 +103,13 @@ describe('ProductDetailPage — dòng freeship theo hạng của khách (R3-UI-9
     mocks.getCart.mockReturnValue(new Promise(() => undefined));
     renderPdp();
     expect(await screen.findByText('Xà phòng sả chanh')).toBeInTheDocument();
-    expect(screen.queryByText(/Miễn phí vận chuyển/)).toBeNull();
+    expect(screen.queryByText(/Miễn phí giao hàng/)).toBeNull();
   });
 
   it('đang đăng nhập (status loading): không hiện ngưỡng chung', async () => {
     mocks.auth.status = 'loading';
     renderPdp();
     expect(await screen.findByText('Xà phòng sả chanh')).toBeInTheDocument();
-    expect(screen.queryByText(/Miễn phí vận chuyển/)).toBeNull();
+    expect(screen.queryByText(/Miễn phí giao hàng/)).toBeNull();
   });
 });

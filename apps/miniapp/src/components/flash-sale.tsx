@@ -23,6 +23,7 @@ import { Icon } from './ui/icon';
 import { PriceTag } from './ui/price-tag';
 import { ProgressBar } from './ui/progress-bar';
 import { ScrollRow } from './ui/scroll-row';
+import { rowKeyboardProps } from './ui/row-keyboard';
 import { Heading, Text } from './ui/text';
 
 const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
@@ -128,6 +129,9 @@ export function FlashSale() {
             <div
               key={item.itemId}
               className="tubu-press"
+              // role=link (không phải button): thẻ mở trang sản phẩm; thẻ "Sắp diễn ra" chứa nút nhắc bên trong nên role=button sẽ lồng nút.
+              role="link"
+              {...rowKeyboardProps()}
               onClick={() => {
                 haptic('light');
                 // Truyền variationId: sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân
@@ -195,7 +199,7 @@ function UpcomingFlashCard({
   const { price, pct } = flashDisplay(item);
 
   return (
-    <div className="tubu-press" onClick={onOpen} style={CARD_STYLE}>
+    <div className="tubu-press" role="link" {...rowKeyboardProps()} onClick={onOpen} style={CARD_STYLE}>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
         {item.thumbnail && (
           <img
@@ -225,6 +229,7 @@ function UpcomingFlashCard({
         {startsIn && (
           <div
             role="button"
+            {...rowKeyboardProps()}
             className="tubu-press"
             onClick={(e: MouseEvent) => {
               e.stopPropagation();

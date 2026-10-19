@@ -1,5 +1,6 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   getCart: vi.fn(),
   getCartSelection: vi.fn(),
   removeCartItem: vi.fn(),
+  updateCartItem: vi.fn(),
   voucherProps: [] as Record<string, unknown>[],
   fetchProducts: vi.fn(),
 }));
@@ -23,7 +25,7 @@ vi.mock('../services/shop-api', () => ({
   getCart: mocks.getCart,
   getCartSelection: mocks.getCartSelection,
   removeCartItem: mocks.removeCartItem,
-  updateCartItem: vi.fn(),
+  updateCartItem: mocks.updateCartItem,
   addToCart: vi.fn(),
   fetchProducts: mocks.fetchProducts,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
@@ -218,15 +220,15 @@ describe('CartPage — chia theo nơi giao (D4)', () => {
     vi.clearAllMocks();
   });
 
-  it('giỏ toàn hàng Tubu: không có tiêu đề nơi giao, ngưỡng miễn phí ship như cũ', async () => {
+  it('giỏ toàn hàng Tubu: không có tiêu đề nơi giao, ngưỡng miễn phí giao hàng như cũ', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, fulfiller: TUBU }] }));
     renderPage();
     await screen.findByText('Xà bông thảo mộc');
     expect(screen.queryByRole('heading', { level: 2, name: 'Tubu Tree giao' })).toBeNull();
-    expect(screen.getByText('Mua thêm 150.000đ để được miễn phí ship')).toBeInTheDocument();
+    expect(screen.getByText('Mua thêm 150.000đ để được miễn phí giao hàng')).toBeInTheDocument();
   });
 
-  it('có hàng gian hàng tự giao: mỗi nơi giao một nhóm (Tubu trước), báo tách đơn; ngưỡng miễn phí ship chỉ tính phần Tubu', async () => {
+  it('có hàng gian hàng tự giao: mỗi nơi giao một nhóm (Tubu trước), báo tách đơn; ngưỡng miễn phí giao hàng chỉ tính phần Tubu', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [HONEY, { ...OK_LINE, fulfiller: TUBU }], subtotal: 200_000, freeship: true }));
     renderPage();
     await screen.findByText('Mật ong rừng');
@@ -234,14 +236,14 @@ describe('CartPage — chia theo nơi giao (D4)', () => {
     expect(sections.map((s) => s.getAttribute('aria-label'))).toEqual(['Tubu Tree giao', 'Mật ong Linh giao']);
     expect(screen.getByRole('heading', { level: 2, name: 'Mật ong Linh giao' })).toBeInTheDocument();
     expect(screen.getByText(/mỗi nơi giao thành một đơn riêng/)).toBeInTheDocument();
-    expect(screen.getByText('Mua thêm 150.000đ để được miễn phí ship cho phần hàng Tubu Tree giao')).toBeInTheDocument();
+    expect(screen.getByText('Mua thêm 150.000đ để được miễn phí giao hàng cho phần hàng Tubu Tree giao')).toBeInTheDocument();
   });
 
-  it('chỉ có hàng gian hàng tự giao: không mời mua thêm để được miễn phí ship', async () => {
+  it('chỉ có hàng gian hàng tự giao: không mời mua thêm để được miễn phí giao hàng', async () => {
     mocks.getCart.mockResolvedValue(summary({ items: [HONEY], subtotal: 150_000 }));
     renderPage();
     await screen.findByText('Mật ong rừng');
-    expect(screen.queryByText(/miễn phí ship/)).toBeNull();
+    expect(screen.queryByText(/miễn phí giao hàng/)).toBeNull();
   });
 });
 
@@ -551,5 +553,36 @@ describe('CartPage — thành tiền dòng khi SL > 1 (D6-10)', () => {
     fireEvent.click(screen.getByLabelText('Tăng số lượng'));
     expect(screen.queryByText(/Thành tiền/)).toBeNull();
     expect(screen.queryByText(/150\.000đ/)).toBeNull();
+  });
+
+  it('PATCH đang bay (đã qua debounce 380ms, optimistic đã nhân sẵn) → vẫn ẩn dòng thành tiền, chỉ hiện lại khi server trả', async () => {
+    let resolvePatch: (v: unknown) => void = () => {};
+    mocks.updateCartItem.mockReturnValue(new Promise((r) => { resolvePatch = r; }));
+    const flash = { ...OK_LINE, id: 'ci-f', productName: 'Hàng flash', unitPrice: 50_000, quantity: 2, total: 100_000 };
+    mocks.getCart.mockResolvedValue(summary({ items: [flash], subtotal: 100_000, itemCount: 2 }));
+    renderPage();
+    await screen.findByText('Hàng flash');
+    fireEvent.click(screen.getByLabelText('Tăng số lượng'));
+    await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledWith('ci-f', 3), { timeout: 2_000 });
+    expect(screen.queryByText(/Thành tiền/)).toBeNull();
+
+    // Server tính lại giá (hết suất flash): số hiện ra phải là số server, không phải số client tự nhân.
+    mocks.getCart.mockResolvedValue(
+      summary({ items: [{ ...flash, quantity: 3, total: 160_000 }], subtotal: 160_000, itemCount: 3 }),
+    );
+    await act(async () => {
+      resolvePatch(summary({ items: [{ ...flash, quantity: 3, total: 160_000 }], subtotal: 160_000, itemCount: 3 }));
+    });
+    expect(await screen.findByText(/Thành tiền/)).toHaveTextContent('160.000đ');
+  });
+  it('bàn phím: tên sản phẩm là nút, Enter mở trang sản phẩm (D8-8)', async () => {
+    mocks.getCart.mockResolvedValue(
+      summary({ items: [{ ...OK_LINE, id: 'ci-k', productName: 'Xà bông bàn phím', slug: 'xb-kb' }] }),
+    );
+    renderPage();
+    const name = await screen.findByRole('button', { name: 'Xà bông bàn phím', hidden: false });
+    name.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/xb-kb');
   });
 });
