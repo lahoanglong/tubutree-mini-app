@@ -277,7 +277,7 @@ function CopyControls({ text, name }: { text: string; name: string }) {
         </span>
       )}
       {failed && (
-        <span role="alert" className="sr-only md:hidden">
+        <span role="alert" className="basis-full text-xs text-danger-fg md:hidden">
           Không thể sao chép {name}. Vui lòng sao chép thủ công.
         </span>
       )}
