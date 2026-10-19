@@ -661,3 +661,17 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     expect(button('Yêu cầu nhận thưởng')).toBeUndefined();
   });
 });
+
+describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)', () => {
+  it('nền xanh xám, thẻ tổng quan navy, nút Dán đơn kiểu secondary, giá đại lý màu navy', async () => {
+    const c = await mount();
+    const main = c.querySelector('main')!;
+    expect(main.className).toContain('max-md:bg-[var(--color-dealer-bg)]');
+    expect(main.style.getPropertyValue('--color-dealer-ink')).toBe('#1f2a44');
+    expect(main.style.getPropertyValue('--color-dealer-bg')).toBe('#f4f6f9');
+    expect(c.querySelector('section[aria-label="Tổng quan đại lý"]')!.className).toContain('max-md:bg-[var(--color-dealer-ink)]');
+    expect(button('Dán đơn').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(c.querySelector('li .font-bold')!.className).toContain('max-md:text-[var(--color-dealer-ink)]');
+    expect(c.querySelector('h1')!.className).toContain('max-md:pl-12');
+  });
+});

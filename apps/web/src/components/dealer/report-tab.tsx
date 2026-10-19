@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { dealerReportQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
-import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
@@ -58,7 +58,7 @@ export function ReportTab() {
           )}
         </section>
 
-        <section aria-label="Bậc thưởng doanh số quý" className={`p-4 ${ui.card}`}>
+        <section aria-label="Bậc thưởng doanh số quý" className={`p-4 ${skin.card}`}>
           <h2 className="mb-2 text-base font-semibold text-stone-900">Bậc thưởng doanh số quý</h2>
           <ul>
             {d.tiers.map((t) => {

@@ -50,7 +50,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   return (
     <DealerShell title="Đăng ký đại lý">
       <div className="mx-auto max-w-xl">
-        <div className="rounded-card bg-stone-900 p-4 text-stone-0">
+        <div className="rounded-card bg-stone-900 p-4 text-stone-0 max-md:bg-[var(--color-dealer-ink)]">
           <Store className="h-6 w-6" aria-hidden="true" />
           <h2 className="mt-1 font-display text-lg font-semibold">Trở thành đại lý Tubu</h2>
           <p className="mt-1 text-sm text-stone-100">{applyPitch(config.isLoaded ? config.dealer?.maxDiscountPct : null)}</p>

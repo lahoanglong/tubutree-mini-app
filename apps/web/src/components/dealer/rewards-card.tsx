@@ -9,6 +9,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { rewardClaimView, type RewardClaimTone } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { errText } from './dealer-shell';
@@ -50,7 +51,7 @@ export function RewardsCard() {
   if (!rewards.length) return null;
   const pendingKey = claimMut.isPending ? `${claimMut.variables?.rewardId}|${claimMut.variables?.periodKey}` : null;
   return (
-    <section aria-label="Phần thưởng đại lý" className={`p-4 ${ui.card}`}>
+    <section aria-label="Phần thưởng đại lý" className={`p-4 ${skin.card}`}>
       <h2 className="mb-2 text-base font-semibold text-stone-900">Phần thưởng đại lý</h2>
       <div role="status" aria-live="polite">
         {notice && <p className={`mb-2 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}

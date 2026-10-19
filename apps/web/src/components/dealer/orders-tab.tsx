@@ -8,7 +8,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate } from '@/lib/format-date';
 import { orderStatusLabel } from '@/lib/order-view';
-import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,7 +29,7 @@ export function OrdersTab() {
   const orders = q.data ?? [];
   if (orders.length === 0) {
     return (
-      <section aria-label="Chưa có đơn đại lý nào" className={`p-8 text-center ${ui.card}`}>
+      <section aria-label="Chưa có đơn đại lý nào" className={`p-8 text-center ${skin.card}`}>
         <Package className="mx-auto h-8 w-8 text-stone-500" aria-hidden="true" />
         <h2 className="mt-2 font-display text-base font-semibold text-stone-900">Chưa có đơn đại lý nào</h2>
       </section>
@@ -42,7 +42,7 @@ export function OrdersTab() {
         const backordered = o.items?.reduce((s, it) => s + (it.backorderedQty || 0), 0) ?? 0;
         return (
           <li key={o.code}>
-            <Link href={`/tai-khoan/don-hang/${encodeURIComponent(o.code)}`} aria-label={`Xem đơn ${o.code}`} className={`block min-h-11 p-3 hover:bg-stone-50 ${ui.card}`}>
+            <Link href={`/tai-khoan/don-hang/${encodeURIComponent(o.code)}`} aria-label={`Xem đơn ${o.code}`} className={`block min-h-11 p-3 hover:bg-stone-50 ${skin.card}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-semibold text-stone-900">#{o.code}</span>
                 <span className="flex items-center gap-0.5">

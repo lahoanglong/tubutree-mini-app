@@ -13,6 +13,7 @@ import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { bankPaymentHref } from '@/lib/order-view';
 import { useDebounced } from '@/lib/use-debounced';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -41,9 +42,9 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
           {row.sku} · {row.stock > 0 ? `tồn ${row.stock}` : OUT_OF_STOCK_PREORDER}
         </div>
         <div className="flex items-baseline gap-1.5">
-          <span className="text-sm font-bold tabular-nums text-stone-900">{formatVnd(row.dealerPrice)}</span>
+          <span className="text-sm font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(row.dealerPrice)}</span>
           <span className="text-xs tabular-nums text-stone-600 line-through">{formatVnd(row.retailPrice)}</span>
-          {discountPct > 0 && <span className="text-xs font-semibold text-forest-700">-{discountPct}%</span>}
+          {discountPct > 0 && <span className="text-xs font-semibold text-forest-700 max-md:font-normal max-md:text-[var(--color-text-brand)]">-{discountPct}%</span>}
         </div>
         {preorder > 0 && (
           <div className="mt-1">
@@ -203,10 +204,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </p>
       )}
       <div className="mt-2 flex gap-2">
-        <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${ui.btnSecondary} flex-1`}>
+        <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${skin.btnSecondary} flex-1`}>
           Trả trước
         </button>
-        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} flex-1`}>
+        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} max-md:bg-[var(--color-dealer-ink)] max-md:hover:bg-[var(--color-dealer-ink)] flex-1`}>
           {placing ? 'Đang đặt...' : 'Ghi công nợ'}
         </button>
       </div>
@@ -233,7 +234,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </div>
         <button
           type="button"
-          className={`${ui.btnSecondary} flex-none`}
+          className={`${skin.btnSecondary} flex-none`}
           onClick={() => {
             setPasteResult(null);
             setPasteOpen(true);
@@ -272,7 +273,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </ul>
       )}
 
-      <div className={`mt-3 overflow-hidden ${ui.card}`}>
+      <div className={`mt-3 overflow-hidden ${skin.card}`}>
         {priceQ.isLoading ? (
           <div className="flex flex-col gap-2 p-3">
             {Array.from({ length: 6 }).map((_, i) => (
