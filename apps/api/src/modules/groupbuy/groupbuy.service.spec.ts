@@ -26,6 +26,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       create: jest.fn().mockResolvedValue({}),
     },
     coupon: { create: jest.fn().mockResolvedValue({}) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   (base.groupBuy as { count?: jest.Mock }).count = jest.fn().mockResolvedValue(0);
   base.$transaction = jest
@@ -174,6 +175,19 @@ describe('GroupBuyService.create', () => {
     });
   });
 
+  it('D4-04: đếm nhóm OPEN và tạo nhóm nằm trong cùng một transaction, giữ khoá advisory theo khách', async () => {
+    const prisma = makePrisma();
+    await new GroupBuyService(prisma, makeConfig()).create('u1', 'prod1');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    const order = [
+      ...(prisma.$executeRaw as unknown as jest.Mock).mock.invocationCallOrder,
+      ...(prisma.groupBuy.count as jest.Mock).mock.invocationCallOrder,
+      ...(prisma.groupBuy.create as jest.Mock).mock.invocationCallOrder,
+    ];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(((prisma.$executeRaw as unknown as jest.Mock).mock.calls[0] as unknown[]).join(' ')).toContain('u1');
+  });
+
   it('còn dưới trần số nhóm OPEN → vẫn tạo được bình thường', async () => {
     const prisma = makePrisma();
     (prisma.groupBuy.count as jest.Mock).mockResolvedValue(1);
@@ -259,6 +273,30 @@ describe('GroupBuyService.join', () => {
       (c) => c[0]?.data?.couponsGrantedAt,
     );
     expect(marked).toBeTruthy();
+  });
+
+  it('D5-04: GROUP_BUY_SUCCESS mang tên sản phẩm, mã coupon của chính người nhận và hạn dùng (giờ VN)', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-17T10:00:00.000Z'));
+    try {
+      const prisma = makePrisma();
+      (prisma.groupBuy.findUnique as jest.Mock)
+        .mockResolvedValueOnce(group({ id: 'gbABC', currentSize: 2, targetSize: 3 }))
+        .mockResolvedValueOnce(group({ id: 'gbABC', currentSize: 3, targetSize: 3 }));
+      (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'userZZZ' }]);
+      (prisma.product as unknown as { findUnique: jest.Mock }).findUnique.mockResolvedValue({
+        id: 'prod1', isActive: true, approvalStatus: 'APPROVED', basePrice: 100000, salePrice: null, name: 'Nước rửa chén', slug: 'nuoc-rua-chen', thumbnail: null,
+      });
+      const notify = jest.fn().mockResolvedValue(undefined);
+      await new GroupBuyService(prisma, makeConfig(), { notify } as never).join('u1', 'gbABC');
+      expect(notify).toHaveBeenCalledWith('userZZZ', 'GROUP_BUY_SUCCESS', {
+        discount: '15.000',
+        product: 'Nước rửa chén',
+        code: 'GBUY-GBABC-USERZZZ',
+        expires: '16/11/2026',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('grant coupon gặp P2002 (đã có) → coi như đã cấp, KHÔNG re-notify, vẫn đánh dấu granted', async () => {

@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
+import { formatVnDate } from '../../common/vn-time';
 
 /** Số nhóm hết hạn xử lý mỗi lần quét (15 phút/lần): chặn một đợt tồn đọng làm cron chạy quá lâu; phần dư để lần quét sau. */
 const EXPIRE_BATCH = 200;
@@ -75,11 +76,6 @@ export class GroupBuyService {
     // Chống spam mở nhóm hàng loạt: rác hoá danh sách mua chung / tốn tài nguyên tạo nhóm vô tội vạ
     // (tài khoản phụ đã bị chặn ở assertRealUser, mã chỉ áp cho đúng sản phẩm — xem grantCoupon()).
     const maxOpenPerUser = await this.config.get<number>('groupbuy.max_open_per_user', 3);
-    const openCount = await this.prisma.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN', product: LISTED_GROUP_PRODUCT } });
-    if (openCount >= maxOpenPerUser) {
-      throw new BadRequestException(`Bạn đang có ${openCount} nhóm mua chung chưa đóng, hãy chờ nhóm cũ hoàn tất.`);
-    }
-
     const [pct, targetSize, windowHours] = await Promise.all([
       this.config.get<number>('groupbuy.discount_pct', 15),
       this.config.get<number>('groupbuy.target_size', 3),
@@ -89,19 +85,27 @@ export class GroupBuyService {
     const unitPrice = Math.round((basePrice * (100 - pct)) / 100);
     const expiresAt = new Date(Date.now() + windowHours * 3600 * 1000);
 
-    const created = (await this.prisma.groupBuy.create({
-      data: {
-        productId,
-        initiatorId: userId,
-        targetSize,
-        currentSize: 1,
-        unitPrice,
-        basePrice,
-        status: 'OPEN',
-        expiresAt,
-        members: { create: { userId } },
-      },
-    })) as unknown as GroupRow;
+    // Đếm rồi tạo dưới khoá theo khách: không khoá thì N yêu cầu song song cùng đọc "chưa đủ" và vượt trần.
+    const created = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`groupbuy-open:${userId}`}))`;
+      const openCount = await tx.groupBuy.count({ where: { initiatorId: userId, status: 'OPEN', product: LISTED_GROUP_PRODUCT } });
+      if (openCount >= maxOpenPerUser) {
+        throw new BadRequestException(`Bạn đang có ${openCount} nhóm mua chung chưa đóng, hãy chờ nhóm cũ hoàn tất.`);
+      }
+      return (await tx.groupBuy.create({
+        data: {
+          productId,
+          initiatorId: userId,
+          targetSize,
+          currentSize: 1,
+          unitPrice,
+          basePrice,
+          status: 'OPEN',
+          expiresAt,
+          members: { create: { userId } },
+        },
+      })) as unknown as GroupRow;
+    });
 
     // Cạnh biên: targetSize (config) = 1 → nhóm đã đủ người NGAY khi tạo (chỉ có initiator).
     // Không xử lý thì nhóm kẹt OPEN mãi vì join()'s guard `currentSize < targetSize` không bao
@@ -203,24 +207,31 @@ export class GroupBuyService {
   private async grantAllMembers(group: GroupRow): Promise<boolean> {
     const members = await this.prisma.groupBuyMember.findMany({ where: { groupBuyId: group.id } });
     const discount = group.basePrice - group.unitPrice;
+    // Tên sản phẩm chỉ để điền tin: tra lỗi không được chặn việc cấp mã.
+    const product = await this.prisma.product
+      .findUnique({ where: { id: group.productId }, select: { name: true } })
+      .catch(() => null);
     let allGranted = true;
     for (const m of members) {
-      let newlyGranted = false;
+      let granted: { code: string; endAt: Date } | null = null;
       try {
-        await this.grantCoupon(group.id, m.userId, discount, group.unitPrice, group.productId);
-        newlyGranted = true;
+        granted = await this.grantCoupon(group.id, m.userId, discount, group.unitPrice, group.productId);
       } catch (e) {
-        if (this.isAlreadyGranted(e)) {
-          newlyGranted = false; // đã cấp ở lần trước → coi như đã có, KHÔNG thông báo lại
-        } else {
+        // P2002: đã cấp ở lần trước → coi như đã có, KHÔNG thông báo lại.
+        if (!this.isAlreadyGranted(e)) {
           allGranted = false;
           this.logger.warn(`grantCoupon lỗi (nhóm ${group.id}, user ${m.userId}): ${(e as Error).message}`);
         }
       }
       // Chỉ thông báo khi coupon vừa được cấp mới (tránh spam khi reconcile chạy lại).
-      if (newlyGranted && this.notifications) {
+      if (granted && this.notifications) {
         await this.notifications
-          .notify(m.userId, 'GROUP_BUY_SUCCESS', { discount: discount.toLocaleString('vi-VN') })
+          .notify(m.userId, 'GROUP_BUY_SUCCESS', {
+            discount: discount.toLocaleString('vi-VN'),
+            product: product?.name ?? '',
+            code: granted.code,
+            expires: formatVnDate(granted.endAt),
+          })
           .catch((e) => this.logger.warn(`notify lỗi: ${(e as Error).message}`));
       }
     }
@@ -383,7 +394,7 @@ export class GroupBuyService {
     amount: number,
     minOrder: number,
     productId: string,
-  ): Promise<string> {
+  ): Promise<{ code: string; endAt: Date }> {
     const code = groupBuyCouponCode(groupBuyId, userId);
     const end = new Date();
     end.setDate(end.getDate() + COUPON_VALID_DAYS);
@@ -401,6 +412,6 @@ export class GroupBuyService {
         applyTo: { productIds: [productId] } as object,
       },
     });
-    return code;
+    return { code, endAt: end };
   }
 }
