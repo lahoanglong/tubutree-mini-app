@@ -1047,7 +1047,7 @@ export default function CheckoutPage() {
               Nếu đơn trước chưa có trong Đơn của tôi, bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại.
             </Text>
           )}
-          <Button size="small" variant="secondary" style={{ marginTop: 8 }} onPress={() => navigate('/orders')}>
+          <Button size="md" variant="secondary" style={{ marginTop: 8 }} onPress={() => navigate('/orders')}>
             Đơn của tôi
           </Button>
         </Box>
