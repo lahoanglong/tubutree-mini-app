@@ -20,7 +20,7 @@ export function readText(file: string): string {
 
 const tokens = () => readText(TOKENS_CSS);
 
-/** Giải `var(--x)` lồng nhau qua tokens.css (và `extra` nếu truyền) về một mã màu cuối. */
+/** Giải chuỗi `var()` lồng nhau qua tokens.css (và `extra` nếu truyền) về một mã màu cuối. */
 export function resolveColor(value: string, extra = ''): string {
   let v = value.trim();
   for (let i = 0; i < 8; i++) {
