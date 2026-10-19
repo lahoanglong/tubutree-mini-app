@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   rewards: null as object | null,
   loyalty: null as Record<string, unknown> | null,
+  config: null as Record<string, unknown> | null,
   fail: new Set<string>(),
   calls: [] as Call[],
   redeem: null as null | (() => Promise<unknown>),
@@ -30,6 +31,7 @@ vi.mock('@/lib/core-http', () => ({
       }
       if (path === '/me/loyalty/rewards') return state.rewards;
       if (path === '/me/loyalty') return state.loyalty;
+      if (path === '/config/public' && state.config) return state.config;
       throw new Error(`chưa mock ${path}`);
     },
     post: async (path: string, body?: unknown, opts?: { headers?: Record<string, string> }) => {
@@ -86,6 +88,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.rewards = makeRewardCatalog();
   state.loyalty = { pointsBalance: 30_000, pointsConvertedBalance: 5000, lockedPoints: 0, redeemablePoints: 30_000 };
+  state.config = null;
   state.fail = new Set();
   state.calls = [];
   state.keySeq = 0;
@@ -105,6 +108,38 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     expect(c.textContent).toContain('Đổi quà dùng được 30.000 điểm');
     expect(c.textContent).toContain('Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.');
     expect(c.querySelector('a[href="/kho-qua/cua-toi"]')?.textContent).toContain('Quà của tôi');
+  });
+
+  it('ghi chú luật dùng điểm từ cấu hình công khai; không hiện khi cấu hình chưa tải', async () => {
+    let c = await mount();
+    expect(c.textContent).not.toContain('Điểm Xanh thường dùng tối đa');
+    state.config = { loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.2, pointExpireMonths: 12 } };
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    c = await mount();
+    expect(c.textContent).toContain('Điểm Xanh thường dùng tối đa 20% giá trị hàng Tubu trong đơn, không trừ vào phí ship. Điểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
+  });
+
+  it('không lặp số dư: dòng "Đổi quà dùng được" chỉ hiện khi khác tổng', async () => {
+    state.rewards = makeRewardCatalog({ pointsBalance: 42_000, pointsConvertedBalance: 0, lockedPoints: 0, redeemablePoints: 42_000 });
+    const c = await mount();
+    expect(c.textContent).toContain('42.000 điểm');
+    expect(c.textContent).not.toContain('Đổi quà dùng được');
+  });
+
+  it('thẻ quà: biểu tượng theo loại, giá và nút Đổi cùng một hàng', async () => {
+    const c = await mount();
+    const voucher = card(c, 'Miễn phí vận chuyển');
+    expect(voucher.querySelector('[data-testid="reward-icon"] svg.lucide-ticket')).not.toBeNull();
+    const price = Array.from(voucher.querySelectorAll('div')).find((d) => /điểm$/.test(d.textContent ?? '') && d.children.length === 0)!;
+    expect(price.parentElement).toBe(byText(voucher, 'button', 'Đổi')!.parentElement);
+    click(tab(c, 'Cây và hạt'));
+    await flush(2);
+    expect(card(c, 'Gói hạt giống Tubu').querySelector('[data-testid="reward-icon"] svg.lucide-leaf')).not.toBeNull();
+    expect(card(c, 'Góp quỹ trồng cây').querySelector('[data-testid="reward-icon"] svg.lucide-sprout')).not.toBeNull();
+    click(tab(c, 'Quà nhỏ'));
+    await flush(2);
+    expect(card(c, 'Túi vải Tubu').querySelector('[data-testid="reward-icon"] svg.lucide-gift')).not.toBeNull();
   });
 
   it('có điểm khoá thì hiện ghi chú vì sao chưa đổi được; không khoá thì không có', async () => {

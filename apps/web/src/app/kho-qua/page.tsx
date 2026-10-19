@@ -3,7 +3,8 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Gift } from 'lucide-react';
+import { ChevronRight, Gift, Leaf, Sprout, Ticket } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { redeemLoyaltyReward } from '@tubutree/app-core/api/loyalty';
 import { buyTree } from '@tubutree/app-core/api/game';
@@ -15,6 +16,8 @@ import { coreHttp } from '@/lib/core-http';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
+import { pointsRulesNote } from '@/lib/loyalty-copy';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
@@ -121,37 +124,48 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
   );
 }
 
+const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
+  VOUCHER: Ticket,
+  TREE: Sprout,
+  SEED_PACK: Leaf,
+  GIFT: Gift,
+};
+
 function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void }) {
   const s = rewardCardState(reward, catalog);
+  const KindIcon = KIND_ICON[reward.kind];
   return (
-    <div data-reward className={`flex flex-col gap-2 p-4 ${ui.card}`}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-base font-semibold text-stone-900">{reward.name}</div>
-        {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+    <div data-reward className={`flex flex-col gap-2.5 p-4 ${ui.card}`}>
+      <div className="flex items-start gap-3">
+        <span data-testid="reward-icon" className="flex h-10 w-10 flex-none items-center justify-center rounded-control bg-forest-50 text-forest-700">
+          <KindIcon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-base font-semibold text-stone-900">{reward.name}</div>
+            {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+          </div>
+          {reward.description && <div className="text-xs text-stone-700">{reward.description}</div>}
+          {reward.stockRemaining != null && !reward.soldOut && <div className="text-xs text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
+          {reward.claimInstructions && <div className="text-xs text-stone-600">{reward.claimInstructions}</div>}
+        </div>
       </div>
-      {reward.description && <div className="text-xs text-stone-700">{reward.description}</div>}
-      <div className="text-sm font-semibold tabular-nums text-forest-700">{points(reward.pointsCost)}</div>
-      {reward.stockRemaining != null && !reward.soldOut && <div className="text-xs text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
-      {reward.claimInstructions && <div className="text-xs text-stone-600">{reward.claimInstructions}</div>}
-      <div className="mt-auto pt-1">
+      <div className="mt-auto flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold tabular-nums text-forest-700">{points(reward.pointsCost)}</div>
         {s.kind === 'redeem' && (
-          <button type="button" onClick={onRedeem} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" onClick={onRedeem} className={`${ui.btnPrimary} min-w-[88px]`}>
             Đổi
           </button>
         )}
         {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
         {s.kind === 'locked' && (
-          <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
+          <button type="button" disabled className={ui.btnPrimary}>
             Chờ mở khoá điểm
           </button>
         )}
-        {s.kind === 'need' && (
-          <div className="space-y-1.5">
-            <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>
-            <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />
-          </div>
-        )}
+        {s.kind === 'need' && <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
       </div>
+      {s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
     </div>
   );
 }
@@ -185,6 +199,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
 function RewardsBody() {
   const rewardsQ = useQuery(rewardsQuery(coreHttp));
   const loyaltyQ = useQuery(loyaltyQuery(coreHttp));
+  const cfg = usePublicConfig();
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
   const [confirmReward, setConfirmReward] = useState<RewardItemDTO | null>(null);
   const [result, setResult] = useState<RedeemOutcome | null>(null);
@@ -197,13 +212,16 @@ function RewardsBody() {
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
   const shown = c.rewards.filter((r) => kinds.includes(r.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
+  const total = pointsSummary(c).total;
+  const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;
 
   return (
     <div className="space-y-4 pb-12">
       <div className="space-y-1">
-        <div className="text-3xl font-bold tabular-nums text-stone-900">{points(pointsSummary(c).total)}</div>
-        <p className="text-sm text-stone-700">{`Đổi quà dùng được ${points(c.redeemablePoints)}`}</p>
+        <div className="text-3xl font-bold tabular-nums text-stone-900">{points(total)}</div>
+        {c.redeemablePoints !== total && <p className="text-sm text-stone-700">{`Đổi quà dùng được ${points(c.redeemablePoints)}`}</p>}
+        {rulesNote && <p className="text-xs text-stone-600">{rulesNote}</p>}
         {lockedNote && <p className="text-xs text-stone-600">{lockedNote}</p>}
         {c.pointsConvertedBalance > 0 && (
           <p className="text-xs text-stone-600">

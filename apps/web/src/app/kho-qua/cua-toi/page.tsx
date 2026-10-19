@@ -13,6 +13,7 @@ import { ui } from '@/lib/guest-ui';
 import { EmptyState } from '@/components/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
+import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { QrCode } from '@/components/ui/qr-code';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,7 +35,9 @@ function RedemptionStatus({ r }: { r: GiftRedemptionDTO }) {
     return (
       <>
         <p className="font-display text-2xl font-semibold tracking-wide text-stone-900">{r.code}</p>
-        <QrCode value={r.code} size={140} />
+        <div data-testid="qr-center" className="flex justify-center">
+          <QrCode value={r.code} size={140} />
+        </div>
         {r.claimPoint && <ClaimPointInfo point={r.claimPoint} heading={`Nhận tại ${r.claimPoint.name}`} />}
         {r.claimExpiresAt && <div className="text-sm text-stone-700">{`Hạn nhận ${formatDate(r.claimExpiresAt)}`}</div>}
       </>
@@ -71,7 +74,10 @@ function RedemptionEntry({ r }: { r: GiftRedemptionDTO }) {
   }
   return (
     <div data-redemption className={`space-y-2 p-4 ${ui.card}`}>
-      <div className="text-base font-semibold text-stone-900">{r.giftName}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-base font-semibold text-stone-900">{r.giftName}</div>
+        {r.status === 'READY' && <Badge tone="info">Chờ nhận</Badge>}
+      </div>
       <RedemptionStatus r={r} />
     </div>
   );

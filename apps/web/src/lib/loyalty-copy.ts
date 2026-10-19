@@ -57,3 +57,18 @@ export function pointExpiryPolicyNote(months: number | null | undefined): string
   const n = Number(months ?? 0);
   return Number.isFinite(n) && n >= 1 ? `Điểm Xanh thường có hạn ${Math.floor(n)} tháng kể từ ngày nhận, điểm cũ được dùng trước.` : null;
 }
+
+/**
+ * Ghi chú luật dùng điểm ở Kho quà. Trần % tính trên giá trị hàng Tubu của đơn và khoản trừ không bao giờ chạm phí ship;
+ * chỉ lô điểm thường chịu trần và hết hạn. Thiếu cấu hình từ máy chủ thì bỏ vế đó thay vì đoán con số.
+ */
+export function pointsRulesNote(loyalty: { maxRedeemPct?: number; pointExpireMonths?: number } | undefined): string | null {
+  const parts: string[] = [];
+  const pct = loyalty?.maxRedeemPct;
+  if (typeof pct === 'number' && Number.isFinite(pct) && pct > 0 && pct <= 1) {
+    parts.push(`Điểm Xanh thường dùng tối đa ${Math.round(pct * 100)}% giá trị hàng Tubu trong đơn, không trừ vào phí ship.`);
+  }
+  const expiry = pointExpiryPolicyNote(loyalty?.pointExpireMonths);
+  if (expiry) parts.push(expiry);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
