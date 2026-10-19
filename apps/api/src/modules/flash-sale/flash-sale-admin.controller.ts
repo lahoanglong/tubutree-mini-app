@@ -4,6 +4,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { Trim } from '../../common/decorators/trim.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { JwtPayload } from '@tubutree/shared-types';
+import type { CouponActor } from '../admin/coupon-input-rules';
 import { FlashSaleService } from './flash-sale.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
@@ -25,6 +27,8 @@ class AddItemDto {
   @IsOptional() @IsInt() @Min(1) perUserLimit?: number;
 }
 
+const actorOf = (user: JwtPayload): CouponActor => ({ id: user.sub, staff: user.role !== 'ADMIN' });
+
 @Roles('ADMIN')
 @AllowStaff('MARKETING')
 @Controller('admin/flash-sales')
@@ -42,22 +46,22 @@ export class FlashSaleAdminController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateSaleDto) {
-    return this.flashSale.updateSale(id, dto);
+  update(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: UpdateSaleDto) {
+    return this.flashSale.updateSale(id, dto, actorOf(user));
   }
 
   @Delete(':id')
-  removeSale(@Param('id') id: string) {
-    return this.flashSale.deleteSale(id);
+  removeSale(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.flashSale.deleteSale(id, actorOf(user));
   }
 
   @Post(':id/items')
-  addItem(@Param('id') id: string, @Body() dto: AddItemDto) {
-    return this.flashSale.addItem(id, dto);
+  addItem(@CurrentUser() user: JwtPayload, @Param('id') id: string, @Body() dto: AddItemDto) {
+    return this.flashSale.addItem(id, dto, actorOf(user));
   }
 
   @Delete('items/:itemId')
-  removeItem(@Param('itemId') itemId: string) {
-    return this.flashSale.removeItem(itemId);
+  removeItem(@CurrentUser() user: JwtPayload, @Param('itemId') itemId: string) {
+    return this.flashSale.removeItem(itemId, actorOf(user));
   }
 }
