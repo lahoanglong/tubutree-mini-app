@@ -242,6 +242,7 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
           <div className="flex w-full flex-col gap-1.5 sm:w-auto">
             <input
               type="text"
+              aria-label="Lý do gỡ liên kết (gửi đối tác)"
               placeholder="Lý do gỡ (gửi đối tác)..."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -534,6 +535,7 @@ export function MerchantProductRow({
             <div className="flex flex-col gap-1.5 pt-1">
               <input
                 type="text"
+                aria-label="Lý do từ chối"
                 placeholder="Lý do từ chối..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}

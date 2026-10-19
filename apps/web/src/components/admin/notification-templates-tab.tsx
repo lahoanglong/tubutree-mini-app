@@ -36,7 +36,7 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
           ? 'Chưa có mẫu nào gửi qua ZNS: mọi thông báo (đơn hàng, nhắc điểm sắp hết hạn, voucher...) chỉ hiện khi khách tự mở app. '
           : `${zns} mẫu đang gửi qua ZNS. `}
         {missing > 0 && `${missing} mẫu kênh ZNS chưa có mã mẫu nên đang chỉ gửi trong app. `}
-        Đăng ký mẫu ZNS trên Zalo (duyệt 7–14 ngày, xem docs/GO-LIVE-KEYS.md mục 2), duyệt xong thì nhập mã mẫu ở đây.
+        Đăng ký mẫu ZNS trên Zalo (Zalo duyệt trong 7–14 ngày), duyệt xong thì nhập mã mẫu ở đây. Chưa đăng ký được thì nhờ người quản trị kỹ thuật.
       </Notice>
       {!canEditAll && (
         <Notice tone="info">

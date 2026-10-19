@@ -28,6 +28,7 @@ export function SubscriptionsTab() {
 
   return (
     <div className="space-y-3">
+      <h2 className="font-display text-lg font-semibold text-stone-900">Gói định kỳ</h2>
       <Notice>Chỉ xem. Khách tự tạm dừng hoặc huỷ gói trong Mini App; hệ thống tự tạo đơn vào ngày giao kế tiếp của gói đang chạy.</Notice>
       <div role="tablist" aria-label="Lọc gói định kỳ theo trạng thái" className="flex flex-wrap gap-2">
         {STATUS_CHIPS.map((c) => (

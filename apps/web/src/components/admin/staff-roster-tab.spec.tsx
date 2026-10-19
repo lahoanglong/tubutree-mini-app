@@ -99,7 +99,16 @@ describe('StaffRosterTab (Nhân sự)', () => {
     await flush();
     expect(JSON.parse(api.posts('/admin/staff/revoke')[0]!.init!.body as string)).toEqual({ phone: '0911111111' });
     expect(container.textContent).toContain('Đã thu hồi quyền.');
+    // D7-15: huỷ lời mời cũng hỏi lại (người được mời phải mời lại từ đầu).
     click(container.querySelector('[aria-label="Huỷ lời mời · 0933333333"]'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('0933333333');
+    answerConfirm(false);
+    await flush();
+    expect(api.posts('/admin/staff/revoke')).toHaveLength(1);
+    click(container.querySelector('[aria-label="Huỷ lời mời · 0933333333"]'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(JSON.parse(api.posts('/admin/staff/revoke')[1]!.init!.body as string)).toEqual({ phone: '0933333333' });
   });

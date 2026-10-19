@@ -89,4 +89,20 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     expect(container.textContent).toContain('Nhà > Bếp');
     expect(container.textContent).toContain('→ Nhà bếp');
   });
+
+  // D7-27: hai truy vấn cùng hỏng thì cùng một lời báo hiện hai lần (khung đỏ và dòng "Thử lại").
+  it('D7-27: cả danh sách lẫn danh mục cùng lỗi một câu → chỉ hiện câu đó một lần, kèm "Thử lại"', async () => {
+    const m = mockFetch({
+      '/admin/product-categories/products': { status: 503, body: { message: 'Máy chủ đang bận, vui lòng thử lại sau.' } },
+      '/admin/pancake/categories': { body: [] },
+      '/categories': { status: 503, body: { message: 'Máy chủ đang bận, vui lòng thử lại sau.' } },
+    });
+    vi.stubGlobal('fetch', vi.fn(m.fn));
+    const r = render(<ProductCategoriesTab />);
+    mounted.push(r);
+    await flush();
+    const text = r.container.textContent ?? '';
+    expect(text.split('Máy chủ đang bận, vui lòng thử lại sau.').length - 1).toBe(1);
+    expect(byText(r.container, 'button', 'Thử lại')).not.toBeNull();
+  });
 });

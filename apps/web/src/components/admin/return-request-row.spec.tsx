@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import type { AdminReturnPreview, AdminReturnRequest } from '@/lib/admin-client';
 
@@ -242,7 +242,50 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
     typeInto(c.querySelector('input[placeholder^="Ghi chú duyệt"]'), 'Ảnh không rõ');
     click(btn(c, 'Từ chối'));
     await flush();
+    answerConfirm(true);
+    await flush();
     expect(mocks.review).toHaveBeenCalledWith('r1', false, 'Ảnh không rõ');
+  });
+
+  // D7-14: ghi chú gõ sẵn cho yêu cầu khác từng khiến một cú bấm gửi thông báo từ chối cho khách.
+  it('D7-14: "Từ chối" hỏi lại (danger) nhắc đúng lý do sẽ gửi cho khách; Huỷ thì không gọi API', async () => {
+    const c = await mount(REQ());
+    typeInto(c.querySelector('input[placeholder^="Ghi chú duyệt"]'), 'Ảnh không rõ');
+    click(btn(c, 'Từ chối'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d).not.toBeNull();
+    expect(d.textContent).toContain('TB-1');
+    expect(d.textContent).toContain('Ảnh không rõ');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    answerConfirm(false);
+    await flush();
+    expect(mocks.review).not.toHaveBeenCalled();
+  });
+
+  it('D7-14: "Đã nhận hàng về" hỏi lại (cộng kho); Huỷ thì không gọi API, đồng ý gọi đúng một lần', async () => {
+    const c = await mount(REQ({ status: 'APPROVED', refundAmount: 89_000, reviewedAt: '2026-10-13T05:00:00Z' }));
+    click(btn(c, 'Đã nhận hàng về'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('TB-1');
+    answerConfirm(false);
+    await flush();
+    expect(mocks.received).not.toHaveBeenCalled();
+    click(btn(c, 'Đã nhận hàng về'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(mocks.received).toHaveBeenCalledTimes(1);
+  });
+
+  // D7-06: CSKH cần biết đơn hoàn về đâu; mã WALLET/BANK_TRANSFER là chữ của lập trình viên.
+  it.each([
+    ['WALLET', 'Ví Tubu'],
+    ['BANK_TRANSFER', 'Chuyển khoản'],
+  ])('D7-06: phương thức thanh toán %s hiện nhãn "%s", không lộ mã thô', async (code, label) => {
+    const c = await mount(REQ({ order: { ...REQ().order!, paymentMethod: code } }));
+    expect(c.textContent).toContain(`(${label})`);
+    expect(c.textContent).not.toContain(code);
   });
 
   it('quyền nhân viên: KHO không có nút duyệt/từ chối, CSKH không có nút "Đã nhận hàng về" (API chặn theo nhóm việc)', async () => {
@@ -282,6 +325,8 @@ describe('ReturnRow — duyệt đổi/trả theo dòng (ADMINOPS-6, D3)', () =>
       'Đã hoàn 104.000đ (tiền hàng 89.000đ + phí ship 15.000đ) về Ví Tubu',
     );
     click(btn(c, 'Đã nhận hàng về'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(mocks.received).toHaveBeenCalledWith('r1');
     expect(unnamedControls(c)).toEqual([]);

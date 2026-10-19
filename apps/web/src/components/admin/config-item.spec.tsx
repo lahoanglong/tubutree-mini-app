@@ -168,4 +168,19 @@ describe('ConfigItem — khoá văn bản legal.* (D5-01)', () => {
     expect(r.container.textContent).toContain('tối đa 50.000 ký tự');
     expect(r.container.querySelector('textarea')!.value).toBe('abc');
   });
+
+  // D7-18: opacity-70 trên cả thẻ kéo chữ của huy hiệu và mô tả xuống 2,8:1 (cần 4,5:1). Màu chữ giữ nguyên token đạt AA
+  // (stone-600 trên stone-200 = 5,38; stone-500 trên stone-50 = 5,09), chỉ làm dịu nền và viền.
+  it('D7-18: khoá "Không dùng" không làm mờ cả thẻ (opacity) nên chữ huy hiệu và mô tả giữ độ tương phản', () => {
+    const { container } = setup(row({ key: 'game.old_key', value: 1, deprecated: true }));
+    const badge = byText(container, 'span', 'Không dùng')!;
+    expect(badge).not.toBeNull();
+    for (let el: HTMLElement | null = badge; el && el !== container; el = el.parentElement) {
+      expect(el.className).not.toMatch(/(^|\s)opacity-/);
+    }
+    expect(badge.className).toContain('text-stone-600');
+    expect(badge.className).toContain('bg-stone-200');
+    const card = container.firstElementChild as HTMLElement;
+    expect(card.className).toContain('bg-stone-50');
+  });
 });

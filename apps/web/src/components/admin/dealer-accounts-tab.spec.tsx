@@ -5,6 +5,14 @@ import { DealerAccountsTab } from './dealer-accounts-tab';
 import { answerConfirm, byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { DealerAccountRow, DealerAccountsPage, DealerTiersView } from '@/lib/dealer-accounts-client';
 
+/** `<dl>` hợp lệ: con trực tiếp chỉ là `<div>` gói `dt`/`dd` (axe `definition-list`). */
+const dlProblems = (root: ParentNode) =>
+  [...root.querySelectorAll('dl')].flatMap((dl) =>
+    [...dl.children]
+      .filter((c) => !(c.tagName === 'DIV' && c.querySelector('dt') && c.querySelector('dd') && [...c.children].every((k) => k.tagName === 'DT' || k.tagName === 'DD')))
+      .map((c) => c.outerHTML.slice(0, 90)),
+  );
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -215,5 +223,13 @@ describe('DealerAccountsTab — danh sách đại lý đã duyệt (D1-06)', () 
       if ((el as HTMLInputElement).type === 'checkbox') return;
       expect(el.className).toContain('min-h-[44px]');
     });
+  });
+
+  it('D7-17: dư nợ và doanh số là cặp dt/dd gói trong div, phần chú thích nằm trong dd', async () => {
+    stub();
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    expect(container.querySelector('[data-dealer-account] dl')).not.toBeNull();
+    expect(dlProblems(container)).toEqual([]);
   });
 });

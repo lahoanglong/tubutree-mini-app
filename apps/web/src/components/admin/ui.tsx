@@ -71,6 +71,16 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 // Viền stone-450 đủ 3:1 trên nền trắng/canvas (WCAG 1.4.11), như ô nhập của web khách (lib/guest-ui.ts). Không tắt
 // outline: vòng lấy nét chung của globals.css (:focus-visible) là dấu hiệu bàn phím duy nhất.
 // FIELD_CLASS không có chiều rộng để ô nhập đứng cạnh nhau trong hàng flex; INPUT_CLASS là bản chiếm cả hàng.
+/** Một cặp nhãn - giá trị trong `<dl>` (nhãn và giá trị cùng dòng): `<div>` gói `dt`/`dd` để trình đọc màn hình đọc đúng cặp. */
+export function DlRow({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <dt className="inline">{label}: </dt>
+      <dd className="inline">{children}</dd>
+    </div>
+  );
+}
+
 export const FIELD_CLASS =
   'min-w-0 rounded-control border border-stone-450 bg-stone-0 px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 focus:border-forest-600 disabled:bg-stone-100 disabled:text-stone-500';
 export const INPUT_CLASS = `w-full ${FIELD_CLASS}`;

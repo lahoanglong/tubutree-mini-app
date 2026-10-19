@@ -11,6 +11,8 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDateTime } from '@/lib/format-date';
+import { PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
+import { useConfirm } from './confirm-dialog';
 import { EvidenceImages } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H } from './ui';
 
@@ -50,6 +52,7 @@ export function ReturnRow({
   canReceive?: boolean;
 }) {
   const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
   const [note, setNote] = useState(r.adminNote ?? '');
   const [confirming, setConfirming] = useState(false);
   const [shopFault, setShopFault] = useState<boolean | undefined>(undefined);
@@ -84,6 +87,31 @@ export function ReturnRow({
     onSuccess: refresh,
   });
   const received = useMutation({ mutationFn: () => markReturnReceived(r.id), onSuccess: refresh });
+
+  const orderCode = r.order?.code ?? r.orderId;
+  const askReject = async () => {
+    if (note.trim().length < REJECT_NOTE_MIN) {
+      setNoteError('Ghi lý do từ chối để báo cho khách (tối thiểu 3 ký tự).');
+      return;
+    }
+    // Ô ghi chú dùng chung cho duyệt và từ chối nên có thể còn chữ gõ cho yêu cầu khác: đọc lại đúng lý do khách sẽ nhận.
+    const ok = await confirm({
+      title: 'Từ chối yêu cầu đổi/trả',
+      message: `Từ chối yêu cầu đổi/trả của đơn ${orderCode}? Khách sẽ nhận thông báo từ chối kèm lý do:\n"${note.trim()}"`,
+      confirmLabel: 'Từ chối',
+      cancelLabel: 'Không từ chối',
+      tone: 'danger',
+    });
+    if (ok) reject.mutate();
+  };
+  const askReceived = async () => {
+    const ok = await confirm({
+      title: 'Đã nhận hàng trả về?',
+      message: `Xác nhận kho đã nhận hàng trả của đơn ${orderCode}? Hàng sẽ được cộng lại vào kho ngay.`,
+      confirmLabel: 'Đã nhận hàng về',
+    });
+    if (ok) received.mutate();
+  };
 
   const statusBadge =
     r.status === 'APPROVED' ? (
@@ -127,7 +155,7 @@ export function ReturnRow({
             Khách:{' '}
             <span className="font-medium text-stone-800">{r.user?.fullName ?? 'Khách hàng'}</span>
             {r.user?.phone ? ` · SĐT: ${r.user.phone}` : ''}
-            {r.order ? ` · Tổng đơn: ${formatVnd(r.order.total)} (${r.order.paymentMethod})` : ''}
+            {r.order ? ` · Tổng đơn: ${formatVnd(r.order.total)} (${PAYMENT_METHOD_LABELS[r.order.paymentMethod] ?? r.order.paymentMethod})` : ''}
           </div>
         </div>
         <span className="text-xs text-stone-500">{formatDateTime(r.createdAt)}</span>
@@ -202,13 +230,7 @@ export function ReturnRow({
             )}
             <button
               type="button"
-              onClick={() => {
-                if (note.trim().length < REJECT_NOTE_MIN) {
-                  setNoteError('Ghi lý do từ chối để báo cho khách (tối thiểu 3 ký tự).');
-                  return;
-                }
-                reject.mutate();
-              }}
+              onClick={() => void askReject()}
               disabled={busy}
               className={BTN_DANGER_OUTLINE}
             >
@@ -380,7 +402,7 @@ export function ReturnRow({
                 {canReceive && (
                   <button
                     type="button"
-                    onClick={() => received.mutate()}
+                    onClick={() => void askReceived()}
                     disabled={received.isPending}
                     className={BTN_SECONDARY}
                   >
@@ -396,6 +418,7 @@ export function ReturnRow({
           )}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

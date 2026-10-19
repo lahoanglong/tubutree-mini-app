@@ -46,7 +46,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
     onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
   });
   return (
-    <div className={`rounded-card border border-stone-200 p-3 ${dead ? 'bg-stone-50 opacity-70' : 'bg-stone-0'}`}>
+    <div className={`rounded-card border border-stone-200 p-3 ${dead ? 'border-dashed bg-stone-50' : 'bg-stone-0'}`}>
       <div className="flex items-center gap-2 text-sm font-medium">
         <span className="min-w-0 break-all">{row.key}</span>
         {dead && <span className="rounded bg-stone-200 px-1.5 py-0.5 text-[11px] font-medium text-stone-600">Không dùng</span>}

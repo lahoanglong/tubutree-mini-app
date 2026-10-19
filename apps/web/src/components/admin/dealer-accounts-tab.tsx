@@ -193,16 +193,20 @@ function AccountRow({ row: r, month, onPaid }: { row: DealerAccountRow; month: s
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs text-stone-600 sm:grid-cols-2">
         <div>
           <dt className="inline">Dư nợ: </dt>
-          <dd className={`inline font-semibold ${debtTone}`}>{formatVnd(r.debt)}</dd>
-          <span className="text-stone-500"> / hạn mức {r.creditLimit > 0 ? formatVnd(r.creditLimit) : 'chưa có'}</span>
+          <dd className="inline">
+            <span className={`font-semibold ${debtTone}`}>{formatVnd(r.debt)}</span>
+            <span className="text-stone-500"> / hạn mức {r.creditLimit > 0 ? formatVnd(r.creditLimit) : 'chưa có'}</span>
+          </dd>
         </div>
         <div>
           <dt className="inline">Doanh số tháng {month}: </dt>
-          <dd className="inline font-semibold text-stone-900">{formatVnd(r.monthSales)}</dd>
-          <span className="text-stone-500">
-            {' '}
-            · {r.monthOrders} đơn{r.monthPending > 0 ? ` · chờ chốt ${formatVnd(r.monthPending)}` : ''}
-          </span>
+          <dd className="inline">
+            <span className="font-semibold text-stone-900">{formatVnd(r.monthSales)}</span>
+            <span className="text-stone-500">
+              {' '}
+              · {r.monthOrders} đơn{r.monthPending > 0 ? ` · chờ chốt ${formatVnd(r.monthPending)}` : ''}
+            </span>
+          </dd>
         </div>
       </dl>
 

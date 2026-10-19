@@ -294,6 +294,9 @@ test.describe('Web admin nhân sự và lương', () => {
     await expect(page.getByText('2h05')).toBeVisible();
     const sent = api.waitForCall('POST', '/admin/payroll/:id/finalize');
     await page.getByRole('button', { name: 'Chốt · Lan' }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Chốt bảng lương?' });
+    await expect(dialog).toContainText('Lan');
+    await dialog.getByRole('button', { name: 'Chốt lương' }).click();
     expect((await sent).body).toEqual({ year: month.year, month: month.month });
   });
 });

@@ -42,7 +42,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
 
 type Who = ClaimActor;
 
@@ -237,37 +237,50 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
         </span>
       </div>
       <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs text-stone-600 sm:grid-cols-2">
-        <div>Khách: {c.userName ?? '—'} · {c.userPhoneMasked ?? 'không có SĐT'}</div>
-        <div>SĐT trên đơn: {c.orderPhoneMasked ?? 'không có hoặc bị che'}</div>
-        <div>Tiền hàng: {c.goodsValue === null ? 'chưa tính được' : formatVnd(c.goodsValue)}</div>
-        <div>Điểm: {c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</div>
-        <div>Trạng thái đơn: {ORDER_STATUS_LABEL[c.orderStatus] ?? c.orderStatus}</div>
-        <div>Gửi lúc: {formatDateTime(c.createdAt)}</div>
+        <DlRow label="Khách">{c.userName ?? '—'} · {c.userPhoneMasked ?? 'không có SĐT'}</DlRow>
+        <DlRow label="SĐT trên đơn">{c.orderPhoneMasked ?? 'không có hoặc bị che'}</DlRow>
+        <DlRow label="Tiền hàng">{c.goodsValue === null ? 'chưa tính được' : formatVnd(c.goodsValue)}</DlRow>
+        <DlRow label="Điểm">{c.points > 0 ? `${groupThousands(c.points)} điểm` : 'chưa tính được'}</DlRow>
+        <DlRow label="Trạng thái đơn">{ORDER_STATUS_LABEL[c.orderStatus] ?? c.orderStatus}</DlRow>
+        <DlRow label="Gửi lúc">{formatDateTime(c.createdAt)}</DlRow>
         {c.kind === 'PHONE' && c.userId && (
           <div className="sm:col-span-2" data-member-info>
-            Người nhận: SĐT xác minh {row.memberPhoneVerifiedAt ? `lúc ${formatDateTime(row.memberPhoneVerifiedAt)}` : 'chưa từng'} · tài khoản tạo{' '}
-            {row.memberCreatedAt ? formatDate(row.memberCreatedAt) : '—'} · {row.memberDeliveredAppOrders ?? 0} đơn app đã giao
-            {row.memberPhoneStale && (
-              <span className="ml-1.5 align-middle">
-                <ToneBadge tone="warning">{PHONE_STALE_LABEL}</ToneBadge>
-              </span>
-            )}
+            <dt className="inline">Người nhận: </dt>
+            <dd className="inline">
+              SĐT xác minh {row.memberPhoneVerifiedAt ? `lúc ${formatDateTime(row.memberPhoneVerifiedAt)}` : 'chưa từng'} · tài khoản tạo{' '}
+              {row.memberCreatedAt ? formatDate(row.memberCreatedAt) : '—'} · {row.memberDeliveredAppOrders ?? 0} đơn app đã giao
+              {row.memberPhoneStale && (
+                <span className="ml-1.5 align-middle">
+                  <ToneBadge tone="warning">{PHONE_STALE_LABEL}</ToneBadge>
+                </span>
+              )}
+            </dd>
           </div>
         )}
-        {c.reviewReason && <div className="sm:col-span-2">{c.state === 'CREDITED' ? 'Cờ cần xử lý' : 'Lý do cần duyệt'}: <span className="font-medium text-warning-fg">{c.reviewReason}</span></div>}
-        {c.voidReason && <div className="sm:col-span-2">Lý do huỷ: <span className="font-medium text-danger-fg">{c.voidReason}</span></div>}
+        {c.reviewReason && (
+          <DlRow label={c.state === 'CREDITED' ? 'Cờ cần xử lý' : 'Lý do cần duyệt'} className="sm:col-span-2">
+            <span className="font-medium text-warning-fg">{c.reviewReason}</span>
+          </DlRow>
+        )}
+        {c.voidReason && (
+          <DlRow label="Lý do huỷ" className="sm:col-span-2">
+            <span className="font-medium text-danger-fg">{c.voidReason}</span>
+          </DlRow>
+        )}
       </dl>
       {open && (
-        <dl data-claim-detail className="mt-2 grid grid-cols-1 gap-x-4 gap-y-0.5 rounded-control bg-stone-100 p-2 text-xs text-stone-700 sm:grid-cols-2">
-          {detail.isLoading && <div>Đang tải…</div>}
-          {detail.isError && <div className="text-danger-fg">Không tải được chi tiết.</div>}
-          <div>Mã yêu cầu: <span className="font-mono">{row.id}</span></div>
-          <div>Đơn Pancake: <span className="font-mono">#{row.pancakeOrderId}</span></div>
-          <div>Giao lúc: {row.deliveredAt ? formatDateTime(row.deliveredAt) : '—'}</div>
-          <div>Cộng lúc: {row.creditedAt ? formatDateTime(row.creditedAt) : '—'}</div>
-          <div>Người xử lý: {row.decidedById ?? '—'}</div>
+        <div data-claim-detail className="mt-2 rounded-control bg-stone-100 p-2 text-xs text-stone-700">
+          {detail.isLoading && <p>Đang tải…</p>}
+          {detail.isError && <p className="text-danger-fg">Không tải được chi tiết.</p>}
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
+            <DlRow label="Mã yêu cầu"><span className="font-mono">{row.id}</span></DlRow>
+            <DlRow label="Đơn Pancake"><span className="font-mono">#{row.pancakeOrderId}</span></DlRow>
+            <DlRow label="Giao lúc">{row.deliveredAt ? formatDateTime(row.deliveredAt) : '—'}</DlRow>
+            <DlRow label="Cộng lúc">{row.creditedAt ? formatDateTime(row.creditedAt) : '—'}</DlRow>
+            <DlRow label="Người xử lý">{row.decidedById ?? '—'}</DlRow>
+          </dl>
           {detail.data && (
-            <div className="sm:col-span-2" data-claim-events>
+            <div className="mt-1.5" data-claim-events>
               <div className="font-medium">Lịch sử thao tác</div>
               {detail.data.events.length === 0 && <div className="text-stone-500">Chưa có thao tác nào.</div>}
               <ol className="mt-0.5 space-y-0.5">
@@ -283,7 +296,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
               </ol>
             </div>
           )}
-        </dl>
+        </div>
       )}
       {done && <p role="status" className="mt-2 text-xs text-success-fg">{done}</p>}
       {err && <p role="alert" className="mt-2 text-xs text-danger-fg">{err}</p>}

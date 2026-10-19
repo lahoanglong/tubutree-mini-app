@@ -3,6 +3,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ExternalClaimsTab } from './external-claims-tab';
 import { answerConfirm, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
+/** `<dl>` hợp lệ: con trực tiếp chỉ là `<div>` gói `dt`/`dd` (axe `definition-list`). */
+const dlProblems = (root: ParentNode) =>
+  [...root.querySelectorAll('dl')].flatMap((dl) =>
+    [...dl.children]
+      .filter((c) => !(c.tagName === 'DIV' && c.querySelector('dt') && c.querySelector('dd') && [...c.children].every((k) => k.tagName === 'DT' || k.tagName === 'DD')))
+      .map((c) => c.outerHTML.slice(0, 90)),
+  );
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -430,5 +438,18 @@ describe('ExternalClaimsTab', () => {
       expect(JSON.parse(String(approves[1]!.init!.body))).toEqual({ note: 'Gọi khách xác nhận' });
       expect(r.container.textContent).toContain('Đã duyệt');
     });
+  });
+
+  it('D7-17: danh sách và chi tiết claim dùng dt/dd gói trong div', async () => {
+    stub({ events: [] });
+    const r = mount(<ExternalClaimsTab isAdmin canAct meId="ad1" />);
+    await flush();
+    expect(r.container.querySelector('dl')).not.toBeNull();
+    expect(dlProblems(r.container)).toEqual([]);
+    click(btn(r.container, 'Chi tiết'));
+    await flush();
+    expect(r.container.querySelector('[data-claim-detail]')).not.toBeNull();
+    expect(dlProblems(r.container)).toEqual([]);
+    expect(r.container.querySelector('[data-claim-events]')).not.toBeNull();
   });
 });

@@ -337,7 +337,7 @@ describe('ReviewsTab / SubscriptionsTab / CashbackTab — DS v2', () => {
     expect(approve.className).toContain('min-h-[44px]');
     expect(reject.className).toContain('border-danger-fg');
     expect(reject.className).toContain('min-h-[44px]');
-    const pending = byText(container, 'button', 'PENDING')!;
+    const pending = byText(container, 'button', 'Chờ duyệt')!;
     expect(pending.className).toContain('bg-forest-600');
     expect(pending.className).toContain('min-h-[44px]');
   });

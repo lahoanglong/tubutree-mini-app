@@ -508,7 +508,7 @@ function PayoutRow({
   const [bankRef, setBankRef] = useState('');
   const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError });
   const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError });
-  const { ask, dialog } = useConfirm();
+  const { confirm, ask, dialog } = useConfirm();
   const busy = paidMut.isPending || cancelMut.isPending;
   const bank = p.bankInfo;
   const toTubu = payoutToTubu(p);
@@ -523,6 +523,31 @@ function PayoutRow({
       input: { label: 'Lý do huỷ (gian hàng sẽ đọc được)', placeholder: 'Vd: sai tài khoản nhận, lập nhầm kỳ', maxLength: 300, required: true },
     });
     if (reason) cancelMut.mutate(reason);
+  };
+  // Ghi sổ đối soát là không rút lại được; Enter trong ô mã giao dịch cũng gửi form nên bước hỏi phải nằm ở đây, không ở nút.
+  const askPaid = async () => {
+    const ref = bankRef.trim();
+    const store = p.storefront?.title ?? 'gian hàng';
+    const amount = formatVnd(Math.abs(p.amount));
+    const target = !toTubu
+      ? bank?.accountNo
+        ? `Tài khoản nhận: ${bank.bankName ?? ''} ${bank.accountNo} (${bank.accountName ?? ''})`
+        : 'Gian hàng chưa khai tài khoản nhận đối soát.'
+      : '';
+    const ok = await confirm({
+      title: toTubu ? 'Xác nhận đã thu của đối tác?' : 'Xác nhận đã chuyển cho đối tác?',
+      message: [
+        toTubu ? `Đối tác ${store} đã nộp ${amount} cho Tubu.` : `Tubu đã chuyển ${amount} cho đối tác ${store}.`,
+        target,
+        `Mã giao dịch: ${ref}`,
+        'Phiếu sẽ chuyển sang đã xong và không sửa lại được.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      confirmLabel: toTubu ? 'Đã thu' : 'Đã chuyển',
+      tone: 'danger',
+    });
+    if (ok) paidMut.mutate();
   };
   return (
     <li className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-xs shadow-card">
@@ -572,7 +597,7 @@ function PayoutRow({
             className="flex flex-wrap items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              paidMut.mutate();
+              void askPaid();
             }}
           >
             {(!toTubu || canConfirmToTubu) && (

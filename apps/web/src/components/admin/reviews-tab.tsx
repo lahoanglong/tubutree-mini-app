@@ -35,6 +35,7 @@ export function ReviewsTab() {
 
   return (
     <div className="space-y-3">
+      <h2 className="font-display text-lg font-semibold text-stone-900">Đánh giá</h2>
       <Notice>Đánh giá bị ẩn không hiện trên trang sản phẩm và không tính vào điểm sao; có thể hiện lại bất cứ lúc nào.</Notice>
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Lọc đánh giá theo trạng thái" className="flex flex-wrap gap-2">

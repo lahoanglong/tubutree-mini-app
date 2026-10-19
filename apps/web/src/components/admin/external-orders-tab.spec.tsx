@@ -4,6 +4,14 @@ import { act } from 'react';
 import { ExternalOrdersTab } from './external-orders-tab';
 import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 
+/** `<dl>` hợp lệ: con trực tiếp chỉ là `<div>` gói `dt`/`dd` (axe `definition-list`). */
+const dlProblems = (root: ParentNode) =>
+  [...root.querySelectorAll('dl')].flatMap((dl) =>
+    [...dl.children]
+      .filter((c) => !(c.tagName === 'DIV' && c.querySelector('dt') && c.querySelector('dd') && [...c.children].every((k) => k.tagName === 'DT' || k.tagName === 'DD')))
+      .map((c) => c.outerHTML.slice(0, 90)),
+  );
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -132,5 +140,15 @@ describe('ExternalOrdersTab (Đơn ngoài app)', () => {
     const { container } = mount(<ExternalOrdersTab isAdmin={false} />);
     await flush();
     expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Tải thêm')).toBe(true);
+  });
+
+  // D7-17: `<dl>` có con không phải dt/dd làm trình đọc màn hình đọc sai cặp nhãn - giá trị.
+  it('D7-17: mỗi dòng nhãn - giá trị là cặp dt/dd gói trong div; chữ hiển thị không đổi', async () => {
+    stub();
+    const { container } = mount(<ExternalOrdersTab isAdmin />);
+    await flush();
+    expect(container.querySelector('[data-external-order] dl')).not.toBeNull();
+    expect(dlProblems(container)).toEqual([]);
+    expect(container.querySelector('[data-external-order] dl')!.textContent).toContain('Tiền hàng: 320.000');
   });
 });

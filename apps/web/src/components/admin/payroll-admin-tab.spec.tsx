@@ -5,7 +5,7 @@ const downloads: { csv: string; name: string }[] = [];
 vi.mock('@/lib/export-csv', () => ({ downloadCsvFile: (csv: string, name: string) => downloads.push({ csv, name }) }));
 
 import { PayrollAdminTab } from './payroll-admin-tab';
-import { answerConfirm, byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { currentVnYearMonth } from '@/lib/week';
 
 let mounted: Rendered[] = [];
@@ -82,7 +82,16 @@ describe('PayrollAdminTab (Lương)', () => {
     const api = stub([row('1', 'Lan', 'OPEN')]);
     const { container } = mount(<PayrollAdminTab />);
     await flush();
+    // D7-15: chốt lương khoá sổ tháng của nhân viên; mở lại thì có hỏi nên chốt cũng phải hỏi.
     click(container.querySelector('[aria-label="Chốt · Lan"]'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Lan');
+    answerConfirm(false);
+    await flush();
+    expect(api.to('/admin/payroll/1/finalize')).toHaveLength(0);
+    click(container.querySelector('[aria-label="Chốt · Lan"]'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(JSON.parse(api.to('/admin/payroll/1/finalize')[0]!.init!.body as string)).toEqual({ year, month });
     expect(container.textContent).toContain('Đã chốt lương.');

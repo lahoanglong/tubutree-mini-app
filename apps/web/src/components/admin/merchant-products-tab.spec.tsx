@@ -486,6 +486,22 @@ describe('MerchantProductsTab — "Tubu giao hộ" lấy mã của sản phẩm 
     expect(byText(container, 'button', 'Xác nhận hàng ký gửi')).toBeNull();
     expect(text.match(/Tồn lúc liên kết/g)).toHaveLength(1);
   });
+  // D8-10: nhãn chỉ là placeholder thì mất khi gõ và trình đọc màn hình không nghe được tên ô.
+  it('D8-10: ô "Lý do gỡ" và ô "Lý do từ chối" có tên truy cập (aria-label), không chỉ placeholder', async () => {
+    const api = mockFetch({
+      '/admin/merchant-products/pending': { body: { data: [product()], meta: { page: 1, limit: 100, total: 1 } } },
+      '/admin/merchant-products/linked': { body: { data: [linked], meta: { page: 1, limit: 100, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<MerchantProductsTab />);
+    await flush();
+    click(byText(container, 'button', 'Từ chối'));
+    click(byText(container, 'button', 'Gỡ liên kết'));
+    const reject = container.querySelector('input[placeholder="Lý do từ chối..."]')!;
+    const unlink = container.querySelector('input[placeholder="Lý do gỡ (gửi đối tác)..."]')!;
+    expect(reject.getAttribute('aria-label')).toBe('Lý do từ chối');
+    expect(unlink.getAttribute('aria-label')).toBe('Lý do gỡ liên kết (gửi đối tác)');
+  });
 });
 
 describe('MerchantProductsTab — bản sửa của sản phẩm đang bán (R3-MERCHANT-4)', () => {
