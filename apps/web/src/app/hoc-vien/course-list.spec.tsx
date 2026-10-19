@@ -123,3 +123,14 @@ describe('/hoc-vien — danh sách khoá học', () => {
     expect(unnamedControls(container)).toEqual([]);
   });
 });
+
+describe('/hoc-vien — thẻ khoá học như Mini App', () => {
+  it('thẻ không viền; tên và mô tả cỡ ListRow ở điện thoại', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('a[href="/hoc-vien/a"]')!;
+    expect(card.classList.contains('border')).toBe(false);
+    const [title, desc] = Array.from(card.querySelectorAll('span.block'));
+    expect(title!.className).toContain('max-md:text-[length:var(--type-body-sm-size)]');
+    expect(desc!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+  });
+});

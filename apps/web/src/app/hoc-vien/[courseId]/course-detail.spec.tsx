@@ -152,3 +152,30 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     expect(unnamedControls(container)).toEqual([]);
   });
 });
+
+describe('/hoc-vien/[courseId] — như Mini App', () => {
+  it('bài đã học: nút "Đã học xong" có dấu tích trước chữ và là nút phụ ZaUI', async () => {
+    const { container } = await mount();
+    const done = buttons(container, 'Đã học xong')[0]!;
+    expect(done.querySelector('svg.lucide-circle-check-big, svg.lucide-check-circle-2, svg.lucide-circle-check')).not.toBeNull();
+    expect(done.className).toContain('max-md:bg-forest-50');
+  });
+
+  it('link "Mở video bài học" không gạch chân ở điện thoại', async () => {
+    const { container } = await mount();
+    expect(byText(container, 'a', 'Mở video bài học')!.className).toContain('max-md:no-underline');
+  });
+
+  it('"Danh sách khoá học" vẫn hiện ở điện thoại như nút ghost của Mini App; bài học là thẻ không viền', async () => {
+    const { container } = await mount();
+    const back = byText(container, 'a', 'Danh sách khoá học')!;
+    expect(back.className).not.toContain('max-md:hidden');
+    expect(container.querySelector('section')!.classList.contains('border')).toBe(false);
+  });
+
+  it('tên khoá cỡ title-md ở điện thoại', async () => {
+    const { container } = await mount();
+    const h = Array.from(container.querySelectorAll('h2')).find((x) => x.textContent === 'Khoá bán hàng')!;
+    expect(h.className).toContain('max-md:text-[length:var(--type-title-md-size)]');
+  });
+});

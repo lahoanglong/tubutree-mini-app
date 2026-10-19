@@ -11,6 +11,7 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { miniCard } from '@/components/loyalty/mini-surface';
 import { AcademyAuthGate } from './academy-auth';
 
 export const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
@@ -19,7 +20,7 @@ function CourseCard({ course }: { course: AcademyCourseSummary }) {
   const pct = course.lessonCount > 0 ? Math.round((course.completedCount / course.lessonCount) * 100) : 0;
   const cover = safeMediaUrl(course.coverUrl);
   return (
-    <Link href={`/hoc-vien/${encodeURIComponent(course.id)}`} className={`${ui.card} flex min-h-11 items-start gap-3 p-3 transition active:scale-[0.99]`}>
+    <Link href={`/hoc-vien/${encodeURIComponent(course.id)}`} className={`${miniCard} flex min-h-11 items-start gap-3 p-3 transition active:scale-[0.99]`}>
       <span className="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-control bg-forest-50 text-forest-600">
         {cover ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -29,8 +30,10 @@ function CourseCard({ course }: { course: AcademyCourseSummary }) {
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-base font-semibold text-stone-900">{course.title}</span>
-        {course.description && <span className="block truncate text-sm text-stone-700">{course.description}</span>}
+        <span className="block truncate text-base font-semibold text-stone-900 max-md:text-[length:var(--type-body-sm-size)]">{course.title}</span>
+        {course.description && (
+          <span className="block truncate text-sm text-stone-700 max-md:text-[length:var(--type-caption-size)] max-md:text-stone-600">{course.description}</span>
+        )}
         <span className="my-2 block">
           <ProgressBar value={pct} max={100} />
         </span>

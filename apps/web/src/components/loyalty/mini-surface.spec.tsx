@@ -31,6 +31,7 @@ describe('bề mặt kiểu Mini App ở điện thoại', () => {
     expect(miniBtnSecondary).toContain('max-md:border-transparent');
     expect(miniBtnSecondary).toContain('max-md:bg-forest-50');
     expect(miniBtnSecondary).toContain('max-md:text-forest-700');
+    expect(miniBtnSecondary).toContain('max-md:disabled:bg-stone-200');
   });
 
   it('thanh tiêu đề: nền trắng tràn ngang dưới md, chừa chỗ cho nút lùi', () => {

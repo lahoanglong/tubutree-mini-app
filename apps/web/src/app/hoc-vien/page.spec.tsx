@@ -41,3 +41,13 @@ describe('/hoc-vien — trang công khai', () => {
     expect(r.container.querySelector('h1')?.textContent).toBe('CTV Academy');
   });
 });
+
+describe('/hoc-vien — giao diện điện thoại như Mini App', () => {
+  it('tiêu đề trên thanh trắng, trang bỏ đệm 48px của body', async () => {
+    const r = render(await HocVienPage());
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(r.container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+  });
+});
