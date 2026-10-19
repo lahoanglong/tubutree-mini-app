@@ -63,6 +63,16 @@ describe('thanh đầu và chân trang website', () => {
   });
 });
 
+describe('chân trang điện thoại', () => {
+  it('có hotline và đủ link chính sách dưới md', async () => {
+    const html = renderToStaticMarkup(await SiteFooter());
+    const compact = html.slice(html.indexOf('aria-label="Hỗ trợ và chính sách"'));
+    expect(compact).toContain('tel:0984606774');
+    expect(compact).toContain('/chinh-sach/');
+    expect(html.match(/<footer[^>]*>/g)![1]).toMatch(/\bmd:hidden\b/);
+  });
+});
+
 describe('PageHeader (web) ở điện thoại', () => {
   it('một h1, chỉ còn link quay lại cho máy tính; nút lùi nổi do layout gắn một lần', () => {
     const { container } = mount(<PageHeader title="Giỏ hàng" subtitle="3 sản phẩm" backHref="/tai-khoan" />);

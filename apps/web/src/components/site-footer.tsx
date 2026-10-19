@@ -21,6 +21,7 @@ export default async function SiteFooter() {
   ].filter((c): c is { label: string; href: string } => Boolean(c.href));
 
   return (
+    <>
     <footer className="mt-12 hidden md:block border-t border-stone-200 bg-stone-0">
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:grid-cols-2">
         <div>
@@ -76,5 +77,25 @@ export default async function SiteFooter() {
         </ul>
       </nav>
     </footer>
+
+    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline và chính sách vẫn phải với tới được từ mọi trang. */}
+    <footer aria-label="Hỗ trợ và chính sách" className="mt-8 border-t border-stone-200 bg-stone-0 px-4 py-4 md:hidden">
+      <a href={`tel:${tel}`} className={LINK}>
+        <Phone className="h-4 w-4" aria-hidden="true" />
+        <span>Hotline: {formatPhoneDisplay(hotline)}</span>
+      </a>
+      <nav aria-label="Chính sách (điện thoại)">
+        <ul className="flex flex-wrap gap-x-4">
+          {LEGAL_SLUGS.map((slug) => (
+            <li key={slug}>
+              <Link href={`/chinh-sach/${slug}`} className={LINK}>
+                {LEGAL_PAGES[slug].footerLabel}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </footer>
+    </>
   );
 }
