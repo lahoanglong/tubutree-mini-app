@@ -1026,6 +1026,10 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
     await clickPlace(1);
     await clickPlace(2);
     fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    // Khách tự đổi lựa chọn sau lần chưa rõ kết quả: lần bấm đầu chỉ nhắc kiểm tra Đơn hàng, lần sau mới đặt đơn mới.
+    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.', type: 'error' }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(2);
     await clickPlace(3);
     const keys = mocks.placeOrder.mock.calls.map((c) => c[1] as string);
     expect(keys[1]).toBe(keys[0]);
@@ -1318,5 +1322,158 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     const { container } = renderPage();
     await screen.findByRole('checkbox', { name: 'Thu kèm rác' });
     expect(container.textContent).not.toMatch(/tái chế|quần áo cũ, pin|Thu gom tối đa/);
+  });
+});
+
+describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ kết quả (không tạo đơn thứ hai)', () => {
+  const COD_OVER = 'Đơn này vượt hạn mức COD, vui lòng chọn cách thanh toán khác.';
+  const PREVIOUS = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
+  let qc: QueryClient;
+  let cartData: typeof CART;
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    cartData = CART;
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockImplementation(async () => cartData);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  });
+
+  const mount = () =>
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+  const networkError = () => new AxiosError('Network Error', 'ERR_NETWORK');
+  const apiError = (status: number, code: string, message: string) =>
+    new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, { status, data: { statusCode: status, code, message } } as AxiosResponse);
+  async function click(times: number) {
+    const btn = await screen.findByText(/Đặt hàng · /);
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(times));
+    await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
+  }
+
+  it('lỗi mạng, ví/báo giá nạp lại làm phương thức tự đổi: bấm lại gửi đúng body và Idempotency-Key cũ', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    mount();
+    await click(1);
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, total: 75_000, blockedPaymentMethods: { COD: COD_OVER } });
+    await qc.invalidateQueries({ queryKey: ['quote'] });
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Chuyển khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'true'));
+    await click(2);
+    expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+    expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+    expect(await screen.findByTestId('order-success')).toBeInTheDocument();
+  });
+
+  it('lỗi mạng rồi khách tự đổi phương thức: chặn một lần kèm lời nhắc kiểm tra Đơn hàng, bấm sau gửi đơn mới với key mới', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValue({ id: 'o2', code: 'TT002' });
+    mount();
+    await click(1);
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: PREVIOUS, type: 'error' }));
+    expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+    await click(2);
+    const [first, second] = mocks.placeOrder.mock.calls;
+    expect(second![1]).not.toBe(first![1]);
+    expect(second![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+  });
+
+  it('lỗi mạng rồi khách chạm lại đúng phương thức đang chọn: không mở băng, bấm lại gửi đúng body và key cũ, không báo PREVIOUS', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    mount();
+    await click(1);
+    const selected = within(paymentBox()).getAllByRole('radio').find((r) => r.getAttribute('aria-checked') === 'true')!;
+    fireEvent.click(selected);
+    await click(2);
+    expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+    expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: PREVIOUS, type: 'error' });
+  });
+
+  it('lỗi mạng: khối báo cố định nói đơn có thể đã được ghi nhận và có lối sang Đơn của tôi', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError());
+    mount();
+    await click(1);
+    const notice = await screen.findByTestId('place-notice');
+    expect(notice).toHaveTextContent('Đơn có thể đã được ghi nhận. Bấm Đặt hàng lần nữa để thử lại');
+    fireEvent.click(within(notice).getByRole('button', { name: 'Đơn của tôi' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/orders');
+  });
+
+  it('chặn PREVIOUS: khối báo cố định nói bấm lần nữa sẽ đặt đơn mới, có lối sang Đơn của tôi', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError());
+    mount();
+    await click(1);
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    fireEvent.click(await screen.findByText(/Đặt hàng · /));
+    const notice = await screen.findByTestId('place-notice');
+    await waitFor(() => expect(notice).toHaveTextContent('bấm Đặt hàng lần nữa để đặt đơn mới với lựa chọn hiện tại'));
+    expect(within(notice).getByRole('button', { name: 'Đơn của tôi' })).toBeInTheDocument();
+  });
+
+  it('đặt thành công sau lần chưa rõ kết quả: hết đóng băng, màn thành công hiện', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    mount();
+    await click(1);
+    await click(2);
+    expect(await screen.findByTestId('order-success')).toBeInTheDocument();
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: PREVIOUS, type: 'error' });
+  });
+
+  it('lỗi nghiệp vụ rõ (4xx có mã) khi gửi lại: hết đóng băng, đổi lựa chọn rồi đặt không bị chặn', async () => {
+    mocks.placeOrder
+      .mockRejectedValueOnce(networkError())
+      .mockRejectedValueOnce(apiError(400, 'TOTAL_CHANGED', 'Tổng đơn đã thay đổi.'))
+      .mockResolvedValue({ id: 'o3', code: 'TT003' });
+    mount();
+    await click(1);
+    await click(2);
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await click(3);
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith({ text: PREVIOUS, type: 'error' });
+    expect(mocks.placeOrder.mock.calls[2]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
+  });
+
+  it('401 khi gửi lại không nói gì về đơn trước: giữ đóng băng, lần sau vẫn gửi đúng body và key cũ', async () => {
+    mocks.placeOrder
+      .mockRejectedValueOnce(networkError())
+      .mockRejectedValueOnce(apiError(401, 'UNAUTHORIZED', 'Hết phiên'))
+      .mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mount();
+    await click(1);
+    await click(2);
+    await click(3);
+    const keys = mocks.placeOrder.mock.calls.map((c) => c[1] as string);
+    expect(keys[2]).toBe(keys[0]);
+    expect(mocks.placeOrder.mock.calls[2]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+  });
+
+  it('giỏ nạp lại thành rỗng sau lỗi mạng: hiện "Đơn của bạn có thể đã được tạo", Kiểm tra lại gửi đúng body và key cũ', async () => {
+    mocks.placeOrder.mockRejectedValueOnce(networkError()).mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
+    mount();
+    await click(1);
+    cartData = { ...CART, items: [], itemCount: 0, subtotal: 0 };
+    await qc.invalidateQueries({ queryKey: ['cart'] });
+    expect(await screen.findByText('Đơn của bạn có thể đã được tạo')).toBeInTheDocument();
+    expect(screen.queryByText(viCopy.cart.emptyHeading)).toBeNull();
+    fireEvent.click(screen.getByText('Kiểm tra lại'));
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
+    expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+    expect(await screen.findByTestId('order-success')).toBeInTheDocument();
   });
 });
