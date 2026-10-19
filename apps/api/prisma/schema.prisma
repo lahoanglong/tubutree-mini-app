@@ -1181,6 +1181,8 @@ model PointsTransaction {
   // *_converted_refund_unique (reason, refId) WHERE ORDER_REFUND_CONVERTED:% / ORDER_REFUND_XU:%.
   // Đổi rác lấy quà (20261020000000_waste_exchange): points_transactions_recycle_ref_key, points_transactions_recycle_reverse_key
   // và points_transactions_gift_refund_key, đều (refId) WHERE refType = 'RECYCLE' / 'RECYCLE_REVERSED' / 'GIFT_REFUND'.
+  // Thu hồi thưởng đánh giá khi trả hàng (20261020100000_review_return_reversal): points_transactions_review_return_key (reason)
+  // WHERE refType = 'REVIEW' AND reason LIKE 'REVIEW_RETURN:%'.
   @@map("points_transactions")
 }
 

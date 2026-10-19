@@ -33,6 +33,8 @@ type MockTx = {
   pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
   orderCustomerRefund: { create: jest.Mock; createMany: jest.Mock };
   returnRequest: { findMany: jest.Mock };
+  /** Đánh giá có thưởng của đơn (thu hồi khi trả hàng); mặc định không có. */
+  review: { findMany: jest.Mock };
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
@@ -71,6 +73,7 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
     orderCustomerRefund: { create: jest.fn().mockResolvedValue({ id: 'cr1' }), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     // D3: đơn đã giao chưa có lần trả một phần nào.
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+    review: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     orderItem: { update: jest.fn().mockResolvedValue({}) },
@@ -1287,5 +1290,87 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
       ['fsA', 1],
       ['fsB', 1],
     ]);
+  });
+});
+
+describe('OrderReversalService — thưởng đánh giá khi trả hàng', () => {
+  let service: OrderReversalService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+    jest.mocked(applyWalletDelta).mockClear();
+  });
+
+  const REVIEW = { id: 'r1', userId: 'u1', productId: 'p1', pointsEarned: 10_000 };
+  const advisoryLocks = (tx: MockTx) =>
+    tx.$executeRaw.mock.calls.flatMap((c, i) =>
+      (c[0] as string[]).join('').includes('pg_advisory_xact_lock') ? [tx.$executeRaw.mock.invocationCallOrder[i]!] : [],
+    );
+
+  it('trả cả đơn bán lẻ đã giao: khoá thưởng đánh giá TRƯỚC mọi ghi lên Ví/users, lọc theo đơn và đánh giá có thưởng', async () => {
+    const order = makeOrder({ type: 'RETAIL', placedForCustomer: false });
+    const tx = makeTx(order);
+    tx.review.findMany.mockResolvedValue([REVIEW]);
+    Object.assign(tx.pointsTransaction, { findFirst: jest.fn().mockResolvedValue(null) });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', pointsEarned: { gt: 0 } } }));
+    const locks = advisoryLocks(tx);
+    expect(locks).toHaveLength(1);
+    expect(locks[0]!).toBeLessThan(jest.mocked(applyWalletDelta).mock.invocationCallOrder[0]!);
+    expect(locks[0]!).toBeLessThan(tx.$executeRaw.mock.invocationCallOrder.filter((n) => n !== locks[0])[0]!);
+  });
+
+  it.each([
+    ['đơn đại lý', { type: 'DEALER', placedForCustomer: false }],
+    ['đơn CTV lên hộ', { type: 'RETAIL', placedForCustomer: true }],
+    ['đơn chưa giao (huỷ)', { type: 'RETAIL', placedForCustomer: false, status: 'CONFIRMED' }],
+  ])('%s: không có đánh giá được thưởng nên không đọc, không khoá', async (_name, over) => {
+    const order = makeOrder(over);
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+    expect(tx.review.findMany).not.toHaveBeenCalled();
+    expect(advisoryLocks(tx)).toEqual([]);
+  });
+
+  it('trả một phần: chỉ khoá và thu hồi thưởng của sản phẩm thuộc dòng bị trả (dòng i2 → sản phẩm p2, không phải p1)', async () => {
+    const order = makeOrder({ type: 'RETAIL', placedForCustomer: false, shippingFee: 0 });
+    const tx = Object.assign(makeTx(order), {
+      commission: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ productId: 'p2' }]) },
+    });
+    tx.review.findMany.mockResolvedValue([{ ...REVIEW, id: 'r2', productId: 'p2' }]);
+    Object.assign(tx.pointsTransaction, { findFirst: jest.fn().mockResolvedValue(null) });
+    const shares = {
+      isFull: false,
+      goods: 0,
+      shipping: 0,
+      pointsUsedBack: 0,
+      convertedBack: 0,
+      pointsEarnedBack: 0,
+      lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 0 }],
+    };
+
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'rq1',
+      shares: shares as never,
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+
+    expect(tx.variation.findMany).toHaveBeenCalledWith({ where: { id: { in: ['v2'] } }, select: { productId: true } });
+    expect(tx.review.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderId: 'o1', pointsEarned: { gt: 0 }, productId: { in: ['p2'] } } }),
+    );
+    expect(advisoryLocks(tx)).toHaveLength(1);
   });
 });
