@@ -166,6 +166,14 @@ test.describe('Web khách: tài khoản', () => {
       { id: 'f2', category: 'Đổi trả', question: 'Đổi hàng thế nào?', answer: 'Trong 7 ngày.' },
     ]);
     api.get('/config/public', { support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null } });
+    // Bản build render server bằng API thật rồi đưa kết quả vào initialData (staleTime 1 giờ) nên mock không được hỏi lại.
+    // Đổi tên ba prop trong dữ liệu RSC để trình duyệt tự tải qua mock, như khi server đọc lỗi.
+    await page.route('**/gioi-thieu', async (route) => {
+      if (route.request().resourceType() !== 'document') return route.fallback();
+      const res = await route.fetch();
+      const body = (await res.text()).replace(/initial(Faqs|Config|Support)(\\*"):/g, 'ignored$1$2:');
+      return route.fulfill({ response: res, body });
+    });
     await page.goto('/gioi-thieu');
 
     await expect(page.getByRole('heading', { name: 'Về Tubu Tree', level: 1 })).toBeVisible();
@@ -177,9 +185,9 @@ test.describe('Web khách: tài khoản', () => {
     await page.getByRole('button', { name: /Đổi hàng thế nào/ }).click();
     await expect(page.getByText('Trong 7 ngày.')).toBeVisible();
 
-    await expect(page.getByRole('link', { name: /Hotline/ })).toHaveAttribute('href', 'tel:0984606774');
-    await expect(page.getByRole('link', { name: 'tubutree@gmail.com' })).toHaveAttribute('href', 'mailto:tubutree@gmail.com');
-    await expect(page.getByRole('link', { name: 'Chính sách đổi trả' })).toHaveAttribute('href', '/chinh-sach/doi-tra');
+    await expect(page.getByRole('main').getByRole('link', { name: /Hotline/ })).toHaveAttribute('href', 'tel:0984606774');
+    await expect(page.getByRole('main').getByRole('link', { name: 'tubutree@gmail.com' })).toHaveAttribute('href', 'mailto:tubutree@gmail.com');
+    await expect(page.getByRole('main').getByRole('link', { name: 'Chính sách đổi trả' })).toHaveAttribute('href', '/chinh-sach/doi-tra');
     await expect(page.getByRole('button', { name: 'Xóa tài khoản' })).toHaveCount(0);
   });
 
@@ -236,7 +244,8 @@ test.describe('Web khách: tài khoản', () => {
     api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
     api.post('/me/onboarding', ({ call }) => ({ id: 'u1', onboarded: true, segments: (call.body as { segments: string[] }).segments }));
     // Trang chủ có thể gọi thêm vài API phụ không liên quan tới quiz.
-    api.allowUnmocked('POST /events', 'GET /flash-sales/active', 'GET /me/coupons', 'POST /affiliate/touch');
+    api.allowUnmocked('POST /events', 'GET /flash-sales/active', 'GET /me/coupons', 'POST /affiliate/touch',
+      'GET /config/public', 'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/upcoming', 'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you');
     await page.goto('/');
 
     const quiz = page.getByRole('dialog', { name: 'Chào mừng đến Tubu Tree' });
