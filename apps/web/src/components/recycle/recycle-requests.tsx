@@ -74,7 +74,7 @@ export function RecycleRequests() {
           { key: 'closed', label: 'Đã đóng', count: closedRows.length },
         ]}
       />
-      <div className={`divide-y divide-stone-200 ${skin.card} max-md:divide-y-0 max-md:bg-transparent max-md:shadow-none`}>
+      <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
         {shown.map((r) => {
           const paused =
             !!me &&

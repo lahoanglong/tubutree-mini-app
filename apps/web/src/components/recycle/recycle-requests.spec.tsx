@@ -199,5 +199,7 @@ describe('/doi-rac/yeu-cau — diện mạo Mini App ở điện thoại', () =>
     const list = link(c, '/doi-rac/yeu-cau/r-open')!.closest('div[class*="divide-y"]')!;
     expect(list.className).toContain('max-md:bg-transparent');
     expect(list.className).toContain('max-md:border-transparent');
+    expect(list.className).toContain('max-md:shadow-none');
+    expect(list.className).not.toContain('box-shadow:var(--elevation');
   });
 });

@@ -24,3 +24,30 @@ describe('skin.mainUp', () => {
     expect(skin.mainUp).toContain('max-md:[body.with-back-btn_&]:pt-0');
   });
 });
+
+describe('skin.plain, outlineCard, dealerInkBtn, cardTitleSans', () => {
+  it('plain: hàng trơn trên nền, không chứa box-shadow tuỳ ý để max-md:shadow-none thắng', () => {
+    expect(skin.plain).toContain(ui.card);
+    expect(skin.plain).toContain('max-md:shadow-none');
+    expect(skin.plain).toContain('max-md:bg-transparent');
+    expect(skin.plain).toContain('max-md:border-transparent');
+    expect(skin.plain).not.toContain('box-shadow:var(--elevation');
+  });
+  it('outlineCard: giữ viền, bỏ bóng ở điện thoại như Card variant outline', () => {
+    expect(skin.outlineCard).toContain(ui.card);
+    expect(skin.outlineCard).toContain('max-md:shadow-none');
+    expect(skin.outlineCard).toContain('max-md:border-[color:var(--color-border-default)]');
+    expect(skin.outlineCard).not.toContain('max-md:border-transparent');
+  });
+  it('dealerInkBtn: chỉ nút đang bật mới navy, kể cả khi hover; nút khoá giữ kiểu khoá', () => {
+    expect(skin.dealerInkBtn).toContain('max-md:enabled:bg-[var(--color-dealer-ink)]');
+    expect(skin.dealerInkBtn).toContain('max-md:enabled:hover:bg-[var(--color-dealer-ink)]');
+    expect(skin.dealerInkBtn).not.toMatch(/max-md:hover:bg/);
+  });
+  it('cardTitleSans: máy tính giữ sans 16px, chỉ điện thoại đổi serif title-sm', () => {
+    expect(skin.cardTitleSans).toContain('text-base font-semibold');
+    expect(skin.cardTitleSans).not.toMatch(/(^|\s)font-display/);
+    expect(skin.cardTitleSans).toContain('max-md:font-display');
+    expect(skin.cardTitleSans).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+});

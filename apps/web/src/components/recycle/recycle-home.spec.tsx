@@ -342,6 +342,20 @@ describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
     expect(pointsCard.className).toContain('max-md:border-transparent');
     const rows = link(c, '/kho-qua')!.parentElement!;
     expect(rows.className).toContain('max-md:bg-transparent');
+    expect(rows.className).toContain('max-md:shadow-none');
+    expect(rows.className).not.toContain('box-shadow:var(--elevation');
     expect(link(c, '/kho-qua')!.className).toContain('max-md:px-0');
+  });
+
+  it('tiêu đề chừa 48px cho nút lùi nổi vì thân trang được kéo lên ngang nút', async () => {
+    const c = await mount();
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('pl-12');
+  });
+
+  it('thẻ Cách đổi giữ viền, không bóng như Card outline của Mini App', async () => {
+    const c = await mount();
+    const card = byText(c, 'p', 'Mang tới điểm nhận')!.parentElement!;
+    expect(card.className).toContain('max-md:shadow-none');
+    expect(card.className).not.toContain('max-md:border-transparent');
   });
 });

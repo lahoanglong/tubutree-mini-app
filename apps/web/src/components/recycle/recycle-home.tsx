@@ -52,6 +52,8 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
     <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
       <PageHeader
         title="Đổi rác lấy quà"
+        backHref="/"
+        backLabel="Trang chủ"
         actions={
           showHistory ? (
             <Link href="/doi-rac/yeu-cau" aria-label="Yêu cầu của tôi" className="inline-flex min-h-11 w-11 items-center justify-center rounded-control text-stone-800 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
@@ -233,7 +235,7 @@ export function RecycleHome() {
           <section className="space-y-2">
             <h2 className={skin.sectionTitle}>Cách đổi</h2>
             {methods.map((m) => (
-              <div key={m} className={`p-3 ${skin.card}`}>
+              <div key={m} className={`p-3 ${skin.outlineCard}`}>
                 <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
                 <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
               </div>
@@ -256,7 +258,7 @@ export function RecycleHome() {
         </section>
       </div>
 
-      <div className={`divide-y divide-stone-200 ${skin.card} max-md:divide-y-0 max-md:bg-transparent max-md:shadow-none`}>
+      <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
         <RecycleLinkRow bare href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
         {deskRow}
         <RecycleLinkRow bare href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
