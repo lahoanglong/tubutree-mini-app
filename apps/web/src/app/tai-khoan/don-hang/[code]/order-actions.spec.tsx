@@ -113,7 +113,7 @@ describe('chi tiết đơn — hành trình đơn (BUYERWEB-13)', () => {
     const { container } = await mount();
     const steps = Array.from(container.querySelectorAll('ol[class=""] li, section[aria-labelledby="order-timeline-title"] li'));
     expect(steps.map((s) => s.textContent?.replace(/ — (đã qua|hiện tại)/, ''))).toEqual([
-      'Đã đặt hàng', 'Đã xác nhận', 'Đang đóng gói', 'Đang giao', 'Đã giao',
+      'Đã đặt hàng', 'Đã xác nhận', 'Đang đóng gói', 'Đang giao', 'Giao thành công',
     ]);
     expect(steps.map((s) => s.getAttribute('aria-current'))).toEqual([null, null, 'step', null, null]);
   });

@@ -17,6 +17,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { mini, miniGhostDanger } from '@/components/order-mobile/mobile-ui';
 import { subscriptionCycleView } from './subscription-price';
 import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { PAY_SHORT, addressText } from './subscription-options';
@@ -74,7 +75,7 @@ export function SubscriptionsPanel() {
   const actionError = statusMut.isError ? errText(statusMut.error) : skipMut.isError ? errText(skipMut.error) : null;
 
   return (
-    <div className="flex flex-col gap-3 pb-6 pt-1">
+    <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
       <div>
         <p className="text-sm text-stone-700">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, hủy bất kỳ lúc nào.`}</p>
         {subs[0] && <p className="mt-1 text-xs font-medium text-forest-700">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>}
@@ -191,9 +192,9 @@ function SubscriptionCard({
 }) {
   const cycle = subscriptionCycleView(s);
   return (
-    <li className={`p-3 ${ui.card}`}>
+    <li className={`p-3 ${ui.card} ${mini.card}`}>
       <div className="flex gap-3">
-        <div className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-stone-100">
+        <div className={`flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-stone-100 ${mini.thumb}`}>
           {s.thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={s.thumbnail} alt={s.productName} className="h-full w-full object-cover" />
@@ -222,13 +223,13 @@ function SubscriptionCard({
         {s.status === 'ACTIVE' ? (s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch') : 'Đang tạm dừng'}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" disabled={busy} onClick={onEdit} className={`${ui.btnSecondary} min-w-max flex-1`}>
+        <button type="button" disabled={busy} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
           Sửa
         </button>
-        <button type="button" disabled={busy} onClick={onToggle} className={`${ui.btnSecondary} min-w-max flex-1`}>
+        <button type="button" disabled={busy} onClick={onToggle} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
           {s.status === 'ACTIVE' ? 'Tạm dừng' : 'Tiếp tục'}
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} className={`${ui.btnSecondary} min-w-max flex-1 border-transparent text-danger-fg`}>
+        <button type="button" disabled={busy} onClick={onCancel} className={miniGhostDanger}>
           Hủy
         </button>
       </div>

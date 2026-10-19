@@ -227,7 +227,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     expect(mocks.qr.calls).toBe(0);
     expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
-    expect(container.textContent).toContain('Đã giao');
+    expect(container.textContent).toContain('Giao thành công');
     expect(container.textContent).toContain('Best Express');
     expect(container.textContent).toContain('BE123');
     const link = container.querySelector<HTMLAnchorElement>('a[href="https://tracking.example/BE123"]');
