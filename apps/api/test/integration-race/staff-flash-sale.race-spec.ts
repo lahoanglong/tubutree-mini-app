@@ -41,9 +41,10 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     }
     return out;
   };
-  const sale = async (createdBy: string) => {
+  const HOUR = 3_600_000;
+  const sale = async (createdBy: string, fromHour = 1, toHour = 2) => {
     const s = await prisma.flashSale.create({
-      data: { title: `IT ${randCode(4)}`, startAt: new Date(Date.now() + 3_600_000), endAt: new Date(Date.now() + 7_200_000), createdBy },
+      data: { title: `IT ${randCode(4)}`, startAt: new Date(Date.now() + fromHour * HOUR), endAt: new Date(Date.now() + toHour * HOUR), createdBy },
     });
     created.flashSaleIds.push(s.id);
     return s;
@@ -145,6 +146,78 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     expect(await prisma.flashSaleItem.count({ where: { flashSaleId: s.id } })).toBe(1);
   });
 
+  it('trần 100.000đ theo ĐƠN: dòng thứ hai của cùng người tạo vượt tổng thì bị chặn, hai lần thêm song song chỉ một lọt, nhân viên khác không bị ảnh hưởng', async () => {
+    const m1 = await staffUser();
+    const m2 = await staffUser();
+    const s1 = await sale(m1.id);
+    const s1b = await sale(m1.id);
+    const s2 = await sale(m2.id);
+    const [a, b, c, d] = await variations(4);
+    const actor = (id: string) => ({ id, staff: true });
+    // giảm 20.000đ × 4 suất mỗi khách = 80.000đ
+    await flash.addItem(s1.id, { variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 4 }, actor(m1.id));
+    // thêm 20.000đ × 2 = 40.000đ: 120.000đ > 100.000đ
+    await expect(flash.addItem(s1.id, { variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id))).rejects.toThrow(/Một đơn mua đủ/);
+    // cùng khung giờ nhưng đợt khác của cùng người tạo cũng cộng dồn
+    await expect(flash.addItem(s1b.id, { variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id))).rejects.toThrow(/Một đơn mua đủ/);
+    // nhân viên khác có trần riêng
+    await flash.addItem(s2.id, { variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 5 }, actor(m2.id));
+    // hai lần thêm song song, mỗi lần 20.000đ × 2 = 40.000đ: còn 20.000đ nên cả hai đều vượt → không lần nào lọt
+    const r = summarize(
+      await Promise.allSettled([
+        flash.addItem(s1.id, { variationId: c!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+        flash.addItem(s1b.id, { variationId: d!, flashPrice: 80_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+      ]),
+    );
+    expect(r.fulfilled).toHaveLength(0);
+    expect(await prisma.flashSaleItem.count({ where: { flashSaleId: { in: [s1.id, s1b.id] } } })).toBe(1);
+    // đúng phần còn lại thì được; thêm lần hai song song 10.000đ × 2 : chỉ một lọt
+    const r2 = summarize(
+      await Promise.allSettled([
+        flash.addItem(s1.id, { variationId: c!, flashPrice: 90_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+        flash.addItem(s1b.id, { variationId: d!, flashPrice: 90_000, quota: 10, perUserLimit: 2 }, actor(m1.id)),
+      ]),
+    );
+    expect(r2.fulfilled).toHaveLength(1);
+    expect(r2.errors[0]).toContain('Một đơn mua đủ');
+  });
+
+  it('dời giờ làm hai đợt liền nhau chồng giờ: tổng giảm một đơn vượt 100.000đ thì PATCH bị chặn, đợt không đổi', async () => {
+    const m1 = await staffUser();
+    const a = await sale(m1.id, 1, 2);
+    const b = await sale(m1.id, 2, 3);
+    const [va, vb] = await variations(2);
+    const actor = { id: m1.id, staff: true };
+    // 20.000đ × 5 suất mỗi khách = 100.000đ mỗi đợt; hai đợt không chồng giờ nên cả hai thêm được
+    await flash.addItem(a.id, { variationId: va!, flashPrice: 80_000, quota: 10, perUserLimit: 5 }, actor);
+    await flash.addItem(b.id, { variationId: vb!, flashPrice: 80_000, quota: 10, perUserLimit: 5 }, actor);
+    const before = await prisma.flashSale.findUniqueOrThrow({ where: { id: a.id } });
+    await expect(flash.updateSale(a.id, { endAt: new Date(Date.now() + 3 * HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
+    await expect(flash.updateSale(b.id, { startAt: new Date(Date.now() + 1.5 * HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
+    expect((await prisma.flashSale.findUniqueOrThrow({ where: { id: a.id } })).endAt).toEqual(before.endAt);
+    // dời mà không chồng thì được
+    await flash.updateSale(a.id, { endAt: new Date(Date.now() + 1.9 * HOUR).toISOString() }, actor);
+  });
+
+  it('thêm dòng vào đợt B song song với PATCH kéo dài đợt A chồng B: tổng 120.000đ > 100.000đ nên chỉ một bên lọt', async () => {
+    const m1 = await staffUser();
+    const a = await sale(m1.id, 1, 2);
+    const b = await sale(m1.id, 2, 3);
+    const [va, vb] = await variations(2);
+    const actor = { id: m1.id, staff: true };
+    // 20.000đ × 3 = 60.000đ mỗi đợt
+    await flash.addItem(a.id, { variationId: va!, flashPrice: 80_000, quota: 10, perUserLimit: 3 }, actor);
+    const r = summarize(
+      await Promise.allSettled([
+        flash.addItem(b.id, { variationId: vb!, flashPrice: 80_000, quota: 10, perUserLimit: 3 }, actor),
+        flash.updateSale(a.id, { endAt: new Date(Date.now() + 3 * HOUR).toISOString() }, actor),
+      ]),
+    );
+    expect(r.fulfilled).toHaveLength(1);
+    expect(r.rejected).toHaveLength(1);
+    expect(r.errors[0]).toContain('Một đơn mua đủ');
+  });
+
   it('người tạo đợt mua: không có giá flash; khách khác có', async () => {
     const staff = await staffUser();
     const customer = await createUser(prisma, { role: 'CUSTOMER', phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, zaloId: `z-${randCode(8)}` });
@@ -155,7 +228,7 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     });
     created.flashSaleIds.push(s.id);
     await prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 2 } });
-    expect((await flash.resolveEffective([a!], new Date(), staff.id)).has(a!)).toBe(false);
+    expect((await flash.resolveEffective([a!], new Date(), staff.id)).get(a!)).toMatchObject({ ownSale: true, allowance: 0 });
     expect((await flash.resolveEffective([a!], new Date(), customer.id)).get(a!)).toMatchObject({ flashPrice: 80_000, allowance: 2 });
   });
 

@@ -10,6 +10,11 @@ import { formatVnd } from '../../orders/refund-destination';
 /** Khoản điều chỉnh tay giống hệt khoản vừa ghi trong 5 phút: chưa ghi, admin xác nhận (allowDuplicate) thì ghi thêm. */
 export const PAYROLL_ADJUST_DUPLICATE = 'PAYROLL_ADJUST_DUPLICATE';
 
+/** Chữ báo khi ghi vào tháng lương đã chốt/đã trả; nơi gọi so sánh để bỏ qua riêng trường hợp này. */
+export const PAYROLL_MONTH_LOCKED_MSG = 'Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.';
+export const PAYROLL_OPEN_SESSION_MSG =
+  'Còn phiên chấm công chưa đóng trong tháng này — chốt ra ca cho nhân viên (Chấm công đang mở → Chốt ra ca) rồi thử lại.';
+
 type Db = PrismaService | Prisma.TransactionClient;
 
 export interface BankInput {
@@ -107,13 +112,9 @@ export class PayrollService {
    *
    * `reprice` = quản lý CỐ Ý định giá lại (nút tính lại của tháng) — chỉ khi đó mới áp đơn giá
    * mới cho ngày cũ.
+   *
+   * Chỉ gọi trong khoá tháng (withMonthLock) của chính ngày đó.
    */
-  async recomputeDay(staffId: string, workDate: Date, opts: { reprice?: boolean } = {}) {
-    return this.withMonthLock(staffId, workDate.getUTCFullYear(), workDate.getUTCMonth() + 1, (tx) =>
-      this.recomputeDayIn(tx, staffId, workDate, opts),
-    );
-  }
-
   private async recomputeDayIn(
     db: Db,
     staffId: string,
@@ -128,7 +129,7 @@ export class PayrollService {
     // mới lặp qua từng ngày — kiểm lại ở đây là thêm một truy vấn cho MỖI ngày công (một tháng
     // 26 ngày làm là 26 truy vấn thừa mỗi lần ai đó mở màn lương).
     if (!opts.monthAlreadyChecked && (await this.isMonthLocked(staffId, workDate, db))) {
-      throw new BadRequestException('Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.');
+      throw new BadRequestException(PAYROLL_MONTH_LOCKED_MSG);
     }
     const [profile, existingDay] = await Promise.all([
       db.staffProfile.findUnique({ where: { userId: staffId } }),
@@ -166,22 +167,37 @@ export class PayrollService {
   }
 
   /**
-   * Ghi dữ liệu đầu vào của một ngày công (phiên chấm công, khoản điều chỉnh) CÙNG khoá tháng với recompute/chốt/đã chi:
+   * Ghi dữ liệu đầu vào của một ngày công (phiên chấm công, khoản điều chỉnh, duyệt ca) CÙNG khoá tháng với recompute/chốt/đã chi:
    * kiểm tháng chưa chốt, ghi, rồi tính lại ngày trong một transaction. Kiểm tháng ngoài khoá thì markPaid chen vào giữa
    * và dữ liệu mới nằm trong tháng PAID mà net không phản ánh. Tháng đã chốt/đã trả thì ném 400 trước khi ghi gì.
+   * `recompute: false` cho nơi chỉ cần khoá và kiểm tháng (check-in, duyệt ca): lương ngày vẫn tính lại ở lần đọc kế tiếp.
    */
   async writeInMonth<T>(
     staffId: string,
     workDate: Date,
     write: (tx: Prisma.TransactionClient) => Promise<T>,
-    lockedMessage = 'Tháng lương đã chốt/đã trả — mở lại tháng trước khi sửa.',
+    lockedMessage = PAYROLL_MONTH_LOCKED_MSG,
+    opts: { recompute?: boolean } = {},
   ): Promise<T> {
     return this.withMonthLock(staffId, workDate.getUTCFullYear(), workDate.getUTCMonth() + 1, async (tx) => {
       if (await this.isMonthLocked(staffId, workDate, tx)) throw new BadRequestException(lockedMessage);
       const out = await write(tx);
-      await this.recomputeDayIn(tx, staffId, workDate, { monthAlreadyChecked: true });
+      if (opts.recompute !== false) await this.recomputeDayIn(tx, staffId, workDate, { monthAlreadyChecked: true });
       return out;
     });
+  }
+
+  /**
+   * Chốt/đã chi đóng băng net của tháng, mà phiên chưa đóng sẽ ra ca SAU đó và ghi giờ công vào tháng đã đóng băng (net không
+   * bao giờ gồm phần đó). Chặn ở đây thay vì chặn ra ca: nhân viên không ra ca được thì phiên mở mãi và chặn luôn lần vào ca sau.
+   * Check-in đi qua writeInMonth cùng khoá nên không có phiên mới chen vào sau lần kiểm này.
+   */
+  private async assertNoOpenSessions(tx: Prisma.TransactionClient, staffId: string, year: number, month: number): Promise<void> {
+    const { start, end } = this.monthRange(year, month);
+    const open = await tx.attendanceSession.count({
+      where: { staffId, checkoutAt: null, shift: { workDate: { gte: start, lt: end } } },
+    });
+    if (open > 0) throw new BadRequestException(PAYROLL_OPEN_SESSION_MSG);
   }
 
   /** Tháng chứa `workDate` đã FINALIZED/PAID chưa (theo mốc VN — workDate là midnight UTC của date-key VN). */
@@ -351,6 +367,7 @@ export class PayrollService {
 
   async finalize(staffId: string, year: number, month: number) {
     return this.withMonthLock(staffId, year, month, async (tx) => {
+      await this.assertNoOpenSessions(tx, staffId, year, month);
       await this.recomputeMonthIn(tx, staffId, year, month);
       const r = await tx.payrollMonth.updateMany({
         where: { staffId, year, month, status: 'OPEN' },
@@ -372,9 +389,10 @@ export class PayrollService {
     if (!proofImageUrl) throw new BadRequestException('Cần ảnh xác nhận đã chuyển khoản.');
     // Tính lại TRƯỚC khi đóng băng: tháng OPEN có thể vừa nhận thêm phiên chấm công vài phút
     // trước. Đóng băng số cũ là phần công đó không bao giờ được trả (PAID chặn recompute vĩnh
-    // viễn). recomputeStaffMonth tự bỏ qua tháng đã FINALIZED nên gọi luôn là an toàn.
+    // viễn). recomputeMonthIn tự bỏ qua tháng đã FINALIZED nên gọi luôn là an toàn.
     // Tính lại và đóng băng trong CÙNG khoá tháng: recompute của nơi khác không chen vào giữa hai bước được.
     await this.withMonthLock(staffId, year, month, async (tx) => {
+      await this.assertNoOpenSessions(tx, staffId, year, month);
       await this.recomputeMonthIn(tx, staffId, year, month);
       const r = await tx.payrollMonth.updateMany({
         where: { staffId, year, month, status: { in: ['OPEN', 'FINALIZED'] } },
@@ -407,13 +425,19 @@ export class PayrollService {
     // paidAt/paidBy/proofImageUrl vẫn là của lần chuyển khoản CŨ — sổ sách nói "đã chuyển X đồng
     // lúc T, ảnh chứng từ Y" cho một số tiền không còn là X, và màn "Lương của tôi" vẫn hiện ảnh
     // chứng từ cũ cho nhân viên. Chốt và trả lại là hai thao tác phải làm lại từ đầu.
-    const r = await this.prisma.payrollMonth.updateMany({
-      where: { staffId, year, month, status: { in: ['FINALIZED', 'PAID'] } },
-      data: { status: 'OPEN', finalizedAt: null, paidAt: null, paidBy: null, proofImageUrl: null },
+    //
+    // Chuyển OPEN và tính lại nằm trong khoá tháng như chốt/đã chi: ngoài khoá thì "Đã chi" của admin khác chen vào giữa,
+    // tháng thành PAID mà lần mở lại vẫn báo thành công và trả về bảng lương PAID.
+    const row = await this.withMonthLock(staffId, year, month, async (tx) => {
+      const r = await tx.payrollMonth.updateMany({
+        where: { staffId, year, month, status: { in: ['FINALIZED', 'PAID'] } },
+        data: { status: 'OPEN', finalizedAt: null, paidAt: null, paidBy: null, proofImageUrl: null },
+      });
+      if (r.count === 0) throw new BadRequestException('Tháng lương đang mở (hoặc chưa tồn tại).');
+      return this.recomputeMonthIn(tx, staffId, year, month);
     });
-    if (r.count === 0) throw new BadRequestException('Tháng lương đang mở (hoặc chưa tồn tại).');
     this.logger.warn(`Admin ${adminId} MỞ LẠI bảng lương ${staffId} T${month}/${year}`);
-    return this.recomputeStaffMonth(staffId, year, month);
+    return row;
   }
 
   async adjust(

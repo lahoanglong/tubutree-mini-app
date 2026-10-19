@@ -1,7 +1,10 @@
 import type { EffectivePrice } from './flash-sale.service';
 
-/** Lý do dòng giờ vàng đang tính giá thường: số lượng vượt số suất người mua còn mua được. */
+export const FLASH_OWN_SALE_NOTICE = 'Bạn tạo sale này nên không mua được giá flash.';
+
+/** Lý do dòng giờ vàng đang tính giá thường: người mua là người tạo đợt, hoặc số lượng vượt số suất còn mua được. */
 export function flashLimitMessage(offer: EffectivePrice, quantity: number): string {
+  if (offer.ownSale) return FLASH_OWN_SALE_NOTICE;
   const allowance = offer.allowance ?? 0;
   if (allowance <= 0) return 'Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.';
   const tail = `Giảm số lượng còn ${allowance} để được giá giờ vàng, hoặc mua ${quantity} sản phẩm với giá thường.`;

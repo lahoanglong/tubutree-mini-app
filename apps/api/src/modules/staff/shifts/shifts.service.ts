@@ -223,11 +223,17 @@ export class ShiftsService {
     });
   }
 
-  async approve(adminId: string, id: string, times?: { approvedStart?: Date; approvedEnd?: Date }) {
+  /** {staffId, workDate} của các ca để controller lấy khoá tháng lương; ca không tồn tại thì không có trong kết quả. */
+  owners(ids: string[]): Promise<{ id: string; staffId: string; workDate: Date }[]> {
+    return this.prisma.shift.findMany({ where: { id: { in: ids } }, select: { id: true, staffId: true, workDate: true } });
+  }
+
+  /** `db`: controller duyệt ca trong khoá tháng lương (PayrollService.writeInMonth) nên truyền tx vào đây. */
+  async approve(adminId: string, id: string, times?: { approvedStart?: Date; approvedEnd?: Date }, db: Pick<PrismaService, 'shift'> = this.prisma) {
     if (times?.approvedStart && times?.approvedEnd && times.approvedEnd <= times.approvedStart) {
       throw new BadRequestException('Giờ kết thúc phải sau giờ bắt đầu.');
     }
-    const r = await this.prisma.shift.updateMany({
+    const r = await db.shift.updateMany({
       where: { id, status: 'PENDING' },
       data: {
         status: 'APPROVED',
@@ -250,8 +256,8 @@ export class ShiftsService {
     return { rejected: true };
   }
 
-  async bulkApprove(adminId: string, ids: string[]) {
-    const r = await this.prisma.shift.updateMany({
+  async bulkApprove(adminId: string, ids: string[], db: Pick<PrismaService, 'shift'> = this.prisma) {
+    const r = await db.shift.updateMany({
       where: { id: { in: ids }, status: 'PENDING' },
       data: { status: 'APPROVED', approvedBy: adminId, approvedAt: new Date() },
     });
