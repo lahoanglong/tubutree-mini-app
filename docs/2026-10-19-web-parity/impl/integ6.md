@@ -30,13 +30,16 @@ cd apps/web && npx vitest run
 npx tsc --noEmit            (không lỗi)
 npx eslint src/components/recycle src/app/doi-rac   (không lỗi)
 ```
+```
+E2E_SCOPE=web apps/e2e/scripts/web-gate.sh tests/recycle.web.spec.ts --project="Web Customer" --project="Web Customer Mobile" --retries=0
+  30 passed (57.6s)
+```
 Test đỏ trước khi code ở từng nhóm (nhãn, trang tổng, tạo yêu cầu, chi tiết, quầy). Mini App không bị sửa file nào nên test Mini App không chạy lại.
 
 ## 3. Review
 Chưa chạy review Opus trong lần này. Điểm nên soi: quầy (số mặc định của bộ đếm, thẻ kết quả, hai bản thanh xác nhận), `isRequestPaused` khớp Mini App.
 
 ## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
-- Playwright không chạy; `apps/e2e/tests/recycle.web.spec.ts` đã cập nhật cho chữ mới của quầy nhận (hạn mức, bộ đếm điền sẵn, thẻ kết quả), chưa chạy được ở lane này.
 - Chưa kiểm bằng trình duyệt thật: bố cục quầy hai cột trên desktop sau khi dời ưu đãi và báo cáo, thanh dính đáy trên điện thoại.
 - Bản máy tính của thanh xác nhận quầy nằm trong thẻ yêu cầu, bản điện thoại là thanh dính; hai bản cùng nội dung nên jsdom thấy hai nút "Xác nhận đã nhận".
 
