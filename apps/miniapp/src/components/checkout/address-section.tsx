@@ -40,7 +40,7 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
         const active = selectedId === a.id;
         return (
           <AddressCard key={a.id} address={a} active={active} onClick={() => onSelect(a.id)}>
-            {active && isLegacyGeo(a) && editingId !== a.id && (
+            {active && isLegacyGeo(a) && editingId === null && (
               <LegacyGeoNotice
                 onFix={() => {
                   haptic('light');

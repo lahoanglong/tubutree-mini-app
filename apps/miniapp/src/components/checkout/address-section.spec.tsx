@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -100,6 +101,25 @@ describe('AddressSection — cảnh báo địa giới cũ nằm trong đúng th
 
   it('chọn thẻ hợp lệ trong khi thẻ 1 cũ → không có cảnh báo nào', () => {
     renderSection([LEGACY, OK], () => {}, 'a2');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('đang mở form sửa thẻ 1, chạm sang thẻ 2 cũng địa giới cũ → thẻ 2 chưa hiện cảnh báo (nút của nó sẽ đè form đang gõ)', () => {
+    const LEGACY2: AddressDTO = { ...LEGACY, id: 'a3', recipient: 'Chi', isDefault: false };
+    function Harness() {
+      const [sel, setSel] = useState<string | null>('a1');
+      return (
+        <QueryClientProvider client={new QueryClient()}>
+          <AddressSection addresses={[LEGACY, LEGACY2]} selectedId={sel} onSelect={setSel} />
+        </QueryClientProvider>
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(within(cardOf(/Ánh/)).getByRole('button', { name: viCopy.checkout.addressLegacyCta }));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: /Chi/ }));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+    expect(within(cardOf(/Chi/)).queryByRole('alert')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

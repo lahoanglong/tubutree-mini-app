@@ -45,4 +45,32 @@ describe('assertMiniappBuildEnv — bản build production phải biết địa 
     expect(cfg).toContain('assertMiniappBuildEnv');
     expect(cfg).toMatch(/command === 'build'/);
   });
+
+  describe('CI build vẫn qua cổng kiểm (pnpm build chạy vite build mode production)', () => {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+    const stepBlock = (file: string, name: string): string => {
+      const text = fs.readFileSync(path.join(root, '.github/workflows', file), 'utf8');
+      const start = text.indexOf(`- name: ${name}`);
+      expect(start, `${file} thiếu bước "${name}"`).toBeGreaterThanOrEqual(0);
+      const next = text.indexOf('\n      - ', start + 1);
+      const next4 = text.indexOf('\n    - ', start + 1);
+      const ends = [next, next4].filter((n) => n > 0);
+      return text.slice(start, ends.length ? Math.min(...ends) : undefined);
+    };
+
+    it.each([
+      ['ci.yml', 'Build'],
+      ['e2e.yml', 'Build Monorepo'],
+    ])('%s bước %s đặt VITE_API_BASE_URL https, không localhost', (file, name) => {
+      const block = stepBlock(file, name);
+      const m = block.match(/VITE_API_BASE_URL:\s*(\S+)/);
+      expect(m, `${file} bước ${name} thiếu VITE_API_BASE_URL`).not.toBeNull();
+      expect(() => assertMiniappBuildEnv('production', { VITE_API_BASE_URL: m![1] })).not.toThrow();
+    });
+
+    it('turbo.json khai VITE_API_BASE_URL ở tasks.build.env (vào khoá cache, strict mode cho đi qua)', () => {
+      const turbo = JSON.parse(fs.readFileSync(path.join(root, 'turbo.json'), 'utf8'));
+      expect(turbo.tasks.build.env).toContain('VITE_API_BASE_URL');
+    });
+  });
 });

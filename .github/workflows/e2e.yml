@@ -71,6 +71,8 @@ jobs:
     # 8. Build toàn bộ dự án (shared-types cần build trước khi API/web dev import được).
     - name: Build Monorepo
       run: pnpm build
+      env:
+        VITE_API_BASE_URL: https://api.tubutree.com/api
 
     # 9. Chạy Playwright — webServer trong playwright.config.ts TỰ start API/web/miniapp rồi chờ health.
     - name: Run Playwright tests

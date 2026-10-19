@@ -536,4 +536,20 @@ describe('CartPage — thành tiền dòng khi SL > 1 (D6-10)', () => {
     const single = screen.getByText('Xà bông lẻ').closest('[class*="zaui-box"], div')!.parentElement as HTMLElement;
     expect(single.textContent).not.toContain('Thành tiền');
   });
+
+  it('bấm + (SL local lệch SL server) → ẩn dòng thành tiền, không hiện số tự nhân khi server có thể tính lại giá', async () => {
+    mocks.getCart.mockResolvedValue(
+      summary({
+        items: [{ ...OK_LINE, id: 'ci-f', productName: 'Hàng flash', unitPrice: 50_000, quantity: 2, total: 100_000 }],
+        subtotal: 100_000,
+        itemCount: 2,
+      }),
+    );
+    renderPage();
+    await screen.findByText('Hàng flash');
+    expect(screen.getByText(/Thành tiền/)).toHaveTextContent('100.000đ');
+    fireEvent.click(screen.getByLabelText('Tăng số lượng'));
+    expect(screen.queryByText(/Thành tiền/)).toBeNull();
+    expect(screen.queryByText(/150\.000đ/)).toBeNull();
+  });
 });

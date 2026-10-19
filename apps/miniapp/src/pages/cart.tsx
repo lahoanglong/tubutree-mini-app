@@ -474,9 +474,10 @@ function CartLineRow({
         <Box style={{ marginTop: 4 }}>
           <PriceTag value={line.unitPrice} size="sm" />
         </Box>
-        {localQty > 1 && (
+        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Đang chờ đồng bộ SL thì ẩn. */}
+        {line.quantity > 1 && localQty === line.quantity && (
           <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums' }}>
-            Thành tiền {formatVnd(line.unitPrice * localQty)}
+            Thành tiền {formatVnd(line.total)}
           </Text>
         )}
         {line.isFlash && (
