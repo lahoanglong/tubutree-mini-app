@@ -46,6 +46,12 @@ beforeEach(() => {
 });
 
 describe('HomePage — server render phần công khai', () => {
+  it('main không ghép max-md:py với sm:py (sm: thắng ở 640-767px)', async () => {
+    const out = await render();
+    const cls = /<main[^>]*class="([^"]*)"/.exec(out)![1]!;
+    expect(cls).not.toMatch(/(^|\s)sm:py-/);
+  });
+
   it('canonical luôn là "/" (danh mục và tìm kiếm đã sang /san-pham)', () => {
     expect(metadata.alternates?.canonical).toBe('/');
   });

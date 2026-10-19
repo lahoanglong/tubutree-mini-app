@@ -247,9 +247,23 @@ describe('trang gian hàng — khổ 640-767px vẫn là bố cục điện tho�
     expect(img.className).not.toMatch(/(^|\s)sm:h-/);
   });
 
-  it('không có bộ sưu tập: không chừa 90px đệm đáy cho thanh dính vì không có thanh', async () => {
+  it('không có bộ sưu tập: vẫn chừa 90px đệm đáy và vẫn có thanh dính ở điện thoại như Mini App', async () => {
     mocks.sf = { ...SF, collections: [] };
-    expect((await html()).querySelector('main')!.className).not.toContain('max-md:pb-[calc(90px');
+    const box = await html();
+    expect(box.querySelector('main')!.className).toContain('max-md:pb-[calc(90px+var(--safe-bottom))]');
+    expect(box.querySelector('[data-testid="storefront-header"] .max-md\\:fixed')).not.toBeNull();
+  });
+
+  it('không className nào ghép max-md:<thuộc tính> với sm:<cùng thuộc tính> (sm: thắng ở 640-767px)', async () => {
+    const box = await html();
+    const bad: string[] = [];
+    box.querySelectorAll<HTMLElement>('[class]').forEach((el) => {
+      const cls = el.getAttribute('class')!.split(/\s+/);
+      const props = (v: string) => cls.filter((c) => c.startsWith(v)).map((c) => c.slice(v.length).replace(/^(\[?[a-z-]+).*$/, '$1').replace(/^(text|py|px|pt|pb|h|w|mt|p|mb)-.*$/, '$1'));
+      const m = new Set(props('max-md:'));
+      props('sm:').forEach((p) => m.has(p) && bad.push(el.getAttribute('class')!));
+    });
+    expect(bad).toEqual([]);
   });
 });
 

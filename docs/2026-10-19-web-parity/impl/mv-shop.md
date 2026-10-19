@@ -18,6 +18,6 @@ Mục chung còn mở: Mini App vẽ tiêu đề trang trong một dải trắng
 
 File mới ngoài `app/**` và `components/**`: `apps/web/src/lib/phone-ui.ts`, `points-earn.ts`, `safe-color.ts` (dùng chung giữa nhiều màn của nhóm; không lane khác sửa), orchestrator lưu ý khi gộp.
 
-Quyết định ghi lại: tên nhãn ở PDP giờ mở `/san-pham?brand=<tên>` (aria-label "Xem sản phẩm nhãn X") giống `brandBrowsePath` của Mini App, kể cả khi nhãn có trang `/brand/<slug>`. Gian hàng /s không có bộ sưu tập: thanh dính chỉ dựng khi có sản phẩm (đã có nút trong khối trạng thái rỗng), nên không chừa đệm đáy. Dòng Điểm Xanh của khách đã đăng nhập mà chưa có tổng quan trong cache nói chung (không gọi thêm API ở trang đông khách), thận trọng hơn Mini App.
+Quyết định ghi lại: tên nhãn ở PDP giờ mở `/san-pham?brand=<tên>` (aria-label "Xem sản phẩm nhãn X") giống `brandBrowsePath` của Mini App, kể cả khi nhãn có trang `/brand/<slug>`. Gian hàng /s không có bộ sưu tập: điện thoại vẫn có thanh dính và vẫn chừa đệm đáy 90px như Mini App (máy tính ẩn thanh vì khối trạng thái rỗng đã có nút). Dòng Điểm Xanh của khách đã đăng nhập mà chưa có tổng quan trong cache nói chung (không gọi thêm API ở trang đông khách), thận trọng hơn Mini App.
 
 Dữ liệu mua chung: tour web không 404 (màn dựng từ mock trình duyệt), nên không thêm khối vào `tour-db.ts`.

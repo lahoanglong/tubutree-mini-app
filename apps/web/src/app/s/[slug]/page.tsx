@@ -75,7 +75,7 @@ export default async function StorefrontPage({
     .filter((c) => c.items.length > 0);
 
   return (
-    <main data-page-bleed className={`mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0 md:py-8 ${collections.length > 0 ? 'max-md:pb-[calc(90px+var(--safe-bottom))]' : ''}`}>
+    <main data-page-bleed className={`mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0 md:py-8 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
       {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
       <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
 
@@ -250,7 +250,7 @@ export default async function StorefrontPage({
               className="h-5 w-1.5 rounded-full max-md:hidden"
               style={{ backgroundColor: themeColor }}
             />
-            <h2 className="font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] sm:text-xl">{c.title}</h2>
+            <h2 className="font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] md:text-xl">{c.title}</h2>
             <span className="text-xs text-stone-600 max-md:hidden">({c.items?.length ?? 0} sản phẩm)</span>
           </div>
 
