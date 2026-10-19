@@ -38,7 +38,7 @@ import { QrCode } from '@/components/ui/qr-code';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
-const TIER_KEY = 'tubu_last_tier_min';
+const TIER_KEY = 'tubu_last_tier_min_v2';
 
 const TIER_STYLE: Record<string, { emoji: string; bg: string; fg: string }> = {
   'Mầm Xanh': { emoji: '🌱', bg: 'bg-sage-50', fg: 'text-sage-700' },

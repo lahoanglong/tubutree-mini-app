@@ -396,12 +396,19 @@ describe('/tai-khoan/diem-xanh — chúc mừng lên hạng', () => {
     higher();
     await mount();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(storage.get('tubu_last_tier_min')).toBe('200');
+    expect(storage.get('tubu_last_tier_min_v2')).toBe('200');
+  });
+
+  it('mốc lưu trước đợt đổi ngưỡng (khoá cũ) bị bỏ qua: không chúc mừng giả', async () => {
+    higher();
+    storage.set('tubu_last_tier_min', '0');
+    await mount();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('mốc cũ thấp hơn: chúc mừng kèm quyền lợi, "Tuyệt vời!" đóng lại', async () => {
     higher();
-    storage.set('tubu_last_tier_min', '0');
+    storage.set('tubu_last_tier_min_v2', '0');
     await mount();
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Chúc mừng lên hạng Lộc Biếc!');
@@ -412,7 +419,7 @@ describe('/tai-khoan/diem-xanh — chúc mừng lên hạng', () => {
 
   it('mốc cũ bằng hạng hiện tại: không chúc mừng', async () => {
     higher();
-    storage.set('tubu_last_tier_min', '200');
+    storage.set('tubu_last_tier_min_v2', '200');
     await mount();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
