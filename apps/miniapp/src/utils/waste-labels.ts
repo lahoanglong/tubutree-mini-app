@@ -33,7 +33,7 @@ export const METHOD_LABELS: Record<WasteMethod, string> = {
 };
 
 export const TIMELINE_STEPS: Record<WasteMethod, readonly string[]> = {
-  MAIL_IN: ['Đã gửi', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm'],
+  MAIL_IN: ['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm'],
   DROP_OFF: ['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm'],
   PICKUP: ['Đã tạo', 'Gắn vào đơn', 'Chờ kho nhận', 'Cộng điểm'],
 };
