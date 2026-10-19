@@ -90,14 +90,14 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
   });
 
   const bigField = `${ui.field} max-md:text-[length:var(--type-body-lg-size)]`;
-  const dateClass = `${ui.field} flex-1`;
+  const dateClass = `${ui.field} min-w-0 flex-1`;
 
   return (
     <div className="grid gap-4 pb-6 xl:grid-cols-2 xl:items-start">
       {notice && <div className="xl:col-span-2">{notice}</div>}
 
       <section aria-label="Thông tin nhãn" className={`flex flex-col gap-3 p-4 ${skin.card}`}>
-        <h2 className={skin.cardTitle}>Thông tin nhãn</h2>
+        <h2 className={skin.cardTitleSans}>Thông tin nhãn</h2>
         <BrandImageField label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} />
         <BrandImageField label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} />
         <Field label="Tagline">
@@ -115,7 +115,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
       </section>
 
       <section aria-label="Khuyến mãi" className={`flex flex-col gap-2 p-4 ${skin.card}`}>
-        <h2 className={`flex items-center gap-1.5 ${skin.cardTitle}`}>
+        <h2 className={`flex items-center gap-1.5 ${skin.cardTitleSans}`}>
           <Gift className="h-4 w-4 text-forest-600" aria-hidden="true" />
           Khuyến mãi
         </h2>
@@ -179,7 +179,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
           {invalid && <p className={ui.error}>Ngày kết thúc phải sau ngày bắt đầu.</p>}
           {editingId ? (
             <div className="flex gap-2">
-              <button type="button" className={`${ui.btnSecondary} flex-1`} disabled={!promo.title.trim() || invalid || updPromo.isPending} onClick={() => updPromo.mutate()}>
+              <button type="button" className={`${skin.btnSecondary} flex-1`} disabled={!promo.title.trim() || invalid || updPromo.isPending} onClick={() => updPromo.mutate()}>
                 {updPromo.isPending ? 'Đang lưu…' : 'Lưu thay đổi'}
               </button>
               <button type="button" className={ui.btnText} onClick={resetPromoForm}>
@@ -187,7 +187,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
               </button>
             </div>
           ) : (
-            <button type="button" className={`${ui.btnSecondary} self-start`} disabled={!promo.title.trim() || invalid || addPromo.isPending} onClick={() => addPromo.mutate()}>
+            <button type="button" className={`${skin.btnSecondary} self-start`} disabled={!promo.title.trim() || invalid || addPromo.isPending} onClick={() => addPromo.mutate()}>
               <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
               {addPromo.isPending ? 'Đang thêm…' : 'Thêm khuyến mãi'}
             </button>

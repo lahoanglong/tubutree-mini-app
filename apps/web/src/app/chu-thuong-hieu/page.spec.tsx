@@ -376,3 +376,21 @@ describe('/chu-thuong-hieu — diện mạo Mini App ở điện thoại', () =>
     expect(field('Nguồn gốc')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
   });
 });
+
+describe('/chu-thuong-hieu — khối Khuyến mãi và tiêu đề thẻ', () => {
+  it('tiêu đề thẻ giữ sans 16px ở máy tính, chỉ điện thoại đổi serif title-sm', async () => {
+    await mount();
+    const h = document.querySelector('section[aria-label="Thông tin nhãn"] h2')!;
+    expect(h.className).toContain('text-base');
+    expect(h.className).not.toMatch(/(^|\s)font-display/);
+    expect(h.className).toContain('max-md:font-display');
+  });
+
+  it('Thêm khuyến mãi là nút secondary kiểu Mini App; ô ngày co được để trang không tràn ngang', async () => {
+    await mount();
+    const add = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Thêm khuyến mãi'))!;
+    expect(add.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(document.querySelector('input[aria-label="Từ ngày"]')!.className).toContain('min-w-0');
+    expect(document.querySelector('input[aria-label="Đến ngày"]')!.className).toContain('min-w-0');
+  });
+});
