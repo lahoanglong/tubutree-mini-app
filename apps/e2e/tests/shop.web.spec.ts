@@ -198,6 +198,7 @@ test.describe('Web khách: Trang chủ /', () => {
     });
     mockHome(api);
     mockCustomer(api);
+    api.get('/me/wishlist/ids', []);
     api.post('/cart/items', { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 1 });
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
 
@@ -385,6 +386,7 @@ test.describe('Web: yêu thích', () => {
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
     api.get('/flash-sales/active', []);
     api.get('/me/wishlist', [product(1), product(2)]);
+    api.get('/me/wishlist/ids', [product(1).id, product(2).id]);
     await page.goto('/tai-khoan/yeu-thich');
     await expect(page.getByRole('heading', { level: 1, name: 'Sản phẩm yêu thích' })).toBeVisible();
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
