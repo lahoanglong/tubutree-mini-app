@@ -32,17 +32,45 @@ Thư mục ảnh chụp cuối: `/Users/longla/coding/tubutree-mini-app/.claude/
 
 ## 4. Kiểm chứng
 
+Gate cuối `gate-logs/mv-loyalty/run3/summary.txt`:
+
 ```
-web vitest        Test Files 367 passed (367)  Tests 6349 passed (6349)
-web vitest TZ=UTC Test Files 367 passed (367)  Tests 6349 passed (6349)
-web tsc --noEmit  exit 0
-web next lint     exit 0 (chỉ cảnh báo <img> có sẵn)
-web next build    exit 0
-miniapp vitest    Test Files 283 passed (283)  Tests 4313 passed (4313)
-visual-tour       51 passed, 51/51 cặp ảnh (mv-loyalty-2)
+install rc=0 
+shared-types rc=0 
+app-core-typecheck rc=0 
+app-core-test rc=0  Test Files  41 passed (41)       Tests  489 passed (489) 
+web-typecheck rc=0 
+web-lint rc=0 
+web-test rc=0  Test Files  367 passed (367)       Tests  6352 passed (6352) 
+web-test-utc rc=0  Test Files  367 passed (367)       Tests  6352 passed (6352) 
+miniapp-typecheck rc=0 
+miniapp-lint rc=0 
+miniapp-test rc=1  Test Files  1 failed | 282 passed (283)       Tests  1 failed | 4312 passed (4313)  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @tubutree/miniapp@0.0.0 test: `vitest run` 
+lint-vars rc=0 OK — every var(--x) reference is defined. 
+lint-parity rc=0 > tubutree@0.0.0 lint:parity /Users/longla/coding/tubutree-mini-app/.claude/worktrees/web-mv-loyalty lint:parity xanh (0 mục pending) 
+web-build rc=0  ✓ Compiled successfully 
+miniapp-build rc=0 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit. 
+DONE
 ```
 
-Playwright chỉ chạy spec tham quan. Spec `loyalty.web.spec.ts` sửa 1 dòng (lịch sử Điểm Xanh không còn mã đơn "· TB0"); chưa chạy lại spec này.
+Bước duy nhất đỏ: `miniapp-test` (rc=1) do `subscribe-sheet.spec.tsx` "mặc định giao ngay, COD..." quá hạn 1294ms khi máy tải; chạy riêng lại toàn bộ miniapp vitest: 283 file, 4313/4313 xanh. Không sửa test Mini App. Chưa chạy lại cả gate (run3b).
+
+Ảnh chụp: visual-tour 51/51 cặp (`gate-logs/visual/mv-loyalty-2`, trước commit đổi hex sang token). Cặp Quà của tôi chưa xem ảnh, chỉ có test; Điểm Xanh, Vườn Xanh, Xếp hạng chỉ xem ở lần chụp 1.
+
+Playwright chỉ chạy spec tham quan. Spec e2e mới/sửa CHƯA CHẠY (chỉ qua tsc): `loyalty.web.spec.ts` (1 dòng), `community.web.spec.ts` (+11 dòng, scrollWidth `/cong-dong`), `game.web.spec.ts` (+23 dòng, Trợ lý AI 390x844; file thuộc lane khác theo 02-ke-hoach.md, cần xác nhận chủ file).
+
+## 4b. Review
+
+Lượt 1 (e6031cc8..70ffedbb), sửa ở 247af92b:
+- MAJOR `/tu-van` và `/cong-dong/[id]`: thanh nhập `fixed` che chân trang điện thoại. Đã sửa: hook `use-sticky-bar-offset` gắn `has-sticky-bar` và `--sticky-bar-h`, bỏ đệm cứng, có test mount/unmount.
+- MAJOR `/cong-dong` tràn ngang 4px do hàng chip `-mx-4`. Đã sửa: `-mx-3 px-3`, thêm e2e scrollWidth.
+- MINOR hàng chip tự cuộn dọc 4px (`tubu-hit-44` ::after). Đã sửa: `max-md:py-1`.
+
+Lượt 2 (247af92b), sửa ở d1857da7:
+- MAJOR `/tu-van` tin mới cuộn xuống nằm dưới ô nhập fixed ~161px. Đã sửa: `max-md:scroll-mb-[var(--sticky-bar-h)]` trên `endRef` (test đỏ trước, rồi xanh) + e2e 390x844 chưa chạy; vị trí scroll-margin chưa đo lại trong trình duyệt ngoài lần reviewer dựng thử.
+- Lượt 2 xác nhận 3 lỗi lượt 1 đã sửa đúng; không phát hiện MINOR.
+
+Không có lỗi về tiền, điểm, mã: diff trang điểm/ví chỉ đổi className, endpoint/body/Idempotency-Key giữ nguyên.
 
 ## 5. Câu hỏi và điều để lại
 
@@ -51,3 +79,6 @@ Playwright chỉ chạy spec tham quan. Spec `loyalty.web.spec.ts` sửa 1 dòng
 3. Ô nhập Trợ lý AI cao 9rem như Mini App (ZaUI TextArea) chiếm ~17% màn; muốn gọn hơn thì giảm `max-md:min-h-[9rem]`.
 4. Khác biệt cỡ nút 44 so với 48 ở Mini App, cỡ chữ vài px ở thẻ quà/điểm danh: chưa chỉnh.
 5. Chân trang website gọn (hotline, chính sách) còn hiện ở các màn này, Mini App không có: thuộc mshell.
+6. Spec e2e `game.web.spec.ts` (thuộc lane khác) được thêm 1 case Trợ lý AI; cần chủ file xác nhận, và chạy cả 3 spec e2e ở trên khi được phép chạy Playwright.
+7. Logo sàn Hoàn tiền dùng token `forest-500`→`forest-200` thay hex ZaUI (mặc định: token, vì ds-v2-guest cấm hex).
+8. Chưa thêm test đỏ-trước cho cỡ chữ số dư ví và tên quà (chưa chỉnh nên không có commit).
