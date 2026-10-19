@@ -48,11 +48,17 @@ test.describe('Web đại lý', () => {
       createdAt: new Date().toISOString(), items: [{ backorderedQty: 1, quantity: 1 }],
     }));
 
+    api.get('/payments/bank-qr/TUBU2026101900001', {
+      orderCode: 'TUBU2026101900001', amount: 80_000, paymentStatus: 'UNPAID', paymentDeadline: null,
+      bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
+      memo: 'TUBU2026101900001', qrString: 'x', qrImageUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
+    });
+
     await page.goto('/dai-ly');
     await expect(page.getByText('Hết hàng — được đặt trước')).toBeVisible();
     await page.getByRole('button', { name: 'Tăng số lượng' }).click();
     await expect(page.getByText('Đặt trước 1, giao khi hàng về')).toBeVisible();
-    await expect(page.getByText(/1 mặt hàng đặt vượt tồn/)).toBeVisible();
+    await expect(page.getByText(/1 mặt hàng đặt vượt tồn/).filter({ visible: true }).first()).toBeVisible();
 
     const placed = api.waitForCall('POST', '/dealer/orders');
     await page.getByRole('button', { name: 'Trả trước' }).click();
@@ -205,7 +211,7 @@ test.describe('Web chủ thương hiệu', () => {
     await page.getByRole('button', { name: 'Thêm khuyến mãi' }).click();
     const call = await sent;
     expect(call.body).toMatchObject({ title: 'Giảm sốc', couponCode: 'MASAI' });
-    await expect(page.getByRole('alert')).toContainText('chưa có trong hệ thống');
+    await expect(page.getByRole('alert').filter({ hasText: 'chưa có trong hệ thống' })).toBeVisible();
   });
 
   test('tab Doanh thu: đổi kỳ gọi lại với kỳ mới', async ({ page, api }) => {
@@ -263,6 +269,7 @@ test.describe('Web admin nhân sự và lương', () => {
       isEmergency: false, evidenceUrl: null, cancelPenalty: false,
     };
     api.get('/admin/shifts', [shift]);
+    api.post('/admin/shifts/:id/reject', { ...shift, status: 'REJECTED', rejectReason: 'Trùng lịch' });
     await page.goto('/admin?tab=shiftApproval');
     await page.getByRole('button', { name: /^Từ chối ca Lan/ }).click();
     const accept = page.getByRole('alertdialog').getByRole('button', { name: 'Xác nhận từ chối' });
