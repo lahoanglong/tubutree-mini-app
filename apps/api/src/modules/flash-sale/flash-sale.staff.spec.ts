@@ -102,6 +102,20 @@ describe('FlashSaleService.addItem — nhân viên (D2-01)', () => {
     ).rejects.toThrow('còn 1.000.000đ');
   });
 
+  it('nhân viên khác thêm vào đợt của m1: ngân sách và khoá tính theo người tạo đợt (m1), không theo người thêm (m2)', async () => {
+    const { prisma, svc } = setup({ createdBy: 'm1', used: 7_000_000 });
+    const other = { id: 'm2', staff: true };
+    // 20.000đ × 200 = 4.000.000đ; phần đã dùng đọc là của m1 nên 7.000.000 + 4.000.000 > 10.000.000
+    await expect(svc().addItem('s1', { variationId: 'v1', flashPrice: 80_000, quota: 200, perUserLimit: 1 }, other)).rejects.toThrow('Vượt ngân sách');
+    expect(prisma.flashSaleItem.create).not.toHaveBeenCalled();
+    const lockKeys = prisma.$executeRaw.mock.calls.flatMap((c: unknown[]) => c.slice(1));
+    expect(lockKeys).toContain('coupon.staff_budget:m1');
+    expect(lockKeys).not.toContain('coupon.staff_budget:m2');
+    const queryValues = prisma.$queryRaw.mock.calls.flatMap((c: unknown[]) => c.slice(1));
+    expect(queryValues).toContain('m1');
+    expect(queryValues).not.toContain('m2');
+  });
+
   it('ADMIN thêm item giảm 90%, quota lớn, perUserLimit lớn vẫn được; không khoá, không tính ngân sách', async () => {
     const { prisma, svc } = setup({ createdBy: 'a1', creatorRole: 'ADMIN', used: 1_000_000_000 });
     await svc().addItem('s1', { variationId: 'v1', flashPrice: 10_000, quota: 1_000, perUserLimit: 200 }, ADMIN);
@@ -168,10 +182,11 @@ describe('FlashSaleService.resolveEffective — người tạo đợt không đ�
     id: 'fi1', variationId: 'v1', flashPrice: 50_000, quota: 10, soldCount: 0, perUserLimit: 2,
     flashSale: { endAt: new Date('2026-07-05T12:00:00Z'), createdBy },
   });
-  const svcWith = (createdBy: string) => {
+  const svcWith = (createdBy: string, role: string | null = 'STAFF') => {
     const prisma = {
       flashSaleItem: { findMany: jest.fn().mockResolvedValue([item(createdBy)]) },
       flashSalePurchase: { findMany: jest.fn().mockResolvedValue([]) },
+      user: { findUnique: jest.fn().mockResolvedValue(role ? { role } : null) },
     } as unknown as PrismaService;
     return new FlashSaleService(prisma, cfg(), notifications, lifecycle);
   };
@@ -183,5 +198,13 @@ describe('FlashSaleService.resolveEffective — người tạo đợt không đ�
   it('khách khác vẫn có giá flash; tra không theo người mua (trang chủ) không đổi', async () => {
     expect((await svcWith('m1').resolveEffective(['v1'], NOW, 'u2')).get('v1')).toMatchObject({ flashPrice: 50_000, allowance: 2 });
     expect((await svcWith('m1').resolveEffective(['v1'], NOW)).has('v1')).toBe(true);
+  });
+
+  it('ADMIN tạo đợt rồi tự mua vẫn có giá flash (như isOwnStaffCoupon miễn ADMIN), để thử đợt trước giờ mở khách', async () => {
+    expect((await svcWith('a1', 'ADMIN').resolveEffective(['v1'], NOW, 'a1')).get('v1')).toMatchObject({ flashPrice: 50_000, allowance: 2 });
+  });
+
+  it('không tra được vai trò của người tạo thì coi như nhân viên: vẫn không có giá flash', async () => {
+    expect((await svcWith('m1', null).resolveEffective(['v1'], NOW, 'm1')).has('v1')).toBe(false);
   });
 });

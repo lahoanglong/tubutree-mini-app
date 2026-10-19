@@ -90,6 +90,20 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     expect(await prisma.flashSaleItem.count({ where: { flashSaleId: s.id } })).toBe(1);
   });
 
+  it('hai nhân viên cùng thêm vào đợt của A: ngân sách tính theo A (người tạo đợt), nên chỉ một lần 6.000.000đ lọt', async () => {
+    const a = await staffUser();
+    const b = await staffUser();
+    const s = await sale(a.id);
+    const [v1, v2, v3] = await variations(3);
+    const add = (variationId: string, id: string) => flash.addItem(s.id, { variationId, flashPrice: 80_000, quota: 300, perUserLimit: 1 }, { id, staff: true });
+    const r = summarize(await Promise.allSettled([add(v1!, a.id), add(v2!, b.id)]));
+    expect(r.fulfilled).toHaveLength(1);
+    expect(r.errors[0]).toContain('Vượt ngân sách');
+    // B chưa từng tạo gì trong ngày nhưng vẫn không thêm tiếp được: phần đã dùng là của A.
+    await expect(add(v3!, b.id)).rejects.toThrow('Vượt ngân sách');
+    expect(await prisma.flashSaleItem.count({ where: { flashSaleId: s.id } })).toBe(1);
+  });
+
   it('ngân sách chung với mã: đã tạo mã có thể giảm 5.000.000đ trong ngày thì flash 6.000.000đ bị chặn, 4.000.000đ được', async () => {
     const staff = await staffUser();
     const coupon = await prisma.coupon.create({
@@ -143,5 +157,17 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     await prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 2 } });
     expect((await flash.resolveEffective([a!], new Date(), staff.id)).has(a!)).toBe(false);
     expect((await flash.resolveEffective([a!], new Date(), customer.id)).get(a!)).toMatchObject({ flashPrice: 80_000, allowance: 2 });
+  });
+
+  it('ADMIN tạo đợt rồi tự mua vẫn có giá flash', async () => {
+    const admin = await createUser(prisma, { role: 'ADMIN', phone: `09${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, zaloId: `z-${randCode(8)}` });
+    created.userIds.push(admin.id);
+    const [a] = await variations(1);
+    const s = await prisma.flashSale.create({
+      data: { title: `IT ${randCode(4)}`, startAt: new Date(Date.now() - 3_600_000), endAt: new Date(Date.now() + 3_600_000), createdBy: admin.id },
+    });
+    created.flashSaleIds.push(s.id);
+    await prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 2 } });
+    expect((await flash.resolveEffective([a!], new Date(), admin.id)).get(a!)).toMatchObject({ flashPrice: 80_000, allowance: 2 });
   });
 });

@@ -112,8 +112,14 @@ export class FlashSaleService {
       },
       include: { flashSale: { select: { endAt: true, createdBy: true } } },
     });
-    // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá: OWN_COUPON_MSG): nhân viên tự đặt giá rồi tự mua.
-    const open = items.filter((it) => it.soldCount < it.quota && !(userId && it.flashSale.createdBy === userId));
+    // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá, isOwnStaffCoupon): nhân viên tự đặt giá rồi tự mua.
+    // ADMIN được miễn như với mã giảm giá; chỉ tra vai trò khi người mua thật sự là người tạo một đợt đang xét.
+    let ownSalesBlocked = false;
+    if (userId && items.some((it) => it.flashSale.createdBy === userId)) {
+      const buyer = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+      ownSalesBlocked = buyer?.role !== 'ADMIN';
+    }
+    const open = items.filter((it) => it.soldCount < it.quota && !(ownSalesBlocked && it.flashSale.createdBy === userId));
     // Cùng hai giới hạn consumeQuotas kiểm lúc đặt đơn: giỏ/báo giá tính trước để khách không bị chặn ở bước cuối
     // với một giá giỏ không bao giờ đặt được (ENGAGE-4).
     const bought = new Map<string, number>();
@@ -429,8 +435,10 @@ export class FlashSaleService {
     if (perUnit * perUserLimit > caps.maxAmount) {
       throw deny(`Mỗi khách được giảm tối đa ${vnd(caps.maxAmount)} (giảm mỗi sản phẩm ${vnd(perUnit)} × ${perUserLimit} suất mỗi khách).`);
     }
+    // Trừ vào ngân sách của người tạo đợt, không của người thêm: nhân viên được sửa đợt của nhau (assertStaffCreated) nên tính
+    // theo người thêm thì đổ item vào đợt của người khác là qua mặt trần ngày. assertStaffCreated đã bảo đảm createdBy là STAFF.
     return this.prisma.$transaction(async (tx) => {
-      await assertStaffDailyBudget(tx, actor.id, sale.createdAt, perUnit * dto.quota, caps);
+      await assertStaffDailyBudget(tx, sale.createdBy!, sale.createdAt, perUnit * dto.quota, caps);
       return tx.flashSaleItem.create({ data });
     });
   }
