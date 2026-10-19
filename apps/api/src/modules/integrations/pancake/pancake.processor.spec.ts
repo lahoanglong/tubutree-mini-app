@@ -265,7 +265,7 @@ describe('PancakeProcessor.onStatusUpdated', () => {
 });
 
 describe('PancakeProcessor.onCancelled', () => {
-  it('đơn đã CANCELLED → không xử lý lại', async () => {
+  it('đơn đã CANCELLED → không lật lại; chỉ chạy lại phần đảo điểm (idempotent) để lần huỷ lỗi dở được làm nốt', async () => {
     const { proc, txUpdateMany, loyalty } = setup({
       id: 'o1',
       code: 'TUBU1',
@@ -276,7 +276,7 @@ describe('PancakeProcessor.onCancelled', () => {
     });
     await proc.onCancelled({ id: 'p1' });
     expect(txUpdateMany).not.toHaveBeenCalled();
-    expect(loyalty.reverseOrderPoints).not.toHaveBeenCalled();
+    expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
   });
 
   it('đơn DELIVERED → KHÔNG hủy được qua webhook cancelled (đơn đã giao chỉ hủy qua luồng RETURNED)', async () => {

@@ -250,20 +250,16 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     ['RETURNED', 'DELIVERED'],
   ])('đơn chuyển %s → đóng báo động Gomdon "hàng đã hoàn về kho" và gỡ việc Pancake "HUỶ sau bàn giao"/"ĐANG HOÀN" (R3-CANCEL-3)', async (to, from) => {
     const { svc, prisma } = make(makeOrder({ status: from, pancakeOrderId: null, paymentStatus: 'UNPAID', paymentMethod: 'COD' }));
+    // Hàng cần xử lý đang có cả hai lý do đã có kết cục → gỡ hết, đơn rời hàng đợi.
+    const attention = 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển (mã 6) | Pancake báo ĐANG HOÀN — chờ hàng về';
+    (prisma.order as unknown as { findUnique: jest.Mock }).findUnique = jest.fn().mockResolvedValue({ pancakeAttention: attention });
     await svc.setStatus('o1', to as never, { actorType: 'ADMIN' });
     expect(prisma.gomdonAlert.updateMany).toHaveBeenCalledWith({
       where: { orderId: 'o1', resolvedAt: null, kind: { in: ['GOODS_RETURNED'] } },
       data: { resolvedAt: expect.any(Date), resolvedById: null },
     });
     expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: {
-        id: 'o1',
-        OR: [
-          { pancakeAttention: { startsWith: 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển' } },
-          { pancakeAttention: { startsWith: 'Pancake đã huỷ nhưng đơn Tubu còn hiệu lực' } },
-          { pancakeAttention: { startsWith: 'Pancake báo ĐANG HOÀN' } },
-        ],
-      },
+      where: { id: 'o1', pancakeAttention: attention },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
     });
   });

@@ -276,6 +276,64 @@ describe('OrderReversalService', () => {
     });
   });
 
+  // D12-02: Điểm Xanh thường đã dùng cũng hoàn trong tx huỷ khi caller đưa hạn điểm (đọc cấu hình ngoài tx).
+  describe('hoàn lô STANDARD trong tx huỷ (D12-02)', () => {
+    const expiresAt = new Date('2027-10-20T00:00:00Z');
+    const standardRow = (delta: number) => ({
+      data: [{ userId: 'u1', delta, lot: 'STANDARD', reason: 'ORDER_REFUND_POINTS:TUBU1', refType: 'ORDER', refId: 'o1', expiresAt }],
+      skipDuplicates: true,
+      select: { id: true },
+    });
+
+    it('đơn WALLET dùng 40 điểm thường + có hạn điểm → +40 STANDARD (có hạn) trong cùng tx, báo pointsRefunded 40', async () => {
+      const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledWith(standardRow(40));
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsBalance: { increment: 40 } } });
+      expect(result.pointsRefunded).toBe(40);
+    });
+
+    it('đơn dùng 150 điểm (120 quy đổi) → CONVERTED 120 và STANDARD 30, pointsRefunded 150', async () => {
+      const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', pointsUsed: 150, pointsUsedConverted: 120 });
+      const tx = makeTx(order);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      const reasons = tx.pointsTransaction.createManyAndReturn.mock.calls.map((c) => c[0].data[0].reason);
+      expect(reasons).toEqual(['ORDER_REFUND_CONVERTED:TUBU1', 'ORDER_REFUND_POINTS:TUBU1']);
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsBalance: { increment: 30 } } });
+      expect(result.pointsRefunded).toBe(150);
+    });
+
+    it('dòng ORDER_REFUND_POINTS đã có (unique reason + refId) → không cộng lần 2, pointsRefunded 0', async () => {
+      const order = makeOrder({ pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      tx.pointsTransaction.createManyAndReturn.mockResolvedValue([]);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      expect(tx.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { pointsBalance: expect.anything() } }));
+      expect(result.pointsRefunded).toBe(0);
+    });
+
+    it('caller không đưa hạn điểm (đường cũ: LoyaltyService.reverseOrderPoints hoàn sau commit) → không ghi STANDARD', async () => {
+      const order = makeOrder({ pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.pointsTransaction.createManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it('đơn đã trả một phần trước đó chỉ hoàn phần điểm thường còn lại (remainingPointsBack)', async () => {
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      tx.returnRequest.findMany.mockResolvedValue([
+        { id: 'r1', status: 'APPROVED', refundAmount: 10000, shippingRefund: 0, pointsRefunded: 15, convertedPointsRefunded: 0, pointsReversed: 0, commissionReversed: 0, items: [] },
+      ]);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      const rows = tx.pointsTransaction.createManyAndReturn.mock.calls.map((c) => c[0].data[0]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ lot: 'STANDARD', delta: 25 });
+      expect(result.pointsRefunded).toBe(25);
+    });
+  });
+
   // Review B1 (minor): lời báo khách phải khớp thứ thật sự được cộng. moneyRefunded chỉ true khi có tiền > 0đ vào Ví;
   // pointsRefunded là số Điểm Xanh hoàn TRONG tx (lô CONVERTED + đơn XU cũ).
   describe('kết quả báo caller: tiền vào Ví và Điểm Xanh hoàn (review B1)', () => {
