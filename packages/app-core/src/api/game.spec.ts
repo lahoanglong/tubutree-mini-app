@@ -54,6 +54,11 @@ describe('game — đúng route, body, Idempotency-Key', () => {
       { method: 'post', path: '/game/garden/unlock', body: { currency: 'SEEDS' } },
     ],
     [
+      'unlockPlot kèm slot ô khách định mở',
+      (h) => g.unlockPlot(h, 4),
+      { method: 'post', path: '/game/garden/unlock', body: { currency: 'SEEDS', slot: 4 } },
+    ],
+    [
       'waterPlot',
       (h) => g.waterPlot(h, 'pl1', 3),
       { method: 'post', path: '/game/garden/plot/pl1/water', body: { drops: 3 } },

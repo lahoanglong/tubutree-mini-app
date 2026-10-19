@@ -250,7 +250,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(getsOf('/game/garden').length).toBeGreaterThan(before);
   });
 
-  it('mở lô: nút kèm giá giọt nước, POST {currency:"SEEDS"} một lần dù chạm đúp, báo và làm mới', async () => {
+  it('mở lô: nút kèm giá giọt nước, POST {currency:"SEEDS", slot} một lần dù chạm đúp, báo và làm mới', async () => {
     let release!: () => void;
     state.hold.set('/game/garden/unlock', new Promise<void>((r) => (release = r)));
     state.posts['/game/garden/unlock'] = () => plot(4);
@@ -264,7 +264,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     release();
     await flush(8);
     expect(postsOf('/game/garden/unlock')).toHaveLength(1);
-    expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS' });
+    expect(postsOf('/game/garden/unlock')[0]!.body).toEqual({ currency: 'SEEDS', slot: 4 });
     expect(document.body.textContent).toContain('Đã mở lô đất mới 🪴');
     expect(getsOf('/game/garden').length).toBeGreaterThan(1);
   });

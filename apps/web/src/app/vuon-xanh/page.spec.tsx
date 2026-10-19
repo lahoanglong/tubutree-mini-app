@@ -573,6 +573,12 @@ describe('Vườn Xanh: vòng quay may mắn', () => {
     expect(sheet.textContent).toContain('+50 Điểm Xanh đã vào tài khoản');
   });
 
+  it('API chưa trả spinCostPoints: giá vòng quay mặc định 10.000 điểm', async () => {
+    state.data['/game/profile'] = PROFILE({ spinCostPoints: undefined });
+    const c = await mount();
+    expect(btn(c, 'Quay ngay').textContent).toBe('Quay ngay (10.000 Điểm Xanh)');
+  });
+
   it('trúng voucher: "Dùng ngay" đóng hộp rồi sang /san-pham; không trúng thì "Tiếc quá!"', async () => {
     state.posts['/game/spin'] = () => ({ prize: { id: 'p', name: 'Voucher 20k', rewardType: 'COUPON', value: 0, coupon: { code: 'WHEEL20', minOrder: 99_000, expiresAt: '2026-11-16T16:59:59.000Z' } } });
     const c = await mount();

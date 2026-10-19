@@ -217,8 +217,8 @@ export interface Garden {
 }
 export const getGarden = (http: HttpClient) => http.get<Garden>('/game/garden');
 /** Mở lô đất bằng giọt nước — mở bằng xu cũ đã ngừng (đã gộp vào Điểm Xanh). */
-export const unlockPlot = (http: HttpClient) =>
-  http.post<GardenPlot>('/game/garden/unlock', { currency: 'SEEDS' });
+export const unlockPlot = (http: HttpClient, slot?: number) =>
+  http.post<GardenPlot>('/game/garden/unlock', { currency: 'SEEDS', ...(slot ? { slot } : {}) });
 export const waterPlot = (http: HttpClient, plotId: string, drops: number) =>
   http.post<{
     progress: number;
