@@ -84,7 +84,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     },
   );
 
-  it('có nút "Tôi đã chuyển khoản, kiểm tra lại" — bấm thì gọi lại API kiểm tra trạng thái', async () => {
+  it('có nút "Tôi đã chuyển khoản — Kiểm tra" — bấm thì gọi lại API kiểm tra trạng thái', async () => {
     const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<BankTransferPanel order={order()} />);
@@ -152,7 +152,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     await flush(2);
     expect(calls).toBeGreaterThanOrEqual(2);
     expect(btn().disabled).toBe(false);
-    expect(btn().textContent).toBe('Tôi đã chuyển khoản, kiểm tra lại');
+    expect(btn().textContent).toBe('Tôi đã chuyển khoản — Kiểm tra');
     expect(container.querySelector('[data-testid="bank-poll-status"]')?.textContent).toContain('Đang kiểm tra');
 
     release();

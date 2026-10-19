@@ -296,7 +296,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
       expect((container.textContent ?? '').split('quá hạn đơn sẽ tự huỷ').length - 1).toBe(1);
 
       mocks.qr.paymentStatus = 'PAID';
-      const check = buttons(container).find((b) => (b.textContent ?? '').includes('kiểm tra lại'))!;
+      const check = buttons(container).find((b) => (b.textContent ?? '').includes('Kiểm tra'))!;
       await act(async () => {
         check.click();
       });
@@ -357,7 +357,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).not.toContain('Đã nhận thanh toán');
 
     mocks.qr.paymentStatus = 'PAID';
-    const check = buttons(container).find((b) => (b.textContent ?? '').includes('kiểm tra lại'))!;
+    const check = buttons(container).find((b) => (b.textContent ?? '').includes('Kiểm tra'))!;
     await act(async () => {
       check.click();
     });

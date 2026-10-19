@@ -7,10 +7,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel } from '../../bank-transfer-panel';
 
-const TITLE = 'Thanh toán chuyển khoản';
+const TITLE = 'Quét QR để chuyển khoản';
 
 function readCode(raw: string | undefined): string {
   try {
@@ -53,6 +54,7 @@ export default function BankPaymentPage() {
         <BankTransferPanel
           order={{ code, paymentMethod: 'BANK_TRANSFER' }}
           onPaid={onPaid}
+          showHeading={false}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>
@@ -65,8 +67,8 @@ export default function BankPaymentPage() {
           }
         />
         {!paid && (
-          <div className="mt-3 text-center">
-            <Link href={detail} className={ui.btnSecondary}>
+          <div className="mt-3 text-center max-md:mx-2 max-md:mt-2">
+            <Link href={detail} className={`${ui.btnSecondary} ${mini.secondary} max-md:w-full`}>
               Để sau / Xem đơn hàng
             </Link>
           </div>
@@ -76,12 +78,12 @@ export default function BankPaymentPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <h1 className={ui.pageTitle}>{TITLE}</h1>
-      {!paid && code && phase === 'authenticated' && (
-        <p className="mt-1 text-sm text-stone-600">Mở app ngân hàng / ví bất kỳ để quét mã VietQR bên dưới.</p>
-      )}
-      <div className="mt-2">{body}</div>
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand
+        title={TITLE}
+        subtitle={!paid && code && phase === 'authenticated' ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
+      />
+      <div className="mt-2 max-md:pb-6">{body}</div>
     </main>
   );
 }
