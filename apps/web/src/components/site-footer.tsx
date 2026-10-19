@@ -21,7 +21,7 @@ export default async function SiteFooter() {
   ].filter((c): c is { label: string; href: string } => Boolean(c.href));
 
   return (
-    <footer className="mt-12 border-t border-stone-200 bg-stone-0">
+    <footer className="mt-12 hidden md:block border-t border-stone-200 bg-stone-0">
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:grid-cols-2">
         <div>
           <Image src={tubuLogo} alt="Tubu Tree" width={110} height={40} className="h-10 w-auto" />

@@ -40,6 +40,7 @@ import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/re
 import { OrderTimeline } from './order-timeline';
 import { FollowOaPrompt, OrderInvoice, OrderWasteLink } from './order-extras';
 import { CopyShippingCode } from './copy-shipping-code';
+import BackLink from '@/components/back-link';
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
@@ -379,9 +380,9 @@ function Row({ label, value, positive }: { label: string; value: string; positiv
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
+      <BackLink href="/tai-khoan">
         ← Đơn hàng của tôi
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 break-words ${ui.pageTitle}`}>{title}</h1>
       <div className="mt-3">{children}</div>
     </main>

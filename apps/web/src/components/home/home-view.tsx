@@ -25,6 +25,7 @@ import { FlashSale, UpcomingFlashSales } from './flash-sale';
 import { dedupeAgainst, homeBlockOrder, isEndpointMissing, refreshHomeQueries, type HomeBlockId } from './home-blocks';
 import { HomeBlockError, HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeExtras } from './home-extras';
+import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
 import { HomeSection, type SectionQuery } from './home-section';
 import { NewCustomerGift } from './new-customer-gift';
@@ -151,6 +152,7 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
 
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
+      <HomeHeader unreadCount={unreadCount} authed={authed} />
       {homeBlockOrder(kind, newCustomerLayout).map((id) => (
         <Fragment key={id}>
           <div data-home-block={id}>{blocks[id]}</div>
@@ -172,7 +174,7 @@ function SearchRow({ unreadCount, authed }: { unreadCount: number; authed: boole
       <Link
         href="/san-pham?focus=search"
         aria-label={homeText.searchPlaceholder}
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-full border border-stone-300 bg-stone-0 px-4 py-2.5 shadow-card transition hover:border-stone-450"
+        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition md:min-h-11 md:border-stone-300 md:py-2.5 md:hover:border-stone-450"
       >
         <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
         <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>
@@ -181,7 +183,7 @@ function SearchRow({ unreadCount, authed }: { unreadCount: number; authed: boole
         <Link
           href="/tai-khoan/thong-bao"
           aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications}
-          className="relative inline-flex h-11 w-11 flex-none items-center justify-center rounded-full bg-forest-50 text-forest-700 transition hover:bg-forest-100"
+          className="relative hidden h-11 w-11 flex-none items-center justify-center rounded-full bg-forest-50 md:inline-flex text-forest-700 transition hover:bg-forest-100"
         >
           <Bell className="h-5 w-5" aria-hidden="true" />
           {unreadCount > 0 && (

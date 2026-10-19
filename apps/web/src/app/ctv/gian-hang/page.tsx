@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sprout } from 'lucide-react';
 import { myStorefrontQuery } from '@tubutree/app-core/queries/storefront';
@@ -14,15 +13,16 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontBuilder } from '@/components/affiliate/storefront-builder';
 import { TemplateSheet, errText } from '@/components/affiliate/storefront-sheets';
+import BackLink from '@/components/back-link';
 
 const TITLE = 'Gian hàng của tôi';
 
 function Shell({ children }: { children: ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/ctv" className={ui.backLink}>
+      <BackLink href="/ctv">
         ← Cộng tác viên
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>{TITLE}</h1>
       <div className="mt-4">{children}</div>
     </main>

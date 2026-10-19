@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/client-api';
 import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
+import { GardenHintBubble } from './garden-hint-bubble';
 
 /** Khoá nằm dưới tiền tố ['orders'] nên mọi lần làm mới ['orders'] (đặt đơn, huỷ đơn) cũng làm mới badge, như Mini App. */
 const ACTIVE_ORDER_COUNT_KEY = ['orders', 'active-count'] as const;
@@ -43,6 +44,7 @@ export default function BottomNav() {
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-stone-200 bg-stone-0 shadow-card"
         style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
+        <GardenHintBubble onGardenTab={pathname === '/vuon-xanh'} />
         {tabs.map((t) => {
           const active = pathname === t.path;
           const count = t.badge === 'active-orders' ? activeOrders : 0;

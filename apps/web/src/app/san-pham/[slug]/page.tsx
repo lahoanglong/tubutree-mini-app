@@ -15,11 +15,11 @@ import { createServerHttp } from '@/lib/core-http-server';
 import { isRetailOnly } from '@/lib/pdp-logic';
 import { galleryImages, jsonLdScript, plainText, productJsonLd } from '@/lib/product-seo';
 import { SITE_URL } from '@/lib/site';
-import { ui } from '@/lib/guest-ui';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
 import { PdpRails } from './pdp-rails';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
+import BackLink from '@/components/back-link';
 
 export const revalidate = 300;
 
@@ -70,9 +70,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/" className={ui.backLink}>
+      <BackLink href="/">
         ← Về trang chủ
-      </Link>
+      </BackLink>
       <div className="mt-2 grid gap-8 md:grid-cols-2">
         <ProductGallery images={images} name={product.name} />
         <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>

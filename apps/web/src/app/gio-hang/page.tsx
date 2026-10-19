@@ -14,6 +14,7 @@ import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } 
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { cartKey, useCartKey } from '@/lib/cart-key';
+import BackLink from '@/components/back-link';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -489,9 +490,9 @@ export default function CartPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/" className={ui.backLink}>
+      <BackLink href="/">
         ← Tiếp tục mua sắm
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>Giỏ hàng</h1>
       <div className="mt-4">{children}</div>
     </main>
