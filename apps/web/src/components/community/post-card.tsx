@@ -4,6 +4,7 @@ import type { FeedItem } from '@tubutree/app-core/api/feed';
 import { formatVnd } from '@/lib/format-vnd';
 import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from './post-parts';
 import { dedupeTagsAgainstProducts } from './post-tags';
+import { miniBleed } from '@/components/loyalty/mini-surface';
 
 const CLAMP3 = { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
 const CLAMP1 = { display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
@@ -20,7 +21,7 @@ export function PostCard({ post }: { post: FeedItem }) {
   const href = `/cong-dong/${encodeURIComponent(post.id)}`;
   const extra = (post.imageCount ?? 1) - 1;
   return (
-    <article data-testid="post-card" className="relative isolate rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+    <article data-testid="post-card" className={`relative isolate rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card ${miniBleed}`}>
       <div className="flex items-center gap-2">
         <Avatar src={post.avatar} />
         <AuthorLine

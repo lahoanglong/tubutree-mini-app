@@ -8,6 +8,9 @@ export const miniCard = `${miniSurface} bg-stone-0`;
 /** Thẻ viền như `Card` outline của Mini App ở điện thoại (viền mảnh, không bóng); từ md giữ bóng của giao diện máy tính. */
 export const miniOutline = 'rounded-card border border-stone-200 bg-stone-0 shadow-card max-md:shadow-none';
 
+/** Khối trắng tràn ngang không viền không bo như bài viết của Mini App ở điện thoại; thêm sau lớp thẻ (`ui.card`) để ghi đè. Cha có `px-4`. */
+export const miniBleed = 'max-md:-mx-4 max-md:rounded-none max-md:border-0 max-md:shadow-none';
+
 /** Nút phụ như nút secondary ZaUI của Mini App ở điện thoại (nền xanh nhạt, không viền, chữ brand); từ md giữ nút viền. */
 export const miniBtnSecondary = `${ui.btnSecondary} max-md:border-transparent max-md:bg-forest-50 max-md:text-forest-700 max-md:hover:bg-forest-100`;
 

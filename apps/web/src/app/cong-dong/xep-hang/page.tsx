@@ -9,6 +9,7 @@ import { levelEmoji } from '@/components/community/rank';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
+import { MiniBar, miniCard } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -21,8 +22,10 @@ const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message :
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <PageHeader title="Bảng xếp hạng" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
+    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
+      <MiniBar>
+        <PageHeader title="Bảng xếp hạng" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
+      </MiniBar>
       <div className="mt-4">{children}</div>
     </main>
   );
@@ -40,7 +43,7 @@ function BoardSkeleton() {
 
 function LeaderRow({ rank, entry }: { rank: number; entry: LeaderboardEntry }) {
   return (
-    <li className={`${ui.card} flex items-center gap-2.5 p-3`}>
+    <li className={`${miniCard} flex items-center gap-2.5 p-3`}>
       <span className="w-7 text-center text-base font-semibold text-stone-900">{MEDAL[rank] ?? `#${rank}`}</span>
       <Avatar src={entry.avatar} size={36} />
       <div className="min-w-0 flex-1">

@@ -20,6 +20,7 @@ import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
+import { MiniBar, miniBleed, miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -39,9 +40,11 @@ type ReportTarget = { targetType: 'POST' | 'COMMENT'; targetId?: string };
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <PageHeader title={TITLE} backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
-      <div className="mt-4 flex flex-col gap-3">{children}</div>
+    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6 max-md:pb-24 max-md:pt-0">
+      <MiniBar>
+        <PageHeader title={TITLE} backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
+      </MiniBar>
+      <div className="mt-4 flex flex-col gap-3 max-md:mt-0 max-md:gap-2">{children}</div>
     </main>
   );
 }
@@ -232,7 +235,7 @@ export default function PostDetailPage() {
         </p>
       )}
 
-      <article className={`${ui.card} p-4`}>
+      <article className={`${ui.card} p-4 ${miniBleed}`}>
         {p.status === 'PENDING' && p.isOwner && (
           <div className="mb-2.5 flex items-center gap-1.5 rounded-control bg-warning-bg px-3 py-2 text-sm font-semibold text-warning-fg">
             <Clock className="h-4 w-4" aria-hidden="true" />
@@ -246,7 +249,7 @@ export default function PostDetailPage() {
           </div>
         )}
         {isAdmin && (
-          <button type="button" disabled={pinMut.isPending} onClick={() => pinMut.mutate()} className={`${ui.btnSecondary} mb-2.5`}>
+          <button type="button" disabled={pinMut.isPending} onClick={() => pinMut.mutate()} className={`${miniBtnSecondary} mb-2.5`}>
             <Pin className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
           </button>
@@ -291,7 +294,9 @@ export default function PostDetailPage() {
             {kindLabel}
           </div>
         )}
-        {p.kind === 'QUESTION' && p.title && <h2 className="mt-1 font-display text-lg font-semibold text-stone-900">{p.title}</h2>}
+        {p.kind === 'QUESTION' && p.title && <h2 className="mt-1 font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)]">
+            {p.title}
+          </h2>}
         <p className="mt-2 whitespace-pre-wrap break-words text-base text-stone-800">{p.body}</p>
 
         {images.length > 0 && (
@@ -357,7 +362,7 @@ export default function PostDetailPage() {
         </div>
       </article>
 
-      <section aria-labelledby="answers-title" className={`${ui.card} p-4`}>
+      <section aria-labelledby="answers-title" className={`${ui.card} p-4 ${miniBleed}`}>
         <h2 id="answers-title" className="mb-2.5 font-display text-lg font-semibold text-stone-900">
           Trả lời ({sorted.length})
         </h2>
@@ -389,7 +394,7 @@ export default function PostDetailPage() {
           </ul>
         )}
         {comments.hasNextPage && (
-          <button type="button" disabled={comments.isFetchingNextPage} onClick={() => void comments.fetchNextPage()} className={`${ui.btnSecondary} mt-2.5`}>
+          <button type="button" disabled={comments.isFetchingNextPage} onClick={() => void comments.fetchNextPage()} className={`${miniBtnSecondary} mt-2.5`}>
             {comments.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm trả lời'}
           </button>
         )}
@@ -404,7 +409,7 @@ export default function PostDetailPage() {
             addCommentMut.mutate(body);
           }
         }}
-        className="sticky bottom-0 -mx-4 flex flex-col gap-1.5 border-t border-stone-200 bg-stone-0 px-4 py-2.5 md:mx-0 md:rounded-card md:border"
+        className="sticky bottom-0 -mx-4 flex flex-col gap-1.5 border-t border-stone-200 bg-stone-0 px-4 py-2.5 md:mx-0 md:rounded-card md:border max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:mx-0 max-md:border-t-0 max-md:shadow-[var(--elevation-3)]"
         style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0px))' }}
       >
         {replyError && (

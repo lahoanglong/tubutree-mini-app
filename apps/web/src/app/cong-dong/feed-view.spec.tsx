@@ -410,3 +410,40 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
     expect(mocks.get.mock.calls.filter((c) => c[0] === '/feed/public-preview')).toHaveLength(0);
   });
 });
+
+describe('/cong-dong — giao diện điện thoại như Mini App', () => {
+  it('hai nút Bảng xếp hạng và Sự kiện: hình tròn, có tên truy cập và có chữ từ sm', async () => {
+    mocks.ready.add('/cong-dong/su-kien');
+    const { container } = await mount();
+    for (const name of ['Bảng xếp hạng', 'Sự kiện']) {
+      const a = container.querySelector(`a[aria-label="${name}"]`)!;
+      expect(a.className).toContain('max-md:rounded-full');
+      const text = a.querySelector('span')!;
+      expect(text.textContent).toBe(name);
+      expect(text.className).toContain('hidden');
+      expect(text.className).toContain('sm:inline');
+    }
+  });
+
+  it('vùng đầu (nút, ô tìm, chip) nằm trên dải trắng liền khối dưới md', async () => {
+    const { container } = await mount();
+    const band = searchInput(container).closest('form')!.parentElement!;
+    expect(band.className).toContain('max-md:bg-stone-0');
+    expect(band.contains(container.querySelector('[aria-label="Chọn danh mục"]'))).toBe(true);
+    expect(band.contains(container.querySelector('[aria-label="Sắp xếp"]'))).toBe(true);
+  });
+
+  it('chip chưa chọn nền be không viền, ô tìm bo tròn như viên thuốc', async () => {
+    const { container } = await mount();
+    const chip = exact(container, 'button', 'Nhà bếp');
+    expect(chip.className).toContain('max-md:bg-stone-100');
+    expect(chip.className).toContain('max-md:border-transparent');
+    expect(searchInput(container).className).toContain('max-md:rounded-full');
+  });
+
+  it('danh sách bài cách nhau dải nền 8px', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="post-card"]')!.parentElement!.className).toContain('max-md:gap-2');
+  });
+});
+

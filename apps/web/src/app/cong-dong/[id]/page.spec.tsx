@@ -482,3 +482,32 @@ describe('/cong-dong/[id] — lỗi hiện tại chỗ thao tác', () => {
     expect(container.querySelector<HTMLInputElement>('input[aria-label="Viết trả lời…"]')!.maxLength).toBe(500);
   });
 });
+
+describe('/cong-dong/[id] — giao diện điện thoại như Mini App', () => {
+  it('bài và khối Trả lời là khối trắng tràn ngang không viền không bo', async () => {
+    const { container } = await mount();
+    for (const el of [container.querySelector('article')!, container.querySelector('section[aria-labelledby="answers-title"]')!]) {
+      for (const c of ['max-md:-mx-4', 'max-md:rounded-none', 'max-md:border-0', 'max-md:shadow-none']) expect(el.className).toContain(c);
+    }
+  });
+
+  it('tiêu đề câu hỏi cỡ title-sm ở điện thoại', async () => {
+    stub(POST({ kind: 'QUESTION', title: 'Rửa bình sữa thế nào?' }));
+    const { container } = await mount();
+    const h = Array.from(container.querySelectorAll('h2')).find((x) => x.textContent === 'Rửa bình sữa thế nào?')!;
+    expect(h.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+
+  it('ô Viết trả lời cố định đáy màn hình ở điện thoại, đổ bóng, thân trang chừa chỗ', async () => {
+    const { container } = await mount();
+    const form = container.querySelector('form')!;
+    for (const c of ['max-md:fixed', 'max-md:inset-x-0', 'max-md:shadow-[var(--elevation-3)]']) expect(form.className).toContain(c);
+    expect(container.querySelector('main')!.className).toContain('max-md:pb-');
+  });
+
+  it('tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+  });
+});

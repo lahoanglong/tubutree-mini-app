@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
-import { miniBtnSecondary, miniCard, miniOutline, MiniBar, MiniTitleBar } from './mini-surface';
+import { miniBleed, miniBtnSecondary, miniCard, miniOutline, MiniBar, MiniTitleBar } from './mini-surface';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -20,6 +20,10 @@ describe('bề mặt kiểu Mini App ở điện thoại', () => {
   it('thẻ viền: có viền, bóng chỉ từ md', () => {
     expect(miniOutline.split(' ')).toContain('border');
     expect(miniOutline).toContain('max-md:shadow-none');
+  });
+
+  it('khối tràn ngang: bỏ bo, viền, bóng và bù lề cha ở điện thoại', () => {
+    for (const c of ['max-md:-mx-4', 'max-md:rounded-none', 'max-md:border-0', 'max-md:shadow-none']) expect(miniBleed).toContain(c);
   });
 
   it('nút phụ: giữ nút viền của máy tính, dưới md đổi sang nền xanh nhạt không viền như ZaUI secondary', () => {
