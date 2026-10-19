@@ -87,11 +87,11 @@ export function FlashSale() {
               <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className={CARD}>
                 <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
                 <div className="p-2">
-                  <p className="line-clamp-2 min-h-[2.5rem] text-xs text-stone-900">{item.productName}</p>
+                  <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
                   <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
                   {was > price && <p className="text-xs text-stone-500 line-through">{formatVnd(was)}</p>}
                   <div className="mt-1">
-                    <ProgressBar value={sold} max={100} tone="flash" />
+                    <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
                   </div>
                   <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
                 </div>
@@ -113,7 +113,7 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
       <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className="block">
         <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
         <div className="px-2 pt-2">
-          <p className="line-clamp-2 min-h-[2.5rem] text-xs text-stone-900">{item.productName}</p>
+          <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
           <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
           {/* Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem. */}
           <p className="mt-0.5 text-xs text-stone-600">{startsIn ? flashSaleText.startsIn(startsIn) : flashSaleText.live}</p>

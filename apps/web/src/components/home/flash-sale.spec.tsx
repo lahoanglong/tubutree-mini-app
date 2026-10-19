@@ -89,6 +89,17 @@ describe('FlashSale', () => {
     expect(c.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('100');
   });
 
+  // D7-32: thanh tiến độ cần tên truy cập (axe aria-progressbar-name); D7-29: tên SP cao đúng 2 dòng, không lòi dòng 3.
+  it('thanh "đã bán" có tên truy cập; tên sản phẩm cao đúng hai dòng', async () => {
+    activeResult = async () => [active({ soldCount: 4 })];
+    const c = await mount(<FlashSale />);
+    expect(c.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Đã bán 40%');
+    const name = c.querySelector('p.line-clamp-2')!;
+    expect(name.className).toContain('h-8');
+    expect(name.className).toContain('leading-4');
+    expect(name.className).not.toContain('min-h-');
+  });
+
   it('flashPrice cao hơn giá đang bán → hiện giá đang bán, không nhãn % âm, không gạch giá; có salePrice thì % theo giá đang bán', async () => {
     activeResult = async () => [active({ flashPrice: 90000, retailPrice: 100000, salePrice: 60000 })];
     let c = await mount(<FlashSale />);
