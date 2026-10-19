@@ -48,7 +48,16 @@ const MINIAPP_PORT = process.env.E2E_MINIAPP_PORT ?? '3113';
 const WEB_URL = `http://localhost:${WEB_PORT}`;
 const MINIAPP_URL = `http://localhost:${MINIAPP_PORT}`;
 // Cổng mặc định nằm trong script `dev` của từng app: chỉ khi ghi đè cổng mới gọi thẳng bộ dựng với cổng mới.
-const WEB_COMMAND = process.env.E2E_WEB_PORT ? `pnpm --filter @tubutree/web exec next dev -H 0.0.0.0 -p ${WEB_PORT}` : 'pnpm --filter @tubutree/web dev';
+// E2E_WEB_PROD=1 (web-gate.sh): bản build + `next start`. `next dev` dịch từng trang lúc chạy, với nhiều worker song song thì chết giữa chừng (mọi goto sau đó ERR_CONNECTION_REFUSED).
+const WEB_PROD = process.env.E2E_WEB_PROD === '1';
+const WEB_COMMAND = WEB_PROD
+  ? `pnpm --filter @tubutree/web exec next build && pnpm --filter @tubutree/web exec next start -H 0.0.0.0 -p ${WEB_PORT}`
+  : process.env.E2E_WEB_PORT
+    ? `pnpm --filter @tubutree/web exec next dev -H 0.0.0.0 -p ${WEB_PORT}`
+    : 'pnpm --filter @tubutree/web dev';
+// E2E_LOG_DIR: ghi stdout/stderr của máy chủ API và web ra file để còn log khi máy chủ chết giữa lần chạy.
+const LOG_DIR = process.env.E2E_LOG_DIR;
+const withLog = (command: string, name: string) => (LOG_DIR ? `mkdir -p "${LOG_DIR}" && { ${command} ; } > "${LOG_DIR}/webserver-${name}.log" 2>&1` : command);
 const MINIAPP_COMMAND = process.env.E2E_MINIAPP_PORT ? `pnpm --filter @tubutree/miniapp exec vite --host 0.0.0.0 --port ${MINIAPP_PORT}` : 'pnpm --filter @tubutree/miniapp dev';
 
 // `test:miniapp` (package.json) không cần cross-env: npm/pnpm đặt npm_lifecycle_event = tên script.
@@ -62,7 +71,7 @@ const webAdminOnly = process.env.E2E_SCOPE === 'web-admin';
 type WebServer = NonNullable<Exclude<PlaywrightTestConfig['webServer'], unknown[]>>;
 
 const apiServer: WebServer = {
-  command: 'pnpm --filter @tubutree/api dev',
+  command: withLog('pnpm --filter @tubutree/api dev', 'api'),
   url: `${API_URL}/api/health`,
   cwd: '../..',
   // PORT truyền thẳng: main.ts đọc process.env.PORT → server Playwright spawn nghe đúng cổng đang chờ.
@@ -71,12 +80,17 @@ const apiServer: WebServer = {
   reuseExistingServer: !process.env.CI,
 };
 const webServer: WebServer = {
-  command: WEB_COMMAND,
+  command: withLog(WEB_COMMAND, 'web'),
   url: WEB_URL,
   cwd: '../..',
-  // Web admin gọi đúng API vừa start (mặc định next.config.mjs là :3001).
-  env: { NEXT_PUBLIC_API_BASE_URL: `${API_URL}/api`, API_BASE_URL: `${API_URL}/api` },
-  timeout: 180_000,
+  // Web admin gọi đúng API vừa start (mặc định next.config.mjs là :3001). NEXT_PUBLIC_* được nhúng lúc build nên phải có sẵn ở đây.
+  // NODE_ENV=production: web-gate.sh export NODE_ENV=test cho API, `next build` không chạy đúng với giá trị đó.
+  env: {
+    NEXT_PUBLIC_API_BASE_URL: `${API_URL}/api`,
+    API_BASE_URL: `${API_URL}/api`,
+    ...(WEB_PROD ? { NODE_ENV: 'production' } : {}),
+  },
+  timeout: WEB_PROD ? 600_000 : 180_000,
   reuseExistingServer: !process.env.CI,
 };
 const miniappServer: WebServer = {

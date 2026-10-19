@@ -327,6 +327,7 @@ export const test = base.extend<{ api: MockApi }>({
       // Trang chủ thử GET /home + /home/me trước; 404 (như API cũ) làm nó lùi về từng request lẻ — đúng
       // luồng mà các spec Home/Browse hiện có đã mock. Spec muốn kiểm đường gộp thì api.get('/home', ...).
       api.allowUnmocked('GET /home', 'GET /home/me');
+      if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(
         (url) => !LOCAL_HOSTS.has(url.hostname),
@@ -355,6 +356,20 @@ export const test = base.extend<{ api: MockApi }>({
 });
 
 export { expect };
+
+/**
+ * Mặc định cho lời gọi của vỏ web (AppGates, huy hiệu đơn) chạy ở MỌI trang khi đã đăng nhập, kể cả /admin — Mini App cũng gọi
+ * đúng ba endpoint này (CouponClaimGate/useCartCount, OnboardingGate, BottomNav). Dùng fallback: spec đã mock thì thắng.
+ */
+function shellDefaults(api: MockApi): void {
+  api.fallback('GET', '/cart', {
+    items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 0,
+  });
+  api.fallback('GET', '/me', {
+    id: 'e2e-shell-user', fullName: null, email: null, avatarUrl: null, dob: null, onboarded: true, segments: [],
+  });
+  api.fallback('GET', '/orders/active-count', { count: 0 });
+}
 
 // ─────────────────────────── Dữ liệu mẫu dùng chung ───────────────────────────
 
