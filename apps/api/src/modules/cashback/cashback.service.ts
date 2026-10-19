@@ -345,7 +345,8 @@ export class CashbackService {
           }
           return true;
         });
-        if (settled) {
+        // Không có tiền vào Ví thì không báo "Hoàn tiền 0đ".
+        if (settled && tx.userReward > 0) {
           await this.notifications
             .notify(tx.userId, 'CASHBACK_PAID', { amount: tx.userReward.toLocaleString('vi-VN') })
             .catch((err) => this.logger.error(`Notify CASHBACK_PAID lỗi: ${err instanceof Error ? err.message : err}`));

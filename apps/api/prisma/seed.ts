@@ -829,7 +829,7 @@ export const NOTIFICATION_TEMPLATES = [
   // PD-3 OQ-10: báo khách có xu đã quy sang Điểm Xanh (1.000 xu = 1 điểm, làm tròn lên). Cùng mã/nội dung với migration
   // 20261012160000_pd3_xu_converted_notice, nơi tạo luôn thông báo cho từng user đã quy đổi.
   { id: 'nt-xu-converted', code: 'XU_CONVERTED', channel: 'INAPP', bodyTemplate: '{{xu}} xu cũ của bạn đã thành {{points}} Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.', createOnly: true },
-  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm Điểm Xanh thưởng.' },
+  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿{{reward_note}}' },
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
   { id: 'nt-comm-rejected', code: 'COMMUNITY_POST_REJECTED', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn chưa được đăng vì {{reason}}. Bạn có thể chỉnh lại nội dung rồi đăng bài mới nhé.' },
   { id: 'nt-comm-post-liked', code: 'COMMUNITY_POST_LIKED', channel: 'INAPP', bodyTemplate: '💚 Bài viết "{{title}}" của bạn vừa được thả tim.', createOnly: true },

@@ -871,11 +871,19 @@ export class CommunityFeedService {
         try {
           const answerer = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
           const template = role === 'STAFF' || role === 'ADMIN' ? 'COMMUNITY_EXPERT_REPLIED' : 'COMMUNITY_NEW_ANSWER';
-          await this.notifications?.notify(post.userId, template, {
+          const data = {
             author: answerer?.fullName ?? 'Thành viên',
             title: post.title ?? 'câu hỏi của bạn',
             post_id: post.id,
-          });
+          };
+          if (template === 'COMMUNITY_NEW_ANSWER') {
+            // Khoá cấu hình 0 là "tắt tin thích/bình luận"; tin câu trả lời trước nay luôn gửi nên 0 chỉ bỏ việc gộp, không tắt tin.
+            const windowMs = await this.authorNotifyWindowMs();
+            if (windowMs === null) await this.notifications?.notify(post.userId, template, data);
+            else await this.notifications?.notify(post.userId, template, data, { dedupeKey: `post-answer:${post.id}`, dedupeWithinMs: windowMs });
+          } else {
+            await this.notifications?.notify(post.userId, template, data);
+          }
         } catch (err) {
           this.logger.warn(`notify(answer) failed for comment ${comment.id}: ${(err as Error).message}`);
         }
@@ -966,8 +974,9 @@ export class CommunityFeedService {
       this.prisma.feedComment.update({ where: { id: commentId }, data: { isAccepted: true } }),
       this.prisma.feedPost.update({ where: { id: postId }, data: { bestCommentId: commentId }, select: { id: true } }),
     ]);
+    let rewardedPoints = 0;
     try {
-      await this.reward.rewardBestAnswer(comment.userId, post.userId, postId);
+      rewardedPoints = (await this.reward.rewardBestAnswer(comment.userId, post.userId, postId)) ?? 0;
     } catch (err) {
       this.logger.warn(`rewardBestAnswer failed for comment ${commentId}: ${(err as Error).message}`);
     }
@@ -985,7 +994,10 @@ export class CommunityFeedService {
         this.logger.warn(`bumpReputation(best-answer) failed for ${comment.userId}: ${(err as Error).message}`);
       }
       try {
-        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', { post_id: postId });
+        await this.notifications?.notify(comment.userId, 'COMMUNITY_BEST_ANSWER', {
+          post_id: postId,
+          reward_note: rewardedPoints > 0 ? ` Bạn nhận thêm ${formatPoints(rewardedPoints)} Điểm Xanh thưởng.` : '',
+        });
       } catch (err) {
         this.logger.warn(`notify(best-answer) failed for comment ${commentId}: ${(err as Error).message}`);
       }
@@ -1470,16 +1482,18 @@ export class CommunityFeedService {
       data: { winnerUserId: userId, status: 'CLOSED' },
     });
     if (count !== 1) throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
+    let rewarded = true;
     try {
       await this.reward.rewardEventWinner(userId, eventId, event.rewardPoints);
     } catch (err) {
+      rewarded = false;
       this.logger.warn(`rewardEventWinner failed for event ${eventId}/user ${userId}: ${(err as Error).message}`);
     }
     // Người thắng phải biết mình trúng (trước đây chỉ cộng điểm im lặng); lỗi thông báo không đảo việc đã chốt.
     await this.notifications
       ?.notify(userId, 'COMMUNITY_EVENT_WINNER', {
         title: event.title,
-        reward: event.rewardPoints > 0 ? ` Bạn được thưởng ${formatPoints(event.rewardPoints)} Điểm Xanh.` : '',
+        reward: rewarded && event.rewardPoints > 0 ? ` Bạn được thưởng ${formatPoints(event.rewardPoints)} Điểm Xanh.` : '',
       })
       .catch((e: unknown) => this.logger.warn(`Không báo được người thắng sự kiện ${eventId}/${userId}: ${(e as Error).message}`));
     return { ok: true };
