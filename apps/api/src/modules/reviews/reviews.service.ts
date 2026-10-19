@@ -8,7 +8,7 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { decodeServedImage } from '../../common/served-image';
 import { returnedProductsByOrder, REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
-import { takeBackReviewReward } from './review-reward-reversal';
+import { reviewReturnReason, takeBackReviewReward } from './review-reward-reversal';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -86,12 +86,20 @@ export class ReviewsService {
     });
     const reviewed = new Set(mine.map((r) => r.orderId));
     const codeOf = new Map(purchases.map((o) => [o.id, o.code]));
-    const reviewableOrders = purchases
-      .filter((o) => !reviewed.has(o.id))
-      .map((o) => ({ orderId: o.id, code: o.code, deliveredAt: o.deliveredAt }));
+    const unreviewed = purchases.filter((o) => !reviewed.has(o.id));
+    // Đánh giá viết cho đơn mà sản phẩm đã có dòng trả được duyệt không được thưởng (createFirst), nên đơn chưa bị trả sản phẩm
+    // này đứng trước: FE mặc định viết cho đơn đầu danh sách, nếu không thì gợi ý có điểm nhưng khách nhận 0.
+    const returnedBy = await returnedProductsByOrder(this.prisma, unreviewed.map((o) => o.id));
+    const returned = (orderId: string) => returnedBy.get(orderId)?.has(product.id) ?? false;
+    const reviewableOrders = [...unreviewed.filter((o) => !returned(o.id)), ...unreviewed.filter((o) => returned(o.id))].map((o) => ({
+      orderId: o.id,
+      code: o.code,
+      deliveredAt: o.deliveredAt,
+    }));
     // Chỉ để FE nói đúng về điểm: máy chủ vẫn quyết định thưởng lúc tạo (createFirst, cùng rewardAlreadyKept). Hết đơn để
-    // viết mới thì không có đánh giá mới nào để thưởng.
-    const rewardAvailable = reviewableOrders.length > 0 && !(await this.rewardAlreadyKept(this.prisma, userId, product));
+    // viết mới, hay mọi đơn còn lại đều đã bị trả sản phẩm này, thì không có đánh giá mới nào để thưởng.
+    const rewardAvailable =
+      reviewableOrders.some((o) => !returned(o.orderId)) && !(await this.rewardAlreadyKept(this.prisma, userId, product));
     return {
       canReview: reviewableOrders.length > 0,
       reason: reviewableOrders.length > 0 ? null : 'ALL_REVIEWED',
@@ -189,8 +197,13 @@ export class ReviewsService {
       // Đọc trạng thái đơn ở ngoài tx (purchasesOf) có thể cũ: đơn đang được trả cả đơn thì lần đảo (đã ghi trạng thái, giữ
       // khoá dòng đơn) đã quét thưởng đánh giá trước khi đánh giá này tồn tại. Khoá chung dòng đơn để hoặc chờ lần đảo xong
       // rồi từ chối, hoặc ghi xong trước khi lần đảo lật trạng thái và lần đảo thấy đánh giá. Lấy khoá đơn TRƯỚC khoá cặp
-      // (cùng thứ tự với lần đảo: dòng đơn, rồi khoá cặp, rồi dòng user) để không deadlock.
-      const [order] = await tx.$queryRaw<{ status: string }[]>`SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${orderId} FOR SHARE`;
+      // (cùng thứ tự với lần đảo: dòng đơn, rồi khoá cặp, rồi dòng user) để không deadlock. Gộp phiên khách và ẩn danh hoá
+      // cũng khoá dòng đơn của khách trước dòng users nên cùng thứ tự; bỏ một trong các khoá đơn đó là deadlock trở lại
+      // (p3-review-return-merge.race-spec). Đòi đơn còn đúng của người gọi: đơn vừa gộp sang tài khoản đích thì phiên khách
+      // cũ không được ghi đánh giá và điểm thưởng vào dòng khách đã gộp.
+      const [order] = await tx.$queryRaw<{ status: string }[]>`
+        SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${orderId} AND "userId" = ${userId} FOR SHARE`;
+      if (order?.status === 'RETURNED') throw new BadRequestException('Đơn này đã trả hàng nên không đánh giá mới được.');
       if (order?.status !== REVIEWABLE_ORDER.status) {
         throw new BadRequestException('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
       }
@@ -241,8 +254,9 @@ export class ReviewsService {
    * thêm, không thì vòng tạo, tiêu điểm, xoá, tạo lại cho điểm vô hạn.
    *
    * Cộng mọi dòng sổ REVIEW của cặp (khách, sản phẩm): thưởng dương `REVIEW:<slug>`, thu hồi âm `REVIEW_DELETE:<id sản
-   * phẩm>`; còn dương nghĩa là còn phần thưởng chưa thu hồi. slug không đổi sau khi tạo sản phẩm (đồng bộ Pancake chỉ
-   * ghi slug lúc tạo).
+   * phẩm>` (xoá đánh giá) và `REVIEW_RETURN:<id đánh giá>` (trả hàng); còn dương nghĩa là còn phần thưởng chưa thu hồi. Dòng
+   * trả hàng không mang id sản phẩm nên tra theo id đánh giá của các dòng thưởng của cặp. slug không đổi sau khi tạo sản
+   * phẩm (đồng bộ Pancake chỉ ghi slug lúc tạo).
    */
   private async rewardAlreadyKept(tx: Db, userId: string, product: { id: string; slug: string }): Promise<boolean> {
     const rows = await tx.pointsTransaction.findMany({
@@ -251,9 +265,16 @@ export class ReviewsService {
         refType: 'REVIEW',
         reason: { in: [`REVIEW:${product.slug}`, `REVIEW_DELETE:${product.id}`] },
       },
-      select: { delta: true },
+      select: { delta: true, refId: true },
     });
-    return rows.reduce((sum, r) => sum + r.delta, 0) > 0;
+    const rewardedReviewIds = rows.filter((r) => r.delta > 0 && r.refId).map((r) => r.refId as string);
+    const returnRows = rewardedReviewIds.length
+      ? await tx.pointsTransaction.findMany({
+          where: { userId, refType: 'REVIEW', reason: { in: rewardedReviewIds.map(reviewReturnReason) } },
+          select: { delta: true },
+        })
+      : [];
+    return [...rows, ...returnRows].reduce((sum, r) => sum + r.delta, 0) > 0;
   }
 
   /**

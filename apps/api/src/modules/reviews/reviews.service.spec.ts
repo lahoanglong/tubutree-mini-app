@@ -359,8 +359,8 @@ describe('ReviewsService.create', () => {
         const prisma = makePrisma() as Db;
         await new ReviewsService(prisma, analytics, loyalty).create('u1', 'tinh-dau', dto as never);
         const sql = (prisma.$queryRaw.mock.calls[0]![0] as TemplateStringsArray).join('?');
-        expect(sql).toMatch(/FROM "orders" WHERE "id" = \? FOR SHARE/);
-        expect(prisma.$queryRaw.mock.calls[0]!.slice(1)).toEqual(['o1']);
+        expect(sql).toMatch(/FROM "orders" WHERE "id" = \? AND "userId" = \? FOR SHARE/);
+        expect(prisma.$queryRaw.mock.calls[0]!.slice(1)).toEqual(['o1', 'u1']);
         expect(prisma.$queryRaw.mock.invocationCallOrder[0]!).toBeLessThan(prisma.$executeRaw.mock.invocationCallOrder[0]!);
       });
 
@@ -481,7 +481,7 @@ describe('ReviewsService.create', () => {
       await create(prisma);
       expect(prisma.pointsTransaction.findMany).toHaveBeenCalledWith({
         where: { userId: 'u1', refType: 'REVIEW', reason: { in: ['REVIEW:tinh-dau', 'REVIEW_DELETE:p1'] } },
-        select: { delta: true },
+        select: { delta: true, refId: true },
       });
     });
 
@@ -1194,7 +1194,7 @@ describe('ReviewsService.canReview', () => {
       await check(prisma);
       expect(prisma.pointsTransaction.findMany).toHaveBeenCalledWith({
         where: { userId: 'u1', refType: 'REVIEW', reason: { in: ['REVIEW:tinh-dau', 'REVIEW_DELETE:p1'] } },
-        select: { delta: true },
+        select: { delta: true, refId: true },
       });
     });
   });
