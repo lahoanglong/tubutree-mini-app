@@ -60,7 +60,7 @@ export default function GroupBuyPage() {
     mutationFn: (id: string) => joinGroupBuy(id),
     onSuccess: (r) => {
       openSnackbar({
-        text: r.status === 'SUCCESS' ? '🎉 Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm 🛒',
+        text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm',
         type: 'success',
       });
       void queryClient.invalidateQueries({ queryKey: ['group-buy'] });

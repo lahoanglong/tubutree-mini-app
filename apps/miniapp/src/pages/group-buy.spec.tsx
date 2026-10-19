@@ -96,7 +96,7 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
     await waitFor(() => expect(mocks.joinGroupBuy).toHaveBeenCalledWith('a'));
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm 🛒', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tham gia nhóm', type: 'success' }),
     );
     await waitFor(() => expect(mocks.listGroupBuys).toHaveBeenCalledTimes(2));
   });
@@ -107,7 +107,7 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Tham gia mua chung (−20%)' }));
     await waitFor(() =>
       expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: '🎉 Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.',
+        text: 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.',
         type: 'success',
       }),
     );

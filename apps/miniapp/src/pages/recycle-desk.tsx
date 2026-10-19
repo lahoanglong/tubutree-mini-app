@@ -98,7 +98,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
             <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{`Còn lại ${formatNumber(point.quota.remaining)} điểm`}</Text>
           </>
         ) : (
-          <Text variant="body-md" as="div">Không giới hạn hạn mức tháng</Text>
+          <Text variant="body-md" as="div">Không giới hạn mức tháng</Text>
         )}
       </div>
     </Card>
