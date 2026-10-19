@@ -11,6 +11,8 @@ export const skin = {
   card: `${ui.card} max-md:border-transparent max-md:[box-shadow:var(--elevation-1)]`,
   /** h1 trang con: chừa chỗ cho nút lùi tròn nổi, serif cỡ title-lg như PageHeader dùng chung. */
   pageTitle: `${ui.pageTitle} max-md:py-3 max-md:pl-12 max-md:text-[length:var(--type-title-lg-size)] max-md:leading-[var(--type-title-lg-lh)] max-md:tracking-[-0.01em]`,
+  /** Tiêu đề khối kiểu Heading title-md. */
+  sectionTitle: `${ui.sectionTitle} max-md:text-[length:var(--type-title-md-size)] max-md:leading-[var(--type-title-md-lh)]`,
   /** Tiêu đề thẻ kiểu Heading title-sm (serif ~15px). */
   cardTitle: 'font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)]',
 } as const;

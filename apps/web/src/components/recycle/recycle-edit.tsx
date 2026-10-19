@@ -11,6 +11,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { savePointsNav, takeReturn, toLineInputs, type WasteWizardDraft } from '@/lib/recycle-wizard';
 import { useDebounced } from '@/lib/use-debounced';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -38,9 +39,9 @@ function Shell({ id, subtitle, children, bar }: { id: string; subtitle?: string;
 /** Thanh lưu: dính đáy trên điện thoại, nằm cuối trang từ md; hai bản cùng nội dung nên bản máy tính gắn data-desktop-action. */
 function Actions({ summary, children }: { summary: ReactNode; children: ReactNode }) {
   const body = (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 max-md:flex-col max-md:items-stretch max-md:gap-2">
       <div className="min-w-0 flex-1">{summary}</div>
-      <div className="flex-none">{children}</div>
+      <div className="flex-none max-md:w-full">{children}</div>
     </div>
   );
   return (
@@ -185,7 +186,7 @@ export function RecycleEdit({ id }: { id: string }) {
           <p className="text-sm font-semibold text-stone-900">{`${l.itemName}: ${formatCount(l.declaredQty)} ${l.unitLabel}`}</p>
           <p className="text-xs text-danger-fg">Món này hiện chưa nhận</p>
           <div>
-            <button type="button" className={ui.btnSecondary} onClick={() => setLine(l.itemId, 0)}>
+            <button type="button" className={skin.btnSecondary} onClick={() => setLine(l.itemId, 0)}>
               Bỏ món này
             </button>
           </div>
@@ -204,7 +205,7 @@ export function RecycleEdit({ id }: { id: string }) {
             <p className="text-xs text-stone-600">{pointAddress(shownPoint)}</p>
           </div>
           <div>
-            <button type="button" className={ui.btnSecondary} onClick={changePoint}>
+            <button type="button" className={skin.btnSecondary} onClick={changePoint}>
               Đổi điểm nhận
             </button>
           </div>

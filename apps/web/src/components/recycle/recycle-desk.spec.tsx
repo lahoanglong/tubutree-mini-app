@@ -586,3 +586,13 @@ describe('/doi-rac/quay: ưu đãi và báo cáo tháng', () => {
     expect(button(c, 'Chỉnh sửa')).toBeNull();
   });
 });
+
+describe('/doi-rac/quay — diện mạo Mini App ở điện thoại', () => {
+  it('thẻ Hạn mức không viền, đệm 12px, chữ cỡ body-md', async () => {
+    const c = await mount();
+    const card = c.querySelector<HTMLElement>('section[aria-label="Hạn mức"]')!;
+    expect(card.className).toContain('max-md:border-transparent');
+    expect(card.className).toContain('max-md:p-3');
+    expect(card.querySelector('p:nth-of-type(2)')!.className).toContain('max-md:text-[length:var(--type-body-md-size)]');
+  });
+});

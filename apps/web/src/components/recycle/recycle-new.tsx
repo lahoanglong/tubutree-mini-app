@@ -36,6 +36,7 @@ import {
   type WasteWizardDraft,
 } from '@/lib/recycle-wizard';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -86,9 +87,9 @@ function Check({ checked, onChange, label }: { checked: boolean; onChange: () =>
 /** Thanh hành động: dính đáy trên điện thoại, nằm cuối trang từ md; hai bản cùng nội dung nên bản máy tính gắn data-desktop-action. */
 function Actions({ label, summary, children }: { label: string; summary?: ReactNode; children: ReactNode }) {
   const body = (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 max-md:flex-col max-md:items-stretch max-md:gap-2">
       {summary && <div className="min-w-0 flex-1">{summary}</div>}
-      <div className={summary ? 'flex-none' : 'flex-1'}>{children}</div>
+      <div className={`${summary ? 'flex-none' : 'flex-1'} max-md:w-full`}>{children}</div>
     </div>
   );
   return (
@@ -409,7 +410,7 @@ export function RecycleNew() {
             <div className="flex flex-col gap-2">
               <p className="text-sm font-semibold text-warning-fg">Phí ship có thể cao hơn giá trị điểm bạn nhận được</p>
               {unlockedOthers(m).map((o) => (
-                <button key={o} type="button" className={ui.btnSecondary} onClick={() => selectMethod(o)}>
+                <button key={o} type="button" className={skin.btnSecondary} onClick={() => selectMethod(o)}>
                   {`Chọn ${METHOD_LABELS[o]}`}
                 </button>
               ))}
@@ -423,7 +424,7 @@ export function RecycleNew() {
                   <p className="text-xs text-stone-600">{pointAddress(draft.pickedPoint)}</p>
                 </div>
               )}
-              <button type="button" className={`${ui.btnSecondary} self-start`} onClick={pickPoint}>
+              <button type="button" className={`${skin.btnSecondary} self-start`} onClick={pickPoint}>
                 {draft.pickedPoint ? 'Đổi điểm nhận' : 'Chọn điểm nhận'}
               </button>
             </div>
@@ -436,12 +437,12 @@ export function RecycleNew() {
   return shell(
     <>
       {showShipLocked && (
-        <div className={`${ui.card} p-4`}>
+        <div className={`${skin.card} p-4`}>
           <p className="text-sm font-semibold text-stone-900">{blockMessage({ code: 'SHIP_LOCKED' }, ctxFor(undefined))}</p>
         </div>
       )}
       {order.length === 0 ? (
-        <div className={`${ui.card} p-4`}>
+        <div className={`${skin.card} p-4`}>
           <p className="text-sm font-semibold text-stone-900">Hiện chưa có cách giao nào đang mở, bạn quay lại sau nhé.</p>
         </div>
       ) : (

@@ -4,7 +4,7 @@ import { Clock, MapPin, Navigation, Phone } from 'lucide-react';
 import type { WastePointDTO } from '@tubutree/shared-types';
 import { platformBridge } from '@/lib/platform-bridge';
 import { formatPhoneDisplay } from '@/lib/phone-display';
-import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
 import { isOpenNow, mapsUrl, pointAddress } from './recycle-labels';
 
@@ -118,12 +118,12 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 </p>
               )}
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={ui.btnSecondary} onClick={() => platformBridge.openExternal(mapsUrl(p))}>
+                <button type="button" className={skin.btnSecondary} onClick={() => platformBridge.openExternal(mapsUrl(p))}>
                   <Navigation className="mr-1.5 h-4 w-4" aria-hidden="true" />
                   Chỉ đường
                 </button>
                 {p.phone && (
-                  <button type="button" className={ui.btnSecondary} onClick={() => platformBridge.callPhone(p.phone as string)}>
+                  <button type="button" className={skin.btnSecondary} onClick={() => platformBridge.callPhone(p.phone as string)}>
                     <Phone className="mr-1.5 h-4 w-4" aria-hidden="true" />
                     {`Gọi ${formatPhoneDisplay(p.phone)}`}
                   </button>

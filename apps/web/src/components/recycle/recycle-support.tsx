@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supportContactQuery } from '@tubutree/app-core/queries/config';
 import { coreHttp } from '@/lib/core-http';
-import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { platformBridge } from '@/lib/platform-bridge';
 
@@ -21,17 +21,17 @@ export function RecycleSupport() {
   return (
     <div className="flex flex-wrap gap-2">
       {hasOA && (
-        <button type="button" className={ui.btnSecondary} onClick={() => void platformBridge.oa.openChat()}>
+        <button type="button" className={skin.btnSecondary} onClick={() => void platformBridge.oa.openChat()}>
           Nhắn Zalo OA
         </button>
       )}
       {hotline && (
-        <a href={`tel:${hotline.replace(/[^\d+]/g, '')}`} className={ui.btnSecondary}>
+        <a href={`tel:${hotline.replace(/[^\d+]/g, '')}`} className={skin.btnSecondary}>
           {`Gọi hotline ${formatPhoneDisplay(hotline)}`}
         </a>
       )}
       {email && (
-        <a href={`mailto:${email}`} className={`${ui.btnSecondary} break-all`}>
+        <a href={`mailto:${email}`} className={`${skin.btnSecondary} break-all`}>
           {email}
         </a>
       )}

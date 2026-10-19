@@ -32,7 +32,7 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
       ) : q.isError ? (
         <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
       ) : (
-        <div className="whitespace-pre-line text-base text-stone-900">{q.data.text ?? 'Thể lệ đang được cập nhật'}</div>
+        <div className="whitespace-pre-line text-base text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">{q.data.text ?? 'Thể lệ đang được cập nhật'}</div>
       )}
     </main>
   );

@@ -190,3 +190,10 @@ describe('/doi-rac/xong/[id] (§4.7)', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 });
+
+describe('/doi-rac/xong/[id] — diện mạo Mini App ở điện thoại', () => {
+  it('Đổi thêm rác là nút secondary xanh nhạt không viền', async () => {
+    const c = await mount();
+    expect(byText(c, 'a', 'Đổi thêm rác')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+  });
+});

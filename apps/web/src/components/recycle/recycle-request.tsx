@@ -13,6 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +41,7 @@ import {
 
 const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác';
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
-const BLOCK = `flex flex-col gap-2.5 p-4 ${ui.card}`;
+const BLOCK = `flex flex-col gap-2.5 p-4 ${skin.card}`;
 const DANGER_BTN =
   'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100';
 
@@ -150,7 +151,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
     if (errorStatus(q.error) === 404) {
       return (
         <Shell>
-          <div className={`flex flex-col items-center gap-3 p-8 text-center ${ui.card}`}>
+          <div className={`flex flex-col items-center gap-3 p-8 text-center ${skin.card}`}>
             <p className="text-base font-semibold text-stone-900">Không tìm thấy yêu cầu</p>
             <Link href="/doi-rac/yeu-cau" className={ui.btnPrimary}>
               Xem yêu cầu của tôi
@@ -188,7 +189,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const cancelButton = (
     <button
       type="button"
-      className={`${ui.btnSecondary} w-full`}
+      className={`${skin.btnSecondary} w-full`}
       onClick={() => {
         cancel.reset();
         setCancelOpen(true);
@@ -198,7 +199,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
     </button>
   );
   const changePointLink = canEdit ? (
-    <Link href={editPath} className={`${ui.btnSecondary} w-full`}>
+    <Link href={editPath} className={`${skin.btnSecondary} w-full`}>
       Đổi điểm nhận
     </Link>
   ) : null;
@@ -223,7 +224,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             <div className="mt-2">
               <button
                 type="button"
-                className={ui.btnSecondary}
+                className={skin.btnSecondary}
                 onClick={async () => {
                   const ok = await copyText([recipient.name, recipient.phone, pointAddress(recipient)].filter(Boolean).join('\n'));
                   setNotice(ok ? { text: 'Đã sao chép', ok } : { text: 'Không sao chép được, hãy chọn và chép thủ công.', ok });
@@ -330,7 +331,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
                   </button>
                 ))}
               {canEdit && (
-                <Link href={editPath} className={`${ui.btnSecondary} w-full`}>
+                <Link href={editPath} className={`${skin.btnSecondary} w-full`}>
                   Sửa món
                 </Link>
               )}
@@ -354,7 +355,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
                   />
                 ) : (
                   <div>
-                    <button type="button" className={ui.btnSecondary} onClick={() => setEditingTracking(true)}>
+                    <button type="button" className={skin.btnSecondary} onClick={() => setEditingTracking(true)}>
                       Sửa
                     </button>
                   </div>

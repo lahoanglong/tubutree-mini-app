@@ -243,3 +243,13 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 });
+
+describe('/doi-rac/yeu-cau/[id]/sua — diện mạo Mini App ở điện thoại', () => {
+  it('thanh dính đáy xếp dọc: chú thích ở trên, nút Lưu thay đổi full-width bên dưới', async () => {
+    await mount();
+    const bar = document.querySelector('[data-testid="sticky-bar"]')!;
+    const row = bar.firstElementChild!;
+    expect(row.className).toContain('max-md:flex-col');
+    expect(row.lastElementChild!.className).toContain('max-md:w-full');
+  });
+});

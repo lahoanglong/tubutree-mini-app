@@ -192,3 +192,12 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
     expect(smallTouchTargets(c)).toEqual([]);
   });
 });
+
+describe('/doi-rac/yeu-cau — diện mạo Mini App ở điện thoại', () => {
+  it('hàng yêu cầu trơn trên nền trang, không thẻ viền', async () => {
+    const c = await mount();
+    const list = link(c, '/doi-rac/yeu-cau/r-open')!.closest('div[class*="divide-y"]')!;
+    expect(list.className).toContain('max-md:bg-transparent');
+    expect(list.className).toContain('max-md:border-transparent');
+  });
+});
