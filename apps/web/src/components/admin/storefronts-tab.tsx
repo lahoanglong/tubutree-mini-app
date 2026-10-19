@@ -21,7 +21,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
 import { USER_ROLE_LABELS } from './users-list';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, ToneBadge, chipClass, LoadError } from './ui';
 
 const REASON_MAX = 300;
 
@@ -117,7 +117,7 @@ export function StorefrontsTab() {
 
       <div className="mt-4 space-y-3">
         {list.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
-        {list.isError && <Notice tone="danger" role="alert">Không tải được danh sách gian hàng.</Notice>}
+        {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
         {list.data && view.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">Không có gian hàng nào khớp bộ lọc.</p>
         )}
@@ -216,7 +216,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   return (
     <SideDrawer title={sf?.title ?? 'Gian hàng'} onClose={onClose}>
       {detail.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {detail.isError && <Notice tone="danger" role="alert">Không tải được chi tiết gian hàng.</Notice>}
+      {detail.isError && <LoadError onRetry={() => void detail.refetch()} retrying={detail.isFetching}>Không tải được chi tiết gian hàng.</LoadError>}
       {sf && (
         <div className="space-y-3">
           {failure && <Notice tone="danger" role="alert">{failure}</Notice>}

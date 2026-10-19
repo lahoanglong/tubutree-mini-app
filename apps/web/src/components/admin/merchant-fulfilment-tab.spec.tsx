@@ -343,6 +343,25 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(true);
   });
 
+  // Ô chỉ có dấu cách qua được `required` của trình duyệt, nhưng API từ chối mã rỗng (IsNotEmpty): chặn ngay ở ô.
+  it('ô mã giao dịch chỉ có dấu cách: báo lỗi ngay ở ô, không mở hộp xác nhận, không gọi API', async () => {
+    const api = setup();
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    const input = root.querySelector('input')!;
+    typeInto(input, '    ');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('Nhập mã giao dịch');
+    typeInto(input, 'FT1');
+    expect(input.getAttribute('aria-invalid')).not.toBe('true');
+  });
+
   // D7-02: "Đã chuyển"/"Đã thu" ghi sổ đối soát; Enter trong ô mã giao dịch từng gửi thẳng không qua bước hỏi.
   it('D7-02: "Đã chuyển" hỏi lại (danger) nêu số tiền, đối tác, tài khoản và mã GD; Huỷ thì không gọi API', async () => {
     const api = setup();

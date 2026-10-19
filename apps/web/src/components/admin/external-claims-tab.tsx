@@ -42,7 +42,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ToneBadge, chipClass, LoadError } from './ui';
 
 type Who = ClaimActor;
 
@@ -113,7 +113,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
         />
       </div>
       {claims.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {claims.isError && <p className="text-sm text-danger-fg">Không tải được danh sách yêu cầu.</p>}
+      {claims.isError && <LoadError onRetry={() => void claims.refetch()} retrying={claims.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
       {claims.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có yêu cầu nào khớp.</p>}
       <ul className="space-y-2">
         {rows.map((c) => (
@@ -343,7 +343,7 @@ function AttemptsSection({ who }: { who: Who }) {
       <p className="text-xs text-stone-500">
         Khách gửi mã mà hệ thống chưa tìm thấy đơn sau 3 ngày, hoặc đơn đã thấy nhưng chưa biết nguồn. Gắn đúng đơn Pancake (xem ở mục Đơn ngoài app) hoặc từ chối.
       </p>
-      {attempts.isError && <p className="text-sm text-danger-fg">Không tải được các lần gửi mã.</p>}
+      {attempts.isError && <LoadError onRetry={() => void attempts.refetch()} retrying={attempts.isFetching}>Không tải được các lần gửi mã.</LoadError>}
       {attempts.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có lần gửi mã nào cần xử lý.</p>}
       <ul className="space-y-2">
         {rows.map((a) => (

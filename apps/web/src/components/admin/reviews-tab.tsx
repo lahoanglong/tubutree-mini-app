@@ -13,7 +13,7 @@ import { reviewStarCount, safeHttpsLink } from '@/lib/admin-pickers';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { PageNav } from './page-nav';
-import { BTN_LINK, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_LINK, Notice, ToneBadge, chipClass, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
@@ -74,9 +74,9 @@ export function ReviewsTab() {
       </div>
 
       {q.isError && (
-        <p role="alert" className="text-sm text-danger-fg">
+        <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>
           {(q.error as Error).message || 'Không tải được danh sách đánh giá.'}
-        </p>
+        </LoadError>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải đánh giá…</p>}
       {q.data && q.data.data.length === 0 && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Không có đánh giá nào khớp bộ lọc.</p>}

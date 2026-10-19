@@ -8,7 +8,7 @@ import {
   type AdminNotificationTemplate,
   type NotificationDelivery,
 } from '@/lib/admin-client';
-import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge } from './ui';
+import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError } from './ui';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -44,7 +44,7 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
         </Notice>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mẫu thông báo.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách mẫu thông báo.</LoadError>}
       <div className="space-y-2">
         {rows?.map((t) => <TemplateRow key={t.code} item={t} canEditDelivery={canEditAll} />)}
       </div>

@@ -12,7 +12,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
-import { BTN_WARNING, FIELD_XS } from './ui';
+import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 
 /**
  * A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): trước đây đại lý tự bấm "Báo đã CK" là TRỪ NỢ
@@ -115,7 +115,7 @@ export function DealerCreditPanel({
       {open && (
         <div className="mt-2 space-y-2">
           {ledgerQ.isLoading && <p className="text-xs text-stone-500">Đang tải sổ công nợ…</p>}
-          {ledgerQ.isError && <p role="alert" className="text-xs text-danger-fg">Không tải được sổ công nợ.</p>}
+          {ledgerQ.isError && <LoadError onRetry={() => void ledgerQ.refetch()} retrying={ledgerQ.isFetching}>Không tải được sổ công nợ.</LoadError>}
           {ledgerQ.data && (
             <>
               <p className="text-xs font-semibold text-stone-800">
@@ -131,37 +131,40 @@ export function DealerCreditPanel({
                 {ledgerQ.data.entries.length === 0 && <li className="py-0.5 text-stone-500">Chưa có phát sinh.</li>}
               </ul>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  aria-label="Số tiền đã nhận (đ)"
-                  placeholder="Số tiền đã nhận (đ)"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  disabled={busy}
-                  className={`${FIELD_XS} w-32`}
-                />
-                <input
-                  type="text"
-                  aria-label="Mã giao dịch ngân hàng"
-                  placeholder="Mã giao dịch (tuỳ chọn)"
-                  maxLength={DEALER_BANK_REF_MAX}
-                  value={bankRef}
-                  onChange={(e) => setBankRef(e.target.value)}
-                  disabled={busy}
-                  className={`${FIELD_XS} grow basis-40`}
-                />
-                <input
-                  type="text"
-                  aria-label="Ghi chú"
-                  placeholder="Ghi chú (tuỳ chọn)"
-                  maxLength={DEALER_PAYMENT_NOTE_MAX}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  disabled={busy}
-                  className={`${FIELD_XS} grow basis-40`}
-                />
+              <div className="flex flex-wrap items-end gap-2">
+                <Field label="Số tiền đã nhận (đ)" className="w-32">
+                  <input
+                    type="number"
+                    min={1}
+                    aria-label="Số tiền đã nhận (đ)"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    disabled={busy}
+                    className={`${FIELD_XS} w-full`}
+                  />
+                </Field>
+                <Field label="Mã giao dịch (tuỳ chọn)" className="grow basis-40">
+                  <input
+                    type="text"
+                    aria-label="Mã giao dịch ngân hàng"
+                    maxLength={DEALER_BANK_REF_MAX}
+                    value={bankRef}
+                    onChange={(e) => setBankRef(e.target.value)}
+                    disabled={busy}
+                    className={`${FIELD_XS} w-full`}
+                  />
+                </Field>
+                <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+                  <input
+                    type="text"
+                    aria-label="Ghi chú"
+                    maxLength={DEALER_PAYMENT_NOTE_MAX}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    disabled={busy}
+                    className={`${FIELD_XS} w-full`}
+                  />
+                </Field>
                 <button
                   type="button"
                   onClick={onConfirm}

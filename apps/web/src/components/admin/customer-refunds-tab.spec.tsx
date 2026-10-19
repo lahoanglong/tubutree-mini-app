@@ -1351,3 +1351,103 @@ describe('CustomerRefundsTab — tiền trả dư Pancake chờ đối soát', (
     expect(card.querySelectorAll('button')).toHaveLength(0);
   });
 });
+
+// Đơn COD đã giao rồi Pancake báo hoàn (5) mà chưa rõ hãng vận chuyển đã thu tiền: API ghi một khoản kind RETURN chờ
+// đối soát. Kế toán đối chiếu với hãng, nên chữ trên nút và hộp xác nhận phải nói về COD, không phải "tiền khách trả dư".
+describe('CustomerRefundsTab — khoản COD trả hàng chờ đối soát', () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const cod = (over: Partial<AdminCustomerRefund> = {}) =>
+    refund({ kind: 'RETURN', status: 'UNVERIFIED', userId: 'u1', reason: 'RETURNED', amount: 450_000, recipientName: null, phone: null, ...over });
+
+  function stub(list: () => AdminCustomerRefund[]) {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        calls.push({ url, init });
+        if (url.includes('/verify')) return json({ id: 'r1', status: 'PENDING' });
+        if (url.includes('/dismiss')) return json({ id: 'r1', status: 'DISMISSED' });
+        return json(page(list()));
+      }),
+    );
+    return {
+      verifies: () => calls.filter((c) => c.url.includes('/verify')),
+      dismisses: () => calls.filter((c) => c.url.includes('/dismiss')),
+    };
+  }
+  const open = async (container: HTMLElement) => {
+    click(byText(container, 'button', 'Chờ đối soát'));
+    await flush();
+    return container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+  };
+
+  it('nút ghi "Xác nhận đã thu COD, hoàn cho khách" và "Không hoàn"; không còn chữ "tiền dư"', async () => {
+    stub(() => [cod()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    expect(Array.from(card.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Xác nhận đã thu COD, hoàn cho khách', 'Không hoàn']);
+    expect(card.textContent).not.toContain('tiền dư');
+    expect(card.textContent).not.toContain('trả nhiều hơn tổng đơn');
+    expect(card.textContent).toContain('COD');
+    expect((card.querySelector('input[name="overpaidAmount"]') as HTMLInputElement).value).toBe('450.000');
+  });
+
+  it('xác nhận: câu hỏi nói về COD của hãng, nói rõ khách CHƯA được báo; gửi đúng số hoàn', async () => {
+    const api = stub(() => [cod()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    click(byText(card, 'button', 'Xác nhận đã thu COD, hoàn cho khách'));
+    await flush(1);
+    const d = confirmDialog()!;
+    const text = d.textContent ?? '';
+    expect(text).toContain('COD');
+    expect(text).toContain('450.000đ');
+    expect(text).not.toContain('khách chuyển dư');
+    expect(text).not.toContain('khách được báo');
+    expect(text).toContain('khách chưa được báo');
+    expect(d.querySelector('[data-confirm="accept"]')?.textContent).toBe('Xác nhận đã thu COD, hoàn cho khách');
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(JSON.parse(String(api.verifies()[0]!.init?.body))).toEqual({ amount: 450_000 });
+    const flash = container.querySelector('[role="status"]')?.textContent ?? '';
+    expect(flash).toContain('COD');
+    expect(flash).not.toContain('Khách được báo');
+  });
+
+  it('số hoàn vượt phần chưa hoàn → báo bằng chữ COD, không gửi', async () => {
+    const api = stub(() => [cod()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    typeInto(card.querySelector('input[name="overpaidAmount"]'), '900.000');
+    click(byText(card, 'button', 'Xác nhận đã thu COD, hoàn cho khách'));
+    await flush(1);
+    expect(confirmDialog()).toBeNull();
+    expect(api.verifies()).toHaveLength(0);
+    const alert = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('450.000đ');
+    expect(alert).not.toContain('Pancake báo dư');
+  });
+
+  it('"Không hoàn": hộp hỏi nói hãng chưa thu COD, bắt buộc lý do, nút xác nhận ghi "Không hoàn"', async () => {
+    const api = stub(() => [cod()]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const card = await open(container);
+    click(byText(card, 'button', 'Không hoàn'));
+    await flush(1);
+    const d = confirmDialog()!;
+    const text = d.textContent ?? '';
+    expect(text).toContain('COD');
+    expect(text).not.toContain('không phải tiền khách trả dư');
+    expect(d.querySelector('[data-confirm="accept"]')?.textContent).toBe('Không hoàn');
+    typeInto(d.querySelector('textarea') as HTMLTextAreaElement, 'Hãng báo chưa thu tiền');
+    click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+    await flush();
+    expect(JSON.parse(String(api.dismisses()[0]!.init?.body))).toEqual({ reason: 'Hãng báo chưa thu tiền' });
+    expect(container.querySelector('[role="status"]')?.textContent).not.toContain('không phải tiền dư');
+  });
+});

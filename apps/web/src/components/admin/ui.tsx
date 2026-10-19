@@ -47,6 +47,21 @@ export function Notice({
 }
 
 /**
+ * Lỗi tải danh sách kèm nút "Thử lại": không có nút thì nhân viên phải F5 cả trang và mất bộ lọc đang chọn.
+ * `onRetry` truyền `() => void q.refetch()` của đúng truy vấn vừa lỗi.
+ */
+export function LoadError({ children, onRetry, retrying = false }: { children: ReactNode; onRetry: () => void; retrying?: boolean }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger-fg">
+      <span className="min-w-0 break-words">{children}</span>
+      <button type="button" className={BTN_SECONDARY} disabled={retrying} onClick={onRetry}>
+        Thử lại
+      </button>
+    </div>
+  );
+}
+
+/**
  * Khung cuộn ngang bọc bảng. Bảng không có nút/ô nhập trong hàng thì khung không có gì focus được, bàn phím không
  * cuộn tới cột bị che (axe `scrollable-region-focusable`): tự nhận tab, kèm tên vùng cho trình đọc màn hình.
  */
@@ -58,9 +73,10 @@ export function ScrollRegion({ label, className = '', children }: { label: strin
   );
 }
 
-export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+/** `className`: nhãn đứng trong hàng flex cùng nút (độ rộng/basis của cả cụm nhãn + ô). */
+export function Field({ label, children, hint, className = '' }: { label: string; children: ReactNode; hint?: string; className?: string }) {
   return (
-    <label className="block text-xs">
+    <label className={`block text-xs ${className}`.trim()}>
       <span className="font-medium text-stone-700">{label}</span>
       <div className="mt-1">{children}</div>
       {hint && <span className="mt-0.5 block text-[11px] text-stone-500">{hint}</span>}

@@ -188,7 +188,7 @@ describe('PosCreditsTab — DS v2', () => {
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<PosCreditsTab />);
     await flush();
-    expect(container.querySelector('p.text-danger-fg')?.textContent).toContain('Lỗi máy chủ');
+    expect(container.querySelector('[role="alert"].text-danger-fg')?.textContent).toContain('Lỗi máy chủ');
   });
 });
 

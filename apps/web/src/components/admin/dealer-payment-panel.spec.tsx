@@ -172,7 +172,7 @@ describe('DealerPaymentPanel — DS v2', () => {
     expect(inputs).toHaveLength(2);
     for (const input of inputs) {
       expect(input.className).toContain('min-h-[44px]');
-      expect(input.className).toContain('basis-40');
+      expect(input.closest('label')?.className).toContain('basis-40');
     }
     const btn = byText(container, 'button', 'Xác nhận đã nhận chuyển khoản');
     expect(btn?.className).toContain('min-h-[44px]');

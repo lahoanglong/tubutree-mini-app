@@ -9,7 +9,7 @@ import { actorLabel, canIssueInvoice, formatShippingAddress, invoiceStatusLabel,
 import { safeHttpsLink } from '@/lib/admin-pickers';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
-import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge } from './ui';
+import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, Field } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 import { COMMISSION_STATUS, getOrderReferral } from '@/lib/commission-rates';
 import { formatVnd } from '@/lib/shop-client';
@@ -293,17 +293,19 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
       )}
 
       {issuable && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input
-            type="url"
-            aria-label="Link hoá đơn điện tử (tuỳ chọn)"
-            placeholder="Link hoá đơn điện tử (tuỳ chọn, https://…)"
-            maxLength={INVOICE_URL_MAX}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            disabled={mut.isPending}
-            className={`${INPUT_CLASS} min-h-[44px] min-w-0 flex-1`}
-          />
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <Field label="Link hoá đơn điện tử (tuỳ chọn)" className="min-w-0 flex-1">
+            <input
+              type="url"
+              aria-label="Link hoá đơn điện tử (tuỳ chọn)"
+              placeholder="https://…"
+              maxLength={INVOICE_URL_MAX}
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              disabled={mut.isPending}
+              className={`${INPUT_CLASS} min-h-[44px]`}
+            />
+          </Field>
           <button
             type="button"
             onClick={onIssue}

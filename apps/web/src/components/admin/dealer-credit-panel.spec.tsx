@@ -163,7 +163,7 @@ describe('DealerCreditPanel — DS v2', () => {
     click(byText(container, 'button', 'Công nợ đại lý'));
     await flush();
     for (const input of Array.from(container.querySelectorAll('input'))) expect(input.className).toContain('min-h-[44px]');
-    expect(container.querySelector('input[aria-label="Ghi chú"]')?.className).toContain('basis-40');
+    expect(container.querySelector('input[aria-label="Ghi chú"]')?.closest('label')?.className).toContain('basis-40');
     expect(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ')?.className).toContain('min-h-[44px]');
     expect(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ')?.className).toContain('bg-warning-fg');
   });

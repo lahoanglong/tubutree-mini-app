@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PayoutAdminTab, PayoutRow } from './payout-admin-tab';
+import { OpsInboxTab } from './ops-inbox-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminPayout } from '@/lib/admin-client';
 
@@ -155,7 +156,7 @@ describe('PayoutRow / PayoutAdminTab — DS v2', () => {
   it('lệnh APPROVED: "Đã chuyển khoản" cao 44px, ô ghi chú/mã giao dịch chịu xuống dòng', () => {
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
     expect(byText(container, 'button', 'Đã chuyển khoản')?.className).toContain('min-h-[44px]');
-    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')?.className).toContain('flex-1');
+    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')?.closest('label')?.className).toContain('flex-1');
   });
 
   it('huy hiệu trạng thái và lý do từ chối theo token danger', () => {
@@ -243,5 +244,40 @@ describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
     mount(<PayoutAdminTab canReview={false} />);
     await flush();
     expect(api.calls.find((c) => !c.url.includes('/pit-report'))!.url).toContain('status=APPROVED');
+  });
+});
+
+// Số trên thẻ trang chủ phải khớp số dòng khi bấm vào (quy ước ops-inbox.service). ADMIN thấy cả hai thẻ rút tiền nhưng tab
+// mở mặc định ở hàng chờ duyệt, nên bấm thẻ "chờ chi" (đếm APPROVED) từng ra danh sách khác với số trên thẻ.
+describe('PayoutAdminTab — mở từ thẻ ở Việc cần xử lý (ADMIN)', () => {
+  const inbox = { '/admin/ops/inbox': { body: { generatedAt: '2026-10-14T03:00:00.000Z', items: [{ key: 'payouts', count: 2 }, { key: 'payoutsToPay', count: 5 }] } } };
+  const listUrl = (api: ReturnType<typeof mockFetch>) => api.calls.filter((c) => c.url.includes('/admin/payouts?')).at(-1)!.url;
+
+  async function openFromCard(key: string) {
+    const api = mockFetch({ ...inbox, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const inboxView = mount(<OpsInboxTab onOpen={() => undefined} />);
+    await flush();
+    click(inboxView.container.querySelector<HTMLButtonElement>(`[data-inbox="${key}"]`));
+    mount(<PayoutAdminTab canReview />);
+    await flush();
+    return api;
+  }
+
+  it('thẻ "Lệnh rút tiền chờ chi" mở danh sách lọc APPROVED', async () => {
+    expect(listUrl(await openFromCard('payoutsToPay'))).toContain('status=APPROVED');
+  });
+
+  it('thẻ "Lệnh rút tiền chờ duyệt" vẫn mở danh sách lọc REQUESTED', async () => {
+    expect(listUrl(await openFromCard('payouts'))).toContain('status=REQUESTED');
+  });
+
+  it('mở tab từ thanh menu (không qua thẻ) sau đó vẫn mặc định REQUESTED, không dính lần bấm thẻ trước', async () => {
+    await openFromCard('payoutsToPay');
+    const api = mockFetch(LIST);
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mount(<PayoutAdminTab canReview />);
+    await flush();
+    expect(listUrl(api)).toContain('status=REQUESTED');
   });
 });

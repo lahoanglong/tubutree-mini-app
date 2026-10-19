@@ -14,7 +14,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { PAYMENT_METHOD_LABELS } from '@/lib/export-csv';
 import { useConfirm } from './confirm-dialog';
 import { EvidenceImages } from './evidence-images';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H, Field } from './ui';
 
 const REJECT_NOTE_MIN = 3;
 
@@ -207,17 +207,19 @@ export function ReturnRow({
       )}
       {r.status === 'REQUESTED' && canReview && (
         <div className="mt-3 border-t border-stone-200 pt-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              aria-label="Ghi chú duyệt / lý do từ chối"
-              placeholder="Ghi chú duyệt / lý do từ chối (bắt buộc khi từ chối)"
-              value={note}
-              onChange={(e) => {
-                setNote(e.target.value);
-                setNoteError(null);
-              }}
-              className={`${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-60`}
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Ghi chú duyệt / lý do từ chối (bắt buộc khi từ chối)" className="grow basis-full sm:basis-60">
+              <input
+                aria-label="Ghi chú duyệt / lý do từ chối"
+                placeholder="Ghi chú duyệt hoặc lý do từ chối"
+                value={note}
+                onChange={(e) => {
+                  setNote(e.target.value);
+                  setNoteError(null);
+                }}
+                className={`${FIELD_CLASS} ${TOUCH_H} w-full`}
+              />
+            </Field>
             {!confirming && (
               <button
                 type="button"

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
-import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
@@ -182,16 +182,18 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       )}
 
       {pending && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
-          <input
-            aria-label="Ghi chú xử lý"
-            placeholder="Ghi chú (tuỳ chọn), vd đã gọi xác nhận với khách"
-            value={note}
-            maxLength={500}
-            onChange={(e) => setNote(e.target.value)}
-            className={`${INPUT_CLASS} min-w-[200px] flex-1`}
-            disabled={mut.isPending}
-          />
+        <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3">
+          <Field label="Ghi chú (tuỳ chọn)" className="min-w-[200px] flex-1">
+            <input
+              aria-label="Ghi chú xử lý"
+              placeholder="vd đã gọi xác nhận với khách"
+              value={note}
+              maxLength={500}
+              onChange={(e) => setNote(e.target.value)}
+              className={INPUT_CLASS}
+              disabled={mut.isPending}
+            />
+          </Field>
           <button
             type="button"
             onClick={() => void run()}

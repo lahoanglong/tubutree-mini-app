@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listLiveAttendance, manualCheckout, type LiveAttendance } from '@/lib/admin-client';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_DANGER_OUTLINE, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, Notice, ToneBadge, LoadError } from './ui';
 
 /** Nhân viên đang trong ca + nút "Chốt ra ca" cho người quên ra ca (ADMINOPS-17). Lương ngày đó tự tính lại. */
 export function AttendanceTab() {
@@ -43,7 +43,7 @@ export function AttendanceTab() {
         </Notice>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách chấm công.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách chấm công.</LoadError>}
       {q.data?.length === 0 && <p className="text-sm text-stone-500">Không có ai đang trong ca.</p>}
       <ul className="space-y-2">
         {q.data?.map((s) => (

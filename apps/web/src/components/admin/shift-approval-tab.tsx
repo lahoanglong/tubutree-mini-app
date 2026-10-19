@@ -76,7 +76,7 @@ export function ShiftApprovalTab() {
     onError: fail,
   });
   const bulkM = useMutation({
-    mutationFn: () => bulkApproveShifts(coreHttp, pendingIds),
+    mutationFn: (ids: string[]) => bulkApproveShifts(coreHttp, ids),
     onSuccess: (r) => {
       setMsg({ tone: 'success', text: `Đã duyệt ${r.approved} ca.` });
       invalidate();
@@ -91,12 +91,14 @@ export function ShiftApprovalTab() {
   };
 
   const askBulkApprove = async () => {
+    // Danh sách tự làm mới khi hộp đang mở: duyệt đúng những ca đã nêu trong câu hỏi, không lấy lại danh sách lúc bấm.
+    const ids = [...pendingIds];
     const ok = await confirm({
       title: 'Duyệt tất cả ca chờ?',
-      message: `Duyệt ${pendingIds.length} ca đang chờ của tuần này? Các ca cần từ chối hoặc chỉnh giờ nên xử lý riêng trước.`,
-      confirmLabel: `Duyệt ${pendingIds.length} ca`,
+      message: `Duyệt ${ids.length} ca đang chờ của tuần này? Các ca cần từ chối hoặc chỉnh giờ nên xử lý riêng trước.`,
+      confirmLabel: `Duyệt ${ids.length} ca`,
     });
-    if (ok) bulkM.mutate();
+    if (ok) bulkM.mutate(ids);
   };
 
   const askReject = async (s: AdminShift, who: string) => {

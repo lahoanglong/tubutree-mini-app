@@ -19,7 +19,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, chipClass, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, LoadError, chipClass, Notice, ToneBadge } from './ui';
 
 export type CommunityView = 'pending' | 'published' | 'unanswered';
 
@@ -88,17 +88,6 @@ export function CommunityModerationTab({ initialView = 'pending', isAdmin = fals
         {view === 'unanswered' && <UnansweredList />}
       </div>
     </StaleNoticeContext.Provider>
-  );
-}
-
-function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
-  return (
-    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger-fg">
-      <span>Không tải được {what}.</span>
-      <button type="button" onClick={onRetry} className={BTN_SECONDARY}>
-        Thử lại
-      </button>
-    </div>
   );
 }
 
@@ -176,7 +165,7 @@ function PendingList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError what="danh sách bài chờ duyệt" onRetry={() => void q.refetch()} />}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài chờ duyệt.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">{q.data.length === 0 ? 'Không có bài nào đang chờ duyệt.' : `${q.data.length} bài chờ duyệt · cũ nhất trước`}</p>
@@ -238,7 +227,7 @@ function PublishedList({ canPin }: { canPin: boolean }) {
   return (
     <div className="space-y-2">
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError what="danh sách bài đã đăng" onRetry={() => void q.refetch()} />}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài đã đăng.</LoadError>}
       {q.data && items.length === 0 && <p className="text-xs text-stone-500">Chưa có bài nào được đăng.</p>}
       <ul className="space-y-2">
         {items.map((p) => (
@@ -304,7 +293,7 @@ function UnansweredList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError what="danh sách câu hỏi chưa trả lời" onRetry={() => void q.refetch()} />}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách câu hỏi chưa trả lời.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">

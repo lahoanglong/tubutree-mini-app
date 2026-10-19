@@ -13,7 +13,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { parseVndInput } from '@/lib/loyalty-pos';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
-import { BTN_WARNING, FIELD_XS, TOUCH_H } from './ui';
+import { BTN_WARNING, FIELD_XS, TOUCH_H, Field } from './ui';
 
 export interface OrderStatusAction {
   status: string;
@@ -261,7 +261,7 @@ export function OrderStatusActions({
               ? 'Đơn đã huỷ khi chưa nhận tiền. Nếu sao kê có khoản chuyển của đơn này, nhập đúng số tiền thực nhận rồi bấm "Ghi nhận tiền về muộn" để đưa vào hàng đợi Hoàn tiền khách.'
               : 'Chuyển khoản chưa ghi nhận thanh toán — chưa giao được đơn. Đối chiếu sao kê rồi bấm "Đã nhận tiền".'}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-end gap-2">
             {latePayment && (
               <label className="flex w-full items-center gap-1.5 text-xs text-stone-700 sm:w-auto">
                 <span className="shrink-0">Số tiền thực nhận</span>
@@ -278,16 +278,18 @@ export function OrderStatusActions({
                 <span className="shrink-0">đ</span>
               </label>
             )}
-            <input
-              type="text"
-              aria-label="Mã giao dịch ngân hàng"
-              placeholder="Mã giao dịch (tuỳ chọn), vd FT26270…"
-              maxLength={DEALER_BANK_REF_MAX}
-              value={bankRef}
-              onChange={(e) => setBankRef(e.target.value)}
-              disabled={busy}
-              className={`${FIELD_XS} grow basis-40`}
-            />
+            <Field label="Mã giao dịch (tuỳ chọn)" className="grow basis-40">
+              <input
+                type="text"
+                aria-label="Mã giao dịch ngân hàng"
+                placeholder="vd FT26270…"
+                maxLength={DEALER_BANK_REF_MAX}
+                value={bankRef}
+                onChange={(e) => setBankRef(e.target.value)}
+                disabled={busy}
+                className={`${FIELD_XS} w-full`}
+              />
+            </Field>
             <button
               type="button"
               onClick={onConfirmPayment}

@@ -5,14 +5,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCashbackTxns, reviewCashbackTxn, type AdminCashbackTxn } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
-import { BTN_XS_DANGER, BTN_XS_PRIMARY } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, LoadError } from './ui';
 
-/** Nhãn trạng thái hoàn tiền sàn ngoài cho kế toán: Đã duyệt là chờ hết thời gian giữ, Đã chi là tiền đã vào Ví Tubu của khách. */
+/** Nhãn trạng thái hoàn tiền sàn ngoài cho kế toán: Đã duyệt là chờ hết thời gian giữ; PAID do cron cộng thẳng vào Ví Tubu của khách, không có bước chi nào của kế toán. */
 export const CASHBACK_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Chờ duyệt',
   CONFIRMED: 'Đã duyệt',
   REJECTED: 'Đã từ chối',
-  PAID: 'Đã chi',
+  PAID: 'Đã cộng vào Ví',
 };
 
 /**
@@ -79,7 +79,7 @@ export function CashbackTab() {
       </div>
       {err && <p className="mb-2 text-sm text-danger-fg">{err}</p>}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách.</LoadError>}
       <div className="space-y-2">
         {q.data?.map((t) => (
           <div key={t.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">

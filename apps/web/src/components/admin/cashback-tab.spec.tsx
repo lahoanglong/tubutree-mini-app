@@ -116,16 +116,18 @@ describe('CashbackTab (Hoàn tiền sàn ngoài)', () => {
   });
 
   // D7-05: kế toán đọc trạng thái hằng ngày; mã thô PENDING/CONFIRMED/PAID khó phân biệt nên dễ chi trùng.
-  it('D7-05: chip lọc và dòng giao dịch dùng nhãn tiếng Việt, không còn mã thô; chip "Đã chi" lọc status=PAID', async () => {
+  // PAID là cron cộng tiền vào Ví Tubu của khách (không phải Kế toán chuyển khoản), nên không gọi là "Đã chi" như lệnh rút tiền.
+  it('D7-05: chip lọc và dòng giao dịch dùng nhãn tiếng Việt, không còn mã thô; chip "Đã cộng vào Ví" lọc status=PAID', async () => {
     const api = stub();
     const { container } = mount(<CashbackTab />);
     await flush();
     const chips = Array.from(container.querySelectorAll('button')).map((b) => b.textContent);
-    expect(chips).toEqual(expect.arrayContaining(['Chờ duyệt', 'Đã duyệt', 'Đã từ chối', 'Đã chi', 'Tất cả']));
+    expect(chips).toEqual(expect.arrayContaining(['Chờ duyệt', 'Đã duyệt', 'Đã từ chối', 'Đã cộng vào Ví', 'Tất cả']));
     expect(container.textContent).not.toMatch(/PENDING|CONFIRMED|REJECTED|PAID/);
+    expect(chips).not.toContain('Đã chi');
     expect(container.querySelector('[data-cashback-status]')?.textContent).toBe('Chờ duyệt');
 
-    click(byText(container, 'button', 'Đã chi'));
+    click(byText(container, 'button', 'Đã cộng vào Ví'));
     await flush();
     expect(api.calls.at(-1)!.url).toContain('status=PAID');
   });

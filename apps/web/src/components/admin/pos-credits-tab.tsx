@@ -9,7 +9,7 @@ import { vnDayKey } from '@/lib/loyalty-pos';
 import { personLabel } from '@/lib/admin-pickers';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
-import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H } from './ui';
+import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H, LoadError } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 
 /** Tổng hợp nhanh cho dòng tóm tắt đầu bảng. */
@@ -78,7 +78,7 @@ export function PosCreditsTab() {
       </div>
 
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">{q.error instanceof Error ? q.error.message : 'Không tải được sổ tích điểm.'}</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>{q.error instanceof Error ? q.error.message : 'Không tải được sổ tích điểm.'}</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-600">
