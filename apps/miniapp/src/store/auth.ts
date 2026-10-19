@@ -256,8 +256,13 @@ setUnauthorizedHandler(async () => {
     useAuthStore.setState({ user: res.user, status: 'authenticated' });
     return res.accessToken;
   } catch (err) {
-    if (isRefreshRejected(err)) await clearRefresh();
-    useAuthStore.setState({ user: null, status: 'idle' });
+    if (isRefreshRejected(err)) {
+      await clearRefresh();
+      useAuthStore.setState({ user: null, status: 'idle' });
+    } else {
+      // Mạng/5xx: chưa biết phiên còn hay không. 'error' (như restore()) để useSessionRecovery tự thử lại, thay vì mời đăng nhập.
+      useAuthStore.setState({ status: 'error', error: vi.errors.sessionUnavailable });
+    }
     return null;
   }
 });
