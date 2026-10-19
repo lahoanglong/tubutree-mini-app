@@ -135,6 +135,8 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
 
 export default defineConfig({
   testDir: './tests',
+  // Spec tham quan chỉ để chụp ảnh so giao diện: không đưa vào CI làm ca skipped.
+  testIgnore: process.env.VISUAL_DIR ? undefined : /visual-tour\./,
   globalSetup: './global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

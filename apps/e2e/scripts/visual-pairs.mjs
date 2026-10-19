@@ -49,8 +49,21 @@ function findImage(entries, route, used) {
   return hits.length ? hits[0].file : null;
 }
 
+function readTour(app) {
+  const f = path.join(dir, app, 'tour.jsonl');
+  const byKey = new Map();
+  if (!existsSync(f)) return byKey;
+  for (const l of readFileSync(f, 'utf8').split('\n').filter(Boolean)) {
+    const r = JSON.parse(l);
+    byKey.set(r.key, r);
+  }
+  return byKey;
+}
+
 const mini = readIndex('miniapp');
 const web = readIndex('web');
+const miniTour = readTour('miniapp');
+const webTour = readTour('web');
 const usedMini = new Set();
 const usedWeb = new Set();
 const pairs = [];
@@ -61,13 +74,21 @@ for (const lane of map.routes) {
       skipped.push({ miniapp: it.miniapp, reason: it.skip });
       continue;
     }
+    const mt = miniTour.get(it.miniapp);
+    const wt = webTour.get(it.miniapp);
     pairs.push({
       lane: lane.lane,
+      name: mt?.name ?? wt?.name ?? it.name ?? null,
       miniappRoute: it.miniapp,
       webRoute: it.web,
       private: !!it.private,
-      miniappImage: findImage(mini, it.miniapp, usedMini),
-      webImage: findImage(web, it.web, usedWeb),
+      miniappImage: mt?.file ?? findImage(mini, it.miniapp, usedMini),
+      webImage: wt?.file ?? findImage(web, it.web, usedWeb),
+      miniappSource: mt ? 'tour' : 'pathname',
+      webSource: wt ? 'tour' : 'pathname',
+      rawIcons: { miniapp: !!mt?.rawIcons, web: !!wt?.rawIcons },
+      miniappUrl: mt?.url ?? null,
+      webUrl: wt?.url ?? null,
     });
   }
 }
@@ -76,6 +97,17 @@ const unmatched = {
   web: web.filter((e) => !usedWeb.has(e.file)).map((e) => e.pathname),
 };
 writeFileSync(path.join(dir, 'pairs.json'), JSON.stringify({ pairs, skipped, unmatched }, null, 2));
+
+function sameTarget(url, route) {
+  try {
+    const a = new URL(url);
+    const [p] = route.split('?');
+    const re = new RegExp(`^${p.split('/').map((seg) => (/^:\w+$/.test(seg) ? '[^/]+' : seg.replace(/[.*+?^${}()|\\]/g, '\\$&'))).join('/')}$`);
+    return re.test(a.pathname);
+  } catch {
+    return true;
+  }
+}
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const cell = (app, file, label) =>
@@ -86,7 +118,7 @@ const both = pairs.filter((p) => p.miniappImage && p.webImage);
 const rows = pairs
   .map(
     (p) => `<section class="row${p.miniappImage && p.webImage ? '' : ' partial'}">
-<h2><span>Mini App <code>${esc(p.miniappRoute)}</code></span><span>Web <code>${esc(p.webRoute)}</code></span><small>${esc(p.lane)}${p.private ? ' · cần đăng nhập' : ''}</small></h2>
+<h2><strong>${esc(p.name ?? p.miniappRoute)}</strong><span>Mini App <code>${esc(p.miniappRoute)}</code></span><span>Web <code>${esc(p.webRoute)}</code></span><small>${esc(p.lane)}${p.private ? ' · cần đăng nhập' : ''}${p.webUrl && !sameTarget(p.webUrl, p.webRoute) ? ` · web dừng ở <code>${esc(new URL(p.webUrl).pathname)}</code>` : ''}</small></h2>
 <div class="cols"><figure><figcaption>Mini App</figcaption>${cell('miniapp', p.miniappImage, p.miniappRoute)}</figure><figure><figcaption>Web</figcaption>${cell('web', p.webImage, p.webRoute)}</figure></div>
 </section>`,
   )
@@ -97,7 +129,7 @@ const onlyWeb = pairs.filter((p) => !p.miniappImage && p.webImage);
 const none = pairs.filter((p) => !p.miniappImage && !p.webImage);
 const html = `<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>So sánh Mini App và web khổ điện thoại</title>
+<title>So sánh Mini App và web trên điện thoại</title>
 <style>
 body{margin:0;padding:16px;font:14px/1.4 system-ui,sans-serif;background:#f3f1ec;color:#222}
 h1{font-size:20px}.row{background:#fff;border-radius:8px;padding:12px;margin:0 0 16px;box-shadow:0 1px 3px #0002}
@@ -109,7 +141,7 @@ img{width:390px;display:block;border:1px solid #ccc;border-radius:6px}
 .none{width:390px;height:120px;display:flex;align-items:center;justify-content:center;border:1px dashed #bbb;color:#999;border-radius:6px}
 code{background:#eee;padding:1px 4px;border-radius:3px}
 </style></head><body>
-<h1>So sánh Mini App (trái) và web (phải), khổ 390x844</h1>
+<h1>So sánh giao diện Mini App (trái) và web (phải) trên điện thoại, khổ 390x844</h1>
 <p>${pairs.length} route, ${both.length} cặp đủ hai bên. Bấm ảnh để mở ảnh full-page.</p>
 ${rows}
 <section class="row"><h2>Route thiếu ảnh</h2>
