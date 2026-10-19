@@ -44,7 +44,9 @@ export function GameNoticeBar({ notice, raised = false }: { notice: GameNotice |
   if (!notice || typeof document === 'undefined') return null;
   const error = notice.tone === 'error';
   return createPortal(
-    <div className={`pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4${raised ? '' : ' md:bottom-6'}`}>
+    <div
+      className={`pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4${raised ? ' max-md:bottom-[calc(11.5rem+env(safe-area-inset-bottom))]' : ' md:bottom-6'}`}
+    >
       <div
         key={notice.id}
         role={error ? 'alert' : 'status'}

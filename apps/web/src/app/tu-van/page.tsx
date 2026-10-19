@@ -15,6 +15,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { PageHeader } from '@/components/ui/page-header';
+import { MiniBar, miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -44,7 +45,7 @@ const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
 
 function ProductRow({ p }: { p: AiProduct }) {
   return (
-    <Link href={`/san-pham/${p.slug}`} className={`${ui.card} flex min-h-11 items-center gap-3 p-2 hover:bg-stone-50`}>
+    <Link href={`/san-pham/${p.slug}`} className={`${miniOutline} flex min-h-11 items-center gap-3 p-2 hover:bg-stone-50`}>
       {p.thumbnail ? (
         // eslint-disable-next-line @next/next/no-img-element -- ảnh do server tư vấn trả về, miền không cố định
         <img src={p.thumbnail} alt={p.name} className="h-11 w-11 shrink-0 rounded-control object-cover" />
@@ -110,7 +111,7 @@ function Advisor() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col">
+    <div className="mx-auto flex max-w-2xl flex-col max-md:pb-[calc(10.5rem+env(safe-area-inset-bottom))]">
       <div role="log" aria-label="Cuộc trò chuyện" className="min-h-[50vh] py-3">
         {messages.length === 0 && (
           <div className="px-3 py-8 text-center">
@@ -121,7 +122,7 @@ function Advisor() {
             <p className="mt-1 text-sm text-stone-600">Bạn đang tìm giải pháp hay sản phẩm sinh học an lành nào cho gia đình?</p>
             <div className="mt-5 flex flex-col gap-2.5 text-left">
               {SUGGESTIONS.map((s) => (
-                <button key={s} type="button" onClick={() => send(s)} className={`${ui.card} min-h-11 px-4 py-3 text-left text-sm text-stone-900 hover:bg-stone-50`}>
+                <button key={s} type="button" onClick={() => send(s)} className={`${miniOutline} min-h-11 px-4 py-3 text-left text-sm text-stone-900 hover:bg-stone-50 max-md:font-semibold`}>
                   {s}
                 </button>
               ))}
@@ -140,7 +141,7 @@ function Advisor() {
             </div>
             {m.failed && i === messages.length - 1 && !chatM.isPending && (
               <div className="mt-1.5">
-                <button type="button" className={ui.btnSecondary} onClick={() => retry(i)}>
+                <button type="button" className={miniBtnSecondary} onClick={() => retry(i)}>
                   Thử lại
                 </button>
               </div>
@@ -165,9 +166,9 @@ function Advisor() {
 
       <p className="py-1 text-center text-xs text-stone-600">Gợi ý chỉ để tham khảo.</p>
 
-      <div className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
+      <div className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:items-center">
         <textarea
-          className={`${ui.field} min-w-0 flex-1 resize-none py-2`}
+          className={`${ui.field} min-w-0 flex-1 resize-none py-2 max-md:min-h-[9rem]`}
           placeholder="Nhập câu hỏi…"
           aria-label="Nhập câu hỏi"
           value={draft}
@@ -177,7 +178,7 @@ function Advisor() {
           maxLength={500}
         />
         {/* Không gộp isPending vào disabled: nút báo đang bận bằng aria-busy, bấm lại thì send() tự chặn. */}
-        <button type="button" className={ui.btnPrimary} disabled={!draft.trim()} aria-busy={chatM.isPending} onClick={() => send(draft)}>
+        <button type="button" className={`${ui.btnPrimary} max-md:px-8`} disabled={!draft.trim()} aria-busy={chatM.isPending} onClick={() => send(draft)}>
           Gửi
         </button>
       </div>
@@ -198,8 +199,10 @@ export default function AdvisorPage() {
   }, [aiOff, router]);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24">
-      <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
+    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
+      <MiniBar>
+        <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
+      </MiniBar>
       <div className="mt-4">
         {aiOff ? null : (
           <>

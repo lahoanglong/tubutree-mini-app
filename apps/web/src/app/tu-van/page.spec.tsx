@@ -410,3 +410,43 @@ describe('Trợ lý AI: thanh nhập', () => {
     expect(box.className).toContain('bottom-[calc(76px+env(safe-area-inset-bottom))]');
   });
 });
+
+describe('Trợ lý AI: giao diện điện thoại như Mini App', () => {
+  it('thanh nhập dính đáy màn hình ở điện thoại (fixed), ô nhập cao như Mini App; máy tính giữ sticky', async () => {
+    const c = await mount();
+    const bar = input(c).parentElement as HTMLElement;
+    expect(bar.className).toContain('max-md:fixed');
+    expect(bar.className).toContain('max-md:inset-x-0');
+    expect(input(c).className).toContain('max-md:min-h-[9rem]');
+    expect(bar.className).toContain('sticky');
+  });
+
+  it('thân trang chừa chỗ cho thanh nhập cố định để tin cuối không bị che', async () => {
+    const c = await mount();
+    expect((c.querySelector('[role="log"]')!.parentElement as HTMLElement).className).toContain('max-md:pb-');
+  });
+
+  it('3 gợi ý là thẻ viền mảnh không bóng, chữ đậm', async () => {
+    const c = await mount();
+    const s = byText(c, 'button', 'Gợi ý quà tặng sống xanh')!;
+    expect(s.className).toContain('max-md:shadow-none');
+    expect(s.className).toContain('max-md:font-semibold');
+  });
+
+  it('tiêu đề trên thanh trắng, trang bỏ đệm đỉnh', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')!.className).toContain('max-md:pt-0');
+    expect(c.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+  });
+
+  it('thông báo lỗi nâng lên trên thanh nhập cao ở điện thoại', async () => {
+    state.chat = () => {
+      throw new Error('Hết hạn mức');
+    };
+    const c = await mount();
+    await ask(c, 'Xin chào');
+    const box = document.body.querySelector('[role="alert"]')?.parentElement as HTMLElement;
+    expect(box.className).toContain('max-md:bottom-[calc(11.5rem+env(safe-area-inset-bottom))]');
+  });
+});
+
