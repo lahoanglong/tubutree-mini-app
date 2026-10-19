@@ -399,6 +399,25 @@ describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)'
     expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
   });
 
+  it.each([[401], [403], [408], [429]])('chưa rõ kết quả rồi lần sau gặp %i (request này không được xử lý): vẫn gửi key của lệnh chưa rõ', async (status) => {
+    mocks.withdraw.mockReset();
+    mocks.withdraw
+      .mockRejectedValueOnce(failure(undefined, 'ECONNABORTED'))
+      .mockRejectedValueOnce(failure(status, 'ERR_BAD_REQUEST'))
+      .mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
+    await openAndFill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(2));
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(3));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+    expect(mocks.withdraw.mock.calls[2]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
   it('máy chủ từ chối rõ ràng (400): lần bấm sau dùng key mới', async () => {
     mocks.withdraw.mockReset();
     mocks.withdraw.mockRejectedValue(failure(400, 'ERR_BAD_REQUEST'));

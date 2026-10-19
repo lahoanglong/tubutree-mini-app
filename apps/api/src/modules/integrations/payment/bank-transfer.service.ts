@@ -72,6 +72,8 @@ export class BankTransferService {
       amount: order.total,
       paymentStatus: order.paymentStatus,
       paymentDeadline,
+      // App bù lệch đồng hồ điện thoại khi tính quá hạn chuyển khoản, kể cả khi trang chủ chưa tải suất giờ vàng nào.
+      serverNow: new Date().toISOString(),
       bank: { bin, name: bankName, accountNo, accountName },
       memo,
       qrString,

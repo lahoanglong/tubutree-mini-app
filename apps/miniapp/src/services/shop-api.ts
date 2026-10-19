@@ -413,7 +413,7 @@ export interface FlashSaleActiveItem {
   soldCount: number;
   quota: number;
   endAt: string;
-  /** Giờ máy chủ lúc dựng danh sách (API từ D14-05); thiếu = API cũ, app dùng đồng hồ điện thoại. */
+  /** Giờ máy chủ lúc dựng danh sách; thiếu thì app dùng đồng hồ điện thoại. */
   serverNow?: string;
 }
 export const fetchActiveFlashSales = async () => {

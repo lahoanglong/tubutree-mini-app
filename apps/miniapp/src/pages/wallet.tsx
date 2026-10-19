@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page, Input, useSnackbar } from 'zmp-ui';
@@ -28,6 +29,9 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
+
+const KEEP_KEY_STATUSES = new Set([401, 403, 408, 429]);
+const axiosStatus = (e: unknown) => (isAxiosError(e) ? e.response?.status ?? 0 : 0);
 
 const CARD: CSSProperties = {
   background: 'var(--color-bg-surface)',
@@ -87,8 +91,11 @@ export default function WalletPage() {
         openSnackbar({ text: vi.wallet.withdrawUnknown, type: 'error' });
         return;
       }
-      withdrawKey.current = newIdempotencyKey();
-      withdrawUnresolved.current = false;
+      // 401/403/408/429: request NÀY chưa được xử lý, nhưng lệnh trước (nếu chưa rõ kết quả) có thể đã trừ ví; đổi key lúc này là mở đường rút lần hai.
+      if (!KEEP_KEY_STATUSES.has(axiosStatus(e))) {
+        withdrawKey.current = newIdempotencyKey();
+        withdrawUnresolved.current = false;
+      }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });

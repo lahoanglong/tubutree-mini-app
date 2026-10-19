@@ -377,6 +377,20 @@ describe('Thanh toán chuyển khoản: đơn bị huỷ hoặc quá hạn khi �
     expect(screen.getByAltText('VietQR')).toBeInTheDocument();
   });
 
+  it('lần dò sau bị 401 (phiên hết hạn, refresh chưa được): vẫn giữ QR và tiếp tục dò, không báo đơn đã đóng', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValueOnce(apiError(401, 'Unauthorized')).mockResolvedValue(QR);
+    renderPage();
+    const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    await tick(0);
+    await tick(4_000);
+    expect(screen.getByAltText('VietQR')).toBeInTheDocument();
+    expect(screen.queryByText('Unauthorized')).toBeNull();
+    expect(screen.queryByText('Đơn không còn chờ chuyển khoản')).toBeNull();
+    await tick(4_000);
+    expect(mocks.getBankQr).toHaveBeenCalledTimes(3);
+  });
+
   it('mở link của đơn đã huỷ: hiện lý do máy chủ và lối xem đơn, không có nút Thử lại vô ích', async () => {
     mocks.getBankQr.mockRejectedValue(apiError(400));
     renderPage();

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -164,6 +164,23 @@ describe('Trang Tích điểm đơn ngoài app', () => {
       expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN123456789');
       expect(mocks.ensurePhone).toHaveBeenCalledTimes(2);
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeNull());
+    });
+
+    it('bấm Tích điểm hai lần trong lúc đang xin SĐT: chỉ xin một lần và gửi mã một lần', async () => {
+      mocks.user = { phone: null };
+      let grant!: (v: string) => void;
+      mocks.ensurePhone.mockReturnValue(new Promise<string>((r) => { grant = r; }));
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+      });
+      renderPage();
+      await typeCode();
+      const button = screen.getByRole('button', { name: 'Tích điểm' });
+      fireEvent.click(button);
+      fireEvent.click(button);
+      await act(async () => { grant('0901234567'); });
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1));
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
     });
 
     it('máy chủ trả NOT_ELIGIBLE_USER dù app tưởng đã có SĐT chưa lưu: hiện nút chia sẻ, bấm xong gửi lại đúng mã', async () => {

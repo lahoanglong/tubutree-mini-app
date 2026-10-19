@@ -23,14 +23,13 @@ const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // của h1, hình dáng vẫn do Text quyết định. Hai trạng thái chỉ có khung chờ/lỗi dùng h1 ẩn (SR_ONLY) cho đủ tiêu đề.
 const H1_RESET_MT12 = { margin: '12px 0 0', font: 'inherit' } as const;
 
-/**
- * Máy chủ từ chối hẳn (đơn đã huỷ/trả, không có đơn...): dò lại hay bấm Thử lại không ra kết quả khác. 408 và 429 là
- * tạm thời nên không tính; lỗi mạng/5xx cũng không, khách vẫn đang chờ tiền về và QR phải còn đó.
- */
+// Chỉ các mã cho biết đơn không còn chờ tiền: dò lại hay bấm Thử lại không ra kết quả khác. 401/403 là phiên hết hạn khi refresh
+// chưa xong (đơn vẫn chờ, phiên khôi phục xong dò lại là ra), 408/429 tạm thời, mạng/5xx khách vẫn đang chờ tiền về: QR phải còn đó.
+const FINAL_REJECTION_STATUSES = new Set([400, 404, 409, 410, 422]);
 function isFinalRejection(error: unknown): boolean {
   if (!isAxiosError(error)) return false;
   const status = error.response?.status;
-  return status !== undefined && status >= 400 && status < 500 && status !== 408 && status !== 429;
+  return status !== undefined && FINAL_REJECTION_STATUSES.has(status);
 }
 
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
