@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import BackLink from '@/components/back-link';
 
@@ -15,7 +16,7 @@ export function StaffShell({ title, children }: { title: string; children: React
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>{title}</h1>
+      <h1 className={`mt-1 ${skin.pageTitle}`}>{title}</h1>
       <div className="mt-4">{children}</div>
     </main>
   );
@@ -113,7 +114,7 @@ export function PeriodNav({
 }) {
   const btn = 'inline-flex h-11 w-11 items-center justify-center rounded-control text-stone-800 hover:bg-stone-50';
   return (
-    <div className={`flex items-center justify-between px-1 ${ui.card}`}>
+    <div className={`flex items-center justify-between px-1 ${skin.card}`}>
       <button type="button" aria-label={prevLabel} onClick={onPrev} className={btn}>
         <ChevronLeft className="h-5 w-5" aria-hidden="true" />
       </button>

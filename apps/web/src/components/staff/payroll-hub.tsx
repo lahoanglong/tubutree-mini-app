@@ -22,6 +22,8 @@ import {
   vnDateTimeISO,
 } from '@/lib/week';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
+import { EmptyState } from '@/components/mini';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
@@ -129,11 +131,11 @@ export function PayrollHub() {
       <div className="grid gap-3 lg:grid-cols-[22rem_1fr] lg:items-start">
         <div className="flex flex-col gap-3">
           {m && (
-            <section aria-label="Tổng kết tháng" className="rounded-card bg-forest-800 p-4 text-stone-0">
+            <section aria-label="Tổng kết tháng" className="rounded-card bg-forest-800 p-4 text-stone-0 max-md:[background:linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))]">
               <div className="text-sm">
                 Thực nhận tháng {m.month}/{m.year}
               </div>
-              <div className="mt-0.5 font-display text-3xl font-semibold tabular-nums">{formatVnd(m.net)}</div>
+              <div className="mt-0.5 font-display text-3xl font-semibold tabular-nums max-md:font-sans max-md:text-[length:var(--type-price-xl-size)] max-md:leading-[var(--type-price-xl-lh)] max-md:font-bold">{formatVnd(m.net)}</div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                 <span>Giờ công: {fmtH(m.totalMinutes)}</span>
                 <span>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</span>
@@ -153,7 +155,7 @@ export function PayrollHub() {
             </section>
           )}
 
-          <button type="button" onClick={openBank} disabled={!profileLoaded} className={ui.btnSecondary}>
+          <button type="button" onClick={openBank} disabled={!profileLoaded} className={skin.btnSecondary}>
             <Landmark className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Thông tin nhận lương
           </button>
@@ -161,7 +163,7 @@ export function PayrollHub() {
 
         <div className="flex flex-col gap-3">
           {weeks.map((w, i) => (
-            <section key={w.wk} className={`p-3 ${ui.card}`}>
+            <section key={w.wk} className={`p-3 ${skin.card}`}>
               <div className="mb-1 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-bold text-stone-900">
                   Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(addDaysKey(w.wk, 6))})
@@ -208,7 +210,7 @@ export function PayrollHub() {
             </section>
           ))}
           {payQ.data && payQ.data.days.length === 0 && (
-            <p className={`p-6 text-center text-sm text-stone-600 ${ui.card}`}>Chưa có dữ liệu công tháng này.</p>
+            <EmptyState art="box" heading="Chưa có dữ liệu công tháng này." variant="inline" />
           )}
         </div>
       </div>

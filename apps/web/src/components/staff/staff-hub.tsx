@@ -19,6 +19,7 @@ import {
   weekDayKeys,
 } from '@/lib/week';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -174,7 +175,7 @@ export function StaffHub() {
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Đăng ký nhanh
         </button>
-        <button type="button" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${ui.btnSecondary} flex-1`}>
+        <button type="button" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${skin.btnSecondary} flex-1`}>
           <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Copy tuần trước
         </button>
@@ -189,9 +190,9 @@ export function StaffHub() {
             const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
             const shifts = byDay[dk] ?? [];
             return (
-              <section key={dk} className={`p-3 ${ui.card}`}>
+              <section key={dk} className={`p-3 ${skin.card}`}>
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <h2 className={ui.sectionTitle}>
+                  <h2 className={skin.cardTitle}>
                     {dowLabel(dk)} · {shortDayLabel(dk)}
                   </h2>
                   {dk >= todayKey && (
