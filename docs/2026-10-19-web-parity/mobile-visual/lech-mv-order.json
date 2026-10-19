@@ -1,0 +1,503 @@
+{
+ "group": "mv-order",
+ "lanes": [
+  "order",
+  "account"
+ ],
+ "result": {
+  "summary": "Nhóm mv-order có 12 cặp: lane order 7, lane account 5. Không cặp nào có webRoute /admin. Không màn nào giống hẳn. Lệch lớn ở 6 màn: Giỏ hàng, Thanh toán, Chuyển khoản, Chi tiết đơn, Giới thiệu và Tài khoản. Lệch nhỏ ở 6 màn: Đơn hàng, Đơn định kỳ, Sổ địa chỉ, Sửa hồ sơ, Cài đặt, Thông báo.\nCó ba khác biệt lặp lại ở nhiều màn. (1) Nút phụ: Mini App dùng nút nền xanh nhạt không viền (--color-action-secondary-bg = forest-50); web dùng ui.btnSecondary nền trắng có viền stone-450. (2) Nền ô ảnh/icon: Mini App dùng --color-bg-subtle = sage-50 (xanh nhạt); web dùng bg-stone-100 (be). (3) Tiêu đề khối: Mini App chữ không chân in đậm; web dùng font-display (serif). Ngoài ra web còn thêm nhiều thứ Mini App không có: tóm tắt nằm trong khung, số tiền gắn trên nút, khối Đơn hàng của tôi ở trang Tài khoản, ô Số điện thoại ở Sửa hồ sơ.\nẢnh full-page của Mini App chỉ cao bằng khung nhìn (844px), vì khung cuộn là phần tử bên trong chứ không phải trang. Vì vậy các khối nằm dưới mép màn hình của Mini App chỉ đối chiếu được qua mã nguồn.\nCó một lỗi màu thật trên web: nút \"Hủy\" ở tab Định kỳ hiện chữ đen chứ không đỏ. Nguyên nhân là lớp text-stone-800 trong btnSecondary và text-danger-fg cùng nằm trên một nút, nên màu nào thắng phụ thuộc thứ tự CSS (web/src/components/orders/subscriptions-panel.tsx:231).",
+  "screens": [
+   {
+    "name": "Giỏ hàng",
+    "miniappRoute": "/cart",
+    "webRoute": "/gio-hang",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website (logo Tubu Tree, nút giỏ có số 2, nút tài khoản 'N An') và ô 'Tìm sản phẩm...'; Mini App không có",
+     "Web có dòng '← Tiếp tục mua sắm' và tiêu đề 'Giỏ hàng' to nằm trong thân trang; Mini App có nút quay lại tròn nổi và tiêu đề 'Giỏ hàng' trên đầu trang",
+     "Web có chân trang website (Hỗ trợ khách hàng, Facebook/TikTok, Điều khoản...); trong ảnh full-page, thanh dính đáy đè lên chân trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Dòng chọn tất cả",
+      "miniapp": "Chữ 'Chọn tất cả' không kèm số, ô chọn tự vẽ bo góc màu xanh",
+      "web": "Chữ 'Chọn tất cả (1)', ô chọn checkbox gốc của trình duyệt 24px",
+      "miniappSource": "apps/miniapp/src/pages/cart.tsx:233",
+      "webSource": "apps/web/src/app/gio-hang/page.tsx:214-222"
+     },
+     {
+      "where": "Thẻ sản phẩm trong giỏ",
+      "miniapp": "Gồm ô chọn, ảnh, tên một dòng, '30ml', giá '289.000đ'. Bộ tăng giảm là hai nút vuông có viền tách rời, '−' và '+', số 2 ở giữa. Nút xoá là icon thùng rác bên phải. Không có thành tiền theo dòng",
+      "web": "Tên xuống hai dòng; thành tiền '578.000đ' đậm ở góc phải. Bộ tăng giảm gộp trong một khung viền. Nút xoá là chữ đỏ 'Xóa' nằm dưới bộ tăng giảm, không có icon thùng rác",
+      "miniappSource": "apps/miniapp/src/pages/cart.tsx:387-518 (QuantitySelector + IconButton Trash2 dòng 505-514)",
+      "webSource": "apps/web/src/app/gio-hang/page.tsx:257-361"
+     },
+     {
+      "where": "Mã giảm giá",
+      "miniapp": "Một thẻ riêng ngay dưới sản phẩm. Icon vé đặt trên nền đất nung nhạt, chữ 'Mã giảm giá' kèm phụ đề 'Chọn hoặc nhập mã giảm giá', bên phải 'Chọn mã >'",
+      "web": "Một dòng bên trong khung tóm tắt: icon vé, 'Mã giảm giá', bên phải 'Bạn có 1 mã ⌄' (mở dạng accordion). Không có phụ đề",
+      "miniappSource": "apps/miniapp/src/pages/cart.tsx:522-628",
+      "webSource": "apps/web/src/components/coupon-box.tsx:160-175 (gọi từ gio-hang/page.tsx:389)"
+     },
+     {
+      "where": "Khung tóm tắt trong thân trang",
+      "miniapp": "Không có. Tạm tính chỉ hiện trên thanh dính đáy",
+      "web": "Có thẻ 'Tạm tính 578.000đ / Mã giảm giá / Tổng 578.000đ' nằm dưới danh sách",
+      "miniappSource": "apps/miniapp/src/pages/cart.tsx:631-747 (chỉ có StickySummary)",
+      "webSource": "apps/web/src/app/gio-hang/page.tsx:366-410"
+     },
+     {
+      "where": "Thanh dính đáy",
+      "miniapp": "Dòng 'Bạn được miễn phí ship 🌿' kèm thanh tiến độ xanh, dòng 'Tạm tính (đã giảm, chưa gồm ship)  578.000đ', rồi nút toàn chiều ngang 'Thanh toán (2)'",
+      "web": "Không có dòng freeship hay thanh tiến độ. Bên trái 'Tổng cộng 578.000đ', bên phải nút 'Thanh toán (2) · 578.000đ'. Freeship chỉ hiện thành băng 'Mua thêm … để được miễn phí vận chuyển' khi chưa đủ mức",
+      "miniappSource": "apps/miniapp/src/pages/cart.tsx:654-741",
+      "webSource": "apps/web/src/app/gio-hang/page.tsx:224-232, 455-482"
+     }
+    ],
+    "note": "Dữ liệu ở hai bên giống nhau (1 dòng Serum ×2). Ảnh sản phẩm trống ở cả hai bên, mỗi bên vẽ một kiểu lá giữ chỗ khác nhau."
+   },
+   {
+    "name": "Thanh toán",
+    "miniappRoute": "/checkout",
+    "webRoute": "/thanh-toan",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website và ô tìm kiếm; Mini App không có",
+     "Web có dòng '← Về giỏ hàng' và tiêu đề 'Thanh toán' to trong thân trang; Mini App có nút tròn nổi và tiêu đề trên đầu trang",
+     "Web có chân trang website; trong ảnh full-page, thanh dính đáy đè lên nội dung"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Kiểu khối",
+      "miniapp": "Mỗi phần là một dải trắng phẳng tràn ngang, cách nhau bằng khe nền xám, không bo góc. Tiêu đề phần là chữ không chân nhỏ, đậm vừa ('Địa chỉ giao hàng', 'Phương thức thanh toán')",
+      "web": "Mỗi phần là thẻ bo góc có viền và bóng, cách lề 16px. Tiêu đề phần là serif font-display cỡ lg",
+      "miniappSource": "apps/miniapp/src/pages/checkout.tsx:526, 584, 670, 785 (Box p=4 mt=2 nền surface)",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:481-547 (ui.card + ui.sectionTitle)"
+     },
+     {
+      "where": "Thứ tự khối",
+      "miniapp": "Địa chỉ → Sản phẩm (2) → Mã giảm giá → Mã giới thiệu → Phương thức thanh toán → Điểm → Ghi chú → Hoá đơn VAT → Tóm tắt",
+      "web": "Địa chỉ → Phương thức thanh toán → Ghi chú cho đơn hàng → Mã giới thiệu → Yêu cầu xuất hoá đơn VAT → 'Đơn hàng' (danh sách món, tạm tính, phí ship, mã giảm giá, Điểm Xanh, tổng cộng)",
+      "miniappSource": "apps/miniapp/src/pages/checkout.tsx:513-1034",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:481-735"
+     },
+     {
+      "where": "Địa chỉ giao hàng",
+      "miniapp": "Thẻ địa chỉ đang chọn có viền xanh, không có nút radio, có badge 'Mặc định'. Bên dưới là '⊕ Thêm địa chỉ mới' kèm icon cộng trong vòng tròn",
+      "web": "Thẻ có nút radio bên trái, liên kết 'Sửa' gạch chân bên phải, không có badge 'Mặc định'. Bên dưới là '+ Thêm địa chỉ mới' và thêm liên kết 'Quản lý sổ địa chỉ'",
+      "miniappSource": "apps/miniapp/src/components/checkout/address-section.tsx:144, 191",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:482-505, 910-920"
+     },
+     {
+      "where": "Danh sách sản phẩm",
+      "miniapp": "Khối riêng 'Sản phẩm (2)': ảnh nhỏ, 'Serum dưỡng ẩm Visante', '30ml', '289.000đ × 2', thành tiền bên phải",
+      "web": "Không có khối riêng, không có ảnh. Món hàng chỉ là một dòng chữ 'Serum dưỡng ẩm Visante ×2  578.000đ' trong thẻ 'Đơn hàng'",
+      "miniappSource": "apps/miniapp/src/pages/checkout.tsx:526-580",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:631-660"
+     },
+     {
+      "where": "Mã giảm giá",
+      "miniapp": "Thẻ riêng: icon vé trên nền đất nung, 'Mã giảm giá / Chọn hoặc nhập mã giảm giá', bên phải 'Xem mã >'",
+      "web": "Một dòng accordion trong thẻ 'Đơn hàng': 'Mã giảm giá   Bạn có 1 mã ⌄'",
+      "miniappSource": "apps/miniapp/src/pages/checkout.tsx:584-648",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:691"
+     },
+     {
+      "where": "Phương thức thanh toán",
+      "miniapp": "Các dòng radio không viền, cách nhau rộng. Ví Tubu bị làm mờ",
+      "web": "Mỗi lựa chọn là một thẻ có viền; lựa chọn đang chọn có nền xanh nhạt. Ví Tubu mờ, bên dưới có dòng 'Số dư chưa đủ — cần thêm 228.000đ'",
+      "miniappSource": "apps/miniapp/src/pages/checkout.tsx:670-725",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:507-545"
+     },
+     {
+      "where": "Thanh dính đáy",
+      "miniapp": "Một nút toàn chiều ngang 'Đặt hàng · 578.000đ'",
+      "web": "Bên trái 'Tổng cộng 578.000đ', bên phải nút 'Đặt hàng · 578.000đ'",
+      "miniappSource": "apps/miniapp/src/pages/checkout.tsx:1070-1080",
+      "webSource": "apps/web/src/app/thanh-toan/page.tsx:788-806"
+     }
+    ],
+    "note": "Ảnh full-page của Mini App chỉ cao bằng khung nhìn, nên các phần dưới mép màn hình (điểm, ghi chú, VAT, tóm tắt) được đối chiếu qua mã nguồn. Dữ liệu giống nhau."
+   },
+   {
+    "name": "Chuyển khoản",
+    "miniappRoute": "/bank-payment/:code",
+    "webRoute": "/thanh-toan/chuyen-khoan/:code",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm và chân trang; Mini App có nút quay lại tròn nổi",
+     "Tiêu đề trang: web có h1 'Thanh toán chuyển khoản' kèm phụ đề 'Mở app ngân hàng / ví bất kỳ để quét mã VietQR bên dưới.'; Mini App dùng tiêu đề đầu trang 'Quét QR để chuyển khoản' kèm phụ đề 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới'"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Đầu thẻ QR",
+      "miniapp": "Không có tiêu đề lặp lại trong thẻ",
+      "web": "Trong thẻ có thêm tiêu đề serif 'Quét QR để chuyển khoản' và dòng 'Mở app ngân hàng / ví bất kỳ để quét mã bên dưới', nên tiêu đề bị lặp với h1",
+      "miniappSource": "apps/miniapp/src/pages/bank-payment.tsx:181",
+      "webSource": "apps/web/src/app/thanh-toan/bank-transfer-panel.tsx:111-114"
+     },
+     {
+      "where": "Ảnh QR và số tiền",
+      "miniapp": "Khung QR vuông, viền mảnh, không bo góc. Số tiền '578.000đ' màu xanh, cỡ vừa. Không có nút lưu",
+      "web": "Khung QR bo góc lớn. Số tiền '578.000đ' màu đen, đậm, cỡ lớn. Có thêm nút viền 'Lưu mã QR' kèm icon tải xuống",
+      "miniappSource": "apps/miniapp/src/pages/bank-payment.tsx:185-195",
+      "webSource": "apps/web/src/app/thanh-toan/bank-transfer-panel.tsx:118-131"
+     },
+     {
+      "where": "Các dòng thông tin ngân hàng",
+      "miniapp": "Các dòng có đường kẻ phân cách phía trên. Nút sao chép chỉ là icon (Copy), không viền",
+      "web": "Không có đường kẻ phân cách. Nút sao chép là nút viền bo góc có chữ 'Sao chép' kèm icon. Mã 'TUBU…' bị đẩy sát nhãn 'Nội dung CK'",
+      "miniappSource": "apps/miniapp/src/pages/bank-payment.tsx:197-205, 285-295",
+      "webSource": "apps/web/src/app/thanh-toan/bank-transfer-panel.tsx:145-163"
+     },
+     {
+      "where": "Lời nhắc giữ nội dung",
+      "miniapp": "Có icon tam giác cảnh báo, chữ đỏ căn trái",
+      "web": "Không có icon, chữ đỏ căn giữa",
+      "miniappSource": "apps/miniapp/src/pages/bank-payment.tsx:208-211",
+      "webSource": "apps/web/src/app/thanh-toan/bank-transfer-panel.tsx:167-169"
+     },
+     {
+      "where": "Trạng thái chờ và các nút",
+      "miniapp": "Dòng 'Đang chờ thanh toán…' kèm icon đồng hồ nằm ngoài thẻ. Nút chính toàn chiều ngang ngoài thẻ, chữ 'Tôi đã chuyển khoản — Kiểm tra'. Nút phụ toàn chiều ngang nền xanh nhạt 'Để sau / Xem đơn hàng'",
+      "web": "Dòng chờ và nút chính nằm trong thẻ, chữ nút 'Tôi đã chuyển khoản, kiểm tra lại'. Nút phụ 'Để sau / Xem đơn hàng' là nút viền trắng, rộng vừa chữ, căn giữa, nằm ngoài thẻ",
+      "miniappSource": "apps/miniapp/src/pages/bank-payment.tsx:237-248",
+      "webSource": "apps/web/src/app/thanh-toan/bank-transfer-panel.tsx:192-201; apps/web/src/app/thanh-toan/chuyen-khoan/[code]/page.tsx:70"
+     }
+    ],
+    "note": "Ảnh QR ở cả hai bên đều không tải được trong môi trường mock, nên không tính là khác biệt."
+   },
+   {
+    "name": "Đơn hàng",
+    "miniappRoute": "/orders",
+    "webRoute": "/tai-khoan/don-hang",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website và ô tìm kiếm; web có nút '<' kèm tiêu đề 'Đơn hàng' to trong thân trang, còn Mini App là trang tab, tiêu đề nằm trên đầu trang, không có nút quay lại",
+     "Thanh đáy: badge trên tab Đơn hàng màu cam ở Mini App, màu xanh đậm ở web. Web không có bong bóng gợi ý 'Trồng cây mỗi ngày, nhận quà thật' trên nút Vườn Xanh",
+     "Web có chân trang website và thanh đáy đè lên chân trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Badge trạng thái của đơn đã giao",
+      "miniapp": "'Giao thành công'",
+      "web": "'Đã giao'",
+      "miniappSource": "apps/miniapp/src/i18n/vi.ts:393",
+      "webSource": "apps/web/src/lib/order-view.ts:9"
+     },
+     {
+      "where": "Nút 'Mua lại' trên thẻ đơn",
+      "miniapp": "Nút phụ nền xanh nhạt (forest-50), không viền",
+      "web": "Nút nền trắng có viền stone-450",
+      "miniappSource": "apps/miniapp/src/components/orders/order-card.tsx:116",
+      "webSource": "apps/web/src/components/orders/order-card.tsx:85"
+     },
+     {
+      "where": "Ô ảnh sản phẩm và tên",
+      "miniapp": "Ô ảnh nền sage-50 (xanh nhạt). Tên hiện đủ 'Serum dưỡng ẩm Visante +1'",
+      "web": "Ô ảnh nền stone-100 (be). Tên bị cắt 'Serum dưỡng ẩm Visante ...', mất phần '+1' vì padding và khoảng cách rộng hơn",
+      "miniappSource": "apps/miniapp/src/components/orders/order-card.tsx:72, 83",
+      "webSource": "apps/web/src/components/orders/order-card.tsx:54, 64"
+     }
+    ],
+    "note": "Tab và số liệu giống nhau. Thẻ đơn trên web cao hơn (padding và khoảng cách lớn hơn) và mã đơn to hơn."
+   },
+   {
+    "name": "Đơn định kỳ",
+    "miniappRoute": "/subscriptions",
+    "webRoute": "/tai-khoan/don-hang?tab=subscriptions",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Đơn hàng' trong thân trang và chân trang",
+     "Thanh đáy: badge màu cam (Mini App) so với màu xanh (web); web không có bong bóng gợi ý Vườn Xanh"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Ba nút hành động của gói",
+      "miniapp": "'Sửa' và 'Tạm dừng' là nút nền xanh nhạt không viền. 'Hủy' là nút chữ màu đỏ",
+      "web": "'Sửa' và 'Tạm dừng' là nút trắng có viền. 'Hủy' hiện chữ màu tối, không đỏ: ui.btnSecondary có sẵn text-stone-800 và cùng nằm với text-danger-fg trên một nút, màu nào thắng phụ thuộc thứ tự CSS",
+      "miniappSource": "apps/miniapp/src/components/subscriptions-panel.tsx:235-241",
+      "webSource": "apps/web/src/components/orders/subscriptions-panel.tsx:225-231"
+     },
+     {
+      "where": "Ô ảnh của gói",
+      "miniapp": "Nền sage-50 (xanh nhạt)",
+      "web": "Nền stone-100 (be)",
+      "miniappSource": "apps/miniapp/src/components/subscriptions-panel.tsx:185",
+      "webSource": "apps/web/src/components/orders/subscriptions-panel.tsx:196"
+     }
+    ],
+    "note": "Chữ giống nhau: mô tả, 'Đang giảm 12% cho đơn định kỳ', 'Đang chạy', 'Tiết kiệm 12%', 'Lần kế: 15/11/2026'. Trên web, đoạn mô tả sát thanh tab hơn."
+   },
+   {
+    "name": "Chi tiết đơn",
+    "miniappRoute": "/order/:code",
+    "webRoute": "/tai-khoan/don-hang/:code",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, dòng '← Đơn hàng của tôi' và chân trang; Mini App có nút tròn nổi",
+     "Tiêu đề: Mini App ghi 'Chi tiết đơn hàng' kèm phụ đề mã 'TUBU20261015001'; web ghi h1 'Đơn hàng #TUBU20261015001'"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Đầu đơn và trạng thái",
+      "miniapp": "Băng nền xanh nhạt tràn ngang: 'Đặt lúc 15:00 15/10/2026', bên dưới 'Giao thành công' đậm màu xanh",
+      "web": "Không có băng. Dưới h1 là một dòng gồm badge 'Đã giao' và chữ 'Đặt lúc 15:00 15/10/2026'",
+      "miniappSource": "apps/miniapp/src/pages/order-detail.tsx:277-297",
+      "webSource": "apps/web/src/app/tai-khoan/don-hang/[code]/page.tsx:144-160"
+     },
+     {
+      "where": "Hành trình đơn hàng",
+      "miniapp": "Dải phẳng, tiêu đề chữ không chân. 4 bước: Đã xác nhận, Đang đóng gói, Đang giao, Giao thành công",
+      "web": "Thẻ có viền, tiêu đề serif. 5 bước: Đã đặt hàng, Đã xác nhận, Đang đóng gói, Đang giao, Đã giao",
+      "miniappSource": "apps/miniapp/src/pages/order-detail.tsx:325-331 (timelineStepsFor dòng 259)",
+      "webSource": "apps/web/src/app/tai-khoan/don-hang/[code]/order-timeline.tsx:5-17"
+     },
+     {
+      "where": "Nút 'Mua lại đơn này' và lời báo hết hạn đổi trả",
+      "miniapp": "Nút toàn chiều ngang dính đáy màn hình. Trong khung nhìn không có hộp 'Đã quá hạn đổi/trả'",
+      "web": "Thẻ riêng ngay dưới hành trình: nút 'Mua lại đơn này' rộng vừa chữ, kèm hộp xám 'Đã quá hạn đổi/trả (7 ngày kể từ khi nhận hàng)…'",
+      "miniappSource": "apps/miniapp/src/pages/order-detail.tsx:749 (StickyActionBar), 679",
+      "webSource": "apps/web/src/app/tai-khoan/don-hang/[code]/order-actions.tsx:201, 222"
+     },
+     {
+      "where": "Danh sách sản phẩm",
+      "miniapp": "Dòng chữ gọn, không có ảnh: 'Serum dưỡng ẩm Visante · 30ml ×1' và giá '289.000đ' bên phải. Dòng dưới là '☆ Viết đánh giá' màu xanh, không gạch chân",
+      "web": "Mỗi món có ảnh 56px, tên, '30ml', '289.000đ × 1' trên các dòng riêng. '☆ Viết đánh giá' gạch chân, có đường kẻ phân cách giữa các món",
+      "miniappSource": "apps/miniapp/src/pages/order-detail.tsx:335-380",
+      "webSource": "apps/web/src/app/tai-khoan/don-hang/[code]/page.tsx:215-252"
+     },
+     {
+      "where": "Khối tiền",
+      "miniapp": "Dải phẳng không tiêu đề: Tạm tính, Phí vận chuyển, Tổng cộng (lớn), 'Thanh toán  Khi nhận hàng (COD)', và dòng '🍃 Đã cộng +14 Điểm Xanh vào tài khoản'",
+      "web": "Thẻ có tiêu đề serif 'Thanh toán': Tạm tính, Phí vận chuyển, Tổng cộng, 'Phương thức  Thanh toán khi nhận hàng (COD)', thêm dòng 'Tình trạng  Đã thanh toán', rồi dòng điểm",
+      "miniappSource": "apps/miniapp/src/pages/order-detail.tsx:385-405",
+      "webSource": "apps/web/src/app/tai-khoan/don-hang/[code]/page.tsx:263-280, 399"
+     }
+    ],
+    "note": "Ảnh full-page của Mini App chỉ cao bằng khung nhìn, nên không thấy được phần dưới mép màn hình (thẻ 'Giao hàng' và dòng hỗ trợ hủy/đổi ở web)."
+   },
+   {
+    "name": "Sổ địa chỉ",
+    "miniappRoute": "/addresses",
+    "webRoute": "/tai-khoan/dia-chi",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, dòng '← Tài khoản' kèm tiêu đề 'Sổ địa chỉ' trong thân trang, và chân trang; Mini App có nút tròn nổi và tiêu đề trên đầu trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ địa chỉ mặc định",
+      "miniapp": "Viền xanh đậm 1.5px (thẻ mặc định được làm nổi), không có bóng",
+      "web": "Viền xám stone-200 và bóng, giống thẻ thường. Tên cỡ chữ lớn hơn (base so với sm)",
+      "miniappSource": "apps/miniapp/src/pages/addresses.tsx:84-88",
+      "webSource": "apps/web/src/app/tai-khoan/dia-chi/page.tsx:134, 151"
+     },
+     {
+      "where": "Hai nút Sửa / Xóa",
+      "miniapp": "'Sửa' chữ xanh đậm và 'Xóa' chữ đỏ, không gạch chân",
+      "web": "'Sửa' chữ đen gạch chân và 'Xóa' chữ đỏ gạch chân (ui.btnText)",
+      "miniappSource": "apps/miniapp/src/pages/addresses.tsx:109-111",
+      "webSource": "apps/web/src/app/tai-khoan/dia-chi/page.tsx:199-227"
+     },
+     {
+      "where": "Nút thêm địa chỉ",
+      "miniapp": "Nút phụ nền xanh nhạt, icon '+' riêng, chữ xanh 'Thêm địa chỉ mới'",
+      "web": "Nút chính nền xanh đậm, chữ trắng '+ Thêm địa chỉ mới'",
+      "miniappSource": "apps/miniapp/src/pages/addresses.tsx:122-130",
+      "webSource": "apps/web/src/app/tai-khoan/dia-chi/page.tsx:262-264"
+     }
+    ],
+    "note": "Dữ liệu giống nhau (1 địa chỉ mặc định)."
+   },
+   {
+    "name": "Giới thiệu",
+    "miniappRoute": "/about",
+    "webRoute": "/gioi-thieu",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, h1 'Về Tubu Tree' trong thân trang và chân trang; Mini App có nút tròn nổi và tiêu đề 'Về Tubu Tree' trên đầu trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ hero 'Sống Xanh An Lành'",
+      "miniapp": "Nền chuyển màu xanh (linear-gradient). Tiêu đề serif cỡ vừa, icon cây nhỏ",
+      "web": "Nền forest đậm một màu. Tiêu đề serif cỡ xl, lớn hơn; icon cây lớn hơn",
+      "miniappSource": "apps/miniapp/src/pages/about.tsx:126-134",
+      "webSource": "apps/web/src/app/gioi-thieu/about-view.tsx:42-50"
+     },
+     {
+      "where": "Tiêu đề các khối (Câu hỏi thường gặp, Hỗ trợ khách hàng, Điều khoản & Chính sách)",
+      "miniapp": "Chữ không chân, in đậm",
+      "web": "Serif font-display",
+      "miniappSource": "apps/miniapp/src/pages/about.tsx:310",
+      "webSource": "apps/web/src/app/gioi-thieu/about-view.tsx:83"
+     },
+     {
+      "where": "Chip lọc FAQ",
+      "miniapp": "Chip bo tròn hẳn. Chip chưa chọn có nền be, không viền; chip đang chọn nền xanh đậm. Nằm trên một hàng",
+      "web": "Nút bo góc vừa (rounded-control). Nút chưa chọn nền trắng, viền stone-450, cao 44px. Xuống 2 hàng",
+      "miniappSource": "apps/miniapp/src/pages/about.tsx:147-150 (Chip)",
+      "webSource": "apps/web/src/app/gioi-thieu/about-view.tsx:106-116"
+     },
+     {
+      "where": "Hỗ trợ khách hàng",
+      "miniapp": "Email 'tubutree@gmail.com' chữ đen đậm. Hotline có nhãn trên, số lệch xuống dòng dưới",
+      "web": "Email là liên kết màu xanh, đậm vừa (ui.backLink). Hotline và số nằm cùng hàng",
+      "miniappSource": "apps/miniapp/src/pages/about.tsx:94",
+      "webSource": "apps/web/src/app/gioi-thieu/about-view.tsx:166, 191"
+     },
+     {
+      "where": "Dòng Điều khoản & Chính sách",
+      "miniapp": "Tên chính sách in đậm ('Điều khoản sử dụng', 'Chính sách bảo mật')",
+      "web": "Tên chính sách chữ thường, không đậm",
+      "miniappSource": "apps/miniapp/src/pages/about.tsx (Section Điều khoản)",
+      "webSource": "apps/web/src/app/gioi-thieu/about-view.tsx:58-70"
+     },
+     {
+      "where": "Xóa tài khoản / Đăng xuất (cuối trang)",
+      "miniapp": "Theo mã nguồn: 'Xóa tài khoản' là ListRow destructive (chữ đỏ) và 'Đăng xuất' là Button secondary (nền xanh nhạt). Không thấy trong ảnh vì nằm dưới mép màn hình",
+      "web": "Hai nút trắng có viền, chữ đen: 'Xóa tài khoản' và 'Đăng xuất'",
+      "miniappSource": "apps/miniapp/src/pages/about.tsx:275, 302",
+      "webSource": "apps/web/src/app/gioi-thieu/about-view.tsx:255-259"
+     }
+    ],
+    "note": "Nội dung FAQ khác nhau. Mini App có các nhóm Vận chuyển/Đổi trả với câu 'Bao lâu thì nhận hàng?'. Web có Chung/Điểm & Vườn/Mua sắm/Đổi trả với câu 'Tubu Tree bán những gì?'. Nguyên nhân: Mini App lấy faqs từ mock API, web rơi về bản fallbackFaq. Đây là khác biệt dữ liệu, không tính."
+   },
+   {
+    "name": "Tài khoản",
+    "miniappRoute": "/profile",
+    "webRoute": "/tai-khoan",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, dòng '← Trang chủ' kèm h1 'Tài khoản' trong thân trang; Mini App không có tiêu đề, phần hero tràn lên mép trên",
+     "Thanh đáy: badge màu cam (Mini App) so với màu xanh (web); web không có bong bóng gợi ý Vườn Xanh",
+     "Web có chân trang website; trong ảnh full-page, thanh đáy đè giữa trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Hero hồ sơ",
+      "miniapp": "Dải xanh tràn ngang không bo góc. Ô 'Mã giới thiệu: AN123 / Sao chép' nằm ở mép dưới dải",
+      "web": "Thẻ forest-800 bo góc lớn, cách lề 16px, chứa toàn bộ thông tin kể cả các số liệu",
+      "miniappSource": "apps/miniapp/src/pages/profile.tsx:240-285",
+      "webSource": "apps/web/src/app/tai-khoan/page.tsx:142-185"
+     },
+     {
+      "where": "Số liệu Điểm Xanh / Ví Tubu / Mã giảm giá",
+      "miniapp": "Ba thẻ trắng nổi đè lên mép dải xanh (marginTop −20), số serif căn giữa '1.800 điểm', '350.000đ', '1 mã'. Thẻ 'Mã giảm giá' trải hết chiều ngang",
+      "web": "Nằm trong thẻ xanh, chữ trắng căn trái: '1.800', 'Điểm Xanh', thêm 'trong đó 119 điểm không hết hạn' và 'Xem lịch sử >' cho điểm và ví. '1 mã / Mã giảm giá' nằm ở hàng dưới",
+      "miniappSource": "apps/miniapp/src/pages/profile.tsx:288-303, 404",
+      "webSource": "apps/web/src/app/tai-khoan/page.tsx:187-210"
+     },
+     {
+      "where": "Khối 'Đơn hàng của tôi (2)' dưới menu",
+      "miniapp": "Không có. Đơn hàng là tab riêng ở thanh đáy",
+      "web": "Có thêm khối: ô 'Mã đơn hoặc tên sản phẩm' kèm nút 'Tìm', chip trạng thái, thẻ đơn có danh sách món, liên kết 'Xem chi tiết', và dòng 'Đang hiển thị 2 / 2 đơn'",
+      "miniappSource": "apps/miniapp/src/pages/profile.tsx (không có)",
+      "webSource": "apps/web/src/app/tai-khoan/page.tsx:248; apps/web/src/app/tai-khoan/orders-section.tsx:80"
+     },
+     {
+      "where": "Dòng menu",
+      "miniapp": "Dòng cao hơn, phụ đề được xuống dòng ('Rủ bạn mua chung, đủ nhóm nhận mã / giảm')",
+      "web": "Dòng thấp hơn, phụ đề nằm trên một dòng",
+      "miniappSource": "apps/miniapp/src/pages/profile.tsx:44-60",
+      "webSource": "apps/web/src/app/tai-khoan/page.tsx:28-60"
+     }
+    ],
+    "note": "Ảnh đại diện khác nhau: Mini App là vòng tròn ảnh xanh, web là icon User trên nền forest-700. Đây là khác biệt dữ liệu/mock (avatarUrl), không tính. Ảnh full-page của Mini App chỉ cao bằng khung nhìn, nên phần Tài sản/Hợp tác/Khác/Đăng xuất được đối chiếu qua mã nguồn (profile.tsx:360 có Đăng xuất)."
+   },
+   {
+    "name": "Sửa hồ sơ",
+    "miniappRoute": "/edit-profile",
+    "webRoute": "/tai-khoan/ho-so",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Sửa hồ sơ' trong thân trang và chân trang; Mini App có nút tròn nổi và tiêu đề trên đầu trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Ô số điện thoại",
+      "miniapp": "Không có",
+      "web": "Có thêm khối chỉ đọc 'Số điện thoại / 0912 345 678' giữa 'Ngày sinh' và nút 'Lưu thay đổi'",
+      "miniappSource": "apps/miniapp/src/pages/edit-profile.tsx (không có)",
+      "webSource": "apps/web/src/app/tai-khoan/ho-so/page.tsx:259"
+     },
+     {
+      "where": "Ảnh đại diện giữ chỗ",
+      "miniapp": "Vòng tròn trống nền xanh nhạt (Avatar của zmp-ui), không có icon",
+      "web": "Vòng tròn nền be, giữa có icon User màu xám",
+      "miniappSource": "apps/miniapp/src/pages/edit-profile.tsx:160",
+      "webSource": "apps/web/src/app/tai-khoan/ho-so/page.tsx:188"
+     },
+     {
+      "where": "Ô Ngày sinh",
+      "miniapp": "Ô cao khoảng 50px, hiện '10/19/2026' màu xám, không có icon lịch",
+      "web": "Ô cao 44px, hiện 'mm/dd/yyyy' kèm icon lịch của trình duyệt",
+      "miniappSource": "apps/miniapp/src/pages/edit-profile.tsx:263-266",
+      "webSource": "apps/web/src/app/tai-khoan/ho-so/page.tsx:249-250"
+     }
+    ],
+    "note": "Chữ hướng dẫn về ảnh đại diện và chữ sinh nhật giống nhau. Ô nhập của Mini App cao và bo góc hơn web một chút."
+   },
+   {
+    "name": "Cài đặt",
+    "miniappRoute": "/settings",
+    "webRoute": "/tai-khoan/cai-dat",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Cài đặt' trong thân trang và chân trang; Mini App có nút tròn nổi và tiêu đề trên đầu trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Tiêu đề khối (Thông báo, Hiển thị · Cỡ chữ, Tài khoản)",
+      "miniapp": "Chữ không chân, in đậm",
+      "web": "Serif font-display",
+      "miniappSource": "apps/miniapp/src/pages/settings.tsx:181",
+      "webSource": "apps/web/src/app/tai-khoan/cai-dat/page.tsx:167"
+     },
+     {
+      "where": "Nhãn dòng",
+      "miniapp": "'Cập nhật đơn hàng', 'Chỉnh sửa hồ sơ', 'Sổ địa chỉ' in đậm vừa (semibold)",
+      "web": "Cùng các nhãn đó nhưng chữ thường (text-sm, không đậm)",
+      "miniappSource": "apps/miniapp/src/pages/settings.tsx:106, 165",
+      "webSource": "apps/web/src/app/tai-khoan/cai-dat/page.tsx:100, 151"
+     },
+     {
+      "where": "Nút Đăng xuất và dòng phiên bản",
+      "miniapp": "Nút nền xanh nhạt, không viền. Dưới nút có dòng 'Tubu Tree · phiên bản 1.0.0'",
+      "web": "Nút trắng có viền. Không có dòng phiên bản",
+      "miniappSource": "apps/miniapp/src/pages/settings.tsx:171-174",
+      "webSource": "apps/web/src/app/tai-khoan/cai-dat/page.tsx:157"
+     }
+    ],
+    "note": "Bố cục ba thẻ và bộ chọn cỡ chữ Nhỏ/Vừa/Lớn giống nhau."
+   },
+   {
+    "name": "Thông báo",
+    "miniappRoute": "/notifications",
+    "webRoute": "/tai-khoan/thong-bao",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Thông báo' trong thân trang và chân trang; Mini App có nút tròn nổi và tiêu đề trên đầu trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Liên kết 'Đọc tất cả'",
+      "miniapp": "Chữ xanh đậm, không gạch chân, nằm trên đầu trang",
+      "web": "Chữ đen gạch chân, nằm cùng hàng với tiêu đề trong thân trang",
+      "miniappSource": "apps/miniapp/src/pages/notifications.tsx:269",
+      "webSource": "apps/web/src/app/tai-khoan/thong-bao/page.tsx:112"
+     },
+     {
+      "where": "Ô icon trên thẻ thông báo",
+      "miniapp": "Nền --color-bg-subtle (sage-50, xanh nhạt)",
+      "web": "Nền bg-stone-100 (be)",
+      "miniappSource": "apps/miniapp/src/pages/notifications.tsx:313",
+      "webSource": "apps/web/src/app/tai-khoan/thong-bao/page.tsx:174"
+     }
+    ],
+    "note": "Thẻ chưa đọc nền xanh có chấm, nội dung và mốc thời gian giống nhau. Phần thân chữ trên web đậm màu hơn (stone-700 so với secondary)."
+   }
+  ]
+ }
+}

@@ -1,0 +1,388 @@
+{
+ "group": "mv-loyalty",
+ "lanes": [
+  "loyalty",
+  "game",
+  "community"
+ ],
+ "result": {
+  "screens": [
+   {
+    "name": "Điểm Xanh và hạng",
+    "miniappRoute": "/loyalty",
+    "webRoute": "/tai-khoan/diem-xanh",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website (logo Tubu Tree, giỏ, avatar, ô 'Tìm sản phẩm...'); Mini App có thanh tiêu đề trắng với nút quay lại tròn nổi",
+     "Web có dòng '← Tài khoản' và tiêu đề trang H1 trong thân; Mini App để tiêu đề trên thanh đầu",
+     "Web có chân trang website (Hỗ trợ khách hàng, Facebook/TikTok, Điều khoản...)",
+     "Thẻ chung: Mini App thẻ trắng không viền chỉ đổ bóng; web thẻ có viền stone-200 + shadow-card (ui.card)"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ hạng (medallion) đầu trang",
+      "miniapp": "Nền xanh nhạt sage-50 theo hạng, không viền, đổ bóng elevation-1",
+      "web": "Nền trắng có viền (ui.card có bg-stone-0 đè lên lớp bg-sage-50 của hạng)",
+      "miniappSource": "apps/miniapp/src/pages/loyalty.tsx:200",
+      "webSource": "apps/web/src/app/tai-khoan/diem-xanh/page.tsx:186"
+     },
+     {
+      "where": "Thanh tiến độ lên hạng",
+      "miniapp": "Chỉ có thanh dày 10px, không có chữ nhãn (aria-label 'Tiến độ lên hạng kế' ẩn)",
+      "web": "Hiện chữ 'Tiến độ lên hạng kế' phía trên thanh, thanh mảnh hơn (ProgressBar)",
+      "miniappSource": "apps/miniapp/src/pages/loyalty.tsx:242",
+      "webSource": "apps/web/src/app/tai-khoan/diem-xanh/page.tsx:205"
+     },
+     {
+      "where": "Nút 'Thẻ thành viên số (mã QR)' (và mọi nút secondary)",
+      "miniapp": "Nút ZaUI secondary: nền xanh xám nhạt, không viền, chữ/biểu tượng màu brand",
+      "web": "ui.btnSecondary: nền trắng, viền stone-450, chữ stone-800",
+      "miniappSource": "apps/miniapp/src/pages/loyalty.tsx:298 (components/ui/button.tsx:9)",
+      "webSource": "apps/web/src/app/tai-khoan/diem-xanh/page.tsx:231 (lib/guest-ui.ts:21)"
+     },
+     {
+      "where": "Lịch sử Điểm Xanh (dưới màn hình đầu, so bằng mã)",
+      "miniapp": "Tối đa 20 dòng, nhãn ngắn pointsReasonLabel, không có dòng chú thích cuối",
+      "web": "Hiện toàn bộ, nhãn chi tiết pointsReasonDetail ('Tích điểm từ đơn hàng · TUBU...'), thêm ' · Hết hạn dd/mm' và dòng 'Hiển thị tối đa 100 giao dịch gần nhất.'",
+      "miniappSource": "apps/miniapp/src/pages/loyalty.tsx:542",
+      "webSource": "apps/web/src/app/tai-khoan/diem-xanh/page.tsx:391"
+     },
+     {
+      "where": "Lối tắt Vườn Cây Tubu / Kho quà",
+      "miniapp": "ListRow với icon chevron lucide",
+      "web": "Ký tự '›' làm mũi tên",
+      "miniappSource": "apps/miniapp/src/pages/loyalty.tsx:450",
+      "webSource": "apps/web/src/app/tai-khoan/diem-xanh/page.tsx:333"
+     }
+    ],
+    "note": "Ảnh full-page Mini App chỉ cao 844 (cuộn trong khung), nên các khối dưới màn đầu so bằng mã nguồn. Mã giảm giá: HSD xuống dòng ở Mini App do bề rộng, không tính."
+   },
+   {
+    "name": "Ví Tubu",
+    "miniappRoute": "/wallet",
+    "webRoute": "/tai-khoan/vi-tubu",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề với nút quay lại tròn nổi",
+     "Web có dòng '← Tài khoản' và H1 'Ví Tubu' trong thân",
+     "Web có chân trang website",
+     "Thẻ chung: web có viền, Mini App không viền"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thứ tự khối sau thẻ Điểm Xanh",
+      "miniapp": "Thẻ 'Mời bạn — nhận Điểm Xanh' đứng ngay sau thẻ Điểm Xanh, rồi mới tới thẻ 'Hoàn tiền đã duyệt, chờ về Ví' và hộp 'Mẹo: dùng Ví Tubu...'",
+      "web": "Thẻ hoàn tiền 42.000đ và hộp 'Mẹo' đứng trước, 'Mời bạn' bị đẩy xuống sau (cột bên phải trên desktop)",
+      "miniappSource": "apps/miniapp/src/pages/wallet.tsx:223",
+      "webSource": "apps/web/src/app/tai-khoan/vi-tubu/page.tsx:227 và :241"
+     },
+     {
+      "where": "Nút 'Rút ngân hàng' trong thẻ số dư",
+      "miniapp": "Nút secondary ZaUI nền xanh xám nhạt, không viền",
+      "web": "Nút trắng viền stone-450",
+      "miniappSource": "apps/miniapp/src/pages/wallet.tsx:158",
+      "webSource": "apps/web/src/app/tai-khoan/vi-tubu/page.tsx:179"
+     }
+    ],
+    "note": "Lịch sử Ví nằm dưới màn đầu Mini App, không chụp được; số liệu giống nhau."
+   },
+   {
+    "name": "Kho quà",
+    "miniappRoute": "/rewards",
+    "webRoute": "/kho-qua",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm; dòng '← Tài khoản' + H1 'Kho quà' ở web, Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web",
+     "Thẻ quà: web có viền đậm hơn + shadow-card"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Số điểm '1.800 điểm'",
+      "miniapp": "Chữ serif hiển thị (Heading display-md)",
+      "web": "Chữ sans đậm text-3xl font-bold",
+      "miniappSource": "apps/miniapp/src/pages/rewards.tsx:215",
+      "webSource": "apps/web/src/app/kho-qua/page.tsx:222"
+     },
+     {
+      "where": "Dòng 'Quà của tôi'",
+      "miniapp": "Hàng ListRow phẳng nằm trên nền trang, không thẻ, không viền",
+      "web": "Thẻ trắng có viền, bo góc (ui.card)",
+      "miniappSource": "apps/miniapp/src/pages/rewards.tsx:227",
+      "webSource": "apps/web/src/app/kho-qua/page.tsx:232"
+     }
+    ],
+    "note": "Tab Mã giảm giá/Cây và hạt/Quà nhỏ và thẻ quà giống nhau về thứ tự, chữ."
+   },
+   {
+    "name": "Quà của tôi",
+    "miniappRoute": "/rewards/mine",
+    "webRoute": "/kho-qua/cua-toi",
+    "severity": "giong",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm, '← Tài khoản' + H1 ở web; Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web",
+     "Thẻ: Mini App Card outline không bóng, web ui.card có shadow"
+    ],
+    "contentDiffs": [],
+    "note": "Một hàng 'Miễn phí vận chuyển / Mã FS-AN123' với icon vé và chevron, giống chữ và bố cục."
+   },
+   {
+    "name": "Hoàn tiền",
+    "miniappRoute": "/cashback",
+    "webRoute": "/hoan-tien",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; web dùng '<' + H1 'Hoàn tiền' trong thân, Mini App thanh tiêu đề + nút tròn nổi",
+     "Chân trang website ở web",
+     "Thẻ sàn/giao dịch: web có viền"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ 'Đã duyệt, chờ về Ví 42.000đ'",
+      "miniapp": "Gradient cam đất (clay-500 → clay-700)",
+      "web": "Gradient xanh rừng (forest-600 → forest-700)",
+      "miniappSource": "apps/miniapp/src/pages/cashback.tsx:78",
+      "webSource": "apps/web/src/app/hoan-tien/page.tsx:126"
+     },
+     {
+      "where": "Logo sàn khi không có ảnh (Shopee/Lazada)",
+      "miniapp": "Avatar fallback hình tròn gradient xanh lá, không chữ",
+      "web": "Hình tròn xám stone-100 có chữ cái đầu 'S'/'L'",
+      "miniappSource": "apps/miniapp/src/pages/cashback.tsx:139",
+      "webSource": "apps/web/src/app/hoan-tien/page.tsx:29"
+     },
+     {
+      "where": "Tên sàn trong ô",
+      "miniapp": "Đậm (Text variant label)",
+      "web": "Thường font-medium, cỡ lớn hơn",
+      "miniappSource": "apps/miniapp/src/pages/cashback.tsx:140",
+      "webSource": "apps/web/src/app/hoan-tien/page.tsx:174"
+     },
+     {
+      "where": "Dòng giao dịch cuối",
+      "miniapp": "Có đường kẻ dưới cả dòng cuối",
+      "web": "Bỏ đường kẻ dòng cuối (last:border-b-0)",
+      "miniappSource": "apps/miniapp/src/pages/cashback.tsx:187",
+      "webSource": "apps/web/src/app/hoan-tien/page.tsx:201"
+     }
+    ],
+    "note": "Sàn không có logoUrl trong mock nên khác biệt fallback là do cách vẽ, không phải do dữ liệu."
+   },
+   {
+    "name": "Vườn Xanh",
+    "miniappRoute": "/game",
+    "webRoute": "/vuon-xanh",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Web có đầu trang website + ô tìm kiếm; Mini App chỉ thanh tiêu đề 'Vườn Xanh' không nút quay lại",
+     "Cả hai có thanh đáy 5 tab; ở web full-page thanh đáy fixed bị chụp đè giữa trang",
+     "Chân trang website ở web"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Nút 'Góp quỹ trồng cây (20.000 điểm)', 'Mua (80💧)', 'Hứng giọt sương'",
+      "miniapp": "Nút secondary ZaUI nền xanh xám nhạt, không viền, chữ brand",
+      "web": "Nút trắng viền stone-450, chữ stone-800",
+      "miniappSource": "apps/miniapp/src/components/game/tree-actions.tsx:65; components/game/checkin-streak.tsx:90,96",
+      "webSource": "apps/web/src/components/game/tree-actions.tsx:67; components/game/checkin-streak.tsx:69,73"
+     }
+    ],
+    "note": "Thẻ cây, tab Hôm nay/Vườn/Cộng đồng, nút Tưới cây, điểm danh 7 ngày giống. Nhiệm vụ/Quiz/Vòng quay chỉ thấy ở web full-page vì Mini App không chụp được phần dưới."
+   },
+   {
+    "name": "Trợ lý AI",
+    "miniappRoute": "/ai-advisor",
+    "webRoute": "/tu-van",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website + ô tìm kiếm, H1 + phụ đề trong thân; Mini App thanh tiêu đề có phụ đề + nút tròn",
+     "Chân trang website ở web"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Ô nhập 'Nhập câu hỏi…' + nút Gửi",
+      "miniapp": "Dính đáy màn hình: trang là cột flex cao đủ màn, vùng log flex:1 đẩy ô nhập xuống đáy, ô nhập cao và rộng, nền trắng kẻ trên",
+      "web": "Nằm giữa trang ngay sau vùng log min-h-[50vh] (sticky chỉ dính khi nội dung dài), một dòng, có khoảng trống lớn rồi tới chân trang",
+      "miniappSource": "apps/miniapp/src/pages/ai-advisor.tsx:95 và :219",
+      "webSource": "apps/web/src/app/tu-van/page.tsx:114 và :168"
+     },
+     {
+      "where": "3 gợi ý câu hỏi",
+      "miniapp": "Card outline + ListRow, chữ đậm",
+      "web": "Nút ui.card, chữ thường text-sm",
+      "miniappSource": "apps/miniapp/src/pages/ai-advisor.tsx:125",
+      "webSource": "apps/web/src/app/tu-van/page.tsx:123"
+     }
+    ],
+    "note": "Lời chào, icon lấp lánh, câu 'Gợi ý chỉ để tham khảo.' giống chữ."
+   },
+   {
+    "name": "Cộng đồng",
+    "miniappRoute": "/feed",
+    "webRoute": "/cong-dong",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website + ô tìm sản phẩm; Mini App thanh tiêu đề + nút tròn, phụ đề xuống dòng",
+     "Web H1 + phụ đề trong thân",
+     "Chân trang website ở web"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Danh sách bài viết",
+      "miniapp": "Mỗi bài là khối trắng tràn bề ngang, không viền, không bo, cách nhau dải nền 8px",
+      "web": "Mỗi bài là thẻ bo góc có viền + bóng, thụt lề 16px",
+      "miniappSource": "apps/miniapp/src/components/community/post-card.tsx:58",
+      "webSource": "apps/web/src/components/community/post-card.tsx:23"
+     },
+     {
+      "where": "Vùng đầu (nút, ô tìm, chip)",
+      "miniapp": "Nằm trên dải nền trắng liền khối, tách với danh sách bằng dải nền",
+      "web": "Nằm trực tiếp trên nền trang",
+      "miniappSource": "apps/miniapp/src/pages/feed.tsx:163",
+      "webSource": "apps/web/src/app/cong-dong/feed-view.tsx:177"
+     },
+     {
+      "where": "Chip lọc 'Tất cả/Nhà bếp/Vườn nhà/Mới nhất/Nổi bật/Chưa trả lời'",
+      "miniapp": "Chip chưa chọn nền be stone-100, không viền",
+      "web": "Chip chưa chọn nền trắng viền stone-450 (dạng viền)",
+      "miniappSource": "apps/miniapp/src/components/ui/chip.tsx:45",
+      "webSource": "apps/web/src/app/cong-dong/feed-view.tsx:40"
+     },
+     {
+      "where": "Nút cúp (xếp hạng) và pháo giấy (sự kiện)",
+      "miniapp": "Hình tròn (radius-pill)",
+      "web": "Ô vuông bo góc rounded-control",
+      "miniappSource": "apps/miniapp/src/pages/feed.tsx:167 (components/ui/icon-button.tsx:28)",
+      "webSource": "apps/web/src/app/cong-dong/feed-view.tsx:171"
+     },
+     {
+      "where": "Ô 'Tìm câu hỏi, mẹo, bài viết…'",
+      "miniapp": "Bo tròn dạng viên thuốc",
+      "web": "Bo góc control (ui.field)",
+      "miniappSource": "apps/miniapp/src/components/ui/search-field.tsx:53",
+      "webSource": "apps/web/src/app/cong-dong/feed-view.tsx:209"
+     }
+    ],
+    "note": "Hàng chip 'Facebook'/'TikTok' chỉ có ở web vì mock public-config của Mini App không có link community (CommunityChannels cả hai bên đều ẩn khi không có link) — do dữ liệu, không tính."
+   },
+   {
+    "name": "Bảng xếp hạng",
+    "miniappRoute": "/feed/leaderboard",
+    "webRoute": "/cong-dong/xep-hang",
+    "severity": "giong",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; web '<' + H1 trong thân, Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web",
+     "Hàng xếp hạng: web có viền, Mini App không viền"
+    ],
+    "contentDiffs": [],
+    "note": "Cột Hạng/Thành viên/điểm uy tín, 3 hàng Lan Anh/Minh Tâm/Hà My, huy chương, cấp độ giống. Hình huy chương khác do font emoji."
+   },
+   {
+    "name": "Sự kiện cộng đồng",
+    "miniappRoute": "/feed/events",
+    "webRoute": "/cong-dong/su-kien",
+    "severity": "giong",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; web '<' + H1 'Sự kiện', Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web",
+     "Thẻ sự kiện: web có viền"
+    ],
+    "contentDiffs": [],
+    "note": "Thẻ 'Thử thách vườn xanh / Khoe góc vườn của bạn / Kết thúc: 23/10/2026 / 5 điểm' giống."
+   },
+   {
+    "name": "Bài viết",
+    "miniappRoute": "/feed/:id",
+    "webRoute": "/cong-dong/:id",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; web '<' + H1 'Cộng đồng Vườn Tubu', Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Khối bài viết và khối 'Trả lời (1)'",
+      "miniapp": "Khối trắng tràn bề ngang, không viền, không bo, cách nhau dải nền",
+      "web": "Hai thẻ bo góc có viền + bóng, thụt lề",
+      "miniappSource": "apps/miniapp/src/pages/post-detail.tsx:217 và :443",
+      "webSource": "apps/web/src/app/cong-dong/[id]/page.tsx:235 và :360"
+     },
+     {
+      "where": "Tiêu đề câu hỏi 'Rửa bình sữa thế nào?'",
+      "miniapp": "Heading title-sm (nhỏ, ~15px)",
+      "web": "font-display text-lg (to hơn rõ)",
+      "miniappSource": "apps/miniapp/src/pages/post-detail.tsx:334",
+      "webSource": "apps/web/src/app/cong-dong/[id]/page.tsx:294"
+     },
+     {
+      "where": "Ô 'Viết trả lời…' + nút Gửi",
+      "miniapp": "position fixed dính đáy màn hình, nút Gửi rộng",
+      "web": "sticky bottom-0 nhưng nằm ngay sau khối trả lời giữa trang (nội dung ngắn), phía dưới là khoảng trống + chân trang",
+      "miniappSource": "apps/miniapp/src/pages/post-detail.tsx:505",
+      "webSource": "apps/web/src/app/cong-dong/[id]/page.tsx:407"
+     }
+    ],
+    "note": "Chữ bài, tác giả, nhãn 'Hỏi đáp', lượt thích/bình luận, câu trả lời của Hạnh giống."
+   },
+   {
+    "name": "Học viện",
+    "miniappRoute": "/academy",
+    "webRoute": "/hoc-vien",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; web H1 'CTV Academy' + phụ đề trong thân, Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web",
+     "Thẻ khoá học: web có viền"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Tên/mô tả khoá học trong thẻ",
+      "miniapp": "Tên body-md đậm ~14px, mô tả caption nhỏ",
+      "web": "Tên text-base (~16px), mô tả text-sm, to hơn rõ",
+      "miniappSource": "apps/miniapp/src/pages/academy.tsx:95",
+      "webSource": "apps/web/src/app/hoc-vien/course-list.tsx:32"
+     }
+    ],
+    "note": "Thứ tự, icon sách, thanh tiến độ, '1/2 bài đã học' giống."
+   },
+   {
+    "name": "Khoá học",
+    "miniappRoute": "/academy/:courseId",
+    "webRoute": "/hoc-vien/:courseId",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; web H1 'CTV Academy' trong thân, Mini App thanh tiêu đề + nút tròn",
+     "Chân trang website ở web",
+     "Thẻ bài học: web có viền"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Nút 'Đã học xong' (bài đã học)",
+      "miniapp": "Nút secondary bị tắt: nền be, có icon dấu tích trước chữ",
+      "web": "Nút trắng viền, không icon",
+      "miniappSource": "apps/miniapp/src/pages/academy.tsx:214",
+      "webSource": "apps/web/src/app/hoc-vien/[courseId]/course-detail.tsx:58"
+     },
+     {
+      "where": "Link 'Mở video bài học'",
+      "miniapp": "Chữ đậm màu brand, không gạch chân",
+      "web": "Chữ đậm có gạch chân",
+      "miniappSource": "apps/miniapp/src/pages/academy.tsx:189",
+      "webSource": "apps/web/src/app/hoc-vien/[courseId]/course-detail.tsx:48"
+     },
+     {
+      "where": "'Danh sách khoá học' và tên khoá 'Khoá bán hàng'",
+      "miniapp": "Nút ghost có chevron cách xa chữ; tên khoá Heading title-md",
+      "web": "Link chữ liền chevron (ui.backLink); tên khoá text-xl to hơn",
+      "miniappSource": "apps/miniapp/src/pages/academy.tsx:138 và :169",
+      "webSource": "apps/web/src/app/hoc-vien/[courseId]/course-detail.tsx:84 và :29"
+     }
+    ],
+    "note": "Hai bài học, icon video/bài viết, nút 'Đánh dấu đã học' giống."
+   }
+  ],
+  "summary": "Đã so 12 cặp của nhóm mv-loyalty (loyalty 5, game 2, community 5). Không có cặp /admin nào. Kết quả: 3 màn giống (Quà của tôi, Bảng xếp hạng, Sự kiện), 6 màn lệch nhỏ, 4 màn lệch lớn (Ví Tubu, Trợ lý AI, Cộng đồng, Bài viết).\nLệch lớn gồm: Ví Tubu xếp thẻ 'Mời bạn' sau thẻ hoàn tiền và hộp Mẹo, trong khi Mini App đặt nó ngay sau Điểm Xanh. Ở Trợ lý AI và Bài viết, ô nhập của Mini App dính đáy màn hình còn trên web nó nằm giữa trang. Cộng đồng và Bài viết trên Mini App là khối trắng tràn ngang, không viền; web dùng thẻ bo góc có viền, chip lọc có viền, nút icon hình vuông.\nCó một lệch chung ở nhiều màn: nút secondary của Mini App (ZaUI) có nền xanh xám nhạt, không viền, còn ui.btnSecondary của web là nền trắng có viền (lib/guest-ui.ts:21). Lệch này thấy ở nút QR, Rút ngân hàng, Góp quỹ, Hứng giọt sương, Đã học xong. Ngoài ra: thẻ hạng trên web bị ui.card nền trắng đè mất màu hạng, thẻ Hoàn tiền trên web màu xanh thay vì cam đất.\nHạn chế: ảnh full-page của Mini App chỉ cao 844 vì trang cuộn trong khung, nên các khối dưới màn đầu chỉ so được qua mã nguồn. Riêng hàng Facebook/TikTok ở /cong-dong lệch là do dữ liệu cấu hình."
+ }
+}

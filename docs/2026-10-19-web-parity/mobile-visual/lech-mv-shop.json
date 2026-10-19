@@ -1,0 +1,410 @@
+{
+ "group": "mv-shop",
+ "lanes": [
+  "shop",
+  "affiliate"
+ ],
+ "result": {
+  "screens": [
+   {
+    "name": "Trang chủ",
+    "miniappRoute": "/",
+    "webRoute": "/",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web has the website header (Tubu Tree logo, cart pill, An avatar button) plus a 'Tìm sản phẩm...' search box with a green button; Mini App has the logo with round bell and cart buttons and no second search box",
+     "Mini App shows the 'Trồng cây mỗi ngày, nhận quà thật' bubble above the Vườn Xanh tab (bottom-nav.tsx:46 GardenHintBubble); web bottom bar has no bubble",
+     "Web cards use the shared bordered card style; Mini App cards are flat with a shadow (see the product card row below)"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Search row / notification bell",
+      "miniapp": "Pill search 'Bạn đang tìm gì hôm nay?' at full width; the bell sits in the page header next to the cart (round button, orange badge 1)",
+      "web": "Pill search box with the bell beside it in the same row (round light-green button, orange badge 1); the bell is in the page body, not the header",
+      "miniappSource": "apps/miniapp/src/components/home/home-header.tsx:22-36",
+      "webSource": "apps/web/src/components/home/home-view.tsx:169-196"
+     },
+     {
+      "where": "Product card (Bán chạy grid and other grids)",
+      "miniapp": "Flat card without border (elevation-1); beige image area with a round floating heart at top-right; below the image a colored dot + brand name (gray caption, bold); 2-line name; '★ 4.5 (8) · Đã bán 12' on one line ABOVE the price; price last",
+      "web": "Card with a stone-200 border; light-green image with a leaf placeholder icon; brand as a white chip overlaid at the bottom-left of the image; NO heart; name then price; rating/sold go BELOW the price, split across both edges (not visible on home)",
+      "miniappSource": "apps/miniapp/src/components/ui/product-tile.tsx:79-90,139-147,175-179,180-206",
+      "webSource": "apps/web/src/components/product-card.tsx:16,34-39,56-59,68-92"
+     },
+     {
+      "where": "'Xem tất cả' link in section headings",
+      "miniapp": "Green bold text, not underlined",
+      "web": "Green bold text, underlined",
+      "miniappSource": "apps/miniapp/src/components/home/home-section.tsx:48-62",
+      "webSource": "apps/web/src/components/home/home-section.tsx:48-55"
+     }
+    ],
+    "note": "The Mini App full-page shot equals the viewport (the scroll container is not captured), so blocks below the fold can only be compared on the web side. Different product names and prices in Bán chạy (Mật ong/Dầu tràm vs Cao cà gai leo/Hạt điều) and the -12% badge are mock data. The web home cards show no rating/sold count while the browse page does; this may be a home feed missing reviewCount (data)."
+   },
+   {
+    "name": "Danh mục và tìm kiếm",
+    "miniappRoute": "/browse",
+    "webRoute": "/san-pham",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web header (logo, cart, avatar) vs a Mini App page with no website header",
+     "Web shows a visible 'Khám phá' h1 title (browse-view.tsx:150); the Mini App h1 is SR_ONLY (browse.tsx:155)"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Search row",
+      "miniapp": "White pill search 'Tìm sản phẩm...' at the top of the page with a round cart button and orange badge 2 in the same row",
+      "web": "Search box with a dark border and rounded rectangle corners at full width, below the 'Khám phá' title, no cart button in the row",
+      "miniappSource": "apps/miniapp/src/pages/browse.tsx:156-181",
+      "webSource": "apps/web/src/components/catalog/browse-view.tsx:150-170"
+     },
+     {
+      "where": "Sort chips (Gợi ý, Bán chạy, Mới nhất, Giá tăng...)",
+      "miniapp": "Inactive chips filled stone-100 (beige) with no border",
+      "web": "Inactive chips white with a stone-300 border",
+      "miniappSource": "apps/miniapp/src/components/ui/chip.tsx:45-60",
+      "webSource": "apps/web/src/components/catalog/chip.tsx:21-25"
+     },
+     {
+      "where": "'Bộ lọc' button",
+      "miniapp": "Secondary button filled light green, green text, no border",
+      "web": "btnSecondary white with a stone-450 border and dark text",
+      "miniappSource": "apps/miniapp/src/components/catalog/result-header.tsx:31-33",
+      "webSource": "apps/web/src/components/catalog/result-header.tsx:34-37 (ui.btnSecondary apps/web/src/lib/guest-ui.ts:21-22)"
+     },
+     {
+      "where": "Product grid card",
+      "miniapp": "ProductTile: floating heart, brand dot, '★ 4.5 (8) · Đã bán 12' above the price, no border",
+      "web": "Bordered ProductCard, brand chip on the image, no heart, '★ 4.5 (8)' at left and 'Đã bán 12' at right BELOW the price",
+      "miniappSource": "apps/miniapp/src/components/ui/product-tile.tsx:79-206",
+      "webSource": "apps/web/src/components/product-card.tsx:16-92"
+     }
+    ],
+    "note": "Category grid (8 outlined items, grid icon) and the '44 sản phẩm' count match. The Mini App full-page shot equals the viewport."
+   },
+   {
+    "name": "Chi tiết sản phẩm",
+    "miniappRoute": "/product/:slug",
+    "webRoute": "/san-pham/:slug",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Mini App has a round floating back button on the image; web has the website header + '← Về trang chủ' link (page.tsx:73-75)",
+     "Web shows the site footer (logo, Hỗ trợ khách hàng, Facebook/TikTok, Điều khoản...)"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Product image gallery",
+      "miniapp": "Full-bleed image (390px edge to edge), no rounded corners, no border, sitting directly below the top of the screen",
+      "web": "Image inside a frame with 16px side margins, rounded-sheet corners, stone-200 border and shadow-card, large dark leaf icon",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:338,937-950",
+      "webSource": "apps/web/src/components/product-gallery.tsx:6,23-24"
+     },
+     {
+      "where": "Info block background",
+      "miniapp": "Info block has a white surface background (bg-surface) that sets it apart from the page",
+      "web": "Info sits directly on the stone page background",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:341",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:79"
+     },
+     {
+      "where": "Brand row + heart + share",
+      "miniapp": "'● Visante ›' (colored dot + gray chevron, no underline; tapping it opens browse filtered by brand); heart icon; share icon only (no text)",
+      "web": "Green 'Visante' link, underlined, no dot or chevron, goes to /brand/visante; heart; share icon + 'Chia sẻ' text",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:343-380",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:80-95; apps/web/src/components/share-button.tsx:40-42"
+     },
+     {
+      "where": "Product name",
+      "miniapp": "Sans-serif bold, about 18px",
+      "web": "Display serif (font-display) text-2xl, larger",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:384",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:96"
+     },
+     {
+      "where": "Price row",
+      "miniapp": "'289.000đ  320.000đ' (strikethrough) with 'Đã bán 12' aligned right; no % badge",
+      "web": "'289.000đ  320.000đ' plus a red '-10%' pill; no 'Đã bán' shown",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:395-400",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:98-101; apps/web/src/components/flash-price.tsx:56-90"
+     },
+     {
+      "where": "Green points line",
+      "miniapp": "Green line with a leaf icon: 'Nhận Điểm Xanh khi đơn giao thành công' right below the price",
+      "web": "Line missing (web has no PointsEarnLine)",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:402 (components/product/points-earn-line.tsx)",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:98-126 (no equivalent)"
+     },
+     {
+      "where": "Short description / fulfiller / freeship order",
+      "miniapp": "shortDesc (gray body-sm) → 'Miễn phí vận chuyển cho đơn từ 500.000đ' → Vegan chip",
+      "web": "'Tubu Tree giao hàng' (gray text) → freeship → shortDesc 16px (cut off under the sticky bar); the shortDesc text sits below the freeship line",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:401-440",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:103-126"
+     },
+     {
+      "where": "Certification chip (Vegan)",
+      "miniapp": "Light-green pill with no border, check icon",
+      "web": "rounded-control chip with a forest-200 border",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:495-512",
+      "webSource": "apps/web/src/app/san-pham/[slug]/page.tsx:128-137"
+     },
+     {
+      "where": "Sticky bottom bar",
+      "miniapp": "48px bordered cart button with badge 2 + 'Thêm vào giỏ' (filled light green) + 'Mua ngay' over '289.000đ' on two lines",
+      "web": "Left: 'Tạm tính' / '289.000đ'; 'Thêm vào giỏ' (white outlined) + 'Mua ngay' on one line; no cart button",
+      "miniappSource": "apps/miniapp/src/pages/product-detail.tsx:845-900",
+      "webSource": "apps/web/src/components/add-to-cart.tsx:281-302"
+     }
+    ],
+    "note": "The Mini App full-page shot equals the viewport, so the lower blocks (Phân loại, Số lượng, Mở nhóm mua chung, Thành phần, Cam kết Tubu, Mô tả, Đánh giá, Cùng nhà Visante) can only be seen on the web. The Mini App code has the same order (product-detail.tsx:600-830). The Mini App missing 'Tubu Tree giao hàng', the web missing 'Đã bán 12', and different shortDesc text (Mini App: 'Serum dưỡng ẩm Visante — lành tính...'; web: 'Cấp ẩm chuyên sâu...') are most likely mock data (fulfiller/sold/shortDesc), since both sides render these fields."
+   },
+   {
+    "name": "Yêu thích",
+    "miniappRoute": "/wishlist",
+    "webRoute": "/tai-khoan/yeu-thich",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Mini App: round floating back button + 'Sản phẩm yêu thích' in a white header strip; web: website header + '‹ Sản phẩm yêu thích' title in the page body",
+     "Web has the site footer"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Wishlist product card",
+      "miniapp": "Each card has a filled RED heart in a round white button at the top-right of the image (tap to unfavorite)",
+      "web": "No heart on the cards, so items cannot be removed from the list here",
+      "miniappSource": "apps/miniapp/src/components/ui/product-tile.tsx:175-179 (showWishlist default true, :65)",
+      "webSource": "apps/web/src/components/product-card.tsx:14-60; apps/web/src/app/tai-khoan/yeu-thich/page.tsx:65"
+     },
+     {
+      "where": "Card body",
+      "miniapp": "Brand dot + name; '★ 4.5 (8) · Đã bán 12' above the price; flat card",
+      "web": "Brand chip on the image; price then rating at left / 'Đã bán 12' at right; bordered card",
+      "miniappSource": "apps/miniapp/src/components/ui/product-tile.tsx:139-206",
+      "webSource": "apps/web/src/components/product-card.tsx:16,56-92"
+     }
+    ],
+    "note": "Same three products. The truncated name 'Mật ong rừng nguyên chất...' on the web comes from width and line-clamp, not data."
+   },
+   {
+    "name": "Mua chung",
+    "miniappRoute": "/group-buy",
+    "webRoute": "/mua-chung",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Mini App: round back button + PageHeader 'Mua chung giá tốt' with a subtitle on a white header strip; web: website header + h1 in the page body + footer",
+     "Web cards use ui.card with a border (guest-ui.ts:11); Mini App Card is borderless"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Group-buy card text",
+      "miniapp": "Product name/price body-sm (~15px); 'Đủ nhóm: nhận mã giảm...' line is caption-size but visibly larger",
+      "web": "text-sm/text-xs (14/12px), slightly smaller text, tighter line spacing",
+      "miniappSource": "apps/miniapp/src/pages/group-buy.tsx:165-235",
+      "webSource": "apps/web/src/app/mua-chung/group-buy-view.tsx:184-230"
+     }
+    ],
+    "note": "Layout, labels (-15%, '2/3 người · còn 5 ngày', 'Tham gia mua chung (–15%)') and progress bar match."
+   },
+   {
+    "name": "Chi tiết nhóm mua chung",
+    "miniappRoute": "/group-buy/:id",
+    "webRoute": "/mua-chung/:id",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Same as Mua chung: Mini App PageHeader + back button vs web header + h1 in the page body + footer; web card has a border"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Invited card ('Bạn được mời vào nhóm này')",
+      "miniapp": "Text body-sm/caption larger, borderless card",
+      "web": "text-sm/text-xs smaller, bordered card",
+      "miniappSource": "apps/miniapp/src/pages/group-buy.tsx:165-170",
+      "webSource": "apps/web/src/app/mua-chung/group-buy-view.tsx:184-185"
+     }
+    ],
+    "note": "Content and order match."
+   },
+   {
+    "name": "Thương hiệu",
+    "miniappRoute": "/brand/:slug",
+    "webRoute": "/brand/:slug",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Mini App has a round floating back button on the cover; web has the website header and footer"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Brand cover + avatar",
+      "miniapp": "Dark green cover band ~96px (fallback when there is no cover image) + round avatar with a leaf icon overlapping the cover",
+      "web": "Without coverUrl/logoUrl, renders no cover or avatar; the page starts at the 'Visante' name",
+      "miniappSource": "apps/miniapp/src/pages/brand-view.tsx:100-105 (StorePageShell coverHeight 96, avatarFallback Leaf)",
+      "webSource": "apps/web/src/app/brand/[slug]/page.tsx:41-49"
+     },
+     {
+      "where": "Name + 'Chính hãng' badge",
+      "miniapp": "'Chính hãng' pill (check icon) on its own line BELOW the name",
+      "web": "'Chính hãng' pill (BadgeCheck) on the SAME line as the h1; tagline text larger (16px)",
+      "miniappSource": "apps/miniapp/src/pages/brand-view.tsx:109-118,138-141",
+      "webSource": "apps/web/src/app/brand/[slug]/page.tsx:51-60"
+     },
+     {
+      "where": "Theo dõi / Chia sẻ buttons",
+      "miniapp": "In a sticky bottom bar: 'Theo dõi' (light-green fill, + icon) + 'Chia sẻ' (dark green)",
+      "web": "Inline below the follower count: 'Theo dõi' outlined white + 'Chia sẻ' dark green; no sticky bar",
+      "miniappSource": "apps/miniapp/src/pages/brand-view.tsx:120-134",
+      "webSource": "apps/web/src/app/brand/[slug]/brand-actions.tsx:70-85"
+     },
+     {
+      "where": "Chứng nhận",
+      "miniapp": "Heading with no icon; 'Vegan' chip is a small light-green Badge with no border",
+      "web": "Heading with an Award icon in front; 'Vegan' chip with a forest-200 border, larger (text-sm, py-1.5)",
+      "miniappSource": "apps/miniapp/src/pages/brand-view.tsx:170-180",
+      "webSource": "apps/web/src/app/brand/[slug]/page.tsx:66-82"
+     },
+     {
+      "where": "Product grid",
+      "miniapp": "Uses ProductTile (brand dot, heart, rating, flat)",
+      "web": "Hand-built inline card: bordered, large dark leaf icon, no brand, heart, or rating",
+      "miniappSource": "apps/miniapp/src/pages/brand-view.tsx:238-250",
+      "webSource": "apps/web/src/app/brand/[slug]/page.tsx:116-158"
+     }
+    ],
+    "note": "The Mini App mock has promotions ('MUA 2 TẶNG 1 · TUBU20 chạm để chép') but no products; the web mock has 8 products and no promotions. Both sides have code for both blocks (miniapp brand-view.tsx:183-250, web page.tsx:86-158), so their absence on one side is data."
+   },
+   {
+    "name": "Câu chuyện thương hiệu",
+    "miniappRoute": "/brand-story",
+    "webRoute": "/cau-chuyen",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Mini App: back button + PageHeader 'Hành trình nguyên liệu'; web: website header + h1 in the page body + footer"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Intro paragraph",
+      "miniapp": "'...Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ 🌿' (ends with an emoji), secondary text ~15px",
+      "web": "'...để khám phá xuất xứ.' (period, no emoji), text-base 16px stone-700 with leading-relaxed, wraps to more lines",
+      "miniappSource": "apps/miniapp/src/pages/brand-story.tsx:26-28",
+      "webSource": "apps/web/src/app/cau-chuyen/brand-story-view.tsx:20-21"
+     }
+    ],
+    "note": "Map and the grid of 8 brand cards (gradient + emoji + province) match."
+   },
+   {
+    "name": "Gian hàng CTV (công khai)",
+    "miniappRoute": "/s/:slug",
+    "webRoute": "/s/:slug",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Mini App has a round floating back button on the cover; web has the website header and footer"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Storefront header",
+      "miniapp": "Edge-to-edge dark green cover band ~84px, round 58px avatar with a Sprout icon, serif name, gray tagline, all on the page background (no card)",
+      "web": "Rounded cover inside the side margins with a green→black gradient; white bordered card overlapping the cover holding a square 'C' avatar with a verified check, name, badges, and the tagline below a divider",
+      "miniappSource": "apps/miniapp/src/pages/storefront-view.tsx:67-95 (StorePageShell)",
+      "webSource": "apps/web/src/app/s/[slug]/page.tsx:81-175"
+     },
+     {
+      "where": "'Chia sẻ gian hàng' button",
+      "miniapp": "Full-width sticky button at the bottom",
+      "web": "Inline button inside the header card, aligned right",
+      "miniappSource": "apps/miniapp/src/pages/storefront-view.tsx:97-105",
+      "webSource": "apps/web/src/app/s/[slug]/page.tsx:162-168"
+     },
+     {
+      "where": "Trust tiles",
+      "miniapp": "None",
+      "web": "4 bordered tiles: 'Sản phẩm đã qua duyệt của Tubu Tree', 'Theo dõi đơn trên Tubu Tree', 'Thanh toán qua Tubu Tree', 'Đổi trả 7 ngày (hàng lỗi NSX)'",
+      "miniappSource": "apps/miniapp/src/pages/storefront-view.tsx (no equivalent)",
+      "webSource": "apps/web/src/app/s/[slug]/page.tsx:213-235"
+     },
+     {
+      "where": "Collection heading",
+      "miniapp": "'Bán chạy' title-sm, nothing in front, no count",
+      "web": "Green vertical bar + 'Bán chạy' text-lg + '(4 sản phẩm)'",
+      "miniappSource": "apps/miniapp/src/pages/storefront-view.tsx:127",
+      "webSource": "apps/web/src/app/s/[slug]/page.tsx:240-249"
+     },
+     {
+      "where": "Product card in the collection",
+      "miniapp": "ProductTile (heart, brand dot, rating · sold, flat)",
+      "web": "Hand-built inline card: bordered, brand as plain green text above the name, no heart or rating",
+      "miniappSource": "apps/miniapp/src/pages/storefront-view.tsx:131",
+      "webSource": "apps/web/src/app/s/[slug]/page.tsx:254-309"
+     }
+    ],
+    "note": "The web badges 'CTV tuyển chọn' and 'Tân binh' are data-driven (approved/ownerTier); the Mini App also has the code (storefront-view.tsx:74-90), so their absence in the Mini App shot is probably mock data. Products in the collection differ (Mini App: Mật ong/Dầu tràm/Fuwa3e; web: Visante): data."
+   },
+   {
+    "name": "Cộng tác viên",
+    "miniappRoute": "/affiliate",
+    "webRoute": "/ctv",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Mini App: back button + PageHeader 'Cộng tác viên'; web: website header + '← Tài khoản' link + h1 in the page body + footer",
+     "Web stat, tier and referral-code cards use ui.card with a border; Mini App cards are borderless"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Academy entry button",
+      "miniapp": "'CTV Academy' (graduation-cap icon) light-green filled button with no border; caption 'Khoá học đào tạo dành cho CTV'",
+      "web": "'Học viện Tubu' white button with a stone-450 border; caption 'Học cách bán hàng và nhận hoa hồng hiệu quả hơn.'",
+      "miniappSource": "apps/miniapp/src/pages/affiliate.tsx:515-527 (vi.ts:911-912)",
+      "webSource": "apps/web/src/app/ctv/page.tsx:444-451"
+     }
+    ],
+    "note": "Commission hero card, the 4 shortcuts, Đang chờ/Có thể rút and CTV Đồng match in text and order. The Mini App full-page shot equals the viewport, so the blocks below 'Mã giới thiệu' (Caption gợi ý, Link chia sẻ, Lịch sử hoa hồng, Lệnh rút, Theo gian hàng, Theo sản phẩm) can only be seen on the web."
+   },
+   {
+    "name": "Gian hàng của tôi",
+    "miniappRoute": "/storefront",
+    "webRoute": "/ctv/gian-hang",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Mini App: back button + PageHeader 'Gian hàng của tôi'; web: website header + '← Cộng tác viên' link + h1 in the page body + footer"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Sửa hồ sơ / Cấu hình / Gỡ đăng buttons",
+      "miniapp": "Secondary buttons filled light green, no border, green text",
+      "web": "White buttons with a stone-450 border, dark text, inline icon",
+      "miniappSource": "apps/miniapp/src/pages/storefront-builder.tsx:324-336",
+      "webSource": "apps/web/src/components/affiliate/storefront-builder.tsx:198-213"
+     },
+     {
+      "where": "Cover area / 'Thêm ảnh bìa'",
+      "miniapp": "Cover with a light green→darker green gradient, 'Thêm ảnh bìa' caption in normal weight",
+      "web": "Flat pale green cover, 'Thêm ảnh bìa' bold",
+      "miniappSource": "apps/miniapp/src/pages/storefront-builder.tsx:343-366",
+      "webSource": "apps/web/src/components/affiliate/storefront-builder.tsx:219-232"
+     },
+     {
+      "where": "Collection heading 'Bán chạy'",
+      "miniapp": "Title only + edit/delete icons, no layout chip",
+      "web": "Adds a beige 'Lưới' chip (layout) under the title",
+      "miniappSource": "apps/miniapp/src/pages/storefront-builder.tsx (no LAYOUT_LABEL)",
+      "webSource": "apps/web/src/components/affiliate/storefront-builder.tsx:260"
+     },
+     {
+      "where": "'Nội dung' link on each product",
+      "miniapp": "Green bold text, not underlined",
+      "web": "Dark btnText, underlined",
+      "miniappSource": "apps/miniapp/src/pages/storefront-builder.tsx:447",
+      "webSource": "apps/web/src/components/affiliate/storefront-builder.tsx:309-310 (ui.btnText guest-ui.ts:24)"
+     },
+     {
+      "where": "Sticky bottom bar",
+      "miniapp": "'Xem trước' (light-green fill) + 'Chia sẻ gian ...' (dark green, truncated to one line)",
+      "web": "'Xem trước' white with a border + 'Chia sẻ gian hàng' wrapping onto 2 lines",
+      "miniappSource": "apps/miniapp/src/pages/storefront-builder.tsx:481-505",
+      "webSource": "apps/web/src/components/affiliate/storefront-builder.tsx:336-352"
+     }
+    ],
+    "note": "Name, 'Đang hiển thị', '/s/ctv-pilot', and the per-product pin/eye/trash icons match. The Mini App full-page shot equals the viewport, so 'Thêm sản phẩm', 'Tạo bộ sưu tập', 'Thống kê 30 ngày' and 'Hành trình gian hàng' can only be seen on the web."
+   }
+  ],
+  "summary": "All 11 pairs in mv-shop (shop 8, affiliate 3) were compared; no /admin routes. 6 screens are lech-lon (Trang chủ, Danh mục, Chi tiết SP, Yêu thích, Thương hiệu, Gian hàng CTV công khai) and 5 are lech-nho.\nThe root cause of most differences is the product card: the Mini App uses ProductTile (flat, round heart, brand dot, rating · sold above the price) while web ProductCard has a border, a brand chip on the image, no heart and rating below the price. Web Yêu thích therefore cannot unfavorite from the list. Brand/storefront pages on the web also hand-build their own cards.\nThe second cause is the shared web primitives: ui.btnSecondary/ui.card/btnText (guest-ui.ts:11-24) are outlined white, have a border or are underlined, while Mini App secondary Buttons/Cards/Chips are light-green or beige fill with no border. This hits Bộ lọc, sort chips, Học viện, the builder buttons and the sticky bars.\nBrand and public storefront pages lack the StorePageShell layout (edge-to-edge cover + round avatar + Theo dõi/Chia sẻ in a sticky bar), and the web adds trust tiles. The PDP image is framed instead of edge-to-edge, the 'Nhận Điểm Xanh' line is missing, and the sticky bar lacks the cart button and 'Mua ngay + giá' on two lines.\nLimitation: the Mini App .full.jpg equals the viewport (the scroll container is not captured), so blocks below the fold were only seen on the web. Differences in product, promotion and badge data are recorded in each screen's note."
+ }
+}
