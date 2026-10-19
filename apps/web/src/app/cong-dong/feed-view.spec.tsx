@@ -433,6 +433,17 @@ describe('/cong-dong — giao diện điện thoại như Mini App', () => {
     expect(band.contains(container.querySelector('[aria-label="Sắp xếp"]'))).toBe(true);
   });
 
+  it('hai hàng chip khớp lề 12px của dải trắng (không tràn ngang) và có đệm dọc 4px chứa vùng chạm', async () => {
+    const { container } = await mount();
+    for (const label of ['Chọn danh mục', 'Sắp xếp']) {
+      const row = container.querySelector(`[aria-label="${label}"]`)!;
+      expect(row.className).toContain('max-md:-mx-3');
+      expect(row.className).toContain('max-md:px-3');
+      expect(row.className).toContain('max-md:py-1');
+      expect(row.className).not.toMatch(/(^|\s)-mx-4(\s|$)/);
+    }
+  });
+
   it('chip chưa chọn nền be không viền, ô tìm bo tròn như viên thuốc', async () => {
     const { container } = await mount();
     const chip = exact(container, 'button', 'Nhà bếp');

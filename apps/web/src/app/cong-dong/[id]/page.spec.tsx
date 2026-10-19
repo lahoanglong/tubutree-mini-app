@@ -209,6 +209,18 @@ describe('/cong-dong/[id] — hiển thị', () => {
   });
 });
 
+describe('/cong-dong/[id] — ô trả lời dính đáy', () => {
+  it('body có has-sticky-bar khi bài hiện, mất khi rời trang; main không còn đệm cứng', async () => {
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+    const { container } = await mount();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
+    expect(container.querySelector('main')!.className).not.toContain('max-md:pb-24');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+  });
+});
+
 describe('/cong-dong/[id] — thao tác', () => {
   const likeBtn = (c: HTMLElement) => c.querySelector<HTMLElement>('button[aria-pressed]')!;
 
@@ -498,11 +510,10 @@ describe('/cong-dong/[id] — giao diện điện thoại như Mini App', () => 
     expect(h.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
   });
 
-  it('ô Viết trả lời cố định đáy màn hình ở điện thoại, đổ bóng, thân trang chừa chỗ', async () => {
+  it('ô Viết trả lời cố định đáy màn hình ở điện thoại, đổ bóng', async () => {
     const { container } = await mount();
     const form = container.querySelector('form')!;
     for (const c of ['max-md:fixed', 'max-md:inset-x-0', 'max-md:shadow-[var(--elevation-3)]']) expect(form.className).toContain(c);
-    expect(container.querySelector('main')!.className).toContain('max-md:pb-');
   });
 
   it('tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {

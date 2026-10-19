@@ -225,7 +225,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
           )}
         </form>
 
-        <div role="group" aria-label="Chọn danh mục" className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+        <div role="group" aria-label="Chọn danh mục" className="flex gap-2 overflow-x-auto max-md:-mx-3 max-md:px-3 max-md:py-1 md:flex-wrap">
           <Chip selected={!category} onClick={() => setCategory(undefined)}>
             Tất cả
           </Chip>
@@ -236,7 +236,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
           ))}
         </div>
 
-        <div role="group" aria-label="Sắp xếp" className="-mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
+        <div role="group" aria-label="Sắp xếp" className="flex gap-2 overflow-x-auto max-md:-mx-3 max-md:px-3 max-md:py-1 md:flex-wrap">
           {SORTS.map((s) => (
             <Chip key={s.key} selected={sort === s.key} onClick={() => setSort(s.key)}>
               {s.label}

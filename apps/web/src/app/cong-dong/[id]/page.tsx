@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type FormHTMLAttributes, type ReactNode } from 'react';
+import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -38,9 +39,16 @@ const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message :
 
 type ReportTarget = { targetType: 'POST' | 'COMMENT'; targetId?: string };
 
+// Ô trả lời fixed ở điện thoại: gắn has-sticky-bar để chân trang không bị che.
+function ReplyBar(props: FormHTMLAttributes<HTMLFormElement>) {
+  const ref = useRef<HTMLFormElement>(null);
+  useStickyBarOffset(ref);
+  return <form ref={ref} {...props} />;
+}
+
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6 max-md:pb-24 max-md:pt-0">
+    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
       <MiniBar>
         <PageHeader title={TITLE} backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       </MiniBar>
@@ -400,7 +408,7 @@ export default function PostDetailPage() {
         )}
       </section>
 
-      <form
+      <ReplyBar
         onSubmit={(e) => {
           e.preventDefault();
           const body = commentText.trim();
@@ -430,7 +438,7 @@ export default function PostDetailPage() {
             Gửi
           </button>
         </div>
-      </form>
+      </ReplyBar>
 
       <EditPostSheet
         open={editing}

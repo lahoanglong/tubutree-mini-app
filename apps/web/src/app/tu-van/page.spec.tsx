@@ -128,6 +128,18 @@ describe('Trợ lý AI: trạng thái trang', () => {
   });
 });
 
+describe('Trợ lý AI: ô nhập dính đáy', () => {
+  it('ô nhập fixed ở điện thoại: body có has-sticky-bar khi trang hiện, mất khi rời trang (chân trang không bị che)', async () => {
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+    const c = await mount();
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
+    expect(c.querySelector('.max-md\\:pb-\\[calc\\(10\\.5rem\\+env\\(safe-area-inset-bottom\\)\\)\\]')).toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    expect(document.body.classList.contains('has-sticky-bar')).toBe(false);
+  });
+});
+
 describe('Trợ lý AI: hội thoại', () => {
   it('chưa có tin nhắn: lời chào, 3 câu gợi ý và lưu ý tham khảo', async () => {
     const c = await mount();
@@ -419,11 +431,6 @@ describe('Trợ lý AI: giao diện điện thoại như Mini App', () => {
     expect(bar.className).toContain('max-md:inset-x-0');
     expect(input(c).className).toContain('max-md:min-h-[9rem]');
     expect(bar.className).toContain('sticky');
-  });
-
-  it('thân trang chừa chỗ cho thanh nhập cố định để tin cuối không bị che', async () => {
-    const c = await mount();
-    expect((c.querySelector('[role="log"]')!.parentElement as HTMLElement).className).toContain('max-md:pb-');
   });
 
   it('3 gợi ý là thẻ viền mảnh không bóng, chữ đậm', async () => {

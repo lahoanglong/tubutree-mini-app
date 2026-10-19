@@ -5,6 +5,7 @@ import type { KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
+import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { ChevronRight, Sparkles, Sprout } from 'lucide-react';
 import { aiChat, type AiChatTurn, type AiProduct } from '@tubutree/app-core/api/ai';
 import { coreHttp } from '@/lib/core-http';
@@ -68,6 +69,8 @@ function Advisor() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  useStickyBarOffset(barRef);
 
   const chatM = useMutation({
     mutationFn: ({ text, history }: { text: string; history: AiChatTurn[] }) => aiChat(coreHttp, text, history),
@@ -111,7 +114,7 @@ function Advisor() {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col max-md:pb-[calc(10.5rem+env(safe-area-inset-bottom))]">
+    <div className="mx-auto flex max-w-2xl flex-col">
       <div role="log" aria-label="Cuộc trò chuyện" className="min-h-[50vh] py-3">
         {messages.length === 0 && (
           <div className="px-3 py-8 text-center">
@@ -166,7 +169,7 @@ function Advisor() {
 
       <p className="py-1 text-center text-xs text-stone-600">Gợi ý chỉ để tham khảo.</p>
 
-      <div className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:items-center">
+      <div ref={barRef} className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:items-center">
         <textarea
           className={`${ui.field} min-w-0 flex-1 resize-none py-2 max-md:min-h-[9rem]`}
           placeholder="Nhập câu hỏi…"

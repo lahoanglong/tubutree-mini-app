@@ -81,6 +81,17 @@ test.describe('Web khách: cộng đồng', () => {
     await expect(page.getByText('Mẹo của Lan Anh')).toBeVisible();
   });
 
+  test('điện thoại 390px: bảng tin không cuộn ngang, hai hàng chip không tràn khỏi dải trắng', async ({ page, api }) => {
+    mockSession(api);
+    api.get('/config/public', {});
+    api.get('/feed', { posts: [POST('p1', 'Lan Anh')], nextCursor: null });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/cong-dong');
+    await expect(page.getByRole('link', { name: 'Mẹo của Lan Anh' })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
   test('đăng một câu hỏi gửi POST /feed đúng thân, báo đã đăng và tải lại bảng tin', async ({ page, api }) => {
     mockSession(api);
     api.get('/config/public', {});
