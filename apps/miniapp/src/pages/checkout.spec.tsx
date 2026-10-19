@@ -1477,3 +1477,41 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
     expect(await screen.findByTestId('order-success')).toBeInTheDocument();
   });
 });
+
+describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20)', () => {
+  const cfg = mocks.publicConfig as Record<string, unknown>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+  });
+  afterEach(() => {
+    delete cfg.shippingEta;
+  });
+
+  it('cấu hình có shippingEta → dưới phí vận chuyển có dòng "Giao dự kiến" kèm khoảng ngày', async () => {
+    cfg.shippingEta = { minDays: 2, maxDays: 4 };
+    renderPage();
+    const label = await screen.findByText(viCopy.success.etaLabel);
+    const row = label.parentElement as HTMLElement;
+    expect(row.textContent).toMatch(/\d{2}\/\d{2} – \d{2}\/\d{2}/);
+    const shipRow = screen.getByText(viCopy.checkout.shippingFee).parentElement as HTMLElement;
+    expect(shipRow.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shippingEta null hoặc thiếu → không có dòng giao dự kiến', async () => {
+    cfg.shippingEta = null;
+    renderPage();
+    await screen.findByText(viCopy.checkout.shippingFee);
+    expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
+    delete cfg.shippingEta;
+  });
+});

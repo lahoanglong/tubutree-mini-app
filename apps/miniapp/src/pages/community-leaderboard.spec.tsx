@@ -81,10 +81,17 @@ describe('CommunityLeaderboardPage — hành vi giữ nguyên khi chuyển DS v2
     expect(text.indexOf('Lan Anh')).toBeLessThan(text.indexOf('Minh Tâm'));
     expect(text.indexOf('Minh Tâm')).toBeLessThan(text.indexOf('Hà My'));
     expect(text.indexOf('Hà My')).toBeLessThan(text.indexOf('Quốc Bảo'));
-    expect(screen.getByText('🥇')).toBeInTheDocument();
-    expect(screen.getByText('🥈')).toBeInTheDocument();
-    expect(screen.getByText('🥉')).toBeInTheDocument();
+    expect(screen.getByLabelText('Huy chương vàng')).toBeInTheDocument();
+    expect(screen.getByLabelText('Huy chương bạc')).toBeInTheDocument();
+    expect(screen.getByLabelText('Huy chương đồng')).toBeInTheDocument();
     expect(screen.getByText('#4')).toBeInTheDocument();
+  });
+
+  it('huy chương là icon, không phải emoji 🥇🥈🥉 (D6-19)', async () => {
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.getByTestId('page').textContent).not.toMatch(/[🥇🥈🥉]/u);
+    expect(screen.getByLabelText('Huy chương vàng').tagName.toLowerCase()).toBe('svg');
   });
 
   it('mỗi dòng hiện hạng thành viên (emoji + tên hạng) và điểm uy tín', async () => {

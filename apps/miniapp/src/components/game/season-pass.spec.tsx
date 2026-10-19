@@ -51,3 +51,16 @@ describe('StreakRepair — icon nét thay emoji (D7-6)', () => {
     expect(title.querySelector('svg')).not.toBeNull();
   });
 });
+
+describe('SeasonPass — bậc đang khoá vẫn đọc được (D8-6)', () => {
+  it('hàng bậc khoá không bị làm mờ bằng opacity và không dùng nền stone-100 (chữ vàng chỉ 4,24:1 trên đó)', () => {
+    renderPass();
+    const lockedRow = screen.getByText(viText.game.seasonPass.tier(2)).closest('div[style*="padding: 12px"]') as HTMLElement;
+    expect(lockedRow).not.toBeNull();
+    expect(lockedRow.style.opacity).toBe('');
+    expect(lockedRow.style.background).not.toContain('--stone-100');
+    const unlockedRow = screen.getByText(viText.game.seasonPass.tier(1)).closest('div[style*="padding: 12px"]') as HTMLElement;
+    expect(unlockedRow.style.opacity).toBe('');
+  });
+});
+

@@ -261,6 +261,19 @@ describe('FeedPage — tiêu đề, vùng chạm, biểu tượng (C-076, C-113,
     expect(screen.getByRole('button', { name: 'Nổi bật' }).className).toContain('tubu-hit-44');
   });
 
+  it('nút Bảng xếp hạng và Sự kiện có chữ nhìn thấy, không chỉ là biểu tượng (D6-05)', async () => {
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.getByRole('button', { name: 'Bảng xếp hạng' }).textContent?.trim()).toBe('Xếp hạng');
+    expect(screen.getByRole('button', { name: 'Sự kiện' }).textContent?.trim()).toBe('Sự kiện');
+  });
+
+  it('đã đăng nhập: không còn câu phụ đề dưới tiêu đề để bài đầu lên sớm hơn (D6-05)', async () => {
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.queryByText(/Hỏi đáp cách dùng/)).toBeNull();
+  });
+
   it('nhãn lọc thẻ không dùng ký tự ✕', async () => {
     mocks.search = '?tag=da-nhay-cam&tagName=da%20nh%E1%BA%A1y%20c%E1%BA%A3m';
     renderPage();

@@ -59,8 +59,12 @@ export function CategoryGrid({ entries, isLoading, onSelect, title = vi.browse.c
                 borderRadius: 'var(--radius-card)',
               }}
             >
-              <Icon icon={e.icon} size="sm" tone="brand" style={{ flex: '0 0 auto' }} />
-              <Text variant="body-sm" style={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {e.image ? (
+                <img src={e.image} alt="" width={24} height={24} loading="lazy" style={{ flex: '0 0 auto', borderRadius: 6, objectFit: 'cover' }} />
+              ) : (
+                <Icon icon={e.icon} size="md" tone="brand" style={{ flex: '0 0 auto' }} />
+              )}
+              <Text variant="body-sm" style={{ fontWeight: 600, minWidth: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>
                 {e.label}
               </Text>
             </button>

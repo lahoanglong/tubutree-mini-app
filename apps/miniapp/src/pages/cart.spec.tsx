@@ -510,3 +510,46 @@ describe('CartPage: chọn một phần giỏ lấy giá phần chọn từ máy
     });
   });
 });
+
+describe('CartPage — thành tiền dòng khi SL > 1 (D6-10)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 4, total: 0 } });
+  });
+
+  it('dòng SL 3, giá 95.000đ → có "Thành tiền" 285.000đ; SL 1 thì không có dòng thành tiền', async () => {
+    mocks.getCart.mockResolvedValue(
+      summary({
+        items: [
+          { ...OK_LINE, id: 'ci-3', productName: 'Nước rửa chén', unitPrice: 95_000, quantity: 3, total: 285_000 },
+          { ...OK_LINE, id: 'ci-1', variationId: 'v-1', productName: 'Xà bông lẻ', unitPrice: 50_000, quantity: 1, total: 50_000 },
+        ],
+        subtotal: 335_000,
+        itemCount: 4,
+      }),
+    );
+    renderPage();
+    await screen.findByText('Nước rửa chén');
+    const line = screen.getByText('Nước rửa chén').closest('[class*="zaui-box"], div')!.parentElement as HTMLElement;
+    expect(line.textContent).toContain('Thành tiền');
+    expect(line.textContent).toContain('285.000đ');
+    const single = screen.getByText('Xà bông lẻ').closest('[class*="zaui-box"], div')!.parentElement as HTMLElement;
+    expect(single.textContent).not.toContain('Thành tiền');
+  });
+
+  it('bấm + (SL local lệch SL server) → ẩn dòng thành tiền, không hiện số tự nhân khi server có thể tính lại giá', async () => {
+    mocks.getCart.mockResolvedValue(
+      summary({
+        items: [{ ...OK_LINE, id: 'ci-f', productName: 'Hàng flash', unitPrice: 50_000, quantity: 2, total: 100_000 }],
+        subtotal: 100_000,
+        itemCount: 2,
+      }),
+    );
+    renderPage();
+    await screen.findByText('Hàng flash');
+    expect(screen.getByText(/Thành tiền/)).toHaveTextContent('100.000đ');
+    fireEvent.click(screen.getByLabelText('Tăng số lượng'));
+    expect(screen.queryByText(/Thành tiền/)).toBeNull();
+    expect(screen.queryByText(/150\.000đ/)).toBeNull();
+  });
+});

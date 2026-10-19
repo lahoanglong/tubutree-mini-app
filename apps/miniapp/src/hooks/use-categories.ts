@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Baby, Droplets, LayoutGrid, Recycle, SprayCan, type LucideIcon } from 'lucide-react';
+import { Baby, Coffee, Droplets, Flower2, HeartHandshake, LayoutGrid, Recycle, Smile, Sparkles, SprayCan, Wheat, type LucideIcon } from 'lucide-react';
 import { fetchCategories, type CategoryDTO } from '../services/shop-api';
 import { vi } from '../i18n/vi';
 import { browserStorage } from '../utils/recently-viewed';
@@ -10,14 +10,27 @@ export interface CategoryEntry {
   key: string;
   label: string;
   icon: LucideIcon;
+  /** Ảnh danh mục do quản trị đặt; có thì ô lưới vẽ ảnh thay icon. */
+  image?: string | null;
 }
+
+/** Icon theo slug danh mục chuẩn; slug lạ lùi về LayoutGrid. */
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  'my-pham-thien-nhien': Flower2,
+  'tay-rua-sinh-hoc': Sparkles,
+  'cho-be': Baby,
+  'cho-me-bau': HeartHandshake,
+  'cham-soc-ca-nhan': Smile,
+  'ca-phe-do-uong': Coffee,
+  'nong-san-thuc-pham': Wheat,
+};
 
 /** 4 phân khúc (forSegment) — luôn có hàng trên prod vì sync Pancake suy ra từ tên SP. */
 export const SEGMENT_ENTRIES: CategoryEntry[] = [
-  { kind: 'segment', key: 'mom_baby', label: vi.browse.segments.mom_baby, icon: Baby },
-  { kind: 'segment', key: 'home_clean', label: vi.browse.segments.home_clean, icon: SprayCan },
-  { kind: 'segment', key: 'skincare', label: vi.browse.segments.skincare, icon: Droplets },
-  { kind: 'segment', key: 'eco', label: vi.browse.segments.eco, icon: Recycle },
+  { kind: 'segment', key: 'mom_baby', label: vi.browse.segments.mom_baby, icon: Baby, image: null },
+  { kind: 'segment', key: 'home_clean', label: vi.browse.segments.home_clean, icon: SprayCan, image: null },
+  { kind: 'segment', key: 'skincare', label: vi.browse.segments.skincare, icon: Droplets, image: null },
+  { kind: 'segment', key: 'eco', label: vi.browse.segments.eco, icon: Recycle, image: null },
 ];
 
 export function segmentLabel(key: string): string | undefined {
@@ -36,7 +49,7 @@ export function categoryEntries(categories: CategoryDTO[] | undefined): Category
   if (!all.some((c) => typeof c.productCount === 'number')) return SEGMENT_ENTRIES;
   const real = all.filter((c) => typeof c.productCount !== 'number' || c.productCount > 0);
   if (real.length === 0) return SEGMENT_ENTRIES;
-  return real.map((c) => ({ kind: 'category', key: c.id, label: c.name, icon: LayoutGrid }));
+  return real.map((c) => ({ kind: 'category', key: c.id, label: c.name, icon: CATEGORY_ICONS[c.slug] ?? LayoutGrid, image: c.image }));
 }
 
 export const CATEGORIES_KEY = ['categories'] as const;

@@ -209,13 +209,38 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
   });
 
   it('dòng chính sách mở nội dung ngay trong app, "Đã hiểu" đóng lại', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ freeshipThreshold: 200000, support: SUPPORT, returnWindowDays: 7 });
     renderPage();
     const row = await screen.findByRole('button', { name: /Chính sách đổi trả/ });
     fireEvent.click(row);
     expect(await screen.findByRole('heading', { level: 2, name: 'Chính sách đổi trả' })).toBeInTheDocument();
-    expect(screen.getByText(/Đổi\/trả áp dụng trong 7 ngày/)).toBeInTheDocument();
+    await screen.findByText(/Đổi\/trả áp dụng trong 7 ngày/);
     fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
     await waitFor(() => expect(screen.queryByText(/Đổi\/trả áp dụng trong 7 ngày/)).toBeNull());
+  });
+
+  it('tóm tắt đổi trả đọc số ngày từ cấu hình công khai: 14 ngày thì không còn chữ "7 ngày" (D8-4)', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ freeshipThreshold: 200000, support: SUPPORT, returnWindowDays: 14 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
+    const body = await screen.findByText(/Đổi\/trả áp dụng/);
+    await waitFor(() => expect(body.textContent).toContain('14 ngày'));
+    expect(body.textContent).not.toContain('7 ngày');
+  });
+
+  it('cấu hình chưa tải/không có số ngày: nói chung chung, không bịa số (D8-4)', async () => {
+    mocks.getPublicConfig.mockRejectedValue(new Error('offline'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
+    const body = await screen.findByText(/Đổi\/trả áp dụng/);
+    expect(body.textContent).not.toMatch(/\d+ ngày/);
+  });
+
+  it('tóm tắt đổi trả nói đúng kênh hoàn: Ví Tubu hoặc tài khoản ngân hàng khách chọn (D8-4)', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
+    const body = await screen.findByText(/Đổi\/trả áp dụng/);
+    expect(body.textContent).toMatch(/Ví Tubu hoặc tài khoản ngân hàng/);
   });
 
   it('Xóa tài khoản: bấm → hỏi lại → "Gửi yêu cầu xóa" gọi API đúng một lần, "Hủy" quay về', async () => {

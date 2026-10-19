@@ -474,6 +474,12 @@ function CartLineRow({
         <Box style={{ marginTop: 4 }}>
           <PriceTag value={line.unitPrice} size="sm" />
         </Box>
+        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Đang chờ đồng bộ SL thì ẩn. */}
+        {line.quantity > 1 && localQty === line.quantity && (
+          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+            Thành tiền {formatVnd(line.total)}
+          </Text>
+        )}
         {line.isFlash && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
             <Badge tone="promo" size="sm" icon={Zap}>

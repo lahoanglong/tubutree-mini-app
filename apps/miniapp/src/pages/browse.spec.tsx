@@ -475,6 +475,16 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     });
   });
 
+  describe('API sản phẩm lỗi ở lần tải đầu (D6-08)', () => {
+    it('hiện khối lỗi + "Thử lại" và KHÔNG ghi "0 sản phẩm" (khách không nghĩ cửa hàng hết hàng)', async () => {
+      mocks.fetchCatalog.mockRejectedValue(new Error('network'));
+      renderAt('/browse');
+      expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+      expect(screen.queryByText('0 sản phẩm')).toBeNull();
+      expect(screen.getByTestId('result-count').textContent?.trim()).toBe('');
+    });
+  });
+
   describe('khung chờ Danh mục', () => {
     it('dựng đúng số ô của lần tải trước (không mặc định 4) khi danh sách danh mục còn đang tải', async () => {
       localStorage.setItem(CATEGORY_COUNT_KEY, '6');

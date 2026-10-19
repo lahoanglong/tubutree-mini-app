@@ -73,6 +73,16 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
   });
 
+  it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {
+    renderPage();
+    const tile = await screen.findByRole('button', { name: /^Ví Tubu: 50\.000đ$/ });
+    const value = Array.from(tile.querySelectorAll<HTMLElement>('*')).find((el) => el.textContent === '50.000đ' && el.children.length === 0)!;
+    expect(value).toBeTruthy();
+    expect(value.style.fontFamily).toContain('--font-ui');
+    expect(value.style.fontFamily).not.toContain('--font-display');
+    expect(value.style.fontVariantNumeric).toBe('tabular-nums');
+  });
+
   it('không còn mục Hoàn tiền sàn ngoài; bấm mục menu điều hướng thật, không báo "đang hoàn thiện"', async () => {
     renderPage();
     expect(screen.queryByText('Hoàn tiền sàn ngoài')).toBeNull();

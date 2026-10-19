@@ -421,9 +421,9 @@ function Stat({ label, value, onClick, wide }: { label: string; value: string; o
         gridColumn: wide ? '1 / -1' : undefined,
       }}
     >
-      <Heading variant="title-sm" as="div" tone="brand">
+      <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {value}
-      </Heading>
+      </Text>
       <Text variant="caption" tone="tertiary" as="div">
         {label}
       </Text>

@@ -52,7 +52,10 @@ jobs:
         run: pnpm test:ci
 
       - name: Build
+        # Bản build production của Mini App bắt buộc có địa chỉ API https (apps/miniapp/src/build-env.ts); bundle CI không đem đi deploy.
         run: pnpm build
+        env:
+          VITE_API_BASE_URL: https://api.tubutree.com/api
 
       - name: Báo cáo kích thước bundle miniapp (chỉ cảnh báo, không chặn)
         # Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành: chưa kiểm).

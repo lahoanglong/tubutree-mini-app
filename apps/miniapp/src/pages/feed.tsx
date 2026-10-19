@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, HelpCircle, Hash, Trophy, PartyPopper, X } from 'lucide-react';
+import { Plus, HelpCircle, Hash, X } from 'lucide-react';
 import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -15,7 +15,6 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
 import { Chip } from '../components/ui/chip';
 import { Icon } from '../components/ui/icon';
-import { IconButton } from '../components/ui/icon-button';
 import { PageHeader } from '../components/ui/page-header';
 import { CommunityChannels } from '../components/community/community-channels';
 import { ScrollRow } from '../components/ui/scroll-row';
@@ -150,41 +149,34 @@ export default function FeedPage() {
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
-      <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
+      <PageHeader title={vi.community.title} />
       <CommunityChannels />
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          padding: '0 12px 8px',
-          background: 'var(--color-bg-surface)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <IconButton
-            icon={Trophy}
-            label={vi.community.leaderboard}
-            style={{ background: 'var(--color-bg-subtle)' }}
-            onPress={() => {
-              haptic('light');
-              navigate('/feed/leaderboard');
-            }}
-          />
-          <IconButton
-            icon={PartyPopper}
-            label={vi.community.events}
-            style={{ background: 'var(--color-bg-subtle)' }}
-            onPress={() => {
-              haptic('light');
-              navigate('/feed/events');
-            }}
-          />
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
+        <Button
+          variant="secondary"
+          aria-label={vi.community.leaderboard}
+          style={{ flex: '0 0 auto', minWidth: 44, padding: '0 14px' }}
+          onPress={() => {
+            haptic('light');
+            navigate('/feed/leaderboard');
+          }}
+        >
+          Xếp hạng
+        </Button>
+        <Button
+          variant="secondary"
+          style={{ flex: '0 0 auto', minWidth: 44, padding: '0 14px' }}
+          onPress={() => {
+            haptic('light');
+            navigate('/feed/events');
+          }}
+        >
+          {vi.community.events}
+        </Button>
         <Button
           icon={Plus}
+          style={{ flex: '1 1 0', minWidth: 44, padding: '0 8px' }}
           onPress={() => {
             haptic('light');
             setComposing(true);
@@ -194,7 +186,7 @@ export default function FeedPage() {
         </Button>
       </div>
 
-      <div style={{ padding: '0 12px 8px', background: 'var(--color-bg-surface)' }}>
+      <div style={{ padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
         <SearchField
           value={q}
           onChange={setQ}

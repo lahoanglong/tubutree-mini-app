@@ -23,6 +23,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { shippingEtaLabel } from '../utils/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
@@ -88,6 +89,8 @@ export default function CheckoutPage() {
   // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ server; chưa tải xong → ẩn, không hứa dịch vụ chưa chắc có.
   const publicConfig = usePublicConfig();
   const pickupFlag = publicConfig.isLoaded && publicConfig.waste.pickup === true;
+  // Cùng điều kiện với màn thành công: chưa có cấu hình thì không hứa ngày giao.
+  const etaLabel = publicConfig.isLoaded && publicConfig.shippingEta ? shippingEtaLabel(publicConfig.shippingEta) : null;
   const wasteMeQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: pickupFlag });
   const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
@@ -786,7 +789,7 @@ export default function CheckoutPage() {
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
-        <Input placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
+        <Input aria-label={vi.checkout.note} placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
           choiceRev.current += 1;
           setNote(e.target.value);
         }} />
@@ -999,6 +1002,7 @@ export default function CheckoutPage() {
               value={quote.data.shippingFee === 0 ? vi.common.freeShip : formatVnd(quote.data.shippingFee)}
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
+            {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
             <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
