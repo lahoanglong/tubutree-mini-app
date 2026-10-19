@@ -7,7 +7,7 @@ import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
 import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { PageHeader } from '@/components/ui/page-header';
+import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -81,9 +81,9 @@ export default function SettingsPage() {
   };
 
   const shell = (body: ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <PageHeader title="Cài đặt" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
-      {body}
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand title="Cài đặt" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
+      <div className="max-md:px-4">{body}</div>
     </main>
   );
 
@@ -97,7 +97,7 @@ export default function SettingsPage() {
       <Section title="Thông báo">
         {platformBridge.oa.available && <FollowOaRow />}
         <div className="min-h-11 border-b border-stone-200 py-2">
-          <p className="text-sm text-stone-900">Cập nhật đơn hàng</p>
+          <p className="text-sm text-stone-900 max-md:font-semibold">Cập nhật đơn hàng</p>
           <p className="text-xs text-stone-600">Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền</p>
         </div>
         {prefsQ.isLoading && <Skeleton height={44} style={{ marginTop: 8 }} />}
@@ -153,9 +153,10 @@ export default function SettingsPage() {
       </Section>
 
       <div className="flex flex-col justify-end md:col-span-1">
-        <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full`}>
+        <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
           Đăng xuất
         </button>
+        <p className="mt-3 text-center text-xs text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">Tubu Tree · phiên bản 1.0.0</p>
       </div>
     </div>,
   );
@@ -163,8 +164,8 @@ export default function SettingsPage() {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className={`${ui.card} p-4`}>
-      <h2 className="mb-2 font-display text-base font-semibold text-stone-900">{title}</h2>
+    <section className={`${ui.card} p-4 ${mini.card}`}>
+      <h2 className="mb-2 font-display text-base font-semibold text-stone-900 max-md:font-ui max-md:font-bold">{title}</h2>
       {children}
     </section>
   );
@@ -184,7 +185,7 @@ function SwitchRow({ label, on, onToggle, disabled, last }: { label: string; on:
       }}
       className={`flex min-h-11 w-full items-center justify-between gap-3 py-2 text-left ${last ? '' : 'border-b border-stone-200'} ${disabled ? 'cursor-default opacity-60' : ''}`}
     >
-      <span className="text-sm text-stone-900">{label}</span>
+      <span className="text-sm text-stone-900 max-md:font-semibold">{label}</span>
       {/* Trạng thái tắt dùng stone-450 để thanh trượt đạt 3:1 với nền thẻ (WCAG 1.4.11). */}
       <span aria-hidden="true" className={`relative h-[26px] w-11 shrink-0 rounded-full transition-colors ${on ? 'bg-forest-600' : 'bg-stone-450'}`}>
         <span className={`absolute top-[3px] h-5 w-5 rounded-full bg-stone-0 shadow-card transition-all ${on ? 'left-[21px]' : 'left-[3px]'}`} />
@@ -197,7 +198,7 @@ function SwitchRow({ label, on, onToggle, disabled, last }: { label: string; on:
 function FollowOaRow() {
   return (
     <div className="flex min-h-11 items-center justify-between gap-3 border-b border-stone-200 py-2">
-      <span className="text-sm text-stone-900">Theo dõi Zalo OA</span>
+      <span className="text-sm text-stone-900 max-md:font-semibold">Theo dõi Zalo OA</span>
       <button type="button" onClick={() => void platformBridge.oa.follow()} className={`${ui.btnPrimary} min-h-11`}>
         Theo dõi
       </button>
@@ -207,7 +208,7 @@ function FollowOaRow() {
 
 function LinkRow({ href, label, last }: { href: string; label: string; last?: boolean }) {
   return (
-    <Link href={href} className={`flex min-h-11 items-center justify-between gap-3 py-2 text-sm text-stone-900 hover:text-forest-700 ${last ? '' : 'border-b border-stone-200'}`}>
+    <Link href={href} className={`flex min-h-11 items-center justify-between gap-3 py-2 text-sm text-stone-900 hover:text-forest-700 max-md:font-semibold ${last ? '' : 'border-b border-stone-200'}`}>
       {label}
       <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
     </Link>
