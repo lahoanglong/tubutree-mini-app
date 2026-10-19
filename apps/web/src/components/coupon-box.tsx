@@ -184,7 +184,7 @@ export function CouponBox({
               <span className="flex flex-col text-sm font-semibold text-stone-900">
                 Mã giảm giá
                 <span className="inline-flex items-center gap-2">
-                  <span className="rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-[11px] font-bold text-[color:var(--clay-700)]">
+                  <span className="rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-xs font-bold text-[color:var(--clay-700)]">
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
