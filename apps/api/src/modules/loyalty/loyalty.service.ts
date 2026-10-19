@@ -388,8 +388,10 @@ export class LoyaltyService {
 
   /**
    * Cron nightly: tính lại hạng cho mọi user ĐÃ có hạng — nơi DUY NHẤT thực sự áp rớt hạng
-   * sau khi hết ân hạn (sự kiện đơn hàng chỉ chạy lẻ tẻ). User chưa có hạng sẽ được gán
-   * hạng ở đơn DELIVERED đầu tiên nên không cần quét. Lỗi 1 user không chặn người khác.
+   * sau khi hết ân hạn (sự kiện đơn hàng chỉ chạy lẻ tẻ). User chưa có hạng được gán hạng ở đơn DELIVERED đầu tiên,
+   * trừ khi lúc đó bảng hạng còn trống (nạp hạng sau khi đã có đơn giao): recalcTier thoát sớm và khách kẹt tierId
+   * null đến đơn giao kế tiếp. Vì vậy quét thêm khách chưa có hạng nhưng đã có đơn DELIVERED; khách chưa mua bỏ qua.
+   * Lỗi 1 user không chặn người khác.
    */
   async recalcAllTiers(): Promise<number> {
     // Load tiers 1 LẦN cho cả batch — trước đây mỗi recalcTier tự findMany lại → N+1 query
@@ -402,7 +404,7 @@ export class LoyaltyService {
     let cursor: string | undefined;
     for (let page = 0; page < LoyaltyService.RECALC_MAX_PAGES; page++) {
       const users = await this.prisma.user.findMany({
-        where: { tierId: { not: null } },
+        where: { OR: [{ tierId: { not: null } }, { tierId: null, orders: { some: { status: 'DELIVERED' } } }] },
         orderBy: { id: 'asc' },
         take: LoyaltyService.RECALC_PAGE,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

@@ -1269,6 +1269,23 @@ describe('LoyaltyService.recalcAllTiers (tránh N+1)', () => {
     expect(n).toBe(3);
     expect(findMany).toHaveBeenCalledTimes(1);
   });
+
+  // Nạp hạng muộn (deploy không cờ rồi chạy --with-business-defaults): khách có đơn giao trước đó còn tierId null và
+  // recalcTier chỉ chạy ở đơn giao kế tiếp, nên quét đêm là đường duy nhất cứu họ.
+  it('quét cả khách chưa có hạng nhưng đã có đơn DELIVERED, không quét khách chưa mua', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      user: { findMany },
+      membershipTier: { findMany: jest.fn().mockResolvedValue([{ id: 'mam', sortOrder: 0, minPoints: 0, minSpending: null }]) },
+    } as unknown as PrismaService;
+
+    await new LoyaltyService(prisma, makeConfig()).recalcAllTiers();
+
+    const where = findMany.mock.calls[0]![0].where as { OR: unknown[] };
+    expect(where.OR).toEqual(
+      expect.arrayContaining([{ tierId: { not: null } }, { tierId: null, orders: { some: { status: 'DELIVERED' } } }]),
+    );
+  });
 });
 
 describe('LoyaltyService.dailyCheckIn — Task 9 analytics (engagement_action)', () => {
