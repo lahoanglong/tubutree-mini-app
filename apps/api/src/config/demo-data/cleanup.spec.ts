@@ -87,10 +87,23 @@ describe('formatPlan', () => {
     expect(text).toContain('order_items');
     expect(text).toContain('1 đơn');
     expect(text).toMatch(/WELCOME30.*GIỮ NGUYÊN/);
-    expect(text).toContain('CẢNH BÁO');
     expect(text).toMatch(/cat-baby.*TRỐNG/);
     expect(text).not.toMatch(/cat-food.*TRỐNG/);
     expect(text).toContain('Fuwa3e');
+  });
+
+  it('ba mã chủ dự án đã chốt giữ (A4): xem trước in GIỮ NGUYÊN theo A4, không cảnh báo "chưa duyệt"', () => {
+    const base = plan().coupons[0]!;
+    const p = plan({ coupons: ['WELCOME30', 'FREESHIP', 'XANH10'].map((code, i) => ({ ...base, id: `c${i}`, code, willExpire: false })) });
+    const text = formatPlan(p, { apply: false, coupons: 'keep', keepCoupons: [], expectDb: null });
+    for (const code of ['WELCOME30', 'FREESHIP', 'XANH10']) expect(text).toMatch(new RegExp(`${code}.*GIỮ NGUYÊN \\(chủ dự án đã chốt giữ, A4\\)`));
+    expect(text).not.toContain('chưa duyệt');
+    expect(text).not.toContain('CẢNH BÁO');
+  });
+
+  it('--coupons=expire không kèm --keep-coupon: nhắc ba mã A4 là mã chủ dự án đã chốt giữ', () => {
+    const text = formatPlan(plan(), { apply: false, coupons: 'expire', keepCoupons: [], expectDb: null });
+    expect(text).toMatch(/WELCOME30.*sẽ TẮT.*chủ dự án đã chốt GIỮ.*--keep-coupon=WELCOME30/);
   });
 
   it('--coupons=expire: mã sẽ bị tắt và cắt hạn, trừ mã --keep-coupon', () => {
