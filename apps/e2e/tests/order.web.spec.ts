@@ -54,6 +54,8 @@ function mockBuyer(api: MockApi, opts: { pickup?: boolean } = {}) {
     subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000,
     pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
   });
+  api.get('/me/purchased-items', { items: [], nextCursor: null });
+  api.get('/orders/me/refunds', []);
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
 }
 
@@ -112,7 +114,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
 
     await page.goto('/thanh-toan');
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
-    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible();
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
     await expect(page.getByRole('heading', { name: 'Đặt hàng thành công!' })).toBeVisible();
 

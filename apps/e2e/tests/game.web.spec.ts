@@ -99,7 +99,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
     await page.getByRole('button', { name: 'Điểm danh', exact: true }).dblclick();
-    await expect(page.getByText('+10💧')).toBeVisible();
+    await expect(page.getByRole('status').getByText('+10💧')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
     expect(api.callsTo('POST', '/game/check-in')).toHaveLength(1);
   });
@@ -178,7 +178,7 @@ test.describe('Web khách: Vườn Xanh', () => {
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API vườn', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
     await page.goto('/vuon-xanh');
-    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
     expect(api.callsTo('GET', '/game/profile')).toHaveLength(0);
   });
 });
@@ -188,6 +188,16 @@ test.describe('Web khách: Vườn Xanh', () => {
  * lỗi thì có "Thử lại" gửi lại đúng câu cũ, công tắc tắt AI đưa về Trang chủ.
  */
 test.describe('Trợ lý AI (/tu-van)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy, chỉ không có phiên khôi phục
+      }
+    });
+  });
+
   const PRODUCT = {
     id: 'p1', name: 'Nước rửa chén bồ hòn', slug: 'nuoc-rua-chen-bo-hon', brand: 'Tubu', shortDesc: null,
     thumbnail: null, basePrice: 90000, salePrice: 70000,
@@ -231,6 +241,11 @@ test.describe('Trợ lý AI (/tu-van)', () => {
 
   test('server báo tắt AI: về Trang chủ, không gọi chat', async ({ page, api }) => {
     mockAdvisor(api, false);
+    // Trang chủ mở sau khi chuyển hướng gọi nhiều khối không liên quan tới luồng này.
+    api.allowUnmocked(
+      'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/active', 'GET /flash-sales/upcoming',
+      'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you',
+    );
     await page.goto('/tu-van');
     await expect(page).toHaveURL(/\/$/);
     expect(api.callsTo('POST', '/ai-advisor/chat')).toHaveLength(0);
@@ -240,7 +255,7 @@ test.describe('Trợ lý AI (/tu-van)', () => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
     api.get('/config/public', { freeshipThreshold: 500000, aiAdvisorEnabled: true });
     await page.goto('/tu-van');
-    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
     expect(api.callsTo('POST', '/ai-advisor/chat')).toHaveLength(0);
   });
 });

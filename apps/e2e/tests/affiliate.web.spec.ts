@@ -237,12 +237,18 @@ test.describe('Web khách: CTV', () => {
 
   test('gian hàng: tạo bộ sưu tập (chỉ tên), thêm sản phẩm, đăng — đúng body như Mini App', async ({ page, api }) => {
     mockSession(api);
-    api.get('/storefront/me', SF());
+    let added = false;
+    api.get('/storefront/me', () =>
+      SF({ collections: [{ id: 'c1', title: 'Bộ sưu tập A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: added ? [{ id: 'i2', productId: 'p2' }] : [] }] }),
+    );
     api.get('/storefront/me/products', [{ id: 'p2', name: 'Xà phòng', slug: 'xa-phong', thumbnail: null, brand: 'Tubu', basePrice: 50_000, salePrice: null, ratingAvg: 5, reviewCount: 1, maxAffiliateRate: 12 }]);
     api.get('/storefront/me/stats', EMPTY_STATS);
     api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
     api.post('/storefront/me/collections', { id: 'c2', title: 'Combo Tết', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] });
-    api.post('/storefront/me/collections/:id/items', { id: 'i2', productId: 'p2' });
+    api.post('/storefront/me/collections/:id/items', () => {
+      added = true;
+      return { id: 'i2', productId: 'p2' };
+    });
     api.post('/storefront/me/publish', SF({ isPublished: true }));
     await page.goto('/ctv/gian-hang');
     await page.getByLabel('Tên bộ sưu tập (khách sẽ thấy)').fill('Combo Tết');
@@ -255,6 +261,7 @@ test.describe('Web khách: CTV', () => {
     await page.getByRole('button', { name: 'Thêm Xà phòng' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/collections/:id/items')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/collections/:id/items')[0]!.body).toEqual({ productId: 'p2' });
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Lưu & Đăng' }).click();
     await expect.poll(() => api.callsTo('POST', '/storefront/me/publish')).toHaveLength(1);
     expect(api.callsTo('POST', '/storefront/me/publish')[0]!.body).toEqual({ isPublished: true });
@@ -279,7 +286,7 @@ test.describe('Web khách: CTV', () => {
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API CTV', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
     await page.goto('/ctv');
-    await expect(page.getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
     expect(api.callsTo('GET', '/affiliate/me')).toHaveLength(0);
   });
 });
