@@ -136,6 +136,34 @@ describe('PayrollService.recomputeStaffMonth', () => {
   });
 });
 
+describe('PayrollService — khoá tháng (D4-03)', () => {
+  it('recompute, chốt và đã chi đều lấy khoá advisory (staffId, năm, tháng) TRƯỚC khi đọc/ghi', async () => {
+    for (const run of [
+      (svc: PayrollService) => svc.recomputeStaffMonth('u1', 2026, 7),
+      (svc: PayrollService) => svc.finalize('u1', 2026, 7),
+      (svc: PayrollService) => svc.markPaid('u1', 2026, 7, 'http://img/p.jpg', undefined, 'a1'),
+    ]) {
+      const order: string[] = [];
+      const prisma = makePrisma({
+        payrollMonth: {
+          findUnique: jest.fn().mockImplementation(async () => {
+            order.push('read');
+            return null;
+          }),
+          upsert: jest.fn().mockResolvedValue({}),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        $executeRaw: jest.fn().mockImplementation(async () => {
+          order.push('lock');
+        }),
+      });
+      await run(mk(prisma));
+      expect(order[0]).toBe('lock');
+      expect(((prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw.mock.calls[0] as unknown[]).slice(1)).toEqual(['payroll:u1:2026-7']);
+    }
+  });
+});
+
 describe('PayrollService.markPaid / finalize', () => {
   it('markPaid thiếu proof → BadRequest', async () => {
     await expect(mk(makePrisma()).markPaid('u1', 2026, 7, '', undefined, 'a1')).rejects.toBeInstanceOf(
@@ -463,7 +491,8 @@ describe('PayrollService.adjust — chống gửi trùng', () => {
 
     await mk(prisma).adjust('u1', new Date('2026-07-03'), 500000, 'trừ tạm ứng', 'a1');
 
-    expect(order).toEqual(['lock', 'check', 'create']);
+    // Lần 'lock' thứ hai là khoá tháng của recomputeDay chạy sau khi ghi khoản điều chỉnh.
+    expect(order).toEqual(['lock', 'check', 'create', 'lock']);
     // Khoá theo (staffId, workDate, type) — đúng phạm vi task yêu cầu, không lẫn amount/reason
     // (2 khoản khác số tiền/lý do CÙNG ngày vẫn phải serialize qua nhau).
     expect(executeRaw.mock.calls[0].slice(1)).toEqual(['u1:2026-07-03T00:00:00.000Z:MANUAL']);
