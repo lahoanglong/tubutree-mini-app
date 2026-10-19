@@ -82,17 +82,13 @@ afterEach(() => {
 });
 
 describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB-18)', () => {
-  it('nhãn đã công khai: tên nhãn là liên kết tới /brand/:slug', async () => {
-    api.product = { ...PRODUCT, brandSlug: 'xanh-viet' };
-    const c = await mount();
-    const a = Array.from(c.querySelectorAll('a')).find((x) => x.textContent === 'Xanh Việt')!;
-    expect(a.getAttribute('href')).toBe('/brand/xanh-viet');
-  });
-
-  it('nhãn chưa có trang: tên nhãn chỉ là chữ, không có liên kết chết', async () => {
-    const c = await mount();
-    expect(Array.from(c.querySelectorAll('a')).find((x) => x.textContent === 'Xanh Việt')).toBeUndefined();
-    expect(c.textContent).toContain('Xanh Việt');
+  it('tên nhãn mở danh mục lọc theo nhãn như Mini App (brandBrowsePath), kể cả nhãn chưa có trang riêng', async () => {
+    for (const brandSlug of ['xanh-viet', undefined]) {
+      api.product = { ...PRODUCT, brandSlug };
+      const c = await mount();
+      const a = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm nhãn Xanh Việt"]')!;
+      expect(a.getAttribute('href')).toBe('/san-pham?brand=Xanh%20Vi%E1%BB%87t');
+    }
   });
 });
 
@@ -110,7 +106,7 @@ describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
   it('hàng nhãn: chấm màu + tên + mũi tên, không gạch chân ở điện thoại; chia sẻ chỉ là biểu tượng', async () => {
     api.product = PRODUCT_TUBU;
     const c = await mount();
-    const link = c.querySelector<HTMLAnchorElement>('a[href="/brand/xanh-viet"]')!;
+    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm nhãn Xanh Việt"]')!;
     expect(link.className).toContain('max-md:no-underline');
     expect(link.querySelector('[data-testid="brand-dot"]')).not.toBeNull();
     expect(link.querySelector('svg')).not.toBeNull();

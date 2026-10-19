@@ -80,27 +80,21 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
         <div data-testid="pdp-info" className="max-md:bg-stone-0 max-md:p-4">
           <div className="flex items-center justify-between gap-2">
-            {/* Điện thoại: chấm màu + tên nhãn xám + mũi tên như Mini App; đích vẫn là trang nhãn. */}
-            {product.brandSlug ? (
-              <Link
-                href={`/brand/${encodeURIComponent(product.brandSlug)}`}
-                className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[var(--color-text-secondary)] max-md:no-underline"
-              >
-                <span
-                  data-testid="brand-dot"
-                  aria-hidden="true"
-                  className="hidden h-2 w-2 rounded-full max-md:block"
-                  style={{ background: brandAccent(product.brand) }}
-                />
-                {product.brand}
-                <ChevronRight className="hidden h-4 w-4 text-[var(--color-text-tertiary)] max-md:block" aria-hidden="true" />
-              </Link>
-            ) : (
-              <div className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 max-md:text-xs max-md:text-[var(--color-text-secondary)]">
-                <span aria-hidden="true" className="hidden h-2 w-2 rounded-full max-md:block" style={{ background: brandAccent(product.brand) }} />
-                {product.brand}
-              </div>
-            )}
+            {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
+            <Link
+              href={`/san-pham?brand=${encodeURIComponent(product.brand)}`}
+              aria-label={`Xem sản phẩm nhãn ${product.brand}`}
+              className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 underline max-md:text-xs max-md:text-[var(--color-text-secondary)] max-md:no-underline"
+            >
+              <span
+                data-testid="brand-dot"
+                aria-hidden="true"
+                className="hidden h-2 w-2 rounded-full max-md:block"
+                style={{ background: brandAccent(product.brand) }}
+              />
+              {product.brand}
+              <ChevronRight className="hidden h-4 w-4 text-[var(--color-text-tertiary)] max-md:block" aria-hidden="true" />
+            </Link>
             <div className="flex items-center">
               <WishlistHeart productId={product.id} />
               <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
