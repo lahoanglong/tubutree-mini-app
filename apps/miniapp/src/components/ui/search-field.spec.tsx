@@ -86,6 +86,12 @@ describe('SearchField', () => {
     expect((screen.getByTestId('search-field-box') as HTMLElement).style.minHeight).toBe('44px');
   });
 
+  it('chính ô nhập (phần tử nhận chạm) cao ít nhất 44px, không 42px (D6-16)', () => {
+    renderField();
+    const input = screen.getByRole('searchbox');
+    expect(Number.parseFloat(input.style.height)).toBeGreaterThanOrEqual(44);
+  });
+
   it('bấm nút xoá trả focus về ô nhập (bàn phím không bị đóng)', async () => {
     const user = userEvent.setup();
     const ref = createRef<HTMLInputElement>();

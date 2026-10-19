@@ -45,7 +45,7 @@ export function Stars({ value, size = 14 }: { value: number; size?: number }) {
           size={size}
           strokeWidth={1.75}
           aria-hidden
-          style={{ color: i <= Math.round(value) ? 'var(--color-rating)' : 'var(--stone-200)', fill: 'currentColor' }}
+          style={{ color: i <= Math.round(value) ? 'var(--color-rating)' : 'var(--stone-450)', fill: 'currentColor' }}
         />
       ))}
     </span>
@@ -508,7 +508,7 @@ function WriteReview({
               background: 'transparent',
               display: 'grid',
               placeItems: 'center',
-              color: i <= rating ? 'var(--color-rating)' : 'var(--stone-200)',
+              color: i <= rating ? 'var(--color-rating)' : 'var(--stone-450)',
             }}
           >
             <Star size={32} strokeWidth={1.75} aria-hidden style={{ fill: 'currentColor' }} />
@@ -516,6 +516,7 @@ function WriteReview({
         ))}
       </div>
       <Input.TextArea
+        aria-label="Nội dung đánh giá"
         placeholder="Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)..."
         value={comment}
         onChange={(e) => onDraftChange({ comment: e.target.value })}

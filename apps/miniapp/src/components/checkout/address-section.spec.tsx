@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -14,16 +14,17 @@ vi.mock('../address-form', () => ({
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { AddressSection } from './address-section';
+import { vi as viCopy } from '../../i18n/vi';
 
 const ADDR: AddressDTO = {
   id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 X', province: 'HCM', provinceCode: '84_VN79',
   ward: 'P1', wardCode: '84_VN79_001', district: '', districtCode: '', isDefault: true,
 };
 
-function renderSection(addresses: AddressDTO[], onSelect: (id: string) => void = () => {}) {
+function renderSection(addresses: AddressDTO[], onSelect: (id: string) => void = () => {}, selectedId: string | null = null) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <AddressSection addresses={addresses} selectedId={null} onSelect={onSelect} />
+      <AddressSection addresses={addresses} selectedId={selectedId} onSelect={onSelect} />
     </QueryClientProvider>,
   );
 }
@@ -73,5 +74,32 @@ describe('AddressSection — hàng chọn địa chỉ dùng được bằng bà
     await user.keyboard('{Enter}');
     expect(onSelect).toHaveBeenCalledTimes(3);
     expect(onSelect).toHaveBeenLastCalledWith('a2');
+  });
+});
+
+describe('AddressSection — cảnh báo địa giới cũ nằm trong đúng thẻ đang chọn (D6-03)', () => {
+  const LEGACY: AddressDTO = { ...ADDR, id: 'a1', provinceCode: '79', wardCode: '00' };
+  const OK: AddressDTO = { ...ADDR, id: 'a2', recipient: 'Bình', isDefault: false };
+  const cardOf = (name: RegExp) => screen.getByRole('radio', { name }).parentElement as HTMLElement;
+
+  it('chọn thẻ 1 (địa giới cũ), thẻ 2 hợp lệ → alert nằm trong thẻ 1, thẻ 2 không có alert', () => {
+    renderSection([LEGACY, OK], () => {}, 'a1');
+    const first = cardOf(/Ánh/);
+    const second = cardOf(/Bình/);
+    expect(within(first).getByRole('alert')).toBeInTheDocument();
+    expect(within(second).queryByRole('alert')).toBeNull();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  it('nút "chọn lại tỉnh/phường" nằm cùng thẻ với cảnh báo và mở form sửa', () => {
+    renderSection([LEGACY, OK], () => {}, 'a1');
+    const first = cardOf(/Ánh/);
+    fireEvent.click(within(first).getByRole('button', { name: viCopy.checkout.addressLegacyCta }));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+  });
+
+  it('chọn thẻ hợp lệ trong khi thẻ 1 cũ → không có cảnh báo nào', () => {
+    renderSection([LEGACY, OK], () => {}, 'a2');
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

@@ -608,6 +608,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
   return (
     <div style={{ marginTop: 8 }}>
       <Input.Search
+        aria-label={t.searchProduct}
         placeholder={t.searchProduct}
         value={q}
         onChange={(e) => setQ(e.target.value)}

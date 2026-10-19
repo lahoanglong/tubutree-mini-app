@@ -7,7 +7,8 @@ import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
 
 export interface ResultHeaderProps {
-  total: number;
+  /** Thiếu số (lần tải đầu lỗi) thì không in "0 sản phẩm": khách sẽ hiểu nhầm cửa hàng hết hàng. */
+  total?: number;
   isLoading: boolean;
   chips: ActiveFilterChip[];
   filterCount: number;
@@ -25,7 +26,7 @@ export function ResultHeader({ total, isLoading, chips, filterCount, filtersIgno
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <p aria-live="polite" aria-atomic="true" data-testid="result-count" style={{ margin: 0, minWidth: 0 }}>
           <Text variant="body-sm" tone="secondary">
-            {isLoading ? ' ' : vi.browse.resultCount(total)}
+            {isLoading || total === undefined ? ' ' : vi.browse.resultCount(total)}
           </Text>
         </p>
         <Button variant="secondary" icon={SlidersHorizontal} onPress={onOpenFilters} style={{ minWidth: 0, flex: '0 0 auto' }}>
