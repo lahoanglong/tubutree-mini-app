@@ -22,7 +22,7 @@ import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { SubscriptionsService } from '../../src/modules/subscriptions/subscriptions.service';
 import { PRODUCT_DISCONTINUED } from '../../src/modules/cart/sellable';
 import * as orderCode from '../../src/common/order-code';
-import { createDealer, createUser, randCode, summarize, warmPool } from './helpers';
+import { createDealer, createUser, pinDealerOrderRulesOff, randCode, summarize, warmPool } from './helpers';
 
 /**
  * C-007 / A5N-04 (Q-14, docs/2026-10-review): SP ngừng bán (variation/Product isActive=false) hoặc SP
@@ -40,6 +40,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
   let checkout: CheckoutService;
   let affiliate: AffiliateService;
   let dealer: DealerService;
+  let restoreRules: () => Promise<void>;
   let subs: SubscriptionsService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const pricing = {
@@ -93,6 +94,8 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
     affiliate = moduleRef.get(AffiliateService);
     dealer = moduleRef.get(DealerService);
     subs = moduleRef.get(SubscriptionsService);
+    // Đơn đại lý ở đây chỉ vài trăm nghìn: tắt luật tối thiểu/phí giao để lỗi trả về là lỗi ngừng bán đang kiểm.
+    restoreRules = await pinDealerOrderRulesOff(prisma);
   });
 
   afterEach(() => {
@@ -101,6 +104,7 @@ describe('SP ngừng bán không đặt được ở mọi đường (real Postg
   });
 
   afterAll(async () => {
+    await restoreRules?.();
     await moduleRef?.close();
   });
 
