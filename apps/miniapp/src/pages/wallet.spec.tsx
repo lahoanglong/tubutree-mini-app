@@ -519,6 +519,30 @@ describe('WalletPage — cờ "lệnh rút chưa rõ kết quả" tự gỡ (P3 
     expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
   });
 
+  it('sao kê chưa tải được lúc rút hết thời gian chờ: lệnh rút cũ cùng số tiền không được coi là lệnh vừa gửi, key cũ vẫn giữ', async () => {
+    mocks.getWallet.mockResolvedValue(WALLET);
+    mocks.getReferral.mockResolvedValue(REFERRAL);
+    mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    const OLD_TX = { ...RECORDED_TX, id: 'old', createdAt: '2026-09-01T07:04:00.000Z' };
+    mocks.getWalletTransactions
+      .mockRejectedValueOnce(new Error('history down'))
+      .mockImplementation((page: number) => Promise.resolve(page === 1 ? { ...TXN_PAGE_1, data: [OLD_TX, ...TXN_PAGE_1.data] } : TXN_PAGE_2));
+    mocks.withdraw.mockReset();
+    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
+    renderPage();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('−400.000đ')).toBeInTheDocument();
+    await closeSheet();
+    await openSheet();
+    await fill();
+    press();
+    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
+    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
+  });
+
   it('khách rời màn Ví rồi vào lại: lệnh rút mới không mang key của lệnh chưa rõ kết quả trước đó', async () => {
     stubHistory({ extra: [] });
     mocks.withdraw.mockReset();

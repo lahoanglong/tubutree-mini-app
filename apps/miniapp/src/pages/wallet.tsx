@@ -75,12 +75,14 @@ export default function WalletPage() {
   const withdrawKey = useRef(newIdempotencyKey());
   // Có một lệnh rút chưa rõ kết quả: mở lại sheet vẫn dùng key đó cho tới khi máy chủ trả lời dứt khoát hoặc sao kê cho thấy
   // lệnh đã được ghi. `knownIds` là các dòng rút cùng số tiền đã có trong sao kê lúc đó, để không nhận nhầm lệnh cũ là lệnh vừa gửi.
-  const withdrawUnresolved = useRef<{ amount: number; knownIds: Set<string> } | null>(null);
-  const firstPageRows = useRef<WalletTxn[]>([]);
+  // `knownIds` null = lúc lỗi chưa có sao kê nào tải xong, không biết dòng nào là cũ → không tự gỡ cờ (giữ key như trước).
+  const withdrawUnresolved = useRef<{ amount: number; knownIds: Set<string> | null } | null>(null);
+  const firstPageRows = useRef<WalletTxn[] | null>(null);
   const onHistoryRows = useCallback((rows: WalletTxn[]) => {
     firstPageRows.current = rows;
     const pending = withdrawUnresolved.current;
-    if (pending && rows.some((t) => isWithdrawOf(t, pending.amount) && !pending.knownIds.has(t.id))) {
+    const knownIds = pending?.knownIds;
+    if (pending && knownIds && rows.some((t) => isWithdrawOf(t, pending.amount) && !knownIds.has(t.id))) {
       // Chỉ bỏ cờ, chưa đổi key: sheet còn mở mà khách bấm lại thì máy chủ trả đúng lệnh đã ghi thay vì rút thêm lần nữa.
       // Key mới được cấp ở lần mở sheet kế tiếp.
       withdrawUnresolved.current = null;
@@ -103,7 +105,7 @@ export default function WalletPage() {
         const amountSent = Number(amount);
         withdrawUnresolved.current = {
           amount: amountSent,
-          knownIds: new Set(firstPageRows.current.filter((t) => isWithdrawOf(t, amountSent)).map((t) => t.id)),
+          knownIds: firstPageRows.current && new Set(firstPageRows.current.filter((t) => isWithdrawOf(t, amountSent)).map((t) => t.id)),
         };
         refreshAll();
         openSnackbar({ text: vi.wallet.withdrawUnknown, type: 'error' });

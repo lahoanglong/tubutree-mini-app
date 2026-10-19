@@ -42,6 +42,13 @@ function isSessionExpired(error: unknown): boolean {
   const status = error.response?.status;
   return status === 401 || status === 403;
 }
+// Lý do cụ thể của máy chủ (vd. "Tài khoản đã bị khoá.") đáng hiện hơn câu chung về phiên; chữ mặc định tiếng Anh của Nest thì không.
+const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
+function sessionExpiredText(error: unknown): string {
+  const data = isAxiosError(error) ? (error.response?.data as { message?: string | string[] } | undefined) : undefined;
+  const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
+  return message && !GENERIC_AUTH_MESSAGES.has(message) ? message : SESSION_EXPIRED_MESSAGE;
+}
 
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
 
@@ -115,7 +122,7 @@ export default function BankPaymentPage() {
         text: isFinalRejection(err)
           ? getErrorMessage(err)
           : isSessionExpired(err)
-            ? SESSION_EXPIRED_MESSAGE
+            ? sessionExpiredText(err)
             : 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng.',
         type: 'error',
         position: 'top',

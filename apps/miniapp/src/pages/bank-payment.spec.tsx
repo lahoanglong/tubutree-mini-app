@@ -510,4 +510,15 @@ describe('Thanh toán chuyển khoản: nút Kiểm tra khi phiên hết hạn (
     expect(arg.text).not.toMatch(/kết nối/i);
     expect(screen.getByAltText('VietQR')).toBeInTheDocument();
   });
+
+  it('401 kèm lý do cụ thể của máy chủ (tài khoản bị khoá): hiện đúng lý do, không nói chung chung là hết phiên', async () => {
+    const blocked = new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, {
+      status: 401, statusText: '', headers: {}, config: {} as never, data: { message: 'Tài khoản đã bị khoá.' },
+    });
+    mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(blocked);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Tôi đã chuyển khoản/ }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+    expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toBe('Tài khoản đã bị khoá.');
+  });
 });
