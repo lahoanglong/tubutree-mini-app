@@ -13,6 +13,13 @@ export const ATTENTION_PARTIAL_RETURN_ACK = 'Pancake đã nhận phiếu hoàn m
 export const ATTENTION_CANCELLED_ON_PANCAKE_ONLY = 'Pancake đã huỷ nhưng đơn Tubu còn hiệu lực';
 /** Pancake báo huỷ đơn đã bàn giao (processor) — xong việc khi đơn đã huỷ/trả theo luồng hoàn. */
 export const ATTENTION_CANCEL_AFTER_HANDOVER = 'Pancake báo HUỶ nhưng đơn đã bàn giao vận chuyển';
+/**
+ * Pancake báo "Đã hoàn" cho đơn COD đã giao mà Tubu chưa có bằng chứng thu COD (DELIVERED có thể do kho bấm "Đã nhận" nhầm):
+ * đơn đã sang RETURNED nhưng tiền chưa hoàn Ví — chờ admin/kế toán kiểm rồi hoàn tay.
+ */
+export const ATTENTION_COD_RETURN_UNVERIFIED =
+  'Pancake báo "Đã hoàn" cho đơn COD đã giao — đơn đã chuyển "Đã trả hàng", điểm/hoa hồng đã đảo, nhưng hệ thống KHÔNG tự hoàn tiền vào Ví vì chưa có bằng chứng hãng đã thu COD. ' +
+  'Kiểm tra với kho/hãng vận chuyển: hãng đã thu COD và khách đã trả tiền thì hoàn tiền tay cho khách; chưa thu thì không hoàn.';
 /** Lời nhắc tạo phiếu trả trên Pancake lúc duyệt trả (OrderReturnsService.flagPancakeReturn). */
 export const ATTENTION_RETURN_APPROVED = ['Khách trả một phần đơn', 'Khách trả cả đơn'];
 /** Pancake báo khách mới chuyển một phần tiền — tự gỡ khi đơn đủ tiền hoặc số đã nhận đã thành khoản hoàn. */

@@ -36,6 +36,7 @@ import { PANCAKE_CANCEL } from '../integrations/pancake/pancake-order.service';
 import {
   ATTENTION_CANCEL_AFTER_HANDOVER,
   ATTENTION_CANCELLED_ON_PANCAKE_ONLY,
+  ATTENTION_COD_RETURN_UNVERIFIED,
   ATTENTION_UNDERPAID,
   clearPancakeAttention,
   flagPancakeAttention,
@@ -182,6 +183,11 @@ export class OrderStatusService {
        * của D1 nên được huỷ dù đơn đã bàn giao vận chuyển. Mọi đường huỷ khác bị chặn sau mốc bàn giao.
        */
       returnedToSender?: boolean;
+      /**
+       * Trả hàng đơn COD mà DELIVERED chưa phải bằng chứng đã thu tiền (Pancake báo hàng hoàn về, kho có thể đã bấm "Đã nhận"
+       * nhầm): đảo kho/điểm/hoa hồng như thường nhưng KHÔNG tự hoàn Ví; đơn vào "Cần xử lý Pancake" cùng câu lật trạng thái.
+       */
+      withholdCodRefund?: boolean;
       /** Lý do người vận hành nhập khi huỷ/trả — khách đọc nguyên văn trong tin báo (ghi chú nội bộ ở `note`). */
       customerReason?: string;
     } = {},
@@ -320,7 +326,17 @@ export class OrderStatusService {
       }
 
       if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
-        reversed = await this.reversal.reverseFinancials(tx, order);
+        const withholdCod = opts.withholdCodRefund === true && order.paymentMethod === 'COD' && from === 'DELIVERED' && targetStatus === 'RETURNED';
+        reversed = withholdCod
+          ? await this.reversal.reverseFinancials(tx, order, { withholdCodRefund: true })
+          : await this.reversal.reverseFinancials(tx, order);
+        // Cùng tx: nếu ghi sau commit mà chết giữa chừng thì đơn đã RETURNED, không tiền hoàn, và không ai biết phải kiểm.
+        if (withholdCod) {
+          await tx.order.updateMany({
+            where: { id: order.id },
+            data: { pancakeAttention: ATTENTION_COD_RETURN_UNVERIFIED, pancakeAttentionAt: new Date() },
+          });
+        }
       }
       return true;
     }).catch(async (err: unknown) => {
