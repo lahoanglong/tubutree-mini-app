@@ -77,6 +77,21 @@ export async function pinConfig(prisma: PrismaService, key: string, value: Prism
 }
 
 /**
+ * Tắt luật đơn sỉ (tối thiểu 3 triệu, phí giao dưới 5 triệu, khoá mua chịu quá hạn) cho spec không kiểm luật đó nhưng đặt
+ * đơn đại lý vài trăm nghìn để thử kho, hạn mức, khoá. Trả hàm khôi phục như pinConfig.
+ */
+export async function pinDealerOrderRulesOff(prisma: PrismaService): Promise<() => Promise<void>> {
+  const restores = [
+    await pinConfig(prisma, 'dealer.min_order_value_vnd', 0),
+    await pinConfig(prisma, 'dealer.shipping_fee_below_threshold_vnd', 0),
+    await pinConfig(prisma, 'dealer.block_credit_when_overdue', false),
+  ];
+  return async () => {
+    for (const restore of restores.reverse()) await restore();
+  };
+}
+
+/**
  * Đơn dựng thẳng ở DELIVERED mặc định đã xong việc sau giao (có mốc deliveredEffectsAt), như đơn đi qua setStatus thật: nếu không,
  * DB dùng chung đầy đơn "giao mà chưa xong việc" và cron chạy lại / Sức khoẻ hệ thống của spec khác thấy chúng. Ca cần đơn chưa
  * xong thì truyền `deliveredEffectsAt: null`.

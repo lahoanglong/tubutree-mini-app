@@ -18,7 +18,17 @@ import { notifyAdmins } from '../../common/notify-admins';
 import { paginated, skipTake } from '../../common/pagination';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { resolveDealerRecipient } from './dealer-recipient';
-import { DEALER_MAX_DISCOUNT_PCT_DEFAULT } from './dealer-config';
+import {
+  DEALER_BLOCK_CREDIT_WHEN_OVERDUE_KEY,
+  DEALER_FREE_SHIP_THRESHOLD_DEFAULT,
+  DEALER_FREE_SHIP_THRESHOLD_KEY,
+  DEALER_MAX_DISCOUNT_PCT_DEFAULT,
+  DEALER_MIN_ORDER_VALUE_DEFAULT,
+  DEALER_MIN_ORDER_VALUE_KEY,
+  DEALER_SHIPPING_FEE_BELOW_THRESHOLD_KEY,
+  RETAIL_FLAT_SHIPPING_FEE_DEFAULT,
+  RETAIL_FLAT_SHIPPING_FEE_KEY,
+} from './dealer-config';
 import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
@@ -240,6 +250,16 @@ export class DealerService {
       );
     }
 
+    const rules = await this.orderRules();
+    if (rules.minOrder > 0 && subtotal < rules.minOrder) {
+      throw new BadRequestException({
+        code: 'DEALER_ORDER_BELOW_MIN',
+        message: `Đơn đại lý tối thiểu ${vnd(rules.minOrder)} tiền hàng, đơn của bạn mới ${vnd(subtotal)}. Vui lòng thêm hàng vào đơn.`,
+      });
+    }
+    const shippingFee = subtotal >= rules.freeShipFrom ? 0 : rules.feeBelow;
+    const total = subtotal + shippingFee;
+
     // Kho Pancake cần tên, SĐT, địa chỉ người nhận — trước đây đơn đại lý chỉ có ghi chú "giao theo hợp đồng".
     const shippingAddress = await resolveDealerRecipient(this.prisma, userId, dto.addressId);
     if (!shippingAddress) {
@@ -262,9 +282,11 @@ export class DealerService {
           ? 'Vượt hạn mức công nợ.'
           : 'Tài khoản đại lý chưa được gán bậc nên chưa có hạn mức công nợ. Vui lòng chọn thanh toán trả trước hoặc liên hệ Tubu Tree để được gán bậc.',
       );
+    const termDays = DealerService.netDaysOf(tier?.paymentTerms);
     if (onCredit) {
+      if (rules.blockWhenOverdue) await this.assertNoOverdueCredit(this.prisma, userId, termDays, tier?.paymentTerms);
       const pre = await this.prisma.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
-      if ((pre._sum.delta ?? 0) + subtotal > creditLimit) throw overLimitError();
+      if ((pre._sum.delta ?? 0) + total > creditLimit) throw overLimitError();
     }
 
     const code = await generateUniqueOrderCode(this.prisma, 'DEALER');
@@ -275,9 +297,10 @@ export class DealerService {
           // Kiểm tra hạn mức công nợ TRONG transaction Serializable: 2 đơn CREDIT
           // đồng thời không thể cùng vượt trần (một trong hai sẽ serialization-fail).
           if (onCredit) {
+            if (rules.blockWhenOverdue) await this.assertNoOverdueCredit(tx, userId, termDays, tier?.paymentTerms);
             const agg = await tx.dealerCreditLedger.aggregate({ where: { userId }, _sum: { delta: true } });
             const debt = agg._sum.delta ?? 0;
-            if (debt + subtotal > creditLimit) throw overLimitError();
+            if (debt + total > creditLimit) throw overLimitError();
           }
           // Giữ chỗ tồn kho như mọi đường tạo đơn khác (checkout, CTV lên đơn hộ, đơn định
           // kỳ) — NHƯNG đại lý được phép đặt trước phần vượt tồn thay vì bị từ chối cả đơn:
@@ -303,8 +326,8 @@ export class DealerService {
               status: onCredit ? 'CONFIRMED' : 'PENDING_PAYMENT',
               subtotal,
               discount: 0,
-              shippingFee: 0,
-              total: subtotal,
+              shippingFee,
+              total,
               paymentMethod: 'BANK_TRANSFER',
               paymentStatus: 'UNPAID',
               shippingAddress: { ...shippingAddress },
@@ -315,7 +338,7 @@ export class DealerService {
           });
           if (onCredit) {
             await tx.dealerCreditLedger.create({
-              data: { userId, delta: subtotal, refType: 'ORDER', refId: created.id, note: `Đơn ${code}` },
+              data: { userId, delta: total, refType: 'ORDER', refId: created.id, note: `Đơn ${code}` },
             });
           }
           return { ...created, hasBackorder };
@@ -356,6 +379,74 @@ export class DealerService {
       this.logger.warn(`PancakeOrderService chưa wiring — đơn đại lý ${order.id} KHÔNG được đẩy sang kho.`);
     }
     return this.orderForDealer(order.id);
+  }
+
+  /** Số đọc từ cấu hình phải là số hữu hạn không âm, nếu không dùng mặc định (gõ nhầm chữ không được làm đơn thành NaN). */
+  private async nonNegativeConfig(key: string, fallback: number): Promise<number> {
+    const raw = Number(await this.config.get<number>(key, fallback));
+    return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : fallback;
+  }
+
+  /** Luật đơn sỉ đã chốt: tối thiểu, ngưỡng miễn phí giao, phí giao dưới ngưỡng, khoá mua chịu khi quá hạn. */
+  private async orderRules() {
+    const retailFlat = await this.nonNegativeConfig(RETAIL_FLAT_SHIPPING_FEE_KEY, RETAIL_FLAT_SHIPPING_FEE_DEFAULT);
+    const [minOrder, freeShipFrom, feeBelow, block] = await Promise.all([
+      this.nonNegativeConfig(DEALER_MIN_ORDER_VALUE_KEY, DEALER_MIN_ORDER_VALUE_DEFAULT),
+      this.nonNegativeConfig(DEALER_FREE_SHIP_THRESHOLD_KEY, DEALER_FREE_SHIP_THRESHOLD_DEFAULT),
+      this.nonNegativeConfig(DEALER_SHIPPING_FEE_BELOW_THRESHOLD_KEY, retailFlat),
+      // Chỉ `false` thật mới tắt: chuỗi "false" không được vô tình tắt khoá.
+      this.config.get<unknown>(DEALER_BLOCK_CREDIT_WHEN_OVERDUE_KEY, true),
+    ]);
+    return { minOrder, freeShipFrom, feeBelow, blockWhenOverdue: block !== false };
+  }
+
+  /** "NET 15" → 15; PREPAID, trống hoặc sai dạng → null (không có hạn nợ để tính quá hạn). */
+  private static netDaysOf(paymentTerms: string | null | undefined): number | null {
+    const m = /^NET (\d+)$/.exec(paymentTerms ?? '');
+    return m ? Number(m[1]) : null;
+  }
+
+  /**
+   * Chặn đơn ghi công nợ khi đại lý còn nợ đơn quá hạn. Tiền đã trả (PAYMENT, thưởng quý) trừ vào đơn
+   * CŨ NHẤT trước; đơn nào còn dư sau đó mới tính tuổi nợ. Đơn đã huỷ (ORDER_CANCEL) không còn là nợ.
+   * Gọi lại trong transaction Serializable của đơn để khoản quá hạn chen vào giữa vẫn bị chặn.
+   */
+  private async assertNoOverdueCredit(
+    db: Pick<Prisma.TransactionClient, 'dealerCreditLedger'>,
+    userId: string,
+    termDays: number | null,
+    paymentTerms: string | null | undefined,
+    now: Date = new Date(),
+  ): Promise<void> {
+    if (termDays === null) return;
+    const rows = await db.dealerCreditLedger.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'asc' },
+      select: { delta: true, refType: true, refId: true, createdAt: true },
+    });
+    const cancelled = new Set(rows.filter((r) => r.refType === 'ORDER_CANCEL' && r.refId).map((r) => r.refId));
+    let credit = Math.max(
+      0,
+      -rows.filter((r) => r.refType !== 'ORDER' && r.refType !== 'ORDER_CANCEL').reduce((s, r) => s + r.delta, 0),
+    );
+    for (const r of rows) {
+      if (r.refType !== 'ORDER' || r.delta <= 0 || (r.refId && cancelled.has(r.refId))) continue;
+      const covered = Math.min(credit, r.delta);
+      credit -= covered;
+      if (r.delta - covered <= 0) continue;
+      const dueAt = r.createdAt.getTime() + termDays * DAY_MS;
+      if (now.getTime() > dueAt) {
+        const vn = new Date(r.createdAt.getTime() + DealerService.VN_OFFSET);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        throw new BadRequestException({
+          code: 'DEALER_CREDIT_OVERDUE',
+          message:
+            `Bạn còn nợ đơn ngày ${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()} đã quá hạn thanh toán (${paymentTerms}). ` +
+            'Vui lòng thanh toán công nợ trước khi đặt thêm đơn ghi nợ, hoặc chọn thanh toán trả trước.',
+        });
+      }
+      return; // đơn nợ cũ nhất còn dư chưa tới hạn thì các đơn sau (mới hơn) cũng chưa tới hạn
+    }
   }
 
   private async orderForDealer(id: string) {
@@ -625,13 +716,16 @@ export class DealerService {
    * `db` = transaction của caller khi cần thấy chính thay đổi chưa commit (thu hồi thưởng lúc
    * huỷ/trả đơn — xem clawbackQuarterBonusForOrder); mặc định đọc ngoài transaction.
    * `excludeOrderId` = bỏ hẳn 1 đơn (doanh số "các đơn khác" khi tính phần biên của đơn bị huỷ).
+   * `countedBy` = chỉ tính đơn đã chốt (đủ cả 2 điều kiện trên) TẠI hoặc TRƯỚC mốc này — tức doanh số mà
+   * lần trả thưởng ở mốc đó đã thấy, không tính đơn chốt muộn hơn.
    */
   private async dealerVolume(
     userId: string,
     start: Date,
     end: Date,
-    db: Pick<Prisma.TransactionClient, 'order' | 'dealerCreditLedger'> = this.prisma,
+    db: Pick<Prisma.TransactionClient, 'order' | 'dealerCreditLedger' | 'orderStatusHistory'> = this.prisma,
     excludeOrderId?: string,
+    countedBy?: Date,
   ): Promise<DealerVolume> {
     const orders = await db.order.findMany({
       where: {
@@ -641,33 +735,73 @@ export class DealerService {
         createdAt: { gte: start, lt: end },
         ...(excludeOrderId ? { id: { not: excludeOrderId } } : {}),
       },
-      select: { id: true, total: true, status: true, paymentStatus: true },
+      select: { id: true, total: true, status: true, paymentStatus: true, createdAt: true, paidAt: true },
     });
     const isSettledStatus = (s: string) => DEALER_SETTLED_STATUSES.includes(s);
     const unpaidSettledIds = orders
       .filter((o) => isSettledStatus(o.status) && o.paymentStatus === 'UNPAID')
       .map((o) => o.id);
-    const creditOrderIds = new Set<string>();
+    const creditAtById = new Map<string, Date>();
     if (unpaidSettledIds.length > 0) {
       const debits = await db.dealerCreditLedger.findMany({
         where: { userId, refType: 'ORDER', refId: { in: unpaidSettledIds } },
-        select: { refId: true },
+        select: { refId: true, createdAt: true },
       });
-      for (const d of debits) if (d.refId) creditOrderIds.add(d.refId);
+      for (const d of debits) if (d.refId) creditAtById.set(d.refId, d.createdAt);
     }
     const v: DealerVolume = { settled: 0, settledCount: 0, pending: 0, pendingCount: 0 };
+    const settledRows: typeof orders = [];
     for (const o of orders) {
       // Đã hoàn tiền/thanh toán lỗi thì không còn là doanh số — bỏ khỏi cả 2 phía.
       if (o.paymentStatus === 'REFUNDED' || o.paymentStatus === 'FAILED') continue;
-      if (isSettledStatus(o.status) && (o.paymentStatus === 'PAID' || creditOrderIds.has(o.id))) {
-        v.settled += o.total;
-        v.settledCount += 1;
+      if (isSettledStatus(o.status) && (o.paymentStatus === 'PAID' || creditAtById.has(o.id))) {
+        settledRows.push(o);
       } else {
         v.pending += o.total;
         v.pendingCount += 1;
       }
     }
+    let counted = settledRows;
+    if (countedBy) {
+      const settledAt = await this.settledAtByOrder(
+        db,
+        settledRows.map((o) => ({ id: o.id, createdAt: o.createdAt, paidAt: o.paidAt, paid: o.paymentStatus === 'PAID' })),
+        creditAtById,
+      );
+      counted = settledRows.filter((o) => settledAt.get(o.id)!.getTime() <= countedBy.getTime());
+    }
+    for (const o of counted) {
+      v.settled += o.total;
+      v.settledCount += 1;
+    }
     return v;
+  }
+
+  /**
+   * Lúc mỗi đơn BẮT ĐẦU được tính vào doanh số đã chốt = muộn hơn của (lần đầu lên PACKED/SHIPPING/DELIVERED,
+   * lúc có cam kết tiền: paidAt nếu đã trả, hoặc lúc ghi dòng công nợ ORDER nếu mua chịu). Không có dòng lịch sử
+   * hay paidAt (đơn cũ) thì lấy lúc tạo đơn — giữ cách tính cũ, không tự coi là chốt muộn.
+   */
+  private async settledAtByOrder(
+    db: Pick<Prisma.TransactionClient, 'orderStatusHistory'>,
+    rows: { id: string; createdAt: Date; paidAt: Date | null; paid: boolean }[],
+    creditAtById: Map<string, Date>,
+  ): Promise<Map<string, Date>> {
+    const out = new Map<string, Date>();
+    if (rows.length === 0) return out;
+    const history = await db.orderStatusHistory.findMany({
+      where: { orderId: { in: rows.map((r) => r.id) }, toStatus: { in: [...DEALER_SETTLED_STATUSES] } },
+      select: { orderId: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const firstPacked = new Map<string, Date>();
+    for (const h of history) if (!firstPacked.has(h.orderId)) firstPacked.set(h.orderId, h.createdAt);
+    for (const r of rows) {
+      const packedAt = firstPacked.get(r.id) ?? r.createdAt;
+      const committedAt = (r.paid ? r.paidAt : creditAtById.get(r.id)) ?? r.createdAt;
+      out.set(r.id, packedAt.getTime() >= committedAt.getTime() ? packedAt : committedAt);
+    }
+    return out;
   }
 
   /** Số ngày sau khi kỳ kết thúc vẫn được gửi yêu cầu nhận thưởng (config, mặc định 30, kẹp 0..366). */
@@ -1317,6 +1451,8 @@ export class DealerService {
    * (ảnh chụp `order.status` trước lần lật) ∈ PACKED/SHIPPING/DELIVERED và (đã PAID — theo
    * `opts.paidBeforeReversal` của guard hoàn tiền, mặc định ảnh chụp paymentStatus — hoặc là đơn ghi
    * công nợ có dòng ledger ORDER). Cùng bậc/công thức với payout (bonusTiers + bonusForRevenue).
+   * "Doanh số đã chốt" ở đây là doanh số MÀ LẦN TRẢ THƯỞNG ĐÃ THẤY: đơn (kể cả "các đơn khác") chỉ tính khi đã chốt
+   * (lên PACKED + có tiền/ghi nợ) không muộn hơn createdAt của dòng QUARTER_BONUS — xem wasCountedByPayout/settledAtByOrder.
    * Thưởng còn giữ = dòng QUARTER_BONUS + mọi dòng QUARTER_BONUS_ADJ của quý; thu hồi ghi 1 dòng
    * QUARTER_BONUS_ADJ delta DƯƠNG (tăng lại công nợ). Không bao giờ điều chỉnh tăng.
    *
@@ -1349,8 +1485,8 @@ export class DealerService {
     const quarter = `Q${q + 1}/${year}`;
 
     await DealerService.lockDealerQuarter(tx, order.userId, quarter);
-    const bonusRows = await tx.$queryRaw<{ id: string; delta: number }[]>`
-      SELECT "id", "delta" FROM "dealer_credit_ledgers"
+    const bonusRows = await tx.$queryRaw<{ id: string; delta: number; createdAt: Date }[]>`
+      SELECT "id", "delta", "createdAt" FROM "dealer_credit_ledgers"
       WHERE "userId" = ${order.userId} AND "refType" = 'QUARTER_BONUS' AND "refId" = ${quarter}
       FOR UPDATE`;
     const bonusRow = bonusRows[0];
@@ -1367,8 +1503,15 @@ export class DealerService {
     if (!(await this.wasCountedBeforeReversal(tx, order, opts.paidBeforeReversal))) {
       return { quarter, clawedBack: 0 }; // đơn không nằm trong doanh số đã chốt → thưởng không tính trên nó
     }
+    // Dòng QUARTER_BONUS ghi trong cùng transaction với lúc payout đọc doanh số nên createdAt của nó là mốc "doanh
+    // số đã tính". Đơn (và các đơn khác) chốt sau mốc đó chưa từng góp vào thưởng đã trả: không được thu hồi vì
+    // chúng, và không được làm "doanh số các đơn khác" phình ra khiến phần biên của đơn đã tính bị thu quá tay.
+    const payoutAt = new Date(bonusRow.createdAt);
+    if (!(await this.wasCountedByPayout(tx, order, payoutAt, opts.paidBeforeReversal))) {
+      return { quarter, clawedBack: 0 };
+    }
 
-    const others = (await this.dealerVolume(order.userId, qStart, qEnd, tx, order.id)).settled;
+    const others = (await this.dealerVolume(order.userId, qStart, qEnd, tx, order.id, payoutAt)).settled;
     const before = others + order.total;
     const tiers = await this.bonusTiers();
     const marginal = bonusForRevenue(before, tiers).bonusAmount - bonusForRevenue(others, tiers).bonusAmount;
@@ -1419,6 +1562,30 @@ export class DealerService {
       select: { id: true },
     });
     return !!debit;
+  }
+
+  /** Đơn đã chốt (đủ điều kiện tính thưởng) từ TRƯỚC hoặc đúng lúc lần trả thưởng `payoutAt` chưa. */
+  private async wasCountedByPayout(
+    tx: Pick<Prisma.TransactionClient, 'order' | 'dealerCreditLedger' | 'orderStatusHistory'>,
+    order: { id: string; userId: string; createdAt: Date; paymentStatus: string },
+    payoutAt: Date,
+    paidBeforeReversal?: boolean,
+  ): Promise<boolean> {
+    const paid = paidBeforeReversal ?? order.paymentStatus === 'PAID';
+    const creditAtById = new Map<string, Date>();
+    let paidAt: Date | null = null;
+    if (paid) {
+      paidAt = (await tx.order.findUnique({ where: { id: order.id }, select: { paidAt: true } }))?.paidAt ?? null;
+    } else {
+      const debit = await tx.dealerCreditLedger.findFirst({
+        where: { userId: order.userId, refType: 'ORDER', refId: order.id },
+        select: { createdAt: true },
+      });
+      if (debit?.createdAt) creditAtById.set(order.id, debit.createdAt);
+    }
+    const createdAt = new Date(order.createdAt);
+    const at = await this.settledAtByOrder(tx, [{ id: order.id, createdAt, paidAt, paid }], creditAtById);
+    return at.get(order.id)!.getTime() <= payoutAt.getTime();
   }
 
   /** Lịch kiểm tra (ms) trước khi báo điều chỉnh thưởng — xem notifyBonusAdjustedAfterCommit. */

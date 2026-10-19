@@ -5,7 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
-import { createDealer, randCode, summarize, warmPool } from './helpers';
+import { createDealer, pinDealerOrderRulesOff, randCode, summarize, warmPool } from './helpers';
 
 /** C-008: hạn mức công nợ đơn CREDIT trên Postgres thật — có tier (trần thật) và không tier (trần 0). */
 describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
@@ -13,6 +13,7 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
   let prisma: PrismaService;
   let dealer: DealerService;
   let variationId: string;
+  let restoreRules: () => Promise<void>;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -27,6 +28,7 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
+    restoreRules = await pinDealerOrderRulesOff(prisma);
     dealer = moduleRef.get(DealerService);
 
     const tag = randCode(8);
@@ -56,6 +58,7 @@ describe('DealerService.placeOrder CREDIT limit (real Postgres)', () => {
   });
 
   afterAll(async () => {
+    await restoreRules?.();
     await moduleRef?.close();
   });
 

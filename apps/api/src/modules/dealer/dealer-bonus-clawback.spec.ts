@@ -39,29 +39,54 @@ const ORDER = {
   paymentStatus: 'PAID',
 };
 
-type Row = { id: string; total: number; status: string; paymentStatus: string };
+type Row = {
+  id: string;
+  total: number;
+  status: string;
+  paymentStatus: string;
+  createdAt?: Date;
+  paidAt?: Date | null;
+  /** Lúc đơn lên PACKED (dòng order_status_history); không có → coi như chốt ngay lúc tạo. */
+  packedAt?: Date;
+};
+
+/** Lúc cron trả thưởng Q1/2026 ghi dòng QUARTER_BONUS (10/4, giờ VN). */
+const PAYOUT_AT = new Date('2026-04-10T02:00:00Z');
 
 /**
  * tx giả: `bonusDelta` = dòng QUARTER_BONUS (null = quý chưa trả thưởng); `others` = các đơn KHÁC
  * của quý (đơn bị huỷ đã lật trạng thái trong cùng tx nên không nằm trong đây — dealerVolume còn
  * loại hẳn theo id); `adjRows` = các dòng QUARTER_BONUS_ADJ đã ghi (mutable — createMany thêm vào);
- * `creditOrderIds` = đơn "Ghi công nợ" (có dòng ledger refType=ORDER).
+ * `creditOrderIds` = đơn "Ghi công nợ" (có dòng ledger refType=ORDER); `reversed` = mốc chốt của chính đơn
+ * bị huỷ/trả (paidAt, lúc lên PACKED); `payoutAt` = createdAt của dòng QUARTER_BONUS.
  */
 function makeTx(opts: {
   bonusDelta: number | null;
   others: number[] | Row[];
   adjRows?: { delta: number; refId: string }[];
   creditOrderIds?: string[];
+  reversed?: { paidAt?: Date | null; packedAt?: Date };
+  payoutAt?: Date;
 }) {
   const adjRows = opts.adjRows ?? [];
   const credit = new Set(opts.creditOrderIds ?? []);
   const rows: Row[] = (opts.others as (number | Row)[]).map((o, i) =>
     typeof o === 'number' ? { id: `r${i}`, total: o, status: 'DELIVERED', paymentStatus: 'PAID' } : o,
-  );
+  ).map((r) => ({ createdAt: new Date('2026-03-10T03:00:00Z'), paidAt: null, ...r }));
+  const packedOf = new Map<string, Date>(rows.filter((r) => r.packedAt).map((r) => [r.id, r.packedAt!]));
+  if (opts.reversed?.packedAt) packedOf.set('o9', opts.reversed.packedAt);
   const tx = {
     $executeRaw: jest.fn(async () => 1),
-    $queryRaw: jest.fn(async () => (opts.bonusDelta === null ? [] : [{ id: 'qb1', delta: opts.bonusDelta }])),
+    $queryRaw: jest.fn(async () =>
+      opts.bonusDelta === null ? [] : [{ id: 'qb1', delta: opts.bonusDelta, createdAt: opts.payoutAt ?? PAYOUT_AT }],
+    ),
+    orderStatusHistory: {
+      findMany: jest.fn(async ({ where }: { where: { orderId: { in: string[] } } }) =>
+        where.orderId.in.filter((id) => packedOf.has(id)).map((orderId) => ({ orderId, createdAt: packedOf.get(orderId)! })),
+      ),
+    },
     order: {
+      findUnique: jest.fn(async () => ({ paidAt: opts.reversed?.paidAt ?? null })),
       findMany: jest.fn(async ({ where }: { where: { id?: { not?: string }; status?: { notIn?: string[] } } }) =>
         rows.filter(
           (r) => r.id !== where.id?.not && !(where.status?.notIn ?? []).includes(r.status),
@@ -71,7 +96,9 @@ function makeTx(opts: {
     dealerCreditLedger: {
       findMany: jest.fn(async ({ where }: { where: { refType: string; refId?: { in?: string[] } } }) => {
         if (where.refType === 'QUARTER_BONUS_ADJ') return adjRows.map((r) => ({ delta: r.delta }));
-        if (where.refType === 'ORDER') return (where.refId?.in ?? []).filter((id) => credit.has(id)).map((refId) => ({ refId }));
+        if (where.refType === 'ORDER') {
+          return (where.refId?.in ?? []).filter((id) => credit.has(id)).map((refId) => ({ refId, createdAt: new Date('2026-03-01T00:00:00Z') }));
+        }
         return [];
       }),
       findFirst: jest.fn(async ({ where }: { where: { refType: string; refId: string } }) =>
@@ -235,6 +262,73 @@ describe('DealerService.clawbackQuarterBonusForOrder (thu hồi theo phần biê
     expect(r).toEqual({ quarter: null, clawedBack: 0 });
     expect(tx.$queryRaw).not.toHaveBeenCalled();
     expect(tx.$executeRaw).not.toHaveBeenCalled();
+  });
+});
+
+describe('Thu hồi theo doanh số ĐÃ TÍNH lúc trả thưởng (đơn chốt muộn không kéo theo thưởng của đơn khác)', () => {
+  const AFTER_PAYOUT = new Date('2026-04-16T03:00:00Z');
+  const A: Row = { id: 'oA', total: 120_000_000, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-02-05T03:00:00Z'), paidAt: new Date('2026-02-05T04:00:00Z'), packedAt: new Date('2026-02-08T03:00:00Z') };
+  const B = { ...ORDER, code: 'DLRB', total: 90_000_000, createdAt: new Date('2026-03-28T03:00:00Z') };
+
+  it('D11-02: đơn B chỉ lên PACKED sau ngày trả thưởng rồi bị trả → thu 0 (trước đây thu 3.6tr thưởng của đơn A)', async () => {
+    const { tx } = makeTx({
+      bonusDelta: -3_600_000,
+      others: [A],
+      reversed: { paidAt: new Date('2026-03-28T04:00:00Z'), packedAt: AFTER_PAYOUT },
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, B);
+    expect(r).toEqual({ quarter: 'Q1/2026', clawedBack: 0 });
+    expect(tx.dealerCreditLedger.createMany).not.toHaveBeenCalled();
+  });
+
+  it('đơn B đã PACKED từ trước nhưng kế toán xác nhận tiền sau ngày trả thưởng → cũng chưa được tính, thu 0', async () => {
+    const { tx } = makeTx({
+      bonusDelta: -3_600_000,
+      others: [A],
+      reversed: { paidAt: new Date('2026-04-12T03:00:00Z'), packedAt: new Date('2026-03-30T03:00:00Z') },
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, B);
+    expect(r.clawedBack).toBe(0);
+    expect(tx.dealerCreditLedger.createMany).not.toHaveBeenCalled();
+  });
+
+  it('D11-02 ca 2: A 120tr + A2 60tr đã tính (5.4tr), C 30tr chốt muộn; trả A2 → thu 1.8tr (không phải 3.9tr)', async () => {
+    const C: Row = { id: 'oC', total: 30_000_000, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-03-29T03:00:00Z'), paidAt: new Date('2026-03-29T04:00:00Z'), packedAt: AFTER_PAYOUT };
+    const { tx } = makeTx({
+      bonusDelta: -5_400_000,
+      others: [A, C],
+      reversed: { paidAt: new Date('2026-03-01T04:00:00Z'), packedAt: new Date('2026-03-05T03:00:00Z') },
+    });
+    const a2 = { ...ORDER, id: 'o9', total: 60_000_000, createdAt: new Date('2026-03-01T03:00:00Z') };
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, a2);
+    expect(r).toEqual({ quarter: 'Q1/2026', clawedBack: 1_800_000 });
+    expect(tx.dealerCreditLedger.createMany.mock.calls[0]![0].data).toEqual([
+      expect.objectContaining({ delta: 1_800_000, refId: 'Q1/2026:o9' }),
+    ]);
+  });
+
+  it('đơn bị trả đã được tính lúc trả thưởng, thu xong lần 2 cùng đơn → không thu thêm (idempotent)', async () => {
+    const { tx, adjRows } = makeTx({
+      bonusDelta: -3_600_000,
+      others: [90_000_000],
+      reversed: { paidAt: new Date('2026-03-01T04:00:00Z'), packedAt: new Date('2026-03-05T03:00:00Z') },
+    });
+    const svc = service();
+    const first = await svc.clawbackQuarterBonusForOrder(tx as never, ORDER);
+    const again = await svc.clawbackQuarterBonusForOrder(tx as never, ORDER);
+    expect(first.clawedBack).toBe(1_800_000);
+    expect(again.clawedBack).toBe(0);
+    expect(adjRows).toHaveLength(1);
+  });
+
+  it('đơn chốt đúng lúc trả thưởng (packedAt = payoutAt) vẫn tính là đã nằm trong doanh số', async () => {
+    const { tx } = makeTx({
+      bonusDelta: -3_600_000,
+      others: [90_000_000],
+      reversed: { paidAt: new Date('2026-03-01T04:00:00Z'), packedAt: PAYOUT_AT },
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, ORDER);
+    expect(r.clawedBack).toBe(1_800_000);
   });
 });
 

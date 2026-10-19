@@ -189,6 +189,9 @@ export class SystemConfigService {
     'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
     'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },
     'orders.dealer_pending_payment_ttl_hours': { min: 1, max: 720, note: 'số giờ', integer: true },
+    'dealer.min_order_value_vnd': { min: 0, max: 100_000_000, note: 'đồng tiền hàng tối thiểu của một đơn đại lý (0 = không chặn)', integer: true },
+    'dealer.free_ship_threshold_vnd': { min: 0, max: 500_000_000, note: 'đồng tiền hàng từ mức này đơn đại lý miễn phí giao', integer: true },
+    'dealer.shipping_fee_below_threshold_vnd': { min: 0, max: 1_000_000, note: 'đồng phí giao đơn đại lý dưới ngưỡng miễn phí', integer: true },
     'affiliate.pit_withhold_pct': { min: 0, max: 0.35, note: 'phân số (0.1 = 10%)' },
     'affiliate.pit_withhold_threshold': { min: 0, max: 100000000, note: 'đồng', integer: true },
     // ADMINOPS-3 (vòng 2): tiền phạt đi trễ đi thẳng vào bảng lương (âm = cộng tiền), giá/thưởng 💧 âm đảo chiều ví game.
@@ -266,6 +269,8 @@ export class SystemConfigService {
       typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
     // Vai trò được ghi công đơn và hưởng hoa hồng CTV (affiliate.service createCommissionForOrder / findEligibleReferrer).
     [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
+    // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để khoá mua chịu quá hạn không bị tắt/bật nhầm.
+    'dealer.block_credit_when_overdue': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
     [STOREFRONT_REQUIRE_APPROVAL_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_SUBDOMAIN_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
