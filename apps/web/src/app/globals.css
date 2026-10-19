@@ -1,5 +1,6 @@
 @import '@tubutree/design-tokens/src/fonts.css';
 @import '@tubutree/design-tokens/src/tokens.css';
+@import '../components/mini/mini.css';
 
 @tailwind base;
 @tailwind components;
@@ -61,4 +62,19 @@ html[data-tenant-host] [data-site-search] {
 /* Thanh đáy điện thoại nhường chỗ cho thanh hành động dính của trang (giá/tổng + nút mua). */
 body.has-sticky-bar [data-bottom-nav] {
   display: none;
+}
+
+/* Trang con ở điện thoại có nút lùi tròn nổi (top-left, như BackButton của Mini App): đệm đỉnh để nút không đè tiêu đề.
+   body.with-back-btn do BackButton gắn; Mini App làm cùng việc bằng `.page` (apps/miniapp/src/css/tokens.css). */
+@media (max-width: 767px) {
+  body {
+    padding-top: var(--safe-top);
+  }
+  body.with-back-btn {
+    padding-top: calc(var(--safe-top) + 48px);
+  }
+  /* Trang hero full-bleed (gallery/hero): nút lùi nằm trên hero nên không cần đệm, như .page.page-bleed của Mini App. */
+  body.with-back-btn:has([data-page-bleed]) {
+    padding-top: var(--safe-top);
+  }
 }

@@ -1,20 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import BackLink from '@/components/back-link';
 
 /** Khung chung của màn nhân sự: mỗi nhánh render có đúng một h1. */
 export function StaffShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
+      <BackLink href="/tai-khoan">
         ← Tài khoản
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>{title}</h1>
       <div className="mt-4">{children}</div>
     </main>

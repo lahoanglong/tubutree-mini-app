@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/client-api';
 import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
+import { GardenHintBubble } from './garden-hint-bubble';
+import { CountBadge } from './mini/badge';
 
 /** Khoá nằm dưới tiền tố ['orders'] nên mọi lần làm mới ['orders'] (đặt đơn, huỷ đơn) cũng làm mới badge, như Mini App. */
 const ACTIVE_ORDER_COUNT_KEY = ['orders', 'active-count'] as const;
@@ -43,6 +45,7 @@ export default function BottomNav() {
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-stone-200 bg-stone-0 shadow-card"
         style={{ height: 'calc(60px + env(safe-area-inset-bottom, 0px))', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
+        <GardenHintBubble onGardenTab={pathname === '/vuon-xanh'} />
         {tabs.map((t) => {
           const active = pathname === t.path;
           const count = t.badge === 'active-orders' ? activeOrders : 0;
@@ -65,11 +68,7 @@ export default function BottomNav() {
               ) : (
                 <span aria-hidden="true" className="relative grid place-items-center">
                   <t.Icon className="h-6 w-6" />
-                  {count > 0 && (
-                    <span className="absolute -right-2 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-forest-600 px-1 text-xs font-bold text-stone-0 ring-2 ring-stone-0">
-                      {count > 99 ? '99+' : count}
-                    </span>
-                  )}
+                  <CountBadge count={count} />
                 </span>
               )}
               <span className="text-xs">{t.label}</span>

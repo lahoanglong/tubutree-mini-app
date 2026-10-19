@@ -37,7 +37,7 @@ export default async function BrandPage({
   if (!b) notFound();
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
+    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6">
       {b.coverUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={b.coverUrl} alt={b.name} className="mb-4 h-44 w-full rounded-card object-cover" />

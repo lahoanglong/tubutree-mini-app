@@ -54,6 +54,7 @@ import { createOrderKeyRing } from '@/lib/order-key-ring';
 import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
+import BackLink from '@/components/back-link';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -927,9 +928,9 @@ function AddressPicker({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/gio-hang" className={ui.backLink}>
+      <BackLink href="/gio-hang">
         ← Về giỏ hàng
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>Thanh toán</h1>
       <div className="mt-4">{children}</div>
     </main>

@@ -45,6 +45,7 @@ import {
   PAYOUT_META,
   WITHDRAWING_META,
 } from '@/components/affiliate/ctv-copy';
+import BackLink from '@/components/back-link';
 
 const TITLE = 'Cộng tác viên';
 const DEFAULT_MIN_WITHDRAW_BANK = 50_000;
@@ -64,9 +65,9 @@ async function copyToClipboard(text: string): Promise<boolean> {
 function Shell({ children }: { children: ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
+      <BackLink href="/tai-khoan">
         ← Tài khoản
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>{TITLE}</h1>
       <div className="mt-4">{children}</div>
     </main>

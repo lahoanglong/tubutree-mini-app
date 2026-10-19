@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ChevronLeft, FileText, PlayCircle } from 'lucide-react';
 import { completeLesson, type AcademyCourseDetail } from '@tubutree/app-core/api/academy';
@@ -11,6 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { AcademyAuthGate } from '../academy-auth';
 import { errorText } from '../course-list';
+import BackLink from '@/components/back-link';
 
 /** Link video do quản trị nhập: chỉ http(s), `javascript:` và các scheme khác không được thành href. */
 const safeVideoUrl = (url: string | null) => (url && /^https?:\/\//i.test(url) ? url : null);
@@ -81,10 +81,10 @@ function Detail({ courseId }: { courseId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <Link href="/hoc-vien" className={ui.backLink}>
+        <BackLink href="/hoc-vien">
           <ChevronLeft className="mr-0.5 h-4 w-4" aria-hidden="true" />
           Danh sách khoá học
-        </Link>
+        </BackLink>
       </div>
       {complete.isSuccess && (
         <p role="status" className="rounded-control bg-forest-50 px-3 py-2 text-sm text-forest-800">

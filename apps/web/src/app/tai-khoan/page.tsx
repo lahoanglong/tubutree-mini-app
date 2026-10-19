@@ -21,6 +21,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
 import { OrdersSection } from './orders-section';
+import BackLink from '@/components/back-link';
 
 const TILE = 'block min-h-11 rounded-control p-2 -m-2 transition hover:bg-forest-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0';
 const ROW = 'flex min-h-11 w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';
@@ -134,9 +135,9 @@ export default function AccountPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/" className={ui.backLink}>
+      <BackLink href="/">
         ← Trang chủ
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>Tài khoản</h1>
 
       <section aria-label="Thông tin tài khoản" className="mt-3 rounded-sheet bg-forest-800 p-5 text-stone-0 shadow-raised">

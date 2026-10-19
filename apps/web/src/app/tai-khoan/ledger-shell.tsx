@@ -1,13 +1,13 @@
-import Link from 'next/link';
 import { ui } from '@/lib/guest-ui';
+import BackLink from '@/components/back-link';
 
 /** Khung chung của các trang sổ cái trong tài khoản (Điểm Xanh, Ví Tubu). */
 export function LedgerShell({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <main className={`mx-auto px-4 py-6 ${wide ? 'max-w-5xl' : 'max-w-3xl'}`}>
-      <Link href="/tai-khoan" className={ui.backLink}>
+      <BackLink href="/tai-khoan">
         ← Tài khoản
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>{title}</h1>
       <div className="mt-4">{children}</div>
     </main>

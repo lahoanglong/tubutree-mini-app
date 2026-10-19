@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -10,6 +9,7 @@ import { createAddress, deleteAddress, getAddresses, updateAddress, type Address
 import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import BackLink from '@/components/back-link';
 
 const NOTICE_MS = 4000;
 
@@ -273,9 +273,9 @@ export default function AddressBookPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
+      <BackLink href="/tai-khoan">
         ← Tài khoản
-      </Link>
+      </BackLink>
       <h1 className={`mt-1 ${ui.pageTitle}`}>Sổ địa chỉ</h1>
       <div className="mt-4">{children}</div>
     </main>
