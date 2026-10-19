@@ -39,7 +39,7 @@ const DAY_MS = 86_400_000;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const POINT_INCLUDE = {
-  items: { select: { itemId: true } },
+  items: { select: { itemId: true, item: { select: { warehouseOnly: true } } } },
   staff: {
     include: { user: { select: { id: true, fullName: true, phone: true } } },
     orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
@@ -64,7 +64,8 @@ async function assertItemsFitKind(tx: Prisma.TransactionClient, kind: WastePoint
   if (kind !== 'PARTNER' || itemIds.length === 0) return;
   const blocked = await tx.wasteItem.findMany({ where: { id: { in: itemIds }, warehouseOnly: true }, select: { name: true } });
   if (blocked.length > 0) {
-    throw new BadRequestException(`Điểm đại lý không nhận: ${blocked.map((i) => i.name).join(', ')}. Món này chỉ kho Tubu HCMC nhận.`);
+    // Item names can hold a comma ('Vỏ chai, hộp Tubu Tree'), so the list is joined with ';'.
+    throw new BadRequestException(`Điểm đại lý không nhận: ${blocked.map((i) => i.name).join('; ')}. ${blocked.length > 1 ? 'Các món này' : 'Món này'} chỉ kho Tubu HCMC nhận.`);
   }
 }
 const jsonSafe = (o: Record<string, unknown>): Record<string, unknown> =>
@@ -126,7 +127,8 @@ export function toAdminPointDTO(row: PointRow, usage: WastePointUsage | undefine
     lng: row.lng,
     phone: row.phone,
     openingHours: row.openingHours as unknown as WasteOpeningHours,
-    acceptedItemIds: row.items.map((i) => i.itemId).sort(),
+    // A link left from before the warehouse-only rule is not shown as accepted by a partner point (same as the customer list).
+    acceptedItemIds: row.items.filter((i) => row.kind === 'WAREHOUSE' || !i.item.warehouseOnly).map((i) => i.itemId).sort(),
     perkText: row.perkText,
     distanceKm: null,
     status: row.status,

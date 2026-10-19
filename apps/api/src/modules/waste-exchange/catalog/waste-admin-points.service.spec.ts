@@ -37,7 +37,7 @@ const addr = { addressLine: '1 Đường A', provinceCode: '79', provinceName: '
 const point = (o: Record<string, unknown> = {}) => ({
   id: 'p1', kind: 'PARTNER', name: 'Tạp hoá Cô Ba', ...addr, lat: null, lng: null, phone: null, openingHours: {}, status: 'ACTIVE',
   monthlyQuotaPoints: 100_000, perkText: null, perkPendingText: null, giftHandoverEnabled: false, note: null, sortOrder: 10,
-  activatedAt: new Date('2026-08-08T00:00:00Z'), lastConfirmedAt: null, items: [{ itemId: 'i1' }, { itemId: 'i2' }], staff: [], ...o,
+  activatedAt: new Date('2026-08-08T00:00:00Z'), lastConfirmedAt: null, items: [{ itemId: 'i1', item: { warehouseOnly: false } }, { itemId: 'i2', item: { warehouseOnly: false } }], staff: [], ...o,
 });
 
 async function expectHttp(p: Promise<unknown>, cls: new (...a: never[]) => Error, message: string) {
@@ -151,6 +151,20 @@ describe('WasteAdminPointsService', () => {
       expect(row!.quotaFull).toBe(false);
     });
 
+    it('a PARTNER row drops a legacy link to a warehouse-only item, the WAREHOUSE row keeps every link', async () => {
+      const links = [
+        { itemId: 'i1', item: { warehouseOnly: false } },
+        { itemId: 'i-milk', item: { warehouseOnly: true } },
+      ];
+      const h = setup();
+      h.wastePoint.findMany.mockResolvedValue([point({ items: links }), point({ id: 'wh', kind: 'WAREHOUSE', items: links })]);
+
+      const [partner, warehouse] = await h.svc.list('a1', {});
+
+      expect(partner!.acceptedItemIds).toEqual(['i1']);
+      expect(warehouse!.acceptedItemIds).toEqual(['i-milk', 'i1']);
+    });
+
     it('builds the where from status and perkPending', async () => {
       const h = setup();
       const whereOf = (i: number) => (h.wastePoint.findMany.mock.calls[i]![0] as { where: unknown }).where;
@@ -165,7 +179,7 @@ describe('WasteAdminPointsService', () => {
       expect(h.wastePoint.findMany.mock.calls[0]![0]).toMatchObject({
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
         include: {
-          items: { select: { itemId: true } },
+          items: { select: { itemId: true, item: { select: { warehouseOnly: true } } } },
           staff: {
             include: { user: { select: { id: true, fullName: true, phone: true } } },
             orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
@@ -291,7 +305,7 @@ describe('WasteAdminPointsService', () => {
       await expectHttp(
         both.svc.create('a1', { ...partner, itemIds: ['i-milk', 'i-bottle'] }),
         BadRequestException,
-        'Điểm đại lý không nhận: Vỏ hộp sữa sạch, Vỏ chai, hộp Tubu Tree. Món này chỉ kho Tubu HCMC nhận.',
+        'Điểm đại lý không nhận: Vỏ hộp sữa sạch; Vỏ chai, hộp Tubu Tree. Các món này chỉ kho Tubu HCMC nhận.',
       );
 
       const wh = setup();

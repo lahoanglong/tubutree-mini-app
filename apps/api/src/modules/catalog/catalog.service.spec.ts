@@ -73,6 +73,27 @@ describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
       expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
     });
 
+    it('cache đầy mà khoá đang làm mới chính là khoá hết hạn → không xoá nhầm khoá còn hạn của sản phẩm khác', async () => {
+      const prisma = {
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'target' }), findMany: jest.fn().mockResolvedValue([]) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      const cache = (svc as unknown as { boughtTogetherCache: Map<string, { ids: string[]; expiresAt: number }> }).boughtTogetherCache;
+      const alive = Date.now() + 60_000;
+      cache.set('oldest-still-valid', { ids: [], expiresAt: alive });
+      for (let i = 0; i < 498; i++) cache.set(`k${i}`, { ids: [], expiresAt: alive });
+      cache.set('target', { ids: [], expiresAt: Date.now() - 1 });
+      expect(cache.size).toBe(500);
+
+      await svc.boughtTogether('tinh-dau');
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(cache.has('oldest-still-valid')).toBe(true);
+      expect(cache.get('target')!.expiresAt).toBeGreaterThan(Date.now());
+      expect(cache.size).toBe(500);
+    });
+
     it('sản phẩm khác nhau không dùng chung kết quả; bộ nhớ có trần', async () => {
       let id = 0;
       const prisma = {

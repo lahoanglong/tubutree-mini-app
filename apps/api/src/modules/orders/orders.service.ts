@@ -508,15 +508,35 @@ export class OrdersService {
 
     if (pending.length > 0) {
       const outcomes = await this.cart.addItems(userId, pending.map((p) => ({ variationId: p.variationId, quantity: p.qty, addSource })));
+      // Chỗ mà dòng bị từ chối đã giữ trong inCart nhưng không vào giỏ: trả lại cho dòng sau cùng variation đã bị kẹp nhỏ vì phần đó.
+      const freed = new Map<string, number>();
+      const topUps: { slot: number; variationId: string; quantity: number }[] = [];
       pending.forEach((p, i) => {
         const outcome = outcomes[i]!;
         // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua dòng; lỗi hạ tầng do addItems ném ra.
         if (!outcome.ok) {
           results[p.slot] = { orderItemId: p.line.id, status: 'skipped', reason: outcome.error === 'UNAVAILABLE' ? 'INACTIVE' : 'EXCEEDS_STOCK', addedQuantity: 0 };
+          freed.set(p.variationId, (freed.get(p.variationId) ?? 0) + p.qty);
         } else if (p.qty < p.want) {
           results[p.slot] = { orderItemId: p.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: p.qty };
+          const extra = Math.min(p.want - p.qty, freed.get(p.variationId) ?? 0);
+          if (extra > 0) {
+            freed.set(p.variationId, (freed.get(p.variationId) ?? 0) - extra);
+            topUps.push({ slot: p.slot, variationId: p.variationId, quantity: extra });
+          }
         }
       });
+      if (topUps.length > 0) {
+        const extraOutcomes = await this.cart.addItems(userId, topUps.map((t) => ({ variationId: t.variationId, quantity: t.quantity, addSource })));
+        topUps.forEach((t, i) => {
+          if (!extraOutcomes[i]!.ok) return;
+          const base = pending.find((p) => p.slot === t.slot)!;
+          const added = base.qty + t.quantity;
+          results[t.slot] = added < base.want
+            ? { orderItemId: base.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: added }
+            : { orderItemId: base.line.id, status: 'added', addedQuantity: added };
+        });
+      }
     }
     const cart = toPublicCart(await this.cart.getCart(userId));
     return { ...cart, cart, results };

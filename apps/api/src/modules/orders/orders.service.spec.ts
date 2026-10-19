@@ -1213,6 +1213,39 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     ]);
   });
 
+  it('dòng đứng trước bị addItems từ chối → phần chỗ nó giữ chỗ được trả cho dòng sau cùng variation, thêm bằng một lần addItems nữa', async () => {
+    const addItems = jest
+      .fn()
+      .mockResolvedValueOnce([{ ok: false, error: 'STOCK' }, { ok: true }])
+      .mockResolvedValueOnce([{ ok: true }]);
+    const { svc } = makeRepurchaseService({
+      items: [line('i1', 'v1', 2), line('i2', 'v1', 2)],
+      variations: [variation('v1', 3)],
+      addItems,
+    });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItems).toHaveBeenCalledTimes(2);
+    expect(addItems.mock.calls[1]).toEqual(['u1', [{ variationId: 'v1', quantity: 1, addSource: 'repurchase' }]]);
+    expect(res.results).toEqual([
+      { orderItemId: 'i1', status: 'skipped', reason: 'EXCEEDS_STOCK', addedQuantity: 0 },
+      { orderItemId: 'i2', status: 'added', addedQuantity: 2 },
+    ]);
+  });
+
+  it('lượt thêm bù bị từ chối thì dòng sau giữ kết quả partial cũ; không có dòng nào bị từ chối thì không có lượt bù', async () => {
+    const addItems = jest
+      .fn()
+      .mockResolvedValueOnce([{ ok: false, error: 'STOCK' }, { ok: true }])
+      .mockResolvedValueOnce([{ ok: false, error: 'STOCK' }]);
+    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 2), line('i2', 'v1', 2)], variations: [variation('v1', 3)], addItems });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(res.results[1]).toEqual({ orderItemId: 'i2', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 1 });
+
+    const plain = makeRepurchaseService({ items: [line('i1', 'v1', 2), line('i2', 'v1', 2)], variations: [variation('v1', 3)] });
+    await plain.svc.repurchase('u1', 'TUBU1');
+    expect(plain.addItems).toHaveBeenCalledTimes(1);
+  });
+
   it('lỗi hạ tầng (không phải lỗi nghiệp vụ) → ném ra, không nuốt', async () => {
     const addItems = jest.fn().mockRejectedValue(new Error('connection reset'));
     const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)], addItems });
