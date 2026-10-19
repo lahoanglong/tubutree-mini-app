@@ -466,6 +466,12 @@ export class PancakeProcessor extends WorkerHost {
       await this.onPartialReturned(order, action.reason);
       return;
     }
+    // "Đã hoàn" tới đơn đã huỷ/trả: không còn gì để lật, nhưng đây có thể là lần BullMQ gửi lại sau khi lần đầu lật xong mà đảo
+    // điểm/hoa hồng lỗi. Gọi lại setStatus cùng trạng thái để chạy lại hai việc idempotent đó; còn lỗi thì ném tiếp để thử lại.
+    if (action.kind === 'returned' && isClosedOrder(order.status)) {
+      await this.orderStatus.setStatus(order.id, order.status as OrderStatus, { actorType: 'PANCAKE' });
+      return;
+    }
     const target = this.targetStatus(order, action);
     if (!target) return;
     if (action.kind === 'returned' && target.status === 'RETURNED' && (await this.blockedByPartialReturn(order))) return;
@@ -571,9 +577,9 @@ export class PancakeProcessor extends WorkerHost {
 
   /** `returnedToSender`: Pancake "Đã hoàn" — hàng đã về kho, được huỷ/hoàn tiền dù đơn đã bàn giao vận chuyển (D1). */
   private async setStatusFromPancake(order: Order, status: OrderStatus, note?: string, returnedToSender = false): Promise<void> {
+    // COD không có "PAID" thật: DELIVERED có thể là kho bấm "Đã nhận" hàng loạt/nhầm, nên "Đã hoàn" không chứng minh khách đã trả tiền.
+    const withholdCodRefund = returnedToSender && status === 'RETURNED' && order.paymentMethod === 'COD' && order.paymentStatus !== 'PAID';
     try {
-      // COD không có "PAID" thật: DELIVERED có thể là kho bấm "Đã nhận" hàng loạt/nhầm, nên "Đã hoàn" không chứng minh khách đã trả tiền.
-      const withholdCodRefund = returnedToSender && status === 'RETURNED' && order.paymentMethod === 'COD' && order.paymentStatus !== 'PAID';
       const after = await this.orderStatus.setStatus(order.id, status, { actorType: 'PANCAKE', note, returnedToSender, ...(withholdCodRefund ? { withholdCodRefund } : {}) });
       if (withholdCodRefund && order.status !== status && after.status === 'RETURNED' && after.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
         // Dòng "Cần xử lý" và khoản chờ Kế toán đối soát đã ghi cùng tx lật trạng thái; ở đây chỉ báo ADMIN.
@@ -584,7 +590,12 @@ export class PancakeProcessor extends WorkerHost {
         await clearPancakeAttention(this.prisma, order.id, PANCAKE_RETURNING_PREFIX);
       }
     } catch (err) {
-      if (!(err instanceof InvalidOrderTransitionError)) throw err;
+      if (!(err instanceof InvalidOrderTransitionError)) {
+        // setStatus ném sau cùng khi đảo điểm/hoa hồng lỗi, lúc đơn đã RETURNED và khoản chờ đối soát đã ghi. Lần BullMQ thử lại không
+        // còn là lần lật (không tới đoạn báo ADMIN ở trên) nên báo ngay ở đây.
+        if (withholdCodRefund && order.status !== status) await this.alertCodReturnIfFlagged(order);
+        throw err;
+      }
       if (err instanceof CancelAfterHandoverError) {
         // D1: sau bàn giao chỉ còn luồng hoàn/trả — lệnh huỷ từ Pancake là việc cho người, không phải lệnh hoàn tiền.
         await this.flagAttention(
@@ -604,6 +615,18 @@ export class PancakeProcessor extends WorkerHost {
         return;
       }
       this.logger.warn(`Bỏ qua webhook status=${status} cho đơn ${order.code}: ${err.message}`);
+    }
+  }
+
+  /** Báo ADMIN khoản COD chờ đối soát nếu lần lật vừa rồi đã ghi nó; lỗi báo không được che lỗi gốc của người gọi. */
+  private async alertCodReturnIfFlagged(order: Order): Promise<void> {
+    try {
+      const row = await this.prisma.order.findUnique({ where: { id: order.id }, select: { status: true, pancakeAttention: true } });
+      if (row?.status === 'RETURNED' && row.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
+        await this.alerts.alert(order.code, ATTENTION_COD_RETURN_UNVERIFIED, PANCAKE_ALERT_TEMPLATE);
+      }
+    } catch (alertErr) {
+      this.logger.error(`Không báo được ADMIN khoản COD chờ đối soát của đơn ${order.code}: ${alertErr instanceof Error ? alertErr.message : alertErr}`);
     }
   }
 

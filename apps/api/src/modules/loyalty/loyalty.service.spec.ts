@@ -304,8 +304,11 @@ function reverseHarness(order: ReverseOrder, opts: { reversed?: unknown; deliver
   const updateMany = jest.fn(async (_args: { where: unknown; data: unknown }) => ({ count: opts.decCount ?? 1 }));
   const tx = { $queryRaw: queryRaw, pointsTransaction: { findFirst, findMany, create }, user: { update, updateMany } };
   const txn = jest.fn(async (cb: (t: typeof tx) => Promise<unknown>) => cb(tx));
+  // Lần xem trước ngoài tx (đơn không có điểm tích): cùng sổ với lần re-check trong tx, nhưng không đụng chuỗi findFirst của tx.
+  const preCheck = jest.fn(async () => opts.reversed ?? null);
   const prisma = {
     order: { findUniqueOrThrow: jest.fn().mockResolvedValue(order) },
+    pointsTransaction: { findFirst: preCheck },
     $transaction: txn,
   } as unknown as PrismaService;
   return { prisma, txn, calls, lockSql, queryRaw, findFirst, findMany, create, update, updateMany };
@@ -370,6 +373,16 @@ describe('LoyaltyService.reverseOrderPoints (idempotent)', () => {
       expect(create).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
       expect(updateMany).not.toHaveBeenCalled();
+    });
+
+    it('đơn không có điểm tích và điểm thường đã hoàn → không khoá dòng user, không đọc cấu hình hạn điểm (webhook lặp không tốn tài nguyên)', async () => {
+      const get = jest.fn(async <T>(_k: string, fb?: T) => fb as T);
+      const { prisma, calls, create } = reverseHarness({ ...order, pointsEarned: 0, pointsUsed: 20 }, { reversed: refundRow });
+      const back = await new LoyaltyService(prisma, { get } as unknown as SystemConfigService).reverseOrderPoints('o1');
+      expect(back).toBe(0);
+      expect(calls).not.toContain('lock');
+      expect(get).not.toHaveBeenCalled();
+      expect(create).not.toHaveBeenCalled();
     });
 
     it('dòng ORDER_REVERSED đã có → xong cả hai, không ghi gì', async () => {

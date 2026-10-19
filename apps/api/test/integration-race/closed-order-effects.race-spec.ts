@@ -10,7 +10,8 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
 import { ATTENTION_CANCEL_AFTER_HANDOVER, ATTENTION_COD_RETURN_UNVERIFIED } from '../../src/modules/integrations/pancake/pancake-attention';
-import { createOrder, createUser, summarize, warmPool } from './helpers';
+import { PancakeProcessor } from '../../src/modules/integrations/pancake/pancake.processor';
+import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * D12-02 trên Postgres THẬT: lỗi ở đảo điểm sau commit CANCELLED/RETURNED không làm khách mất Điểm Xanh thường đã dùng, lần gọi
@@ -22,6 +23,9 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
   let orderStatus: OrderStatusService;
   let loyalty: LoyaltyService;
   let hooks: { afterLocalCancel: jest.Mock; precheckCancel: jest.Mock };
+  let processor: { onStatusUpdated(data: Record<string, unknown>): Promise<void> };
+  const reverseCommissions = jest.fn().mockResolvedValue(undefined);
+  const alert = jest.fn().mockResolvedValue(undefined);
   const notify = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
@@ -39,7 +43,7 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
         {
           provide: AffiliateService,
           useValue: {
-            reverseCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
+            reverseCommissionsForOrder: reverseCommissions,
             lockCommissionsForOrder: jest.fn().mockResolvedValue(undefined),
             grantReferralReward: jest.fn().mockResolvedValue(undefined),
           },
@@ -56,6 +60,7 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
     // pancakeHooks là @Optional() tiêm theo class nên dựng tay: chỉ cần biết afterLocalCancel được gọi mấy lần.
     (orderStatus as unknown as { pancakeHooks: unknown }).pancakeHooks = hooks;
     loyalty = moduleRef.get(LoyaltyService);
+    processor = new PancakeProcessor(prisma, moduleRef.get(NotificationsService), orderStatus, { alert } as never) as unknown as typeof processor;
   });
 
   afterAll(async () => {
@@ -65,6 +70,8 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
   beforeEach(() => {
     notify.mockClear();
     hooks.afterLocalCancel.mockClear();
+    reverseCommissions.mockClear();
+    alert.mockClear();
     jest.restoreAllMocks();
   });
 
@@ -170,5 +177,52 @@ describe('Việc sau commit của đơn huỷ/trả (real Postgres)', () => {
     expect(after.status).toBe('RETURNED');
     expect(after.pancakeAttention).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
     expect(after.pancakeAttentionAt).not.toBeNull();
+  });
+
+  // Pancake "Đã hoàn" (5) là đường duy nhất từ Pancake sang RETURNED: lần BullMQ gửi lại tới đơn đã RETURNED phải làm nốt phần đảo.
+  it('Pancake "Đã hoàn" (5) trên đơn đã giao có hoa hồng + điểm tích: hoa hồng lỗi một lần → job lỗi; sự kiện gửi lại làm nốt, điểm tích thu hồi đúng một lần', async () => {
+    const { user, order } = await walletOrderUsingStandardPoints('DELIVERED', { pointsUsed: 10, pointsEarned: 50, pancakeOrderId: `pk-it-${randCode(8)}` });
+    await prisma.pointsTransaction.create({
+      data: { userId: user.id, delta: 50, reason: `ORDER_DELIVERED:${order.code}`, refType: 'ORDER', refId: order.id, expiresAt: new Date(Date.now() + 86_400_000 * 300) },
+    });
+    await prisma.user.update({ where: { id: user.id }, data: { pointsBalance: 50 } });
+    reverseCommissions.mockRejectedValueOnce(dbDown());
+    const event = { id: order.pancakeOrderId, status: 5 };
+
+    await expect(processor.onStatusUpdated(event)).rejects.toThrow('P2024');
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('RETURNED');
+    expect(reverseCommissions).toHaveBeenCalledTimes(1);
+
+    await expect(processor.onStatusUpdated(event)).resolves.toBeUndefined();
+    expect(reverseCommissions).toHaveBeenCalledTimes(2);
+    expect(await balanceOf(user.id)).toBe(10);
+    expect(await ledger(order.id, 'ORDER_REVERSED:')).toHaveLength(1);
+    expect(await ledger(order.id, 'ORDER_REFUND_POINTS:')).toHaveLength(1);
+
+    await processor.onStatusUpdated(event);
+    expect(await balanceOf(user.id)).toBe(10);
+  });
+
+  it('P3: đơn COD đã giao nhận "Đã hoàn" mà đảo điểm lỗi sau commit → vẫn báo ADMIN khoản chờ đối soát đúng một lần, lần gửi lại không báo thêm', async () => {
+    const user = await createUser(prisma, { role: 'CUSTOMER', walletBalance: 0 });
+    const order = await createOrder(prisma, {
+      userId: user.id,
+      status: 'DELIVERED',
+      paymentMethod: 'COD',
+      paymentStatus: 'UNPAID',
+      total: 300_000,
+      subtotal: 300_000,
+      pancakeOrderId: `pk-it-${randCode(8)}`,
+    });
+    jest.spyOn(loyalty, 'reverseOrderPoints').mockRejectedValueOnce(dbDown());
+    const event = { id: order.pancakeOrderId, status: 5 };
+
+    await expect(processor.onStatusUpdated(event)).rejects.toThrow('P2024');
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert).toHaveBeenCalledWith(order.code, ATTENTION_COD_RETURN_UNVERIFIED, expect.any(String));
+
+    await expect(processor.onStatusUpdated(event)).resolves.toBeUndefined();
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).pancakeAttention).toBe(ATTENTION_COD_RETURN_UNVERIFIED);
   });
 });

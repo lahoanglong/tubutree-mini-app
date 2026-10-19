@@ -1175,6 +1175,40 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       expect(statusFlips(txUpdateMany)).toHaveLength(0);
       expect(alerts.alert).not.toHaveBeenCalled();
     });
+
+    // D12-02: lần đầu lật xong nhưng đảo điểm/hoa hồng ném lỗi → job FAILED → BullMQ gửi lại sự kiện; lúc đó đơn đã ở trạng thái cuối
+    // và targetStatus() trả null, nên trước đây lần thử lại không bao giờ tới setStatus và việc đảo bị bỏ vĩnh viễn.
+    it.each(['RETURNED', 'CANCELLED'] as const)('sự kiện "Đã hoàn" (5) tới đơn đã %s (thử lại sau lỗi) → chạy lại đảo điểm + hoa hồng, không lật lại', async (closed) => {
+      const { proc, txUpdateMany, loyalty, affiliate, notifications } = setup({ ...base, status: closed, paymentMethod: 'WALLET', paymentStatus: 'REFUNDED' });
+      await proc.onStatusUpdated({ id: 'p1', status: 5 });
+      expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
+      expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledWith('o1');
+      expect(statusFlips(txUpdateMany)).toHaveLength(0);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('sự kiện "Đã hoàn" (5) tới đơn đã RETURNED mà đảo hoa hồng vẫn lỗi → ném tiếp để BullMQ thử lại, không coi là xong', async () => {
+      const { proc, affiliate } = setup({ ...base, status: 'RETURNED' });
+      (affiliate.reverseCommissionsForOrder as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+      await expect(proc.onStatusUpdated({ id: 'p1', status: 5 })).rejects.toThrow('P2024');
+    });
+
+    // P3: báo động ADMIN nằm sau setStatus nên lỗi đảo điểm làm mất nó, mà lần thử lại không còn là lần lật nên không bao giờ gửi.
+    it('đơn COD chưa có bằng chứng thu, đảo điểm lỗi sau commit → vẫn báo ADMIN khoản chờ đối soát rồi ném tiếp', async () => {
+      const alerts = { alert: jest.fn().mockResolvedValue(undefined) };
+      const order = { ...base, total: 300000, paymentMethod: 'COD', paymentStatus: 'UNPAID', status: 'DELIVERED' };
+      const { proc, prisma, txUpdateMany, loyalty } = setup(order, undefined, alerts);
+      (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+      (prisma.order.findUnique as jest.Mock).mockImplementation(async () => ({
+        status: 'RETURNED',
+        pancakeAttention: (attentionFlags(txUpdateMany)[0] ?? null) as string | null,
+      }));
+      await expect(proc.onStatusUpdated({ id: 'p1', status: 5 })).rejects.toThrow('P2024');
+      const flags = attentionFlags(txUpdateMany);
+      expect(flags).toHaveLength(1);
+      expect(alerts.alert).toHaveBeenCalledTimes(1);
+      expect(alerts.alert).toHaveBeenCalledWith('TUBU1', flags[0], expect.any(String));
+    });
   });
 
   // R2-LIFECYCLE-4 / R2-MONEY-3: "Đã hoàn" (cả đơn) sau một lần trả một phần đã duyệt thường là kho làm sai loại phiếu.
