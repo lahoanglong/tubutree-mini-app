@@ -1373,4 +1373,32 @@ describe('OrderReversalService — thưởng đánh giá khi trả hàng', () =>
     );
     expect(advisoryLocks(tx)).toHaveLength(1);
   });
+
+  it('trả một phần khi sản phẩm chưa có đánh giá nào: vẫn khoá cặp (khách, sản phẩm) để đánh giá đang tạo song song thấy dòng trả đã duyệt', async () => {
+    const order = makeOrder({ type: 'RETAIL', placedForCustomer: false, shippingFee: 0 });
+    const tx = Object.assign(makeTx(order), {
+      commission: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ productId: 'p2' }, { productId: 'p1' }]) },
+    });
+    const shares = {
+      isFull: false,
+      goods: 0,
+      shipping: 0,
+      pointsUsedBack: 0,
+      convertedBack: 0,
+      pointsEarnedBack: 0,
+      lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 0 }],
+    };
+
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'rq1',
+      shares: shares as never,
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+
+    const keys = tx.$executeRaw.mock.calls.flatMap((c) => ((c[0] as string[]).join('').includes('pg_advisory_xact_lock') ? [c[1] as string] : []));
+    expect(keys).toEqual(['review-reward:u1:p1', 'review-reward:u1:p2']);
+  });
 });

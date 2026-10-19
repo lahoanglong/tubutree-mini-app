@@ -74,3 +74,37 @@ export async function orderLineReviews(
   );
   return (itemId) => byItem.get(itemId) ?? NO_REVIEW;
 }
+
+type ReturnedLinesDb = Pick<Prisma.TransactionClient, 'returnRequestItem' | 'orderItem' | 'variation'>;
+
+/**
+ * Sản phẩm đã có dòng trả được duyệt (mọi số lượng) trên từng đơn: orderId → tập productId. Sản phẩm bị trả một phần cũng mất
+ * thưởng đánh giá (thưởng bị thu hồi lúc duyệt trả nếu đã có đánh giá), nên đánh giá viết SAU lần duyệt không được thưởng và
+ * không tính vào nhiệm vụ. Đơn chưa có lần trả nào chỉ tốn một truy vấn.
+ */
+export async function returnedProductsByOrder(db: ReturnedLinesDb, orderIds: readonly string[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  if (orderIds.length === 0) return out;
+  const lines = await db.returnRequestItem.findMany({
+    where: { quantity: { gt: 0 }, returnRequest: { orderId: { in: [...orderIds] }, status: 'APPROVED' } },
+    select: { orderItemId: true },
+  });
+  if (lines.length === 0) return out;
+  const items = await db.orderItem.findMany({
+    where: { id: { in: [...new Set(lines.map((l) => l.orderItemId))] } },
+    select: { orderId: true, variationId: true },
+  });
+  const variations = await db.variation.findMany({
+    where: { id: { in: [...new Set(items.map((it) => it.variationId))] } },
+    select: { id: true, productId: true },
+  });
+  const productOf = new Map(variations.map((v) => [v.id, v.productId]));
+  for (const it of items) {
+    const productId = productOf.get(it.variationId);
+    if (!productId) continue;
+    const set = out.get(it.orderId) ?? new Set<string>();
+    set.add(productId);
+    out.set(it.orderId, set);
+  }
+  return out;
+}

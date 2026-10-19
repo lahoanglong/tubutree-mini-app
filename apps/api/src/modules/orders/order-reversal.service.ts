@@ -18,7 +18,7 @@ import { maskPhone } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
-import { lockRewardedReviewsOfOrder, revokeReviewRewardsForReturn } from '../reviews/review-reward-reversal';
+import { lockRewardedReviewsOfOrder, lockReviewRewardsOfProducts, revokeReviewRewardsForReturn } from '../reviews/review-reward-reversal';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -376,7 +376,7 @@ export class OrderReversalService {
     // Thưởng đánh giá của các sản phẩm bị trả: khoá trước mọi ghi lên dòng users (xem reverseFinancials).
     const reviewable = canHaveReviewReward(order);
     const returnedProductIds = reviewable ? await this.productIdsOfLines(tx, order, shares.lines) : [];
-    if (returnedProductIds.length > 0) await lockRewardedReviewsOfOrder(tx, order.id, returnedProductIds);
+    if (returnedProductIds.length > 0) await lockReviewRewardsOfProducts(tx, order.userId, returnedProductIds);
 
     // Suất flash trước mọi ghi lên dòng users, cùng thứ tự với đường tạo đơn (xem reverseFinancials).
     const byId = new Map(order.items.map((i) => [i.id, i]));

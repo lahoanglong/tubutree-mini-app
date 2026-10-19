@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -84,7 +85,7 @@ describe('Trả hàng thu hồi điểm thưởng đánh giá (real Postgres)', 
   }
 
   /** Khách đã đánh giá có ảnh sản phẩm của đơn COD đã giao: A mua 2 chai, B mua 1 chai; điểm thưởng 10.000 mỗi đánh giá (B bỏ qua nếu reviewB=false). */
-  async function setup(opts: { reviewB?: boolean } = {}) {
+  async function setup(opts: { reviewA?: boolean; reviewB?: boolean } = {}) {
     const user = await createUser(prisma);
     touched.push(user.id);
     const tag = randCode(8);
@@ -108,9 +109,9 @@ describe('Trả hàng thu hồi điểm thưởng đánh giá (real Postgres)', 
     });
     const itemA = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id, variationId: a.v.id } });
     const itemB = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id, variationId: b.v.id } });
-    const ra = await reviews.create(user.id, a.p.slug, { rating: 5, comment: 'tốt', images: PHOTO, orderId: order.id });
+    const ra = opts.reviewA === false ? null : await reviews.create(user.id, a.p.slug, { rating: 5, comment: 'tốt', images: PHOTO, orderId: order.id });
     const rb = opts.reviewB === false ? null : await reviews.create(user.id, b.p.slug, { rating: 5, comment: 'ổn', images: PHOTO, orderId: order.id });
-    return { user, order, a, b, itemA, itemB, reviewA: ra.id, reviewB: rb?.id ?? '' };
+    return { user, order, a, b, itemA, itemB, reviewA: ra?.id ?? '', reviewB: rb?.id ?? '' };
   }
 
   async function returnLines(userId: string, code: string, lines: { orderItemId: string; quantity: number }[]) {
@@ -212,6 +213,87 @@ describe('Trả hàng thu hồi điểm thưởng đánh giá (real Postgres)', 
 
     expect(await balance(s.user.id)).toBe(REWARD);
     expect(await prisma.pointsTransaction.count({ where: { userId: s.user.id, reason: `REVIEW_DELETE:${s.a.p.id}` } })).toBe(0);
+  });
+
+  it('trả hết số lượng sản phẩm A (đơn vẫn giao vì còn B) rồi mới đánh giá A có ảnh: không thưởng, số dư giữ nguyên', async () => {
+    const s = await setup({ reviewA: false, reviewB: false });
+    await returnLines(s.user.id, s.order.code, [{ orderItemId: s.itemA.id, quantity: 2 }]);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).status).toBe('DELIVERED');
+
+    const r = await reviews.create(s.user.id, s.a.p.slug, { rating: 5, comment: 'muộn', images: PHOTO, orderId: s.order.id });
+
+    expect((await prisma.review.findUniqueOrThrow({ where: { id: r.id } })).pointsEarned).toBe(0);
+    expect(await balance(s.user.id)).toBe(0);
+    expect(await prisma.pointsTransaction.count({ where: { userId: s.user.id } })).toBe(0);
+  });
+
+  it('chỉ trả một phần số lượng của A rồi mới đánh giá A: cũng không thưởng; đánh giá B vẫn được thưởng', async () => {
+    const s = await setup({ reviewA: false, reviewB: false });
+    await returnLines(s.user.id, s.order.code, [{ orderItemId: s.itemA.id, quantity: 1 }]);
+
+    const ra = await reviews.create(s.user.id, s.a.p.slug, { rating: 5, comment: 'muộn', images: PHOTO, orderId: s.order.id });
+    expect((await prisma.review.findUniqueOrThrow({ where: { id: ra.id } })).pointsEarned).toBe(0);
+    expect(await balance(s.user.id)).toBe(0);
+
+    await reviews.create(s.user.id, s.b.p.slug, { rating: 5, comment: 'ổn', images: PHOTO, orderId: s.order.id });
+    expect(await balance(s.user.id)).toBe(REWARD);
+  });
+
+  it('yêu cầu trả A bị từ chối thì đánh giá A vẫn được thưởng', async () => {
+    const s = await setup({ reviewA: false, reviewB: false });
+    const req = await returns.request(s.user.id, s.order.code, {
+      reasonCode: 'OTHER',
+      reason: 'Không còn nhu cầu dùng nữa',
+      items: [{ orderItemId: s.itemA.id, quantity: 2 }],
+    });
+    await returns.review(admin.id, req.id, { approve: false, note: 'Không đủ điều kiện' });
+
+    await reviews.create(s.user.id, s.a.p.slug, { rating: 5, comment: 'ổn', images: PHOTO, orderId: s.order.id });
+    expect(await balance(s.user.id)).toBe(REWARD);
+  });
+
+  it('duyệt trả A chạy song song với tạo đánh giá A có ảnh: thưởng không bao giờ còn lại, không deadlock', async () => {
+    for (let round = 0; round < 4; round++) {
+      const s = await setup({ reviewA: false, reviewB: false });
+      const req = await returns.request(s.user.id, s.order.code, {
+        reasonCode: 'OTHER',
+        reason: 'Không còn nhu cầu dùng nữa',
+        items: [{ orderItemId: s.itemA.id, quantity: 2 }],
+      });
+      const results = await Promise.allSettled([
+        returns.review(admin.id, req.id, { approve: true }),
+        reviews.create(s.user.id, s.a.p.slug, { rating: 5, comment: 'song song', images: PHOTO, orderId: s.order.id }),
+      ]);
+      expect(summarize(results).errors).toEqual([]);
+      expect(await balance(s.user.id)).toBe(0);
+      const ledger = await prisma.pointsTransaction.aggregate({ where: { userId: s.user.id }, _sum: { delta: true } });
+      expect(ledger._sum.delta ?? 0).toBe(0);
+    }
+  });
+
+  it('duyệt trả cả đơn chạy song song với tạo đánh giá: không còn thưởng treo trên đơn đã trả', async () => {
+    for (let round = 0; round < 4; round++) {
+      const s = await setup({ reviewA: false, reviewB: false });
+      const req = await returns.request(s.user.id, s.order.code, {
+        reasonCode: 'OTHER',
+        reason: 'Không còn nhu cầu dùng nữa',
+        items: [
+          { orderItemId: s.itemA.id, quantity: 2 },
+          { orderItemId: s.itemB.id, quantity: 1 },
+        ],
+      });
+      const results = await Promise.allSettled([
+        returns.review(admin.id, req.id, { approve: true }),
+        reviews.create(s.user.id, s.a.p.slug, { rating: 5, comment: 'song song', images: PHOTO, orderId: s.order.id }),
+      ]);
+      const failed = results.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []));
+      // Đánh giá thua thì bị từ chối vì đơn đã trả (400); mọi lỗi khác là bug (deadlock, 500).
+      expect(failed.filter((e) => !(e instanceof BadRequestException))).toEqual([]);
+      expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).status).toBe('RETURNED');
+      expect(await balance(s.user.id)).toBe(0);
+      const ledger = await prisma.pointsTransaction.aggregate({ where: { userId: s.user.id }, _sum: { delta: true } });
+      expect(ledger._sum.delta ?? 0).toBe(0);
+    }
   });
 
   it('đảo đơn chạy song song với xoá đánh giá: tổng điểm bị trừ đúng một lần, không âm, không deadlock', async () => {

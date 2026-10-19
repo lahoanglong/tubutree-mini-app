@@ -116,6 +116,30 @@ describe('Nhiệm vụ FIRST_ORDER, REVIEW_3 chờ hết hạn đổi/trả (rea
     await expect(game.claimMission(user.id, 'REVIEW_3')).resolves.toMatchObject({ claimed: true, rewardPoints: 15 });
   });
 
+  it('REVIEW_3: đánh giá của sản phẩm đã bị trả một phần trên đơn (đơn vẫn giao, đã qua hạn) không tính', async () => {
+    const user = await createUser(prisma);
+    const PHOTO = ['https://res.cloudinary.com/it/p.jpg'];
+    const orders = [] as { id: string }[];
+    for (let i = 0; i < 3; i += 1) {
+      const order = await delivered(user.id, 30);
+      orders.push(order);
+      await prisma.review.create({ data: { userId: user.id, productId: productIds[i]!, orderId: order.id, rating: 5, images: PHOTO } });
+    }
+    expect(await mission(user.id, 'REVIEW_3')).toMatchObject({ progress: 3, completed: true });
+
+    const variation = await prisma.variation.create({
+      data: { pancakeId: `it-mw-v-${randCode(8)}`, productId: productIds[1]!, sku: `MW-${randCode(8)}`, name: 'Chai', attributes: {}, retailPrice: 100_000, stock: 5 },
+    });
+    const item = await prisma.orderItem.create({
+      data: { orderId: orders[1]!.id, variationId: variation.id, productName: 'IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000, paidTotal: 100_000 },
+    });
+    const req = await prisma.returnRequest.create({ data: { orderId: orders[1]!.id, userId: user.id, reason: 'Hỏng', status: 'APPROVED' } });
+    await prisma.returnRequestItem.create({ data: { returnRequestId: req.id, orderItemId: item.id, quantity: 1 } });
+
+    expect(await mission(user.id, 'REVIEW_3')).toMatchObject({ progress: 2, completed: false });
+    await expect(game.claimMission(user.id, 'REVIEW_3')).rejects.toThrow(TOO_EARLY);
+  });
+
   it('REVIEW_3: đánh giá của đơn đã trả (RETURNED) không tính', async () => {
     const user = await createUser(prisma);
     const order = await createOrder(prisma, { userId: user.id, status: 'RETURNED', deliveredAt: ago(30) });

@@ -7,7 +7,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { decodeServedImage } from '../../common/served-image';
-import { REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
+import { returnedProductsByOrder, REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
 import { takeBackReviewReward } from './review-reward-reversal';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -186,11 +186,22 @@ export class ReviewsService {
     const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
     return this.prisma.$transaction(async (tx) => {
+      // Đọc trạng thái đơn ở ngoài tx (purchasesOf) có thể cũ: đơn đang được trả cả đơn thì lần đảo (đã ghi trạng thái, giữ
+      // khoá dòng đơn) đã quét thưởng đánh giá trước khi đánh giá này tồn tại. Khoá chung dòng đơn để hoặc chờ lần đảo xong
+      // rồi từ chối, hoặc ghi xong trước khi lần đảo lật trạng thái và lần đảo thấy đánh giá. Lấy khoá đơn TRƯỚC khoá cặp
+      // (cùng thứ tự với lần đảo: dòng đơn, rồi khoá cặp, rồi dòng user) để không deadlock.
+      const [order] = await tx.$queryRaw<{ status: string }[]>`SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${orderId} FOR SHARE`;
+      if (order?.status !== REVIEWABLE_ORDER.status) {
+        throw new BadRequestException('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+      }
       // pointsEarned nằm ngay trên dòng đánh giá nên phải biết trước review.create. Thưởng chỉ cho đánh giá đầu tiên của
       // cặp (khách, sản phẩm) nhưng đánh giá cho đơn khác không chạm khoá unique của đơn này: khoá theo cặp để sổ REVIEW
       // của cặp không đổi giữa lúc đọc và lúc ghi, lượt chờ khoá đọc được dòng thưởng lượt trước vừa ghi.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reviewRewardLockKey(userId, product.id)}))`;
-      const pointsEarned = (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
+      // Sản phẩm đã bị trả (dù một phần) trên chính đơn này: lần duyệt trả không còn đánh giá nào để thu hồi nên thưởng ở
+      // đây sẽ không bao giờ bị lấy lại. Lần duyệt giữ cùng khoá cặp tới khi commit nên đọc ở đây thấy đủ.
+      const returned = (await returnedProductsByOrder(tx, [orderId])).get(orderId)?.has(product.id) ?? false;
+      const pointsEarned = returned || (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
       const r = await tx.review.create({
         data: {
           userId,

@@ -77,6 +77,21 @@ export async function lockRewardedReviewsOfOrder(
 }
 
 /**
+ * Khoá advisory của các cặp (khách, sản phẩm) bị trả MỘT PHẦN, kể cả khi chưa có đánh giá nào: đánh giá của sản phẩm vừa bị trả
+ * đang tạo song song phải thấy dòng trả đã duyệt (createFirst đọc sau khi lấy cùng khoá) hoặc để lần duyệt thấy đánh giá của
+ * nó. Thứ tự theo productId cố định để hai lần duyệt không chéo khoá nhau.
+ */
+export async function lockReviewRewardsOfProducts(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  productIds: readonly string[],
+): Promise<void> {
+  for (const productId of [...productIds].sort()) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reviewRewardLockKey(userId, productId)}))`;
+  }
+}
+
+/**
  * Thu hồi thưởng đánh giá của các dòng hàng bị trả (điểm đã cấp ngay khi đơn giao nên đơn trả không được giữ). Mỗi đánh giá
  * một lần: dòng REVIEW_RETURN:<id> (partial unique theo reason) là dấu đã xử lý, nên lần trả sau của cùng sản phẩm, trả nốt
  * cả đơn và gọi lại đều không trừ thêm. Số dư không đủ thì thu hồi phần có, như thu hồi điểm đơn. Gọi trong tx của lần đảo,
