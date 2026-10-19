@@ -60,3 +60,26 @@ describe('AnalyticsEventsService.recordBestEffort', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe('AnalyticsEventsService.recordMany / recordManyBestEffort', () => {
+  it('lô rỗng không chạm DB', async () => {
+    const createMany = jest.fn();
+    const svc = new AnalyticsEventsService({ analyticsEvent: { createMany } } as unknown as PrismaService);
+    await svc.recordManyBestEffort([]);
+    expect(createMany).not.toHaveBeenCalled();
+  });
+
+  it('recordMany dùng tx truyền vào, tự sinh eventId khi thiếu và bỏ qua eventId trùng', async () => {
+    const createMany = jest.fn().mockResolvedValue({ count: 2 });
+    const tx = { analyticsEvent: { createMany } } as unknown as PrismaService;
+    const svc = new AnalyticsEventsService({} as PrismaService);
+    await svc.recordMany(tx, [
+      { eventId: 'a', eventName: 'add_to_cart', platform: 'miniapp' },
+      { eventName: 'add_to_cart', platform: 'miniapp' },
+    ]);
+    const arg = createMany.mock.calls[0][0];
+    expect(arg.skipDuplicates).toBe(true);
+    expect(arg.data[0].eventId).toBe('a');
+    expect(typeof arg.data[1].eventId).toBe('string');
+  });
+});
