@@ -49,7 +49,7 @@ export function HomeSection({ title, query, limit, seeAllTo, priority = false }:
           <Link
             href={seeAllTo}
             aria-label={homeText.seeAllLabel(title)}
-            className="inline-flex min-h-11 flex-none items-center px-1 text-sm font-semibold text-forest-700 underline"
+            className="inline-flex min-h-11 flex-none items-center px-1 text-sm font-semibold text-forest-700"
           >
             {homeText.seeAll}
           </Link>
