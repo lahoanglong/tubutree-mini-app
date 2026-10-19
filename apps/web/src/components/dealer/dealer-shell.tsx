@@ -12,13 +12,13 @@ const DEALER_THEME = {
 export function DealerShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <main
-      className="mx-auto max-w-5xl px-4 py-6 max-md:min-h-dvh max-md:bg-[var(--color-dealer-bg)]"
+      className={`mx-auto max-w-5xl px-4 py-6 max-md:min-h-dvh max-md:bg-[var(--color-dealer-bg)] ${skin.mainUp}`}
       style={DEALER_THEME}
     >
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>
-      <h1 className={`mt-1 ${skin.pageTitle}`}>{title}</h1>
+      <h1 className={`mt-1 max-md:mt-0 ${skin.pageTitle}`}>{title}</h1>
       <div className="mt-4">{children}</div>
     </main>
   );

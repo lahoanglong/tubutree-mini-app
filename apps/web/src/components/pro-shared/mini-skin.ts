@@ -7,6 +7,8 @@ import { ui } from '@/lib/guest-ui';
 export const skin = {
   /** Nút phụ ZaUI secondary: nền xanh nhạt, không viền, chữ xanh đậm. */
   btnSecondary: `${ui.btnSecondary} max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[var(--color-action-secondary-fg)] max-md:hover:bg-[var(--color-action-secondary-bg)]`,
+  /** Kéo thân trang lên sát mép trên khi có nút lùi nổi: tiêu đề nằm ngang hàng nút như thanh đầu của Mini App (body.with-back-btn đã đệm 48px cho nút). */
+  mainUp: 'max-md:[body.with-back-btn_&]:-mt-12 max-md:[body.with-back-btn_&]:pt-0',
   /** Card raised: không viền, chỉ bóng elevation-1. */
   card: `${ui.card} max-md:border-transparent max-md:[box-shadow:var(--elevation-1)]`,
   /** h1 trang con: chừa chỗ cho nút lùi tròn nổi, serif cỡ title-lg như PageHeader dùng chung. */

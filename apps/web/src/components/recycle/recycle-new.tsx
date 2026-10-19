@@ -244,7 +244,7 @@ export function RecycleNew() {
 
   const subtitle = step === 'items' ? 'Bước 1/3: Chọn món' : 'Bước 2/3: Chọn cách giao';
   const shell = (content: ReactNode, bar?: ReactNode) => (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
+    <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
       <PageHeader title="Đổi rác" subtitle={subtitle} backHref={step === 'method' ? WIZARD_PATH : '/doi-rac'} backLabel={step === 'method' ? 'Chọn món' : 'Đổi rác lấy quà'} />
       {content}
       {bar}

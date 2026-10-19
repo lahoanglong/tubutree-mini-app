@@ -25,7 +25,7 @@ const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '
 
 function Shell({ id, subtitle, children }: { id: string; subtitle?: string; children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12">
+    <main className={`mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
       <PageHeader title="Kết quả đổi rác" subtitle={subtitle} backHref={`/doi-rac/yeu-cau/${id}`} backLabel="Yêu cầu đổi rác" />
       {children}
     </main>

@@ -17,3 +17,10 @@ describe('skin (lớp phủ Mini App cho nhóm pro)', () => {
     for (const cls of [skin.pageTitle, skin.cardTitle]) expect(cls).toMatch(/max-md:/);
   });
 });
+
+describe('skin.mainUp', () => {
+  it('chỉ kéo lên khi body có nút lùi nổi và chỉ ở điện thoại', () => {
+    expect(skin.mainUp).toContain('max-md:[body.with-back-btn_&]:-mt-12');
+    expect(skin.mainUp).toContain('max-md:[body.with-back-btn_&]:pt-0');
+  });
+});
