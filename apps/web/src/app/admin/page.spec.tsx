@@ -951,6 +951,59 @@ describe('admin/page — tab Người dùng', () => {
     expect(mocks.setUserRole).toHaveBeenCalledWith('0955555555', 'CUSTOMER', undefined);
   });
 
+  it('D15-02: lời cảnh báo bám đúng vai trò đích (khớp admin.service: nhóm việc chỉ mất khi đích khác STAFF, cờ đối tác chỉ tắt khi đích là CUSTOMER/AFFILIATE)', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    const dialogText = async (role: string) => {
+      selectValue(roleSelect, role);
+      if (role === 'DEALER') {
+        await flush();
+        const tier = container.querySelector('select[aria-label="Bậc đại lý"]') as HTMLSelectElement;
+        selectValue(tier, 't1');
+      }
+      act(() => grant.click());
+      await flush();
+      const text = document.body.querySelector('[role="alertdialog"]')?.textContent ?? '';
+      await answerDialog(false);
+      return text;
+    };
+
+    const asDealer = await dialogText('DEALER');
+    expect(asDealer).toContain('Đại lý');
+    expect(asDealer).not.toContain('tắt cờ đối tác');
+    expect(asDealer).not.toContain('MERCHANT');
+
+    const asStaff = await dialogText('STAFF');
+    expect(asStaff).toContain('Nhân viên');
+    expect(asStaff).not.toContain('mất toàn bộ nhóm việc');
+    expect(asStaff).not.toContain('tắt cờ đối tác');
+
+    for (const role of ['CUSTOMER', 'AFFILIATE']) {
+      const text = await dialogText(role);
+      expect(text).toContain('mất toàn bộ nhóm việc');
+      expect(text).toContain('tắt cờ đối tác');
+      expect(text).toContain('MERCHANT');
+      expect(text).toContain('nhân viên hoặc admin');
+    }
+    expect(mocks.setUserRole).not.toHaveBeenCalled();
+  });
+
+  it('D15-02: đổi vai trò xong thì ô vai trò và bậc về trống, lần sau lại phải chọn có chủ đích', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    selectValue(roleSelect, 'CUSTOMER');
+    mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    act(() => grant.click());
+    await flush();
+    await answerDialog(true);
+    expect(roleSelect.value).toBe('');
+    expect(grant.disabled).toBe(true);
+  });
+
   it('cấp quyền ADMIN vẫn phải qua hộp xác nhận: chưa xác nhận thì không gọi API', async () => {
     const { container } = await openUsers();
     const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;

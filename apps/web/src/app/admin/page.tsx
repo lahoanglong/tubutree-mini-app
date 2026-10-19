@@ -1834,6 +1834,24 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   );
 }
 
+/** Hậu quả đổi vai trò, bám admin.service: nhóm việc chỉ giữ khi đích là STAFF; cờ đối tác chỉ tắt khi đích là CUSTOMER/AFFILIATE (kể cả nhân viên/admin đang sở hữu gian hàng đối tác). */
+function roleChangeConsequences(target: UserRole): string {
+  const lines: string[] = [];
+  if (target === 'STAFF') {
+    lines.push('Nếu tài khoản đã là nhân viên: giữ nguyên nhóm việc hiện có.');
+  } else {
+    lines.push('Nếu tài khoản đang là nhân viên: mất toàn bộ nhóm việc, đặt lại nhân viên không trả nhóm việc cũ.');
+  }
+  if (target === 'CUSTOMER' || target === 'AFFILIATE') {
+    lines.push(
+      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV.',
+    );
+  } else if (target === 'DEALER') {
+    lines.push('Nếu tài khoản đã là đại lý: chỉ đổi bậc, gian hàng đối tác giữ nguyên.');
+  }
+  return lines.join('\n');
+}
+
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
 function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
@@ -1850,6 +1868,8 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${r.previousRole} → ${r.role}` });
       setPhone('');
+      setRole('');
+      setTierId('');
       onDone();
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
@@ -1868,10 +1888,7 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
           }
         : {
             title: 'Đổi vai trò',
-            message:
-              `Đổi vai trò của SĐT ${phone.trim()} sang "${roleLabel}"?\n` +
-              'Nếu tài khoản đang là nhân viên: mất toàn bộ nhóm việc, đặt lại nhân viên không trả nhóm việc cũ.\n' +
-              'Nếu đang là đại lý: gian hàng đối tác bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV.',
+            message: `Đổi vai trò của SĐT ${phone.trim()} sang "${roleLabel}"?\n${roleChangeConsequences(role)}`,
             confirmLabel: 'Đổi vai trò',
             tone: 'danger',
           },
@@ -3273,7 +3290,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
             <button
               onClick={() => askDelete({
                 title: 'Xoá khoá học',
-                message: `Xoá khoá học "${course.title}" cùng ${course.lessons.length} bài học? Không hoàn tác được.`,
+                message: `Xoá khoá học "${course.title}" cùng ${course.lessons.length} bài học? Tiến độ học của học viên trong khoá này cũng mất. Không hoàn tác được.`,
                 confirmLabel: 'Xoá khoá học',
               }, () => del.mutate())}
               disabled={del.isPending}
