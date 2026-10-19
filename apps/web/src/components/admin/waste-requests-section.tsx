@@ -28,7 +28,7 @@ import {
   WASTE_REQUEST_STATUS_LABELS,
   WASTE_UNMATCHED_REASON_LABELS,
 } from '@/lib/waste-labels';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, INPUT_CLASS, Notice, ScrollRegion, ToneBadge } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { WasteSeed } from './waste-tab';
 import { WasteRequestDetail } from './waste-request-detail';
@@ -182,7 +182,7 @@ export function WasteRequestsSection({ isAdmin, seed, initialUserId }: { isAdmin
             </select>
           </div>
 
-          {queue.isError && <Notice tone="danger" role="alert">Không tải được danh sách yêu cầu.</Notice>}
+          {queue.isError && <LoadError onRetry={() => void queue.refetch()} retrying={queue.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
           <RequestTable label="Danh sách yêu cầu" rows={queueRows} receivingId={receiving?.id ?? null} onReceive={setReceiving} openId={openId} onOpen={setOpenId} />
           {queue.isSuccess && queueRows.length === 0 && <p className="text-sm text-stone-600">Không có yêu cầu nào trong hàng đợi này.</p>}
           {queue.hasNextPage && (
@@ -619,7 +619,7 @@ function UnmatchedView({ isAdmin }: { isAdmin: boolean }) {
         <span>Xem kiện đã xử lý</span>
       </label>
 
-      {list.isError && <Notice tone="danger" role="alert">Không tải được danh sách kiện không rõ chủ.</Notice>}
+      {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách kiện không rõ chủ.</LoadError>}
       {list.isSuccess && rows.length === 0 && (
         <p className="text-sm text-stone-600">{status === 'OPEN' ? 'Không có kiện nào đang chờ xử lý.' : 'Chưa có kiện nào đã xử lý.'}</p>
       )}

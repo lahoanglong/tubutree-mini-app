@@ -10,7 +10,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { formatVnd } from '@/lib/format-vnd';
 import { WASTE_ITEM_STATUS_LABELS } from '@/lib/waste-labels';
 import { useConfirm } from './confirm-dialog';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 
 const DASH = '—';
 const STATUSES = Object.keys(WASTE_ITEM_STATUS_LABELS) as WasteItemStatus[];
@@ -184,21 +184,18 @@ export function WasteItemsSection() {
         <div>Dùng tối đa {Math.round(maxPct * 100)}% giá trị đơn</div>
         <div>Gói gửi kho tối thiểu {formatCount(mailMin)} điểm</div>
       </dl>
-      {items.isError && <Notice tone="danger" role="alert">Không tải được danh sách món.</Notice>}
+      {items.isError && <LoadError onRetry={() => void items.refetch()} retrying={items.isFetching}>Không tải được danh sách món.</LoadError>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng món nhận">
-        <table className="w-full min-w-[960px] border-collapse">
+        <table className="w-full min-w-[820px] border-collapse">
           <thead>
             <tr className="border-b border-stone-200">
               <th className={TH}>Thứ tự</th>
-              <th className={TH}>Mã</th>
-              <th className={TH}>Tên</th>
-              <th className={TH}>Đơn vị</th>
+              <th className={TH}>Món</th>
               <th className={TH}>Quy đổi</th>
               <th className={TH}>Trần ngày (mang tới điểm)</th>
               <th className={TH}>Trần tháng</th>
-              <th className={TH}>Giọt nước mỗi đơn vị</th>
-              <th className={TH}>Gram mỗi đơn vị</th>
+              <th className={TH}>Giọt nước · gram mỗi đơn vị</th>
               <th className={TH}>Trạng thái</th>
               <th className={TH}>Sửa</th>
             </tr>
@@ -216,15 +213,17 @@ export function WasteItemsSection() {
                     </button>
                   </div>
                 </td>
-                <td className={TD}>{i.code}</td>
-                <td className={TD}>{i.name}</td>
-                <td className={TD}>{i.unitLabel}</td>
+                <td className={TD}>
+                  <div className="font-medium">{i.name}</div>
+                  <div className="font-mono text-xs text-stone-500">{i.code}</div>
+                </td>
                 <td className={TD}>{conversion(i.unitsPerPoint, i.unitLabel, i.pointsPerGroup)}</td>
                 <td className={TD}>{i.dailyCapQty === null ? DASH : formatCount(i.dailyCapQty)}</td>
                 <td className={TD}>{i.monthlyCapQty === null ? DASH : formatCount(i.monthlyCapQty)}</td>
-                <td className={TD}>{formatCount(i.dropsPerUnit)}</td>
-                <td className={TD}>{i.gramsPerUnit === null ? DASH : formatCount(i.gramsPerUnit)}</td>
-                <td className={TD}>
+                <td className={`${TD} whitespace-nowrap`}>
+                  {formatCount(i.dropsPerUnit)} · {i.gramsPerUnit === null ? DASH : `${formatCount(i.gramsPerUnit)} g`}
+                </td>
+                <td className={`${TD} whitespace-nowrap`}>
                   <select
                     aria-label={`Trạng thái ${i.name}`}
                     className={FIELD_XS}
@@ -237,7 +236,7 @@ export function WasteItemsSection() {
                     ))}
                   </select>
                 </td>
-                <td className={TD}>
+                <td className={`${TD} whitespace-nowrap`}>
                   <button type="button" className={BTN_XS_SECONDARY} onClick={() => setPanel({ id: i.id, form: toForm(i) })}>Sửa</button>
                 </td>
               </tr>

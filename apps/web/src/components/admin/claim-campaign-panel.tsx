@@ -15,7 +15,7 @@ import { downloadCsvFile, generateClaimCodesCsv } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
+import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const MINIAPP_BASE_URL_KEY = 'app.miniapp_base_url';
 const BATCH_MAX = 2000;
@@ -252,7 +252,7 @@ export function ClaimCampaignPanel() {
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Các lô đã tạo</h3>
         {batchesQ.isLoading && <p className="text-sm text-stone-500">Đang tải các lô...</p>}
-        {batchesQ.isError && <p className="text-sm text-danger-fg">Không tải được các lô mã.</p>}
+        {batchesQ.isError && <LoadError onRetry={() => void batchesQ.refetch()} retrying={batchesQ.isFetching}>Không tải được các lô mã.</LoadError>}
         {batchesQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có lô nào.</p>}
         <ul className="space-y-2">
           {batchesQ.data?.map((b) => (

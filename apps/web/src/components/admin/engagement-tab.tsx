@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listAdminMissions, updateAdminMission, type AdminMission } from '@/lib/admin-client';
-import { BTN_XS_PRIMARY, INPUT_CLASS, Notice } from './ui';
+import { BTN_XS_PRIMARY, INPUT_CLASS, Notice, LoadError } from './ui';
 
 const REWARD_POINTS_MAX = 500_000;
 
@@ -19,7 +19,7 @@ export function EngagementTab() {
           áp dụng cho lượt nhận sau khi lưu.
         </p>
         {missionsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-        {missionsQ.isError && <p className="text-sm text-danger-fg">Không tải được danh sách nhiệm vụ.</p>}
+        {missionsQ.isError && <LoadError onRetry={() => void missionsQ.refetch()} retrying={missionsQ.isFetching}>Không tải được danh sách nhiệm vụ.</LoadError>}
         {missionsQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có nhiệm vụ nào.</p>}
         <div className="space-y-2">
           {missionsQ.data?.map((m) => <MissionRow key={m.id} item={m} />)}

@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PANCAKE_RESOLVE_NOTE_MAX, resolvePancakeAttention, type AdminOrder } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
-import { BTN_XS_SECONDARY, FIELD_XS, ToneBadge } from './ui';
+import { BTN_XS_SECONDARY, FIELD_XS, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 
 export const PANCAKE_ATTENTION_COUNT_KEY = ['admin-pancake-attention-count'] as const;
@@ -73,17 +73,19 @@ export function PancakeAttentionPanel({ order }: { order: AdminOrder }) {
         <span className="font-normal text-stone-600">{formatDateTime(order.pancakeAttentionAt)}</span>
       </div>
       <p className="mt-1 text-stone-800">{order.pancakeAttention}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <input
-          type="text"
-          aria-label="Ghi chú đã xử lý Pancake"
-          placeholder="Ghi chú (tuỳ chọn), vd: đã hoàn tiền tay cho khách"
-          maxLength={PANCAKE_RESOLVE_NOTE_MAX}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          disabled={resolve.isPending}
-          className={`${FIELD_XS} grow basis-40`}
-        />
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+          <input
+            type="text"
+            aria-label="Ghi chú đã xử lý Pancake"
+            placeholder="vd: đã hoàn tiền tay cho khách"
+            maxLength={PANCAKE_RESOLVE_NOTE_MAX}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            disabled={resolve.isPending}
+            className={`${FIELD_XS} w-full`}
+          />
+        </Field>
         <button type="button" onClick={onResolve} disabled={resolve.isPending} className={BTN_XS_SECONDARY}>
           {resolve.isPending ? 'Đang lưu…' : 'Đã xử lý'}
         </button>

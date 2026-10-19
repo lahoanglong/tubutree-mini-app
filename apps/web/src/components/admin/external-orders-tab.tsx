@@ -15,7 +15,7 @@ import {
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ScrollRegion, ToneBadge } from './ui';
+import { BTN_SECONDARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 
 const SOURCE_LABEL: Record<ExternalOrderSource, string> = {
   MARKETPLACE: 'Đơn sàn',
@@ -101,7 +101,7 @@ export function ExternalOrdersTab({ isAdmin }: { isAdmin: boolean }) {
         </select>
       </div>
       {orders.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {orders.isError && <p className="text-sm text-danger-fg">Không tải được đơn ngoài app.</p>}
+      {orders.isError && <LoadError onRetry={() => void orders.refetch()} retrying={orders.isFetching}>Không tải được đơn ngoài app.</LoadError>}
       {orders.isSuccess && rows.length === 0 && (
         <p className="text-sm text-stone-500">{filtered ? 'Không có đơn nào khớp bộ lọc.' : 'Chưa nhận được đơn ngoài app nào từ Pancake.'}</p>
       )}
@@ -125,7 +125,7 @@ function SourcesTable() {
   return (
     <section aria-label="Nguồn đã thấy" className="space-y-2">
       <h3 className="text-sm font-semibold text-stone-900">Nguồn đã thấy</h3>
-      {sources.isError && <p className="text-sm text-danger-fg">Không tải được bảng nguồn đã thấy.</p>}
+      {sources.isError && <LoadError onRetry={() => void sources.refetch()} retrying={sources.isFetching}>Không tải được bảng nguồn đã thấy.</LoadError>}
       {sources.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Chưa thấy nguồn nào.</p>}
       {rows.length > 0 && (
         <ScrollRegion label="Bảng nguồn đã thấy">

@@ -11,7 +11,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
-import { BTN_WARNING, FIELD_XS } from './ui';
+import { BTN_WARNING, FIELD_XS, Field } from './ui';
 
 /**
  * Hiện "Xác nhận đã nhận chuyển khoản" khi: đơn ĐẠI LÝ, còn UNPAID, BE xác nhận KHÔNG phải đơn "Ghi công
@@ -95,27 +95,30 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
       <p className="mt-1 text-xs text-stone-600">
         Đối chiếu sao kê ngân hàng trước khi xác nhận. Mã giao dịch và ghi chú được lưu vào lịch sử đơn để đối soát.
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <input
-          type="text"
-          aria-label="Mã giao dịch ngân hàng"
-          placeholder="Mã giao dịch ngân hàng (tuỳ chọn), vd FT26270…"
-          maxLength={DEALER_BANK_REF_MAX}
-          value={bankRef}
-          onChange={(e) => setBankRef(e.target.value)}
-          disabled={busy}
-          className={`${FIELD_XS} grow basis-40`}
-        />
-        <input
-          type="text"
-          aria-label="Ghi chú xác nhận thanh toán"
-          placeholder="Ghi chú (tuỳ chọn)"
-          maxLength={DEALER_PAYMENT_NOTE_MAX}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          disabled={busy}
-          className={`${FIELD_XS} grow basis-40`}
-        />
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <Field label="Mã giao dịch ngân hàng (tuỳ chọn)" className="grow basis-40">
+          <input
+            type="text"
+            aria-label="Mã giao dịch ngân hàng"
+            placeholder="vd FT26270…"
+            maxLength={DEALER_BANK_REF_MAX}
+            value={bankRef}
+            onChange={(e) => setBankRef(e.target.value)}
+            disabled={busy}
+            className={`${FIELD_XS} w-full`}
+          />
+        </Field>
+        <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+          <input
+            type="text"
+            aria-label="Ghi chú xác nhận thanh toán"
+            maxLength={DEALER_PAYMENT_NOTE_MAX}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            disabled={busy}
+            className={`${FIELD_XS} w-full`}
+          />
+        </Field>
         <button
           type="button"
           onClick={onConfirm}

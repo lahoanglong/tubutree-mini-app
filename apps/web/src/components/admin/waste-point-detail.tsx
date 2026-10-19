@@ -16,7 +16,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_CLASS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_SECONDARY, FIELD_CLASS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
 
@@ -239,7 +239,7 @@ export function WastePointDetail({
 
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Nhật ký cộng điểm</h3>
-        {credits.isError && <Notice tone="danger" role="alert">Không tải được nhật ký cộng điểm.</Notice>}
+        {credits.isError && <LoadError onRetry={() => void credits.refetch()} retrying={credits.isFetching}>Không tải được nhật ký cộng điểm.</LoadError>}
         <ScrollRegion label="Nhật ký cộng điểm">
           <table className="w-full min-w-[520px] border-collapse">
             <thead>
@@ -275,7 +275,7 @@ export function WastePointDetail({
         <Field label="Tháng">
           <input type="month" className={`${INPUT_CLASS} max-w-[200px]`} value={month} onChange={(e) => setMonth(e.target.value)} />
         </Field>
-        {report.isError && <Notice tone="danger" role="alert">Không tải được số lượng trong tháng.</Notice>}
+        {report.isError && <LoadError onRetry={() => void report.refetch()} retrying={report.isFetching}>Không tải được số lượng trong tháng.</LoadError>}
         {report.data && (
           <div className="space-y-1 text-sm text-stone-800">
             <ul className="list-disc pl-5">

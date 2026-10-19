@@ -2,8 +2,10 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, type InboxKey } from '@/lib/admin-client';
+import { getOpsInbox, type AdminPayoutStatus, type InboxKey } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
+import { seedPayoutFilter } from './payout-admin-tab';
+import { LoadError } from './ui';
 
 export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   pancakeAttention: { title: 'Cần xử lý Pancake', hint: 'Pancake báo việc hệ thống không tự làm được' },
@@ -35,11 +37,18 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 
+/** Hai thẻ rút tiền cùng mở tab "Duyệt yêu cầu rút tiền": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
+const PAYOUT_FILTER: Partial<Record<InboxKey, AdminPayoutStatus>> = { payouts: 'REQUESTED', payoutsToPay: 'APPROVED' };
+
 /** Trang chủ quản trị: mỗi hàng đợi một thẻ có số việc đang chờ, bấm vào mở đúng tab/bộ lọc. */
-export function OpsInboxTab({ onOpen }: { onOpen: (key: InboxKey) => void }) {
+export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => void }) {
+  const onOpen = (key: InboxKey) => {
+    seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
+    openTab(key);
+  };
   const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang đếm việc cần xử lý…</p>;
-  if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được danh sách việc cần xử lý.</p>;
+  if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách việc cần xử lý.</LoadError>;
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
   const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
   const open = items.filter((i) => i.count > 0);

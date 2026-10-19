@@ -20,7 +20,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
-import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 
 const PUSH_STATUS_LABELS: Record<string, string> = {
   PENDING: 'chờ đẩy',
@@ -164,7 +164,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
         </button>
       </div>
       {q.isLoading && <p className="text-sm text-stone-500">Đang kiểm tra…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được tình trạng hệ thống.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được tình trạng hệ thống.</LoadError>}
       {msg && (
         <div ref={msgRef}>
           <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>

@@ -18,7 +18,7 @@ import { formatDateTime } from '@/lib/format-date';
 import { pointsDebtAmount, pointsReasonDetail, walletTxLabel } from '@/lib/ledger-labels';
 import { pointsSummary } from '@/lib/checkout-points';
 import { SideDrawer } from './side-drawer';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -81,7 +81,7 @@ export function UserDetailDrawer({ userId, isAdmin, onClose }: { userId: string;
   return (
     <SideDrawer title={title} onClose={onClose}>
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được chi tiết người dùng.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được chi tiết người dùng.</LoadError>}
       {q.data && <DetailBody d={q.data} isAdmin={isAdmin} />}
     </SideDrawer>
   );
