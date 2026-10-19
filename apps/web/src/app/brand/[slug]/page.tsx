@@ -1,10 +1,10 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { Award, BadgeCheck, Sparkles, Leaf } from 'lucide-react';
-import { getBrand, formatSold } from '@/lib/api';
-import { ProductPriceRow } from '@/components/flash-price';
+import { getBrand, type ProductCard as ProductCardData } from '@/lib/api';
+import ProductCard from '@/components/product-card';
 import { EmptyState } from '@/components/empty-state';
+import { safeHexColor } from '@/lib/safe-color';
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
 
 export const revalidate = 300;
@@ -37,43 +37,59 @@ export default async function BrandPage({
   if (!b) notFound();
 
   return (
-    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6">
-      {b.coverUrl && (
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]">
+      {/* Điện thoại: dải bìa tràn mép 96px (xanh đậm khi chưa có ảnh) và avatar đè lên như StorePageShell của Mini App. */}
+      {b.coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={b.coverUrl} alt={b.name} className="mb-4 h-44 w-full rounded-card object-cover" />
+        <img src={b.coverUrl} alt={b.name} className="mb-4 h-44 w-full rounded-card object-cover max-md:mb-0 max-md:h-24 max-md:rounded-none" />
+      ) : (
+        <div data-testid="brand-cover-band" aria-hidden="true" className="hidden h-24 bg-forest-700 max-md:block" />
       )}
-      <div className="flex min-w-0 items-center gap-3">
-        {b.logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={b.logoUrl} alt={b.name} className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-stone-0" />
-        )}
-        <div className="min-w-0">
-          <h1 className="flex flex-wrap items-center gap-2 break-words font-display text-2xl font-semibold text-stone-900">
-            {b.name}
-            {b.isVerified && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-forest-600 px-2 py-0.5 font-ui text-xs font-medium text-stone-0">
-                <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                Chính hãng
-              </span>
-            )}
-          </h1>
-          {b.tagline && <p className="text-stone-600">{b.tagline}</p>}
+      <div className="max-md:px-4">
+        <div className="flex min-w-0 items-center gap-3 max-md:flex-col max-md:items-start max-md:gap-0">
+          {b.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={b.logoUrl}
+              alt={b.name}
+              className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-stone-0 max-md:-mt-8 max-md:h-16 max-md:w-16 max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:ring-0"
+            />
+          ) : (
+            <span
+              data-testid="brand-avatar-fallback"
+              aria-hidden="true"
+              className="hidden h-16 w-16 shrink-0 place-items-center rounded-full border-[3px] border-[var(--color-bg-surface)] bg-[var(--color-action-primary-bg)] text-[var(--color-text-inverse)] max-md:-mt-8 max-md:grid"
+            >
+              <Leaf className="h-6 w-6" aria-hidden="true" />
+            </span>
+          )}
+          <div className="min-w-0 max-md:mt-2">
+            <h1 className="flex flex-wrap items-center gap-2 break-words font-display text-2xl font-semibold text-stone-900 max-md:flex-col max-md:items-start max-md:gap-2">
+              {b.name}
+              {b.isVerified && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-forest-600 px-2 py-0.5 font-ui text-xs font-medium text-stone-0">
+                  <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                  Chính hãng
+                </span>
+              )}
+            </h1>
+            {b.tagline && <p className="text-stone-600 max-md:mt-2 max-md:text-sm">{b.tagline}</p>}
+          </div>
         </div>
-      </div>
 
-      <BrandActions slug={b.slug} name={b.name} followerCount={b.followerCount} />
+        <BrandActions slug={b.slug} name={b.name} followerCount={b.followerCount} />
 
       {b.certifications.length > 0 && (
         <section className="mt-5">
           <h2 className="mb-2 flex items-center gap-1.5 font-display font-semibold text-stone-900">
-            <Award className="h-4 w-4 text-forest-600" aria-hidden="true" />
+            <Award className="h-4 w-4 text-forest-600 max-md:hidden" aria-hidden="true" />
             <span>Chứng nhận</span>
           </h2>
           <div className="flex gap-2 overflow-x-auto pb-1">
             {b.certifications.map((c) => (
               <span
                 key={c.code}
-                className="flex items-center gap-1 whitespace-nowrap rounded-control border border-forest-200 bg-forest-50 px-3 py-1.5 text-sm text-forest-800"
+                className="flex items-center gap-1 whitespace-nowrap rounded-control border border-forest-200 bg-forest-50 px-3 py-1.5 text-sm text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-status-success-bg)] max-md:px-2 max-md:py-[3px] max-md:text-xs max-md:text-[var(--color-status-success-fg)]"
               >
                 <Leaf className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
                 <span>{c.label}</span>
@@ -94,7 +110,7 @@ export default async function BrandPage({
               <div
                 key={p.id}
                 className="rounded-card border border-promo-solid/30 bg-promo-bg p-3"
-                style={p.themeColor ? { borderColor: p.themeColor } : undefined}
+                style={safeHexColor(p.themeColor) ? { borderColor: safeHexColor(p.themeColor) } : undefined}
               >
                 <p className="font-semibold text-promo-fg">{p.title}</p>
                 {p.subtitle && <p className="text-sm text-stone-600">{p.subtitle}</p>}
@@ -116,40 +132,10 @@ export default async function BrandPage({
       {b.products.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
             {b.products.map((p) => (
-              <Link
-                key={p.id}
-                href={`/san-pham/${encodeURIComponent(p.slug)}`}
-                className="block overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised"
-              >
-                {p.thumbnail ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={p.thumbnail}
-                    alt={p.name}
-                    className="aspect-square w-full object-cover"
-                    width={400}
-                    height={400}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-forest-50 text-forest-600">
-                    <Leaf className="h-10 w-10 text-forest-600" aria-hidden="true" />
-                  </div>
-                )}
-                <div className="p-2">
-                  <p className="line-clamp-2 text-sm text-stone-900">{p.name}</p>
-                  <ProductPriceRow
-                    product={p}
-                    className="mt-1 flex items-baseline gap-1.5"
-                    priceClassName="font-bold text-stone-900"
-                    originalClassName="text-xs text-stone-500 line-through"
-                  />
-                  {formatSold(p.sold) && <p className="mt-0.5 text-xs text-stone-500">{formatSold(p.sold)}</p>}
-                </div>
-              </Link>
+              // Payload sản phẩm của trang nhãn không kèm `brand` (mọi sản phẩm thuộc nhãn này): dùng tên nhãn của trang như Mini App.
+              <ProductCard key={p.id} product={{ ...p, brand: b.name } as ProductCardData} />
             ))}
           </div>
         </section>
@@ -163,6 +149,7 @@ export default async function BrandPage({
           <p className="whitespace-pre-line break-words text-stone-700">{b.story}</p>
         </section>
       )}
+      </div>
     </main>
   );
 }
