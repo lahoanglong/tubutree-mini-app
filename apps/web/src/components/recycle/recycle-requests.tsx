@@ -4,11 +4,11 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import type { WasteRequestSummaryDTO } from '@tubutree/shared-types';
-import { wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
+import { wasteMeQuery, wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -16,32 +16,11 @@ import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RecycleLinkRow } from './recycle-link-row';
-import { METHOD_LABELS, closedLabel, formatPoints } from './recycle-labels';
+import { METHOD_LABELS, isRequestPaused, requestStatusText } from './recycle-labels';
 
 const OPEN_STATUSES: readonly string[] = ['OPEN', 'IN_TRANSIT', 'RECEIVED'];
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
-
-function statusText(r: WasteRequestSummaryDTO): string {
-  switch (r.status) {
-    case 'OPEN':
-      return 'Đang mở';
-    case 'IN_TRANSIT':
-      return 'Đang vận chuyển';
-    case 'RECEIVED':
-      return 'Kho đã nhận, đang đếm';
-    case 'COMPLETED':
-      return `Đã cộng ${formatPoints(r.pointsAwarded ?? 0)}`;
-    case 'REJECTED':
-      return 'Bị từ chối';
-    case 'CANCELLED':
-      return 'Đã huỷ';
-    case 'REVERSED':
-      return 'Đã thu hồi điểm';
-    default:
-      return closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null })!.label;
-  }
-}
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -56,6 +35,9 @@ export function RecycleRequests() {
   const phase = useAuthPhase();
   const [tab, setTab] = useState<'open' | 'closed'>('open');
   const q = useQuery({ ...wasteRequestsQuery(coreHttp), enabled: phase === 'authenticated' });
+  const cfg = usePublicConfig();
+  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: phase === 'authenticated' });
+  const me = meQ.data;
 
   if (phase === 'loading') return <Shell><AuthLoading /></Shell>;
   if (phase === 'unavailable') return <Shell><SessionUnavailable /></Shell>;
@@ -92,14 +74,24 @@ export function RecycleRequests() {
         ]}
       />
       <div className={`divide-y divide-stone-200 ${ui.card}`}>
-        {shown.map((r) => (
-          <RecycleLinkRow
-            key={r.id}
-            href={r.status === 'COMPLETED' ? `/doi-rac/xong/${r.id}` : `/doi-rac/yeu-cau/${r.id}`}
-            title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-            subtitle={`${statusText(r)} · ${formatDate(r.createdAt)}`}
-          />
-        ))}
+        {shown.map((r) => {
+          const paused =
+            !!me &&
+            isRequestPaused(r, {
+              programmeEnabled: me.programmeEnabled,
+              blocked: me.blocked,
+              shipLockedAt: me.shipLockedAt,
+              cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
+            });
+          return (
+            <RecycleLinkRow
+              key={r.id}
+              href={r.status === 'COMPLETED' ? `/doi-rac/xong/${r.id}` : `/doi-rac/yeu-cau/${r.id}`}
+              title={`${r.code} · ${METHOD_LABELS[r.method]}`}
+              subtitle={`${requestStatusText(r, { blocked: me?.blocked, paused })} · ${formatDate(r.createdAt)}`}
+            />
+          );
+        })}
       </div>
     </Shell>
   );

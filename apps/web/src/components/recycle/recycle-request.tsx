@@ -11,9 +11,11 @@ import { wasteMeQuery, wastePointsQuery, wasteRequestQuery } from '@tubutree/app
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
+import { formatPhoneDisplay } from '@/lib/phone-display';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
 import { PageHeader } from '@/components/ui/page-header';
@@ -23,7 +25,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
 import { RecycleSupport } from './recycle-support';
 import { RecycleTimeline } from './recycle-timeline';
-import { METHOD_LABELS, PAUSED_TEXT, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, timelineFor } from './recycle-labels';
+import {
+  METHOD_LABELS,
+  PAUSED_TEXT,
+  TIMELINE_STEPS,
+  closedLabel,
+  dayMonth,
+  formatPoints,
+  isRequestPaused,
+  pointAddress,
+  requestStatusText,
+  timelineFor,
+} from './recycle-labels';
 
 const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác';
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
@@ -161,10 +174,14 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
 
-  const pickupPaused = !!me?.blocked || !!me?.shipLockedAt || !cfg.waste.pickup;
-  const pausedPickup = r.method === 'PICKUP' && open && !r.orderCode && pickupPaused;
-  const dropOffPaused =
-    r.method === 'DROP_OFF' && open && ((cfg.isLoaded && !cfg.waste.enabled) || me?.programmeEnabled === false || !!me?.blocked);
+  const paused = isRequestPaused(r, {
+    programmeEnabled: me?.programmeEnabled,
+    blocked: me?.blocked,
+    shipLockedAt: me?.shipLockedAt,
+    cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
+  });
+  const pausedPickup = paused && r.method === 'PICKUP';
+  const dropOffPaused = paused && r.method === 'DROP_OFF';
   const quotaFull =
     r.method === 'DROP_OFF' && open && r.pointAvailable && (pointsQ.data ?? []).some((p) => p.id === r.point?.id && p.quotaFull);
 
@@ -201,7 +218,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         {recipient && (
           <div data-recipient className="flex flex-col gap-0.5">
             <p className="text-base font-semibold text-stone-900">{recipient.name}</p>
-            {recipient.phone && <p className="text-sm text-stone-800">{recipient.phone}</p>}
+            {recipient.phone && <p className="text-sm text-stone-800">{formatPhoneDisplay(recipient.phone)}</p>}
             <p className="text-sm text-stone-800">{pointAddress(recipient)}</p>
             <div className="mt-2">
               <button
@@ -236,7 +253,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         <p className="text-sm text-stone-800">Ghi mã này lên túi</p>
         {r.orderCode ? (
           <p className="text-base font-semibold text-stone-900">{`Đã gắn vào đơn ${r.orderCode}`}</p>
-        ) : pickupPaused ? (
+        ) : pausedPickup ? (
           <>
             <p className="text-sm text-stone-800">
               {`Thu kèm rác đang tạm dừng, yêu cầu này chưa gắn được vào đơn và sẽ tự hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)}`}
@@ -262,8 +279,21 @@ export function RecycleRequestDetail({ id }: { id: string }) {
       </section>
     ) : null;
 
+  const stepHints =
+    r.method === 'DROP_OFF' && open && r.point && r.pointAvailable && !quotaFull && !dropOffPaused
+      ? {
+          1: (
+            <>
+              <span className="text-xs text-stone-600">{`Mang tới ${r.point.name} trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</span>
+              <span className="text-xs text-stone-600">{pointAddress(r.point)}</span>
+            </>
+          ),
+        }
+      : undefined;
+  const codeBlockShown = mailBlock !== null || pickupBlock !== null;
+
   return (
-    <Shell title={r.code} subtitle={METHOD_LABELS[r.method]}>
+    <Shell title={codeBlockShown ? 'Yêu cầu đổi rác' : r.code} subtitle={METHOD_LABELS[r.method]}>
       {notice && (
         <p role={notice.ok ? 'status' : 'alert'} className={notice.ok ? 'text-sm font-semibold text-success-fg' : ui.error}>
           {notice.text}
@@ -271,11 +301,16 @@ export function RecycleRequestDetail({ id }: { id: string }) {
       )}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
         <div className="flex flex-col gap-4">
+          {t && (
+            <div>
+              <Badge tone="brand">{requestStatusText(r, { blocked: !!me?.blocked, paused })}</Badge>
+            </div>
+          )}
           {mailBlock}
           {pickupBlock}
           {pointNotice}
           {t ? (
-            <RecycleTimeline steps={TIMELINE_STEPS[r.method]} current={t.current} />
+            <RecycleTimeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
           ) : (
             closed && (
               <section className="flex flex-col gap-1">
@@ -327,6 +362,9 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             </section>
           )}
           <DeclaredCountedTable lines={r.lines} />
+          {t && r.status !== 'COMPLETED' && r.estimatedPoints > 0 && (
+            <p className="text-right text-base font-semibold text-stone-900">{`Ước tính ${formatPoints(r.estimatedPoints)}`}</p>
+          )}
           {r.status === 'COMPLETED' && (
             <Link href={`/doi-rac/xong/${id}`} className={`${ui.btnPrimary} w-full`}>
               Xem kết quả cộng điểm

@@ -6,7 +6,7 @@ import type { WasteMeItemDTO } from '@tubutree/shared-types';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
-import { UNCAPPED_QTY_MAX, capSentence, groupProgressText, ruleText } from './recycle-labels';
+import { UNCAPPED_QTY_MAX, capSentence, groupProgressText, monthRemainingText, ruleText } from './recycle-labels';
 
 interface WasteItemStepProps {
   items: readonly WasteMeItemDTO[];
@@ -24,6 +24,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
         const cap = capSentence(item);
+        const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
         const comingSoon = item.status === 'COMING_SOON';
         return (
@@ -49,6 +50,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
               <p className="text-xs text-stone-700">{ruleText(item)}</p>
               {item.prepInstructions && <p className="text-xs text-stone-600">{item.prepInstructions}</p>}
               {cap && <p className="text-xs text-stone-600">{cap}</p>}
+              {monthLeft && <p className={`text-xs ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
               {item.status === 'ACTIVE' && (
                 <div className="mt-1 flex flex-col gap-2">
                   <div>

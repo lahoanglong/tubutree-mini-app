@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Check } from 'lucide-react';
 
 type StepState = 'done' | 'current' | 'upcoming';
@@ -17,14 +18,17 @@ export function RecycleTimeline({
   current,
   label = 'Tiến độ yêu cầu',
   compact = false,
+  hints,
 }: {
   steps: readonly string[];
   current: number;
   label?: string;
   compact?: boolean;
+  /** Dòng phụ dưới tên bước, theo chỉ số bước; chỉ hiện ở bản đầy đủ. */
+  hints?: Readonly<Record<number, ReactNode>>;
 }) {
   const size = compact ? 'h-4 w-4' : 'h-6 w-6';
-  return (
+  const list = (
     <ol aria-label={label} className={`flex ${compact ? 'flex-row gap-2' : 'flex-col gap-3'}`}>
       {steps.map((s, i) => {
         const state: StepState = i < current ? 'done' : i === current ? 'current' : 'upcoming';
@@ -35,7 +39,7 @@ export function RecycleTimeline({
             data-step={s}
             data-state={state}
             aria-current={state === 'current' ? 'step' : undefined}
-            className={`flex min-w-0 items-center gap-2.5 ${compact ? 'flex-1' : ''}`}
+            className={`flex min-w-0 ${!compact && hints?.[i] ? 'items-start' : 'items-center'} gap-2.5 ${compact ? 'flex-1' : ''}`}
           >
             <span
               aria-hidden="true"
@@ -49,14 +53,29 @@ export function RecycleTimeline({
             {compact ? (
               <span className="sr-only">{`${s}${STATE_TEXT[state]}`}</span>
             ) : (
-              <span className={`text-sm text-stone-900 ${state === 'current' ? 'font-semibold' : ''}`}>
-                {s}
-                <span className="sr-only">{STATE_TEXT[state]}</span>
-              </span>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className={`text-sm text-stone-900 ${state === 'current' ? 'font-semibold' : ''}`}>
+                  {s}
+                  <span className="sr-only">{STATE_TEXT[state]}</span>
+                </span>
+                {hints?.[i]}
+              </div>
             )}
           </li>
         );
       })}
     </ol>
+  );
+  if (!compact) return list;
+  const caption = steps[Math.min(current, steps.length - 1)];
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      {list}
+      {caption && (
+        <div aria-hidden="true" className="truncate text-xs text-stone-600">
+          {caption}
+        </div>
+      )}
+    </div>
   );
 }

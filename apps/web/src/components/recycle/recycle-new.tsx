@@ -346,7 +346,9 @@ export function RecycleNew() {
     const locked = isLocked(pv);
     const checked = selected === m;
     const fee = m === 'MAIL_IN' ? pv?.feeEstimate : null;
-    const showProvince = m === 'MAIL_IN' && provincesQ.data && (draft.provinceCode !== null || pv?.blocks.some((b) => b.code === 'NEED_PROVINCE'));
+    // Tỉnh chưa có điểm nhận thì API trả chính mã tỉnh làm tên; khi danh sách tỉnh chưa về thì bỏ cụm tên tỉnh, không in mã số.
+    const feeProvince = fee ? (provincesQ.data?.find((pr) => pr.code === fee.provinceCode)?.name ?? (fee.provinceName === fee.provinceCode ? null : fee.provinceName)) : null;
+    const showProvince = m === 'MAIL_IN' && checked && provincesQ.data && (draft.provinceCode !== null || pv?.blocks.some((b) => b.code === 'NEED_PROVINCE'));
     return (
       <div key={m} className={`${ui.card} p-4 ${checked ? 'border-2 border-forest-600' : ''}`}>
         <button
@@ -358,21 +360,25 @@ export function RecycleNew() {
           onClick={() => {
             if (!locked) selectMethod(m);
           }}
-          className={`flex min-h-11 w-full flex-col gap-1 text-left ${locked ? 'cursor-default opacity-60' : 'cursor-pointer'}`}
+          className={`flex min-h-11 w-full flex-col gap-1 text-left ${locked ? 'cursor-default' : 'cursor-pointer'}`}
         >
+          <span className={`flex flex-col gap-1 ${locked ? 'opacity-60' : ''}`}>
           <span className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</span>
           <span className="text-xs text-stone-600">{METHOD_LINE[m]}</span>
           {pv && <span className="text-sm font-semibold text-stone-900">{`Ước tính ${formatPoints(pv.estimatedPoints)}`}</span>}
           {fee && (
-            <span className="text-xs text-stone-600">{`Phí ship ước tính từ ${fee.provinceName}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}</span>
+            <span className="text-xs text-stone-600">{`Phí ship ước tính${feeProvince ? ` từ ${feeProvince}` : ''}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}</span>
           )}
           {m === 'MAIL_IN' && <span className="text-xs text-stone-600">{`Gói tối thiểu ${formatPoints(me.thresholds.mailinMinPoints)}`}</span>}
           {m === 'PICKUP' && <span className="text-xs text-stone-600">{`Tối thiểu ${formatPoints(me.thresholds.pickupMinPoints)} ước tính`}</span>}
-          {pv?.blocks.map((b) => (
-            <span key={`${b.code}-${b.itemId ?? ''}`} className="text-xs text-danger-fg">
-              {blockMessage(b, ctxFor(pv, m))}
-            </span>
-          ))}
+          </span>
+          {pv?.blocks
+            .filter((b) => b.code !== 'NEED_PROVINCE' || checked)
+            .map((b) => (
+              <span key={`${b.code}-${b.itemId ?? ''}`} className={`text-xs ${b.code === 'NEED_PROVINCE' ? 'text-stone-600' : 'text-warning-fg'}`}>
+                {blockMessage(b, ctxFor(pv, m))}
+              </span>
+            ))}
         </button>
         <div className="mt-2 flex flex-col gap-2">
           {showProvince && (

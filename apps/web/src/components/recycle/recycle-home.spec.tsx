@@ -141,6 +141,13 @@ describe('/doi-rac trang vào (§4.1)', () => {
     expect(link(c, '/doi-rac/yeu-cau')?.getAttribute('aria-label')).toBe('Yêu cầu của tôi');
   });
 
+  it('thẻ yêu cầu có một dòng trạng thái theo cách giao, kèm mini timeline', async () => {
+    state.me = makeWasteMe({ openRequests: [makeRequestSummary({ method: 'MAIL_IN', status: 'IN_TRANSIT' })] });
+    const c = await mount();
+    expect(c.textContent).toContain('Đang vận chuyển');
+    expect(c.querySelector('ol[aria-label="Tiến độ TR-8K2M9"]')).not.toBeNull();
+  });
+
   it('thẻ yêu cầu liệt kê từng món dạng "Tên món: số lượng đơn vị", không lặp danh từ đơn vị', async () => {
     state.me = makeWasteMe({
       openRequests: [
@@ -196,6 +203,51 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(c.querySelector('[data-item]')).toBeNull();
     expect(link(c, '/kho-qua')).toBeNull();
     expect(link(c, '/doi-rac/yeu-cau/req-1')).not.toBeNull();
+  });
+
+  it('chương trình tắt: yêu cầu Mang tới và Thu kèm đơn chưa gắn đọc "Đang tạm dừng", Gửi về kho giữ nhãn cũ', async () => {
+    state.me = makeWasteMe({
+      programmeEnabled: false,
+      openRequests: [
+        makeRequestSummary({ id: 'r-d', code: 'TR-DROP1' }),
+        makeRequestSummary({ id: 'r-p', code: 'TR-PICK1', method: 'PICKUP' }),
+        makeRequestSummary({ id: 'r-m', code: 'TR-MAIL1', method: 'MAIL_IN' }),
+      ],
+    });
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+    const c = await mount();
+    expect(c.textContent?.split('Đang tạm dừng').length).toBe(3);
+    expect(c.textContent).toContain('Chờ bạn gửi kiện');
+    expect(c.textContent).not.toContain('Chờ bạn mang tới');
+    expect(c.textContent).not.toContain('Chờ gắn vào đơn');
+  });
+
+  it('khách bị khoá: yêu cầu Mang tới đọc "Đang tạm dừng"', async () => {
+    state.me = makeWasteMe({ blocked: true, openRequests: [makeRequestSummary()] });
+    const c = await mount();
+    expect(c.textContent).toContain('Đang tạm dừng');
+    expect(c.textContent).not.toContain('Chờ bạn mang tới');
+  });
+
+  it('chương trình bật: Mang tới đọc "Chờ bạn mang tới"; Thu kèm đơn tạm dừng khi cờ pickup tắt', async () => {
+    state.me = makeWasteMe({ openRequests: [makeRequestSummary(), makeRequestSummary({ id: 'r-p', code: 'TR-PICK1', method: 'PICKUP' })] });
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+    let c = await mount();
+    expect(c.textContent).toContain('Chờ bạn mang tới');
+    expect(c.textContent).toContain('Chờ gắn vào đơn');
+    mounted.pop()!.unmount();
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } };
+    c = await mount();
+    expect(c.textContent).toContain('Chờ bạn mang tới');
+    expect(c.textContent).toContain('Đang tạm dừng');
+    expect(c.textContent).not.toContain('Chờ gắn vào đơn');
+  });
+
+  it('NEED_PHONE + chương trình bật + có deskPoints: thông báo Mini App kèm lối vào /doi-rac/quay', async () => {
+    state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }] });
+    const c = await mount();
+    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(link(c, '/doi-rac/quay')?.textContent).toContain('Nhận hàng tại điểm');
   });
 
   it('khách bị khoá: thẻ khoá, yêu cầu RECEIVED ghi "Đang chờ Tubu xem lại"', async () => {

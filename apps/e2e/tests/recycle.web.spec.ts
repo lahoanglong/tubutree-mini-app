@@ -60,6 +60,8 @@ const REWARDS = {
 function mockRecycle(api: MockApi, meBody: Record<string, unknown> = me()) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
+  // Cổng nhận mã thẻ đọc số món trong giỏ ở mọi trang.
+  api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 0 });
   api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } });
   api.get('/waste/me', () => meBody);
   api.get('/me/loyalty/rewards', REWARDS);
@@ -147,7 +149,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await plus.click();
     await plus.click();
     await plus.click();
-    await expect(page.getByText('Ước tính 3.000 điểm')).toBeVisible();
+    await expect(page.getByText('Ước tính 3.000 điểm').filter({ visible: true })).toBeVisible();
     await next.click();
 
     await expect(page.getByText('Bước 2/3: Chọn cách giao')).toBeVisible();
@@ -224,6 +226,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
   test('sửa yêu cầu: đổi số lượng, thấy ước tính mới, PATCH đúng body rồi về trang yêu cầu', async ({ page, api }) => {
     mockRecycle(api);
     api.get('/waste/requests/:id', () => detail());
+    api.get('/waste/points', () => []);
     api.post('/waste/preview', () => ({
       estimatedPoints: 4000, estimatedDrops: 0, estimatedGrams: null, pointsValueVnd: 4000, blocks: [], feeEstimate: null,
       itemCaps: [], pointsMonthRemaining: 190000,
@@ -231,9 +234,9 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     api.patch('/waste/requests/:id', () => detail());
     await page.goto('/doi-rac/yeu-cau/req-1/sua');
     await expect(page.getByRole('heading', { name: 'Sửa yêu cầu', level: 1 })).toBeVisible();
-    await expect(page.getByText('Hạn giữ chỗ không đổi: 25/10/2026').first()).toBeVisible();
+    await expect(page.getByText('Hạn giữ chỗ không đổi: 25/10/2026').filter({ visible: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Giảm số lượng' }).click();
-    await expect(page.getByText('Ước tính mới 4.000 điểm').first()).toBeVisible();
+    await expect(page.getByText('Ước tính mới 4.000 điểm').filter({ visible: true }).first()).toBeVisible();
     const patched = api.waitForCall('PATCH', '/waste/requests/:id');
     await page.getByRole('button', { name: 'Lưu thay đổi' }).first().click();
     expect((await patched).body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 4 }], pointId: 'pt-1' });
@@ -283,16 +286,18 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
       quota: { limit: 500000, used: 125000, remaining: 375000 }, staffDailyCapRemaining: 150000 }));
     await page.goto('/doi-rac/quay');
     await expect(page.getByRole('heading', { name: 'Nhận hàng tại điểm', level: 1 })).toBeVisible();
-    await expect(page.getByText('Còn 380.000 điểm')).toBeVisible();
+    await expect(page.getByText('Còn lại 380.000 điểm')).toBeVisible();
     await page.getByLabel('Mã yêu cầu hoặc mã nhận quà').fill('tr-8k2m9');
     await page.getByRole('button', { name: 'Tra mã' }).click();
     await expect(page.getByText('Ng*** A')).toBeVisible();
-    for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Tăng số lượng' }).click();
-    await expect(page.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm')).toBeVisible();
+    await expect(page.getByText('Tối đa 5')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.getByText('Điểm Tubu sẽ cộng cho khách: 5.000 điểm').filter({ visible: true })).toBeVisible();
     const confirmed = api.waitForCall('POST', '/waste/desk/requests/:id/confirm');
     await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
     expect((await confirmed).body).toEqual({ lines: [{ itemId: 'item-carton', declaredQty: 5, receivedQty: 5 }] });
-    await expect(page.getByText('Tubu sẽ cộng 5.000 điểm cho khách')).toBeVisible();
+    await expect(page.getByText('Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Nhận yêu cầu khác' })).toBeVisible();
   });
 
   test('quầy nhận: từ chối với lý do Khác bắt buộc ghi chú rồi gửi reject', async ({ page, api }) => {

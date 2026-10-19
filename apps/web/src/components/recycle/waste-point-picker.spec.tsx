@@ -75,6 +75,31 @@ describe('WastePointPicker (web)', () => {
     click(r);
     expect(onChange).not.toHaveBeenCalled();
   });
+  it('lý do khoá dài (nhiều món) được xuống dòng, không bị cắt', () => {
+    const none = makeWastePoint({ id: 'pt-none', name: 'Đại lý Không', acceptedItemIds: [] });
+    const c = mount({ points: [none] });
+    const reason = byText(c, 'span', 'Điểm này không nhận: Thùng carton, Vỏ hộp sữa')!;
+    expect(reason).not.toBeNull();
+    expect(reason.className).not.toContain('whitespace-nowrap');
+  });
+  it('thẻ khoá: chỉ radio và phần chữ bị làm mờ; lý do, Chỉ đường và Gọi giữ nguyên độ đậm', () => {
+    const c = mount();
+    const r = radio(c, 'Đại lý Hết');
+    const card = r.parentElement as HTMLElement;
+    expect(card.className).not.toContain('opacity-');
+    expect(r.querySelector('[data-point-body]')?.className).toContain('opacity-[.55]');
+    const keep = [byText(c, 'span', 'Tạm hết hạn mức tháng này')!, ...Array.from(card.querySelectorAll<HTMLElement>('button')).filter((b) => b !== r)];
+    for (const el of keep) expect(el.closest('[class*="opacity-"]')).toBeNull();
+    expect(radio(c, 'Đại lý Gần').querySelector('[data-point-body]')?.className).not.toContain('opacity-');
+  });
+  it('món nhận hiện thành chip riêng, món không nhận vẫn gạch ngang kèm "Không nhận"', () => {
+    const c = mount();
+    const r = radio(c, 'Đại lý Thiếu');
+    const accepted = Array.from(r.querySelectorAll<HTMLElement>('span')).find((e) => e.textContent === 'Thùng carton')!;
+    expect(accepted.className).toContain('rounded-full');
+    expect(accepted.closest('s, del')).toBeNull();
+    expect(r.querySelector('s')?.textContent).toBe('Vỏ hộp sữa');
+  });
   it('không có "Gần nhất" hay khoảng cách vì web không xin vị trí', () => {
     const c = mount({ points: [{ ...NEAR, distanceKm: 1.2 }] });
     expect(c.textContent).not.toContain('Gần nhất');

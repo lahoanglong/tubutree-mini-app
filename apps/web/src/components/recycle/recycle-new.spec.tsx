@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   rewards: null as unknown,
   preview: null as unknown as (b: unknown) => unknown,
   provinces: [] as unknown[],
+  failProvinces: false,
   create: null as unknown as (b: unknown, key: string) => unknown,
   calls: [] as { path: string; body?: unknown; headers?: Record<string, string> }[],
   keySeq: 0,
@@ -44,7 +45,10 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/waste/me') return state.me;
       if (path.startsWith('/waste/points')) return state.points;
       if (path === '/me/loyalty/rewards') return state.rewards;
-      if (path === '/geo/provinces') return state.provinces;
+      if (path === '/geo/provinces') {
+        if (state.failProvinces) throw new Error('offline');
+        return state.provinces;
+      }
       throw new Error(`chưa mock ${path}`);
     },
     post: async (path: string, body: unknown, opts?: { headers?: Record<string, string> }) => {
@@ -105,6 +109,7 @@ beforeEach(() => {
   state.push = vi.fn();
   state.replace = vi.fn();
   state.calls = [];
+  state.failProvinces = false;
   state.keySeq = 0;
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
@@ -341,7 +346,7 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
       preview({ blocks: (b as WastePreviewRequest).method === 'MAIL_IN' ? [{ code: 'BELOW_MIN', missingPoints: 6000 }, { code: 'MAX_OPEN', openCount: 3 }] : [{ code: 'MAX_OPEN', openCount: 3 }] });
     atStep2();
     const c = await mount();
-    expect(c.textContent).toContain('cần thêm 6.000 điểm');
+    expect(c.textContent).toContain('Cần thêm 6.000 điểm');
     expect(Array.from(c.querySelectorAll('[role="radio"]')).every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(c.textContent).toContain('Bạn đang có 3 yêu cầu chưa xong');
   });
@@ -352,8 +357,8 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     };
     atStep2();
     const c = await mount();
-    expect(method(c, 'PICKUP').textContent).toContain('tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
-    expect(method(c, 'MAIL_IN').textContent).toContain('tháng này bạn không còn đủ trần cho một gói gửi kho');
+    expect(method(c, 'PICKUP').textContent).toContain('Tháng này bạn không còn đủ trần cho một gói thu kèm đơn');
+    expect(method(c, 'MAIL_IN').textContent).toContain('Tháng này bạn không còn đủ trần cho một gói gửi kho');
     expect(method(c, 'PICKUP').textContent).not.toContain('gói gửi kho');
   });
   it('NEED_PROVINCE → ô chọn tỉnh trên thẻ Gửi về kho; chọn → preview lại với provinceCode', async () => {
@@ -363,12 +368,56 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     };
     atStep2();
     const c = await mount();
+    click(method(c, 'MAIL_IN'));
+    await flush(4);
     const select = c.querySelector<HTMLSelectElement>('select[aria-label="Chọn tỉnh để ước tính phí ship"]')!;
     expect(select).not.toBeNull();
     selectValue(select, '01');
     await flush(10);
     expect(previewCalls()).toContainEqual(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' }));
     expect(loadDraft()?.provinceCode).toBe('01');
+  });
+  it('phí ship ước tính ghi tên tỉnh từ danh sách, không ghi mã tỉnh', async () => {
+    state.provinces = [{ code: '48', name: 'Đà Nẵng' }];
+    state.preview = (b) => preview((b as WastePreviewRequest).method === 'MAIL_IN' ? { feeEstimate: { ...FEE, provinceCode: '48', provinceName: '48' } } : {});
+    atStep2();
+    const c = await mount();
+    expect(method(c, 'MAIL_IN').textContent).toContain('Phí ship ước tính từ Đà Nẵng:');
+    expect(method(c, 'MAIL_IN').textContent).not.toContain('từ 48:');
+  });
+  it('danh sách tỉnh không tải được: phí ship ước tính bỏ cụm tên tỉnh thay vì in mã tỉnh', async () => {
+    state.failProvinces = true;
+    state.preview = (b) => preview((b as WastePreviewRequest).method === 'MAIL_IN' ? { feeEstimate: { ...FEE, provinceCode: '48', provinceName: '48', low: 30000, high: 45000 } } : {});
+    atStep2();
+    const c = await mount();
+    expect(method(c, 'MAIL_IN').textContent).toContain('Phí ship ước tính: 30.000đ – 45.000đ, ước tính theo bảng giá niêm yết');
+    expect(method(c, 'MAIL_IN').textContent).not.toContain('từ 48');
+  });
+  it('chưa chọn Gửi về kho: không có ô chọn tỉnh và không có lời nhắc chọn tỉnh; chọn xong thì lời nhắc không dùng màu lỗi', async () => {
+    state.preview = (b) => {
+      const req = b as WastePreviewRequest;
+      return preview(req.method === 'MAIL_IN' && !req.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {});
+    };
+    atStep2();
+    const c = await mount();
+    expect(c.querySelector('select[aria-label="Chọn tỉnh để ước tính phí ship"]')).toBeNull();
+    expect(method(c, 'MAIL_IN').textContent).not.toContain('Chọn tỉnh để ước tính phí ship');
+    click(method(c, 'MAIL_IN'));
+    await flush(4);
+    const prompt = Array.from(method(c, 'MAIL_IN').querySelectorAll('span')).find((e) => e.textContent === 'Chọn tỉnh để ước tính phí ship')!;
+    expect(prompt.className).toContain('text-stone-600');
+    expect(prompt.className).not.toContain('text-danger-fg');
+  });
+  it('thẻ khoá: chỉ phần tên, mô tả và ước tính bị làm mờ; lý do giữ nguyên độ đậm và dùng tông cảnh báo', async () => {
+    state.preview = (b) => preview({ blocks: (b as WastePreviewRequest).method === 'MAIL_IN' ? [{ code: 'BELOW_MIN', missingPoints: 6000 }] : [] });
+    atStep2();
+    const c = await mount();
+    const card = method(c, 'MAIL_IN');
+    const reason = Array.from(card.querySelectorAll('span')).find((e) => e.textContent === 'Cần thêm 6.000 điểm')!;
+    expect(reason.closest('[class*="opacity-"]')).toBeNull();
+    expect(reason.className).toContain('text-warning-fg');
+    expect(card.className).not.toContain('opacity-');
+    expect(card.querySelector('[class*="opacity-60"]')?.textContent).toContain('Gửi về kho Tubu HCM');
   });
   it('khoá đường kho → ẩn Gửi về kho và Thu kèm, hiện câu ghim', async () => {
     state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z', laneFlags: { dropoff: true, mailin: true, pickup: true } });
