@@ -6,6 +6,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
+import { skin } from '@/components/pro-shared/mini-skin';
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -21,7 +22,7 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
   });
 
   return (
-    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12">
+    <main className={`mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
       <PageHeader title="Thể lệ Đổi rác lấy quà" backHref="/doi-rac" backLabel="Đổi rác lấy quà" />
       {q.isPending ? (
         <div className="space-y-2">
@@ -32,7 +33,7 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
       ) : q.isError ? (
         <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
       ) : (
-        <div className="whitespace-pre-line text-base text-stone-900">{q.data.text ?? 'Thể lệ đang được cập nhật'}</div>
+        <div className="whitespace-pre-line text-base text-stone-900 max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)]">{q.data.text ?? 'Thể lệ đang được cập nhật'}</div>
       )}
     </main>
   );

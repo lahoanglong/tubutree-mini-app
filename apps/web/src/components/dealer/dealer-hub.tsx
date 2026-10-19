@@ -27,7 +27,7 @@ function HubBody() {
 
   return (
     <DealerShell title="Kênh đại lý">
-      <section aria-label="Tổng quan đại lý" className="rounded-card bg-stone-900 p-4 text-stone-0">
+      <section aria-label="Tổng quan đại lý" className="rounded-card bg-stone-900 p-4 text-stone-0 max-md:bg-[var(--color-dealer-ink)]">
         <div className="flex items-center justify-between gap-2">
           <div>
             <div className="text-xs text-stone-100">Bậc đại lý</div>

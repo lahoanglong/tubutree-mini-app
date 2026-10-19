@@ -54,3 +54,10 @@ describe('/doi-rac/quy-dinh (§14.2)', () => {
     expect(c.textContent).toContain('OK');
   });
 });
+
+describe('/doi-rac/quy-dinh — diện mạo Mini App ở điện thoại', () => {
+  it('đoạn thể lệ cỡ body-md như Mini App', async () => {
+    const c = await mount('Thể lệ.');
+    expect(byText(c, 'div', 'Thể lệ.')!.className).toContain('max-md:text-[length:var(--type-body-md-size)]');
+  });
+});

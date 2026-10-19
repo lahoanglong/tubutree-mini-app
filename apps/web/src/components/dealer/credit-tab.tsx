@@ -10,6 +10,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { formatDate } from '@/lib/format-date';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
@@ -55,7 +56,7 @@ export function CreditTab() {
 
   return (
     <div className="grid gap-4 pb-6 lg:grid-cols-2 lg:items-start">
-      <section aria-label="Dư nợ" className={`p-4 ${ui.card}`}>
+      <section aria-label="Dư nợ" className={`p-4 ${skin.card}`}>
         <div className="text-sm text-stone-600">Dư nợ hiện tại</div>
         <div className={`text-3xl font-bold tabular-nums ${balance > 0 ? 'text-danger-fg' : 'text-forest-700'}`}>{formatVnd(balance)}</div>
         <div className="mt-3 flex gap-2">
@@ -68,7 +69,7 @@ export function CreditTab() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />
-          <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} flex-none`}>
+          <button type="button" disabled={payDisabled} onClick={submit} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-none`}>
             {pay.isPending ? 'Đang gửi...' : 'Báo đã CK'}
           </button>
         </div>
@@ -94,7 +95,7 @@ export function CreditTab() {
       <section aria-label="Sổ công nợ">
         <h2 className={`mb-2 ${ui.sectionTitle}`}>Sổ công nợ</h2>
         {entries.length > 0 ? (
-          <ul className={`overflow-hidden ${ui.card}`}>
+          <ul className={`overflow-hidden ${skin.card}`}>
             {entries.map((e) => (
               <li key={e.id} className="flex items-center justify-between gap-2 border-b border-stone-200 p-3 last:border-b-0">
                 <div>
@@ -109,7 +110,7 @@ export function CreditTab() {
             ))}
           </ul>
         ) : (
-          <div className={`p-6 text-center ${ui.card}`}>
+          <div className={`p-6 text-center ${skin.card}`}>
             <Leaf className="mx-auto h-6 w-6 text-stone-500" aria-hidden="true" />
             <p className="mt-1 text-sm text-stone-600">Chưa có giao dịch công nợ</p>
           </div>

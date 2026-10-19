@@ -12,6 +12,7 @@ import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { pointsSummary } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { Badge } from '@/components/ui/badge';
@@ -48,17 +49,19 @@ const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '
 
 function Shell({ children, showHistory = false }: { children: ReactNode; showHistory?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
-      <PageHeader
-        title="Đổi rác lấy quà"
-        actions={
-          showHistory ? (
-            <Link href="/doi-rac/yeu-cau" aria-label="Yêu cầu của tôi" className={`${ui.btnSecondary} w-11 px-0`}>
-              <History className="h-5 w-5" aria-hidden="true" />
-            </Link>
-          ) : undefined
-        }
-      />
+    <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
+      <div className="max-md:pl-12">
+        <PageHeader
+          title="Đổi rác lấy quà"
+          actions={
+            showHistory ? (
+              <Link href="/doi-rac/yeu-cau" aria-label="Yêu cầu của tôi" className="inline-flex min-h-11 w-11 items-center justify-center rounded-control text-stone-800 hover:bg-stone-50 md:border md:border-stone-450 md:bg-stone-0">
+                <History className="h-5 w-5" aria-hidden="true" />
+              </Link>
+            ) : undefined
+          }
+        />
+      </div>
       {children}
     </main>
   );
@@ -66,7 +69,7 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
 
 function NoticeCard({ text }: { text: string }) {
   return (
-    <div className={`p-4 text-sm font-semibold text-stone-900 ${ui.card}`}>
+    <div className={`p-4 text-sm font-semibold text-stone-900 ${skin.card}`}>
       <p>{text}</p>
     </div>
   );
@@ -77,7 +80,7 @@ function RequestsBlock({ me }: { me: WasteMeDTO }) {
   if (me.openRequests.length === 0) return null;
   return (
     <section className="space-y-2">
-      <h2 className={ui.sectionTitle}>Yêu cầu đang xử lý</h2>
+      <h2 className={skin.sectionTitle}>Yêu cầu đang xử lý</h2>
       <div className="grid gap-3 md:grid-cols-2">
         {me.openRequests.map((r) => {
           const tl = timelineFor(r);
@@ -91,7 +94,7 @@ function RequestsBlock({ me }: { me: WasteMeDTO }) {
           });
           const status = requestStatusText(r, { blocked: me.blocked, paused });
           return (
-            <div key={r.id} className={ui.card}>
+            <div key={r.id} className={skin.card}>
               <RecycleLinkRow href={`/doi-rac/yeu-cau/${r.id}`} title={`${r.code} · ${METHOD_LABELS[r.method]}`} subtitle={subtitle} />
               <div className="px-4 pb-3">
                 {tl ? (
@@ -164,7 +167,7 @@ export function RecycleHome() {
       <Shell showHistory={showHistory}>
         <NoticeCard text={PAUSED_TEXT} />
         {openRequests}
-        {deskRow && <div className={ui.card}>{deskRow}</div>}
+        {deskRow && <div className={skin.card}>{deskRow}</div>}
       </Shell>
     );
   }
@@ -173,7 +176,7 @@ export function RecycleHome() {
     return (
       <Shell>
         <MiniAppOnlyNotice path="/doi-rac" />
-        {deskRow && <div className={ui.card}>{deskRow}</div>}
+        {deskRow && <div className={skin.card}>{deskRow}</div>}
       </Shell>
     );
   }
@@ -182,7 +185,7 @@ export function RecycleHome() {
       <Shell showHistory={showHistory}>
         <NoticeCard text={BLOCKED_TEXT} />
         {openRequests}
-        {deskRow && <div className={ui.card}>{deskRow}</div>}
+        {deskRow && <div className={skin.card}>{deskRow}</div>}
       </Shell>
     );
   }
@@ -200,7 +203,7 @@ export function RecycleHome() {
 
   return (
     <Shell showHistory>
-      <div className={`space-y-2 p-4 ${ui.card}`}>
+      <div className={`space-y-2 p-4 ${skin.card}`}>
         <p className="text-xs text-stone-600">Điểm Xanh của bạn</p>
         <p className="font-display text-3xl font-semibold tabular-nums text-stone-900">{formatPoints(total)}</p>
         <p className="text-sm text-stone-700">{`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}</p>
@@ -230,9 +233,9 @@ export function RecycleHome() {
       <div className="grid gap-6 lg:grid-cols-2">
         {methods.length > 0 && (
           <section className="space-y-2">
-            <h2 className={ui.sectionTitle}>Cách đổi</h2>
+            <h2 className={skin.sectionTitle}>Cách đổi</h2>
             {methods.map((m) => (
-              <div key={m} className={`p-3 ${ui.card}`}>
+              <div key={m} className={`p-3 ${skin.outlineCard}`}>
                 <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
                 <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
               </div>
@@ -241,24 +244,24 @@ export function RecycleHome() {
         )}
 
         <section className="space-y-2">
-          <h2 className={ui.sectionTitle}>Tubu nhận những món này</h2>
+          <h2 className={skin.sectionTitle}>Tubu nhận những món này</h2>
           {items.map((item) => (
             <div key={item.id} data-item data-status={item.status} className={`space-y-0.5 ${item.status === 'COMING_SOON' ? 'opacity-70' : ''}`}>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-stone-900">{item.name}</span>
+                <span className="text-sm font-semibold text-stone-900 max-md:text-[length:var(--type-body-sm-size)]">{item.name}</span>
                 {item.status === 'COMING_SOON' && <Badge>Sắp nhận</Badge>}
               </div>
-              <p className="text-xs text-stone-700">{ruleText(item)}</p>
-              {item.prepInstructions && <p className="text-xs text-stone-600">{item.prepInstructions}</p>}
+              <p className="text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{ruleText(item)}</p>
+              {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
             </div>
           ))}
         </section>
       </div>
 
-      <div className={`divide-y divide-stone-200 ${ui.card}`}>
-        <RecycleLinkRow href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
+      <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
+        <RecycleLinkRow bare href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
         {deskRow}
-        <RecycleLinkRow href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
+        <RecycleLinkRow bare href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
       </div>
     </Shell>
   );

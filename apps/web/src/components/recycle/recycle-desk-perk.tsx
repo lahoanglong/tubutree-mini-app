@@ -8,12 +8,13 @@ import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { formatPoints } from './recycle-labels';
 
 const PERK_TITLE = 'Ưu đãi riêng của cửa hàng';
-const CARD = `flex flex-col gap-1.5 p-4 ${ui.card}`;
+const CARD = `flex flex-col gap-1.5 p-4 max-md:gap-1 max-md:p-3 ${skin.card}`;
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -41,9 +42,9 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
 
   return (
     <section aria-label={PERK_TITLE} className={CARD}>
-      <p className="text-base font-semibold text-stone-900">{PERK_TITLE}</p>
+      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{PERK_TITLE}</p>
       <p className="text-sm text-stone-600">Cửa hàng tự chịu, không liên quan Điểm Xanh</p>
-      <p className="text-base text-stone-900">{point.perkText ?? 'Chưa có ưu đãi'}</p>
+      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{point.perkText ?? 'Chưa có ưu đãi'}</p>
       {point.perkPendingText && <p className="text-sm text-stone-600">{`Đang chờ Tubu duyệt: ${point.perkPendingText}`}</p>}
       {sent && (
         <p role="status" className="text-sm font-semibold text-success-fg">
@@ -54,7 +55,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
         <div>
           <button
             type="button"
-            className={ui.btnSecondary}
+            className={skin.btnSecondary}
             onClick={() => {
               setText(point.perkPendingText ?? point.perkText ?? '');
               setSent(false);
@@ -103,9 +104,9 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
   if (q.isError) {
     return (
       <section aria-label="Báo cáo tháng này" className={CARD}>
-        <p className="text-base text-stone-900">Chưa tải được báo cáo</p>
+        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Chưa tải được báo cáo</p>
         <div>
-          <button type="button" className={ui.btnSecondary} onClick={() => void q.refetch()}>
+          <button type="button" className={skin.btnSecondary} onClick={() => void q.refetch()}>
             Thử lại
           </button>
         </div>
@@ -117,8 +118,8 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
   return (
     <section aria-label="Báo cáo tháng này" className={CARD}>
       <p className="text-sm text-stone-600">Báo cáo tháng này</p>
-      <p className="text-base font-semibold text-stone-900">{`${formatCount(r.confirmations)} lượt xác nhận`}</p>
-      <p className="text-base text-stone-900">{`Tubu đã cộng ${formatPoints(r.pointsAwarded)} cho khách`}</p>
+      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{`${formatCount(r.confirmations)} lượt xác nhận`}</p>
+      <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Tubu đã cộng ${formatPoints(r.pointsAwarded)} cho khách`}</p>
       {r.units.map((u) => (
         <p key={u.itemId} className="text-sm text-stone-600">{`${u.itemName}: ${formatCount(u.qty)} ${u.unitLabel}`}</p>
       ))}

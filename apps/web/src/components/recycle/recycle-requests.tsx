@@ -10,6 +10,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -24,7 +25,7 @@ const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : '
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12">
+    <main className={`mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
       <PageHeader title="Yêu cầu của tôi" backHref="/doi-rac" backLabel="Đổi rác lấy quà" />
       {children}
     </main>
@@ -49,7 +50,7 @@ export function RecycleRequests() {
   if (rows.length === 0) {
     return (
       <Shell>
-        <div className={`flex flex-col items-center gap-3 p-8 text-center ${ui.card}`}>
+        <div className={`flex flex-col items-center gap-3 p-8 text-center ${skin.card}`}>
           <p className="text-base font-semibold text-stone-900">Chưa có yêu cầu nào</p>
           <Link href="/doi-rac/tao" className={ui.btnPrimary}>
             Đổi rác ngay
@@ -73,7 +74,7 @@ export function RecycleRequests() {
           { key: 'closed', label: 'Đã đóng', count: closedRows.length },
         ]}
       />
-      <div className={`divide-y divide-stone-200 ${ui.card}`}>
+      <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
         {shown.map((r) => {
           const paused =
             !!me &&
@@ -85,6 +86,7 @@ export function RecycleRequests() {
             });
           return (
             <RecycleLinkRow
+              bare
               key={r.id}
               href={r.status === 'COMPLETED' ? `/doi-rac/xong/${r.id}` : `/doi-rac/yeu-cau/${r.id}`}
               title={`${r.code} · ${METHOD_LABELS[r.method]}`}

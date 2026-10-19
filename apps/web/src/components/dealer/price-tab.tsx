@@ -13,6 +13,7 @@ import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { bankPaymentHref } from '@/lib/order-view';
 import { useDebounced } from '@/lib/use-debounced';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
@@ -41,9 +42,9 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
           {row.sku} · {row.stock > 0 ? `tồn ${row.stock}` : OUT_OF_STOCK_PREORDER}
         </div>
         <div className="flex items-baseline gap-1.5">
-          <span className="text-sm font-bold tabular-nums text-stone-900">{formatVnd(row.dealerPrice)}</span>
+          <span className="text-sm font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(row.dealerPrice)}</span>
           <span className="text-xs tabular-nums text-stone-600 line-through">{formatVnd(row.retailPrice)}</span>
-          {discountPct > 0 && <span className="text-xs font-semibold text-forest-700">-{discountPct}%</span>}
+          {discountPct > 0 && <span className="text-xs font-semibold text-forest-700 max-md:font-normal max-md:text-[var(--color-text-brand)]">-{discountPct}%</span>}
         </div>
         {preorder > 0 && (
           <div className="mt-1">
@@ -193,7 +194,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
           <Save className="h-4 w-4" aria-hidden="true" />
           Lưu mẫu
         </button>
-        <span className="text-lg font-bold tabular-nums text-stone-900">{formatVnd(total)}</span>
+        <span className="text-lg font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(total)}</span>
       </div>
       {preorderLines > 0 && <p className="text-xs text-warning-fg">{preorderNote(preorderLines)}</p>}
       {overLimit && (
@@ -203,10 +204,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </p>
       )}
       <div className="mt-2 flex gap-2">
-        <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${ui.btnSecondary} flex-1`}>
+        <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${skin.btnSecondary} flex-1`}>
           Trả trước
         </button>
-        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} flex-1`}>
+        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
           {placing ? 'Đang đặt...' : 'Ghi công nợ'}
         </button>
       </div>
@@ -233,7 +234,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </div>
         <button
           type="button"
-          className={`${ui.btnSecondary} flex-none`}
+          className={`${skin.btnSecondary} flex-none`}
           onClick={() => {
             setPasteResult(null);
             setPasteOpen(true);
@@ -247,10 +248,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
       {templates.length > 0 && (
         <ul aria-label="Mẫu đơn đã lưu" className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {templates.map((t) => (
-            <li key={t.id} className="flex flex-none items-center rounded-full border border-stone-900 bg-stone-0">
+            <li key={t.id} className="flex flex-none items-center rounded-full border border-stone-900 bg-stone-0 max-md:border-[color:var(--color-dealer-ink)]">
               <button
                 type="button"
-                className="flex min-h-11 items-center gap-1.5 pl-3 pr-1 text-xs font-semibold text-stone-900"
+                className="flex min-h-11 items-center gap-1.5 pl-3 pr-1 text-xs font-semibold text-stone-900 max-md:text-[var(--color-dealer-ink)]"
                 onClick={() => setQty(Object.fromEntries(t.items.map((i) => [i.variationId, i.quantity])))}
               >
                 <ClipboardList className="h-4 w-4 flex-none" aria-hidden="true" />
@@ -272,7 +273,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </ul>
       )}
 
-      <div className={`mt-3 overflow-hidden ${ui.card}`}>
+      <div className={`mt-3 overflow-hidden ${skin.card}`}>
         {priceQ.isLoading ? (
           <div className="flex flex-col gap-2 p-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -309,7 +310,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         onClose={() => setSaveOpen(false)}
         title="Lưu mẫu đơn"
         footer={
-          <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" disabled={!tplName.trim() || saveTpl.isPending} onClick={() => saveTpl.mutate()} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
             {saveTpl.isPending ? 'Đang lưu...' : 'Lưu mẫu'}
           </button>
         }
@@ -327,7 +328,7 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         onClose={() => setPasteOpen(false)}
         title="Đặt nhanh — dán từ Excel/Sheet"
         footer={
-          <button type="button" disabled={!pasteText.trim() || priceQ.isLoading} onClick={applyPaste} className={`${ui.btnPrimary} w-full`}>
+          <button type="button" disabled={!pasteText.trim() || priceQ.isLoading} onClick={applyPaste} className={`${ui.btnPrimary} ${skin.dealerInkBtn} w-full`}>
             Thêm vào đơn
           </button>
         }

@@ -78,3 +78,13 @@ describe('WasteItemStep (web)', () => {
     expect(unnamedControls(c)).toEqual([]);
   });
 });
+
+describe('WasteItemStep — diện mạo Mini App ở điện thoại', () => {
+  it('món chưa có ảnh dùng lá xanh nhạt của ProductThumb thay icon Recycle; chữ phụ cỡ caption', () => {
+    const { c } = mount({ items: [{ ...ITEM_CARTON, imageUrl: null }] });
+    const media = c.querySelector('[data-item-media]')!;
+    expect(media.querySelector('svg[class*="lucide"]')).toBeNull();
+    expect(media.querySelector('path')?.getAttribute('fill')).toBe('var(--forest-200)');
+    expect(card(c, 'Thùng carton').querySelector('p')!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
+  });
+});

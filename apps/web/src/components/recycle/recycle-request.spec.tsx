@@ -478,3 +478,11 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () =
     expect(c.querySelector('h1')?.textContent).toContain('TR-8K2M9');
   });
 });
+
+describe('/doi-rac/yeu-cau/[id] — diện mạo Mini App ở điện thoại', () => {
+  it('Sửa món và Huỷ yêu cầu là nút secondary xanh nhạt không viền', async () => {
+    const c = await mount();
+    expect(byText(c, 'a', 'Sửa món')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(button(c, 'Huỷ yêu cầu')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+  });
+});

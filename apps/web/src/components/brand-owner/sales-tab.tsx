@@ -9,14 +9,14 @@ import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ownerLoadError, SALES_PERIODS } from '@/lib/brand-owner-view';
-import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { ErrorState } from '@/components/ui/error-state';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function Stat({ icon: Icon, label, value, wide }: { icon: LucideIcon; label: string; value: string; wide?: boolean }) {
   return (
-    <div className={`flex items-center gap-3 p-4 ${ui.card} ${wide ? 'col-span-2 lg:col-span-1' : ''}`}>
+    <div className={`flex items-center gap-3 p-4 ${skin.card} ${wide ? 'col-span-2 lg:col-span-1' : ''}`}>
       <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-forest-50 text-forest-600">
         <Icon className="h-5 w-5" aria-hidden="true" />
       </span>
@@ -46,7 +46,7 @@ export function SalesTab() {
       ) : !d ? (
         <ErrorState message={ownerLoadError(q.error)} onRetry={errorStatus(q.error) === 403 ? undefined : () => void q.refetch()} />
       ) : d.orderCount === 0 ? (
-        <section aria-label="Chưa có đơn" className={`p-8 text-center ${ui.card}`}>
+        <section aria-label="Chưa có đơn" className={`p-8 text-center ${skin.card}`}>
           <h2 className="font-display text-base font-semibold text-stone-900">Chưa có đơn nào trong kỳ này</h2>
           <p className="mt-1 text-sm text-stone-600">Khi khách đặt sản phẩm của nhãn, số liệu sẽ hiện ở đây.</p>
         </section>
@@ -60,7 +60,7 @@ export function SalesTab() {
           <p className="text-xs text-stone-600">
             {d.delivered.orderCount} đơn đã giao · {formatVnd(d.delivered.revenue)}
           </p>
-          <section aria-label="Sản phẩm bán chạy" className={`p-4 ${ui.card}`}>
+          <section aria-label="Sản phẩm bán chạy" className={`p-4 ${skin.card}`}>
             <h2 className="mb-2 text-base font-semibold text-stone-900">Sản phẩm bán chạy</h2>
             <ol>
               {d.topProducts.map((p, i) => (

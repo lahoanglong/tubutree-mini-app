@@ -6,6 +6,7 @@ import { attendanceStatusQuery } from '@tubutree/app-core/queries/attendance';
 import { coreHttp } from '@/lib/core-http';
 import { isoToVnHHMM } from '@/lib/week';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { errText } from './staff-shell';
@@ -20,10 +21,10 @@ export function TodayCard() {
   const todayShifts = statusQ.data?.shifts ?? [];
 
   return (
-    <section aria-label="Chấm công hôm nay" className={`p-4 ${ui.card}`}>
+    <section aria-label="Chấm công hôm nay" className={`p-4 ${skin.card}`}>
       <div className="flex items-center gap-2">
         <MapPin className="h-5 w-5 text-forest-600" aria-hidden="true" />
-        <h2 className={ui.sectionTitle}>Chấm công hôm nay</h2>
+        <h2 className={skin.cardTitle}>Chấm công hôm nay</h2>
       </div>
 
       {statusQ.isLoading && <Skeleton height={40} style={{ marginTop: 8 }} />}
@@ -58,12 +59,9 @@ export function TodayCard() {
         </div>
       )}
 
-      {statusQ.data && (open || todayShifts.length > 0) && (
-        <>
-          <p className="mt-3 text-xs text-stone-600">Chấm công cần ở đúng mạng WiFi công ty, trong vùng làm việc và chỉ thực hiện được trên Mini App Zalo.</p>
-          <MiniAppOnlyNotice miniappPath="/staff" compact />
-        </>
-      )}
+      <p className="mt-2 text-xs text-stone-600">Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.</p>
+
+      {statusQ.data && (open || todayShifts.length > 0) && <MiniAppOnlyNotice miniappPath="/staff" compact />}
     </section>
   );
 }

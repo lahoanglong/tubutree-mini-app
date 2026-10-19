@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
@@ -659,5 +661,115 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     await open('Báo cáo');
     expect(document.body.textContent).toContain('Lý do: Sai số liệu');
     expect(button('Yêu cầu nhận thưởng')).toBeUndefined();
+  });
+});
+
+describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)', () => {
+  it('nền xanh xám, thẻ tổng quan navy, nút Dán đơn kiểu secondary, giá đại lý màu navy', async () => {
+    const c = await mount();
+    const main = c.querySelector('main')!;
+    expect(main.className).toContain('max-md:bg-[var(--color-dealer-bg)]');
+    expect(main.hasAttribute('data-dealer-theme')).toBe(true);
+    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
+    expect(css).toContain('--color-dealer-ink: #1f2a44;');
+    expect(css).toContain('--color-dealer-bg: #f4f6f9;');
+    expect(c.querySelector('section[aria-label="Tổng quan đại lý"]')!.className).toContain('max-md:bg-[var(--color-dealer-ink)]');
+    expect(button('Dán đơn').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(c.querySelector('li .font-bold')!.className).toContain('max-md:text-[var(--color-dealer-ink)]');
+    expect(c.querySelector('h1')!.className).toContain('max-md:pl-12');
+  });
+});
+
+describe('/dai-ly — biến màu navy nhìn thấy được từ sheet (portal ra body)', () => {
+  it('dealer-theme.css khai báo biến ở :root vì Sheet render ngoài khung data-dealer-theme', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
+    expect(css).toMatch(/^:root\s*\{/m);
+    expect(css).not.toMatch(/^\[data-dealer-theme\]\s*\{/m);
+  });
+  it('nút Lưu mẫu và Thêm vào đơn có màu dự phòng khi biến không phân giải', async () => {
+    await mount();
+    click(plus());
+    click(button('Lưu mẫu'));
+    await flush();
+    const save = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((b) => b.textContent === 'Lưu mẫu')!;
+    expect(save.className).toContain('var(--color-dealer-ink,');
+  });
+});
+
+describe('/dai-ly — chữ navy còn lại ở điện thoại', () => {
+  it('tổng giỏ, mẫu đơn đã lưu, tổng đơn ở tab Đơn hàng', async () => {
+    setup({
+      '/dealer/templates': [{ id: 'tp1', name: 'Đơn tháng', items: [{ variationId: 'v1', quantity: 2 }] }],
+      '/dealer/orders': [
+        { code: 'TUBU9', status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', total: 500_000, createdAt: '2026-09-01T00:00:00.000Z', items: [] },
+      ],
+    });
+    const c = await mount();
+    const INK_TEXT = 'max-md:text-[var(--color-dealer-ink)]';
+    click(button(/Đơn tháng/));
+    expect(Array.from(c.querySelectorAll('span.font-bold')).find((e) => e.textContent?.includes('160.000đ'))!.className).toContain(INK_TEXT);
+    const pill = c.querySelector('ul[aria-label="Mẫu đơn đã lưu"] li')!;
+    expect(pill.className).toContain('max-md:border-[color:var(--color-dealer-ink)]');
+    expect(button(/Đơn tháng/).className).toContain(INK_TEXT);
+    mounted.pop()!.unmount();
+    await mount('tab=orders');
+    const total = Array.from(document.querySelectorAll('a[aria-label="Xem đơn TUBU9"] span.font-bold'))[0]!;
+    expect(total.className).toContain(INK_TEXT);
+  });
+});
+
+describe('/dai-ly — nút chính navy ở điện thoại như inkButton của Mini App', () => {
+  const INK = 'max-md:enabled:bg-[var(--color-dealer-ink,';
+
+  it('Ghi công nợ, Lưu mẫu, Thêm vào đơn (dán đơn) đều navy', async () => {
+    await mount();
+    click(plus());
+    expect(button('Ghi công nợ').className).toContain(INK);
+    click(button('Lưu mẫu'));
+    await flush();
+    expect(Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find((b) => b.textContent === 'Lưu mẫu')!.className).toContain(INK);
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Đóng"]')?.click();
+    click(button('Dán đơn'));
+    await flush();
+    expect(button('Thêm vào đơn').className).toContain(INK);
+  });
+
+  it('Gửi hồ sơ đăng ký navy', async () => {
+    setup({ '/dealer/me': { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 } });
+    await mount();
+    expect(button('Gửi hồ sơ đăng ký').className).toContain(INK);
+  });
+
+  it('Báo đã CK navy', async () => {
+    setup({ '/dealer/credit-ledger': { balance: 3_000_000, entries: [] } });
+    await mount('tab=credit');
+    expect(button('Báo đã CK').className).toContain(INK);
+  });
+
+  it('Báo cáo: thẻ doanh số quý gradient navy, thưởng và thanh tiến độ dùng màu nhấn đại lý, Yêu cầu nhận thưởng navy', async () => {
+    setup({
+      '/dealer/quarterly-report': {
+        quarter: 'Q3/2026', periodStart: '', periodEnd: '', revenue: 120_000_000, orderCount: 14, pendingRevenue: 0, pendingOrderCount: 0,
+        bonusPct: 2, bonusAmount: 2_400_000, nextTier: { min: 200_000_000, pct: 3, toNext: 80_000_000 }, tiers: [{ min: 100_000_000, pct: 2 }],
+      },
+      '/dealer/rewards': {
+        claimGraceDays: 30,
+        rewards: [{
+          id: 'rw1', type: 'TOUR', title: 'Tour', description: null, threshold: 1, period: 'QUARTER', periodKey: 'Q3/2026', periodLabel: 'Quý 3/2026',
+          isCurrentPeriod: true, volume: 1, pendingVolume: 0, achieved: true, toGo: 0, claimStatus: null, claimId: null, rejectionReason: null,
+          claimDeadline: '2026-10-30T17:00:00.000Z', canClaim: true,
+        }],
+      },
+    });
+    await mount('tab=report');
+    const hero = document.querySelector('section[aria-label="Doanh số Q3/2026"]')!;
+    expect(hero.className).toContain('max-md:from-[var(--color-dealer-ink)]');
+    expect(hero.className).toContain('max-md:to-[var(--color-dealer-ink-soft)]');
+    expect(hero.querySelector('b')!.className).toContain('max-md:text-[var(--color-dealer-accent)]');
+    expect(hero.querySelector('[role="progressbar"] > div')!.className).toContain('max-md:bg-[var(--color-dealer-accent)]');
+    expect(button('Yêu cầu nhận thưởng').className).toContain(INK);
+    const css = readFileSync(resolve(process.cwd(), 'src/components/dealer/dealer-theme.css'), 'utf8');
+    expect(css).toContain('--color-dealer-ink-soft: #2e3b5e;');
+    expect(css).toContain('--color-dealer-accent: var(--forest-300);');
   });
 });
