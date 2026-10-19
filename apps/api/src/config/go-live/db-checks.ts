@@ -38,6 +38,9 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261014003831_p8_seller_merchant_fulfilment', ordersLock: true },
   { name: '20261014150000_p4_admin_ops_search', ordersLock: true },
   { name: ORDERS_LOCK_MIGRATION, ordersLock: true },
+  { name: '20261016210000_r11_delivered_effects_marker', ordersLock: true },
+  { name: '20261018140000_lr_reports_source_indexes', ordersLock: true },
+  { name: '20261018170100_lr_orders_filter_indexes', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

@@ -183,7 +183,7 @@ jobs:
 
               gin)
                 echo "=== Tạo GIN index CONCURRENTLY (không khóa writes) ==="
-                bash tools/db/create-gin-indexes-concurrently.sh
+                COMPOSE_FILE="$COMPOSE_FILE" bash tools/db/create-gin-indexes-concurrently.sh
                 echo "=== Kiểm tra index hợp lệ (indisvalid) ==="
                 psql_q -c "SELECT c.relname, i.indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid WHERE c.relname LIKE 'products_%_gin';"
                 ;;

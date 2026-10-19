@@ -51,3 +51,25 @@ describe('.env.production.example khớp env.validation.ts', () => {
     expect(example).not.toMatch(/^AUTH_COOKIE_SAMESITE=\s*(#.*)?$/m);
   });
 });
+
+describe('file mẫu của các app khớp mã (D10-10)', () => {
+  const fileHasKey = (file: string, key: string) => new RegExp(`^#?\\s*${key}=`, 'm').test(readFileSync(join(REPO, file), 'utf8'));
+
+  it('apps/api/.env.example có ZNS_BASE_URL (khoá của schema, đã có ở .env.production.example)', () => {
+    expect(fileHasKey('apps/api/.env.example', 'ZNS_BASE_URL')).toBe(true);
+  });
+
+  it('apps/web/.env.example có NEXT_PUBLIC_ZALO_APP_ID (Dockerfile dừng build khi rỗng, build tay không có gì nhắc)', () => {
+    expect(fileHasKey('apps/web/.env.example', 'NEXT_PUBLIC_ZALO_APP_ID')).toBe(true);
+  });
+
+  it('Mini App có file mẫu cho mọi khoá VITE_* mà mã đọc', () => {
+    for (const key of ['VITE_API_BASE_URL', 'VITE_WEB_BASE_URL', 'VITE_ZALO_OA_ID', 'VITE_CLOUDINARY_CLOUD_NAME', 'VITE_CLOUDINARY_UPLOAD_PRESET']) {
+      expect({ key, has: fileHasKey('apps/miniapp/.env.example', key) }).toEqual({ key, has: true });
+    }
+  });
+
+  it('.env.production.example có bốn khoá D3-03 (token làm mới OA, secret webhook OA, hai khoá cookie)', () => {
+    for (const key of ['ZALO_OA_REFRESH_TOKEN', 'ZALO_OA_WEBHOOK_SECRET', 'AUTH_COOKIE_SAMESITE', 'AUTH_COOKIE_DOMAIN']) expect(inExample(key)).toBe(true);
+  });
+});

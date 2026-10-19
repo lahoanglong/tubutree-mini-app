@@ -5,7 +5,7 @@ import { normalizeZaloPhone } from '../common/phone';
 
 const SCRIPT = join(__dirname, '../../scripts/grant-admin.js');
 
-// Chạy trong tiến trình riêng: script là CommonJS tự chạy khi nạp, không có DB trong test.
+// Chạy bằng node thuần như trong image: script là CommonJS không qua ts-jest. Nạp bằng require không chạy main (guard require.main), nên không cần DB.
 function normalizeInChild(raw: string): { status: number | null; out: string } {
   const res = spawnSync(process.execPath, ['-e', `const m = require(${JSON.stringify(SCRIPT)}); console.log(JSON.stringify(m.normalizeAdminPhone(${JSON.stringify(raw)})));`], {
     encoding: 'utf8',

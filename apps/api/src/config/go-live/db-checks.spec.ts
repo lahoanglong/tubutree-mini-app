@@ -161,6 +161,20 @@ describe('evaluateDb', () => {
       expect(r.hint).toContain('7.3');
     });
 
+    it.each([
+      '20261016210000_r11_delivered_effects_marker',
+      '20261018140000_lr_reports_source_indexes',
+      '20261018170100_lr_orders_filter_indexes',
+    ])('%s khoá bảng orders: db.pending_scope nêu tên nó ở danh sách nặng và db.orders_lock tính nó', (name) => {
+      const s = behind(300_000, [name]);
+      const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(scope.status).toBe('WARN');
+      expect(scope.detail).toMatch(new RegExp(`nặng: [^;]*${name}`));
+      const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      expect(lock.detail).toContain('~28 giây');
+      expect(lock.detail).toContain(name);
+    });
+
     it('thêm migration không nặng: WARN, không nêu danh sách nặng thừa', () => {
       const extra = '20261013172011_p6_promo_abuse_coupon_active_code';
       const s = dbWith({ orderCount: 1_000, expectedMigrations: [extra, ...GOOD_DB.expectedMigrations] });

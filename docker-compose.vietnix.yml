@@ -106,7 +106,6 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
-        NEXT_PUBLIC_APP_URL: https://app.${WEB_DOMAIN}
         NEXT_PUBLIC_SITE_URL: https://app.${WEB_DOMAIN}
         NEXT_PUBLIC_TENANT_ROOT_DOMAIN: ${WEB_DOMAIN}
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}

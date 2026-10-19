@@ -4,7 +4,7 @@
 # migration 20260622010000_catalog_gin_indexes.
 #
 # Sau khi chạy xong → mark migration đã applied:
-#   docker compose -f docker-compose.prod.yml exec api \
+#   docker compose -f docker-compose.vietnix.yml exec api \
 #     npx prisma migrate resolve --applied 20260622010000_catalog_gin_indexes
 #
 # CONCURRENTLY:
@@ -16,7 +16,7 @@ set -euo pipefail
 
 POSTGRES_USER="${POSTGRES_USER:-tubu}"
 POSTGRES_DB="${POSTGRES_DB:-tubutree}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vietnix.yml}"
 
 run_sql() {
   local sql="$1"

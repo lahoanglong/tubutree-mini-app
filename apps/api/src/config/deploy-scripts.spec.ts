@@ -506,3 +506,19 @@ describe('docs/launch/deploy-rollback-runbook.md: seed-reference khớp quyết 
     expect(step).toMatch(/thiếu --with-business-defaults/);
   });
 });
+
+describe('.github/workflows/ops.yml và tools/db: cùng file compose với VPS thật (D10-08)', () => {
+  const ops = readFileSync(join(REPO, '.github/workflows/ops.yml'), 'utf8');
+
+  it('mọi lời gọi `bash tools/...` trong ops.yml truyền COMPOSE_FILE (biến shell không export không tới được script con)', () => {
+    const calls = ops.split('\n').filter((l) => /\bbash tools\/\S+/.test(l) && !l.trim().startsWith('#') && !/^\s*echo\b/.test(l));
+    expect(calls.length).toBeGreaterThan(0);
+    for (const l of calls) expect({ line: l.trim(), passes: /COMPOSE_FILE="\$COMPOSE_FILE"/.test(l) }).toEqual({ line: l.trim(), passes: true });
+  });
+
+  it.each(['create-gin-indexes-concurrently.sh', 'phase5-indexes-concurrently.sh'])('%s mặc định docker-compose.vietnix.yml như tools/backup', (name) => {
+    const sh = readFileSync(join(REPO, 'tools/db', name), 'utf8');
+    expect(sh).toContain('COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vietnix.yml}"');
+    expect(sh).not.toMatch(/docker-compose\.prod\.yml/);
+  });
+});
