@@ -106,7 +106,7 @@ export function CouponBox({
     queryKey: ['coupon-previews', settledSig],
     queryFn: () => getCouponPreviews((JSON.parse(settledSig!) as [CouponPreviewParams, string])[0]),
     // Ví không có mã nào thì không có gì để tính: khỏi gọi máy chủ mỗi lần đổi giỏ.
-    enabled: !!settledSig && !currentCode && (couponsQ.data?.length ?? 0) > 0,
+    enabled: !!settledSig && (!currentCode || open) && (couponsQ.data?.length ?? 0) > 0,
     retry: false,
   });
   // Số chỉ đúng cho đúng giỏ đã hỏi: giỏ vừa đổi (chưa hỏi lại) hoặc đang tải lại thì quay về phép đoán phía máy, không hiện số cũ.
@@ -280,10 +280,11 @@ export function CouponBox({
                   .slice(0, showAll ? undefined : VISIBLE_COUPONS)
                   .map((c) => {
                     const pv = previews.get(c.code.toUpperCase());
+                    const isApplied = currentCode?.toUpperCase() === c.code.toUpperCase();
                     // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
-                    const redundant = !pv && isFreeshipRedundant(c, shippingFee);
+                    const redundant = !isApplied && !pv && isFreeshipRedundant(c, shippingFee);
                     const meetsMin = !!pv || isCouponEligible(c, subtotal);
-                    const serverBlocked = !!pv && !pv.eligible;
+                    const serverBlocked = !isApplied && !!pv && !pv.eligible;
                     const eligible = meetsMin && !redundant && !serverBlocked;
                     const saving = !pv
                       ? null
@@ -329,18 +330,20 @@ export function CouponBox({
                         </div>
                         <button
                           type="button"
-                          disabled={!eligible || busy}
+                          disabled={isApplied || !eligible || busy}
                           onClick={() => apply.mutate(c.code)}
-                          aria-label={`${redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
+                          aria-label={`${isApplied ? 'Đang dùng' : redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
                           className={`${ui.btnPrimary} flex-none px-3`}
                         >
-                          {redundant
-                            ? 'Không cần'
-                            : serverBlocked
-                              ? 'Không áp dụng'
-                              : eligible
-                                ? 'Dùng mã'
-                                : 'Chưa đủ'}
+                          {isApplied
+                            ? 'Đang dùng'
+                            : redundant
+                              ? 'Không cần'
+                              : serverBlocked
+                                ? 'Không áp dụng'
+                                : eligible
+                                  ? 'Dùng mã'
+                                  : 'Chưa đủ'}
                         </button>
                       </li>
                     );
