@@ -169,6 +169,18 @@ describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm
     expect(out).toMatch(/backup/);
   });
 
+  it('seed-reference chạy CÓ --with-business-defaults theo quyết định A8 (không cờ thì DB mới không có hạng thành viên)', () => {
+    const { status, calls } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' });
+    expect(status).toBe(0);
+    expect(calls.filter((c) => c.includes('prisma:seed:reference'))).toEqual([expect.stringMatching(/pnpm run prisma:seed:reference --with-business-defaults$/)]);
+  });
+
+  it('SEED_REFERENCE_ARGS rỗng: bỏ cờ (đường tắt cho DB đã có hạng)', () => {
+    const { status, calls } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0', SEED_REFERENCE_ARGS: '' });
+    expect(status).toBe(0);
+    expect(calls.filter((c) => c.includes('prisma:seed:reference'))).toEqual([expect.stringMatching(/pnpm run prisma:seed:reference$/)]);
+  });
+
   it('API cũ đang chạy, points_1d chưa áp, build lỗi → dừng, API cũ KHÔNG bị dừng, chưa migrate', () => {
     const { status, calls } = run({ FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' }, { failOn: ' build api web' });
     expect(status).not.toBe(0);
@@ -473,5 +485,24 @@ describe('ops/crontab.backup.example', () => {
     const ops = readFileSync(join(REPO, '.github/workflows/ops.yml'), 'utf8');
     expect(ops.match(/BACKUP_KEEP_COUNT=(\d+)/g)).toEqual(['BACKUP_KEEP_COUNT=120', 'BACKUP_KEEP_COUNT=120']);
     expect(sample).toMatch(/chỉ hạ[^\n]*RCLONE_REMOTE/i);
+  });
+});
+
+describe('docs/launch/deploy-rollback-runbook.md: seed-reference khớp quyết định A8', () => {
+  const runbook = readFileSync(join(REPO, 'docs/launch/deploy-rollback-runbook.md'), 'utf8');
+
+  it('bước 7b chạy lệnh có cờ và không còn coi cờ là chờ chủ dự án duyệt', () => {
+    const step = runbook.slice(runbook.indexOf('### Bước 7b'), runbook.indexOf('### Bước 7c'));
+    expect(step).toContain('pnpm run prisma:seed:reference --with-business-defaults');
+    expect(step).not.toMatch(/chủ dự án chưa quyết|CHỈ chạy lệnh có cờ sau khi|duyệt bảng giá trị ở mục 3\.2/);
+    expect(step).not.toMatch(/mau_tin = 100/);
+  });
+
+  it('bước 7b không hứa hạng có ngay sau khi nạp muộn, và nói đúng dòng cảnh báo khi thiếu cờ', () => {
+    const step = runbook.slice(runbook.indexOf('### Bước 7b'), runbook.indexOf('### Bước 7c'));
+    expect(step).not.toMatch(/muốn có ngay thì chờ/);
+    expect(step).not.toMatch(/chờ chủ dự án duyệt/);
+    expect(step).toMatch(/không có lệnh tính lại ngay/);
+    expect(step).toMatch(/thiếu --with-business-defaults/);
   });
 });

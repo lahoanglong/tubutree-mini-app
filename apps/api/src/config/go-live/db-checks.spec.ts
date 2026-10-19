@@ -414,6 +414,40 @@ describe('evaluateDb', () => {
     it('đủ thì PASS', () => expect(status(GOOD_DB, 'db.gomdon_warehouse')).toBe('PASS'));
   });
 
+  describe('hạng thành viên và bậc đại lý (db.membership_tiers, db.dealer_tiers)', () => {
+    it('hạng đủ hệ số 1, 1,2, 1,5, 2 và có bậc đại lý: PASS', () => {
+      expect(status(GOOD_DB, 'db.membership_tiers')).toBe('PASS');
+      expect(status(GOOD_DB, 'db.dealer_tiers')).toBe('PASS');
+    });
+
+    it('bảng hạng trống sau deploy: FAIL, chỉ cách chạy seed-reference có cờ (mọi khách hệ số x1)', () => {
+      const r = byId(run(dbWith({ membershipTiers: [] })), 'db.membership_tiers');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toMatch(/chưa có hạng nào/);
+      expect(r.hint).toContain('--with-business-defaults');
+    });
+
+    it('bảng hạng trống trước deploy: chỉ WARN (seed-reference chạy ở bước deploy)', () => {
+      expect(status(dbWith({ membershipTiers: [] }), 'db.membership_tiers', 'pre-deploy')).toBe('WARN');
+    });
+
+    it('thiếu một hệ số đã chốt (thiếu 1,5): FAIL và nêu hệ số thiếu', () => {
+      const r = byId(run(dbWith({ membershipTiers: [1, 1.2, 2] })), 'db.membership_tiers');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('1,5');
+    });
+
+    it('hệ số lệch (1,5 thành 15, kiểu nhầm đơn vị): FAIL', () => {
+      expect(status(dbWith({ membershipTiers: [1, 1.2, 15, 2] }), 'db.membership_tiers')).toBe('FAIL');
+    });
+
+    it('chưa có bậc đại lý: WARN (không chặn mở bán khách lẻ)', () => {
+      const r = byId(run(dbWith({ dealerTierCount: 0 })), 'db.dealer_tiers');
+      expect(r.status).toBe('WARN');
+      expect(r.hint).toContain('--with-business-defaults');
+    });
+  });
+
   describe('tài khoản admin', () => {
     it('có ADMIN thì PASS', () => expect(status(GOOD_DB, 'db.admin_user')).toBe('PASS'));
     it('chưa có nhưng có quyền cấp theo SĐT chờ thì WARN', () => expect(status(dbWith({ adminCount: 0, pendingAdminGrants: 1 }), 'db.admin_user')).toBe('WARN'));

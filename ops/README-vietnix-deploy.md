@@ -122,8 +122,8 @@ bash ops/check-edge.sh --local
 (`-v /var/backups/tubutree:...:ro` để `go-live:check` thấy thư mục backup; trong container nó không đọc được crontab và rclone, nên 4 mục backup còn lại luôn là WARN "không kiểm được": kiểm tay bằng `crontab -l | grep backup-db` và `rclone listremotes`, xem [runbook](../docs/launch/deploy-rollback-runbook.md) mục 1.2.)
 
 **Lần deploy đầu (hoặc DB mới): sau bước migrate, chạy thêm
-`npx prisma migrate deploy && npm run prisma:seed:reference`** (trên VPS: `docker compose -f
-docker-compose.vietnix.yml run --rm --no-deps api pnpm run prisma:seed:reference`, xem bước 7b của
+`npx prisma migrate deploy && npm run prisma:seed:reference -- --with-business-defaults`** (trên VPS: `docker compose -f
+docker-compose.vietnix.yml run --rm --no-deps api pnpm run prisma:seed:reference --with-business-defaults`, xem bước 7b của
 runbook). Thứ tự: `deploy.sh` migrate rồi bật API ngay trong cùng một lần chạy, nên không xen lệnh này
 vào giữa được; chạy nó NGAY SAU `deploy.sh` (vài chục giây API chạy với bảng tham chiếu còn trống, như
 trước đây, không lỗi; khoá cấu hình vừa nạp có hiệu lực trong 60 giây, không cần khởi động lại).
@@ -131,9 +131,11 @@ Muốn dữ liệu có TRƯỚC khi API chạy thì theo thứ tự thủ công 
 bật API). Migration không nạp chủ đề cộng đồng, quiz, loài cây và 28 mẫu thông báo; `prisma:seed` thì
 bị chặn ở production. Lệnh này chỉ tạo dòng còn thiếu, không ghi đè chỉnh sửa của admin và không đụng
 sản phẩm, người dùng, mã giảm giá, tài khoản ngân hàng, nên chạy lại sau mỗi lần phát hành cũng được.
-Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh KHÔNG nạp ở lệnh này: chỉ nạp khi
-thêm `--with-business-defaults`, sau khi chủ dự án duyệt bảng ở `docs/2026-10-18-launch-review/impl/refseed.md`
-mục 3.2 (chưa nạp thì admin chưa duyệt được hồ sơ đại lý). `deploy.sh` chỉ gọi nó trong luồng `points_1d` (bản có migration đó chưa áp); deploy thường vẫn không gọi.
+Hạng thành viên, bậc đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh chỉ nạp khi thêm `--with-business-defaults`;
+chủ dự án đã chốt chạy CÓ cờ (A8), nên lệnh trên phải kèm cờ: `... pnpm run prisma:seed:reference --with-business-defaults`
+(không cờ thì DB mới không có hạng, mọi khách hệ số điểm x1, admin không duyệt được hồ sơ đại lý). `deploy.sh` chỉ gọi nó trong
+luồng `points_1d` (bản có migration đó chưa áp) hoặc khi API đang tắt, và tự thêm cờ; đặt `SEED_REFERENCE_ARGS=` (rỗng) để bỏ cờ trên DB
+đã có sẵn các bảng đó. Deploy thường (API đang chạy, không có migration đó) vẫn không gọi.
 
 `tools/deploy/deploy.sh` giữ đúng thứ tự: `docker compose run` **không** build lại image, nên
 chạy `run --rm api pnpm exec prisma migrate deploy` trước khi build sẽ áp thư mục migrations của

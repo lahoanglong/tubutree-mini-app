@@ -76,6 +76,9 @@ export interface DbSnapshot {
   waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
+  /** pointMultiplier của từng hạng trong membership_tiers; bảng chưa có hoặc trống thì []. */
+  membershipTiers: number[];
+  dealerTierCount: number;
   adminCount: number;
   pendingAdminGrants: number;
   znsTemplates: ZnsTemplateRow[];
@@ -415,7 +418,37 @@ function adminCheck(s: DbSnapshot): CheckResult {
   if (s.pendingAdminGrants > 0) {
     return warn(G_DB, 'db.admin_user', title, `chưa có ADMIN nào, nhưng có ${s.pendingAdminGrants} quyền cấp theo SĐT chờ người đó đăng nhập`, 'Người được cấp phải đăng nhập một lần để quyền có hiệu lực; kiểm lại ngay sau đó.');
   }
-  return fail(G_DB, 'db.admin_user', title, 'không có tài khoản ADMIN nào', 'Cấp admin đầu tiên: `docker compose -f docker-compose.vietnix.yml run --rm --no-deps -e ADMIN_PHONE=<SĐT> api node scripts/grant-admin.js` (hoặc ops.yml, hành động grant-admin).');
+  return fail(G_DB, 'db.admin_user', title, 'không có tài khoản ADMIN nào', 'Cấp admin đầu tiên: `docker compose -f docker-compose.vietnix.yml run --rm --no-deps -e ADMIN_PHONE=<SĐT> api node scripts/grant-admin.js` (SĐT 10 số dạng 0912345678 hoặc +84912345678, script tự chuẩn hoá; hoặc ops.yml, hành động grant-admin).');
+}
+
+/** Hệ số điểm đã chốt cho Mầm Xanh, Lộc Biếc, Đại Thụ, Cổ Thụ (A8). */
+const REQUIRED_TIER_MULTIPLIERS = [1, 1.2, 1.5, 2] as const;
+const viNum = (n: number) => String(n).replace('.', ',');
+
+const SEED_FLAG_HINT = 'Chạy `pnpm run prisma:seed:reference --with-business-defaults` trong container api (chỉ tạo dòng thiếu, chạy lại an toàn; runbook bước 7b).';
+
+function membershipTierCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
+  const title = 'Hạng thành viên và hệ số điểm';
+  const have = new Set(s.membershipTiers.map((m) => Math.round(m * 100) / 100));
+  const missing = REQUIRED_TIER_MULTIPLIERS.filter((m) => !have.has(m));
+  if (s.membershipTiers.length === 0) {
+    // Trước deploy, DB mới chưa có hạng là bình thường: seed-reference chạy ở bước deploy.
+    const red = phase === 'pre-deploy' ? warn : fail;
+    const detail = phase === 'pre-deploy' ? 'chưa có hạng nào (sẽ nạp ở bước 7b khi deploy)' : 'chưa có hạng nào: mọi khách hệ số x1, không có freeship theo hạng';
+    return red(G_DB, 'db.membership_tiers', title, detail, SEED_FLAG_HINT);
+  }
+  if (missing.length > 0) {
+    return fail(G_DB, 'db.membership_tiers', title, `thiếu hạng có hệ số ${missing.map(viNum).join(', ')} (đã chốt x1, x1,2, x1,5, x2); đang có ${s.membershipTiers.map(viNum).join(', ')}`, `Sửa ở Quản trị, Hạng thành viên, hoặc ${SEED_FLAG_HINT}`);
+  }
+  return pass(G_DB, 'db.membership_tiers', title, `${s.membershipTiers.length} hạng, hệ số ${[...s.membershipTiers].sort((a, b) => a - b).map(viNum).join(', ')}`);
+}
+
+function dealerTierCheck(s: DbSnapshot): CheckResult {
+  const title = 'Bậc đại lý';
+  if (s.dealerTierCount === 0) {
+    return warn(G_DB, 'db.dealer_tiers', title, 'chưa có bậc đại lý nào: admin không duyệt được hồ sơ đại lý hay cấp vai trò DEALER', SEED_FLAG_HINT);
+  }
+  return pass(G_DB, 'db.dealer_tiers', title, `${s.dealerTierCount} bậc`);
 }
 
 function znsCheck(s: DbSnapshot): CheckResult {
@@ -453,6 +486,8 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     bankCheck(s),
     codCapCheck(s),
     ...gomdonToggleChecks(s, ctx.env),
+    membershipTierCheck(s, ctx.phase),
+    dealerTierCheck(s),
     adminCheck(s),
     znsCheck(s),
     ...evaluateDemoData(s.demoData, ctx.env, ctx.phase),

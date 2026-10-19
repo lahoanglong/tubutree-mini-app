@@ -8,14 +8,28 @@
  *
  * KHÔNG hardcode SĐT trong source (repo public) — luôn đọc từ env ADMIN_PHONE.
  * Dùng: ADMIN_PHONE=<số điện thoại> node scripts/grant-admin.js
+ * SĐT được chuẩn hoá về dạng User.phone vẫn lưu (0xxxxxxxxx, 10 số) trước khi tra: nhập +84912345678 hay 84912345678 đều
+ * ra 0912345678, không thì script tạo thêm một user ADMIN mới thay vì nâng user Zalo thật.
  * (trên VM prod: gọi qua .github/workflows/ops.yml action=grant-admin, secret ADMIN_PHONE)
  */
 const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
 
-async function main() {
-  const phone = process.env.ADMIN_PHONE;
-  if (!phone) throw new Error('Thiếu env ADMIN_PHONE');
+// Cùng luật với normalizeZaloPhone (src/common/phone.ts); script chạy bằng node thuần trong image nên không import được bản TS.
+function normalizeAdminPhone(raw) {
+  if (!raw) return null;
+  const digits = String(raw).replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  let formatted = digits;
+  if (digits.startsWith('84')) formatted = `0${digits.slice(2)}`;
+  else if (!digits.startsWith('0')) formatted = `0${digits}`;
+  return /^0\d{9}$/.test(formatted) ? formatted : null;
+}
+
+async function main(prisma) {
+  const raw = process.env.ADMIN_PHONE;
+  if (!raw) throw new Error('Thiếu env ADMIN_PHONE');
+  const phone = normalizeAdminPhone(raw);
+  if (!phone) throw new Error('ADMIN_PHONE phải là SĐT Việt Nam 10 số (0912345678, +84912345678 hoặc 84912345678)');
 
   const existing = await prisma.user.findUnique({ where: { phone } });
   if (existing) {
@@ -36,9 +50,15 @@ async function main() {
   console.log(`OK: user mới (id=${user.id}) tạo với role=ADMIN.`);
 }
 
-main()
-  .catch((e) => {
-    console.error('FAIL:', e.message);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+// ops.yml đẩy script qua stdin (`node < grant-admin.js`): lúc đó require.main là undefined và module.id là '[stdin]'.
+if (require.main === module || module.id === '[stdin]') {
+  const prisma = new PrismaClient();
+  main(prisma)
+    .catch((e) => {
+      console.error('FAIL:', e.message);
+      process.exit(1);
+    })
+    .finally(() => prisma.$disconnect());
+}
+
+module.exports = { normalizeAdminPhone };

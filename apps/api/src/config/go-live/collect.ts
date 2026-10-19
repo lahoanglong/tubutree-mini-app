@@ -61,6 +61,10 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         ? await tx.notificationTemplate.findMany({ select: { code: true, channel: true, zaloTemplateId: true }, orderBy: { code: 'asc' } })
         : [];
 
+      const membershipTiers = (await exists('membership_tiers'))
+        ? (await tx.membershipTier.findMany({ select: { pointMultiplier: true } })).map((t) => Number(t.pointMultiplier))
+        : [];
+
       return {
         appliedMigrations,
         unfinishedMigrations,
@@ -73,6 +77,8 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
           activeWarehousesWithPhone: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`),
         },
         configs,
+        membershipTiers,
+        dealerTierCount: await count('dealer_tiers'),
         adminCount: await count('users', `"role" = 'ADMIN'`),
         pendingAdminGrants: await count('role_grants', `"role" = 'ADMIN' AND "revokedAt" IS NULL`),
         znsTemplates,
