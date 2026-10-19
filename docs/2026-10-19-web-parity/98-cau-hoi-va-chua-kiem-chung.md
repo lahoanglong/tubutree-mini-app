@@ -47,7 +47,7 @@ Không có.
 ### shop (11 câu)
 - shop:1. Web có cần gửi `search_performed`, `search_result_clicked`, `filter_applied` không, tới endpoint nào? Mặc định: không gửi.
 - shop:2. Hai bản mua lại (`components/reorder/*` của shop, `components/orders/*` của order): giữ bản nào? Mặc định: giữ cả hai, bản shop đã khoá CTA sau thêm một phần; xử lý ở tích hợp.
-- shop:3. Khối đại lý trên `/brand/[slug]`: Mini App hiện khối cho mọi người, còn BUYERWEB-18 (30cfe565, nhánh main, 14/10) cố ý ẩn chương trình đại lý B2B với khách lẻ, không liên quan việc `/dai-ly` có hay chưa. Câu hỏi MỞ cho chủ dự án: giữ BUYERWEB-18 hay theo Mini App? Tạm thời web giữ BUYERWEB-18 (chỉ người có hồ sơ đại lý đã duyệt hoặc đang chờ thấy khối); commit 94e40f36 đã bị revert ở cc748264. Nếu chủ chọn theo Mini App thì cherry-pick lại 94e40f36 và cân nhắc việc trang SSR công khai lộ ngưỡng thưởng B2B.
+- shop:3. Khối đại lý trên `/brand/[slug]`: Mini App hiện khối cho mọi người, còn BUYERWEB-18 (30cfe565, nhánh main, 14/10) cố ý ẩn chương trình đại lý B2B với khách lẻ, không liên quan việc `/dai-ly` có hay chưa. Câu hỏi MỞ cho chủ dự án: giữ BUYERWEB-18 hay theo Mini App? Tạm thời web giữ BUYERWEB-18 (chỉ người có hồ sơ đại lý đã duyệt hoặc đang chờ thấy khối); commit 94e40f36 đã bị revert ở cc748264. Nếu chủ chọn theo Mini App thì cherry-pick lại 94e40f36 và cân nhắc việc trang SSR công khai lộ ngưỡng thưởng B2B. **Chủ chốt 2026-10-19: hiện cho mọi người như Mini App, web e1396df4.**
 - shop:4. Bài mẫu chia sẻ nhãn cho người không phải CTV: mặc định không hiện, chỉ QR, link, nút chia sẻ.
 - shop:5. Chữ dải tăng điểm Trang chủ đổi từ "Mua trong Mini App tích nhiều hơn" thành "Mua trực tiếp tại Tubu Tree ...": xác nhận chữ? Mặc định: chữ mới.
 - shop:6. Giờ vàng ở Trang chủ chỉ link `/san-pham/{slug}` (không truyền variationId, trang sản phẩm tự chọn phân loại đang giờ vàng). Mặc định: như vậy, chưa kiểm bằng trình duyệt.
@@ -108,7 +108,7 @@ Không có.
 - integ2:2. Gom mọi chỗ nối `/thanh-toan/chuyen-khoan/...` về `bankPaymentHref`? Mặc định: chưa gom (không đổi hành vi). Đã xử lý ở 42134975 (integ4).
 
 ### integ3 (1 câu)
-- integ3:1. shop:3 (khối chương trình đại lý ở `/brand/[slug]`): giữ BUYERWEB-18 (30cfe565, ẩn chương trình B2B với khách lẻ), hay theo Mini App brand-view (cherry-pick 94e40f36, chấp nhận trang SSR hiện ngưỡng B2B cho mọi người). Hiện đang giữ BUYERWEB-18.
+- integ3:1. shop:3 (khối chương trình đại lý ở `/brand/[slug]`): giữ BUYERWEB-18 (30cfe565, ẩn chương trình B2B với khách lẻ), hay theo Mini App brand-view (cherry-pick 94e40f36, chấp nhận trang SSR hiện ngưỡng B2B cho mọi người). Hiện đang giữ BUYERWEB-18. **Chủ chốt 2026-10-19: hiện cho mọi người như Mini App, web e1396df4.**
 
 ### integ4 (0 câu)
 Không có câu hỏi mới. Mặc định đã dùng: QR ở chi tiết đơn theo `canPayNow` như Mini App; trang chuyển khoản riêng không chặn theo hạn (giống Mini App).
@@ -273,7 +273,7 @@ Không có câu hỏi mới. Mặc định đã dùng: QR ở chi tiết đơn t
 - Không chạy Playwright; chưa kiểm chứng trên trình duyệt thật.
 
 ### integ3 (3 mục)
-- Chưa làm: shop:3 giữ hành vi BUYERWEB-18, chưa theo Mini App, chờ chủ quyết.
+- Chưa làm: shop:3 giữ hành vi BUYERWEB-18, chưa theo Mini App, chờ chủ quyết. **Chủ chốt 2026-10-19: hiện cho mọi người như Mini App, web e1396df4.**
 - Playwright không chạy (chỉ viết/typecheck spec e2e).
 - Spec mục 1 và 3 xanh ngay khi viết (hub đã đúng sẵn, compact thêm cùng lúc), không đỏ trước như TDD.
 

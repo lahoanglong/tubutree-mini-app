@@ -33,6 +33,8 @@ Chi tiết từng lane: `impl/<lane>.md`. Dòng thời gian: `PROGRESS.md`. Ma t
 
 ## Cần anh/chị quyết (xếp theo mức rủi ro)
 
+**Đã chốt 2026-10-19 (chủ dự án trả lời):** câu 1 và 2 sửa Mini App như web (lane `mafix`, review Opus 2 lượt); câu 3 hiện khối đại lý cho mọi người như Mini App (web e1396df4, bỏ BUYERWEB-18); câu 4–7 và 9 giữ mặc định; câu 8 (biến môi trường deploy) để sau. Đưa lên `main`: hai PR, đổi rác trước (PR nháp #21 đã có), rồi PR nháp `web/integration`.
+
 1. **Mini App có thể tạo đơn thứ hai sau lỗi mạng.** Khi đặt đơn gặp lỗi mạng, ví/điểm nạp lại làm `pickPaymentMethod` tự đổi phương thức, Idempotency-Key đổi theo, lần bấm sau tạo đơn mới. Web đã chặn (đóng băng yêu cầu sau lần chưa rõ kết quả). Mặc định: chưa sửa Mini App. Đề xuất: sửa Mini App theo cách của web, có review Opus 2 lượt.
 2. **Mini App không lưu được hồ sơ cho khách đã có ngày sinh.** `edit-profile.tsx` luôn gửi lại `dob`, API chỉ cho đặt một lần nên trả 400 và tên/email không lưu. Web đã sửa. Mặc định: chưa sửa Mini App. Đề xuất: sửa.
 3. **Khối chương trình đại lý ở trang nhãn `/brand/[slug]`** (shop:3). Mini App hiện cho mọi người; web đang ẩn với khách lẻ theo quyết định cũ BUYERWEB-18 (30cfe565). Mặc định: giữ BUYERWEB-18. Muốn giống Mini App thì lấy lại 94e40f36.
