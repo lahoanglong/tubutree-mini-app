@@ -10,6 +10,7 @@ import {
   type SubmitExternalClaimResponse,
 } from '../services/external-points-api';
 import { getErrorMessage } from '../services/api';
+import { useAuthStore } from '../store/auth';
 import { getPublicConfig } from '../services/shop-api';
 import { scanCode } from '../services/zmp-bridge';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -171,8 +172,11 @@ function ClaimList() {
 
 function ClaimForm() {
   const qc = useQueryClient();
+  const hasPhone = useAuthStore((s) => !!s.user?.phone);
+  const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [needPhone, setNeedPhone] = useState(false);
   const [result, setResult] = useState<SubmitExternalClaimResponse | null>(null);
 
   const submit = useMutation({
@@ -181,6 +185,7 @@ function ClaimForm() {
       haptic('medium');
       setResult(r);
       setError(null);
+      setNeedPhone(false);
       setCode('');
       void qc.invalidateQueries({ queryKey: ['external-claims'] });
     },
@@ -188,17 +193,39 @@ function ClaimForm() {
       setResult(null);
       const rejected = externalClaimRejectCode(e);
       setError(rejected ? t.reject[rejected] : getErrorMessage(e));
+      setNeedPhone(rejected === 'NOT_ELIGIBLE_USER');
     },
   });
 
-  const send = () => {
+  // Đăng nhập ngầm không xin SĐT, nên khách vào từ thẻ trong hộp hay từ sàn thường chưa có SĐT; máy chủ chỉ cộng điểm theo SĐT.
+  const requestPhone = async (): Promise<boolean> => {
+    try {
+      if (await ensurePhone()) return true;
+    } catch {
+      /* người dùng huỷ hoặc Zalo lỗi: coi như chưa có SĐT, nút chia sẻ vẫn ở đó để thử lại */
+    }
+    setError(t.reject.NOT_ELIGIBLE_USER);
+    setNeedPhone(true);
+    return false;
+  };
+
+  const send = async () => {
     const trimmed = code.trim();
     if (!trimmed) {
       setError(t.emptyCode);
       return;
     }
     setResult(null);
+    if (!hasPhone && !(await requestPhone())) return;
     submit.mutate(trimmed);
+  };
+
+  const sharePhone = async () => {
+    const trimmed = code.trim();
+    if (!(await requestPhone())) return;
+    setNeedPhone(false);
+    setError(null);
+    if (trimmed) submit.mutate(trimmed);
   };
 
   const scan = async () => {
@@ -230,6 +257,9 @@ function ClaimForm() {
           <Text variant="body-sm" tone="danger" as="div" style={{ marginTop: 8 }}>
             <span role="alert">{error}</span>
           </Text>
+        )}
+        {needPhone && !hasPhone && (
+          <Button fullWidth variant="secondary" onPress={sharePhone} style={{ marginTop: 8 }}>{t.sharePhone}</Button>
         )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <Button fullWidth loading={submit.isPending} onPress={send} style={{ flex: 1, minWidth: 0 }}>{t.submit}</Button>

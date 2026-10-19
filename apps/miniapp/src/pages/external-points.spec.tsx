@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   getMyExternalClaims: vi.fn(),
   scanCode: vi.fn(),
   phase: 'authenticated' as string,
+  user: { phone: '0901234567' } as { phone?: string | null } | null,
+  ensurePhone: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -28,6 +30,13 @@ vi.mock('../services/external-points-api', async (importOriginal) => ({
 }));
 vi.mock('../services/zmp-bridge', () => ({ scanCode: mocks.scanCode }));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('../store/auth', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useAuthStore: (sel?: (s: unknown) => unknown) => {
+    const state = { user: mocks.user, ensurePhone: mocks.ensurePhone };
+    return sel ? sel(state) : state;
+  },
+}));
 vi.mock('../components/back-button', () => ({ default: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -53,6 +62,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.phase = 'authenticated';
+    mocks.user = { phone: '0901234567' };
     mocks.getPublicConfig.mockResolvedValue({ loyalty: LOYALTY });
     mocks.getMyExternalClaims.mockResolvedValue(EMPTY_LIST);
   });
@@ -97,6 +107,82 @@ describe('Trang Tích điểm đơn ngoài app', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
     expect(screen.queryByText('máy chủ')).toBeNull();
     expect(screen.queryByTestId('claim-result')).toBeNull();
+  });
+
+  describe('khách chưa chia sẻ số điện thoại (D14-01)', () => {
+    const typeCode = async (value = 'SPXVN123456789') => {
+      fireEvent.change(await screen.findByLabelText('Mã vận đơn hoặc mã đơn trên sàn'), { target: { value } });
+    };
+
+    it('chưa có SĐT: xin SĐT ngay khi bấm Tích điểm, rồi mới gửi mã', async () => {
+      mocks.user = { phone: null };
+      mocks.ensurePhone.mockResolvedValue('0901234567');
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+      });
+      renderPage();
+      await typeCode();
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN123456789'));
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(1);
+      expect(mocks.ensurePhone.mock.invocationCallOrder[0]!).toBeLessThan(mocks.submitExternalClaim.mock.invocationCallOrder[0]!);
+    });
+
+    it('chưa có SĐT và khách từ chối chia sẻ: không gửi mã, có câu giải thích và nút Chia sẻ số điện thoại', async () => {
+      mocks.user = { phone: null };
+      mocks.ensurePhone.mockResolvedValue(null);
+      renderPage();
+      await typeCode();
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('cho phép Tubu xem số điện thoại');
+      expect(screen.getByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeInTheDocument();
+      expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
+    });
+
+    it('đã có SĐT: gửi thẳng, không xin lại', async () => {
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+      });
+      renderPage();
+      await typeCode();
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1));
+      expect(mocks.ensurePhone).not.toHaveBeenCalled();
+    });
+
+    it('khách từ chối lần đầu rồi bấm nút Chia sẻ số điện thoại: có SĐT thì gửi luôn đúng mã đã nhập', async () => {
+      mocks.user = { phone: null };
+      mocks.ensurePhone.mockResolvedValueOnce(null).mockResolvedValueOnce('0901234567');
+      mocks.submitExternalClaim.mockResolvedValue({
+        status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+      });
+      renderPage();
+      await typeCode();
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ số điện thoại' }));
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1));
+      expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN123456789');
+      expect(mocks.ensurePhone).toHaveBeenCalledTimes(2);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Chia sẻ số điện thoại' })).toBeNull());
+    });
+
+    it('máy chủ trả NOT_ELIGIBLE_USER dù app tưởng đã có SĐT chưa lưu: hiện nút chia sẻ, bấm xong gửi lại đúng mã', async () => {
+      mocks.user = { phone: null };
+      mocks.ensurePhone.mockResolvedValue('0901234567');
+      mocks.submitExternalClaim
+        .mockRejectedValueOnce(Object.assign(new Error('x'), { isAxiosError: true, response: { status: 403, data: { code: 'NOT_ELIGIBLE_USER' } } }))
+        .mockResolvedValueOnce({
+          status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
+        });
+      renderPage();
+      await typeCode();
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      const share = await screen.findByRole('button', { name: 'Chia sẻ số điện thoại' });
+      expect(await screen.findByRole('alert')).toHaveTextContent('cho phép Tubu xem số điện thoại');
+      fireEvent.click(share);
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
+      expect(mocks.submitExternalClaim).toHaveBeenLastCalledWith('SPXVN123456789');
+    });
   });
 
   it('mã trống: nhắc nhập, không gọi API', async () => {
