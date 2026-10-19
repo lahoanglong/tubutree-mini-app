@@ -518,3 +518,41 @@ describe('/tai-khoan/vi-tubu — truy cập', () => {
     expect(smallTouchTargets(document.body)).toEqual([]);
   });
 });
+
+describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () => {
+  const orderOf = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.className)![1]);
+
+  it('thứ tự một cột ở điện thoại: thẻ Mời bạn đứng ngay sau thẻ Điểm Xanh, rồi nguồn tiền, hoàn tiền, mẹo, lịch sử', async () => {
+    const c = await mount();
+    const items = Array.from(c.querySelectorAll('main *')).filter((el) => /max-md:order-\d+/.test(el.className.toString()));
+    const labels = items.sort((a, b) => orderOf(a) - orderOf(b)).map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '');
+    const at = (needle: string) => labels.findIndex((l) => l.includes(needle));
+    expect(at('Số dư Ví Tubu')).toBeGreaterThan(-1);
+    expect(at('Số dư Ví Tubu')).toBeLessThan(at('Điểm Xanh (đổi giảm giá)'));
+    expect(at('Điểm Xanh (đổi giảm giá)')).toBeLessThan(at('Mời bạn bè'));
+    expect(at('Mời bạn bè')).toBeLessThan(at('Hoa hồng chờ duyệt'));
+    expect(at('Hoa hồng chờ duyệt')).toBeLessThan(at('Hoàn tiền đã duyệt'));
+    expect(at('Hoàn tiền đã duyệt')).toBeLessThan(at('Mẹo: dùng Ví Tubu'));
+    expect(at('Mẹo: dùng Ví Tubu')).toBeLessThan(at('Lịch sử Ví'));
+  });
+
+  it('hai cột giữ nguyên ở máy tính: DOM vẫn là cột trái rồi cột phải', async () => {
+    const c = await mount();
+    const heads = Array.from(c.querySelectorAll('section')).map((s) => s.getAttribute('aria-label'));
+    expect(heads.indexOf('Số dư Ví Tubu')).toBeLessThan(heads.indexOf('Mời bạn bè'));
+    expect(heads.indexOf('Mời bạn bè')).toBeLessThan(heads.indexOf('Lịch sử Ví'));
+  });
+
+  it('nút Rút ngân hàng là nút phụ ZaUI; các thẻ không viền ở điện thoại', async () => {
+    const c = await mount();
+    expect(byText(c, 'button', 'Rút ngân hàng')!.className).toContain('max-md:bg-forest-50');
+    expect(Array.from(c.querySelectorAll('section')).filter((s) => s.classList.contains('border'))).toEqual([]);
+  });
+
+  it('trang bỏ đệm 48px của body và có thanh tiêu đề trắng như Mini App', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:bg-stone-0');
+  });
+});
+

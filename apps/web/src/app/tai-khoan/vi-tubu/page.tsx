@@ -26,6 +26,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
+import { miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 
 const TITLE = 'Ví Tubu';
@@ -162,9 +163,10 @@ export default function WalletPage() {
       <div role="status" aria-live="polite">
         {notice && <p className={`mb-3 text-sm ${notice.error ? 'text-danger-fg' : 'font-medium text-success-fg'}`}>{notice.text}</p>}
       </div>
+      {/* Dưới md hai cột "contents" để mọi khối xếp một cột theo thứ tự của Mini App (max-md:order-*); từ md giữ hai cột của máy tính. */}
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-        <div className="space-y-4">
-          <section aria-label="Số dư Ví Tubu" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-card">
+        <div className="max-md:contents md:flex md:flex-col md:gap-4">
+          <section aria-label="Số dư Ví Tubu" className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-stone-0 shadow-raised max-md:order-1">
             <div className="text-sm">Ví Tubu (số dư khả dụng)</div>
             <div className="mt-1 text-3xl font-bold tabular-nums">{formatVnd(w.walletBalance)}</div>
             <button
@@ -176,20 +178,20 @@ export default function WalletPage() {
                 setWithdrawError(null);
                 setWithdrawOpen(true);
               }}
-              className={`${ui.btnSecondary} mt-4 w-full gap-2`}
+              className={`${miniBtnSecondary} mt-4 w-full gap-2`}
             >
               <Landmark className="h-4 w-4" aria-hidden="true" />
               Rút ngân hàng
             </button>
           </section>
-          <p className="-mt-2 px-1 text-xs text-stone-600">
+          <p className="-mt-2 px-1 text-xs text-stone-600 max-md:order-2">
             {showCommission
               ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc trả đơn hàng.`
               : 'Số dư dùng để thanh toán đơn'}
           </p>
 
-          <div>
-            <Link href="/tai-khoan/diem-xanh" className={`flex min-h-11 items-center gap-3 p-4 hover:bg-stone-50 ${ui.card}`}>
+          <div className="max-md:order-3">
+            <Link href="/tai-khoan/diem-xanh" className={`flex min-h-11 items-center gap-3 p-4 hover:bg-stone-50 ${miniCard}`}>
               <span className="grid h-11 w-11 flex-none place-items-center rounded-full bg-stone-100">
                 <Leaf className="h-5 w-5 text-forest-600" aria-hidden="true" />
               </span>
@@ -210,7 +212,7 @@ export default function WalletPage() {
           </div>
 
           {showCommission && (
-            <div className="flex gap-2.5">
+            <div className="flex gap-2.5 max-md:order-5">
               <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} icon={Clock} />
               {/* Hoa hồng đã duyệt KHÔNG tự vào Ví: phải bấm "Nhận về ví" ở trang Cộng tác viên, nên thẻ chỉ dẫn khi có tiền. */}
               <SourceCard
@@ -225,10 +227,12 @@ export default function WalletPage() {
 
           {/* Khoản đã duyệt còn chờ về Ví là tiền của khách nên vẫn hiện dù lối vào Hoàn tiền sàn ngoài đã ẩn. */}
           {(CASHBACK_ENABLED || w.cashbackPending > 0) && (
-            <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} icon={ShoppingBag} wide />
+            <div className="max-md:order-6">
+              <SourceCard label="Hoàn tiền đã duyệt, chờ về Ví" value={w.cashbackPending} icon={ShoppingBag} wide />
+            </div>
           )}
 
-          <div className="flex gap-2 rounded-card bg-promo-bg p-4">
+          <div className="flex gap-2 rounded-card bg-promo-bg p-4 max-md:order-7">
             <Wallet className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
             <p className="text-xs text-promo-fg">
               Mẹo: dùng Ví Tubu để <b>trả đơn hàng</b> — <b>miễn phí</b>, thay vì rút về ngân hàng (phí chuyển khoản {formatVnd(fee)}/lần).
@@ -236,9 +240,9 @@ export default function WalletPage() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="max-md:contents md:flex md:flex-col md:gap-4">
           {referral && !isAffiliate && (
-            <section aria-label="Mời bạn bè" className={`p-4 ${ui.card}`}>
+            <section aria-label="Mời bạn bè" className={`p-4 max-md:order-4 ${miniCard}`}>
               <div className="mb-2 flex items-center gap-2">
                 <Gift className="h-5 w-5 text-forest-600" aria-hidden="true" />
                 <h2 className="text-base font-semibold text-stone-900">Mời bạn — nhận Điểm Xanh</h2>
@@ -370,7 +374,7 @@ function SourceCard({ label, value, icon: SourceIcon, wide, hint, href }: { labe
       {hint && <span className="mt-1 block text-xs font-semibold text-forest-700">{hint}</span>}
     </>
   );
-  const cls = `block min-w-0 flex-1 p-3 ${ui.card}`;
+  const cls = `block min-w-0 flex-1 p-3 ${miniCard}`;
   return href ? (
     <Link href={href} className={`${cls} min-h-11 hover:bg-stone-50`}>
       {body}
@@ -392,7 +396,7 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
   const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
 
   return (
-    <section aria-label="Lịch sử Ví" className={`p-4 ${ui.card}`}>
+    <section aria-label="Lịch sử Ví" className={`p-4 max-md:order-8 ${miniCard}`}>
       <div className="mb-1 flex items-center gap-2">
         <History className="h-5 w-5 text-forest-600" aria-hidden="true" />
         <h2 className="text-base font-semibold text-stone-900">Lịch sử Ví</h2>
@@ -429,7 +433,7 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
           </ul>
           {q.hasNextPage && (
             <div className="mt-3 text-center">
-              <button type="button" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage} className={ui.btnSecondary}>
+              <button type="button" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage} className={miniBtnSecondary}>
                 {q.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
               </button>
               {q.isFetchNextPageError && (
