@@ -1,5 +1,6 @@
 import { isAxiosError } from 'axios';
 import { api } from './api';
+import { syncServerClock } from '../utils/server-clock';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
 import { cartStorefrontSlug } from './cart-key';
@@ -412,9 +413,14 @@ export interface FlashSaleActiveItem {
   soldCount: number;
   quota: number;
   endAt: string;
+  /** Giờ máy chủ lúc dựng danh sách (API từ D14-05); thiếu = API cũ, app dùng đồng hồ điện thoại. */
+  serverNow?: string;
 }
-export const fetchActiveFlashSales = async () =>
-  (await takePublicBlock('flashActive')) ?? api.get<FlashSaleActiveItem[]>('/flash-sales/active').then((r) => r.data);
+export const fetchActiveFlashSales = async () => {
+  const items = (await takePublicBlock('flashActive')) ?? (await api.get<FlashSaleActiveItem[]>('/flash-sales/active')).data;
+  syncServerClock(items[0]?.serverNow);
+  return items;
+};
 
 export interface UpcomingFlashItem {
   itemId: string;

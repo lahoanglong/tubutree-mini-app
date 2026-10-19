@@ -101,6 +101,17 @@ describe('FlashSaleService.listActive', () => {
     expect(list[0]).toMatchObject({ itemId: 'fi1', flashPrice: 80000, retailPrice: 100000, productSlug: 'a' });
   });
 
+  it('kèm serverNow (giờ máy chủ lúc tính danh sách) để app bù lệch đồng hồ điện thoại khi đếm ngược', async () => {
+    const row = {
+      id: 'fi1', variationId: 'v1', flashPrice: 80000, quota: 10, soldCount: 3,
+      flashSale: { endAt: new Date('2026-07-05T12:00:00Z') },
+      variation: { retailPrice: 100000, product: { slug: 'a', name: 'A', thumbnail: null } },
+    };
+    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row]) } } as unknown as PrismaService;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
+    expect(list[0]!.serverNow).toBe(NOW.toISOString());
+  });
+
   it('where CHỈ lấy hàng còn bán (biến thể và sản phẩm đang bán, sản phẩm đã duyệt)', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
