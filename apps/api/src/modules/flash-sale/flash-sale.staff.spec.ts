@@ -160,6 +160,47 @@ describe('FlashSaleService.addItem — nhân viên (D2-01)', () => {
   });
 });
 
+describe('FlashSaleService.updateSale — dời giờ không được làm hai đợt cùng người tạo chồng giờ vượt trần đơn', () => {
+  const extend = { endAt: '2026-07-05T14:00:00Z' };
+  const ADMIN_ACTOR = { id: 'a1', staff: false };
+  // Đợt trong setup() chạy 09:00–12:00; ghim 08:00 để đợt chưa bắt đầu (dời được cả giờ bắt đầu lẫn giờ kết thúc).
+  beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-05T08:00:00Z').getTime()));
+  afterEach(() => jest.restoreAllMocks());
+
+  it('nhân viên kéo dài đợt cho chồng giờ đợt khác, tổng giảm một đơn vượt 100.000đ → 400, không ghi', async () => {
+    const { prisma, svc } = setup({ exposure: 160_000 });
+    const call = () => svc().updateSale('s1', extend, STAFF);
+    await expect(call()).rejects.toBeInstanceOf(BadRequestException);
+    await expect(call()).rejects.toThrow(/Một đơn mua đủ.*100\.000đ.*160\.000đ/);
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
+  });
+
+  it('đúng trần thì được; ghi và tính tổng cùng một giao dịch, khoá theo người tạo đợt', async () => {
+    const { prisma, svc } = setup({ exposure: 100_000 });
+    await svc().updateSale('s1', extend, STAFF);
+    expect(prisma.flashSale.update).toHaveBeenCalledTimes(1);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw.mock.calls.flatMap((c: unknown[]) => c.slice(1))).toContain('flash.staff_order_cap:m1');
+  });
+
+  it('quản trị viên dời giờ đợt của nhân viên cũng bị trần đơn của nhân viên đó', async () => {
+    const { prisma, svc } = setup({ exposure: 160_000 });
+    await expect(svc().updateSale('s1', { startAt: '2026-07-05T09:30:00Z' }, ADMIN_ACTOR)).rejects.toThrow(/Một đơn mua đủ/);
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
+  });
+
+  it('đợt của quản trị viên và chỉ đổi tên/bật tắt: không khoá, không tính trần', async () => {
+    const adminSale = setup({ createdBy: 'a1', creatorRole: 'ADMIN' });
+    await adminSale.svc().updateSale('s1', extend, ADMIN_ACTOR);
+    expect(adminSale.prisma.flashSale.update).toHaveBeenCalledTimes(1);
+    expect(adminSale.prisma.$queryRaw).not.toHaveBeenCalled();
+    const rename = setup({ exposure: 999_000 });
+    await rename.svc().updateSale('s1', { title: 'Tên mới', isActive: true }, STAFF);
+    expect(rename.prisma.flashSale.update).toHaveBeenCalledTimes(1);
+    expect(rename.prisma.$queryRaw).not.toHaveBeenCalled();
+  });
+});
+
 describe('FlashSaleService — nhân viên không đụng đợt của quản trị viên (D2-05)', () => {
   const adminSale = () => setup({ createdBy: 'a1', creatorRole: 'ADMIN' });
   const adminOnly = /quản trị viên/;

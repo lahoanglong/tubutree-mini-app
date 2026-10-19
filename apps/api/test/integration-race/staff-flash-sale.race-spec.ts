@@ -41,9 +41,10 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     }
     return out;
   };
-  const sale = async (createdBy: string) => {
+  const HOUR = 3_600_000;
+  const sale = async (createdBy: string, fromHour = 1, toHour = 2) => {
     const s = await prisma.flashSale.create({
-      data: { title: `IT ${randCode(4)}`, startAt: new Date(Date.now() + 3_600_000), endAt: new Date(Date.now() + 7_200_000), createdBy },
+      data: { title: `IT ${randCode(4)}`, startAt: new Date(Date.now() + fromHour * HOUR), endAt: new Date(Date.now() + toHour * HOUR), createdBy },
     });
     created.flashSaleIds.push(s.id);
     return s;
@@ -179,6 +180,42 @@ describe('Flash sale do nhân viên tạo (real Postgres)', () => {
     );
     expect(r2.fulfilled).toHaveLength(1);
     expect(r2.errors[0]).toContain('Một đơn mua đủ');
+  });
+
+  it('dời giờ làm hai đợt liền nhau chồng giờ: tổng giảm một đơn vượt 100.000đ thì PATCH bị chặn, đợt không đổi', async () => {
+    const m1 = await staffUser();
+    const a = await sale(m1.id, 1, 2);
+    const b = await sale(m1.id, 2, 3);
+    const [va, vb] = await variations(2);
+    const actor = { id: m1.id, staff: true };
+    // 20.000đ × 5 suất mỗi khách = 100.000đ mỗi đợt; hai đợt không chồng giờ nên cả hai thêm được
+    await flash.addItem(a.id, { variationId: va!, flashPrice: 80_000, quota: 10, perUserLimit: 5 }, actor);
+    await flash.addItem(b.id, { variationId: vb!, flashPrice: 80_000, quota: 10, perUserLimit: 5 }, actor);
+    const before = await prisma.flashSale.findUniqueOrThrow({ where: { id: a.id } });
+    await expect(flash.updateSale(a.id, { endAt: new Date(Date.now() + 3 * HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
+    await expect(flash.updateSale(b.id, { startAt: new Date(Date.now() + 1.5 * HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
+    expect((await prisma.flashSale.findUniqueOrThrow({ where: { id: a.id } })).endAt).toEqual(before.endAt);
+    // dời mà không chồng thì được
+    await flash.updateSale(a.id, { endAt: new Date(Date.now() + 1.9 * HOUR).toISOString() }, actor);
+  });
+
+  it('thêm dòng vào đợt B song song với PATCH kéo dài đợt A chồng B: tổng 120.000đ > 100.000đ nên chỉ một bên lọt', async () => {
+    const m1 = await staffUser();
+    const a = await sale(m1.id, 1, 2);
+    const b = await sale(m1.id, 2, 3);
+    const [va, vb] = await variations(2);
+    const actor = { id: m1.id, staff: true };
+    // 20.000đ × 3 = 60.000đ mỗi đợt
+    await flash.addItem(a.id, { variationId: va!, flashPrice: 80_000, quota: 10, perUserLimit: 3 }, actor);
+    const r = summarize(
+      await Promise.allSettled([
+        flash.addItem(b.id, { variationId: vb!, flashPrice: 80_000, quota: 10, perUserLimit: 3 }, actor),
+        flash.updateSale(a.id, { endAt: new Date(Date.now() + 3 * HOUR).toISOString() }, actor),
+      ]),
+    );
+    expect(r.fulfilled).toHaveLength(1);
+    expect(r.rejected).toHaveLength(1);
+    expect(r.errors[0]).toContain('Một đơn mua đủ');
   });
 
   it('người tạo đợt mua: không có giá flash; khách khác có', async () => {
