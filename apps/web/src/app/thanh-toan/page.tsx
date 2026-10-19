@@ -720,7 +720,7 @@ export default function CheckoutPage() {
                 band
                 actionLabel="Xem mã"
                 currentCode={cart.couponCode}
-                appliedDiscount={quote?.discount ?? cart.discount}
+                appliedDiscount={quote?.discount ?? 0}
                 subtotal={previewSubtotal}
                 shippingFee={quote?.shippingFee ?? null}
                 notice={quote ? quote.couponNotice : cart.couponNotice}

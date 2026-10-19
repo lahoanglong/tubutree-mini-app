@@ -49,7 +49,11 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('link', { name: /Mã giảm giá/ })).toContainText('2 mã');
     await expect(page.getByRole('heading', { name: 'Tài sản', level: 2 })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
-    await expect(page.getByRole('heading', { name: /Đơn hàng của tôi/ })).toBeVisible();
+    // Điện thoại giống Mini App (hub không có khối đơn hàng); máy tính còn danh sách đơn.
+    const narrow = (page.viewportSize()?.width ?? 1280) < 768;
+    const orders = page.getByRole('heading', { name: /Đơn hàng của tôi/ });
+    if (narrow) await expect(orders).toBeHidden();
+    else await expect(orders).toBeVisible();
     // Khách thường không thấy nhóm công việc nội bộ.
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toHaveCount(0);
   });
