@@ -2,8 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, type AdminPayoutStatus, type InboxKey } from '@/lib/admin-client';
+import { getOpsInbox, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
+import { seedDealerClaimFilter } from './dealer-claims-tab';
 import { seedPayoutFilter } from './payout-admin-tab';
 import { LoadError } from './ui';
 
@@ -21,6 +22,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   merchantPayoutsPending: { title: 'Phiếu đối soát chờ chuyển / thu', hint: 'Chờ chuyển cho đối tác hoặc chờ đối tác nộp lại' },
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
+  dealerClaimsToPay: { title: 'Thưởng đại lý chờ chi', hint: 'Admin đã duyệt, chờ kế toán trao thưởng và bấm "Đã chi"' },
   payouts: { title: 'Lệnh rút tiền chờ duyệt', hint: 'Hoa hồng CTV / Ví' },
   payoutsToPay: { title: 'Lệnh rút tiền chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
   wasteToCount: { title: 'Kiện đổi rác chờ đếm', hint: 'Kiện gửi kho hoặc thu kèm đơn đã nhận, chưa đếm' },
@@ -39,11 +41,14 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
 
 /** Hai thẻ rút tiền cùng mở tab "Duyệt yêu cầu rút tiền": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
 const PAYOUT_FILTER: Partial<Record<InboxKey, AdminPayoutStatus>> = { payouts: 'REQUESTED', payoutsToPay: 'APPROVED' };
+/** Cùng lý do với hai thẻ thưởng đại lý: thẻ chờ chi phải mở hàng đã duyệt, không phải hàng chờ duyệt. */
+const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { dealerClaims: 'PENDING', dealerClaimsToPay: 'APPROVED' };
 
 /** Trang chủ quản trị: mỗi hàng đợi một thẻ có số việc đang chờ, bấm vào mở đúng tab/bộ lọc. */
 export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => void }) {
   const onOpen = (key: InboxKey) => {
     seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
+    seedDealerClaimFilter(CLAIM_FILTER[key] ?? null);
     openTab(key);
   };
   const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });

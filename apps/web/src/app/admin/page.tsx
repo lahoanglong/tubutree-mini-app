@@ -492,6 +492,7 @@ export default function AdminPage() {
       merchantPayoutsPending: 'merchantFulfilment',
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
+      dealerClaimsToPay: 'dealerClaims',
       payouts: 'payouts',
       payoutsToPay: 'payouts',
       externalPoints: 'externalClaims',
