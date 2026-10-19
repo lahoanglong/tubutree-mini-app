@@ -363,7 +363,7 @@ export default function PostDetailPage() {
       </article>
 
       <section aria-labelledby="answers-title" className={`${ui.card} p-4 ${miniBleed}`}>
-        <h2 id="answers-title" className="mb-2.5 font-display text-lg font-semibold text-stone-900">
+        <h2 id="answers-title" className="mb-2.5 font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)]">
           Trả lời ({sorted.length})
         </h2>
         {comments.isLoading ? (

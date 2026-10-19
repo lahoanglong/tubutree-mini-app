@@ -515,3 +515,15 @@ describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', (
     expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:bg-stone-0');
   });
 });
+
+describe('/tai-khoan/diem-xanh — tiêu đề khối như Mini App', () => {
+  it('tiêu đề các khối cỡ title-sm ở điện thoại; thẻ hạng chữ lớn như medallion', async () => {
+    const c = await mount();
+    for (const name of ['Các hạng', 'Lịch sử Điểm Xanh', 'Mã giảm giá của tôi']) {
+      const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === name)!;
+      expect(h.className, name).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+    }
+    const tier = c.querySelector('section[aria-label="Hạng thành viên"] h2')!;
+    expect(tier.className).toContain('max-md:text-[length:var(--type-title-lg-size)]');
+  });
+});

@@ -216,7 +216,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
             placeholder="Tìm câu hỏi, mẹo, bài viết…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className={`${ui.field} pl-9 pr-11 max-md:rounded-full`}
+            className={`${ui.field} pl-9 pr-11 max-md:rounded-full max-md:border-stone-200`}
           />
           {q && (
             <button type="button" aria-label="Xoá từ khoá" onClick={() => setQ('')} className="absolute right-0 top-0 inline-flex h-11 min-h-11 w-11 items-center justify-center text-stone-700">

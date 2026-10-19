@@ -511,3 +511,10 @@ describe('/cong-dong/[id] — giao diện điện thoại như Mini App', () => 
     expect(container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
   });
 });
+
+describe('/cong-dong/[id] — tiêu đề khối như Mini App', () => {
+  it('"Trả lời (n)" cỡ title-sm ở điện thoại', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('#answers-title')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+});

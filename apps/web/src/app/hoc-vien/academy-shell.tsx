@@ -6,7 +6,7 @@ import { MiniBar } from '@/components/loyalty/mini-surface';
 export function AcademyShell({ children, withSubtitle }: { children: ReactNode; withSubtitle: boolean }) {
   return (
     <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
-      <MiniBar>
+      <MiniBar clearBack>
         <PageHeader title="CTV Academy" subtitle={withSubtitle ? 'Học kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày' : undefined} />
       </MiniBar>
       <div className="mt-4">{children}</div>

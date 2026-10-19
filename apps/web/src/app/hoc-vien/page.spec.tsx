@@ -51,3 +51,12 @@ describe('/hoc-vien — giao diện điện thoại như Mini App', () => {
     expect(r.container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
   });
 });
+
+describe('/hoc-vien — tiêu đề chừa chỗ nút lùi', () => {
+  it('thanh tiêu đề chừa 64px bên trái cho nút lùi nổi', async () => {
+    const r = render(await HocVienPage());
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:pl-16');
+  });
+});

@@ -9,7 +9,7 @@ export const FEED_SUBTITLE = 'Hỏi đáp cách dùng, chia sẻ trải nghiệm
 export function FeedShell({ subtitle, children }: { subtitle?: boolean; children: ReactNode }) {
   return (
     <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
-      <MiniBar>
+      <MiniBar clearBack>
         <PageHeader title={FEED_TITLE} subtitle={subtitle ? FEED_SUBTITLE : undefined} />
       </MiniBar>
       <div className="mt-3 flex flex-col gap-3 max-md:mt-0 max-md:gap-2">{children}</div>

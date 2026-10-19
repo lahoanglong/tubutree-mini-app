@@ -778,3 +778,10 @@ describe('Vườn Xanh: giao diện điện thoại như Mini App', () => {
   });
 });
 
+describe('Vườn Xanh: tiêu đề khối như Mini App', () => {
+  it('tiêu đề khối cỡ title-sm ở điện thoại', async () => {
+    const c = await mount();
+    const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === 'Nhiệm vụ')!;
+    expect(h.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+});

@@ -34,7 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { QrCode } from '@/components/ui/qr-code';
-import { miniBtnSecondary, miniCard, miniSurface } from '@/components/loyalty/mini-surface';
+import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
@@ -184,10 +184,10 @@ export default function LoyaltyPage() {
     <LedgerShell title={TITLE} wide>
       <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
-            <div aria-hidden="true" className="text-5xl leading-none">
+            <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
               {tierStyle.emoji}
             </div>
-            <h2 className={`mt-2 font-display text-xl font-semibold ${tierStyle.fg}`}>{tierName}</h2>
+            <h2 className={`mt-2 font-display text-xl font-semibold max-md:text-[length:var(--type-title-lg-size)] ${tierStyle.fg}`}>{tierName}</h2>
             <p className="mt-0.5 text-sm text-stone-700">
               Tích điểm ×{data.tier?.multiplier ?? 1} · {formatCount(lots.total)} điểm Xanh
             </p>
@@ -360,7 +360,7 @@ export default function LoyaltyPage() {
           )}
 
           <section aria-label="Các hạng" className={`p-4 ${miniCard}`}>
-            <h2 className={`mb-3 ${ui.sectionTitle}`}>Các hạng</h2>
+            <h2 className={`mb-3 ${ui.sectionTitle} ${miniSectionTitle}`}>Các hạng</h2>
             <ul className="space-y-1.5">
               {data.tiers.map((t) => {
                 const active = t.name === tierName;
@@ -385,7 +385,7 @@ export default function LoyaltyPage() {
           </section>
 
           <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-span-2 ${miniCard}`}>
-            <h2 className={`mb-2 ${ui.sectionTitle}`}>Lịch sử Điểm Xanh</h2>
+            <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
             ) : txnQ.isError ? (
@@ -555,7 +555,7 @@ function Section({ title, action, children }: { title: string; action?: string; 
   return (
     <section aria-label={title} className={`p-4 ${miniCard}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className={ui.sectionTitle}>{title}</h2>
+        <h2 className={`${ui.sectionTitle} ${miniSectionTitle}`}>{title}</h2>
         {action && <span className="text-xs text-stone-600">{action}</span>}
       </div>
       {children}

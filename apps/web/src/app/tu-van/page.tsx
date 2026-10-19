@@ -199,8 +199,8 @@ export default function AdvisorPage() {
   }, [aiOff, router]);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
-      <MiniBar>
+    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
+      <MiniBar clearBack>
         <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
       </MiniBar>
       <div className="mt-4">

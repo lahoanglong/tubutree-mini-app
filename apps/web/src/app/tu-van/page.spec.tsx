@@ -450,3 +450,10 @@ describe('Trợ lý AI: giao diện điện thoại như Mini App', () => {
   });
 });
 
+describe('Trợ lý AI: tiêu đề chừa chỗ nút lùi', () => {
+  it('trang bỏ đệm 48px và thanh tiêu đề chừa 64px bên trái cho nút lùi nổi', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:pl-16');
+  });
+});

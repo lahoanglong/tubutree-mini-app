@@ -1,7 +1,7 @@
 import { Check, Droplets, Flame, Snowflake } from 'lucide-react';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
-import { miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
+import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
 import { isSameVNDay } from './game-utils';
 
@@ -30,7 +30,7 @@ export function CheckInStreak({
     <section className={`p-4 ${miniCard}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className={`flex items-center gap-1.5 ${ui.sectionTitle}`}>
+          <h2 className={`flex items-center gap-1.5 ${ui.sectionTitle} ${miniSectionTitle}`}>
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             Điểm danh chuỗi {streakDays} ngày
           </h2>
