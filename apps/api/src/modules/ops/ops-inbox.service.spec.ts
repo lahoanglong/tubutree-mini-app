@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
@@ -30,6 +30,9 @@ const build = (
   const payoutCount = jest.fn().mockResolvedValue(over.slips ?? 0);
   const withdrawalCount = jest.fn((args: { where: { status: string } }) => Promise.resolve(args.where.status === 'APPROVED' ? (over.toPay ?? 0) : 0));
   const refundCount = jest.fn().mockResolvedValue(over.refunds ?? 0);
+  const dealerClaimCount = jest.fn((args: { where: { status: string } }) =>
+    Promise.resolve(args.where.status === 'APPROVED' ? (over.dealerToPay ?? 0) : args.where.status === 'PENDING' ? (over.dealerPending ?? 0) : 0),
+  );
   const extClaimCount = jest.fn((args: { where: { state: string; reviewReason?: unknown; OR?: unknown } }) =>
     Promise.resolve(args.where.state === 'REVIEW' ? (over.extReview ?? 0) : args.where.reviewReason ? (over.extPartial ?? 0) : args.where.OR ? (over.extStuck ?? 0) : (over.extClosed ?? 0)),
   );
@@ -45,7 +48,7 @@ const build = (
     orderCustomerRefund: { count: refundCount },
     returnRequest: zero,
     dealerApplication: zero,
-    dealerRewardClaim: zero,
+    dealerRewardClaim: { count: dealerClaimCount },
     payout: { count: withdrawalCount },
     wasteRequest: { count: wasteReqCount },
     wasteUnmatchedParcel: { count: unmatchedCount },
@@ -62,7 +65,7 @@ const build = (
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
   const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService));
-  return { svc, config, productCount, linkCount, payoutCount, withdrawalCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount };
+  return { svc, config, dealerClaimCount, productCount, linkCount, payoutCount, withdrawalCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount };
 };
 
 describe('OpsInboxService — merchantProducts', () => {
@@ -255,6 +258,32 @@ describe('OpsInboxService — payoutsToPay', () => {
   });
 });
 
+describe('OpsInboxService — dealerClaimsToPay', () => {
+  const count = (res: { items: { key: string; count: number }[] }, key: string) => res.items.find((i) => i.key === key)?.count;
+
+  it('đếm thưởng đại lý ADMIN đã duyệt, chờ kế toán bấm "Đã chi" (mark-paid cho KE_TOAN); ADMIN và KE_TOAN thấy, các nhóm khác không', async () => {
+    const { svc, dealerClaimCount } = build({ dealerToPay: 3, dealerPending: 7 });
+
+    const accountant = await svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(count(accountant, 'dealerClaimsToPay')).toBe(3);
+    expect(dealerClaimCount).toHaveBeenCalledWith({ where: { status: 'APPROVED' } });
+    expect(count(await svc.counts({ role: 'ADMIN' }), 'dealerClaimsToPay')).toBe(3);
+
+    for (const perms of [['CSKH'], ['KHO'], ['MARKETING'], []]) {
+      const res = await build({ dealerToPay: 3 }).svc.counts({ role: 'STAFF', staffPermissions: perms });
+      expect(res.items.map((i) => i.key)).not.toContain('dealerClaimsToPay');
+    }
+  });
+
+  it('khoá dealerClaims (chờ DUYỆT) vẫn chỉ đếm PENDING và chỉ ADMIN thấy; kế toán không thấy việc duyệt', async () => {
+    const { svc } = build({ dealerToPay: 3, dealerPending: 7 });
+
+    expect(count(await svc.counts({ role: 'ADMIN' }), 'dealerClaims')).toBe(7);
+    const accountant = await svc.counts({ role: 'STAFF', staffPermissions: ['KE_TOAN'] });
+    expect(accountant.items.map((i) => i.key)).not.toContain('dealerClaims');
+  });
+});
+
 describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình xử lý được (D1-05)', () => {
   const keysFor = async (perms: string[]) => (await build().svc.counts({ role: 'STAFF', staffPermissions: perms })).items.map((i) => i.key).sort();
 
@@ -262,8 +291,8 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
     expect(await keysFor(['MARKETING'])).toEqual(['communityPending', 'communityUnanswered', 'wasteToCount', 'wasteUnmatched']);
   });
 
-  it('KE_TOAN: hoàn tiền khách, VAT chờ xuất, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển, rút tiền đã duyệt chờ chi — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
-    expect(await keysFor(['KE_TOAN'])).toEqual(['customerRefunds', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
+  it('KE_TOAN: hoàn tiền khách, thưởng đại lý đã duyệt chờ chi, VAT chờ xuất, gian hàng chờ lập phiếu, phiếu đối soát chờ chuyển, rút tiền đã duyệt chờ chi — không thấy rút tiền chờ DUYỆT (việc của ADMIN)', async () => {
+    expect(await keysFor(['KE_TOAN'])).toEqual(['customerRefunds', 'dealerClaimsToPay', 'invoicePending', 'merchantPayoutsPending', 'merchantToSettle', 'payoutsToPay', 'wasteToCount', 'wasteUnmatched']);
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
@@ -284,7 +313,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
 
     expect(keys(res)).toEqual([
       'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'merchantOverdue', 'merchantProducts',
-      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'payouts', 'payoutsToPay', 'communityPending',
+      'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityPending',
       'communityUnanswered', 'invoicePending', 'externalPoints', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
     ]);
