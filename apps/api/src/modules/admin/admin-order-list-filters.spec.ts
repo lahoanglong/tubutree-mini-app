@@ -106,6 +106,56 @@ describe('AdminService.listOrders — bộ lọc mới của danh sách đơn (D
   });
 });
 
+describe('AdminService.listOrders — người xem bị che SĐT không dò SĐT bằng chuỗi con (D2-04)', () => {
+  const KE_TOAN_VIEWER = { sub: 'kt-1', role: 'STAFF' as const, staffPermissions: ['KE_TOAN'] };
+  const CSKH_VIEWER = { sub: 'cs-1', role: 'STAFF' as const, staffPermissions: ['CSKH'] };
+
+  const searchPrisma = () => {
+    const userFindMany = jest.fn().mockResolvedValue([{ id: 'u-1' }]);
+    const orderFindMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      order: { findMany: orderFindMany, count: jest.fn().mockResolvedValue(0) },
+      user: { findMany: userFindMany },
+      storefront: { findFirst: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      $transaction: jest.fn((arr: Promise<unknown>[]) => Promise.all(arr)),
+    };
+    return { prisma, userFindMany, orderFindMany };
+  };
+  const list = (prisma: unknown, search: string, viewer: Parameters<AdminService['listOrders']>[9]) =>
+    mkAdmin(prisma).listOrders(1, 20, undefined, search, undefined, undefined, undefined, undefined, undefined, viewer);
+  const phoneClauses = (call: { where: { OR: Record<string, unknown>[] } }) => call.where.OR.filter((c) => 'phone' in c).map((c) => c.phone);
+
+  it('KE_TOAN gõ một phần SĐT ("0901"): không có điều kiện "chứa" trên SĐT khách', async () => {
+    const { prisma, userFindMany } = searchPrisma();
+    await list(prisma, '0901', KE_TOAN_VIEWER);
+    expect(phoneClauses(userFindMany.mock.calls[0][0])).toEqual([]);
+  });
+
+  it('KE_TOAN gõ cả SĐT 10 số (kể cả +84 hay thiếu số 0): chỉ khớp bằng đúng số nội địa đó', async () => {
+    for (const raw of ['0901234567', '+84 901 234 567', '901234567']) {
+      const { prisma, userFindMany } = searchPrisma();
+      await list(prisma, raw, KE_TOAN_VIEWER);
+      expect(phoneClauses(userFindMany.mock.calls[0][0])).toEqual(['0901234567']);
+    }
+  });
+
+  it('chuỗi ngắn (dưới 3 ký tự, không tra trước id khách): where của đơn cũng không chứa "chứa SĐT"', async () => {
+    const { prisma, orderFindMany } = searchPrisma();
+    await list(prisma, '09', KE_TOAN_VIEWER);
+    const or = (orderFindMany.mock.calls[0][0].where.OR as { user?: { phone?: unknown } }[]).filter((c) => c.user && 'phone' in c.user);
+    expect(or).toEqual([]);
+  });
+
+  it('ADMIN và CSKH (thấy SĐT đầy đủ) vẫn tìm theo một phần SĐT như trước', async () => {
+    for (const viewer of [VIEWER, CSKH_VIEWER]) {
+      const { prisma, userFindMany } = searchPrisma();
+      await list(prisma, '0901', viewer);
+      expect(phoneClauses(userFindMany.mock.calls[0][0])).toEqual([{ contains: '0901' }]);
+    }
+  });
+});
+
 describe('Controller + DTO — bộ lọc mới của GET /admin/orders (D1-17)', () => {
   it('chuyển các bộ lọc mới xuống listOrders qua tham số cuối', async () => {
     const admin = { listOrders: jest.fn().mockResolvedValue({ data: [] }) };

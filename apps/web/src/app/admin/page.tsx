@@ -477,6 +477,7 @@ export default function AdminPage() {
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
       payouts: 'payouts',
+      payoutsToPay: 'payouts',
       externalPoints: 'externalClaims',
     };
     setTab(target[k]);
@@ -539,7 +540,7 @@ export default function AdminPage() {
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
-          {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
+          {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} isAdmin={isAdmin} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
           {active === 'orders' && (

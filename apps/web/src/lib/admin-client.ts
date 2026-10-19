@@ -1665,6 +1665,7 @@ export type InboxKey =
   | 'dealerApplications'
   | 'dealerClaims'
   | 'payouts'
+  | 'payoutsToPay'
   | 'wasteToCount'
   | 'wasteUnmatched'
   | 'wasteBlockedPending'

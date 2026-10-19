@@ -32,6 +32,7 @@ import {
   recipientPhoneVariants,
   searchPhone,
   type AdminOrderFilterInput,
+  userPhoneClauses,
   type InvoiceFilter,
   type OrderListExtra,
   type PancakeFilter,
@@ -821,17 +822,15 @@ export class AdminService {
   }
 
   /** undefined = giữ lọc theo quan hệ `user` (chuỗi quá ngắn cho trigram, hoặc khớp quá nhiều khách). */
-  private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
+  private async findSearchUserIds(search?: string, exactPhoneOnly = false): Promise<string[] | undefined> {
     const s = normalizeAdminOrderSearch(search);
     if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
     const like = escapePrismaLike(s);
-    const phone = searchPhone(s);
     const folded = foldVietnamese(s);
     const rows = await this.prisma.user.findMany({
       where: {
         OR: [
-          { phone: { contains: like } },
-          ...(phone && phone !== s ? [{ phone: { contains: phone } }] : []),
+          ...userPhoneClauses(s, exactPhoneOnly),
           { fullName: { contains: like, mode: 'insensitive' } },
           ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: escapePrismaLike(folded) } }] : []),
         ],
@@ -855,7 +854,7 @@ export class AdminService {
 
   /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
   async orderCsv(f: AdminOrderFilterInput, opts: { maskPhones?: boolean } = {}): Promise<AsyncGenerator<string>> {
-    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f), opts);
+    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f, { exactPhoneOnly: opts.maskPhones }), opts);
   }
 
   userCsv(search?: string): AsyncGenerator<string> {
@@ -863,14 +862,15 @@ export class AdminService {
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
-  async adminOrderWhere(f: AdminOrderFilterInput): Promise<Prisma.OrderWhereInput> {
+  async adminOrderWhere(f: AdminOrderFilterInput, opts: { exactPhoneOnly?: boolean } = {}): Promise<Prisma.OrderWhereInput> {
     const { storefront, ...filter } = f;
+    const exactPhoneOnly = opts.exactPhoneOnly === true;
     const [searchUserIds, searchOrderIds, storefrontId] = await Promise.all([
-      this.findSearchUserIds(f.search),
+      this.findSearchUserIds(f.search, exactPhoneOnly),
       this.findSearchOrderIds(f.search),
       this.findStorefrontId(storefront),
     ]);
-    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, ...(storefrontId ? { storefrontId } : {}) });
+    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, exactPhoneOnly, ...(storefrontId ? { storefrontId } : {}) });
   }
 
   /**
@@ -906,7 +906,7 @@ export class AdminService {
     viewer: OrderActor = { role: 'ADMIN' },
     { order = 'desc', ...extra }: OrderListExtra = {},
   ) {
-    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra });
+    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra }, { exactPhoneOnly: !seesFullOrderPhones(viewer) });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,

@@ -270,7 +270,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /affiliate/content-kit/:slug': STAFF,
   'POST /feed/admin/:id/approve': [CSKH, MARKETING],
   'POST /feed/admin/:id/hide': [CSKH, MARKETING],
-  'POST /feed/admin/:id/pin': [CSKH, MARKETING],
+  'POST /feed/admin/:id/pin': ADMIN_ONLY,
   'POST /feed/admin/:id/reject': [CSKH, MARKETING],
   'GET /feed/admin/events': ADMIN_ONLY,
   'GET /feed/admin/events/:id/participants': ADMIN_ONLY,

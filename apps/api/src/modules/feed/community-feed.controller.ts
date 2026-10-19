@@ -102,8 +102,8 @@ export class CommunityFeedController {
   }
 
   // Admin (literal paths) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
-  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn/ghim, báo cáo) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop;
-  // sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
+  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn, báo cáo) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop;
+  // ghim bài, sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
   @Roles('ADMIN')
   @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/pending')
@@ -314,8 +314,8 @@ export class CommunityFeedController {
     return this.feed.resolveReport(id);
   }
 
+  /** Ghim đặt bài lên đầu bảng tin nên chỉ ADMIN; nhân viên kiểm duyệt chỉ duyệt, từ chối và ẩn. */
   @Roles('ADMIN')
-  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/pin')
   pin(@Param('id') id: string, @Body() body: PinDto) {
     return this.feed.pinPost(id, body?.pinned !== false);

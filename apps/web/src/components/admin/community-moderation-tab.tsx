@@ -53,9 +53,9 @@ const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.statu
 /**
  * Kiểm duyệt cộng đồng trên web admin cho ADMIN và nhân viên nhóm CSKH (trước đây chỉ ADMIN duyệt được, và chỉ trong mini app):
  * duyệt/từ chối bài chờ duyệt, ẩn/ghim bài đã đăng, và xem câu hỏi chờ quá lâu chưa ai trả lời. Tác giả được báo khi bài bị từ
- * chối hoặc ẩn, kèm lý do người kiểm duyệt nhập.
+ * chối hoặc ẩn, kèm lý do người kiểm duyệt nhập. Ghim bài chỉ ADMIN (API từ chối nhân viên), nên nút ghim chỉ hiện khi `isAdmin`.
  */
-export function CommunityModerationTab({ initialView = 'pending' }: { initialView?: CommunityView }) {
+export function CommunityModerationTab({ initialView = 'pending', isAdmin = false }: { initialView?: CommunityView; isAdmin?: boolean }) {
   const [view, setView] = useState<CommunityView>(initialView);
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   return (
@@ -84,7 +84,7 @@ export function CommunityModerationTab({ initialView = 'pending' }: { initialVie
           </Notice>
         )}
         {view === 'pending' && <PendingList />}
-        {view === 'published' && <PublishedList />}
+        {view === 'published' && <PublishedList canPin={isAdmin} />}
         {view === 'unanswered' && <UnansweredList />}
       </div>
     </StaleNoticeContext.Provider>
@@ -227,7 +227,7 @@ function PendingRow({ post: p }: { post: CommunityPendingPost }) {
   );
 }
 
-function PublishedList() {
+function PublishedList({ canPin }: { canPin: boolean }) {
   const q = useInfiniteQuery({
     queryKey: QUERY_KEYS.published,
     queryFn: ({ pageParam }) => listCommunityPublished(pageParam),
@@ -242,7 +242,7 @@ function PublishedList() {
       {q.data && items.length === 0 && <p className="text-xs text-stone-500">Chưa có bài nào được đăng.</p>}
       <ul className="space-y-2">
         {items.map((p) => (
-          <PublishedRow key={p.id} post={p} />
+          <PublishedRow key={p.id} post={p} canPin={canPin} />
         ))}
       </ul>
       {q.hasNextPage && (
@@ -254,7 +254,7 @@ function PublishedList() {
   );
 }
 
-function PublishedRow({ post: p }: { post: CommunityPublishedPost }) {
+function PublishedRow({ post: p, canPin }: { post: CommunityPublishedPost; canPin: boolean }) {
   const { ask, dialog } = useConfirm();
   const keys = [QUERY_KEYS.published, QUERY_KEYS.unanswered];
   const pin = usePostAction((pinned: boolean) => pinCommunityPost(p.id, pinned), keys, 'Không đổi được trạng thái ghim.');
@@ -285,9 +285,11 @@ function PublishedRow({ post: p }: { post: CommunityPublishedPost }) {
         {p.likeCount} lượt thích · {p.commentCount} bình luận
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={busy} onClick={() => pin.mutate(!p.isPinned)} className={BTN_SECONDARY}>
-          {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
-        </button>
+        {canPin && (
+          <button type="button" disabled={busy} onClick={() => pin.mutate(!p.isPinned)} className={BTN_SECONDARY}>
+            {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
+          </button>
+        )}
         <button type="button" disabled={busy} onClick={() => void askHide()} className={BTN_DANGER_OUTLINE}>
           Ẩn
         </button>

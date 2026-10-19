@@ -20,6 +20,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
   payouts: { title: 'Lệnh rút tiền chờ duyệt', hint: 'Hoa hồng CTV / Ví' },
+  payoutsToPay: { title: 'Lệnh rút tiền chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
   wasteToCount: { title: 'Kiện đổi rác chờ đếm', hint: 'Kiện gửi kho hoặc thu kèm đơn đã nhận, chưa đếm' },
   wasteUnmatched: { title: 'Kiện không rõ chủ', hint: 'Kiện về kho chưa khớp yêu cầu nào' },
   wasteBlockedPending: { title: 'Yêu cầu đổi rác của khách bị khoá', hint: 'Yêu cầu đang mở, đang gửi hoặc kho đã nhận của khách bị khoá' },
