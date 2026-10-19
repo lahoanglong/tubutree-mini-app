@@ -220,7 +220,7 @@ function GroupCard({
       </div>
       {g.status !== 'SUCCESS' && (
         <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-          {`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
+          {`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
         </Text>
       )}
       {g.status === 'SUCCESS' && member ? (
@@ -235,7 +235,7 @@ function GroupCard({
             </Text>
           )}
           <Button fullWidth onPress={onOpen} style={{ marginTop: 10 }}>
-            {`Mua ngay với mã giảm ${formatVnd(g.basePrice - g.unitPrice)}`}
+            {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Button>
         </>
       ) : (
