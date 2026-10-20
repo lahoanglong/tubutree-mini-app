@@ -134,7 +134,7 @@ describe('/thanh-toan — tách đơn theo nơi giao (D4)', () => {
     const r = await mount();
     click([...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Đặt hàng')!);
     await flush(8);
-    const items = [...r.container.querySelectorAll('li')].map((li) => li.textContent);
+    const items = [...r.container.querySelectorAll('[data-testid="order-success-desktop"] li')].map((li) => li.textContent);
     expect(items).toEqual([expect.stringContaining('TB1 · Tubu Tree giao'), expect.stringContaining('TB2 · Mật ong Linh giao')]);
     expect(items[1]).toContain('225.000');
     expect(r.container.querySelector('a[href*="TB2"]')).not.toBeNull();

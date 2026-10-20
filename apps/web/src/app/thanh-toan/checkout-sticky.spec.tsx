@@ -87,7 +87,7 @@ describe('/thanh-toan — thanh dính đáy', () => {
     click(barButton(c));
     await flush(6);
     expect(state.placed).toHaveLength(1);
-    expect(c.textContent).toContain('Đặt hàng thành công');
+    expect(c.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
     expect(bar(c)).toBeNull();
   });
 
