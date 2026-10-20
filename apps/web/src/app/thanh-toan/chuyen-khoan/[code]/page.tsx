@@ -90,6 +90,7 @@ export default function BankPaymentPage() {
         title={showQr ? TITLE : NEUTRAL_TITLE}
         subtitle={showQr ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
         subtitleClassName="md:text-sm"
+        parentHref={detail}
         bleed={false}
       />
       <div className="mt-2 max-md:pb-6">{body}</div>

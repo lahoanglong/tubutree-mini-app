@@ -63,6 +63,12 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(false);
   });
 
+  it('nút lùi vào thẳng link thanh toán đi tới chi tiết đơn đang chờ, không tới Checkout', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('header')!.getAttribute('data-back-href')).toBe('/tai-khoan/don-hang/TB-9');
+  });
+
   it('mỗi dòng cần chép có nút có tên: số tài khoản, số tiền, nội dung', async () => {
     const c = mount();
     await flush();
