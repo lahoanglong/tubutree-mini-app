@@ -265,6 +265,17 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     expect(text().match(/Khách không thấy/g)).toHaveLength(1);
   });
 
+  it('tên món bị ẩn đổi sang chữ nhạt đủ tương phản, không làm mờ bằng opacity (D6)', async () => {
+    state.sf = storefront({
+      collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ id: 'i1', isHidden: true })] }],
+    });
+    const { container } = mount();
+    await flush();
+    const name = Array.from(container.querySelectorAll('div')).find((d) => d.children.length === 0 && d.textContent === 'Trà xanh')!;
+    expect(name.className).toContain('text-stone-500');
+    expect(name.className).not.toContain('opacity-');
+  });
+
   it('ghim và ẩn gọi đúng API', async () => {
     mount();
     await flush();

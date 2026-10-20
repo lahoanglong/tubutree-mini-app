@@ -276,7 +276,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                     <div key={it.id} className="border-b border-stone-200 py-1">
                       <div className="flex items-center">
                         <div className="min-w-0 flex-1">
-                          <div className={`text-sm text-stone-900 ${it.isHidden || it.hiddenReason ? 'opacity-60' : ''}`}>{name}</div>
+                          <div className={`text-sm ${it.isHidden || it.hiddenReason ? 'text-stone-500' : 'text-stone-900'}`}>{name}</div>
                           <div className="text-sm font-semibold tabular-nums text-stone-900">{formatVnd(price)}</div>
                           {it.hiddenReason && (
                             <Badge tone="warning" size="sm" className="mt-0.5">
