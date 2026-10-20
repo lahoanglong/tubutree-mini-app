@@ -10,6 +10,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate, startOfNextVnMonth, startOfVnMonth, vnDateParts, vnMonthKey } from '../../common/vn-time';
 import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
+import { OWN_RETAIL_SPEND_SQL } from '../orders/own-retail-spend';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { voucherCode } from './voucher-code';
 
@@ -378,8 +379,7 @@ export class VouchersService {
             ) rr ON rr."orderId" = o.id
             JOIN users u ON u.id = o."userId"
             WHERE o.status::text = 'DELIVERED'
-              AND o.type::text = 'RETAIL'
-              AND o."placedForCustomer" = false
+              AND ${OWN_RETAIL_SPEND_SQL}
               AND o."createdAt" >= ${start} AND o."createdAt" < ${end}
               AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${deliveredBefore}
               AND NOT EXISTS (
@@ -473,8 +473,7 @@ export class VouchersService {
           FROM orders o
           JOIN users u ON u.id = o."userId"
           WHERE o.status::text = 'DELIVERED'
-            AND o.type::text = 'RETAIL'
-            AND o."placedForCustomer" = false
+            AND ${OWN_RETAIL_SPEND_SQL}
             AND o."subscriptionId" IS NULL
             AND o."createdAt" >= ${createdAfter}
             AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${deliveredBefore}

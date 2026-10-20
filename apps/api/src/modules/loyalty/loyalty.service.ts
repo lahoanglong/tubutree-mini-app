@@ -15,6 +15,7 @@ import type { CouponType, WasteGift, WasteGiftRedemption } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
 import { remainingPointsBack } from '../orders/refund-allocation';
+import { OWN_RETAIL_SPEND_WHERE } from '../orders/own-retail-spend';
 import { parseVnPhoneStrict } from '../../common/phone';
 import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -360,7 +361,8 @@ export class LoyaltyService {
   }
 
   /**
-   * Tiền mua 12 tháng của khách: tổng đơn đã giao trừ phần đã hoàn của đơn trả một phần. Dùng chung cho xét hạng
+   * Tiền mua 12 tháng của khách: tổng đơn mua lẻ tự đặt đã giao (không gồm đơn đại lý, đơn CTV lên hộ: OWN_RETAIL_SPEND_WHERE)
+   * trừ phần đã hoàn của đơn trả một phần. Dùng chung cho xét hạng
    * (recalcTier) và tiến độ lên hạng (getOverview) để hai nơi không lệch nhau.
    */
   private async spending12m(userId: string, since: Date): Promise<{ spent12m: number; partialReturns: Map<string, PartialReturnSum> }> {
@@ -373,6 +375,7 @@ export class LoyaltyService {
       userId,
       status: 'DELIVERED',
       createdAt: { gte: since },
+      ...OWN_RETAIL_SPEND_WHERE,
       ...(earnOnXu ? {} : { paymentMethod: { not: 'XU' } }),
     };
     const spentAgg = await this.prisma.order.aggregate({ where: spendWhere, _sum: { total: true } });
