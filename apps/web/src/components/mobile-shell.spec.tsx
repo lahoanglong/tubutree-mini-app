@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -155,6 +156,31 @@ describe('GardenHintBubble', () => {
     const b = mount(<GardenHintBubble onGardenTab={false} />);
     await flush();
     expect(b.container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('cao ít nhất 44px để chạm tắt được (D6-16)', async () => {
+    const a = mount(<GardenHintBubble onGardenTab={false} />);
+    await flush();
+    const bubble = a.container.querySelector<HTMLElement>('[role="status"]')!;
+    expect(Number.parseFloat(bubble.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  it('tự tắt sau 8 giây để không che nội dung phía sau thanh tab (D6-16)', async () => {
+    vi.useFakeTimers();
+    try {
+      const a = mount(<GardenHintBubble onGardenTab={false} />);
+      expect(a.container.querySelector('[role="status"]')).not.toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(7_999);
+      });
+      expect(a.container.querySelector('[role="status"]')).not.toBeNull();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(a.container.querySelector('[role="status"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('đang ở tab Vườn Xanh thì không hiện và đánh dấu đã xem', async () => {
