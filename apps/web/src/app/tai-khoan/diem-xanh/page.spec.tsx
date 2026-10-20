@@ -109,7 +109,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     expect(c.textContent).toContain('Mầm Xanh');
     expect(c.textContent).toContain('Tích điểm ×1');
-    expect(c.textContent).toContain('1.800 điểm Xanh');
+    expect(c.textContent).toContain('1.800 Điểm Xanh');
     expect(c.textContent).toContain('trong đó 119 điểm không hết hạn');
     expect(c.textContent).toContain('Còn 2,5 triệu mua hàng để lên hạng Lộc Biếc');
     const bar = c.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]')!;
@@ -121,6 +121,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     expect(c.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]')).toBeNull();
     expect(c.textContent).toContain('Bạn đang ở hạng cao nhất');
+    expect(c.textContent).toContain('Tích điểm ×1,5');
   });
 
   it('thiếu mốc chi tiêu: nói theo điểm tích từ mua hàng kèm số tiền tương ứng', async () => {
@@ -168,7 +169,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     const section = c.querySelector('section[aria-label="Các hạng"]')!;
     expect(section.textContent).toContain('hạng khởi đầu · ×1');
-    expect(section.textContent).toContain('từ 4 triệu mua hàng trong 12 tháng · ×1.2');
+    expect(section.textContent).toContain('từ 4 triệu mua hàng trong 12 tháng · ×1,2');
     expect(section.querySelector('[aria-current="true"]')?.textContent).toContain('Mầm Xanh');
   });
 
@@ -290,7 +291,7 @@ describe('/tai-khoan/diem-xanh — lối tắt', () => {
   it('route đã sẵn sàng: Vườn Xanh, Đổi rác lấy quà (theo waste.enabled), Kho quà', async () => {
     state.readyRoutes = new Set(['/vuon-xanh', '/doi-rac', '/kho-qua']);
     const c = await mount();
-    expect(c.querySelector('a[href="/vuon-xanh"]')?.textContent).toContain('Vườn Cây Tubu');
+    expect(c.querySelector('a[href="/vuon-xanh"]')?.textContent).toContain('Vườn Xanh');
     expect(c.querySelector('a[href="/doi-rac"]')?.textContent).toContain('Đổi rác lấy quà');
     expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
     state.config = { waste: { enabled: false } };
@@ -346,7 +347,7 @@ describe('/tai-khoan/diem-xanh — thẻ thành viên số', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Thẻ Thành Viên Tubu');
     expect(dialog.textContent).toContain('TUBUAN123');
-    expect(dialog.textContent).toContain('Hạng Mầm Xanh · 1.800 điểm Xanh');
+    expect(dialog.textContent).toContain('Hạng Mầm Xanh · 1.800 Điểm Xanh');
     expect(dialog.textContent).toContain('Đưa mã QR này cho thu ngân');
     expect(dialog.querySelector('img[alt="QR"], [data-qr-placeholder]')).not.toBeNull();
     expect(state.calls.some((x) => x.path === '/me/loyalty/member-card')).toBe(true);
