@@ -164,7 +164,8 @@ export default function CheckoutPage() {
   const [sfCtx] = useState(() => getStorefrontContext());
   // CHỈ gian hàng CTV mới gắn vào đơn — xem ghi chú ở StorefrontContext.kind.
   const ctvSlug = ctvSlugFor(sfCtx);
-  const continueHref = !sfCtx.slug ? '/' : sfCtx.kind === 'CTV' ? `/s/${sfCtx.slug}` : `/brand/${sfCtx.slug}`;
+  // Web chỉ ghi ngữ cảnh ở /s/[slug] (mọi loại gian hàng), còn /brand/[slug] đọc thực thể khác: không dựng link /brand/ từ đây.
+  const continueHref = sfCtx.slug ? `/s/${encodeURIComponent(sfCtx.slug)}` : '/';
   // Điểm Xanh: Mini App cho tiêu, web thì không — cùng một giỏ mà mua trên web đắt hơn.
   const [usePoints, setUsePoints] = useState(false);
   // Quote đầu tiên (pointsToUse = 0) trả về số điểm DÙNG ĐƯỢC (redeemablePoints = số dư − điểm đơn còn
@@ -961,10 +962,10 @@ function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }
         ← Về giỏ hàng
       </BackLink>
       {bare ? (
-        // Bọc để thanh tiêu đề không còn là con trực tiếp của main: không còn data-page-bleed nào ở điện thoại nên đệm 48px cho nút lùi nổi vẫn giữ.
-        <div className="max-md:hidden">
-          <PageHeader title="Thanh toán" className="md:mt-1" />
-        </div>
+        // Không dùng PageHeader: data-page-bleed dù ẩn bằng CSS vẫn khớp `body.with-back-btn:has([data-page-bleed])` và làm mất đệm 48px của nút lùi nổi.
+        <header className="flex items-center gap-2 max-md:hidden md:mt-1">
+          <h1 className={ui.pageTitle}>Thanh toán</h1>
+        </header>
       ) : (
         <PageHeader title="Thanh toán" className="md:mt-1" />
       )}

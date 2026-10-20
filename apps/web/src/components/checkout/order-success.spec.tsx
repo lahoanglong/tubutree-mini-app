@@ -18,7 +18,9 @@ vi.mock('@/app/san-pham/[slug]/subscribe-sheet', () => ({
     p.visible ? <div data-testid="sub-sheet" data-variation={p.variationId} data-qty={p.quantity} /> : null,
 }));
 vi.mock('next/link', () => ({
-  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a>,
+  default: ({ href, children, replace, ...rest }: { href: string; children: React.ReactNode; replace?: boolean }) => (
+    <a href={href} data-replace={replace ? 'true' : undefined} {...rest}>{children}</a>
+  ),
 }));
 const copyText = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/copy-text', () => ({ copyText }));
@@ -176,6 +178,22 @@ describe('OrderSuccess từ md giữ màn máy tính, thêm các dòng thông ti
     );
     expect(d.textContent).toContain('Hàng do 2 nơi giao nên được tách thành 2 đơn');
     expect(d.textContent).toContain('Mỗi đơn có mã, phí giao và lộ trình riêng.');
+  });
+
+  it('Theo dõi đơn, đơn tách và Tiếp tục mua sắm đều thay trang hiện tại, Back không về lại màn đặt hàng', () => {
+    const r = render(
+      <OrderSuccess
+        order={order({ splitOrders: [{ code: 'TB-1', total: 1, fulfillerName: 'Tubu' }, { code: 'TB-2', total: 2, fulfillerName: 'A' }] } as unknown as Partial<OrderDTO>)}
+        etaLabel={null}
+        continueHref="/"
+      />,
+    );
+    mounted.push(r);
+    const d = r.container.querySelector<HTMLElement>('[data-testid="order-success-desktop"]')!;
+    expect(byText(d, 'a', 'Theo dõi đơn')?.getAttribute('data-replace')).toBe('true');
+    expect(byText(d, 'a', 'Tiếp tục mua sắm')?.getAttribute('data-replace')).toBe('true');
+    expect(d.querySelector('a[href$="TB-1"]')?.getAttribute('data-replace')).toBe('true');
+    expect(d.querySelector('a[href$="TB-2"]')?.getAttribute('data-replace')).toBe('true');
   });
 
   it('Tiếp tục mua sắm theo gian hàng', () => {

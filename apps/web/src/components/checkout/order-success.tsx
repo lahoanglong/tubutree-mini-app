@@ -332,7 +332,7 @@ function DesktopSuccess({ order, etaLabel, split, grandTotal, pointsEarned, cont
             {split.map((o) => (
               <li key={o.code} className={`flex flex-wrap items-center justify-between gap-2 p-3 text-sm ${ui.card}`}>
                 <span>
-                  <Link href={orderDetailHref(o.code)} className="font-semibold text-forest-700 underline">
+                  <Link href={orderDetailHref(o.code)} replace className="font-semibold text-forest-700 underline">
                     {o.code}
                   </Link>{' '}
                   · {o.fulfillerName} giao
@@ -360,7 +360,7 @@ function DesktopSuccess({ order, etaLabel, split, grandTotal, pointsEarned, cont
         {etaLabel && <p>{t.etaLabel}: <span className="font-semibold text-stone-900">{etaLabel}</span></p>}
       </div>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <Link href={orderDetailHref(order.code)} className={ui.btnPrimary}>
+        <Link href={orderDetailHref(order.code)} replace className={ui.btnPrimary}>
           {t.trackOrder}
         </Link>
         <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
