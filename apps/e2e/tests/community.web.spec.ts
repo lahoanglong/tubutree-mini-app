@@ -121,7 +121,7 @@ test.describe('Web khách: cộng đồng', () => {
     ]);
     await page.goto('/cong-dong/xep-hang');
     await expect(page.getByRole('heading', { name: 'Bảng xếp hạng', level: 1 })).toBeVisible();
-    await expect(page.getByText('🥇')).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Huy chương vàng' })).toBeVisible();
     await expect(page.getByText('#4')).toBeVisible();
     await expect(page.getByText('980 điểm uy tín')).toBeVisible();
   });
