@@ -1098,6 +1098,59 @@ describe('CartService.addItems (D9-05: mua lại cả đơn một lượt)', () 
     expect((analyticsSpy.recordMany as jest.Mock).mock.calls[0][1].map((e: { props: { variationId: string } }) => e.props.variationId)).toEqual(['v3', 'v1', 'v2', 'v1']);
   });
 
+  describe('topUp: bù thêm số lượng cho dòng đã đạt, cùng transaction và cùng một sự kiện add_to_cart', () => {
+    it('dòng đạt được cộng thêm: một transaction, upsert theo tổng, MỘT sự kiện với số lượng gộp, outcome ghi toppedUp', async () => {
+      const { svc, txUpsert, transaction, analyticsSpy, tx } = setup([sellable('v1', 3)]);
+      const seen: unknown[] = [];
+      const out = await svc.addItems('u1', [{ variationId: 'v1', quantity: 1, addSource: 'repurchase' }], {
+        topUp: (outcomes) => {
+          seen.push(...outcomes);
+          return [{ index: 0, quantity: 2 }];
+        },
+      });
+      expect(seen).toEqual([{ ok: true }]);
+      expect(out).toEqual([{ ok: true, toppedUp: 2 }]);
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(txUpsert).toHaveBeenCalledTimes(1);
+      expect(txUpsert).toHaveBeenCalledWith({
+        where: { cartId_variationId: { cartId: 'c1', variationId: 'v1' } },
+        update: { quantity: { increment: 3 } },
+        create: { cartId: 'c1', variationId: 'v1', quantity: 3 },
+      });
+      expect(analyticsSpy.recordMany).toHaveBeenCalledWith(tx, [
+        { eventName: 'add_to_cart', userId: 'u1', platform: 'miniapp', props: { variationId: 'v1', quantity: 3, addSource: 'repurchase' } },
+      ]);
+    });
+
+    it('phần bù vượt tồn thì bỏ phần bù, giữ dòng gốc; dòng gốc đã bị từ chối thì không bù', async () => {
+      const over = setup([sellable('v1', 3)]);
+      const out = await over.svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }], { topUp: () => [{ index: 0, quantity: 3 }] });
+      expect(out).toEqual([{ ok: true }]);
+      expect(over.txUpsert).toHaveBeenCalledWith(expect.objectContaining({ create: { cartId: 'c1', variationId: 'v1', quantity: 1 } }));
+
+      const rejected = setup([sellable('v1', 1)], [{ variationId: 'v1', quantity: 1 }]);
+      const out2 = await rejected.svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }], { topUp: () => [{ index: 0, quantity: 1 }] });
+      expect(out2).toEqual([{ ok: false, error: 'STOCK' }]);
+      expect(rejected.transaction).not.toHaveBeenCalled();
+    });
+
+    it('phần bù tính cả các dòng cùng variation đã nhận: tổng không vượt tồn', async () => {
+      const { svc, txUpsert } = setup([sellable('v1', 4)]);
+      const out = await svc.addItems('u1', [{ variationId: 'v1', quantity: 2 }, { variationId: 'v1', quantity: 1 }], {
+        topUp: () => [{ index: 1, quantity: 5 }, { index: 0, quantity: 1 }],
+      });
+      expect(out).toEqual([{ ok: true, toppedUp: 1 }, { ok: true }]);
+      expect(txUpsert.mock.calls.map((c) => c[0].create.quantity)).toEqual([3, 1]);
+    });
+
+    it('lỗi hạ tầng trong transaction ném ra: không có lần ghi nào lọt riêng', async () => {
+      const { svc, transaction } = setup([sellable('v1', 5)]);
+      transaction.mockRejectedValue(new Error('connection reset'));
+      await expect(svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }], { topUp: () => [{ index: 0, quantity: 1 }] })).rejects.toThrow('connection reset');
+      expect(transaction).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('không dòng nào đạt → không mở transaction; danh sách rỗng → không chạm DB', async () => {
     const a = setup([sellable('v1', 0)]);
     expect(await a.svc.addItems('u1', [{ variationId: 'v1', quantity: 1 }])).toEqual([{ ok: false, error: 'STOCK' }]);

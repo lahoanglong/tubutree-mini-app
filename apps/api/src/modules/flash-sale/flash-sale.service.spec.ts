@@ -375,13 +375,19 @@ describe('FlashSaleService.createSale (ADMINOPS-16)', () => {
 });
 
 describe('FlashSaleService.updateSale', () => {
-  const mkPrisma = (current: Record<string, unknown>, clash: unknown = null) => ({
-    flashSale: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue(current),
-      update: jest.fn().mockResolvedValue({ id: 's1' }),
-    },
-    flashSaleItem: { findFirst: jest.fn().mockResolvedValue(clash) },
-  });
+  const mkPrisma = (current: Record<string, unknown>, clash: unknown = null) => {
+    const prisma = {
+      flashSale: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue(current),
+        update: jest.fn().mockResolvedValue({ id: 's1' }),
+      },
+      flashSaleItem: { findFirst: jest.fn().mockResolvedValue(clash) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $transaction: jest.fn(),
+    };
+    prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+    return prisma;
+  };
 
   it('startAt sau endAt (cả 2 đều truyền) → reject, KHÔNG update', async () => {
     const prisma = mkPrisma({ id: 's1', startAt: new Date('2026-07-01'), endAt: new Date('2026-07-02') }) as any;
@@ -565,13 +571,19 @@ describe('FlashSaleService.deleteSale (R2-ENGAGE-13: xoá đợt chưa bắt đ�
 });
 
 describe('FlashSaleService.addItem (validate)', () => {
-  const base = () => ({
-    flashSale: {
-      findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: new Date('2026-07-05T09:00:00Z'), endAt: new Date('2026-07-05T12:00:00Z') }),
-    },
-    variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, salePrice: null, stock: 10 }) },
-    flashSaleItem: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'fi1' }) },
-  });
+  const base = () => {
+    const prisma = {
+      flashSale: {
+        findUnique: jest.fn().mockResolvedValue({ id: 's1', startAt: new Date('2026-07-05T09:00:00Z'), endAt: new Date('2026-07-05T12:00:00Z') }),
+      },
+      variation: { findUnique: jest.fn().mockResolvedValue({ id: 'v1', retailPrice: 100000, salePrice: null, stock: 10 }) },
+      flashSaleItem: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'fi1' }) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $transaction: jest.fn(),
+    };
+    prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(prisma));
+    return prisma;
+  };
   it('đợt flash không tồn tại → reject', async () => {
     const prisma = base() as any;
     prisma.flashSale.findUnique.mockResolvedValue(null);

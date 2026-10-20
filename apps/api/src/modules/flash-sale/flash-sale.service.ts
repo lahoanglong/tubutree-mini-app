@@ -348,21 +348,29 @@ export class FlashSaleService {
     if (current.startAt.getTime() <= Date.now() && start.getTime() !== current.startAt.getTime()) {
       throw new BadRequestException(FLASH_START_LOCKED_MSG);
     }
-    await this.assertNoItemClash(id, current.items?.map((it) => it.variationId) ?? [], start, end);
-    if (!(await this.isStaffCreator(current.createdBy))) return this.prisma.flashSale.update({ where: { id }, data });
-
-    // Dời giờ có thể làm hai đợt của cùng nhân viên chồng giờ, nên trần đơn (addItem chỉ kiểm lúc thêm dòng) phải kiểm lại ở đây,
-    // dưới cùng khoá với addItem và cùng giao dịch với lần ghi.
-    const maxAmount = (await loadStaffCouponCaps(this.config)).maxAmount;
-    const creator = current.createdBy!;
+    const staffCreated = await this.isStaffCreator(current.createdBy);
+    const maxAmount = staffCreated ? (await loadStaffCouponCaps(this.config)).maxAmount : 0;
+    // Tra trùng biến thể và ghi giờ mới cùng giao dịch, dưới khoá của addItem: không thì addItem chen một dòng vào giữa lúc tra và lúc ghi.
     return this.prisma.$transaction(async (tx) => {
-      await this.lockStaffOrderCap(tx, creator);
-      const total = await this.staffOrderExposure(tx, creator, start, end, id);
-      if (total > maxAmount) {
-        throw new BadRequestException(
-          `Một đơn mua đủ các sản phẩm flash của nhân viên này cùng khung giờ chỉ được giảm tối đa ${vnd(maxAmount)}: ` +
-            `sau khi dời giờ, các đợt chồng nhau giảm tới ${vnd(total)}. Cần mức cao hơn thì nhờ quản trị viên tạo đợt.`,
-        );
+      await this.lockItemClash(tx);
+      const fresh = await tx.flashSale.findUniqueOrThrow({ where: { id }, include: { items: { select: { variationId: true } } } });
+      await this.assertNoItemClash(tx, id, fresh.items?.map((it) => it.variationId) ?? [], start, end);
+      if (staffCreated) {
+        // Dời giờ có thể làm hai đợt của cùng nhân viên chồng giờ, nên trần đơn (addItem chỉ kiểm lúc thêm dòng) phải kiểm lại ở đây, dưới cùng
+        // khoá với addItem. Chỉ khung mới nằm gọn trong khung cũ (thu hẹp, đợt chưa kết thúc) mới được qua khi đã vượt trần, để đợt admin thêm
+        // dòng vượt trần vẫn gỡ được bằng cách thu hẹp. So với mức "trước" thì không được: mức đó cộng cả các đợt rời nhau trong khung dài
+        // nên bị thổi phồng, dời sang khung khác với tổng thấp hơn nó vẫn lách được trần.
+        const creator = fresh.createdBy!;
+        await this.lockStaffOrderCap(tx, creator);
+        const total = await this.staffOrderExposure(tx, creator, start, end, id);
+        const shrinks = start.getTime() >= fresh.startAt.getTime() && end.getTime() <= fresh.endAt.getTime() && fresh.endAt.getTime() > Date.now();
+        if (total > maxAmount && !shrinks) {
+          throw new BadRequestException(
+            `Một đơn mua đủ các sản phẩm flash của nhân viên này cùng khung giờ chỉ được giảm tối đa ${vnd(maxAmount)}: ` +
+              `sau khi dời giờ, các đợt chồng nhau giảm tới ${vnd(total)}.` +
+              (actor?.staff ? ' Cần mức cao hơn thì nhờ quản trị viên tạo đợt.' : ''),
+          );
+        }
       }
       return tx.flashSale.update({ where: { id }, data });
     });
@@ -384,11 +392,19 @@ export class FlashSaleService {
     return this.config.get<number>(FLASH_MAX_DURATION_KEY, FLASH_MAX_DURATION_DEFAULT_DAYS);
   }
 
+  /**
+   * Khoá chung cho mọi đường ghi có thể làm một biến thể nằm trong hai đợt trùng giờ (addItem, dời giờ): hai đường chạy song song
+   * mỗi bên chỉ thấy bản chưa có dòng của bên kia nên cùng lọt kiểm tra. Luôn lấy TRƯỚC khoá trần của nhân viên để không khoá chéo.
+   */
+  private async lockItemClash(tx: Prisma.TransactionClient): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'flash.item_clash'}))`;
+  }
+
   /** Không biến thể nào của đợt `saleId` nằm trong đợt khác trùng khung giờ [start, end). */
-  private async assertNoItemClash(saleId: string, variationIds: string[], start: Date, end: Date): Promise<void> {
+  private async assertNoItemClash(tx: Prisma.TransactionClient, saleId: string, variationIds: string[], start: Date, end: Date): Promise<void> {
     if (variationIds.length === 0) return;
     const from = new Date(Math.max(start.getTime(), Date.now()));
-    const clash = await this.prisma.flashSaleItem.findFirst({
+    const clash = await tx.flashSaleItem.findFirst({
       where: { variationId: { in: variationIds }, flashSale: { id: { not: saleId }, startAt: { lt: end }, endAt: { gt: from } } },
       select: { id: true },
     });
@@ -457,29 +473,36 @@ export class FlashSaleService {
       );
     }
     if (dto.quota > variation.stock) throw new BadRequestException('Quota vượt tồn kho.');
-    // Chỉ chặn đợt TRÙNG khung giờ (hai giá flash cùng lúc cho một SKU); đợt kế tiếp không trùng giờ thì xếp được.
-    const from = new Date(Math.max(sale.startAt.getTime(), Date.now()));
-    const clash = await this.prisma.flashSaleItem.findFirst({
-      where: { variationId: dto.variationId, flashSale: { startAt: { lt: sale.endAt }, endAt: { gt: from } } },
-    });
-    if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
     const perUserLimit = dto.perUserLimit ?? (await this.config.get<number>('flashsale.default_per_user_limit', 5));
     const data = { flashSaleId: saleId, variationId: dto.variationId, flashPrice: dto.flashPrice, quota: dto.quota, perUserLimit };
-    if (!actor?.staff) return this.prisma.flashSaleItem.create({ data });
 
     // Cùng ba trần với mã do nhân viên tạo (coupon.staff_*): % mỗi đơn vị, tiền mỗi khách, tổng tiền cả ngày.
-    const caps = await loadStaffCouponCaps(this.config);
+    const caps = actor?.staff ? await loadStaffCouponCaps(this.config) : null;
     const perUnit = standing - dto.flashPrice;
-    const deny = (msg: string) => new BadRequestException(`${msg} Cần mức cao hơn thì nhờ quản trị viên tạo đợt.`);
-    if (perUnit * 100 > caps.maxPercent * standing) throw deny(`Nhân viên đặt giá flash giảm tối đa ${caps.maxPercent}%.`);
-    if (perUnit * perUserLimit > caps.maxAmount) {
-      throw deny(`Mỗi khách được giảm tối đa ${vnd(caps.maxAmount)} (giảm mỗi sản phẩm ${vnd(perUnit)} × ${perUserLimit} suất mỗi khách).`);
+    if (caps) {
+      const deny = (msg: string) => new BadRequestException(`${msg} Cần mức cao hơn thì nhờ quản trị viên tạo đợt.`);
+      if (perUnit * 100 > caps.maxPercent * standing) throw deny(`Nhân viên đặt giá flash giảm tối đa ${caps.maxPercent}%.`);
+      if (perUnit * perUserLimit > caps.maxAmount) {
+        throw deny(`Mỗi khách được giảm tối đa ${vnd(caps.maxAmount)} (giảm mỗi sản phẩm ${vnd(perUnit)} × ${perUserLimit} suất mỗi khách).`);
+      }
     }
-    // Trừ vào ngân sách của người tạo đợt, không của người thêm: nhân viên được sửa đợt của nhau (assertStaffCreated) nên tính
-    // theo người thêm thì đổ item vào đợt của người khác là qua mặt trần ngày. assertStaffCreated đã bảo đảm createdBy là STAFF.
     return this.prisma.$transaction(async (tx) => {
-      await assertStaffDailyBudget(tx, sale.createdBy!, sale.createdAt, perUnit * dto.quota, caps);
-      await this.assertStaffOrderCap(tx, { ...sale, createdBy: sale.createdBy! }, perUnit * perUserLimit, caps.maxAmount);
+      await this.lockItemClash(tx);
+      // Chỉ chặn đợt TRÙNG khung giờ (hai giá flash cùng lúc cho một SKU); đợt kế tiếp không trùng giờ thì xếp được. Tra dưới khoá và đọc
+      // lại khung giờ của đợt: updateSale có thể vừa dời giờ giữa lúc đọc đợt ở trên và lúc giữ khoá.
+      const fresh = await tx.flashSale.findUnique({ where: { id: saleId }, select: { startAt: true, endAt: true } });
+      if (!fresh) throw new BadRequestException('Đợt flash không tồn tại.');
+      const from = new Date(Math.max(fresh.startAt.getTime(), Date.now()));
+      const clash = await tx.flashSaleItem.findFirst({
+        where: { variationId: dto.variationId, flashSale: { startAt: { lt: fresh.endAt }, endAt: { gt: from } } },
+      });
+      if (clash) throw new BadRequestException(FLASH_ITEM_CLASH_MSG);
+      if (caps) {
+        // Trừ vào ngân sách của người tạo đợt, không của người thêm: nhân viên được sửa đợt của nhau (assertStaffCreated) nên tính
+        // theo người thêm thì đổ item vào đợt của người khác là qua mặt trần ngày. assertStaffCreated đã bảo đảm createdBy là STAFF.
+        await assertStaffDailyBudget(tx, sale.createdBy!, sale.createdAt, perUnit * dto.quota, caps);
+        await this.assertStaffOrderCap(tx, { ...sale, createdBy: sale.createdBy! }, perUnit * perUserLimit, caps.maxAmount);
+      }
       return tx.flashSaleItem.create({ data });
     });
   }
@@ -514,7 +537,11 @@ export class FlashSaleService {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flash.staff_order_cap:${createdBy}`}))`;
   }
 
-  /** Tổng (giá gốc − giá flash) × suất mỗi khách của mọi dòng thuộc đợt của `createdBy` chồng khung [start, end), cộng cả đợt `alsoSaleId`. */
+  /**
+   * Tổng (giá gốc − giá flash) × suất mỗi khách của mọi dòng thuộc đợt của `createdBy` chồng khung [start, end), cộng cả đợt `alsoSaleId`.
+   * Khung đã hết giờ (end <= bây giờ) rỗng: không đếm đợt nào khác, không thì mức "trước" của một đợt đã kết thúc bị thổi phồng bởi các đợt
+   * đang chạy và kéo dài đợt đó sẽ lách được trần.
+   */
   private async staffOrderExposure(tx: Prisma.TransactionClient, createdBy: string, start: Date, end: Date, alsoSaleId?: string): Promise<number> {
     const from = new Date(Math.max(start.getTime(), Date.now()));
     const rows = await tx.$queryRaw<{ exposure: bigint | number | null }[]>`
@@ -522,7 +549,7 @@ export class FlashSaleService {
       FROM "flash_sale_items" fsi
       JOIN "flash_sales" fs ON fs."id" = fsi."flashSaleId"
       JOIN "variations" v ON v."id" = fsi."variationId"
-      WHERE fs."createdBy" = ${createdBy} AND ((fs."startAt" < ${end} AND fs."endAt" > ${from}) OR fs."id" = ${alsoSaleId ?? null})`;
+      WHERE fs."createdBy" = ${createdBy} AND ((fs."startAt" < ${end} AND fs."endAt" > ${from} AND ${from} < ${end}) OR fs."id" = ${alsoSaleId ?? null})`;
     return Number(rows[0]?.exposure ?? 0);
   }
 
