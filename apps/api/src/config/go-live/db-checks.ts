@@ -29,18 +29,31 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
 
 /**
  * Migration nặng đã biết trong danh sách chờ áp khi PROD còn ở bản cũ hơn (không chỉ các migration của đợt). `ordersLock`: viết
- * lại bảng orders hoặc dựng chỉ mục trên đó. Chưa đo riêng từng cái: ước theo migration r6.
+ * lại bảng orders hoặc dựng chỉ mục (không CONCURRENTLY) trên đó. Các cái còn lại giữ khoá trên users hoặc points_transactions
+ * (UPDATE cả bảng, ràng buộc, chỉ mục duy nhất một phần). Chưa đo riêng từng cái: ước theo migration r6. Spec quét thư mục
+ * migrations để danh sách này không thiếu cái mới.
  */
 export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean }> = [
+  { name: '20261010170000_orders_invoice_open_index', ordersLock: true },
+  { name: '20261012100000_pd3_points_lot_schema', ordersLock: false },
   { name: '20261012110000_pd3_xu_to_points', ordersLock: false },
   { name: '20261012130000_pd3_freeze_coins', ordersLock: false },
+  { name: '20261013172522_p2_pancake_inbound_attention', ordersLock: true },
+  { name: '20261013173621_p3_gomdon_order_note_cleanup', ordersLock: true },
   { name: '20261014003644_p1_pancake_outbound_sync_state', ordersLock: true },
   { name: '20261014003831_p8_seller_merchant_fulfilment', ordersLock: true },
+  { name: '20261014090000_p5_refunds_returns_queue', ordersLock: false },
   { name: '20261014150000_p4_admin_ops_search', ordersLock: true },
   { name: ORDERS_LOCK_MIGRATION, ordersLock: true },
   { name: '20261016210000_r11_delivered_effects_marker', ordersLock: true },
+  { name: '20261018000100_n1_indexes', ordersLock: false },
   { name: '20261018140000_lr_reports_source_indexes', ordersLock: true },
   { name: '20261018170100_lr_orders_filter_indexes', ordersLock: true },
+  { name: '20261018210000_points_1d', ordersLock: false },
+  { name: '20261019100000_external_orders', ordersLock: false },
+  { name: '20261019170000_chat_review1', ordersLock: false },
+  { name: '20261020000000_waste_exchange', ordersLock: false },
+  { name: '20261020100000_review_return_reversal', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

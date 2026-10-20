@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { parseCronBackup } from './go-live/backup-checks';
+import { HEAVY_MIGRATIONS } from './go-live/db-checks';
 
 const REPO = join(__dirname, '../../../..');
 
@@ -520,5 +521,66 @@ describe('.github/workflows/ops.yml và tools/db: cùng file compose với VPS t
     const sh = readFileSync(join(REPO, 'tools/db', name), 'utf8');
     expect(sh).toContain('COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.vietnix.yml}"');
     expect(sh).not.toMatch(/docker-compose\.prod\.yml/);
+  });
+});
+
+describe('.github/workflows/ops.yml: script con nhận cùng POSTGRES_USER/POSTGRES_DB với backup và cron (D10-08)', () => {
+  const ops = readFileSync(join(REPO, '.github/workflows/ops.yml'), 'utf8');
+
+  it('mọi lời gọi `bash tools/db|backup/...` truyền POSTGRES_USER và POSTGRES_DB (script con rơi về tubu/tubutree khi .env đặt khác)', () => {
+    const calls = ops.split('\n').filter((l) => /\bbash tools\/(?:db|backup)\/\S+/.test(l) && !l.trim().startsWith('#') && !/^\s*echo\b/.test(l));
+    expect(calls.length).toBeGreaterThan(0);
+    for (const l of calls) {
+      expect({ line: l.trim(), user: /POSTGRES_USER="\$PGUSER"/.test(l), db: /POSTGRES_DB="\$PGDB"/.test(l) }).toEqual({ line: l.trim(), user: true, db: true });
+    }
+  });
+});
+
+describe('docs/launch/deploy-rollback-runbook.md: bảng 1.0 và ví dụ cửa sổ khớp HEAVY_MIGRATIONS (D10-07)', () => {
+  const runbook = readFileSync(join(REPO, 'docs/launch/deploy-rollback-runbook.md'), 'utf8');
+  const section = (from: string) => {
+    const start = runbook.indexOf(from);
+    return runbook.slice(start, runbook.indexOf('\n### ', start + 1));
+  };
+  const ordersHeavy = HEAVY_MIGRATIONS.filter((h) => h.ordersLock).length;
+
+  it('bảng mục 1.0 nêu tên mọi migration trong HEAVY_MIGRATIONS (operator đối chiếu db.pending_scope với bảng này)', () => {
+    const table = section('### 1.0 ');
+    expect(table.length).toBeGreaterThan(1000);
+    expect(HEAVY_MIGRATIONS.map((h) => h.name).filter((n) => !table.includes(n))).toEqual([]);
+  });
+
+  it('mục 1.0 không còn nói các migration còn lại chỉ thêm cột hoặc bảng nhỏ', () => {
+    expect(section('### 1.0 ')).not.toContain('chủ yếu thêm cột hoặc bảng nhỏ');
+  });
+
+  it('mục 3.1 và ví dụ 3.2 dùng đúng số migration nặng trên orders mà go-live:check tính', () => {
+    expect(ordersHeavy).toBeGreaterThan(4);
+    expect(section('### 3.1 ')).toContain(`tối đa ${ordersHeavy}`);
+    const step = section('### 3.2 ');
+    expect(step).toContain(`${ordersHeavy} × 10 giây = ${ordersHeavy * 10} giây`);
+    expect(step).not.toContain('4 × 10 giây');
+  });
+});
+
+describe('tài liệu: câu chữ khớp mã (D10-03, D10-05)', () => {
+  it('docs/DEPLOY-GCP.md: không nêu tỉ lệ chưa đo và không bảo `+` làm hỏng URL', () => {
+    const line = readFileSync(join(REPO, 'docs/DEPLOY-GCP.md'), 'utf8')
+      .split('\n')
+      .find((l) => l.startsWith('Sinh secret nhanh'));
+    expect(line).toBeDefined();
+    expect(line).not.toMatch(/\d+ trên \d+/);
+    expect(line).not.toMatch(/`\/` hoặc `\+`, làm URL hỏng/);
+    expect(line).toContain('P1013');
+  });
+
+  it('pilot-order-playbook 1.5: dòng Bằng chứng nói trong giờ yên tĩnh log ZNS ở PENDING tới 08:00 là đúng, và chờ cache cấu hình 1 phút', () => {
+    const doc = readFileSync(join(REPO, 'docs/launch/pilot-order-playbook.md'), 'utf8');
+    const start = doc.indexOf('### 1.5 ');
+    const sec = doc.slice(start, doc.indexOf('\n### ', start + 1));
+    const evidence = sec.split('\n').find((l) => l.startsWith('- **Bằng chứng**')) ?? '';
+    expect(evidence).toContain('PENDING');
+    expect(evidence).toContain('08:00');
+    expect(sec).toMatch(/1 phút/);
   });
 });

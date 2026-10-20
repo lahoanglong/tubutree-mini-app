@@ -100,6 +100,11 @@ Ghi: số migration chờ áp ______ . Đối chiếu từng tên với bảng d
 | `20261014150000_p4_admin_ops_search` (p4) | Điền `users.fullNameSearch` cho mọi user, dựng 2 chỉ mục GIN và 1 chỉ mục biểu thức trên `users`/`orders` | Tỉ lệ số user và số đơn; tính vào cửa sổ |
 | `20261014003831_p8_seller_merchant_fulfilment` (p8) | Thêm cột, 3 chỉ mục, 2 khoá ngoại trên `orders`; đổi dữ liệu một chiều: hoa hồng PAID của lệnh rút REQUESTED hoặc APPROVED về APPROVED, `products.pancakeId` và `variations.pancakeId` cho phép NULL và đặt NULL cho mã `MCH_`, đơn cũ được gán gian hàng | Tính vào cửa sổ; sau khi chạy thì KHÔNG quay lại bằng image (7.0) |
 | `20261014213300_r6_admin_orders_recipient_search` (r6) | Khoá `orders` và viết lại mọi đơn có tên người nhận, dựng chỉ mục GIN: khoảng 14 giây cho mỗi 300.000 đơn | Đã đo ở UAT (mục 3.1) |
+| `20261010170000_orders_invoice_open_index`, `20261013172522_p2_pancake_inbound_attention`, `20261018170100_lr_orders_filter_indexes` | Dựng chỉ mục KHÔNG `CONCURRENTLY` trên `orders` (một chỉ mục từng phần theo hoá đơn; một chỉ mục `pancakeAttentionAt`; bốn chỉ mục `paymentStatus`, `type`, `platform`, `placedForCustomer` cùng `createdAt`): khoá chặn ghi `orders` suốt lúc dựng | Tính vào cửa sổ (mục 3); `go-live:check` đếm mỗi cái ngang r6 |
+| `20261016210000_r11_delivered_effects_marker`, `20261013173621_p3_gomdon_order_note_cleanup` | r11 thêm cột `deliveredEffectsAt`, viết lại MỌI đơn đã giao hoặc đã trả (`UPDATE orders`) rồi dựng chỉ mục từng phần; p3 gomdon duyệt cả bảng `orders` theo `LIKE` trên `note` rồi viết lại các đơn có dòng "Gomdon webhook" hoặc "Tự huỷ" | Thời gian tỉ lệ số đơn; tính vào cửa sổ |
+| `20261018140000_lr_reports_source_indexes` | Dựng `users_createdAt_idx` và `orders_userId_createdAt_idx` không `CONCURRENTLY`: khoá chặn ghi `users` và `orders` | Tính vào cửa sổ |
+| `20261012100000_pd3_points_lot_schema`, `20261014090000_p5_refunds_returns_queue`, `20261018000100_n1_indexes`, `20261019100000_external_orders`, `20261020000000_waste_exchange`, `20261020100000_review_return_reversal` | Thêm ràng buộc CHECK (duyệt hết `points_transactions`, `users`) và chỉ mục (duy nhất từng phần, hoặc `userId, refId`) trên `points_transactions`, không `CONCURRENTLY`: khoá chặn ghi sổ điểm. Mỗi cái chỉ thêm, không đổi dữ liệu | Thời gian tỉ lệ số dòng sổ điểm; không tính vào `db.orders_lock` nhưng tính vào cửa sổ. `waste_exchange` còn tương thích image cũ (mục 7.0) |
+| `20261019170000_chat_review1` | `UPDATE users SET phoneVerifiedAt = now()` cho mọi user có SĐT mà chưa xác minh | Thời gian tỉ lệ số user; tính vào cửa sổ |
 
 Ba truy vấn kiểm PD-3 (chỉ cần khi danh sách có `pd3_xu_to_points`; chỉ đọc):
 
@@ -111,7 +116,7 @@ psqlq -tAc "SELECT value FROM system_configs WHERE key = 'loyalty.vnd_per_point_
 
 Hai số đầu phải là `0`; dòng thứ ba phải không có dòng nào (mặc định 1000) hoặc `1000`. Khác đi: đối soát tay với Tech lead TRƯỚC ngày deploy (đây là điều kiện sửa được trước, không phải lý do dừng giữa lúc đang bảo trì).
 
-Các migration còn lại trong danh sách chủ yếu thêm cột hoặc bảng nhỏ. Khi danh sách có migration ngoài sáu cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
+Migration không có trong bảng trên chỉ thêm cột, bảng nhỏ hoặc dữ liệu tham chiếu (spec `db-checks.spec.ts` quét thư mục migrations để bảng khớp danh sách nặng của `go-live:check`). Khi danh sách có migration ngoài sáu cái của đợt, mục 7.0 bắt buộc: chỉ có thể quay lại bằng khôi phục bản backup (7.3).
 
 - [ ] Đã ghi bản PROD đang chạy (image khớp DB) và số migration chờ áp
 - [ ] Đã đối chiếu từng tên với bảng migration nặng; PD-3 (nếu có) đã kiểm 0, 0, 1000
@@ -412,7 +417,7 @@ psqlq -tAc 'SELECT count(*) FROM orders'
 
 Quy tắc ước tính (khớp với `go-live:check`) cho MỘT migration nặng trên `orders` (đo ở UAT với r6): dưới 50.000 đơn khoảng 2 giây; từ đó trở lên khoảng 14 giây cho mỗi 300.000 đơn (`số đơn × 14 / 300.000`, làm tròn lên). Chính migration viết lại mọi đơn có tên người nhận và dựng chỉ mục tìm kiếm, nên thời gian tỉ lệ với số đơn.
 
-Nhưng r6 chỉ là một trong các migration nặng. Nếu danh sách chờ áp (1.0) có thêm p1, p4, p8, mỗi cái cũng viết lại hoặc dựng chỉ mục trên `orders` (p4 còn điền cả bảng `users`), và PD-3 khoá `users`. Chưa có số đo riêng cho từng cái; `go-live:check --phase=pre-deploy` (dòng `db.orders_lock`) lấy số trên nhân với số migration nặng trên `orders` còn chờ áp (r6, p1, p4, p8: tối đa 4), coi mỗi cái ngang r6. Dùng số đó làm "ước tính khoá" ở 3.2, hoặc tốt hơn là đo thật ở 3.4.
+Nhưng r6 chỉ là một trong các migration nặng. Nếu danh sách chờ áp (1.0) có thêm p1, p4, p8 hay các migration orders khác ở bảng 1.0, mỗi cái cũng viết lại hoặc dựng chỉ mục trên `orders` (p4 còn điền cả bảng `users`), và PD-3 khoá `users`. Chưa có số đo riêng cho từng cái; `go-live:check --phase=pre-deploy` (dòng `db.orders_lock`) lấy số trên nhân với số migration nặng trên `orders` còn chờ áp (r6, p1, p4, p8, r11, p2, p3 gomdon, chỉ mục hoá đơn, `lr_reports_source_indexes`, `lr_orders_filter_indexes`: tối đa 10), coi mỗi cái ngang r6. Dùng số đó làm "ước tính khoá" ở 3.2, hoặc tốt hơn là đo thật ở 3.4.
 
 | Số đơn | Khoá `orders` ước tính (một migration nặng, như r6) |
 |---|---|
@@ -431,7 +436,7 @@ cửa sổ (phút) = 10 + thời gian backup đo ở mục 1.2 + 5 × (tổng th
 
 "Tổng thời gian migrate" là thời gian của TOÀN BỘ danh sách chờ áp (1.0), không chỉ r6: lấy số đo thật của diễn tập ở 3.4 nếu có; không thì lấy "ước tính khoá" ở 3.1 (đã nhân theo số migration nặng) và xin gấp đôi cửa sổ tính ra, vì phần PD-3, p4 trên `users` và p8 chưa được đo.
 
-10 phút là: dừng API 30 giây, bật lại và chờ khoẻ 3 phút, kiểm tra khói 5 đến 7 phút. Hệ số 5 là biên an toàn vì máy dùng chung với ChoDeli nên chậm hơn lúc đo. Ví dụ 200.000 đơn, backup 2 phút, PROD còn ở bản cũ (r6, p1, p4, p8 cùng chờ, ước tính 4 × 10 giây = 40 giây, tức 0,67 phút): 10 + 2 + 5 × 0,67 = 15,3, tròn lên 30 phút, rồi gấp đôi vì chưa đo: xin 60 phút. Ví dụ chỉ có các migration của đợt (chỉ r6 nặng), 200.000 đơn (một migration nặng, 10 giây, tức 0,17 phút): 10 + 2 + 5 × 0,17 = 12,8, nên xin 30 phút.
+10 phút là: dừng API 30 giây, bật lại và chờ khoẻ 3 phút, kiểm tra khói 5 đến 7 phút. Hệ số 5 là biên an toàn vì máy dùng chung với ChoDeli nên chậm hơn lúc đo. Ví dụ 200.000 đơn, backup 2 phút, PROD còn ở bản cũ (cả 10 migration nặng trên `orders` cùng chờ, ước tính 10 × 10 giây = 100 giây, tức 1,67 phút): 10 + 2 + 5 × 1,67 = 20,3, tròn lên 30 phút, rồi gấp đôi vì chưa đo: xin 60 phút. Ví dụ chỉ có các migration của đợt (chỉ r6 nặng), 200.000 đơn (một migration nặng, 10 giây, tức 0,17 phút): 10 + 2 + 5 × 0,17 = 12,8, nên xin 30 phút.
 
 ### 3.3 Chọn giờ vắng nhất
 

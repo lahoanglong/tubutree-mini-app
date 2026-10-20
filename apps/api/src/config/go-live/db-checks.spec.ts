@@ -1,5 +1,5 @@
 import { estimateOrdersLockSeconds, evaluateDb, HEAVY_MIGRATIONS, IMAGE_COMPATIBLE_MIGRATIONS, recommendedWindowSeconds, REQUIRED_MIGRATIONS } from './db-checks';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GOOD_DB, GOOD_ENV, byId, dbWith, envWith } from './go-live.fixtures';
 import type { DbSnapshot } from './db-checks';
@@ -165,6 +165,9 @@ describe('evaluateDb', () => {
       '20261016210000_r11_delivered_effects_marker',
       '20261018140000_lr_reports_source_indexes',
       '20261018170100_lr_orders_filter_indexes',
+      '20261010170000_orders_invoice_open_index',
+      '20261013172522_p2_pancake_inbound_attention',
+      '20261013173621_p3_gomdon_order_note_cleanup',
     ])('%s khoá bảng orders: db.pending_scope nêu tên nó ở danh sách nặng và db.orders_lock tính nó', (name) => {
       const s = behind(300_000, [name]);
       const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
@@ -173,6 +176,48 @@ describe('evaluateDb', () => {
       const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
       expect(lock.detail).toContain('~28 giây');
       expect(lock.detail).toContain(name);
+    });
+
+    it.each([
+      '20261012100000_pd3_points_lot_schema',
+      '20261014090000_p5_refunds_returns_queue',
+      '20261018000100_n1_indexes',
+      '20261018210000_points_1d',
+      '20261019100000_external_orders',
+      '20261019170000_chat_review1',
+      '20261020000000_waste_exchange',
+      '20261020100000_review_return_reversal',
+    ])('%s nặng trên users/points_transactions: db.pending_scope nêu tên, db.orders_lock không tính nó', (name) => {
+      // migration không nặng đi kèm để chắc chắn vào nhánh WARN (waste_exchange tự nó thuộc danh sách tương thích image nên một mình sẽ PASS)
+      const s = behind(300_000, [name, '20261013172011_p6_promo_abuse_coupon_active_code']);
+      const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(scope.detail).toMatch(new RegExp(`nặng: [^;]*${name}`));
+      const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      expect(lock.detail).toContain('~14 giây');
+      expect(lock.detail).not.toContain(name);
+    });
+
+    it('mọi migration tới 20261020110000 có câu lệnh nặng trên orders, order_items, users, points_transactions đều nằm trong HEAVY_MIGRATIONS', () => {
+      const dir = join(__dirname, '../../../prisma/migrations');
+      const inProd = '20261010080000_dealer_volume_bigint';
+      const lastChecked = '20261020110000_coupons_admin_list_index';
+      const tables = '(?:orders|order_items|users|points_transactions)';
+      const heavySql = [
+        new RegExp(`UPDATE "${tables}"`, 'i'),
+        new RegExp(`DELETE FROM "${tables}"`, 'i'),
+        new RegExp(`INSERT INTO "${tables}"[^;]*SELECT`, 'is'),
+        new RegExp(`CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?"[^"]+"\\s+ON "${tables}"`, 'i'),
+        new RegExp(`ALTER TABLE "${tables}"\\s+ADD CONSTRAINT`, 'i'),
+        new RegExp(`ALTER TABLE "${tables}"[^;]*ALTER COLUMN`, 'i'),
+      ];
+      const flagged = readdirSync(dir)
+        .filter((n) => /^\d/.test(n) && n > inProd && n <= lastChecked)
+        .filter((n) => {
+          const sql = readFileSync(join(dir, n, 'migration.sql'), 'utf8').replace(/--[^\n]*/g, '');
+          return sql.split(/;\s*\n/).some((st) => !/CONCURRENTLY/i.test(st) && heavySql.some((re) => re.test(st)));
+        });
+      const listed = new Set(HEAVY_MIGRATIONS.map((h) => h.name));
+      expect(flagged.filter((n) => !listed.has(n))).toEqual([]);
     });
 
     it('thêm migration không nặng: WARN, không nêu danh sách nặng thừa', () => {
