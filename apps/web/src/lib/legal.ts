@@ -204,7 +204,7 @@ ${window}
 ## 5. Hoàn tiền
 
 - Tubu Tree hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt yêu cầu.
-- Thời gian hoàn tiền: [số ngày làm việc] sau khi Tubu Tree nhận lại và kiểm tra sản phẩm.
+- Thời gian hoàn tiền: 7 ngày làm việc kể từ khi Tubu Tree nhận lại và kiểm tra sản phẩm.
 - Điểm thưởng hoặc mã giảm giá đã dùng cho đơn được xử lý theo điều kiện của từng chương trình.
 
 ## 6. Chi phí vận chuyển đổi trả

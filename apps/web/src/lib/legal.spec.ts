@@ -47,7 +47,9 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
   it('đổi trả: số ngày và ngưỡng freeship lấy từ biến truyền vào, không cứng trong chữ', () => {
     const doiTra = defaultLegalContent('doi-tra', { returnWindowDays: 10, freeshipThreshold: 300000 }, SUPPORT);
     expect(doiTra).toContain('10 ngày');
-    expect(doiTra).not.toContain('7 ngày');
+    // Thời gian hoàn tiền (7 ngày làm việc) là mốc cố định riêng, không phải số ngày đổi trả.
+    expect(doiTra).toContain('Thời gian hoàn tiền: 7 ngày làm việc kể từ khi');
+    expect(doiTra.replace('7 ngày làm việc', '')).not.toContain('7 ngày');
     const vanChuyen = defaultLegalContent('van-chuyen', { returnWindowDays: 10, freeshipThreshold: 300000 }, SUPPORT);
     expect(vanChuyen).toContain('300.000đ');
     expect(vanChuyen).not.toContain('200.000đ');
