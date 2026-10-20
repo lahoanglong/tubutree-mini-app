@@ -106,6 +106,7 @@ function prismaForAddress(opts: {
   const update = opts.update ?? jest.fn().mockImplementation(({ data }) => data);
   const txSpy = jest.fn();
   const base: Record<string, unknown> = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
     address: {
       count: jest.fn().mockResolvedValue(opts.count ?? 0),
       findUnique: jest.fn().mockResolvedValue(opts.findUnique ?? { id: 'a1', userId: 'u1' }),
@@ -138,6 +139,14 @@ describe('UsersService.createAddress', () => {
     await svc.createAddress('u1', { line1: 'B', ...GEO } as never);
     expect(updateMany).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ isDefault: false }) });
+  });
+
+  it('mở transaction bằng khoá theo khách (U6-2), trước khi đếm địa chỉ', async () => {
+    const { prisma } = prismaForAddress({ count: 0 });
+    await new UsersService(prisma).createAddress('u1', { line1: 'A', ...GEO } as never);
+    const tx = prisma as unknown as { $queryRaw: jest.Mock; address: { count: jest.Mock } };
+    expect(String((tx.$queryRaw.mock.calls[0] as [TemplateStringsArray])[0].join('?'))).toContain('FOR NO KEY UPDATE');
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.address.count.mock.invocationCallOrder[0]!);
   });
 
   it('chạy trong transaction Serializable (chống race 2 request cùng đọc count=0)', async () => {

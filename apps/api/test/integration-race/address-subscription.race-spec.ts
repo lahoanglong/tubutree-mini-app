@@ -179,6 +179,92 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
     }
   });
 
+  const createDto = { recipient: 'Khach IT', phone: '0900000000', province: 'Ha Noi', district: '', ward: 'Phuong IT', street: '1 Duong IT', provinceCode: '84_VN01', districtCode: '', wardCode: '00001' };
+  const codeOf = (e: unknown) => (e as { code?: string; meta?: { code?: string } }).meta?.code ?? (e as { code?: string }).code;
+
+  it('U6-1: thứ tự vật lý khác thứ tự id, xoá mặc định song song với đặt địa chỉ kia làm mặc định: không 40P01, đúng một mặc định', async () => {
+    for (let round = 0; round < 3; round++) {
+      const u = await createUser(prisma);
+      // b ghi trước a: quét bảng gặp b trước, còn id sắp a trước b.
+      const b = await prisma.address.create({ data: { ...createDto, id: `${u.id}-b`, userId: u.id, isDefault: false } });
+      const a = await prisma.address.create({ data: { ...createDto, id: `${u.id}-a`, userId: u.id, isDefault: true } });
+      let unlock!: () => void;
+      const held = new Promise<void>((r) => (unlock = r));
+      let locked!: () => void;
+      const isLocked = new Promise<void>((r) => (locked = r));
+      // Giữ khoá dòng a để ép hai bên xen kẽ thay vì trông vào lịch chạy.
+      const blocker = prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${a.id} FOR UPDATE`;
+          locked();
+          await held;
+        },
+        { timeout: 30_000 },
+      );
+      await isLocked;
+      const deleting = users.deleteAddress(u.id, a.id).then(() => 'ok', (e: unknown) => e);
+      await new Promise((r) => setTimeout(r, 300));
+      const updating = users.updateAddress(u.id, b.id, { isDefault: true } as never).then(() => 'ok', (e: unknown) => e);
+      await new Promise((r) => setTimeout(r, 300));
+      unlock();
+      await blocker;
+      const results = await Promise.all([deleting, updating]);
+      const ctx = `vòng ${round}: ${results.map((r) => (r === 'ok' ? 'ok' : String(codeOf(r)))).join('/')}`;
+      for (const r of results) if (r !== 'ok') expect({ ctx, code: codeOf(r) }).toEqual({ ctx, code: 'P2034' });
+      const rows = await prisma.address.findMany({ where: { userId: u.id } });
+      expect({ ctx, defaults: rows.filter((x) => x.isDefault).length }).toEqual({ ctx, defaults: 1 });
+    }
+  });
+
+  it('U6-2: tạo địa chỉ không mặc định song song với xoá địa chỉ mặc định duy nhất: luôn đúng một mặc định', async () => {
+    for (let round = 0; round < 10; round++) {
+      const u = await createUser(prisma);
+      const a = await prisma.address.create({ data: { ...createDto, id: `${u.id}-a`, userId: u.id, isDefault: true } });
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      let counted!: () => void;
+      const afterCount = new Promise<void>((r) => (counted = r));
+      // create đọc count=1 (còn a) rồi dừng; xoá a chạy chen vào, rồi create mới được ghi.
+      const gated = new Proxy(prisma, {
+        get(t, p) {
+          if (p !== '$transaction') return (t as never)[p];
+          return (cb: (tx: unknown) => unknown, opts: never) =>
+            prisma.$transaction(async (tx) => {
+              const ptx = new Proxy(tx, {
+                get(tt, pp) {
+                  if (pp !== 'address') return (tt as never)[pp];
+                  return new Proxy(tt.address, {
+                    get(aa, k) {
+                      if (k !== 'count') return (aa as never)[k];
+                      return async (args: never) => {
+                        const n = await aa.count(args);
+                        counted();
+                        await gate;
+                        return n;
+                      };
+                    },
+                  });
+                },
+              });
+              return cb(ptx);
+            }, opts);
+        },
+      });
+      const creator = new UsersService(gated as never);
+      const creating = creator.createAddress(u.id, { ...createDto } as never).then(() => 'ok', (e: unknown) => e);
+      await afterCount;
+      const deleting = users.deleteAddress(u.id, a.id).then(() => 'ok', (e: unknown) => e);
+      await new Promise((r) => setTimeout(r, 300));
+      release();
+      const results = await Promise.all([creating, deleting]);
+      const ctx = `vòng ${round}: ${results.map((r) => (r === 'ok' ? 'ok' : String(codeOf(r)))).join('/')}`;
+      for (const r of results) if (r !== 'ok') expect({ ctx, code: codeOf(r) }).toEqual({ ctx, code: 'P2034' });
+      const rows = await prisma.address.findMany({ where: { userId: u.id } });
+      // Bên thua có thể thất bại (409) nên sổ còn 1 hoặc 2 địa chỉ, nhưng không bao giờ 0 mặc định khi còn địa chỉ.
+      expect({ ctx, defaults: rows.filter((x) => x.isDefault).length, total: rows.length > 0 }).toEqual({ ctx, defaults: 1, total: true });
+    }
+  });
+
   it('xoá địa chỉ song song với tạo gói (20 vòng): không gói nào bị mất hay mồ côi', async () => {
     for (let round = 0; round < 20; round++) {
       const u = await createUser(prisma);

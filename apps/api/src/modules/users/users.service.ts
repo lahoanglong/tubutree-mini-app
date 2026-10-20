@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notifyAdmins } from '../../common/notify-admins';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -18,6 +19,15 @@ function addressInUseError(productNames: string[]): BadRequestException {
     code: ADDRESS_IN_USE_BY_SUBSCRIPTION,
     message: `Địa chỉ đang dùng cho gói giao định kỳ${which}, hãy đổi địa chỉ của gói trước.`,
   });
+}
+
+/**
+ * Mở đầu mọi giao dịch ghi sổ địa chỉ (tạo, sửa, xoá): các giao dịch của cùng một khách xếp hàng theo một khoá
+ * duy nhất nên không đan xen việc chọn mặc định (không để lại 0 hoặc 2 mặc định) và không có hai thứ tự khoá dòng
+ * khác nhau gây deadlock. NO KEY để không chặn kiểm FK từ bảng khác trỏ vào users.
+ */
+async function lockAddressBook(tx: Prisma.TransactionClient, userId: string) {
+  await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
 }
 
 @Injectable()
@@ -95,6 +105,7 @@ export class UsersService {
     await assertDeliverableAddress(this.geo, dto);
     return this.prisma.$transaction(
       async (tx) => {
+        await lockAddressBook(tx, userId);
         const count = await tx.address.count({ where: { userId } });
         const makeDefault = dto.isDefault ?? count === 0;
         if (makeDefault) {
@@ -121,6 +132,7 @@ export class UsersService {
     }
     return this.prisma.$transaction(
       async (tx) => {
+        await lockAddressBook(tx, userId);
         if (dto.isDefault) {
           await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
         }
@@ -140,11 +152,11 @@ export class UsersService {
     await this.assertOwner(userId, id);
     try {
       await this.prisma.$transaction(async (tx) => {
+        await lockAddressBook(tx, userId);
         // Khoá dòng địa chỉ: tạo gói song song (INSERT có FK cần FOR KEY SHARE) phải chờ tới khi xoá xong
-        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá. Khoá cả sổ địa chỉ của khách (theo id)
-        // để việc chọn mặc định mới chờ updateAddress/createAddress đang đổi mặc định, không để lại 0 hoặc 2 mặc định.
-        // Không dùng Serializable ở đây: snapshot lấy trước khi chờ khoá sẽ không thấy gói vừa tạo song song.
-        await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "userId" = ${userId} ORDER BY "id" FOR UPDATE`;
+        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá. Không dùng Serializable ở đây:
+        // snapshot lấy trước khi chờ khoá sẽ không thấy gói vừa tạo song song.
+        await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${id} FOR UPDATE`;
         const inUse = await tx.subscription.findMany({
           where: { addressId: id, status: { in: ['ACTIVE', 'PAUSED'] } },
           select: { variation: { select: { product: { select: { name: true } } } } },
