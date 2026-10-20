@@ -202,7 +202,11 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     expect(r.paid).toBe(0);
     expect(prisma.dealerCreditLedger.create).not.toHaveBeenCalled();
     const where = (prisma.dealerCreditLedger.findFirst as jest.Mock).mock.calls[0][0].where;
-    expect(where).toMatchObject({ userId: 'd1', refType: 'QUARTER_BONUS', refId: 'Q1/2026' });
+    expect(where).toMatchObject({ userId: 'd1' });
+    expect(where.OR).toEqual([
+      { refType: 'QUARTER_BONUS', refId: 'Q1/2026' },
+      { refType: 'QUARTER_BONUS_TOPUP', refId: { startsWith: 'Q1/2026:topup:' } },
+    ]);
   });
 
   // Việc 4 (audit round 2): findFirst rồi create không transaction — 2 lượt chạy cron/manual

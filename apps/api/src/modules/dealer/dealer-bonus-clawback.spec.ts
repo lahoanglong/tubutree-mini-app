@@ -67,6 +67,8 @@ function makeTx(opts: {
   creditOrderIds?: string[];
   reversed?: { paidAt?: Date | null; packedAt?: Date };
   payoutAt?: Date;
+  /** Dòng QUARTER_BONUS_TOPUP (trả bù) đã ghi sau lần trả thưởng đầu; createdAt = mốc doanh số của lần trả bù. */
+  topups?: { delta: number; createdAt: Date }[];
 }) {
   const adjRows = opts.adjRows ?? [];
   const credit = new Set(opts.creditOrderIds ?? []);
@@ -78,7 +80,10 @@ function makeTx(opts: {
   const tx = {
     $executeRaw: jest.fn(async () => 1),
     $queryRaw: jest.fn(async () =>
-      opts.bonusDelta === null ? [] : [{ id: 'qb1', delta: opts.bonusDelta, createdAt: opts.payoutAt ?? PAYOUT_AT }],
+      [
+        ...(opts.bonusDelta === null ? [] : [{ id: 'qb1', delta: opts.bonusDelta, createdAt: opts.payoutAt ?? PAYOUT_AT }]),
+        ...(opts.topups ?? []).map((t, i) => ({ id: `tu${i}`, ...t })),
+      ],
     ),
     orderStatusHistory: {
       findMany: jest.fn(async ({ where }: { where: { orderId: { in: string[] } } }) =>
@@ -235,7 +240,7 @@ describe('DealerService.clawbackQuarterBonusForOrder (thu hồi theo phần biê
     expect(lock.slice(1)).toEqual(['d1:Q1/2026']);
     const sel = tx.$queryRaw.mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
     expect(sel[0].join('?')).toMatch(/FOR UPDATE/);
-    expect(sel.slice(1)).toEqual(['d1', 'Q1/2026']);
+    expect(sel.slice(1)).toEqual(['d1', 'Q1/2026', 'Q1/2026:topup:%']);
     expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.$queryRaw.mock.invocationCallOrder[0]!);
   });
 
@@ -329,6 +334,46 @@ describe('Thu hồi theo doanh số ĐÃ TÍNH lúc trả thưởng (đơn chố
     });
     const r = await service().clawbackQuarterBonusForOrder(tx as never, ORDER);
     expect(r.clawedBack).toBe(1_800_000);
+  });
+});
+
+describe('Thu hồi thưởng khi quý đã được trả bù (QUARTER_BONUS_TOPUP) — Q8', () => {
+  const TOPUP_AT = new Date('2026-04-20T02:00:00Z');
+  const A = { id: 'a1', total: 120_000_000, status: 'DELIVERED', paymentStatus: 'PAID' };
+
+  it('đơn chốt muộn đã được lần trả bù tính (chốt trước mốc trả bù) → thu hồi phần biên của nó, thưởng còn giữ gồm cả khoản bù', async () => {
+    // Trả đầu 120tr × 3% = 3,6tr; đơn D 90tr chốt 18/4 → trả bù 4,8tr lúc 20/4 (210tr × 4% = 8,4tr). Trả D: 8,4 − 3,6 = 4,8tr.
+    const { tx } = makeTx({
+      bonusDelta: -3_600_000,
+      others: [A],
+      topups: [{ delta: -4_800_000, createdAt: TOPUP_AT }],
+      reversed: { packedAt: new Date('2026-04-18T02:00:00Z') },
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, { ...ORDER, total: 90_000_000 });
+    expect(r).toEqual({ quarter: 'Q1/2026', clawedBack: 4_800_000 });
+  });
+
+  it('đơn chốt SAU lần trả bù cuối chưa từng góp vào khoản nào đã trả → không thu hồi', async () => {
+    const { tx } = makeTx({
+      bonusDelta: -3_600_000,
+      others: [A],
+      topups: [{ delta: -4_800_000, createdAt: TOPUP_AT }],
+      reversed: { packedAt: new Date('2026-04-25T02:00:00Z') },
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, { ...ORDER, total: 90_000_000 });
+    expect(r.clawedBack).toBe(0);
+  });
+
+  it('lần trả đầu chưa có thưởng (dưới bậc), chỉ có khoản trả bù → vẫn thu hồi theo doanh số lúc trả bù', async () => {
+    // A 30tr + D 30tr = 60tr → 2% = 1,2tr trả bù. Trả D: bonus(60tr) − bonus(30tr) = 1,2tr.
+    const { tx } = makeTx({
+      bonusDelta: null,
+      others: [{ id: 'a1', total: 30_000_000, status: 'DELIVERED', paymentStatus: 'PAID' }],
+      topups: [{ delta: -1_200_000, createdAt: TOPUP_AT }],
+      reversed: { packedAt: new Date('2026-04-18T02:00:00Z') },
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, ORDER);
+    expect(r).toEqual({ quarter: 'Q1/2026', clawedBack: 1_200_000 });
   });
 });
 

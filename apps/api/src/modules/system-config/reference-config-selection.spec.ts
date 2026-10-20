@@ -65,6 +65,7 @@ const APPROVED_LOADED_KEYS = [
     'coupon.staff_max_percent',
     'coupon.staff_max_usage',
     'dealer.block_credit_when_overdue',
+    'dealer.bonus_topup_window_days',
     'dealer.free_ship_threshold_vnd',
     'dealer.max_discount_pct',
     'dealer.min_order_value_vnd',

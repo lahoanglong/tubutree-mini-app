@@ -22,3 +22,7 @@ export const RETAIL_FLAT_SHIPPING_FEE_DEFAULT = 19_000;
 
 /** Bật thì đại lý còn nợ đơn quá hạn theo điều kiện thanh toán của bậc (NET n) không đặt được đơn ghi công nợ; trả trước vẫn đặt được. */
 export const DEALER_BLOCK_CREDIT_WHEN_OVERDUE_KEY = 'dealer.block_credit_when_overdue';
+
+/** Số ngày sau ngày cuối quý còn trả bù thưởng quý cho đơn chốt muộn hơn ngày chốt 10 (SystemConfig `dealer.bonus_topup_window_days`); 0 = tắt trả bù. Chủ chốt 60 ngày. */
+export const DEALER_BONUS_TOPUP_WINDOW_DAYS_KEY = 'dealer.bonus_topup_window_days';
+export const DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT = 60;

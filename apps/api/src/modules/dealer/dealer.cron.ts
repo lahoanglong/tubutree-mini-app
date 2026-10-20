@@ -21,4 +21,15 @@ export class DealerCron {
       this.logger.error(`Cron trả thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
     }
   }
+
+  // 05:00 hằng ngày, sau giờ trả thưởng 04:00 ngày 10: đơn của quý chốt muộn hơn ngày 10 được trả bù trong cửa sổ cấu hình.
+  @Cron('0 0 5 * * *', { timeZone: CRON_TZ })
+  async topUpQuarterly() {
+    try {
+      const { toppedUp, quarters } = await this.dealer.topUpQuarterlyBonuses();
+      if (toppedUp > 0) this.logger.log(`Cron trả bù thưởng quý ${quarters.join(', ')}: đã bù ${toppedUp} khoản.`);
+    } catch (err) {
+      this.logger.error(`Cron trả bù thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
+    }
+  }
 }
