@@ -279,7 +279,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
                           <div className={`text-sm ${it.isHidden || it.hiddenReason ? 'text-stone-500' : 'text-stone-900'}`}>{name}</div>
                           <div className="text-sm font-semibold tabular-nums text-stone-900">{formatVnd(price)}</div>
                           {it.hiddenReason && (
-                            <Badge tone="warning" size="sm" className="mt-0.5">
+                            <Badge tone="warning" size="sm" className="mt-0.5 max-w-full !whitespace-normal">
                               Khách không thấy: {it.hiddenReason}
                             </Badge>
                           )}

@@ -29,6 +29,19 @@ function unlabelled(file: string): string[] {
   const src = fs.readFileSync(path.join(here, file), 'utf8');
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const bad: string[] = [];
+  const attrText = (a: ts.JsxAttribute) => {
+    const init = a.initializer;
+    if (!init) return '';
+    return ts.isJsxExpression(init) && init.expression ? init.expression.getText(sf) : init.getText(sf).replace(/^"|"$/g, '');
+  };
+  const forTargets = new Set<string>();
+  const collect = (node: ts.Node) => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      for (const a of node.attributes.properties.filter(ts.isJsxAttribute)) if (a.name.getText(sf) === 'htmlFor') forTargets.add(attrText(a));
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sf);
   const visit = (node: ts.Node, inside: boolean) => {
     let within = inside;
     if (ts.isJsxElement(node) && WRAPPERS.has(node.openingElement.tagName.getText(sf))) within = true;
@@ -37,7 +50,8 @@ function unlabelled(file: string): string[] {
       const names = opening.attributes.properties.filter(ts.isJsxAttribute).map((a) => a.name.getText(sf));
       const typeAttr = opening.attributes.properties.filter(ts.isJsxAttribute).find((a) => a.name.getText(sf) === 'type');
       const hidden = names.includes('hidden') || typeAttr?.initializer?.getText(sf) === '"hidden"';
-      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby' || n === 'id');
+      const idAttr = opening.attributes.properties.filter(ts.isJsxAttribute).find((a) => a.name.getText(sf) === 'id');
+      const named = names.some((n) => n === 'aria-label' || n === 'aria-labelledby') || (!!idAttr && forTargets.has(attrText(idAttr)));
       if (!named && !within && !hidden) bad.push(`${file}:${sf.getLineAndCharacterOfPosition(opening.getStart(sf)).line + 1}`);
     }
     ts.forEachChild(node, (c) => visit(c, within));
