@@ -417,6 +417,9 @@ export class OrderStatusService {
     // Lỗi đảo điểm/hoa hồng không được chặn xếp lệnh huỷ Pancake, báo merchant, báo khách ở dưới (đơn đã CANCELLED, lần gọi lại
     // không còn đi đường này): ghi nhận rồi ném SAU CÙNG để người gọi biết mà thử lại (nhánh idempotent ở đầu hàm).
     let closedEffectsFailure: unknown = null;
+    // Hai bước sau commit mà lỗi bị nuốt (không được làm hỏng lần huỷ đã commit) nhưng cũng không được coi là xong: ghi mốc thì cron
+    // không còn thấy đơn, khoản hoàn số tiền chuyển thiếu hay lệnh huỷ Pancake mất luôn.
+    let swallowedFailure = false;
     if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
       const done = await this.reverseClosedOrderEffects(order);
       standardPointsBack = done.standardPointsBack;
@@ -432,11 +435,12 @@ export class OrderStatusService {
         order.id,
         { notifyCustomer: !noteCarriesRefund },
       ).catch((err: unknown) => {
+        swallowedFailure = true;
         this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
         return 0;
       });
       await this.enqueueGomdonCancel(order);
-      if (opts.actorType !== 'PANCAKE') await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision);
+      if (opts.actorType !== 'PANCAKE' && (await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision)) === false) swallowedFailure = true;
       if (opts.actorType !== 'MERCHANT') {
         await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
           order_code: order.code,
@@ -466,7 +470,11 @@ export class OrderStatusService {
 
     if (closedEffectsFailure !== null) throw closedEffectsFailure;
     // Mọi việc sau commit đã chạy: cron chạy lại (ReversalEffectsResyncCron) chỉ còn thấy đơn mà tiến trình chết trước dòng này.
-    if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') await markReversalEffectsDone(this.prisma, order.id, this.logger);
+    if (swallowedFailure) {
+      this.logger.warn(`Đơn ${order.code}: hoàn số tiền chuyển thiếu hoặc xếp lệnh huỷ Pancake chưa xong, chưa ghi mốc để cron chạy lại.`);
+    } else if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
+      await markReversalEffectsDone(this.prisma, order.id, this.logger);
+    }
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
   }
 
@@ -556,7 +564,9 @@ export class OrderStatusService {
       });
       await this.enqueueGomdonCancel(order);
       // Pancake tự báo huỷ thì đơn Pancake đã huỷ; đã có kết quả huỷ (kể cả đang chờ thử lại) thì cron huỷ Pancake lo.
-      if (actor !== 'PANCAKE' && order.pancakeCancelStatus === null) await this.pancakeHooks?.afterLocalCancel(order.id, undefined);
+      if (actor !== 'PANCAKE' && order.pancakeCancelStatus === null && (await this.pancakeHooks?.afterLocalCancel(order.id, undefined)) === false) {
+        failure ??= new Error('Chưa xếp được lệnh huỷ Pancake');
+      }
     }
     await this.settleClosedOrderAlerts(order);
     if (failure !== null) {
@@ -815,12 +825,13 @@ export class OrderStatusService {
   }
 
   /** Sau khi đơn đã huỷ ở Tubu bằng đường riêng (khách tự huỷ): ghi kết quả huỷ Pancake / xếp job huỷ. */
-  async afterPancakeCancel(orderId: string, decision?: PancakeCancelDecision): Promise<void> {
-    await this.pancakeHooks?.afterLocalCancel(orderId, decision);
+  async afterPancakeCancel(orderId: string, decision?: PancakeCancelDecision): Promise<boolean> {
+    const settled = (await this.pancakeHooks?.afterLocalCancel(orderId, decision)) !== false;
     // Lần huỷ trước của khách có thể đã để dấu lệch Pancake–Tubu (xem flagPancakeCancelDivergence); lần này huỷ xong thì hết lệch.
     await clearPancakeAttention(this.prisma, orderId, ATTENTION_CANCELLED_ON_PANCAKE_ONLY).catch((err: unknown) =>
       this.logger.warn(`Không đóng dấu lệch huỷ Pancake của đơn ${orderId}: ${err instanceof Error ? err.message : err}`),
     );
+    return settled;
   }
 
   /**

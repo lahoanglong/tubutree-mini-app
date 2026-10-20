@@ -165,6 +165,31 @@ describe('OrdersService.cancel', () => {
     expect(failed.updateMany.mock.calls.some(([a]) => 'reversalEffectsAt' in (a as { data: object }).data)).toBe(false);
   });
 
+  it('Q19: khoản hoàn số tiền chuyển thiếu lỗi hoặc xếp lệnh huỷ Pancake thất bại (afterPancakeCancel trả false) thì KHÔNG ghi mốc, huỷ vẫn thành công', async () => {
+    const markerWrites = (updateMany: jest.Mock) => updateMany.mock.calls.filter(([a]) => 'reversalEffectsAt' in (a as { data: object }).data);
+    const orderStatus = (afterPancakeCancel: jest.Mock) => ({
+      precheckPancakeCancel: jest.fn().mockResolvedValue({ kind: 'NONE' }),
+      afterPancakeCancel,
+    });
+
+    const spy = jest.spyOn(refundQueue, 'refundReportedUnderpayment').mockRejectedValue(new Error('P2024'));
+    try {
+      const refundFails = makeService({ ...baseOrder, status: 'CONFIRMED' }, { orderStatus: orderStatus(jest.fn().mockResolvedValue(true)) });
+      await expect(refundFails.svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
+      expect(markerWrites(refundFails.updateMany)).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const pancakeFails = makeService({ ...baseOrder, status: 'CONFIRMED' }, { orderStatus: orderStatus(jest.fn().mockResolvedValue(false)) });
+    await expect(pancakeFails.svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
+    expect(markerWrites(pancakeFails.updateMany)).toHaveLength(0);
+
+    const ok = makeService({ ...baseOrder, status: 'CONFIRMED' }, { orderStatus: orderStatus(jest.fn().mockResolvedValue(true)) });
+    await ok.svc.cancel('u1', 'TUBU1');
+    expect(markerWrites(ok.updateMany)).toHaveLength(1);
+  });
+
   it('R3-MONEY-7: khách tự huỷ đơn đã trả có dùng Điểm Xanh → tin huỷ nói cả số tiền vào Ví lẫn số điểm thường được hoàn', async () => {
     (loyalty.reverseOrderPoints as jest.Mock).mockResolvedValueOnce(19);
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID', total: 95000 });

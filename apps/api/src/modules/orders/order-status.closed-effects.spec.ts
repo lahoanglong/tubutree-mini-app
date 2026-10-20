@@ -1,4 +1,5 @@
 import { OrderStatusService } from './order-status.service';
+import * as refundQueue from './refund-queue';
 import type { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -239,6 +240,29 @@ describe('OrderStatusService — việc sau commit của CANCELLED/RETURNED (D12
       const b = build(makeOrder(), { affiliate: { reverseCommissionsForOrder: jest.fn().mockRejectedValue(dbDown()) } });
       await expect(b.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow();
       expect(markerWrites(b.prisma)).toHaveLength(0);
+    });
+
+    it('khoản hoàn số tiền khách chuyển thiếu lỗi (bị nuốt thành 0): KHÔNG ghi mốc, cron còn thấy đơn để ghi khoản hoàn', async () => {
+      const spy = jest.spyOn(refundQueue, 'refundReportedUnderpayment').mockRejectedValue(dbDown());
+      try {
+        const { svc, prisma } = build(makeOrder());
+        await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).resolves.toBeDefined();
+        expect(markerWrites(prisma)).toHaveLength(0);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('xếp lệnh huỷ Pancake thất bại trước khi đặt PENDING (afterLocalCancel trả false): KHÔNG ghi mốc', async () => {
+      const { svc, prisma } = build(makeOrder(), { hooks: { afterLocalCancel: jest.fn().mockResolvedValue(false) } });
+      await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).resolves.toBeDefined();
+      expect(markerWrites(prisma)).toHaveLength(0);
+    });
+
+    it('afterLocalCancel trả true hoặc không trả gì (đã xếp job/không có đơn Pancake): vẫn ghi mốc', async () => {
+      const { svc, prisma } = build(makeOrder(), { hooks: { afterLocalCancel: jest.fn().mockResolvedValue(true) } });
+      await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
+      expect(markerWrites(prisma)).toHaveLength(1);
     });
 
     it('ghi mốc lỗi không làm hỏng lần huỷ đã commit', async () => {

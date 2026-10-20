@@ -110,6 +110,17 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     expect(b.markerWrites()).toHaveLength(0);
   });
 
+  it('afterLocalCancel trả false (lỗi trước khi đặt PENDING): INCOMPLETE, không ghi mốc, không báo khách; lần sau chạy lại được', async () => {
+    const a = build(makeOrder());
+    a.hooks.afterLocalCancel.mockResolvedValueOnce(false);
+    await expect(a.svc.resyncReversalEffects('o1')).resolves.toMatchObject({ outcome: 'INCOMPLETE' });
+    expect(a.markerWrites()).toHaveLength(0);
+    expect(a.notifications.notify).not.toHaveBeenCalled();
+
+    await expect(a.svc.resyncReversalEffects('o1')).resolves.toMatchObject({ outcome: 'DONE' });
+    expect(a.markerWrites()).toHaveLength(1);
+  });
+
   it('tin báo đã đi sau lúc đóng đơn (log có tin của đơn): không gửi lại, vẫn ghi mốc', async () => {
     const { svc, notifications, prisma, markerWrites } = build(makeOrder(), { noticeSent: true });
 

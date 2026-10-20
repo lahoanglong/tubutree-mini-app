@@ -407,7 +407,7 @@ export class OrdersService {
       return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
     }
     await this.wastePickupHooks?.onOrderCancelled(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (huỷ) lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`));
-    await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);
+    let swallowedFailure = (await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision)) === false;
     // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội bộ) nên để ngoài tx được; khách tự huỷ
     // cũng phải thu hồi hoa hồng PENDING của CTV như admin/pancake. Đơn đã CANCELLED nên bấm huỷ lại thoát sớm ở đầu hàm: lỗi đảo ở
     // đây không được làm bỏ các bước sau (hoàn tiền thiếu, vận đơn Gomdon, tin khách), chúng chạy hết rồi mới ném lỗi đầu tiên.
@@ -429,6 +429,7 @@ export class OrdersService {
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       order.id,
     ).catch((err: unknown) => {
+      swallowedFailure = true;
       this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${code}: ${err instanceof Error ? err.message : err}`);
       return 0;
     });
@@ -466,7 +467,9 @@ export class OrdersService {
     // Đảo điểm/hoa hồng lỗi đã ném ở dòng trên nên tới đây là đảo xong: lỗi thì đơn không có mốc và ReversalEffectsResyncCron làm nốt
     // (bấm huỷ lại bị chặn vì đã huỷ).
     if (reversalFailure !== null) throw reversalFailure;
-    await markReversalEffectsDone(this.prisma, order.id, this.logger);
+    // Hoàn số tiền chuyển thiếu và lệnh huỷ Pancake lỗi bị nuốt để khách vẫn thấy huỷ thành công, nhưng chưa xong thì không ghi mốc.
+    if (swallowedFailure) this.logger.warn(`Đơn ${code}: hoàn số tiền chuyển thiếu hoặc xếp lệnh huỷ Pancake chưa xong, chưa ghi mốc để cron chạy lại.`);
+    else await markReversalEffectsDone(this.prisma, order.id, this.logger);
     return this.detail(userId, code);
   }
 
