@@ -54,6 +54,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261019170000_chat_review1', ordersLock: false },
   { name: '20261020000000_waste_exchange', ordersLock: false },
   { name: '20261020100000_review_return_reversal', ordersLock: false },
+  { name: '20261020120000_q19_reversal_effects_marker', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;
