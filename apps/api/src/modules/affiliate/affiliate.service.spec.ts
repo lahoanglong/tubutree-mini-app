@@ -1480,6 +1480,14 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       expect(userUpdate).not.toHaveBeenCalled();
     });
 
+    it('lệnh rút về Ví bị trừ hết (net 0) → lời nhắn nói rõ toàn bộ số rút bị khấu trừ thuế, không "Đã cộng 0đ"', async () => {
+      const m = makePrisma({ available: 100_000, rows: [{ id: 'c1', amount: 100_000 }], taxId: MST, priorGross: 1_900_000, priorTax: 0 });
+      const res = await new AffiliateService(m.prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 100_000, 'WALLET_BALANCE');
+      expect(res).toEqual(expect.objectContaining({ credited: 0 }));
+      expect((res as { note: string }).note).toContain('khấu trừ thuế TNCN');
+      expect((res as { note: string }).note).not.toContain('Đã cộng 0đ');
+    });
+
     it('tổng tháng chưa tới ngưỡng → không trừ; đã trừ dư (lệnh trước bị từ chối sau đó) → không trừ âm', async () => {
       const under = await run('BANK', 1_000_000, { priorGross: 900_000, priorTax: 0 });
       expect(under.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0 }));

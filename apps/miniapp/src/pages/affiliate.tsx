@@ -952,7 +952,7 @@ function WithdrawForm({
           {pit && pit.pct > 0 && (
             <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
               Thuế TNCN {Math.round(Math.min(pit.pct, 1) * 100)}% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi
-              tổng từ {formatVnd(pit.threshold)} trở lên, phần các lần rút trước chưa bị trừ được trừ bù vào lần rút này.
+              tổng từ {formatVnd(pit.threshold)} trở lên, thuế của các lần rút trước trong tháng chưa bị trừ sẽ được trừ bù vào lần rút này (tối đa bằng số tiền lần này).
             </Text>
           )}
           {tax > 0 && (

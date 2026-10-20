@@ -1178,7 +1178,10 @@ export class AffiliateService {
         ok: true,
         method,
         credited: result.credited,
-        note: `Đã cộng ${result.credited}đ vào Ví Tubu.`,
+        note:
+          result.credited > 0
+            ? `Đã cộng ${result.credited}đ vào Ví Tubu.`
+            : 'Toàn bộ số rút lần này được khấu trừ thuế TNCN (truy thu các lần rút trước trong tháng), chưa có tiền cộng vào Ví.',
       };
     }
 

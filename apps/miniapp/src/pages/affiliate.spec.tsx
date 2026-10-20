@@ -420,7 +420,7 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     await openWithdraw();
     expect(
       await screen.findByText(
-        'Thuế TNCN 10% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi tổng từ 2.000.000đ trở lên, phần các lần rút trước chưa bị trừ được trừ bù vào lần rút này.',
+        'Thuế TNCN 10% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi tổng từ 2.000.000đ trở lên, thuế của các lần rút trước trong tháng chưa bị trừ sẽ được trừ bù vào lần rút này (tối đa bằng số tiền lần này).',
       ),
     ).toBeInTheDocument();
   });
