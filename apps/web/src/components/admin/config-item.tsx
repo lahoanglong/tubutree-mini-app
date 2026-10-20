@@ -5,8 +5,32 @@ import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
 
-/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp. */
-const MONEY_PREFIXES = ['payment.', 'loyalty.', 'shipping.', 'wallet.', 'waste.'];
+/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, hoa hồng, mã giảm, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp. */
+const MONEY_PREFIXES = [
+  'payment.',
+  'loyalty.',
+  'shipping.',
+  'wallet.',
+  'waste.',
+  'affiliate.',
+  'coupon.',
+  'cashback.',
+  'dealer.',
+  'flashsale.',
+  'merchant.',
+  'voucher.',
+  'referral.',
+  'groupbuy.',
+  'subscribe.',
+  'coins.',
+];
+
+/** Nhóm trộn khoá tiền/điểm với khoá không đụng tiền (đường dẫn, số ô vườn…): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần. */
+const MIXED_PREFIXES = ['community.', 'game.'];
+const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|cap)([._]|$)/;
+
+const isMoneyKey = (key: string) =>
+  MONEY_PREFIXES.some((p) => key.startsWith(p)) || (MIXED_PREFIXES.some((p) => key.startsWith(p)) && MIXED_MONEY_KEY.test(key));
 
 /** Một dòng trong "Tất cả tham số (JSON)" của tab Cấu hình. */
 export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
@@ -28,7 +52,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
           throw new Error('JSON không hợp lệ');
         }
       }
-      if (MONEY_PREFIXES.some((p) => row.key.startsWith(p))) {
+      if (isMoneyKey(row.key)) {
         const ok = await confirm({
           title: 'Xác nhận đổi cấu hình tiền/điểm',
           message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\nÁp dụng ngay cho mọi đơn, ví và điểm của khách.`,

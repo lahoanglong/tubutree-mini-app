@@ -116,6 +116,49 @@ describe('ConfigItem (tab Cấu hình)', () => {
       await flush();
       expect(puts).toEqual([{ key: 'waste.customer_monthly_cap_points', value: 80_000 }]);
     });
+
+    // U5-B04: nhóm khoá hoa hồng/mã giảm/hoàn tiền/đại lý/điểm thưởng từng lưu thẳng, không hộp xác nhận.
+    it.each([
+      ['affiliate.min_withdraw_bank', 50_000, '60000'],
+      ['affiliate.pit_withhold_pct', 10, '1'],
+      ['coupon.staff_max_percent', 30, '90'],
+      ['cashback.merchant_user_share', 0.5, '0.9'],
+      ['dealer.max_discount_pct', 20, '40'],
+      ['flashsale.max_discount_pct', 50, '90'],
+      ['merchant.commission_pct', 10, '1'],
+      ['voucher.welcome_amount', 30_000, '300000'],
+      ['referral.referrer_reward_points', 20_000, '2000000'],
+      ['groupbuy.discount_pct', 15, '50'],
+      ['subscribe.discount_pct', 5, '50'],
+      ['community.post_reward_points', 1_000, '100000'],
+      ['game.daily_checkin_points', 1_000, '100000'],
+      ['coins.referrer_reward', 500, '50000'],
+    ])('%s: hộp xác nhận nêu giá trị cũ → mới trước khi ghi', async (key, oldValue, next) => {
+      const { container, puts } = setup(row({ key, value: oldValue, category: key.split('.')[0] }));
+      typeInto(container.querySelector('input'), next);
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      const d = confirmDialog();
+      expect(d?.textContent).toContain('Xác nhận đổi cấu hình tiền/điểm');
+      expect(d?.textContent).toContain(key);
+      expect(d?.textContent).toContain(`${oldValue} → ${next}`);
+      expect(puts).toHaveLength(0);
+      answerConfirm(true);
+      await flush();
+      expect(puts).toEqual([{ key, value: JSON.parse(next) }]);
+    });
+
+    it.each([
+      ['game.max_plots', 5, '6'],
+      ['community.facebook_url', 'https://a.example', '"https://b.example"'],
+    ])('%s: khoá không phải tiền/điểm vẫn lưu thẳng, không hỏi', async (key, oldValue, next) => {
+      const { container, puts } = setup(row({ key, value: oldValue, category: key.split('.')[0] }));
+      typeInto(container.querySelector('input'), next);
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      expect(confirmDialog()).toBeNull();
+      expect(puts).toHaveLength(1);
+    });
   });
 });
 
