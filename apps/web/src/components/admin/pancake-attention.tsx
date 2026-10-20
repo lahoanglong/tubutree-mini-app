@@ -74,10 +74,9 @@ export function PancakeAttentionPanel({ order }: { order: AdminOrder }) {
       </div>
       <p className="mt-1 text-stone-800">{order.pancakeAttention}</p>
       <div className="mt-2 flex flex-wrap items-end gap-2">
-        <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+        <Field label="Ghi chú xử lý Pancake (tuỳ chọn)" className="grow basis-40">
           <input
             type="text"
-            aria-label="Ghi chú đã xử lý Pancake"
             placeholder="vd: đã hoàn tiền tay cho khách"
             maxLength={PANCAKE_RESOLVE_NOTE_MAX}
             value={note}

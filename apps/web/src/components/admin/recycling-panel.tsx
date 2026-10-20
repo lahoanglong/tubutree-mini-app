@@ -256,10 +256,9 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
           </div>
           {actions.canMarkHandled && (
             <div className="flex flex-wrap items-end gap-2">
-              <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+              <Field label="Ghi chú xử lý tay (tuỳ chọn)" className="grow basis-40">
                 <input
                   type="text"
-                  aria-label="Ghi chú đã xử lý tay"
                   placeholder="vd: đã tạo vận đơn GHN tay"
                   maxLength={GOMDON_HANDLED_NOTE_MAX}
                   value={handledNote}

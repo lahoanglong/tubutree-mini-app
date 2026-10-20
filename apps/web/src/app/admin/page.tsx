@@ -246,7 +246,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'productCategories', label: 'Danh mục sản phẩm' },
-      { k: 'payouts', label: 'Rút tiền CTV' },
+      { k: 'payouts', label: 'Yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
       { k: 'storefronts', label: 'Gian hàng' },
       { k: 'brands', label: 'Nhãn hàng' },
@@ -1904,13 +1904,18 @@ function roleChangeConsequences(target: UserRole, current?: string | null): stri
   return lines.join('\n');
 }
 
-const phoneKey = (v: string) => v.replace(/\D/g, '').replace(/^84/, '0');
+/** Cùng quy tắc với searchPhone của API (admin-order-filter.ts), vì server dùng nó để chọn người cần đổi vai trò: 912345678 và 840912345678 đều về 0912345678. */
+const phoneKey = (v: string) =>
+  v
+    .replace(/\D/g, '')
+    .replace(/^840?(\d{9})$/, '0$1')
+    .replace(/^([1-9]\d{8})$/, '0$1');
 
 /** Vai trò hiện tại của SĐT (khớp đúng số, không khớp một phần); không tra được thì null để hộp xác nhận nêu hậu quả dạng điều kiện. */
 async function lookupRoleByPhone(phone: string): Promise<string | null> {
   try {
     const key = phoneKey(phone);
-    const res = await listUsers(1, phone.trim());
+    const res = await listUsers(1, key);
     return res.data.find((u) => u.phone && phoneKey(u.phone) === key)?.role ?? null;
   } catch {
     return null;

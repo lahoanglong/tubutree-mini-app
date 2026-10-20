@@ -39,7 +39,7 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 
-/** Hai thẻ rút tiền cùng mở tab "Duyệt yêu cầu rút tiền": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
+/** Hai thẻ rút tiền cùng mở tab "Yêu cầu rút tiền": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
 const PAYOUT_FILTER: Partial<Record<InboxKey, AdminPayoutStatus>> = { payouts: 'REQUESTED', payoutsToPay: 'APPROVED' };
 /** Cùng lý do với hai thẻ thưởng đại lý: thẻ chờ chi phải mở hàng đã duyệt, không phải hàng chờ duyệt. */
 const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { dealerClaims: 'PENDING', dealerClaimsToPay: 'APPROVED' };

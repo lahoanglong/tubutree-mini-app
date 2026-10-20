@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   createCoupon: vi.fn(),
   config: [] as unknown[],
   configFails: false,
+  accessFails: false,
   brands: [] as unknown[],
   brandProducts: [] as unknown[],
   promotions: [] as unknown[],
@@ -144,7 +145,10 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
         ],
       };
     },
-    getOpsAccess: async () => mocks.access,
+    getOpsAccess: async () => {
+      if (mocks.accessFails) throw new Error('boom');
+      return mocks.access;
+    },
     getOpsHealth: async () => ({
       generatedAt: '2026-10-14T03:00:00.000Z',
       thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6, gomdonBacklogMinutes: 15 },
@@ -301,6 +305,7 @@ beforeEach(() => {
   mocks.createCoupon.mockReset();
   mocks.config = [];
   mocks.configFails = false;
+  mocks.accessFails = false;
   mocks.brands = [];
   mocks.brandProducts = [];
   mocks.promotions = [];
@@ -2332,7 +2337,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Hoàn tiền sàn ngoài',
       'Thưởng đại lý',
       'Đại lý & công nợ',
-      'Rút tiền CTV',
+      'Yêu cầu rút tiền',
       'Đổi rác',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
@@ -2754,7 +2759,7 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
 });
 
 describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
-  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Rút tiền CTV', async () => {
+  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Yêu cầu rút tiền', async () => {
     const { container } = await mount();
     const card = container.querySelector('[data-inbox="payoutsToPay"]')!;
     expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
@@ -3105,6 +3110,16 @@ describe('admin/page — UAT ui-admin-2', () => {
       await flush();
       expect(window.location.search).toBe('?tab=waste');
     });
+    // Khi getOpsAccess lỗi trang chỉ hiện "Không tải được quyền của bạn", không dựng tab nào: sửa URL lúc đó chỉ làm mất link hợp lệ.
+    it('getOpsAccess lỗi: trang báo lỗi quyền và giữ nguyên URL, không đè ?tab= của link có thể hợp lệ', async () => {
+      asStaff(['KE_TOAN']);
+      mocks.accessFails = true;
+      window.history.replaceState(null, '', '/admin?tab=payouts');
+      const { container } = await mount();
+      await flush();
+      expect(container.textContent).toContain('Không tải được quyền của bạn');
+      expect(window.location.search).toBe('?tab=payouts');
+    });
     it('tab được phép giữ nguyên URL và bộ lọc kèm theo', async () => {
       asStaff(['CSKH']);
       window.history.replaceState(null, '', '/admin?tab=orders&pancake=attention');
@@ -3115,10 +3130,11 @@ describe('admin/page — UAT ui-admin-2', () => {
   });
 
   describe('D7-23: tên tab đúng chức năng', () => {
-    it('"Duyệt yêu cầu rút tiền" đổi thành "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
+    it('hàng đợi rút tiền gồm cả lệnh rút Ví Tubu nên tên là "Yêu cầu rút tiền", không "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
       const { container } = await mount();
       const items = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
-      expect(items).toContain('Rút tiền CTV');
+      expect(items).toContain('Yêu cầu rút tiền');
+      expect(items).not.toContain('Rút tiền CTV');
       expect(items).toContain('Nhiệm vụ');
       expect(items).not.toContain('Duyệt yêu cầu rút tiền');
       expect(items).not.toContain('Nhiệm vụ & quà đổi điểm');
@@ -3137,7 +3153,8 @@ describe('admin/page — UAT ui-admin-2', () => {
       click(retry);
       await flush();
       expect(container.textContent).toContain('shipping.flat_fee');
-      expect(btn(container, 'Thử lại')).toBeUndefined();
+      // Thẻ Gomdon trong tab Cấu hình tự gọi API thật (không giả trong spec này) nên có nút Thử lại riêng; chỉ lỗi của danh sách cấu hình phải hết.
+      expect(container.textContent).not.toContain('Không tải được danh sách cấu hình.');
     });
   });
 
@@ -3194,6 +3211,13 @@ describe('admin/page — UAT ui-admin-2', () => {
       expect(text).toContain('Hiện là Khách hàng → đổi sang Đại lý');
       expect(text).not.toContain('mất toàn bộ nhóm việc');
       expect(text).not.toContain('mất toàn quyền quản trị');
+      await answerDialog(false);
+    });
+    // Server (admin-order-filter.searchPhone) đổi 912345678 và 840912345678 về 0912345678 trước khi tìm người cần đổi vai trò.
+    it.each(['912345678', '840912345678', '+84 912 345 678', '0912.345.678'])('SĐT gõ "%s" khớp người có SĐT 0912345678 như server', async (typed) => {
+      mocks.users = [{ id: 'u9', fullName: 'Bình', phone: '0912345678', role: 'STAFF', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      const text = await grant(typed, 'CUSTOMER');
+      expect(text).toContain('Hiện là Nhân viên → đổi sang Khách hàng');
       await answerDialog(false);
     });
     it('không tra được SĐT: giữ câu điều kiện, gồm cả "Nếu tài khoản đang là Quản trị"', async () => {

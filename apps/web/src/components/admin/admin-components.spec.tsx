@@ -9,6 +9,12 @@ import { LoyaltyConfigCard } from './loyalty-config-card';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -124,7 +130,7 @@ describe('RecyclingPanel (chi tiết đơn admin)', () => {
     await flush();
     expect(api.calls).toHaveLength(0);
 
-    typeInto(container.querySelector('input[aria-label="Ghi chú đã xử lý tay"]'), '  đã tạo vận đơn GHN tay  ');
+    typeInto(field(container, 'Ghi chú xử lý tay (tuỳ chọn)'), '  đã tạo vận đơn GHN tay  ');
     click(btn);
     await flush();
     expect(confirmDialog()?.textContent).toContain('TB-100');
