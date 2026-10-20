@@ -258,7 +258,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     return detail.ok() ? ((await detail.json()) as { id: string; slug: string; variations: { id: string; stock: number }[] }) : null;
   }
 
-  function mockPdp(api: MockApi, p: { slug: string; variations: { id: string; stock: number }[] }, over: { affiliate?: boolean } = {}) {
+  function mockPdp(api: MockApi, p: { slug: string; variations: { id: string; stock: number }[] }, over: { affiliate?: boolean; coupons?: unknown[] } = {}) {
     api.get('/flash-sales/active', []);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
     api.get(`/products/${p.slug}/reviews/can-review`, { canReview: false });
@@ -267,7 +267,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     api.get(`/products/${p.slug}/bought-together`, []);
     api.get(`/products/${p.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
     api.get('/me/wishlist/ids', []);
-    api.get('/me/coupons', [
+    api.get('/me/coupons', over.coupons ?? [
       { code: 'GIAM20', type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z' },
     ]);
     api.get('/affiliate/me', { isAffiliate: over.affiliate === true });
@@ -351,6 +351,30 @@ test.describe('Web khách: trang sản phẩm', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('điện thoại 390px, khách đăng nhập có nhiều mã giảm giá: không cuộn ngang, nút chia sẻ trong màn', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await signIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123' }));
+    const endAt = '2027-01-01T00:00:00.000Z';
+    mockPdp(api, p!, {
+      coupons: [
+        { code: 'CHAOBANMOI15', type: 'PERCENT', value: 15, minOrder: 0, maxDiscount: 50000, endAt },
+        { code: 'FREESHIPTUBU', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt },
+        { code: 'GIAM20', type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, endAt },
+        { code: 'SINHNHATXANH', type: 'AMOUNT', value: 100000, minOrder: 1000000, maxDiscount: null, endAt },
+      ],
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/san-pham/${p!.slug}`);
+    await expect(page.getByRole('button', { name: 'Sao chép mã SINHNHATXANH' })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    const box = await page.getByRole('button', { name: 'Chia sẻ', exact: true }).boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
   });
 });
 

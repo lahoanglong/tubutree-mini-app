@@ -103,6 +103,15 @@ describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
     expect(c.querySelector('[data-testid="pdp-info"]')!.className).toContain('max-md:bg-stone-0');
   });
 
+  it('chống tràn ngang ở điện thoại: lưới một cột minmax(0,1fr), cột thông tin min-w-0 (jsdom không đo layout, e2e 390px kiểm thật)', async () => {
+    api.product = PRODUCT_TUBU;
+    const c = await mount();
+    const info = c.querySelector('[data-testid="pdp-info"]')!;
+    expect(info.className.split(' ')).toContain('min-w-0');
+    expect(info.parentElement!.className.split(' ')).toContain('grid-cols-1');
+    expect(info.parentElement!.className).toContain('md:grid-cols-2');
+  });
+
   it('hàng nhãn: chấm màu + tên + mũi tên, không gạch chân ở điện thoại; chia sẻ chỉ là biểu tượng', async () => {
     api.product = PRODUCT_TUBU;
     const c = await mount();

@@ -9,7 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { AcademyAuthGate } from '../academy-auth';
-import { errorText } from '../course-list';
+import { CtvOnlyNotice, errorText } from '../course-list';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { isAuthError } from '@/lib/friendly-error';
 import Link from 'next/link';
 import { miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
 
@@ -101,8 +103,10 @@ function Detail({ courseId }: { courseId: string }) {
       )}
       {q.isLoading ? (
         <Skeleton height={200} rounded="rounded-card" />
+      ) : q.isError && errorStatus(q.error) === 403 ? (
+        <CtvOnlyNotice />
       ) : q.isError ? (
-        <ErrorState message={errorText(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={errorText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} />
       ) : q.data ? (
         <CourseBody course={q.data} onComplete={(id) => complete.mutate(id)} completingId={complete.isPending ? complete.variables : undefined} />
       ) : null}

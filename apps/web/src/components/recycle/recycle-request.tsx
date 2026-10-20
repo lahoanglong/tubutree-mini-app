@@ -8,6 +8,7 @@ import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
 import { WASTE_WRITE_INVALIDATE_KEYS, cancelWasteRequest, setWasteTracking } from '@tubutree/app-core/api/waste';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { wasteMeQuery, wastePointsQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
@@ -44,8 +45,6 @@ const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy
 const BLOCK = `flex flex-col gap-2.5 p-4 ${skin.card}`;
 const DANGER_BTN =
   'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100';
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 async function copyText(text: string): Promise<boolean> {
   try {

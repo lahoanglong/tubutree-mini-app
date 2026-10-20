@@ -5,6 +5,7 @@ import { byText, click, flush, render, selectValue, type Rendered } from '@/test
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
 import { EMPTY_DRAFT, loadDraft, loadPointsNav, markResume, peekResume, saveDraft, saveReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
+import { ApiError } from '@/lib/client-api';
 import { makeRequestDetail, makeWasteMe, makeWastePoint } from './recycle-fixtures';
 
 // Chép ý recycle-new.spec.tsx (Mini App, §4.2, §4.3, §15.2, §16.1): chọn món, ước tính debounce, chọn cách giao, cam kết,
@@ -503,6 +504,19 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     expect(keys[0]).toMatch(/^key-\d+$/);
     expect(keys[1]).toBe(keys[0]);
     expect(loadDraft()).toBeNull();
+  });
+  it('lỗi 403 kèm câu nghiệp vụ → hiện nguyên văn câu của máy chủ', async () => {
+    const msg = 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.';
+    state.create = () => {
+      throw new ApiError(msg, 403);
+    };
+    atStep2(PICKED);
+    const c = await mount();
+    click(check(c, CONSENT));
+    await flush(3);
+    click(barButton(c, 'Tạo yêu cầu'));
+    await flush(10);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe(msg);
   });
   it('Gửi về kho cần thêm hai cam kết và gửi packagingConsent + postagePaidConsent', async () => {
     atStep2({ ...DRAFT, method: 'MAIL_IN', lines: { 'item-carton': 20 } });

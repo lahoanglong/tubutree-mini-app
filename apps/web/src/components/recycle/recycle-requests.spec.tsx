@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { ApiError } from '@/lib/client-api';
 import { makeRequestSummary, makeWasteMe } from './recycle-fixtures';
 
 // Chép ý recycle-requests.spec.tsx (Mini App, §4.6, §16.1): hai tab có số đếm, điều hướng theo trạng thái, ngày giờ VN, rỗng.
@@ -13,6 +14,7 @@ const state = vi.hoisted(() => ({
   failMe: false,
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
   fail: false,
+  reqError: null as Error | null,
   calls: [] as string[],
 }));
 
@@ -27,7 +29,10 @@ vi.mock('@/lib/core-http', () => ({
         state.fail = false;
         throw new Error('mất mạng');
       }
-      if (path === '/waste/requests') return state.rows;
+      if (path === '/waste/requests') {
+        if (state.reqError) throw state.reqError;
+        return state.rows;
+      }
       if (path === '/waste/me') {
         if (state.failMe) throw new Error('me hỏng');
         return state.me;
@@ -66,6 +71,7 @@ beforeEach(() => {
   state.failMe = false;
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.fail = false;
+  state.reqError = null;
   state.calls = [];
 });
 afterEach(() => {
@@ -75,6 +81,22 @@ afterEach(() => {
 });
 
 describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
+  it.each(['GUEST', 'NEED_PHONE'] as const)('eligibility %s: MiniAppOnlyNotice như ba trang đổi rác khác, không gọi /waste/requests (Q2)', async (eligibility) => {
+    state.me = makeWasteMe({ eligibility, balance: null, monthUsage: null });
+    const c = await mount();
+    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(byText(c, 'button', 'Thử lại')).toBeNull();
+    expect(state.calls).not.toContain('/waste/requests');
+  });
+
+  it('API trả 403 Forbidden: câu tiếng Việt, không chữ thô, không Thử lại', async () => {
+    state.reqError = new ApiError('Forbidden', 403);
+    const c = await mount();
+    expect(c.textContent).toContain('không có quyền');
+    expect(c.textContent).not.toContain('Forbidden');
+    expect(byText(c, 'button', 'Thử lại')).toBeNull();
+  });
+
   it('hai tab có số đếm; mặc định Đang xử lý chỉ hiện yêu cầu chưa đóng', async () => {
     const c = await mount();
     expect(tab(c, 'Đang xử lý')?.getAttribute('aria-selected')).toBe('true');
@@ -159,9 +181,10 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
   });
 
   it('lỗi tải → "Thử lại" tải lại được', async () => {
-    state.fail = true;
+    state.reqError = new Error('mất mạng');
     const c = await mount();
     expect(c.textContent).toContain('mất mạng');
+    state.reqError = null;
     click(byText(c, 'button', 'Thử lại'));
     await flush(6);
     expect(link(c, '/doi-rac/yeu-cau/r-open')).not.toBeNull();

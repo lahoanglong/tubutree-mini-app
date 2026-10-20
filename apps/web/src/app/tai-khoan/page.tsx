@@ -79,8 +79,9 @@ export default function AccountPage() {
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
-  // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại.
-  const ownedBrandQ = useQuery({ ...ownedBrandProfileQuery(coreHttp), enabled: authed, retry: false });
+  // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại. Chưa có cờ "là chủ nhãn" trên /me
+  // (Mini App cũng gọi rồi nuốt 404), nên giữ kết quả 5 phút để mỗi lần quay lại hub không lặp lại một request 404; sửa nhãn thì khoá 'owned-brand' bị làm mới.
+  const ownedBrandQ = useQuery({ ...ownedBrandProfileQuery(coreHttp), enabled: authed, retry: false, staleTime: 5 * 60_000 });
   const dealerQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: authed, retry: false });
 
   if (phase === 'loading') {

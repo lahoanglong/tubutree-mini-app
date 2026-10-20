@@ -7,7 +7,8 @@ import { EmptyState } from '@/components/empty-state';
 import { safeHexColor } from '@/lib/safe-color';
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
 
-export const revalidate = 300;
+// Admin gỡ đăng không làm mới được trang này, nên hạn ngắn để nhãn bị gỡ không còn hiện lâu; vẫn dựng phía server cho SEO.
+export const revalidate = 60;
 
 export async function generateMetadata({
   params,
