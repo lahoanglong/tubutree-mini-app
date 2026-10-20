@@ -119,7 +119,7 @@ export default function CartPage() {
   const update = useOptimisticCart(
     ({ id, qty }: { id: string; qty: number }) => updateCartItem(id, qty),
     (prev, { id, qty }) =>
-      recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l))),
+      recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l)), id),
   );
   const remove = useOptimisticCart(
     ({ id }: { id: string; line: CartLine }) => removeCartItem(id),
@@ -187,7 +187,10 @@ export default function CartPage() {
   // Món đang chọn (không nằm trong deselected). Toàn-chọn → checkout gửi itemIds=undefined (toàn giỏ).
   const selectedItems = summary.items.filter((l) => !deselected.has(l.id));
   const allSelected = selectedItems.length === summary.items.length;
-  const selectedSubtotal = selectedItems.reduce((s, l) => s + l.total, 0);
+  // Dòng hết hàng (tồn 0) không mua được: không cộng vào tạm tính hay tiến độ miễn phí giao, để khách không thấy số mà đặt không nổi.
+  const buyableSelected = selectedItems.filter((l) => l.stock > 0);
+  const outOfStockSelected = selectedItems.filter((l) => l.stock <= 0);
+  const selectedSubtotal = buyableSelected.reduce((s, l) => s + l.total, 0);
   const selectedCount = selectedItems.reduce((s, l) => s + l.quantity, 0);
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
@@ -321,8 +324,9 @@ export default function CartPage() {
           allSelected={allSelected}
           priced={priced}
           overStock={overStockSelected}
+          outOfStockNames={outOfStockSelected.map((l) => l.productName)}
           tubuOnlyFreeship={hasMerchant}
-          tubuSelectedSubtotal={tubuSubtotal(selectedItems)}
+          tubuSelectedSubtotal={tubuSubtotal(buyableSelected)}
           onCheckout={goCheckout}
         />
       )}
@@ -651,6 +655,7 @@ function StickySummary({
   allSelected,
   priced,
   overStock,
+  outOfStockNames,
   tubuOnlyFreeship,
   tubuSelectedSubtotal,
   onCheckout,
@@ -662,6 +667,8 @@ function StickySummary({
   /** Giá của phần chọn từ máy chủ (chỉ khi chọn một phần và đã có số đúng); null = chưa có, không hiện giảm giá. */
   priced: CartSummary | null;
   overStock: boolean;
+  /** Tên các dòng đang chọn mà tồn bằng 0: nói rõ dòng nào cần bỏ chọn hoặc xoá. */
+  outOfStockNames: string[];
   /** Giỏ có hàng gian hàng tự giao: miễn phí vận chuyển chỉ áp cho phần Tubu Tree giao. */
   tubuOnlyFreeship: boolean;
   tubuSelectedSubtotal: number;
@@ -672,7 +679,8 @@ function StickySummary({
   // thì chỉ tính phần Tubu Tree giao (checkout tính phí kho Tubu trên tiền hàng của kiện Tubu).
   const base = tubuOnlyFreeship ? tubuSelectedSubtotal : selectedSubtotal;
   const showFreeship = !tubuOnlyFreeship || base > 0;
-  const reached = (!tubuOnlyFreeship && allSelected && summary.freeship) || base >= threshold;
+  // `summary.freeship` do máy chủ tính trên cả giỏ kể cả dòng hết hàng, nên không tin khi còn dòng hết hàng đang chọn.
+  const reached = (!tubuOnlyFreeship && allSelected && summary.freeship && outOfStockNames.length === 0) || base >= threshold;
   const progressPct = Math.min(100, Math.round((base / threshold) * 100));
   const remaining = Math.max(0, threshold - base);
   // Cả giỏ lấy số giảm từ giỏ; một phần giỏ lấy từ giá phần chọn của máy chủ (combo cần đủ bộ trong phần chọn); chưa có thì không
@@ -743,7 +751,15 @@ function StickySummary({
             value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
-          {overStock && (
+          {outOfStockNames.length > 0 && (
+            <Box flex alignItems="flex-start" role="status" style={{ gap: 4, marginTop: 4 }}>
+              <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+              <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+                {vi.cart.outOfStockBlocked(outOfStockNames)}
+              </Text>
+            </Box>
+          )}
+          {overStock && outOfStockNames.length === 0 && (
             <Box flex alignItems="center" role="status" style={{ gap: 4, marginTop: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>

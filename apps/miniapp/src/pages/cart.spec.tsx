@@ -195,6 +195,39 @@ describe('CartPage — vượt tồn kho (BUYERMINI-18) và suất giờ vàng (
     expect(screen.queryByText('Chỉ còn 0 sản phẩm')).toBeNull();
   });
 
+  describe('dòng hết hàng (tồn 0) đang chọn', () => {
+    const OOS = { ...OK_LINE, id: 'ci-oos', variationId: 'v-oos', productName: 'Cobote bột giặt', unitPrice: 79_000, quantity: 2, stock: 0, total: 158_000 };
+    const BUYABLE = { ...OK_LINE, id: 'ci-buy', variationId: 'v-buy', productName: 'Cà phê hoà tan', unitPrice: 75_000, quantity: 1, stock: 5, total: 75_000 };
+
+    it('Tạm tính và thanh miễn phí giao chỉ tính phần mua được: không cộng dòng hết hàng', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
+      renderPage();
+      await screen.findByText('Cobote bột giặt');
+      expect(screen.getByText('Mua thêm 125.000đ để được miễn phí giao hàng')).toBeInTheDocument();
+      expect(screen.queryByText('Bạn được miễn phí giao hàng 🌿')).toBeNull();
+      expect(screen.getByText('Tạm tính (đã giảm, chưa gồm phí giao hàng)').parentElement).toHaveTextContent('75.000đ');
+      expect(screen.getByText('Tạm tính (đã giảm, chưa gồm phí giao hàng)').parentElement).not.toHaveTextContent('233.000đ');
+    });
+
+    it('thanh dưới nêu đúng dòng hết hàng và cách gỡ (bỏ chọn hoặc xoá), không bảo giảm số lượng', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
+      renderPage();
+      await screen.findByText('Cobote bột giặt');
+      expect(screen.getByText('"Cobote bột giặt" đã hết hàng. Bỏ chọn hoặc xoá sản phẩm này để thanh toán.')).toBeInTheDocument();
+      expect(screen.queryByText('Giảm số lượng sản phẩm vượt tồn kho để thanh toán.')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Thanh toán (3)' })).toBeDisabled();
+    });
+
+    it('bỏ chọn dòng hết hàng: hết lời nhắc, nút Thanh toán mở', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [OOS, BUYABLE], subtotal: 233_000, itemCount: 3 }));
+      renderPage();
+      await screen.findByText('Cobote bột giặt');
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Cobote bột giặt' }));
+      expect(screen.queryByText(/đã hết hàng\. Bỏ chọn/)).toBeNull();
+      expect(await screen.findByRole('button', { name: 'Thanh toán (1)' })).toBeEnabled();
+    });
+  });
+
   it('đủ tồn → Thanh toán bấm được, không hiện hướng dẫn', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     renderPage();

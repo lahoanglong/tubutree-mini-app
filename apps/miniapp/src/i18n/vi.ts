@@ -231,6 +231,8 @@ export const vi = {
     stockLimited: (n: number) => `Chỉ còn ${n} sản phẩm`,
     outOfStock: 'Sản phẩm đã hết hàng',
     overStockBlocked: 'Giảm số lượng sản phẩm vượt tồn kho để thanh toán.',
+    outOfStockBlocked: (names: string[]) =>
+      `${names.map((n) => `"${n}"`).join(', ')} đã hết hàng. Bỏ chọn hoặc xoá ${names.length > 1 ? 'các sản phẩm' : 'sản phẩm'} này để thanh toán.`,
     discontinuedHeading: (n: number) => `${n} sản phẩm đã ngừng bán`,
     discontinuedBody: 'Không thể đặt các sản phẩm này nên đã được tách khỏi đơn của bạn.',
     discontinuedRemove: 'Xoá',
