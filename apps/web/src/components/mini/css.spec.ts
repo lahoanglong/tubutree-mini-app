@@ -51,4 +51,10 @@ describe('mini.css không đổi giao diện máy tính', () => {
     expect(css).not.toMatch(/\[role=['"]search['"]\][^{]*cancel-button/);
     expect(css).toMatch(/\.tubu-search-field input\[type='search'\]::-webkit-search-cancel-button/);
   });
+
+  it('điện thoại: body cắt tràn ngang vì dải PageHeader tràn bằng 100vw (gồm cả thanh cuộn của trình duyệt máy tính thu hẹp)', () => {
+    const globals = strip(read(join(dir, '../../app/globals.css')));
+    const phone = [...globals.matchAll(/@media \(max-width: 767px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(phone).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+  });
 });

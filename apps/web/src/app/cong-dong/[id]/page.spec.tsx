@@ -518,8 +518,8 @@ describe('/cong-dong/[id] — giao diện điện thoại như Mini App', () => 
 
   it('tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {
     const { container } = await mount();
-    expect(container.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
-    expect(container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+    expect(container.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(container.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 });
 

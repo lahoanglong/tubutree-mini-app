@@ -11,7 +11,8 @@ import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
-import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/empty-state';
@@ -101,7 +102,7 @@ export default function NotificationsPage() {
 
   const shell = (body: ReactNode) => (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <TitleBand
+      <PageHeader
         title="Thông báo"
         backHref="/tai-khoan"
         backLabel="Quay lại tài khoản"

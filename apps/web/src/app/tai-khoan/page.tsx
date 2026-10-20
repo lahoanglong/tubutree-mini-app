@@ -139,7 +139,7 @@ export default function AccountPage() {
   };
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0 max-md:pb-4">
+    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0 max-md:pb-4">
       <div className="max-md:hidden">
         <BackLink href="/">
           ← Trang chủ

@@ -7,7 +7,8 @@ import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
 import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -82,7 +83,7 @@ export default function SettingsPage() {
 
   const shell = (body: ReactNode) => (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <TitleBand title="Cài đặt" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
+      <PageHeader title="Cài đặt" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
       <div className="max-md:px-4">{body}</div>
     </main>
   );

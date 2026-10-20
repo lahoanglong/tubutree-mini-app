@@ -47,8 +47,8 @@ describe('/hoc-vien — giao diện điện thoại như Mini App', () => {
     const r = render(await HocVienPage());
     mounted.push(r);
     await flush();
-    expect(r.container.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
-    expect(r.container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+    expect(r.container.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(r.container.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 });
 
@@ -57,6 +57,6 @@ describe('/hoc-vien — tiêu đề chừa chỗ nút lùi', () => {
     const r = render(await HocVienPage());
     mounted.push(r);
     await flush();
-    expect(r.container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:pl-16');
+    expect(r.container.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
   });
 });

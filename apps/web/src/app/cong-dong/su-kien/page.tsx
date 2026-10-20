@@ -11,7 +11,7 @@ import { safeMediaUrl } from '@/components/community/post-parts';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
-import { MiniBar, miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
+import { miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatCount } from '@/lib/checkout-points';
@@ -27,10 +27,8 @@ const isEventEnded = (event: Pick<CommunityEvent, 'endAt'>) => new Date(event.en
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
-      <MiniBar>
-        <PageHeader title="Sự kiện" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
-      </MiniBar>
+    <main className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
+      <PageHeader title="Sự kiện" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4 flex flex-col gap-3">{children}</div>
     </main>
   );

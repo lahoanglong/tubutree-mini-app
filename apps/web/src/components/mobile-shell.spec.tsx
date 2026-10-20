@@ -101,7 +101,21 @@ describe('PageHeader (web) ở điện thoại', () => {
 
   it('tiêu đề chừa chỗ cho nút lùi ở điện thoại, không chừa từ md', () => {
     const { container } = mount(<PageHeader title="X" backHref="/" />);
-    expect(container.querySelector('h1')!.parentElement!.className).toMatch(/\bpl-12\b.*\bmd:pl-0\b/);
+    expect(container.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
+  });
+});
+
+describe('khung trang có thanh tiêu đề dùng chung', () => {
+  it('globals.css kéo khung lên sát mép khi con trực tiếp là PageHeader, chỉ dưới md', () => {
+    const css = readFileSync(join(__dirname, '../app/globals.css'), 'utf8');
+    const media = css.slice(css.indexOf('@media (max-width: 767px) {\n  body {'));
+    expect(media).toMatch(/main:has\(> header\[data-page-bleed\]\)\s*\{\s*padding-top: 0;/);
+  });
+
+  it('không còn lớp bọc thanh tiêu đề riêng của từng nhóm màn', () => {
+    const ui = readFileSync(join(__dirname, 'loyalty/mini-surface.tsx'), 'utf8');
+    expect(ui).not.toMatch(/export function Mini(Title)?Bar/);
+    expect(readFileSync(join(__dirname, 'order-mobile/mobile-ui.tsx'), 'utf8')).not.toContain('export function TitleBand');
   });
 });
 

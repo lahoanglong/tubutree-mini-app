@@ -10,7 +10,7 @@ import { isCloudinaryConfigured, uploadToCloudinary } from '@/components/account
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
-import { TitleBand } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -155,7 +155,7 @@ export default function EditProfilePage() {
 
   const shell = (body: React.ReactNode) => (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <TitleBand title="Sửa hồ sơ" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
+      <PageHeader title="Sửa hồ sơ" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
       <div className="max-md:px-4">{body}</div>
     </main>
   );

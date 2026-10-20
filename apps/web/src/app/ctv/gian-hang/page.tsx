@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontBuilder } from '@/components/affiliate/storefront-builder';
 import { TemplateSheet, errText } from '@/components/affiliate/storefront-sheets';
 import BackLink from '@/components/back-link';
+import { PageHeader } from '@/components/ui/page-header';
 
 const TITLE = 'Gian hàng của tôi';
 
@@ -23,7 +24,7 @@ function Shell({ children }: { children: ReactNode }) {
       <BackLink href="/ctv">
         ← Cộng tác viên
       </BackLink>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>{TITLE}</h1>
+      <PageHeader title={TITLE} parentHref="/ctv" className="md:mt-1" />
       <div className="mt-4">{children}</div>
     </main>
   );

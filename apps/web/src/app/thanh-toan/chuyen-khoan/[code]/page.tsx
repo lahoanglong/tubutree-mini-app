@@ -7,7 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
-import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 
@@ -86,10 +87,21 @@ export default function BankPaymentPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <TitleBand
-        title={showQr ? TITLE : NEUTRAL_TITLE}
-        subtitle={showQr ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
-      />
+      {showQr ? (
+        <PageHeader
+          title={TITLE}
+          subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới"
+          subtitleClassName="md:text-sm"
+          parentHref={detail}
+          bleed={false}
+        />
+      ) : (
+        // Mini App chỉ vẽ dải tiêu đề ở trạng thái QR; các trạng thái khác chỉ giữ h1 cho trình đọc và trang cha cho nút lùi.
+        <>
+          <h1 className="sr-only">{NEUTRAL_TITLE}</h1>
+          <span hidden data-back-href={detail} />
+        </>
+      )}
       <div className="mt-2 max-md:pb-6">{body}</div>
     </main>
   );

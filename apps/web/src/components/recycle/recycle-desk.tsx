@@ -81,7 +81,7 @@ const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => !l.
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
       <PageHeader title="Nhận hàng tại điểm" backHref="/doi-rac" backLabel="Đổi rác" />
       {children}
     </main>

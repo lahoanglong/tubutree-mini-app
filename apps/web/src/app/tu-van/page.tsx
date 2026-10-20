@@ -16,7 +16,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { PageHeader } from '@/components/ui/page-header';
-import { MiniBar, miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
+import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -202,10 +202,8 @@ export default function AdvisorPage() {
   }, [aiOff, router]);
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
-      <MiniBar clearBack>
-        <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
-      </MiniBar>
+    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
+      <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
       <div className="mt-4">
         {aiOff ? null : (
           <>

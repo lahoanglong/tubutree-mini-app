@@ -57,6 +57,18 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(c.textContent).toContain('Giữ nguyên nội dung');
   });
 
+  it('thanh tiêu đề nằm dưới đệm 48px của body như màn chuyển khoản của Mini App (không bỏ đệm)', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(false);
+  });
+
+  it('nút lùi vào thẳng link thanh toán đi tới chi tiết đơn đang chờ, không tới Checkout', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('header')!.getAttribute('data-back-href')).toBe('/tai-khoan/don-hang/TB-9');
+  });
+
   it('mỗi dòng cần chép có nút có tên: số tài khoản, số tiền, nội dung', async () => {
     const c = mount();
     await flush();
@@ -102,6 +114,16 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     const guest = mount();
     await flush();
     expect(guest.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+  });
+
+  it('đã PAID hoặc chưa có QR: không vẽ dải tiêu đề, vẫn đúng một h1 và còn trang cha cho nút lùi', async () => {
+    mocks.qr.paymentStatus = 'PAID';
+    const c = mount();
+    await flush();
+    expect(c.querySelector('header')).toBeNull();
+    expect(c.innerHTML).not.toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(c.querySelectorAll('h1')).toHaveLength(1);
+    expect(c.querySelector('[data-back-href]')!.getAttribute('data-back-href')).toBe('/tai-khoan/don-hang/TB-9');
   });
 
   it('lỗi tải: báo lỗi, "Thử lại" và vẫn có lối xem đơn hàng', async () => {

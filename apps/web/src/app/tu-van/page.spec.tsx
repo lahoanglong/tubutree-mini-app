@@ -453,7 +453,7 @@ describe('Trợ lý AI: giao diện điện thoại như Mini App', () => {
   it('tiêu đề trên thanh trắng, trang bỏ đệm đỉnh', async () => {
     const c = await mount();
     expect(c.querySelector('main')!.className).toContain('max-md:pt-0');
-    expect(c.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 
   it('thông báo lỗi nâng lên trên thanh nhập cao ở điện thoại', async () => {
@@ -470,7 +470,7 @@ describe('Trợ lý AI: giao diện điện thoại như Mini App', () => {
 describe('Trợ lý AI: tiêu đề chừa chỗ nút lùi', () => {
   it('trang bỏ đệm 48px và thanh tiêu đề chừa 64px bên trái cho nút lùi nổi', async () => {
     const c = await mount();
-    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
-    expect(c.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:pl-16');
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
   });
 });

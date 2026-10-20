@@ -69,6 +69,7 @@ body.has-sticky-bar [data-bottom-nav] {
 @media (max-width: 767px) {
   body {
     padding-top: var(--safe-top);
+    overflow-x: clip;
   }
   body.with-back-btn {
     padding-top: calc(var(--safe-top) + 48px);
@@ -76,5 +77,9 @@ body.has-sticky-bar [data-bottom-nav] {
   /* Trang hero full-bleed (gallery/hero): nút lùi nằm trên hero nên không cần đệm, như .page.page-bleed của Mini App. */
   body.with-back-btn:has([data-page-bleed]) {
     padding-top: var(--safe-top);
+  }
+  /* Thanh tiêu đề dùng chung (PageHeader) là con trực tiếp của khung trang: kéo khung lên sát mép để dải trắng bắt đầu từ đỉnh màn hình như Mini App. */
+  main:has(> header[data-page-bleed]) {
+    padding-top: 0;
   }
 }

@@ -21,7 +21,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MiniBar, miniCard } from '@/components/loyalty/mini-surface';
+import { miniCard } from '@/components/loyalty/mini-surface';
 
 const DEFAULT_HOLD_DAYS = 30;
 
@@ -133,10 +133,8 @@ export default function CashbackPage() {
   })();
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
-      <MiniBar>
-        <PageHeader title="Hoàn tiền" backHref="/tai-khoan/vi-tubu" backLabel="Quay lại Ví Tubu" />
-      </MiniBar>
+    <main className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
+      <PageHeader title="Hoàn tiền" backHref="/tai-khoan/vi-tubu" backLabel="Quay lại Ví Tubu" />
       <div role="status" aria-live="polite">
         {notice && <p className="mt-3 text-sm font-medium text-success-fg">{notice}</p>}
       </div>
