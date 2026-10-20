@@ -81,7 +81,7 @@ describe('hub /tai-khoan như Mini App (điện thoại)', () => {
   it('h1 chỉ cho trình đọc màn hình; không có dòng "← Trang chủ"; không dải tiêu đề', async () => {
     const c = await mount();
     expect(c.querySelector('h1')!.className).toContain('max-md:sr-only');
-    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(false);
     const back = Array.from(c.querySelectorAll('a')).find((a) => a.textContent?.includes('Trang chủ'))!;
     expect(back.closest('.max-md\\:hidden')).not.toBeNull();
   });
