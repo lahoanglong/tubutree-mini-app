@@ -729,6 +729,103 @@ describe('SubscriptionsService.effectiveDiscountPct', () => {
   });
 });
 
+describe('SubscriptionsService.effectiveDiscountPct: chỉ đếm gói thật (Q10)', () => {
+  const tiers = [{ minActive: 1, pct: 0.12 }, { minActive: 3, pct: 0.14 }, { minActive: 5, pct: 0.15 }];
+  const DAY = 86_400_000;
+  type Row = { id: string; userId: string; status: string; lastOrderId: string | null; nextRunAt: Date };
+
+  // Bộ khớp tối thiểu cho đúng các dạng where mà service dùng: bằng nhau, { not: null }, { lte: Date }, id, OR.
+  function matches(row: Row, where: Record<string, unknown>): boolean {
+    return Object.entries(where).every(([key, cond]) => {
+      if (key === 'OR') return (cond as Record<string, unknown>[]).some((w) => matches(row, w));
+      const v = (row as unknown as Record<string, unknown>)[key];
+      if (cond !== null && typeof cond === 'object' && !(cond instanceof Date)) {
+        const c = cond as { not?: unknown; lte?: Date };
+        if ('not' in c) return v !== c.not;
+        if (c.lte) return (v as Date).getTime() <= c.lte.getTime();
+      }
+      return v === cond;
+    });
+  }
+
+  function makeSvc(rows: Row[]) {
+    const prisma = {
+      subscription: {
+        count: jest.fn(async ({ where }: { where: Record<string, unknown> }) => rows.filter((r) => matches(r, where)).length),
+      },
+    } as unknown as PrismaService;
+    const cfg = {
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        k === 'subscribe.discount_tiers' ? (tiers as unknown as T) : (fb as T),
+    } as unknown as SystemConfigService;
+    return new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, { enqueuePush: jest.fn() } as unknown as PancakeOrderService, makeAnalytics(), walletLedger());
+  }
+
+  const sub = (id: string, over: Partial<Row> = {}): Row => ({
+    id,
+    userId: 'u1',
+    status: 'ACTIVE',
+    lastOrderId: null,
+    nextRunAt: new Date(Date.now() + 200 * DAY),
+    ...over,
+  });
+
+  it('4 gói hẹn +200 ngày chưa ra đơn nào: chỉ đạt bậc thấp nhất khi có gói đang tạo đơn', async () => {
+    const rows = [sub('a'), sub('b'), sub('c'), sub('d')];
+    await expect(makeSvc(rows).effectiveDiscountPct('u1', undefined, { selfId: 'a' })).resolves.toBe(0.12);
+  });
+
+  it('4 gói hẹn +200 ngày chưa ra đơn nào: danh sách hiện bậc thấp nhất, không phải 14%', async () => {
+    const rows = [sub('a'), sub('b'), sub('c'), sub('d')];
+    await expect(makeSvc(rows).effectiveDiscountPct('u1', undefined, { floorCount: 1 })).resolves.toBe(0.12);
+  });
+
+  it('1 gói đã ra đơn + 1 gói có kỳ kế +20 ngày + 3 gói hẹn xa chưa ra đơn: đếm 2, chưa tới bậc 3 gói', async () => {
+    const rows = [
+      sub('a', { lastOrderId: 'o1' }),
+      sub('b', { nextRunAt: new Date(Date.now() + 20 * DAY) }),
+      sub('c'),
+      sub('d'),
+      sub('e'),
+    ];
+    const svc = makeSvc(rows);
+    await expect(svc.effectiveDiscountPct('u1', undefined, { floorCount: 1 })).resolves.toBe(0.12);
+    // Thêm một gói nữa đạt điều kiện thì lên đủ 3 gói → bậc 14%.
+    rows.push(sub('f', { nextRunAt: new Date(Date.now() + 30 * DAY) }));
+    await expect(svc.effectiveDiscountPct('u1', undefined, { floorCount: 1 })).resolves.toBe(0.14);
+  });
+
+  it('gói chưa ra đơn, kỳ kế sau 36 ngày không được đếm; quá hạn thì đếm', async () => {
+    const rows = [
+      sub('a', { nextRunAt: new Date(Date.now() + 36 * DAY) }),
+      sub('b', { nextRunAt: new Date(Date.now() + 36 * DAY) }),
+      sub('c', { nextRunAt: new Date(Date.now() + 36 * DAY) }),
+      sub('d', { nextRunAt: new Date(Date.now() - DAY) }),
+    ];
+    await expect(makeSvc(rows).effectiveDiscountPct('u1')).resolves.toBe(0.12);
+  });
+
+  it('gói PAUSED đã ra đơn không được đếm', async () => {
+    const rows = [
+      sub('a', { lastOrderId: 'o1', status: 'PAUSED' }),
+      sub('b', { lastOrderId: 'o2', status: 'PAUSED' }),
+      sub('c', { lastOrderId: 'o3', status: 'PAUSED' }),
+      sub('d', { lastOrderId: 'o4' }),
+    ];
+    await expect(makeSvc(rows).effectiveDiscountPct('u1')).resolves.toBe(0.12);
+  });
+
+  it('gói đang tạo đơn luôn tự đếm: 3 gói đã ra đơn + gói thứ 4 đang tới kỳ → 4 gói, bậc 14%', async () => {
+    const rows = [
+      sub('a', { lastOrderId: 'o1' }),
+      sub('b', { lastOrderId: 'o2' }),
+      sub('c', { lastOrderId: 'o3' }),
+      sub('d', { nextRunAt: new Date(Date.now() + 200 * DAY) }),
+    ];
+    await expect(makeSvc(rows).effectiveDiscountPct('u1', undefined, { selfId: 'd' })).resolves.toBe(0.14);
+  });
+});
+
 describe('SubscriptionsService.skipCycle', () => {
   function makeSkip(sub: unknown, updateImpl?: jest.Mock) {
     const update = updateImpl ?? jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...args.data }));
