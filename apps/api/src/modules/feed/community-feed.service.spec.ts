@@ -8,6 +8,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     feedPost: {
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'post1', userId: 'author', kind: 'SHOWCASE' }),
+      // pickWinner đòi người thắng có bài dự thi: mặc định coi mọi người đều đã dự.
+      findFirst: jest.fn().mockResolvedValue({ id: 'entry1' }),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'new', ...data })),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -2165,10 +2167,28 @@ describe('CommunityFeedService.listEvents', () => {
 describe('CommunityFeedService.createEvent (admin)', () => {
   it('tạo sự kiện mới từ dto', async () => {
     const prisma = makePrisma();
-    const dto = { title: 'Thi khoe vườn', description: 'Mô tả', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10'), rewardPoints: 5 };
+    const dto = { title: 'Thi khoe vườn', description: 'Mô tả', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10'), rewardPoints: 30_000 };
     const r = await makeSvc(prisma).createEvent(dto);
     expect(prisma.communityEvent.create).toHaveBeenCalledWith({ data: dto });
     expect(r).toMatchObject({ id: 'ev1', title: 'Thi khoe vườn' });
+  });
+
+  // Quyết định C (docs/2026-10-18-launch-review/03-cau-hoi-sang.md): quà sự kiện 20.000-50.000 Điểm Xanh. 0 = sự kiện không quà.
+  const eventDto = (rewardPoints?: number) => ({
+    title: 'Thi khoe vườn', startAt: new Date('2026-08-01'), endAt: new Date('2026-08-10'),
+    ...(rewardPoints === undefined ? {} : { rewardPoints }),
+  });
+
+  it.each([5_000, 19_999, 50_001, 1_000_000])('U4-29: rewardPoints %i nằm ngoài 20.000-50.000 → BadRequest tiếng Việt, không tạo', async (points) => {
+    const prisma = makePrisma();
+    await expect(makeSvc(prisma).createEvent(eventDto(points))).rejects.toThrow(/20\.000.*50\.000/);
+    expect(prisma.communityEvent.create).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 0, 20_000, 50_000])('U4-29: rewardPoints %s (không quà hoặc trong khoảng) → tạo được', async (points) => {
+    const prisma = makePrisma();
+    await makeSvc(prisma).createEvent(eventDto(points));
+    expect(prisma.communityEvent.create).toHaveBeenCalledTimes(1);
   });
 
   it('startAt >= endAt → BadRequest, không tạo', async () => {
@@ -2209,6 +2229,21 @@ describe('CommunityFeedService.pickWinner (admin)', () => {
     await expect(makeSvc(prisma, reward).pickWinner('ev1', 'u1')).rejects.toBeInstanceOf(BadRequestException);
     expect(reward.rewardEventWinner).not.toHaveBeenCalled();
     expect(prisma.communityEvent.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('U4-B04: người không có bài PUBLISHED dự thi sự kiện → BadRequest tiếng Việt, KHÔNG thưởng, KHÔNG đóng sự kiện', async () => {
+    const prisma = makePrisma();
+    (prisma.communityEvent.findUnique as jest.Mock).mockResolvedValue({ id: 'ev1', rewardPoints: 30_000, status: 'OPEN' });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'uat_marketing' });
+    (prisma.feedPost.findFirst as jest.Mock).mockResolvedValue(null);
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn(), rewardEventWinner: jest.fn() };
+    await expect(makeSvc(prisma, reward).pickWinner('ev1', 'uat_marketing')).rejects.toThrow(/dự thi/);
+    expect(reward.rewardEventWinner).not.toHaveBeenCalled();
+    expect(prisma.communityEvent.updateMany).not.toHaveBeenCalled();
+    // cùng điều kiện với adminEventParticipants: bài đã duyệt, meta.eventId = sự kiện
+    expect((prisma.feedPost.findFirst as jest.Mock).mock.calls[0][0].where).toEqual({
+      userId: 'uat_marketing', status: 'PUBLISHED', meta: { path: ['eventId'], equals: 'ev1' },
+    });
   });
 
   it('người dùng không tồn tại → NotFound, KHÔNG thưởng, KHÔNG updateMany', async () => {

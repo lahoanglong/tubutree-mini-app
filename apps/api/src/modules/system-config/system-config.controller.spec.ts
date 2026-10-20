@@ -269,10 +269,10 @@ describe('SystemConfigController.publicConfig — trần dùng điểm và hạn
 
 // D5-10: chữ trong miniapp từng viết cứng 45%, 24 giờ, "tối đa 1.000 điểm"; giờ đọc từ config công khai.
 describe('SystemConfigController.publicConfig — số trong chữ đại lý và sự kiện cộng đồng (D5-10)', () => {
-  it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 1.000.000 điểm', async () => {
+  it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 50.000 điểm', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.dealer).toEqual({ maxDiscountPct: 0.45, reviewHours: 24 });
-    expect(out.community).toMatchObject({ eventRewardMaxPoints: 1_000_000 });
+    expect(out.community).toMatchObject({ eventRewardMaxPoints: 50_000 });
   });
 
   it('admin đổi → trả giá trị mới của đúng khoá mà dealer.service đang kẹp chiết khấu', async () => {

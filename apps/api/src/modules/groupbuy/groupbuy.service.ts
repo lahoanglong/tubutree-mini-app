@@ -206,7 +206,6 @@ export class GroupBuyService {
    *  Trả true nếu mọi thành viên đều đã có coupon (mới cấp hoặc đã có sẵn — P2002). */
   private async grantAllMembers(group: GroupRow): Promise<boolean> {
     const members = await this.prisma.groupBuyMember.findMany({ where: { groupBuyId: group.id } });
-    const discount = group.basePrice - group.unitPrice;
     const terms = await this.couponTerms(group);
     // Tên sản phẩm chỉ để điền tin: tra lỗi không được chặn việc cấp mã.
     const product = await this.prisma.product
@@ -228,7 +227,8 @@ export class GroupBuyService {
       if (granted && this.notifications) {
         await this.notifications
           .notify(m.userId, 'GROUP_BUY_SUCCESS', {
-            discount: discount.toLocaleString('vi-VN'),
+            // Mã là % có trần: số tiền cố định sẽ hứa nhiều hơn mức giảm thật khi khách mua biến thể rẻ.
+            discount: `${terms.pct}%`,
             product: product?.name ?? '',
             code: granted.code,
             expires: formatVnDate(granted.endAt),
