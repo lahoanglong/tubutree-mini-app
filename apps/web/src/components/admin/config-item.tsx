@@ -5,7 +5,11 @@ import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
 
-/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, hoa hồng, mã giảm, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp. */
+/**
+ * Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, hoa hồng, mã giảm, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp.
+ * game.* và seasonpass.* cũng vào đây trọn nhóm: giọt nước/hạt giống/XP là "giá" của coupon thu hoạch 30.000đ và bậc premium 5.000-30.000 điểm (game.service.ts),
+ * nên cả khoá không mang chữ "điểm" vẫn đổi được số tiền phát ra.
+ */
 const MONEY_PREFIXES = [
   'payment.',
   'loyalty.',
@@ -23,10 +27,12 @@ const MONEY_PREFIXES = [
   'groupbuy.',
   'subscribe.',
   'coins.',
+  'game.',
+  'seasonpass.',
 ];
 
-/** Nhóm trộn khoá tiền/điểm với khoá không đụng tiền (đường dẫn, số ô vườn, hạt giống, XP…): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần, giải, bậc thưởng, đơn tối thiểu, hạn mức mua bằng điểm. */
-const MIXED_PREFIXES = ['community.', 'game.', 'seasonpass.'];
+/** Nhóm trộn khoá thưởng điểm với khoá không đụng tiền (đường dẫn mạng xã hội, bật/tắt tính năng): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần. */
+const MIXED_PREFIXES = ['community.'];
 const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|cap|prizes?|tiers?|min_order|limit)([._]|$)/;
 
 /** Khoá tiền nằm ngoài các nhóm trên: phạt đi trễ trừ thẳng vào lương nhân viên. */

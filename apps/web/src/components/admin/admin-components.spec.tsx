@@ -647,18 +647,97 @@ describe('LoyaltyConfigCard', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/Ngày 7/);
   });
 
-  it('chỉ gửi khoá có thay đổi', async () => {
+  // U5-B04: card này ghi thẳng loyalty.* qua setConfig; gõ nhầm 2000 → 20000 làm mọi lượt điểm danh sau đó nhân 10.
+  it('chỉ gửi khoá có thay đổi, sau khi admin xác nhận "trước → sau"', async () => {
     const { container, puts } = setup();
     typeInto(container.querySelector('input[aria-label="Điểm ngày 7"]'), '5000');
     click(byText(container, 'button', 'Lưu tham số tích điểm'));
     await flush();
+    const d = confirmDialog();
+    expect(d?.textContent).toContain('Xác nhận đổi cấu hình tiền/điểm');
+    expect(d?.textContent).toContain('loyalty.checkin_points');
+    expect(d?.textContent).toContain('[1000,1000,1000,1000,1000,1000,2000] → [1000,1000,1000,1000,1000,1000,5000]');
+    expect(puts).toHaveLength(0);
+    answerConfirm(true);
+    await flush();
     expect(puts).toEqual([{ key: 'loyalty.checkin_points', value: [1000, 1000, 1000, 1000, 1000, 1000, 5000] }]);
   });
 
-  it('công tắc POS lưu ngay loyalty.pos_credit_enabled=true', async () => {
+  it('điểm ngày 7 gõ nhầm 2000 → 20000: hộp xác nhận hiện, Huỷ thì không gửi PUT nào', async () => {
+    const { container, puts } = setup();
+    typeInto(container.querySelector('input[aria-label="Điểm ngày 7"]'), '20000');
+    click(byText(container, 'button', 'Lưu tham số tích điểm'));
+    await flush();
+    expect(confirmDialog()).not.toBeNull();
+    expect(puts).toHaveLength(0);
+    answerConfirm(false);
+    await flush();
+    expect(puts).toHaveLength(0);
+  });
+
+  it('đổi nhiều trần cùng lúc: hộp xác nhận liệt kê từng khoá cũ → mới', async () => {
+    const { container, puts } = setup();
+    typeInto(field(container, 'Trần điểm / thành viên / ngày'), '1000000000');
+    typeInto(field(container, 'Trần điểm / nhân viên / ngày'), '4000000');
+    click(byText(container, 'button', 'Lưu tham số tích điểm'));
+    await flush();
+    const d = confirmDialog();
+    expect(d?.textContent).toContain('loyalty.pos_member_daily_points_cap');
+    expect(d?.textContent).toContain('1000000 → 1000000000');
+    expect(d?.textContent).toContain('loyalty.pos_staff_daily_points_cap');
+    expect(d?.textContent).toContain('3000000 → 4000000');
+    expect(puts).toHaveLength(0);
+    answerConfirm(true);
+    await flush();
+    expect(puts.map((p) => p.key).sort()).toEqual(['loyalty.pos_member_daily_points_cap', 'loyalty.pos_staff_daily_points_cap']);
+  });
+
+  it('không có thay đổi → không hỏi, không gửi', async () => {
+    const { container, puts } = setup();
+    click(byText(container, 'button', 'Lưu tham số tích điểm'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(puts).toHaveLength(0);
+    expect(container.textContent).toContain('Không có thay đổi');
+  });
+
+  it('công tắc POS BẬT: hỏi xác nhận, đồng ý mới lưu loyalty.pos_credit_enabled=true', async () => {
     const { container, puts } = setup();
     click(container.querySelector('input[role="switch"]'));
     await flush();
+    const d = confirmDialog();
+    expect(d?.textContent).toContain('loyalty.pos_credit_enabled');
+    expect(d?.textContent).toContain('false → true');
+    expect(puts).toHaveLength(0);
+    answerConfirm(true);
+    await flush();
     expect(puts).toEqual([{ key: 'loyalty.pos_credit_enabled', value: true }]);
+  });
+
+  it('công tắc POS BẬT rồi Huỷ: không gửi PUT, công tắc vẫn TẮT', async () => {
+    const { container, puts } = setup();
+    click(container.querySelector('input[role="switch"]'));
+    await flush();
+    answerConfirm(false);
+    await flush();
+    expect(puts).toHaveLength(0);
+    expect((container.querySelector('input[role="switch"]') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('công tắc POS TẮT (đang bật): lưu ngay, không hỏi', async () => {
+    const on = rows.map((r) => (r.key === 'loyalty.pos_credit_enabled' ? { ...r, value: true } : r));
+    const puts: { key: string; value: unknown }[] = [];
+    const api = mockFetch({
+      '/admin/config': (init) => {
+        if (init?.method === 'PUT') puts.push(JSON.parse(String(init.body)));
+        return { body: { ok: true } };
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<LoyaltyConfigCard rows={on} />);
+    click(container.querySelector('input[role="switch"]'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(puts).toEqual([{ key: 'loyalty.pos_credit_enabled', value: false }]);
   });
 });

@@ -41,12 +41,12 @@ function setup(r: ConfigRow) {
 
 describe('ConfigItem (tab Cấu hình)', () => {
   it('khoá đang dùng: sửa JSON rồi Lưu → gửi PUT đúng giá trị đã parse', async () => {
-    const { container, puts, onSaved } = setup(row({ key: 'game.max_plots', value: 5, category: 'game' }));
-    typeInto(container.querySelector('input'), '6');
+    const { container, puts, onSaved } = setup(row({ key: 'community.facebook_url', value: 'a', category: 'community' }));
+    typeInto(container.querySelector('input'), '"b"');
     click(byText(container, 'button', 'Lưu'));
     await flush();
     expect(confirmDialog()).toBeNull();
-    expect(puts).toEqual([{ key: 'game.max_plots', value: 6 }]);
+    expect(puts).toEqual([{ key: 'community.facebook_url', value: 'b' }]);
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -178,23 +178,38 @@ describe('ConfigItem (tab Cấu hình)', () => {
       expect(puts).toEqual([{ key, value: real!.value }]);
     });
 
-    // Khoá game/season pass chỉ là hạt giống, giọt nước, XP, số ô: không đụng tiền hay điểm Xanh nên không hỏi.
-    it.each(['game.daily_login_seeds', 'game.dew_seeds', 'game.plot_target','game.tank_capacity', 'seasonpass.checkin_xp'])(
-      '%s (dòng thật): không phải tiền/điểm nên lưu thẳng',
-      async (key) => {
-        const real = ADMIN_CONFIG_ROWS.find((r) => r.key === key);
-        expect(real, `fixture thiếu ${key}`).toBeDefined();
-        const { container, puts } = setup(real!);
-        typeInto(container.querySelector('input'), JSON.stringify(real!.value) + ' ');
-        click(byText(container, 'button', 'Lưu'));
-        await flush();
-        expect(confirmDialog()).toBeNull();
-        expect(puts).toHaveLength(1);
-      },
-    );
+    // Mỗi giọt nước/hạt giống/XP là "giá" của coupon 30.000đ hoặc bậc premium 5.000-30.000 điểm (game.service.ts): gõ 600 → 6 làm cây nào cũng ra coupon.
+    it.each([
+      'game.tree_default_target',
+      'game.plot_target',
+      'game.dew_seeds',
+      'game.daily_login_seeds',
+      'game.tank_capacity',
+      'seasonpass.checkin_xp',
+    ])('%s (dòng thật): đổi là đổi giá trị coupon/điểm nên hỏi xác nhận', async (key) => {
+      const real = ADMIN_CONFIG_ROWS.find((r) => r.key === key);
+      expect(real, `fixture thiếu ${key}`).toBeDefined();
+      const { container, puts } = setup(real!);
+      typeInto(container.querySelector('input'), JSON.stringify(real!.value) + ' ');
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      expect(confirmDialog()?.textContent).toContain(key);
+      expect(puts).toHaveLength(0);
+      answerConfirm(true);
+      await flush();
+      expect(puts).toEqual([{ key, value: real!.value }]);
+    });
+
+    it('game.tree_default_target 600 → 6: hộp xác nhận nêu cũ → mới', async () => {
+      const real = ADMIN_CONFIG_ROWS.find((r) => r.key === 'game.tree_default_target')!;
+      const { container } = setup(real);
+      typeInto(container.querySelector('input'), '6');
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      expect(confirmDialog()?.textContent).toContain('600 → 6');
+    });
 
     it.each([
-      ['game.max_plots', 5, '6'],
       ['community.facebook_url', 'https://a.example', '"https://b.example"'],
     ])('%s: khoá không phải tiền/điểm vẫn lưu thẳng, không hỏi', async (key, oldValue, next) => {
       const { container, puts } = setup(row({ key, value: oldValue, category: key.split('.')[0] }));
