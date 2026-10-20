@@ -32,17 +32,18 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
             key={item.id}
             data-item
             data-status={item.status}
-            className={`flex gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 ${comingSoon ? 'opacity-[.55]' : ''}`}
+            aria-disabled={comingSoon || undefined}
+            className="flex gap-3 rounded-card border border-stone-200 bg-stone-0 p-3"
           >
             <span data-item-media>
               <ProductThumb src={item.imageUrl} alt="" size={48} />
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-stone-900 max-md:text-[length:var(--type-body-md-size)]">{item.name}</span>
+                <span className={`text-sm font-semibold max-md:text-[length:var(--type-body-md-size)] ${comingSoon ? 'text-stone-500' : 'text-stone-900'}`}>{item.name}</span>
                 {comingSoon && <Badge>Sắp nhận</Badge>}
               </div>
-              <p className="text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{ruleText(item)}</p>
+              <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
               {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
               {cap && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{cap}</p>}
               {monthLeft && <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}

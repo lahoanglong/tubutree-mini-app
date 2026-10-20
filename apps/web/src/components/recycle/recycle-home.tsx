@@ -245,16 +245,19 @@ export function RecycleHome() {
 
         <section className="space-y-2">
           <h2 className={skin.sectionTitle}>Tubu nhận những món này</h2>
-          {items.map((item) => (
-            <div key={item.id} data-item data-status={item.status} className={`space-y-0.5 ${item.status === 'COMING_SOON' ? 'opacity-70' : ''}`}>
+          {items.map((item) => {
+            const comingSoon = item.status === 'COMING_SOON';
+            return (
+            <div key={item.id} data-item data-status={item.status} aria-disabled={comingSoon || undefined} className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-stone-900 max-md:text-[length:var(--type-body-sm-size)]">{item.name}</span>
-                {item.status === 'COMING_SOON' && <Badge>Sắp nhận</Badge>}
+                <span className={`text-sm font-semibold max-md:text-[length:var(--type-body-sm-size)] ${comingSoon ? 'text-stone-500' : 'text-stone-900'}`}>{item.name}</span>
+                {comingSoon && <Badge>Sắp nhận</Badge>}
               </div>
-              <p className="text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{ruleText(item)}</p>
+              <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
               {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
             </div>
-          ))}
+            );
+          })}
         </section>
       </div>
 
