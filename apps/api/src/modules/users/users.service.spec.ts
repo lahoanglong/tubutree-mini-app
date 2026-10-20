@@ -180,6 +180,59 @@ describe('UsersService.updateAddress', () => {
   });
 });
 
+/** Sổ địa chỉ trong bộ nhớ: deleteAddress cần đọc/ghi thật để kiểm "ai là mặc định sau khi xoá". */
+function prismaWithBook(rows: { id: string; userId: string; isDefault: boolean }[]) {
+  const book = rows.map((r) => ({ ...r }));
+  const txSpy = jest.fn();
+  const base: Record<string, unknown> = {
+    $queryRaw: jest.fn().mockResolvedValue([]),
+    subscription: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    address: {
+      findUnique: jest.fn(async ({ where }: { where: { id: string } }) => book.find((a) => a.id === where.id) ?? null),
+      findFirst: jest.fn(async ({ where }: { where: { userId: string } }) =>
+        [...book].filter((a) => a.userId === where.userId).sort((a, b) => (a.id < b.id ? -1 : 1))[0] ?? null),
+      delete: jest.fn(async ({ where }: { where: { id: string } }) => {
+        book.splice(book.findIndex((a) => a.id === where.id), 1);
+      }),
+      update: jest.fn(async ({ where, data }: { where: { id: string }; data: { isDefault: boolean } }) => {
+        Object.assign(book.find((a) => a.id === where.id)!, data);
+      }),
+    },
+  };
+  base.$transaction = jest.fn(async (cb: (tx: unknown) => unknown, txOpts?: unknown) => {
+    txSpy(txOpts);
+    return cb(base);
+  });
+  return { prisma: base as unknown as PrismaService, book, txSpy };
+}
+
+describe('UsersService.deleteAddress: giữ một địa chỉ mặc định (U6-B07)', () => {
+  it('xoá địa chỉ mặc định khi còn địa chỉ khác → địa chỉ đầu tiên còn lại (theo id) thành mặc định', async () => {
+    const { prisma, book } = prismaWithBook([
+      { id: 'a3', userId: 'u1', isDefault: false },
+      { id: 'a1', userId: 'u1', isDefault: true },
+      { id: 'a2', userId: 'u1', isDefault: false },
+    ]);
+    await expect(new UsersService(prisma).deleteAddress('u1', 'a1')).resolves.toEqual({ ok: true });
+    expect(book.map((a) => [a.id, a.isDefault]).sort()).toEqual([['a2', true], ['a3', false]]);
+  });
+
+  it('xoá địa chỉ không mặc định → mặc định giữ nguyên', async () => {
+    const { prisma, book } = prismaWithBook([
+      { id: 'a1', userId: 'u1', isDefault: true },
+      { id: 'a2', userId: 'u1', isDefault: false },
+    ]);
+    await new UsersService(prisma).deleteAddress('u1', 'a2');
+    expect(book).toEqual([{ id: 'a1', userId: 'u1', isDefault: true }]);
+  });
+
+  it('xoá địa chỉ cuối cùng → không lỗi, sổ trống', async () => {
+    const { prisma, book } = prismaWithBook([{ id: 'a1', userId: 'u1', isDefault: true }]);
+    await expect(new UsersService(prisma).deleteAddress('u1', 'a1')).resolves.toEqual({ ok: true });
+    expect(book).toEqual([]);
+  });
+});
+
 describe('Sổ địa chỉ chỉ nhận địa chỉ gửi được sang Pancake (PANCAKE-16, MONEY-12)', () => {
   const geoReturning = (r: 'ok' | 'invalid' | 'unknown') => ({ checkWard: jest.fn().mockResolvedValue(r) }) as never;
 

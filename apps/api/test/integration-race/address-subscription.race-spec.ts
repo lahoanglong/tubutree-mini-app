@@ -150,6 +150,35 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
     expect(await prisma.address.count({ where: { id: addr.id } })).toBe(0);
   });
 
+  it('U6-B07: xoá địa chỉ mặc định → địa chỉ còn lại thành mặc định', async () => {
+    const u = await createUser(prisma);
+    const first = await address(u.id);
+    const second = await address(u.id);
+    await prisma.address.update({ where: { id: first.id }, data: { isDefault: true } });
+    await expect(users.deleteAddress(u.id, first.id)).resolves.toEqual({ ok: true });
+    expect(await prisma.address.findMany({ where: { userId: u.id }, select: { id: true, isDefault: true } })).toEqual([
+      { id: second.id, isDefault: true },
+    ]);
+  });
+
+  it('U6-B07: xoá mặc định song song với đặt địa chỉ kia làm mặc định (10 vòng): luôn đúng một mặc định', async () => {
+    for (let round = 0; round < 10; round++) {
+      const u = await createUser(prisma);
+      const first = await address(u.id);
+      const second = await address(u.id);
+      await prisma.address.update({ where: { id: first.id }, data: { isDefault: true } });
+      const results = await Promise.allSettled([
+        users.deleteAddress(u.id, first.id),
+        users.updateAddress(u.id, second.id, { isDefault: true } as never),
+      ]);
+      // Xung đột Serializable (P2034) được phép: bên thua thử lại ở tầng HTTP, miễn không để lại 0 hay 2 mặc định.
+      for (const r of results) if (r.status === 'rejected') expect((r.reason as { code?: string }).code).toBe('P2034');
+      const rows = await prisma.address.findMany({ where: { userId: u.id } });
+      const ctx = `vòng ${round}: ${results.map((r) => r.status).join('/')}`;
+      expect({ ctx, defaults: rows.filter((a) => a.isDefault).length }).toEqual({ ctx, defaults: 1 });
+    }
+  });
+
   it('xoá địa chỉ song song với tạo gói (20 vòng): không gói nào bị mất hay mồ côi', async () => {
     for (let round = 0; round < 20; round++) {
       const u = await createUser(prisma);

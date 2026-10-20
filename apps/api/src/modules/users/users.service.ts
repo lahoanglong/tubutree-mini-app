@@ -141,8 +141,10 @@ export class UsersService {
     try {
       await this.prisma.$transaction(async (tx) => {
         // Khoá dòng địa chỉ: tạo gói song song (INSERT có FK cần FOR KEY SHARE) phải chờ tới khi xoá xong
-        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá.
-        await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${id} FOR UPDATE`;
+        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá. Khoá cả sổ địa chỉ của khách (theo id)
+        // để việc chọn mặc định mới chờ updateAddress/createAddress đang đổi mặc định, không để lại 0 hoặc 2 mặc định.
+        // Không dùng Serializable ở đây: snapshot lấy trước khi chờ khoá sẽ không thấy gói vừa tạo song song.
+        await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "userId" = ${userId} ORDER BY "id" FOR UPDATE`;
         const inUse = await tx.subscription.findMany({
           where: { addressId: id, status: { in: ['ACTIVE', 'PAUSED'] } },
           select: { variation: { select: { product: { select: { name: true } } } } },
@@ -150,7 +152,13 @@ export class UsersService {
         });
         if (inUse.length > 0) throw addressInUseError(inUse.map((s) => s.variation.product.name));
         await tx.subscription.deleteMany({ where: { addressId: id, status: 'CANCELLED' } });
+        const doomed = await tx.address.findUnique({ where: { id }, select: { isDefault: true } });
         await tx.address.delete({ where: { id } });
+        if (doomed?.isDefault) {
+          // Cùng thứ tự listAddresses trả cho khách: không có mặc định thì lấy id nhỏ nhất, để khách luôn còn một địa chỉ mặc định.
+          const next = await tx.address.findFirst({ where: { userId }, orderBy: { id: 'asc' }, select: { id: true } });
+          if (next) await tx.address.update({ where: { id: next.id }, data: { isDefault: true } });
+        }
       });
     } catch (err) {
       // Lưới an toàn: có gói gắn vào địa chỉ mà bước kiểm không thấy thì FK RESTRICT chặn (P2003).
