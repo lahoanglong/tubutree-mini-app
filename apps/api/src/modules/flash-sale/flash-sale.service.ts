@@ -357,13 +357,14 @@ export class FlashSaleService {
       await this.assertNoItemClash(tx, id, fresh.items?.map((it) => it.variationId) ?? [], start, end);
       if (staffCreated) {
         // Dời giờ có thể làm hai đợt của cùng nhân viên chồng giờ, nên trần đơn (addItem chỉ kiểm lúc thêm dòng) phải kiểm lại ở đây, dưới cùng
-        // khoá với addItem. Chỉ chặn khi lần dời làm TĂNG mức giảm một đơn: đợt đã vượt trần từ trước (quản trị viên thêm dòng) vẫn được thu
-        // hẹp hay dời giờ mà không tăng mức giảm, không thì chẳng ai gỡ được đợt đó bằng cách dời giờ.
+        // khoá với addItem. Chỉ khung mới nằm gọn trong khung cũ (thu hẹp, đợt chưa kết thúc) mới được qua khi đã vượt trần, để đợt admin thêm
+        // dòng vượt trần vẫn gỡ được bằng cách thu hẹp. So với mức "trước" thì không được: mức đó cộng cả các đợt rời nhau trong khung dài
+        // nên bị thổi phồng, dời sang khung khác với tổng thấp hơn nó vẫn lách được trần.
         const creator = fresh.createdBy!;
         await this.lockStaffOrderCap(tx, creator);
-        const before = await this.staffOrderExposure(tx, creator, fresh.startAt, fresh.endAt, id);
         const total = await this.staffOrderExposure(tx, creator, start, end, id);
-        if (total > maxAmount && total > before) {
+        const shrinks = start.getTime() >= fresh.startAt.getTime() && end.getTime() <= fresh.endAt.getTime() && fresh.endAt.getTime() > Date.now();
+        if (total > maxAmount && !shrinks) {
           throw new BadRequestException(
             `Một đơn mua đủ các sản phẩm flash của nhân viên này cùng khung giờ chỉ được giảm tối đa ${vnd(maxAmount)}: ` +
               `sau khi dời giờ, các đợt chồng nhau giảm tới ${vnd(total)}.` +

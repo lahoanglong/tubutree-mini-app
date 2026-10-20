@@ -137,7 +137,7 @@ describe('Đơn P3: flash sale dưới khoá, mua lại một lần ghi (real Po
   });
 
   describe('trần mỗi đơn của nhân viên khi PATCH đợt đã vượt trần từ trước', () => {
-    it('thu hẹp giờ và sửa tiêu đề vẫn được; kéo dài làm tăng mức giảm một đơn thì bị chặn', async () => {
+    it('thu hẹp giờ và sửa tiêu đề vẫn được; kéo dài hay dời sang khung khác khi đã vượt trần thì bị chặn', async () => {
       const staff = await user('STAFF');
       const s1 = await sale(staff.id, 1, 3);
       const s2 = await sale(staff.id, 2, 4);
@@ -148,7 +148,8 @@ describe('Đơn P3: flash sale dưới khoá, mua lại một lần ghi (real Po
       const actor = { id: staff.id, staff: true };
       await flash.updateSale(s1.id, { endAt: new Date(Date.now() + 2.5 * HOUR).toISOString() }, actor);
       await flash.updateSale(s2.id, { title: 'Đổi tên', isActive: false }, actor);
-      await expect(flash.updateSale(s1.id, { endAt: new Date(Date.now() + 4 * HOUR).toISOString() }, actor)).resolves.toBeDefined();
+      // Kéo dài đợt đã vượt trần (kể cả khi tổng không tăng) cũng bị chặn: chỉ thu hẹp mới gỡ được.
+      await expect(flash.updateSale(s1.id, { endAt: new Date(Date.now() + 4 * HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
       // Đợt tách khỏi nhau (đợt 1 chỉ còn 1h–1.9h) rồi kéo lại chồng thì mức giảm tăng từ 80.000đ lên 160.000đ: chặn.
       await flash.updateSale(s1.id, { endAt: new Date(Date.now() + 1.9 * HOUR).toISOString() }, actor);
       await expect(flash.updateSale(s1.id, { endAt: new Date(Date.now() + 3 * HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
@@ -167,6 +168,28 @@ describe('Đơn P3: flash sale dưới khoá, mua lại một lần ghi (real Po
       const actor = { id: staff.id, staff: true };
       await expect(flash.updateSale(s.id, { endAt: new Date(Date.now() + HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
       expect((await prisma.flashSale.findUniqueOrThrow({ where: { id: s.id } })).endAt.getTime()).toBeLessThan(Date.now());
+    });
+  });
+
+  describe('trần mỗi đơn của nhân viên khi dời giờ sang khung khác', () => {
+    it('dời đợt S sang khung đợt T1 làm tổng giảm một đơn 110.000đ > 100.000đ: bị chặn dù mức "trước" của khung cũ bị các đợt rời nhau thổi phồng', async () => {
+      const staff = await user('STAFF');
+      const actor = { id: staff.id, staff: true };
+      const [a, b, c, d] = await variations(4);
+      const s = await sale(staff.id, 1, 5);
+      const t2a = await sale(staff.id, 1, 2);
+      const t2b = await sale(staff.id, 3, 4);
+      const t1 = await sale(staff.id, 10, 11);
+      // Mọi bước qua addItem của nhân viên (giá 100.000đ): 20.000đ×1, 25.000đ×2, 25.000đ×2, 30.000đ×3.
+      await flash.addItem(s.id, { variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 1 }, actor);
+      await flash.addItem(t2a.id, { variationId: b!, flashPrice: 75_000, quota: 10, perUserLimit: 2 }, actor);
+      await flash.addItem(t2b.id, { variationId: c!, flashPrice: 75_000, quota: 10, perUserLimit: 2 }, actor);
+      await flash.addItem(t1.id, { variationId: d!, flashPrice: 70_000, quota: 10, perUserLimit: 3 }, actor);
+      const newStart = new Date(Date.now() + 10 * HOUR);
+      const newEnd = new Date(Date.now() + 11 * HOUR);
+      await expect(flash.updateSale(s.id, { startAt: newStart.toISOString(), endAt: newEnd.toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
+      const after = await prisma.flashSale.findUniqueOrThrow({ where: { id: s.id } });
+      expect(after.startAt.getTime()).toBeLessThan(Date.now() + 2 * HOUR);
     });
   });
 
