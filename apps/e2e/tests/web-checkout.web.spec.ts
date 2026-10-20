@@ -67,14 +67,16 @@ test.describe('Web khách: thanh toán', () => {
   test('đặt đơn bằng Ví Tubu rồi số dư ở Tài khoản giảm ngay, không chờ làm mới trang', async ({ page, api }) => {
     const balances: Balances = { wallet: 500000, points: 0 };
     mockBuyer(api, balances);
+    const placedOrder = (total: number, paymentMethod: string) => ({
+      id: 'n1', code: 'TUBU2026101499999', status: 'CONFIRMED', subtotal: 250000, discount: 0, shippingFee: 30000,
+      total, paymentMethod, paymentStatus: 'PAID', createdAt: new Date().toISOString(), items: [],
+    });
     api.post('/checkout/place-order', ({ call }) => {
       const body = call.body as { paymentMethod: string; expectedTotal: number };
       if (body.paymentMethod === 'WALLET') balances.wallet -= body.expectedTotal;
-      return {
-        id: 'n1', code: 'TUBU2026101499999', status: 'CONFIRMED', subtotal: 250000, discount: 0, shippingFee: 30000,
-        total: body.expectedTotal, paymentMethod: body.paymentMethod, paymentStatus: 'PAID', createdAt: new Date().toISOString(), items: [],
-      };
+      return placedOrder(body.expectedTotal, body.paymentMethod);
     });
+    api.get('/orders/TUBU2026101499999', () => placedOrder(280000, 'WALLET'));
 
     await page.goto('/thanh-toan');
     const wallet = page.getByRole('radio', { name: /Ví Tubu/ });
@@ -92,8 +94,9 @@ test.describe('Web khách: thanh toán', () => {
     const desktop = (page.viewportSize()?.width ?? 0) >= 768;
     await expect(page.getByTestId('order-success-desktop')).toBeVisible({ visible: desktop });
     await expect(page.getByTestId('order-success-mobile')).toBeVisible({ visible: !desktop });
+    // Điện thoại đi bằng điều hướng phía client (không goto) để /me không được tải mới, nếu không ca này không bắt được thiếu invalidateBalances.
     if (desktop) await page.getByRole('link', { name: 'Đơn của tôi' }).click();
-    else await page.goto('/tai-khoan/don-hang');
+    else await page.getByRole('button', { name: 'Theo dõi đơn' }).click();
     await expect(page).toHaveURL(/\/tai-khoan\/don-hang/);
     await page.locator('a[href="/tai-khoan"]:visible').first().click();
     await expect(page.getByText('220.000đ')).toBeVisible();
