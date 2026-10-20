@@ -4,7 +4,7 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
 
-// D7 việc 4: giỏ hàng trên điện thoại có thanh dính đáy (Tổng + "Thanh toán (N) · số tiền"), checkbox ≥ 24px.
+// D7 việc 4: giỏ hàng trên điện thoại có thanh dính đáy (tạm tính đã giảm + "Thanh toán (N)" như Mini App), checkbox ≥ 24px.
 
 const state = vi.hoisted(() => ({ cart: null as unknown }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
@@ -47,17 +47,17 @@ afterEach(() => {
 });
 
 describe('/gio-hang — thanh dính đáy', () => {
-  it('hiện Tổng cộng và liên kết "Thanh toán (số lượng) · số tiền" sang /thanh-toan', async () => {
+  it('hiện tạm tính đã giảm và liên kết "Thanh toán (số lượng)" sang /thanh-toan', async () => {
     const c = await mount();
-    expect(bar(c)!.textContent).toContain('Tổng cộng');
+    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm, chưa gồm ship)300.000đ');
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
-    expect(link.textContent).toBe('Thanh toán (2) · 300.000đ');
+    expect(link.textContent).toBe('Thanh toán (2)');
   });
 
   it('tổng trên thanh dính trừ các khoản giảm như khung tóm tắt', async () => {
     state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
     const c = await mount();
-    expect(bar(c)!.querySelector('a[href="/thanh-toan"]')!.textContent).toBe('Thanh toán (2) · 250.000đ');
+    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm, chưa gồm ship)250.000đ');
   });
 
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {

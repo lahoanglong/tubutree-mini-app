@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Recycle, ShoppingBag } from 'lucide-react';
+import { CheckCircle2, Plus, Recycle, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -21,6 +21,7 @@ import {
   getPublicConfig,
   formatVnd,
   type AddressDTO,
+  type CartLine,
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
@@ -55,6 +56,8 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
+import { TitleBand, CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
+import { ProductThumb } from '@/components/mini';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -62,6 +65,18 @@ const PRICE_CHANGED = 'PRICE_CHANGED';
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm';
 const optionClass = (selected: boolean) =>
   `${OPTION_BASE} ${selected ? 'border-forest-600 bg-forest-50' : 'border-stone-450 bg-stone-0'}`;
+// Mini App: dòng phương thức thanh toán không viền/nền, cách nhau bằng khoảng đệm (checkout.tsx: padding 12px 0).
+const payOptionClass = (selected: boolean) =>
+  `${optionClass(selected)} max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:py-3`;
+// Mini App: thẻ địa chỉ viền 1,5px; đang chọn viền xanh và nền sage nhạt.
+const addressOptionClass = (selected: boolean) =>
+  `${optionClass(selected)} max-md:border-[1.5px] ${
+    selected
+      ? 'max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-bg-subtle)]'
+      : 'max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
+  }`;
+// Mỗi phần của trang thanh toán ở điện thoại là dải trắng phẳng tràn ngang cách nhau 8px (Box p=4 mt=2 của Mini App).
+const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
@@ -477,10 +492,10 @@ export default function CheckoutPage() {
           </Link>
         </div>
       )}
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="space-y-4 md:col-span-2">
-          <section className={`p-4 ${ui.card}`}>
-            <h2 className={ui.sectionTitle}>Địa chỉ giao hàng</h2>
+      <div className="grid gap-6 max-md:gap-0 md:grid-cols-3">
+        <div className="space-y-4 max-md:contents md:col-span-2">
+          <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
               <p className={`mt-2 ${ui.error}`}>
                 Không tải được danh sách địa chỉ.{' '}
@@ -492,6 +507,7 @@ export default function CheckoutPage() {
             <AddressPicker
               addresses={addrQ.data ?? []}
               selectedId={addressId}
+              quoteOutdated={quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
@@ -505,8 +521,8 @@ export default function CheckoutPage() {
             />
           </section>
 
-          <section className={`p-4 ${ui.card}`}>
-            <h2 className={ui.sectionTitle}>Phương thức thanh toán</h2>
+          <section data-mini-block="payment" className={`${MINI_BAND} max-md:order-5`}>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Phương thức thanh toán</h2>
             {zeroNote ? (
               <p className="mt-2 text-sm text-forest-800">{zeroNote}</p>
             ) : (
@@ -515,7 +531,7 @@ export default function CheckoutPage() {
                   const reason = p.hint;
                   return (
                     <div key={p.k}>
-                      <label className={`${optionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
+                      <label className={`${payOptionClass(payment === p.k)} ${reason ? 'cursor-not-allowed opacity-60' : ''}`}>
                         <input
                           type="radio"
                           name="pay"
@@ -523,7 +539,7 @@ export default function CheckoutPage() {
                           onChange={chosen(() => setPayment(p.k))}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
-                          className="h-6 w-6 shrink-0 accent-forest-600"
+                          className={miniRadio}
                         />
                         {p.label}
                       </label>
@@ -544,8 +560,8 @@ export default function CheckoutPage() {
             )}
           </section>
 
-          <section className={`p-4 ${ui.card}`}>
-            <h2 className={ui.sectionTitle}>Ghi chú cho đơn hàng</h2>
+          <section data-mini-block="note" className={`${MINI_BAND} max-md:order-7`}>
+            <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho đơn hàng</h2>
             <label className="mt-2 block">
               <span className="text-xs font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
@@ -565,7 +581,7 @@ export default function CheckoutPage() {
           </section>
 
           {pickupReq !== undefined && (
-            <section id="checkout-waste-pickup" className={`p-4 ${ui.card}`}>
+            <section id="checkout-waste-pickup" data-mini-block="waste" className={`${MINI_BAND} max-md:order-8`}>
               {pickupReq === null ? (
                 <Link href="/doi-rac/tao" className="flex min-h-11 items-center justify-between gap-3 text-sm">
                   <span className="flex items-center gap-3">
@@ -612,32 +628,38 @@ export default function CheckoutPage() {
             </section>
           )}
 
-          <ReferralCodeBox
-            linkedCode={sfCtx.referralCode}
-            appliedCode={referralApplied}
-            onApplied={chosen(setReferralApplied)}
-            disabled={place.isPending}
-          />
+          <div data-mini-block="referral" className="max-md:order-4 max-md:mt-2">
+            <ReferralCodeBox
+              linkedCode={sfCtx.referralCode}
+              appliedCode={referralApplied}
+              onApplied={chosen(setReferralApplied)}
+              disabled={place.isPending}
+            />
+          </div>
 
-          <InvoiceSection
-            want={wantInvoice}
-            onWant={chosen(setWantInvoice)}
-            invoice={invoice}
-            onInvoice={chosen(setInvoice)}
-            valid={invoiceValid}
-            disabled={place.isPending}
-          />
+          <div data-mini-block="invoice" className="max-md:order-9 max-md:mt-2">
+            <InvoiceSection
+              want={wantInvoice}
+              onWant={chosen(setWantInvoice)}
+              invoice={invoice}
+              onInvoice={chosen(setInvoice)}
+              valid={invoiceValid}
+              disabled={place.isPending}
+            />
+          </div>
         </div>
 
-        <div className={`h-fit p-4 ${ui.card}`}>
-          <h2 className={ui.sectionTitle}>Đơn hàng</h2>
+        <div className={`h-fit p-4 ${ui.card} max-md:contents`}>
+          <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
               hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
+          <div data-mini-block="items" className="max-md:order-2 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4">
+          <MobileItems items={checkoutItems} shipments={split ? shipments : null} splitNote={splitNote} />
           <div
             role="region"
             aria-label="Sản phẩm trong đơn"
             tabIndex={split ? undefined : 0}
-            className={`mt-2 space-y-1 text-sm ${split ? '' : 'max-h-40 overflow-auto'}`}
+            className={`mt-2 space-y-1 text-sm max-md:hidden ${split ? '' : 'max-h-40 overflow-auto'}`}
           >
             {split
               ? shipments.map((sh) => (
@@ -672,7 +694,10 @@ export default function CheckoutPage() {
               </Link>
             </p>
           )}
-          {splitNote && <p className="mt-2 text-xs text-stone-600">{splitNote}</p>}
+          {splitNote && <p className="mt-2 text-xs text-stone-600 max-md:hidden">{splitNote}</p>}
+          </div>
+          <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
+          <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
           <Row label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
           {(quote?.discount ?? 0) > 0 && (
             <Row label={`Giảm giá${cart?.couponCode ? ` (${cart.couponCode})` : ''}`} value={`-${formatVnd(quote!.discount)}`} green />
@@ -688,30 +713,40 @@ export default function CheckoutPage() {
             label="Phí vận chuyển"
             value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
           />
+          </div>
           {cart && (
-            <CouponBox
-              currentCode={cart.couponCode}
-              subtotal={previewSubtotal}
-              shippingFee={quote?.shippingFee ?? null}
-              notice={quote ? quote.couponNotice : cart.couponNotice}
-              disabled={place.isPending}
-              preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
-              previewKey={couponPreviewKey(checkoutItems)}
-            />
+            <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
+              <CouponBox
+                band
+                actionLabel="Xem mã"
+                currentCode={cart.couponCode}
+                appliedDiscount={quote?.discount ?? 0}
+                subtotal={previewSubtotal}
+                shippingFee={quote?.shippingFee ?? null}
+                notice={quote ? quote.couponNotice : cart.couponNotice}
+                disabled={place.isPending}
+                preview={checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined}
+                previewKey={couponPreviewKey(checkoutItems)}
+              />
+            </div>
           )}
+          <div data-mini-block="points" className="max-md:order-6 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:p-4 max-md:empty:hidden">
           {usablePoints > 0 && (
             <label
-              className={`mt-3 flex min-h-11 items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm ${
+              className={`relative mt-3 flex min-h-11 items-center gap-2 rounded-control border border-forest-200 bg-forest-50 p-3 text-sm max-md:mt-0 max-md:flex-row-reverse max-md:justify-between max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 ${
                 partnerPoints.disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
               }`}
             >
-              <input
-                type="checkbox"
-                checked={usePoints && !partnerPoints.disabled}
-                disabled={partnerPoints.disabled}
-                onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
-                className="h-6 w-6 shrink-0 accent-forest-600"
-              />
+              <span className={miniCheckboxWrap}>
+                <input
+                  type="checkbox"
+                  checked={usePoints && !partnerPoints.disabled}
+                  disabled={partnerPoints.disabled}
+                  onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setUsePoints(e.target.checked))}
+                  className={miniCheckbox}
+                />
+                <CheckMark />
+              </span>
               {/* Số thật backend trừ (đã áp trần % giá trị hàng) nằm ở quote.pointsUsed, không phải số dư. */}
               <span className="text-forest-800">
                 {usePoints && quote
@@ -724,7 +759,9 @@ export default function CheckoutPage() {
           {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.partnerNote}</p>}
           {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
-          <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
+          </div>
+          <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4">
+          <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:mt-0 max-md:border-t-0 max-md:pt-1">
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
@@ -784,6 +821,7 @@ export default function CheckoutPage() {
               )}
             </div>
           )}
+          </div>
         </div>
       </div>
       <StickyActionBar label="Đặt hàng">
@@ -792,20 +830,14 @@ export default function CheckoutPage() {
             {barHint}
           </p>
         )}
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-none">
-            <div className="text-xs text-stone-600">Tổng cộng</div>
-            <div className="text-lg font-bold leading-tight text-stone-900">{totalText}</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => place.mutate()}
-            disabled={placeDisabled}
-            className={`${uiBar.primary} min-w-0 flex-1`}
-          >
-            {place.isPending ? 'Đang đặt hàng…' : quote ? `Đặt hàng · ${formatVnd(quote.total)}` : 'Đặt hàng'}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => place.mutate()}
+          disabled={placeDisabled}
+          className={`${uiBar.primary} w-full`}
+        >
+          {place.isPending ? 'Đang đặt hàng…' : quote ? `Đặt hàng · ${formatVnd(quote.total)}` : 'Đặt hàng'}
+        </button>
       </StickyActionBar>
     </Shell>
   );
@@ -823,12 +855,14 @@ function Row({ label, value, green }: { label: string; value: string; green?: bo
 function AddressPicker({
   addresses,
   selectedId,
+  quoteOutdated,
   onSelect,
   onCreated,
   onUpdated,
 }: {
   addresses: AddressDTO[];
   selectedId: string | null;
+  quoteOutdated: boolean;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
   onUpdated: (a: AddressDTO) => void;
@@ -854,16 +888,23 @@ function AddressPicker({
           />
         ) : (
           <div key={a.id} className="flex items-start gap-1">
-            <label className={`${optionClass(selectedId === a.id)} min-w-0 flex-1 items-start`}>
+            <label className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
               <input
                 type="radio"
                 name="addr"
                 checked={selectedId === a.id}
                 onChange={() => onSelect(a.id)}
-                className="h-6 w-6 shrink-0 accent-forest-600"
+                className={`${miniRadio} max-md:sr-only`}
               />
               <span className="min-w-0 break-words">
-                <span className="font-medium text-stone-900">{a.recipient} · {a.phone}</span>
+                <span className="flex flex-wrap items-center gap-x-1.5">
+                  <span className="font-medium text-stone-900 max-md:font-semibold">{a.recipient} · {a.phone}</span>
+                  {a.isDefault && (
+                    <span className="rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-xs font-semibold text-[color:var(--color-action-secondary-fg)]">
+                      Mặc định
+                    </span>
+                  )}
+                </span>
                 <br />
                 <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
                 {isLegacyGeo(a) && (
@@ -883,7 +924,7 @@ function AddressPicker({
                 setEditingId(a.id);
               }}
               aria-label={`Sửa địa chỉ của ${a.recipient}`}
-              className={ui.btnText}
+              className={`${ui.btnText} ${isLegacyGeo(a) || (selectedId === a.id && quoteOutdated) ? '' : 'max-md:hidden'}`}
             >
               Sửa
             </button>
@@ -910,12 +951,18 @@ function AddressPicker({
               setEditingId(null);
               setAdding(true);
             }}
-            className="inline-flex min-h-11 items-center text-sm font-semibold text-forest-700 hover:underline"
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-forest-700 hover:underline"
           >
-            + Thêm địa chỉ mới
+            <span
+              aria-hidden="true"
+              className="inline-flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-dashed border-[var(--color-action-primary-bg)]"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.75} />
+            </span>
+            Thêm địa chỉ mới
           </button>
           {addresses.length > 0 && (
-            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-stone-700 hover:underline">
+            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-stone-700 hover:underline max-md:hidden">
               Quản lý sổ địa chỉ
             </Link>
           )}
@@ -927,12 +974,66 @@ function AddressPicker({
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
       <BackLink href="/gio-hang">
         ← Về giỏ hàng
       </BackLink>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>Thanh toán</h1>
-      <div className="mt-4">{children}</div>
+      <TitleBand title="Thanh toán" className="md:mt-1" />
+      <div className="mt-4 max-md:mt-0">{children}</div>
     </main>
+  );
+}
+
+// Khối "Sản phẩm (n)" của Mini App (checkout.tsx): ảnh 48px, tên một dòng, phân loại, đơn giá × số lượng, thành tiền. Chỉ hiện ở điện thoại;
+// từ md danh sách chữ trong khung "Đơn hàng" giữ nguyên.
+function MobileItems({
+  items,
+  shipments,
+  splitNote,
+}: {
+  items: CartLine[];
+  shipments: { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number }[] | null;
+  splitNote: string | null;
+}) {
+  if (items.length === 0) return null;
+  const count = items.reduce((sum, it) => sum + it.quantity, 0);
+  const groups = shipments
+    ? shipments.map((sh) => ({ key: sh.key, shipment: sh, lines: items.filter((it) => sh.itemIds.includes(it.id)) }))
+    : [{ key: 'all', shipment: null, lines: items }];
+  return (
+    <div className="md:hidden">
+      <h2 className="font-ui text-sm font-semibold leading-5">Sản phẩm ({count})</h2>
+      {splitNote && <p className="mt-2.5 text-xs text-[color:var(--color-text-secondary)]">{splitNote}</p>}
+      <div className="mt-2.5 space-y-3">
+        {groups.map((g) => (
+          <section key={g.key} aria-label={g.shipment ? fulfillerLabel(g.shipment.fulfiller) : 'Sản phẩm sẽ mua'}>
+            {g.shipment && <p className="mb-2 text-sm font-semibold">{fulfillerLabel(g.shipment.fulfiller)}</p>}
+            <div className="space-y-3">
+              {g.lines.map((it) => (
+                <div key={it.id} className="flex items-center gap-2.5">
+                  <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm">{it.productName}</div>
+                    {it.variationName && <div className="text-xs text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
+                    <div className="text-xs text-[color:var(--color-text-tertiary)]">
+                      {formatVnd(it.unitPrice)} × {it.quantity}
+                    </div>
+                  </div>
+                  <div className="whitespace-nowrap text-sm font-semibold">{formatVnd(it.total)}</div>
+                </div>
+              ))}
+            </div>
+            {g.shipment && (
+              <div className="mt-1.5 flex justify-between text-sm">
+                <span className="text-[color:var(--color-text-secondary)]">Phí giao</span>
+                <span className={g.shipment.shippingFee === 0 ? 'text-success-fg' : ''}>
+                  {g.shipment.shippingFee === 0 ? 'Miễn phí' : formatVnd(g.shipment.shippingFee)}
+                </span>
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+    </div>
   );
 }

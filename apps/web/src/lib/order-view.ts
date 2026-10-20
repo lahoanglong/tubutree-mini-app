@@ -6,7 +6,7 @@ const STATUS_LABEL: Record<string, string> = {
   CONFIRMED: 'Đã xác nhận',
   PACKED: 'Đang đóng gói',
   SHIPPING: 'Đang giao',
-  DELIVERED: 'Đã giao',
+  DELIVERED: 'Giao thành công',
   RETURNED: 'Đã hoàn',
   CANCELLED: 'Đã hủy',
 };

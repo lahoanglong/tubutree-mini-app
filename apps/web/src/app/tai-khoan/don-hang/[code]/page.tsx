@@ -22,7 +22,6 @@ import {
   orderStamp,
   orderStatusLabel,
   orderStatusTone,
-  paymentMethodLabel,
   safeHttpUrl,
 } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
@@ -40,7 +39,28 @@ import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/re
 import { OrderTimeline } from './order-timeline';
 import { FollowOaPrompt, OrderInvoice, OrderWasteLink } from './order-extras';
 import { CopyShippingCode } from './copy-shipping-code';
-import BackLink from '@/components/back-link';
+import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+
+/** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
+const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
+  PENDING_PAYMENT: { bg: 'var(--color-status-warning-bg)', fg: 'var(--color-status-warning-fg)' },
+  CONFIRMED: { bg: 'var(--color-action-secondary-bg)', fg: 'var(--color-action-secondary-fg)' },
+  PACKED: { bg: 'var(--color-action-secondary-bg)', fg: 'var(--color-action-secondary-fg)' },
+  SHIPPING: { bg: 'var(--color-status-info-bg)', fg: 'var(--color-status-info-fg)' },
+  DELIVERED: { bg: 'var(--color-status-success-bg)', fg: 'var(--color-status-success-fg)' },
+  RETURNED: { bg: 'var(--color-status-neutral-bg)', fg: 'var(--color-status-neutral-fg)' },
+  CANCELLED: { bg: 'var(--color-status-danger-bg)', fg: 'var(--color-status-danger-fg)' },
+};
+
+/** vi.paymentMethod của Mini App: tên ngắn của phương thức ở dòng "Thanh toán" khối tiền. */
+const PAYMENT_METHOD_NAME: Record<string, string> = {
+  COD: 'Khi nhận hàng (COD)',
+  ZALOPAY: 'ZaloPay',
+  VNPAY: 'VNPay',
+  XU: 'Điểm Xanh (xu cũ)',
+  BANK_TRANSFER: 'Chuyển khoản',
+  WALLET: 'Ví Tubu',
+};
 
 export default function OrderDetailPage() {
   const params = useParams<{ code: string }>();
@@ -106,7 +126,7 @@ export default function OrderDetailPage() {
   if (orderQ.isLoading) {
     return (
       <Shell title="Chi tiết đơn hàng">
-        <p className="py-16 text-center text-stone-600">Đang tải đơn hàng…</p>
+        <p className="py-16 text-center text-stone-600 max-md:px-4">Đang tải đơn hàng…</p>
       </Shell>
     );
   }
@@ -142,28 +162,38 @@ export default function OrderDetailPage() {
     orderReturns,
   );
   return (
-    <Shell title={`Đơn hàng #${o.code}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)}`}>
-          {buyerOrderStatusLabel(o)}
-        </span>
-        <span className="text-sm text-stone-600">
-          {stamp.label} {formatDateTime(stamp.at)}
-        </span>
-      </div>
-      {o.manualHandling ? (
-        <p className="mt-2 text-sm text-stone-700">Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.</p>
-      ) : (
-        !showPayPanel &&
-        showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
-          <p className="mt-2 text-sm font-medium text-warning-fg">
-            Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
+    <Shell title="Chi tiết đơn hàng" subtitle={o.code}>
+      <div
+        data-testid="status-hero"
+        style={{ '--hero-bg': (STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!).bg, '--hero-fg': (STATUS_COLOR[o.status] ?? STATUS_COLOR.CONFIRMED!).fg } as React.CSSProperties}
+        className="max-md:bg-[var(--hero-bg)] max-md:p-4 max-md:text-[color:var(--hero-fg)]"
+      >
+        <div className="flex flex-wrap items-center gap-2 max-md:flex-col-reverse max-md:items-start max-md:gap-0">
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${orderStatusTone(o.status)} max-md:bg-transparent max-md:p-0 max-md:text-base max-md:font-semibold max-md:text-[color:inherit]`}
+          >
+            {buyerOrderStatusLabel(o)}
+          </span>
+          <span className="text-sm text-stone-600 max-md:text-xs max-md:text-[color:inherit]">
+            {stamp.label} {formatDateTime(stamp.at)}
+          </span>
+        </div>
+        {o.manualHandling ? (
+          <p className="mt-2 text-sm text-stone-700 max-md:mt-1 max-md:text-xs max-md:text-[color:inherit]">
+            Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.
           </p>
-        )
-      )}
+        ) : (
+          !showPayPanel &&
+          showsPaymentDeadline({ status: o.status, paymentStatus: o.paymentStatus ?? '', paymentDeadline: o.paymentDeadline }) && (
+            <p className="mt-2 text-sm font-medium text-warning-fg max-md:mt-1 max-md:text-xs max-md:font-normal max-md:text-[color:inherit]">
+              Thanh toán trước <b>{formatDateTime(o.paymentDeadline!)}</b> — quá hạn đơn sẽ tự huỷ.
+            </p>
+          )
+        )}
+      </div>
 
       {o.fulfilment?.kind === 'MERCHANT' && (
-        <p className="mt-2 text-sm text-stone-700">
+        <p className="mt-2 text-sm text-stone-700 max-md:px-4">
           Giao bởi <span className="font-semibold text-stone-900">{o.fulfilment.name}</span> (gian hàng đối tác tự đóng gói và giao)
           {o.fulfilment.phone && (
             <>
@@ -173,7 +203,7 @@ export default function OrderDetailPage() {
         </p>
       )}
       {(o.siblings?.length ?? 0) > 0 && (
-        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm ${ui.card}`}>
+        <section aria-label="Đơn cùng lần đặt" className={`mt-3 p-3 text-sm max-md:mx-4 ${ui.card}`}>
           <p className="text-stone-700">Lần đặt này được tách theo nơi giao, các đơn còn lại:</p>
           <ul className="mt-1 space-y-1">
             {o.siblings!.map((sb) => (
@@ -192,7 +222,7 @@ export default function OrderDetailPage() {
       )}
 
       {showPayPanel && (
-        <div className="mt-2">
+        <div className="mt-2 max-md:px-4">
           {canPayNow(o) && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
               Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
@@ -202,22 +232,24 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      <FollowOaPrompt />
-      <OrderTimeline status={o.status} />
+      <div className="max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
+      <OrderTimeline status={o.status} paymentMethod={o.paymentMethod} />
       <OrderActions order={o} userId={user?.id} />
       {cancelClosed && (
-        <p className="mt-3 text-sm text-stone-700">
+        <p className="mt-3 text-sm text-stone-700 max-md:px-4">
           Đơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.
         </p>
       )}
-      {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
+      <div className="max-md:px-4 max-md:empty:hidden">
+        {o.id && showsRefundPanel(o) && <OrderRefunds orderId={o.id} returnRequestIds={new Set(orderReturns.map((r) => r.id))} />}
+      </div>
 
-      <section className={`mt-4 p-4 ${ui.card}`}>
-        <h2 className={ui.sectionTitle}>Sản phẩm</h2>
+      <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+        <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Sản phẩm</h2>
         <ul className="mt-2 divide-y divide-stone-200">
           {o.items.map((it, i) => (
-            <li key={`${it.productName}-${it.variationName}-${i}`} className="flex gap-3 py-3">
-              <div className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50">
+            <li key={`${it.productName}-${it.variationName}-${i}`} className="flex gap-3 py-3 max-md:py-1.5">
+              <div className="flex h-14 w-14 flex-none max-md:hidden items-center justify-center overflow-hidden rounded-control bg-forest-50">
                 {it.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={it.thumbnail} alt="" className="h-full w-full object-cover" />
@@ -226,9 +258,15 @@ export default function OrderDetailPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-stone-900">{it.productName}</div>
-                {it.variationName && <div className="text-xs text-stone-600">{it.variationName}</div>}
-                <div className="mt-0.5 text-xs text-stone-600">
+                {/* Điện thoại: một dòng gọn "tên · phân loại ×SL" như Mini App, không ảnh. */}
+                <div data-testid="mini-line" className="text-sm text-stone-900 md:hidden">
+                  {it.productName}
+                  {it.variationName ? ` · ${it.variationName}` : ''}{' '}
+                  <span className="text-xs text-[color:var(--color-text-tertiary)]">×{it.quantity}</span>
+                </div>
+                <div className="text-sm font-medium text-stone-900 max-md:hidden">{it.productName}</div>
+                {it.variationName && <div className="text-xs text-stone-600 max-md:hidden">{it.variationName}</div>}
+                <div className="mt-0.5 text-xs text-stone-600 max-md:hidden">
                   {formatVnd(it.unitPrice)} × {it.quantity}
                 </div>
                 {(it.backorderedQty ?? 0) > 0 && (
@@ -245,22 +283,22 @@ export default function OrderDetailPage() {
                 {o.status === 'DELIVERED' && it.productSlug && (it.reviewId || it.reviewable !== false) && (
                   <Link
                     href={reviewHref(it.productSlug, o.id)}
-                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline"
+                    className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-forest-700 underline max-md:min-h-0 max-md:py-1 max-md:text-xs max-md:text-[color:var(--color-text-brand)] max-md:no-underline"
                   >
                     <Star className="h-4 w-4" aria-hidden="true" />
                     {it.reviewId ? 'Sửa đánh giá' : 'Viết đánh giá'}
                   </Link>
                 )}
               </div>
-              <div className="flex-none text-sm font-semibold text-stone-900">{formatVnd(it.total)}</div>
+              <div className="flex-none text-sm font-semibold text-stone-900 max-md:font-normal">{formatVnd(it.total)}</div>
             </li>
           ))}
         </ul>
       </section>
 
-      <section className={`mt-4 p-4 ${ui.card}`}>
-        <h2 className={ui.sectionTitle}>Thanh toán</h2>
-        <div className="mt-2 space-y-1 text-sm">
+      <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+        <h2 className={`${ui.sectionTitle} max-md:sr-only`}>Thanh toán</h2>
+        <div className="mt-2 space-y-1 text-sm max-md:mt-0 max-md:space-y-2">
           <Row label="Tạm tính" value={formatVnd(o.subtotal)} />
           {/* Order.discount là tổng mã + combo + giảm hạng + Điểm Xanh: mỗi khoản một dòng, cùng cách tách với Mini App. */}
           {discountRows(o).map((r) => (
@@ -270,12 +308,16 @@ export default function OrderDetailPage() {
             <Row label="Điểm Xanh đã dùng" value={`${formatCount(o.pointsUsed ?? 0)} điểm`} />
           )}
           <Row label="Phí vận chuyển" value={o.shippingFee === 0 ? 'Miễn phí' : formatVnd(o.shippingFee)} />
-          <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900">
+          <div className="flex justify-between border-t border-stone-200 pt-2 font-bold text-stone-900 max-md:border-t-0 max-md:pt-0 max-md:text-base">
             <span>Tổng cộng</span>
             <span>{formatVnd(o.total)}</span>
           </div>
-          <Row label="Phương thức" value={paymentMethodLabel(o.paymentMethod)} />
-          {o.paymentStatus && <PaymentStatusRow order={o} />}
+          <Row label="Thanh toán" value={PAYMENT_METHOD_NAME[o.paymentMethod] ?? o.paymentMethod} />
+          {o.paymentStatus && (
+            <div className="max-md:hidden">
+              <PaymentStatusRow order={o} />
+            </div>
+          )}
           {pointsNote && (
             <p className={`mt-1 flex items-center gap-1 text-xs ${pointsNote.tone === 'success' ? 'text-success-fg' : 'text-stone-700'}`}>
               <Leaf className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
@@ -285,18 +327,20 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
-      <OrderInvoice order={o} />
-      <OrderWasteLink order={o} />
+      <div className="max-md:px-4 max-md:empty:hidden">
+        <OrderInvoice order={o} />
+        <OrderWasteLink order={o} />
+      </div>
       <DeliverySection order={o} />
 
       {o.note && (
-        <section className={`mt-4 p-4 ${ui.card}`}>
+        <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
           <h2 className={ui.sectionTitle}>Ghi chú</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-stone-700">{o.note}</p>
         </section>
       )}
 
-      <p className="mt-6 text-sm text-stone-600">
+      <p className="mt-6 px-4 text-sm text-stone-600 md:px-0">
         Cần hủy hoặc đổi đơn? Gọi hotline {formatPhoneDisplay(support.hotline)} hoặc email {support.email}
         {support.zaloOaName ? `, hoặc nhắn Zalo OA ${support.zaloOaName}` : ''} để được hỗ trợ.
       </p>
@@ -315,7 +359,7 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
   if (!contact && !line && !addr?.note && !hasShipping) return null;
 
   return (
-    <section className={`mt-4 p-4 ${ui.card}`}>
+    <section className={`mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
       <h2 className={ui.sectionTitle}>Giao hàng</h2>
       <div className="mt-2 space-y-1 text-sm">
         {contact && <p className="font-medium text-stone-900">{contact}</p>}
@@ -368,28 +412,7 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
   );
 }
 
-function Row({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
-  return (
-    <div className={`flex justify-between gap-3 ${positive ? 'text-success-fg' : 'text-stone-900'}`}>
-      <span className={positive ? '' : 'text-stone-600'}>{label}</span>
-      <span className="text-right">{value}</span>
-    </div>
-  );
-}
-
-function Shell({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <BackLink href="/tai-khoan">
-        ← Đơn hàng của tôi
-      </BackLink>
-      <h1 className={`mt-1 break-words ${ui.pageTitle}`}>{title}</h1>
-      <div className="mt-3">{children}</div>
-    </main>
-  );
-}
-
-/** Cùng khoá với khối Hoàn tiền: đơn REFUNDED còn khoản chuyển khoản chưa xong thì "Đang hoàn tiền". */
+/** Cùng khoá với khối Hoàn tiền: đơn REFUNDED còn khoản chuyển khoản chưa xong thì "Đang hoàn tiền". Mini App không có dòng này nên chỉ hiện ở máy tính. */
 function PaymentStatusRow({ order: o }: { order: OrderDetailDTO }) {
   const refunds = useQuery({
     queryKey: ['my-refunds', o.id],
@@ -398,4 +421,22 @@ function PaymentStatusRow({ order: o }: { order: OrderDetailDTO }) {
     retry: 0,
   });
   return <Row label="Tình trạng" value={orderPaymentStatusLabel(o, refunds.data)} />;
+}
+
+function Row({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+  return (
+    <div className={`flex justify-between gap-3 ${positive ? 'text-success-fg' : 'text-stone-900'}`}>
+      <span className={positive ? '' : 'text-stone-600 max-md:text-[color:var(--color-text-tertiary)]'}>{label}</span>
+      <span className="text-right max-md:font-semibold">{value}</span>
+    </div>
+  );
+}
+
+function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand title={title} subtitle={subtitle} backHref="/tai-khoan" backLabel="Đơn hàng của tôi" className="md:px-0" />
+      <div className="mt-3 max-md:mt-0 max-md:pb-6">{children}</div>
+    </main>
+  );
 }

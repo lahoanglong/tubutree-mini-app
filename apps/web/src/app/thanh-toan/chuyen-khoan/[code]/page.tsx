@@ -7,10 +7,13 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
+import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { BankTransferPanel } from '../../bank-transfer-panel';
+import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 
-const TITLE = 'Thanh toán chuyển khoản';
+const TITLE = 'Quét QR để chuyển khoản';
+// Tên trang của Mini App khi chưa có QR để quét (đã trả, chưa đăng nhập).
+const NEUTRAL_TITLE = 'Thanh toán chuyển khoản';
 
 function readCode(raw: string | undefined): string {
   try {
@@ -30,6 +33,7 @@ export default function BankPaymentPage() {
   const phase = useAuthPhase();
   const qc = useQueryClient();
   const [paid, setPaid] = useState(false);
+  const [panelState, setPanelState] = useState<BankPanelState>('loading');
   const detail = orderDetailHref(code);
 
   // Không làm mới thì chi tiết/danh sách đơn đọc lại từ cache và còn hiện "Chờ thanh toán" ngay sau khi khách vừa thấy "Đã nhận thanh toán".
@@ -42,6 +46,8 @@ export default function BankPaymentPage() {
     refreshOrders();
   }, [refreshOrders]);
 
+  const showQr = !paid && !!code && phase === 'authenticated' && panelState === 'ready';
+
   let body: React.ReactNode;
   if (phase === 'loading') body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
@@ -53,6 +59,8 @@ export default function BankPaymentPage() {
         <BankTransferPanel
           order={{ code, paymentMethod: 'BANK_TRANSFER' }}
           onPaid={onPaid}
+          onState={setPanelState}
+          showHeading={false}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>
@@ -65,8 +73,8 @@ export default function BankPaymentPage() {
           }
         />
         {!paid && (
-          <div className="mt-3 text-center">
-            <Link href={detail} className={ui.btnSecondary}>
+          <div className="mt-3 text-center max-md:mx-2 max-md:mt-2">
+            <Link href={detail} className={`${ui.btnSecondary} ${mini.secondary} max-md:w-full`}>
               Để sau / Xem đơn hàng
             </Link>
           </div>
@@ -76,12 +84,12 @@ export default function BankPaymentPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <h1 className={ui.pageTitle}>{TITLE}</h1>
-      {!paid && code && phase === 'authenticated' && (
-        <p className="mt-1 text-sm text-stone-600">Mở app ngân hàng / ví bất kỳ để quét mã VietQR bên dưới.</p>
-      )}
-      <div className="mt-2">{body}</div>
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand
+        title={showQr ? TITLE : NEUTRAL_TITLE}
+        subtitle={showQr ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
+      />
+      <div className="mt-2 max-md:pb-6">{body}</div>
     </main>
   );
 }

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ordersListQuery } from '@tubutree/app-core/queries/orders';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
-import { PageHeader } from '@/components/ui/page-header';
+import { TitleBand } from '@/components/order-mobile/mobile-ui';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
 import { ErrorState } from '@/components/ui/error-state';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
@@ -68,7 +68,7 @@ function OrdersPageBody() {
   else {
     body = (
       <>
-        <div className="mt-3">
+        <div className="mt-3 max-md:mt-2">
           <SegmentedTabs
             items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
             value={tab}
@@ -131,9 +131,9 @@ function OrdersPageBody() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <PageHeader title="Đơn hàng" backHref="/tai-khoan" backLabel="Tài khoản" />
-      {body}
+    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand title="Đơn hàng" backHref="/tai-khoan" backLabel="Tài khoản" floatingBack={false} />
+      <div className="max-md:px-3">{body}</div>
       <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
     </main>
   );

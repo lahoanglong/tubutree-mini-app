@@ -10,7 +10,7 @@ import { isCloudinaryConfigured, uploadToCloudinary } from '@/components/account
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
-import { PageHeader } from '@/components/ui/page-header';
+import { TitleBand } from '@/components/order-mobile/mobile-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -37,6 +37,9 @@ function dataUrlToBlob(dataUrl: string): Blob {
 const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : SAVE_FAILED);
 
 /** Sửa hồ sơ (cùng PATCH /me với `edit-profile.tsx` của Mini App): họ tên, email, ngày sinh, ảnh đại diện; SĐT chỉ đọc. */
+/** Ô nhập của Mini App cao khoảng 50px (Input của zmp-ui), cao hơn ô 44px của web. */
+const FIELD_MINI = 'max-md:min-h-[50px]';
+
 export default function EditProfilePage() {
   const { user, updateProfile } = useAuth();
   const phase = useAuthPhase();
@@ -151,9 +154,9 @@ export default function EditProfilePage() {
   };
 
   const shell = (body: React.ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <PageHeader title="Sửa hồ sơ" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
-      {body}
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <TitleBand title="Sửa hồ sơ" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
+      <div className="max-md:px-4">{body}</div>
     </main>
   );
 
@@ -184,8 +187,8 @@ export default function EditProfilePage() {
     // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary hoặc data URL xem trước, domain không cố định
     <img src={shownAvatar} alt="" className="h-22 w-22 rounded-full border-[3px] border-stone-0 bg-stone-100 object-cover shadow-raised" style={{ width: 88, height: 88 }} />
   ) : (
-    <span className="flex items-center justify-center rounded-full border-[3px] border-stone-0 bg-stone-100 text-stone-500 shadow-raised" style={{ width: 88, height: 88 }}>
-      <User className="h-10 w-10" aria-hidden="true" />
+    <span className="flex items-center justify-center rounded-full border-[3px] border-stone-0 bg-stone-100 text-stone-500 shadow-raised max-md:bg-[var(--color-bg-subtle)]" style={{ width: 88, height: 88 }}>
+      <User className="h-10 w-10 max-md:hidden" aria-hidden="true" />
     </span>
   );
   const phoneText = formatPhoneDisplay(me?.phone);
@@ -193,7 +196,7 @@ export default function EditProfilePage() {
   return shell(
     <form
       noValidate
-      className="mx-auto mt-4 flex max-w-md flex-col gap-4"
+      className="mx-auto mt-4 flex max-w-md flex-col gap-4 max-md:max-w-none max-md:gap-5"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -230,7 +233,7 @@ export default function EditProfilePage() {
       </div>
 
       <Field label="Họ và tên">
-        <input type="text" value={fullName} maxLength={120} autoComplete="name" onChange={(e) => setFullName(e.target.value)} className={ui.field} />
+        <input type="text" value={fullName} maxLength={120} autoComplete="name" onChange={(e) => setFullName(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
       </Field>
 
       <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
@@ -241,13 +244,13 @@ export default function EditProfilePage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           onBlur={() => setTouched(true)}
-          className={emailInvalid ? ui.fieldError : ui.field}
+          className={`${emailInvalid ? ui.fieldError : ui.field} ${FIELD_MINI}`}
         />
       </Field>
 
       <div>
         <Field label="Ngày sinh">
-          <input type="date" value={dob} readOnly={Boolean(me?.dob)} autoComplete="bday" onChange={(e) => setDob(e.target.value)} className={ui.field} />
+          <input type="date" value={dob} readOnly={Boolean(me?.dob)} autoComplete="bday" onChange={(e) => setDob(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
         </Field>
         <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
@@ -255,7 +258,8 @@ export default function EditProfilePage() {
         </p>
       </div>
 
-      <dl className="rounded-control bg-stone-50 px-3 py-2 text-sm">
+      {/* Mini App không có khối số điện thoại ở màn này; từ md giữ để khách thấy số đang đăng nhập. */}
+      <dl className="rounded-control bg-stone-50 px-3 py-2 text-sm max-md:hidden">
         <dt className="text-xs text-stone-600">Số điện thoại</dt>
         <dd className="font-medium text-stone-900">{phoneText || 'Chưa có số điện thoại'}</dd>
       </dl>
@@ -269,7 +273,7 @@ export default function EditProfilePage() {
         {done ?? ''}
       </p>
 
-      <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full`}>
+      <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
         {save.isPending ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />

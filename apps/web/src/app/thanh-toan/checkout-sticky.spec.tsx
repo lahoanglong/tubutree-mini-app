@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
-// D7 việc 4: thanh toán trên điện thoại có thanh dính đáy (Tổng + nút "Đặt hàng · số tiền"), radio/checkbox ≥ 24px.
+// D7 việc 4: thanh toán trên điện thoại có thanh dính đáy (một nút "Đặt hàng · số tiền" như Mini App), radio/checkbox ≥ 24px.
 
 const state = vi.hoisted(() => ({
   placed: [] as Record<string, unknown>[],
@@ -75,10 +75,9 @@ afterEach(() => {
 });
 
 describe('/thanh-toan — thanh dính đáy', () => {
-  it('hiện Tổng cộng và nút "Đặt hàng · số tiền" đúng báo giá', async () => {
+  it('chỉ có nút "Đặt hàng · số tiền" đúng báo giá, không có khối Tổng cộng', async () => {
     const c = await mount();
-    expect(bar(c)!.textContent).toContain('Tổng cộng');
-    expect(bar(c)!.textContent).toContain('330.000đ');
+    expect(bar(c)!.textContent).not.toContain('Tổng cộng');
     expect(barButton(c).textContent).toBe('Đặt hàng · 330.000đ');
     expect(barButton(c).disabled).toBe(false);
   });
@@ -92,10 +91,10 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(bar(c)).toBeNull();
   });
 
-  it('chưa có địa chỉ: tổng ghi "Chưa tính", nút khoá và không kèm số tiền', async () => {
+  it('chưa có địa chỉ: tổng trong khung tóm tắt ghi "Chưa tính", nút khoá và không kèm số tiền', async () => {
     state.noAddress = true;
     const c = await mount();
-    expect(bar(c)!.textContent).toContain('Chưa tính');
+    expect(c.querySelector('[data-mini-part="summary-total"]')!.textContent).toContain('Chưa tính');
     expect(barButton(c).disabled).toBe(true);
     expect(barButton(c).textContent).toBe('Đặt hàng');
   });
