@@ -220,7 +220,7 @@ function GroupCard({
       </div>
       {g.status !== 'SUCCESS' && (
         <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 6 }}>
-          {`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}
+          {`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`}
         </Text>
       )}
       {g.status === 'SUCCESS' && member ? (

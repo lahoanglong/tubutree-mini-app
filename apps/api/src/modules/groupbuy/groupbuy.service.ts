@@ -32,6 +32,25 @@ const COUPON_VALID_DAYS = 30;
  */
 const LISTED_GROUP_PRODUCT = { storefrontId: null, ...PUBLIC_PRODUCT_WHERE } satisfies Prisma.ProductWhereInput;
 
+interface VariationPrice {
+  retailPrice: number;
+  salePrice: number | null;
+}
+
+const sellingPrice = (v: VariationPrice) => v.salePrice ?? v.retailPrice;
+
+/**
+ * Đơn tối thiểu của mã = giá nhóm của biến thể rẻ nhất đang bán. Giá sản phẩm (`basePrice`) lấy từ biến thể đầu tiên Pancake
+ * trả về, nên nếu lấy nó làm ngưỡng thì khách mua một đơn vị biến thể rẻ bị từ chối. % suy từ giá nhóm đã lưu để nhóm mở
+ * trước khi đổi config hay cấp lại qua đối soát vẫn ra cùng mức. Không biến thể nào có giá thì giữ giá nhóm đã lưu.
+ */
+function groupMinOrder(g: GroupRow, variations: VariationPrice[]): number {
+  const prices = variations.map(sellingPrice).filter((p) => p > 0);
+  if (g.basePrice <= 0 || prices.length === 0) return g.unitPrice;
+  const pct = Math.round(((g.basePrice - g.unitPrice) / g.basePrice) * 100);
+  return Math.round((Math.min(...prices) * (100 - pct)) / 100);
+}
+
 /** Mã giảm TẤT ĐỊNH theo (nhóm, thành viên): cấp lại an toàn và hiện lại được cho đúng người mà không cần tra bảng mã. */
 export function groupBuyCouponCode(groupBuyId: string, userId: string): string {
   return `GBUY-${groupBuyId.slice(-8)}-${userId.slice(-8)}`.toUpperCase();
@@ -115,11 +134,13 @@ export class GroupBuyService {
       const flip = await this.prisma.groupBuy.updateMany({ where: { id: created.id, status: 'OPEN' }, data: { status: 'SUCCESS' } });
       if (flip.count === 1) status = (await this.onSuccess({ ...created, status: 'SUCCESS' })) ? 'SUCCESS' : 'FAILED';
     }
+    const minOrders = await this.minOrders([created]);
     return this.toView(
       { ...created, status },
       { name: product.name, slug: product.slug, thumbnail: product.thumbnail },
       1,
       true,
+      minOrders.get(created.id) ?? created.unitPrice,
       userId,
     );
   }
@@ -216,7 +237,7 @@ export class GroupBuyService {
     for (const m of members) {
       let granted: { code: string; endAt: Date } | null = null;
       try {
-        granted = await this.grantCoupon(group.id, m.userId, terms, group.unitPrice, group.productId);
+        granted = await this.grantCoupon(group.id, m.userId, terms, terms.minOrder, group.productId);
       } catch (e) {
         // P2002: đã cấp ở lần trước → coi như đã có, KHÔNG thông báo lại.
         if (!this.isAlreadyGranted(e)) {
@@ -287,7 +308,8 @@ export class GroupBuyService {
     const joined = Array.isArray((group as { members?: unknown[] }).members)
       ? (group as { members: unknown[] }).members.length > 0
       : false;
-    return this.toView(group as unknown as GroupRow, group.product, group._count.members, joined, userId);
+    const minOrders = await this.minOrders([group as unknown as GroupRow]);
+    return this.toView(group as unknown as GroupRow, group.product, group._count.members, joined, minOrders.get(group.id) ?? group.unitPrice, userId);
   }
 
   /** `userId` (khi đã đăng nhập) để đánh dấu nhóm mình đã tham gia / tự mở; khách thì joined=false. */
@@ -307,7 +329,10 @@ export class GroupBuyService {
       });
       for (const r of rows) mine.add(r.groupBuyId);
     }
-    const open = groups.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), userId));
+    const openMinOrders = await this.minOrders(groups as unknown as GroupRow[]);
+    const open = groups.map((g) =>
+      this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), openMinOrders.get(g.id) ?? g.unitPrice, userId),
+    );
     if (!userId) return open;
     // Nhóm của mình đã đủ người, mã giảm còn hạn: khách phải tìm lại được mã và mua tiếp ngay từ đây.
     const since = new Date(Date.now() - COUPON_VALID_DAYS * 864e5);
@@ -318,7 +343,11 @@ export class GroupBuyService {
       take: 10,
       include: { product: { select: { name: true, slug: true, thumbnail: true } }, _count: { select: { members: true } } },
     });
-    return [...open, ...done.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, true, userId))];
+    const doneMinOrders = await this.minOrders(done as unknown as GroupRow[]);
+    return [
+      ...open,
+      ...done.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, true, doneMinOrders.get(g.id) ?? g.unitPrice, userId)),
+    ];
   }
 
   /**
@@ -361,11 +390,29 @@ export class GroupBuyService {
     }
   }
 
+  /** Đơn tối thiểu hiển thị phải cùng số với mã đã cấp (groupMinOrder). Một truy vấn cho cả danh sách; lỗi tra thì dùng giá nhóm. */
+  private async minOrders(groups: GroupRow[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (groups.length === 0) return out;
+    const rows = await this.prisma.variation
+      .findMany({
+        where: { productId: { in: [...new Set(groups.map((g) => g.productId))] }, isActive: true },
+        select: { productId: true, retailPrice: true, salePrice: true },
+      })
+      .catch((e: unknown) => {
+        this.logger.warn(`Không tra được biến thể để tính đơn tối thiểu: ${(e as Error).message}`);
+        return [];
+      });
+    for (const g of groups) out.set(g.id, groupMinOrder(g, rows.filter((v) => v.productId === g.productId)));
+    return out;
+  }
+
   private toView(
     g: GroupRow,
     product: { name: string; slug: string; thumbnail: string | null },
     memberCount: number,
     joined: boolean,
+    minOrder: number,
     viewerId?: string,
   ) {
     return {
@@ -374,6 +421,7 @@ export class GroupBuyService {
       targetSize: g.targetSize,
       currentSize: memberCount,
       unitPrice: g.unitPrice,
+      minOrder,
       basePrice: g.basePrice,
       discountPct: g.basePrice > 0 ? Math.round(((g.basePrice - g.unitPrice) / g.basePrice) * 100) : 0,
       status: g.status,
@@ -390,16 +438,20 @@ export class GroupBuyService {
    * đó trên biến thể đắt nhất: không biến thể nào giảm quá % đã công bố. % suy từ giá nhóm đã lưu để nhóm mở trước khi đổi
    * config hay cấp lại qua đối soát vẫn ra cùng mức.
    */
-  private async couponTerms(group: GroupRow): Promise<{ pct: number; maxDiscount: number }> {
+  private async couponTerms(group: GroupRow): Promise<{ pct: number; maxDiscount: number; minOrder: number }> {
     const flatDiscount = group.basePrice - group.unitPrice;
-    if (group.basePrice <= 0 || flatDiscount <= 0) return { pct: 0, maxDiscount: flatDiscount };
+    if (group.basePrice <= 0 || flatDiscount <= 0) return { pct: 0, maxDiscount: flatDiscount, minOrder: group.unitPrice };
     const pct = Math.round((flatDiscount / group.basePrice) * 100);
     const variations = await this.prisma.variation.findMany({
       where: { productId: group.productId, isActive: true },
       select: { retailPrice: true, salePrice: true },
     });
-    const dearest = Math.max(group.basePrice, ...variations.map((v) => v.salePrice ?? v.retailPrice));
-    return { pct, maxDiscount: Math.max(flatDiscount, Math.round((dearest * pct) / 100)) };
+    const dearest = Math.max(group.basePrice, ...variations.map(sellingPrice));
+    return {
+      pct,
+      maxDiscount: Math.max(flatDiscount, Math.round((dearest * pct) / 100)),
+      minOrder: groupMinOrder(group, variations),
+    };
   }
 
   /**

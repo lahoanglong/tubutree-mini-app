@@ -640,3 +640,89 @@ describe('D11-05: mã mua chung giảm đúng % trên biến thể khách mua, k
     expect(await discountOn(data, [{ total: 100000 }])).toBe(15000);
   });
 });
+
+describe('Q18: đơn tối thiểu của mã mua chung theo giá nhóm của biến thể rẻ nhất đang bán', () => {
+  // Pancake trả biến thể đắt trước nên product.basePrice = 430.000đ, biến thể rẻ 120.000đ nằm sau.
+  const variations = [
+    { retailPrice: 430000, salePrice: null },
+    { retailPrice: 120000, salePrice: null },
+    { retailPrice: 0, salePrice: null },
+  ];
+
+  function prismaDearFirst() {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prod1', isActive: true, approvalStatus: 'APPROVED', basePrice: 430000, salePrice: null, name: 'X', slug: 'x', thumbnail: null,
+    });
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue(variations);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    return prisma;
+  }
+
+  async function grantedCoupon() {
+    const prisma = prismaDearFirst();
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 1 })).create('u1', 'prod1');
+    return (prisma.coupon.create as jest.Mock).mock.calls[0][0].data as Record<string, unknown>;
+  }
+
+  async function validate(data: Record<string, unknown>, total: number) {
+    const row = { id: 'c1', ...data, startAt: new Date(Date.now() - 1000), endAt: new Date(Date.now() + 864e5), usageLimit: null };
+    const prisma = {
+      coupon: { findUnique: jest.fn().mockResolvedValue(row) },
+      couponRedemption: { count: jest.fn().mockResolvedValue(0) },
+      user: { findUnique: jest.fn().mockResolvedValue({ phone: '0912345678', zaloId: 'z1' }) },
+    } as unknown as PrismaService;
+    return new CouponsService(prisma).validateAndCompute(String(data.code), 'u1', total, [{ productId: 'prod1', total }]);
+  }
+
+  it('2 biến thể (đắt trước, rẻ sau) → minOrder = giá nhóm biến thể rẻ (120.000 × 85%), bỏ qua biến thể không có giá', async () => {
+    expect((await grantedCoupon()).minOrder).toBe(102000);
+  });
+
+  it('khách mua 1 đơn vị biến thể rẻ 120.000đ áp được mã, giảm 18.000đ', async () => {
+    expect((await validate(await grantedCoupon(), 120000)).discount).toBe(18000);
+  });
+
+  it('trần giảm vẫn là 15% giá biến thể đắt nhất (64.500đ)', async () => {
+    expect((await grantedCoupon()).maxDiscount).toBe(64500);
+  });
+
+  it('chỉ xét biến thể còn bán (isActive)', async () => {
+    const prisma = prismaDearFirst();
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.target_size': 1 })).create('u1', 'prod1');
+    expect((prisma.variation.findMany as jest.Mock).mock.calls[0][0].where).toMatchObject({ productId: 'prod1', isActive: true });
+  });
+
+  it('biến thể rẻ có salePrice → tính theo salePrice', async () => {
+    const prisma = prismaDearFirst();
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+      { retailPrice: 430000, salePrice: null },
+      { retailPrice: 120000, salePrice: 100000 },
+    ]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.target_size': 1 })).create('u1', 'prod1');
+    expect((prisma.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(85000);
+  });
+
+  it('đối soát cấp lại mã cho nhóm cũ cũng ra minOrder theo biến thể rẻ', async () => {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([group({ id: 'gbX', status: 'SUCCESS', basePrice: 430000, unitPrice: 365500 })]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'u1' }]);
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue(variations);
+    await new GroupBuyService(prisma, makeConfig()).reconcileSuccessfulGroups();
+    expect((prisma.coupon.create as jest.Mock).mock.calls[0][0].data.minOrder).toBe(102000);
+  });
+
+  it('trang nhóm trả minOrder cùng số với mã (listOpen và getGroup)', async () => {
+    const prisma = makePrisma();
+    const row = { ...group({ basePrice: 430000, unitPrice: 365500 }), product: { name: 'A', slug: 'a', thumbnail: null }, _count: { members: 1 } };
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([row]);
+    (prisma.groupBuy.findUnique as jest.Mock).mockResolvedValue({ ...row, members: [] });
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+      { productId: 'prod1', retailPrice: 430000, salePrice: null },
+      { productId: 'prod1', retailPrice: 120000, salePrice: null },
+    ]);
+    const svc = new GroupBuyService(prisma, makeConfig());
+    expect((await svc.listOpen())[0]).toMatchObject({ minOrder: 102000 });
+    expect(await svc.getGroup('gb1')).toMatchObject({ minOrder: 102000 });
+  });
+});
