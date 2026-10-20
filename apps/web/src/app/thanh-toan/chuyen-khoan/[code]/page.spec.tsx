@@ -116,6 +116,16 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(guest.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
   });
 
+  it('đã PAID hoặc chưa có QR: không vẽ dải tiêu đề, vẫn đúng một h1 và còn trang cha cho nút lùi', async () => {
+    mocks.qr.paymentStatus = 'PAID';
+    const c = mount();
+    await flush();
+    expect(c.querySelector('header')).toBeNull();
+    expect(c.innerHTML).not.toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(c.querySelectorAll('h1')).toHaveLength(1);
+    expect(c.querySelector('[data-back-href]')!.getAttribute('data-back-href')).toBe('/tai-khoan/don-hang/TB-9');
+  });
+
   it('lỗi tải: báo lỗi, "Thử lại" và vẫn có lối xem đơn hàng', async () => {
     mocks.qr.fail = true;
     const c = mount();

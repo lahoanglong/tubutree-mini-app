@@ -86,13 +86,21 @@ export default function BankPaymentPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <PageHeader
-        title={showQr ? TITLE : NEUTRAL_TITLE}
-        subtitle={showQr ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
-        subtitleClassName="md:text-sm"
-        parentHref={detail}
-        bleed={false}
-      />
+      {showQr ? (
+        <PageHeader
+          title={TITLE}
+          subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới"
+          subtitleClassName="md:text-sm"
+          parentHref={detail}
+          bleed={false}
+        />
+      ) : (
+        // Mini App chỉ vẽ dải tiêu đề ở trạng thái QR; các trạng thái khác chỉ giữ h1 cho trình đọc và trang cha cho nút lùi.
+        <>
+          <h1 className="sr-only">{NEUTRAL_TITLE}</h1>
+          <span hidden data-back-href={detail} />
+        </>
+      )}
       <div className="mt-2 max-md:pb-6">{body}</div>
     </main>
   );
