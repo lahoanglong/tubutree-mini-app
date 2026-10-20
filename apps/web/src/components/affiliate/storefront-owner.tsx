@@ -35,14 +35,14 @@ export function StorefrontAction({ slug, title, referralCode }: { slug: string; 
   const [shareOpen, setShareOpen] = useState(false);
   if (!owner) {
     return (
-      <div className={BAR}>
+      <div data-sticky-bar className={BAR}>
         <GuestLink label="Xem sản phẩm" />
       </div>
     );
   }
   return (
     <>
-      <div className={BAR}>
+      <div data-sticky-bar className={BAR}>
         <button type="button" className={`${ui.btnPrimary} max-md:w-full`} onClick={() => setShareOpen(true)}>
           <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Chia sẻ gian hàng

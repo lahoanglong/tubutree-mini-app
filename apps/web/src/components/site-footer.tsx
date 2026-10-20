@@ -78,8 +78,9 @@ export default async function SiteFooter() {
       </nav>
     </footer>
 
-    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline và chính sách vẫn phải với tới được từ mọi trang. */}
-    <footer aria-label="Hỗ trợ và chính sách" className="mt-8 border-t border-stone-200 bg-stone-0 px-4 py-4 md:hidden">
+    {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline và chính sách vẫn phải với tới được từ mọi trang.
+        Trang có thanh dính đáy ([data-sticky-bar]) thì globals.css ẩn luôn chân trang gọn này, nhắm theo data-compact-footer. */}
+    <footer aria-label="Hỗ trợ và chính sách" data-compact-footer className="mt-8 border-t border-stone-200 bg-stone-0 px-4 py-4 md:hidden">
       <a href={`tel:${tel}`} className={LINK}>
         <Phone className="h-4 w-4" aria-hidden="true" />
         <span>Hotline: {formatPhoneDisplay(hotline)}</span>

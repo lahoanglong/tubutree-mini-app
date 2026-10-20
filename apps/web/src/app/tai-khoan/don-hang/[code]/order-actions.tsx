@@ -327,6 +327,7 @@ function ActionRow({ children }: { children: React.ReactNode }) {
     <div
       ref={ref}
       data-testid="order-action-bar"
+      data-sticky-bar
       className="flex flex-wrap gap-2 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:flex-nowrap max-md:border-t max-md:border-stone-200 max-md:bg-stone-0 max-md:px-4 max-md:pt-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-md:shadow-raised"
     >
       {children}

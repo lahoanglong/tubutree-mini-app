@@ -72,6 +72,7 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
       {/* Điện thoại: thanh dính đáy như StickyActionBar của Mini App (Theo dõi nền nhạt + Chia sẻ nền đậm); từ md nằm ngay dưới tên. */}
       <div
         data-testid="brand-actions-bar"
+        data-sticky-bar
         className="max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]"
       >
         <div className="mt-2 flex gap-2 max-md:mt-0">

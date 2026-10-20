@@ -169,7 +169,7 @@ function Advisor() {
 
       <p className="py-1 text-center text-xs text-stone-600">Gợi ý chỉ để tham khảo.</p>
 
-      <div ref={barRef} className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:items-center">
+      <div ref={barRef} data-sticky-bar className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:items-center">
         <textarea
           className={`${ui.field} min-w-0 flex-1 resize-none py-2 max-md:min-h-[9rem]`}
           placeholder="Nhập câu hỏi…"

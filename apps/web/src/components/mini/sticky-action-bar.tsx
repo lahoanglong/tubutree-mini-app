@@ -15,6 +15,7 @@ export function StickyActionBar({ primary, secondary, summary }: StickyActionBar
   return (
     <div
       data-testid="sticky-bar"
+      data-sticky-bar
       className="tubu-sticky-bar"
       style={{
         position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,

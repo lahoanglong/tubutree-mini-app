@@ -415,6 +415,7 @@ export default function PostDetailPage() {
             addCommentMut.mutate(body);
           }
         }}
+        data-sticky-bar
         className="sticky bottom-0 -mx-4 flex flex-col gap-1.5 border-t border-stone-200 bg-stone-0 px-4 py-2.5 md:mx-0 md:rounded-card md:border max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:mx-0 max-md:border-t-0 max-md:shadow-[var(--elevation-3)]"
         style={{ paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom, 0px))' }}
       >

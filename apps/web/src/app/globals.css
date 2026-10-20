@@ -59,6 +59,14 @@ html[data-tenant-host] [data-site-search] {
   }
 }
 
+/* Mini App không có chân trang; ở điện thoại chỉ giữ chân trang gọn (hotline + chính sách) ở trang không có thanh hành động dính đáy,
+   vì chân trang gọn nằm giữa nội dung và thanh dính sẽ không giống Mini App. Thanh nào dính đáy tự gắn data-sticky-bar. */
+@media (max-width: 767.98px) {
+  body:has([data-sticky-bar]) footer[data-compact-footer] {
+    display: none;
+  }
+}
+
 /* Thanh đáy điện thoại nhường chỗ cho thanh hành động dính của trang (giá/tổng + nút mua). */
 body.has-sticky-bar [data-bottom-nav] {
   display: none;
