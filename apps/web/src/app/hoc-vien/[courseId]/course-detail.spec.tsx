@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcademyCourseDetail } from '@tubutree/app-core/api/academy';
+import { ApiError } from '@/lib/client-api';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -144,6 +145,14 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     click(byText(container, 'button', 'Thử lại'));
     await flush(6);
     expect(container.textContent).toContain('Khoá bán hàng');
+  });
+
+  it('khoá không xem được (403): giải thích CTV Academy dành cho CTV, lối tới /ctv, không Thử lại', async () => {
+    mocks.get.mockReset().mockRejectedValue(new ApiError('Forbidden', 403));
+    const { container } = await mount();
+    expect(container.textContent).toContain('CTV Academy dành cho cộng tác viên');
+    expect(container.querySelector('a[href="/ctv"]')).not.toBeNull();
+    expect(byText(container, 'button', 'Thử lại')).toBeNull();
   });
 
   it('vùng chạm >= 44px và mọi điều khiển có tên', async () => {

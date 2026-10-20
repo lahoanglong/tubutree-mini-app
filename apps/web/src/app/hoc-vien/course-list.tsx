@@ -52,6 +52,19 @@ function CourseCard({ course }: { course: AcademyCourseSummary }) {
   );
 }
 
+/** API chỉ mở cho CTV/đại lý/nhân viên: khách thường gõ thẳng địa chỉ thì được giải thích và chỉ đường, Thử lại không đổi được kết quả. */
+export function CtvOnlyNotice() {
+  return (
+    <section className={`${ui.card} p-8 text-center`}>
+      <h2 className="font-display text-base font-semibold text-stone-900">CTV Academy dành cho cộng tác viên</h2>
+      <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.</p>
+      <Link href="/ctv" className={`${ui.btnPrimary} mt-4`}>
+        Tìm hiểu về CTV
+      </Link>
+    </section>
+  );
+}
+
 function Courses() {
   const q = useQuery(academyCoursesQuery(coreHttp));
   if (q.isLoading) {
@@ -62,17 +75,8 @@ function Courses() {
       </div>
     );
   }
-  // API chỉ mở cho CTV/đại lý/nhân viên: khách thường gõ thẳng địa chỉ thì được giải thích và chỉ đường, Thử lại không đổi được kết quả.
   if (q.isError && errorStatus(q.error) === 403) {
-    return (
-      <section className={`${ui.card} p-8 text-center`}>
-        <h2 className="font-display text-base font-semibold text-stone-900">CTV Academy dành cho cộng tác viên</h2>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.</p>
-        <Link href="/ctv" className={`${ui.btnPrimary} mt-4`}>
-          Tìm hiểu về CTV
-        </Link>
-      </section>
-    );
+    return <CtvOnlyNotice />;
   }
   if (q.isError) return <ErrorState message={errorText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} />;
   if (!q.data || q.data.length === 0) {
