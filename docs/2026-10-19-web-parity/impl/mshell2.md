@@ -88,16 +88,58 @@ Giới hạn: mục lịch sử tạo bằng điều hướng cứng (thẻ `<a>
 | Đổi rác hoàn tất | `/recycle/done/:id` | thanh trắng ngang hàng nút lùi, tiêu đề chừa 48px | `/doi-rac/xong/:id` | `mshell2-2/web/tour/recycle__done___id.jpg` |
 | Quầy nhận rác | `/recycle/desk` | thanh trắng ngang hàng nút lùi, tiêu đề chừa 48px | `/doi-rac/quay` | `mshell2-2/web/tour/recycle__desk.jpg` |
 
-## 4. Kiểm chứng
+## 4. Kiểm chứng (gate cuối, summary.txt)
 
-- vitest web: 384 file, 6533 test xanh; chạy thêm `TZ=UTC` cũng 6533 xanh.
-- vitest Mini App: 283 file, 4313 test xanh (không đổi).
-- `tsc --noEmit` web sạch; `next lint` chỉ còn cảnh báo `<img>` cũ ở `ctv-order-sheet.tsx`; `next build` thành công (trước commit 6c001100; commit đó chỉ thêm một prop).
-- Playwright: chỉ spec tham quan, 51/51 chụp được hai lần.
+```
+install rc=0
+shared-types rc=0
+app-core-typecheck rc=0
+app-core-test rc=0  Test Files  41 passed (41)  Tests  489 passed (489)
+web-typecheck rc=0
+web-lint rc=0
+web-test rc=0  Test Files  384 passed (384)  Tests  6544 passed (6544)
+web-test-utc rc=0  Test Files  384 passed (384)  Tests  6544 passed (6544)
+miniapp-typecheck rc=0
+miniapp-lint rc=0
+miniapp-test rc=0  Test Files  283 passed (283)  Tests  4313 passed (4313)
+lint-vars rc=0 OK — every var(--x) reference is defined.
+lint-parity rc=0 lint:parity xanh (0 mục pending)
+web-build rc=0  ✓ Compiled successfully
+miniapp-build rc=0
+DONE
+```
 
-## 5. Chưa làm, cố ý để lại, ghi chú
+Playwright: chỉ spec tham quan, 51/51 chụp được hai lần (trước các sửa review).
 
-- Docker Colima trên máy lúc chạy không chuyển tiếp cổng của container mới (container cũ vẫn thông), nên `web-gate.sh` báo P1001. Chụp ảnh bằng Postgres chạy thẳng (embedded-postgres) và một máy chủ Redis giả chỉ trả PING ở scratchpad; không đụng DB dùng chung. Không sửa gì trong repo vì chuyện này.
-- Ngoài phạm vi, ghi lại cho lane khác: `/cong-dong` web có thêm hai chip "Facebook", "TikTok" mà Mini App không có; `/admin` web vẫn là bản desktop (ở `app/admin`, ngoài lane); lệch dọc 5 đến 7px ở thân giỏ hàng và thanh toán so với Mini App (thân màn).
-- Chân trang gọn ở điện thoại (hotline, chính sách) giữ nguyên, chờ chủ dự án.
-- Code `nav-depth` viết sau bài test đỏ (spec viết trước, 8 test đỏ, rồi mới code).
+## 5. Review
+
+Lượt 1 (3b5da802..ba16288a):
+
+| Mức | Phát hiện | Xử lý |
+|---|---|---|
+| MAJOR | Vào thẳng trang con, nút lùi dùng `push` tới trang cha nên bấm lần hai `back()` dội về trang con (vòng lặp) | Sửa ở 4ad48de1: nhánh dự phòng dùng `router.replace` / `location.replace`, thêm test bấm lần hai |
+| MINOR | Chuyển khoản lùi về Thanh toán thay vì chi tiết đơn | Sửa ở 723ee823: `parentHref={detail}` kèm test |
+| MINOR | `100vw` gây cuộn ngang vài px ở trình duyệt desktop thu hẹp dưới 768px | Sửa ở 723ee823: `overflow-x: clip` cho body dưới 767px |
+
+Lượt 2:
+
+| Mức | Phát hiện | Xử lý |
+|---|---|---|
+| MINOR | 493c6914 xoá nhầm test SegmentedTabs/ScrollRow/SearchField | Sửa ở ce45be39: khôi phục nguyên văn từ 3b5da802 (16 test) |
+| MINOR | Màn chuyển khoản vẽ dải tiêu đề ở mọi trạng thái, Mini App chỉ ở trạng thái QR | Sửa ở ce45be39: chỉ vẽ dải khi QR, các trạng thái khác dùng h1 sr-only giữ `data-back-href`. Test viết cùng lúc với code, chưa chứng kiến đỏ trước |
+
+Không còn phát hiện mở.
+
+## 6. Chưa làm, cố ý để lại, chưa kiểm chứng
+
+- `web-gate.sh` không chạy được lúc đó vì Docker Colima không chuyển tiếp cổng container mới (prisma P1001). Ảnh chụp dùng Postgres chạy thẳng cộng Redis giả ở scratchpad; không đụng DB dùng chung. Gate cuối chạy ở bước sau và xanh. Cần xem lại Colima.
+- Ảnh tham quan chưa chụp lại sau ba commit sửa review (4ad48de1, 723ee823, ce45be39): chưa kiểm chứng bằng ảnh.
+- Mục lịch sử tạo bằng điều hướng cứng (thẻ `<a>`, `location.assign`) chưa có dấu độ sâu: nút đi trang cha thay vì `back()`. An toàn nhưng có thể không lùi đúng trang vừa xem.
+- Ngoài lane, ghi lại: `/cong-dong` web có thêm chip Facebook, TikTok mà Mini App không có; `/admin` web vẫn là bản desktop (`app/admin`); thân giỏ hàng và thanh toán lệch dọc 5 đến 7px so với Mini App.
+- Chân trang gọn ở điện thoại giữ nguyên.
+- Chưa push, chưa PR, không deploy.
+
+## 7. Câu hỏi cho chủ dự án
+
+1. Chân trang gọn ở điện thoại (hotline, chính sách) giữ hay bỏ cho giống Mini App? Mặc định: giữ nguyên.
+2. Chip Facebook và TikTok ở `/cong-dong` web: giữ hay bỏ? Mặc định: giữ (ngoài lane).
