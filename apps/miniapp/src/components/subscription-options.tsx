@@ -3,11 +3,13 @@ import type { AddressDTO } from '../services/shop-api';
 import {
   MAX_START_DAYS_AHEAD,
   SUBSCRIPTION_PAYMENT_METHODS,
+  type SubscriptionDTO,
   type SubscriptionPaymentMethod,
 } from '../services/subscriptions-api';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { Chip } from './ui/chip';
 import { Radio } from './ui/form';
 import { rowKeyboardProps } from './ui/row-keyboard';
 import { Text } from './ui/text';
@@ -31,6 +33,39 @@ export function isStartDateAllowed(date: string, now: Date = new Date()): boolea
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const { min, max } = startDateRange(now);
   return date >= min && date <= max;
+}
+
+/** Chu kỳ giao hợp lệ (tuần), khớp SUBSCRIPTION_INTERVAL_WEEKS của API. */
+export const SUBSCRIPTION_INTERVAL_WEEKS = [4, 6, 8, 10] as const;
+
+/**
+ * Ngày giao kế tiếp sau khi đổi chu kỳ, cùng luật với API (intervalPatch): đơn kỳ gần nhất + chu kỳ mới, không sớm hơn
+ * 0h ngày mai giờ VN. null = không tính được hoặc không có gì đổi (gói tạm dừng, cùng chu kỳ, API cũ chưa trả lastOrderAt).
+ * Gói chưa ra đơn nào giữ ngày bắt đầu đã hẹn.
+ */
+export function nextRunAfterIntervalChange(
+  sub: Pick<SubscriptionDTO, 'status' | 'intervalWeeks' | 'nextRunAt' | 'lastOrderAt'>,
+  weeks: number,
+  now: Date = new Date(),
+): Date | null {
+  if (sub.status !== 'ACTIVE' || weeks === sub.intervalWeeks || sub.lastOrderAt === undefined) return null;
+  if (sub.lastOrderAt === null) return new Date(sub.nextRunAt);
+  const due = new Date(new Date(sub.lastOrderAt).getTime() + weeks * 7 * 864e5);
+  const earliest = new Date(Date.parse(`${vnDateOf(new Date(now.getTime() + 864e5))}T00:00:00+07:00`));
+  return due < earliest ? earliest : due;
+}
+
+export function IntervalPicker({ value, onChange }: { value: number; onChange: (weeks: number) => void }) {
+  const t = vi.subscriptions;
+  return (
+    <div role="group" aria-label={t.intervalLabel} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
+      {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
+        <Chip key={w} selected={value === w} onPress={() => onChange(w)}>
+          {t.intervalOption(w)}
+        </Chip>
+      ))}
+    </div>
+  );
 }
 
 /** "2026-10-20" → "20/10/2026" (không qua Date để khỏi lệch ngày theo múi giờ máy). */

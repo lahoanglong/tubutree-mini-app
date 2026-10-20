@@ -202,6 +202,8 @@ export const vi = {
     edit: 'Sửa',
     editTitle: 'Sửa gói định kỳ',
     quantityLabel: 'Số lượng mỗi kỳ',
+    intervalNextRun: (date: string) => `Lần giao kế tiếp: ${date}`,
+    intervalPausedHint: 'Gói đang tạm dừng: ngày giao kế tiếp được tính lại khi bạn bật lại gói.',
     saveCta: 'Lưu thay đổi',
     saved: 'Đã cập nhật gói định kỳ',
     payLine: (method: string) => `Thanh toán: ${method}`,

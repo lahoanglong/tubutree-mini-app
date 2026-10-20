@@ -7,6 +7,7 @@ import {
   addressText,
   formatVnDate,
   isStartDateAllowed,
+  nextRunAfterIntervalChange,
   PaymentMethodPicker,
   startDateRange,
   vnDateOf,
@@ -47,5 +48,30 @@ describe('PaymentMethodPicker', () => {
     expect(onChange).toHaveBeenCalledWith('WALLET');
     fireEvent.keyDown(screen.getByRole('radio', { name: /Chuyển khoản ngân hàng/ }), { key: 'Enter' });
     expect(onChange).toHaveBeenCalledWith('BANK_TRANSFER');
+  });
+});
+
+describe('nextRunAfterIntervalChange: cùng luật với API (Q22)', () => {
+  const now = new Date('2026-10-20T05:00:00.000Z');
+  const sub = { status: 'ACTIVE' as const, intervalWeeks: 4, nextRunAt: '2026-11-07T03:00:00.000Z', lastOrderAt: '2026-10-10T03:00:00.000Z' };
+
+  it('ACTIVE có đơn gần nhất: ngày đơn + chu kỳ mới', () => {
+    expect(nextRunAfterIntervalChange(sub, 6, now)?.toISOString()).toBe('2026-11-21T03:00:00.000Z');
+  });
+
+  it('mốc mới đã qua hoặc trong hôm nay → 0h ngày mai giờ VN', () => {
+    expect(nextRunAfterIntervalChange({ ...sub, intervalWeeks: 10, lastOrderAt: '2026-08-01T03:00:00.000Z' }, 4, now)?.toISOString()).toBe(
+      '2026-10-20T17:00:00.000Z',
+    );
+  });
+
+  it('chưa có đơn nào: giữ ngày bắt đầu hiện có', () => {
+    expect(nextRunAfterIntervalChange({ ...sub, lastOrderAt: null }, 8, now)?.toISOString()).toBe('2026-11-07T03:00:00.000Z');
+  });
+
+  it('không tính được: gói tạm dừng, cùng chu kỳ, hoặc API cũ chưa trả lastOrderAt', () => {
+    expect(nextRunAfterIntervalChange({ ...sub, status: 'PAUSED' }, 6, now)).toBeNull();
+    expect(nextRunAfterIntervalChange(sub, 4, now)).toBeNull();
+    expect(nextRunAfterIntervalChange({ ...sub, lastOrderAt: undefined }, 6, now)).toBeNull();
   });
 });
