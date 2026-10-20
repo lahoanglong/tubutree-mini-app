@@ -25,6 +25,7 @@ import {
   type OrderDTO,
 } from '@/lib/shop-client';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
+import { shippingEtaLabel } from '@/lib/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
   ORDER_NOTE_MAX,
@@ -121,6 +122,8 @@ export default function CheckoutPage() {
   // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ máy chủ; chưa tải xong thì ẩn, không hứa dịch vụ chưa chắc có.
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const pickupFlag = configQ.data?.waste?.pickup === true;
+  // Chưa có cấu hình (đang tải, lỗi, API cũ) thì không hứa ngày giao.
+  const etaLabel = configQ.data?.shippingEta ? shippingEtaLabel(configQ.data.shippingEta) : null;
   const wasteMeQ = useQuery({
     queryKey: WASTE_QUERY_KEYS.me,
     queryFn: () => getWasteMe(coreHttp),
@@ -713,6 +716,7 @@ export default function CheckoutPage() {
             label="Phí vận chuyển"
             value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
           />
+          {etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
           {cart && (
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
