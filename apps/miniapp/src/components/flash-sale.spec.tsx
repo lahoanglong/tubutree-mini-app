@@ -153,6 +153,18 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p1', { state: { variationId: 'v1' } });
   });
 
+  it('thẻ role=link chỉ kích hoạt bằng Enter: Space không mở sản phẩm (để trang cuộn như liên kết thật)', async () => {
+    mocks.fetchActive.mockResolvedValue([ITEM]);
+    renderFlash();
+    const card = await screen.findByRole('link', { name: /Nước rửa chén/ });
+    card.focus();
+    const spaceNotPrevented = fireEvent.keyDown(card, { key: ' ' });
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(spaceNotPrevented).toBe(true);
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  });
+
   it('bán quá suất: chữ và thanh "đã bán" cùng dừng ở 100%, không in 150%', async () => {
     mocks.fetchActive.mockResolvedValue([{ ...ITEM, quota: 10, soldCount: 15 }]);
     renderFlash();
@@ -312,6 +324,15 @@ describe('UpcomingFlashSales (C-076 di cư DS v2: giữ nguyên hành vi)', () =
     renderUpcoming();
     fireEvent.click(await screen.findByRole('button', { name: /Đã đặt nhắc/ }));
     await waitFor(() => expect(mocks.cancelReminder).toHaveBeenCalledWith('u1'));
+  });
+
+  it('thẻ "Sắp diễn ra" cũng là link: Space không mở sản phẩm, Enter mở', async () => {
+    renderUpcoming();
+    const card = await screen.findByRole('link', { name: /Nước rửa chén/ });
+    fireEvent.keyDown(card, { key: ' ' });
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc');
   });
 
   it('chạm thẻ → mở sản phẩm (không kèm state)', async () => {

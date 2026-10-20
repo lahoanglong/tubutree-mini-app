@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { Checkbox, Radio } from './form';
-import { rowKeyboardProps } from './row-keyboard';
+import { linkKeyboardProps, rowKeyboardProps } from './row-keyboard';
 
 describe('rowKeyboardProps', () => {
   it('hàng tự làm role=radio có thể Tab tới, Space và Enter kích hoạt đúng một lần mỗi phím', async () => {
@@ -89,5 +89,29 @@ describe('hàng role=radio/checkbox ở trang thanh toán có bàn phím', () =>
 
   it.each(rows.map((r, i) => [i, r.role, r.tag] as const))('hàng #%i (%s) gắn rowKeyboardProps', (_i, _role, tag) => {
     expect(tag).toMatch(/rowKeyboardProps\(\)|tabIndex=/);
+  });
+});
+
+describe('linkKeyboardProps', () => {
+  it('role=link: Enter kích hoạt, Space không kích hoạt và không chặn cuộn trang', () => {
+    const onClick = vi.fn();
+    render(<div role="link" aria-label="Thẻ" onClick={onClick} {...linkKeyboardProps()} />);
+    const link = screen.getByRole('link');
+    expect(fireEvent.keyDown(link, { key: ' ' })).toBe(true);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('Enter từ phần tử lồng bên trong hoặc phím lặp không kích hoạt thẻ', () => {
+    const onClick = vi.fn();
+    render(
+      <div role="link" aria-label="Thẻ" onClick={onClick} {...linkKeyboardProps()}>
+        <button type="button">Nhắc tôi</button>
+      </div>,
+    );
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Nhắc tôi' }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('link'), { key: 'Enter', repeat: true });
+    expect(onClick).not.toHaveBeenCalled();
   });
 });

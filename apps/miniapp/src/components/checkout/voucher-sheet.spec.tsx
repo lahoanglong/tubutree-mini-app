@@ -330,6 +330,29 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: HELD_NOTICE, type: 'warning' })));
   });
 
+  const FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+
+  it('đơn đầu đã miễn phí giao: thẻ FREESHIP ghi lý do, khoá nút; mã gõ tay không báo "Đã áp dụng" mà nói đúng lý do như thanh toán (U1-B03)', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'GIAM10', eligible: true, discount: 5_000 },
+      { code: 'FREESHIP', eligible: false, reason: FIRST_ORDER_REASON, discount: 0 },
+      { code: 'MUACHUNG', eligible: true, discount: 1_000 },
+    ]);
+    mocks.applyCoupon.mockResolvedValue({ couponCode: 'FREESHIP', discount: 0, freeship: true, couponNotice: null });
+    renderSheet(undefined, { previewParams: {} });
+    expect(await screen.findByText(FIRST_ORDER_REASON)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Không áp dụng' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'freeship' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('FREESHIP'));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(
+        expect.objectContaining({ text: `Mã chưa được áp dụng cho đơn này: ${FIRST_ORDER_REASON}`, type: 'warning' }),
+      ),
+    );
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã FREESHIP' }));
+  });
+
   it('freeship không miễn được đồng nào (hoặc trang giỏ chưa có phí giao): không ghi số tiền', async () => {
     mocks.getCouponPreviews.mockResolvedValue([
       { code: 'GIAM10', eligible: true, discount: 5_000 },

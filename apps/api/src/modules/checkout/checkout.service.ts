@@ -52,6 +52,7 @@ import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import {
+  COUPON_FREESHIP_FIRST_ORDER_REASON,
   COUPON_FREESHIP_NOTHING_REASON,
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
@@ -165,9 +166,10 @@ function groupSubtotal(lines: { total: number }[]): number {
  * Mã hợp lệ mà không đem lại đồng nào cho lần đặt (giảm 0đ, freeship không miễn được phí nào) thì coi như chưa áp: placeOrder không
  * redeem. Trả lý do báo khách, null = mã có áp.
  */
-function couponNothingReason(discount: number, freeship: boolean, freeshipSaved: number): string | null {
+function couponNothingReason(discount: number, freeship: boolean, freeshipSaved: number, firstOrderWaived = 0): string | null {
   if (discount > 0 || freeshipSaved > 0) return null;
-  return freeship && discount === 0 ? COUPON_FREESHIP_NOTHING_REASON : COUPON_ZERO_DISCOUNT_REASON;
+  if (!freeship) return COUPON_ZERO_DISCOUNT_REASON;
+  return firstOrderWaived > 0 ? COUPON_FREESHIP_FIRST_ORDER_REASON : COUPON_FREESHIP_NOTHING_REASON;
 }
 
 /**
@@ -938,11 +940,14 @@ export class CheckoutService {
     // Báo giá ném lỗi này cho cả lần đặt; xem trước cũng vậy để không hứa số tiền của một lần đặt không đặt được.
     if (withShipping) assertNoUnavailableLine(cart.items);
     let freeshipSaved = 0;
-    if (withShipping && [...results.values()].some((r) => !(r instanceof BadRequestException) && r.freeship)) {
+    let firstOrderWaived = 0;
+    // Phí giao không phụ thuộc địa chỉ nên trang giỏ cũng biết được đơn đầu đã miễn phí giao (mã freeship không giúp thêm gì).
+    if ([...results.values()].some((r) => !(r instanceof BadRequestException) && r.freeship)) {
       const groups = groupByFulfiller(cart.items);
       const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
       const terms = await this.shipmentTerms(groups, groups.map((g) => groupSubtotal(g.lines)), user.tierId, true, firstOrderFrom);
       freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
+      firstOrderWaived = terms.reduce((s, t) => s + t.firstOrderWaived, 0);
     }
 
     const coupons: CouponPreviewItem[] = [];
@@ -953,11 +958,14 @@ export class CheckoutService {
       }
       const discount = Math.min(r.discount, base.goodsAfterCombo);
       // Trang giỏ chưa có phí giao: mã freeship hợp lệ là dùng được (như getCart), số tiền miễn phí giao chỉ biết ở thanh toán.
+      const firstOrderTookShip = r.freeship && discount === 0 && firstOrderWaived > 0 && freeshipSaved === 0;
       const nothing = withShipping
-        ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0)
-        : discount > 0 || r.freeship
-          ? null
-          : COUPON_ZERO_DISCOUNT_REASON;
+        ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0, r.freeship ? firstOrderWaived : 0)
+        : firstOrderTookShip
+          ? COUPON_FREESHIP_FIRST_ORDER_REASON
+          : discount > 0 || r.freeship
+            ? null
+            : COUPON_ZERO_DISCOUNT_REASON;
       coupons.push({
         code,
         eligible: nothing === null,
@@ -1149,7 +1157,7 @@ export class CheckoutService {
     // được gì. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
     const freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
     // couponApplied: coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true.
-    const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved) : null;
+    const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved, firstOrderShipWaived) : null;
     const couponApplied = couponValid && nothingReason === null;
     if (nothingReason !== null) {
       couponNotice = couponNotAppliedNotice(nothingReason, flashSubtotal > 0, combo.total > 0);

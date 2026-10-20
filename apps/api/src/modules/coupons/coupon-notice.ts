@@ -8,6 +8,9 @@ export const COUPON_ZERO_DISCOUNT_REASON = 'Không có sản phẩm nào trong �
 export const COUPON_FREESHIP_NOTHING_REASON =
   'Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó.';
 
+/** Đơn đầu đã được miễn phí giao nên mã freeship không miễn thêm gì và không bị tiêu lượt. */
+export const COUPON_FREESHIP_FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+
 /**
  * Câu giải thích cho khách khi giỏ vẫn giữ mã nhưng mã chưa được áp cho đơn này (giảm 0đ, không tiêu
  * lượt). `reason` là thông điệp tiếng Việt của CouponsService (vd "Đơn tối thiểu 150.000đ để dùng mã này.").

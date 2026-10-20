@@ -48,7 +48,9 @@ describe('ProductCard (danh sách yêu thích, C-076 di cư DS v2: giữ nguyên
     mocks.fetchActive.mockResolvedValue([FLASH]);
     await renderCard();
     expect(await screen.findByText('99.000đ')).toBeInTheDocument();
-    expect(screen.getByText(/-34%/)).toBeInTheDocument();
+    expect(screen.getByText(/-18%/)).toBeInTheDocument();
+    expect(screen.getByText('120.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(screen.queryByText('150.000đ')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { variationId: 'v1' } });
   });

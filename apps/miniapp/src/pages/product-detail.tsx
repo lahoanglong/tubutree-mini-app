@@ -25,6 +25,7 @@ import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
 import { fetchReviews } from '../services/shop-api';
+import { tilePricing } from '../components/catalog/catalog-pricing';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -279,7 +280,8 @@ export default function ProductDetailPage() {
   // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
   const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
   const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
-  const originalPrice = selected ? selected.retailPrice : p.basePrice;
+  // Giờ vàng gạch giá đang bán trước giờ vàng (khớp dải trang chủ và thẻ SP); flash không rẻ hơn thì như không có flash.
+  const originalPrice = flashItem && price < baseSelectedPrice ? baseSelectedPrice : selected ? selected.retailPrice : p.basePrice;
   // % badge tính từ giá THỰC hiển thị (price/originalPrice) — không dùng flashItem.retailPrice (snapshot cũ).
   const flashPct = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0;
   const inStock = (selected?.stock ?? 0) > 0;
@@ -1041,22 +1043,17 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
 function RelatedTile({ product, flashSales }: { product: ProductCardData; flashSales: FlashSaleActiveItem[] }) {
   const navigate = useNavigate();
   const flash = flashSales.find((f) => f.productSlug === product.slug);
-  const standing = product.salePrice ?? product.basePrice;
-  // Giá flash chỉ thắng khi thực sự rẻ hơn giá đang bán (đúng quy tắc BE dùng ở giỏ hàng).
-  const price = flash && flash.flashPrice < standing ? flash.flashPrice : standing;
-  const isFlash = price !== standing;
-  const hasSale = price < product.basePrice;
-  const salePct = hasSale ? Math.round((1 - price / product.basePrice) * 100) : 0;
+  const { price, compareAt, isFlash, salePct } = tilePricing(product, flashSales);
   return (
     <ProductTile
       product={product}
       variant="rail"
-      priceOverride={{ price }}
+      priceOverride={{ price, compareAt }}
       badge={
         // Y hệt ProductCard cũ: KHÔNG hiện badge giảm giá khi đã hết hàng — overlay "tạm hết
         // hàng" của ProductTile là lớp phủ TRONG SUỐT (72% opacity), badge % có thể lộ ra dưới
         // lớp phủ nếu không chặn ở đây (review fix, Task 24).
-        hasSale && product.inStock ? (
+        salePct > 0 && product.inStock ? (
           <Badge
             tone="promo"
             size="sm"

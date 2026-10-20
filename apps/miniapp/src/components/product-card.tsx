@@ -29,7 +29,7 @@ export default function ProductCard({ product }: { product: ProductCardType }) {
     <ProductTile
       product={product}
       variant="grid"
-      priceOverride={{ price: pricing.price }}
+      priceOverride={{ price: pricing.price, compareAt: pricing.compareAt }}
       badge={
         // Hết hàng: lớp phủ của ProductTile trong suốt 72% — không để badge % lộ ra bên dưới.
         pricing.salePct > 0 && product.inStock ? (

@@ -78,11 +78,13 @@ describe('CatalogGrid', () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([
       { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'x', thumbnail: null, flashPrice: 75000, retailPrice: 150000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
     ]);
-    renderGrid();
-    const badge = await screen.findByText(/Giờ vàng -50%/);
-    expect(badge.textContent).toBe('Giờ vàng -50%');
+    renderGrid(undefined, [SALE]);
+    const badge = await screen.findByText(/Giờ vàng -38%/);
+    expect(badge.textContent).toBe('Giờ vàng -38%');
     expect(badge.querySelector('svg')).not.toBeNull();
     expect(screen.getByText('75.000đ')).toBeInTheDocument();
+    expect(screen.getByText('120.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(screen.queryByText('150.000đ')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { listSource: 'search', variationId: 'v9' } });
   });
