@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   params: { code: 'TB-9' } as Record<string, string>,
   order: null as unknown,
   orderCalls: [] as string[],
-  qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined },
+  qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined, error: null as unknown },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -35,6 +35,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   fetchMyReturns: async () => [],
   getBankQr: async () => {
     mocks.qr.calls += 1;
+    if (mocks.qr.error) throw mocks.qr.error;
     return {
       orderCode: 'TB-9', amount: 330000, paymentStatus: mocks.qr.paymentStatus, paymentDeadline: mocks.qr.paymentDeadline,
       bank: { bin: '970407', name: 'Techcombank', accountNo: '9984606774', accountName: 'CONG TY TUBU TREE' },
@@ -88,7 +89,7 @@ beforeEach(() => {
   mocks.params = { code: 'TB-9' };
   mocks.order = structuredClone(ORDER);
   mocks.orderCalls = [];
-  mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined };
+  mocks.qr = { paymentStatus: 'UNPAID', calls: 0, paymentDeadline: undefined, error: null };
   mocks.support = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
 });
 afterEach(() => {
@@ -270,6 +271,20 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     const { container } = await mount();
     expect(mocks.qr.calls).toBeGreaterThan(0);
     expect(container.textContent).toContain('Đơn đang chờ bạn chuyển khoản');
+  });
+
+  it('lần dò QR bị từ chối chốt (409) khi đang mở trang: dòng "Quét mã bên dưới" biến mất cùng lúc khung chuyển sang đóng', async () => {
+    mocks.order = { ...ORDER, paymentDeadline: '2999-01-01T00:00:00Z' };
+    const { container } = await mount();
+    expect(container.textContent).toContain('Quét mã bên dưới');
+    mocks.qr.error = new ApiError('Đơn đã huỷ.', 409);
+    const check = buttons(container).find((b) => (b.textContent ?? '').includes('Kiểm tra'))!;
+    await act(async () => {
+      check.click();
+    });
+    await flush(12);
+    expect(container.textContent).toContain('Đơn không còn chờ chuyển khoản');
+    expect(container.textContent).not.toContain('Quét mã bên dưới');
   });
 
   it('QR đã hiện lúc còn hạn thì ở lại khi trang dựng lại sau hạn, để lần dò thấy PAID vẫn báo "Đã nhận thanh toán"', async () => {

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { serverNow, syncServerClock } from '../server-clock';
 import { fakeHttp } from './fake-http';
 import { cancelFlashReminder, fetchActiveFlashSales, fetchUpcomingFlashSales, setFlashReminder } from './flash-sale';
 
@@ -15,5 +16,31 @@ describe('flash-sale — hợp đồng gọi API', () => {
       { method: 'post', path: '/flash-sales/items/it1/remind' },
       { method: 'delete', path: '/flash-sales/items/it1/remind' },
     ]);
+  });
+
+  describe('giờ máy chủ', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      syncServerClock(new Date().toISOString());
+    });
+
+    it('danh sách đang chạy trả serverNow: đồng bộ đồng hồ máy chủ', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-10-18T10:00:00.000Z'));
+      const serverIso = '2026-10-18T09:50:00.000Z';
+      const { http } = fakeHttp(() => [{ itemId: 'i1', serverNow: serverIso }]);
+      await fetchActiveFlashSales(http);
+      expect(serverNow()).toBe(Date.parse(serverIso));
+    });
+
+    it('API cũ không trả serverNow hoặc danh sách rỗng: giữ độ lệch đang có', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-10-18T10:00:00.000Z'));
+      syncServerClock('2026-10-18T09:55:00.000Z');
+      await fetchActiveFlashSales(fakeHttp(() => [{ itemId: 'i1' }]).http);
+      await fetchActiveFlashSales(fakeHttp(() => []).http);
+      await fetchActiveFlashSales(fakeHttp().http);
+      expect(serverNow()).toBe(Date.parse('2026-10-18T09:55:00.000Z'));
+    });
   });
 });

@@ -218,7 +218,7 @@ function GroupCard({
         <ProgressBar value={g.currentSize} max={g.targetSize} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${formatVnd(g.basePrice - g.unitPrice)}, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}</p>
+        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}</p>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>
@@ -228,7 +228,7 @@ function GroupCard({
             </p>
           )}
           <Link href={productHref} className={`${ui.btnPrimary} mt-3 w-full`}>
-            {`Mua ngay với mã giảm ${formatVnd(g.basePrice - g.unitPrice)}`}
+            {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Link>
         </>
       ) : (

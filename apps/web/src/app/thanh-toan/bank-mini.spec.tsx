@@ -91,9 +91,10 @@ describe('/thanh-toan/chuyen-khoan — bố cục như Mini App ở điện tho�
 
   it('lời nhắc giữ nội dung có icon cảnh báo và căn trái', async () => {
     const c = await mount();
-    const note = Array.from(c.querySelectorAll<HTMLElement>('p')).find((p) => p.textContent?.startsWith('Giữ nguyên nội dung'))!;
+    const note = c.querySelector<HTMLElement>('[data-testid="memo-note"]')!;
+    expect(note.textContent).toMatch(/^Giữ nguyên nội dung/);
     expect(note.querySelector('svg')).not.toBeNull();
-    expect(note.className).toMatch(/\bmax-md:text-left\b/);
+    expect(note.className).toMatch(/\btext-left\b/);
   });
 
   it('hạn chuyển khoản là hộp nền cảnh báo ngoài thẻ', async () => {
@@ -108,7 +109,7 @@ describe('/thanh-toan/chuyen-khoan — tiêu đề khi chưa có QR để quét'
   it('QR không tải được: h1 trung tính, không phụ đề "quét mã VietQR bên dưới"', async () => {
     mocks.qr = 'error';
     const c = await mount();
-    expect(c.textContent).toContain('Không tải được thông tin thanh toán.');
+    expect(c.textContent).toContain('Chưa tải được thông tin thanh toán');
     expect(c.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
     expect(c.textContent).not.toContain('quét mã VietQR bên dưới');
   });

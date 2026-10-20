@@ -49,10 +49,12 @@ const QR_BODY = {
 
 describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơn (A2-02=A6-01)', () => {
   it('BUYERMINI-8 (web): hiện hạn chuyển khoản giờ VN để khách biết đơn tự huỷ khi nào', async () => {
+    vi.useFakeTimers({ now: new Date('2026-10-13T00:00:00Z'), toFake: ['Date'] });
     const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, paymentDeadline: '2026-10-14T03:00:00.000Z' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<BankTransferPanel order={order()} />);
     await flush();
+    vi.useRealTimers();
     expect(container.querySelector('[role="note"]')?.textContent).toBe('Chuyển khoản trước 10:00 14/10/2026 — quá hạn đơn sẽ tự huỷ.');
   });
 
@@ -247,7 +249,8 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<BankTransferPanel order={order()} />);
     await flush();
-    expect(container.textContent).toMatch(/không tải được|thử lại/i);
+    expect(container.textContent).toContain('Chưa tải được thông tin thanh toán');
+    expect(byText(container, 'button', 'Thử lại')).not.toBeNull();
   });
   it('mỗi dòng cần chép có nút riêng: số tài khoản, số tiền (chữ số thuần), nội dung chuyển khoản', async () => {
     const writeText = vi.fn(async () => undefined);
@@ -282,9 +285,10 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
       expect(el?.closest('[aria-live], [role="status"], [role="alert"]')).toBeNull();
     });
 
-    it('quá hạn: nói thẳng "Đã quá hạn chuyển khoản"', async () => {
+    it('quá hạn: khối "Đơn không còn chờ chuyển khoản", không còn QR hay đồng hồ', async () => {
       const c = await withDeadline('2026-10-17T09:00:00Z');
-      expect(c.querySelector('[data-testid="payment-countdown"]')?.textContent).toBe('Đã quá hạn chuyển khoản');
+      expect(c.textContent).toContain('Đơn không còn chờ chuyển khoản');
+      expect(c.querySelector('[data-testid="payment-countdown"]')).toBeNull();
     });
 
     it('API không trả hạn: không có đồng hồ', async () => {

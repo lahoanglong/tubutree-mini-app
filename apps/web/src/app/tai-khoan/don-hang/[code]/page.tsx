@@ -28,7 +28,7 @@ import { ui } from '@/lib/guest-ui';
 import { reviewHref } from '@/lib/reviews-client';
 import { canPayNow } from '@/components/orders/order-rules';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { BankTransferPanel } from '../../../thanh-toan/bank-transfer-panel';
+import { BankTransferPanel, type BankPanelState } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
 import { formatCount } from '@/lib/checkout-points';
 import { formatPhoneDisplay } from '@/lib/phone-display';
@@ -93,6 +93,16 @@ export default function OrderDetailPage() {
   // gỡ khung là mất lần dò thấy tiền về của khách vừa chuyển sát giờ.
   const [qrShown, setQrShown] = useState(false);
   if (!qrShown && orderQ.data && canPayNow(orderQ.data)) setQrShown(true);
+  // Dòng nhắc "quét mã" theo đúng trạng thái khung QR, không theo trạng thái đơn đã lưu đệm: khung đóng (đơn bị huỷ, hết hạn
+  // theo giờ máy chủ) thì đơn cũng phải tải lại để trạng thái và dòng nhắc cùng đổi.
+  const [panelState, setPanelState] = useState<BankPanelState>('loading');
+  const onPanelState = useCallback(
+    (state: BankPanelState) => {
+      setPanelState(state);
+      if (state === 'closed') void qc.invalidateQueries({ queryKey: ['order', code] });
+    },
+    [qc, code],
+  );
   const refreshOrder = useCallback(() => {
     setPaidNotice(true);
     void qc.invalidateQueries({ queryKey: ['order', code] });
@@ -223,12 +233,12 @@ export default function OrderDetailPage() {
 
       {showPayPanel && (
         <div className="mt-2 max-md:px-4">
-          {canPayNow(o) && (
+          {canPayNow(o) && panelState === 'ready' && (
             <p className="rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
               Đơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.
             </p>
           )}
-          <BankTransferPanel order={o} onPaid={refreshOrder} />
+          <BankTransferPanel order={o} onPaid={refreshOrder} onState={onPanelState} />
         </div>
       )}
 

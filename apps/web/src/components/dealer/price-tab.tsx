@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, ClipboardList, Save, Search, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteTemplate, placeDealerOrder, saveTemplate, type PricelistRow } from '@tubutree/app-core/api/dealer';
+import { deleteTemplate, placeDealerOrder, saveTemplate, type DealerOrderRules, type PricelistRow } from '@tubutree/app-core/api/dealer';
 import { dealerPricelistQuery, dealerTemplatesQuery } from '@tubutree/app-core/queries/dealer';
 import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from '@tubutree/app-core/dealer-pricing';
 import { coreHttp } from '@/lib/core-http';
@@ -62,7 +62,7 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
 }
 
 /** Bảng giá đại lý + đặt nhanh: số lượng theo biến thể, đặt trước khi vượt tồn, mẫu đơn, dán đơn từ bảng tính. */
-export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: number }) {
+export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; debt: number; rules?: DealerOrderRules }) {
   const qc = useQueryClient();
   const router = useRouter();
   const priceQ = useQuery(dealerPricelistQuery(coreHttp));
@@ -183,7 +183,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
     place.mutate(method);
   };
 
-  const overLimit = debt + total > creditLimit;
+  const belowMin = !!rules && rules.minOrderValue > 0 && total < rules.minOrderValue;
+  const shippingFee = rules && !belowMin && total < rules.freeShipThreshold ? rules.shippingFee : 0;
+  const grandTotal = total + shippingFee;
+  const overLimit = debt + grandTotal > creditLimit;
   const placing = place.isPending;
   const templates = templatesQ.data ?? [];
 
@@ -194,8 +197,21 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
           <Save className="h-4 w-4" aria-hidden="true" />
           Lưu mẫu
         </button>
-        <span className="text-lg font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(total)}</span>
+        <span className="text-lg font-bold tabular-nums text-stone-900 max-md:text-[var(--color-dealer-ink)]">{formatVnd(grandTotal)}</span>
       </div>
+      {belowMin && rules && (
+        <p className="flex items-center gap-1 text-xs text-danger-fg">
+          <AlertTriangle className="h-4 w-4 flex-none" aria-hidden="true" />
+          Đơn tối thiểu {formatVnd(rules.minOrderValue)} tiền hàng — thêm {formatVnd(rules.minOrderValue - total)} nữa để đặt.
+        </p>
+      )}
+      {rules && !belowMin && (
+        <p className="text-xs text-stone-600">
+          {shippingFee > 0
+            ? `Tiền hàng ${formatVnd(total)} + Phí giao ${formatVnd(shippingFee)} (miễn phí từ ${formatVnd(rules.freeShipThreshold)})`
+            : `Miễn phí giao (đơn từ ${formatVnd(rules.freeShipThreshold)})`}
+        </p>
+      )}
       {preorderLines > 0 && <p className="text-xs text-warning-fg">{preorderNote(preorderLines)}</p>}
       {overLimit && (
         <p className="flex items-center gap-1 text-xs text-danger-fg">
@@ -204,10 +220,10 @@ export function PriceTab({ creditLimit, debt }: { creditLimit: number; debt: num
         </p>
       )}
       <div className="mt-2 flex gap-2">
-        <button type="button" disabled={placing} onClick={() => submit('PREPAID')} className={`${skin.btnSecondary} flex-1`}>
+        <button type="button" disabled={placing || belowMin} onClick={() => submit('PREPAID')} className={`${skin.btnSecondary} flex-1`}>
           Trả trước
         </button>
-        <button type="button" disabled={overLimit || placing} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
+        <button type="button" disabled={overLimit || placing || belowMin} onClick={() => submit('CREDIT')} className={`${ui.btnPrimary} ${skin.dealerInkBtn} flex-1`}>
           {placing ? 'Đang đặt...' : 'Ghi công nợ'}
         </button>
       </div>

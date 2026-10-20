@@ -108,7 +108,7 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     mocks.qr.fail = true;
     const c = mount();
     await flush();
-    expect(c.textContent).toContain('Không tải được thông tin thanh toán.');
+    expect(c.textContent).toContain('Chưa tải được thông tin thanh toán');
     expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(true);
     expect(Array.from(c.querySelectorAll('a')).some((a) => a.getAttribute('href') === '/tai-khoan/don-hang/TB-9')).toBe(true);
   });
