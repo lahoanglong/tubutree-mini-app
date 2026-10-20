@@ -5,7 +5,8 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 // Chép ý recycle-rules.spec.tsx (Mini App, §14.2): thể lệ do admin soạn giữ xuống dòng, chưa có thì dòng chờ, lỗi có "Thử lại".
 // Khác Mini App: trang công khai, thể lệ có sẵn từ server (ISR) thì không gọi API từ trình duyệt.
 
-const state = vi.hoisted(() => ({ get: vi.fn() }));
+const state = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated' as string }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: state.get, post: vi.fn() } }));
 
 import { ApiError } from '@/lib/client-api';
@@ -19,7 +20,10 @@ const mount = async (initialText?: string | null) => {
   return r.container;
 };
 
-beforeEach(() => state.get.mockReset());
+beforeEach(() => {
+  state.get.mockReset();
+  state.phase = 'authenticated';
+});
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
@@ -64,6 +68,16 @@ describe('/doi-rac/quy-dinh (§14.2)', () => {
     expect(c.textContent).toContain(expected);
     expect(c.textContent).not.toContain(raw);
     expect(byText(c, 'button', 'Thử lại')).toBeNull();
+  });
+});
+
+describe('/doi-rac/quy-dinh — khách chưa đăng nhập', () => {
+  it('API trả 401 mà khách chưa có phiên: mời đăng nhập, không nói phiên hết hạn', async () => {
+    state.phase = 'guest';
+    state.get.mockRejectedValueOnce(new ApiError('Unauthorized', 401));
+    const c = await mount();
+    expect(c.querySelector('a[href="/dang-nhap?returnTo=%2Fdoi-rac%2Fquy-dinh"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Phiên đăng nhập đã hết hạn');
   });
 });
 

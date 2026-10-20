@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { wasteRulesQuery } from '@tubutree/app-core/queries/waste';
 import { friendlyError as errText, isAuthError } from '@/lib/friendly-error';
 import { coreHttp } from '@/lib/core-http';
+import { LoginRequired } from '@/components/login-required';
+import { useAuthPhase } from '@/lib/auth-phase';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +23,8 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
     staleTime: 5 * 60_000,
   });
 
+  const phase = useAuthPhase();
+
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12">
       <PageHeader title="Thể lệ Đổi rác lấy quà" backHref="/doi-rac" backLabel="Đổi rác lấy quà" />
@@ -29,6 +34,8 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
           <Skeleton height={16} />
           <Skeleton height={16} width="70%" />
         </div>
+      ) : q.isError && errorStatus(q.error) === 401 && phase === 'guest' ? (
+        <LoginRequired message="Đăng nhập để xem thể lệ Đổi rác lấy quà." returnTo="/doi-rac/quy-dinh" />
       ) : q.isError ? (
         <ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} />
       ) : (
