@@ -34,6 +34,8 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
+  /** Thuế TNCN bị khấu trừ nếu rút hết số khả dụng ngay bây giờ (cộng dồn tháng VN); thiếu khi API cũ. */
+  withdrawTaxPreview?: number;
   /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền; thiếu khi API cũ. */
   withdrawingCommission?: number;
   totalClicks: number;

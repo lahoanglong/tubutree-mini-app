@@ -976,6 +976,28 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
     expect(d.tier.bonusPct).toBe(0);
   });
 
+  it('Q2: withdrawTaxPreview = thuế sẽ bị trừ nếu rút hết ngay, cộng dồn các lệnh rút đã có trong tháng VN; không có gì để rút → 0', async () => {
+    const aggregate = jest.fn(async (args: { where: { status?: unknown; payoutBatchId?: unknown } }) =>
+      args.where.status === 'APPROVED' && args.where.payoutBatchId === null
+        ? { _sum: { amount: 1_500_000, commissionableTotal: 0 } }
+        : { _sum: { amount: 0, commissionableTotal: 0 } },
+    );
+    const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: 1_500_000, taxWithheld: 0 } });
+    const prisma = {
+      commission: { aggregate },
+      payout: { aggregate: payoutAggregate },
+      affiliateLink: { aggregate: jest.fn().mockResolvedValue({ _sum: { clicks: 0, conversions: 0 } }) },
+    } as unknown as PrismaService;
+    const svc = new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
+    const d = await svc.dashboard('u1', NOW);
+    expect(d.withdrawTaxPreview).toBe(300_000);
+    expect(payoutAggregate.mock.calls[0][0].where.requestedAt).toEqual({
+      gte: new Date('2026-09-30T17:00:00.000Z'),
+      lt: new Date('2026-10-31T17:00:00.000Z'),
+    });
+    expect((await build().svc.dashboard('u1', NOW)).withdrawTaxPreview).toBe(0);
+  });
+
   it('hoa hồng hôm nay/tháng này tính từ 00:00 giờ VN (không theo TZ máy chủ UTC)', async () => {
     const { svc, commissionAggregate } = build();
     await svc.dashboard('u1', NOW);
@@ -1155,8 +1177,18 @@ describe('AffiliateService.getMilestones holdDays hiển thị = số ngày gi�
 });
 
 describe('AffiliateService.requestPayout (money safety)', () => {
-  function makePrisma(opts: { available?: number; rows?: { id: string; amount: number }[]; markCount?: number; taxId?: string | null }) {
+  function makePrisma(opts: {
+    available?: number;
+    rows?: { id: string; amount: number }[];
+    markCount?: number;
+    taxId?: string | null;
+    /** Các lệnh rút hoa hồng đã có trong tháng (chưa kể lệnh đang tạo). */
+    priorGross?: number;
+    priorTax?: number;
+  }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
+    const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: opts.priorGross ?? null, taxWithheld: opts.priorTax ?? null } });
+    const executeRaw = jest.fn().mockResolvedValue(1);
     const userUpdate = jest.fn().mockResolvedValue({});
     const userFindUnique = jest.fn().mockResolvedValue({ personalTaxId: opts.taxId ?? null });
     const payoutCreate = jest.fn().mockResolvedValue({ id: 'payout-1' });
@@ -1168,12 +1200,13 @@ describe('AffiliateService.requestPayout (money safety)', () => {
         updateMany,
       },
       user: { update: userUpdate, findUnique: userFindUnique },
-      payout: { create: payoutCreate },
+      payout: { create: payoutCreate, aggregate: payoutAggregate },
+      $executeRaw: executeRaw,
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
       .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
-    return { prisma, userUpdate, userFindUnique, payoutCreate, updateMany };
+    return { prisma, userUpdate, userFindUnique, payoutCreate, updateMany, payoutAggregate, executeRaw };
   }
 
   it('số dư khả dụng = 0 → BadRequest', async () => {
@@ -1280,7 +1313,9 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       },
       payout: {
         create: jest.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: `payout-${++payoutSeq}`, ...data })),
+        aggregate: jest.fn(async () => ({ _sum: { grossAmount: null, taxWithheld: null } })),
       },
+      $executeRaw: jest.fn(async () => 1),
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
@@ -1407,6 +1442,86 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     const big = makePrisma({ available: 5_000_000, rows: [{ id: 'c1', amount: 5_000_000 }] });
     await new AffiliateService(big.prisma, off, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 5_000_000, 'BANK', {});
     expect(big.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 5_000_000 }));
+  });
+
+  describe('thuế TNCN cộng dồn theo tháng VN (Q2)', () => {
+    const MST = '079201001234';
+    const bank = { bankName: 'VCB', accountNumber: '0123456789', accountName: 'NGUYEN A' };
+    const run = (method: 'BANK' | 'WALLET_BALANCE', total: number, prior: { priorGross?: number; priorTax?: number }, cfg: SystemConfigService = config) => {
+      const m = makePrisma({ available: total, rows: [{ id: 'c1', amount: total }], taxId: MST, ...prior });
+      return new AffiliateService(m.prisma, cfg, pricing, pancakeOrder, coins, analytics)
+        .requestPayout('u1', total, method, method === 'BANK' ? bank : undefined)
+        .then(() => m);
+    };
+
+    it.each(['WALLET_BALANCE', 'BANK'] as const)('%s: lần 2 trong tháng 1.500.000đ sau lần 1 1.500.000đ (chưa bị trừ) → trừ 10% trên tổng 3.000.000đ = 300.000đ', async (method) => {
+      const { payoutCreate } = await run(method, 1_500_000, { priorGross: 1_500_000, priorTax: 0 });
+      expect(payoutCreate.mock.calls[0][0].data).toEqual(
+        expect.objectContaining({ grossAmount: 1_500_000, taxWithheld: 300_000, amount: 1_200_000, taxId: MST }),
+      );
+    });
+
+    it.each(['WALLET_BALANCE', 'BANK'] as const)('%s: đã trừ 300.000đ trên 3.000.000đ, lần này 1.000.000đ → chỉ trừ phần chênh 100.000đ (10% × 4.000.000đ − 300.000đ)', async (method) => {
+      const { payoutCreate } = await run(method, 1_000_000, { priorGross: 3_000_000, priorTax: 300_000 });
+      expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 100_000, amount: 900_000 }));
+    });
+
+    it('khoản truy thu lớn hơn số tiền lần này → chỉ trừ tối đa bằng lần này, phần còn lại dồn sang lần sau', async () => {
+      const { payoutCreate } = await run('BANK', 100_000, { priorGross: 1_900_000, priorTax: 0 });
+      expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 100_000, amount: 0 }));
+      // Lần sau: tổng 2.100.000đ, đã trừ 100.000đ → còn thiếu 110.000đ, lại bị chặn ở 100.000đ của lần đó.
+      const next = await run('BANK', 100_000, { priorGross: 2_000_000, priorTax: 100_000 });
+      expect(next.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 100_000, amount: 0 }));
+    });
+
+    it('lệnh rút về Ví bị trừ hết (net 0) → vẫn ghi lệnh PAID, không ghi dòng sổ ví 0đ', async () => {
+      const { payoutCreate, userUpdate } = await run('WALLET_BALANCE', 100_000, { priorGross: 1_900_000, priorTax: 0 });
+      expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 100_000, amount: 0, status: 'PAID' }));
+      expect(userUpdate).not.toHaveBeenCalled();
+    });
+
+    it('tổng tháng chưa tới ngưỡng → không trừ; đã trừ dư (lệnh trước bị từ chối sau đó) → không trừ âm', async () => {
+      const under = await run('BANK', 1_000_000, { priorGross: 900_000, priorTax: 0 });
+      expect(under.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0 }));
+      const over = await run('BANK', 500_000, { priorGross: 1_500_000, priorTax: 300_000 });
+      expect(over.payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 500_000 }));
+    });
+
+    it('cấu hình 0% → tắt dù tổng tháng vượt ngưỡng', async () => {
+      const off = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.pit_withhold_pct' ? 0 : fb) as T } as unknown as SystemConfigService;
+      const { payoutCreate } = await run('BANK', 1_500_000, { priorGross: 1_500_000, priorTax: 0 }, off);
+      expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 0 }));
+    });
+
+    it('lần 2 bị trừ mà chưa có MST → 400 PIT_TAX_ID_REQUIRED, không tạo lệnh', async () => {
+      const m = makePrisma({ available: 1_500_000, rows: [{ id: 'c1', amount: 1_500_000 }], priorGross: 1_500_000, priorTax: 0 });
+      const err = await new AffiliateService(m.prisma, config, pricing, pancakeOrder, coins, analytics)
+        .requestPayout('u1', 1_500_000, 'WALLET_BALANCE')
+        .catch((e: BadRequestException) => e);
+      expect((err as BadRequestException).getResponse()).toEqual(expect.objectContaining({ code: 'PIT_TAX_ID_REQUIRED' }));
+      expect(m.payoutCreate).not.toHaveBeenCalled();
+    });
+
+    it('tổng tháng chỉ tính lệnh hoa hồng (có grossAmount) chưa bị từ chối, trong tháng VN; khoá user-tháng lấy TRƯỚC khi đọc hoa hồng', async () => {
+      jest.useFakeTimers({ now: new Date('2026-10-31T17:30:00Z'), doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'clearImmediate', 'queueMicrotask'] });
+      try {
+        const m = makePrisma({ available: 1_500_000, rows: [{ id: 'c1', amount: 1_500_000 }], taxId: MST, priorGross: 1_500_000, priorTax: 0 });
+        await new AffiliateService(m.prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 1_500_000, 'BANK', bank);
+        // 31/10 17:30 UTC = 01/11 00:30 giờ VN → tháng 11.
+        const where = m.payoutAggregate.mock.calls[0][0].where;
+        expect(where).toEqual({
+          userId: 'u1',
+          grossAmount: { not: null },
+          status: { not: 'REJECTED' },
+          requestedAt: { gte: new Date('2026-10-31T17:00:00Z'), lt: new Date('2026-11-30T17:00:00Z') },
+        });
+        expect(m.executeRaw).toHaveBeenCalledTimes(1);
+        const txFindMany = (m.prisma.commission.findMany as jest.Mock).mock.invocationCallOrder[0];
+        expect(m.executeRaw.mock.invocationCallOrder[0]!).toBeLessThan(txFindMany!);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 
   it('BANK: 1 phần row bị đổi giữa đọc và ghi (marked.count !== rows.length) → Conflict, KHÔNG trả payout REQUESTED (Bug 4 fix)', async () => {

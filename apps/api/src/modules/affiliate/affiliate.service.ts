@@ -93,6 +93,7 @@ function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_T
 export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
 export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 2_000_000;
 export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
+const PIT_MONTH_LOCK = 'affiliate.pit_month';
 /** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
@@ -324,12 +325,15 @@ export class AffiliateService {
       }),
     ]);
 
+    const withdrawable = approved._sum.amount ?? 0;
     return {
+      // Thuế sẽ bị khấu trừ nếu rút hết số khả dụng ngay bây giờ (cộng dồn tháng VN); chỉ để hiển thị, lệnh rút tính lại dưới khoá.
+      withdrawTaxPreview: withdrawable > 0 ? await this.personalIncomeTax(this.prisma, userId, withdrawable, now) : 0,
       withdrawingCommission: withdrawing._sum.amount ?? 0,
       todayCommission: today,
       monthCommission,
       pendingCommission: pending._sum.amount ?? 0,
-      withdrawableCommission: approved._sum.amount ?? 0,
+      withdrawableCommission: withdrawable,
       totalClicks: links._sum.clicks ?? 0,
       totalConversions: links._sum.conversions ?? 0,
       monthRevenue,
@@ -540,16 +544,36 @@ export class AffiliateService {
   }
 
   /**
-   * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động: lần trả từ ngưỡng trở lên thì giữ lại
-   * `affiliate.pit_withhold_pct` (mặc định 10% từ 2.000.000đ, theo Thông tư 111/2013/TT-BTC). 0% = tắt.
+   * Khoá theo (CTV, tháng VN) trong transaction rút tiền: hai lệnh rút cùng lúc của một CTV phải đọc tổng tháng nối tiếp nhau, nếu
+   * không cả hai cùng thấy "chưa rút gì" và cùng thoát khấu trừ. Lấy TRƯỚC khi đọc hoa hồng khả dụng để lệnh đến sau đọc số mới.
    */
-  async personalIncomeTax(gross: number): Promise<number> {
+  async lockPitMonth(tx: Prisma.TransactionClient, userId: string, now: Date): Promise<void> {
+    const month = vnMonthBounds(now).key;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${PIT_MONTH_LOCK}), hashtext(${`${userId}:${month}`}))`;
+  }
+
+  /**
+   * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động (`affiliate.pit_withhold_pct`, mặc định 10% từ
+   * 2.000.000đ, theo Thông tư 111/2013/TT-BTC; 0% = tắt). Ngưỡng xét trên TỔNG các lệnh rút hoa hồng trong tháng VN, kể cả lần này:
+   * từ ngưỡng trở lên thì khấu trừ pct × tổng tháng trừ phần đã khấu trừ ở các lệnh trước (truy thu các lần nhỏ trước đó). Phần
+   * truy thu vượt số tiền lần này thì chỉ trừ tối đa bằng lần này, phần còn thiếu dồn sang lần sau. Lệnh bị từ chối và lệnh rút Ví
+   * về ngân hàng (không có grossAmount) không tính. Phải gọi sau `lockPitMonth` trong cùng transaction.
+   */
+  async personalIncomeTax(tx: Prisma.TransactionClient, userId: string, gross: number, now: Date = new Date()): Promise<number> {
     const [pct, threshold] = await Promise.all([
       this.config.get<number>('affiliate.pit_withhold_pct', DEFAULT_PIT_WITHHOLD_PCT),
       this.config.get<number>('affiliate.pit_withhold_threshold', DEFAULT_PIT_WITHHOLD_THRESHOLD),
     ]);
-    if (!(pct > 0) || gross < threshold) return 0;
-    return Math.round(gross * Math.min(pct, 1));
+    if (!(pct > 0)) return 0;
+    const { start, end } = vnMonthBounds(now);
+    const prior = await tx.payout.aggregate({
+      where: { userId, grossAmount: { not: null }, status: { not: 'REJECTED' }, requestedAt: { gte: start, lt: end } },
+      _sum: { grossAmount: true, taxWithheld: true },
+    });
+    const monthGross = (prior._sum.grossAmount ?? 0) + gross;
+    if (monthGross < threshold) return 0;
+    const owed = Math.round(monthGross * Math.min(pct, 1)) - (prior._sum.taxWithheld ?? 0);
+    return Math.min(Math.max(owed, 0), gross);
   }
 
   /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng (canPlaceOrderForCustomer). */
@@ -1079,13 +1103,14 @@ export class AffiliateService {
       let result: { credited: number };
       try {
         result = await this.prisma.$transaction(async (tx) => {
+          await this.lockPitMonth(tx, userId, new Date());
           const rows = await tx.commission.findMany({
             where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
             select: { id: true, amount: true },
           });
           const total = rows.reduce((s, c) => s + c.amount, 0);
           // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
-          const taxWithheld = await this.personalIncomeTax(total);
+          const taxWithheld = await this.personalIncomeTax(tx, userId, total);
           const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
           const marked = await tx.commission.updateMany({
             where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
@@ -1114,16 +1139,19 @@ export class AffiliateService {
               idempotencyKey: key,
             },
           });
-          await applyWalletDelta(tx, {
-            userId,
-            delta: credited,
-            type: 'COMMISSION_PAYOUT',
-            refType: 'PAYOUT',
-            refId: payout.id,
-            reason: taxWithheld
-              ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
-              : `Rút ${rows.length} khoản hoa hồng về Ví`,
-          });
+          // Phần truy thu có thể ăn hết số tiền lần này (net 0): sổ ví không nhận dòng 0đ.
+          if (credited > 0) {
+            await applyWalletDelta(tx, {
+              userId,
+              delta: credited,
+              type: 'COMMISSION_PAYOUT',
+              refType: 'PAYOUT',
+              refId: payout.id,
+              reason: taxWithheld
+                ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
+                : `Rút ${rows.length} khoản hoa hồng về Ví`,
+            });
+          }
           return { credited };
         });
       } catch (err) {
@@ -1158,13 +1186,14 @@ export class AffiliateService {
     let payout: { id: string; status: string };
     try {
       payout = await this.prisma.$transaction(async (tx) => {
+        await this.lockPitMonth(tx, userId, new Date());
         const rows = await tx.commission.findMany({
           where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
           select: { id: true, amount: true },
         });
         const total = rows.reduce((s, c) => s + c.amount, 0);
         if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
-        const taxWithheld = await this.personalIncomeTax(total);
+        const taxWithheld = await this.personalIncomeTax(tx, userId, total);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
         const p = await tx.payout.create({
           data: {

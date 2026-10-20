@@ -385,6 +385,46 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     expect(screen.getByRole('button', { name: 'Nhận 2.700.000đ vào Ví' })).toBeInTheDocument();
   });
 
+  it('Q2: thuế tính cộng dồn trong tháng — rút 1.500.000đ dưới ngưỡng nhưng tháng này đã rút trước đó → hiện số khấu trừ máy chủ báo, bắt khai MST', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 1_500_000, withdrawTaxPreview: 300_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 1.200.000đ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận 1.200.000đ vào Ví' })).toBeDisabled();
+    expect(inputNear('Mã số thuế cá nhân hoặc số CCCD')).toBeInTheDocument();
+  });
+
+  it('Q2: máy chủ báo chưa khấu trừ (tổng tháng chưa tới ngưỡng) → không hiện số khấu trừ dù số rút lần này lớn', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 1_900_000, withdrawTaxPreview: 0,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(await screen.findByRole('button', { name: 'Nhận 1.900.000đ vào Ví' })).toBeEnabled();
+    expect(screen.queryByText(/Khấu trừ thuế TNCN/)).toBeNull();
+  });
+
+  it('Q2: màn rút giải thích đúng cách tính thuế: cộng dồn các lần rút trong tháng, từ ngưỡng thì khấu trừ', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 500_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(
+      await screen.findByText(
+        'Thuế TNCN 10% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi tổng từ 2.000.000đ trở lên, phần các lần rút trước chưa bị trừ được trừ bù vào lần rút này.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('SELLER-11: lần rút bị khấu trừ mà chưa khai MST/CCCD → bắt nhập (10 hoặc 12 số) rồi gửi kèm', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
