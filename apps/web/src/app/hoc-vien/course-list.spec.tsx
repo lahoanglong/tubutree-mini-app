@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
+import { ApiError } from '@/lib/client-api';
 import { CourseList } from './course-list';
 
 const COURSE = (id: string, over: Partial<AcademyCourseSummary> = {}): AcademyCourseSummary => ({
@@ -108,6 +109,15 @@ describe('/hoc-vien — danh sách khoá học', () => {
     click(byText(container, 'button', 'Thử lại'));
     await flush(6);
     expect(container.textContent).toContain('Khoá a');
+  });
+
+  it.each([[403, 'Forbidden'], [403, 'Bạn không có quyền truy cập tài nguyên này']])('khách thường (%i %s): giải thích CTV Academy dành cho CTV, lối tới /ctv, không Thử lại', async (status, msg) => {
+    mocks.get.mockReset().mockRejectedValue(new ApiError(msg, status));
+    const { container } = await mount();
+    expect(container.textContent).toContain('CTV Academy dành cho cộng tác viên');
+    expect(container.textContent).not.toContain(msg);
+    expect(container.querySelector('a[href="/ctv"]')).not.toBeNull();
+    expect(byText(container, 'button', 'Thử lại')).toBeNull();
   });
 
   it('thanh tiến độ giữ đúng phần trăm: 1/3 = 33%, đủ bài = 100%, không có bài = 0%', async () => {
