@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteLineInput } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, editWasteRequest, previewWaste } from '@tubutree/app-core/api/waste';
 import { wasteMeQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
@@ -23,8 +24,6 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WasteItemStep } from './waste-item-step';
 import { PREVIEW_DEBOUNCE_MS, formatPoints, pointAddress } from './recycle-labels';
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function Shell({ id, subtitle, children, bar }: { id: string; subtitle?: string; children: ReactNode; bar?: ReactNode }) {
   return (

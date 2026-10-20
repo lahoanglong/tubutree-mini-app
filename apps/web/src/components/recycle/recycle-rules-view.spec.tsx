@@ -8,6 +8,7 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 const state = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: state.get, post: vi.fn() } }));
 
+import { ApiError } from '@/lib/client-api';
 import { RecycleRulesView } from './recycle-rules-view';
 
 let mounted: Rendered[] = [];
@@ -52,6 +53,17 @@ describe('/doi-rac/quy-dinh (§14.2)', () => {
     click(byText(c, 'button', 'Thử lại'));
     await flush(6);
     expect(c.textContent).toContain('OK');
+  });
+
+  it.each([
+    [401, 'Unauthorized', 'Phiên đăng nhập đã hết hạn'],
+    [403, 'Forbidden', 'không có quyền'],
+  ])('lỗi %i: câu tiếng Việt, không in "%s" thô, không có Thử lại vô ích', async (status, raw, expected) => {
+    state.get.mockRejectedValueOnce(new ApiError(raw, status));
+    const c = await mount();
+    expect(c.textContent).toContain(expected);
+    expect(c.textContent).not.toContain(raw);
+    expect(byText(c, 'button', 'Thử lại')).toBeNull();
   });
 });
 

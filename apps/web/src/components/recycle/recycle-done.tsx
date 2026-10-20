@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Droplet } from 'lucide-react';
 import { wasteMeQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { pointsSummary, formatCount } from '@/lib/checkout-points';
 import { coreHttp } from '@/lib/core-http';
@@ -20,8 +21,6 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
 import { formatPoints, impactLine, nextRewardProgress } from './recycle-labels';
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function Shell({ id, subtitle, children }: { id: string; subtitle?: string; children: ReactNode }) {
   return (

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
@@ -15,8 +16,6 @@ import { formatPoints } from './recycle-labels';
 
 const PERK_TITLE = 'Ưu đãi riêng của cửa hàng';
 const CARD = `flex flex-col gap-1.5 p-4 max-md:gap-1 max-md:p-3 ${skin.card}`;
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 /** Tháng 'YYYY-MM' theo giờ VN, không phụ thuộc múi giờ máy. */
 export function vnMonthKey(now: Date): string {

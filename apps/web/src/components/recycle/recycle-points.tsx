@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import type { WasteMethod, WastePointDTO } from '@tubutree/shared-types';
 import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
@@ -26,8 +27,6 @@ import { WastePointPicker } from './waste-point-picker';
 
 const WIZARD_METHOD_STEP = '/doi-rac/tao?step=method';
 const SWITCH_METHODS: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP'];
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 /** Khớp không phân biệt hoa thường và dấu trên tên điểm, phường/xã và tên đường. */
 export function filterPointsByText(points: readonly WastePointDTO[], q: string): WastePointDTO[] {

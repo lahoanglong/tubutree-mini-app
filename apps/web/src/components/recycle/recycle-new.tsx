@@ -16,6 +16,7 @@ import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, createWasteRequest, prev
 import { getProvinces } from '@tubutree/app-core/api/geo';
 import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { useDebounced } from '@/lib/use-debounced';
@@ -68,8 +69,6 @@ const PARCEL_COUNT_TEXT = 'Mỗi kiện là một yêu cầu riêng: có nhiều
 const STEP1_CAP_BLOCKS: readonly string[] = ['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP', 'ITEM_DAY_CAP'];
 const WIZARD_PATH = '/doi-rac/tao';
 const METHOD_STEP_PATH = `${WIZARD_PATH}?step=method`;
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function isLocked(preview: WastePreviewDTO | undefined): boolean {
   return preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;

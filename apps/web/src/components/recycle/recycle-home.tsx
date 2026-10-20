@@ -7,6 +7,7 @@ import { History } from 'lucide-react';
 import type { WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -44,8 +45,6 @@ import {
   ruleText,
   timelineFor,
 } from './recycle-labels';
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function Shell({ children, showHistory = false }: { children: ReactNode; showHistory?: boolean }) {
   return (
