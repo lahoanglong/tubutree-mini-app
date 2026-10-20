@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
-import { withdraw, type BankInfo } from '@tubutree/app-core/api/wallet';
+import { withdraw, type BankInfo, type WalletTxn } from '@tubutree/app-core/api/wallet';
 import { loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
 import { walletQuery, walletTransactionsQuery } from '@tubutree/app-core/queries/wallet';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
@@ -16,6 +16,8 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
+import { ApiError } from '@/lib/client-api';
+import { isOutcomeUnknown } from '@/lib/checkout-waste';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -32,6 +34,13 @@ import { LedgerShell, SignedAmount } from '../ledger-shell';
 const TITLE = 'Ví Tubu';
 const DEFAULT_FEE = 3000;
 const DEFAULT_MIN = 100000;
+
+const WITHDRAW_UNKNOWN =
+  'Chưa nhận được phản hồi từ máy chủ nên chưa rõ lệnh rút đã được ghi nhận chưa. Bạn kiểm tra lịch sử giao dịch của Ví trước khi rút lại nhé.';
+const KEEP_KEY_STATUSES = new Set([401, 403, 408, 429]);
+
+/** Dòng sổ cái của một lệnh rút đúng số tiền (delta âm = tiền gộp cả phí, bằng `amount` gửi lên). */
+const isWithdrawOf = (t: WalletTxn, amount: number) => t.type === 'WITHDRAW' && t.delta === -amount;
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -60,8 +69,23 @@ export default function WalletPage() {
   const [shareMsg, setShareMsg] = useState('');
 
   // Key giữ nguyên qua các lần bấm lại của CÙNG một lệnh rút (bấm đúp/timeout) để API không trừ ví hai lần;
-  // đổi key khi mở sheet, sau khi rút xong và sau mỗi lỗi, để lệnh sau (có thể đã sửa số tiền) là lệnh mới.
+  // đổi key khi mở sheet, sau khi rút xong và khi máy chủ từ chối rõ ràng, để lệnh sau (có thể đã sửa số tiền) là lệnh mới.
   const withdrawKey = useRef(newIdempotencyKey());
+  // Có một lệnh rút chưa rõ kết quả: mở lại sheet vẫn dùng key đó cho tới khi máy chủ trả lời dứt khoát hoặc sao kê cho thấy
+  // lệnh đã được ghi. `knownIds` là các dòng rút cùng số tiền đã có trong sao kê lúc đó, để không nhận nhầm lệnh cũ là lệnh vừa gửi.
+  // `knownIds` null = lúc lỗi chưa có sao kê nào tải xong, không biết dòng nào là cũ → không tự gỡ cờ (giữ key như trước).
+  const withdrawUnresolved = useRef<{ amount: number; knownIds: Set<string> | null } | null>(null);
+  const firstPageRows = useRef<WalletTxn[] | null>(null);
+  const onHistoryRows = useCallback((rows: WalletTxn[]) => {
+    firstPageRows.current = rows;
+    const pending = withdrawUnresolved.current;
+    const knownIds = pending?.knownIds;
+    if (pending && knownIds && rows.some((t) => isWithdrawOf(t, pending.amount) && !knownIds.has(t.id))) {
+      // Chỉ bỏ cờ, chưa đổi key: sheet còn mở mà khách bấm lại thì API trả đúng lệnh đã ghi thay vì rút thêm lần nữa.
+      // Key mới được cấp ở lần mở sheet kế tiếp.
+      withdrawUnresolved.current = null;
+    }
+  }, []);
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
   const withdrawBusy = useRef(false);
   const withdrawMut = useMutation({
@@ -69,12 +93,29 @@ export default function WalletPage() {
     onSuccess: (r) => {
       setNotice({ text: `Đã gửi yêu cầu rút. Thực nhận ${formatVnd(r.net)} trong 1-3 ngày làm việc.`, error: false });
       withdrawKey.current = newIdempotencyKey();
+      withdrawUnresolved.current = null;
       setWithdrawOpen(false);
       setAmount('');
       void qc.invalidateQueries({ queryKey: walletQuery(coreHttp).queryKey });
     },
+    // Quá thời gian/mất mạng/5xx: API có thể đã trừ ví và tạo lệnh rút. GIỮ key để bấm lại trả đúng lệnh đó thay vì rút thêm
+    // lần nữa; chỉ đổi key khi API đã từ chối rõ ràng (4xx, kể cả "key đã dùng với số tiền khác") nên không có gì được ghi.
     onError: (e) => {
-      withdrawKey.current = newIdempotencyKey();
+      if (isOutcomeUnknown(e)) {
+        const amountSent = Number(amount);
+        withdrawUnresolved.current = {
+          amount: amountSent,
+          knownIds: firstPageRows.current && new Set(firstPageRows.current.filter((t) => isWithdrawOf(t, amountSent)).map((t) => t.id)),
+        };
+        void qc.invalidateQueries({ queryKey: walletQuery(coreHttp).queryKey });
+        setWithdrawError(WITHDRAW_UNKNOWN);
+        return;
+      }
+      // 401/403/408/429: request NÀY chưa được xử lý, nhưng lệnh trước (nếu chưa rõ kết quả) có thể đã trừ ví; đổi key lúc này là mở đường rút lần hai.
+      if (!(e instanceof ApiError && KEEP_KEY_STATUSES.has(e.status))) {
+        withdrawKey.current = newIdempotencyKey();
+        withdrawUnresolved.current = null;
+      }
       setWithdrawError(errText(e));
     },
     onSettled: () => {
@@ -172,8 +213,8 @@ export default function WalletPage() {
             <button
               type="button"
               onClick={() => {
-                // Mỗi lần MỞ sheet là một lệnh rút mới: mở lại với số khác thì key khác, không bị API trả lại lệnh cũ.
-                withdrawKey.current = newIdempotencyKey();
+                // Mỗi lần MỞ sheet là một lệnh rút mới: mở lại với số khác thì key khác, không bị API trả lại lệnh cũ. Trừ khi lệnh trước chưa rõ kết quả.
+                if (!withdrawUnresolved.current) withdrawKey.current = newIdempotencyKey();
                 setNotice(null);
                 setWithdrawError(null);
                 setWithdrawOpen(true);
@@ -197,10 +238,15 @@ export default function WalletPage() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm text-stone-600">Điểm Xanh (đổi giảm giá)</span>
-                <span className="block text-xl font-bold tabular-nums text-stone-900">{formatCount(points?.total ?? 0)} điểm</span>
-                {points?.convertedNote && <span className="block text-xs text-stone-700">{points.convertedNote}</span>}
+                {/* Hạng nằm dưới số, không cùng hàng: ở 390px cột số chỉ còn ~120px nên số bị gãy "130.000 / điểm". */}
+                <span className="block whitespace-nowrap text-xl font-bold tabular-nums text-stone-900">{formatCount(points?.total ?? 0)} điểm</span>
+                {tierName && (
+                  <span className="mt-1 block">
+                    <Badge tone="brand">{tierName}</Badge>
+                  </span>
+                )}
+                {points?.convertedNote && <span className="mt-1 block text-xs text-stone-700">{points.convertedNote}</span>}
               </span>
-              {tierName && <Badge tone="brand">{tierName}</Badge>}
               <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
             </Link>
             <p className="mt-1.5 px-1 text-xs text-stone-600">Tích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau &amp; lên hạng thành viên.</p>
@@ -278,7 +324,7 @@ export default function WalletPage() {
             </section>
           )}
 
-          <WalletHistory enabled={authed} />
+          <WalletHistory enabled={authed} onFirstPage={onHistoryRows} />
         </div>
       </div>
 
@@ -385,7 +431,7 @@ function SourceCard({ label, value, icon: SourceIcon, wide, hint, href }: { labe
 }
 
 /** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
-function WalletHistory({ enabled }: { enabled: boolean }) {
+function WalletHistory({ enabled, onFirstPage }: { enabled: boolean; onFirstPage: (rows: WalletTxn[]) => void }) {
   // Khoá con của ['wallet'] nên làm mới ví sau khi rút cũng làm mới luôn sao kê.
   const q = useInfiniteQuery({
     ...walletTransactionsQuery(coreHttp),
@@ -394,6 +440,10 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
     enabled,
   });
   const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
+  const firstPage = q.data?.pages[0]?.data;
+  useEffect(() => {
+    if (firstPage) onFirstPage(firstPage);
+  }, [firstPage, onFirstPage]);
 
   return (
     <section aria-label="Lịch sử Ví" className={`p-4 max-md:order-8 ${miniCard}`}>

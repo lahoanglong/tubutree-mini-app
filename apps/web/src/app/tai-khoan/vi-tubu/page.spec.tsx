@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
+import { ApiError, NetworkError } from '@/lib/client-api';
 
 type Call = { method: string; path: string; body?: unknown; query?: Record<string, unknown>; headers?: Record<string, string> };
 
@@ -556,3 +557,192 @@ describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () 
   });
 });
 
+
+describe('/tai-khoan/vi-tubu — rút gặp lỗi chưa rõ kết quả (95d6a687, 9dcc431b)', () => {
+  const OK = { ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 400_000, fee: 3_000, net: 397_000 };
+  const keys = () => postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);
+  const walletGets = () => state.calls.filter((c) => c.method === 'get' && c.path === '/me/wallet').length;
+  const closeSheet = async () => {
+    click(byText(document.body, 'button', 'Đóng') ?? (document.querySelector('[aria-label="Đóng"]') as HTMLElement));
+    await flush(2);
+  };
+  /** Lần gọi thứ n ném `errors[n]`, hết danh sách thì thành công. */
+  const failWith = (...errors: unknown[]) => {
+    let n = 0;
+    state.withdraw = async () => {
+      const e = errors[n++];
+      if (e) throw e;
+      return OK;
+    };
+  };
+
+  it.each([
+    ['mất mạng giữa chừng', () => new NetworkError(false)],
+    ['hết thời gian chờ', () => new NetworkError(true)],
+    ['máy chủ 502', () => new ApiError('Bad gateway', 502)],
+  ])('%s: bấm lại gửi đúng Idempotency-Key cũ, tải lại số dư và nhắc kiểm tra lịch sử', async (_n, make) => {
+    failWith(make());
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    const before = walletGets();
+    click(submitBtn());
+    await flush(6);
+    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toBe(
+      'Chưa nhận được phản hồi từ máy chủ nên chưa rõ lệnh rút đã được ghi nhận chưa. Bạn kiểm tra lịch sử giao dịch của Ví trước khi rút lại nhé.',
+    );
+    expect(walletGets()).toBeGreaterThan(before);
+    click(submitBtn());
+    await flush(6);
+    expect(keys()).toHaveLength(2);
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
+  it('chưa rõ kết quả rồi đóng sheet và mở lại: vẫn dùng key của lệnh chưa rõ, không rút lần hai', async () => {
+    failWith(new NetworkError(true));
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    await closeSheet();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    expect(keys()).toHaveLength(2);
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
+  it.each([[401], [403], [408], [429]])('chưa rõ kết quả rồi lần sau gặp %i (request này chưa được xử lý): vẫn gửi key của lệnh chưa rõ', async (status) => {
+    failWith(new NetworkError(true), new ApiError('x', status));
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    click(submitBtn());
+    await flush(6);
+    click(submitBtn());
+    await flush(6);
+    expect(keys()).toHaveLength(3);
+    expect(keys()[1]).toBe(keys()[0]);
+    expect(keys()[2]).toBe(keys()[0]);
+  });
+
+  it('máy chủ từ chối rõ ràng (400): lần bấm sau dùng key mới', async () => {
+    failWith(new ApiError('Số dư ví không đủ.', 400), new ApiError('Số dư ví không đủ.', 400));
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toBe('Số dư ví không đủ.');
+    click(submitBtn());
+    await flush(6);
+    expect(keys()[1]).not.toBe(keys()[0]);
+  });
+
+  it('401 ở lần rút đầu tiên (chưa có lệnh nào chưa rõ): lần bấm sau vẫn key cũ vì request này chưa được xử lý', async () => {
+    failWith(new ApiError('Unauthorized', 401));
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    click(submitBtn());
+    await flush(6);
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
+  it('khách rời màn Ví rồi vào lại: lệnh rút mới không mang key của lệnh chưa rõ kết quả trước đó', async () => {
+    failWith(new NetworkError(true));
+    const first = await mount();
+    await openSheet(first);
+    await fillBank(first, '400000');
+    click(submitBtn());
+    await flush(6);
+    mounted.pop()!.unmount();
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    expect(keys()[1]).not.toBe(keys()[0]);
+  });
+});
+
+describe('/tai-khoan/vi-tubu — cờ "rút chưa rõ kết quả" tự gỡ khi sao kê đã ghi lệnh (9968242c, 4ee6b81d)', () => {
+  const keys = () => postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);
+  const RECORDED = { id: 't0', delta: -400_000, balanceAfter: 850_000, type: 'WITHDRAW', reason: 'Rút về ngân hàng (phí 3000đ)', orderId: null, createdAt: '2026-10-06T07:04:00Z' };
+  const withRows = (...rows: Record<string, unknown>[]) => [{ ...PAGE_1, data: [...rows, ...PAGE_1.data] }, PAGE_2];
+  const closeSheet = async () => {
+    click(byText(document.body, 'button', 'Đóng') ?? (document.querySelector('[aria-label="Đóng"]') as HTMLElement));
+    await flush(2);
+  };
+  /** Rút hết thời gian chờ ở lần đầu; `after` chạy ngay trước khi bấm để dựng sao kê sẽ tải lại. */
+  async function timeoutThenReopen(after: () => void = () => {}) {
+    let n = 0;
+    state.withdraw = async () => {
+      if (n++ === 0) throw new NetworkError(true);
+      return { ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 400_000, fee: 3_000, net: 397_000 };
+    };
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    after();
+    click(submitBtn());
+    await flush(8);
+    await closeSheet();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+  }
+
+  it('sao kê tải lại đã thấy đúng lệnh vừa chưa rõ: lần rút sau đúng số tiền ấy là lệnh mới, key mới', async () => {
+    await timeoutThenReopen(() => {
+      state.pages = withRows(RECORDED);
+    });
+    expect(keys()).toHaveLength(2);
+    expect(keys()[1]).not.toBe(keys()[0]);
+  });
+
+  it('sao kê tải lại vẫn chưa có lệnh: giữ key cũ để bấm lại không rút hai lần', async () => {
+    await timeoutThenReopen();
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
+  it('lệnh rút cùng số tiền đã nằm trong sao kê từ trước: không coi là lệnh vừa chưa rõ, vẫn giữ key cũ', async () => {
+    state.pages = withRows({ ...RECORDED, id: 'old', createdAt: '2026-09-01T07:04:00Z' });
+    await timeoutThenReopen();
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
+  it('số tiền khác trong sao kê mới: không gỡ cờ', async () => {
+    await timeoutThenReopen(() => {
+      state.pages = withRows({ ...RECORDED, id: 'other', delta: -250_000 });
+    });
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
+  it('sao kê chưa tải được lúc rút chưa rõ kết quả: lệnh cũ cùng số tiền không bị nhận nhầm là lệnh vừa gửi, key cũ vẫn giữ', async () => {
+    state.fail = new Set(['/me/wallet/transactions']);
+    state.pages = withRows({ ...RECORDED, id: 'old', createdAt: '2026-09-01T07:04:00Z' });
+    await timeoutThenReopen(() => {
+      state.fail = new Set();
+    });
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+});
+
+describe('/tai-khoan/vi-tubu — số Điểm Xanh không gãy dòng (9968242c)', () => {
+  it('số điểm không xuống dòng và hạng thành viên nằm dưới số, không chen vào hàng làm cột số hẹp lại', async () => {
+    const c = await mount();
+    const points = Array.from(c.querySelectorAll<HTMLElement>('span')).find((x) => x.textContent === '50.000 điểm')!;
+    expect(points.className).toContain('whitespace-nowrap');
+    const column = points.parentElement as HTMLElement;
+    expect(column.contains(byText(c, 'span', 'Bạc'))).toBe(true);
+    expect(column.className).toContain('min-w-0');
+  });
+});
