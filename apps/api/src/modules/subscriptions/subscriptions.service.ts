@@ -431,14 +431,19 @@ export class SubscriptionsService {
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
     if (subs.length === 0) return [];
-    const [variations, effectiveDiscountPct] = await Promise.all([
+    const lastOrderIds = subs.flatMap((s) => (s.lastOrderId ? [s.lastOrderId] : []));
+    const [variations, effectiveDiscountPct, lastOrders] = await Promise.all([
       this.prisma.variation.findMany({
         where: { id: { in: subs.map((s) => s.variationId) } },
         include: { product: { select: { name: true, thumbnail: true, slug: true } } },
       }),
       this.effectiveDiscountPct(userId),
+      lastOrderIds.length > 0
+        ? this.prisma.order.findMany({ where: { id: { in: lastOrderIds } }, select: { id: true, createdAt: true } })
+        : Promise.resolve([]),
     ]);
     const vmap = new Map(variations.map((v) => [v.id, v]));
+    const lastOrderAt = new Map(lastOrders.map((o) => [o.id, o.createdAt]));
     return subs.map((s) => {
       const v = vmap.get(s.variationId);
       return {
@@ -450,6 +455,8 @@ export class SubscriptionsService {
         addressId: s.addressId,
         paymentMethod: s.paymentMethod ?? 'COD',
         lastOrderId: s.lastOrderId ?? null,
+        // Mini App tính trước ngày giao kế khi khách chọn chu kỳ khác, cùng luật với intervalPatch.
+        lastOrderAt: (s.lastOrderId && lastOrderAt.get(s.lastOrderId)) || null,
         productName: v?.product.name ?? 'Sản phẩm',
         variationName: v?.name ?? '',
         thumbnail: v?.product.thumbnail ?? null,

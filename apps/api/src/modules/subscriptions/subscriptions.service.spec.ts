@@ -904,6 +904,30 @@ describe('SubscriptionsService.list', () => {
     expect(row).toMatchObject({ cycleSubtotal: 299_970, cycleDiscount: 41_995, cycleGoods: 257_975 });
   });
 
+  it('Q22: trả lastOrderAt (ngày đơn kỳ gần nhất) để Mini App tính trước ngày giao kế khi đổi chu kỳ; chưa có đơn → null', async () => {
+    const at = new Date('2026-10-10T03:00:00.000Z');
+    const orderFindMany = jest.fn().mockResolvedValue([{ id: 'o1', createdAt: at }]);
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date(), lastOrderId: 'o1' },
+          { id: 's2', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date(), lastOrderId: null },
+        ]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', name: 'V', salePrice: null, retailPrice: 100000, product: { name: 'P', thumbnail: null, slug: 'p' } },
+        ]),
+      },
+      order: { findMany: orderFindMany },
+    } as unknown as PrismaService;
+    const svc = new SubscriptionsService(prisma, { get: async <T>(_k: string, fb?: T) => fb as T } as unknown as SystemConfigService, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    const rows = await svc.list('u1');
+    expect(rows.map((r) => r.lastOrderAt)).toEqual([at, null]);
+    expect(orderFindMany).toHaveBeenCalledWith({ where: { id: { in: ['o1'] } }, select: { id: true, createdAt: true } });
+  });
+
   it('giới hạn số gói trả về (mặc định 100, tối đa 200) và hỗ trợ cursor, C-100', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { subscription: { findMany } } as unknown as PrismaService;
