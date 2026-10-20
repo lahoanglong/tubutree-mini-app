@@ -423,7 +423,7 @@ export class ReviewsService {
     const review = await this.prisma.review.findUnique({ where: { id } });
     if (!review) throw new NotFoundException('Không tìm thấy đánh giá.');
     if (review.userId !== userId && role !== 'ADMIN') {
-      throw new ForbiddenException('Không có quyền xóa đánh giá này.');
+      throw new ForbiddenException('Không có quyền xoá đánh giá này.');
     }
     await this.prisma.$transaction(async (tx) => {
       // Cùng khoá cặp (khách, sản phẩm) với createFirst và lấy trước khoá dòng user như createFirst: đánh giá mới viết song

@@ -403,7 +403,7 @@ export class OrdersService {
     });
     if (!won) {
       await this.orderStatus?.flagPancakeCancelDivergence(order.id, pancakeDecision, 'đơn đổi trạng thái trong lúc khách bấm huỷ');
-      return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
+      return this.detail(userId, code); // đã bị huỷ bởi request khác → không hoàn lần 2
     }
     await this.wastePickupHooks?.onOrderCancelled(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (huỷ) lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`));
     await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);

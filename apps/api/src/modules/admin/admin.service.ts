@@ -1141,24 +1141,24 @@ export class AdminService {
       select: { id: true, code: true, userId: true, status: true, invoiceRequest: true, invoiceStatus: true, invoiceUrl: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hóa đơn VAT.`);
-    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hóa đơn của đơn ${order.code} đã được phát hành.`);
+    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hoá đơn VAT.`);
+    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hoá đơn của đơn ${order.code} đã được phát hành.`);
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hóa đơn VAT.`);
+      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hoá đơn VAT.`);
     }
     const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
     const res = await this.prisma.order.updateMany({
       where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
       data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
     });
-    if (res.count === 0) throw new BadRequestException(`Hóa đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
-    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hóa đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
+    if (res.count === 0) throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
+    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hoá đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
     await this.notifications
       .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })
       .catch((e) => this.logger.warn(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
     return {
       ok: true,
-      message: `Đã ghi nhận xuất hóa đơn VAT cho đơn ${order.code}.`,
+      message: `Đã ghi nhận xuất hoá đơn VAT cho đơn ${order.code}.`,
       order: { id: order.id, code: order.code, invoiceStatus: 'ISSUED' as const, invoiceUrl: invoiceUrl ?? order.invoiceUrl },
     };
   }

@@ -28,7 +28,7 @@ export class BankTransferService {
     // trước khi hủy) là tiền thật vào TK shop cho một đơn không còn tồn tại về nghiệp vụ, và
     // không có cơ chế tự động hoàn lại khoản đó.
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-      throw new BadRequestException('Đơn đã hủy/trả, không thể thanh toán.');
+      throw new BadRequestException('Đơn đã huỷ/trả, không thể thanh toán.');
     }
 
     // A2-01 = A5-02 = A6-03 (docs/audit-2026-09/00-MASTER-SUMMARY.md + 02/05/06 chi tiết): TRƯỚC

@@ -743,8 +743,8 @@ export const NOTIFICATION_TEMPLATES = [
   // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   // {{refund_note}}: tiền hoàn bao nhiêu, về đâu (Ví Tubu / tài khoản ngân hàng) — rỗng khi đơn chưa thanh toán.
-  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.{{refund_note}}' },
-  { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
+  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị huỷ.{{refund_note}}' },
+  { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hoá đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
   // {{refund_note}}: tiền hoàn bao nhiêu, về đâu — rỗng khi đơn không có tiền để hoàn.
   { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.{{refund_note}}' },
@@ -907,7 +907,7 @@ export const MISSIONS = [
   { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20_000, goal: 1, isRepeatable: false },
   { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30_000, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15_000, goal: 3, isRepeatable: false },
-  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
+  { id: 'm4', code: 'INVITE_3', title: 'Lan toả sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
 ];
 
 const CASHBACK_MERCHANTS = [
