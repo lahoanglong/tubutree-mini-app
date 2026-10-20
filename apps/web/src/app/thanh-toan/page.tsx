@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Plus, Recycle, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -891,7 +891,8 @@ function AddressPicker({
             onCancel={() => setEditingId(null)}
           />
         ) : (
-          <div key={a.id} className="flex items-start gap-1">
+          <div key={a.id}>
+          <div className="flex items-start gap-1">
             <label className={`${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
               <input
                 type="radio"
@@ -911,14 +912,6 @@ function AddressPicker({
                 </span>
                 <br />
                 <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
-                {isLegacyGeo(a) && (
-                  <>
-                    <br />
-                    <span className="text-xs font-medium text-warning-fg">
-                      Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025) — chưa giao được, bấm Sửa để chọn lại tỉnh/phường.
-                    </span>
-                  </>
-                )}
               </span>
             </label>
             <button
@@ -932,6 +925,25 @@ function AddressPicker({
             >
               Sửa
             </button>
+          </div>
+          {selectedId === a.id && isLegacyGeo(a) && editingId === null && (
+            <div role="alert" className="mt-2 flex flex-col gap-2 rounded-control bg-warning-bg p-3">
+              <span className="flex items-start gap-1.5 text-sm text-warning-fg">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
+                Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setEditingId(a.id);
+                }}
+                className={`${ui.btnSecondary} self-start`}
+              >
+                Cập nhật địa chỉ
+              </button>
+            </div>
+          )}
           </div>
         ),
       )}

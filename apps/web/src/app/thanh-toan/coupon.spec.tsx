@@ -72,7 +72,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     return [];
   },
   getAddresses: async () => state.noAddress ? [] : [
-    { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: 'p', districtCode: '', wardCode: 'w', isDefault: true },
+    { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN01_001', isDefault: true },
   ],
   checkoutQuote: async () => {
     state.quoteCalls += 1;
