@@ -47,6 +47,7 @@ import { CouponBox, COUPON_MUTATION_KEY, couponPreviewKey } from '@/components/c
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
+import { OrderSuccess } from '@/components/checkout/order-success';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { InvoiceSection } from './invoice-section';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
@@ -354,46 +355,8 @@ export default function CheckoutPage() {
 
   if (placed) {
     return (
-      <Shell>
-        <div className="py-16 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
-            <CheckCircle2 className="h-9 w-9" aria-hidden="true" />
-          </div>
-          <h2 className="mt-5 font-display text-2xl font-semibold text-stone-900">Đặt hàng thành công!</h2>
-          {placed.splitOrders && placed.splitOrders.length > 1 ? (
-            <div className="mx-auto mt-3 max-w-md text-left">
-              <p className="text-center text-stone-700">Hàng do nhiều nơi giao nên được tách thành {placed.splitOrders.length} đơn:</p>
-              <ul className="mt-2 space-y-2">
-                {placed.splitOrders.map((o) => (
-                  <li key={o.code} className={`flex flex-wrap items-center justify-between gap-2 p-3 text-sm ${ui.card}`}>
-                    <span>
-                      <Link href={orderDetailHref(o.code)} className="font-semibold text-forest-700 underline">
-                        {o.code}
-                      </Link>{' '}
-                      · {o.fulfillerName} giao
-                    </span>
-                    <span className="font-semibold text-stone-900">{formatVnd(o.total)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="mt-2 text-stone-700">
-              Mã đơn <span className="font-semibold text-forest-700">{placed.code}</span> · {formatVnd(placed.total)}
-            </p>
-          )}
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href={orderDetailHref(placed.code)} className={ui.btnPrimary}>
-              Xem chi tiết đơn
-            </Link>
-            <Link href="/tai-khoan/don-hang" className={ui.btnSecondary}>
-              Đơn của tôi
-            </Link>
-            <Link href="/" className={ui.btnSecondary}>
-              Tiếp tục mua sắm
-            </Link>
-          </div>
-        </div>
+      <Shell bare>
+        <OrderSuccess order={placed} etaLabel={etaLabel} />
         {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN hiện QR/STK/nội dung CK ngay sau khi đặt để khách trả liền;
             nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
@@ -989,13 +952,14 @@ function AddressPicker({
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+// `bare`: màn thành công ở điện thoại không có thanh tiêu đề (Mini App OrderSuccess tự có h1), từ md vẫn như các màn khác.
+function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
       <BackLink href="/gio-hang">
         ← Về giỏ hàng
       </BackLink>
-      <PageHeader title="Thanh toán" className="md:mt-1" />
+      <PageHeader title="Thanh toán" className={bare ? 'max-md:hidden md:mt-1' : 'md:mt-1'} />
       <div className="mt-4 max-md:mt-0">{children}</div>
     </main>
   );
