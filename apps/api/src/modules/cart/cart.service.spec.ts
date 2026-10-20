@@ -303,7 +303,7 @@ describe('CartService guard tồn kho', () => {
       discount: 0,
       tierDiscount: 0,
       freeship: false,
-      freeshipThreshold: 200000,
+      freeshipThreshold: 199000,
       itemCount: 0,
       unavailableItems: [],
     });

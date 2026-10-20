@@ -66,7 +66,7 @@ Mọi thao tác "Quản trị" trên Quản trị cần tài khoản có quyền
 
 Chọn một sản phẩm Tubu giao (không phải hàng đối tác) thoả đủ:
 
-- [ ] giá rẻ nhất trong danh mục đang bán (đơn dưới 200.000đ còn cộng phí giao 19.000đ theo `shipping.flat_fee_below_threshold`)
+- [ ] giá rẻ nhất trong danh mục đang bán (đơn dưới 199.000đ còn cộng phí giao 19.000đ theo `shipping.flat_fee_below_threshold`)
 - [ ] có đúng một biến thể, không phải combo, không đang Flash Sale, không áp mã giảm giá tự động
 - [ ] tồn kho Tubu đủ cho cả hai mức, lấy mức lớn hơn: từ 10 trở lên (khoảng 8 đơn vị cho T1 đến T12 cùng lúc), và từ 2 + (99.000đ chia giá, làm tròn lên) trở lên (lúc làm 7.4, T2 và T3 giao thật đã lấy 2 đơn vị, các đơn huỷ đã trả lại tồn, và đơn T13 cần số đơn vị để giỏ đạt 99.000đ)
 - [ ] có khai báo cân nặng (Gomdon tính theo gram, thiếu thì lấy 500 g)
@@ -116,7 +116,7 @@ Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
 | T10 | Hàng đối tác tự giao x1 | Ví Tubu | Đơn đối tác, đối soát | Giao | |
 | T11 | Hàng đối tác "Tubu giao hộ" x1 | COD | Ký gửi, kho Tubu giao, đối soát | Giao | |
 | T12 (tuỳ chọn) | Nhiều hàng, sát 5.000.000đ | COD | Trần COD | Huỷ ngay | |
-| T13 | SP-MIN, số lượng để giỏ nằm từ 99.000đ đến dưới 200.000đ (bước 7.4) | COD | Dùng voucher "Miễn phí vận chuyển" đã đổi bằng Điểm Xanh | Huỷ hoặc Giao | |
+| T13 | SP-MIN, số lượng để giỏ nằm từ 99.000đ đến dưới 199.000đ (bước 7.4) | COD | Dùng voucher "Miễn phí vận chuyển" đã đổi bằng Điểm Xanh | Huỷ hoặc Giao | |
 
 **Gói rác của các yêu cầu Đổi rác thử.** Thu kèm đơn cần ít nhất 10.000 điểm ước tính (`waste.pickup_min_points` = 10.000) và Gửi về kho cần ít nhất 15.000 (`waste.mailin_min_points` = 15.000); dưới mức đó máy chủ từ chối ngay khi tạo yêu cầu. Điểm ước tính của một món = phần nguyên của (số lượng chia số đơn vị mỗi nhóm) nhân điểm mỗi nhóm.
 
@@ -708,7 +708,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 - **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
 - **Trước khi làm**: kiểm số Điểm Xanh của Người thử (bảng B.5, Mini App, Điểm Xanh). Điểm chỉ có sau khi kho đếm và xác nhận: 7.1 cộng 3.000 ngay trong ngày; 7.2 cộng 20.000 khi kiện về tới kho (vài ngày sau); 7.3 cộng thêm 10.000 khi kiện thu kèm về kho. Voucher rẻ nhất trong danh mục gieo sẵn là "Miễn phí vận chuyển", giá 20.000 điểm: đủ sau khi kho đã đếm 7.1 và 7.2 (23.000 điểm), nên làm 7.4 sau khi kiện của 7.2 đã về kho; chưa đủ điểm thì để 7.4 sang lúc đó, đừng bỏ qua. Quà TREE có giá `game.tree_points_price` (mặc định 50.000 điểm, sửa ở Quản trị, Cấu hình; ở Quản trị, Khách hàng, Đổi rác, Quà chỉ xem được), nên tối đa 33.000 điểm của 7.1 đến 7.3 chưa đủ: chỉ đổi TREE khi số dư đủ giá, nếu không thì ghi "không thử TREE: thiếu điểm" ở bảng kết quả. Giá của các quà khác do admin đặt ở Quản trị, Khách hàng, Đổi rác, Quà: xem lại trước khi làm.
-- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 200.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 200.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7. Khi T13 còn mở, thử dùng lại đúng mã voucher đó ở màn thanh toán của một giỏ khác từ 99.000đ (không cần đặt đơn): phải bị từ chối với câu "Bạn đã dùng hết lượt cho mã này." Sau đó mới đưa T13 tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
+- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 199.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 199.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7. Khi T13 còn mở, thử dùng lại đúng mã voucher đó ở màn thanh toán của một giỏ khác từ 99.000đ (không cần đặt đơn): phải bị từ chối với câu "Bạn đã dùng hết lượt cho mã này." Sau đó mới đưa T13 tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
 - **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần (kiểm khi T13 còn mở); quà TREE xuất hiện ở Vườn Xanh.
 - **Bằng chứng**: Phụ lục P7 (`points_transactions` của người thử: dòng điểm trừ cho từng quà).
 - **Hoàn tác**: không hoàn tác được voucher và quà TREE: voucher thành coupon ngay, quà TREE đi qua Vườn Xanh, nên không bao giờ ở trạng thái chờ nhận. Điểm đã trừ là chi phí thử, ghi vào cột "Sau" của bảng B.5. Huỷ T13 thì hệ thống trả lượt dùng, mã quay lại tài khoản Người thử và dùng lại được: tắt mã đó ở Quản trị, Khuyến mãi, Voucher, nút "Tắt mã". Muốn thử huỷ có hoàn điểm thì đổi thêm một quà loại "Gói hạt giống" hoặc "Quà tặng" (hiện ở trạng thái "Chờ nhận"), rồi huỷ ở Quản trị, Khách hàng, Đổi rác, Quà với `refundPoints` (checklist mục 7).

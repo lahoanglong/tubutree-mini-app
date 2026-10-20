@@ -2,6 +2,7 @@ import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
+import { FREE_SHIP_THRESHOLD_DEFAULT } from '../pricing/pricing.service';
 
 /**
  * Nội dung điều khoản/chính sách hiển thị ở web (/chinh-sach/:loai). Admin nhập ở tab Cấu hình dưới dạng markdown hoặc chữ
@@ -16,7 +17,7 @@ export const LEGAL_CONFIG_KEYS: Readonly<Record<string, string>> = {
 };
 
 const DEFAULT_RETURN_WINDOW_DAYS = 7;
-const DEFAULT_FREESHIP_THRESHOLD = 200000;
+const DEFAULT_FREESHIP_THRESHOLD = FREE_SHIP_THRESHOLD_DEFAULT;
 
 /**
  * Số không âm hợp lệ (0 là hợp lệ: freeship mọi đơn, hạn đổi trả 0 ngày — khớp loyalty.returnWindowDays), không thì mặc định:

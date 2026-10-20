@@ -224,8 +224,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   },
 
   // Shipping
-  { key: 'shipping.free_threshold', value: 200000, category: 'shipping', description: 'Đơn ≥ 200k được freeship' },
-  { key: 'shipping.flat_fee_below_threshold', value: 19000, category: 'shipping', description: 'Phí cố định khi đơn < 200k' },
+  { key: 'shipping.free_threshold', value: 199000, category: 'shipping', description: 'Đơn ≥ 199k được freeship' },
+  { key: 'shipping.flat_fee_below_threshold', value: 19000, category: 'shipping', description: 'Phí cố định khi đơn < 199k' },
   // null = chưa đặt: app ẩn dòng "Giao dự kiến" thay vì hứa số ngày chủ shop chưa chốt. Khoá phải CÓ dòng để admin
   // bật được từ tab Cấu hình (tab chỉ liệt kê dòng đã tồn tại). createOnly: deploy lại không xoá số admin đã đặt.
   { key: 'shipping.eta_min_days', value: Prisma.JsonNull, category: 'shipping', description: 'Giao dự kiến: số ngày tối thiểu (0-60). Để null thì app ẩn dòng "Giao dự kiến"', createOnly: true },

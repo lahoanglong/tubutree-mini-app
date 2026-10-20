@@ -90,6 +90,6 @@ Hệ thống chỉ **hoàn tiền**. Khách muốn đổi sang sản phẩm khá
 
 **Khách hỏi hoá đơn VAT.** Khách tick yêu cầu VAT lúc đặt. Chuyển kế toán: họ xuất hoá đơn rồi bấm "Đã xuất hoá đơn", khách nhận thông báo.
 
-**Khách hỏi phí ship.** Mặc định miễn phí từ 200.000đ, dưới đó 19.000đ, một số hạng thành viên được miễn sớm hơn. Hỏi admin mức đang áp dụng.
+**Khách hỏi phí ship.** Mặc định miễn phí từ 199.000đ, dưới đó 19.000đ, một số hạng thành viên được miễn sớm hơn. Hỏi admin mức đang áp dụng.
 
 **Khách đánh giá xấu.** Chỉ admin ẩn được (nút "Ẩn đánh giá"). Phản hồi đánh giá chưa có (**⏳ đang làm**). Liên hệ khách riêng.

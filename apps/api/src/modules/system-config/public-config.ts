@@ -4,7 +4,7 @@ import { DEFAULT_PIT_WITHHOLD_PCT, DEFAULT_PIT_WITHHOLD_THRESHOLD } from '../aff
 import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY } from '../feed/community-public-preview';
 import { EVENT_REWARD_MAX_POINTS } from '../feed/community-limits';
 import { DEALER_MAX_DISCOUNT_PCT_DEFAULT, DEALER_REVIEW_HOURS_DEFAULT } from '../dealer/dealer-config';
-import { FIRST_ORDER_FREESHIP_ENABLED_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
+import { FREE_SHIP_THRESHOLD_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_DEFAULT, FIRST_ORDER_FREESHIP_ENABLED_KEY, FIRST_ORDER_FREESHIP_MIN_DEFAULT, FIRST_ORDER_FREESHIP_MIN_KEY } from '../pricing/pricing.service';
 import { publicCommunityUrl } from './community-links';
 import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
@@ -63,7 +63,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     communityTiktokUrl,
     waste,
   ] = await Promise.all([
-    config.get<number>('shipping.free_threshold', 200000),
+    config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
     config.get<number>('affiliate.min_withdraw_bank', 50000),
     config.get<number>('cashback.hold_days', 30),
