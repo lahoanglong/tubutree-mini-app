@@ -51,7 +51,7 @@ git clone https://github.com/lahoanglong/tubutree-mini-app.git tubutree && cd tu
 cp .env.production.example .env
 nano .env        # điền WEB_DOMAIN, POSTGRES_PASSWORD, JWT secrets, các key
 ```
-Sinh secret nhanh: `openssl rand -base64 48` (JWT), `openssl rand -hex 24` (Postgres). Mật khẩu Postgres đi nguyên văn vào `DATABASE_URL` nên phải an toàn cho URL: `-hex` chỉ ra chữ số và a-f. Không dùng `-base64` cho mật khẩu Postgres (khoảng 4 trên 10 chuỗi có `/` hoặc `+`, làm URL hỏng và API không khởi động); tự đặt thì tránh `/ @ : # ? %`.
+Sinh secret nhanh: `openssl rand -base64 48` (JWT), `openssl rand -hex 24` (Postgres). Mật khẩu Postgres đi nguyên văn vào `DATABASE_URL` nên phải an toàn cho URL: `-hex` chỉ ra chữ số và a-f. Không dùng `-base64` cho mật khẩu Postgres: base64 có thể sinh `/` hoặc `+`, và `/` làm hỏng URL (Prisma P1013, API không khởi động); tự đặt thì tránh `/ @ : # ? %`.
 
 ## 5. Khởi chạy
 ```bash
