@@ -773,3 +773,105 @@ describe('/dai-ly — nút chính navy ở điện thoại như inkButton của 
     expect(css).toContain('--color-dealer-accent: var(--forest-300);');
   });
 });
+
+describe('/dai-ly — báo trước phí giao và mức tối thiểu của đơn sỉ (bc5e4c5b, 269aec88)', () => {
+  const RULES = { minOrderValue: 3_000_000, freeShipThreshold: 5_000_000, shippingFee: 19_000 };
+  const meWith = (over: Record<string, unknown> = {}) => ({ ...APPROVED, currentDebt: 0, orderRules: RULES, ...over });
+  const priced = (dealerPrice: number, me = meWith()) =>
+    setup({ '/dealer/me': me, '/dealer/pricelist': [row({ dealerPrice, retailPrice: dealerPrice * 2, stock: 9 })] });
+  const buttons = (name: string) => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === name || b.textContent === 'Đang đặt...');
+
+  it('giỏ 4.000.000đ: hiện phí giao 19.000đ, tổng 4.019.000đ và nút đặt bật', async () => {
+    priced(4_000_000);
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).toContain('4.019.000đ');
+    expect(c.textContent).toContain('Tiền hàng 4.000.000đ + Phí giao 19.000đ (miễn phí từ 5.000.000đ)');
+    expect(button('Ghi công nợ').disabled).toBe(false);
+  });
+
+  it('giỏ 5.000.000đ: miễn phí giao, tổng bằng tiền hàng', async () => {
+    priced(5_000_000);
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).toContain('Miễn phí giao (đơn từ 5.000.000đ)');
+    expect(c.textContent).not.toContain('Phí giao 19.000đ');
+    expect(c.textContent).not.toContain('5.019.000đ');
+  });
+
+  it('giỏ 2.999.999đ: tắt cả hai nút đặt, ghi mức tối thiểu, bấm không gửi đơn', async () => {
+    priced(2_999_999);
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).toContain('Đơn tối thiểu 3.000.000đ tiền hàng — thêm 1đ nữa để đặt.');
+    expect(c.textContent).not.toContain('Phí giao');
+    for (const b of [...buttons('Ghi công nợ'), ...buttons('Trả trước')]) {
+      expect(b.disabled).toBe(true);
+      click(b);
+    }
+    await flush();
+    expect(posts('/dealer/orders')).toHaveLength(0);
+  });
+
+  it('hạn mức tính cả phí giao: nợ + tiền hàng vừa hạn mức nhưng cộng phí thì vượt', async () => {
+    priced(4_000_000, meWith({ tier: { id: 't1', name: 'Bạc', creditLimit: 10_000_000 }, currentDebt: 5_990_000 }));
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).toContain('Vượt hạn mức công nợ');
+    expect(button('Ghi công nợ').disabled).toBe(true);
+    expect(button('Trả trước').disabled).toBe(false);
+  });
+
+  it('nợ + tiền hàng + phí vừa đúng hạn mức: vẫn đặt được', async () => {
+    priced(4_000_000, meWith({ tier: { id: 't1', name: 'Bạc', creditLimit: 10_000_000 }, currentDebt: 5_981_000 }));
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).not.toContain('Vượt hạn mức công nợ');
+    expect(button('Ghi công nợ').disabled).toBe(false);
+  });
+
+  it('đặt đơn đủ mức tối thiểu: cùng endpoint, body và Idempotency-Key như trước, không kèm phí giao', async () => {
+    priced(4_000_000);
+    m.post['/dealer/orders'] = () => ({ code: 'TUBU3', items: [{ backorderedQty: 0, quantity: 1 }] });
+    await mount();
+    click(plus());
+    click(button('Ghi công nợ'));
+    await flush();
+    const [call] = posts('/dealer/orders');
+    expect(call?.body).toEqual({ items: [{ variationId: 'v1', quantity: 1 }], paymentMethod: 'CREDIT', note: undefined });
+    expect(call?.headers?.['Idempotency-Key']).toEqual(expect.any(String));
+  });
+
+  it('mức tối thiểu 0 (tắt): không chặn, vẫn báo phí giao theo ngưỡng', async () => {
+    priced(100_000, meWith({ orderRules: { ...RULES, minOrderValue: 0 } }));
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).not.toContain('Đơn tối thiểu');
+    expect(c.textContent).toContain('Tiền hàng 100.000đ + Phí giao 19.000đ');
+    expect(button('Ghi công nợ').disabled).toBe(false);
+  });
+
+  it('API chưa trả orderRules: giữ hành vi cũ, tổng bằng tiền hàng, không dòng phí và không chặn', async () => {
+    setup({ '/dealer/me': { ...APPROVED, currentDebt: 0 }, '/dealer/pricelist': [row({ dealerPrice: 80_000, stock: 9 })] });
+    const c = await mount();
+    click(plus());
+    expect(c.textContent).toContain('80.000đ');
+    expect(c.textContent).not.toContain('Phí giao');
+    expect(c.textContent).not.toContain('Đơn tối thiểu');
+    expect(c.textContent).not.toContain('Miễn phí giao');
+    expect(button('Ghi công nợ').disabled).toBe(false);
+  });
+
+  it('đơn bị từ chối vì còn nợ quá hạn: hiện nguyên văn lý do máy chủ, không tự quyết ở web', async () => {
+    priced(4_000_000);
+    const reason = 'Bạn còn nợ đơn ngày 01/10/2026 đã quá hạn thanh toán (NET 15). Vui lòng thanh toán công nợ trước khi đặt thêm đơn ghi công nợ, hoặc chọn thanh toán trả trước.';
+    m.post['/dealer/orders'] = () => {
+      throw new Error(reason);
+    };
+    const c = await mount();
+    click(plus());
+    click(button('Ghi công nợ'));
+    await flush();
+    expect(c.textContent).toContain(reason);
+  });
+});

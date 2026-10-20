@@ -46,7 +46,7 @@ function HubBody() {
       </div>
 
       <div className="mt-3">
-        {tab === 'price' && <PriceTab creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} />}
+        {tab === 'price' && <PriceTab creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} rules={me?.orderRules} />}
         {tab === 'orders' && <OrdersTab />}
         {tab === 'credit' && <CreditTab />}
         {tab === 'report' && <ReportTab />}
