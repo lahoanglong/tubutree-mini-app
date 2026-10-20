@@ -15,7 +15,7 @@ Dùng workflow và subagent cho việc này (tôi cho phép điều phối nhi�
 | Q1 | Nhánh gốc | `BASE = web/base` (db9adca0: `review/2026-10-18-launch` d2dcbe0b gộp với `feat/recycle-rewards` ef5ad5ed). `main` giữ nguyên vì hai nhánh kia còn nhận commit |
 | Q2 | Số điện thoại trên web | Không xác minh SĐT trên web. Khách nhập SĐT ở địa chỉ giao hàng như hiện tại. Tính năng dựa vào SĐT đã xác minh (cộng điểm theo SĐT, quét mã đơn sàn, gộp tài khoản theo SĐT, `ensure-phone`) chỉ có trên Mini App; web hiện lời dặn "mở Mini App để dùng" kèm nút "Mở trên Zalo". Ghi `skip` có lý do trong file ánh xạ |
 | Q3 | Zalo App ID | Web và Mini App dùng chung một Zalo App ID, nên một khách là một User (tra theo `zaloId`). Vẫn kiểm cấu hình ở bước 1; thấy lệch thì dừng phần ví/điểm/đơn và ghi câu hỏi |
-| Q4 | Thanh toán web | Chỉ chuyển khoản QR + COD (phương thức API đã hỗ trợ cho web). Không thêm cổng ZaloPay web |
+| Q4 | Thanh toán web | Chuyển khoản QR, COD và Ví Tubu như Mini App (phương thức API đã hỗ trợ cho web; Ví là số dư nội bộ, không phải cổng thanh toán). Không thêm cổng ZaloPay web. Chủ dự án chốt lại Ví Tubu ngày 2026-10-20 (UAT U6-B08) |
 | Q5 | Màn nội bộ | Có, đưa lên web giống hệt Mini App (đại lý, nhân viên, bảng lương, chủ thương hiệu + doanh số, kiểm duyệt cộng đồng), kiểm quyền theo vai trò như Mini App. Làm sau màn khách hàng |
 | Q6 | Máy tính | Responsive đầy đủ: điện thoại giống Mini App; máy tính có header điều hướng, lưới nhiều cột, khung rộng tối đa, theo các trang web đang có |
 | Q7 | Thứ tự | `core` → `shop` → `account` → `loyalty` → `community` → `affiliate` → `game`, `ai` → `pro` → `recycle` |
@@ -90,7 +90,7 @@ Giao cho scout (Haiku) quét, phần kết luận do phiên chính (Opus) làm. 
 | `openPhone` | `tel:` |
 | `openWebview` | liên kết thường |
 | `requestSendNotification` | trung tâm thông báo trong web; không làm web push đợt này |
-| `Payment` (ZaloPay trong Mini App) | chuyển khoản QR + COD (Q4). Không tích hợp cổng thanh toán mới |
+| `Payment` (ZaloPay trong Mini App) | chuyển khoản QR, COD, Ví Tubu (Q4). Không tích hợp cổng thanh toán mới |
 
 3. Giao diện tách theo nền tảng: Mini App giữ zmp-ui + react-router; web dùng Next App Router + Tailwind + `@tubutree/design-tokens` theo hệ thiết kế web hiện có (`ds-v2-guest`). Không ép chia sẻ component giao diện đợt này; chỉ đưa vào `packages/` component thuần trình bày nếu cả hai bên đã giống hệt.
 4. Web phải chạy tốt cả điện thoại (dưới 768px giống Mini App, có thanh dính đáy) và máy tính (header điều hướng, khung rộng tối đa, không kéo ngang).
