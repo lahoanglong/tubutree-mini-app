@@ -203,7 +203,7 @@ ${window}
 
 ## 5. Hoàn tiền
 
-- Tiền được hoàn theo cách bạn đã thanh toán, hoặc vào Ví Tubu nếu bạn chọn.
+- Tubu Tree hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt yêu cầu.
 - Thời gian hoàn tiền: [số ngày làm việc] sau khi Tubu Tree nhận lại và kiểm tra sản phẩm.
 - Điểm thưởng hoặc mã giảm giá đã dùng cho đơn được xử lý theo điều kiện của từng chương trình.
 
