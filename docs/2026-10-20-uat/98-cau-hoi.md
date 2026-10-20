@@ -28,3 +28,24 @@ Mỗi câu có 2–4 phương án, phương án (1) là phương án agent khuy�
 | Q22 | U2-B01 (UAT U2-19b) | Khách không đổi được chu kỳ giao (4/6/8/10 tuần) của gói định kỳ đang chạy; màn Sửa chỉ có số lượng, thanh toán, địa chỉ; API trả 400 với `intervalWeeks`. Q-13 chỉ chốt sửa số lượng/địa chỉ. | (1) Giữ như vậy cho ra mắt; khách huỷ rồi tạo gói mới (khuyên: luật đã chốt không có chu kỳ). (2) Cho đổi chu kỳ, giữ ngày giao kế như cũ. (3) Cho đổi chu kỳ, tính lại ngày giao kế từ đơn kỳ gần nhất. | Chưa đổi. |
 | Q23 | U2-B02 (UAT U2-06) | Chi tiêu 12 tháng để xét hạng cộng cả phí giao (`order.total`). Khách mua đơn nhỏ trả ship lên hạng sớm hơn chút (vd 38.000đ ship trong 1.447.000đ). Luật chốt chỉ nói điểm tích không tính ship. | (1) Giữ tính cả ship (khuyên cho ra mắt: không đổi hạng của ai, ít rủi ro). (2) Chỉ tính tiền hàng (`total − shippingFee`), sửa cả tiến độ "còn X đ". | Chưa đổi (đổi luật hạng). |
 | Q24 | U3-B02 (UAT U3-21) | ADMIN hạ CTV về CUSTOMER thì gian hàng ẩn, nhưng người đó tự bấm "Đăng ký miễn phí ngay" là thành CTV lại ngay, gian hàng hiện lại, mã giới thiệu lại ghi hoa hồng. | (1) Chặn tự đăng ký lại khi ADMIN đã hạ: ghi `affiliateRevokedAt/By`, đăng ký trả 403 tới khi ADMIN mở lại (khuyên nếu hạ vai trò là xử lý vi phạm). (2) Giữ như vậy, ghi rõ trên màn admin "hạ vai trò chỉ là tạm ngừng". | Chưa đổi (luật vai trò, chờ chủ). |
+
+## Chủ trả lời sáng 2026-10-20 (07:50–08:00, qua câu hỏi có lựa chọn)
+
+| Câu | Chủ chọn | Việc tiếp |
+|---|---|---|
+| Q1 | Xét hạng chỉ tính đơn khách tự mua lẻ cho mình; không tính đơn sỉ đại lý, không tính đơn CTV lên hộ | Sửa `spending12m` (loyalty), đợt 6 |
+| Q5 | Không theo hai lựa chọn. Chủ muốn: khách chat trong Mini App, tin chuyển tới một tài khoản Zalo cá nhân do chủ đăng nhập (như dự án MSS), nhân viên trả lời từ Zalo cá nhân, tin quay về khách | Tính năng mới: khảo sát MSS, viết thiết kế cho chủ duyệt trước khi làm. Trong lúc chờ, chưa bật tự trả lời qua OA |
+| Q8 | Trả bù thưởng quý cho đơn của quý chốt muộn, trong 60 ngày sau quý | Sửa thưởng quý đại lý, đợt 6 (tiền: review 2 lượt) |
+| Q10 | Bậc giảm định kỳ chỉ đếm gói đã ra ít nhất một đơn hoặc có kỳ kế tiếp trong 35 ngày | Đợt 6 |
+| Q12 | Ngưỡng miễn phí giao thường về 199.000đ, khớp ngưỡng đơn đầu | Đợt 6 (số tiền: review 2 lượt); web theo bằng cấu hình chung, báo d3 |
+| Q13 | Thống nhất "Huỷ, Xoá, Khoá" | Đợt 6 Mini App + admin; báo d3 phần web khách |
+| Q14 | Bỏ con số, ghi "từ nhiều vùng đất Việt Nam" | Đợt 6 Mini App; báo d3 phần web khách |
+| Q16 | Việt hoá hết, giữ "CTV" | Đợt 6 Mini App + admin; báo d3 phần web khách |
+| Q18 | Đơn tối thiểu mã mua chung theo biến thể rẻ nhất đang bán | Đợt 6 |
+| Q22 | Cho đổi chu kỳ gói định kỳ; tính lại ngày giao kế từ đơn kỳ gần nhất | Đợt 6 API + Mini App; báo d3 phần web khách |
+| Q23 | Giữ tính cả phí giao khi xét hạng | Không đổi |
+| Q24 | Giữ như hiện nay: hạ vai trò chỉ là tạm ngừng, người đó tự mở lại được | Ghi rõ trên màn admin chỗ hạ vai trò, đợt 6 |
+| Q2 | Thuế TNCN của CTV: cộng dồn các lần rút trong tháng, khấu trừ khi tổng vượt 2 triệu | Đợt 6 (tiền: review 2 lượt); vẫn nên báo kế toán |
+| Q15 | Thay axios bằng fetch trong Mini App để giảm gói tải đầu | Đợt 6 |
+| Q19 | Làm ngay: thêm cột đánh dấu đã chạy xong phần đảo sau huỷ/trả + cron quét chạy lại | Đợt 6 (migration: review 2 lượt) |
+| Q20 | Đổi tên tab thành "Yêu cầu rút tiền" | Đã làm ở đợt 5 (77023047) |

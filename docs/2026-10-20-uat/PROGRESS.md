@@ -11,6 +11,8 @@ Bị ngắt thì đọc file này, `00-brief.md`, rồi journal workflow (đư�
 | 21:52 | 05e6ae97 | Postgres chạy thẳng 25432, Redis Docker 26379 | `tools/pg-native.sh install/start 25432/createdb 25432 tubutree_uat`; `docker run -d --rm --name tubu-uat-redis --tmpfs /data -p 127.0.0.1:26379:6379 redis:7-alpine` | PG 16.14 lên, Redis PONG |
 | 21:53 | 05e6ae97 | Migrate + seed DB UAT | `prisma migrate deploy`; `tsx prisma/seed.ts`; `tsx prisma/seed-reference.ts --with-business-defaults` | exit 0 cả ba (`logs/seed*.log`) |
 | 21:54 | 05e6ae97 | Mốc đầu đêm (sàn) | `tools/baseline.sh` → `logs/baseline/` | xem mục "Sàn test" |
+| 07:30 | — | Phiên tắt khoảng 00:20 đến 07:30 (W10, gate 5 dừng giữa chừng); 07:32 viết báo cáo sáng bản đầu, hỏi chủ 3 lượt | `99-bao-cao-sang.md`, `98-cau-hoi.md` | chủ trả lời 12 câu |
+| 20:39 | — | Máy khởi động lại (mất scratchpad, cụm Postgres, Redis, API, lane); chủ trả lời thêm Q2, Q15, Q19, Q20 | dựng lại 25432, Redis 26379, API 3221; `tools/race-one.sh` thay helper scratchpad | API 3221 lên |
 
 ## Sàn test đầu đêm (05e6ae97)
 
@@ -62,7 +64,9 @@ Log: `logs/baseline.out`, `logs/baseline/*.log`. Xong 22:01.
 | 22:37 | uat-w6-fix-wave2 (5 gói: dai-ly, pancake-hoan-cod, doi-rac-kho, miniapp-logic, admin-web) | wf_25916745-4eb | `tools/w6-fix-wave2.workflow.js` | xong 23:08: 5/5 rev2 ok (chỉ còn P3), 19 agent, 0 lỗi; `impl/dot2.md` |
 | 23:11 | uat-w8-fix-wave4a (5 gói từ uat/int 70be1b2f: don-sau-huy D12-02, mua-chung D11-05, tai-lieu-deploy D10-02…08/10, p3-thuong-tin, p3-nhan-vien) | wf_8afb05fe-f3a | `tools/w8-fix-wave4a.workflow.js` | xong: 5/5 gộp vào uat/int (mua-chung qua review lượt 3 ở 959bf4f4); `impl/dot4a.md` |
 | 23:23 | uat-w9-fix-wave4b (5 gói từ uat/int b419dd9c: ui-miniapp-2 chuyển khoản/ví, ui-miniapp-3 chữ + a11y, ui-admin-2 page.tsx, ui-admin-3 components/admin, api-p3-hieu-nang) | wf_7502a8d0-93f | `tools/w9-fix-wave4b.workflow.js` | xong 23:58: 5/5 rev2 ok (chỉ còn P3), 18 agent, 0 lỗi; `impl/dot4b.md` |
-| 00:19 | uat-w10-fix-wave5 (6 gói từ uat/int 4d71b653: tien-mua U1-B04/B01, gio-mini U1-B02/B03/B05, ctv-su-kien U3-B01/U4-29/U5-B05/Q21, admin-chu U5-B04/Q20, p3-don, p3-tai-lieu) | wf_7d32ae8f-0e0 | `tools/w10-fix-wave5.workflow.js` | chạy |
+| 00:19 | uat-w10-fix-wave5 (6 gói từ uat/int 4d71b653: tien-mua U1-B04/B01, gio-mini U1-B02/B03/B05, ctv-su-kien U3-B01/U4-29/U5-B05/Q21, admin-chu U5-B04/Q20, p3-don, p3-tai-lieu) | wf_7d32ae8f-0e0 | `tools/w10-fix-wave5.workflow.js` | dừng 00:20 (phiên tắt, Edit của worker bị chặn, không commit); chạy lại 07:36 là wf_cd7831ab-0ad: 6/6 xong; rev2 ok: tien-mua, gio-mini, p3-tai-lieu; rev2 còn lỗi: p3-don P1 (dời giờ flash lách trần), admin-chu P2 (khoá điểm game.*, seasonpass.*), ctv-su-kien P2 (GO-LIVE-KEYS discount %) |
+| 20:45 | uat-w11-fix-wave5-round3 (sửa lỗi rev2 của p3-don, admin-chu, ctv-su-kien; review Opus lượt 3, tối đa lượt 4) | wf_8833a695-384 | script trong session | chạy |
+| 20:47 | uat-w12-fix-wave6-chu-quyet (10 gói theo quyết định của chủ sáng nay: q1-xet-hang, q8-thuong-quy, q10-goi-that, q2-tncn, q19-dao-don, q12-freeship, q18-mua-chung, q22-chu-ky, q15-fetch, chu-viet; từ uat/int 30de91c9) | wf_cc6633fb-c4c | `tools/w12-fix-wave6.workflow.js` | chạy |
 
 Journal workflow: `~/.claude/projects/-Users-longla-coding-tubutree-mini-app/290ef81c-34a8-4ce1-8b2c-51c8d5a19dd7/subagents/workflows/<runId>/journal.jsonl`.
 
@@ -94,3 +98,6 @@ Worktree `uat` đang chạy UAT (Vite, API dist từ mã 05e6ae97), nên KHÔNG 
 | 00:06 | Playwright Mini App 1 | `uat/int` 755fede9 | `E2E_SCOPE=miniapp E2E_MINIAPP_PORT=3223 npx playwright test --workers=4` (`logs/pw-miniapp-int-1/run.log`) | 168 passed, 2 failed: `design-system-pilot.miniapp.spec.ts:145` (ảnh dòng giỏ nay aria-hidden, tên là nút) và `:194` (viền thẻ địa chỉ dời ra khung bọc, D6-03): test bám cấu trúc cũ, UI không hỏng |
 | 00:09 | sửa Playwright 1 | `uat/int` a6c3ecc6 (ff lên uat/chu-nho cb27ea6b rồi commit: `data-testid="cart-line-thumb"`, test đọc style khung thẻ) | `npx playwright test tests/design-system-pilot.miniapp.spec.ts --workers=2`; `npx vitest run src/pages/cart` | 8 passed; cart 35/35; tsc e2e/miniapp exit 0 |
 | 00:12 | review lượt 3 mua-chung + commit điều phối | `uat/chu-nho` cb27ea6b | reviewer Opus: vitest miniapp group-buy + new-customer-gift 39/39, web ops-inbox + dealer-claims 11/11, jest groupbuy + coupons 6 suite/177 test | OK gộp phần mã: không P0/P1; P2 còn ở vùng web (gửi d3 lô 5); P2/P3 mẫu tin GROUP_BUY_SUCCESS "{{discount}}đ" có ca hứa quá mức (đưa đợt 5); P3 runbook "Ba" → "Bốn" migration (sửa 4d71b653) |
+| 07:45 | gate 5 | `uat/int` 4d71b653 | `tools/gate.sh <uat-int> logs/gate-int-5` | tsc 4 app, lint:vars, lint:parity, migrate, drift, partial index exit 0; jest api 437/9619; race luồng 1 135/1060 exit 0, luồng 2 1 FAIL lặp lại `pd3-order-reversal.race-spec.ts` B1 (kỳ vọng 470, nhận 500: kỳ vọng cũ, D12-02 nay hoàn điểm thường trong tx huỷ); vitest miniapp 293 file VN+UTC, web 362 VN+UTC, app-core 41 exit 0 |
+| 20:43 | sửa gate 5 | `uat/int` 38c1b10d | `tools/race-one.sh <uat-int> 25549 pd3-order-reversal.race-spec.ts` | Tests: 8 passed, 8 total |
+| 20:44 | đợt 5 (3 gói) | `uat/int` 30de91c9: uat-tien-mua c1012c39, uat-gio-mini 48474da8, uat-p3-tai-lieu 13a55174 | `git merge --no-ff uat/<gói>` | không xung đột; chưa gate |

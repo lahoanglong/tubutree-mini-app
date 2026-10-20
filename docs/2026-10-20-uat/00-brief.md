@@ -59,3 +59,7 @@ Mỗi phát hiện một dòng bảng hoặc một mục:
 - Nhóm: "agent sửa ngay" / "cần chủ quyết" / "chủ tự làm".
 - `path:line`, mô tả ngắn, kịch bản lỗi cụ thể (đầu vào → kết quả sai), bằng chứng (đoạn mã, output lệnh, truy vấn DB, ảnh), đề xuất sửa + test nên viết.
 - Vùng file: ghi rõ file thuộc vùng phiên UAT hay phiên web.
+
+## Quyết định mới của chủ (sáng 2026-10-20)
+
+Chủ đã trả lời Q1, Q2, Q5, Q8, Q10, Q12–Q16, Q18–Q20, Q22–Q24. Bảng ở `98-cau-hoi.md`, mục "Chủ trả lời sáng 2026-10-20". Các quyết định này là luật mới, thay luật cũ ở đúng mục đó. Reviewer không coi việc làm theo chúng là đổi luật đã chốt.
