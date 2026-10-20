@@ -72,8 +72,8 @@ function useSubscribeCandidate(order: OrderDTO): SubscribeCandidate | null {
     const idx = it.productSlug ? slugs.indexOf(it.productSlug) : -1;
     const product = idx >= 0 ? products[idx]?.data : undefined;
     if (!product || isRetailOnly(product)) continue;
-    const variation = product.variations.find((v) => v.id === it.variationId);
-    if (variation && variation.stock > 0) return { variationId: it.variationId, quantity: it.quantity, productName: it.productName };
+    const variation = it.variationId ? product.variations.find((v) => v.id === it.variationId) : undefined;
+    if (it.variationId && variation && variation.stock > 0) return { variationId: it.variationId, quantity: it.quantity, productName: it.productName };
   }
   return null;
 }
@@ -102,7 +102,8 @@ function SubscribeCard({ candidate, onOpen }: { candidate: SubscribeCandidate; o
 
 // Phản hồi place-order có thêm điểm sẽ nhận (shared-types OrderDTO / PlacedOrder của Mini App) mà kiểu cục bộ của web chưa khai.
 type PlacedSplit = SplitOrderDTO & { pointsEarned?: number };
-type OrderDTO = Omit<ShopOrderDTO, 'splitOrders'> & { pointsEarned?: number; splitOrders?: PlacedSplit[] };
+type PlacedItem = ShopOrderDTO['items'][number] & { variationId?: string; productSlug?: string | null };
+type OrderDTO = Omit<ShopOrderDTO, 'splitOrders' | 'items'> & { pointsEarned?: number; splitOrders?: PlacedSplit[]; items: PlacedItem[] };
 type Split = PlacedSplit[];
 
 // Lần đặt có hàng gian hàng tự giao bị tách thành nhiều đơn: tổng và điểm phải là của cả lần đặt, không chỉ đơn đầu
