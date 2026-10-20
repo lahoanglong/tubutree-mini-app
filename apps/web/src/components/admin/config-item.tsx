@@ -25,12 +25,17 @@ const MONEY_PREFIXES = [
   'coins.',
 ];
 
-/** Nhóm trộn khoá tiền/điểm với khoá không đụng tiền (đường dẫn, số ô vườn…): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần. */
-const MIXED_PREFIXES = ['community.', 'game.'];
-const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|cap)([._]|$)/;
+/** Nhóm trộn khoá tiền/điểm với khoá không đụng tiền (đường dẫn, số ô vườn, hạt giống, XP…): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần, giải, bậc thưởng, đơn tối thiểu, hạn mức mua bằng điểm. */
+const MIXED_PREFIXES = ['community.', 'game.', 'seasonpass.'];
+const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|cap|prizes?|tiers?|min_order|limit)([._]|$)/;
+
+/** Khoá tiền nằm ngoài các nhóm trên: phạt đi trễ trừ thẳng vào lương nhân viên. */
+const MONEY_KEYS = new Set(['attendance.late_fine']);
 
 const isMoneyKey = (key: string) =>
-  MONEY_PREFIXES.some((p) => key.startsWith(p)) || (MIXED_PREFIXES.some((p) => key.startsWith(p)) && MIXED_MONEY_KEY.test(key));
+  MONEY_KEYS.has(key) ||
+  MONEY_PREFIXES.some((p) => key.startsWith(p)) ||
+  (MIXED_PREFIXES.some((p) => key.startsWith(p)) && MIXED_MONEY_KEY.test(key));
 
 /** Một dòng trong "Tất cả tham số (JSON)" của tab Cấu hình. */
 export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {

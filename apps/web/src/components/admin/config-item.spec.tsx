@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ConfigItem } from './config-item';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { ConfigRow } from '@/lib/admin-client';
+import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -133,6 +134,8 @@ describe('ConfigItem (tab Cấu hình)', () => {
       ['community.post_reward_points', 1_000, '100000'],
       ['game.daily_checkin_points', 1_000, '100000'],
       ['coins.referrer_reward', 500, '50000'],
+      // Có trong seed (apps/api/prisma/seed.ts) nhưng chưa có trong fixture chụp: 6 → 1 làm voucher vòng quay dùng được cho mọi đơn.
+      ['game.spin_voucher_min_order_multiplier', 6, '1'],
     ])('%s: hộp xác nhận nêu giá trị cũ → mới trước khi ghi', async (key, oldValue, next) => {
       const { container, puts } = setup(row({ key, value: oldValue, category: key.split('.')[0] }));
       typeInto(container.querySelector('input'), next);
@@ -147,6 +150,48 @@ describe('ConfigItem (tab Cấu hình)', () => {
       await flush();
       expect(puts).toEqual([{ key, value: JSON.parse(next) }]);
     });
+
+    // Khoá lấy từ dòng GET /admin/config thật (fixture), không bịa tên: giải POINTS tới 100.000 điểm, thưởng premium 5.000-30.000 điểm,
+    // đơn tối thiểu của coupon thu hoạch/voucher vòng quay, số lượt mua quay bằng điểm, tiền phạt đi trễ.
+    it.each([
+      'game.spin_prizes',
+      'seasonpass.tiers',
+      'game.harvest_coupon_min_order',
+      'game.spin_buy_daily_limit',
+      'game.spin_buy_cost_points',
+      'game.tree_points_price',
+      'attendance.late_fine',
+    ])('%s (dòng thật trong cấu hình): hỏi xác nhận trước khi ghi', async (key) => {
+      const real = ADMIN_CONFIG_ROWS.find((r) => r.key === key);
+      expect(real, `fixture thiếu ${key}`).toBeDefined();
+      const { container, puts } = setup(real!);
+      const next = JSON.stringify(real!.value) + ' ';
+      typeInto(container.querySelector('input'), next);
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      const d = confirmDialog();
+      expect(d?.textContent).toContain('Xác nhận đổi cấu hình tiền/điểm');
+      expect(d?.textContent).toContain(key);
+      expect(puts).toHaveLength(0);
+      answerConfirm(true);
+      await flush();
+      expect(puts).toEqual([{ key, value: real!.value }]);
+    });
+
+    // Khoá game/season pass chỉ là hạt giống, giọt nước, XP, số ô: không đụng tiền hay điểm Xanh nên không hỏi.
+    it.each(['game.daily_login_seeds', 'game.dew_seeds', 'game.plot_target','game.tank_capacity', 'seasonpass.checkin_xp'])(
+      '%s (dòng thật): không phải tiền/điểm nên lưu thẳng',
+      async (key) => {
+        const real = ADMIN_CONFIG_ROWS.find((r) => r.key === key);
+        expect(real, `fixture thiếu ${key}`).toBeDefined();
+        const { container, puts } = setup(real!);
+        typeInto(container.querySelector('input'), JSON.stringify(real!.value) + ' ');
+        click(byText(container, 'button', 'Lưu'));
+        await flush();
+        expect(confirmDialog()).toBeNull();
+        expect(puts).toHaveLength(1);
+      },
+    );
 
     it.each([
       ['game.max_plots', 5, '6'],
