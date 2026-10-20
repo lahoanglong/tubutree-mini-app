@@ -144,7 +144,7 @@ describe('OrderInvoicePanel', () => {
 
   it('xuất: hộp thoại xác nhận — huỷ thì KHÔNG gọi API; đồng ý thì POST issue-invoice kèm link đã trim, hiện message API', async () => {
     const api = mockFetch({
-      '/issue-invoice': { body: { ok: true, message: 'Đã ghi nhận xuất hóa đơn VAT cho đơn TB-500.', order: { id: 'o1', code: 'TB-500', invoiceStatus: 'ISSUED', invoiceUrl: 'https://hd.example.vn/abc' } } },
+      '/issue-invoice': { body: { ok: true, message: 'Đã ghi nhận xuất hoá đơn VAT cho đơn TB-500.', order: { id: 'o1', code: 'TB-500', invoiceStatus: 'ISSUED', invoiceUrl: 'https://hd.example.vn/abc' } } },
       '/admin/orders': { body: { data: [], meta: { page: 1, limit: 20, total: 0 } } },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
@@ -165,7 +165,7 @@ describe('OrderInvoicePanel', () => {
     const post = api.calls.find((c) => c.init?.method === 'POST')!;
     expect(post.url).toContain('/admin/orders/o1/issue-invoice');
     expect(post.init?.body).toBe(JSON.stringify({ invoiceUrl: 'https://hd.example.vn/abc' }));
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã ghi nhận xuất hóa đơn VAT cho đơn TB-500.');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã ghi nhận xuất hoá đơn VAT cho đơn TB-500.');
     expect(native).not.toHaveBeenCalled();
   });
 
@@ -192,7 +192,7 @@ describe('OrderInvoicePanel', () => {
   });
 
   it('400 từ API (admin khác vừa xuất) → hiện NGUYÊN VĂN, không báo thành công; bấm dồn chỉ 1 request', async () => {
-    const msg = 'Hóa đơn của đơn TB-500 vừa được phát hành bởi người khác — vui lòng tải lại.';
+    const msg = 'Hoá đơn của đơn TB-500 vừa được phát hành bởi người khác — vui lòng tải lại.';
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
     const calls: string[] = [];

@@ -215,8 +215,8 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Tổng quan',
     items: [
       { k: 'inbox', label: 'Việc cần xử lý' },
-      { k: 'dashboard', label: 'Tổng quan KPI' },
-      { k: 'analytics', label: 'Retention & North-star' },
+      { k: 'dashboard', label: 'Tổng quan chỉ số' },
+      { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
       { k: 'reports', label: 'Báo cáo' },
     ],
   },
@@ -266,8 +266,8 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
   {
     label: 'Khuyến mãi',
     items: [
-      { k: 'coupons', label: 'Voucher' },
-      { k: 'flashSales', label: 'Flash Sale' },
+      { k: 'coupons', label: 'Mã giảm giá' },
+      { k: 'flashSales', label: 'Giờ vàng' },
       { k: 'engagement', label: 'Nhiệm vụ' },
     ],
   },
@@ -275,8 +275,8 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Nội dung',
     items: [
       { k: 'faqs', label: 'Câu hỏi thường gặp' },
-      { k: 'contentKit', label: 'Content Kit CTV' },
-      { k: 'academy', label: 'Academy' },
+      { k: 'contentKit', label: 'Bộ nội dung CTV' },
+      { k: 'academy', label: 'Học viện CTV' },
       { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
       { k: 'notificationTemplates', label: 'Mẫu thông báo' },
     ],
@@ -816,7 +816,7 @@ function DashboardTab({
   });
 
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải số liệu tổng quan…</p>;
-  if (q.isError || !q.data) return <LoadError message="Không tải được số liệu tổng quan KPI." onRetry={() => void q.refetch()} />;
+  if (q.isError || !q.data) return <LoadError message="Không tải được các chỉ số tổng quan." onRetry={() => void q.refetch()} />;
 
   const stats = q.data;
 
@@ -910,7 +910,7 @@ function DashboardTab({
             <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} đang giao</span>
             <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} đã giao</span>
             {stats.cancelledOrders > 0 && (
-              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã hủy</span>
+              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã huỷ</span>
             )}
             {(stats.returnedOrders ?? 0) > 0 && (
               <span className="rounded bg-promo-bg px-1.5 py-0.5 font-medium text-promo-fg">{stats.returnedOrders} đã trả hàng</span>
@@ -1160,7 +1160,7 @@ function OrdersTab({
               }}
               className={`${BTN_SECONDARY} whitespace-nowrap`}
             >
-              Xóa lọc
+              Xoá lọc
             </button>
           )}
         </form>
@@ -1178,7 +1178,7 @@ function OrdersTab({
             <option value="PACKED">Đã đóng gói</option>
             <option value="SHIPPING">Đang vận chuyển</option>
             <option value="DELIVERED">Đã giao hàng</option>
-            <option value="CANCELLED">Đã hủy</option>
+            <option value="CANCELLED">Đã huỷ</option>
             <option value="RETURNED">Đã trả hàng</option>
           </select>
 
@@ -1746,7 +1746,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
       message: `Khoá ${label}${u.phone ? ` (${u.phone})` : ''}? Người này bị đăng xuất khỏi Mini App và web ngay, không đăng nhập lại được cho tới khi mở khoá.`,
       confirmLabel: 'Khoá tài khoản',
       tone: 'danger',
-      input: { label: 'Lý do khoá', placeholder: 'VD: farm voucher nhiều tài khoản, bom hàng COD', required: true, maxLength: 500 },
+      input: { label: 'Lý do khoá', placeholder: 'VD: săn mã giảm giá nhiều tài khoản, bom hàng COD', required: true, maxLength: 500 },
     });
     if (reason === null) return;
     if (reason.length < 3) {
@@ -1816,7 +1816,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
             }}
             className={`${BTN_SECONDARY} whitespace-nowrap`}
           >
-            Xóa lọc
+            Xoá lọc
           </button>
         )}
       </form>
@@ -1901,6 +1901,8 @@ function roleChangeConsequences(target: UserRole, current?: string | null): stri
   } else if (target === 'DEALER' && (!current || current === 'DEALER')) {
     lines.push(`${current ? 'Tài khoản đã là đại lý' : 'Nếu tài khoản đã là đại lý'}: chỉ đổi bậc, gian hàng đối tác giữ nguyên.`);
   }
+  // API không chặn đăng ký lại, nên nói rõ để admin không tưởng hạ về khách là đã cấm CTV.
+  if (target === 'CUSTOMER') lines.push('Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.');
   return lines.join('\n');
 }
 
@@ -2119,7 +2121,7 @@ function CouponsTab() {
         scope: f.scope as 'PUBLIC',
       }),
     onSuccess: () => {
-      setMsg('Đã tạo voucher!');
+      setMsg('Đã tạo mã giảm giá!');
       void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
     },
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
@@ -2128,10 +2130,10 @@ function CouponsTab() {
   return (
     <div className="space-y-6">
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
-      <Field label="Mã voucher">
+      <Field label="Mã giảm giá">
         <input
           placeholder="Mã (vd WELCOME30)"
-          aria-label="Mã voucher"
+          aria-label="Mã giảm giá"
           value={f.code}
           // Khách luôn nhập mã dạng HOA không khoảng trắng (Mini App/web tự đổi): lưu đúng dạng đó.
           onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
@@ -2139,8 +2141,8 @@ function CouponsTab() {
         />
       </Field>
       <div className="flex items-end gap-2">
-        <Field label="Loại voucher">
-          <select aria-label="Loại voucher" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
+        <Field label="Loại mã giảm giá">
+          <select aria-label="Loại mã giảm giá" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
             <option value="PERCENT">% giảm</option>
             <option value="AMOUNT">Giảm tiền</option>
             <option value="FREESHIP">Freeship</option>
@@ -2180,16 +2182,16 @@ function CouponsTab() {
       <div className="flex gap-2">
         <div className="min-w-0 flex-1">
           <Field label="Bắt đầu từ ngày">
-            <input type="date" aria-label="Voucher bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+            <input type="date" aria-label="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
           </Field>
         </div>
         <div className="min-w-0 flex-1">
           <Field label="Hết hạn ngày">
-            <input type="date" aria-label="Voucher hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+            <input type="date" aria-label="Mã giảm giá hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
+      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     <ClaimCampaignPanel />
@@ -2566,22 +2568,22 @@ function FlashSalesTab() {
       }),
     onSuccess: () => {
       setF({ title: '', startAt: '', endAt: '' });
-      setMsg({ ok: true, text: 'Đã tạo đợt flash sale!' });
+      setMsg({ ok: true, text: 'Đã tạo đợt giờ vàng!' });
       void qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt flash sale' }),
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt giờ vàng' }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h2>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt giờ vàng</h2>
         <div className="flex flex-wrap items-end gap-2">
           <div className="grow basis-full sm:basis-48">
             <Field label="Tên đợt">
               <input
-                placeholder="vd Flash Sale cuối tuần"
+                placeholder="vd Giờ vàng cuối tuần"
                 value={f.title}
                 onChange={(e) => setF({ ...f, title: e.target.value })}
                 className={`${field} w-full`}
@@ -2606,9 +2608,9 @@ function FlashSalesTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách flash sale." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
         {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
-        {q.data?.length === 0 && <Empty>Chưa có đợt flash sale nào. Tạo đợt đầu tiên ở trên.</Empty>}
+        {q.data?.length === 0 && <Empty>Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.</Empty>}
       </div>
     </div>
   );
@@ -2649,8 +2651,8 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   const askToggleActive = async () => {
     if (sale.isActive) {
       const ok = await confirm({
-        title: 'Tắt đợt flash sale',
-        message: `Tắt "${sale.title}"? Giá flash sale biến mất với khách ngay; bật lại sau là được.`,
+        title: 'Tắt đợt giờ vàng',
+        message: `Tắt "${sale.title}"? Giá giờ vàng biến mất với khách ngay; bật lại sau là được.`,
         confirmLabel: 'Tắt đợt',
         cancelLabel: 'Giữ nguyên',
         tone: 'danger',
@@ -2661,7 +2663,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
   };
   const askDeleteSale = async () => {
     const ok = await confirm({
-      title: 'Xoá đợt flash sale',
+      title: 'Xoá đợt giờ vàng',
       message: `Xoá "${sale.title}"? Mọi sản phẩm và lượt nhắc trong đợt sẽ bị xoá theo, không hoàn tác được.`,
       confirmLabel: 'Xoá đợt',
       cancelLabel: 'Giữ lại',
@@ -2807,7 +2809,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <ProductPicker
             mode="variation"
-            label="Chọn biến thể sản phẩm cho đợt Flash Sale"
+            label="Chọn biến thể sản phẩm cho đợt giờ vàng"
             value={pickedVariation}
             onChange={(v) => {
               setPickedVariation(v);
@@ -3238,13 +3240,13 @@ function ContentKitTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn Content Kit theo sản phẩm</h2>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn bộ nội dung theo sản phẩm</h2>
         <p className="mb-2 text-xs text-stone-500">
           Chọn sản phẩm bằng cách gõ tên (không cần dấu) hoặc SKU. Trong caption dùng{' '}
           <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
         </p>
         <div className="flex flex-wrap items-start gap-2">
-          <ProductPicker mode="product" label="Chọn sản phẩm cho Content Kit" value={pickedProduct} onChange={setPickedProduct} className="min-w-[14rem] flex-1" />
+          <ProductPicker mode="product" label="Chọn sản phẩm cho bộ nội dung" value={pickedProduct} onChange={setPickedProduct} className="min-w-[14rem] flex-1" />
           <button
             onClick={() => pickedProduct && setLoadedId(pickedProduct.id)}
             disabled={!pickedProduct}
@@ -3290,10 +3292,10 @@ function ContentKitEditor({
         faqs: faqs.filter((f) => f.q.trim() && f.a.trim()),
       }),
     onSuccess: () => {
-      setMsg({ ok: true, text: 'Đã lưu Content Kit!' });
+      setMsg({ ok: true, text: 'Đã lưu bộ nội dung!' });
       void qc.invalidateQueries({ queryKey: ['admin-content-kit', productId] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi lưu Content Kit' }),
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi lưu bộ nội dung' }),
   });
 
   const setFaq = (i: number, patch: Partial<ContentKitFaq>) =>
@@ -3371,7 +3373,7 @@ function ContentKitEditor({
           disabled={save.isPending}
           className={BTN_PRIMARY}
         >
-          {save.isPending ? 'Đang lưu…' : 'Lưu Content Kit'}
+          {save.isPending ? 'Đang lưu…' : 'Lưu bộ nội dung'}
         </button>
         {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</span>}
       </div>

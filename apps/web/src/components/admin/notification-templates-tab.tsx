@@ -33,7 +33,7 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
     <div className="space-y-3">
       <Notice tone={missing > 0 || zns === 0 ? 'warning' : 'info'}>
         {zns === 0
-          ? 'Chưa có mẫu nào gửi qua ZNS: mọi thông báo (đơn hàng, nhắc điểm sắp hết hạn, voucher...) chỉ hiện khi khách tự mở app. '
+          ? 'Chưa có mẫu nào gửi qua ZNS: mọi thông báo (đơn hàng, nhắc điểm sắp hết hạn, mã giảm giá...) chỉ hiện khi khách tự mở app. '
           : `${zns} mẫu đang gửi qua ZNS. `}
         {missing > 0 && `${missing} mẫu kênh ZNS chưa có mã mẫu nên đang chỉ gửi trong app. `}
         Đăng ký mẫu ZNS trên Zalo (Zalo duyệt trong 7–14 ngày), duyệt xong thì nhập mã mẫu ở đây. Chưa đăng ký được thì nhờ người quản trị kỹ thuật.

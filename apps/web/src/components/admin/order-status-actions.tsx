@@ -35,7 +35,7 @@ const ACTIONS: readonly OrderStatusAction[] = [
   { status: 'PACKED', label: 'Đã đóng gói', className: `${ACTION_BASE} bg-sage-700 text-stone-0 hover:brightness-90`, confirm: false },
   { status: 'SHIPPING', label: 'Giao vận', className: `${ACTION_BASE} bg-forest-800 text-stone-0 hover:brightness-90`, confirm: false },
   { status: 'DELIVERED', label: 'Đã giao hàng', className: `${ACTION_BASE} bg-forest-600 text-stone-0 hover:bg-forest-700`, confirm: true },
-  { status: 'CANCELLED', label: 'Hủy đơn', className: `${ACTION_BASE} border border-danger-fg text-danger-fg hover:bg-danger-bg`, confirm: true },
+  { status: 'CANCELLED', label: 'Huỷ đơn', className: `${ACTION_BASE} border border-danger-fg text-danger-fg hover:bg-danger-bg`, confirm: true },
 ];
 
 /**

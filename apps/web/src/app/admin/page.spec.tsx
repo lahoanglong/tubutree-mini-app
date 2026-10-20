@@ -386,7 +386,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Người bán')).toEqual(
       expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Danh mục sản phẩm', 'Đại lý & công nợ', 'Gian hàng']),
     );
-    expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ']);
+    expect(group('Khuyến mãi')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
@@ -412,7 +412,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Việc cần xử lý');
     expect(mocks.inbox).toHaveBeenCalled();
-    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Tổng quan KPI')!);
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Tổng quan chỉ số')!);
     await flush();
     expect(window.location.search).toBe('?tab=dashboard');
     expect(container.textContent).toContain('Doanh thu đã thu');
@@ -802,7 +802,7 @@ describe('admin/page — tab Người dùng', () => {
   });
 
   // ADMINOPS-11: trước đây không tìm được người dùng (listUsers chỉ gửi page) và không có cách khoá tài khoản gian lận.
-  it('ô tìm kiếm gửi từ khoá lên API và quay về trang 1; Xóa lọc bỏ từ khoá', async () => {
+  it('ô tìm kiếm gửi từ khoá lên API và quay về trang 1; Xoá lọc bỏ từ khoá', async () => {
     mocks.listUsersArgs = [];
     const { container } = await openUsers();
     const input = container.querySelector('input[type="search"]') as HTMLInputElement;
@@ -811,7 +811,7 @@ describe('admin/page — tab Người dùng', () => {
     act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
     await flush();
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0944']);
-    const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xóa lọc')!;
+    const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xoá lọc')!;
     act(() => clear.click());
     await flush();
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined]);
@@ -952,6 +952,26 @@ describe('admin/page — tab Người dùng', () => {
     mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
     await answerDialog(true);
     expect(mocks.setUserRole).toHaveBeenCalledWith('0955555555', 'CUSTOMER', undefined);
+  });
+
+  it('Q24: hạ về Khách hàng nói rõ chỉ là tạm ngừng, người này tự đăng ký CTV lại được; đích khác không nói câu này', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    selectValue(roleSelect, 'CUSTOMER');
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    act(() => grant.click());
+    await flush();
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.',
+    );
+    await answerDialog(false);
+
+    selectValue(roleSelect, 'STAFF');
+    act(() => grant.click());
+    await flush();
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).not.toContain('tự đăng ký CTV lại');
+    await answerDialog(false);
   });
 
   it('D15-02: lời cảnh báo bám đúng vai trò đích (khớp admin.service: nhóm việc chỉ mất khi đích khác STAFF, cờ đối tác chỉ tắt khi đích là CUSTOMER/AFFILIATE)', async () => {
@@ -1096,7 +1116,7 @@ describe('admin/page — tab Voucher', () => {
 
   it('Tạo voucher khoá tới khi có mã, gửi đúng dữ liệu; thành công báo success, lỗi báo danger', async () => {
     const { container } = await openCoupons();
-    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo voucher')!;
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
     expect(create.disabled).toBe(true);
     expect(create.className).toContain('bg-forest-600');
     expect(create.className).toContain('min-h-[44px]');
@@ -1109,7 +1129,7 @@ describe('admin/page — tab Voucher', () => {
     expect(mocks.createCoupon).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'WELCOME30', type: 'PERCENT', value: 10, perUserLimit: 1, scope: 'PUBLIC' }),
     );
-    const ok = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Đã tạo voucher!')!;
+    const ok = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Đã tạo mã giảm giá!')!;
     expect(ok.className).toContain('text-success-fg');
 
     mocks.createCoupon.mockRejectedValueOnce(new Error('Mã đã tồn tại'));
@@ -1125,7 +1145,7 @@ describe('admin/page — tab Voucher', () => {
     typeInto(codeInput, ' summer 10 ');
     expect(codeInput.value).toBe('SUMMER10');
     mocks.createCoupon.mockResolvedValueOnce({});
-    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo voucher')!.click());
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!.click());
     await flush();
     expect(mocks.createCoupon).toHaveBeenCalledWith(expect.objectContaining({ code: 'SUMMER10' }));
   });
@@ -1410,7 +1430,7 @@ describe('admin/page — tab Flash Sale', () => {
       startAt: new Date('2026-10-20T08:00').toISOString(),
       endAt: new Date('2026-10-21T08:00').toISOString(),
     });
-    expect(para(container, 'Đã tạo đợt flash sale!').className).toContain('text-success-fg');
+    expect(para(container, 'Đã tạo đợt giờ vàng!').className).toContain('text-success-fg');
 
     typeInto(inputs[0]!, 'Đợt hai');
     typeInto(inputs[1]!, '2026-10-20T08:00');
@@ -1850,7 +1870,7 @@ describe('admin/page — tab Content Kit CTV', () => {
     expect(add.className).toContain('text-forest-700');
 
     typeInto(areas[2]!, 'https://v.test/1\n\n https://v.test/2 ');
-    const save = btn(container, 'Lưu Content Kit');
+    const save = btn(container, 'Lưu bộ nội dung');
     expect(save.className).toContain('bg-forest-600');
     mocks.saveContentKit.mockResolvedValueOnce({});
     click(save);
@@ -1861,7 +1881,7 @@ describe('admin/page — tab Content Kit CTV', () => {
       videoUrls: ['https://v.test/1', 'https://v.test/2'],
       faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }],
     });
-    expect(para(container, 'Đã lưu Content Kit!').className).toContain('text-success-fg');
+    expect(para(container, 'Đã lưu bộ nội dung!').className).toContain('text-success-fg');
 
     mocks.saveContentKit.mockRejectedValueOnce(new Error('Quá dài'));
     click(save);
@@ -2309,11 +2329,11 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Báo cáo',
       'Cộng đồng',
       'Đổi rác',
-      'Voucher',
-      'Flash Sale',
+      'Mã giảm giá',
+      'Giờ vàng',
       'Câu hỏi thường gặp',
-      'Content Kit CTV',
-      'Academy',
+      'Bộ nội dung CTV',
+      'Học viện CTV',
       'Mẫu thông báo',
     ]);
     expect(mocks.refundsCalls).toBe(0);
@@ -2361,7 +2381,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
     const labels = [...container.querySelectorAll('button')].map((b) => b.textContent ?? '');
     expect(labels.some((l) => l.includes('Xuất CSV'))).toBe(true);
     expect(labels).toContain('Đã nhận tiền');
-    for (const bad of ['Hủy đơn', 'Đã đóng gói', 'Giao vận', 'Đã giao hàng', 'Xác nhận']) expect(labels).not.toContain(bad);
+    for (const bad of ['Huỷ đơn', 'Đã đóng gói', 'Giao vận', 'Đã giao hàng', 'Xác nhận']) expect(labels).not.toContain(bad);
     expect(labels.some((l) => l.includes('Đẩy lại Pancake'))).toBe(false);
   });
 
@@ -3246,7 +3266,7 @@ describe('admin/page — UAT ui-admin-2', () => {
       window.history.replaceState(null, '', '/admin?tab=coupons');
       const { container } = await mount();
       const form = container.querySelector('[data-testid="coupon-create-form"]')!;
-      for (const t of ['Mã voucher', 'Giá trị', 'Đơn tối thiểu (đ)', 'Giảm tối đa (đ)', 'Tổng lượt dùng', 'Lượt / khách', 'Bắt đầu từ ngày', 'Hết hạn ngày']) {
+      for (const t of ['Mã giảm giá', 'Giá trị', 'Đơn tối thiểu (đ)', 'Giảm tối đa (đ)', 'Tổng lượt dùng', 'Lượt / khách', 'Bắt đầu từ ngày', 'Hết hạn ngày']) {
         const l = labelOf(form, t);
         expect(l, t).toBeDefined();
         expect(l!.querySelector('input'), t).not.toBeNull();
