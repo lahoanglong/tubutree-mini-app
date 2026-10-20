@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import BrandPage, { generateMetadata } from './page';
+import BrandPage, { generateMetadata, revalidate } from './page';
 
 const mocks = vi.hoisted(() => ({ brand: null as unknown }));
 
@@ -207,5 +207,12 @@ describe('trang nhãn hàng — trạng thái rỗng (D5-05)', () => {
 
   it('nhãn có sản phẩm: không hiện thông báo rỗng', async () => {
     expect((await html()).textContent).not.toContain('Nhãn hàng chưa có sản phẩm đang bán');
+  });
+});
+
+describe('/brand/[slug] — hạn trang dựng sẵn', () => {
+  it('trang nhãn làm mới tối đa 60 giây để nhãn gỡ đăng không còn hiện lâu; vẫn dựng phía server cho SEO', () => {
+    expect(revalidate).toBeLessThanOrEqual(60);
+    expect(BrandPage.constructor.name).toBe('AsyncFunction');
   });
 });

@@ -163,3 +163,13 @@ describe('getStorefront — ảnh do chính API phục vụ (D3-10)', () => {
     await expect(getStorefront('x')).resolves.toMatchObject({ avatarUrl: '//cdn.example/a.jpg' });
   });
 });
+
+// Nhãn gỡ đăng phải biến mất trong tối đa 60 giây (admin không gọi làm mới trang được): Data Cache của lần đọc nhãn không quá 60 giây.
+describe('getBrand — hạn bộ nhớ đệm', () => {
+  it('đọc /brand/public/<slug> với revalidate không quá 60 giây', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(res(200, { id: 'b1' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await getBrand('fuwa3e');
+    expect((fetchMock.mock.calls[0]![1] as { next: { revalidate: number } }).next.revalidate).toBeLessThanOrEqual(60);
+  });
+});
