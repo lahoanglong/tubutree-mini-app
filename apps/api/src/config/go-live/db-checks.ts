@@ -30,8 +30,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
 /**
  * Migration nặng đã biết trong danh sách chờ áp khi PROD còn ở bản cũ hơn (không chỉ các migration của đợt). `ordersLock`: viết
  * lại bảng orders hoặc dựng chỉ mục (không CONCURRENTLY) trên đó. Các cái còn lại giữ khoá trên users hoặc points_transactions
- * (UPDATE cả bảng, ràng buộc, chỉ mục duy nhất một phần). Chưa đo riêng từng cái: ước theo migration r6. Spec quét thư mục
- * migrations để danh sách này không thiếu cái mới.
+ * (UPDATE cả bảng, ràng buộc, chỉ mục duy nhất một phần). Chưa đo riêng từng cái: ước theo migration r6. Spec quét mọi migration sau
+ * bản PROD (UPDATE, chỉ mục, ràng buộc, LOCK TABLE, SQL động) để danh sách này không thiếu cái mới và cái nào đụng orders thì có ordersLock.
  */
 export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean }> = [
   { name: '20261010170000_orders_invoice_open_index', ordersLock: true },
@@ -49,7 +49,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261018000100_n1_indexes', ordersLock: false },
   { name: '20261018140000_lr_reports_source_indexes', ordersLock: true },
   { name: '20261018170100_lr_orders_filter_indexes', ordersLock: true },
-  { name: '20261018210000_points_1d', ordersLock: false },
+  { name: '20261018210000_points_1d', ordersLock: true },
   { name: '20261019100000_external_orders', ordersLock: false },
   { name: '20261019170000_chat_review1', ordersLock: false },
   { name: '20261020000000_waste_exchange', ordersLock: false },
@@ -179,7 +179,7 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
             G_DB,
             'db.pending_scope',
             scopeTitle,
-            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, 6)}` : ''}`,
+            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, HEAVY_MIGRATIONS.length)}` : ''}`,
             'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài sáu cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
           ),
     );
@@ -216,14 +216,15 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
 function ordersLockCheck(s: DbSnapshot): CheckResult {
   const title = 'Số đơn và thời gian khoá bảng orders';
   const applied = new Set(s.appliedMigrations);
-  if (applied.has(ORDERS_LOCK_MIGRATION)) {
-    return pass(G_DB, 'db.orders_lock', title, `${s.orderCount.toLocaleString('vi-VN')} đơn; migration khoá bảng đã áp xong, không còn rủi ro này`);
-  }
   const expected = new Set(s.expectedMigrations);
   const heavy = HEAVY_MIGRATIONS.filter((h) => h.ordersLock && expected.has(h.name) && !applied.has(h.name)).map((h) => h.name);
+  if (applied.has(ORDERS_LOCK_MIGRATION) && heavy.length === 0) {
+    return pass(G_DB, 'db.orders_lock', title, `${s.orderCount.toLocaleString('vi-VN')} đơn; migration khoá bảng đã áp xong, không còn rủi ro này`);
+  }
   const seconds = estimateOrdersLockSeconds(s.orderCount, heavy.length);
   const window = Math.ceil(recommendedWindowSeconds(s.orderCount, heavy.length) / 60);
-  const many = heavy.length > 1 ? ` (${heavy.length} migration nặng trên orders chờ áp, mỗi cái tính ngang migration r6: ${listNames(heavy, 6)})` : '';
+  const named = heavy.length > 1 || (heavy.length === 1 && heavy[0] !== ORDERS_LOCK_MIGRATION);
+  const many = named ? ` (${heavy.length} migration nặng trên orders chờ áp, mỗi cái tính ngang migration r6: ${listNames(heavy, HEAVY_MIGRATIONS.length)})` : '';
   const detail = `${s.orderCount.toLocaleString('vi-VN')} đơn, ước tính khoá orders ~${seconds} giây${many}, cửa sổ nên xin ≥ ${window} phút`;
   if (s.orderCount < ORDERS_LOCK_SMALL) return pass(G_DB, 'db.orders_lock', title, detail);
   return warn(G_DB, 'db.orders_lock', title, detail, 'Đặt hàng và webhook bị chặn suốt lúc khoá: chọn giờ vắng nhất, báo trước, xin cửa sổ theo số trên (runbook mục 3).');

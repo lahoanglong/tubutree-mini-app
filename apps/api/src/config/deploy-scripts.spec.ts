@@ -572,6 +572,19 @@ describe('tài liệu: câu chữ khớp mã (D10-03, D10-05)', () => {
     expect(line).not.toMatch(/\d+ trên \d+/);
     expect(line).not.toMatch(/`\/` hoặc `\+`, làm URL hỏng/);
     expect(line).toContain('P1013');
+    expect(line).not.toContain('gần như luôn');
+  });
+
+  it('pilot-order-playbook 1.5: không khẳng định hệ thống nhớ cấu hình 1 phút (SystemConfigService.set xoá cache ngay khi ghi)', () => {
+    const doc = readFileSync(join(REPO, 'docs/launch/pilot-order-playbook.md'), 'utf8');
+    expect(doc).not.toContain('hệ thống nhớ giá trị cấu hình 1 phút');
+  });
+
+  it('runbook 1.0: points_1d tính vào cửa sổ, và hàng các migration chỉ thêm không nói chung chung là không đổi dữ liệu', () => {
+    const runbook = readFileSync(join(REPO, 'docs/launch/deploy-rollback-runbook.md'), 'utf8');
+    const row = runbook.split('\n').find((l) => l.startsWith('| `20261018210000_points_1d`')) ?? '';
+    expect(row).toContain('go-live:check đếm');
+    expect(runbook).not.toContain('Mỗi cái chỉ thêm, không đổi dữ liệu |');
   });
 
   it('pilot-order-playbook 1.5: dòng Bằng chứng nói trong giờ yên tĩnh log ZNS ở PENDING tới 08:00 là đúng, và chờ cache cấu hình 1 phút', () => {
