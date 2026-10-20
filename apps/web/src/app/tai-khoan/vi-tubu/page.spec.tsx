@@ -630,6 +630,19 @@ describe('/tai-khoan/vi-tubu — rút gặp lỗi chưa rõ kết quả (95d6a68
     expect(keys()[2]).toBe(keys()[0]);
   });
 
+  it('2xx nhưng thân không phải JSON (proxy cắt cụt): coi là chưa rõ kết quả, bấm lại vẫn key cũ', async () => {
+    failWith(new SyntaxError("Unexpected token '<'"));
+    const c = await mount();
+    await openSheet(c);
+    await fillBank(c, '400000');
+    click(submitBtn());
+    await flush(6);
+    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toContain('chưa rõ lệnh rút');
+    click(submitBtn());
+    await flush(6);
+    expect(keys()[1]).toBe(keys()[0]);
+  });
+
   it('máy chủ từ chối rõ ràng (400): lần bấm sau dùng key mới', async () => {
     failWith(new ApiError('Số dư ví không đủ.', 400), new ApiError('Số dư ví không đủ.', 400));
     const c = await mount();

@@ -17,7 +17,6 @@ import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { ApiError } from '@/lib/client-api';
-import { isOutcomeUnknown } from '@/lib/checkout-waste';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -98,10 +97,10 @@ export default function WalletPage() {
       setAmount('');
       void qc.invalidateQueries({ queryKey: walletQuery(coreHttp).queryKey });
     },
-    // Quá thời gian/mất mạng/5xx: API có thể đã trừ ví và tạo lệnh rút. GIỮ key để bấm lại trả đúng lệnh đó thay vì rút thêm
+    // Quá thời gian/mất mạng/5xx, hoặc 2xx mà thân không đọc được (proxy cắt cụt, trang chặn trả HTML): API có thể đã trừ ví và tạo lệnh rút. GIỮ key để bấm lại trả đúng lệnh đó thay vì rút thêm
     // lần nữa; chỉ đổi key khi API đã từ chối rõ ràng (4xx, kể cả "key đã dùng với số tiền khác") nên không có gì được ghi.
     onError: (e) => {
-      if (isOutcomeUnknown(e)) {
+      if (!(e instanceof ApiError) || e.status >= 500) {
         const amountSent = Number(amount);
         withdrawUnresolved.current = {
           amount: amountSent,
