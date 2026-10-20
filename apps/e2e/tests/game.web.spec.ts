@@ -267,7 +267,7 @@ test.describe('Trợ lý AI (/tu-van)', () => {
     // Trang chủ mở sau khi chuyển hướng gọi nhiều khối không liên quan tới luồng này.
     api.allowUnmocked(
       'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/active', 'GET /flash-sales/upcoming',
-      'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you',
+      'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you', 'GET /me/wishlist/ids',
     );
     await page.goto('/tu-van');
     await expect(page).toHaveURL(/\/$/);
