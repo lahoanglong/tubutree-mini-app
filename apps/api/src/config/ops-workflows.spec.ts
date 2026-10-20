@@ -83,6 +83,25 @@ describe('docs/GO-LIVE-KEYS.md', () => {
   });
 });
 
+describe('tham số discount của mẫu ZNS GROUP_BUY_SUCCESS là phần trăm (groupbuy.service)', () => {
+  const keys = read('docs/GO-LIVE-KEYS.md');
+  const playbook = read('docs/launch/pilot-order-playbook.md');
+  const discountRow = keys.split('\n').find((l) => /\|\s*`discount`\s*\|/.test(l)) ?? '';
+
+  it('mã gửi discount dạng "N%" nên bảng khoá ghi mức giảm theo %, ví dụ có dấu % và không còn mô tả "số tiền mã giảm"', () => {
+    expect(read('apps/api/src/modules/groupbuy/groupbuy.service.ts')).toContain('discount: `${terms.pct}%`');
+    expect(discountRow).toMatch(/%/);
+    expect(discountRow).not.toMatch(/Số tiền mã giảm/);
+    expect(discountRow).not.toMatch(/`15\.000`/);
+  });
+
+  it('GO-LIVE-KEYS và playbook dặn mẫu có chữ "đ" sau discount phải nộp lại', () => {
+    const rule = /chữ "đ" sau[^\n]*discount[^\n]*nộp lại/;
+    expect(keys).toMatch(rule);
+    expect(playbook).toMatch(rule);
+  });
+});
+
 describe('OPS_ALERT_WEBHOOK_URL qua quy trình chuẩn (R2-PLATFORM-3)', () => {
   const wf = read('.github/workflows/ops.yml');
   const doc = read('docs/GO-LIVE-KEYS.md');
