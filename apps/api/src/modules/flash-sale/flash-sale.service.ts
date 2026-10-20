@@ -358,7 +358,7 @@ export class FlashSaleService {
       if (staffCreated) {
         // Dời giờ có thể làm hai đợt của cùng nhân viên chồng giờ, nên trần đơn (addItem chỉ kiểm lúc thêm dòng) phải kiểm lại ở đây, dưới cùng
         // khoá với addItem. Chỉ chặn khi lần dời làm TĂNG mức giảm một đơn: đợt đã vượt trần từ trước (quản trị viên thêm dòng) vẫn được thu
-        // hẹp hay sửa tiêu đề giờ, không thì chẳng ai gỡ được đợt đó bằng cách dời giờ.
+        // hẹp hay dời giờ mà không tăng mức giảm, không thì chẳng ai gỡ được đợt đó bằng cách dời giờ.
         const creator = fresh.createdBy!;
         await this.lockStaffOrderCap(tx, creator);
         const before = await this.staffOrderExposure(tx, creator, fresh.startAt, fresh.endAt, id);
@@ -536,7 +536,11 @@ export class FlashSaleService {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flash.staff_order_cap:${createdBy}`}))`;
   }
 
-  /** Tổng (giá gốc − giá flash) × suất mỗi khách của mọi dòng thuộc đợt của `createdBy` chồng khung [start, end), cộng cả đợt `alsoSaleId`. */
+  /**
+   * Tổng (giá gốc − giá flash) × suất mỗi khách của mọi dòng thuộc đợt của `createdBy` chồng khung [start, end), cộng cả đợt `alsoSaleId`.
+   * Khung đã hết giờ (end <= bây giờ) rỗng: không đếm đợt nào khác, không thì mức "trước" của một đợt đã kết thúc bị thổi phồng bởi các đợt
+   * đang chạy và kéo dài đợt đó sẽ lách được trần.
+   */
   private async staffOrderExposure(tx: Prisma.TransactionClient, createdBy: string, start: Date, end: Date, alsoSaleId?: string): Promise<number> {
     const from = new Date(Math.max(start.getTime(), Date.now()));
     const rows = await tx.$queryRaw<{ exposure: bigint | number | null }[]>`
@@ -544,7 +548,7 @@ export class FlashSaleService {
       FROM "flash_sale_items" fsi
       JOIN "flash_sales" fs ON fs."id" = fsi."flashSaleId"
       JOIN "variations" v ON v."id" = fsi."variationId"
-      WHERE fs."createdBy" = ${createdBy} AND ((fs."startAt" < ${end} AND fs."endAt" > ${from}) OR fs."id" = ${alsoSaleId ?? null})`;
+      WHERE fs."createdBy" = ${createdBy} AND ((fs."startAt" < ${end} AND fs."endAt" > ${from} AND ${from} < ${end}) OR fs."id" = ${alsoSaleId ?? null})`;
     return Number(rows[0]?.exposure ?? 0);
   }
 

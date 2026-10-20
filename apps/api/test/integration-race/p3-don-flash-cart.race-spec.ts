@@ -155,6 +155,21 @@ describe('Đơn P3: flash sale dưới khoá, mua lại một lần ghi (real Po
     });
   });
 
+  describe('trần mỗi đơn của nhân viên khi PATCH kéo dài đợt đã kết thúc', () => {
+    it('đợt S đã hết giờ + đợt T đang chạy cùng người tạo: kéo S sống lại làm hai đợt chồng nhau vượt trần thì bị chặn', async () => {
+      const staff = await user('STAFF');
+      const s = await sale(staff.id, -3, -1);
+      const t = await sale(staff.id, -2.5, 24);
+      const [a, b] = await variations(2);
+      // 20.000đ × 3 suất = 60.000đ mỗi đợt: riêng lẻ dưới trần 100.000đ, chồng giờ thì 120.000đ.
+      await prisma.flashSaleItem.create({ data: { flashSaleId: s.id, variationId: a!, flashPrice: 80_000, quota: 10, perUserLimit: 3 } });
+      await prisma.flashSaleItem.create({ data: { flashSaleId: t.id, variationId: b!, flashPrice: 80_000, quota: 10, perUserLimit: 3 } });
+      const actor = { id: staff.id, staff: true };
+      await expect(flash.updateSale(s.id, { endAt: new Date(Date.now() + HOUR).toISOString() }, actor)).rejects.toThrow(/Một đơn mua đủ/);
+      expect((await prisma.flashSale.findUniqueOrThrow({ where: { id: s.id } })).endAt.getTime()).toBeLessThan(Date.now());
+    });
+  });
+
   describe('addItems với topUp (mua lại một lần ghi)', () => {
     it('phần bù gộp vào dòng gốc: một dòng giỏ, một sự kiện add_to_cart với số lượng gộp; phần bù vượt tồn bị bỏ', async () => {
       const customer = await user('CUSTOMER');

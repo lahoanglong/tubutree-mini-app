@@ -181,6 +181,15 @@ describe('FlashSaleService.updateSale — dời giờ không được làm hai �
     expect(prisma.flashSale.update).not.toHaveBeenCalled();
   });
 
+  it('đợt đã kết thúc: câu tính mức giảm không đếm đợt khác khi khung [từ, đến) rỗng (không thổi phồng mức "trước" để lách trần)', async () => {
+    const { prisma, svc } = setup();
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-05T13:00:00Z').getTime());
+    await svc().updateSale('s1', { endAt: '2026-07-06T00:00:00Z' }, ADMIN_ACTOR).catch(() => undefined);
+    const sqls = prisma.$queryRaw.mock.calls.map((c: unknown[]) => (c[0] as readonly string[]).join('?').replace(/\s+/g, ' '));
+    expect(sqls.length).toBeGreaterThan(0);
+    for (const sql of sqls) expect(sql).toMatch(/"startAt" < \? AND fs\."endAt" > \? AND \? < \?/);
+  });
+
   it('đợt đã vượt trần từ trước (admin thêm dòng): PATCH không làm tăng mức giảm (thu hẹp giờ, giữ nguyên) vẫn được', async () => {
     const shrink = setup();
     exposures(shrink.prisma, 160_000, 160_000);
