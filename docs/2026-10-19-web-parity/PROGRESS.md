@@ -99,3 +99,12 @@ Cuốn chiếu thay vì chờ hết đợt: luôn giữ tối đa 4 lane chạy 
 
 - Thông báo REORDER_REMINDER: Mini App mở ReorderSheet (tra purchased-items theo variation_id, chọn mặt hàng bằng pickReminderItem); web hiện chỉ có link tới trang sản phẩm vì ReorderSheet của lane order chưa gộp vào web/integration. Chưa ngang Mini App. Làm tiếp sau khi lane order gộp: nhánh 'reorder' trong `thong-bao/page.tsx` gọi purchased-items, mở sheet, có ref chặn bấm đúp, chỉ rơi về link khi không tìm thấy.
 - Lỗi chung với Mini App (ngoài phạm vi lane): `edit-profile.tsx` của Mini App gửi `dob` ở mọi lần lưu; API chỉ cho đặt ngày sinh một lần nên khách đã có ngày sinh sẽ bị 400 và không lưu được tên/email. Web đã sửa (không gửi lại dob đã đặt); Mini App cần chủ duyệt sửa.
+
+## Web điện thoại giống Mini App (nhánh `web/mobile-visual`, cập nhật 2026-10-20 07:55)
+
+- Vỏ trang `mshell` gộp 60b7fd7e. Bốn lane theo nhóm màn đã gộp: mv-pro fb36217f, mv-loyalty e14ae81a, mv-shop e78718b5, mv-order 3b5da802. Mỗi lane review Opus (mv-order 3 lượt, còn lại 2), gate xanh. Nhánh gộp 3b5da802: tsc web 0 lỗi, vitest web 383 file / 6529 test xanh cả `TZ=UTC`.
+- E2e đã chạy lại sau lane: loyalty/community/game 80/80, shop 44 passed (sau khi mock `/me/wishlist/ids`). Ảnh 51/51: mv-pro-4, mv-loyalty-3, mv-shop-4. Chưa có: e2e vùng đơn hàng và ảnh mv-order sau review. Lý do: 07:40 Colima không chuyển tiếp cổng cho container mới (P1001); chủ dự án chọn tự chạy `colima restart`.
+- Đang chạy (07:55) từ 3b5da802: `mshell2` (thanh tiêu đề trắng dùng chung, nút lùi), `mv-uat2` (web theo Mini App lô 2/4/5 của phiên UAT: QR chuyển khoản, rút Ví, giờ máy chủ, đơn sỉ, nhãn sổ điểm, mua chung theo %), `mv-uat3` (đợt giao diện ui-miniapp-1/3 của UAT: chữ, giỏ, thanh toán, Cộng đồng, danh mục, tương phản, ô nhập). Cấu hình ở `lanes/`. Mini App nguồn đọc từ nhánh cục bộ `uat/int` (không gộp nhánh đó).
+- Phiên bị ngắt lúc 00:17 ngày 2026-10-20 (workflow mv-order dừng ở bước báo cáo, báo cáo viết bù ở f656291f).
+- Sau ba lane: gate đủ, Playwright web và Mini App đầy đủ, chụp ảnh cuối, PR nháp `web/mobile-visual` vào main (không merge, không deploy), báo phiên UAT.
+- Câu hỏi buổi sáng cho chủ: chân trang gọn ở điện thoại (giữ vì hotline và chính sách, hay ẩn như Mini App); các câu hỏi trong `impl/mv-*.md`.
