@@ -240,7 +240,7 @@ export default function CartPage() {
                 <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
                 <span>
                   Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí giao hàng
-                  {hasMerchant ? ' phần hàng Tubu Tree giao' : ''}
+                  {hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}
                 </span>
               </div>
             )}
