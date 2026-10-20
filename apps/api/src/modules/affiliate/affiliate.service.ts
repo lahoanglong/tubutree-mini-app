@@ -299,7 +299,7 @@ export class AffiliateService {
     const startOfMonth = month.start;
     const startOfDay = vnDayStart(now);
 
-    const [today, monthCommission, pending, approved, links, monthRevenue, withdrawing] = await Promise.all([
+    const [today, monthCommission, pending, approved, links, conversions, monthRevenue, withdrawing] = await Promise.all([
       this.sumCommission(userId, startOfDay),
       this.sumCommission(userId, startOfMonth),
       this.prisma.commission.aggregate({
@@ -312,8 +312,11 @@ export class AffiliateService {
       }),
       this.prisma.affiliateLink.aggregate({
         where: { userId },
-        _sum: { clicks: true, conversions: true },
+        _sum: { clicks: true },
       }),
+      // Đơn và lượt chạm không lưu mã link nên cột affiliate_links.conversions không có chỗ tăng; "chuyển đổi" = số đơn đã ghi công.
+      // Mỗi (đơn, CTV) tối đa một dòng hoa hồng (unique) nên webhook lặp không đếm đôi; đơn huỷ/trả (REJECTED) không tính.
+      this.prisma.commission.count({ where: { affiliateUserId: userId, status: { not: 'REJECTED' } } }),
       // Doanh số tháng = doanh số ĐÃ CHỐT (cùng định nghĩa với bậc/mốc — xem ctv-milestones.ts).
       // Trước đây: orderTotal mọi commission khác REJECTED tạo trong tháng → gồm cả đơn còn huỷ
       // được, hàng bị chặn affiliate và phí ship.
@@ -331,7 +334,7 @@ export class AffiliateService {
       pendingCommission: pending._sum.amount ?? 0,
       withdrawableCommission: approved._sum.amount ?? 0,
       totalClicks: links._sum.clicks ?? 0,
-      totalConversions: links._sum.conversions ?? 0,
+      totalConversions: conversions,
       monthRevenue,
       // bonusPct: 0 CHỈ để tương thích bản miniapp cũ còn trên Zalo (render "Bonus +{bonusPct}%" —
       // thiếu field sẽ hiện "+undefined%"). Luôn 0 vì không có luồng nào trả khoản này; bản mới không đọc.

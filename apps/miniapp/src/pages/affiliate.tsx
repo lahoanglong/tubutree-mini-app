@@ -623,7 +623,7 @@ function Dashboard() {
                     {l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}
                   </Text>
                   <Text variant="caption" tone="tertiary" as="div">
-                    {l.clicks} click · {l.conversions} đơn
+                    {l.clicks} click
                   </Text>
                 </div>
                 <Button

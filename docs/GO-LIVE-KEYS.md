@@ -95,12 +95,14 @@ Dùng cho: gửi **ZNS** (mời đánh giá, mua chung thành công/thất bại
    | `REVIEW_REQUEST` | `order_code` | Mã đơn đã giao | `TUBU48213` |
    | | `product` | Tên sản phẩm chưa đánh giá; đơn nhiều sản phẩm thì "<tên SP đầu> và N sản phẩm khác" | `Nước rửa chén bồ hòn và 2 sản phẩm khác` |
    | | `product_slug` | Đường dẫn sản phẩm, chỉ có khi sản phẩm có slug; để dựng link trong app, mẫu ZNS không cần dùng | `nuoc-rua-chen-bo-hon` |
-   | `GROUP_BUY_SUCCESS` | `discount` | Số tiền mã giảm, đã định dạng, không kèm "đ" | `15.000` |
+   | `GROUP_BUY_SUCCESS` | `discount` | Mức giảm theo %, đã kèm dấu %, mẫu không thêm "đ" (mã là % có trần, không phải số tiền cố định) | `15%` |
    | | `product` | Tên sản phẩm của nhóm; mã giảm chỉ dùng cho đúng sản phẩm này | `Nước rửa chén bồ hòn` |
    | | `code` | Mã giảm giá của chính người nhận (mỗi người một mã) | `GBUY-K3F9X2AB-7QZ41MNP` |
    | | `expires` | Hạn dùng mã, ngày/tháng/năm giờ VN (30 ngày kể từ lúc nhóm đủ người) | `16/11/2026` |
    | `GROUP_BUY_FAILED` | `product` | Tên sản phẩm của nhóm đã đóng | `Nước rửa chén bồ hòn` |
    | | `product_slug` | Đường dẫn sản phẩm, để dựng link trong app, mẫu ZNS không cần dùng | `nuoc-rua-chen-bo-hon` |
+
+   `discount` gửi dạng chữ "15%" (trước đây là số tiền "15.000"). Mẫu nào đã nộp hoặc đã duyệt có chữ "đ" sau `<discount>` (kiểu "mã giảm 15.000đ") thì phải nộp lại: khách sẽ nhận "15%đ", và nếu khai tham số kiểu số/tiền tệ thì Zalo có thể từ chối giá trị "15%". Khai `discount` là tham số văn bản.
 
    Mẫu ZNS chỉ nên khai các khoá có trong bảng. Chưa kiểm chứng với Zalo thật: Zalo có nhận `template_data` thừa khoá (ví dụ `product_slug` khi mẫu không khai) hay không. Nếu thử mà Zalo báo lỗi tham số, báo lại để bỏ `product_slug` khỏi dữ liệu gửi ZNS thay vì khai thêm tham số vô nghĩa.
 

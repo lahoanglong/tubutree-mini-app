@@ -291,7 +291,7 @@ describe('GroupBuyService.join', () => {
       const notify = jest.fn().mockResolvedValue(undefined);
       await new GroupBuyService(prisma, makeConfig(), { notify } as never).join('u1', 'gbABC');
       expect(notify).toHaveBeenCalledWith('userZZZ', 'GROUP_BUY_SUCCESS', {
-        discount: '15.000',
+        discount: '15%',
         product: 'Nước rửa chén',
         code: 'GBUY-GBABC-USERZZZ',
         expires: '16/11/2026',
