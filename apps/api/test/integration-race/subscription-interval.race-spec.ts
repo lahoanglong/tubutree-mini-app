@@ -69,7 +69,7 @@ describe('Đổi chu kỳ gói định kỳ (real Postgres)', () => {
     await prisma.subscription.update({ where: { id: subId }, data: { lastOrderId: order.id, nextRunAt: new Date(createdAt.getTime() + 4 * WEEK) } });
   }
 
-  it('ACTIVE có đơn kỳ trước: ghi chu kỳ 6 và nextRunAt = ngày đơn + 6 tuần', async () => {
+  it('ACTIVE có đơn kỳ trước: ghi chu kỳ 6 và nextRunAt = 0h VN ngày đơn + 6 tuần', async () => {
     const { u, sub } = await setup();
     const lastOrderAt = new Date(Date.now() - 7 * 864e5);
     await withLastOrder(u.id, sub.id, lastOrderAt);
@@ -78,7 +78,7 @@ describe('Đổi chu kỳ gói định kỳ (real Postgres)', () => {
 
     const row = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
     expect(row.intervalWeeks).toBe(6);
-    expect(row.nextRunAt.toISOString()).toBe(new Date(lastOrderAt.getTime() + 6 * WEEK).toISOString());
+    expect(row.nextRunAt.toISOString()).toBe(new Date(startOfVnDay(lastOrderAt).getTime() + 6 * WEEK).toISOString());
     expect(row.status).toBe('ACTIVE');
   });
 
@@ -102,6 +102,41 @@ describe('Đổi chu kỳ gói định kỳ (real Postgres)', () => {
     expect(row.nextRunAt.toISOString()).toBe(sub.nextRunAt.toISOString());
   });
 
+  it('đơn cron ghi lúc 03:00:00.200: đến ngày hẹn, đúng điều kiện quét của processDue (nextRunAt <= 03:00:00.010) vẫn bốc gói', async () => {
+    const { u, sub } = await setup();
+    const lastOrderAt = new Date(startOfVnDay().getTime() - 3 * 864e5 + 3 * 3600e3 + 200); // 03:00:00.200 giờ VN, 3 ngày trước
+    await withLastOrder(u.id, sub.id, lastOrderAt);
+
+    await subs.update(u.id, sub.id, { intervalWeeks: 6 });
+
+    const cronStartOnDueDay = new Date(startOfVnDay(lastOrderAt).getTime() + 6 * WEEK + 3 * 3600e3 + 10);
+    const picked = await prisma.subscription.findMany({
+      where: { id: sub.id, status: 'ACTIVE', nextRunAt: { lte: cronStartOnDueDay } },
+      select: { id: true },
+    });
+    expect(picked).toHaveLength(1);
+    const dayBefore = await prisma.subscription.findMany({
+      where: { id: sub.id, nextRunAt: { lte: new Date(cronStartOnDueDay.getTime() - 864e5) } },
+      select: { id: true },
+    });
+    expect(dayBefore).toHaveLength(0);
+  });
+
+  it('gói PAUSED đổi chu kỳ rồi bật lại: nextRunAt theo đơn kỳ gần nhất + chu kỳ mới, không giữ ngày của chu kỳ cũ', async () => {
+    const { u, sub } = await setup();
+    const lastOrderAt = new Date(Date.now() - 6 * 864e5);
+    await withLastOrder(u.id, sub.id, lastOrderAt);
+    await subs.setStatus(u.id, sub.id, 'PAUSED');
+
+    await subs.update(u.id, sub.id, { intervalWeeks: 10 });
+    await subs.setStatus(u.id, sub.id, 'ACTIVE');
+
+    const row = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
+    expect(row.status).toBe('ACTIVE');
+    expect(row.intervalWeeks).toBe(10);
+    expect(row.nextRunAt.toISOString()).toBe(new Date(startOfVnDay(lastOrderAt).getTime() + 10 * WEEK).toISOString());
+  });
+
   it('hai lần đổi song song (6 và 8): chu kỳ và ngày giao kế luôn khớp một trong hai, không lẫn nhau', async () => {
     const { u, sub } = await setup();
     const lastOrderAt = new Date(Date.now() - 7 * 864e5);
@@ -111,6 +146,6 @@ describe('Đổi chu kỳ gói định kỳ (real Postgres)', () => {
 
     const row = await prisma.subscription.findUniqueOrThrow({ where: { id: sub.id } });
     expect([6, 8]).toContain(row.intervalWeeks);
-    expect(row.nextRunAt.toISOString()).toBe(new Date(lastOrderAt.getTime() + row.intervalWeeks * WEEK).toISOString());
+    expect(row.nextRunAt.toISOString()).toBe(new Date(startOfVnDay(lastOrderAt).getTime() + row.intervalWeeks * WEEK).toISOString());
   });
 });

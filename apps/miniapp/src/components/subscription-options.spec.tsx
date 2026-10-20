@@ -53,10 +53,16 @@ describe('PaymentMethodPicker', () => {
 
 describe('nextRunAfterIntervalChange: cùng luật với API (Q22)', () => {
   const now = new Date('2026-10-20T05:00:00.000Z');
-  const sub = { status: 'ACTIVE' as const, intervalWeeks: 4, nextRunAt: '2026-11-07T03:00:00.000Z', lastOrderAt: '2026-10-10T03:00:00.000Z' };
+  const sub = { intervalWeeks: 4, nextRunAt: '2026-11-07T03:00:00.000Z', lastOrderAt: '2026-10-10T03:00:00.000Z' };
 
-  it('ACTIVE có đơn gần nhất: ngày đơn + chu kỳ mới', () => {
-    expect(nextRunAfterIntervalChange(sub, 6, now)?.toISOString()).toBe('2026-11-21T03:00:00.000Z');
+  it('ACTIVE có đơn gần nhất: 0h VN của ngày đơn + chu kỳ mới', () => {
+    expect(nextRunAfterIntervalChange(sub, 6, now)?.toISOString()).toBe('2026-11-20T17:00:00.000Z');
+  });
+
+  it('đơn cron ghi 03:00:00.200 giờ VN: vẫn neo 0h VN của ngày đơn, khớp API để ngày báo = ngày giao', () => {
+    expect(nextRunAfterIntervalChange({ ...sub, lastOrderAt: '2026-10-09T20:00:00.200Z' }, 6, now)?.toISOString()).toBe(
+      '2026-11-20T17:00:00.000Z',
+    );
   });
 
   it('mốc mới đã qua hoặc trong hôm nay → 0h ngày mai giờ VN', () => {
@@ -69,8 +75,17 @@ describe('nextRunAfterIntervalChange: cùng luật với API (Q22)', () => {
     expect(nextRunAfterIntervalChange({ ...sub, lastOrderAt: null }, 8, now)?.toISOString()).toBe('2026-11-07T03:00:00.000Z');
   });
 
-  it('không tính được: gói tạm dừng, cùng chu kỳ, hoặc API cũ chưa trả lastOrderAt', () => {
-    expect(nextRunAfterIntervalChange({ ...sub, status: 'PAUSED' }, 6, now)).toBeNull();
+  it('không phân biệt trạng thái gói: gói tạm dừng tính như gói đang chạy (API ghi sẵn ngày để bật lại giữ đúng)', () => {
+    expect(nextRunAfterIntervalChange(sub, 6, now)?.toISOString()).toBe('2026-11-20T17:00:00.000Z');
+  });
+
+  it('chưa có đơn nào nhưng ngày bắt đầu đã qua: không hứa ngày', () => {
+    expect(
+      nextRunAfterIntervalChange({ ...sub, lastOrderAt: null, nextRunAt: '2026-10-01T03:00:00.000Z' }, 8, now),
+    ).toBeNull();
+  });
+
+  it('không tính được: cùng chu kỳ, hoặc API cũ chưa trả lastOrderAt', () => {
     expect(nextRunAfterIntervalChange(sub, 4, now)).toBeNull();
     expect(nextRunAfterIntervalChange({ ...sub, lastOrderAt: undefined }, 6, now)).toBeNull();
   });

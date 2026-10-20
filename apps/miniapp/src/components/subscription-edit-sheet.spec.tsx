@@ -66,11 +66,14 @@ describe('SubscriptionEditSheet: đổi chu kỳ giao (Q22)', () => {
     expect(screen.queryByText(/Lần giao kế tiếp/)).toBeNull();
   });
 
-  it('gói tạm dừng: đổi được chu kỳ nhưng không hứa ngày, báo ngày tính lại khi bật lại', async () => {
+  it('gói tạm dừng: hiện ngày giao kế như gói đang chạy và nói rõ ngày chỉ đổi khi ngày đó đã qua lúc bật lại', async () => {
     renderSheet({ ...SUB, status: 'PAUSED' as never });
     fireEvent.click(await screen.findByRole('button', { name: '10 tuần' }));
-    expect(screen.queryByText(/Lần giao kế tiếp/)).toBeNull();
-    expect(screen.getByText('Gói đang tạm dừng: ngày giao kế tiếp được tính lại khi bạn bật lại gói.')).toBeInTheDocument();
+    expect(screen.getByText('Lần giao kế tiếp: 19/12/2026')).toBeInTheDocument();
+    expect(
+      screen.getByText('Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/được tính lại khi bạn bật lại gói/)).toBeNull();
   });
 
   it('subscriptionPatch: gửi intervalWeeks chỉ khi đổi, cùng các trường khác', () => {

@@ -407,18 +407,21 @@ export class SubscriptionsService {
   }
 
   /**
-   * Đổi chu kỳ: ngày giao kế = ngày đơn kỳ gần nhất + chu kỳ mới, không sớm hơn 0h ngày mai giờ VN (cùng mức báo
-   * trước tối thiểu của ngày bắt đầu lúc tạo gói, để cron 3h sáng không giao ngay trong ngày khách bấm lưu).
-   * Gói chưa ra đơn nào giữ nguyên ngày bắt đầu khách đã chọn: chu kỳ chỉ có nghĩa từ đơn thứ hai. Gói tạm dừng chỉ
-   * đổi chu kỳ; setStatus tự dời ngày giao khi bật lại. Bậc giảm tính theo số gói ACTIVE nên không bị đụng tới.
+   * Đổi chu kỳ: ngày giao kế = 0h VN của ngày đơn kỳ gần nhất + chu kỳ mới, không sớm hơn 0h ngày mai giờ VN (cùng mức
+   * báo trước tối thiểu của ngày bắt đầu lúc tạo gói, để cron 3h sáng không giao ngay trong ngày khách bấm lưu).
+   * Neo 0h chứ không neo giờ tạo đơn: createdAt của đơn cron luôn muộn hơn `now` lúc cron bắt đầu, neo thẳng thì đến
+   * ngày hẹn cron 3h chạy sớm hơn nextRunAt và lỡ nhịp một ngày so với ngày đã báo khách.
+   * Gói chưa ra đơn nào giữ nguyên ngày bắt đầu khách đã chọn: chu kỳ chỉ có nghĩa từ đơn thứ hai. Gói tạm dừng cũng
+   * tính như gói đang chạy để bật lại giữ đúng ngày; setStatus chỉ dời khi ngày đó đã qua. Bậc giảm tính theo số gói
+   * ACTIVE nên không bị đụng tới.
    */
   private async intervalPatch(tx: Prisma.TransactionClient, sub: LockedSubRow, intervalWeeks: number | undefined) {
     if (intervalWeeks === undefined || intervalWeeks === sub.intervalWeeks) return {};
-    if (sub.status !== 'ACTIVE' || !sub.lastOrderId) return { intervalWeeks };
+    if (!sub.lastOrderId) return { intervalWeeks };
     const last = await tx.order.findUnique({ where: { id: sub.lastOrderId }, select: { createdAt: true } });
     if (!last) return { intervalWeeks };
     const earliest = new Date(startOfVnDay().getTime() + 864e5);
-    const due = this.addWeeks(last.createdAt, intervalWeeks);
+    const due = this.addWeeks(startOfVnDay(last.createdAt), intervalWeeks);
     return { intervalWeeks, nextRunAt: due < earliest ? earliest : due, retryCount: 0 };
   }
 
@@ -594,7 +597,7 @@ export class SubscriptionsService {
    * claim đã ghi; bật lại lịch giữ nguyên ngày đó nên tin tạm dừng nói rõ kỳ này không giao và ngày kỳ kế tiếp.
    */
   private async runCycle(
-    sub: { id: string; userId: string; retryCount?: number },
+    sub: { id: string; userId: string; retryCount?: number; intervalWeeks?: number },
     cycleAt: Date,
     nextRunAt: Date,
   ): Promise<boolean> {
@@ -602,7 +605,7 @@ export class SubscriptionsService {
     let placed: PlacedCycleOrder | null;
     const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
     try {
-      placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code));
+      placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code, sub.intervalWeeks));
     } catch (err) {
       if (isProductDiscontinuedError(err)) {
         await this.pauseSubscription(sub, 'Sản phẩm đã ngừng bán', 'inactive_product');
@@ -703,6 +706,7 @@ export class SubscriptionsService {
     subId: string,
     cycleAt: Date,
     code: string,
+    scannedIntervalWeeks?: number,
   ): Promise<(PlacedCycleOrder & { nextRunAt: Date }) | null> {
     const sub = await this.lockSubscription(tx, subId);
     if (!sub || sub.status !== 'ACTIVE') return null;
@@ -831,6 +835,11 @@ export class SubscriptionsService {
     let nextRunAt = after.nextRunAt;
     if (nextRunAt.getTime() <= cycleAt.getTime()) {
       nextRunAt = this.addWeeks(cycleAt, after.intervalWeeks);
+      await tx.subscription.update({ where: { id: sub.id }, data: { nextRunAt } });
+    } else if (scannedIntervalWeeks !== undefined && after.intervalWeeks !== scannedIntervalWeeks) {
+      // Khách đổi chu kỳ chen giữa bước claim và khoá dòng: PATCH tính từ đơn kỳ trước nên ngày kế có thể sát hôm nay.
+      // Đơn vừa ghi mới là đơn kỳ gần nhất, tính lại từ nó để không ra hai đơn hai ngày liền.
+      nextRunAt = this.addWeeks(startOfVnDay(order.createdAt), after.intervalWeeks);
       await tx.subscription.update({ where: { id: sub.id }, data: { nextRunAt } });
     }
     return { order, userId: sub.userId, nextRunAt };
