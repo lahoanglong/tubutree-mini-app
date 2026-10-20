@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { plainToInstance } from 'class-transformer';
 import { validateSync, type ValidationError } from 'class-validator';
 import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
+import { IS_PUBLIC_KEY } from '../../../common/decorators/public.decorator';
 import { createValidationPipe } from '../../../common/validation-pipe';
 import { parseTreeBuyKey } from '../../game/tree-purchase-key';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -46,6 +47,13 @@ async function build(enabled: boolean) {
 }
 
 describe('WasteCustomerController read routes (spec 15.1)', () => {
+  it('U6-B03: /rules là route công khai (trang thể lệ web cho khách chưa đăng nhập), /me và /items thì không', () => {
+    const proto = WasteCustomerController.prototype as unknown as Record<string, object>;
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.rules!)).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.me!)).toBeUndefined();
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.items!)).toBeUndefined();
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, WasteCustomerController)).toBeUndefined();
+  });
   it('/me and /rules need neither a real user nor the programme flag', async () => {
     const { c, me } = await build(false);
     await expect(c.me('guest')).resolves.toEqual({ ok: 'me' });
