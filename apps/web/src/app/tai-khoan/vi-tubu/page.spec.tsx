@@ -409,7 +409,7 @@ describe('/tai-khoan/vi-tubu — rút tiền về ngân hàng', () => {
 
   it('mỗi lần mở sheet và sau mỗi lỗi là một lệnh mới: Idempotency-Key khác nhau', async () => {
     state.withdraw = async () => {
-      throw new Error('Ngân hàng từ chối');
+      throw new ApiError('Ngân hàng từ chối', 400);
     };
     const c = await mount();
     await openSheet(c);
@@ -427,7 +427,7 @@ describe('/tai-khoan/vi-tubu — rút tiền về ngân hàng', () => {
 
   it('mở lại sheet sau khi đóng cho key mới và xoá số tiền cũ', async () => {
     state.withdraw = async () => {
-      throw new Error('lỗi');
+      throw new ApiError('lỗi', 400);
     };
     const c = await mount();
     await openSheet(c);
