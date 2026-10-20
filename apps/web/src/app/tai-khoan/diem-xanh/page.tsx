@@ -10,7 +10,7 @@ import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
-import { formatCount, lockedPointsLines, pointsSummary } from '@/lib/checkout-points';
+import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { pointsReasonLabel } from '@/lib/ledger-labels';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -171,7 +171,6 @@ export default function LoyaltyPage() {
   const lots = pointsSummary(data);
   const expiring = expiringPointsNote(data.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
-  const lockLines = lockedPointsLines(data);
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
   const wasteOn = configQ.data?.waste?.enabled === true;
   const shortcuts = [
@@ -195,11 +194,6 @@ export default function LoyaltyPage() {
             {lots.convertedNote && <p className="mt-0.5 text-xs text-stone-600">{lots.convertedNote}</p>}
             {expiring && <p className={`mt-1.5 text-xs ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
             {expiryPolicy && <p className="mt-0.5 text-xs text-stone-600">{expiryPolicy}</p>}
-            {lockLines.map((line) => (
-              <p key={line} className="mt-0.5 break-words text-xs text-stone-600">
-                {line}
-              </p>
-            ))}
 
             {next ? (
               <div className="mt-4 text-left">

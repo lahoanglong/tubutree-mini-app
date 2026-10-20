@@ -140,7 +140,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     expect(old.textContent).toContain('từ 200 điểm tích luỹ');
   });
 
-  it('điểm sắp hết hạn, chính sách hạn điểm và điểm đang chờ mở khoá', async () => {
+  it('điểm sắp hết hạn, chính sách hạn điểm; điểm đang khoá không hiện dòng chờ như Mini App', async () => {
     state.loyalty = {
       ...state.loyalty!,
       expiringPoints: { amount: 70, expiresAt: new Date(Date.now() + 5 * 864e5).toISOString() },
@@ -152,8 +152,8 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     expect(c.textContent).toMatch(/70 Điểm Xanh sẽ hết hạn ngày \d{2}\/\d{2}\/\d{4} \(còn [45] ngày\)/);
     expect(c.textContent).toContain('Điểm Xanh thường có hạn 12 tháng');
-    expect(c.textContent).toContain('250 điểm đang chờ, mở khoá ngày 22/10');
-    expect(c.textContent).toContain('100 điểm đang chờ xử lý đổi/trả');
+    expect(c.textContent).not.toContain('đang chờ');
+    expect(c.textContent).not.toContain('mở khoá ngày');
   });
 
   it('không có điểm khoá, hết hạn hay lô quy đổi: các dòng phụ không hiện', async () => {

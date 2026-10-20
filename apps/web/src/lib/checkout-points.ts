@@ -1,5 +1,3 @@
-import { formatDate } from './format-date';
-
 const clamp = (n: number | undefined) => (Number.isFinite(n) ? Math.max(0, n as number) : 0);
 /** Nhóm nghìn kiểu Việt: 1800 → "1.800". Dùng cho mọi số điểm/số lượng hiển thị. */
 export const formatCount = (n: number) => n.toLocaleString('vi-VN');
@@ -25,24 +23,6 @@ export function pointsSummary(u: { pointsBalance: number; pointsConvertedBalance
     total: standard + converted,
     convertedNote: converted > 0 ? convertedPointsNote(converted) : null,
   };
-}
-
-/**
- * Dòng giải thích Điểm Xanh đang chờ mở khoá (cùng nguồn lockedPoints/lockedUntil với Mini App): mỗi phần một câu.
- * Rỗng khi không có điểm khoá hoặc API cũ chưa trả.
- */
-export function lockedPointsLines(lock: { lockedPoints?: number; lockedReturnPoints?: number; lockedUntil?: string | null } | null | undefined): string[] {
-  const locked = clamp(lock?.lockedPoints);
-  if (!lock || locked <= 0) return [];
-  const ret = Math.min(locked, clamp(lock.lockedReturnPoints));
-  const inWindow = locked - ret;
-  const lines: string[] = [];
-  const day = lock.lockedUntil ? formatDate(lock.lockedUntil).slice(0, 5) : null;
-  if (inWindow > 0) {
-    lines.push(day && day !== '—' ? `${group(inWindow)} điểm đang chờ, mở khoá ngày ${day}` : `${group(inWindow)} điểm đang chờ mở khoá`);
-  }
-  if (ret > 0) lines.push(`${group(ret)} điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong`);
-  return lines;
 }
 
 export interface CheckoutPointsOffer {
