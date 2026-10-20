@@ -291,7 +291,7 @@ export function CouponBox({
                       : pv.discount > 0
                         ? `Giảm ${formatVnd(pv.discount)} cho đơn này`
                         : (pv.freeshipSaving ?? 0) > 0
-                          ? `Miễn phí ship ${formatVnd(pv.freeshipSaving!)} cho đơn này`
+                          ? `Miễn phí giao hàng ${formatVnd(pv.freeshipSaving!)} cho đơn này`
                           : null;
                     return (
                       <li
@@ -314,7 +314,7 @@ export function CouponBox({
                           )}
                           {redundant && (
                             <div className="text-xs text-stone-700">
-                              Đơn này đã miễn phí vận chuyển
+                              Đơn này đã miễn phí giao hàng
                             </div>
                           )}
                           {c.minOrder != null && (

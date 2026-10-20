@@ -71,7 +71,10 @@ describe('/cong-dong/xep-hang', () => {
     expect(t.indexOf('Lan Anh')).toBeLessThan(t.indexOf('Minh Tâm'));
     expect(t.indexOf('Minh Tâm')).toBeLessThan(t.indexOf('Hà My'));
     expect(t.indexOf('Hà My')).toBeLessThan(t.indexOf('Quốc Bảo'));
-    for (const s of ['🥇', '🥈', '🥉', '#4']) expect(t).toContain(s);
+    expect(t).toContain('#4');
+    for (const s of ['🥇', '🥈', '🥉']) expect(t).not.toContain(s);
+    const medals = Array.from(container.querySelectorAll('[role="img"]')).map((e) => e.getAttribute('aria-label'));
+    expect(medals).toEqual(expect.arrayContaining(['Huy chương vàng', 'Huy chương bạc', 'Huy chương đồng']));
   });
 
   it('mỗi dòng hiện hạng thành viên (emoji + tên hạng) và điểm uy tín', async () => {

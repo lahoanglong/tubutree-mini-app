@@ -399,6 +399,7 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     const { container } = mount();
     await flush(8);
     expect(container.querySelector('[role="alert"]')!.textContent).toContain('Mất kết nối');
+    expect(container.querySelector('[data-testid="result-count"]')!.textContent?.trim()).toBe('');
     fail = false;
     click(buttonByName(container, 'Thử lại'));
     await flush(8);

@@ -86,7 +86,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     id: 'polang',
     brand: 'Pơ Lang',
     catalogBrand: 'Pơ Lang',
-    province: 'Đắc Lắk',
+    province: 'Đắk Lắk',
     emoji: '🥑',
     gradient: gradient('polang'),
     ingredient: 'Bơ ca cao & dầu gừng bazan',

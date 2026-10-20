@@ -19,6 +19,7 @@ import {
   checkInView,
   earnRuleLine,
   expiringPointsNote,
+  formatMultiplier,
   memberCardHint,
   moneyShort,
   pointExpiryPolicyNote,
@@ -51,7 +52,7 @@ const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }
@@ -174,7 +175,7 @@ export default function LoyaltyPage() {
   const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
   const wasteOn = configQ.data?.waste?.enabled === true;
   const shortcuts = [
-    { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Cây Tubu', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
+    { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Xanh', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
     { href: '/doi-rac', icon: Recycle, title: 'Đổi rác lấy quà', sub: 'Đổi bao bì lấy Điểm Xanh', show: wasteOn && isWebRouteReady('/doi-rac') },
     { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: isWebRouteReady('/kho-qua') },
   ].filter((s) => s.show);
@@ -189,7 +190,7 @@ export default function LoyaltyPage() {
             </div>
             <h2 className={`mt-2 font-display text-xl font-semibold max-md:text-[length:var(--type-title-lg-size)] ${tierStyle.fg}`}>{tierName}</h2>
             <p className="mt-0.5 text-sm text-stone-700">
-              Tích điểm ×{data.tier?.multiplier ?? 1} · {formatCount(lots.total)} điểm Xanh
+              Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatCount(lots.total)} Điểm Xanh
             </p>
             {lots.convertedNote && <p className="mt-0.5 text-xs text-stone-600">{lots.convertedNote}</p>}
             {expiring && <p className={`mt-1.5 text-xs ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
@@ -321,8 +322,8 @@ export default function LoyaltyPage() {
                 ))}
               </ul>
               <p className="mt-2 text-xs text-stone-600">
-                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong
-                Vườn Cây.
+                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng; giọt nước điểm danh riêng trong
+                Vườn Xanh.
               </p>
             </section>
           ) : null}
@@ -376,7 +377,7 @@ export default function LoyaltyPage() {
                       <span className={`text-sm ${active ? 'font-bold' : ''}`}>{t.name}</span>
                     </div>
                     <span className="text-right text-xs text-stone-700">
-                      {tierThresholdLabel(t, rates)} · ×{t.multiplier}
+                      {tierThresholdLabel(t, rates)} · ×{formatMultiplier(t.multiplier)}
                     </span>
                   </li>
                 );
@@ -424,7 +425,7 @@ export default function LoyaltyPage() {
         loading={cardQ.isLoading}
         error={cardQ.isError ? errText(cardQ.error) : null}
         onRetry={() => void cardQ.refetch()}
-        tierLabel={`Hạng ${tierName} · ${formatCount(lots.total)} điểm Xanh`}
+        tierLabel={`Hạng ${tierName} · ${formatCount(lots.total)} Điểm Xanh`}
         tierEmoji={tierStyle.emoji}
       />
 

@@ -9,6 +9,9 @@ import { ui } from '@/lib/guest-ui';
 import { BrandMap } from './brand-map';
 import './brand-theme.css';
 
+/** Nền tối nhẹ ngay sau chữ trắng trên gradient nhãn (D8-1): màu nhãn giữ nguyên, chỉ vùng chữ đủ 4,5:1. */
+const TEXT_SCRIM = 'rounded-control bg-[var(--color-brand-tile-scrim)] px-2.5 py-1.5';
+
 /** Hành trình nguyên liệu: bản đồ gỗ 3D và 8 ô nhãn gắn với tỉnh xuất xứ; chạm mở sheet câu chuyện kèm lối sang sản phẩm của nhãn. */
 export function BrandStoryView() {
   const [selected, setSelected] = useState<BrandOrigin | null>(null);
@@ -18,7 +21,7 @@ export function BrandStoryView() {
       <div className="px-4 pt-6">
         <h1 className={ui.pageTitle}>Hành trình nguyên liệu</h1>
         <p className="mt-3 leading-relaxed text-stone-700 max-md:mt-0 max-md:text-[length:var(--type-body-md-size)] max-md:leading-normal max-md:text-[var(--color-text-secondary)]">
-          Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ 🌿
+          Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ.
         </p>
       </div>
 
@@ -39,9 +42,9 @@ export function BrandStoryView() {
                 <span aria-hidden className="text-4xl leading-tight">
                   {loc.emoji}
                 </span>
-                <span className="block">
+                <span data-testid="brand-tile-scrim" className={`block max-w-full self-start ${TEXT_SCRIM}`}>
                   <span className="block font-bold text-stone-0">{loc.brand}</span>
-                  <span className="flex items-center gap-1 text-xs text-stone-0 opacity-90">
+                  <span className="flex items-center gap-1 text-xs text-stone-0">
                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                     {loc.province}
                   </span>
@@ -59,7 +62,7 @@ export function BrandStoryView() {
               <span aria-hidden className="block text-6xl leading-tight">
                 {selected.emoji}
               </span>
-              <span className="mt-1 flex items-center justify-center gap-1 text-sm text-stone-0 opacity-90">
+              <span className={`mt-1 inline-flex items-center justify-center gap-1 text-sm text-stone-0 ${TEXT_SCRIM}`}>
                 <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
                 {selected.province} · {selected.ingredient}
               </span>

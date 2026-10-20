@@ -97,6 +97,10 @@ describe('hub /tai-khoan như Mini App (điện thoại)', () => {
     for (const t of tiles) {
       expect(t.className).toContain('max-md:bg-[var(--color-bg-surface)]');
       expect(t.className).toContain('max-md:text-center');
+      const value = t.firstElementChild as HTMLElement;
+      expect(value.className).toContain('max-md:text-[length:var(--type-price-md-size)]');
+      expect(value.className).toContain('max-md:tabular-nums');
+      expect(value.className).not.toContain('max-md:font-display');
     }
     expect(tiles[0]!.parentElement!.className).toContain('max-md:-mt-5');
     expect(tiles[2]!.className).toContain('col-span-2');

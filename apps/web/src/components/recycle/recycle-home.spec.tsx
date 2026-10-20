@@ -131,6 +131,8 @@ describe('/doi-rac trang vào (§4.1)', () => {
     const battery = Array.from(c.querySelectorAll<HTMLElement>('[data-item]')).find((e) => e.textContent?.includes('Pin cũ'))!;
     expect(battery.getAttribute('data-status')).toBe('COMING_SOON');
     expect(battery.textContent).toContain('Sắp nhận');
+    expect(battery.className).not.toContain('opacity-');
+    expect(battery.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('yêu cầu đang xử lý: mã, cách giao, mini timeline; link tới /doi-rac/yeu-cau/:id; biểu tượng lịch sử tới /doi-rac/yeu-cau', async () => {

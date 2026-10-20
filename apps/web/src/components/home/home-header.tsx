@@ -10,7 +10,7 @@ import { useCartKey } from '@/lib/cart-key';
 import { getCart } from '@/lib/shop-client';
 import { homeText } from '@/lib/home-text';
 import { CountBadge } from '@/components/mini/badge';
-import tubuLogo from '@/assets/tubu-logo.png';
+import tubuLogo from '@/assets/tubu-logo-home.png';
 
 const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[var(--color-action-secondary-bg)] text-[var(--color-text-primary)]';
 

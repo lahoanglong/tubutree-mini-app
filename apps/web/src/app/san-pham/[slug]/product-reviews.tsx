@@ -47,7 +47,7 @@ function Stars({ value, small = false }: { value: number; small?: boolean }) {
         <Star
           key={i}
           aria-hidden="true"
-          className={`${small ? 'h-3.5 w-3.5' : 'h-4 w-4'} ${i <= Math.round(value) ? 'fill-honey-500 text-honey-500' : 'fill-stone-200 text-stone-200'}`}
+          className={`${small ? 'h-3.5 w-3.5' : 'h-4 w-4'} ${i <= Math.round(value) ? 'fill-honey-500 text-honey-500' : 'fill-[color:var(--stone-450)] text-[color:var(--stone-450)]'}`}
         />
       ))}
     </span>
@@ -437,7 +437,7 @@ function ReviewForm({
             onClick={() => setRating(i)}
             className="inline-flex h-11 w-11 items-center justify-center rounded-control"
           >
-            <Star aria-hidden="true" className={`h-7 w-7 ${i <= rating ? 'fill-honey-500 text-honey-500' : 'fill-stone-200 text-stone-200'}`} />
+            <Star aria-hidden="true" className={`h-7 w-7 ${i <= rating ? 'fill-honey-500 text-honey-500' : 'fill-[color:var(--stone-450)] text-[color:var(--stone-450)]'}`} />
           </button>
         ))}
       </div>

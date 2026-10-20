@@ -161,6 +161,8 @@ export interface PublicConfig {
   returnWindowDays?: number;
   /** Cờ chương trình đổi rác do máy chủ bật; API cũ chưa trả thì coi như tắt. */
   waste?: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
+  /** Khoảng ngày giao dự kiến; null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) thì ẩn dòng "Giao dự kiến". */
+  shippingEta?: { minDays: number; maxDays: number } | null;
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 

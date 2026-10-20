@@ -372,7 +372,6 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             </Link>
           )}
           <section className="flex flex-col gap-2">
-            <p className="text-sm text-stone-600">Cần hỗ trợ? Nhắn Tubu Tree</p>
             <RecycleSupport />
           </section>
         </div>

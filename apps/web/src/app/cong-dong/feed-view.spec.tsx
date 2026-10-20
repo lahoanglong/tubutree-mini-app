@@ -412,17 +412,24 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
 });
 
 describe('/cong-dong — giao diện điện thoại như Mini App', () => {
-  it('hai nút Bảng xếp hạng và Sự kiện: hình tròn, có tên truy cập và có chữ từ sm', async () => {
+  it('hai nút Xếp hạng và Sự kiện có chữ nhìn thấy, không icon; tên truy cập nút xếp hạng vẫn là "Bảng xếp hạng" (D6-05)', async () => {
     mocks.ready.add('/cong-dong/su-kien');
     const { container } = await mount();
-    for (const name of ['Bảng xếp hạng', 'Sự kiện']) {
-      const a = container.querySelector(`a[aria-label="${name}"]`)!;
-      expect(a.className).toContain('max-md:rounded-full');
-      const text = a.querySelector('span')!;
-      expect(text.textContent).toBe(name);
-      expect(text.className).toContain('hidden');
-      expect(text.className).toContain('sm:inline');
+    const rank = container.querySelector('a[aria-label="Bảng xếp hạng"]')!;
+    expect(rank.textContent?.trim()).toBe('Xếp hạng');
+    expect(rank.querySelector('svg')).toBeNull();
+    const events = container.querySelector('a[aria-label="Sự kiện"]')!;
+    expect(events.textContent?.trim()).toBe('Sự kiện');
+    expect(events.querySelector('svg')).toBeNull();
+    for (const a of [rank, events]) {
+      expect(a.className).toContain('border');
+      expect(a.className).not.toContain('rounded-full');
     }
+  });
+
+  it('đã đăng nhập: không có câu phụ đề dưới tiêu đề để bài đầu lên sớm hơn (D6-05)', async () => {
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Hỏi đáp cách dùng');
   });
 
   it('vùng đầu (nút, ô tìm, chip) nằm trên dải trắng liền khối dưới md', async () => {

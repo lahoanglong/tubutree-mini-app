@@ -26,7 +26,7 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 
 const TILE =
   'block min-h-11 rounded-control p-2 -m-2 transition hover:bg-forest-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0 max-md:m-0 max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:p-3 max-md:text-center max-md:shadow-[var(--elevation-1)] max-md:hover:bg-[var(--color-bg-surface)] max-md:focus-visible:outline-forest-600';
-const TILE_VALUE = 'text-xl font-bold max-md:font-display max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)] max-md:text-[color:var(--color-text-brand)]';
+const TILE_VALUE = 'text-xl font-bold max-md:text-[length:var(--type-price-md-size)] max-md:font-semibold max-md:leading-[var(--type-price-md-lh)] max-md:tabular-nums max-md:text-[color:var(--color-text-brand)]';
 const TILE_LABEL = 'text-xs text-forest-100 max-md:text-[length:var(--type-caption-size)] max-md:text-[color:var(--color-text-tertiary)]';
 const TILE_MORE = 'mt-1 inline-flex items-center gap-0.5 text-xs font-semibold text-stone-0 underline max-md:hidden';
 const ROW = 'flex min-h-11 w-full items-center gap-3 px-3 py-3 text-left max-md:py-3.5 transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';

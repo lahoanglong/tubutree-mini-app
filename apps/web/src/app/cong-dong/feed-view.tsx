@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { HelpCircle, Hash, PartyPopper, Plus, Search, Trophy, X, type LucideIcon } from 'lucide-react';
+import { HelpCircle, Hash, Plus, Search, X, type LucideIcon } from 'lucide-react';
 import type { FeedPreviewItem, FeedSort } from '@tubutree/app-core/api/feed';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { feedCategoriesQuery, feedListQuery, feedPublicPreviewQuery } from '@tubutree/app-core/queries/feed';
@@ -171,32 +171,25 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     setNotice(null);
     setComposing(true);
   };
-  // Dưới md là nút tròn nền sage như IconButton của Mini App; từ sm thêm chữ để máy tính đoán được chức năng (nút vẫn có aria-label).
-  const iconLink =
-    'inline-flex h-11 min-w-11 items-center justify-center gap-1.5 bg-stone-100 text-stone-800 hover:bg-stone-200 max-md:rounded-full max-md:bg-sage-50 md:rounded-control sm:px-3';
-  const iconLabel = 'hidden text-sm font-medium sm:inline';
+  const linkBtn = `${ui.btnSecondary} flex-none px-3.5`;
 
   return (
-    <FeedShell subtitle>
+    <FeedShell>
       <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
 
-      <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-2 md:contents">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {isWebRouteReady('/cong-dong/xep-hang') && (
-              <Link href="/cong-dong/xep-hang" aria-label="Bảng xếp hạng" className={iconLink}>
-                <Trophy className="h-5 w-5" aria-hidden="true" />
-                <span className={iconLabel}>Bảng xếp hạng</span>
-              </Link>
-            )}
-            {isWebRouteReady('/cong-dong/su-kien') && (
-              <Link href="/cong-dong/su-kien" aria-label="Sự kiện" className={iconLink}>
-                <PartyPopper className="h-5 w-5" aria-hidden="true" />
-                <span className={iconLabel}>Sự kiện</span>
-              </Link>
-            )}
-          </div>
-          <button type="button" onClick={openComposer} className={ui.btnPrimary}>
+      <div className="flex flex-col gap-3 max-md:-mx-4 max-md:gap-2 max-md:bg-stone-0 max-md:px-3 max-md:pb-1 md:contents">
+        <div className="flex items-center gap-2">
+          {isWebRouteReady('/cong-dong/xep-hang') && (
+            <Link href="/cong-dong/xep-hang" aria-label="Bảng xếp hạng" className={linkBtn}>
+              Xếp hạng
+            </Link>
+          )}
+          {isWebRouteReady('/cong-dong/su-kien') && (
+            <Link href="/cong-dong/su-kien" aria-label="Sự kiện" className={linkBtn}>
+              Sự kiện
+            </Link>
+          )}
+          <button type="button" onClick={openComposer} className={`${ui.btnPrimary} max-md:flex-1 md:ml-auto`}>
             <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
             Đăng bài
           </button>

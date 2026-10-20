@@ -106,7 +106,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
           <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{`Còn lại ${formatCount(point.quota.remaining)} điểm`}</p>
         </>
       ) : (
-        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Không giới hạn hạn mức tháng</p>
+        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Không giới hạn theo tháng</p>
       )}
     </section>
   );

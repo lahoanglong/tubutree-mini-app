@@ -89,3 +89,11 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
     expect(dk).not.toMatch(/Visa|MasterCard|MoMo|ZaloPay|VNPay/i);
   });
 });
+
+describe('legal — chính sách đổi trả: tiền hoàn đi đâu', () => {
+  const text = defaultLegalContent('doi-tra', VARS, SUPPORT);
+  it('nói đúng như Mini App và luồng hoàn tiền của API: Ví Tubu hoặc tài khoản ngân hàng khách chọn sau khi duyệt', () => {
+    expect(text).toContain('hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt');
+    expect(text).not.toContain('theo cách bạn đã thanh toán');
+  });
+});

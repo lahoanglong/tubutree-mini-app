@@ -37,7 +37,10 @@ describe('WasteItemStep (web)', () => {
     const battery = card(c, 'Pin cũ');
     expect(battery.textContent).toContain('Sắp nhận');
     expect(battery.textContent).toContain('Đợt này Tubu chưa nhận pin');
-    expect(battery.className).toContain('opacity-[.55]');
+    expect(battery.className).not.toContain('opacity-');
+    expect(battery.getAttribute('aria-disabled')).toBe('true');
+    expect(card(c, 'Pin cũ').querySelector('span.text-stone-500')?.textContent).toBe('Pin cũ');
+    expect(card(c, 'Thùng carton').hasAttribute('aria-disabled')).toBe(false);
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
   });

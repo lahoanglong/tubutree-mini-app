@@ -198,7 +198,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
   it('đại lý không giới hạn hạn mức tháng', async () => {
     state.points = [makeDeskPoint({ quota: null })];
     const c = await mount();
-    expect(c.textContent).toContain('Không giới hạn hạn mức tháng');
+    expect(c.textContent).toContain('Không giới hạn theo tháng');
   });
   it('kho: không có thẻ hạn mức, có dòng trần nhân viên trong ngày', async () => {
     state.points = [WAREHOUSE_DESK];
@@ -392,7 +392,7 @@ describe('/doi-rac/quay: xác nhận và từ chối (§4.10, §15.5)', () => {
     await flush(10);
     expect((calls('/waste/desk/requests/req-1/confirm')[0]!.body as { match: unknown }).match).toEqual({ parcelCode: 'TR-8K2M9' });
     expect(c.textContent).toContain('Còn lại 380.000 điểm');
-    expect(c.textContent).not.toContain('Không giới hạn hạn mức tháng');
+    expect(c.textContent).not.toContain('Không giới hạn theo tháng');
   });
   it('kho + kiện đã RECEIVED: không gửi match', async () => {
     state.points = [WAREHOUSE_DESK];
