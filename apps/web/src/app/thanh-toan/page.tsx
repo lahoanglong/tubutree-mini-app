@@ -716,7 +716,7 @@ export default function CheckoutPage() {
             label="Phí vận chuyển"
             value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
           />
-          {etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
+          {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
           {cart && (
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">

@@ -4,7 +4,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 
 // Dòng "Giao dự kiến" ở tóm tắt đơn như Mini App (544c9ad7): cùng nhãn, cùng hàm ghép ngày, ẩn khi chưa có cấu hình.
 
-const mocks = vi.hoisted(() => ({ config: null as unknown, configPending: false, addresses: [] as unknown[] }));
+const mocks = vi.hoisted(() => ({ config: null as unknown, configPending: false, addresses: [] as unknown[], quoteError: null as unknown }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/geo-client', () => ({
@@ -20,9 +20,13 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMyCoupons: async () => [],
   getAddresses: async () => mocks.addresses,
   getPublicConfig: () => (mocks.configPending ? new Promise(() => {}) : Promise.resolve(mocks.config)),
-  checkoutQuote: async () => ({ subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0 }),
+  checkoutQuote: async () => {
+    if (mocks.quoteError) throw mocks.quoteError;
+    return { subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000, pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0 };
+  },
 }));
 
+import { ApiError } from '@/lib/client-api';
 import CheckoutPage from './page';
 
 const ADDR = {
@@ -44,6 +48,7 @@ beforeEach(() => {
   mocks.addresses = [ADDR];
   mocks.config = { freeshipThreshold: 500000, shippingEta: { minDays: 2, maxDays: 4 } };
   mocks.configPending = false;
+  mocks.quoteError = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -68,6 +73,18 @@ describe('/thanh-toan — dòng "Giao dự kiến"', () => {
 
   it('cấu hình chưa tải xong: không hứa ngày giao', async () => {
     mocks.configPending = true;
+    expect(row(await mount(), 'Giao dự kiến')).toBeUndefined();
+  });
+});
+
+describe('/thanh-toan — "Giao dự kiến" chỉ hiện khi đã có báo giá', () => {
+  it('chưa chọn địa chỉ: không có dòng ngày giao', async () => {
+    mocks.addresses = [];
+    expect(row(await mount(), 'Giao dự kiến')).toBeUndefined();
+  });
+
+  it('báo giá bị từ chối (địa chỉ cũ trước 2025): không có dòng ngày giao', async () => {
+    mocks.quoteError = new ApiError('Địa chỉ cần cập nhật', 400, 'ADDRESS_OUTDATED');
     expect(row(await mount(), 'Giao dự kiến')).toBeUndefined();
   });
 });
