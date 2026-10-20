@@ -93,7 +93,6 @@ export default function BankPaymentPage() {
           subtitle="Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới"
           subtitleClassName="md:text-sm"
           parentHref={detail}
-          bleed={false}
         />
       ) : (
         // Mini App chỉ vẽ dải tiêu đề ở trạng thái QR; các trạng thái khác chỉ giữ h1 cho trình đọc và trang cha cho nút lùi.

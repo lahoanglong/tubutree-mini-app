@@ -69,9 +69,9 @@ describe('PageHeader', () => {
       expect(c.querySelector('h1')!.className).toContain('max-md:text-[color:var(--color-text-inverse)]');
     });
 
-    it('bleed={false}: dải nằm dưới đệm 48px của body như màn chuyển khoản của Mini App, không kéo khung lên', () => {
-      const h = mount(<PageHeader title="X" bleed={false} />).container.querySelector('header')!;
-      expect(h.hasAttribute('data-page-bleed')).toBe(false);
+    it('dải luôn ngang hàng nút lùi nổi (data-page-bleed bỏ đệm 48px của body), kể cả màn chuyển khoản như Mini App', () => {
+      const h = mount(<PageHeader title="X" />).container.querySelector('header')!;
+      expect(h.hasAttribute('data-page-bleed')).toBe(true);
     });
 
     it('backHref khai báo trang cha cho nút lùi nổi (data-back-href)', () => {

@@ -57,10 +57,10 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(c.textContent).toContain('Giữ nguyên nội dung');
   });
 
-  it('thanh tiêu đề nằm dưới đệm 48px của body như màn chuyển khoản của Mini App (không bỏ đệm)', async () => {
+  it('tiêu đề cùng hàng với nút lùi như màn chuyển khoản của Mini App (bỏ đệm 48px của body)', async () => {
     const c = mount();
     await flush();
-    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(false);
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
   });
 
   it('nút lùi vào thẳng link thanh toán đi tới chi tiết đơn đang chờ, không tới Checkout', async () => {

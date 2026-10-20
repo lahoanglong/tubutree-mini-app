@@ -17,8 +17,6 @@ export interface PageHeaderProps {
   parentHref?: string;
   actions?: ReactNode;
   variant?: 'plain' | 'hero';
-  /** false: giữ đệm 48px của body phía trên dải (Mini App có màn đặt thanh tiêu đề dưới nút lùi thay vì ngang hàng, như chuyển khoản). */
-  bleed?: boolean;
   className?: string;
   subtitleClassName?: string;
 }
@@ -29,12 +27,12 @@ export interface PageHeaderProps {
  * chừa 48px bên trái cho nút lùi nổi (BackButton ở layout) trừ ở trang gốc của thanh đáy nơi nút ẩn.
  * `data-page-bleed` bỏ đệm 48px của body vì dải đã nằm ngang hàng nút. Từ md giữ link quay lại và tiêu đề của giao diện máy tính.
  */
-export function PageHeader({ title, subtitle, backHref, backLabel = 'Quay lại', parentHref, actions, variant = 'plain', bleed = true, className = '', subtitleClassName = '' }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, backHref, backLabel = 'Quay lại', parentHref, actions, variant = 'plain', className = '', subtitleClassName = '' }: PageHeaderProps) {
   const hero = variant === 'hero';
   const floatingBack = !isWebRootPath(useOptionalPathname());
   return (
     <header
-      data-page-bleed={bleed ? '' : undefined}
+      data-page-bleed=""
       data-back-href={backHref ?? parentHref}
       className={`flex items-center gap-2 max-md:mx-[calc(50%-50vw)] max-md:px-4 max-md:pb-3 max-md:pt-[calc(12px+var(--safe-top))] ${
         hero
