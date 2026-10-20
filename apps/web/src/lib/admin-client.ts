@@ -1405,6 +1405,8 @@ export interface AdminCustomerRefund {
   adminNote: string | null;
   createdAt: string;
   kind: AdminCustomerRefundKind;
+  /** Khoá chống trùng của API; khoản COD trả hàng chờ đối soát mang `cod-return-unverified` (thêm `:rest` ở phần không hoàn). API cũ chưa trả. */
+  refKey?: string;
   /** Chủ đơn (khách có tài khoản); null với khoản khách cuối đơn CTV lên hộ. */
   userId: string | null;
   /** Tài khoản nhận khách đã chọn; trống = khách chưa chọn nơi nhận, admin nhập tài khoản khách cung cấp khi xác nhận. */
