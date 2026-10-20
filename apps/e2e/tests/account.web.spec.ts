@@ -252,7 +252,8 @@ test.describe('Web khách: tài khoản', () => {
     api.post('/me/onboarding', ({ call }) => ({ id: 'u1', onboarded: true, segments: (call.body as { segments: string[] }).segments }));
     // Trang chủ có thể gọi thêm vài API phụ không liên quan tới quiz.
     api.allowUnmocked('POST /events', 'GET /flash-sales/active', 'GET /me/coupons', 'POST /affiliate/touch',
-      'GET /config/public', 'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/upcoming', 'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you');
+      'GET /config/public', 'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/upcoming', 'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you',
+      'GET /me/wishlist/ids');
     await page.goto('/');
 
     const quiz = page.getByRole('dialog', { name: 'Chào mừng đến Tubu Tree' });
