@@ -183,9 +183,8 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
 
       {pending && (
         <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3">
-          <Field label="Ghi chú (tuỳ chọn)" className="min-w-[200px] flex-1">
+          <Field label="Ghi chú xử lý (tuỳ chọn)" className="min-w-[200px] flex-1">
             <input
-              aria-label="Ghi chú xử lý"
               placeholder="vd đã gọi xác nhận với khách"
               value={note}
               maxLength={500}

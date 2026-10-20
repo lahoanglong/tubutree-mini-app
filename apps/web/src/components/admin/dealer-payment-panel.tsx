@@ -99,7 +99,6 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
         <Field label="Mã giao dịch ngân hàng (tuỳ chọn)" className="grow basis-40">
           <input
             type="text"
-            aria-label="Mã giao dịch ngân hàng"
             placeholder="vd FT26270…"
             maxLength={DEALER_BANK_REF_MAX}
             value={bankRef}
@@ -108,10 +107,9 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
             className={`${FIELD_XS} w-full`}
           />
         </Field>
-        <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+        <Field label="Ghi chú thanh toán (tuỳ chọn)" className="grow basis-40">
           <input
             type="text"
-            aria-label="Ghi chú xác nhận thanh toán"
             maxLength={DEALER_PAYMENT_NOTE_MAX}
             value={note}
             onChange={(e) => setNote(e.target.value)}

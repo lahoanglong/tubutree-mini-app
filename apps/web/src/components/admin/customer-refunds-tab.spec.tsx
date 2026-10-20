@@ -1451,3 +1451,102 @@ describe('CustomerRefundsTab — khoản COD trả hàng chờ đối soát', ()
     expect(container.querySelector('[role="status"]')?.textContent).not.toContain('không phải tiền dư');
   });
 });
+
+// Khoản COD không chỉ UNVERIFIED: sau khi Kế toán bấm "Không hoàn" (DISMISSED), khi đã xác nhận (PENDING…) và phần dư còn lại
+// khi xác nhận một phần (refKey ":rest") đều là khoản COD, không phải tiền khách chuyển dư.
+describe('CustomerRefundsTab — khoản COD ở các trạng thái sau đối soát', () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const COD_REF = 'cod-return-unverified';
+  const cod = (over: Partial<AdminCustomerRefund> = {}) =>
+    refund({ kind: 'RETURN', refKey: COD_REF, userId: 'u1', reason: 'RETURNED', amount: 450_000, recipientName: null, phone: null, ...over });
+  const badges = (card: Element) => Array.from(card.querySelectorAll('span')).map((s) => s.textContent ?? '');
+
+  function stub(list: () => AdminCustomerRefund[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/verify')) return json({ id: 'r1', status: 'PENDING' });
+        return json(page(list()));
+      }),
+    );
+  }
+
+  it('COD đã "Không hoàn" (DISMISSED): nhãn trạng thái và loại đều nói COD, không có chữ "tiền dư"', async () => {
+    stub(() => [cod({ status: 'DISMISSED', adminNote: 'Hãng chưa thu', completedAt: '2026-10-02T03:00:00.000Z' })]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    click(byText(container, 'button', /^Không phải tiền dư$/));
+    await flush();
+    const card = container.querySelector('[data-refund-id="r1"]')!;
+    expect(badges(card)).toContain('Trả hàng COD');
+    expect(card.querySelector('[data-refund-status="DISMISSED"]')?.textContent).toBe('Không hoàn (COD)');
+    expect(card.textContent).not.toContain('tiền dư');
+  });
+
+  it('phần COD không hoàn của lần xác nhận một phần (refKey ":rest", DISMISSED) cũng nói COD', async () => {
+    stub(() => [cod({ refKey: `${COD_REF}:rest`, status: 'DISMISSED', adminNote: 'Phần COD không hoàn (xác nhận hoàn 300.000đ/450.000đ).' })]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    click(byText(container, 'button', /^Không phải tiền dư$/));
+    await flush();
+    const card = container.querySelector('[data-refund-id="r1"]')!;
+    expect(badges(card)).toContain('Trả hàng COD');
+    expect(card.querySelector('[data-refund-status="DISMISSED"]')?.textContent).toBe('Không hoàn (COD)');
+  });
+
+  it('COD đã xác nhận, chờ chuyển khoản (PENDING): loại vẫn là "Trả hàng COD"', async () => {
+    stub(() => [cod({ status: 'PENDING', userId: 'u1', bankName: 'MB Bank', bankAccountNo: '0123456789', bankAccountName: 'A' })]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    expect(badges(container.querySelector('[data-refund-id="r1"]')!)).toContain('Trả hàng COD');
+  });
+
+  it('khoản trả hàng thường (refKey là mã yêu cầu trả) vẫn hiện "Trả hàng"', async () => {
+    stub(() => [refund({ kind: 'RETURN', refKey: 'ret_abc123', status: 'PENDING', userId: 'u1', bankName: 'MB Bank', bankAccountNo: '0123456789', bankAccountName: 'A' })]);
+    const { container } = mount(<CustomerRefundsTab />);
+    await flush();
+    const b = badges(container.querySelector('[data-refund-id="r1"]')!);
+    expect(b).toContain('Trả hàng');
+    expect(b).not.toContain('Trả hàng COD');
+  });
+
+  describe('đơn CTV lên hộ (userId null): khách cuối không có tài khoản nên không có lựa chọn Ví Tubu', () => {
+    const open = async (container: HTMLElement) => {
+      click(byText(container, 'button', 'Chờ đối soát'));
+      await flush();
+      return container.querySelector('[data-refund-id="r1"]') as HTMLElement;
+    };
+
+    it('câu trên hàng, hộp xác nhận và thông báo xong đều không dặn khách chọn Ví/ngân hàng', async () => {
+      stub(() => [cod({ status: 'UNVERIFIED', userId: null })]);
+      const { container } = mount(<CustomerRefundsTab />);
+      await flush();
+      const card = await open(container);
+      const row = card.textContent ?? '';
+      expect(row).toContain('chuyển khoản tay theo SĐT khách cuối');
+      expect(row).not.toContain('Ví hay ngân hàng');
+      expect(row).not.toContain('liên hệ khách để chọn');
+      click(byText(card, 'button', 'Xác nhận đã thu COD, hoàn cho khách'));
+      await flush(1);
+      const d = confirmDialog()!;
+      expect(d.textContent).toContain('chuyển khoản tay theo SĐT khách cuối');
+      expect(d.textContent).not.toContain('Ví Tubu');
+      click(d.querySelector('[data-confirm="accept"]') as HTMLButtonElement);
+      await flush();
+      const flash = container.querySelector('[role="status"]')?.textContent ?? '';
+      expect(flash).toContain('chuyển khoản tay theo SĐT khách cuối');
+      expect(flash).not.toContain('Ví Tubu');
+    });
+
+    it('khách có tài khoản (userId có giá trị) vẫn được dặn chọn Ví Tubu hay ngân hàng', async () => {
+      stub(() => [cod({ status: 'UNVERIFIED', userId: 'u1' })]);
+      const { container } = mount(<CustomerRefundsTab />);
+      await flush();
+      const card = await open(container);
+      click(byText(card, 'button', 'Xác nhận đã thu COD, hoàn cho khách'));
+      await flush(1);
+      expect(confirmDialog()!.textContent).toContain('Ví Tubu');
+    });
+  });
+});

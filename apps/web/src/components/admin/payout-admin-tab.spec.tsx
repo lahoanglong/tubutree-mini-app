@@ -5,6 +5,12 @@ import { OpsInboxTab } from './ops-inbox-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminPayout } from '@/lib/admin-client';
 
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -57,7 +63,7 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
     expect(confirmDialog()).toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/lý do/i);
 
-    typeInto(container.querySelector('input[aria-label="Ghi chú / lý do"]'), 'Sai số tài khoản');
+    typeInto(field(container, 'Ghi chú / lý do (bắt buộc khi từ chối)'), 'Sai số tài khoản');
     click(byText(container, 'button', 'Từ chối'));
     await flush();
     const d = confirmDialog()!;
@@ -125,7 +131,7 @@ describe('PayoutRow — hỏi lại khi duyệt và khi chi (D7-01, D7-16)', () 
     const api = mockFetch({ '/mark-paid': { body: payout({ status: 'PAID' }) }, ...LIST });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
-    typeInto(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]'), 'FT26100001');
+    typeInto(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)'), 'FT26100001');
     click(byText(container, 'button', 'Đã chuyển khoản'));
     await flush();
     const d = confirmDialog()!;
@@ -156,7 +162,7 @@ describe('PayoutRow / PayoutAdminTab — DS v2', () => {
   it('lệnh APPROVED: "Đã chuyển khoản" cao 44px, ô ghi chú/mã giao dịch chịu xuống dòng', () => {
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
     expect(byText(container, 'button', 'Đã chuyển khoản')?.className).toContain('min-h-[44px]');
-    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')?.closest('label')?.className).toContain('flex-1');
+    expect(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)')?.closest('label')?.className).toContain('flex-1');
   });
 
   it('huy hiệu trạng thái và lý do từ chối theo token danger', () => {
@@ -228,14 +234,14 @@ describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
     const { container } = mount(<PayoutRow payout={payout()} canReview={false} />);
     expect(byText(container, 'button', 'Duyệt')).toBeNull();
     expect(byText(container, 'button', 'Từ chối')).toBeNull();
-    expect(container.querySelector('input[aria-label="Ghi chú / lý do"]')).toBeNull();
+    expect(field(container, 'Ghi chú / lý do (bắt buộc khi từ chối)')).toBeNull();
     expect(container.textContent).toContain('Chờ quản trị viên duyệt');
   });
 
   it('lệnh APPROVED: vẫn bấm được "Đã chuyển khoản" kèm mã giao dịch', () => {
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} canReview={false} />);
     expect(byText(container, 'button', 'Đã chuyển khoản')).not.toBeNull();
-    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')).not.toBeNull();
+    expect(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)')).not.toBeNull();
   });
 
   it('mặc định lọc lệnh đã duyệt chờ chuyển khoản (APPROVED), không phải hàng chờ duyệt', async () => {
@@ -244,6 +250,17 @@ describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
     mount(<PayoutAdminTab canReview={false} />);
     await flush();
     expect(api.calls.find((c) => !c.url.includes('/pit-report'))!.url).toContain('status=APPROVED');
+  });
+});
+
+// Q20: hàng đợi gồm cả lệnh rút Ví Tubu của khách thường, nên tiêu đề phải khớp tên mục "Yêu cầu rút tiền" trên thanh bên.
+describe('PayoutAdminTab — tiêu đề khớp tên tab', () => {
+  it('tiêu đề là "Yêu cầu rút tiền"', async () => {
+    const api = mockFetch(LIST);
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab canReview />);
+    await flush();
+    expect(container.querySelector('h2')?.textContent).toBe('Yêu cầu rút tiền');
   });
 });
 

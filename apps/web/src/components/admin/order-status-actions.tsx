@@ -281,7 +281,6 @@ export function OrderStatusActions({
             <Field label="Mã giao dịch (tuỳ chọn)" className="grow basis-40">
               <input
                 type="text"
-                aria-label="Mã giao dịch ngân hàng"
                 placeholder="vd FT26270…"
                 maxLength={DEALER_BANK_REF_MAX}
                 value={bankRef}

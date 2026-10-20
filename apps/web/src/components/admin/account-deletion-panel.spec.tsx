@@ -3,6 +3,12 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AccountDeletionPanel, type AdminDeletionRequest } from './account-deletion-panel';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -87,7 +93,7 @@ describe('AccountDeletionPanel (C-016)', () => {
     const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<AccountDeletionPanel />);
     await flush();
-    typeInto(container.querySelector('input[aria-label="Ghi chú xử lý"]'), 'đã gọi xác nhận');
+    typeInto(field(container, 'Ghi chú xử lý (tuỳ chọn)'), 'đã gọi xác nhận');
     click(byText(container, 'button', 'Xử lý'));
     await flush();
     const d = confirmDialog()!;

@@ -33,7 +33,7 @@ import {
   wasteEventKindLabel,
   wasteEventMetaLines,
 } from '@/lib/waste-labels';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, Notice, ScrollRegion } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, LoadError, Notice, ScrollRegion } from './ui';
 import { useConfirm } from './confirm-dialog';
 
 const NOTE_MAX = 500;
@@ -76,7 +76,7 @@ export function WasteRequestDetail({ id, isAdmin, onClose }: { id: string; isAdm
         <button type="button" className={BTN_XS_SECONDARY} onClick={onClose}>Đóng</button>
       </div>
       {q.isPending && <p className="text-sm text-stone-600">Đang tải…</p>}
-      {q.isError && <Notice tone="danger" role="alert">{errText(q.error)}</Notice>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>{errText(q.error)}</LoadError>}
       {r && (
         <>
           <Header r={r} isAdmin={isAdmin} />
@@ -554,7 +554,7 @@ function ReopenPanel({ requestId, busy, onSubmit, onCancel }: { requestId: strin
           ))}
         </select>
       </label>
-      {unmatched.isError && <Notice tone="danger" role="alert">{errText(unmatched.error)}</Notice>}
+      {unmatched.isError && <LoadError onRetry={() => void unmatched.refetch()} retrying={unmatched.isFetching}>{errText(unmatched.error)}</LoadError>}
       <div className="flex gap-2">
         <button type="button" className={BTN_PRIMARY} disabled={reasonTrim === '' || busy} onClick={submit}>Xác nhận mở lại</button>
         <button type="button" className={BTN_SECONDARY} onClick={onCancel}>Huỷ</button>

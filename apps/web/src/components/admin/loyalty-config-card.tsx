@@ -7,6 +7,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { configValue, LOYALTY_DEFAULTS, LOYALTY_KEYS, parseCheckinPoints, parseIntInRange } from '@/lib/admin-config-forms';
 import { Field, INPUT_CLASS, Notice } from './ui';
+import { useConfirm } from './confirm-dialog';
 
 interface NumbersForm {
   checkin: string[];
@@ -57,6 +58,7 @@ export function buildLoyaltyWrites(f: NumbersForm): { writes?: { key: string; va
  */
 export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
   const posEnabled = configValue<unknown>(rows, LOYALTY_KEYS.posEnabled, LOYALTY_DEFAULTS.posEnabled) === true;
   const [form, setForm] = useState<NumbersForm>(() => readForm(rows));
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -73,8 +75,21 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
   }, [snapshot, loadedSnapshot]);
 
   const saveToggle = useMutation({
-    mutationFn: (on: boolean) => setConfig(LOYALTY_KEYS.posEnabled, on),
-    onSuccess: (_r, on) => {
+    mutationFn: async (on: boolean) => {
+      // Chỉ bật mới cộng điểm cho khách; tắt là hướng an toàn nên lưu ngay.
+      if (on) {
+        const ok = await confirm({
+          title: 'Xác nhận đổi cấu hình tiền/điểm',
+          message: `${LOYALTY_KEYS.posEnabled}\nfalse → true\n\nThu ngân bắt đầu cộng điểm Xanh cho thành viên ngay.`,
+          confirmLabel: 'Lưu thay đổi',
+        });
+        if (!ok) return null;
+      }
+      await setConfig(LOYALTY_KEYS.posEnabled, on);
+      return on;
+    },
+    onSuccess: (done, on) => {
+      if (done === null) return;
       setMsg({ ok: true, text: on ? 'Đã BẬT tích điểm tại quầy.' : 'Đã TẮT tích điểm tại quầy.' });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
@@ -90,6 +105,14 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       const changed = built.writes.filter(
         (w, i) => JSON.stringify(w.value) !== JSON.stringify(beforeWrites[i]?.value) || configValue(rows, w.key, undefined) === undefined,
       );
+      if (changed.length === 0) return 0;
+      const oldByKey = new Map(beforeWrites.map((w) => [w.key, configValue<unknown>(rows, w.key, w.value)]));
+      const ok = await confirm({
+        title: 'Xác nhận đổi cấu hình tiền/điểm',
+        message: `${changed.map((w) => `${w.key}\n${JSON.stringify(oldByKey.get(w.key))} → ${JSON.stringify(w.value)}`).join('\n\n')}\n\nÁp dụng ngay cho mọi lượt điểm danh và tích điểm của khách.`,
+        confirmLabel: 'Lưu thay đổi',
+      });
+      if (!ok) return null;
       // Tuần tự: lỗi ở khoá nào thì dừng và báo đúng khoá đó (các khoá trước đã lưu).
       for (const w of changed) {
         try {
@@ -101,6 +124,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       return changed.length;
     },
     onSuccess: (n) => {
+      if (n === null) return;
       setMsg({ ok: true, text: n === 0 ? 'Không có thay đổi.' : `Đã lưu ${n} tham số tích điểm.` });
       void qc.invalidateQueries({ queryKey: ['admin-config'] });
     },
@@ -114,6 +138,7 @@ export function LoyaltyConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
 
   return (
     <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+      {dialog}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Gift className="h-4 w-4 text-forest-700" aria-hidden />
