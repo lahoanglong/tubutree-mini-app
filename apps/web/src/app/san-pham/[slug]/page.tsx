@@ -75,10 +75,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <BackLink href="/">
         ← Về trang chủ
       </BackLink>
-      <div className="mt-2 grid gap-8 max-md:mt-0 max-md:gap-0 md:grid-cols-2">
+      <div className="mt-2 grid grid-cols-1 gap-8 max-md:mt-0 max-md:gap-0 md:grid-cols-2">
         <ProductGallery images={images} name={product.name} />
         <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
-        <div data-testid="pdp-info" className="max-md:bg-stone-0 max-md:p-4">
+        <div data-testid="pdp-info" className="min-w-0 max-md:bg-stone-0 max-md:p-4">
           <div className="flex items-center justify-between gap-2">
             {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
             <Link

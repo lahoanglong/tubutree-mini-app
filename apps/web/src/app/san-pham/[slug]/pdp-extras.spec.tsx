@@ -124,6 +124,7 @@ describe('PdpCoupons', () => {
     await flush();
     expect(container.querySelector('ul')!.className).toContain('max-md:flex-col');
     expect(container.querySelector('button')!.className).toContain('max-md:w-full');
+    expect(container.querySelector('li')!.className).toContain('max-md:min-w-0');
   });
   it('chạm chép mã và báo mã đã có sẵn trong ví; không chép được thì cho khách tự ghi mã', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
