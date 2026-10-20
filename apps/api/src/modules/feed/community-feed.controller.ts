@@ -12,7 +12,6 @@ import { AllowStaff, COMMUNITY_MODERATORS } from '../../common/staff-permissions
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
-import { EVENT_REWARD_MAX_POINTS } from './community-limits';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
@@ -57,9 +56,9 @@ export class CreateEventDto {
   @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  // Điểm Xanh (1 điểm = 1đ). Trần 1.000.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
-  // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @OptionalNotNull() @IsInt() @Min(0) @Max(EVENT_REWARD_MAX_POINTS) rewardPoints?: number;
+  // Điểm Xanh (1 điểm = 1đ). Khoảng nghiệp vụ (20.000-50.000) kiểm ở service để báo lỗi tiếng Việt; @Max 1.000.000 chỉ là
+  // lưới chặn nhầm đơn vị. Gửi rewardXu sẽ bị ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm.
+  @OptionalNotNull() @IsInt() @Min(0) @Max(1_000_000) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;

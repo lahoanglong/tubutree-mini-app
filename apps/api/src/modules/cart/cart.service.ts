@@ -40,6 +40,7 @@ const ADD_ITEM_INCLUDE = {
   },
 } satisfies Prisma.VariationInclude;
 type AddableVariation = Prisma.VariationGetPayload<{ include: typeof ADD_ITEM_INCLUDE }>;
+export type AddItemsOutcome = { ok: true; toppedUp?: number } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' };
 
 @Injectable()
 export class CartService {
@@ -379,11 +380,15 @@ export class CartService {
    * Thêm nhiều dòng một lượt (mua lại đơn): cùng kiểm tra với addItem cho TỪNG dòng, nhưng đọc giỏ/hàng một lần, ghi các dòng đạt
    * trong MỘT transaction và KHÔNG dựng lại giỏ (người gọi tự getCart một lần). Dòng không đạt được báo lại để người gọi bỏ qua riêng
    * dòng đó; lỗi hạ tầng ném ra và cả loạt không ghi gì.
+   *
+   * `topUp` nhận kết quả vòng kiểm tra và trả phần bù thêm cho các dòng đã đạt (vd chỗ tồn mà dòng bị từ chối đã giữ): phần bù được kiểm
+   * tồn cộng dồn rồi gộp vào dòng gốc, nên vẫn một transaction và một sự kiện add_to_cart cho mỗi dòng, không có lần ghi thứ hai để hỏng nửa chừng.
    */
   async addItems(
     userId: string,
     lines: { variationId: string; quantity: number; addSource?: string }[],
-  ): Promise<({ ok: true } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' })[]> {
+    opts: { topUp?: (outcomes: AddItemsOutcome[]) => { index: number; quantity: number }[] } = {},
+  ): Promise<AddItemsOutcome[]> {
     if (lines.length === 0) return [];
     const cartId = await this.ensureCart(userId);
     const variationIds = [...new Set(lines.map((l) => l.variationId))];
@@ -393,9 +398,9 @@ export class CartService {
     ]);
     const byId = new Map(variations.map((v) => [v.id, v]));
     const qtyInCart = new Map(existing.map((e) => [e.variationId, e.quantity]));
-    const outcomes: ({ ok: true } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' })[] = [];
-    const accepted: typeof lines = [];
-    for (const line of lines) {
+    const outcomes: AddItemsOutcome[] = [];
+    const accepted: { line: (typeof lines)[number]; index: number; quantity: number }[] = [];
+    for (const [index, line] of lines.entries()) {
       const current = qtyInCart.get(line.variationId) ?? 0;
       try {
         this.assertStock(this.assertSellable(byId.get(line.variationId)), current, line.quantity);
@@ -405,27 +410,44 @@ export class CartService {
         throw err;
       }
       qtyInCart.set(line.variationId, current + line.quantity);
-      accepted.push(line);
+      accepted.push({ line, index, quantity: line.quantity });
       outcomes.push({ ok: true });
     }
     if (accepted.length === 0) return outcomes;
+    if (opts.topUp) {
+      for (const extra of opts.topUp([...outcomes])) {
+        const base = accepted.find((a) => a.index === extra.index);
+        if (!base || extra.quantity <= 0) continue;
+        const current = qtyInCart.get(base.line.variationId) ?? 0;
+        try {
+          this.assertStock(this.assertSellable(byId.get(base.line.variationId)), current, extra.quantity);
+        } catch (err) {
+          if (err instanceof NotFoundException || err instanceof BadRequestException) continue;
+          throw err;
+        }
+        qtyInCart.set(base.line.variationId, current + extra.quantity);
+        base.quantity += extra.quantity;
+        const prev = outcomes[base.index];
+        outcomes[base.index] = { ok: true, toppedUp: (prev?.ok ? (prev.toppedUp ?? 0) : 0) + extra.quantity };
+      }
+    }
     // Hai lượt mua lại song song của cùng khách khoá các dòng giỏ theo thứ tự upsert: cùng thứ tự variationId thì chỉ chờ nhau, không khoá chéo (deadlock).
-    const byVariation = [...accepted].sort((a, b) => (a.variationId < b.variationId ? -1 : a.variationId > b.variationId ? 1 : 0));
+    const byVariation = [...accepted].sort((a, b) => (a.line.variationId < b.line.variationId ? -1 : a.line.variationId > b.line.variationId ? 1 : 0));
     await this.prisma.$transaction(async (tx) => {
-      for (const line of byVariation) {
+      for (const { line, quantity } of byVariation) {
         await tx.cartItem.upsert({
           where: { cartId_variationId: { cartId, variationId: line.variationId } },
-          update: { quantity: { increment: line.quantity } },
-          create: { cartId, variationId: line.variationId, quantity: line.quantity },
+          update: { quantity: { increment: quantity } },
+          create: { cartId, variationId: line.variationId, quantity },
         });
       }
       await this.analytics.recordMany(
         tx,
-        accepted.map((line) => ({
+        accepted.map(({ line, quantity }) => ({
           eventName: 'add_to_cart',
           userId,
           platform: 'miniapp' as const,
-          props: { variationId: line.variationId, quantity: line.quantity, addSource: line.addSource ?? 'pdp' },
+          props: { variationId: line.variationId, quantity, addSource: line.addSource ?? 'pdp' },
         })),
       );
     });

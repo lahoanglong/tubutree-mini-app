@@ -187,6 +187,8 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 ### 1.3 Kiểm tra mẫu ZNS đã được Zalo duyệt
 
 > **Lưu ý theo quyết định đã chốt:** chủ chỉ nộp 3 mẫu `REVIEW_REQUEST`, `GROUP_BUY_SUCCESS`, `GROUP_BUY_FAILED` (bảng khoá tham số ở [GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 2, Bước D). `ORDER_CONFIRMED` và `ORDER_SHIPPING` chưa nộp nên các bước 1.3 đến 1.6 và 2.2, 2.5 dưới đây, viết cho hai mẫu đó, chỉ chạy được khi chủ đã quyết nộp thêm; nếu chưa, bỏ qua 1.5 và 1.6 và thử ZNS bằng một trong 3 mẫu đã nộp.
+>
+> **Mẫu `GROUP_BUY_SUCCESS`:** tham số `discount` là mức giảm theo % kèm dấu % (ví dụ `15%`), không phải số tiền. Mẫu nào đã nộp hoặc đã duyệt có chữ "đ" sau `<discount>` thì phải nộp lại, nếu không khách nhận "mã giảm 15%đ" (chi tiết ở bảng khoá GO-LIVE-KEYS.md mục 2, Bước D).
 
 - **Ai**: Quản trị. **Ở đâu**: Zalo OA, mục ZNS, danh sách mẫu của OA Tubu Tree.
 - **Làm**: mở hai mẫu `ORDER_CONFIRMED` ("Đơn {{order_code}} đã được xác nhận…") và `ORDER_SHIPPING` ("Đơn {{order_code}} đang được giao…"). Kiểm tra trạng thái, ghi lại Template ID (một dãy số).

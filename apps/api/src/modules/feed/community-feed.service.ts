@@ -11,6 +11,7 @@ import { startOfVnDay } from '../../common/vn-time';
 import { formatPoints } from '../../common/format-points';
 import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
+import { EVENT_REWARD_MAX_POINTS, EVENT_REWARD_MIN_POINTS } from './community-limits';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
 import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
@@ -1448,6 +1449,12 @@ export class CommunityFeedService {
     if (new Date(dto.startAt) >= new Date(dto.endAt)) {
       throw new BadRequestException('Thời gian kết thúc phải sau thời gian bắt đầu.');
     }
+    const reward = dto.rewardPoints ?? 0;
+    if (reward !== 0 && (reward < EVENT_REWARD_MIN_POINTS || reward > EVENT_REWARD_MAX_POINTS)) {
+      throw new BadRequestException(
+        `Quà sự kiện phải từ ${formatPoints(EVENT_REWARD_MIN_POINTS)} đến ${formatPoints(EVENT_REWARD_MAX_POINTS)} Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.`,
+      );
+    }
     return this.prisma.communityEvent.create({ data: dto });
   }
 
@@ -1477,6 +1484,12 @@ export class CommunityFeedService {
     if (event.status !== 'OPEN') throw new BadRequestException('Sự kiện đã đóng hoặc đã chọn người thắng.');
     const winner = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!winner) throw new NotFoundException('Người dùng không tồn tại.');
+    // Cùng điều kiện với adminEventParticipants: gọi API trực tiếp không được vòng qua danh sách người dự thi.
+    const entry = await this.prisma.feedPost.findFirst({
+      where: { userId, status: 'PUBLISHED', meta: { path: ['eventId'], equals: eventId } },
+      select: { id: true },
+    });
+    if (!entry) throw new BadRequestException('Người này chưa có bài dự thi nào được đăng trong sự kiện, không thể chọn làm người thắng.');
     const { count } = await this.prisma.communityEvent.updateMany({
       where: { id: eventId, status: 'OPEN' },
       data: { winnerUserId: userId, status: 'CLOSED' },

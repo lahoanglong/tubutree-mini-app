@@ -268,6 +268,63 @@ describe('OrderReturnsService.review — từ chối', () => {
   });
 });
 
+describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo điểm/hoa hồng sau commit', () => {
+  // Giao dịch duyệt đã commit (yêu cầu APPROVED, đơn RETURNED) nên gọi lại báo "đã xử lý": mọi việc sau commit phải chạy hết rồi mới ném.
+  function setupFullApprove(over: { points?: Error; commissions?: Error } = {}) {
+    const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    const prisma = {
+      returnRequest: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'r1', orderId: 'o1', userId: 'u1', status: 'REQUESTED', refundMethod: 'BANK', bankName: 'TCB', bankAccountNo: '1234567890', items: [] }),
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'r1', items: [] }),
+      },
+      order: { findUnique: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn().mockResolvedValue({
+        order,
+        shares: { isFull: true, lines: [] },
+        money: { to: 'BANK', amount: 300_000 },
+        pointsBack: 0,
+        referralNotices: [],
+      }),
+    } as unknown as PrismaService;
+    const loyalty = {
+      pointsExpiresAt: jest.fn().mockResolvedValue(new Date('2027-10-20T00:00:00Z')),
+      reverseOrderPoints: over.points ? jest.fn().mockRejectedValue(over.points) : jest.fn().mockResolvedValue(0),
+    };
+    const affiliate = { reverseCommissionsForOrder: over.commissions ? jest.fn().mockRejectedValue(over.commissions) : jest.fn().mockResolvedValue(undefined) };
+    const svc = new OrderReturnsService(prisma, {} as never, {} as never, loyalty as never, affiliate as never, notifications);
+    const flag = jest.fn().mockResolvedValue(undefined);
+    (svc as unknown as { flagPancakeReturn: unknown }).flagPancakeReturn = flag;
+    (svc as unknown as { withContext: unknown }).withContext = jest.fn().mockResolvedValue({ id: 'r1' });
+    return { svc, loyalty, affiliate, flag };
+  }
+  const events = () => (notifications.notify as jest.Mock).mock.calls.map((c) => c[1]);
+
+  beforeEach(() => (notifications.notify as jest.Mock).mockClear());
+
+  it('reverseOrderPoints reject thì thu hồi hoa hồng, nhắc phiếu trả Pancake, báo khách vẫn chạy đúng một lần; lỗi ném sau cùng', async () => {
+    const { svc, affiliate, flag } = setupFullApprove({ points: new Error('P2024') });
+    await expect(svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P2024');
+    expect(affiliate.reverseCommissionsForOrder).toHaveBeenCalledTimes(1);
+    expect(flag).toHaveBeenCalledTimes(1);
+    expect(events().filter((e) => e === 'RETURN_APPROVED_DETAIL')).toHaveLength(1);
+  });
+
+  it('reverseCommissionsForOrder reject thì đảo điểm đã chạy và các bước sau vẫn chạy', async () => {
+    const { svc, loyalty, flag } = setupFullApprove({ commissions: new Error('P1001') });
+    await expect(svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P1001');
+    expect(loyalty.reverseOrderPoints).toHaveBeenCalledTimes(1);
+    expect(flag).toHaveBeenCalledTimes(1);
+    expect(events().filter((e) => e === 'RETURN_APPROVED_DETAIL')).toHaveLength(1);
+  });
+
+  it('cả hai cùng lỗi: ném lỗi đầu tiên; không lỗi thì trả kết quả như cũ', async () => {
+    const both = setupFullApprove({ points: new Error('P2024'), commissions: new Error('P1001') });
+    await expect(both.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P2024');
+    const ok = setupFullApprove();
+    await expect(ok.svc.review('a1', 'r1', { approve: true, shopFault: true })).resolves.toBeDefined();
+  });
+});
+
 describe('OrderReturnsService.listForAdmin — kèm đơn, khách, tên dòng trả', () => {
   it('ghép order + user + tên sản phẩm của từng dòng trả, chỉ 2 truy vấn phụ cho cả trang', async () => {
     const orderFindMany = jest.fn().mockResolvedValue([

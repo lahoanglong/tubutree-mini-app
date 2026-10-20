@@ -68,7 +68,7 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
       <div className="grid gap-3 md:grid-cols-3">
         <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
           <h4 className="text-sm font-medium text-stone-900">Khấu trừ thuế TNCN của CTV</h4>
-          <p className="text-xs text-stone-500">Mỗi người nhận một dòng, gồm các lệnh đã chi hoa hồng trong khoảng ngày chi (giờ Việt Nam). Cùng số với bảng theo tháng ở mục Duyệt yêu cầu rút tiền.</p>
+          <p className="text-xs text-stone-500">Mỗi người nhận một dòng, gồm các lệnh đã chi hoa hồng trong khoảng ngày chi (giờ Việt Nam). Cùng số với bảng theo tháng ở mục Yêu cầu rút tiền.</p>
           <button type="button" disabled={disabled} onClick={() => void run('tax')} className={BTN_SECONDARY}>
             {busy === 'tax' ? 'Đang xuất…' : 'Xuất CSV thuế TNCN'}
           </button>

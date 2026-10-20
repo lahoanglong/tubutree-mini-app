@@ -92,6 +92,25 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     expect(r.container.textContent).toContain('Đã tạo 2 mã lô SHOPEE11');
   });
 
+  // U5-B05: luật đã chốt thẻ hộp hàng sàn có hạn 60 ngày; thẻ còn nằm trong kho trước khi tới tay khách nên 30 ngày dễ hết sớm.
+  it('U5-B05: để trống "Hết hạn ngày" thì hạn thẻ là 60 ngày kể từ hôm nay, và gợi ý ghi 60 ngày', async () => {
+    const { r, api } = mount({
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
+      '/admin/coupon-batches': (init) => (init?.method === 'POST' ? { body: { batch: 'HOA', created: 1, claimUrlBase: BASE, codes: [] } } : { body: [] }),
+    });
+    await flush();
+    expect(r.container.textContent).toContain('Bỏ trống = 60 ngày');
+    typeInto(input(r, 'Tiền tố lô'), 'hoa');
+    typeInto(input(r, 'Số thẻ'), '1');
+    typeInto(input(r, 'Mức giảm'), '30000');
+    const before = Date.now();
+    click(byText(r.container, 'button', 'Tạo lô và tải CSV'));
+    await flush();
+    const days = (Date.parse(String(bodyOf(api.calls.find((c) => c.init?.method === 'POST')).endAt)) - before) / 864e5;
+    expect(days).toBeGreaterThan(59.99);
+    expect(days).toBeLessThan(60.01);
+  });
+
   it('lô đã tạo: hiện số thẻ đã nhận/đã dùng; tải lại CSV; tắt lô phải xác nhận', async () => {
     const { r, api } = mount({
       '/admin/coupon-batches/claim-url-base': configRoute(BASE),

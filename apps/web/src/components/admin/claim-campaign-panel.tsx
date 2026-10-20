@@ -22,6 +22,9 @@ const BATCH_MAX = 2000;
 type CouponType = 'PERCENT' | 'AMOUNT' | 'FREESHIP';
 type Mode = 'batch' | 'shared';
 
+/** Hạn thẻ hộp hàng sàn khi để trống ngày: luật đã chốt 60 ngày, vì thẻ còn nằm trong kho và trong hộp trước khi tới tay khách. */
+const CLAIM_CARD_DEFAULT_DAYS = 60;
+
 /** Ngày của `<input type="date">` là ngày giờ VN: ghép giờ địa phương để "đến hết 31/12" không hết hạn lúc 7h sáng. */
 function localDayIso(dayKey: string, endOfDay: boolean, fallbackMs: number): string {
   if (!dayKey) return new Date(fallbackMs).toISOString();
@@ -77,7 +80,7 @@ export function ClaimCampaignPanel() {
     minOrder: num(f.minOrder),
     maxDiscount: num(f.maxDiscount),
     startAt: localDayIso(f.startAt, false, Date.now()),
-    endAt: localDayIso(f.endAt, true, Date.now() + 30 * 864e5),
+    endAt: localDayIso(f.endAt, true, Date.now() + CLAIM_CARD_DEFAULT_DAYS * 864e5),
     newCustomerOnly: f.newCustomerOnly,
   });
 
@@ -225,7 +228,7 @@ export function ClaimCampaignPanel() {
         <Field label="Bắt đầu từ ngày" hint="Bỏ trống = từ hôm nay.">
           <input type="date" aria-label="Thẻ bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
         </Field>
-        <Field label="Hết hạn ngày" hint="Bỏ trống = 30 ngày. Nên tính cả thời gian thẻ nằm trong kho.">
+        <Field label="Hết hạn ngày" hint={`Bỏ trống = ${CLAIM_CARD_DEFAULT_DAYS} ngày. Nên tính cả thời gian thẻ nằm trong kho.`}>
           <input type="date" aria-label="Thẻ hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
         </Field>
       </div>

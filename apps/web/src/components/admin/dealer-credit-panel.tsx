@@ -146,7 +146,6 @@ export function DealerCreditPanel({
                 <Field label="Mã giao dịch (tuỳ chọn)" className="grow basis-40">
                   <input
                     type="text"
-                    aria-label="Mã giao dịch ngân hàng"
                     maxLength={DEALER_BANK_REF_MAX}
                     value={bankRef}
                     onChange={(e) => setBankRef(e.target.value)}
@@ -157,7 +156,6 @@ export function DealerCreditPanel({
                 <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
                   <input
                     type="text"
-                    aria-label="Ghi chú"
                     maxLength={DEALER_PAYMENT_NOTE_MAX}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}

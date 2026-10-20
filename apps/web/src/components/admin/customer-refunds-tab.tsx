@@ -48,13 +48,24 @@ const groupDigits = (n: number | null) => (n == null ? '' : String(n).replace(/\
 
 const fmtDate = formatDateTime;
 
-/** Khoản `RETURN` chờ đối soát chỉ do đơn COD đã giao rồi bị hoàn mà chưa rõ hãng vận chuyển đã thu tiền (API refKey cod-return-unverified). */
-const isCodReturn = (r: AdminCustomerRefund) => r.kind === 'RETURN' && r.status === 'UNVERIFIED';
+const COD_RETURN_REF = 'cod-return-unverified';
+
+/**
+ * Khoản `RETURN` sinh từ đơn COD đã giao rồi bị hoàn mà chưa rõ hãng vận chuyển đã thu tiền (API refKey cod-return-unverified,
+ * phần không hoàn thêm hậu tố `:rest`). Nhận bằng refKey để khoản vẫn là COD sau khi đối soát (chờ chuyển khoản, đã chuyển,
+ * không hoàn); API cũ chưa trả refKey thì chỉ khoản RETURN còn chờ đối soát là COD (mọi RETURN khác đã có yêu cầu trả hàng).
+ */
+const isCodReturn = (r: AdminCustomerRefund) =>
+  r.kind === 'RETURN' && (r.refKey !== undefined ? r.refKey.startsWith(COD_RETURN_REF) : r.status === 'UNVERIFIED');
+
+/** Khách cuối của đơn CTV lên hộ không có tài khoản nên không có lựa chọn Ví Tubu: Tubu chuyển khoản tay theo SĐT. */
+const COD_END_CUSTOMER_NEXT = 'khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối';
 
 const VERIFY_LABEL = 'Xác nhận tiền dư';
 const DISMISS_LABEL = 'Không phải tiền dư';
 const COD_VERIFY_LABEL = 'Xác nhận đã thu COD, hoàn cho khách';
 const COD_DISMISS_LABEL = 'Không hoàn';
+const COD_DISMISSED_STATUS_LABEL = 'Không hoàn (COD)';
 
 function codAmountError(n: number | null, max: number): string | null {
   if (n == null || n <= 0) return 'Nhập số tiền hoàn cho khách (lớn hơn 0đ).';
@@ -165,7 +176,11 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
       setFlash({
         tone: 'success',
         text: isCodReturn(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}. Khách chưa được báo: liên hệ khách để chọn nhận về Ví Tubu hay tài khoản ngân hàng; khoản chuyển sang "Chờ chuyển khoản".`
+          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}. ${
+              r.userId === null
+                ? 'Đơn CTV lên hộ: khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối'
+                : 'Khách chưa được báo: liên hệ khách để chọn nhận về Ví Tubu hay tài khoản ngân hàng'
+            }; khoản chuyển sang "Chờ chuyển khoản".`
           : `Đã xác nhận tiền trả dư ${formatVnd(amount)} (đơn ${r.orderCode}). Khách được báo để chọn nhận về Ví Tubu hay tài khoản ngân hàng; khoản chuyển sang "Chờ chuyển khoản".`,
       });
     },
@@ -207,8 +222,10 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
             title: 'Xác nhận đã thu COD',
             message:
               `Hãng vận chuyển đã thu COD của đơn ${r.orderCode} và khách đã trả hàng, nên hoàn ${formatVnd(amount)} cho khách?\n\n` +
-              'Khoản chuyển sang "Chờ chuyển khoản"; khách chưa được báo, hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ' +
-              'ngân hàng. Chỉ bấm khi đã đối chiếu với hãng vận chuyển.',
+              (r.userId === null
+                ? 'Khoản chuyển sang "Chờ chuyển khoản"; đơn CTV lên hộ nên khách cuối không có tài khoản và không được báo, Tubu chuyển khoản tay theo SĐT khách cuối. '
+                : 'Khoản chuyển sang "Chờ chuyển khoản"; khách chưa được báo, hãy liên hệ để khách chọn nhận về Ví Tubu hay tài khoản ngân hàng. ') +
+              'Chỉ bấm khi đã đối chiếu với hãng vận chuyển.',
             confirmLabel: COD_VERIFY_LABEL,
             cancelLabel: 'Đóng',
           }
@@ -459,7 +476,9 @@ export function CustomerRefundRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base font-semibold text-stone-900">{formatVnd(r.amount)}</span>
             <span data-refund-status={view}>
-              <ToneBadge tone={CUSTOMER_REFUND_VIEW_TONE[view]}>{CUSTOMER_REFUND_VIEW_LABEL[view]}</ToneBadge>
+              <ToneBadge tone={CUSTOMER_REFUND_VIEW_TONE[view]}>
+                {codReturn && view === 'DISMISSED' ? COD_DISMISSED_STATUS_LABEL : CUSTOMER_REFUND_VIEW_LABEL[view]}
+              </ToneBadge>
             </span>
             <ToneBadge tone="neutral">
               {codReturn ? 'Trả hàng COD' : r.kind && r.kind !== 'END_CUSTOMER' ? refundKindLabel(r.kind) : refundReasonLabel(r.reason)}
@@ -507,8 +526,11 @@ export function CustomerRefundRow({
           {codReturn ? (
             <p className="text-xs text-warning-fg">
               Đơn COD đã giao rồi bị hoàn, hệ thống chưa rõ hãng vận chuyển đã thu tiền của khách chưa. Khách chưa thấy khoản này. Đối
-              chiếu với hãng: đã thu COD thì xác nhận số hoàn (khách chưa được báo, liên hệ khách để chọn nhận về Ví hay ngân hàng
-              {r.userId === null ? '; đơn CTV lên hộ: Tubu chuyển khoản tay theo SĐT khách cuối' : ''}); hãng chưa thu thì bấm &quot;
+              chiếu với hãng: đã thu COD thì xác nhận số hoàn (
+              {r.userId === null
+                ? `đơn CTV lên hộ: ${COD_END_CUSTOMER_NEXT}`
+                : 'khách chưa được báo, liên hệ khách để chọn nhận về Ví hay ngân hàng'}
+              ); hãng chưa thu thì bấm &quot;
               {COD_DISMISS_LABEL}&quot;.
             </p>
           ) : (

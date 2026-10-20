@@ -271,7 +271,7 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
       {open && (
         <div data-claim-detail className="mt-2 rounded-control bg-stone-100 p-2 text-xs text-stone-700">
           {detail.isLoading && <p>Đang tải…</p>}
-          {detail.isError && <p className="text-danger-fg">Không tải được chi tiết.</p>}
+          {detail.isError && <LoadError onRetry={() => void detail.refetch()} retrying={detail.isFetching}>Không tải được chi tiết.</LoadError>}
           <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
             <DlRow label="Mã yêu cầu"><span className="font-mono">{row.id}</span></DlRow>
             <DlRow label="Đơn Pancake"><span className="font-mono">#{row.pancakeOrderId}</span></DlRow>

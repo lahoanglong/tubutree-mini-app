@@ -10,6 +10,7 @@ import { PancakeAttentionPanel } from './pancake-attention';
 import { PayoutRow } from './payout-admin-tab';
 import { RecyclingPanel } from './recycling-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { accessibleName } from '@/test-utils/a11y';
 import type { AdminOrder, AdminPayout } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -91,6 +92,21 @@ const CASES: [string, () => ReactElement, (c: HTMLElement) => Promise<void>][] =
   ['Yêu cầu xoá tài khoản', () => <AccountDeletionPanel />, async () => flush()],
 ];
 
+/** WCAG 2.5.3: tên truy cập phải chứa chữ đang hiện trên nhãn, nếu không người dùng giọng nói đọc nhãn mà không tới được ô. */
+function fieldsWhoseNameLosesVisibleLabel(root: ParentNode): string[] {
+  const norm = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  return Array.from(root.querySelectorAll<HTMLInputElement>('input, textarea, select'))
+    .filter((el) => !['hidden', 'checkbox', 'radio', 'file'].includes(el.type))
+    .flatMap((el) => {
+      const visible = Array.from(el.labels ?? [])
+        .map((l) => norm(Array.from(l.querySelectorAll('span')).find((sp) => !sp.contains(el))?.textContent ?? ''))
+        .find(Boolean);
+      if (!visible) return [];
+      const name = norm(accessibleName(el));
+      return name.includes(visible) ? [] : [`"${visible}" không nằm trong tên "${name}"`];
+    });
+}
+
 describe('ô nhập trong tab quản trị có nhãn hiện (D7-25)', () => {
   it.each(CASES)('%s', async (_name, ui, prepare) => {
     const api = mockFetch({
@@ -119,5 +135,6 @@ describe('ô nhập trong tab quản trị có nhãn hiện (D7-25)', () => {
     const total = r.container.querySelectorAll('input, textarea').length;
     expect(total, 'không dựng ra ô nhập nào để kiểm').toBeGreaterThan(0);
     expect(fieldsWithoutVisibleLabel(r.container)).toEqual([]);
+    expect(fieldsWhoseNameLosesVisibleLabel(r.container)).toEqual([]);
   });
 });

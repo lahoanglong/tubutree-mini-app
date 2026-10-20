@@ -951,12 +951,23 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
 
   function build() {
     const commissionAggregate = jest.fn().mockResolvedValue({ _sum: { amount: 0, commissionableTotal: 0 } });
+    const commissionCount = jest.fn().mockResolvedValue(0);
     const prisma = {
-      commission: { aggregate: commissionAggregate },
+      commission: { aggregate: commissionAggregate, count: commissionCount },
       affiliateLink: { aggregate: jest.fn().mockResolvedValue({ _sum: { clicks: 0, conversions: 0 } }) },
     } as unknown as PrismaService;
-    return { svc: new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics), commissionAggregate };
+    return { svc: new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics), commissionAggregate, commissionCount };
   }
+
+  // U3-B01: affiliate_links.conversions không chỗ nào tăng, nên "Chuyển đổi" luôn 0 dù CTV có đơn ghi công. Đếm từ bảng
+  // hoa hồng: mỗi (đơn, CTV) tối đa một dòng (unique) nên webhook lặp không đếm đôi; đơn huỷ/trả (REJECTED) không tính.
+  it('U3-B01: totalConversions = số đơn đã ghi công (hoa hồng khác REJECTED), không phải cột links.conversions', async () => {
+    const { svc, commissionCount } = build();
+    commissionCount.mockResolvedValue(15);
+    const d = await svc.dashboard('u1', NOW);
+    expect(commissionCount).toHaveBeenCalledWith({ where: { affiliateUserId: 'u1', status: { not: 'REJECTED' } } });
+    expect(d.totalConversions).toBe(15);
+  });
 
   it('monthRevenue chỉ cộng commissionableTotal của commission APPROVED/PAID chốt trong tháng VN (không PENDING/LOCKED còn huỷ/trả được)', async () => {
     const { svc, commissionAggregate } = build();

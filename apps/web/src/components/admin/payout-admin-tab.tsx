@@ -33,7 +33,7 @@ export const seedPayoutFilter = (status: AdminPayoutStatus | null) => {
 };
 
 /**
- * Duyệt yêu cầu rút tiền (hoa hồng CTV / Ví Tubu → ngân hàng). Trước đây (P0 A5-08 = A6-05) Payout
+ * Yêu cầu rút tiền (hoa hồng CTV / Ví Tubu → ngân hàng). Trước đây (P0 A5-08 = A6-05) Payout
  * REQUESTED không có màn nào xử lý — tiền bị trừ khỏi số dư CTV (hoặc commission bị khoá) rồi
  * "biến mất" khỏi mọi hàng đợi. Từ chối BẮT BUỘC lý do và TỰ ĐỘNG hoàn tiền/commission (BE:
  * AffiliateService.rejectPayout) — không cần thao tác hoàn tiền thủ công nào thêm ở đây.
@@ -54,7 +54,7 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-stone-900">Duyệt yêu cầu rút tiền</h2>
+        <h2 className="text-base font-semibold text-stone-900">Yêu cầu rút tiền</h2>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
           {[...PAYOUT_STATUS_ORDER, ''].map((s) => (
             <button
@@ -352,7 +352,6 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
         <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3">
           <Field label={acts.reject ? 'Ghi chú / lý do (bắt buộc khi từ chối)' : 'Ghi chú (tuỳ chọn)'} className="min-w-[200px] flex-1">
             <input
-              aria-label="Ghi chú / lý do"
               value={text}
               maxLength={500}
               onChange={(e) => setText(e.target.value)}
@@ -363,7 +362,6 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
           {acts.markPaid && (
             <Field label="Mã giao dịch ngân hàng (tuỳ chọn)" className="min-w-[160px] flex-1">
               <input
-                aria-label="Mã giao dịch ngân hàng"
                 value={bankRef}
                 maxLength={100}
                 onChange={(e) => setBankRef(e.target.value)}

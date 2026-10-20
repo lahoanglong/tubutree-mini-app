@@ -150,7 +150,6 @@ describe('FlashSaleService.addItem — nhân viên (D2-01)', () => {
     await svc().addItem('s1', { variationId: 'v1', flashPrice: 10_000, quota: 1_000, perUserLimit: 200 }, ADMIN);
     expect(prisma.flashSaleItem.create).toHaveBeenCalledTimes(1);
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
-    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('không truyền actor (job/seed) cũng không bị trần', async () => {
@@ -167,11 +166,53 @@ describe('FlashSaleService.updateSale — dời giờ không được làm hai �
   beforeEach(() => jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-05T08:00:00Z').getTime()));
   afterEach(() => jest.restoreAllMocks());
 
-  it('nhân viên kéo dài đợt cho chồng giờ đợt khác, tổng giảm một đơn vượt 100.000đ → 400, không ghi', async () => {
-    const { prisma, svc } = setup({ exposure: 160_000 });
+  const exposures = (prisma: { $queryRaw: jest.Mock }, total: number) => {
+    prisma.$queryRaw.mockReset();
+    prisma.$queryRaw.mockResolvedValue([{ exposure: BigInt(total) }]);
+  };
+
+  it('nhân viên kéo dài đợt cho chồng giờ đợt khác, tổng giảm một đơn tăng lên vượt 100.000đ → 400, không ghi', async () => {
+    const { prisma, svc } = setup();
+    exposures(prisma, 160_000);
     const call = () => svc().updateSale('s1', extend, STAFF);
     await expect(call()).rejects.toBeInstanceOf(BadRequestException);
-    await expect(call()).rejects.toThrow(/Một đơn mua đủ.*100\.000đ.*160\.000đ/);
+    exposures(prisma, 160_000);
+    await expect(call()).rejects.toThrow(/Một đơn mua đủ.*100\.000đ.*160\.000đ.*nhờ quản trị viên/);
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
+  });
+
+  it('đợt đã kết thúc: câu tính mức giảm không đếm đợt khác khi khung [từ, đến) rỗng (không thổi phồng mức "trước" để lách trần)', async () => {
+    const { prisma, svc } = setup();
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-05T13:00:00Z').getTime());
+    await svc().updateSale('s1', { endAt: '2026-07-06T00:00:00Z' }, ADMIN_ACTOR).catch(() => undefined);
+    const sqls = prisma.$queryRaw.mock.calls.map((c: unknown[]) => (c[0] as readonly string[]).join('?').replace(/\s+/g, ' '));
+    expect(sqls.length).toBeGreaterThan(0);
+    for (const sql of sqls) expect(sql).toMatch(/"startAt" < \? AND fs\."endAt" > \? AND \? < \?/);
+  });
+
+  it('đợt đã vượt trần từ trước (admin thêm dòng): PATCH thu hẹp giờ nằm gọn trong khung cũ vẫn được', async () => {
+    const shrink = setup();
+    exposures(shrink.prisma, 160_000);
+    await shrink.svc().updateSale('s1', { endAt: '2026-07-05T11:00:00Z' }, ADMIN_ACTOR);
+    expect(shrink.prisma.flashSale.update).toHaveBeenCalledTimes(1);
+
+    const lower = setup();
+    exposures(lower.prisma, 120_000);
+    await lower.svc().updateSale('s1', { endAt: '2026-07-05T11:00:00Z' }, STAFF);
+    expect(lower.prisma.flashSale.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('đợt đã vượt trần mà PATCH làm tăng thêm dù chỉ một chút thì vẫn bị chặn', async () => {
+    const { prisma, svc } = setup();
+    exposures(prisma, 160_001);
+    await expect(svc().updateSale('s1', extend, STAFF)).rejects.toThrow(/Một đơn mua đủ/);
+    expect(prisma.flashSale.update).not.toHaveBeenCalled();
+  });
+
+  it('khung mới không nằm gọn trong khung cũ: tổng vượt trần là bị chặn dù thấp hơn mức "trước" (các đợt rời nhau cộng dồn)', async () => {
+    const { prisma, svc } = setup();
+    exposures(prisma, 110_000);
+    await expect(svc().updateSale('s1', { startAt: '2026-07-05T09:30:00Z', endAt: '2026-07-05T13:00:00Z' }, STAFF)).rejects.toThrow(/Một đơn mua đủ/);
     expect(prisma.flashSale.update).not.toHaveBeenCalled();
   });
 
@@ -184,8 +225,11 @@ describe('FlashSaleService.updateSale — dời giờ không được làm hai �
   });
 
   it('quản trị viên dời giờ đợt của nhân viên cũng bị trần đơn của nhân viên đó', async () => {
-    const { prisma, svc } = setup({ exposure: 160_000 });
-    await expect(svc().updateSale('s1', { startAt: '2026-07-05T09:30:00Z' }, ADMIN_ACTOR)).rejects.toThrow(/Một đơn mua đủ/);
+    const { prisma, svc } = setup();
+    exposures(prisma, 160_000);
+    const err = await svc().updateSale('s1', { startAt: '2026-07-05T08:30:00Z' }, ADMIN_ACTOR).catch((e: Error) => e);
+    expect(String((err as Error).message)).toMatch(/Một đơn mua đủ/);
+    expect(String((err as Error).message)).not.toMatch(/nhờ quản trị viên/);
     expect(prisma.flashSale.update).not.toHaveBeenCalled();
   });
 
@@ -282,5 +326,52 @@ describe('FlashSaleService.resolveEffective — người tạo đợt không đ�
     const priced = priceFlashLine(100_000, 1, (await svcWith('m1', null).resolveEffective(['v1'], NOW, 'm1')).get('v1'));
     expect(priced.flash).toBeNull();
     expect(priced.unitPrice).toBe(100_000);
+  });
+});
+
+describe('FlashSaleService — kiểm trùng biến thể giữa các đợt chạy dưới khoá, cùng giao dịch với lần ghi', () => {
+  const lockOrder = (prisma: { $executeRaw: jest.Mock }, other: jest.Mock) => {
+    const lockCall = prisma.$executeRaw.mock.calls.findIndex((c: unknown[]) => c.slice(1).includes('flash.item_clash'));
+    expect(lockCall).toBeGreaterThanOrEqual(0);
+    expect(prisma.$executeRaw.mock.invocationCallOrder[lockCall]).toBeLessThan(other.mock.invocationCallOrder[0]!);
+  };
+
+  it('addItem của ADMIN: khoá chống trùng trước khi tra trùng và tạo dòng, trong một giao dịch', async () => {
+    const { prisma, svc } = setup({ createdBy: 'a1', creatorRole: 'ADMIN' });
+    await svc().addItem('s1', { variationId: 'v1', flashPrice: 80_000, quota: 5 }, ADMIN);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    lockOrder(prisma, prisma.flashSaleItem.findFirst);
+    expect(prisma.flashSaleItem.findFirst.mock.invocationCallOrder[0]).toBeLessThan(prisma.flashSaleItem.create.mock.invocationCallOrder[0]);
+  });
+
+  it('addItem của nhân viên: khoá chống trùng trước khi tra trùng, cùng giao dịch với kiểm trần', async () => {
+    const { prisma, svc } = setup();
+    await svc().addItem('s1', { variationId: 'v1', flashPrice: 90_000, quota: 5, perUserLimit: 1 }, STAFF);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    lockOrder(prisma, prisma.flashSaleItem.findFirst);
+  });
+
+  it('addItem phát hiện trùng thì không tạo dòng', async () => {
+    const { prisma, svc } = setup({ createdBy: 'a1', creatorRole: 'ADMIN' });
+    prisma.flashSaleItem.findFirst.mockResolvedValue({ id: 'other' });
+    await expect(svc().addItem('s1', { variationId: 'v1', flashPrice: 80_000, quota: 5 }, ADMIN)).rejects.toThrow(/đợt flash khác|trùng/i);
+    expect(prisma.flashSaleItem.create).not.toHaveBeenCalled();
+  });
+
+  it('updateSale đổi giờ (kể cả đợt của ADMIN): khoá chống trùng trước khi tra trùng, tra và ghi trong cùng giao dịch', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-05T08:00:00Z').getTime());
+    try {
+      const { prisma, svc } = setup({ createdBy: 'a1', creatorRole: 'ADMIN' });
+      prisma.flashSale.findUniqueOrThrow.mockResolvedValue({
+        id: 's1', createdBy: 'a1', createdAt: new Date('2026-07-05T03:00:00Z'),
+        startAt: new Date('2026-07-05T09:00:00Z'), endAt: new Date('2026-07-05T12:00:00Z'), items: [{ variationId: 'v1' }],
+      });
+      await svc().updateSale('s1', { endAt: '2026-07-05T11:00:00Z' }, { id: 'a1', staff: false });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      lockOrder(prisma, prisma.flashSaleItem.findFirst);
+      expect(prisma.flashSaleItem.findFirst.mock.invocationCallOrder[0]).toBeLessThan(prisma.flashSale.update.mock.invocationCallOrder[0]);
+    } finally {
+      jest.restoreAllMocks();
+    }
   });
 });

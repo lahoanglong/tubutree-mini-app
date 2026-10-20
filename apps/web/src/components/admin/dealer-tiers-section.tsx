@@ -21,7 +21,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
-import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, Field, INPUT_CLASS, Notice, TOUCH_H } from './ui';
+import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, Field, INPUT_CLASS, LoadError, Notice, TOUCH_H } from './ui';
 
 type Mode = { kind: 'create' } | { kind: 'edit'; id: string; baseline: TierValues };
 interface SaveInput {
@@ -244,7 +244,7 @@ export function DealerTiersSection() {
         {histOpen && (
           <div className="mt-2 space-y-2">
             {histQ.isLoading && <p className="text-sm text-stone-500">Đang tải lịch sử…</p>}
-            {histQ.isError && <p role="alert" className="text-sm text-danger-fg">Không tải được lịch sử bậc.</p>}
+            {histQ.isError && <LoadError onRetry={() => void histQ.refetch()} retrying={histQ.isFetching}>Không tải được lịch sử bậc.</LoadError>}
             {histQ.isSuccess && histQ.data.length === 0 && <p className="text-sm text-stone-500">Chưa có thay đổi nào.</p>}
             <ul className="space-y-2">
               {histQ.data?.map((h) => (

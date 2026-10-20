@@ -154,9 +154,30 @@ describe('PD-3 nguồn thưởng chuyển sang Điểm Xanh (real Postgres)', ()
         rewardPoints: 50,
       },
     });
+    await prisma.feedPost.create({
+      data: { userId: winner.id, body: 'Bài dự thi IT', status: 'PUBLISHED', meta: { eventId: event.id } },
+    });
     const results = await Promise.allSettled(Array.from({ length: 3 }, () => feed.pickWinner(event.id, winner.id)));
     expect(summarize(results).fulfilled).toHaveLength(1);
     expect(await standard(winner.id)).toEqual({ balance: 50, ledger: 50, coins: 0 });
     expect(await prisma.coinTransaction.count({ where: { userId: winner.id } })).toBe(0);
+  });
+
+  it('(e2) người không có bài dự thi → 400, không có dòng COMMUNITY_EVENT_WIN, sự kiện vẫn OPEN', async () => {
+    const outsider = await createUser(prisma);
+    const event = await prisma.communityEvent.create({
+      data: {
+        title: 'Sự kiện IT không bài',
+        startAt: new Date(Date.now() - 86_400_000),
+        endAt: new Date(Date.now() + 86_400_000),
+        rewardPoints: 50,
+      },
+    });
+    await expect(feed.pickWinner(event.id, outsider.id)).rejects.toThrow('chưa có bài dự thi');
+    expect(
+      await prisma.pointsTransaction.count({ where: { userId: outsider.id, reason: { startsWith: 'COMMUNITY_EVENT_WIN:' } } }),
+    ).toBe(0);
+    const after = await prisma.communityEvent.findUniqueOrThrow({ where: { id: event.id }, select: { status: true, winnerUserId: true } });
+    expect(after).toEqual({ status: 'OPEN', winnerUserId: null });
   });
 });

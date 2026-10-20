@@ -180,8 +180,9 @@ export class LoyaltyService {
    * 20. Phần hụt hiện ở dòng ORDER_REVERSED và khách giữ giá trị đó (một lượt quay) theo chính sách "điểm đã tiêu không
    * đòi lại" (PF-3). Thu hồi lấy ít hơn pointsEarned thay vì làm số dư âm.
    *
-   * Dòng ORDER_REVERSED luôn được ghi (delta 0 nếu không còn gì để thu hồi): nó là dấu "đã xử lý" của idempotency và của
-   * lockedOrderPoints.
+   * Dòng ORDER_REVERSED được ghi khi điểm tích của đơn đã được cộng (wasCredited), delta 0 nếu không còn gì để thu hồi: nó là dấu
+   * "đã xử lý" của idempotency và của lockedOrderPoints. Đơn chưa giao không có điểm tích nên không có dòng này; phần hoàn điểm đã dùng
+   * có dấu riêng là ORDER_REFUND_POINTS (refundBooked).
    */
   /**
    * Trả số Điểm Xanh thường (lô STANDARD) vừa hoàn lại cho khách ở lần gọi này — 0 khi không có hoặc đã đảo trước đó.
@@ -200,8 +201,6 @@ export class LoyaltyService {
     // cùng tính bởi remainingPointsBack nên cộng lại đúng bằng số điểm đã dùng chưa trả.
     const usedStandard = remainingPointsBack(order, prior).standard;
     const earnedLeft = Math.max(0, order.pointsEarned - prior.pointsEarnedBack);
-    // Điểm hoàn là điểm thường nên có hạn như mọi điểm thưởng khác (OQ-15). Đọc cấu hình NGOÀI tx: không giữ
-    // kết nối tx trong lúc chờ SystemConfigService.
     // Không có điểm tích để thu hồi và dòng hoàn điểm (hoặc dấu ORDER_REVERSED) đã có: không còn việc gì, bỏ qua khoá dòng user và
     // đọc cấu hình. Webhook CANCELLED/RETURNED lặp lại đi qua đây mỗi lần; tx bên dưới vẫn re-check sau khoá cho ca chạy song song.
     if (earnedLeft === 0 && usedStandard > 0) {
@@ -211,6 +210,8 @@ export class LoyaltyService {
       });
       if (done) return 0;
     }
+    // Điểm hoàn là điểm thường nên có hạn như mọi điểm thưởng khác (OQ-15). Đọc cấu hình NGOÀI tx: không giữ
+    // kết nối tx trong lúc chờ SystemConfigService.
     const refundExpiresAt = usedStandard > 0 ? await this.pointsExpiresAt(new Date()) : null;
     try {
       return await this.prisma.$transaction(async (tx) => {
