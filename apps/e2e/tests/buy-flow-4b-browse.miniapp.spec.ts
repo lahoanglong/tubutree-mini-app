@@ -96,7 +96,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     const box = page.getByRole('searchbox', { name: 'Tìm sản phẩm' });
     await box.click();
     await expect(box).toBeFocused();
-    await expect(page.getByRole('button', { name: 'Hủy' })).toBeVisible(); // đã vào chế độ gõ
+    await expect(page.getByRole('button', { name: 'Huỷ' })).toBeVisible(); // đã vào chế độ gõ
     await expect(page.getByRole('region', { name: 'Gợi ý tìm kiếm' })).toHaveCount(0);
     await expect(cats).toBeVisible();
     await expect(page.getByRole('group', { name: SORT_GROUP })).toBeVisible();
@@ -107,7 +107,7 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     await expect(cats).toHaveCount(0);
     await expect(page.getByRole('group', { name: SORT_GROUP })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Hủy' }).click();
+    await page.getByRole('button', { name: 'Huỷ' }).click();
     await expect(box).toHaveValue('');
     await expect(cats).toBeVisible();
   });

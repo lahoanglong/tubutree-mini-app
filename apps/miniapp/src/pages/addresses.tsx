@@ -47,7 +47,7 @@ export default function AddressesPage() {
     mutationFn: (id: string) => deleteAddress(id),
     onSuccess: () => {
       setConfirmDel(null);
-      openSnackbar({ text: 'Đã xóa địa chỉ.', type: 'success' });
+      openSnackbar({ text: 'Đã xoá địa chỉ.', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['addresses'] });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -108,7 +108,7 @@ export default function AddressesPage() {
                   )}
                   <ActionLink label="Sửa" onClick={() => setEditing(a)} />
                   <ActionLink
-                    label="Xóa"
+                    label="Xoá"
                     danger
                     onClick={() => setConfirmDel(a)}
                     disabled={deleteMut.isPending}
@@ -150,16 +150,16 @@ export default function AddressesPage() {
         )}
       </BottomSheet>
 
-      {/* Xác nhận xóa (tránh mất nhầm địa chỉ — thao tác không hoàn tác). */}
+      {/* Xác nhận xoá (tránh mất nhầm địa chỉ — thao tác không hoàn tác). */}
       <BottomSheet
         open={confirmDel != null}
         onClose={() => setConfirmDel(null)}
-        title="Xóa địa chỉ này?"
+        title="Xoá địa chỉ này?"
         footer={
           confirmDel != null && (
             <div style={{ display: 'flex', gap: 10 }}>
               <Button variant="secondary" fullWidth onPress={() => setConfirmDel(null)}>
-                Hủy
+                Huỷ
               </Button>
               <Button
                 fullWidth
@@ -167,7 +167,7 @@ export default function AddressesPage() {
                 loading={deleteMut.isPending}
                 onPress={() => deleteMut.mutate(confirmDel.id)}
               >
-                Xóa
+                Xoá
               </Button>
             </div>
           )

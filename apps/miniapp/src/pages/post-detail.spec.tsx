@@ -270,13 +270,13 @@ describe('PostDetailPage — thao tác (hành vi giữ nguyên khi chuyển DS v
     );
   });
 
-  it('chủ bài bấm Hủy ở hộp xác nhận xoá thì không xoá', async () => {
+  it('chủ bài bấm Huỷ ở hộp xác nhận xoá thì không xoá', async () => {
     stub(POST({ isOwner: true }));
     renderPage();
     await screen.findByText('Lan Anh');
     fireEvent.click(btn('Xoá'));
     expect(await screen.findByText('Xoá bài viết này?')).toBeInTheDocument();
-    fireEvent.click(btn('Hủy'));
+    fireEvent.click(btn('Huỷ'));
     expect(mocks.deletePost).not.toHaveBeenCalled();
   });
 

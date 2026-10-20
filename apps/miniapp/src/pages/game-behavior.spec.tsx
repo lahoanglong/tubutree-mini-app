@@ -755,8 +755,8 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
     await openTab('Cộng đồng');
     expect(await screen.findByText(viText.game.seasonPass.title)).toBeInTheDocument();
     expect(screen.getByText(viText.game.seasonPass.subtitle('Xuân'))).toBeInTheDocument();
-    expect(screen.getByText('150 XP')).toBeInTheDocument();
-    expect(screen.getAllByText('300 XP').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('150 điểm kinh nghiệm')).toBeInTheDocument();
+    expect(screen.getAllByText('300 điểm kinh nghiệm').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(viText.game.seasonPass.premiumHint)).toBeInTheDocument();
     // 150/300 = 50%
     expect(container.querySelector('[style*="width: 50%"]')).not.toBeNull();
@@ -962,7 +962,7 @@ describe('GamePage — quiz Sống Xanh', () => {
 
   it('hết quiz hôm nay: hiện lời chúc hoàn thành', async () => {
     renderPage();
-    expect(await screen.findByText(/Bạn đã hoàn thành quiz hôm nay/)).toBeInTheDocument();
+    expect(await screen.findByText(/Bạn đã hoàn thành câu đố hôm nay/)).toBeInTheDocument();
   });
 
   it('một câu: tiêu đề phân loại/độ khó, thưởng; chọn đáp án gọi answerQuiz(id, lựa chọn) và khoá mọi đáp án; chỉ làm mới hồ sơ + me', async () => {
@@ -1015,7 +1015,7 @@ describe('GamePage — quiz Sống Xanh', () => {
     fireEvent.click(screen.getByRole('button', { name: '450 năm' }));
     expect(await screen.findByText('Chính xác! +30💧')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Hoàn thành' }));
-    expect(await screen.findByText(/Bạn đã hoàn thành quiz hôm nay/)).toBeInTheDocument();
+    expect(await screen.findByText(/Bạn đã hoàn thành câu đố hôm nay/)).toBeInTheDocument();
     expect(mocks.api.answerQuiz).toHaveBeenNthCalledWith(1, 'q1', 0);
     expect(mocks.api.answerQuiz).toHaveBeenNthCalledWith(2, 'q2', 1);
   });
@@ -1118,7 +1118,7 @@ describe('GamePage — bảng xếp hạng', () => {
       { rank: 4, nickname: 'Quân', drops: 700 },
     ]);
     renderPage();
-    expect(await screen.findByText('Top góp nước mùa này')).toBeInTheDocument();
+    expect(await screen.findByText('Xếp hạng góp nước mùa này')).toBeInTheDocument();
     expect(screen.getByText('🥇 Lan')).toBeInTheDocument();
     expect(screen.getByText('🥈 Minh')).toBeInTheDocument();
     expect(screen.getByText('🥉 Hà')).toBeInTheDocument();
@@ -1129,7 +1129,7 @@ describe('GamePage — bảng xếp hạng', () => {
   it('không có dữ liệu mùa: ẩn khối', async () => {
     renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText('Top góp nước mùa này')).not.toBeInTheDocument();
+    expect(screen.queryByText('Xếp hạng góp nước mùa này')).not.toBeInTheDocument();
   });
 
   it('bảng chuỗi điểm danh dài nhất trống: hiện "Chưa có dữ liệu xếp hạng."', async () => {

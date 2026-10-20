@@ -110,7 +110,7 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     emoji: '🍄',
     gradient: gradient('hector'),
     ingredient: 'Đông trùng hạ thảo',
-    story: 'Hector nghiên cứu và nuôi trồng đông trùng hạ thảo tại khí hậu ôn hòa Lâm Đồng, cung cấp dòng nước uống bổ dưỡng và chăm sóc sức khỏe toàn diện.',
+    story: 'Hector nghiên cứu và nuôi trồng đông trùng hạ thảo tại khí hậu ôn hoà Lâm Đồng, cung cấp dòng nước uống bổ dưỡng và chăm sóc sức khoẻ toàn diện.',
     pin: { top: '73%', left: '58%' },
     labelSide: 'left',
   },

@@ -156,14 +156,14 @@ function RegisterGate() {
   const cfg = usePublicConfig();
   const benefits = [
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
-    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
+    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
     {
       Icon: Landmark,
       // P0 FIX (A5-07, 2026-09-27): bỏ quảng cáo "×hệ số" — rút về Ví Tubu giờ luôn là quy đổi 1:1
       // (Ví là tiền VND rút được ra ngân hàng thật, không phải phần thưởng nội bộ).
       text: `Rút về ngân hàng (tối thiểu ${formatVndShort(cfg.affiliateMinWithdrawBank)}) hoặc quy đổi 1:1 vào Ví Tubu`,
     },
-    { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
+    { Icon: TrendingUp, text: 'Bảng hoa hồng cập nhật liên tục, minh bạch' },
   ];
 
   return (
@@ -340,7 +340,7 @@ function Dashboard() {
             </Text>
             <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
               <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
-              <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
+              <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
               <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
             </div>
           </div>
@@ -548,7 +548,7 @@ function Dashboard() {
 
         {/* Caption gợi ý (§6.8.4) — chạm để copy */}
         <Text variant="caption" as="div" style={{ ...BOLD, marginTop: 12, marginBottom: 6 }}>
-          Caption gợi ý (chạm để sao chép)
+          Lời đăng gợi ý (chạm để sao chép)
         </Text>
         {[
           `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
@@ -563,7 +563,7 @@ function Dashboard() {
               void copyText(cap).then((ok) =>
                 openSnackbar(
                   ok
-                    ? { text: 'Đã sao chép caption', type: 'success' }
+                    ? { text: 'Đã sao chép lời đăng', type: 'success' }
                     : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
                 ),
               );
@@ -623,7 +623,7 @@ function Dashboard() {
                     {l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}
                   </Text>
                   <Text variant="caption" tone="tertiary" as="div">
-                    {l.clicks} click · {l.conversions} đơn
+                    {l.clicks} lượt bấm · {l.conversions} đơn
                   </Text>
                 </div>
                 <Button

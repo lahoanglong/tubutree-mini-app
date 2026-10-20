@@ -14,7 +14,7 @@ describe('shippingEventLabel — trạng thái hãng vận chuyển → tiếng 
     expect(shippingEventLabel('delivery_fail')).toBe('Giao không thành công');
     expect(shippingEventLabel('returning')).toBe('Đang hoàn hàng');
     expect(shippingEventLabel('returned')).toBe('Đã hoàn hàng');
-    expect(shippingEventLabel('cancel')).toBe('Đã hủy vận đơn');
+    expect(shippingEventLabel('cancel')).toBe('Đã huỷ vận đơn');
   });
 
   it('không phân biệt hoa/thường, khoảng trắng hay gạch', () => {

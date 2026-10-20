@@ -161,7 +161,7 @@ export default function BrandViewPage() {
                 </Text>
               </span>
               <Text variant="caption" style={{ color: 'var(--color-text-brand)', marginTop: 2 }} as="span">
-                Bấm để lấy link + caption gắn mã giới thiệu của bạn.
+                Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.
               </Text>
             </button>
           </div>

@@ -93,7 +93,7 @@ function TodayCard() {
     },
     onSuccess: (r) => {
       openSnackbar({
-        text: r.isLate ? 'Đã checkin (đi trễ — có thể bị phạt).' : 'Đã checkin. Chúc làm việc vui!',
+        text: r.isLate ? 'Đã vào ca (đi trễ — có thể bị phạt).' : 'Đã vào ca. Chúc làm việc vui!',
         type: r.isLate ? 'info' : 'success',
       });
       invalidate();
@@ -108,7 +108,7 @@ function TodayCard() {
   const checkoutM = useMutation({
     mutationFn: (at?: string) => attnCheckout(at),
     onSuccess: () => {
-      openSnackbar({ text: 'Đã checkout.', type: 'success' });
+      openSnackbar({ text: 'Đã ra ca.', type: 'success' });
       setBackOpen(false);
       invalidate();
     },
@@ -157,7 +157,7 @@ function TodayCard() {
         if (!locFailed) locFailNotified = false;
         const r = await attnHeartbeat(loc);
         if (r.closed) {
-          openSnackbar({ text: 'Đã tự checkout (ra khỏi vùng công ty).', type: 'info' });
+          openSnackbar({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' });
           invalidate();
         }
       } catch {
@@ -199,7 +199,7 @@ function TodayCard() {
             loading={checkoutM.isPending}
             onPress={() => checkoutM.mutate(undefined)}
           >
-            Checkout
+            Ra ca
           </Button>
           <button
             type="button"
@@ -222,10 +222,10 @@ function TodayCard() {
               color: 'var(--color-text-inverse)',
             }}
           >
-            Quên checkout? Chọn giờ đã về →
+            Quên ra ca? Chọn giờ đã về →
           </button>
           <Text variant="caption" tone="inverse" as="div">
-            Nghỉ giữa ca? Checkout rồi Checkin lại khi quay lại.
+            Nghỉ giữa ca? Ra ca rồi vào ca lại khi quay lại.
           </Text>
         </>
       ) : todayShifts.length === 0 ? (
@@ -242,7 +242,7 @@ function TodayCard() {
               Ca {isoToVnHHMM(s.approvedStart ?? s.startAt)}–{isoToVnHHMM(s.approvedEnd ?? s.endAt)}
             </Text>
             <Button icon={LogIn} loading={checkinM.isPending} onPress={() => checkinM.mutate(s.id)}>
-              Checkin
+              Vào ca
             </Button>
           </div>
         ))
@@ -254,7 +254,7 @@ function TodayCard() {
       <BottomSheet
         open={backOpen}
         onClose={() => setBackOpen(false)}
-        title="Checkout lùi giờ"
+        title="Ra ca lùi giờ"
         footer={
           <Button
             fullWidth
@@ -262,20 +262,20 @@ function TodayCard() {
             disabled={backoutInvalid}
             onPress={() => backoutCandidateISO && checkoutM.mutate(backoutCandidateISO)}
           >
-            Xác nhận checkout
+            Xác nhận ra ca
           </Button>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Text variant="caption" tone="secondary" as="div">
-            Chọn giờ bạn đã thực sự rời đi (chỉ được chọn giờ trong quá khứ, sau giờ checkin).
+            Chọn giờ bạn đã thực sự rời đi (chỉ được chọn giờ trong quá khứ, sau giờ vào ca).
           </Text>
           <Field label="Giờ đã về">
             <TimeInput value={backTime} onChange={setBackTime} />
           </Field>
           {backoutInvalid && open && TIME_RE.test(backTime) && (
             <Text variant="caption" tone="danger" as="div">
-              Giờ đã chọn phải sau giờ checkin ({isoToVnHHMM(open.checkinAt)}) và không được ở tương lai.
+              Giờ đã chọn phải sau giờ vào ca ({isoToVnHHMM(open.checkinAt)}) và không được ở tương lai.
             </Text>
           )}
         </div>
@@ -423,7 +423,7 @@ function StaffHub() {
       copyWeek(keyToUtcMidnightISO(addDaysKey(mondayKey, -7)), keyToUtcMidnightISO(mondayKey)),
     onSuccess: (r) => {
       openSnackbar({
-        text: r.created > 0 ? `Đã copy ${r.created} ca từ tuần trước.` : 'Tuần trước không có ca để copy.',
+        text: r.created > 0 ? `Đã chép ${r.created} ca từ tuần trước.` : 'Tuần trước không có ca để chép.',
         type: r.created > 0 ? 'success' : 'info',
       });
       invalidate();
@@ -478,7 +478,7 @@ function StaffHub() {
             Đăng ký nhanh
           </Button>
           <Button variant="secondary" icon={Copy} style={{ flex: 1 }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
-            Copy tuần trước
+            Chép tuần trước
           </Button>
         </div>
 

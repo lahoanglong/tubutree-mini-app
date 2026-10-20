@@ -142,34 +142,34 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'PAUSED'));
   });
 
-  it('hàng nút Sửa/Tạm dừng/Hủy: nút không bị ép chia đều rồi cắt chữ ("Tạm ...") ở 390px, thiếu chỗ thì xuống dòng (ENGAGE-12)', async () => {
+  it('hàng nút Sửa/Tạm dừng/Huỷ: nút không bị ép chia đều rồi cắt chữ ("Tạm ...") ở 390px, thiếu chỗ thì xuống dòng (ENGAGE-12)', async () => {
     mocks.getSubscriptions.mockResolvedValue([SUB]);
     renderPanel();
     const row = (await screen.findByRole('button', { name: 'Tạm dừng' })).parentElement as HTMLElement;
     expect(row.style.flexWrap).toBe('wrap');
-    for (const name of ['Sửa', 'Tạm dừng', 'Hủy']) {
+    for (const name of ['Sửa', 'Tạm dừng', 'Huỷ']) {
       const btn = screen.getByRole('button', { name });
       expect(btn.style.minWidth).toBe('max-content');
     }
   });
 
-  it('"Hủy" mở sheet giữ chân; "Bỏ qua kỳ này" gọi skip; "Vẫn hủy" gọi CANCELLED', async () => {
+  it('"Huỷ" mở sheet giữ chân; "Bỏ qua kỳ này" gọi skip; "Vẫn huỷ" gọi CANCELLED', async () => {
     mocks.getSubscriptions.mockResolvedValue([SUB]);
     mocks.skipSubscriptionCycle.mockResolvedValue(SUB);
     mocks.setSubscriptionStatus.mockResolvedValue({ ...SUB, status: 'CANCELLED' });
     renderPanel();
-    fireEvent.click(await screen.findByRole('button', { name: 'Hủy' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ' }));
     expect(await screen.findByText('Giữ lại lịch định kỳ?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Bỏ qua kỳ này' }));
     await waitFor(() => expect(mocks.skipSubscriptionCycle).toHaveBeenCalledWith('s1'), { timeout: 5000 });
     // Chờ sheet đầu ĐÓNG hẳn (đang trượt xuống + nút thẻ còn bị khoá) rồi mới mở sheet thứ hai — nếu không,
     // cú bấm "Hủy" thứ hai có thể rơi vào lúc sheet cũ chưa đóng và bị nuốt (flaky khi máy tải nặng).
     await waitFor(() => expect(screen.queryByText('Giữ lại lịch định kỳ?')).not.toBeInTheDocument(), { timeout: 5000 });
-    const cancelBtn = await screen.findByRole('button', { name: 'Hủy' }, { timeout: 5000 });
+    const cancelBtn = await screen.findByRole('button', { name: 'Huỷ' }, { timeout: 5000 });
     await waitFor(() => expect(cancelBtn).toBeEnabled(), { timeout: 5000 });
     fireEvent.click(cancelBtn);
     expect(await screen.findByText('Giữ lại lịch định kỳ?', {}, { timeout: 5000 })).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: 'Vẫn hủy' }, { timeout: 5000 }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Vẫn huỷ' }, { timeout: 5000 }));
     await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'CANCELLED'), { timeout: 5000 });
   }, 20_000);
 

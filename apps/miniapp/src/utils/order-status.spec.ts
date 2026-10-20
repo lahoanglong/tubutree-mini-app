@@ -191,6 +191,6 @@ describe('canCustomerCancel / isCarrierBooked / buyerStatusLabel', () => {
 
   it('đơn đang giao/đã huỷ giữ nhãn gốc dù có mã vận đơn', () => {
     expect(buyerStatusLabel({ status: 'SHIPPING', shippingCode: 'GHN1' })).toBe('Đang giao');
-    expect(buyerStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1' })).toBe('Đã hủy');
+    expect(buyerStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1' })).toBe('Đã huỷ');
   });
 });

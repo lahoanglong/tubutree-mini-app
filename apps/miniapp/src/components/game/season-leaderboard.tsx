@@ -7,7 +7,7 @@ import { GameCard } from './game-card';
 // Huy chương top 3 là nội dung xếp hạng của game.
 export function SeasonLeaderboard({ rows }: { rows: SeasonLeaderRow[] }) {
   return (
-    <GameCard title="Top góp nước mùa này" icon={Droplets}>
+    <GameCard title="Xếp hạng góp nước mùa này" icon={Droplets}>
       {rows.map((r) => (
         <div
           key={r.rank}
