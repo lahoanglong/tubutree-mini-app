@@ -24,6 +24,7 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
+import { markReversalEffectsDone } from './reversal-effects';
 import { isPartnerStore, storeHasPayouts } from '../merchant/partner-store';
 import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
 import { decodeServedImage } from '../../common/served-image';
@@ -474,6 +475,9 @@ export class OrderReturnsService {
         refund_note: refundNote(money, req, outcome.pointsBack),
       })
       .catch(() => undefined);
+    // Trả cả đơn là lần lật RETURNED: lỗi ở đảo điểm/hoa hồng ném ra trước dòng này thì đơn không có mốc và cron chạy lại. Trả một
+    // phần không đổi trạng thái đơn nên cron không quét, không cần mốc.
+    if (shares.isFull) await markReversalEffectsDone(this.prisma, order.id, this.logger);
     return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
 

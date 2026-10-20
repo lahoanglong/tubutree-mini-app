@@ -25,6 +25,7 @@ import { toPublicCart } from '../checkout/checkout-split';
 import { forBuyer, type BuyerHiddenOrderField } from './buyer-order-fields';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
 import { returnPointsTaken } from './return-ledger';
+import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 
@@ -452,6 +453,9 @@ export class OrdersService {
       order_code: code,
       reason: 'Khách huỷ đơn',
     });
+    // Lỗi ở đảo điểm/hoa hồng ném ra trước dòng này: đơn không có mốc nên ReversalEffectsResyncCron làm nốt (bấm huỷ lại bị chặn
+    // vì đã huỷ).
+    await markReversalEffectsDone(this.prisma, order.id, this.logger);
     return this.detail(userId, code);
   }
 

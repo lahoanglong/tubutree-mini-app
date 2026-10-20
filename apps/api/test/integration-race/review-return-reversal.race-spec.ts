@@ -137,7 +137,10 @@ describe('Trả hàng thu hồi điểm thưởng đánh giá (real Postgres)', 
       { orderItemId: s.itemB.id, quantity: 1 },
     ]);
 
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).status).toBe('RETURNED');
+    const returned = await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } });
+    expect(returned.status).toBe('RETURNED');
+    // Q19: trả cả đơn xong trọn vẹn thì có mốc, cron chạy lại phần đảo sau huỷ/trả không còn thấy đơn.
+    expect(returned.reversalEffectsAt).not.toBeNull();
     expect(await balance(s.user.id)).toBe(0);
     expect(await returnRows(s.user.id)).toEqual(
       [s.reviewA, s.reviewB].sort().map((id) => ({ delta: -REWARD, reason: `REVIEW_RETURN:${id}`, refType: 'REVIEW', refId: id })),
@@ -148,7 +151,9 @@ describe('Trả hàng thu hồi điểm thưởng đánh giá (real Postgres)', 
     const s = await setup();
     await returnLines(s.user.id, s.order.code, [{ orderItemId: s.itemA.id, quantity: 1 }]);
 
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } })).status).toBe('DELIVERED');
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } });
+    expect(after.status).toBe('DELIVERED');
+    expect(after.reversalEffectsAt).toBeNull();
     expect(await balance(s.user.id)).toBe(REWARD);
     expect((await returnRows(s.user.id)).map((r) => r.refId)).toEqual([s.reviewA]);
   });

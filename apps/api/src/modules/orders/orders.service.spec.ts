@@ -153,6 +153,17 @@ describe('OrdersService.cancel', () => {
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
   });
 
+  it('Q19: huỷ xong trọn vẹn ghi mốc reversalEffectsAt; đảo điểm lỗi thì KHÔNG ghi (cron chạy lại)', async () => {
+    const ok = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await ok.svc.cancel('u1', 'TUBU1');
+    expect(ok.updateMany).toHaveBeenCalledWith({ where: { id: 'o1', reversalEffectsAt: null }, data: { reversalEffectsAt: expect.any(Date) } });
+
+    (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+    const failed = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await expect(failed.svc.cancel('u1', 'TUBU1')).rejects.toThrow('P2024');
+    expect(failed.updateMany.mock.calls.some(([a]) => 'reversalEffectsAt' in (a as { data: object }).data)).toBe(false);
+  });
+
   it('R3-MONEY-7: khách tự huỷ đơn đã trả có dùng Điểm Xanh → tin huỷ nói cả số tiền vào Ví lẫn số điểm thường được hoàn', async () => {
     (loyalty.reverseOrderPoints as jest.Mock).mockResolvedValueOnce(19);
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID', total: 95000 });
@@ -449,8 +460,9 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     // A6-06 (docs/audit-2026-09/06-web.md): COD chỉ coi là "đã thu tiền" khi status snapshot TRƯỚC
     // lần đảo là DELIVERED (xem OrderReversalService.reverseFinancials) — khách tự huỷ đơn COD chỉ
     // được phép khi còn PENDING_PAYMENT/CONFIRMED (chưa giao), nên ở đây KHÔNG được thử bất kỳ guard
-    // hoàn tiền nào (khác bản cũ: luôn thử guard PAID rồi thua). Chỉ có 1 lệnh updateMany — flip status.
-    expect(updateMany).toHaveBeenCalledTimes(1);
+    // hoàn tiền nào (khác bản cũ: luôn thử guard PAID rồi thua). Chỉ có 1 lệnh updateMany — flip status (ghi mốc
+    // reversalEffectsAt sau commit là lệnh riêng, không phải guard hoàn tiền).
+    expect(updateMany.mock.calls.filter(([a]) => !('reversalEffectsAt' in (a as { data: object }).data))).toHaveLength(1);
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'o1', status: 'CONFIRMED' }, data: { status: 'CANCELLED' } }),
     );
