@@ -22,8 +22,41 @@ Nhánh `web/mv-uat2`. Nguồn: nhánh cục bộ `uat/int` (tip a6c3ecc6, chưa 
 3. Thử lại/hotline: web dùng `supportContactQuery` của app-core với số mặc định `0984 606 774` khi lỗi cấu hình (giống RecycleSupport).
 4. `serverNow` khai báo tuỳ chọn ở app-core và web (`BankQrDTO`, `FlashItem`), không đụng `packages/shared-types`.
 
-## Kiểm chứng
-- `apps/web`: vitest 385 file/6585 test xanh (cả `TZ=UTC`), `tsc --noEmit`, `eslint` các thư mục đụng tới, `next lint`, `next build` xanh.
-- `packages/app-core`: vitest 42 file/496 test, `tsc --noEmit` xanh.
-- `apps/miniapp` (không sửa): vitest 283 file/4313 test xanh.
-- Không chạy Playwright (đề bài chỉ cho viết spec); không có spec e2e nào khoá chữ cũ.
+## Kiểm chứng (gate cuối, summary.txt)
+```
+install rc=0
+shared-types rc=0
+app-core-typecheck rc=0
+app-core-test rc=0  Test Files  42 passed (42)       Tests  496 passed (496)
+web-typecheck rc=0
+web-lint rc=0
+web-test rc=0  Test Files  385 passed (385)       Tests  6587 passed (6587)
+web-test-utc rc=0  Test Files  385 passed (385)       Tests  6587 passed (6587)
+miniapp-typecheck rc=0
+miniapp-lint rc=0
+miniapp-test rc=0  Test Files  283 passed (283)       Tests  4313 passed (4313)
+lint-vars rc=0 OK — every var(--x) reference is defined.
+lint-parity rc=0 lint:parity xanh (0 mục pending)
+web-build rc=0  ✓ Compiled successfully
+miniapp-build rc=0
+DONE
+```
+Test đỏ trước đã xác nhận cho server-clock, bank panel, ví, đơn sỉ, REVIEW_RETURN, mua chung. Không chạy Playwright. Test Mini App không bị sửa.
+
+## Review
+Lượt 1 (reviewer, 3b5da802..9ef93311): không BLOCKER/MAJOR, hai MINOR.
+1. `vi-tubu/page.tsx`: rút tiền, 2xx thân JSON hỏng bị coi là từ chối rõ ràng, đổi key, có thể rút hai lần. Đã sửa ở 8f5c8872 (mọi lỗi không phải ApiError hoặc ApiError 5xx là chưa rõ kết quả, giữ key, hiện WITHDRAW_UNKNOWN; test đỏ trước). Hai test ví cũ đổi `new Error` thành `ApiError(400)` ở 15475192 vì lỗi không phân loại nay là chưa rõ kết quả.
+2. `don-hang/[code]/page.tsx`: dòng "Quét mã bên dưới" mâu thuẫn với khung đã đóng. Đã sửa ở 8f5c8872 (chỉ hiện khi panelState là 'ready'; khi 'closed' thì invalidate `['order', code]`; test đỏ trước).
+Lượt 2: không phát hiện mới; xác nhận cả hai đã sửa đúng.
+
+## Chưa làm, cố ý để lại, chưa kiểm chứng
+- FAQ (mục 4, lane mv-uat3), mục 7, external-points NOT_ELIGIBLE_USER, e2e waste-mocks PARTNER: bỏ qua theo đề.
+- Phần "tiêu đề một hàng/khung chờ tải" của ui-miniapp-2 không áp dụng cho web (TitleBand).
+- Khoá mua chịu khi nợ quá hạn do API từ chối; web chỉ hiện nguyên văn lý do.
+- Playwright chưa chạy. Đã build `packages/shared-types/dist` cục bộ (ignored) để tsc chạy.
+
+## Câu hỏi cho chủ dự án
+1. Câu hết phiên của nút Kiểm tra ở web: "Phiên đăng nhập đã hết hạn. Bạn đăng nhập lại rồi bấm Kiểm tra nhé." Mặc định: giữ (Mini App nói "mở lại ứng dụng", web không có app).
+2. Nhãn REVIEW_RETURN: mặc định dùng chữ Mini App "Thu hồi điểm đánh giá (trả hàng)", không dùng "Thu hồi thưởng đánh giá (trả hàng)".
+3. BankTransferPanel dùng chung nên đơn quá hạn không còn dựng QR ở chi tiết đơn. Mặc định: chấp nhận.
+4. Chữ % mua chung chỉ khớp hoàn toàn khi API 29795d4e của UAT vào main. Mặc định: dùng `discountPct` sẵn có.
