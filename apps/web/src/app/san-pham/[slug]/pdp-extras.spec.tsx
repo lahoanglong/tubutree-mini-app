@@ -83,13 +83,13 @@ describe('PdpFreeship', () => {
   it('khách đăng nhập: ngưỡng theo hạng lấy từ giỏ', async () => {
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí vận chuyển cho đơn từ 150.000đ');
+    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí giao hàng cho đơn từ 150.000đ');
   });
   it('khách vãng lai: ngưỡng chung từ config; config chưa về thì chưa hứa số nào', async () => {
     mocks.phase = 'guest';
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí vận chuyển cho đơn từ 200.000đ');
+    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí giao hàng cho đơn từ 200.000đ');
     expect(mocks.getCart).not.toHaveBeenCalled();
     mocks.config = { ...mocks.config, isLoaded: false };
     const again = mount(<PdpFreeship />);
@@ -101,7 +101,7 @@ describe('PdpFreeship', () => {
     mocks.config = { ...mocks.config, freeshipThreshold: 0 };
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.textContent).toBe('Miễn phí vận chuyển cho mọi đơn hàng');
+    expect(container.textContent).toBe('Miễn phí giao hàng cho mọi đơn hàng');
   });
 });
 

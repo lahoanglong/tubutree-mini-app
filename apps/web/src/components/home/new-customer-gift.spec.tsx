@@ -58,10 +58,10 @@ afterEach(() => {
 describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b)', () => {
   it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và 3 lợi ích, số đọc từ cấu hình', async () => {
     const text = region(await mount())!.textContent!;
-    expect(text).toContain('Voucher chào mừng 25.000đ');
+    expect(text).toContain('Mã giảm giá chào mừng 25.000đ');
     expect(text).toContain('Cho đơn từ 150.000đ');
     expect(text).toContain('Dùng đến 17/11/2026');
-    expect(text).toContain('Miễn phí giao cho đơn từ 350.000đ');
+    expect(text).toContain('Miễn phí giao hàng cho đơn từ 350.000đ');
     expect(text).toContain('Mỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1.000đ');
     expect(text).toContain('Đặt định kỳ giảm 17% mỗi đơn');
     expect(text).not.toMatch(/30\.000|199\.000|10\.000đ|12%/);
@@ -69,34 +69,34 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
 
   it('voucher theo phần trăm và miễn phí giao', async () => {
     offer = { isNewCustomer: true, welcomeVoucher: { ...VOUCHER, type: 'PERCENT', value: 15 } };
-    expect(region(await mount())!.textContent).toContain('Voucher chào mừng giảm 15%');
+    expect(region(await mount())!.textContent).toContain('Mã giảm giá chào mừng 15%');
     mounted!.unmount();
     offer = { isNewCustomer: true, welcomeVoucher: { ...VOUCHER, type: 'FREESHIP' } };
-    expect(region(await mount())!.textContent).toContain('Voucher chào mừng miễn phí giao');
+    expect(region(await mount())!.textContent).toContain('Mã miễn phí giao hàng chào mừng');
   });
 
   it('freeship đơn đầu bật → lợi ích giao hàng nói đơn đầu (kèm ngưỡng nếu có), thay cho ngưỡng freeship thường', async () => {
     config = { ...CONFIG, newCustomer: { ...CONFIG.newCustomer, firstOrderFreeShip: { enabled: true, minSubtotal: 0 } } };
     let text = region(await mount())!.textContent!;
-    expect(text).toContain('Miễn phí giao cho đơn đầu tiên');
+    expect(text).toContain('Miễn phí giao hàng cho đơn đầu tiên');
     expect(text).not.toContain('đơn từ 350.000đ');
     mounted!.unmount();
     config = { ...CONFIG, newCustomer: { ...CONFIG.newCustomer, firstOrderFreeShip: { enabled: true, minSubtotal: 99_000 } } };
     text = region(await mount())!.textContent!;
-    expect(text).toContain('Miễn phí giao cho đơn đầu tiên từ 99.000đ');
+    expect(text).toContain('Miễn phí giao hàng cho đơn đầu tiên từ 99.000đ');
   });
 
   it('voucher không có đơn tối thiểu → không in "Cho đơn từ 0đ"', async () => {
     offer = { isNewCustomer: true, welcomeVoucher: { ...VOUCHER, minOrder: null } };
     const text = region(await mount())!.textContent!;
-    expect(text).toContain('Voucher chào mừng 25.000đ');
+    expect(text).toContain('Mã giảm giá chào mừng 25.000đ');
     expect(text).not.toContain('Cho đơn từ');
   });
 
   it('khách mới nhưng chưa có voucher: chỉ còn 3 lợi ích, không có dòng voucher', async () => {
     offer = { isNewCustomer: true, welcomeVoucher: null };
     const text = region(await mount())!.textContent!;
-    expect(text).not.toContain('Voucher chào mừng');
+    expect(text).not.toContain('Mã giảm giá chào mừng');
     expect(text).toContain('Đặt định kỳ giảm 17% mỗi đơn');
   });
 
@@ -130,7 +130,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     config = old;
     const text = region(await mount())!.textContent!;
     expect(text).not.toContain('Điểm Xanh');
-    expect(text).toContain('Miễn phí giao cho đơn từ 350.000đ');
+    expect(text).toContain('Miễn phí giao hàng cho đơn từ 350.000đ');
     expect(text).toContain('Đặt định kỳ giảm 17% mỗi đơn');
   });
 
@@ -138,7 +138,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.phase = 'guest';
     const text = region(await mount())!.textContent!;
     expect(text).toContain('Đặt định kỳ giảm 17% mỗi đơn');
-    expect(text).not.toContain('Voucher chào mừng');
+    expect(text).not.toContain('Mã giảm giá chào mừng');
     expect(paths()).not.toContain('/me/new-customer-offer');
   });
 

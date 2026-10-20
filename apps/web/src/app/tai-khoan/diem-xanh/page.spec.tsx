@@ -194,7 +194,7 @@ describe('/tai-khoan/diem-xanh — mã giảm giá của tôi', () => {
     expect(heads.indexOf('Mã giảm giá của tôi')).toBeLessThan(heads.indexOf('Điểm danh nhận Điểm Xanh'));
     expect(heads.indexOf('Điểm danh nhận Điểm Xanh')).toBeLessThan(heads.indexOf('Các hạng'));
     expect(c.textContent).toContain('4 mã');
-    expect(c.textContent).toContain('Miễn phí vận chuyển');
+    expect(c.textContent).toContain('Miễn phí giao hàng');
     expect(c.textContent).toContain('đơn từ 199.000đ');
     expect(c.textContent).toContain('HSD 31/12/2026');
     expect(c.textContent).toContain('Giảm 10% (tối đa 50.000đ)');

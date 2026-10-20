@@ -142,7 +142,7 @@ export default function CartPage() {
   const groups = groupByFulfiller(allItems);
   const withHeaders = showFulfillerHeaders(groups);
   const hasMerchant = groupByFulfiller(selectedItems).some((g) => g.fulfiller.kind === 'MERCHANT');
-  // Tiến độ miễn phí vận chuyển theo phần ĐANG CHỌN (đúng số sẽ thanh toán); có hàng gian hàng tự giao thì chỉ tính phần Tubu giao.
+  // Tiến độ miễn phí giao hàng theo phần ĐANG CHỌN (đúng số sẽ thanh toán); có hàng gian hàng tự giao thì chỉ tính phần Tubu giao.
   const freeshipBase = hasMerchant ? tubuSubtotal(selectedItems) : selectedSubtotal;
   const freeshipReached = (!hasMerchant && allSelected && !!cart?.freeship) || (!!cart && freeshipBase >= cart.freeshipThreshold);
   const remainingFreeship =
@@ -239,7 +239,7 @@ export default function CartPage() {
               <div className="mb-3 flex items-center gap-2 rounded-card border border-forest-200 bg-forest-50 px-4 py-3 text-sm text-forest-800 max-md:hidden">
                 <Truck className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
                 <span>
-                  Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí vận chuyển
+                  Mua thêm <strong className="font-bold">{formatVnd(remainingFreeship)}</strong> để được miễn phí giao hàng
                   {hasMerchant ? ' phần hàng Tubu Tree giao' : ''}
                 </span>
               </div>
@@ -316,6 +316,10 @@ export default function CartPage() {
                               <span className="text-xs text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
                             )}
                           </div>
+                          {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
+                          {it.quantity > 1 && !(update.isPending && update.variables?.id === it.id) && (
+                            <div className="text-xs tabular-nums text-stone-600 md:hidden">Thành tiền {formatVnd(it.total)}</div>
+                          )}
                           {it.flashLimitNotice && <p className="mt-1 text-xs font-medium text-warning-fg">{it.flashLimitNotice}</p>}
                           {soldOut && (
                             <p className="mt-1 text-xs font-semibold text-danger-fg">
@@ -494,9 +498,9 @@ export default function CartPage() {
                 <div className={`text-xs ${freeshipReached ? 'text-success-fg' : 'text-stone-600'}`}>
                   {freeshipReached
                     ? hasMerchant
-                      ? 'Phần hàng Tubu Tree giao được miễn phí ship'
-                      : 'Bạn được miễn phí ship 🌿'
-                    : `Mua thêm ${formatVnd(barRemaining)} để được miễn phí ship${hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}`}
+                      ? 'Miễn phí giao hàng cho phần hàng Tubu Tree giao'
+                      : 'Bạn được miễn phí giao hàng 🌿'
+                    : `Mua thêm ${formatVnd(barRemaining)} để được miễn phí giao hàng${hasMerchant ? ' cho phần hàng Tubu Tree giao' : ''}`}
                 </div>
                 <div aria-hidden="true" className="mt-[5px] h-[5px] overflow-hidden rounded-full bg-stone-200">
                   <div
@@ -513,7 +517,7 @@ export default function CartPage() {
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
-            <KeyValueRow label="Tạm tính (đã giảm, chưa gồm ship)" value={formatVnd(payTotal)} emphasis />
+            <KeyValueRow label="Tạm tính (đã giảm, chưa gồm phí giao hàng)" value={formatVnd(payTotal)} emphasis />
             {payHint ? (
               <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
                 Thanh toán ({selectedCount})

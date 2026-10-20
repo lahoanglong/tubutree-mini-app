@@ -52,7 +52,7 @@ const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }

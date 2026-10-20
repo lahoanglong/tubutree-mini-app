@@ -80,7 +80,7 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
       c('TIEN20', { type: 'AMOUNT', value: 20000, maxDiscount: null, endAt: null }),
     ];
     const box = await mount();
-    expect(card(box, 'SHIP0').textContent).toContain('Miễn phí vận chuyển');
+    expect(card(box, 'SHIP0').textContent).toContain('Miễn phí giao hàng');
     expect(card(box, 'TIEN20').textContent).toContain('Giảm 20.000đ');
     expect(card(box, 'TIEN20').textContent).toContain('Không thời hạn');
   });
@@ -111,7 +111,7 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     expect(free.querySelector('button')!.disabled).toBe(true);
     expect(free.querySelector('button')!.textContent).toBe('Không cần');
     expect(free.querySelector('button')!.getAttribute('aria-label')).toBe('Không cần dùng mã SHIP');
-    expect(free.textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(free.textContent).toContain('Đơn này đã miễn phí giao hàng');
     expect(free.textContent).not.toContain('cho đơn này');
     expect(free.className).toContain('opacity-60');
 
@@ -166,7 +166,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     const giam = card(box, 'GIAM30').textContent!;
     expect(giam).toContain('Giảm 30% (tối đa 50.000đ)');
     expect(giam).toContain('Giảm 43.800đ cho đơn này');
-    expect(card(box, 'FS').textContent).toContain('Miễn phí ship 19.000đ cho đơn này');
+    expect(card(box, 'FS').textContent).toContain('Miễn phí giao hàng 19.000đ cho đơn này');
   });
 
   it('trang giỏ (không phí giao) hoặc freeship không miễn được gì: không ghi số tiền freeship', async () => {
@@ -196,7 +196,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     state.previews.mockRejectedValue(new Error('404'));
     const box = await mountWith({ addressId: 'a1' }, 0);
     expect(state.previews).toHaveBeenCalled();
-    expect(card(box, 'FS').textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(card(box, 'FS').textContent).toContain('Đơn này đã miễn phí giao hàng');
     expect(card(box, 'FS').textContent).not.toContain('cho đơn này');
   });
 

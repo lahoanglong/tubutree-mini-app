@@ -26,7 +26,7 @@ describe('groupBuyPitch', () => {
 describe('mã giảm giá ở trang sản phẩm', () => {
   const c = (code: string, over: Record<string, unknown> = {}) => ({ code, type: 'AMOUNT' as const, value: 20000, minOrder: null, maxDiscount: null, endAt: '2026-12-01', ...over });
   it('nhãn theo loại mã', () => {
-    expect(couponLabel(c('A', { type: 'FREESHIP' }))).toBe('Miễn phí vận chuyển');
+    expect(couponLabel(c('A', { type: 'FREESHIP' }))).toBe('Miễn phí giao hàng');
     expect(couponLabel(c('B', { type: 'PERCENT', value: 10 }))).toBe('Giảm 10%');
     expect(couponLabel(c('B', { type: 'PERCENT', value: 10, maxDiscount: 30000 }))).toBe('Giảm 10% (tối đa 30.000đ)');
     expect(couponLabel(c('C'))).toBe('Giảm 20.000đ');
@@ -40,8 +40,8 @@ describe('mã giảm giá ở trang sản phẩm', () => {
 
 describe('dòng freeship', () => {
   it('có ngưỡng thì nói số, ngưỡng 0 là mọi đơn', () => {
-    expect(freeshipLine(200000)).toBe('Miễn phí vận chuyển cho đơn từ 200.000đ');
-    expect(freeshipLine(0)).toBe('Miễn phí vận chuyển cho mọi đơn hàng');
+    expect(freeshipLine(200000)).toBe('Miễn phí giao hàng cho đơn từ 200.000đ');
+    expect(freeshipLine(0)).toBe('Miễn phí giao hàng cho mọi đơn hàng');
   });
   it('khách đăng nhập dùng ngưỡng theo hạng trong giỏ; giỏ chưa về thì chưa hứa số nào', () => {
     expect(resolveFreeshipFrom({ phase: 'authenticated', cartThreshold: 150000, configThreshold: 200000, configLoaded: true })).toBe(150000);
