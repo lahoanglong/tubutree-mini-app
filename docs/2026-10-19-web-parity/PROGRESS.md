@@ -108,3 +108,4 @@ Cuốn chiếu thay vì chờ hết đợt: luôn giữ tối đa 4 lane chạy 
 - Phiên bị ngắt lúc 00:17 ngày 2026-10-20 (workflow mv-order dừng ở bước báo cáo, báo cáo viết bù ở f656291f).
 - Sau ba lane: gate đủ, Playwright web và Mini App đầy đủ, chụp ảnh cuối, PR nháp `web/mobile-visual` vào main (không merge, không deploy), báo phiên UAT.
 - Câu hỏi buổi sáng cho chủ: chân trang gọn ở điện thoại (giữ vì hotline và chính sách, hay ẩn như Mini App); các câu hỏi trong `impl/mv-*.md`.
+- 2026-10-20 ~10:00: đã gộp mv-uat2 (8f01653e), mv-uat3 (aa112654), mshell2 (f51a5042). Gate đủ trên f51a5042 xanh (web 6666 cả UTC, Mini App 4313, app-core 496, build). Playwright web 296 (2 đỏ cùng một case, sửa 08275c9f, chạy lại xanh), Mini App 170/170. Playwright web chạy bằng Postgres + Redis chạy thẳng vì Colima hỏng chuyển tiếp cổng. Báo cáo đợt: `mobile-visual/bao-cao-2026-10-20.md`.
