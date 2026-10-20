@@ -58,18 +58,23 @@ export class BankTransferService {
     }
 
     const memo = order.code; // nội dung CK = mã đơn (để đối soát)
-    const qrString = buildVietQrPayload({ bin, accountNo, amount: order.total, addInfo: memo });
+    // Pancake cộng dồn mọi khoản khớp mã đơn: QR đòi lại đủ tổng đơn thì khách chuyển thừa phần đã nhận (U1-B04).
+    // `pancakePaidReported` chỉ được ghi khi đơn còn UNPAID; đơn đã PAID giữ nguyên giá trị cũ nên không được trừ.
+    const paidSoFar = order.paymentStatus === 'UNPAID' ? (order.pancakePaidReported ?? 0) : 0;
+    const amount = Math.max(0, order.total - paidSoFar);
+    const qrString = buildVietQrPayload({ bin, accountNo, amount, addInfo: memo });
     // Ảnh QR tiện hiển thị (FE có thể render qrString bằng lib QR nếu muốn tự chủ hoàn toàn).
     const qrImageUrl =
       `https://img.vietqr.io/image/${bin}-${accountNo}-compact2.png` +
-      `?amount=${order.total}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
+      `?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
 
     // Hạn trùng với cron tự huỷ: trang QR nói rõ "chuyển trước HH:mm" để khách không chuyển sau khi đơn đã huỷ.
     const paymentDeadline = await pendingPaymentDeadline(order, this.config);
 
     return {
       orderCode: order.code,
-      amount: order.total,
+      amount,
+      paidSoFar,
       paymentStatus: order.paymentStatus,
       paymentDeadline,
       // App bù lệch đồng hồ điện thoại khi tính quá hạn chuyển khoản, kể cả khi trang chủ chưa tải suất giờ vàng nào.

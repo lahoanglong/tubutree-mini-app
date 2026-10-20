@@ -522,3 +522,31 @@ describe('Thanh toán chuyển khoản: nút Kiểm tra khi phiên hết hạn (
     expect((mocks.openSnackbar.mock.calls[0]![0] as { text: string }).text).toBe('Tài khoản đã bị khoá.');
   });
 });
+
+describe('Thanh toán chuyển khoản: đã nhận một phần (U1-B04)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getBankQr.mockResolvedValue({ ...QR, amount: 99_000, paidSoFar: 100_000 });
+  });
+
+  it('nói rõ đã nhận bao nhiêu và còn thiếu bao nhiêu, số tiền cần chuyển là phần còn thiếu', async () => {
+    renderPage();
+    const note = await screen.findByTestId('paid-so-far');
+    expect(note.textContent).toContain('Đã nhận 100.000đ, còn thiếu 99.000đ');
+    expect(screen.getAllByText('99.000đ').length).toBeGreaterThan(0);
+    expect(screen.queryByText('199.000đ')).toBeNull();
+  });
+
+  it('chưa nhận đồng nào hoặc API bản cũ không trả paidSoFar: không hiện dòng "đã nhận"', async () => {
+    mocks.getBankQr.mockResolvedValue({ ...QR, paidSoFar: 0 });
+    const { unmount } = renderPage();
+    await screen.findByText(/Giữ nguyên nội dung/);
+    expect(screen.queryByTestId('paid-so-far')).toBeNull();
+    unmount();
+
+    mocks.getBankQr.mockResolvedValue(QR);
+    renderPage();
+    await screen.findByText(/Giữ nguyên nội dung/);
+    expect(screen.queryByTestId('paid-so-far')).toBeNull();
+  });
+});

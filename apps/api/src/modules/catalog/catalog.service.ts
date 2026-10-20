@@ -139,6 +139,7 @@ export class CatalogService {
     const { page, limit, sort } = query;
     const where = await this.listWhere(query);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit);
+    if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc');
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
@@ -155,17 +156,46 @@ export class CatalogService {
 
   /**
    * "Bán chạy" = soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
-   * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy 3 cột nhỏ của MỌI SP khớp, sắp,
+   * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy vài cột nhỏ của MỌI SP khớp, sắp,
    * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
    * Đủ nhanh với catalog hiện tại (vài trăm SP). Vượt ~5k SP → chuyển sang cột soldTotal có index.
    */
-  private async listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
-    const ranked = await this.prisma.product.findMany({
+  private listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
+    return this.listRanked<{ id: string; soldApp: number; soldExternal: number }>(
       where,
-      select: { id: true, soldApp: true, soldExternal: true },
-    });
+      page,
+      limit,
+      { id: true, soldApp: true, soldExternal: true },
+      (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+    );
+  }
+
+  /**
+   * "Giá tăng/giảm" theo giá ĐANG BÁN (salePrice ?? basePrice), cùng giá với bộ lọc giá và thẻ SP: sắp theo
+   * basePrice thì SP đang giảm giá đứng sai chỗ so với giá khách nhìn thấy (U1-B01). Cũng là biểu thức nên xếp hạng ở TS.
+   */
+  private listByStandingPrice(where: Prisma.ProductWhereInput, page: number, limit: number, dir: 'asc' | 'desc') {
+    type Row = { id: string; basePrice: number; salePrice: number | null };
+    const standing = (p: Row) => p.salePrice ?? p.basePrice;
+    return this.listRanked<Row>(
+      where,
+      page,
+      limit,
+      { id: true, basePrice: true, salePrice: true },
+      (x, y) => (dir === 'asc' ? standing(x) - standing(y) : standing(y) - standing(x)),
+    );
+  }
+
+  private async listRanked<T extends { id: string }>(
+    where: Prisma.ProductWhereInput,
+    page: number,
+    limit: number,
+    select: Prisma.ProductSelect,
+    compare: (x: T, y: T) => number,
+  ) {
+    const ranked = (await this.prisma.product.findMany({ where, select })) as unknown as T[];
     ranked.sort((x, y) => {
-      const diff = y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal);
+      const diff = compare(x, y);
       if (diff !== 0) return diff;
       return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
     });
@@ -490,10 +520,6 @@ export class CatalogService {
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {
     switch (sort) {
-      case 'price_asc':
-        return { basePrice: 'asc' };
-      case 'price_desc':
-        return { basePrice: 'desc' };
       case 'newest':
         return { createdAt: 'desc' };
       case 'rating':

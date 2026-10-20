@@ -3,7 +3,10 @@ import { syncServerClock } from '../utils/server-clock';
 
 export interface BankQr {
   orderCode: string;
+  /** Số cần chuyển nốt: tổng đơn trừ phần Tubu đã nhận. */
   amount: number;
+  /** Số Tubu đã nhận khi khách chuyển thiếu; thiếu hoặc 0 = chưa nhận đồng nào (API bản cũ không trả). */
+  paidSoFar?: number;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
   /** Hạn chuyển khoản (ISO); quá hạn đơn tự huỷ. Null khi đơn không còn chờ tiền hoặc API bản cũ. */
   paymentDeadline?: string | null;

@@ -859,6 +859,68 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
   });
 });
 
+describe('CatalogService.list — sắp theo giá đang bán (U1-B01)', () => {
+  // Giá đang bán = salePrice ?? basePrice, cùng quy tắc với bộ lọc giá và thẻ SP.
+  const ROWS = [
+    { id: 'a', basePrice: 89000, salePrice: null },
+    { id: 'b', basePrice: 100000, salePrice: 75000 }, // base cao hơn 'a' nhưng giá đang bán rẻ hơn
+    { id: 'c', basePrice: 95000, salePrice: null },
+    { id: 'd', basePrice: 79000, salePrice: null },
+    { id: 'e', basePrice: 95000, salePrice: 95000 }, // hoà với 'c'
+  ];
+  type Row = (typeof ROWS)[number];
+
+  // Bảng sản phẩm giả: hiểu lọc theo id và orderBy theo cột đơn giản, để test chạy cả hai cách làm (orderBy của Prisma hay xếp ở TS).
+  function setup() {
+    const findMany = jest.fn(async (args: { skip?: number; take?: number; where?: { AND?: { id?: { in: string[] } }[] }; orderBy?: Record<string, 'asc' | 'desc'>[] | Record<string, 'asc' | 'desc'> }) => {
+      const ids = args.where?.AND?.find((c) => c.id)?.id?.in;
+      let rows: Row[] = ids ? ROWS.filter((r) => ids.includes(r.id)) : [...ROWS];
+      const keys = ([] as Record<string, 'asc' | 'desc'>[]).concat(args.orderBy ?? []);
+      rows = rows.sort((x, y) => {
+        for (const k of keys) {
+          const [col, dir] = Object.entries(k)[0] as [keyof Row, 'asc' | 'desc'];
+          const vx = x[col] as string | number | null;
+          const vy = y[col] as string | number | null;
+          if (vx === vy) continue;
+          return ((vx ?? 0) < (vy ?? 0) ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+        }
+        return 0;
+      });
+      if (args.take !== undefined) rows = rows.slice(args.skip ?? 0, (args.skip ?? 0) + args.take);
+      return rows.map((r) => ({ ...card(r.id), basePrice: r.basePrice, salePrice: r.salePrice }));
+    });
+    const count = jest.fn().mockResolvedValue(ROWS.length);
+    const prisma = { product: { findMany, count }, $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)) } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany };
+  }
+
+  it('Giá tăng: SP có sale rẻ hơn base của SP khác đứng trước; hoà thì id tăng dần', async () => {
+    const r = await setup().svc.list({ page: 1, limit: 5, sort: 'price_asc' });
+    expect(r.data.map((c) => c.id)).toEqual(['b', 'd', 'a', 'c', 'e']);
+    expect(r.meta).toEqual({ page: 1, limit: 5, total: 5 });
+  });
+
+  it('Giá giảm: đảo chiều theo giá đang bán, hoà thì id tăng dần', async () => {
+    const r = await setup().svc.list({ page: 1, limit: 5, sort: 'price_desc' });
+    expect(r.data.map((c) => c.id)).toEqual(['c', 'e', 'a', 'd', 'b']);
+  });
+
+  it('trang 2 nối tiếp trang 1 theo giá đang bán, không trùng, total = số SP khớp', async () => {
+    const { svc } = setup();
+    const p1 = await svc.list({ page: 1, limit: 3, sort: 'price_asc' });
+    const p2 = await svc.list({ page: 2, limit: 3, sort: 'price_asc' });
+    expect([...p1.data, ...p2.data].map((c) => c.id)).toEqual(['b', 'd', 'a', 'c', 'e']);
+    expect(p2.meta).toEqual({ page: 2, limit: 3, total: 5 });
+  });
+
+  it('giữ bộ lọc ở bước xếp hạng (brand + inStock)', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 3, sort: 'price_asc', brand: 'Tubu', inStock: true });
+    const where = { isActive: true, approvalStatus: 'APPROVED', brand: 'Tubu', variations: { some: { isActive: true, stock: { gt: 0 } } } };
+    expect(findMany.mock.calls[0]?.[0].where).toEqual(where);
+  });
+});
+
 describe('CatalogService.categories — productCount (dự án 4b)', () => {
   const CAT = (id: string, sortOrder: number) => ({ id, parentId: null, name: id, slug: id, image: null, sortOrder });
 

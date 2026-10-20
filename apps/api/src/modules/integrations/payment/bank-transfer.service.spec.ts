@@ -50,6 +50,38 @@ describe('BankTransferService.getBankQr', () => {
     expect(r.qrImageUrl).toContain('img.vietqr.io');
   });
 
+  // U1-B04: khách chuyển thiếu 100k/199k rồi quét lại QR cũ chuyển đủ 199k → Pancake cộng dồn 299k → khoản chuyển dư.
+  it('đơn đã nhận một phần → amount, trường 54 của VietQR và ảnh QR đều là phần còn thiếu, kèm paidSoFar', async () => {
+    const order = { ...ORDER, total: 199000, pancakePaidReported: 100000 };
+    const r = await new BankTransferService(makePrisma(order), makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.amount).toBe(99000);
+    expect(r.paidSoFar).toBe(100000);
+    expect(r.qrString).toContain('540599000'); // 54 len5 99000
+    expect(r.qrString).not.toContain('5406199000');
+    expect(crc16ccitt(r.qrString.slice(0, -4))).toBe(r.qrString.slice(-4));
+    expect(r.qrImageUrl).toContain('amount=99000&');
+    expect(r.memo).toBe('TUBU250625001');
+    expect(r.qrString).toContain('TUBU250625001');
+  });
+
+  it('đơn chưa nhận đồng nào → paidSoFar 0, amount = total', async () => {
+    const r = await new BankTransferService(makePrisma({ ...ORDER, pancakePaidReported: null }), makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.paidSoFar).toBe(0);
+    expect(r.amount).toBe(250000);
+  });
+
+  it('số Pancake báo đã nhận vượt tổng đơn mà đơn còn UNPAID → amount không âm', async () => {
+    const r = await new BankTransferService(makePrisma({ ...ORDER, pancakePaidReported: 300000 }), makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.amount).toBe(0);
+    expect(r.paidSoFar).toBe(300000);
+  });
+
+  it('đơn đã PAID: số báo thiếu cũ không làm giảm amount của đơn', async () => {
+    const r = await new BankTransferService(makePrisma({ ...ORDER, paymentStatus: 'PAID', pancakePaidReported: 100000 }), makeConfig()).getBankQr('TUBU250625001', 'u1');
+    expect(r.amount).toBe(250000);
+    expect(r.paidSoFar).toBe(0);
+  });
+
   it('trả giờ máy chủ để app bù lệch đồng hồ điện thoại khi tính hạn chuyển khoản', async () => {
     const before = Date.now();
     const r = await new BankTransferService(makePrisma(ORDER), makeConfig()).getBankQr('TUBU250625001', 'u1');
