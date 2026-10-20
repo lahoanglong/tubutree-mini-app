@@ -407,6 +407,8 @@ test.describe('Web: mua chung', () => {
   test('khách chưa đăng nhập: xem được danh sách, bấm Đăng nhập để tham gia sang đăng nhập kèm returnTo, không gửi tham gia', async ({ page, api }) => {
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
     api.get('/group-buy', [group('g1')]);
+    // /dang-nhap lấy hotline từ cấu hình công khai; lời gọi này đôi khi xong trước khi ca kết thúc.
+    api.get('/config/public', {});
     await page.goto('/mua-chung');
     await expect(page.getByRole('heading', { level: 1, name: 'Mua chung giá tốt' })).toBeVisible();
     await expect(page.getByText('2/5 người')).toBeVisible();
@@ -480,6 +482,7 @@ test.describe('Web: nhãn hàng', () => {
     const slug = await firstBrandSlug(request);
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
     await page.goto(`/brand/${slug}`);
     await page.getByRole('button', { name: 'Theo dõi' }).click();
     await page.waitForURL(/\/dang-nhap/);
