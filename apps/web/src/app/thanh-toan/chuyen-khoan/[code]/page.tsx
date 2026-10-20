@@ -61,6 +61,7 @@ export default function BankPaymentPage() {
           onPaid={onPaid}
           onState={setPanelState}
           showHeading={false}
+          orderHref={detail}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>
@@ -72,7 +73,7 @@ export default function BankPaymentPage() {
             </div>
           }
         />
-        {!paid && (
+        {!paid && panelState !== 'closed' && panelState !== 'error' && (
           <div className="mt-3 text-center max-md:mx-2 max-md:mt-2">
             <Link href={detail} className={`${ui.btnSecondary} ${mini.secondary} max-md:w-full`}>
               Để sau / Xem đơn hàng
