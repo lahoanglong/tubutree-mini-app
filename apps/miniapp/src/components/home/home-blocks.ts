@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { isHttpError } from '../../services/http';
 import type { QueryClient } from '@tanstack/react-query';
 import { resetHomeFeed } from '../../services/home-feed';
 
@@ -54,7 +54,7 @@ export function refreshHomeQueries(qc: QueryClient): Promise<unknown> {
 
 /** API cũ chưa có endpoint (404): khối tuỳ chọn như kệ "Mua lại" ẩn đi thay vì báo lỗi mà bấm "Thử lại" cũng không khỏi. */
 export function isEndpointMissing(error: unknown): boolean {
-  return axios.isAxiosError(error) && error.response?.status === 404;
+  return isHttpError(error) && error.response?.status === 404;
 }
 
 export function dedupeAgainst<T extends { id: string }>(items: T[], seen: ReadonlySet<string>): T[] {

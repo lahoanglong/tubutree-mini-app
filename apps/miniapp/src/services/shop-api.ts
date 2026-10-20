@@ -1,5 +1,5 @@
-import { isAxiosError } from 'axios';
 import { api } from './api';
+import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
 import { homeProductSlot, takeMeBlock, takePublicBlock, takePurchasedItems } from './home-feed';
 import type { CouponPreviewRequest, CouponPreviewsResponse, OrderDTO, OrderItemDTO, WastePublicFlags } from '@tubutree/shared-types';
@@ -380,7 +380,7 @@ export async function fetchCatalog(query: CatalogQuery): Promise<CatalogPage> {
   try {
     return { ...(await fetchProducts(params)), filtersIgnored: false };
   } catch (err) {
-    if (!extended || !isAxiosError(err) || err.response?.status !== 400) throw err;
+    if (!extended || !isHttpError(err) || err.response?.status !== 400) throw err;
     const legacy = { ...params };
     for (const k of EXTENDED_CATALOG_PARAMS) delete legacy[k];
     return { ...(await fetchProducts(legacy)), filtersIgnored: true };

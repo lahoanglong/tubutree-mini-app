@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AxiosError } from 'axios';
+import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -345,12 +345,10 @@ describe('WalletPage — rút tiền', () => {
 
 describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)', () => {
   const failure = (status: number | undefined, code?: string) =>
-    new AxiosError(
+    new HttpError(
       'x',
       code,
-      undefined,
-      undefined,
-      status ? ({ status, statusText: '', headers: {}, config: {} as never, data: { message: 'Số dư ví không đủ.' } } as never) : undefined,
+      status ? { status, data: { message: 'Số dư ví không đủ.' } } : undefined,
     );
 
   async function openAndFill() {
@@ -432,7 +430,7 @@ describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)'
 });
 
 describe('WalletPage — cờ "lệnh rút chưa rõ kết quả" tự gỡ (P3 miniapp-logic)', () => {
-  const timeout = () => new AxiosError('x', 'ECONNABORTED');
+  const timeout = () => new HttpError('x', 'ECONNABORTED');
   const OK = { ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 };
   const RECORDED_TX = { id: 't0', delta: -400_000, balanceAfter: 850_000, type: 'WITHDRAW', reason: 'Rút về ngân hàng (phí 3000đ)', orderId: null, createdAt: '2026-10-06T07:04:00.000Z' };
 

@@ -50,7 +50,7 @@ const LOYALTY = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, marketpl
 const EMPTY_LIST = { data: [], meta: { page: 1, limit: 10, total: 0 }, searching: [] };
 
 function rejection(code: string) {
-  return Object.assign(new Error('x'), { isAxiosError: true, response: { status: 409, data: { code, message: 'máy chủ' } } });
+  return Object.assign(new Error('x'), { isHttpError: true, response: { status: 409, data: { code, message: 'máy chủ' } } });
 }
 
 function renderPage() {
@@ -187,7 +187,7 @@ describe('Trang Tích điểm đơn ngoài app', () => {
       mocks.user = { phone: null };
       mocks.ensurePhone.mockResolvedValue('0901234567');
       mocks.submitExternalClaim
-        .mockRejectedValueOnce(Object.assign(new Error('x'), { isAxiosError: true, response: { status: 403, data: { code: 'NOT_ELIGIBLE_USER' } } }))
+        .mockRejectedValueOnce(Object.assign(new Error('x'), { isHttpError: true, response: { status: 403, data: { code: 'NOT_ELIGIBLE_USER' } } }))
         .mockResolvedValueOnce({
           status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x',
         });

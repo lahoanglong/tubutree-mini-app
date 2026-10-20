@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
 import { getBankQr } from '../services/payment-api';
 import { getErrorMessage } from '../services/api';
+import { isHttpError } from '../services/http';
 import { haptic } from '../utils/haptic';
 import { formatDateTime } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
@@ -29,7 +29,7 @@ const H1_RESET_MT12 = { margin: '12px 0 0', font: 'inherit' } as const;
 // chưa xong (đơn vẫn chờ, phiên khôi phục xong dò lại là ra), 408/429 tạm thời, mạng/5xx khách vẫn đang chờ tiền về: QR phải còn đó.
 const FINAL_REJECTION_STATUSES = new Set([400, 404, 409, 410, 422]);
 function isFinalRejection(error: unknown): boolean {
-  if (!isAxiosError(error)) return false;
+  if (!isHttpError(error)) return false;
   const status = error.response?.status;
   return status !== undefined && FINAL_REJECTION_STATUSES.has(status);
 }
@@ -38,14 +38,14 @@ function isFinalRejection(error: unknown): boolean {
 // đơn vẫn chờ tiền, khách chỉ cần vào lại phiên rồi bấm lại.
 const SESSION_EXPIRED_MESSAGE = 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi bấm Kiểm tra nhé.';
 function isSessionExpired(error: unknown): boolean {
-  if (!isAxiosError(error)) return false;
+  if (!isHttpError(error)) return false;
   const status = error.response?.status;
   return status === 401 || status === 403;
 }
 // Lý do cụ thể của máy chủ (vd. "Tài khoản đã bị khoá.") đáng hiện hơn câu chung về phiên; chữ mặc định tiếng Anh của Nest thì không.
 const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
 function sessionExpiredText(error: unknown): string {
-  const data = isAxiosError(error) ? (error.response?.data as { message?: string | string[] } | undefined) : undefined;
+  const data = isHttpError(error) ? (error.response?.data as { message?: string | string[] } | undefined) : undefined;
   const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
   return message && !GENERIC_AUTH_MESSAGES.has(message) ? message : SESSION_EXPIRED_MESSAGE;
 }

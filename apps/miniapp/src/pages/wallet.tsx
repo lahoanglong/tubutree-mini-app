@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { isAxiosError } from 'axios';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page, Input, useSnackbar } from 'zmp-ui';
@@ -7,6 +6,7 @@ import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tansta
 import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
 import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo, type WalletTxn } from '../services/account-api';
 import { getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { isHttpError } from '../services/http';
 import { useShareWithFallback } from '../components/share-sheet';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 import { useAuthStore } from '../store/auth';
@@ -31,7 +31,7 @@ import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
 
 const KEEP_KEY_STATUSES = new Set([401, 403, 408, 429]);
-const axiosStatus = (e: unknown) => (isAxiosError(e) ? e.response?.status ?? 0 : 0);
+const httpStatus = (e: unknown) => (isHttpError(e) ? e.response?.status ?? 0 : 0);
 
 /** Dòng sổ cái của một lệnh rút đúng số tiền (delta âm = tiền gộp cả phí, bằng `amount` gửi lên). */
 const isWithdrawOf = (t: WalletTxn, amount: number) => t.type === 'WITHDRAW' && t.delta === -amount;
@@ -112,7 +112,7 @@ export default function WalletPage() {
         return;
       }
       // 401/403/408/429: request NÀY chưa được xử lý, nhưng lệnh trước (nếu chưa rõ kết quả) có thể đã trừ ví; đổi key lúc này là mở đường rút lần hai.
-      if (!KEEP_KEY_STATUSES.has(axiosStatus(e))) {
+      if (!KEEP_KEY_STATUSES.has(httpStatus(e))) {
         withdrawKey.current = newIdempotencyKey();
         withdrawUnresolved.current = null;
       }

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AxiosError } from 'axios';
+import { HttpError } from '../services/http';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -43,12 +43,9 @@ vi.mock('../store/auth', () => {
 import ProfilePage from './profile';
 
 function http404() {
-  return new AxiosError('Request failed with status code 404', 'ERR_BAD_REQUEST', undefined, undefined, {
+  return new HttpError('Request failed with status code 404', 'ERR_BAD_REQUEST', {
     status: 404,
-    statusText: 'Not Found',
     data: {},
-    headers: {},
-    config: {} as never,
   });
 }
 
