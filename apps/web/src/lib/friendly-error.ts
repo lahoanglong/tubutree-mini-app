@@ -13,11 +13,12 @@ export function isAuthError(e: unknown): boolean {
   return e instanceof Error && RAW_AUTH.test(e.message.trim());
 }
 
-/** Câu tiếng Việt hiện cho khách: 401/403 và message thô của Nest ("Unauthorized"/"Forbidden") không bao giờ lộ ra. */
+/** Câu tiếng Việt hiện cho khách: 401 và message thô của Nest ("Unauthorized"/"Forbidden") không bao giờ lộ ra. */
 export function friendlyError(e: unknown): string {
   const s = errorStatus(e);
   const raw = e instanceof Error ? e.message.trim() : '';
   if (s === 401 || /^unauthorized$/i.test(raw)) return SESSION_EXPIRED_TEXT;
-  if (s === 403 || /^forbidden$/i.test(raw)) return NO_ACCESS_TEXT;
+  // 403 kèm câu nghiệp vụ tiếng Việt (đường gửi kho bị khoá, chương trình tắt...) giữ nguyên như Mini App; chỉ chữ thô hoặc rỗng mới thay.
+  if (/^forbidden$/i.test(raw) || (s === 403 && !raw)) return NO_ACCESS_TEXT;
   return raw || GENERIC_TEXT;
 }

@@ -5,8 +5,12 @@ import { friendlyError, isAuthError, SESSION_EXPIRED_TEXT, NO_ACCESS_TEXT } from
 describe('friendlyError', () => {
   it('401/403 không bao giờ in message thô của API', () => {
     expect(friendlyError(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
-    expect(friendlyError(new ApiError('Bạn không có quyền truy cập tài nguyên này', 403))).toBe(NO_ACCESS_TEXT);
     expect(friendlyError(new ApiError('Forbidden', 403))).toBe(NO_ACCESS_TEXT);
+    expect(friendlyError(new ApiError('', 403))).toBe(NO_ACCESS_TEXT);
+  });
+  it('403 kèm câu nghiệp vụ tiếng Việt của API giữ nguyên như Mini App', () => {
+    const msg = 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.';
+    expect(friendlyError(new ApiError(msg, 403))).toBe(msg);
   });
   it('message trơ trọi Unauthorized/Forbidden (không có status) cũng đổi sang tiếng Việt', () => {
     expect(friendlyError(new Error('Unauthorized'))).toBe(SESSION_EXPIRED_TEXT);
