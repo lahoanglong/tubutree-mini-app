@@ -12,6 +12,7 @@ import { flashDisplay, soldPercent } from '@/lib/flash-display';
 import { formatVnd } from '@/lib/format-vnd';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
@@ -46,7 +47,7 @@ export function FlashSale() {
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
   const [expiredTick, setExpiredTick] = useState(0);
   const soonestEndAt = useMemo(() => {
-    const now = Date.now();
+    const now = serverNow();
     const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
     return live.length > 0 ? new Date(Math.min(...live)) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
