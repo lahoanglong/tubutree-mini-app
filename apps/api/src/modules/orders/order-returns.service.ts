@@ -450,10 +450,23 @@ export class OrderReturnsService {
 
     const { order, shares, money } = outcome;
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, outcome.referralNotices);
+    // Yêu cầu đã APPROVED và đơn đã RETURNED từ lúc commit nên duyệt lại báo "đã xử lý": lỗi đảo ở đây không được làm bỏ các bước sau,
+    // chúng chạy hết rồi mới ném lỗi đầu tiên.
+    let reversalFailure: unknown = null;
     if (shares.isFull) {
       // Điểm thường/điểm tích và hoa hồng của phần còn lại — idempotent, chạy sau commit như mọi lần đảo cả đơn.
-      await this.loyalty.reverseOrderPoints(order.id);
-      await this.affiliate.reverseCommissionsForOrder(order.id);
+      try {
+        await this.loyalty.reverseOrderPoints(order.id);
+      } catch (err) {
+        reversalFailure ??= err;
+        this.logger.error(`Đảo điểm của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
+      }
+      try {
+        await this.affiliate.reverseCommissionsForOrder(order.id);
+      } catch (err) {
+        reversalFailure ??= err;
+        this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
+      }
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(
@@ -474,6 +487,7 @@ export class OrderReturnsService {
         refund_note: refundNote(money, req, outcome.pointsBack),
       })
       .catch(() => undefined);
+    if (reversalFailure !== null) throw reversalFailure;
     return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
 

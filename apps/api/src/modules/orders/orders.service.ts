@@ -407,13 +407,23 @@ export class OrdersService {
     }
     await this.wastePickupHooks?.onOrderCancelled(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (huỷ) lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`));
     await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);
-    // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội
-    // bộ) nên để ngoài tx được. Trước đây THIẾU reverseCommissionsForOrder ở luồng khách tự hủy
-    // — CTV vẫn giữ hoa hồng PENDING cho đơn khách đã hủy trước khi giao (không tự dọn, dù
-    // không trả được vì payout chỉ rút từ status APPROVED — nhưng làm sai lệch số "chờ duyệt"
-    // hiển thị cho CTV vĩnh viễn). Nhất quán với admin/pancake — cả hai đều gọi cặp đôi này.
-    const standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
-    await this.affiliate.reverseCommissionsForOrder(order.id);
+    // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội bộ) nên để ngoài tx được; khách tự huỷ
+    // cũng phải thu hồi hoa hồng PENDING của CTV như admin/pancake. Đơn đã CANCELLED nên bấm huỷ lại thoát sớm ở đầu hàm: lỗi đảo ở
+    // đây không được làm bỏ các bước sau (hoàn tiền thiếu, vận đơn Gomdon, tin khách), chúng chạy hết rồi mới ném lỗi đầu tiên.
+    let reversalFailure: unknown = null;
+    let standardPointsBack = 0;
+    try {
+      standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
+    } catch (err) {
+      reversalFailure ??= err;
+      this.logger.error(`Đảo điểm của đơn ${code} sau khi khách huỷ lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+    try {
+      await this.affiliate.reverseCommissionsForOrder(order.id);
+    } catch (err) {
+      reversalFailure ??= err;
+      this.logger.error(`Thu hồi hoa hồng của đơn ${code} sau khi khách huỷ lỗi: ${err instanceof Error ? err.message : err}`);
+    }
     const receivedBack = await refundReportedUnderpayment(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       order.id,
@@ -452,6 +462,7 @@ export class OrdersService {
       order_code: code,
       reason: 'Khách huỷ đơn',
     });
+    if (reversalFailure !== null) throw reversalFailure;
     return this.detail(userId, code);
   }
 
@@ -511,36 +522,38 @@ export class OrdersService {
     }
 
     if (pending.length > 0) {
-      const outcomes = await this.cart.addItems(userId, pending.map((p) => ({ variationId: p.variationId, quantity: p.qty, addSource })));
-      // Chỗ mà dòng bị từ chối đã giữ trong inCart nhưng không vào giỏ: trả lại cho dòng sau cùng variation đã bị kẹp nhỏ vì phần đó.
-      const freed = new Map<string, number>();
-      const topUps: { slot: number; variationId: string; quantity: number }[] = [];
+      // Thêm bù chạy trong CÙNG lần addItems (callback nhận kết quả vòng đầu): lần ghi thứ hai riêng để lại giỏ nửa vời khi lỗi hạ tầng và ghi add_to_cart hai lần.
+      // Chỗ mà dòng bị từ chối đã giữ trong inCart nhưng không vào giỏ được trả lại cho dòng sau cùng variation đã bị kẹp nhỏ vì phần đó.
+      const outcomes = await this.cart.addItems(userId, pending.map((p) => ({ variationId: p.variationId, quantity: p.qty, addSource })), {
+        topUp: (first) => {
+          const freed = new Map<string, number>();
+          const topUps: { index: number; quantity: number }[] = [];
+          pending.forEach((p, i) => {
+            const outcome = first[i]!;
+            if (!outcome.ok) {
+              freed.set(p.variationId, (freed.get(p.variationId) ?? 0) + p.qty);
+            } else if (p.qty < p.want) {
+              const extra = Math.min(p.want - p.qty, freed.get(p.variationId) ?? 0);
+              if (extra > 0) {
+                freed.set(p.variationId, (freed.get(p.variationId) ?? 0) - extra);
+                topUps.push({ index: i, quantity: extra });
+              }
+            }
+          });
+          return topUps;
+        },
+      });
       pending.forEach((p, i) => {
         const outcome = outcomes[i]!;
         // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua dòng; lỗi hạ tầng do addItems ném ra.
         if (!outcome.ok) {
           results[p.slot] = { orderItemId: p.line.id, status: 'skipped', reason: outcome.error === 'UNAVAILABLE' ? 'INACTIVE' : 'EXCEEDS_STOCK', addedQuantity: 0 };
-          freed.set(p.variationId, (freed.get(p.variationId) ?? 0) + p.qty);
-        } else if (p.qty < p.want) {
-          results[p.slot] = { orderItemId: p.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: p.qty };
-          const extra = Math.min(p.want - p.qty, freed.get(p.variationId) ?? 0);
-          if (extra > 0) {
-            freed.set(p.variationId, (freed.get(p.variationId) ?? 0) - extra);
-            topUps.push({ slot: p.slot, variationId: p.variationId, quantity: extra });
-          }
+          return;
         }
+        const added = p.qty + (outcome.toppedUp ?? 0);
+        if (added < p.want) results[p.slot] = { orderItemId: p.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: added };
+        else if (outcome.toppedUp) results[p.slot] = { orderItemId: p.line.id, status: 'added', addedQuantity: added };
       });
-      if (topUps.length > 0) {
-        const extraOutcomes = await this.cart.addItems(userId, topUps.map((t) => ({ variationId: t.variationId, quantity: t.quantity, addSource })));
-        topUps.forEach((t, i) => {
-          if (!extraOutcomes[i]!.ok) return;
-          const base = pending.find((p) => p.slot === t.slot)!;
-          const added = base.qty + t.quantity;
-          results[t.slot] = added < base.want
-            ? { orderItemId: base.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: added }
-            : { orderItemId: base.line.id, status: 'added', addedQuantity: added };
-        });
-      }
     }
     const cart = toPublicCart(await this.cart.getCart(userId));
     return { ...cart, cart, results };
