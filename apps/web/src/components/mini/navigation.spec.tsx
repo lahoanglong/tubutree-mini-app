@@ -11,7 +11,6 @@ vi.mock('next/navigation', () => ({
 }));
 
 import BackButton from './back-button';
-import { PageHeader } from './page-header';
 import { SegmentedTabs } from './segmented-tabs';
 import { ScrollRow } from './scroll-row';
 import { SearchField } from './search-field';
@@ -128,25 +127,6 @@ describe('BackButton độ sâu', () => {
     a.unmount();
     expect(document.body.classList.contains('with-back-btn')).toBe(true);
     a.container.remove();
-  });
-});
-
-describe('PageHeader', () => {
-  it('đúng một h1, phụ đề, chừa chỗ cho nút lùi của layout (không tự gắn nút thứ hai) và hành động bên phải', () => {
-    const c = mount(<PageHeader title="Giỏ hàng" subtitle="2 sản phẩm" actions={<button>Sửa</button>} />).container;
-    expect(c.querySelectorAll('h1').length).toBe(1);
-    expect(c.querySelector('h1')!.textContent).toBe('Giỏ hàng');
-    expect(c.textContent).toContain('2 sản phẩm');
-    expect(c.querySelector('[aria-label="Quay lại"]')).toBeNull();
-    expect(c.querySelector('h1')!.parentElement!.style.paddingLeft).toBe('48px');
-    expect(c.textContent).toContain('Sửa');
-  });
-
-  it('back={false} bỏ nút lùi và phần chừa; hero dùng nền đảo', () => {
-    const c = mount(<PageHeader title="Chào" back={false} variant="hero" />).container;
-    expect(c.querySelector('[aria-label="Quay lại"]')).toBeNull();
-    expect(c.querySelector('h1')!.parentElement!.style.paddingLeft).toBe('0px');
-    expect((c.firstElementChild as HTMLElement).style.background).toBe('var(--color-bg-inverse)');
   });
 });
 

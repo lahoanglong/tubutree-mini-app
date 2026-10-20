@@ -73,7 +73,7 @@ export function RecyclePoints() {
   const tab = tabSel ?? provinces[0]?.code ?? '';
 
   const shell = (content: ReactNode, bar?: ReactNode) => (
-    <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
       <PageHeader title="Điểm nhận gần bạn" backHref={nav?.returnTo ?? '/doi-rac/tao'} backLabel="Quay lại" />
       {content}
       {bar}

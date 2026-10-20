@@ -349,7 +349,7 @@ describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
 
   it('tiêu đề chừa 48px cho nút lùi nổi vì thân trang được kéo lên ngang nút', async () => {
     const c = await mount();
-    expect(c.querySelector('header')!.parentElement!.className).toContain('max-md:pl-12');
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
     expect(c.querySelector('a[aria-label="Trang chủ"]')).toBeNull();
   });
 

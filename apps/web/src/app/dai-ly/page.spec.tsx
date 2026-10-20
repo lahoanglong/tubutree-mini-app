@@ -676,7 +676,7 @@ describe('/dai-ly — diện mạo Mini App ở điện thoại (theme B2B navy)
     expect(c.querySelector('section[aria-label="Tổng quan đại lý"]')!.className).toContain('max-md:bg-[var(--color-dealer-ink)]');
     expect(button('Dán đơn').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     expect(c.querySelector('li .font-bold')!.className).toContain('max-md:text-[var(--color-dealer-ink)]');
-    expect(c.querySelector('h1')!.className).toContain('max-md:pl-12');
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
   });
 });
 

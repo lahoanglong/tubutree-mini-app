@@ -8,15 +8,16 @@ import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import BackLink from '@/components/back-link';
+import { PageHeader } from '@/components/ui/page-header';
 
 /** Khung chung của màn nhân sự: mỗi nhánh render có đúng một h1. */
 export function StaffShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <main className={`mx-auto max-w-5xl px-4 py-6 ${skin.mainUp}`}>
+    <main className="mx-auto max-w-5xl px-4 py-6">
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>
-      <h1 className={`mt-1 max-md:mt-0 ${skin.pageTitle}`}>{title}</h1>
+      <PageHeader title={title} parentHref="/tai-khoan" className="md:mt-1" />
       <div className="mt-4">{children}</div>
     </main>
   );

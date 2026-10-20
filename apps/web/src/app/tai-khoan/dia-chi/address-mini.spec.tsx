@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('sổ địa chỉ như Mini App', () => {
-  it('tiêu đề trong dải TitleBand, một h1', async () => {
+  it('tiêu đề trong PageHeader dùng chung, một h1', async () => {
     const c = await mount();
     expect(c.querySelector('[data-page-bleed] h1')!.textContent).toBe('Sổ địa chỉ');
     expect(c.querySelectorAll('h1')).toHaveLength(1);

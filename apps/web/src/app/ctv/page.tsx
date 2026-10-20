@@ -47,6 +47,7 @@ import {
   WITHDRAWING_META,
 } from '@/components/affiliate/ctv-copy';
 import BackLink from '@/components/back-link';
+import { PageHeader } from '@/components/ui/page-header';
 
 const TITLE = 'Cộng tác viên';
 const DEFAULT_MIN_WITHDRAW_BANK = 50_000;
@@ -69,7 +70,7 @@ function Shell({ children }: { children: ReactNode }) {
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>{TITLE}</h1>
+      <PageHeader title={TITLE} parentHref="/tai-khoan" className="md:mt-1" />
       <div className="mt-4">{children}</div>
     </main>
   );

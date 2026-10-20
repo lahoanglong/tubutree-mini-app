@@ -461,7 +461,7 @@ describe('/cong-dong — giao diện điện thoại như Mini App', () => {
 describe('/cong-dong — tiêu đề chừa chỗ nút lùi', () => {
   it('thanh tiêu đề chừa 64px bên trái cho nút lùi nổi; ô tìm viền mảnh', async () => {
     const { container } = await mount();
-    expect(container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:pl-16');
+    expect(container.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
     expect(searchInput(container).className).toContain('max-md:border-stone-200');
   });
 });

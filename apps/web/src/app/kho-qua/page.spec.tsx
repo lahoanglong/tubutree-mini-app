@@ -394,8 +394,8 @@ describe('/kho-qua — giao diện điện thoại như Mini App', () => {
 
   it('trang bỏ đệm 48px của body và có thanh tiêu đề trắng', async () => {
     const c = await mount();
-    expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
-    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:bg-stone-0');
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 });
 

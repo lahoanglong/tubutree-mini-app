@@ -774,7 +774,7 @@ describe('Vườn Xanh: giao diện điện thoại như Mini App', () => {
   it('trang bỏ đệm đỉnh và tiêu đề nằm trên thanh trắng', async () => {
     const c = await mount();
     expect(c.querySelector('main')!.className).toContain('max-md:pt-0');
-    expect(c.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 });
 

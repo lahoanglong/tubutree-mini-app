@@ -6,7 +6,6 @@ export { IconButton } from './icon-button';
 export { Button } from './button';
 export type { ButtonVariant } from './button';
 export { default as BackButton } from './back-button';
-export { PageHeader } from './page-header';
 export { Card } from './card';
 export { ListRow } from './list-row';
 export { SectionTitle } from './section-title';

@@ -9,7 +9,7 @@ import { levelEmoji } from '@/components/community/rank';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
-import { MiniBar, miniCard } from '@/components/loyalty/mini-surface';
+import { miniCard } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -22,10 +22,8 @@ const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message :
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
-      <MiniBar>
-        <PageHeader title="Bảng xếp hạng" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
-      </MiniBar>
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
+      <PageHeader title="Bảng xếp hạng" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4">{children}</div>
     </main>
   );

@@ -145,7 +145,7 @@ describe('/cong-dong/xep-hang — giao diện điện thoại như Mini App', ()
   it('hàng xếp hạng không viền; tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {
     const { container } = await mount();
     expect(container.querySelector('li')!.classList.contains('border')).toBe(false);
-    expect(container.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(true);
-    expect(container.querySelector('h1')!.closest('header')!.parentElement!.className).toContain('max-md:bg-stone-0');
+    expect(container.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(container.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
   });
 });

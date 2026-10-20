@@ -15,7 +15,8 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
-import { TitleBand, CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { KeyValueRow } from '@/components/mini';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -536,7 +537,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <BackLink href="/">
         ← Tiếp tục mua sắm
       </BackLink>
-      <TitleBand title="Giỏ hàng" className="md:mt-1" />
+      <PageHeader title="Giỏ hàng" className="md:mt-1" />
       <div className="mt-4 max-md:mt-0 max-md:px-3 max-md:pt-2">{children}</div>
     </main>
   );

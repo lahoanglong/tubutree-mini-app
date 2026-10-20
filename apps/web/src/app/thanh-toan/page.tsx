@@ -56,7 +56,8 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
-import { TitleBand, CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
@@ -978,7 +979,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <BackLink href="/gio-hang">
         ← Về giỏ hàng
       </BackLink>
-      <TitleBand title="Thanh toán" className="md:mt-1" />
+      <PageHeader title="Thanh toán" className="md:mt-1" />
       <div className="mt-4 max-md:mt-0">{children}</div>
     </main>
   );

@@ -22,7 +22,7 @@ export function RecycleRulesView({ initialText }: { initialText?: string | null 
   });
 
   return (
-    <main className={`mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
+    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6 pb-12">
       <PageHeader title="Thể lệ Đổi rác lấy quà" backHref="/doi-rac" backLabel="Đổi rác lấy quà" />
       {q.isPending ? (
         <div className="space-y-2">

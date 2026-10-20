@@ -21,7 +21,7 @@ import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
-import { MiniBar, miniBleed, miniBtnSecondary } from '@/components/loyalty/mini-surface';
+import { miniBleed, miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -48,10 +48,8 @@ function ReplyBar(props: FormHTMLAttributes<HTMLFormElement>) {
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main data-page-bleed className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
-      <MiniBar>
-        <PageHeader title={TITLE} backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
-      </MiniBar>
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
+      <PageHeader title={TITLE} backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4 flex flex-col gap-3 max-md:mt-0 max-md:gap-2">{children}</div>
     </main>
   );

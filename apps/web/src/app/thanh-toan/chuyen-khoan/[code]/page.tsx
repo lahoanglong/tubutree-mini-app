@@ -7,7 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { bankPaymentHref, orderDetailHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
-import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 
@@ -85,9 +86,10 @@ export default function BankPaymentPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <TitleBand
+      <PageHeader
         title={showQr ? TITLE : NEUTRAL_TITLE}
         subtitle={showQr ? 'Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới' : undefined}
+        subtitleClassName="md:text-sm"
       />
       <div className="mt-2 max-md:pb-6">{body}</div>
     </main>

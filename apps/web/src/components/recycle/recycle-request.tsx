@@ -108,7 +108,7 @@ function TrackingForm({
 
 function Shell({ children, title = 'Yêu cầu đổi rác', subtitle }: { children: ReactNode; title?: string; subtitle?: string }) {
   return (
-    <main className={`mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 ${skin.mainUp}`}>
+    <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
       <PageHeader title={title} subtitle={subtitle} backHref="/doi-rac/yeu-cau" backLabel="Yêu cầu của tôi" />
       {children}
     </main>

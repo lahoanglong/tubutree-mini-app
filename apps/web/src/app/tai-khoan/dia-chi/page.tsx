@@ -9,7 +9,8 @@ import { createAddress, deleteAddress, getAddresses, updateAddress, type Address
 import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { TitleBand, mini } from '@/components/order-mobile/mobile-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
 
 /** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
 const LINK_MINI = 'max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
@@ -284,7 +285,7 @@ export default function AddressBookPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <TitleBand title="Sổ địa chỉ" backHref="/tai-khoan" backLabel="Tài khoản" />
+      <PageHeader title="Sổ địa chỉ" backHref="/tai-khoan" backLabel="Tài khoản" />
       <div className="mt-4 max-md:px-4">{children}</div>
     </main>
   );
