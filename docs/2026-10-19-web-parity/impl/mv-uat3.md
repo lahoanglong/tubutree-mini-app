@@ -2,7 +2,11 @@
 
 Nhánh `web/mv-uat3`. Nguồn: nhánh cục bộ `uat/int` (9a4d13f7 chữ, 544c9ad7 giao diện, 7edb9c02 sửa sau review, lô 4 tới 755fede9, lô 5 404f4f71). Không sửa `apps/miniapp`, `apps/api`, `packages/**`.
 
-## Bảng mục
+## 1. Đã làm
+
+Route web đã bỏ pending: không có route nào đổi trạng thái pending ở lane này (`lint:parity` xanh, 0 mục pending). Các màn đã chỉnh: giỏ hàng, thanh toán, Cộng đồng, duyệt danh mục, Điểm Xanh, đổi rác, câu chuyện thương hiệu, pháp lý.
+
+(Cột "Commit Mini App" là nguồn; commit web của lane: 2010f9fc … da028bd1, sửa review dee28123, 52770eb5, 67ef5227. `git log web/mv-uat3` cho bảng commit theo mục.)
 
 | Mục | Commit Mini App | File web | Kết quả |
 |---|---|---|---|
@@ -32,13 +36,49 @@ Nhánh `web/mv-uat3`. Nguồn: nhánh cục bộ `uat/int` (9a4d13f7 chữ, 544c
 | Thêm | 544c9ad7 | `components/affiliate/storefront-builder.tsx` | Tên món bị ẩn dùng chữ nhạt thay opacity |
 | e2e | | `apps/e2e/tests/loyalty.web.spec.ts`, `community.web.spec.ts` | Bộ chọn theo chữ mới (không đụng `pro.web.spec.ts`) |
 
-## Kiểm chứng
-- vitest web: 392 file / 6590 test xanh, cả mặc định và `TZ=UTC`.
-- vitest Mini App: 283 file / 4313 test xanh (không sửa gì ở Mini App).
-- `tsc --noEmit` web xanh (cần build `packages/shared-types` trước), `next build` xanh, `lint:vars`, `lint:parity` xanh, `next lint` chỉ còn cảnh báo cũ ở `ctv-order-sheet.tsx:587`.
-- Ảnh chụp visual-tour: CHƯA chụp được. `web-gate.sh` đã thử hai lần, Postgres tạm khởi động nhưng cổng host 15432 không nhận kết nối (thử riêng một container cổng khác cũng "Connection refused"): Docker publish cổng ra host đang hỏng trên máy lúc này. Chưa so ảnh với `after` của UAT.
+## 2. Kiểm chứng (summary.txt của gate cuối, xanh)
 
-## Câu hỏi và ghi chú
-1. Trang thành công đặt hàng của web chưa có dòng "Giao dự kiến" (Mini App `order-success.tsx` có). Thuộc luồng đặt hàng/đơn hàng, không làm ở lane này.
-2. `components/mini/tiles.tsx` `StatTile` có `role="button"` mà không có tabIndex/phím (file thuộc `components/mini/*`, không sửa, hiện chưa chỗ nào dùng).
-3. Mục 1, 4, 6, 7 viết code ngay sau test trong cùng bước ở một số chỗ (category-grid, browse-categories); phần còn lại test đỏ trước.
+```
+install rc=0
+shared-types rc=0
+app-core-typecheck rc=0
+app-core-test rc=0  Test Files  41 passed (41)       Tests  489 passed (489)
+web-typecheck rc=0
+web-lint rc=0
+web-test rc=0  Test Files  392 passed (392)       Tests  6593 passed (6593)
+web-test-utc rc=0  Test Files  392 passed (392)       Tests  6593 passed (6593)
+miniapp-typecheck rc=0
+miniapp-lint rc=0
+miniapp-test rc=0  Test Files  283 passed (283)       Tests  4313 passed (4313)
+lint-vars rc=0 OK — every var(--x) reference is defined.
+lint-parity rc=0 lint:parity xanh (0 mục pending)
+web-build rc=0  ✓ Compiled successfully
+miniapp-build rc=0
+DONE
+```
+
+Test web: 6590 trước review, 6593 sau (thêm 3). Mini App 4313, đúng mức sàn, không sửa.
+
+## 3. Review
+
+Lượt 1:
+- MAJOR: dòng "Giao dự kiến" hiện khi chưa có báo giá (chưa có địa chỉ, ADDRESS_OUTDATED), Mini App chỉ hiện sau khi có báo giá. Đã sửa ở dee28123 (điều kiện `quote && etaLabel`, thêm test hai ca).
+- MINOR: nhãn "Khách không thấy" ở storefront-builder không xuống dòng ở 375px. Đã sửa ở 52770eb5 (`max-w-full !whitespace-normal`).
+- MINOR: quét nhãn ô nhập coi mọi `id` là có tên. Đã sửa ở 52770eb5 (đòi `htmlFor` khớp trong cùng file).
+- MINOR: chưa có ảnh visual-tour. Không sửa được (Docker publish cổng hỏng); báo cáo ghi rõ chưa kiểm chứng.
+
+Lượt 2:
+- MINOR: banner freeship desktop giỏ thiếu chữ "cho". Đã sửa ở 67ef5227, kèm test.
+- MINOR: báo cáo chưa cập nhật điều kiện ẩn "Giao dự kiến". Đã sửa ở 67ef5227.
+
+## 4. Chưa làm, cố ý để lại, chưa kiểm chứng
+- Chưa kiểm chứng: ảnh visual-tour (khổ điện thoại và máy tính của giỏ, thanh toán địa chỉ cũ, Cộng đồng, danh mục, scrim) chưa chụp, chưa so với ảnh `after` của UAT. Chạy lại lệnh gate trong `lanes/mv-uat3.json` khi Docker publish cổng chạy lại. Hai spec e2e `loyalty.web`, `community.web` đã sửa bộ chọn nhưng chưa chạy.
+- Chưa làm: dòng "Giao dự kiến" ở trang thành công đặt hàng (thuộc luồng đơn hàng).
+- Cố ý để lại: `components/mini/tiles.tsx` `StatTile` thiếu tabIndex/phím (file ngoài lane, chưa dùng ở đâu).
+- Category-grid và browse-categories: code viết ngay sau test cùng bước, chưa chạy riêng bản đỏ.
+- Commit chưa có dòng `Co-Authored-By` theo nhắc attribution (cần viết lại lịch sử nếu muốn).
+
+## 5. Câu hỏi cho chủ dự án
+1. `lib/legal.ts` còn `[số ngày làm việc]` cho thời gian hoàn tiền: điền bao nhiêu? Mặc định: giữ chỗ trống như bản nháp.
+2. Câu hoàn tiền "vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt yêu cầu" (theo luồng API và Mini App, thay câu cũ "theo cách đã thanh toán"): chấp nhận? Mặc định: đã dùng câu mới.
+3. Thêm "Giao dự kiến" vào trang thành công đặt hàng của web? Mặc định: không làm ở lane này.
