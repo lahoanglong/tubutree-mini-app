@@ -37,8 +37,8 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
         UsersService,
         SubscriptionsService,
         WalletLedgerService,
-        { provide: PricingService, useValue: {} },
-        { provide: LoyaltyService, useValue: {} },
+        { provide: PricingService, useValue: { calcShippingFee: async () => 0, calcPointsEarned: async () => 0 } },
+        { provide: LoyaltyService, useValue: { getTierMultiplier: async () => 1 } },
         { provide: NotificationsService, useValue: { notify: jest.fn().mockResolvedValue(undefined) } },
         { provide: PancakeOrderService, useValue: { enqueuePush: jest.fn().mockResolvedValue(undefined) } },
       ],
@@ -171,8 +171,8 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
         users.deleteAddress(u.id, first.id),
         users.updateAddress(u.id, second.id, { isDefault: true } as never),
       ]);
-      // Xung đột Serializable (P2034) được phép: bên thua thử lại ở tầng HTTP, miễn không để lại 0 hay 2 mặc định.
-      for (const r of results) if (r.status === 'rejected') expect((r.reason as { code?: string }).code).toBe('P2034');
+      // Khoá advisory xếp hàng hai bên, không còn Serializable nên không bên nào bị P2034.
+      expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled']);
       const rows = await prisma.address.findMany({ where: { userId: u.id } });
       const ctx = `vòng ${round}: ${results.map((r) => r.status).join('/')}`;
       expect({ ctx, defaults: rows.filter((a) => a.isDefault).length }).toEqual({ ctx, defaults: 1 });
@@ -210,7 +210,8 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
       await blocker;
       const results = await Promise.all([deleting, updating]);
       const ctx = `vòng ${round}: ${results.map((r) => (r === 'ok' ? 'ok' : String(codeOf(r)))).join('/')}`;
-      for (const r of results) if (r !== 'ok') expect({ ctx, code: codeOf(r) }).toEqual({ ctx, code: 'P2034' });
+      // Khoá advisory xếp hàng hai bên, không còn Serializable nên cả hai đều thành công.
+      expect({ ctx, results: results.map((r) => (r === 'ok' ? 'ok' : codeOf(r))) }).toEqual({ ctx, results: ['ok', 'ok'] });
       const rows = await prisma.address.findMany({ where: { userId: u.id } });
       expect({ ctx, defaults: rows.filter((x) => x.isDefault).length }).toEqual({ ctx, defaults: 1 });
     }
@@ -258,11 +259,65 @@ describe('Xoá địa chỉ đang dùng cho gói định kỳ (real Postgres)', 
       release();
       const results = await Promise.all([creating, deleting]);
       const ctx = `vòng ${round}: ${results.map((r) => (r === 'ok' ? 'ok' : String(codeOf(r)))).join('/')}`;
-      for (const r of results) if (r !== 'ok') expect({ ctx, code: codeOf(r) }).toEqual({ ctx, code: 'P2034' });
+      // Khoá advisory xếp hàng hai bên, không còn Serializable nên cả hai đều thành công.
+      expect({ ctx, results: results.map((r) => (r === 'ok' ? 'ok' : codeOf(r))) }).toEqual({ ctx, results: ['ok', 'ok'] });
       const rows = await prisma.address.findMany({ where: { userId: u.id } });
-      // Bên thua có thể thất bại (409) nên sổ còn 1 hoặc 2 địa chỉ, nhưng không bao giờ 0 mặc định khi còn địa chỉ.
       expect({ ctx, defaults: rows.filter((x) => x.isDefault).length, total: rows.length > 0 }).toEqual({ ctx, defaults: 1, total: true });
     }
+  });
+
+  it('R2-1: gói giao ngay trả bằng ví song song với xoá đúng địa chỉ đó: không 40P01, xoá nhận ADDRESS_IN_USE', async () => {
+    const ledger = moduleRef.get(WalletLedgerService);
+    for (let round = 0; round < 3; round++) {
+      const u = await createUser(prisma, { walletBalance: 1_000_000 });
+      const v = await variation();
+      const addr = await address(u.id);
+      let reached!: () => void;
+      const reachedP = new Promise<void>((r) => (reached = r));
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const original = ledger.applyDelta.bind(ledger);
+      // Dừng sau khi INSERT gói (đang giữ FOR KEY SHARE trên địa chỉ), trước khi khoá dòng users của ví.
+      const spy = jest.spyOn(ledger, 'applyDelta').mockImplementationOnce(async (...args) => {
+        reached();
+        await gate;
+        return original(...args);
+      });
+      const creating = subs.create(u.id, { variationId: v.id, quantity: 1, intervalWeeks: 4, addressId: addr.id, paymentMethod: 'WALLET' } as never).then(() => 'ok', (e: unknown) => e);
+      await reachedP;
+      const deleting = users.deleteAddress(u.id, addr.id).then(() => 'ok', (e: unknown) => e);
+      await new Promise((r) => setTimeout(r, 300));
+      release();
+      const [c, d] = await Promise.all([creating, deleting]);
+      spy.mockRestore();
+      expect({ round, create: c }).toEqual({ round, create: 'ok' });
+      expectAddressInUse(d, v.product.name);
+      expect(await prisma.address.count({ where: { id: addr.id } })).toBe(1);
+    }
+  });
+
+  it.each(['createAddress', 'updateAddress'] as const)('R2-2: %s trong lúc giao dịch khác UPDATE users cùng khách: chờ rồi thành công, không 40001', async (mode) => {
+    const u = await createUser(prisma);
+    const existing = await address(u.id);
+    let held!: () => void;
+    const heldP = new Promise<void>((r) => (held = r));
+    let rel!: () => void;
+    const relP = new Promise<void>((r) => (rel = r));
+    const other = prisma.$transaction(
+      async (tx) => {
+        await tx.user.update({ where: { id: u.id }, data: { pointsBalance: { increment: 1 } } });
+        held();
+        await relP;
+      },
+      { timeout: 30_000 },
+    );
+    await heldP;
+    const run = mode === 'createAddress' ? users.createAddress(u.id, { ...createDto } as never) : users.updateAddress(u.id, existing.id, { street: 'S2' } as never);
+    const result = run.then(() => 'ok', (e: unknown) => e);
+    await new Promise((r) => setTimeout(r, 300));
+    rel();
+    await other;
+    expect(await result).toBe('ok');
   });
 
   it('xoá địa chỉ song song với tạo gói (20 vòng): không gói nào bị mất hay mồ côi', async () => {

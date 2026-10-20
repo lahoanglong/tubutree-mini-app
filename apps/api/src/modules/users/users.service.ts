@@ -23,11 +23,12 @@ function addressInUseError(productNames: string[]): BadRequestException {
 
 /**
  * Mở đầu mọi giao dịch ghi sổ địa chỉ (tạo, sửa, xoá): các giao dịch của cùng một khách xếp hàng theo một khoá
- * duy nhất nên không đan xen việc chọn mặc định (không để lại 0 hoặc 2 mặc định) và không có hai thứ tự khoá dòng
- * khác nhau gây deadlock. NO KEY để không chặn kiểm FK từ bảng khác trỏ vào users.
+ * advisory nên không đan xen việc chọn mặc định (không để lại 0 hoặc 2 mặc định) và không có hai thứ tự khoá dòng
+ * khác nhau gây deadlock. Không khoá dòng users: ví, điểm, đăng nhập, cron gói đều UPDATE users và gói giao ngay
+ * giữ khoá dòng địa chỉ rồi mới khoá users, nên khoá dòng users ở đây sẽ đảo thứ tự khoá với tạo gói (40P01).
  */
 async function lockAddressBook(tx: Prisma.TransactionClient, userId: string) {
-  await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`address-book:${userId}`}))`;
 }
 
 @Injectable()
@@ -105,6 +106,8 @@ export class UsersService {
     await assertDeliverableAddress(this.geo, dto);
     return this.prisma.$transaction(
       async (tx) => {
+        // Read Committed + khoá advisory theo khách: mỗi câu sau khoá đọc dữ liệu mới, 2 request tạo địa chỉ
+        // đầu tiên đồng thời không thể cùng đọc count=0.
         await lockAddressBook(tx, userId);
         const count = await tx.address.count({ where: { userId } });
         const makeDefault = dto.isDefault ?? count === 0;
@@ -113,11 +116,6 @@ export class UsersService {
         }
         return tx.address.create({ data: { ...dto, isDefault: makeDefault, userId } });
       },
-      // Serializable: count-rồi-write không atomic — 2 request tạo địa chỉ đầu tiên
-      // đồng thời có thể cùng đọc count=0 rồi cùng tạo isDefault:true. Serializable
-      // buộc 1 trong 2 tx fail (P2034, map 409 bởi PrismaExceptionFilter) thay vì
-      // để user có 2 địa chỉ mặc định.
-      { isolationLevel: 'Serializable' },
     );
   }
 
@@ -132,15 +130,13 @@ export class UsersService {
     }
     return this.prisma.$transaction(
       async (tx) => {
+        // lockAddressBook tuần tự hoá 2 update isDefault:true đồng thời nên không cần Serializable.
         await lockAddressBook(tx, userId);
         if (dto.isDefault) {
           await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
         }
         return tx.address.update({ where: { id }, data: dto });
       },
-      // Serializable: 2 update isDefault:true đồng thời cho 2 địa chỉ khác nhau có thể
-      // đan xen và để lại 0 hoặc 2 địa chỉ mặc định (mirror createAddress ở trên).
-      { isolationLevel: 'Serializable' },
     );
   }
 
