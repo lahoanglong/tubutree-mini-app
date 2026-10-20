@@ -918,3 +918,123 @@ describe('SubscriptionsService.list', () => {
     expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200, cursor: { id: 's7' }, skip: 1 }));
   });
 });
+
+describe('SubscriptionsService.update — đổi chu kỳ giao (Q22)', () => {
+  const DAY = 864e5;
+  const WEEK = 7 * DAY;
+  const NOW = new Date('2026-10-20T05:00:00.000Z');
+  /** 0h giờ VN ngày kế tiếp: mốc sớm nhất một gói hẹn ngày được phép (cùng luật parseStartDate lúc tạo gói). */
+  const TOMORROW_VN = new Date('2026-10-20T17:00:00.000Z');
+
+  function makeUpdate(row: Record<string, unknown>, lastOrderCreatedAt: Date | null = null) {
+    const update = jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...row, ...args.data }));
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 's1', userId: 'u1', variationId: 'v1', quantity: 2, addressId: 'a1', status: 'ACTIVE', paymentMethod: 'COD', intervalWeeks: 4, ...row },
+      ]),
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }),
+      },
+      order: {
+        findUnique: jest.fn().mockResolvedValue(lastOrderCreatedAt ? { createdAt: lastOrderCreatedAt } : null),
+      },
+      subscription: { update },
+    };
+    const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const analytics = makeAnalytics();
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics, walletLedger());
+    return { svc, update, tx, analytics };
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: NOW });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('4 → 6 tuần: ngày giao kế = ngày đơn kỳ gần nhất + 6 tuần, ghi đúng chu kỳ mới', async () => {
+    const lastOrderAt = new Date('2026-10-10T03:00:00.000Z');
+    const { svc, update } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(lastOrderAt.getTime() + 4 * WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(6);
+    expect((data.nextRunAt as Date).toISOString()).toBe(new Date(lastOrderAt.getTime() + 6 * WEEK).toISOString());
+    expect(data.retryCount).toBe(0);
+  });
+
+  it('6 → 4 tuần mà mốc mới đã qua hoặc sát hơn mức báo trước tối thiểu → đặt 0h ngày mai giờ VN', async () => {
+    const lastOrderAt = new Date(NOW.getTime() - 5 * WEEK);
+    const { svc, update } = makeUpdate({ intervalWeeks: 6, lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 4 });
+    expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(TOMORROW_VN.toISOString());
+  });
+
+  it('mốc mới rơi vào chính hôm nay (chưa tới 0h ngày mai) → vẫn đặt 0h ngày mai, không giao trong ngày', async () => {
+    const lastOrderAt = new Date(NOW.getTime() - 4 * WEEK + 3600e3);
+    const { svc, update } = makeUpdate({ intervalWeeks: 6, lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 3600e3) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 4 });
+    expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(TOMORROW_VN.toISOString());
+  });
+
+  it('gói chưa ra đơn nào (hẹn ngày bắt đầu): giữ ngày bắt đầu khách chọn, chỉ đổi chu kỳ', async () => {
+    const start = new Date(NOW.getTime() + 30 * DAY);
+    const { svc, update, tx } = makeUpdate({ lastOrderId: null, nextRunAt: start });
+    await svc.update('u1', 's1', { intervalWeeks: 10 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(10);
+    expect(data.nextRunAt).toBeUndefined();
+    expect(tx.order.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('gói PAUSED: đổi chu kỳ nhưng không đụng nextRunAt (bật lại thì setStatus tự dời theo chu kỳ mới)', async () => {
+    const { svc, update } = makeUpdate({ status: 'PAUSED', lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() - DAY) }, new Date(NOW.getTime() - 4 * WEEK));
+    await svc.update('u1', 's1', { intervalWeeks: 8 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(8);
+    expect(data.nextRunAt).toBeUndefined();
+  });
+
+  it('gửi lại đúng chu kỳ đang dùng → không tính lại ngày giao kế', async () => {
+    const { svc, update } = makeUpdate({ intervalWeeks: 6, lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 2 * WEEK) }, new Date(NOW.getTime() - 4 * WEEK));
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    expect(update.mock.calls[0][0].data.nextRunAt).toBeUndefined();
+  });
+
+  it('chỉ sửa số lượng (không gửi intervalWeeks) → không đụng chu kỳ lẫn ngày giao kế', async () => {
+    const { svc, update } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 2 * WEEK) }, new Date(NOW.getTime() - 2 * WEEK));
+    await svc.update('u1', 's1', { quantity: 3 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBeUndefined();
+    expect(data.nextRunAt).toBeUndefined();
+  });
+
+  it('chu kỳ ngoài 4/6/8/10 → 400 trước khi mở transaction', async () => {
+    const $transaction = jest.fn();
+    const svc = new SubscriptionsService({ $transaction } as unknown as PrismaService, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    await expect(svc.update('u1', 's1', { intervalWeeks: 5 })).rejects.toThrow('4/6/8/10');
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it('gói đã huỷ → 400, không ghi gì', async () => {
+    const { svc, update } = makeUpdate({ status: 'CANCELLED' });
+    await expect(svc.update('u1', 's1', { intervalWeeks: 6 })).rejects.toThrow('đã huỷ');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('không đổi bậc giảm: không đụng thang bậc theo số gói ACTIVE', async () => {
+    const { svc, tx } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 2 * WEEK) }, new Date(NOW.getTime() - 2 * WEEK));
+    await svc.update('u1', 's1', { intervalWeeks: 8 });
+    expect(Object.keys(tx.subscription)).toEqual(['update']);
+  });
+
+  it('phát subscription_changed action=updated kèm chu kỳ mới và ngày giao kế', async () => {
+    const lastOrderAt = new Date('2026-10-10T03:00:00.000Z');
+    const { svc, analytics } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(lastOrderAt.getTime() + 4 * WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ props: expect.objectContaining({ action: 'updated', intervalWeeks: 6 }) }),
+    );
+  });
+});

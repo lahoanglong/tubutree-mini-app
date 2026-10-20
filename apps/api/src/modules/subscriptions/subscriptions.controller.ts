@@ -5,6 +5,7 @@ import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { clampTake } from '../../common/pagination';
 import {
   MAX_SUBSCRIPTION_QUANTITY,
+  SUBSCRIPTION_INTERVAL_WEEKS,
   SUBSCRIPTION_PAYMENT_METHODS,
   SubscriptionsService,
   type SubscriptionPaymentMethod,
@@ -14,15 +15,16 @@ import { OptionalNotNull } from '../../common/decorators/optional-not-null.decor
 class CreateSubDto {
   @IsString() variationId!: string;
   @IsInt() @Min(1) @Max(MAX_SUBSCRIPTION_QUANTITY) quantity!: number;
-  @IsIn([4, 6, 8, 10]) intervalWeeks!: number;
+  @IsIn(SUBSCRIPTION_INTERVAL_WEEKS) intervalWeeks!: number;
   @IsString() addressId!: string;
   /** YYYY-MM-DD giờ Việt Nam; bỏ trống = giao đơn đầu ngay. */
   @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/) startDate?: string;
   @IsOptional() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
 }
-class UpdateSubDto {
+export class UpdateSubDto {
   @OptionalNotNull() @IsInt() @Min(1) @Max(MAX_SUBSCRIPTION_QUANTITY) quantity?: number;
   @OptionalNotNull() @IsString() addressId?: string;
+  @OptionalNotNull() @IsIn(SUBSCRIPTION_INTERVAL_WEEKS) intervalWeeks?: number;
   @OptionalNotNull() @IsIn(SUBSCRIPTION_PAYMENT_METHODS) paymentMethod?: SubscriptionPaymentMethod;
 }
 class StatusDto {

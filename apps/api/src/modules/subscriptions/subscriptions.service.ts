@@ -25,12 +25,15 @@ import {
 } from '../orders/pending-payment-expiry.cron';
 import { CRON_TZ } from '../../common/cron-tz';
 import { generateUniqueOrderCode } from '../../common/order-code';
-import { formatVnDate, vnDateKey } from '../../common/vn-time';
+import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from '../cart/partner-goods';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
 export type SubscriptionPaymentMethod = (typeof SUBSCRIPTION_PAYMENT_METHODS)[number];
+
+/** Chu kỳ giao hợp lệ (tuần), dùng chung cho tạo gói, sửa gói và DTO. */
+export const SUBSCRIPTION_INTERVAL_WEEKS = [4, 6, 8, 10] as const;
 
 /** Khách chỉ được hẹn ngày bắt đầu trong khoảng này (tính theo ngày giờ Việt Nam). */
 export const MAX_START_DAYS_AHEAD = 60;
@@ -65,6 +68,7 @@ interface CreateSubInput {
 
 interface UpdateSubInput {
   quantity?: number;
+  intervalWeeks?: number;
   addressId?: string;
   paymentMethod?: SubscriptionPaymentMethod;
 }
@@ -130,6 +134,9 @@ interface LockedSubRow {
   addressId: string;
   status: string;
   paymentMethod: SubscriptionPaymentMethod;
+  intervalWeeks: number;
+  nextRunAt: Date;
+  lastOrderId: string | null;
 }
 
 /**
@@ -177,9 +184,7 @@ export class SubscriptionsService {
   ) {}
 
   async create(userId: string, dto: CreateSubInput) {
-    if (![4, 6, 8, 10].includes(dto.intervalWeeks)) {
-      throw new BadRequestException('Chu kỳ chỉ nhận 4/6/8/10 tuần.');
-    }
+    this.assertIntervalWeeks(dto.intervalWeeks);
     const paymentMethod = this.parsePaymentMethod(dto.paymentMethod);
     this.assertQuantity(dto.quantity);
     const firstRunAt = this.parseStartDate(dto.startDate);
@@ -322,12 +327,13 @@ export class SubscriptionsService {
   }
 
   /**
-   * Sửa số lượng / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng (Q-13). Khoá dòng gói như tx
+   * Sửa số lượng / địa chỉ / cách trả / chu kỳ của gói đang chạy hoặc tạm dừng (Q-13, Q22). Khoá dòng gói như tx
    * sinh đơn kỳ: cron đang ghi đơn thì chờ, nên đơn kỳ luôn theo trọn bản cũ hoặc trọn bản mới.
    */
   async update(userId: string, id: string, dto: UpdateSubInput) {
     const paymentMethod = dto.paymentMethod === undefined ? undefined : this.parsePaymentMethod(dto.paymentMethod);
     if (dto.quantity !== undefined) this.assertQuantity(dto.quantity);
+    if (dto.intervalWeeks !== undefined) this.assertIntervalWeeks(dto.intervalWeeks);
     let productName = 'Sản phẩm';
     let variationId: string | null = null;
     try {
@@ -358,10 +364,12 @@ export class SubscriptionsService {
           });
           if (open) throw subscriptionDuplicateError(open, productName);
         }
+        const intervalPatch = await this.intervalPatch(tx, sub, dto.intervalWeeks);
         const updated = await tx.subscription
           .update({
             where: { id },
             data: {
+              ...intervalPatch,
               ...(dto.quantity !== undefined ? { quantity: dto.quantity } : {}),
               ...(dto.addressId !== undefined ? { addressId: dto.addressId } : {}),
               ...(paymentMethod !== undefined ? { paymentMethod } : {}),
@@ -379,6 +387,8 @@ export class SubscriptionsService {
             subscriptionId: id,
             action: 'updated',
             quantity: updated.quantity,
+            intervalWeeks: updated.intervalWeeks,
+            nextRunAt: updated.nextRunAt,
             addressChanged: updated.addressId !== sub.addressId,
             paymentMethod: updated.paymentMethod,
           },
@@ -394,6 +404,22 @@ export class SubscriptionsService {
       if (!open) throw err;
       throw subscriptionDuplicateError(open, productName);
     }
+  }
+
+  /**
+   * Đổi chu kỳ: ngày giao kế = ngày đơn kỳ gần nhất + chu kỳ mới, không sớm hơn 0h ngày mai giờ VN (cùng mức báo
+   * trước tối thiểu của ngày bắt đầu lúc tạo gói, để cron 3h sáng không giao ngay trong ngày khách bấm lưu).
+   * Gói chưa ra đơn nào giữ nguyên ngày bắt đầu khách đã chọn: chu kỳ chỉ có nghĩa từ đơn thứ hai. Gói tạm dừng chỉ
+   * đổi chu kỳ; setStatus tự dời ngày giao khi bật lại. Bậc giảm tính theo số gói ACTIVE nên không bị đụng tới.
+   */
+  private async intervalPatch(tx: Prisma.TransactionClient, sub: LockedSubRow, intervalWeeks: number | undefined) {
+    if (intervalWeeks === undefined || intervalWeeks === sub.intervalWeeks) return {};
+    if (sub.status !== 'ACTIVE' || !sub.lastOrderId) return { intervalWeeks };
+    const last = await tx.order.findUnique({ where: { id: sub.lastOrderId }, select: { createdAt: true } });
+    if (!last) return { intervalWeeks };
+    const earliest = new Date(startOfVnDay().getTime() + 864e5);
+    const due = this.addWeeks(last.createdAt, intervalWeeks);
+    return { intervalWeeks, nextRunAt: due < earliest ? earliest : due, retryCount: 0 };
   }
 
   /** Mặc định 100 gói mới nhất (tối đa 200); cursor = id gói cuối của trang trước. */
@@ -843,9 +869,16 @@ export class SubscriptionsService {
 
   private async lockSubscription(tx: Prisma.TransactionClient, id: string): Promise<LockedSubRow | null> {
     const rows = await tx.$queryRaw<LockedSubRow[]>`
-      SELECT "id", "userId", "variationId", "quantity", "addressId", "status", "paymentMethod"::text AS "paymentMethod"
+      SELECT "id", "userId", "variationId", "quantity", "addressId", "status", "paymentMethod"::text AS "paymentMethod",
+             "intervalWeeks", "nextRunAt", "lastOrderId"
       FROM "subscriptions" WHERE "id" = ${id} FOR UPDATE`;
     return rows[0] ?? null;
+  }
+
+  private assertIntervalWeeks(weeks: number): void {
+    if (!(SUBSCRIPTION_INTERVAL_WEEKS as readonly number[]).includes(weeks)) {
+      throw new BadRequestException('Chu kỳ chỉ nhận 4/6/8/10 tuần.');
+    }
   }
 
   private assertQuantity(quantity: number): void {
