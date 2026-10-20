@@ -117,7 +117,7 @@ export class SystemConfigService {
     // ghi 'return.window_days' (không ai đọc) nên giới hạn này chưa bao giờ áp vào khoá thật.
     'returns.window_days': { min: 0, max: 365, note: 'số ngày', integer: true },
     'dealer.reward_claim_grace_days': { min: 0, max: 366, note: 'số ngày', integer: true },
-    'dealer.bonus_topup_window_days': { min: 0, max: 120, note: 'số ngày nguyên sau ngày cuối quý còn trả bù thưởng quý cho đơn chốt muộn (0 = tắt trả bù)', integer: true },
+    'dealer.bonus_topup_window_days': { min: 0, max: 120, note: 'số ngày nguyên sau ngày cuối quý còn trả bù thưởng quý cho đơn chốt muộn (0 hoặc dưới 10 = tắt: ngày chốt thưởng là ngày 10 sau quý)', integer: true },
     // ETA giao hàng trên trang đặt hàng thành công (buy-flow 4a): số nguyên ngày, gõ nhầm (vd 300) sẽ
     // bị từ chối lúc ghi thay vì âm thầm ẩn dòng ETA (toShippingEta bỏ giá trị ngoài 0–60).
     'shipping.eta_min_days': { min: 0, max: 60, note: 'số ngày' },

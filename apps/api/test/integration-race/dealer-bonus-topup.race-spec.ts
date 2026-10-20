@@ -72,10 +72,19 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
       deliveredAt: status === 'DELIVERED' ? createdAt : null,
     });
 
-  /** Đơn được chốt SAU lần trả thưởng: lên DELIVERED + dòng lịch sử PACKED + paidAt = bây giờ. */
-  async function settleNow(orderId: string) {
-    await prisma.order.update({ where: { id: orderId }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
-    await prisma.orderStatusHistory.create({ data: { orderId, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'SYSTEM' } });
+  /**
+   * Đơn được chốt SAU lần trả thưởng, vào lúc `at` (giờ mô phỏng, nằm trong cửa sổ trả bù): lên DELIVERED + dòng lịch sử
+   * PACKED. Bước bù cắt doanh số ở cuối cửa sổ nên chốt bằng giờ thật (2026) sẽ bị coi là quá hạn.
+   */
+  async function settleAt(orderId: string, at: Date) {
+    await prisma.order.update({ where: { id: orderId }, data: { status: 'DELIVERED', deliveredAt: at } });
+    await prisma.orderStatusHistory.create({ data: { orderId, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'SYSTEM', createdAt: at } });
+  }
+
+  /** payoutQuarterlyBonuses ghi createdAt bằng giờ thật; kéo về giờ mô phỏng để so với giờ chốt đơn trong cùng thời gian giả. */
+  async function payoutAt(at: Date) {
+    await dealer.payoutQuarterlyBonuses(at);
+    await prisma.dealerCreditLedger.updateMany({ where: { refType: 'QUARTER_BONUS', createdAt: { gt: new Date('2026-01-01') } }, data: { createdAt: at } });
   }
 
   function returnOrder(orderId: string) {
@@ -99,11 +108,10 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     const d = await createUser(prisma, { role: 'DEALER' });
     await dealerOrder(d.id, 120_000_000, new Date('2023-02-10T03:00:00Z'), 'DELIVERED', true);
     const b = await dealerOrder(d.id, 90_000_000, new Date('2023-03-28T03:00:00Z'), 'CONFIRMED', true);
-    await dealer.payoutQuarterlyBonuses(new Date('2023-04-12T03:00:00Z'));
+    await payoutAt(new Date('2023-04-12T03:00:00Z'));
     expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
 
-    await sleep(20);
-    await settleNow(b.id);
+    await settleAt(b.id, new Date('2023-04-15T03:00:00Z'));
 
     const results = await Promise.all([1, 2, 3, 4].map(() => topUp(new Date('2023-04-20T03:00:00Z'))));
     expect(results.reduce((s, r) => s + r.toppedUp, 0)).toBeGreaterThanOrEqual(1);
@@ -123,9 +131,8 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     const d = await createUser(prisma, { role: 'DEALER' });
     const a = await dealerOrder(d.id, 120_000_000, new Date('2023-05-10T03:00:00Z'), 'DELIVERED', true);
     const b = await dealerOrder(d.id, 90_000_000, new Date('2023-06-28T03:00:00Z'), 'CONFIRMED', true);
-    await dealer.payoutQuarterlyBonuses(new Date('2023-07-12T03:00:00Z'));
-    await sleep(20);
-    await settleNow(b.id);
+    await payoutAt(new Date('2023-07-12T03:00:00Z'));
+    await settleAt(b.id, new Date('2023-07-15T03:00:00Z'));
 
     await Promise.all([topUp(new Date('2023-07-20T03:00:00Z')), returnOrder(a.id), topUp(new Date('2023-07-20T03:00:00Z'))]);
     // Chạy thêm một lượt để bắt trường hợp lượt bù chạy trước lần trả A rồi thấy số dư đổi.
@@ -140,9 +147,8 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     const d = await createUser(prisma, { role: 'DEALER' });
     await dealerOrder(d.id, 120_000_000, new Date('2023-08-10T03:00:00Z'), 'DELIVERED', true);
     const b = await dealerOrder(d.id, 90_000_000, new Date('2023-09-28T03:00:00Z'), 'CONFIRMED', true);
-    await dealer.payoutQuarterlyBonuses(new Date('2023-10-12T03:00:00Z'));
-    await sleep(20);
-    await settleNow(b.id);
+    await payoutAt(new Date('2023-10-12T03:00:00Z'));
+    await settleAt(b.id, new Date('2023-10-15T03:00:00Z'));
     await topUp(new Date('2023-10-20T03:00:00Z'));
     expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
 
@@ -156,14 +162,43 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     const d = await createUser(prisma, { role: 'DEALER' });
     await dealerOrder(d.id, 120_000_000, new Date('2022-11-10T03:00:00Z'), 'DELIVERED', true);
     const b = await dealerOrder(d.id, 90_000_000, new Date('2022-12-28T03:00:00Z'), 'CONFIRMED', true);
-    await dealer.payoutQuarterlyBonuses(new Date('2023-01-12T03:00:00Z'));
-    await sleep(20);
-    await settleNow(b.id);
+    await payoutAt(new Date('2023-01-12T03:00:00Z'));
+    await settleAt(b.id, new Date('2023-01-15T03:00:00Z'));
 
     await topUp(new Date('2023-03-05T03:00:00Z')); // 64 ngày sau 31/12
     expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
 
     await topUp(new Date('2023-02-28T03:00:00Z')); // 59 ngày sau 31/12 — còn trong cửa sổ
     expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
+  });
+
+  it('admin đổi bậc thưởng sau ngày 10 + đơn chốt muộn, 4 lượt song song: chỉ bù phần biên của đơn muộn theo bậc mới, một lần', async () => {
+    const QUARTER = 'Q1/2022';
+    const d = await createUser(prisma, { role: 'DEALER' });
+    await dealerOrder(d.id, 120_000_000, new Date('2022-02-10T03:00:00Z'), 'DELIVERED', true);
+    const b = await dealerOrder(d.id, 30_000_000, new Date('2022-03-28T03:00:00Z'), 'CONFIRMED', true);
+    await payoutAt(new Date('2022-04-12T03:00:00Z'));
+    expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+
+    const newTiers = [{ min: 50_000_000, pct: 3 }, { min: 100_000_000, pct: 5 }];
+    // setConfig ghi thẳng DB, bỏ qua cache 60 giây của SystemConfigService (set() mới xoá cache) nên phải xoá tay.
+    const dropTiersCache = () => (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.delete('dealer.quarterly_bonus_tiers');
+    await setConfig(prisma, 'dealer.quarterly_bonus_tiers', newTiers);
+    dropTiersCache();
+    try {
+      // Chưa có đơn chốt muộn: đổi bậc một mình không sinh khoản bù.
+      await topUp(new Date('2022-04-18T03:00:00Z'));
+      expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+
+      await settleAt(b.id, new Date('2022-04-19T03:00:00Z'));
+      await Promise.all([1, 2, 3, 4].map(() => topUp(new Date('2022-04-20T03:00:00Z'))));
+      const topups = (await ledgerOf(d.id, QUARTER)).filter((r) => r.refType === 'QUARTER_BONUS_TOPUP');
+      expect(topups).toHaveLength(1);
+      // bonus(150tr) = 7,5tr, bonus(120tr) = 6tr → biên 1,5tr.
+      expect(topups[0]).toMatchObject({ delta: -1_500_000 });
+    } finally {
+      await setConfig(prisma, 'dealer.quarterly_bonus_tiers', TIERS);
+      dropTiersCache();
+    }
   });
 });

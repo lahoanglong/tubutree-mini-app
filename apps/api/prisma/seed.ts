@@ -163,7 +163,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'dealer.free_ship_threshold_vnd', value: 5_000_000, category: 'dealer', description: 'Đơn đại lý từ mức tiền hàng này (đ) thì miễn phí giao; dưới mức này thu phí giao', createOnly: true },
   { key: 'dealer.shipping_fee_below_threshold_vnd', value: 19_000, category: 'dealer', description: 'Phí giao (đ) của đơn đại lý dưới ngưỡng miễn phí giao. Mặc định bằng phí giao phẳng của đơn lẻ (shipping.flat_fee_below_threshold)', createOnly: true },
   { key: 'dealer.block_credit_when_overdue', value: true, category: 'dealer', description: 'true = đại lý còn nợ đơn quá hạn theo điều kiện thanh toán của bậc (NET n ngày) không đặt được đơn ghi công nợ, vẫn đặt được đơn trả trước. false = không khoá', createOnly: true },
-  { key: 'dealer.bonus_topup_window_days', value: 60, category: 'dealer', description: 'Số ngày sau ngày cuối quý mà đơn của quý chốt muộn hơn ngày chốt thưởng 10 vẫn được trả bù thưởng quý (ghi vào công nợ đại lý). 0 = không trả bù', createOnly: true },
+  { key: 'dealer.bonus_topup_window_days', value: 60, category: 'dealer', description: 'Số ngày sau ngày cuối quý mà đơn của quý chốt muộn hơn ngày chốt thưởng 10 vẫn được trả bù thưởng quý (ghi vào công nợ đại lý). 0 hoặc dưới 10 = không trả bù (ngày chốt thưởng là ngày 10)', createOnly: true },
 
   // Game
   { key: 'game.streak_7_bonus', value: { seeds: 10, free_spins: 1 }, category: 'game', description: 'Bonus chuỗi 7 ngày' },
