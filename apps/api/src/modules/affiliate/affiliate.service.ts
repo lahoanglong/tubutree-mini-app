@@ -1103,14 +1103,16 @@ export class AffiliateService {
       let result: { credited: number };
       try {
         result = await this.prisma.$transaction(async (tx) => {
-          await this.lockPitMonth(tx, userId, new Date());
+          // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
+          const now = new Date();
+          await this.lockPitMonth(tx, userId, now);
           const rows = await tx.commission.findMany({
             where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
             select: { id: true, amount: true },
           });
           const total = rows.reduce((s, c) => s + c.amount, 0);
           // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
-          const taxWithheld = await this.personalIncomeTax(tx, userId, total);
+          const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
           const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
           const marked = await tx.commission.updateMany({
             where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
@@ -1135,6 +1137,7 @@ export class AffiliateService {
               taxId,
               method,
               status: 'PAID',
+              requestedAt: now,
               paidAt: new Date(),
               idempotencyKey: key,
             },
@@ -1186,14 +1189,15 @@ export class AffiliateService {
     let payout: { id: string; status: string };
     try {
       payout = await this.prisma.$transaction(async (tx) => {
-        await this.lockPitMonth(tx, userId, new Date());
+        const now = new Date();
+        await this.lockPitMonth(tx, userId, now);
         const rows = await tx.commission.findMany({
           where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
           select: { id: true, amount: true },
         });
         const total = rows.reduce((s, c) => s + c.amount, 0);
         if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
-        const taxWithheld = await this.personalIncomeTax(tx, userId, total);
+        const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
         const p = await tx.payout.create({
           data: {
@@ -1205,6 +1209,7 @@ export class AffiliateService {
             method: 'BANK',
             bankInfo: bankInfo ?? {},
             status: 'REQUESTED',
+            requestedAt: now,
             idempotencyKey: key,
           },
         });

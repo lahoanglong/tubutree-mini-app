@@ -1502,6 +1502,18 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       expect(m.payoutCreate).not.toHaveBeenCalled();
     });
 
+    it.each(['WALLET_BALANCE', 'BANK'] as const)('%s: khoá, khung tháng cộng dồn và requestedAt dùng chung MỘT mốc giờ (không lệch sang tháng khác quanh nửa đêm cuối tháng)', async (method) => {
+      const m = makePrisma({ available: 1_500_000, rows: [{ id: 'c1', amount: 1_500_000 }], taxId: MST, priorGross: 1_500_000, priorTax: 0 });
+      const svc = new AffiliateService(m.prisma, config, pricing, pancakeOrder, coins, analytics);
+      const lock = jest.spyOn(svc, 'lockPitMonth');
+      const tax = jest.spyOn(svc, 'personalIncomeTax');
+      await svc.requestPayout('u1', 1_500_000, method, method === 'BANK' ? bank : undefined);
+      const lockedAt = lock.mock.calls[0]![2];
+      expect(lockedAt).toBeInstanceOf(Date);
+      expect(tax.mock.calls[0]![3]).toBe(lockedAt);
+      expect(m.payoutCreate.mock.calls[0][0].data.requestedAt).toBe(lockedAt);
+    });
+
     it('tổng tháng chỉ tính lệnh hoa hồng (có grossAmount) chưa bị từ chối, trong tháng VN; khoá user-tháng lấy TRƯỚC khi đọc hoa hồng', async () => {
       jest.useFakeTimers({ now: new Date('2026-10-31T17:30:00Z'), doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'clearImmediate', 'queueMicrotask'] });
       try {

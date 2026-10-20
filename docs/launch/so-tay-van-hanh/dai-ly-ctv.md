@@ -57,7 +57,7 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 - Ghi công đơn theo thứ tự: mã giới thiệu khách nhập, rồi gian hàng CTV khách đang xem, rồi lần bấm link CTV trong 7 ngày gần nhất.
 - Đơn "Đã giao hàng" thì hoa hồng ở trạng thái "Đang chờ · đang giữ" trong 10 ngày (hoặc hết hạn đổi/trả nếu dài hơn). Sau đó thành "Có thể rút". Khách trả hàng thì hoa hồng bị thu hồi.
 - Rút về **Ví Tubu**: có ngay. Rút về **ngân hàng**: tối thiểu 50.000đ, rút hết số dư, nhập số tài khoản mỗi lần. Lệnh đi qua "Chờ duyệt", "Đã duyệt · chờ chuyển", "Đã chuyển" (kế toán xử lý).
-- Một lần rút từ 2.000.000đ trở lên bị khấu trừ thuế TNCN 10%. CTV khai mã số thuế hoặc CCCD một lần.
+- Các lần rút hoa hồng trong cùng một tháng (giờ Việt Nam) được cộng dồn. Khi tổng từ 2.000.000đ trở lên, thuế TNCN 10% tính trên tổng tháng; phần các lần rút trước chưa bị trừ được trừ bù vào lần rút sau. CTV khai mã số thuế hoặc CCCD một lần.
 
 **Danh sách CTV và doanh số.** Chưa có màn "CTV" (**⏳ đang làm**). Đường tạm: **Khách hàng › Người dùng › Xuất CSV người dùng**, lọc cột "Vai trò". Doanh số từng CTV chưa có. Hỏi kỹ thuật khi cần.
 
@@ -88,7 +88,7 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 
 **CTV rút ngân hàng chưa nhận.** Hỏi trạng thái lệnh: "Chờ duyệt" hoặc "Đã duyệt · chờ chuyển" nghĩa là kế toán chưa chuyển. Từ lúc đơn giao đến lúc có tiền ngân hàng thường hơn 3 tuần. Báo kế toán theo tên CTV và số tiền. Rút về Ví Tubu thì có ngay để mua hàng. Từ ví ra ngân hàng vẫn qua kế toán (tối thiểu 100.000đ, phí 3.000đ).
 
-**CTV hỏi thuế.** TNCN 10% khi một lần rút từ 2.000.000đ. Số này hiện sẵn trên màn rút. Chứng từ khấu trừ: hỏi kế toán (cần xác nhận).
+**CTV hỏi thuế.** TNCN 10% tính trên tổng hoa hồng rút trong tháng khi tổng từ 2.000.000đ. Số này hiện sẵn trên màn rút. Chứng từ khấu trừ: hỏi kế toán (cần xác nhận).
 
 **Đại lý lên đại lý rồi không thấy màn hoa hồng.** Lỗi đã biết (**⏳ đang làm**). Hoa hồng vẫn cộng nhưng chưa xem và rút được. Ghi tên đại lý, gửi kỹ thuật.
 

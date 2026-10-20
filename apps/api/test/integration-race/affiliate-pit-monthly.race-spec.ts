@@ -156,17 +156,54 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
     expect(rows.every((r) => r.taxWithheld >= 0 && r.taxWithheld <= r.grossAmount!)).toBe(true);
   });
 
-  it('CTV nhận hoa hồng mới giữa chừng và rút nhiều lệnh song song qua requestPayout → tổng trừ = 10% tổng rút, không lệnh nào âm', async () => {
+  it('requestPayout phải chờ khoá user-tháng: lệnh rút đang giữ khoá chưa commit thì lệnh sau đứng chờ rồi thấy lệnh đó và trừ truy thu', async () => {
     const u = await ctv();
     await prisma.user.update({ where: { id: u.id }, data: { personalTaxId: MST } });
-    const ids = (await Promise.all(Array.from({ length: 4 }, () => approvedCommission(u.id, 700_000)))).map((c) => c.id);
+    await approvedCommission(u.id, 1_500_000);
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let locked!: () => void;
+    const lockTaken = new Promise<void>((r) => (locked = r));
+
+    // Lệnh "đến trước": giữ khoá, ghi lệnh 1.500.000đ chưa trừ thuế, chỉ commit khi ta cho phép.
+    const first = prisma.$transaction(
+      async (tx) => {
+        await affiliate.lockPitMonth(tx, u.id, new Date());
+        locked();
+        await tx.payout.create({
+          data: { userId: u.id, method: 'BANK', status: 'REQUESTED', grossAmount: 1_500_000, taxWithheld: 0, amount: 1_500_000, taxId: MST },
+        });
+        await held;
+      },
+      { timeout: 20_000 },
+    );
+    await lockTaken;
+
+    let settled = false;
+    const second = affiliate.requestPayout(u.id, 1_500_000, 'WALLET_BALANCE').finally(() => (settled = true));
+    await sleep(400);
+    expect(settled).toBe(false);
+    release();
+    await first;
+    await second;
+
+    const last = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, method: 'WALLET_BALANCE' } });
+    expect(last).toMatchObject({ grossAmount: 1_500_000, taxWithheld: 300_000, amount: 1_200_000 });
+  });
+
+  it('hoa hồng mới đến giữa lúc các lệnh rút của cùng CTV đang chạy (Ví và ngân hàng xen kẽ) → tổng trừ = 10% tổng rút, không lệnh nào âm hay vượt số tiền của nó', async () => {
+    const u = await ctv();
+    await prisma.user.update({ where: { id: u.id }, data: { personalTaxId: MST } });
+    const ids: string[] = [];
 
     await Promise.allSettled(
-      ids.map(async (id, i) => {
+      Array.from({ length: 4 }, async (_, i) => {
         await sleep(i * 20);
+        const c = await approvedCommission(u.id, 700_000);
+        ids.push(c.id);
         for (let attempt = 0; attempt < 6; attempt++) {
-          const c = await prisma.commission.findUniqueOrThrow({ where: { id } });
-          if (c.status === 'PAID' || c.payoutBatchId) return;
+          const row = await prisma.commission.findUniqueOrThrow({ where: { id: c.id } });
+          if (row.status === 'PAID' || row.payoutBatchId) return;
           const { withdrawableCommission } = await affiliate.dashboard(u.id);
           try {
             await affiliate.requestPayout(u.id, withdrawableCommission, i % 2 ? 'BANK' : 'WALLET_BALANCE', i % 2 ? bank : undefined, `pit-${randCode(10)}`);
@@ -176,6 +213,9 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
         }
       }),
     );
+    // Lệnh nào còn sót hoa hồng chưa rút (tranh nhau hết lượt thử) thì rút nốt để tổng gộp đủ 2.800.000đ.
+    const rest = await prisma.commission.aggregate({ where: { id: { in: ids }, status: 'APPROVED', payoutBatchId: null }, _sum: { amount: true } });
+    if (rest._sum.amount) await affiliate.requestPayout(u.id, rest._sum.amount, 'WALLET_BALANCE');
 
     const { rows, gross, tax } = await monthTotals(u.id);
     expect(gross).toBe(2_800_000);

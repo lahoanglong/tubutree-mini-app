@@ -1614,7 +1614,7 @@ model Payout {
   fee             Int          @default(0) // phí chuyển khoản ngân hàng
   /// Tổng hoa hồng của lệnh trước khấu trừ thuế TNCN. NULL = lệnh cũ trước khi có khấu trừ (amount là toàn bộ).
   grossAmount     Int?
-  /// Thuế TNCN đã khấu trừ tại nguồn (affiliate.pit_withhold_pct khi grossAmount ≥ affiliate.pit_withhold_threshold).
+  /// Thuế TNCN đã khấu trừ tại nguồn (affiliate.pit_withhold_pct trên tổng grossAmount các lệnh trong tháng VN khi tổng ≥ affiliate.pit_withhold_threshold; mỗi lệnh chỉ giữ phần chênh so với số đã khấu trừ trước đó trong tháng).
   taxWithheld     Int          @default(0)
   /// MST/CCCD của người nhận lúc khấu trừ (chứng từ khấu trừ, báo cáo tháng giữ đúng số đã kê khai dù sau đó CTV sửa).
   taxId           String?
