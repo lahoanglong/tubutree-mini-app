@@ -226,6 +226,13 @@ describe('/tai-khoan/diem-xanh — mã giảm giá của tôi', () => {
 });
 
 describe('/tai-khoan/diem-xanh — điểm danh', () => {
+  it('câu giải thích điểm danh nhắc "Vườn Xanh" đúng một lần, không lặp', async () => {
+    const c = await mount();
+    const note = Array.from(c.querySelectorAll('p')).find((p) => (p.textContent ?? '').includes('Điểm danh không tính vào xét hạng'))!;
+    expect(note.textContent).toContain('giọt nước điểm danh riêng trong Vườn Xanh.');
+    expect(note.textContent?.match(/Vườn Xanh/g)).toHaveLength(1);
+  });
+
   it('chưa điểm danh: nút "Điểm danh +3"; bấm gửi đúng POST /me/loyalty/check-in một lần, báo kết quả và khoá nút', async () => {
     state.checkInPost = async () => {
       state.checkIn = { ...state.checkIn!, checkedInToday: true };

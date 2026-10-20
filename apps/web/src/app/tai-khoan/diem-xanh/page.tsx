@@ -322,7 +322,7 @@ export default function LoyaltyPage() {
                 ))}
               </ul>
               <p className="mt-2 text-xs text-stone-600">
-                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong
+                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng; giọt nước điểm danh riêng trong
                 Vườn Xanh.
               </p>
             </section>
