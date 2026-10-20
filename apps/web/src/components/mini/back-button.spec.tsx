@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click } from '@/test-utils/dom';
 import { mount } from './harness';
 
-const nav = vi.hoisted(() => ({ pathname: '/san-pham/abc', back: vi.fn(), push: vi.fn() }));
+const nav = vi.hoisted(() => ({ pathname: '/san-pham/abc', back: vi.fn(), push: vi.fn(), replace: vi.fn() }));
 vi.mock('next/navigation', () => ({
   usePathname: () => nav.pathname,
-  useRouter: () => ({ back: nav.back, push: nav.push }),
+  useRouter: () => ({ back: nav.back, push: nav.push, replace: nav.replace }),
 }));
 
 import BackButton from './back-button';
@@ -26,6 +26,7 @@ beforeEach(() => {
   nav.pathname = '/san-pham/abc';
   nav.back.mockClear();
   nav.push.mockClear();
+  nav.replace.mockClear();
   document.body.className = '';
   document.body.querySelectorAll('[data-back-href]').forEach((n) => n.remove());
   // Bản gốc của trình duyệt (không qua lớp đóng dấu) để mỗi test bắt đầu ở một mục "vào thẳng" độ sâu 0.
@@ -36,7 +37,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
   it('vào thẳng link: đi tới trang cha trong web, không back()', () => {
     const { container } = mount(<BackButton />);
     press(container);
-    expect(nav.push).toHaveBeenCalledWith('/san-pham');
+    expect(nav.replace).toHaveBeenCalledWith('/san-pham');
     expect(nav.back).not.toHaveBeenCalled();
   });
 
@@ -44,7 +45,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     nav.pathname = '/khong-co/trang-con';
     const { container } = mount(<BackButton />);
     press(container);
-    expect(nav.push).toHaveBeenCalledWith('/');
+    expect(nav.replace).toHaveBeenCalledWith('/');
   });
 
   it('PageHeader khai báo trang cha (data-back-href) thì ưu tiên hơn suy luận', () => {
@@ -53,7 +54,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     document.body.appendChild(header);
     const { container } = mount(<BackButton />);
     press(container);
-    expect(nav.push).toHaveBeenCalledWith('/tai-khoan');
+    expect(nav.replace).toHaveBeenCalledWith('/tai-khoan');
   });
 
   it('fallbackHref truyền vào thắng cả data-back-href', () => {
@@ -62,7 +63,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     document.body.appendChild(header);
     const { container } = mount(<BackButton fallbackHref="/s/abc" />);
     press(container);
-    expect(nav.push).toHaveBeenCalledWith('/s/abc');
+    expect(nav.replace).toHaveBeenCalledWith('/s/abc');
   });
 
   it('trang cha trùng đường dẫn hiện tại thì về "/" thay vì bấm không ra gì', () => {
@@ -72,7 +73,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     document.body.appendChild(header);
     const { container } = mount(<BackButton />);
     press(container);
-    expect(nav.push).toHaveBeenCalledWith('/');
+    expect(nav.replace).toHaveBeenCalledWith('/');
   });
 
   it('push A rồi B: ở B lùi một bước; lùi về A rồi A vẫn lùi được về trang đầu trong web', async () => {
@@ -90,7 +91,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     nav.back.mockClear();
     press(container);
     expect(nav.back).not.toHaveBeenCalled();
-    expect(nav.push).toHaveBeenCalled();
+    expect(nav.replace).toHaveBeenCalled();
   });
 
   it('replace B thành C không tăng độ sâu: từ trang vào thẳng rồi replace thì nút đi tới trang cha, không back()', () => {
@@ -99,7 +100,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     nav.pathname = '/san-pham/c';
     press(container);
     expect(nav.back).not.toHaveBeenCalled();
-    expect(nav.push).toHaveBeenCalledWith('/san-pham');
+    expect(nav.replace).toHaveBeenCalledWith('/san-pham');
   });
 
   it('push B rồi replace thành C: vẫn một bước để lùi', () => {
@@ -126,7 +127,7 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     nav.back.mockClear();
     press(container);
     expect(nav.back).not.toHaveBeenCalled();
-    expect(nav.push).toHaveBeenCalled();
+    expect(nav.replace).toHaveBeenCalled();
   });
 
   it('tải lại ở B: độ sâu nằm trong history.state nên nút vẫn lùi một bước', () => {
@@ -161,5 +162,24 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     mount(<BackButton />);
     window.history.pushState(null, '', '/x');
     expect(window.history.state).toBeNull();
+  });
+
+  it('vào thẳng trang con: bấm đi tới trang cha bằng replace, bấm tiếp ở trang cha lên tiếp chứ không back() về trang con', () => {
+    nav.pathname = '/cong-dong/su-kien';
+    const header = document.createElement('header');
+    header.setAttribute('data-back-href', '/cong-dong');
+    document.body.appendChild(header);
+    const first = mount(<BackButton />);
+    press(first.container);
+    expect(nav.replace).toHaveBeenCalledWith('/cong-dong');
+    expect(nav.push).not.toHaveBeenCalled();
+    first.unmount();
+    nextReplace('/cong-dong');
+    nav.pathname = '/cong-dong';
+    header.removeAttribute('data-back-href');
+    const { container } = mount(<BackButton />);
+    press(container);
+    expect(nav.back).not.toHaveBeenCalled();
+    expect(nav.replace).toHaveBeenLastCalledWith('/');
   });
 });

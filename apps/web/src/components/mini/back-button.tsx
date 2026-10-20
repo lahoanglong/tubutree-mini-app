@@ -57,7 +57,7 @@ export default function BackButton({ fallbackHref, className }: BackButtonProps)
       aria-label="Quay lại"
       className={className ? `tubu-press ${className}` : 'tubu-press'}
       onClick={() => {
-        // Có mục lịch sử trước đó trong web thì lùi một bước. Không thì back() sẽ rời site (link chia sẻ, tab mới) nên đi tới trang cha.
+        // Có mục lịch sử trước đó trong web thì lùi một bước. Không thì back() sẽ rời site (link chia sẻ, tab mới) nên đi tới trang cha bằng replace: mục mới giữ độ sâu 0 để bấm tiếp còn leo lên, không dội về trang con.
         if (historyDepth() > 0) {
           if (router) router.back();
           else window.history.back();
@@ -66,8 +66,8 @@ export default function BackButton({ fallbackHref, className }: BackButtonProps)
         const declared = document.querySelector('[data-back-href]')?.getAttribute('data-back-href');
         let target = fallbackHref ?? declared ?? parentOf(pathname);
         if (target === pathname) target = '/';
-        if (router) router.push(target);
-        else window.location.assign(target);
+        if (router) router.replace(target);
+        else window.location.replace(target);
       }}
       style={{
         position: 'fixed',
