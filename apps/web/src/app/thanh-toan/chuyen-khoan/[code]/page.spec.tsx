@@ -57,6 +57,12 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(c.textContent).toContain('Giữ nguyên nội dung');
   });
 
+  it('thanh tiêu đề nằm dưới đệm 48px của body như màn chuyển khoản của Mini App (không bỏ đệm)', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(false);
+  });
+
   it('mỗi dòng cần chép có nút có tên: số tài khoản, số tiền, nội dung', async () => {
     const c = mount();
     await flush();
