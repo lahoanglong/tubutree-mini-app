@@ -11,7 +11,7 @@ import { BTN_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 
 /**
  * KPI theo khoảng ngày và bảng doanh thu ngày × kênh. "Doanh thu" là tiền đã thu thật (đơn huỷ/trả/hoàn không tính, trừ phần
- * đã hoàn một phần): đúng định nghĩa của thẻ "Tổng quan KPI" (mọi thời gian) nên cộng cả khoảng "từ đầu tới nay" sẽ ra cùng số.
+ * đã hoàn một phần): đúng định nghĩa của thẻ "Tổng quan chỉ số" (mọi thời gian) nên cộng cả khoảng "từ đầu tới nay" sẽ ra cùng số.
  */
 export function ReportsRevenueSection({ range }: { range: ReportRange }) {
   const error = rangeError(range.from, range.to, REVENUE_MAX_DAYS);

@@ -33,5 +33,6 @@ describe('chữ màn quản trị web', () => {
     ).toEqual([]);
     expect(offenders(/Tạo voucher|Mã voucher|Loại voucher|Voucher bắt đầu|Voucher hết hạn|Đã tạo voucher|farm voucher/)).toEqual([]);
     expect(offenders(/[Ff]lash [Ss]ale|Content Kit|Chưa có cohort|gộp cohort/)).toEqual([]);
+    expect(offenders(/định nghĩa với KPI/)).toEqual([]);
   });
 });

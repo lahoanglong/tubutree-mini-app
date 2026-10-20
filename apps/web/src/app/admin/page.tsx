@@ -1902,7 +1902,8 @@ function roleChangeConsequences(target: UserRole, current?: string | null): stri
     lines.push(`${current ? 'Tài khoản đã là đại lý' : 'Nếu tài khoản đã là đại lý'}: chỉ đổi bậc, gian hàng đối tác giữ nguyên.`);
   }
   // API không chặn đăng ký lại, nên nói rõ để admin không tưởng hạ về khách là đã cấm CTV.
-  if (target === 'CUSTOMER') lines.push('Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.');
+  if (target === 'CUSTOMER' && current === 'AFFILIATE') lines.push('Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.');
+  else if (target === 'CUSTOMER' && !current) lines.push('Nếu tài khoản đang là CTV: hạ vai trò chỉ tạm ngừng, người này có thể tự đăng ký CTV lại.');
   return lines.join('\n');
 }
 

@@ -50,7 +50,7 @@ function SourcesBody({ report }: { report: SourceReport }) {
       <Notice>
         Khách mới = tài khoản tạo trong khoảng ngày (không tính quản trị/nhân viên, và khách cũ được gắn nguồn lúc gộp khách). Đơn là đơn còn hiệu
         lực (đã xác nhận trở đi, không huỷ/trả). Có đơn đầu = đặt trong {d} ngày sau khi tạo tài khoản; có đơn 2 = đặt đơn thứ hai trong {d} ngày sau đơn
-        đầu; doanh thu tính {d} ngày đầu theo cùng định nghĩa với KPI (đã thu, trừ hoàn một phần). &quot;Không rõ&quot; là tài khoản chưa ghi nguồn.
+        đầu; doanh thu tính {d} ngày đầu theo cùng định nghĩa với Tổng quan chỉ số (đã thu, trừ hoàn một phần). &quot;Không rõ&quot; là tài khoản chưa ghi nguồn.
       </Notice>
       <SourceTable
         label="Tổng theo nguồn trong khoảng ngày"

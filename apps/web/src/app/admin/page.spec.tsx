@@ -963,7 +963,7 @@ describe('admin/page — tab Người dùng', () => {
     act(() => grant.click());
     await flush();
     expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
-      'Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.',
+      'Nếu tài khoản đang là CTV: hạ vai trò chỉ tạm ngừng, người này có thể tự đăng ký CTV lại.',
     );
     await answerDialog(false);
 
@@ -3215,6 +3215,18 @@ describe('admin/page — UAT ui-admin-2', () => {
       expect(text).not.toContain('mất toàn bộ nhóm việc');
       expect(text).not.toContain('mất toàn quyền quản trị');
       await answerDialog(false);
+    });
+    it('Q24: câu "chỉ tạm ngừng" chỉ hiện khi người đó đang là CTV; nhân viên, đại lý, khách hạ về Khách hàng không có câu này', async () => {
+      mocks.users = [{ id: 'u5', fullName: 'Lan', phone: '0955555555', role: 'AFFILIATE', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      expect(await grant('0955555555', 'CUSTOMER')).toContain('Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.');
+      await answerDialog(false);
+      for (const role of ['STAFF', 'DEALER', 'CUSTOMER']) {
+        mocks.users = [{ id: 'u6', fullName: 'Bình', phone: '0955555555', role, pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+        const text = await grant('0955555555', 'CUSTOMER');
+        expect(text).not.toContain('tạm ngừng');
+        expect(text).not.toContain('tự đăng ký CTV lại');
+        await answerDialog(false);
+      }
     });
     it('không tra được SĐT: giữ câu điều kiện, gồm cả "Nếu tài khoản đang là Quản trị"', async () => {
       const text = await grant('0955555555', 'CUSTOMER');
