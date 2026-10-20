@@ -187,7 +187,11 @@ function OrderRow({ order: o, isAdmin }: { order: ExternalOrder; isAdmin: boolea
             {showRaw ? 'Ẩn payload Pancake' : 'Xem payload Pancake'}
           </button>
           {showRaw && detail.isLoading && <p className="mt-1 text-xs text-stone-500">Đang tải…</p>}
-          {showRaw && detail.isError && <p className="mt-1 text-xs text-danger-fg">Không tải được payload.</p>}
+          {showRaw && detail.isError && (
+            <LoadError onRetry={() => void detail.refetch()} retrying={detail.isFetching}>
+              Không tải được payload.
+            </LoadError>
+          )}
           {showRaw && detail.data && (
             <pre data-raw-payload className="mt-1 max-h-80 overflow-auto rounded-control bg-stone-100 p-2 text-xs text-stone-800">
               {JSON.stringify(detail.data.lastPayload ?? null, null, 2)}

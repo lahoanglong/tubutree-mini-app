@@ -330,7 +330,11 @@ function WasteFlagsSection({ userId }: { userId: string }) {
   return (
     <Section title="Đổi rác">
       {flagsQ.isLoading && <p className="text-stone-500">Đang tải…</p>}
-      {flagsQ.isError && <p className="text-danger-fg">Không tải được trạng thái khoá đổi rác.</p>}
+      {flagsQ.isError && (
+        <LoadError onRetry={() => void flagsQ.refetch()} retrying={flagsQ.isFetching}>
+          Không tải được trạng thái khoá đổi rác.
+        </LoadError>
+      )}
       {f && !flagsQ.isError && (
         <div className="space-y-2">
           {(f.blockedAt || f.shipLockedAt) && (
