@@ -219,7 +219,7 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
     await flush(8);
     expect(mocks.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
-    expect(container.textContent).not.toContain('Đặt hàng thành công!');
+    expect(container.textContent).not.toContain('Cảm ơn bạn đã chọn Tubu');
   });
 
   it('/tai-khoan: có h1 khi đã đăng nhập, khi chưa đăng nhập và khi đang tải', async () => {
@@ -301,10 +301,10 @@ describe('trang khách — chi tiết đơn (C-025)', () => {
     await flush();
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng') ?? null);
     await flush(8);
-    expect(container.textContent).toContain('Đặt hàng thành công!');
+    expect(container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
     const detail = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/don-hang/TB-9"]');
     expect(detail).not.toBeNull();
-    expect(detail!.textContent).toBe('Xem chi tiết đơn');
+    expect(detail!.textContent).toBe('Theo dõi đơn');
   });
 });
 

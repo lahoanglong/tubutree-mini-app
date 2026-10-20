@@ -206,7 +206,7 @@ describe('/thanh-toan — đua giữa kết quả đặt đơn và dữ liệu n
     expect(m.placeOrder).toHaveBeenCalledTimes(2);
     expect(m.placeOrder.mock.calls[1]![0]).toEqual(m.placeOrder.mock.calls[0]![0]);
     expect(m.placeOrder.mock.calls[1]![1]).toBe(m.placeOrder.mock.calls[0]![1]);
-    expect(r.container.textContent).toContain('Đặt hàng thành công');
+    expect(r.container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
     expect(r.container.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
   });
 

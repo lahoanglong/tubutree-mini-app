@@ -116,7 +116,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
     await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toBeVisible();
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
-    await expect(page.getByRole('heading', { name: 'Đặt hàng thành công!' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' })).toBeVisible();
 
     const sent = api.callsTo('POST', '/checkout/place-order');
     expect(sent).toHaveLength(2);

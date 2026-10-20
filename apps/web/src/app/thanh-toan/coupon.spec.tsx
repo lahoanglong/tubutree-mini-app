@@ -285,7 +285,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Bỏ mã giảm giá WELCOME30"]')!.disabled).toBe(true);
     release();
     await flush(6);
-    expect(container.textContent).toContain('Đặt hàng thành công');
+    expect(container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
   });
 
   it('đang đặt hàng thì mã trong ví và nút Áp dụng bị khoá', async () => {

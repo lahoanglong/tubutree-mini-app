@@ -164,6 +164,7 @@ export default function CheckoutPage() {
   const [sfCtx] = useState(() => getStorefrontContext());
   // CHỈ gian hàng CTV mới gắn vào đơn — xem ghi chú ở StorefrontContext.kind.
   const ctvSlug = ctvSlugFor(sfCtx);
+  const continueHref = !sfCtx.slug ? '/' : sfCtx.kind === 'CTV' ? `/s/${sfCtx.slug}` : `/brand/${sfCtx.slug}`;
   // Điểm Xanh: Mini App cho tiêu, web thì không — cùng một giỏ mà mua trên web đắt hơn.
   const [usePoints, setUsePoints] = useState(false);
   // Quote đầu tiên (pointsToUse = 0) trả về số điểm DÙNG ĐƯỢC (redeemablePoints = số dư − điểm đơn còn
@@ -356,7 +357,7 @@ export default function CheckoutPage() {
   if (placed) {
     return (
       <Shell bare>
-        <OrderSuccess order={placed} etaLabel={etaLabel} />
+        <OrderSuccess order={placed} etaLabel={etaLabel} continueHref={continueHref} />
         {/* A2-02 = A6-01: đơn CHUYỂN KHOẢN hiện QR/STK/nội dung CK ngay sau khi đặt để khách trả liền;
             nếu đóng tab, trang chi tiết đơn (`/tai-khoan/don-hang/[code]`) dựng lại đúng khung này. */}
         <div className="mx-auto max-w-md">
@@ -959,7 +960,14 @@ function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }
       <BackLink href="/gio-hang">
         ← Về giỏ hàng
       </BackLink>
-      <PageHeader title="Thanh toán" className={bare ? 'max-md:hidden md:mt-1' : 'md:mt-1'} />
+      {bare ? (
+        // Bọc để thanh tiêu đề không còn là con trực tiếp của main: không còn data-page-bleed nào ở điện thoại nên đệm 48px cho nút lùi nổi vẫn giữ.
+        <div className="max-md:hidden">
+          <PageHeader title="Thanh toán" className="md:mt-1" />
+        </div>
+      ) : (
+        <PageHeader title="Thanh toán" className="md:mt-1" />
+      )}
       <div className="mt-4 max-md:mt-0">{children}</div>
     </main>
   );

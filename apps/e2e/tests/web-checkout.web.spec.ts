@@ -88,8 +88,12 @@ test.describe('Web khách: thanh toán', () => {
     expect(body.paymentMethod).toBe('WALLET');
     expect(body.expectedTotal).toBe(280000);
 
-    await expect(page.getByRole('heading', { name: 'Đặt hàng thành công!' })).toBeVisible();
-    await page.getByRole('link', { name: 'Đơn của tôi' }).click();
+    await expect(page.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' })).toBeVisible();
+    const desktop = (page.viewportSize()?.width ?? 0) >= 768;
+    await expect(page.getByTestId('order-success-desktop')).toBeVisible({ visible: desktop });
+    await expect(page.getByTestId('order-success-mobile')).toBeVisible({ visible: !desktop });
+    if (desktop) await page.getByRole('link', { name: 'Đơn của tôi' }).click();
+    else await page.goto('/tai-khoan/don-hang');
     await expect(page).toHaveURL(/\/tai-khoan\/don-hang/);
     await page.locator('a[href="/tai-khoan"]:visible').first().click();
     await expect(page.getByText('220.000đ')).toBeVisible();
