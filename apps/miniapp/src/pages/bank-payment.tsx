@@ -250,6 +250,13 @@ export default function BankPaymentPage() {
           <Text bold size="large" style={{ color: 'var(--color-text-success)', marginTop: 8 }}>
             <Money amount={data.amount} />
           </Text>
+          {!!data.paidSoFar && data.paidSoFar > 0 && (
+            <div data-testid="paid-so-far" style={{ marginTop: 4 }}>
+              <Text size="small" style={{ color: 'var(--color-status-warning-fg)' }}>
+                Đã nhận <Money amount={data.paidSoFar} />, còn thiếu <Money amount={data.amount} />. Mã QR đã trừ phần này.
+              </Text>
+            </div>
+          )}
 
           {/* Thông tin chuyển khoản thủ công (phòng khi không quét được) */}
           <Box mt={2} style={{ textAlign: 'left' }}>
