@@ -377,6 +377,27 @@ describe('Thu hồi thưởng khi quý đã được trả bù (QUARTER_BONUS_TO
   });
 });
 
+describe('Thu hồi sau lượt trả bù quét thêm một ngày (mốc ghi = hạn cửa sổ, đơn chốt sau hạn chưa được tính)', () => {
+  // Lượt quét thêm ghi dòng bù với createdAt = hạn cửa sổ 00:00 31/5 giờ VN (30/5 17:00Z), dù chạy thật lúc 05:00 ngày 31/5.
+  const EXPIRES_AT = new Date('2026-05-30T17:00:00Z');
+  const A = { id: 'a', total: 120_000_000, status: 'DELIVERED', paymentStatus: 'PAID', paidAt: new Date('2026-03-10T03:00:00Z') };
+  const D = { id: 'd', total: 90_000_000, status: 'DELIVERED', paymentStatus: 'PAID', paidAt: new Date('2026-05-29T23:00:00Z') };
+  const Z = { id: 'z', total: 500_000_000, status: 'DELIVERED', paymentStatus: 'PAID', paidAt: new Date('2026-05-30T18:00:00Z') };
+  const base = { bonusDelta: -3_600_000, payoutAt: new Date('2026-04-09T21:00:00Z'), topups: [{ delta: -4_800_000, createdAt: EXPIRES_AT }] };
+
+  it('đơn Z chốt 01:00 ngày 31/5 (sau hạn) rồi bị trả → thu 0, vì lượt bù đã loại Z', async () => {
+    const { tx } = makeTx({ ...base, others: [A, D], reversed: { paidAt: Z.paidAt } });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, { ...ORDER, id: 'z', code: 'DLRZ', total: Z.total, createdAt: new Date('2026-03-28T03:00:00Z') });
+    expect(r.clawedBack).toBe(0);
+  });
+
+  it('đơn d (được lượt bù tính) bị trả khi còn đơn Z chốt sau hạn → thu 4,8tr, Z không làm phình "các đơn khác"', async () => {
+    const { tx } = makeTx({ ...base, others: [A, Z], reversed: { paidAt: D.paidAt } });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, { ...ORDER, id: 'd', code: 'DLRD', total: D.total, createdAt: new Date('2026-03-28T03:00:00Z') });
+    expect(r.clawedBack).toBe(4_800_000);
+  });
+});
+
 describe('Thông báo DEALER_BONUS_ADJUSTED cho đại lý (chỉ SAU KHI lần huỷ đã commit)', () => {
   afterEach(() => jest.useRealTimers());
 

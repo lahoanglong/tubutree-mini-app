@@ -1491,7 +1491,7 @@ export class DealerService {
    *
    * Idempotent: dưới khoá advisory (đại lý, quý) dùng chung với payout và thu hồi, nên 2 lượt chồng nhau tuần tự và lượt
    * sau thấy phần chênh = 0; unique (userId, refType, refId = `quý:topup:số thứ tự`) + bắt P2002 là lưới cuối khi khoá
-   * advisory không có tác dụng. createdAt của dòng bù là mốc "doanh số đã tính" cho lần thu hồi sau (xem clawback).
+   * advisory không có tác dụng. createdAt của dòng bù là mốc "doanh số đã tính" cho lần thu hồi sau (xem clawback), nên lượt chạy sau hạn ghi createdAt = hạn.
    */
   async topUpQuarterlyBonuses(now: Date = new Date()): Promise<{ toppedUp: number; quarters: string[] }> {
     const windowDays = await this.topUpWindowDays();
@@ -1503,6 +1503,9 @@ export class DealerService {
     const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
     let toppedUp = 0;
     for (const period of periods) {
+      // Doanh số cắt ở expiresAt; lượt quét thêm chạy SAU mốc đó nên createdAt của dòng ghi phải ép về expiresAt, nếu không
+      // thu hồi coi đơn chốt trong khoảng expiresAt..giờ chạy là đã được tính. Trong cửa sổ thì để giờ DB mặc định.
+      const stampedAt = now.getTime() > period.expiresAt.getTime() ? period.expiresAt : undefined;
       for (const d of dealers) {
         let outcome: { amount: number; revenue: number; latePayout: boolean } | null;
         try {
@@ -1534,7 +1537,7 @@ export class DealerService {
             if (paidRows.length === 0 && bonusSeen > 0) {
               // Đã đạt bậc ngay lúc trả ngày 10 mà không có dòng thưởng: lần trả đó không chạy được. Trả trọn như payout.
               await tx.dealerCreditLedger.create({
-                data: { userId: d.id, delta: -bonusNow, refType: 'QUARTER_BONUS', refId: period.key, note: `Thưởng doanh số ${period.key} (trả muộn)` },
+                data: { userId: d.id, delta: -bonusNow, refType: 'QUARTER_BONUS', refId: period.key, note: `Thưởng doanh số ${period.key} (trả muộn)`, createdAt: stampedAt },
               });
               return { amount: bonusNow, revenue, latePayout: true };
             }
@@ -1548,6 +1551,7 @@ export class DealerService {
                 delta: -amount,
                 refType: 'QUARTER_BONUS_TOPUP',
                 refId: `${period.key}:topup:${seq}`,
+                createdAt: stampedAt,
                 note: `Trả bù thưởng quý ${period.key}: đơn chốt sau ngày chốt thưởng, doanh số đã chốt ${vnd(revenue)}`,
               },
             });
@@ -1633,7 +1637,7 @@ export class DealerService {
     const quarter = `Q${q + 1}/${year}`;
 
     await DealerService.lockDealerQuarter(tx, order.userId, quarter);
-    // Mọi dòng đã trả của quý: thưởng gốc + các khoản trả bù (Q8). Mốc doanh số đã tính là lần trả MUỘN NHẤT.
+    // Mọi dòng đã trả của quý: thưởng gốc + các khoản trả bù. Mốc doanh số đã tính là lần trả MUỘN NHẤT.
     const payRows = await tx.$queryRaw<{ id: string; delta: number; createdAt: Date }[]>`
       SELECT "id", "delta", "createdAt" FROM "dealer_credit_ledgers"
       WHERE "userId" = ${order.userId}

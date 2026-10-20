@@ -201,4 +201,31 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
       dropTiersCache();
     }
   });
+
+  it('lượt quét thêm sau hạn: dòng bù có createdAt = hạn cửa sổ → đơn chốt sau hạn không bị thu hồi oan, đơn được tính vẫn bị thu 4,8tr', async () => {
+    const QUARTER = 'Q1/2021';
+    const d = await createUser(prisma, { role: 'DEALER' });
+    await dealerOrder(d.id, 120_000_000, new Date('2021-02-10T03:00:00Z'), 'DELIVERED', true);
+    const late = await dealerOrder(d.id, 90_000_000, new Date('2021-03-28T03:00:00Z'), 'CONFIRMED', true);
+    const afterExpiry = await dealerOrder(d.id, 500_000_000, new Date('2021-03-29T03:00:00Z'), 'CONFIRMED', true);
+    await payoutAt(new Date('2021-04-12T03:00:00Z'));
+    expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+
+    // Hạn cửa sổ = 00:00 31/5 giờ VN = 30/5 17:00Z. Đơn late chốt 06:00 ngày 30/5 giờ VN; đơn afterExpiry chốt 01:00 ngày 31/5.
+    await settleAt(late.id, new Date('2021-05-29T23:00:00Z'));
+    await settleAt(afterExpiry.id, new Date('2021-05-30T18:00:00Z'));
+
+    await Promise.all([1, 2, 3, 4].map(() => topUp(new Date('2021-05-30T22:00:00Z')))); // 05:00 ngày 31/5 giờ VN
+    const topups = (await ledgerOf(d.id, QUARTER)).filter((r) => r.refType === 'QUARTER_BONUS_TOPUP');
+    expect(topups).toHaveLength(1);
+    expect(topups[0]).toMatchObject({ delta: -4_800_000 });
+    expect(topups[0]!.createdAt).toEqual(new Date('2021-05-30T17:00:00Z'));
+    expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
+
+    await sleep(20);
+    await returnOrder(afterExpiry.id);
+    expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
+    await returnOrder(late.id);
+    expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+  });
 });

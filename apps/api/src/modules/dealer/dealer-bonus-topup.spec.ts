@@ -243,6 +243,43 @@ describe('DealerService.topUpQuarterlyBonuses — chỉ bù phần do đơn ch�
   });
 });
 
+describe('DealerService.topUpQuarterlyBonuses — mốc createdAt của dòng ghi = mốc doanh số đã tính', () => {
+  // Hết cửa sổ Q1/2026 lúc 00:00 31/5 giờ VN (= 30/5 17:00Z); lượt quét thêm chạy 05:00 31/5 giờ VN (= 30/5 22:00Z).
+  const EXPIRES_AT = new Date('2026-05-30T17:00:00Z');
+  const LATE_RUN = new Date('2026-05-30T22:00:00Z');
+  const paid: Ledger = {
+    userId: 'd1',
+    delta: -3_600_000,
+    refType: 'QUARTER_BONUS',
+    refId: 'Q1/2026',
+    note: 'Thưởng doanh số Q1/2026',
+    createdAt: new Date('2026-04-09T21:00:00Z'),
+  };
+  const A = order('a', 120_000_000, '2026-03-10T03:00:00Z');
+  const d = order('d', 90_000_000, '2026-03-28T03:00:00Z', '2026-05-29T23:00:00Z');
+
+  it('lượt quét sau hạn: dòng QUARTER_BONUS_TOPUP có createdAt = hạn cửa sổ, không phải giờ chạy thật', async () => {
+    const { prisma, ledger } = makePrisma([A, d], [{ ...paid }]);
+    await svc(prisma).service.topUpQuarterlyBonuses(LATE_RUN);
+    const row = ledger.find((l) => l.refType === 'QUARTER_BONUS_TOPUP')!;
+    expect(row.createdAt).toEqual(EXPIRES_AT);
+  });
+
+  it('lượt quét sau hạn, lần trả ngày 10 không chạy: dòng QUARTER_BONUS "trả muộn" cũng có createdAt = hạn cửa sổ', async () => {
+    const { prisma, ledger } = makePrisma([A]);
+    await svc(prisma).service.topUpQuarterlyBonuses(LATE_RUN);
+    const row = ledger.find((l) => l.refType === 'QUARTER_BONUS')!;
+    expect(row.createdAt).toEqual(EXPIRES_AT);
+  });
+
+  it('lượt quét trong cửa sổ: để mặc định giờ DB (không ép createdAt)', async () => {
+    const { prisma, tx } = makePrisma([A, d], [{ ...paid }]);
+    await svc(prisma).service.topUpQuarterlyBonuses(new Date('2026-05-20T03:00:00Z'));
+    const data = (tx.dealerCreditLedger.create.mock.calls[0] as unknown as [{ data: Ledger }])[0].data;
+    expect(data.createdAt).toBeUndefined();
+  });
+});
+
 describe('DealerService.payoutQuarterlyBonuses khi quý đã có khoản trả bù', () => {
   it('đã có QUARTER_BONUS_TOPUP của quý (lần trả đầu thất bại rồi chạy tay) → không trả trọn thưởng lần nữa', async () => {
     const ledger: Ledger[] = [{ userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS_TOPUP', refId: 'Q1/2026:topup:1', note: null }];
