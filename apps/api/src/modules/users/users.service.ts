@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notifyAdmins } from '../../common/notify-admins';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -18,6 +19,16 @@ function addressInUseError(productNames: string[]): BadRequestException {
     code: ADDRESS_IN_USE_BY_SUBSCRIPTION,
     message: `Địa chỉ đang dùng cho gói giao định kỳ${which}, hãy đổi địa chỉ của gói trước.`,
   });
+}
+
+/**
+ * Mở đầu mọi giao dịch ghi sổ địa chỉ (tạo, sửa, xoá): các giao dịch của cùng một khách xếp hàng theo một khoá
+ * advisory nên không đan xen việc chọn mặc định (không để lại 0 hoặc 2 mặc định) và không có hai thứ tự khoá dòng
+ * khác nhau gây deadlock. Không khoá dòng users: ví, điểm, đăng nhập, cron gói đều UPDATE users và gói giao ngay
+ * giữ khoá dòng địa chỉ rồi mới khoá users, nên khoá dòng users ở đây sẽ đảo thứ tự khoá với tạo gói (40P01).
+ */
+async function lockAddressBook(tx: Prisma.TransactionClient, userId: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`address-book:${userId}`}))`;
 }
 
 @Injectable()
@@ -95,6 +106,9 @@ export class UsersService {
     await assertDeliverableAddress(this.geo, dto);
     return this.prisma.$transaction(
       async (tx) => {
+        // Read Committed + khoá advisory theo khách: mỗi câu sau khoá đọc dữ liệu mới, 2 request tạo địa chỉ
+        // đầu tiên đồng thời không thể cùng đọc count=0.
+        await lockAddressBook(tx, userId);
         const count = await tx.address.count({ where: { userId } });
         const makeDefault = dto.isDefault ?? count === 0;
         if (makeDefault) {
@@ -102,11 +116,6 @@ export class UsersService {
         }
         return tx.address.create({ data: { ...dto, isDefault: makeDefault, userId } });
       },
-      // Serializable: count-rồi-write không atomic — 2 request tạo địa chỉ đầu tiên
-      // đồng thời có thể cùng đọc count=0 rồi cùng tạo isDefault:true. Serializable
-      // buộc 1 trong 2 tx fail (P2034, map 409 bởi PrismaExceptionFilter) thay vì
-      // để user có 2 địa chỉ mặc định.
-      { isolationLevel: 'Serializable' },
     );
   }
 
@@ -121,14 +130,13 @@ export class UsersService {
     }
     return this.prisma.$transaction(
       async (tx) => {
+        // lockAddressBook tuần tự hoá 2 update isDefault:true đồng thời nên không cần Serializable.
+        await lockAddressBook(tx, userId);
         if (dto.isDefault) {
           await tx.address.updateMany({ where: { userId }, data: { isDefault: false } });
         }
         return tx.address.update({ where: { id }, data: dto });
       },
-      // Serializable: 2 update isDefault:true đồng thời cho 2 địa chỉ khác nhau có thể
-      // đan xen và để lại 0 hoặc 2 địa chỉ mặc định (mirror createAddress ở trên).
-      { isolationLevel: 'Serializable' },
     );
   }
 
@@ -140,8 +148,10 @@ export class UsersService {
     await this.assertOwner(userId, id);
     try {
       await this.prisma.$transaction(async (tx) => {
+        await lockAddressBook(tx, userId);
         // Khoá dòng địa chỉ: tạo gói song song (INSERT có FK cần FOR KEY SHARE) phải chờ tới khi xoá xong
-        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá.
+        // rồi thất bại vì FK, thay vì chen vào giữa lúc kiểm và lúc xoá. Không dùng Serializable ở đây:
+        // snapshot lấy trước khi chờ khoá sẽ không thấy gói vừa tạo song song.
         await tx.$queryRaw`SELECT "id" FROM "addresses" WHERE "id" = ${id} FOR UPDATE`;
         const inUse = await tx.subscription.findMany({
           where: { addressId: id, status: { in: ['ACTIVE', 'PAUSED'] } },
@@ -150,7 +160,13 @@ export class UsersService {
         });
         if (inUse.length > 0) throw addressInUseError(inUse.map((s) => s.variation.product.name));
         await tx.subscription.deleteMany({ where: { addressId: id, status: 'CANCELLED' } });
+        const doomed = await tx.address.findUnique({ where: { id }, select: { isDefault: true } });
         await tx.address.delete({ where: { id } });
+        if (doomed?.isDefault) {
+          // Cùng thứ tự listAddresses trả cho khách: không có mặc định thì lấy id nhỏ nhất, để khách luôn còn một địa chỉ mặc định.
+          const next = await tx.address.findFirst({ where: { userId }, orderBy: { id: 'asc' }, select: { id: true } });
+          if (next) await tx.address.update({ where: { id: next.id }, data: { isDefault: true } });
+        }
       });
     } catch (err) {
       // Lưới an toàn: có gói gắn vào địa chỉ mà bước kiểm không thấy thì FK RESTRICT chặn (P2003).

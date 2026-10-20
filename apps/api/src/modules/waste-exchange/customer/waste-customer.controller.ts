@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteEditRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest, type WasteTrackingRequest } from '@tubutree/shared-types';
+import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 import { Trim } from '../../../common/decorators/trim.decorator';
@@ -150,6 +151,8 @@ export class WasteCustomerController {
     return this.meSvc.me(userId);
   }
 
+  // Công khai: chỉ trả chữ thể lệ do admin soạn (không dữ liệu riêng, không cần cờ chương trình), trang /doi-rac/quy-dinh trên web đọc khi chưa đăng nhập.
+  @Public()
   @Get('rules')
   rules() {
     return this.meSvc.rules();
