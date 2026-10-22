@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -44,6 +44,9 @@ export function useSettled<T>(value: T, delayMs: number): T {
 export function couponPreviewKey(lines: { id: string; quantity: number; total: number }[]): string {
   return lines.map((l) => `${l.id}:${l.quantity}:${l.total}`).join(',');
 }
+
+/** Lời báo mã chưa được áp dụng tự tắt sau ngần này, như snackbar cảnh báo của Mini App. */
+const APPLY_WARNING_MS = 5000;
 
 /** Khoá mutation dùng chung để trang chứa (thanh toán) biết mã đang được đổi qua `useIsMutating`. */
 export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
@@ -97,6 +100,14 @@ export function CouponBox({
   const [code, setCode] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [applyWarning, setApplyWarning] = useState<string | null>(null);
+  const warnTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(warnTimer.current), []);
+  const showApplyWarning = (text: string | null) => {
+    clearTimeout(warnTimer.current);
+    setApplyWarning(text);
+    if (text) warnTimer.current = setTimeout(() => setApplyWarning(null), APPLY_WARNING_MS);
+  };
   // Thu gọn mặc định: ô nhập + danh sách voucher dài hàng trăm px, đẩy nút thanh toán xuống khỏi màn điện thoại.
   const [open, setOpen] = useState(false);
   const couponsQ = useQuery({ queryKey: ['my-coupons'], queryFn: getMyCoupons });
@@ -127,10 +138,19 @@ export function CouponBox({
   const apply = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
-    onSuccess: (cart) => {
+    onSuccess: (cart, appliedCode) => {
       setErr(null);
       setCode('');
       setOpen(false);
+      // Mã freeship giỏ coi là hợp lệ nhưng xem trước của máy chủ nói không miễn được gì (đơn đã miễn phí giao): nói đúng câu
+      // thanh toán sẽ nói thay vì để chip mã hiện như đã áp. Mã giữ nhưng chưa giảm đã có `notice` của giỏ.
+      const pv = previews.get(appliedCode.trim().toUpperCase());
+      const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship && pv?.eligible !== true;
+      showApplyWarning(
+        !heldOnly && pv && !pv.eligible && pv.reason && cart.discount === 0
+          ? `Mã chưa được áp dụng cho đơn này: ${pv.reason}`
+          : null,
+      );
       afterChange(cart);
     },
     onError: (e) => {
@@ -142,7 +162,10 @@ export function CouponBox({
   const drop = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: removeCoupon,
-    onSuccess: afterChange,
+    onSuccess: (cart) => {
+      showApplyWarning(null);
+      afterChange(cart);
+    },
     onError: (e) => setErr(e instanceof Error ? e.message : 'Không bỏ được mã giảm giá'),
   });
   const busy = apply.isPending || drop.isPending || disabled;
@@ -365,6 +388,11 @@ export function CouponBox({
       {currentCode && notice && (
         <p role="status" data-testid="coupon-notice" className="mt-2 text-xs text-warning-fg">
           {notice}
+        </p>
+      )}
+      {applyWarning && !(currentCode && notice) && (
+        <p role="status" data-testid="coupon-apply-warning" className="mt-2 text-xs text-warning-fg">
+          {applyWarning}
         </p>
       )}
       {err && (

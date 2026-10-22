@@ -629,6 +629,24 @@ describe('/dai-ly — đơn hàng, công nợ, báo cáo', () => {
     expect(button('Yêu cầu nhận thưởng')).toBeTruthy();
   });
 
+  it('báo cáo quý: % bậc thưởng ghi kiểu Việt, 4,5% và 4% (không "4.5%")', async () => {
+    setup({
+      '/dealer/quarterly-report': {
+        ...REPORT, bonusPct: 2.5, nextTier: { min: 200_000_000, pct: 4.5, toNext: 80_000_000 },
+        tiers: [{ min: 100_000_000, pct: 2.5 }, { min: 200_000_000, pct: 4.5 }, { min: 300_000_000, pct: 4 }],
+      },
+      '/dealer/rewards': { claimGraceDays: 30, rewards: [] },
+    });
+    await open('Báo cáo');
+    const t = document.body.textContent ?? '';
+    expect(t).toContain('Còn 80.000.000đ để đạt thưởng 4,5%');
+    expect(t).toContain('Thưởng hiện tại 2,5% =');
+    expect(t).toContain('thưởng 2,5%');
+    expect(t).toContain('thưởng 4,5%');
+    expect(t).toMatch(/thưởng 4%/);
+    expect(t).not.toMatch(/\d\.\d%/);
+  });
+
   it('báo cáo lỗi: báo lỗi kèm Thử lại', async () => {
     setup({ '/dealer/rewards': { claimGraceDays: 30, rewards: [] } });
     m.fail.add('/dealer/quarterly-report');
