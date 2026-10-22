@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AxiosError } from 'axios';
+import { HttpError } from './http';
 import { MutationObserver, QueryObserver, focusManager, onlineManager } from '@tanstack/react-query';
 import { createQueryClient } from './query-client';
 import { getErrorMessage } from './api';
@@ -16,7 +16,7 @@ describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1)
     const client = createQueryClient();
     onlineManager.setOnline(false);
     vi.stubGlobal('navigator', { onLine: false });
-    const networkError = new AxiosError('Network Error', 'ERR_NETWORK');
+    const networkError = new HttpError('Network Error', 'ERR_NETWORK');
     const mutationFn = vi.fn().mockRejectedValue(networkError);
     const onError = vi.fn();
 
@@ -32,7 +32,7 @@ describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1)
   it('có mạng lại thì không tự gửi lại mutation đã lỗi lúc offline (không tự đặt đơn sau đó)', async () => {
     const client = createQueryClient();
     onlineManager.setOnline(false);
-    const mutationFn = vi.fn().mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+    const mutationFn = vi.fn().mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
     const observer = new MutationObserver(client, { mutationFn });
     await observer.mutate(undefined).catch(() => undefined);
 
@@ -44,15 +44,15 @@ describe('createQueryClient — mất mạng khi bấm Đặt hàng (R4-BUYER-1)
   it('query vẫn giữ mặc định cũ: không retry lỗi 4xx, retry 1 lần cho lỗi mạng', () => {
     const client = createQueryClient();
     const retry = client.getDefaultOptions().queries?.retry as (n: number, e: unknown) => boolean;
-    const err4xx = new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, { status: 404 } as never);
+    const err4xx = new HttpError('x', 'ERR_BAD_REQUEST', { status: 404 });
     expect(retry(0, err4xx)).toBe(false);
-    expect(retry(0, new AxiosError('x', 'ERR_NETWORK'))).toBe(true);
-    expect(retry(1, new AxiosError('x', 'ERR_NETWORK'))).toBe(false);
+    expect(retry(0, new HttpError('x', 'ERR_NETWORK'))).toBe(true);
+    expect(retry(1, new HttpError('x', 'ERR_NETWORK'))).toBe(false);
   });
 });
 
 describe('createQueryClient — truy vấn lúc mất mạng (R5-BUYER-1)', () => {
-  const networkError = () => new AxiosError('Network Error', 'ERR_NETWORK');
+  const networkError = () => new HttpError('Network Error', 'ERR_NETWORK');
   const tick = () => new Promise((r) => setTimeout(r, 0));
 
   it('offline: truy vấn chưa có dữ liệu vẫn chạy và hạ xuống trạng thái lỗi ngay, không kẹt ở "tạm dừng" (trang đọc được isError thay vì vẽ màn trống)', async () => {
@@ -127,7 +127,7 @@ describe('createQueryClient — truy vấn lúc mất mạng (R5-BUYER-1)', () =
   it('lỗi 4xx nghiệp vụ (vd 404) không bị tải lại mỗi lần quay lại app', async () => {
     const client = createQueryClient();
     client.mount();
-    const notFound = new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, { status: 404 } as never);
+    const notFound = new HttpError('x', 'ERR_BAD_REQUEST', { status: 404 });
     const queryFn = vi.fn().mockRejectedValue(notFound);
     const observer = new QueryObserver(client, { queryKey: ['order', 'x'], queryFn, retry: false });
     const unsub = observer.subscribe(() => undefined);

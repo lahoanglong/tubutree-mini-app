@@ -106,7 +106,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
                   {product && pricing && (
                     <PriceTag
                       value={pricing.price}
-                      compareAt={pricing.price < product.basePrice ? product.basePrice : null}
+                      compareAt={pricing.compareAt}
                       flash={pricing.isFlash ? { price: pricing.price } : null}
                       size="sm"
                       style={{ flexWrap: 'wrap' }}

@@ -33,6 +33,9 @@ describe('fetchSupportContact (Q-17: liên hệ đọc từ /config/public, dòn
   });
 });
 
+// \b của JS coi chữ có dấu là ký tự không phải chữ, nên "sản xuất" khớp \bxu\b; dùng ranh giới theo chữ Unicode.
+const STANDALONE_XU = /(^|[^\p{L}])xu([^\p{L}]|$)/iu;
+
 describe('fallbackFaq sau khi gộp TubuXu vào Điểm Xanh (PD-3)', () => {
   const answer = (q: RegExp, cfg?: Parameters<typeof fallbackFaq>[0]) => fallbackFaq(cfg).find((f) => q.test(f.q))?.a ?? '';
 
@@ -43,11 +46,17 @@ describe('fallbackFaq sau khi gộp TubuXu vào Điểm Xanh (PD-3)', () => {
     expect(a).not.toMatch(/xu/i);
   });
 
-  it('câu Điểm Xanh nói rõ điểm quy đổi từ xu cũ không hết hạn và không đổi được mã giảm giá', () => {
+  // D14-06: chưa có khách thật nên không có điểm quy đổi từ xu; nhắc "xu cũ" và "trừ tới 100%" chỉ làm khách mới hiểu lầm.
+  it('câu Điểm Xanh không nhắc "xu" và không hứa trừ tới 100% giá trị hàng', () => {
     const a = answer(/Điểm Xanh là gì/);
-    expect(a).toContain('xu cũ');
-    expect(a).toMatch(/không hết hạn/);
-    expect(a).toMatch(/không dùng để đổi mã giảm giá/);
+    expect(a).not.toMatch(STANDALONE_XU);
+    expect(a).not.toMatch(/100%/);
+    expect(a).not.toMatch(/không hết hạn/);
+    expect(a).toContain('Điểm có hạn');
+  });
+
+  it('không câu dự phòng nào nhắc "xu"', () => {
+    for (const f of fallbackFaq()) expect(`${f.q} ${f.a}`).not.toMatch(STANDALONE_XU);
   });
 });
 

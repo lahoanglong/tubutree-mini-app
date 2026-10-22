@@ -35,6 +35,7 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
       return [{ n: BigInt(opts.counts?.[table] ?? 0) }];
     }),
     systemConfig: { findMany: jest.fn(async () => [{ key: 'merchant.commission_pct', value: 0.15 }]) },
+    membershipTier: { findMany: jest.fn(async () => [{ pointMultiplier: 1 }, { pointMultiplier: 1.2 }, { pointMultiplier: 1.5 }, { pointMultiplier: 2 }]) },
     notificationTemplate: { findMany: jest.fn(async () => [{ code: 'ORDER_CONFIRMED', channel: 'ZNS', zaloTemplateId: null }]) },
     product: { count: jest.fn(async (a: { where: Row }) => ('isActive' in a.where ? demo.active : demo.found)) },
     variation: { count: jest.fn(async () => demo.activeVariations) },
@@ -81,6 +82,22 @@ describe('collectDbSnapshot', () => {
     expect(sql.some((q) => q.includes(`FROM "waste_points" WHERE "kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`))).toBe(true);
     expect(sql.some((q) => q.includes(`"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`))).toBe(true);
     expect(sql.some((q) => q.includes('refill_pickup_locations'))).toBe(false);
+  });
+
+  it('gom hệ số các hạng thành viên và số bậc đại lý', async () => {
+    const { prisma } = fakePrisma({ tables: [...ALL_TABLES, 'membership_tiers', 'dealer_tiers'], counts: { dealer_tiers: 4 } });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.membershipTiers).toEqual([1, 1.2, 1.5, 2]);
+    expect(snap.dealerTierCount).toBe(4);
+  });
+
+  it('chưa có bảng hạng và bậc đại lý: danh sách rỗng, số 0, không truy vấn', async () => {
+    const { prisma, tx, sql } = fakePrisma({ tables: ALL_TABLES });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.membershipTiers).toEqual([]);
+    expect(snap.dealerTierCount).toBe(0);
+    expect(tx.membershipTier.findMany).not.toHaveBeenCalled();
+    expect(sql.some((q) => q.includes('FROM "dealer_tiers"'))).toBe(false);
   });
 
   it('DB trước khi áp migration mới: bảng chưa có thì bỏ qua, không truy vấn', async () => {

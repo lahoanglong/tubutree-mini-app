@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Page, Input, useSnackbar } from 'zmp-ui';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
-import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo, type WalletTxn } from '../services/account-api';
+import { getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { isHttpError } from '../services/http';
 import { useShareWithFallback } from '../components/share-sheet';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 import { useAuthStore } from '../store/auth';
@@ -28,6 +29,12 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
+
+const KEEP_KEY_STATUSES = new Set([401, 403, 408, 429]);
+const httpStatus = (e: unknown) => (isHttpError(e) ? e.response?.status ?? 0 : 0);
+
+/** Dòng sổ cái của một lệnh rút đúng số tiền (delta âm = tiền gộp cả phí, bằng `amount` gửi lên). */
+const isWithdrawOf = (t: WalletTxn, amount: number) => t.type === 'WITHDRAW' && t.delta === -amount;
 
 const CARD: CSSProperties = {
   background: 'var(--color-bg-surface)',
@@ -66,20 +73,49 @@ export default function WalletPage() {
   // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lệnh rút (double-tap/timeout) →
   // BE không trừ ví/ tạo payout 2 lần; regenerate sau khi rút thành công (lệnh sau là lệnh mới).
   const withdrawKey = useRef(newIdempotencyKey());
+  // Có một lệnh rút chưa rõ kết quả: mở lại sheet vẫn dùng key đó cho tới khi máy chủ trả lời dứt khoát hoặc sao kê cho thấy
+  // lệnh đã được ghi. `knownIds` là các dòng rút cùng số tiền đã có trong sao kê lúc đó, để không nhận nhầm lệnh cũ là lệnh vừa gửi.
+  // `knownIds` null = lúc lỗi chưa có sao kê nào tải xong, không biết dòng nào là cũ → không tự gỡ cờ (giữ key như trước).
+  const withdrawUnresolved = useRef<{ amount: number; knownIds: Set<string> | null } | null>(null);
+  const firstPageRows = useRef<WalletTxn[] | null>(null);
+  const onHistoryRows = useCallback((rows: WalletTxn[]) => {
+    firstPageRows.current = rows;
+    const pending = withdrawUnresolved.current;
+    const knownIds = pending?.knownIds;
+    if (pending && knownIds && rows.some((t) => isWithdrawOf(t, pending.amount) && !knownIds.has(t.id))) {
+      // Chỉ bỏ cờ, chưa đổi key: sheet còn mở mà khách bấm lại thì máy chủ trả đúng lệnh đã ghi thay vì rút thêm lần nữa.
+      // Key mới được cấp ở lần mở sheet kế tiếp.
+      withdrawUnresolved.current = null;
+    }
+  }, []);
   const withdrawMut = useMutation({
     mutationFn: () => withdraw(Number(amount), bank, withdrawKey.current),
     onSuccess: (r) => {
       openSnackbar({ text: `Đã gửi yêu cầu rút. Thực nhận ${formatVnd(r.net)} trong 1-3 ngày làm việc.`, type: 'success' });
       withdrawKey.current = newIdempotencyKey();
+      withdrawUnresolved.current = null;
       setWithdrawOpen(false);
       setAmount('');
       refreshAll();
     },
-    // Lỗi (kể cả server đã tạo giao dịch thật, hoặc BE báo key đã dùng với số tiền khác) →
-    // regenerate key TRƯỚC khi cho phép bấm lại, để lần thử tiếp theo (số tiền có thể đã sửa)
-    // dùng key MỚI thay vì lặp lại đúng lệnh cũ.
+    // Quá thời gian/mất mạng/5xx: máy chủ có thể đã trừ ví và tạo lệnh rút. GIỮ key để bấm lại trả đúng lệnh đó thay vì rút thêm
+    // lần nữa; chỉ đổi key khi máy chủ đã từ chối rõ ràng (4xx, kể cả "key đã dùng với số tiền khác") nên không có gì được ghi.
     onError: (e) => {
-      withdrawKey.current = newIdempotencyKey();
+      if (isOutcomeUnknown(e)) {
+        const amountSent = Number(amount);
+        withdrawUnresolved.current = {
+          amount: amountSent,
+          knownIds: firstPageRows.current && new Set(firstPageRows.current.filter((t) => isWithdrawOf(t, amountSent)).map((t) => t.id)),
+        };
+        refreshAll();
+        openSnackbar({ text: vi.wallet.withdrawUnknown, type: 'error' });
+        return;
+      }
+      // 401/403/408/429: request NÀY chưa được xử lý, nhưng lệnh trước (nếu chưa rõ kết quả) có thể đã trừ ví; đổi key lúc này là mở đường rút lần hai.
+      if (!KEEP_KEY_STATUSES.has(httpStatus(e))) {
+        withdrawKey.current = newIdempotencyKey();
+        withdrawUnresolved.current = null;
+      }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     },
   });
@@ -161,8 +197,8 @@ export default function WalletPage() {
                   fullWidth
                   onPress={() => {
                     // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
-                    // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ).
-                    withdrawKey.current = newIdempotencyKey();
+                    // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ). Trừ khi lệnh trước chưa rõ kết quả.
+                    if (!withdrawUnresolved.current) withdrawKey.current = newIdempotencyKey();
                     setWithdrawOpen(true);
                   }}
                 >
@@ -189,24 +225,25 @@ export default function WalletPage() {
               <IconBubble>
                 <Icon icon={Leaf} size="md" tone="brand" />
               </IconBubble>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <Text variant="body-sm" tone="tertiary" as="div">
                   Điểm Xanh (đổi giảm giá)
                 </Text>
-                <Text variant="price-xl" as="div">
+                {/* Hạng nằm dưới số, không cùng hàng: ở 390px cột số chỉ còn ~120px nên số bị gãy "130.000 / điểm". */}
+                <Text variant="price-xl" as="div" style={{ whiteSpace: 'nowrap' }}>
                   {formatPoints(points?.total ?? 0)}
                 </Text>
+                {loyalty?.tier && (
+                  <Badge tone="brand" style={{ marginTop: 4 }}>
+                    {loyalty.tier.name}
+                  </Badge>
+                )}
                 {convertedNote && (
-                  <Text variant="caption" tone="secondary" as="div">
+                  <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
                     {convertedNote}
                   </Text>
                 )}
               </div>
-              {loyalty?.tier && (
-                <Badge tone="brand" style={{ flex: '0 0 auto' }}>
-                  {loyalty.tier.name}
-                </Badge>
-              )}
               <Icon icon={ChevronRight} size="sm" tone="muted" style={{ flex: '0 0 auto' }} />
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
@@ -312,7 +349,7 @@ export default function WalletPage() {
             </Text>
           </div>
 
-          <WalletHistory enabled={authed} />
+          <WalletHistory enabled={authed} onFirstPage={onHistoryRows} />
         </>
       ) : null}
 
@@ -412,7 +449,7 @@ function Notice({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
 }
 
 /** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
-function WalletHistory({ enabled }: { enabled: boolean }) {
+function WalletHistory({ enabled, onFirstPage }: { enabled: boolean; onFirstPage: (rows: WalletTxn[]) => void }) {
   // Khoá con của ['wallet'] → refreshAll() sau khi rút tiền làm mới luôn sao kê.
   const q = useInfiniteQuery({
     queryKey: ['wallet', 'transactions'],
@@ -422,6 +459,10 @@ function WalletHistory({ enabled }: { enabled: boolean }) {
     enabled,
   });
   const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
+  const firstPage = q.data?.pages[0]?.data;
+  useEffect(() => {
+    if (firstPage) onFirstPage(firstPage);
+  }, [firstPage, onFirstPage]);
 
   return (
     <div style={{ ...CARD, margin: '0 16px 24px', padding: 16 }}>

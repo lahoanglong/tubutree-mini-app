@@ -13,7 +13,8 @@ import { OrderReversalService } from '../orders/order-reversal.service';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import { allowedNextStatuses } from '../orders/order-transition';
 import { actorAllowedTransitions, actorTransitionBlock, seesFullOrderPhones, type OrderActor } from './order-actor-transitions';
-import { ADMIN_LATE_PAYMENT_REF, recordLatePaymentRefund } from '../orders/refund-queue';
+import { ADMIN_LATE_PAYMENT_REF, COD_RETURN_UNVERIFIED_REF, recordLatePaymentRefund } from '../orders/refund-queue';
+import { ATTENTION_COD_RETURN_UNVERIFIED } from '../integrations/pancake/pancake-attention';
 import { formatVnd } from '../orders/refund-destination';
 import { RbacService } from '../staff/rbac/rbac.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
@@ -32,13 +33,14 @@ import {
   recipientPhoneVariants,
   searchPhone,
   type AdminOrderFilterInput,
+  userPhoneClauses,
   type InvoiceFilter,
   type OrderListExtra,
   type PancakeFilter,
   type RecyclingFilter,
 } from './admin-order-filter';
 import { orderCsvChunks, userCsvChunks } from './admin-export';
-import { GMV_ORDER_WHERE, REVENUE_ORDER_SQL, REVENUE_ORDER_WHERE } from './admin-revenue';
+import { GMV_ORDER_SQL, REVENUE_ORDER_SQL } from './admin-revenue';
 import { redactConfigRows, redactValueForKey, restoreRedactedSecrets } from './config-redaction';
 import { isDeadConfigKey } from '../system-config/dead-config-keys';
 import { configPartnerKey, hasAdminConfigRule, validateAdminConfigValue } from './admin-config-rules';
@@ -732,20 +734,11 @@ export class AdminService {
   static readonly DETAIL_TAKE = 30;
 
   async getDashboardStats() {
-    // Định nghĩa "doanh thu" dùng chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
-    const open = GMV_ORDER_WHERE;
-    const collected = REVENUE_ORDER_WHERE;
+    // Một lượt quét orders cho mọi số đếm theo trạng thái và ba tổng tiền. "Doanh thu" và GMV
+    // dùng đúng mảnh SQL chung với báo cáo theo ngày × kênh (admin-revenue.ts) để hai nơi không bao giờ lệch nhau.
     const [
-      totalOrders,
-      pendingOrders,
-      shippingOrders,
-      deliveredOrders,
-      cancelledOrders,
-      returnedOrders,
+      orderKpiRows,
       pendingReturns,
-      collectedResult,
-      gmvResult,
-      codPendingResult,
       refundRows,
       dealerDebtRows,
       totalUsers,
@@ -754,19 +747,30 @@ export class AdminService {
       plantedTreesCount,
       recentOrders,
     ] = await Promise.all([
-      this.prisma.order.count(),
-      this.prisma.order.count({ where: { status: { in: ['PENDING_PAYMENT', 'CONFIRMED'] } } }),
-      this.prisma.order.count({ where: { status: { in: ['PACKED', 'SHIPPING'] } } }),
-      this.prisma.order.count({ where: { status: 'DELIVERED' } }),
-      this.prisma.order.count({ where: { status: 'CANCELLED' } }),
-      this.prisma.order.count({ where: { status: 'RETURNED' } }),
+      this.prisma.$queryRaw<
+        {
+          total_orders: number;
+          pending_orders: number;
+          shipping_orders: number;
+          delivered_orders: number;
+          cancelled_orders: number;
+          returned_orders: number;
+          collected: bigint | null;
+          gmv: bigint | null;
+          cod_pending: bigint | null;
+        }[]
+      >`
+        SELECT COUNT(*)::int AS total_orders,
+               (COUNT(*) FILTER (WHERE o.status IN ('PENDING_PAYMENT', 'CONFIRMED')))::int AS pending_orders,
+               (COUNT(*) FILTER (WHERE o.status IN ('PACKED', 'SHIPPING')))::int AS shipping_orders,
+               (COUNT(*) FILTER (WHERE o.status = 'DELIVERED'))::int AS delivered_orders,
+               (COUNT(*) FILTER (WHERE o.status = 'CANCELLED'))::int AS cancelled_orders,
+               (COUNT(*) FILTER (WHERE o.status = 'RETURNED'))::int AS returned_orders,
+               SUM(o.total) FILTER (WHERE ${REVENUE_ORDER_SQL}) AS collected,
+               SUM(o.total) FILTER (WHERE ${GMV_ORDER_SQL}) AS gmv,
+               SUM(o.total) FILTER (WHERE o."paymentMethod" = 'COD' AND o."paymentStatus" = 'UNPAID' AND o.status IN ('CONFIRMED', 'PACKED', 'SHIPPING')) AS cod_pending
+        FROM orders o`,
       this.prisma.returnRequest.count({ where: { status: 'REQUESTED' } }),
-      this.prisma.order.aggregate({ _sum: { total: true }, where: collected }),
-      this.prisma.order.aggregate({ _sum: { total: true }, where: open }),
-      this.prisma.order.aggregate({
-        _sum: { total: true },
-        where: { paymentMethod: 'COD', paymentStatus: 'UNPAID', status: { in: ['CONFIRMED', 'PACKED', 'SHIPPING'] } },
-      }),
       this.prisma.$queryRaw<{ all_refunds: bigint | null; on_collected: bigint | null }[]>`
         SELECT
           SUM(r."refundAmount" + r."shippingRefund") AS all_refunds,
@@ -796,19 +800,20 @@ export class AdminService {
         },
       }),
     ]);
+    const kpi = orderKpiRows[0];
     const refunds = refundRows[0];
     const partialRefunds = Number(refunds?.on_collected ?? 0);
 
     return {
-      totalRevenue: (collectedResult._sum.total ?? 0) - partialRefunds,
-      gmv: gmvResult._sum.total ?? 0,
-      codPendingValue: codPendingResult._sum.total ?? 0,
-      totalOrders,
-      pendingOrders,
-      shippingOrders,
-      deliveredOrders,
-      cancelledOrders,
-      returnedOrders,
+      totalRevenue: Number(kpi?.collected ?? 0) - partialRefunds,
+      gmv: Number(kpi?.gmv ?? 0),
+      codPendingValue: Number(kpi?.cod_pending ?? 0),
+      totalOrders: kpi?.total_orders ?? 0,
+      pendingOrders: kpi?.pending_orders ?? 0,
+      shippingOrders: kpi?.shipping_orders ?? 0,
+      deliveredOrders: kpi?.delivered_orders ?? 0,
+      cancelledOrders: kpi?.cancelled_orders ?? 0,
+      returnedOrders: kpi?.returned_orders ?? 0,
       pendingReturns,
       returnRefundTotal: Number(refunds?.all_refunds ?? 0),
       dealerDebtOutstanding: Number(dealerDebtRows[0]?.outstanding ?? 0),
@@ -821,17 +826,15 @@ export class AdminService {
   }
 
   /** undefined = giữ lọc theo quan hệ `user` (chuỗi quá ngắn cho trigram, hoặc khớp quá nhiều khách). */
-  private async findSearchUserIds(search?: string): Promise<string[] | undefined> {
+  private async findSearchUserIds(search?: string, exactPhoneOnly = false): Promise<string[] | undefined> {
     const s = normalizeAdminOrderSearch(search);
     if (!s || s.length < ADMIN_SEARCH_MIN_TRGM_LENGTH) return undefined;
     const like = escapePrismaLike(s);
-    const phone = searchPhone(s);
     const folded = foldVietnamese(s);
     const rows = await this.prisma.user.findMany({
       where: {
         OR: [
-          { phone: { contains: like } },
-          ...(phone && phone !== s ? [{ phone: { contains: phone } }] : []),
+          ...userPhoneClauses(s, exactPhoneOnly),
           { fullName: { contains: like, mode: 'insensitive' } },
           ...(folded.length >= ADMIN_SEARCH_MIN_TRGM_LENGTH ? [{ fullNameSearch: { contains: escapePrismaLike(folded) } }] : []),
         ],
@@ -855,7 +858,7 @@ export class AdminService {
 
   /** File CSV mọi đơn khớp bộ lọc (admin-export.ts đọc theo lô). */
   async orderCsv(f: AdminOrderFilterInput, opts: { maskPhones?: boolean } = {}): Promise<AsyncGenerator<string>> {
-    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f), opts);
+    return orderCsvChunks(this.prisma, await this.adminOrderWhere(f, { exactPhoneOnly: opts.maskPhones }), opts);
   }
 
   userCsv(search?: string): AsyncGenerator<string> {
@@ -863,14 +866,15 @@ export class AdminService {
   }
 
   /** Điều kiện lọc đơn admin dùng chung cho danh sách và file xuất CSV — cùng một tập đơn. */
-  async adminOrderWhere(f: AdminOrderFilterInput): Promise<Prisma.OrderWhereInput> {
+  async adminOrderWhere(f: AdminOrderFilterInput, opts: { exactPhoneOnly?: boolean } = {}): Promise<Prisma.OrderWhereInput> {
     const { storefront, ...filter } = f;
+    const exactPhoneOnly = opts.exactPhoneOnly === true;
     const [searchUserIds, searchOrderIds, storefrontId] = await Promise.all([
-      this.findSearchUserIds(f.search),
+      this.findSearchUserIds(f.search, exactPhoneOnly),
       this.findSearchOrderIds(f.search),
       this.findStorefrontId(storefront),
     ]);
-    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, ...(storefrontId ? { storefrontId } : {}) });
+    return buildAdminOrderWhere({ ...filter, searchUserIds, searchOrderIds, exactPhoneOnly, ...(storefrontId ? { storefrontId } : {}) });
   }
 
   /**
@@ -906,7 +910,7 @@ export class AdminService {
     viewer: OrderActor = { role: 'ADMIN' },
     { order = 'desc', ...extra }: OrderListExtra = {},
   ) {
-    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra });
+    const where = await this.adminOrderWhere({ status, search, recycling, invoice, pancake, from, to, ...extra }, { exactPhoneOnly: !seesFullOrderPhones(viewer) });
     const [items, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
@@ -1137,24 +1141,24 @@ export class AdminService {
       select: { id: true, code: true, userId: true, status: true, invoiceRequest: true, invoiceStatus: true, invoiceUrl: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hóa đơn VAT.`);
-    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hóa đơn của đơn ${order.code} đã được phát hành.`);
+    if (!order.invoiceRequest) throw new BadRequestException(`Đơn ${order.code} chưa có yêu cầu xuất hoá đơn VAT.`);
+    if (order.invoiceStatus === 'ISSUED') throw new BadRequestException(`Hoá đơn của đơn ${order.code} đã được phát hành.`);
     if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
-      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hóa đơn VAT.`);
+      throw new BadRequestException(`Đơn ${order.code} đã huỷ/trả — không xuất hoá đơn VAT.`);
     }
     const invoiceUrl = dto.invoiceUrl?.trim() || undefined;
     const res = await this.prisma.order.updateMany({
       where: { id: order.id, OR: [{ invoiceStatus: null }, { invoiceStatus: { not: 'ISSUED' } }] },
       data: { invoiceStatus: 'ISSUED', ...(invoiceUrl ? { invoiceUrl } : {}) },
     });
-    if (res.count === 0) throw new BadRequestException(`Hóa đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
-    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hóa đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
+    if (res.count === 0) throw new BadRequestException(`Hoá đơn của đơn ${order.code} vừa được phát hành bởi người khác — vui lòng tải lại.`);
+    this.logger.warn(`Admin ${adminId} ghi nhận đã xuất hoá đơn VAT đơn ${order.code}${invoiceUrl ? ` (${invoiceUrl})` : ''}.`);
     await this.notifications
       .notify(order.userId, 'INVOICE_ISSUED', { order_code: order.code })
       .catch((e) => this.logger.warn(`notify INVOICE_ISSUED lỗi (${order.userId}): ${(e as Error).message}`));
     return {
       ok: true,
-      message: `Đã ghi nhận xuất hóa đơn VAT cho đơn ${order.code}.`,
+      message: `Đã ghi nhận xuất hoá đơn VAT cho đơn ${order.code}.`,
       order: { id: order.id, code: order.code, invoiceStatus: 'ISSUED' as const, invoiceUrl: invoiceUrl ?? order.invoiceUrl },
     };
   }
@@ -1252,6 +1256,17 @@ export class AdminService {
       select: { id: true, code: true, pancakeAttention: true },
     });
     if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    // Việc hoàn tiền COD trả hàng do Kế toán quyết ở mục "Hoàn tiền khách" (để lại vết trong lịch sử đơn); nhân viên kho bấm
+    // "Đã xử lý" ở đây sẽ đóng việc mà không ai quyết hoàn hay không.
+    if (order.pancakeAttention?.includes(ATTENTION_COD_RETURN_UNVERIFIED)) {
+      const open = await this.prisma.orderCustomerRefund.findFirst({
+        where: { orderId: order.id, kind: 'RETURN', refKey: COD_RETURN_UNVERIFIED_REF, status: 'UNVERIFIED' },
+        select: { id: true },
+      });
+      if (open) {
+        throw new BadRequestException(`Đơn ${order.code} còn khoản hoàn COD chờ Kế toán quyết ở mục "Hoàn tiền khách" — xử lý ở đó trước.`);
+      }
+    }
     const r = await this.prisma.order.updateMany({
       where: { id: order.id, pancakeAttentionAt: { not: null } },
       data: { pancakeAttention: null, pancakeAttentionAt: null },
@@ -1445,10 +1460,16 @@ export class AdminService {
       ...(q.status === 'expired' ? { endAt: { lt: now } } : {}),
     };
     const { skip, take } = skipTake(q.page, q.limit);
-    const [rows, total] = await Promise.all([
-      this.prisma.coupon.findMany({ where, orderBy: { startAt: 'desc' }, skip, take }),
-      this.prisma.coupon.count({ where }),
-    ]);
+    let rows: Awaited<ReturnType<typeof this.prisma.coupon.findMany>>;
+    let total: number;
+    if (!keyword && !q.scope && !actor.staff) {
+      ({ rows, total } = await this.listDefaultCoupons(q.status, now, skip, take));
+    } else {
+      [rows, total] = await Promise.all([
+        this.prisma.coupon.findMany({ where, orderBy: { startAt: 'desc' }, skip, take }),
+        this.prisma.coupon.count({ where }),
+      ]);
+    }
     const ids = rows.map((r) => r.id);
     const grouped = ids.length
       ? await this.prisma.couponRedemption.groupBy({ by: ['couponId'], where: { couponId: { in: ids } }, _count: { _all: true } })
@@ -1468,6 +1489,28 @@ export class AdminService {
       q.limit,
       total,
     );
+  }
+
+  /**
+   * Trang mặc định của tab Voucher (không tìm theo mã, không lọc scope, không phải nhân viên) bằng SQL thô: Prisma gửi enum dưới
+   * dạng CAST($1::text AS ...) nên Postgres không chứng minh được vị từ `scope <> 'USER_GROUP'` khớp partial index
+   * coupons_admin_list_idx và quét tuần tự cả bảng (hàng nghìn voucher cá nhân); chữ nghĩa thì chứng minh được. Một truy vấn
+   * lấy cả trang lẫn tổng (COUNT OVER) thay cho findMany + count.
+   */
+  private async listDefaultCoupons(status: 'active' | 'inactive' | 'expired' | undefined, now: Date, skip: number, take: number) {
+    const byStatus =
+      status === 'active' ? Prisma.sql`AND "isActive" AND "endAt" >= ${now}` : status === 'inactive' ? Prisma.sql`AND NOT "isActive"` : status === 'expired' ? Prisma.sql`AND "endAt" < ${now}` : Prisma.empty;
+    const filter = Prisma.sql`"scope" <> 'USER_GROUP' AND "batch" IS NULL ${byStatus}`;
+    const page = await this.prisma.$queryRaw<{ id: string; total: number }[]>(Prisma.sql`
+      SELECT "id", COUNT(*) OVER ()::int AS total FROM "coupons" WHERE ${filter} ORDER BY "startAt" DESC LIMIT ${take} OFFSET ${skip}`);
+    // Trang vượt quá cuối danh sách: không có dòng để mang tổng, đếm riêng (hiếm).
+    const total =
+      page[0]?.total ??
+      (skip > 0 ? ((await this.prisma.$queryRaw<{ n: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS n FROM "coupons" WHERE ${filter}`))[0]?.n ?? 0) : 0);
+    if (page.length === 0) return { rows: [], total };
+    const found = await this.prisma.coupon.findMany({ where: { id: { in: page.map((r) => r.id) } } });
+    const byId = new Map(found.map((c) => [c.id, c]));
+    return { rows: page.flatMap((r) => byId.get(r.id) ?? []), total };
   }
 
   /** Sửa nhanh mã đang chạy: tắt/bật, gia hạn/rút ngắn, đổi tổng lượt. Không sửa giá trị (tạo mã mới). */

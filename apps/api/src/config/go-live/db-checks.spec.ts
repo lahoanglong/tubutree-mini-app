@@ -1,5 +1,5 @@
 import { estimateOrdersLockSeconds, evaluateDb, HEAVY_MIGRATIONS, IMAGE_COMPATIBLE_MIGRATIONS, recommendedWindowSeconds, REQUIRED_MIGRATIONS } from './db-checks';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GOOD_DB, GOOD_ENV, byId, dbWith, envWith } from './go-live.fixtures';
 import type { DbSnapshot } from './db-checks';
@@ -159,6 +159,97 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain('7 migration chờ áp, 4 cái nằm ngoài');
       for (const n of [PD3, P1, P8, P4, R6]) expect(r.detail).toContain(n);
       expect(r.hint).toContain('7.3');
+    });
+
+    it.each([
+      '20261016210000_r11_delivered_effects_marker',
+      '20261018140000_lr_reports_source_indexes',
+      '20261018170100_lr_orders_filter_indexes',
+      '20261010170000_orders_invoice_open_index',
+      '20261013172522_p2_pancake_inbound_attention',
+      '20261013173621_p3_gomdon_order_note_cleanup',
+      '20261018210000_points_1d',
+    ])('%s khoá bảng orders: db.pending_scope nêu tên nó ở danh sách nặng và db.orders_lock tính nó', (name) => {
+      const s = behind(300_000, [name]);
+      const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(scope.status).toBe('WARN');
+      expect(scope.detail).toMatch(new RegExp(`nặng: [^;]*${name}`));
+      const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      expect(lock.detail).toContain('~28 giây');
+      expect(lock.detail).toContain(name);
+    });
+
+    it.each([
+      '20261012100000_pd3_points_lot_schema',
+      '20261014090000_p5_refunds_returns_queue',
+      '20261018000100_n1_indexes',
+      '20261019100000_external_orders',
+      '20261019170000_chat_review1',
+      '20261020000000_waste_exchange',
+      '20261020100000_review_return_reversal',
+    ])('%s nặng trên users/points_transactions: db.pending_scope nêu tên, db.orders_lock không tính nó', (name) => {
+      // migration không nặng đi kèm để chắc chắn vào nhánh WARN (waste_exchange tự nó thuộc danh sách tương thích image nên một mình sẽ PASS)
+      const s = behind(300_000, [name, '20261013172011_p6_promo_abuse_coupon_active_code']);
+      const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      expect(scope.detail).toMatch(new RegExp(`nặng: [^;]*${name}`));
+      const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      expect(lock.detail).toContain('~14 giây');
+      expect(lock.detail).not.toContain(name);
+    });
+
+    describe('quét thư mục migrations', () => {
+      const dir = join(__dirname, '../../../prisma/migrations');
+      const inProd = '20261010080000_dealer_volume_bigint';
+      const tables = '(?:orders|order_items|users|points_transactions)';
+      const heavySql = [
+        new RegExp(`UPDATE "${tables}"`, 'i'),
+        new RegExp(`DELETE FROM "${tables}"`, 'i'),
+        new RegExp(`INSERT INTO "${tables}"[^;]*SELECT`, 'is'),
+        new RegExp(`CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?"[^"]+"\\s+ON "${tables}"`, 'i'),
+        new RegExp(`ALTER TABLE "${tables}"\\s+ADD CONSTRAINT`, 'i'),
+        new RegExp(`ALTER TABLE "${tables}"[^;]*ALTER COLUMN`, 'i'),
+        new RegExp(`LOCK TABLE[^;]*"${tables}"`, 'i'),
+      ];
+      // SQL động: EXECUTE format('UPDATE %I ...') với bảng nằm trong bộ giá trị ('orders', 'cột', ...), tên bảng không viết liền ở câu lệnh.
+      const dynamicTable = new RegExp(`\\(\\s*'${tables}'\\s*,`, 'i');
+      const scan = (name: string) => {
+        const sql = readFileSync(join(dir, name, 'migration.sql'), 'utf8').replace(/--[^\n]*/g, '');
+        const stmts = sql.split(/;\s*\n/).filter((st) => !/CONCURRENTLY/i.test(st));
+        const heavyStmts = stmts.filter((st) => heavySql.some((re) => re.test(st)));
+        const dynamic = /EXECUTE\s+format/i.test(sql) && dynamicTable.test(sql);
+        const dynamicOrders = dynamic && /\(\s*'orders'\s*,/i.test(sql);
+        const touchesOrders = dynamicOrders || heavyStmts.some((st) => /["']orders["']/i.test(st));
+        return { heavy: heavyStmts.length > 0 || dynamic, touchesOrders };
+      };
+      const scanned = readdirSync(dir)
+        .filter((n) => /^\d/.test(n) && n > inProd)
+        .map((n) => ({ n, ...scan(n) }));
+      const listed = new Map(HEAVY_MIGRATIONS.map((h) => [h.name, h.ordersLock]));
+
+      it('mọi migration sau bản PROD có câu lệnh nặng trên orders, order_items, users, points_transactions đều nằm trong HEAVY_MIGRATIONS', () => {
+        expect(scanned.filter((m) => m.heavy && !listed.has(m.n)).map((m) => m.n)).toEqual([]);
+      });
+
+      it('migration nặng mà đụng bảng orders (UPDATE, chỉ mục, ràng buộc, LOCK TABLE, SQL động) phải đặt ordersLock = true', () => {
+        expect(scanned.filter((m) => m.touchesOrders && listed.get(m.n) === false).map((m) => m.n)).toEqual([]);
+      });
+    });
+
+    it('db.pending_scope và db.orders_lock nêu đủ tên migration nặng, không rút gọn', () => {
+      const all = HEAVY_MIGRATIONS.map((h) => h.name);
+      const s = dbWith({ orderCount: 300_000, expectedMigrations: [...all, ...GOOD_DB.expectedMigrations], appliedMigrations: GOOD_DB.appliedMigrations.filter((m) => !all.includes(m)) });
+      const scope = byId(run(s, 'pre-deploy'), 'db.pending_scope');
+      const lock = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      for (const n of all) expect(scope.detail).toContain(n);
+      for (const n of HEAVY_MIGRATIONS.filter((h) => h.ordersLock).map((h) => h.name)) expect(lock.detail).toContain(n);
+    });
+
+    it('r6 đã áp nhưng lr_orders_filter_indexes còn chờ: db.orders_lock vẫn WARN, không PASS "hết rủi ro"', () => {
+      const LR = '20261018170100_lr_orders_filter_indexes';
+      const s = dbWith({ orderCount: 300_000, expectedMigrations: [LR, ...GOOD_DB.expectedMigrations], appliedMigrations: GOOD_DB.appliedMigrations });
+      const r = byId(run(s, 'pre-deploy'), 'db.orders_lock');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain(LR);
     });
 
     it('thêm migration không nặng: WARN, không nêu danh sách nặng thừa', () => {
@@ -412,6 +503,40 @@ describe('evaluateDb', () => {
       expect(status(dbWith({ configs: { 'shipping.gomdon.config': cfg } }), 'db.gomdon_warehouse')).toBe('WARN');
     });
     it('đủ thì PASS', () => expect(status(GOOD_DB, 'db.gomdon_warehouse')).toBe('PASS'));
+  });
+
+  describe('hạng thành viên và bậc đại lý (db.membership_tiers, db.dealer_tiers)', () => {
+    it('hạng đủ hệ số 1, 1,2, 1,5, 2 và có bậc đại lý: PASS', () => {
+      expect(status(GOOD_DB, 'db.membership_tiers')).toBe('PASS');
+      expect(status(GOOD_DB, 'db.dealer_tiers')).toBe('PASS');
+    });
+
+    it('bảng hạng trống sau deploy: FAIL, chỉ cách chạy seed-reference có cờ (mọi khách hệ số x1)', () => {
+      const r = byId(run(dbWith({ membershipTiers: [] })), 'db.membership_tiers');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toMatch(/chưa có hạng nào/);
+      expect(r.hint).toContain('--with-business-defaults');
+    });
+
+    it('bảng hạng trống trước deploy: chỉ WARN (seed-reference chạy ở bước deploy)', () => {
+      expect(status(dbWith({ membershipTiers: [] }), 'db.membership_tiers', 'pre-deploy')).toBe('WARN');
+    });
+
+    it('thiếu một hệ số đã chốt (thiếu 1,5): FAIL và nêu hệ số thiếu', () => {
+      const r = byId(run(dbWith({ membershipTiers: [1, 1.2, 2] })), 'db.membership_tiers');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('1,5');
+    });
+
+    it('hệ số lệch (1,5 thành 15, kiểu nhầm đơn vị): FAIL', () => {
+      expect(status(dbWith({ membershipTiers: [1, 1.2, 15, 2] }), 'db.membership_tiers')).toBe('FAIL');
+    });
+
+    it('chưa có bậc đại lý: WARN (không chặn mở bán khách lẻ)', () => {
+      const r = byId(run(dbWith({ dealerTierCount: 0 })), 'db.dealer_tiers');
+      expect(r.status).toBe('WARN');
+      expect(r.hint).toContain('--with-business-defaults');
+    });
   });
 
   describe('tài khoản admin', () => {

@@ -65,7 +65,7 @@ Xác nhận trong mã:
 
 | Nội dung trong bài | Nguồn |
 |---|---|
-| Đơn từ 200.000đ miễn phí ship, dưới đó 19.000đ cho kiện Tubu giao | `apps/api/prisma/seed.ts:218-219`; `apps/api/src/modules/pricing/pricing.service.ts:17-24`, `:83-90` |
+| Đơn từ 199.000đ miễn phí ship, dưới đó 19.000đ cho kiện Tubu giao | `apps/api/prisma/seed.ts:218-219`; `apps/api/src/modules/pricing/pricing.service.ts:17-24`, `:83-90` |
 | Ngưỡng tính trên tiền hàng của kiện TRƯỚC khi trừ mã giảm giá, Điểm Xanh | `apps/api/src/modules/checkout/checkout-split.ts:282`; `checkout.service.ts:1191-1230` |
 | Hạng thành viên freeship sớm hơn (Lộc Biếc từ 99.000đ, Đại Thụ và Cổ Thụ mọi đơn) | `apps/api/prisma/seed.ts:224`; `pricing.service.ts:17-24`. Bài không ghi con số, chỉ ghi "hiển thị ở giỏ hàng" |
 | Freeship đơn đầu: chỉ kiện Tubu, đơn đầu không tính đơn huỷ, có ngưỡng cấu hình | `pricing.service.ts:26-54`; `apps/api/src/common/first-order.ts:32` |
@@ -106,7 +106,7 @@ Chỉ có từ chủ dự án (chưa thấy trong mã ở nhánh này):
 - Hoa hồng giữ 10 ngày sau giao: seed vẫn `affiliate.hold_days` = 20 (`apps/api/prisma/seed.ts:60`). Phải đổi thành 10 trong Cấu hình.
 - Không trả hoa hồng cho hàng gian hàng đối tác (A3): không tìm thấy chặn riêng trong `createCommissionForOrder` ở nhánh này, chỉ có chặn sản phẩm `affiliateBlocked` và hàng ký gửi của chính người giới thiệu.
 - Tài khoản nhận tiền: bài ghi 8386790906 theo chủ dự án, nhưng DB và seed vẫn có `payment.bank_account_no` = 9984606774 (`apps/api/prisma/seed.ts:197-200`, `apps/api/prisma/migrations/20260625070000_payment_bank_config/migration.sql:5`) và go-live check coi đó là số mẫu (`apps/api/src/config/go-live/db-checks.ts:101`). Phải sửa 4 khoá `payment.bank_*` trong Cấu hình trước khi mở bán, nếu không QR trên màn thanh toán khác với số trong điều khoản.
-- Ngưỡng 200.000đ và phí 19.000đ chỉ là mặc định trong mã. Chủ dự án chưa xác nhận con số này, nên go-live check còn cảnh báo (`apps/api/prisma/reference-data/config-selection.ts:56-57`). Bài ghi cứng hai số, nên nếu sửa `shipping.free_threshold` hoặc `shipping.flat_fee_below_threshold` thì phải sửa cả `van-chuyen.md`.
+- Ngưỡng 199.000đ và phí 19.000đ chỉ là mặc định trong mã. Chủ dự án chưa xác nhận con số này, nên go-live check còn cảnh báo (`apps/api/prisma/reference-data/config-selection.ts:56-57`). Bài ghi cứng hai số, nên nếu sửa `shipping.free_threshold` hoặc `shipping.flat_fee_below_threshold` thì phải sửa cả `van-chuyen.md`.
 - Hoa hồng và TNCN: xem mục 4.
 - Duyệt bài cộng đồng 4 giờ làm việc (B8): mã chỉ có kiểm duyệt lai, chưa có hạn 4 giờ.
 - Nhà cung cấp AI: mã gọi DeepSeek và Gemini (`apps/api/src/modules/ai-advisor/llm.client.ts:12`), chủ dự án nói Antigravity CLI. Bài chỉ nói "nhà cung cấp mô hình AI", không nêu tên.

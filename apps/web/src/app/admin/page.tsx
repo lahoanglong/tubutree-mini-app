@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recycle, Store, TreePine, Trophy } from 'lucide-react';
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -61,6 +61,7 @@ import {
   deleteQuickReply,
   listReturnRequests,
   type AdminBrand,
+  type ConfigRow,
   type BrandCert,
   type AdminFlashSale,
   type AdminFaq,
@@ -214,8 +215,8 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Tổng quan',
     items: [
       { k: 'inbox', label: 'Việc cần xử lý' },
-      { k: 'dashboard', label: 'Tổng quan KPI' },
-      { k: 'analytics', label: 'Retention & North-star' },
+      { k: 'dashboard', label: 'Tổng quan chỉ số' },
+      { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
       { k: 'reports', label: 'Báo cáo' },
     ],
   },
@@ -245,7 +246,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'productCategories', label: 'Danh mục sản phẩm' },
-      { k: 'payouts', label: 'Duyệt yêu cầu rút tiền' },
+      { k: 'payouts', label: 'Yêu cầu rút tiền' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
       { k: 'storefronts', label: 'Gian hàng' },
       { k: 'brands', label: 'Nhãn hàng' },
@@ -265,17 +266,17 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
   {
     label: 'Khuyến mãi',
     items: [
-      { k: 'coupons', label: 'Voucher' },
-      { k: 'flashSales', label: 'Flash Sale' },
-      { k: 'engagement', label: 'Nhiệm vụ & quà đổi điểm' },
+      { k: 'coupons', label: 'Mã giảm giá' },
+      { k: 'flashSales', label: 'Giờ vàng' },
+      { k: 'engagement', label: 'Nhiệm vụ' },
     ],
   },
   {
     label: 'Nội dung',
     items: [
       { k: 'faqs', label: 'Câu hỏi thường gặp' },
-      { k: 'contentKit', label: 'Content Kit CTV' },
-      { k: 'academy', label: 'Academy' },
+      { k: 'contentKit', label: 'Bộ nội dung CTV' },
+      { k: 'academy', label: 'Học viện CTV' },
       { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
       { k: 'notificationTemplates', label: 'Mẫu thông báo' },
     ],
@@ -341,6 +342,11 @@ function staffTabs(perms: readonly string[]): Set<Tab> {
 const TAB_KEYS = new Set<Tab>(TABS.map((t) => t.k));
 const ALL_TABS: ReadonlySet<Tab> = TAB_KEYS;
 
+/** Tab đầu tiên (theo thứ tự thanh bên) mà người xem được phép mở; nơi rơi về khi URL xin tab bị cấm. */
+function firstAllowedTab(allowed: ReadonlySet<Tab>): Tab {
+  return TABS.find((t) => allowed.has(t.k))?.k ?? DEFAULT_TAB;
+}
+
 /**
  * Tab + bộ lọc đơn nằm trên URL (`/admin?tab=orders&recycling=attention`) để gửi link cho đồng nghiệp,
  * F5 không mất chỗ đang xem. Đọc window.location sau khi mount (không dùng useSearchParams — trang
@@ -393,6 +399,16 @@ export default function AdminPage() {
     if (u.recycling) setOrdersRecycling(u.recycling);
     if (u.pancake) setOrdersPancake(u.pancake);
   }, []);
+
+  // Link mang tab bị cấm (vd KE_TOAN mở ?tab=users) vẫn hiện tab đầu được phép; sửa URL để link gửi tiếp và F5 không mang tab sai.
+  // Chỉ chạm khi URL đang đúng là tab bị cấm và state đã nhận nó, để không ghi đè URL trước lượt khôi phục ở trên.
+  useEffect(() => {
+    if (!initialized || status !== 'authenticated') return;
+    if (role !== 'ADMIN' && !(role === 'STAFF' && accessQ.data)) return;
+    const allowedTabs: ReadonlySet<Tab> = role === 'ADMIN' ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
+    if (allowedTabs.has(tab) || readUrlState().tab !== tab) return;
+    writeUrlState(firstAllowedTab(allowedTabs), '', '');
+  }, [initialized, status, role, accessQ.data, tab]);
 
   const setTab = (t: Tab) => {
     setConsignmentSeed(0);
@@ -476,7 +492,9 @@ export default function AdminPage() {
       merchantPayoutsPending: 'merchantFulfilment',
       dealerApplications: 'dealers',
       dealerClaims: 'dealerClaims',
+      dealerClaimsToPay: 'dealerClaims',
       payouts: 'payouts',
+      payoutsToPay: 'payouts',
       externalPoints: 'externalClaims',
     };
     setTab(target[k]);
@@ -507,7 +525,7 @@ export default function AdminPage() {
   const isAdmin = role === 'ADMIN';
   const allowed: ReadonlySet<Tab> = isAdmin ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
   const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.k)) })).filter((g) => g.items.length > 0);
-  const active: Tab = allowed.has(tab) ? tab : (groups[0]?.items[0]?.k ?? DEFAULT_TAB);
+  const active: Tab = allowed.has(tab) ? tab : firstAllowedTab(allowed);
   const canReviewReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH');
   const canReceiveReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO');
   const returnsDefault: ReturnsFilter = canReceiveReturns && !canReviewReturns ? 'TO_RECEIVE' : 'REQUESTED';
@@ -539,7 +557,7 @@ export default function AdminPage() {
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
-          {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} />}
+          {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} isAdmin={isAdmin} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}
           {active === 'orders' && (
@@ -631,7 +649,7 @@ function DealersTab() {
       </div>
       <QueueMoreNotice pending={pending} view={view} noun="hồ sơ" />
       <div className="mt-3 space-y-3">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách hồ sơ đại lý.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách hồ sơ đại lý." onRetry={() => void q.refetch()} />}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách hồ sơ…</p>}
         {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
         {q.data && view.items.length === 0 && <Empty>Không có hồ sơ.</Empty>}
@@ -671,14 +689,60 @@ function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean
   );
 }
 
+/** Lỗi tải danh sách kèm nút thử lại: mất mạng vài giây thì không phải F5 cả trang và mất bộ lọc đang chọn. */
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <p className="text-sm text-danger-fg">{message}</p>
+      <button type="button" onClick={onRetry} className={BTN_SECONDARY}>
+        Thử lại
+      </button>
+    </div>
+  );
+}
+
+/** Xoá/gỡ không hoàn tác: hỏi trước, chỉ chạy khi admin đồng ý (cùng cách với xoá đợt flash sale). */
+function useDeleteConfirm() {
+  const { confirm, dialog } = useConfirm();
+  const askDelete = async (opts: { title: string; message: string; confirmLabel: string }, run: () => void) => {
+    if (await confirm({ cancelLabel: 'Giữ lại', tone: 'danger', ...opts })) run();
+  };
+  return { askDelete, dialog };
+}
+
 function DealerRow({ app: a }: { app: DealerApp }) {
   const qc = useQueryClient();
   const [tierId, setTierId] = useState('');
+  const { ask, dialog } = useConfirm();
   const review = useMutation({
-    mutationFn: (approve: boolean) =>
-      reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : 'Không đạt yêu cầu'),
+    mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
+      reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : reason),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-dealers'] }),
   });
+  // Từ chối là trạng thái cuối và lý do được gửi nguyên văn cho người nộp, nên bắt admin tự viết.
+  // API báo lỗi (vd hồ sơ vừa bị admin khác xử lý) thì mở lại hộp với lý do đã gõ, không bắt gõ lại.
+  const askReject = async () => {
+    let initial = '';
+    let error: string | undefined;
+    for (;;) {
+      const reason = await ask({
+        title: 'Từ chối hồ sơ đại lý',
+        message: `Từ chối hồ sơ "${a.businessName}"? Không mở lại được: người nộp phải nộp lại từ đầu và sẽ nhận lý do bạn nhập dưới đây.`,
+        confirmLabel: 'Từ chối hồ sơ',
+        cancelLabel: 'Giữ lại',
+        tone: 'danger',
+        input: { label: 'Lý do từ chối (gửi cho người nộp)', placeholder: 'Ví dụ: ảnh CCCD mặt sau bị mờ, nộp lại giúp', required: true, initial, error },
+      });
+      if (!reason) return;
+      try {
+        await review.mutateAsync({ approve: false, reason });
+        return;
+      } catch (e) {
+        initial = reason;
+        error = e instanceof Error ? e.message : 'Không từ chối được, thử lại.';
+      }
+    }
+  };
 
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
@@ -698,17 +762,18 @@ function DealerRow({ app: a }: { app: DealerApp }) {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />
           <button
-            onClick={() => review.mutate(true)}
+            onClick={() => review.mutate({ approve: true })}
             disabled={review.isPending || !tierId.trim()}
             title={!tierId.trim() ? 'Cần chọn bậc đại lý để duyệt' : undefined}
             className={BTN_PRIMARY}
           >
             Duyệt
           </button>
-          <button onClick={() => review.mutate(false)} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
+          <button onClick={askReject} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
         </div>
       )}
       {review.isError && <p className="mt-1 text-xs text-danger-fg">{(review.error as Error).message}</p>}
+      {dialog}
     </div>
   );
 }
@@ -724,7 +789,7 @@ function OrderStatusBadge({ status }: { status: string }) {
   else if (status === 'CANCELLED') color = 'bg-danger-bg text-danger-fg';
   else if (status === 'RETURNED') color = 'bg-promo-bg text-promo-fg';
 
-  return <span className={`inline-block rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>;
+  return <span className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-xs ${color}`}>{label}</span>;
 }
 
 function DashboardTab({
@@ -751,7 +816,7 @@ function DashboardTab({
   });
 
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải số liệu tổng quan…</p>;
-  if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được số liệu tổng quan KPI.</p>;
+  if (q.isError || !q.data) return <LoadError message="Không tải được các chỉ số tổng quan." onRetry={() => void q.refetch()} />;
 
   const stats = q.data;
 
@@ -845,7 +910,7 @@ function DashboardTab({
             <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} đang giao</span>
             <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} đã giao</span>
             {stats.cancelledOrders > 0 && (
-              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã hủy</span>
+              <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} đã huỷ</span>
             )}
             {(stats.returnedOrders ?? 0) > 0 && (
               <span className="rounded bg-promo-bg px-1.5 py-0.5 font-medium text-promo-fg">{stats.returnedOrders} đã trả hàng</span>
@@ -1095,7 +1160,7 @@ function OrdersTab({
               }}
               className={`${BTN_SECONDARY} whitespace-nowrap`}
             >
-              Xóa lọc
+              Xoá lọc
             </button>
           )}
         </form>
@@ -1113,7 +1178,7 @@ function OrdersTab({
             <option value="PACKED">Đã đóng gói</option>
             <option value="SHIPPING">Đang vận chuyển</option>
             <option value="DELIVERED">Đã giao hàng</option>
-            <option value="CANCELLED">Đã hủy</option>
+            <option value="CANCELLED">Đã huỷ</option>
             <option value="RETURNED">Đã trả hàng</option>
           </select>
 
@@ -1287,9 +1352,10 @@ function OrdersTab({
 
       {/* Orders Table */}
       {q.isError && (
-        <p className="text-sm text-danger-fg">
-          Không tải được danh sách đơn hàng{q.error instanceof Error ? `: ${q.error.message}` : '.'}
-        </p>
+        <LoadError
+          message={`Không tải được danh sách đơn hàng${q.error instanceof Error ? `: ${q.error.message}` : '.'}`}
+          onRetry={() => void q.refetch()}
+        />
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách đơn hàng…</p>}
 
@@ -1302,9 +1368,9 @@ function OrdersTab({
                 <th className="px-3 py-2.5 font-medium">Khách hàng</th>
                 <th className="hidden px-3 py-2.5 font-medium md:table-cell">Thanh toán</th>
                 <th className="px-3 py-2.5 font-medium">Tổng tiền</th>
-                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Trạng thái</th>
+                <th className="hidden whitespace-nowrap px-3 py-2.5 font-medium md:table-cell">Trạng thái</th>
                 <th className="hidden px-3 py-2.5 font-medium md:table-cell">Ngày đặt</th>
-                <th className="hidden px-3 py-2.5 text-right font-medium md:table-cell">Chi tiết / Cập nhật</th>
+                <th className="hidden whitespace-nowrap px-3 py-2.5 text-right font-medium md:table-cell">Chi tiết / Cập nhật</th>
               </tr>
             </thead>
             <tbody>
@@ -1357,7 +1423,7 @@ function OrdersTab({
                             {o.paymentStatus && <PaymentStatusShort order={o} />}
                           </div>
                         </td>
-                        <td className="px-3 py-3">
+                        <td className="min-w-[9rem] px-3 py-3">
                           <div className="font-medium text-stone-900">{o.user?.fullName ?? 'Khách lẻ'}</div>
                           {o.user?.phone && <div className="text-xs text-stone-500">{o.user.phone}</div>}
                           <OrderRecipientLine order={o} />
@@ -1388,7 +1454,7 @@ function OrdersTab({
                               e.stopPropagation();
                               setExpandedId(isExpanded ? null : (o.id || o.code));
                             }}
-                            className={`${BTN_SMALL} inline-flex items-center gap-1`}
+                            className={`${BTN_SMALL} inline-flex items-center gap-1 whitespace-nowrap`}
                           >
                             {isExpanded && !narrow ? 'Đóng' : 'Xem & Sửa'}
                             {isExpanded && !narrow ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
@@ -1610,7 +1676,7 @@ function ReturnsTab({
       <QueueMoreNotice pending={pending} view={view} noun="yêu cầu" />
 
       <div className="mt-3 space-y-3">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách yêu cầu đổi/trả.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => void q.refetch()} />}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách yêu cầu…</p>}
         {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
         {q.data && view.items.length === 0 && <Empty>Không có yêu cầu đổi/trả nào.</Empty>}
@@ -1680,7 +1746,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
       message: `Khoá ${label}${u.phone ? ` (${u.phone})` : ''}? Người này bị đăng xuất khỏi Mini App và web ngay, không đăng nhập lại được cho tới khi mở khoá.`,
       confirmLabel: 'Khoá tài khoản',
       tone: 'danger',
-      input: { label: 'Lý do khoá', placeholder: 'VD: farm voucher nhiều tài khoản, bom hàng COD', required: true, maxLength: 500 },
+      input: { label: 'Lý do khoá', placeholder: 'VD: săn mã giảm giá nhiều tài khoản, bom hàng COD', required: true, maxLength: 500 },
     });
     if (reason === null) return;
     if (reason.length < 3) {
@@ -1750,7 +1816,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
             }}
             className={`${BTN_SECONDARY} whitespace-nowrap`}
           >
-            Xóa lọc
+            Xoá lọc
           </button>
         )}
       </form>
@@ -1758,7 +1824,7 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
         <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
       )}
       {q.isError ? (
-        <p className="text-sm text-danger-fg">Không tải được danh sách người dùng.</p>
+        <LoadError message="Không tải được danh sách người dùng." onRetry={() => void q.refetch()} />
       ) : (
         <>
           <UsersList
@@ -1811,63 +1877,136 @@ function UsersTab({ isAdmin = true }: { isAdmin?: boolean }) {
   );
 }
 
+const roleLabel = (r: string) => USER_ROLE_LABELS[r] ?? r;
+
+/**
+ * Hậu quả đổi vai trò, bám admin.service: nhóm việc chỉ giữ khi đích là STAFF; cờ đối tác chỉ tắt khi đích là CUSTOMER/AFFILIATE
+ * (kể cả nhân viên/admin đang sở hữu gian hàng đối tác). `current` là vai trò hiện tại tra được theo SĐT; chưa tra được thì nêu dạng điều kiện.
+ */
+function roleChangeConsequences(target: UserRole, current?: string | null): string {
+  const lines: string[] = [];
+  if (current) lines.push(`Hiện là ${roleLabel(current)} → đổi sang ${roleLabel(target)}.`);
+  if (target !== 'STAFF' && (!current || current === 'STAFF')) {
+    lines.push(`${current ? 'Tài khoản này sẽ mất' : 'Nếu tài khoản đang là nhân viên: mất'} toàn bộ nhóm việc, đặt lại nhân viên không trả nhóm việc cũ.`);
+  } else if (target === 'STAFF' && !current) {
+    lines.push('Nếu tài khoản đã là nhân viên: giữ nguyên nhóm việc hiện có.');
+  }
+  if (target !== 'ADMIN' && (!current || current === 'ADMIN')) {
+    lines.push(`${current ? 'Tài khoản này sẽ mất' : 'Nếu tài khoản đang là Quản trị: mất'} toàn quyền quản trị.`);
+  }
+  if (target === 'CUSTOMER' || target === 'AFFILIATE') {
+    lines.push(
+      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV.',
+    );
+  } else if (target === 'DEALER' && (!current || current === 'DEALER')) {
+    lines.push(`${current ? 'Tài khoản đã là đại lý' : 'Nếu tài khoản đã là đại lý'}: chỉ đổi bậc, gian hàng đối tác giữ nguyên.`);
+  }
+  // API không chặn đăng ký lại, nên nói rõ để admin không tưởng hạ về khách là đã cấm CTV.
+  if (target === 'CUSTOMER' && current === 'AFFILIATE') lines.push('Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.');
+  else if (target === 'CUSTOMER' && !current) lines.push('Nếu tài khoản đang là CTV: hạ vai trò chỉ tạm ngừng, người này có thể tự đăng ký CTV lại.');
+  return lines.join('\n');
+}
+
+/** Cùng quy tắc với searchPhone của API (admin-order-filter.ts), vì server dùng nó để chọn người cần đổi vai trò: 912345678 và 840912345678 đều về 0912345678. */
+const phoneKey = (v: string) =>
+  v
+    .replace(/\D/g, '')
+    .replace(/^840?(\d{9})$/, '0$1')
+    .replace(/^([1-9]\d{8})$/, '0$1');
+
+/** Vai trò hiện tại của SĐT (khớp đúng số, không khớp một phần); không tra được thì null để hộp xác nhận nêu hậu quả dạng điều kiện. */
+async function lookupRoleByPhone(phone: string): Promise<string | null> {
+  try {
+    const key = phoneKey(phone);
+    const res = await listUsers(1, key);
+    return res.data.find((u) => u.phone && phoneKey(u.phone) === key)?.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
 function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [phone, setPhone] = useState('');
-  // Mặc định vai trò ít quyền nhất (KHÔNG phải ADMIN) — tránh lỡ tay cấp full-quyền cho
-  // SĐT chưa kiểm kỹ khi form chỉ dùng để tra cứu/đổi vai trò khác.
-  const [role, setRole] = useState<UserRole>('CUSTOMER');
+  // Không đặt vai trò mặc định: bất kỳ giá trị nào cũng là một lần đổi vai trò, và CUSTOMER còn gỡ
+  // nhóm việc của nhân viên, tắt cờ đối tác của đại lý. Admin phải chọn có chủ đích.
+  const [role, setRole] = useState<UserRole | ''>('');
   // DEALER bắt buộc kèm bậc (BE từ chối nếu thiếu — C-008): đại lý không bậc đặt CREDIT không bị chặn hạn mức.
   const [tierId, setTierId] = useState('');
   const needsTier = role === 'DEALER';
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [checking, setChecking] = useState(false);
   const { confirm, dialog } = useConfirm();
   const mut = useMutation({
-    mutationFn: () => setUserRole(phone.trim(), role, needsTier ? tierId : undefined),
+    mutationFn: (v: { phone: string; role: UserRole; tierId?: string }) => setUserRole(v.phone, v.role, v.tierId),
     onSuccess: (r) => {
-      setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${r.previousRole} → ${r.role}` });
+      setMsg({ ok: true, text: `Đã đổi ${r.phone ?? r.id}: ${roleLabel(r.previousRole)} → ${roleLabel(r.role)}` });
       setPhone('');
+      setRole('');
+      setTierId('');
       onDone();
     },
     onError: (e: unknown) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi cấp quyền' }),
   });
   const submit = async () => {
     setMsg(null);
-    if (role === 'ADMIN') {
-      const ok = await confirm({
-        title: 'Cấp quyền ADMIN',
-        message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${phone.trim()}?`,
-        confirmLabel: 'Cấp quyền ADMIN',
-        tone: 'danger',
-      });
-      if (!ok) return;
-    }
-    mut.mutate();
+    if (!role) return;
+    // Chụp giá trị lúc bấm: hộp xác nhận và lệnh đổi phải nói về cùng một SĐT dù ô nhập có bị sửa giữa chừng.
+    const target = { phone: phone.trim(), role, tierId: needsTier ? tierId : undefined };
+    setChecking(true);
+    const current = await lookupRoleByPhone(target.phone);
+    setChecking(false);
+    const ok = await confirm(
+      role === 'ADMIN'
+        ? {
+            title: 'Cấp quyền ADMIN',
+            message: `Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT ${target.phone}?`,
+            confirmLabel: 'Cấp quyền ADMIN',
+            tone: 'danger',
+          }
+        : {
+            title: 'Đổi vai trò',
+            message: `Đổi vai trò của SĐT ${target.phone} sang "${roleLabel(target.role)}"?\n${roleChangeConsequences(target.role, current)}`,
+            confirmLabel: 'Đổi vai trò',
+            tone: 'danger',
+          },
+    );
+    if (!ok) return;
+    mut.mutate(target);
   };
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Cấp / đổi vai trò theo SĐT</h3>
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
-          placeholder="SĐT (user đã mở Mini App)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-        />
-        <select
-          aria-label="Vai trò cần cấp"
-          className={`${FIELD_CLASS} ${TOUCH_H}`}
-          value={role}
-          onChange={(e) => setRole(e.target.value as UserRole)}
-        >
-          {ROLES.map((r) => (
-            <option key={r} value={r}>{USER_ROLE_LABELS[r] ?? r}</option>
-          ))}
-        </select>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="w-full sm:w-auto">
+          <Field label="SĐT cần cấp quyền (đã mở Mini App)">
+            <input
+              className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
+              placeholder="SĐT, vd 0912345678"
+              value={phone}
+              disabled={checking}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Vai trò cần cấp">
+          <select
+            aria-label="Vai trò cần cấp"
+            className={`${FIELD_CLASS} ${TOUCH_H}`}
+            value={role}
+            disabled={checking}
+            onChange={(e) => setRole(e.target.value as UserRole | '')}
+          >
+            <option value="">Chọn vai trò…</option>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>{USER_ROLE_LABELS[r] ?? r}</option>
+            ))}
+          </select>
+        </Field>
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
           className={BTN_PRIMARY}
-          disabled={!phone.trim() || (needsTier && !tierId.trim()) || mut.isPending}
+          disabled={!phone.trim() || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
@@ -1882,10 +2021,30 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** Bỏ dấu, hoa/thường để ô tìm khớp "phi giao" với "Phí giao". `đ`/`Đ` không tách dấu được nên đổi tay, trước khi hạ chữ thường. */
+const foldSearch = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
+const CONFIG_OTHER_GROUP = 'Khác';
+
+/** Nhóm theo tiền tố trước dấu chấm đầu tiên (`affiliate.`, `loyalty.`…); khoá không có tiền tố gom vào "Khác", đứng cuối. */
+function groupConfigRows(rows: ConfigRow[]): { name: string; rows: ConfigRow[] }[] {
+  const byName = new Map<string, ConfigRow[]>();
+  for (const r of rows) {
+    const name = r.key.includes('.') ? r.key.slice(0, r.key.indexOf('.')) : CONFIG_OTHER_GROUP;
+    byName.set(name, [...(byName.get(name) ?? []), r]);
+  }
+  const groups = [...byName].map(([name, list]) => ({ name, rows: list }));
+  return [...groups.filter((g) => g.name !== CONFIG_OTHER_GROUP), ...groups.filter((g) => g.name === CONFIG_OTHER_GROUP)];
+}
+
 function ConfigTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
-  if (q.isError) return <p className="text-sm text-danger-fg">Không tải được danh sách cấu hình.</p>;
+  const [search, setSearch] = useState('');
+  const needle = foldSearch(search.trim());
+  const matches = (c: ConfigRow) => !needle || foldSearch(`${c.key} ${c.description ?? ''}`).includes(needle);
+  const groups = groupConfigRows(q.data ?? []);
+  const shownCount = (q.data ?? []).filter(matches).length;
+  if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => void q.refetch()} />;
   return (
     <div className="space-y-4">
       <GomdonConfigCard rows={q.data} />
@@ -1895,10 +2054,29 @@ function ConfigTab() {
         <p className="mt-0.5 text-xs text-stone-500">
           Giá trị có tên chứa password/secret/token luôn hiện dạng ••••••••; giữ nguyên chuỗi đó khi lưu thì giá trị thật không đổi.
         </p>
-        <div className="mt-2 space-y-2">
-          {q.data?.map((c) => (
-            <ConfigItem key={`${c.key}:${JSON.stringify(c.value)}`} row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />
+        <input
+          type="search"
+          aria-label="Tìm khoá cấu hình"
+          placeholder="Tìm theo khoá hoặc mô tả, vd affiliate"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className={`${INPUT_CLASS} ${TOUCH_H} mt-2 max-w-md`}
+        />
+        <div className="mt-3 space-y-4">
+          {groups.map((g) => (
+            <section key={g.name} hidden={!g.rows.some(matches)} className="space-y-2">
+              <h3 className="font-display text-xs font-semibold uppercase tracking-wide text-stone-600">
+                {g.name} ({g.rows.filter(matches).length})
+              </h3>
+              {g.rows.map((c) => (
+                // Ẩn bằng hidden thay vì gỡ khỏi cây: JSON đang sửa dở nằm trong state của ConfigItem, gỡ ra là mất.
+                <div key={`${c.key}:${JSON.stringify(c.value)}`} hidden={!matches(c)}>
+                  <ConfigItem row={c} onSaved={() => qc.invalidateQueries({ queryKey: ['admin-config'] })} />
+                </div>
+              ))}
+            </section>
           ))}
+          {needle && shownCount === 0 && <p className="text-sm text-stone-500">Không có khoá nào khớp &quot;{search.trim()}&quot;.</p>}
         </div>
       </div>
     </div>
@@ -1949,7 +2127,7 @@ function CouponsTab() {
         scope: f.scope as 'PUBLIC',
       }),
     onSuccess: () => {
-      setMsg('Đã tạo voucher!');
+      setMsg('Đã tạo mã giảm giá!');
       void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
     },
     onError: (e) => setMsg(e instanceof Error ? e.message : 'Lỗi'),
@@ -1958,38 +2136,68 @@ function CouponsTab() {
   return (
     <div className="space-y-6">
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
-      <input
-        placeholder="Mã (vd WELCOME30)"
-        aria-label="Mã voucher"
-        value={f.code}
-        // Khách luôn nhập mã dạng HOA không khoảng trắng (Mini App/web tự đổi): lưu đúng dạng đó.
-        onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
-        className={field}
-      />
-      <div className="flex gap-2">
-        <select aria-label="Loại voucher" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
-          <option value="PERCENT">% giảm</option>
-          <option value="AMOUNT">Giảm tiền</option>
-          <option value="FREESHIP">Freeship</option>
-        </select>
-        <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className={`${FIELD_CLASS} ${TOUCH_H} w-28`} />
+      <Field label="Mã giảm giá">
+        <input
+          placeholder="Mã (vd WELCOME30)"
+          aria-label="Mã giảm giá"
+          value={f.code}
+          // Khách luôn nhập mã dạng HOA không khoảng trắng (Mini App/web tự đổi): lưu đúng dạng đó.
+          onChange={(e) => setF({ ...f, code: e.target.value.toUpperCase().replace(/\s+/g, '') })}
+          className={field}
+        />
+      </Field>
+      <div className="flex items-end gap-2">
+        <Field label="Loại mã giảm giá">
+          <select aria-label="Loại mã giảm giá" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={`${FIELD_CLASS} ${TOUCH_H}`}>
+            <option value="PERCENT">% giảm</option>
+            <option value="AMOUNT">Giảm tiền</option>
+            <option value="FREESHIP">Freeship</option>
+          </select>
+        </Field>
+        <Field label="Giá trị">
+          <input type="number" placeholder="Giá trị" value={f.value} onChange={(e) => setF({ ...f, value: Number(e.target.value) })} className={`${FIELD_CLASS} ${TOUCH_H} w-28`} />
+        </Field>
       </div>
       <div className="flex gap-2">
-        <input type="number" placeholder="Đơn tối thiểu (đ)" value={f.minOrder} onChange={(e) => setF({ ...f, minOrder: e.target.value })} className={field} />
-        <input type="number" placeholder="Giảm tối đa (đ)" value={f.maxDiscount} onChange={(e) => setF({ ...f, maxDiscount: e.target.value })} className={field} />
+        <div className="min-w-0 flex-1">
+          <Field label="Đơn tối thiểu (đ)">
+            <input type="number" placeholder="Đơn tối thiểu (đ)" value={f.minOrder} onChange={(e) => setF({ ...f, minOrder: e.target.value })} className={field} />
+          </Field>
+        </div>
+        <div className="min-w-0 flex-1">
+          <Field label="Giảm tối đa (đ)">
+            <input type="number" placeholder="Giảm tối đa (đ)" value={f.maxDiscount} onChange={(e) => setF({ ...f, maxDiscount: e.target.value })} className={field} />
+          </Field>
+        </div>
       </div>
       <div className="flex gap-2">
-        <input type="number" placeholder="Tổng lượt dùng" value={f.usageLimit} onChange={(e) => setF({ ...f, usageLimit: e.target.value })} className={field} />
-        <input type="number" placeholder="Lượt / khách" value={f.perUserLimit} onChange={(e) => setF({ ...f, perUserLimit: e.target.value })} className={field} />
+        <div className="min-w-0 flex-1">
+          <Field label="Tổng lượt dùng">
+            <input type="number" placeholder="Tổng lượt dùng" value={f.usageLimit} onChange={(e) => setF({ ...f, usageLimit: e.target.value })} className={field} />
+          </Field>
+        </div>
+        <div className="min-w-0 flex-1">
+          <Field label="Lượt / khách">
+            <input type="number" placeholder="Lượt / khách" value={f.perUserLimit} onChange={(e) => setF({ ...f, perUserLimit: e.target.value })} className={field} />
+          </Field>
+        </div>
       </div>
       <p className="text-xs text-stone-500">
         Bỏ trống = không giới hạn. Mã % nên đặt &quot;Giảm tối đa&quot; để đơn lớn không bị giảm quá tay.
       </p>
       <div className="flex gap-2">
-        <input type="date" aria-label="Voucher bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
-        <input type="date" aria-label="Voucher hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+        <div className="min-w-0 flex-1">
+          <Field label="Bắt đầu từ ngày">
+            <input type="date" aria-label="Mã giảm giá bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
+          </Field>
+        </div>
+        <div className="min-w-0 flex-1">
+          <Field label="Hết hạn ngày">
+            <input type="date" aria-label="Mã giảm giá hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
+          </Field>
+        </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo voucher</button>
+      <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     <ClaimCampaignPanel />
@@ -2010,19 +2218,28 @@ function BrandsTab() {
     mutationFn: () => createBrand({ name: form.name.trim(), tagline: form.tagline.trim() || undefined }),
     onSuccess: () => { setForm({ name: '', tagline: '' }); void qc.invalidateQueries({ queryKey: ['admin-brands'] }); },
   });
-  const grow = `${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-48`;
+  const cell = 'grow basis-full sm:basis-48';
+  const field = `${INPUT_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-2 rounded-card border border-stone-200 bg-stone-0 p-3">
-        <input placeholder="Tên nhãn (vd Dừa Bến Tre)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={grow} />
-        <input placeholder="Tagline" value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={grow} />
+        <div className={cell}>
+          <Field label="Tên nhãn">
+            <input placeholder="Tên nhãn (vd Dừa Bến Tre)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
+          </Field>
+        </div>
+        <div className={cell}>
+          <Field label="Tagline (câu giới thiệu ngắn)">
+            <input placeholder="Tagline" value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={field} />
+          </Field>
+        </div>
         <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className={BTN_PRIMARY}>Tạo nhãn</button>
       </div>
       {create.isError && <p className="text-sm text-danger-fg">{(create.error as Error).message}</p>}
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách nhãn hàng.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách nhãn hàng." onRetry={() => void q.refetch()} />}
         {q.data?.map((b) => <BrandRow key={b.id} brand={b} />)}
         {q.data?.length === 0 && <Empty>Chưa có nhãn hàng. Tạo nhãn đầu tiên ở trên.</Empty>}
       </div>
@@ -2033,6 +2250,7 @@ function BrandsTab() {
 }
 
 function BrandRow({ brand }: { brand: AdminBrand }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
@@ -2080,7 +2298,8 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
     onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
     onError: onRowError,
   });
-  const grow = `${FIELD_CLASS} ${TOUCH_H} grow basis-full sm:basis-40`;
+  const cell = 'grow basis-full sm:basis-40';
+  const grow = `${INPUT_CLASS} ${TOUCH_H}`;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
@@ -2132,7 +2351,14 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               {products.data?.map((p) => (
                 <div key={p.id} className={LIST_ITEM_CLASS}>
                   <span className="min-w-0 truncate">{p.name}</span>
-                  <button onClick={() => detach.mutate(p.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Gỡ</button>
+                  <button
+                    onClick={() => askDelete({
+                      title: 'Gỡ sản phẩm khỏi nhãn',
+                      message: `Gỡ "${p.name}" khỏi nhãn ${brand.name}? Sản phẩm không còn thuộc nhãn này cho tới khi gán lại.`,
+                      confirmLabel: 'Gỡ sản phẩm',
+                    }, () => detach.mutate(p.id))}
+                    className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+                  >Gỡ</button>
                 </div>
               ))}
               {products.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có SP. Bấm “Gán SP theo tên nhãn” để liên kết catalog.</p>}
@@ -2145,21 +2371,41 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               {promos.data?.map((pm) => (
                 <div key={pm.id} className={LIST_ITEM_CLASS}>
                   <span className="min-w-0 break-words">{pm.title}{pm.subtitle ? ` · ${pm.subtitle}` : ''}</span>
-                  <button onClick={() => delPromo.mutate(pm.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
+                  <button
+                    onClick={() => askDelete({
+                      title: 'Xoá khuyến mãi',
+                      message: `Xoá khuyến mãi "${pm.title}" của nhãn ${brand.name}? Không hoàn tác được.`,
+                      confirmLabel: 'Xoá khuyến mãi',
+                    }, () => delPromo.mutate(pm.id))}
+                    className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+                  >Xoá</button>
                 </div>
               ))}
             </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className={grow} />
-              <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className={grow} />
-              <input type="date" aria-label="Khuyến mãi bắt đầu từ ngày" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className={field} />
-              <input type="date" aria-label="Khuyến mãi kết thúc ngày" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className={field} />
+            <div className="mt-2 flex flex-wrap items-end gap-2">
+              <div className={cell}>
+                <Field label="Tiêu đề khuyến mãi">
+                  <input placeholder="Tiêu đề (MUA 2 TẶNG 1)" value={promo.title} onChange={(e) => setPromo({ ...promo, title: e.target.value })} className={grow} />
+                </Field>
+              </div>
+              <div className={cell}>
+                <Field label="Mô tả">
+                  <input placeholder="Mô tả" value={promo.subtitle} onChange={(e) => setPromo({ ...promo, subtitle: e.target.value })} className={grow} />
+                </Field>
+              </div>
+              <Field label="Bắt đầu từ ngày">
+                <input type="date" aria-label="Khuyến mãi bắt đầu từ ngày" value={promo.startAt} onChange={(e) => setPromo({ ...promo, startAt: e.target.value })} className={field} />
+              </Field>
+              <Field label="Kết thúc ngày">
+                <input type="date" aria-label="Khuyến mãi kết thúc ngày" value={promo.endAt} onChange={(e) => setPromo({ ...promo, endAt: e.target.value })} className={field} />
+              </Field>
               <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim()} className={BTN_PRIMARY}>Thêm KM</button>
             </div>
             {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{(addPromo.error as Error).message}</p>}
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }
@@ -2196,12 +2442,24 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
     <div className="rounded-card border border-stone-200 bg-stone-50 p-3">
       <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin nhãn</div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <input placeholder="Logo URL" value={f.logoUrl} onChange={(e) => setF({ ...f, logoUrl: e.target.value })} className={input} />
-        <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={input} />
-        <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className={input} />
-        <input placeholder="Nguồn gốc (vd Bến Tre)" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className={input} />
+        <Field label="Logo (URL)">
+          <input placeholder="Logo URL" value={f.logoUrl} onChange={(e) => setF({ ...f, logoUrl: e.target.value })} className={input} />
+        </Field>
+        <Field label="Ảnh bìa (URL)">
+          <input placeholder="Ảnh bìa (URL)" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={input} />
+        </Field>
+        <Field label="Tagline">
+          <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className={input} />
+        </Field>
+        <Field label="Nguồn gốc">
+          <input placeholder="Nguồn gốc (vd Bến Tre)" value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} className={input} />
+        </Field>
       </div>
-      <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} className={`mt-2 ${INPUT_CLASS}`} />
+      <div className="mt-2">
+        <Field label="Câu chuyện thương hiệu">
+          <textarea placeholder="Câu chuyện thương hiệu" value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} rows={3} className={INPUT_CLASS} />
+        </Field>
+      </div>
 
       <div className="mt-3 text-sm font-medium text-stone-900">
         Chứng nhận (chỉ cái <Check className="inline h-3.5 w-3.5 align-text-bottom" aria-hidden /> đã xác minh mới hiện cho khách)
@@ -2209,9 +2467,9 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
       <div className="space-y-1">
         {certs.map((c, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
-            <input placeholder="Mã (ORG)" value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
-            <input placeholder="Nhãn (Hữu cơ USDA)" value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
-            <input placeholder="Proof URL" value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
+            <input placeholder="Mã (ORG)" aria-label={`Mã chứng nhận ${i + 1}`} value={c.code} onChange={(e) => setCert(i, { code: e.target.value })} className={`${field} w-24`} />
+            <input placeholder="Nhãn (Hữu cơ USDA)" aria-label={`Tên chứng nhận ${i + 1}`} value={c.label} onChange={(e) => setCert(i, { label: e.target.value })} className={`${field} grow basis-40`} />
+            <input placeholder="Proof URL" aria-label={`Link bằng chứng chứng nhận ${i + 1}`} value={c.proofUrl ?? ''} onChange={(e) => setCert(i, { proofUrl: e.target.value })} className={`${field} w-40`} />
             <label className="inline-flex min-h-[44px] items-center gap-1.5 text-stone-700 sm:min-h-0">
               <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={c.verified ?? false} onChange={(e) => setCert(i, { verified: e.target.checked })} />
               <Check className="h-4 w-4" aria-hidden /> verified
@@ -2231,7 +2489,10 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
   );
 }
 
+const REWARD_TYPE_LABELS: Record<string, string> = { TOUR: 'Tour', GIFT: 'Quà', OTHER: 'Khác' };
+
 function DealerRewardsSection() {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-dealer-rewards'], queryFn: listDealerRewards });
   const [f, setF] = useState({ type: 'TOUR', title: '', description: '', threshold: 50000000, period: 'QUARTER' });
@@ -2252,31 +2513,49 @@ function DealerRewardsSection() {
     <div className={CARD_CLASS}>
       <div className="mb-2 flex items-center gap-1.5 font-display font-medium text-stone-900"><Store className="h-4 w-4 text-forest-700" aria-hidden />Chương trình đại lý (thưởng doanh số)</div>
       <div className="space-y-1">
-        {q.isError && <p className="text-xs text-danger-fg">Không tải được danh sách chương trình.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách chương trình." onRetry={() => void q.refetch()} />}
         {q.data?.map((d) => (
           <div key={d.id} className={LIST_ITEM_CLASS}>
-            <span className="min-w-0 break-words">[{d.type}] {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
-            <button onClick={() => del.mutate(d.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
+            <span className="min-w-0 break-words">{REWARD_TYPE_LABELS[d.type] ?? d.type} · {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
+            <button
+              onClick={() => askDelete({
+                title: 'Xoá chương trình thưởng đại lý',
+                message: `Xoá chương trình "${d.title}"? Các yêu cầu nhận thưởng đã gửi trước đó sẽ mất liên kết với chương trình này, không hoàn tác được.`,
+                confirmLabel: 'Xoá chương trình',
+              }, () => del.mutate(d.id))}
+              className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+            >Xoá</button>
           </div>
         ))}
         {q.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có chương trình.</p>}
         {del.isError && <p className="text-xs text-danger-fg">{(del.error as Error).message}</p>}
       </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <select aria-label="Loại phần thưởng" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={field}>
-          <option value="TOUR">Tour</option>
-          <option value="GIFT">Quà</option>
-          <option value="OTHER">Khác</option>
-        </select>
-        <select aria-label="Kỳ tính doanh số" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className={field}>
-          <option value="QUARTER">Theo quý</option>
-          <option value="YEAR">Theo năm</option>
-        </select>
-        <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} grow basis-full sm:basis-48`} />
-        <input type="number" placeholder="Mốc doanh số" value={f.threshold} onChange={(e) => setF({ ...f, threshold: Number(e.target.value) })} className={`${field} w-36`} />
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <Field label="Loại phần thưởng">
+          <select aria-label="Loại phần thưởng" value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })} className={field}>
+            {Object.entries(REWARD_TYPE_LABELS).map(([v, label]) => (
+              <option key={v} value={v}>{label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Kỳ tính doanh số">
+          <select aria-label="Kỳ tính doanh số" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })} className={field}>
+            <option value="QUARTER">Theo quý</option>
+            <option value="YEAR">Theo năm</option>
+          </select>
+        </Field>
+        <div className="grow basis-full sm:basis-48">
+          <Field label="Tiêu đề chương trình">
+            <input placeholder="Tiêu đề (Tour Phú Quốc)" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-full`} />
+          </Field>
+        </div>
+        <Field label="Mốc doanh số (đ)">
+          <input type="number" placeholder="Mốc doanh số" value={f.threshold} onChange={(e) => setF({ ...f, threshold: Number(e.target.value) })} className={`${field} w-36`} />
+        </Field>
         <button onClick={() => create.mutate()} disabled={!f.title.trim()} className={BTN_PRIMARY}>Thêm</button>
       </div>
       {create.isError && <p className="mt-1 text-xs text-danger-fg">{(create.error as Error).message}</p>}
+      {dialog}
     </div>
   );
 }
@@ -2295,22 +2574,22 @@ function FlashSalesTab() {
       }),
     onSuccess: () => {
       setF({ title: '', startAt: '', endAt: '' });
-      setMsg({ ok: true, text: 'Đã tạo đợt flash sale!' });
+      setMsg({ ok: true, text: 'Đã tạo đợt giờ vàng!' });
       void qc.invalidateQueries({ queryKey: ['admin-flash-sales'] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt flash sale' }),
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi tạo đợt giờ vàng' }),
   });
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt Flash Sale</h2>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo đợt giờ vàng</h2>
         <div className="flex flex-wrap items-end gap-2">
           <div className="grow basis-full sm:basis-48">
             <Field label="Tên đợt">
               <input
-                placeholder="vd Flash Sale cuối tuần"
+                placeholder="vd Giờ vàng cuối tuần"
                 value={f.title}
                 onChange={(e) => setF({ ...f, title: e.target.value })}
                 className={`${field} w-full`}
@@ -2335,9 +2614,9 @@ function FlashSalesTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách flash sale.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
         {q.data?.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
-        {q.data?.length === 0 && <Empty>Chưa có đợt flash sale nào. Tạo đợt đầu tiên ở trên.</Empty>}
+        {q.data?.length === 0 && <Empty>Chưa có đợt giờ vàng nào. Tạo đợt đầu tiên ở trên.</Empty>}
       </div>
     </div>
   );
@@ -2374,9 +2653,23 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
     onSuccess: () => { setRowErr(null); refresh(); },
     onError: (e) => setRowErr(e instanceof Error ? e.message : 'Có lỗi xảy ra'),
   });
+  // Tắt đợt đang bật làm giá sale biến mất với khách ngay (kể cả đợt đang chạy), nên hỏi trước; bật lại thì chạy luôn.
+  const askToggleActive = async () => {
+    if (sale.isActive) {
+      const ok = await confirm({
+        title: 'Tắt đợt giờ vàng',
+        message: `Tắt "${sale.title}"? Giá giờ vàng biến mất với khách ngay; bật lại sau là được.`,
+        confirmLabel: 'Tắt đợt',
+        cancelLabel: 'Giữ nguyên',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
+    toggleActive.mutate();
+  };
   const askDeleteSale = async () => {
     const ok = await confirm({
-      title: 'Xoá đợt flash sale',
+      title: 'Xoá đợt giờ vàng',
       message: `Xoá "${sale.title}"? Mọi sản phẩm và lượt nhắc trong đợt sẽ bị xoá theo, không hoàn tác được.`,
       confirmLabel: 'Xoá đợt',
       cancelLabel: 'Giữ lại',
@@ -2444,7 +2737,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
           <button onClick={() => (editing ? setEditing(false) : startEdit())} className={BTN_SECONDARY}>
             Sửa đợt
           </button>
-          <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={BTN_SECONDARY}>
+          <button onClick={() => void askToggleActive()} disabled={toggleActive.isPending} className={BTN_SECONDARY}>
             {sale.isActive ? 'Tắt' : 'Bật'}
           </button>
           {notStarted && (
@@ -2500,7 +2793,20 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
               <span className="min-w-0 break-words">
                 {variationLabels.labelFor(it.variationId)} · {formatVnd(it.flashPrice)} · đã bán {it.soldCount}/{it.quota} · giới hạn {it.perUserLimit}/khách
               </span>
-              <button onClick={() => delItem.mutate(it.id)} className={`${BTN_LINK_DANGER} shrink-0 text-xs`}>Xoá</button>
+              <button
+                onClick={async () => {
+                  const label = variationLabels.labelFor(it.variationId);
+                  const ok = await confirm({
+                    title: 'Xoá sản phẩm khỏi đợt',
+                    message: `Xoá "${label}" khỏi đợt "${sale.title}"? Đã bán ${it.soldCount}/${it.quota}. Không hoàn tác được.`,
+                    confirmLabel: 'Xoá sản phẩm',
+                    cancelLabel: 'Giữ lại',
+                    tone: 'danger',
+                  });
+                  if (ok) delItem.mutate(it.id);
+                }}
+                className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+              >Xoá</button>
             </div>
           ))}
           {sale.items.length === 0 && <p className="text-xs text-stone-500">Chưa có sản phẩm nào trong đợt này.</p>}
@@ -2509,7 +2815,7 @@ function FlashSaleRow({ sale }: { sale: AdminFlashSale }) {
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <ProductPicker
             mode="variation"
-            label="Chọn biến thể sản phẩm cho đợt Flash Sale"
+            label="Chọn biến thể sản phẩm cho đợt giờ vàng"
             value={pickedVariation}
             onChange={(v) => {
               setPickedVariation(v);
@@ -2573,34 +2879,42 @@ function FaqTab() {
         <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Thêm câu hỏi thường gặp</h2>
         <p className="mb-2 text-xs text-stone-500">Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.</p>
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <input
-              placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className={`${field} w-56`}
-            />
-            <input
-              type="number"
-              placeholder="Thứ tự hiển thị"
-              value={form.sortOrder}
-              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-              className={`${field} w-32`}
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Nhóm">
+              <input
+                placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                className={`${field} w-56`}
+              />
+            </Field>
+            <Field label="Thứ tự hiển thị">
+              <input
+                type="number"
+                placeholder="Thứ tự hiển thị"
+                value={form.sortOrder}
+                onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+                className={`${field} w-32`}
+              />
+            </Field>
           </div>
-          <input
-            placeholder="Câu hỏi"
-            value={form.question}
-            onChange={(e) => setForm({ ...form, question: e.target.value })}
-            className={`${INPUT_CLASS} ${TOUCH_H}`}
-          />
-          <textarea
-            placeholder="Câu trả lời"
-            value={form.answer}
-            onChange={(e) => setForm({ ...form, answer: e.target.value })}
-            rows={3}
-            className={INPUT_CLASS}
-          />
+          <Field label="Câu hỏi">
+            <input
+              placeholder="Câu hỏi"
+              value={form.question}
+              onChange={(e) => setForm({ ...form, question: e.target.value })}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
+            />
+          </Field>
+          <Field label="Câu trả lời">
+            <textarea
+              placeholder="Câu trả lời"
+              value={form.answer}
+              onChange={(e) => setForm({ ...form, answer: e.target.value })}
+              rows={3}
+              className={INPUT_CLASS}
+            />
+          </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.question.trim() || !form.answer.trim() || create.isPending}
@@ -2613,7 +2927,7 @@ function FaqTab() {
       </div>
 
       <div className="space-y-2">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách câu hỏi thường gặp.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách câu hỏi thường gặp." onRetry={() => void q.refetch()} />}
         {q.data?.map((f) => <FaqRow key={f.id} faq={f} />)}
         {q.data?.length === 0 && <Empty>Chưa có câu hỏi thường gặp nào. Thêm câu đầu tiên ở trên.</Empty>}
       </div>
@@ -2622,6 +2936,7 @@ function FaqTab() {
 }
 
 function FaqRow({ faq }: { faq: AdminFaq }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-faqs'] });
@@ -2667,19 +2982,31 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {faq.isActive ? 'Ẩn' : 'Hiện'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
+          <button
+            onClick={() => askDelete({ title: 'Xoá câu hỏi thường gặp', message: `Xoá câu hỏi "${faq.question}"? Câu trả lời này cũng không còn được nạp cho AI tư vấn. Không hoàn tác được.`, confirmLabel: 'Xoá câu hỏi' }, () => del.mutate())}
+            disabled={del.isPending}
+            className={`${BTN_LINK_DANGER} text-xs`}
+          >Xoá</button>
         </div>
       </div>
       {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
 
       {open && (
         <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
-          <div className="flex flex-wrap gap-2">
-            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
-            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-32`} />
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Nhóm">
+              <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+            </Field>
+            <Field label="Thứ tự hiển thị">
+              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-32`} />
+            </Field>
           </div>
-          <input placeholder="Câu hỏi" value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
-          <textarea placeholder="Câu trả lời" value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className={INPUT_CLASS} />
+          <Field label="Câu hỏi">
+            <input placeholder="Câu hỏi" value={f.question} onChange={(e) => setF({ ...f, question: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+          </Field>
+          <Field label="Câu trả lời">
+            <textarea placeholder="Câu trả lời" value={f.answer} onChange={(e) => setF({ ...f, answer: e.target.value })} rows={3} className={INPUT_CLASS} />
+          </Field>
           <button
             onClick={() => save.mutate()}
             disabled={!f.question.trim() || !f.answer.trim() || save.isPending}
@@ -2690,6 +3017,7 @@ function FaqRow({ faq }: { faq: AdminFaq }) {
           {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
+      {dialog}
     </div>
   );
 }
@@ -2730,34 +3058,42 @@ function QuickReplyTab() {
           hoặc bật &quot;Lời chào tự động&quot; để gửi cho tin nhắn đầu tiên của khách.
         </p>
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <input
-              placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className={`${field} w-56`}
-            />
-            <input
-              placeholder="Tên nội bộ"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className={`${field} w-56`}
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Nhóm">
+              <input
+                placeholder="Nhóm (vd Vận chuyển, Đổi trả)"
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                className={`${field} w-56`}
+              />
+            </Field>
+            <Field label="Tên nội bộ">
+              <input
+                placeholder="Tên nội bộ"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className={`${field} w-56`}
+              />
+            </Field>
           </div>
-          <input
-            placeholder="Từ khoá kích hoạt, cách nhau bằng dấu phẩy (vd ship, phí vận chuyển)"
-            value={form.keywords}
-            onChange={(e) => setForm({ ...form, keywords: e.target.value })}
-            disabled={form.isGreeting}
-            className={`${INPUT_CLASS} ${TOUCH_H}`}
-          />
-          <textarea
-            placeholder="Nội dung tin trả lời"
-            value={form.content}
-            onChange={(e) => setForm({ ...form, content: e.target.value })}
-            rows={3}
-            className={INPUT_CLASS}
-          />
+          <Field label="Từ khoá kích hoạt">
+            <input
+              placeholder="Từ khoá kích hoạt, cách nhau bằng dấu phẩy (vd ship, phí vận chuyển)"
+              value={form.keywords}
+              onChange={(e) => setForm({ ...form, keywords: e.target.value })}
+              disabled={form.isGreeting}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
+            />
+          </Field>
+          <Field label="Nội dung tin trả lời">
+            <textarea
+              placeholder="Nội dung tin trả lời"
+              value={form.content}
+              onChange={(e) => setForm({ ...form, content: e.target.value })}
+              rows={3}
+              className={INPUT_CLASS}
+            />
+          </Field>
           <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
             <input
               type="checkbox"
@@ -2779,7 +3115,7 @@ function QuickReplyTab() {
       </div>
 
       <div className="space-y-2">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mẫu tin nhanh.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách mẫu tin nhanh." onRetry={() => void q.refetch()} />}
         {q.data?.map((r) => <QuickReplyRow key={r.id} item={r} />)}
         {q.data?.length === 0 && <Empty>Chưa có mẫu tin nhanh nào. Thêm mẫu đầu tiên ở trên.</Empty>}
       </div>
@@ -2788,6 +3124,7 @@ function QuickReplyTab() {
 }
 
 function QuickReplyRow({ item }: { item: AdminQuickReply }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-quick-replies'] });
@@ -2843,25 +3180,37 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
           <button onClick={() => toggleActive.mutate()} disabled={toggleActive.isPending} className={`${BTN_LINK_MUTED} text-xs`}>
             {item.isActive ? 'Tắt' : 'Bật'}
           </button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
+          <button
+            onClick={() => askDelete({ title: 'Xoá mẫu tin nhanh', message: `Xoá mẫu "${item.title}"? Nếu mẫu đang dùng cho tự động trả lời trên OA thì OA không còn gửi mẫu này. Không hoàn tác được.`, confirmLabel: 'Xoá mẫu' }, () => del.mutate())}
+            disabled={del.isPending}
+            className={`${BTN_LINK_DANGER} text-xs`}
+          >Xoá</button>
         </div>
       </div>
       {rowErr && <p className="mt-1 text-xs text-danger-fg">{rowErr}</p>}
 
       {open && (
         <div className="mt-3 space-y-2 border-t border-stone-200 pt-3">
-          <div className="flex flex-wrap gap-2">
-            <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
-            <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-56`} />
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Nhóm">
+              <input placeholder="Nhóm" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })} className={`${field} w-56`} />
+            </Field>
+            <Field label="Tên nội bộ">
+              <input placeholder="Tên nội bộ" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-56`} />
+            </Field>
           </div>
-          <input
-            placeholder="Từ khoá, cách nhau bằng dấu phẩy"
-            value={f.keywords}
-            onChange={(e) => setF({ ...f, keywords: e.target.value })}
-            disabled={f.isGreeting}
-            className={`${INPUT_CLASS} ${TOUCH_H}`}
-          />
-          <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className={INPUT_CLASS} />
+          <Field label="Từ khoá kích hoạt">
+            <input
+              placeholder="Từ khoá, cách nhau bằng dấu phẩy"
+              value={f.keywords}
+              onChange={(e) => setF({ ...f, keywords: e.target.value })}
+              disabled={f.isGreeting}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
+            />
+          </Field>
+          <Field label="Nội dung tin trả lời">
+            <textarea placeholder="Nội dung" value={f.content} onChange={(e) => setF({ ...f, content: e.target.value })} rows={3} className={INPUT_CLASS} />
+          </Field>
           <label className="flex min-h-[44px] items-center gap-2 text-sm text-stone-600 sm:min-h-0">
             <input type="checkbox" className="h-4 w-4 accent-forest-600" checked={f.isGreeting} onChange={(e) => setF({ ...f, isGreeting: e.target.checked })} />
             Dùng làm lời chào tự động
@@ -2876,6 +3225,7 @@ function QuickReplyRow({ item }: { item: AdminQuickReply }) {
           {save.isError && <p className="text-sm text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
+      {dialog}
     </div>
   );
 }
@@ -2896,13 +3246,13 @@ function ContentKitTab() {
   return (
     <div className="space-y-4">
       <div className={CARD_CLASS}>
-        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn Content Kit theo sản phẩm</h2>
+        <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Soạn bộ nội dung theo sản phẩm</h2>
         <p className="mb-2 text-xs text-stone-500">
           Chọn sản phẩm bằng cách gõ tên (không cần dấu) hoặc SKU. Trong caption dùng{' '}
           <code>{'{ten_ctv}'}</code> và <code>{'{link}'}</code> — hệ thống sẽ tự chèn tên CTV + link giới thiệu khi CTV xem.
         </p>
         <div className="flex flex-wrap items-start gap-2">
-          <ProductPicker mode="product" label="Chọn sản phẩm cho Content Kit" value={pickedProduct} onChange={setPickedProduct} className="min-w-[14rem] flex-1" />
+          <ProductPicker mode="product" label="Chọn sản phẩm cho bộ nội dung" value={pickedProduct} onChange={setPickedProduct} className="min-w-[14rem] flex-1" />
           <button
             onClick={() => pickedProduct && setLoadedId(pickedProduct.id)}
             disabled={!pickedProduct}
@@ -2930,6 +3280,7 @@ function ContentKitEditor({
   initial: { captions: string[]; usps: string[]; faqs: ContentKitFaq[] | null; videoUrls: string[] } | null;
 }) {
   const qc = useQueryClient();
+  const uid = useId();
   const [captions, setCaptions] = useState((initial?.captions ?? []).join('\n'));
   const [usps, setUsps] = useState((initial?.usps ?? []).join('\n'));
   const [videoUrls, setVideoUrls] = useState((initial?.videoUrls ?? []).join('\n'));
@@ -2947,10 +3298,10 @@ function ContentKitEditor({
         faqs: faqs.filter((f) => f.q.trim() && f.a.trim()),
       }),
     onSuccess: () => {
-      setMsg({ ok: true, text: 'Đã lưu Content Kit!' });
+      setMsg({ ok: true, text: 'Đã lưu bộ nội dung!' });
       void qc.invalidateQueries({ queryKey: ['admin-content-kit', productId] });
     },
-    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi lưu Content Kit' }),
+    onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Lỗi lưu bộ nội dung' }),
   });
 
   const setFaq = (i: number, patch: Partial<ContentKitFaq>) =>
@@ -2961,8 +3312,9 @@ function ContentKitEditor({
     <div className={CARD_CLASS}>
       <div className="mb-2 break-all text-sm font-medium text-stone-900">Sản phẩm: {productId}</div>
 
-      <label className="mb-1 block text-xs font-medium text-stone-600">Bài mẫu (mỗi dòng 1 caption)</label>
+      <label htmlFor={`${uid}-captions`} className="mb-1 block text-xs font-medium text-stone-600">Bài mẫu (mỗi dòng 1 caption)</label>
       <textarea
+        id={`${uid}-captions`}
         value={captions}
         onChange={(e) => setCaptions(e.target.value)}
         rows={5}
@@ -2970,8 +3322,9 @@ function ContentKitEditor({
         className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <label className="mb-1 block text-xs font-medium text-stone-600">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
+      <label htmlFor={`${uid}-usps`} className="mb-1 block text-xs font-medium text-stone-600">USP / điểm bán hàng (mỗi dòng 1 ý)</label>
       <textarea
+        id={`${uid}-usps`}
         value={usps}
         onChange={(e) => setUsps(e.target.value)}
         rows={3}
@@ -2979,8 +3332,9 @@ function ContentKitEditor({
         className={`mb-3 ${INPUT_CLASS}`}
       />
 
-      <label className="mb-1 block text-xs font-medium text-stone-600">Video URL (mỗi dòng 1 link)</label>
+      <label htmlFor={`${uid}-videos`} className="mb-1 block text-xs font-medium text-stone-600">Video URL (mỗi dòng 1 link)</label>
       <textarea
+        id={`${uid}-videos`}
         value={videoUrls}
         onChange={(e) => setVideoUrls(e.target.value)}
         rows={2}
@@ -2994,12 +3348,14 @@ function ContentKitEditor({
           <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
             <input
               placeholder="Câu hỏi"
+              aria-label={`Câu hỏi ${i + 1}`}
               value={f.q}
               onChange={(e) => setFaq(i, { q: e.target.value })}
               className={field}
             />
             <input
               placeholder="Câu trả lời"
+              aria-label={`Câu trả lời ${i + 1}`}
               value={f.a}
               onChange={(e) => setFaq(i, { a: e.target.value })}
               className={field}
@@ -3023,7 +3379,7 @@ function ContentKitEditor({
           disabled={save.isPending}
           className={BTN_PRIMARY}
         >
-          {save.isPending ? 'Đang lưu…' : 'Lưu Content Kit'}
+          {save.isPending ? 'Đang lưu…' : 'Lưu bộ nội dung'}
         </button>
         {msg && <span className={`ml-2 text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</span>}
       </div>
@@ -3059,34 +3415,44 @@ function AcademyTab() {
       <div className={CARD_CLASS}>
         <h2 className="mb-2 font-display text-sm font-semibold text-stone-900">Tạo khoá học mới</h2>
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <input
-              placeholder="Tiêu đề khoá học"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className={`${field} grow basis-full sm:basis-48`}
-            />
-            <input
-              type="number"
-              placeholder="Thứ tự"
-              value={form.sortOrder}
-              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-              className={`${field} w-28`}
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grow basis-full sm:basis-48">
+              <Field label="Tiêu đề khoá học">
+                <input
+                  placeholder="Tiêu đề khoá học"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  className={`${field} w-full`}
+                />
+              </Field>
+            </div>
+            <Field label="Thứ tự">
+              <input
+                type="number"
+                placeholder="Thứ tự"
+                value={form.sortOrder}
+                onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+                className={`${field} w-28`}
+              />
+            </Field>
           </div>
-          <input
-            placeholder="Cover URL"
-            value={form.coverUrl}
-            onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
-            className={`${INPUT_CLASS} ${TOUCH_H}`}
-          />
-          <textarea
-            placeholder="Mô tả"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={2}
-            className={INPUT_CLASS}
-          />
+          <Field label="Ảnh bìa (URL)">
+            <input
+              placeholder="Ảnh bìa (URL)"
+              value={form.coverUrl}
+              onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
+            />
+          </Field>
+          <Field label="Mô tả">
+            <textarea
+              placeholder="Mô tả"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              className={INPUT_CLASS}
+            />
+          </Field>
           <button
             onClick={() => { setMsg(null); create.mutate(); }}
             disabled={!form.title.trim() || create.isPending}
@@ -3099,7 +3465,7 @@ function AcademyTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách khoá học.</p>}
+        {q.isError && <LoadError message="Không tải được danh sách khoá học." onRetry={() => void q.refetch()} />}
         {q.data?.map((c) => <CourseRow key={c.id} course={c} />)}
         {q.data?.length === 0 && <Empty>Chưa có khoá học nào. Tạo khoá đầu tiên ở trên.</Empty>}
       </div>
@@ -3108,6 +3474,7 @@ function AcademyTab() {
 }
 
 function CourseRow({ course }: { course: AdminCourse }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
@@ -3183,7 +3550,15 @@ function CourseRow({ course }: { course: AdminCourse }) {
             <button onClick={() => togglePublish.mutate()} disabled={togglePublish.isPending} className={BTN_SECONDARY}>
               {course.isPublished ? 'Chuyển về nháp' : 'Đăng (publish)'}
             </button>
-            <button onClick={() => del.mutate()} disabled={del.isPending} className={BTN_DANGER_OUTLINE}>
+            <button
+              onClick={() => askDelete({
+                title: 'Xoá khoá học',
+                message: `Xoá khoá học "${course.title}" cùng ${course.lessons.length} bài học? Tiến độ học của học viên trong khoá này cũng mất. Không hoàn tác được.`,
+                confirmLabel: 'Xoá khoá học',
+              }, () => del.mutate())}
+              disabled={del.isPending}
+              className={BTN_DANGER_OUTLINE}
+            >
               Xoá khoá học
             </button>
           </div>
@@ -3192,11 +3567,23 @@ function CourseRow({ course }: { course: AdminCourse }) {
           <div className="rounded-card border border-stone-200 bg-stone-50 p-3">
             <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin khoá học</div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={input} />
-              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={input} />
-              <input placeholder="Cover URL" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={`${input} sm:col-span-2`} />
+              <Field label="Tiêu đề khoá học">
+                <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={input} />
+              </Field>
+              <Field label="Thứ tự">
+                <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={input} />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field label="Ảnh bìa (URL)">
+                  <input placeholder="Ảnh bìa (URL)" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={input} />
+                </Field>
+              </div>
             </div>
-            <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={`mt-2 ${INPUT_CLASS}`} />
+            <div className="mt-2">
+              <Field label="Mô tả">
+                <textarea placeholder="Mô tả" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={2} className={INPUT_CLASS} />
+              </Field>
+            </div>
             <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={`${BTN_PRIMARY} mt-2`}>
               {save.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
             </button>
@@ -3212,45 +3599,57 @@ function CourseRow({ course }: { course: AdminCourse }) {
             </div>
 
             <div className="mt-2 space-y-2 rounded-control border border-stone-200 p-2">
-              <div className="flex flex-wrap gap-2">
-                <input
-                  placeholder="Tiêu đề bài học"
-                  value={lesson.title}
-                  onChange={(e) => setLesson({ ...lesson, title: e.target.value })}
-                  className={`${field} grow basis-full sm:basis-40`}
-                />
-                <select
-                  aria-label="Loại bài học"
-                  value={lesson.contentType}
-                  onChange={(e) => setLesson({ ...lesson, contentType: e.target.value as AcademyLessonContentType })}
-                  className={field}
-                >
-                  <option value="ARTICLE">Bài viết</option>
-                  <option value="VIDEO">Video</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Thứ tự"
-                  value={lesson.sortOrder}
-                  onChange={(e) => setLesson({ ...lesson, sortOrder: Number(e.target.value) })}
-                  className={`${field} w-24`}
-                />
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="grow basis-full sm:basis-40">
+                  <Field label="Tiêu đề bài học">
+                    <input
+                      placeholder="Tiêu đề bài học"
+                      value={lesson.title}
+                      onChange={(e) => setLesson({ ...lesson, title: e.target.value })}
+                      className={`${field} w-full`}
+                    />
+                  </Field>
+                </div>
+                <Field label="Loại bài học">
+                  <select
+                    aria-label="Loại bài học"
+                    value={lesson.contentType}
+                    onChange={(e) => setLesson({ ...lesson, contentType: e.target.value as AcademyLessonContentType })}
+                    className={field}
+                  >
+                    <option value="ARTICLE">Bài viết</option>
+                    <option value="VIDEO">Video</option>
+                  </select>
+                </Field>
+                <Field label="Thứ tự">
+                  <input
+                    type="number"
+                    placeholder="Thứ tự"
+                    value={lesson.sortOrder}
+                    onChange={(e) => setLesson({ ...lesson, sortOrder: Number(e.target.value) })}
+                    className={`${field} w-24`}
+                  />
+                </Field>
               </div>
               {lesson.contentType === 'VIDEO' ? (
-                <input
-                  placeholder="Video URL"
-                  value={lesson.videoUrl}
-                  onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
-                  className={input}
-                />
+                <Field label="Link video">
+                  <input
+                    placeholder="Video URL"
+                    value={lesson.videoUrl}
+                    onChange={(e) => setLesson({ ...lesson, videoUrl: e.target.value })}
+                    className={input}
+                  />
+                </Field>
               ) : (
-                <textarea
-                  placeholder="Nội dung bài viết"
-                  value={lesson.body}
-                  onChange={(e) => setLesson({ ...lesson, body: e.target.value })}
-                  rows={3}
-                  className={INPUT_CLASS}
-                />
+                <Field label="Nội dung bài viết">
+                  <textarea
+                    placeholder="Nội dung bài viết"
+                    value={lesson.body}
+                    onChange={(e) => setLesson({ ...lesson, body: e.target.value })}
+                    rows={3}
+                    className={INPUT_CLASS}
+                  />
+                </Field>
               )}
               <button
                 onClick={() => addLesson.mutate()}
@@ -3264,11 +3663,13 @@ function CourseRow({ course }: { course: AdminCourse }) {
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }
 
 function LessonRow({ lesson }: { lesson: AdminLesson }) {
+  const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-academy-courses'] });
@@ -3304,29 +3705,45 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
         </span>
         <div className="flex shrink-0 gap-1">
           <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} text-xs`}>{open ? 'Đóng' : 'Sửa'}</button>
-          <button onClick={() => del.mutate()} disabled={del.isPending} className={`${BTN_LINK_DANGER} text-xs`}>Xoá</button>
+          <button
+            onClick={() => askDelete({ title: 'Xoá bài học', message: `Xoá bài học "${lesson.title}"? Không hoàn tác được.`, confirmLabel: 'Xoá bài học' }, () => del.mutate())}
+            disabled={del.isPending}
+            className={`${BTN_LINK_DANGER} text-xs`}
+          >Xoá</button>
         </div>
       </div>
       {del.isError && <p className="mt-1 text-xs text-danger-fg">{(del.error as Error).message}</p>}
       {open && (
         <div className="mt-2 space-y-2 border-t border-stone-200 pt-2">
-          <div className="flex flex-wrap gap-2">
-            <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} grow basis-full sm:basis-40`} />
-            <select
-              aria-label="Loại bài học"
-              value={f.contentType}
-              onChange={(e) => setF({ ...f, contentType: e.target.value as AcademyLessonContentType })}
-              className={field}
-            >
-              <option value="ARTICLE">Bài viết</option>
-              <option value="VIDEO">Video</option>
-            </select>
-            <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-24`} />
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="grow basis-full sm:basis-40">
+              <Field label="Tiêu đề bài học">
+                <input placeholder="Tiêu đề" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={`${field} w-full`} />
+              </Field>
+            </div>
+            <Field label="Loại bài học">
+              <select
+                aria-label="Loại bài học"
+                value={f.contentType}
+                onChange={(e) => setF({ ...f, contentType: e.target.value as AcademyLessonContentType })}
+                className={field}
+              >
+                <option value="ARTICLE">Bài viết</option>
+                <option value="VIDEO">Video</option>
+              </select>
+            </Field>
+            <Field label="Thứ tự">
+              <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={`${field} w-24`} />
+            </Field>
           </div>
           {f.contentType === 'VIDEO' ? (
-            <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+            <Field label="Link video">
+              <input placeholder="Video URL" value={f.videoUrl} onChange={(e) => setF({ ...f, videoUrl: e.target.value })} className={`${INPUT_CLASS} ${TOUCH_H}`} />
+            </Field>
           ) : (
-            <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
+            <Field label="Nội dung bài viết">
+              <textarea placeholder="Nội dung bài viết" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} rows={3} className={INPUT_CLASS} />
+            </Field>
           )}
           <button onClick={() => save.mutate()} disabled={!f.title.trim() || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu'}
@@ -3334,6 +3751,7 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
           {save.isError && <p className="text-xs text-danger-fg">{(save.error as Error).message}</p>}
         </div>
       )}
+      {dialog}
     </div>
   );
 }

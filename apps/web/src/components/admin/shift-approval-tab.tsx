@@ -33,7 +33,7 @@ const SHIFT_STATUS: Record<AdminShift['status'], { label: string; tone: Tone }> 
 /** Duyệt ca tuần: duyệt, chỉnh giờ rồi duyệt, từ chối kèm lý do, duyệt hàng loạt ca chờ, và quản lý ca chuẩn. */
 export function ShiftApprovalTab() {
   const qc = useQueryClient();
-  const { ask, dialog } = useConfirm();
+  const { ask, confirm, dialog } = useConfirm();
   const [mondayKey, setMondayKey] = useState(() => mondayKeyOf(new Date()));
   const fromISO = keyToUtcMidnightISO(mondayKey);
   const toISO = `${addDaysKey(mondayKey, 6)}T23:59:59.999Z`;
@@ -76,7 +76,7 @@ export function ShiftApprovalTab() {
     onError: fail,
   });
   const bulkM = useMutation({
-    mutationFn: () => bulkApproveShifts(coreHttp, pendingIds),
+    mutationFn: (ids: string[]) => bulkApproveShifts(coreHttp, ids),
     onSuccess: (r) => {
       setMsg({ tone: 'success', text: `Đã duyệt ${r.approved} ca.` });
       invalidate();
@@ -88,6 +88,17 @@ export function ShiftApprovalTab() {
     setAdjust({ id: s.id, dayKey: s.workDate.slice(0, 10) });
     setAdjStart(isoToVnHHMM(s.startAt));
     setAdjEnd(isoToVnHHMM(s.endAt));
+  };
+
+  const askBulkApprove = async () => {
+    // Danh sách tự làm mới khi hộp đang mở: duyệt đúng những ca đã nêu trong câu hỏi, không lấy lại danh sách lúc bấm.
+    const ids = [...pendingIds];
+    const ok = await confirm({
+      title: 'Duyệt tất cả ca chờ?',
+      message: `Duyệt ${ids.length} ca đang chờ của tuần này? Các ca cần từ chối hoặc chỉnh giờ nên xử lý riêng trước.`,
+      confirmLabel: `Duyệt ${ids.length} ca`,
+    });
+    if (ok) bulkM.mutate(ids);
   };
 
   const askReject = async (s: AdminShift, who: string) => {
@@ -123,7 +134,7 @@ export function ShiftApprovalTab() {
         </Notice>
       )}
       {pendingIds.length > 0 && (
-        <button type="button" disabled={bulkM.isPending} onClick={() => bulkM.mutate()} className={BTN_PRIMARY}>
+        <button type="button" disabled={bulkM.isPending} onClick={() => void askBulkApprove()} className={BTN_PRIMARY}>
           Duyệt tất cả ({pendingIds.length})
         </button>
       )}

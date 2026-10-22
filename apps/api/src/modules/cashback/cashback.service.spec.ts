@@ -300,6 +300,16 @@ describe('CashbackService.settleConfirmed', () => {
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'CASHBACK_PAID', { amount: '35.000' });
   });
 
+  it('userReward = 0 → vẫn chốt PAID nhưng KHÔNG cộng ví và KHÔNG bắn "Hoàn tiền 0đ" (D5-07)', async () => {
+    const { prisma, updateMany } = settlePrisma([{ id: 'tx0', userId: 'u1', userReward: 0 }]);
+    ledger.mockClear();
+    (notifications.notify as jest.Mock).mockClear();
+    await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
+    expect(updateMany).toHaveBeenCalledTimes(1);
+    expect(ledger).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalled();
+  });
+
   it('multi-instance race: updateMany count=0 → KHÔNG cộng ví lần nữa, KHÔNG thông báo', async () => {
     const { prisma, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }], 0);
     ledger.mockClear();

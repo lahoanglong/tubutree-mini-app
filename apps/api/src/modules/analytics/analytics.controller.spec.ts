@@ -1,7 +1,8 @@
 import { ValidationPipe } from '@nestjs/common';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsController } from './analytics.controller';
-import type { AnalyticsEventsService } from './analytics-events.service';
+import { AnalyticsEventsService } from './analytics-events.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 import { IngestEventsDto } from './dto/ingest-events.dto';
 import { SERVER_EVENT_NAMES } from '@tubutree/shared-types';
 import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
@@ -12,8 +13,8 @@ const asBody = (metatype: new () => object, value: Record<string, unknown>) =>
 
 describe('AnalyticsController.ingest', () => {
   it('map userId từ JWT, anonymousId ưu tiên body rồi mới tới header', async () => {
-    const recordBestEffort = jest.fn().mockResolvedValue(undefined);
-    const svc = { recordBestEffort } as unknown as AnalyticsEventsService;
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    const svc = { recordManyBestEffort } as unknown as AnalyticsEventsService;
     const ctrl = new AnalyticsController(svc);
 
     const res = await ctrl.ingest(
@@ -27,31 +28,71 @@ describe('AnalyticsController.ingest', () => {
     );
 
     expect(res).toEqual({ accepted: 1 });
-    expect(recordBestEffort).toHaveBeenCalledWith(
+    expect(recordManyBestEffort).toHaveBeenCalledWith([
       expect.objectContaining({ userId: 'u1', anonymousId: 'body-anon-1', eventName: 'app_opened' }),
-    );
+    ]);
   });
 
   it('user undefined (edge case) → userId null, không throw', async () => {
-    const recordBestEffort = jest.fn().mockResolvedValue(undefined);
-    const svc = { recordBestEffort } as unknown as AnalyticsEventsService;
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    const svc = { recordManyBestEffort } as unknown as AnalyticsEventsService;
     const ctrl = new AnalyticsController(svc);
 
     await ctrl.ingest(undefined, {
       events: [{ eventId: 'e2', eventName: 'client_error', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' }],
     });
 
-    expect(recordBestEffort).toHaveBeenCalledWith(expect.objectContaining({ userId: null }));
+    expect(recordManyBestEffort).toHaveBeenCalledWith([expect.objectContaining({ userId: null })]);
+  });
+
+  describe('ghi cả lô một lần (D9-02)', () => {
+    const base = { occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp', eventName: 'screen_viewed' };
+    const batch = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ ...base, eventId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, props: { i } }));
+    const setup = (createMany: jest.Mock, create: jest.Mock = jest.fn().mockResolvedValue(undefined)) => {
+      const prisma = { analyticsEvent: { createMany, create } } as unknown as PrismaService;
+      return { ctrl: new AnalyticsController(new AnalyticsEventsService(prisma)), create };
+    };
+
+    it('50 sự kiện → đúng 1 lần createMany với 50 dòng, không INSERT từng dòng', async () => {
+      const createMany = jest.fn().mockResolvedValue({ count: 50 });
+      const { ctrl, create } = setup(createMany);
+      const res = await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, { events: batch(50) } as IngestEventsDto, 'dev-1');
+      expect(res).toEqual({ accepted: 50 });
+      expect(createMany).toHaveBeenCalledTimes(1);
+      expect(create).not.toHaveBeenCalled();
+      const arg = createMany.mock.calls[0][0];
+      expect(arg.data).toHaveLength(50);
+      expect(arg.skipDuplicates).toBe(true);
+      expect(arg.data[0]).toMatchObject({ eventName: 'screen_viewed', userId: 'u1', anonymousId: 'dev-1', platform: 'miniapp', props: { i: 0 } });
+      expect(arg.data[0].occurredAt).toEqual(new Date('2026-09-27T00:00:00Z'));
+    });
+
+    it('createMany lỗi (không phải trùng) → lùi về ghi từng dòng, accepted không đổi, không throw', async () => {
+      const createMany = jest.fn().mockRejectedValue(new Error('DB down'));
+      const { ctrl, create } = setup(createMany);
+      const res = await ctrl.ingest(undefined, { events: batch(3) } as IngestEventsDto);
+      expect(res).toEqual({ accepted: 3 });
+      expect(create).toHaveBeenCalledTimes(3);
+    });
+
+    it('dòng lỗi trong lúc lùi về từng dòng bị nuốt, các dòng còn lại vẫn được ghi', async () => {
+      const createMany = jest.fn().mockRejectedValue(new Error('DB down'));
+      const create = jest.fn().mockRejectedValueOnce(new Error('bad row')).mockResolvedValue(undefined);
+      const { ctrl } = setup(createMany, create);
+      await expect(ctrl.ingest(undefined, { events: batch(3) } as IngestEventsDto)).resolves.toEqual({ accepted: 3 });
+      expect(create).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('nguồn khách (entrySource, campaign) trên phong bì sự kiện', () => {
     const base = { eventId: '11111111-1111-4111-8111-111111111111', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' };
     const run = async (extra: Record<string, unknown>) => {
-      const recordBestEffort = jest.fn().mockResolvedValue(undefined);
-      const ctrl = new AnalyticsController({ recordBestEffort } as unknown as AnalyticsEventsService);
+      const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
       const dto = (await asBody(IngestEventsDto, { events: [{ ...base, eventName: 'app_opened', ...extra }] })) as IngestEventsDto;
       await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, dto);
-      return recordBestEffort.mock.calls[0]![0] as Record<string, unknown>;
+      return (recordManyBestEffort.mock.calls[0]![0] as Record<string, unknown>[])[0]!;
     };
 
     it('chuyển entrySource và campaign xuống service, chuẩn hoá chữ thường', async () => {

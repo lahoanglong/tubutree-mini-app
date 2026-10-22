@@ -34,12 +34,18 @@ const POLICIES = {
     title: 'Chính sách bảo mật',
     body: 'Tubu Tree thu thập tên, số điện thoại và địa chỉ nhận hàng để xử lý đơn và chăm sóc khách hàng. Chúng tôi KHÔNG bán hay chia sẻ dữ liệu cho bên thứ ba ngoài đối tác vận chuyển/thanh toán cần thiết. Bạn có thể yêu cầu xoá tài khoản & dữ liệu bất kỳ lúc nào trong mục Tài khoản.',
   },
-  returns: {
-    title: 'Chính sách đổi trả',
-    body: 'Đổi/trả áp dụng trong 7 ngày kể từ khi nhận, với sản phẩm lỗi nhà sản xuất (hỏng bao bì, sai HSD, sai mã, không đúng mô tả). Gửi yêu cầu kèm ảnh minh chứng trong chi tiết đơn hàng. Tubu chịu phí ship 2 chiều cho lỗi từ nhà sản xuất; hoàn tiền vào Ví Tubu sau khi duyệt.',
-  },
 } as const;
-type PolicyKey = keyof typeof POLICIES;
+type PolicyKey = keyof typeof POLICIES | 'returns';
+
+/** Số ngày đổi trả đọc từ cấu hình công khai (cùng nguồn với FAQ ở about-data); chưa có thì không nêu con số. */
+function returnsPolicy(returnWindowDays: unknown): { title: string; body: string } {
+  const days = typeof returnWindowDays === 'number' && Number.isFinite(returnWindowDays) && returnWindowDays > 0 ? returnWindowDays : null;
+  const window = days ? `trong ${days} ngày kể từ khi nhận` : 'trong thời hạn đổi/trả kể từ khi nhận';
+  return {
+    title: 'Chính sách đổi trả',
+    body: `Đổi/trả áp dụng ${window}, với sản phẩm lỗi nhà sản xuất (hỏng bao bì, sai HSD, sai mã, không đúng mô tả). Gửi yêu cầu kèm ảnh minh chứng trong chi tiết đơn hàng. Tubu chịu phí ship 2 chiều cho lỗi từ nhà sản xuất; hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt.`,
+  };
+}
 
 // Bản đầy đủ do admin quản lý nằm ở web (/chinh-sach/[loai]); bản tóm tắt trong app chỉ để đọc nhanh.
 const WEB_POLICY_SLUG: Record<PolicyKey | 'shipping', string> = {
@@ -113,6 +119,7 @@ export default function AboutPage() {
     setPolicy(key);
     setPolicyOpen(true);
   };
+  const policyContent = policy === 'returns' ? returnsPolicy(publicConfig.returnWindowDays) : POLICIES[policy];
   const shownFaq = faq.filter((f) => faqCat === ALL_CATS || f.cat === faqCat);
 
   return (
@@ -252,7 +259,7 @@ export default function AboutPage() {
       <BottomSheet
         open={policyOpen}
         onClose={() => setPolicyOpen(false)}
-        title={POLICIES[policy].title}
+        title={policyContent.title}
         footer={
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <Button fullWidth variant="secondary" onPress={() => openWebPolicy(policy)}>
@@ -265,29 +272,29 @@ export default function AboutPage() {
         }
       >
         <Text variant="body-sm" tone="secondary" as="p">
-          {POLICIES[policy].body}
+          {policyContent.body}
         </Text>
       </BottomSheet>
 
-      {/* Xóa tài khoản */}
+      {/* Xoá tài khoản */}
       <div style={{ margin: '12px 16px 0' }}>
         {!confirmDelete ? (
-          <ListRow destructive title="Xóa tài khoản" onPress={() => setConfirmDelete(true)} style={{ justifyContent: 'center', textAlign: 'center' }} />
+          <ListRow destructive title="Xoá tài khoản" onPress={() => setConfirmDelete(true)} style={{ justifyContent: 'center', textAlign: 'center' }} />
         ) : (
           <Card padding={16} style={{ background: 'var(--color-status-danger-bg)' }}>
             <Text variant="body-sm" tone="danger" as="p" style={{ fontWeight: 700 }}>
-              Xóa tài khoản vĩnh viễn?
+              Xoá tài khoản vĩnh viễn?
             </Text>
             <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
-              Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xóa tài khoản theo quy định — tài khoản
-              CHƯA bị xóa ngay khi bạn bấm nút này.
+              Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản
+              CHƯA bị xoá ngay khi bạn bấm nút này.
             </Text>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <Button variant="secondary" onPress={() => setConfirmDelete(false)} style={{ flex: 1 }}>
-                Hủy
+                Huỷ
               </Button>
               <Button variant="danger" loading={deleteM.isPending} onPress={() => deleteM.mutate()} style={{ flex: 1 }}>
-                Gửi yêu cầu xóa
+                Gửi yêu cầu xoá
               </Button>
             </div>
           </Card>

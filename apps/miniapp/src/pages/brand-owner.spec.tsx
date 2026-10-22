@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AxiosError } from 'axios';
+import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -180,8 +180,8 @@ describe('BrandOwnerPage khuyến mãi gắn mã giảm giá (C-006)', () => {
 
   it('mã bị từ chối ở máy chủ (400) -> hiện đúng thông báo, không báo "Đã thêm"', async () => {
     mocks.createOwnedPromotion.mockRejectedValue(
-      new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, {
-        status: 400, statusText: 'Bad Request', headers: {}, config: {} as never,
+      new HttpError('Bad Request', 'ERR_BAD_REQUEST', {
+        status: 400,
         data: { message: 'Mã giảm giá "MASAI" chưa có trong hệ thống.' },
       }),
     );

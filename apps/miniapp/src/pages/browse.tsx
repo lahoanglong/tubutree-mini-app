@@ -216,7 +216,7 @@ export default function BrowsePage() {
             }}
           />
           <ResultHeader
-            total={firstPage?.meta.total ?? 0}
+            total={products.isError && list.length === 0 ? undefined : firstPage?.meta.total ?? 0}
             isLoading={products.isLoading}
             chips={chips}
             filterCount={activeFilterCount(state)}

@@ -63,13 +63,13 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     const { container } = mount(<OrderStatusActions order={order()} />);
     const labels = buttonLabels(container);
     expect(labels).toContain('Đã nhận tiền');
-    expect(labels).toEqual(expect.arrayContaining(['Xác nhận', 'Đã đóng gói', 'Hủy đơn']));
+    expect(labels).toEqual(expect.arrayContaining(['Xác nhận', 'Đã đóng gói', 'Huỷ đơn']));
     expect(labels).not.toContain('Giao vận');
     expect(labels).not.toContain('Đã giao hàng');
     expect(container.textContent).toMatch(/chưa ghi nhận thanh toán/i);
   });
 
-  it('đơn đã giao: không còn nút "Hủy đơn" nào', () => {
+  it('đơn đã giao: không còn nút "Huỷ đơn" nào', () => {
     const { container } = mount(
       <OrderStatusActions
         order={order({ status: 'DELIVERED', paymentStatus: 'PAID', allowedTransitions: ['RETURNED'], canConfirmPayment: false })}
@@ -138,12 +138,12 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
   });
 
   // C-122: huỷ đơn / giao xong là thao tác kích hoạt hoặc đảo ngược tiền-điểm, nên có hộp thoại xác nhận riêng (không còn window.confirm).
-  it('"Hủy đơn": hộp thoại tông đỏ nêu mã đơn — "Giữ đơn" thì KHÔNG gọi API, "Huỷ đơn" thì PUT CANCELLED', async () => {
+  it('"Huỷ đơn": hộp thoại tông đỏ nêu mã đơn — "Giữ đơn" thì KHÔNG gọi API, "Huỷ đơn" thì PUT CANCELLED', async () => {
     const api = mockFetch({ '/status': { body: { id: 'o1', status: 'CANCELLED' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<OrderStatusActions order={order({ canConfirmPayment: false })} />);
-    click(byText(container, 'button', 'Hủy đơn'));
+    click(byText(container, 'button', 'Huỷ đơn'));
     await flush();
     const d = confirmDialog()!;
     expect(d.textContent).toContain('TB-300');
@@ -153,7 +153,7 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     await flush();
     expect(api.calls).toHaveLength(0);
 
-    click(byText(container, 'button', 'Hủy đơn'));
+    click(byText(container, 'button', 'Huỷ đơn'));
     await flush();
     answerConfirm(true);
     await flush();
@@ -162,10 +162,10 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(native).not.toHaveBeenCalled();
   });
 
-  describe('"Hủy đơn" nêu đúng nơi tiền/điểm hoàn về', () => {
+  describe('"Huỷ đơn" nêu đúng nơi tiền/điểm hoàn về', () => {
     const cancelText = async (o: AdminOrder) => {
       const { container } = mount(<OrderStatusActions order={o} />);
-      click(byText(container, 'button', 'Hủy đơn'));
+      click(byText(container, 'button', 'Huỷ đơn'));
       await flush();
       const text = confirmDialog()?.textContent ?? '';
       answerConfirm(false);
@@ -278,11 +278,11 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(JSON.parse(String(api.calls[0]!.init?.body))).toEqual({});
   });
 
-  it('R3-MONEY-7: "Hủy đơn" có ô lý do (khách đọc trong thông báo); nhập thì PUT kèm note', async () => {
+  it('R3-MONEY-7: "Huỷ đơn" có ô lý do (khách đọc trong thông báo); nhập thì PUT kèm note', async () => {
     const api = mockFetch({ '/status': { body: { id: 'o1', status: 'CANCELLED' } } });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<OrderStatusActions order={order({ canConfirmPayment: false })} />);
-    click(byText(container, 'button', 'Hủy đơn'));
+    click(byText(container, 'button', 'Huỷ đơn'));
     await flush();
     const d = confirmDialog()!;
     expect(d.textContent).toContain('khách sẽ đọc trong thông báo huỷ đơn');
@@ -314,14 +314,14 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     expect(buttonLabels(live.container)).toContain('Đã nhận tiền');
   });
 
-  it('"Hủy đơn" đơn đã trả trước: hộp thoại nêu số tiền hoàn và nơi nhận (Ví Tubu của khách), điểm đã dùng được trả lại', async () => {
+  it('"Huỷ đơn" đơn đã trả trước: hộp thoại nêu số tiền hoàn và nơi nhận (Ví Tubu của khách), điểm đã dùng được trả lại', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
     const { container } = mount(
       <OrderStatusActions
         order={order({ status: 'CONFIRMED', paymentMethod: 'ZALOPAY', paymentStatus: 'PAID', total: 300_000, pointsUsed: 50, canConfirmPayment: false })}
       />,
     );
-    click(byText(container, 'button', 'Hủy đơn'));
+    click(byText(container, 'button', 'Huỷ đơn'));
     await flush();
     const text = confirmDialog()!.textContent ?? '';
     expect(text).toMatch(/Hoàn 300\.000\s?đ vào Ví Tubu của khách/);
@@ -330,14 +330,14 @@ describe('OrderStatusActions (chi tiết đơn admin)', () => {
     await flush();
   });
 
-  it('"Hủy đơn" đơn chưa thu tiền: hộp thoại nói rõ không có khoản hoàn tiền; đơn Pancake nhắc sẽ huỷ cả bên kho', async () => {
+  it('"Huỷ đơn" đơn chưa thu tiền: hộp thoại nói rõ không có khoản hoàn tiền; đơn Pancake nhắc sẽ huỷ cả bên kho', async () => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({}).fn));
     const { container } = mount(
       <OrderStatusActions
         order={order({ status: 'CONFIRMED', paymentMethod: 'COD', paymentStatus: 'UNPAID', pancakeOrderId: 'pk-9', canConfirmPayment: false })}
       />,
     );
-    click(byText(container, 'button', 'Hủy đơn'));
+    click(byText(container, 'button', 'Huỷ đơn'));
     await flush();
     const text = confirmDialog()!.textContent ?? '';
     expect(text).toMatch(/Khách chưa trả tiền — không có khoản hoàn/);
@@ -399,12 +399,12 @@ describe('OrderStatusActions — DS v2, vùng chạm 44px ở điện thoại', 
     expect(container.querySelector('input')?.className).toContain('min-h-[44px]');
   });
 
-  it('nút "Hủy đơn" tông nguy hiểm theo token (viền/chữ danger-fg), "Đã giao hàng" là nút chính forest', () => {
+  it('nút "Huỷ đơn" tông nguy hiểm theo token (viền/chữ danger-fg), "Đã giao hàng" là nút chính forest', () => {
     const { container } = mount(
       <OrderStatusActions order={order({ canConfirmPayment: false, allowedTransitions: ['DELIVERED', 'CANCELLED'] })} />,
     );
-    expect(byText(container, 'button', 'Hủy đơn')?.className).toContain('text-danger-fg');
-    expect(byText(container, 'button', 'Hủy đơn')?.className).toContain('border-danger-fg');
+    expect(byText(container, 'button', 'Huỷ đơn')?.className).toContain('text-danger-fg');
+    expect(byText(container, 'button', 'Huỷ đơn')?.className).toContain('border-danger-fg');
     expect(byText(container, 'button', 'Đã giao hàng')?.className).toContain('bg-forest-600');
   });
 

@@ -45,6 +45,8 @@ export class CommunityRewardService {
    * thưởng của người không hề spam). Hạn điểm đọc TRƯỚC tx (đọc config trong tx xin thêm một kết nối pool).
    * Đếm cả sổ xu cũ: thưởng bằng xu trong ngày deploy vẫn tính vào trần ngày đó.
    * Lỗi tạm (deadlock 40P01 / tuần tự hoá 40001/P2034) thì thử lại; hết lượt thử thì log cảnh báo.
+   * Trả true chỉ khi điểm thật sự vào sổ (chạm trần, trùng reason hay bỏ cuộc sau khi thử lại đều là false) để tin báo
+   * khách không hứa điểm không có.
    */
   private async rewardWithDailyCap(
     userId: string,
@@ -52,27 +54,26 @@ export class CommunityRewardService {
     refId: string,
     points: number,
     cap: number,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const since = startOfVnDay();
     const expiresAt = await this.rewards.expiresAt();
     for (let attempt = 1; ; attempt += 1) {
       try {
-        await this.prisma.$transaction(async (tx) => {
+        return await this.prisma.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
           const where = { userId, refType: 'COMMUNITY', reason: { startsWith: `${reasonPrefix}:` }, createdAt: { gte: since } };
           const [coinToday, pointsToday] = await Promise.all([
             tx.coinTransaction.count({ where }),
             tx.pointsTransaction.count({ where }),
           ]);
-          if (coinToday + pointsToday >= cap) return;
-          await this.rewards.grant(userId, points, `${reasonPrefix}:${refId}`, 'COMMUNITY', refId, tx, expiresAt);
+          if (coinToday + pointsToday >= cap) return false;
+          return this.rewards.grant(userId, points, `${reasonPrefix}:${refId}`, 'COMMUNITY', refId, tx, expiresAt);
         });
-        return;
       } catch (err) {
         if (!isRetryableTxError(err)) throw err;
         if (attempt >= MAX_REWARD_ATTEMPTS) {
           this.logger.warn(`Bỏ thưởng ${reasonPrefix}:${refId} user=${userId} sau ${attempt} lần xung đột giao dịch: ${(err as Error).message}`);
-          return;
+          return false;
         }
         await sleep(20 * attempt + Math.random() * 40);
       }
@@ -111,13 +112,16 @@ export class CommunityRewardService {
    * QUESTION rồi chọn best-answer cho nhau ở cả N bài vẫn ăn N×reward (mỗi bài 1 reason
    * khác nhau). Vì vậy phải đi qua rewardWithDailyCap giống rewardPost/rewardAnswer —
    * xem P1-2 trong docs/2026-09-08-review-progress.md.
+   *
+   * Trả số điểm ĐÃ cộng (0 = không cộng gì: chính chủ bài, thưởng tắt, chạm trần ngày, đã thưởng bài này).
    */
-  async rewardBestAnswer(answererId: string, postAuthorId: string, postId: string): Promise<void> {
-    if (answererId === postAuthorId) return;
+  async rewardBestAnswer(answererId: string, postAuthorId: string, postId: string): Promise<number> {
+    if (answererId === postAuthorId) return 0;
     const points = await this.rewardPoints('community.best_answer_reward_points', 1000);
-    if (points <= 0) return;
+    if (points <= 0) return 0;
     const cap = await this.config.get<number>('community.daily_best_answer_cap', 3);
-    await this.rewardWithDailyCap(answererId, 'COMMUNITY_BEST', postId, points, cap);
+    const granted = await this.rewardWithDailyCap(answererId, 'COMMUNITY_BEST', postId, points, cap);
+    return granted ? points : 0;
   }
 
   /**

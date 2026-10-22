@@ -405,10 +405,10 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
               <div key={it.id} style={{ padding: '4px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="body-sm" as="div" style={{ opacity: it.isHidden || it.hiddenReason ? 0.5 : 1 }}>{name}</Text>
+                    <Text variant="body-sm" as="div" tone={it.isHidden || it.hiddenReason ? 'tertiary' : 'primary'}>{name}</Text>
                     <PriceTag value={price} size="sm" />
                     {it.hiddenReason && (
-                      <Badge tone="warning" size="sm" style={{ marginTop: 2 }}>
+                      <Badge tone="warning" size="sm" style={{ marginTop: 2, maxWidth: '100%', whiteSpace: 'normal' }}>
                         Khách không thấy: {it.hiddenReason}
                       </Badge>
                     )}
@@ -459,6 +459,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
       <div style={{ ...CARD_MARGIN, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
         <Input
+          aria-label={vi.storefront.collectionNamePlaceholder}
           value={newColTitle}
           placeholder={vi.storefront.collectionNamePlaceholder}
           onChange={(e) => setNewColTitle(e.target.value)}
@@ -538,6 +539,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         {renaming && (
           <>
             <Input
+              aria-label={vi.storefront.renameCollection}
               value={renaming.title}
               onChange={(e) => setRenaming({ ...renaming, title: e.target.value })}
             />
@@ -589,6 +591,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         {notingItem && (
           <>
             <Input.TextArea
+              aria-label={vi.storefront.itemNotePlaceholder}
               value={notingItem.note}
               maxLength={200}
               placeholder={vi.storefront.itemNotePlaceholder}
@@ -779,7 +782,7 @@ function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string;
 
   return (
     <>
-      <Input placeholder={vi.storefront.pickerSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <Input aria-label={vi.storefront.pickerSearch} placeholder={vi.storefront.pickerSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
       <div style={{ marginTop: 12, maxHeight: 360, overflowY: 'auto' }}>
         {listQ.isError ? <ErrorState message={getErrorMessage(listQ.error)} onRetry={() => void listQ.refetch()} variant="inline" /> :
           listQ.isLoading ? (
@@ -861,6 +864,7 @@ function ProfileSheet({
 
       <Text variant="label" as="div" style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
       <Input.TextArea
+        aria-label={vi.storefront.headerNote}
         value={headerNote}
         maxLength={200}
         placeholder={vi.storefront.headerNotePlaceholder}

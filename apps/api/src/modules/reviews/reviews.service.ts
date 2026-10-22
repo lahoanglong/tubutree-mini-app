@@ -5,10 +5,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
-import { loadPointExpiryTxns, lotRecoverable, reviewLotKey } from '../loyalty/loyalty-expiry.service';
 import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { decodeServedImage } from '../../common/served-image';
-import { REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
+import { returnedProductsByOrder, REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
+import { reviewReturnReason, takeBackReviewReward } from './review-reward-reversal';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -48,6 +48,11 @@ export type CanReviewResult =
       reason: 'ALL_REVIEWED' | null;
       /** Đánh giá MỚI lúc này có được cộng Điểm Xanh không (chỉ đánh giá đầu tiên của cặp khách-sản phẩm được thưởng). */
       rewardAvailable: boolean;
+      /**
+       * Vì sao `rewardAvailable` là false, để FE nói đúng: ALREADY_KEPT = khách đang giữ thưởng của sản phẩm này; RETURNED =
+       * mọi đơn còn lại đã có dòng trả được duyệt cho sản phẩm này (khách chưa nhận thưởng nào); NO_ORDER = hết đơn để viết mới.
+       */
+      rewardUnavailableReason: 'ALREADY_KEPT' | 'RETURNED' | 'NO_ORDER' | null;
       /** Số lần mua đã nhận có sản phẩm này. */
       purchaseCount: number;
       reviewableOrders: { orderId: string; code: string; deliveredAt: Date | null }[];
@@ -86,16 +91,29 @@ export class ReviewsService {
     });
     const reviewed = new Set(mine.map((r) => r.orderId));
     const codeOf = new Map(purchases.map((o) => [o.id, o.code]));
-    const reviewableOrders = purchases
-      .filter((o) => !reviewed.has(o.id))
-      .map((o) => ({ orderId: o.id, code: o.code, deliveredAt: o.deliveredAt }));
+    const unreviewed = purchases.filter((o) => !reviewed.has(o.id));
+    // Đánh giá viết cho đơn mà sản phẩm đã có dòng trả được duyệt không được thưởng (createFirst), nên đơn chưa bị trả sản phẩm
+    // này đứng trước: FE mặc định viết cho đơn đầu danh sách, nếu không thì gợi ý có điểm nhưng khách nhận 0.
+    const returnedBy = await returnedProductsByOrder(this.prisma, unreviewed.map((o) => o.id));
+    const returned = (orderId: string) => returnedBy.get(orderId)?.has(product.id) ?? false;
+    const reviewableOrders = [...unreviewed.filter((o) => !returned(o.id)), ...unreviewed.filter((o) => returned(o.id))].map((o) => ({
+      orderId: o.id,
+      code: o.code,
+      deliveredAt: o.deliveredAt,
+    }));
     // Chỉ để FE nói đúng về điểm: máy chủ vẫn quyết định thưởng lúc tạo (createFirst, cùng rewardAlreadyKept). Hết đơn để
-    // viết mới thì không có đánh giá mới nào để thưởng.
-    const rewardAvailable = reviewableOrders.length > 0 && !(await this.rewardAlreadyKept(this.prisma, userId, product));
+    // viết mới, hay mọi đơn còn lại đều đã bị trả sản phẩm này, thì không có đánh giá mới nào để thưởng.
+    const hasFreshOrder = reviewableOrders.some((o) => !returned(o.orderId));
+    // Đã giữ thưởng thì câu "đã nhận" luôn đúng, nên xét trước lý do "đã trả".
+    const kept = reviewableOrders.length > 0 && (await this.rewardAlreadyKept(this.prisma, userId, product));
+    const rewardUnavailableReason: 'ALREADY_KEPT' | 'RETURNED' | 'NO_ORDER' | null =
+      reviewableOrders.length === 0 ? 'NO_ORDER' : kept ? 'ALREADY_KEPT' : hasFreshOrder ? null : 'RETURNED';
+    const rewardAvailable = rewardUnavailableReason === null;
     return {
       canReview: reviewableOrders.length > 0,
       reason: reviewableOrders.length > 0 ? null : 'ALL_REVIEWED',
       rewardAvailable,
+      rewardUnavailableReason,
       purchaseCount: purchases.length,
       reviewableOrders,
       myReviews: mine.map((r) => ({ ...r, orderCode: codeOf.get(r.orderId) ?? null })),
@@ -186,11 +204,27 @@ export class ReviewsService {
     const expiresAt = await this.loyalty.pointsExpiresAt(new Date());
 
     return this.prisma.$transaction(async (tx) => {
+      // Đọc trạng thái đơn ở ngoài tx (purchasesOf) có thể cũ: đơn đang được trả cả đơn thì lần đảo (đã ghi trạng thái, giữ
+      // khoá dòng đơn) đã quét thưởng đánh giá trước khi đánh giá này tồn tại. Khoá chung dòng đơn để hoặc chờ lần đảo xong
+      // rồi từ chối, hoặc ghi xong trước khi lần đảo lật trạng thái và lần đảo thấy đánh giá. Lấy khoá đơn TRƯỚC khoá cặp
+      // (cùng thứ tự với lần đảo: dòng đơn, rồi khoá cặp, rồi dòng user) để không deadlock. Gộp phiên khách và ẩn danh hoá
+      // cũng khoá dòng đơn của khách trước dòng users nên cùng thứ tự; bỏ một trong các khoá đơn đó là deadlock trở lại
+      // (p3-review-return-merge.race-spec). Đòi đơn còn đúng của người gọi: đơn vừa gộp sang tài khoản đích thì phiên khách
+      // cũ không được ghi đánh giá và điểm thưởng vào dòng khách đã gộp.
+      const [order] = await tx.$queryRaw<{ status: string }[]>`
+        SELECT "status"::text AS "status" FROM "orders" WHERE "id" = ${orderId} AND "userId" = ${userId} FOR SHARE`;
+      if (order?.status === 'RETURNED') throw new BadRequestException('Đơn này đã trả hàng nên không đánh giá mới được.');
+      if (order?.status !== REVIEWABLE_ORDER.status) {
+        throw new BadRequestException('Đơn này chưa giao tới bạn hoặc không có sản phẩm này nên chưa đánh giá được.');
+      }
       // pointsEarned nằm ngay trên dòng đánh giá nên phải biết trước review.create. Thưởng chỉ cho đánh giá đầu tiên của
       // cặp (khách, sản phẩm) nhưng đánh giá cho đơn khác không chạm khoá unique của đơn này: khoá theo cặp để sổ REVIEW
       // của cặp không đổi giữa lúc đọc và lúc ghi, lượt chờ khoá đọc được dòng thưởng lượt trước vừa ghi.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${reviewRewardLockKey(userId, product.id)}))`;
-      const pointsEarned = (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
+      // Sản phẩm đã bị trả (dù một phần) trên chính đơn này: lần duyệt trả không còn đánh giá nào để thu hồi nên thưởng ở
+      // đây sẽ không bao giờ bị lấy lại. Lần duyệt giữ cùng khoá cặp tới khi commit nên đọc ở đây thấy đủ.
+      const returned = (await returnedProductsByOrder(tx, [orderId])).get(orderId)?.has(product.id) ?? false;
+      const pointsEarned = returned || (await this.rewardAlreadyKept(tx, userId, product)) ? 0 : rewardPoints;
       const r = await tx.review.create({
         data: {
           userId,
@@ -230,8 +264,9 @@ export class ReviewsService {
    * thêm, không thì vòng tạo, tiêu điểm, xoá, tạo lại cho điểm vô hạn.
    *
    * Cộng mọi dòng sổ REVIEW của cặp (khách, sản phẩm): thưởng dương `REVIEW:<slug>`, thu hồi âm `REVIEW_DELETE:<id sản
-   * phẩm>`; còn dương nghĩa là còn phần thưởng chưa thu hồi. slug không đổi sau khi tạo sản phẩm (đồng bộ Pancake chỉ
-   * ghi slug lúc tạo).
+   * phẩm>` (xoá đánh giá) và `REVIEW_RETURN:<id đánh giá>` (trả hàng); còn dương nghĩa là còn phần thưởng chưa thu hồi. Dòng
+   * trả hàng không mang id sản phẩm nên tra theo id đánh giá của các dòng thưởng của cặp. slug không đổi sau khi tạo sản
+   * phẩm (đồng bộ Pancake chỉ ghi slug lúc tạo).
    */
   private async rewardAlreadyKept(tx: Db, userId: string, product: { id: string; slug: string }): Promise<boolean> {
     const rows = await tx.pointsTransaction.findMany({
@@ -240,9 +275,16 @@ export class ReviewsService {
         refType: 'REVIEW',
         reason: { in: [`REVIEW:${product.slug}`, `REVIEW_DELETE:${product.id}`] },
       },
-      select: { delta: true },
+      select: { delta: true, refId: true },
     });
-    return rows.reduce((sum, r) => sum + r.delta, 0) > 0;
+    const rewardedReviewIds = rows.filter((r) => r.delta > 0 && r.refId).map((r) => r.refId as string);
+    const returnRows = rewardedReviewIds.length
+      ? await tx.pointsTransaction.findMany({
+          where: { userId, refType: 'REVIEW', reason: { in: rewardedReviewIds.map(reviewReturnReason) } },
+          select: { delta: true },
+        })
+      : [];
+    return [...rows, ...returnRows].reduce((sum, r) => sum + r.delta, 0) > 0;
   }
 
   /**
@@ -381,7 +423,7 @@ export class ReviewsService {
     const review = await this.prisma.review.findUnique({ where: { id } });
     if (!review) throw new NotFoundException('Không tìm thấy đánh giá.');
     if (review.userId !== userId && role !== 'ADMIN') {
-      throw new ForbiddenException('Không có quyền xóa đánh giá này.');
+      throw new ForbiddenException('Không có quyền xoá đánh giá này.');
     }
     await this.prisma.$transaction(async (tx) => {
       // Cùng khoá cặp (khách, sản phẩm) với createFirst và lấy trước khoá dòng user như createFirst: đánh giá mới viết song
@@ -398,47 +440,15 @@ export class ReviewsService {
           : [];
       await tx.review.delete({ where: { id } });
       // Hoàn tác điểm đã thưởng lúc tạo review — nếu không, user có thể farm điểm vô hạn bằng cách tạo review (+điểm)
-      // rồi xóa (đơn đó mở lại để viết) rồi tạo lại. Đánh giá không nhận thưởng (pointsEarned 0) không thu hồi gì.
-      // Điểm thưởng đã quá hạn thì cron đã (hoặc sẽ) trừ chính các điểm đó; thu hồi thêm là trừ hai lần và có thể kéo
-      // số dư âm. Dòng gốc cũ không hạn (trước PE-3) hoặc không tìm thấy thì thu hồi như cũ.
-      if (review.pointsEarned > 0 && !(await this.rewardExpired(tx, review.userId, id))) {
-        // Thu hồi tối đa phần lô đánh giá chưa mất theo sổ lô (lotRecoverable) và không quá số dư, nên số dư không bao
-        // giờ âm. Dòng REVIEW_DELETE ghi đúng số đã thu hồi; không thu hồi được gì thì không ghi dòng nào (khác đơn hàng,
-        // xoá đánh giá không cần dấu "đã xử lý": dòng đánh giá đã mất nên không có lượt xoá thứ hai). Điểm đã thưởng nằm
-        // ở dòng REVIEW:<slug> cùng refId nên phần thiếu tra lại được.
-        const recoverable = lotRecoverable(await loadPointExpiryTxns(tx, review.userId), reviewLotKey(id));
-        const balance = Math.max(0, locked[0]?.pointsBalance ?? 0);
-        const take = Math.min(review.pointsEarned, recoverable ?? review.pointsEarned, balance);
-        if (take > 0) {
-          await tx.pointsTransaction.create({
-            data: {
-              userId: review.userId,
-              delta: -take,
-              reason: `REVIEW_DELETE:${review.productId}`,
-              refType: 'REVIEW',
-              refId: id,
-            },
-          });
-          // Số dư đã đọc sau FOR UPDATE nên không thể thiếu; ném để rollback thay vì để sổ lệch.
-          const dec = await tx.user.updateMany({
-            where: { id: review.userId, pointsBalance: { gte: take } },
-            data: { pointsBalance: { decrement: take } },
-          });
-          if (dec.count !== 1) throw new Error(`Xoá đánh giá ${id}: số dư đổi giữa chừng`);
-        }
+      // rồi xóa (đơn đó mở lại để viết) rồi tạo lại. Đánh giá không nhận thưởng (pointsEarned 0) không thu hồi gì. Không
+      // thu hồi được gì thì không ghi dòng nào (khác đơn hàng, xoá đánh giá không cần dấu "đã xử lý": dòng đánh giá đã mất
+      // nên không có lượt xoá thứ hai).
+      if (review.pointsEarned > 0) {
+        await takeBackReviewReward(tx, review, locked[0]?.pointsBalance ?? 0, `REVIEW_DELETE:${review.productId}`);
       }
       await this.recomputeRating(review.productId, tx);
     });
     return { ok: true };
-  }
-
-  /** Dòng thưởng của đánh giá đã tới hạn chưa; cùng quy tắc `expiresAt <= now` với cron hết hạn. */
-  private async rewardExpired(tx: Prisma.TransactionClient, userId: string, reviewId: string): Promise<boolean> {
-    const credit = await tx.pointsTransaction.findFirst({
-      where: { userId, refType: 'REVIEW', refId: reviewId, delta: { gt: 0 } },
-      select: { expiresAt: true },
-    });
-    return credit?.expiresAt != null && credit.expiresAt.getTime() <= Date.now();
   }
 
   /** Admin ẩn/hiện review vi phạm (§6.13: ẩn KHÔNG xóa) — rating tính lại loại review ẩn. */

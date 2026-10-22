@@ -35,17 +35,32 @@ describe('recompute', () => {
   it('tính lại total từng dòng theo unitPrice × quantity mới (không tin total cũ từ server)', () => {
     const cart = summary();
     const items = [line({ id: 'a', unitPrice: 50_000, quantity: 2, total: 999 })];
-    const result = recompute(cart, items);
+    const result = recompute(cart, items, 'a');
     expect(result.items[0]?.total).toBe(100_000);
+  });
+
+  it('chỉ tính lại dòng đang sửa: dòng khác giữ total của máy chủ (giá giờ vàng vượt suất không bị nhân lại)', () => {
+    const a = line({ id: 'a', unitPrice: 40_000, quantity: 2, total: 80_000 });
+    const b = line({ id: 'b', unitPrice: 50_000, quantity: 3, total: 160_000 });
+    const result = recompute(summary({ items: [a, b], subtotal: 240_000 }), [{ ...a, quantity: 3 }, b], 'a');
+    expect(result.items.map((l) => l.total)).toEqual([120_000, 160_000]);
+    expect(result.subtotal).toBe(280_000);
+  });
+
+  it('xoá dòng (không có dòng đang sửa): mọi dòng còn lại giữ total của máy chủ', () => {
+    const b = line({ id: 'b', unitPrice: 50_000, quantity: 3, total: 160_000 });
+    const result = recompute(summary({ subtotal: 400_000 }), [b]);
+    expect(result.items[0]?.total).toBe(160_000);
+    expect(result.subtotal).toBe(160_000);
   });
 
   it('subtotal = tổng total các dòng, itemCount = tổng quantity', () => {
     const cart = summary();
     const items = [
       line({ id: 'a', unitPrice: 50_000, quantity: 2 }),
-      line({ id: 'b', unitPrice: 30_000, quantity: 3 }),
+      line({ id: 'b', unitPrice: 30_000, quantity: 3, total: 90_000 }),
     ];
-    const result = recompute(cart, items);
+    const result = recompute(cart, items, 'a');
     expect(result.subtotal).toBe(50_000 * 2 + 30_000 * 3);
     expect(result.itemCount).toBe(5);
   });

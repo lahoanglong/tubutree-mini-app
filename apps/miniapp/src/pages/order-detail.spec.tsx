@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AxiosError, type AxiosResponse } from 'axios';
+import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -119,7 +119,7 @@ describe('OrderDetailPage — giải thích vì sao không còn nút huỷ (R6-B
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING' });
     renderPage();
     expect(await screen.findByText(NOTE)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull();
   });
 
   it('đơn đã xác nhận còn huỷ được: không có câu giải thích', async () => {
@@ -144,7 +144,7 @@ describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
   });
 
   it('404 → "Không tìm thấy" kèm "Về trang chủ", không có "Thử lại"', async () => {
-    mocks.fetchOrder.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    mocks.fetchOrder.mockRejectedValue(new HttpError('nf', '404', { status: 404, data: {} }));
     renderPage();
     expect(await screen.findByText('Không tìm thấy đơn hàng này.')).toBeInTheDocument();
     expect(screen.queryByText('Thử lại')).toBeNull();
@@ -153,7 +153,7 @@ describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
   });
 
   it('lỗi máy chủ 5xx → vẫn "Thử lại"', async () => {
-    mocks.fetchOrder.mockRejectedValue(new AxiosError('boom', '500', undefined, undefined, { status: 500, data: {} } as AxiosResponse));
+    mocks.fetchOrder.mockRejectedValue(new HttpError('boom', '500', { status: 500, data: {} }));
     renderPage();
     expect(await screen.findByText('Thử lại')).toBeInTheDocument();
     expect(screen.queryByText('Về trang chủ')).toBeNull();
@@ -349,31 +349,31 @@ describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuy
     mocks.getPublicConfig.mockResolvedValue({ returnWindowDays: 7 });
   });
 
-  it('đơn lẻ đang đóng gói vẫn có nút "Hủy đơn"; đơn đại lý đang đóng gói / đơn đang giao thì không', async () => {
+  it('đơn lẻ đang đóng gói vẫn có nút "Huỷ đơn"; đơn đại lý đang đóng gói / đơn đang giao thì không', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'RETAIL', status: 'PACKED', paymentStatus: 'UNPAID' });
     const packed = renderPage();
-    expect(await screen.findByRole('button', { name: 'Hủy đơn' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Huỷ đơn' })).toBeInTheDocument();
     packed.unmount();
 
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'DEALER', status: 'PACKED', paymentStatus: 'UNPAID' });
     const dealer = renderPage();
     expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull();
     dealer.unmount();
 
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, type: 'RETAIL', status: 'SHIPPING', paymentStatus: 'UNPAID' });
     renderPage();
     expect((await screen.findAllByText(/Xà bông/)).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull();
   });
 
-  it('R3-CANCEL-2: đang đóng gói mà kho đã đặt hãng (mã GHN) — chip "Đã đặt đơn vị vận chuyển", không có nút "Hủy đơn"', async () => {
+  it('R3-CANCEL-2: đang đóng gói mà kho đã đặt hãng (mã GHN) — chip "Đã đặt đơn vị vận chuyển", không có nút "Huỷ đơn"', async () => {
     mocks.fetchOrder.mockResolvedValue({
       ...ORDER, type: 'RETAIL', status: 'PACKED', paymentStatus: 'UNPAID', shippingPartner: 'GHN', shippingCode: 'GHN1933', canCancel: false,
     });
     renderPage();
     expect(await screen.findByText('Đã đặt đơn vị vận chuyển')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull();
   });
 
   it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không hạn "tự huỷ", không nút huỷ hay trả tiền', async () => {
@@ -391,7 +391,7 @@ describe('OrderDetailPage — tự huỷ tới trước khi bàn giao vận chuy
     expect(await screen.findByText('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.')).toBeInTheDocument();
     expect(screen.queryByText(/quá hạn đơn sẽ tự huỷ/)).toBeNull();
     expect(screen.queryByText(/Thanh toán trước/)).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Hủy đơn' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Thanh toán ngay' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Xem tất cả đơn' })).toBeInTheDocument();
   });
@@ -484,11 +484,11 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
   it('đơn chuyển khoản đã trả: chọn tài khoản ngân hàng → gửi nơi nhận kèm tài khoản điền sẵn', async () => {
     mocks.fetchOrder.mockResolvedValue(paidTransfer);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Hủy đơn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
     expect(screen.getByText('Nhận lại 114.000đ về')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ }));
     await waitFor(() => expect(screen.getByLabelText('Số tài khoản')).toHaveValue('0071000123456'));
-    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
     await waitFor(() =>
       expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', {
@@ -503,8 +503,8 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
   it('đơn chuyển khoản đã trả: giữ mặc định Ví Tubu → gửi refundMethod WALLET', async () => {
     mocks.fetchOrder.mockResolvedValue(paidTransfer);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Hủy đơn' }));
-    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
     await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }));
   });
@@ -533,9 +533,9 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     });
     renderPage();
     expect(await screen.findByText(/quá hạn đơn sẽ tự huỷ/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Hủy đơn' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ đơn' }));
     expect(screen.getByRole('note')).toHaveTextContent('Nếu bạn vừa chuyển khoản');
-    const buttons = screen.getAllByRole('button', { name: 'Hủy đơn' });
+    const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
     await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined));
   });
@@ -553,7 +553,7 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
       manualHandling: false,
     });
     renderPage();
-    await screen.findByRole('button', { name: 'Hủy đơn' });
+    await screen.findByRole('button', { name: 'Huỷ đơn' });
     expect(screen.queryByRole('button', { name: 'Thanh toán ngay' }) !== null).toBe(shown);
   });
 
@@ -635,7 +635,7 @@ describe('OrderDetailPage — dòng yêu cầu thu rác (§12.2)', () => {
   });
   it('404 (đơn cũ trước đổi rác) → không có dòng, không báo lỗi', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, hasRecyclingPickup: true });
-    mocks.getWasteRequestByOrder.mockRejectedValue(new AxiosError('nf', 'ERR_BAD_REQUEST', undefined, undefined, { status: 404 } as AxiosResponse));
+    mocks.getWasteRequestByOrder.mockRejectedValue(new HttpError('nf', 'ERR_BAD_REQUEST', { status: 404 }));
     renderPage();
     await screen.findByText('TT001');
     await waitFor(() => expect(mocks.getWasteRequestByOrder).toHaveBeenCalled());

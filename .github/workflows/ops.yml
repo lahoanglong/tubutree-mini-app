@@ -45,6 +45,7 @@ jobs:
           ZALO_OA_ID: ${{ secrets.ZALO_OA_ID }}
           ZALO_OA_ACCESS_TOKEN: ${{ secrets.ZALO_OA_ACCESS_TOKEN }}
           ZALO_OA_REFRESH_TOKEN: ${{ secrets.ZALO_OA_REFRESH_TOKEN }}
+          ZALO_OA_WEBHOOK_SECRET: ${{ secrets.ZALO_OA_WEBHOOK_SECRET }}
           ACCESSTRADE_TOKEN: ${{ secrets.ACCESSTRADE_TOKEN }}
           ACCESSTRADE_PUBLISHER_ID: ${{ secrets.ACCESSTRADE_PUBLISHER_ID }}
           ACCESSTRADE_WEBHOOK_SECRET_GH: ${{ secrets.ACCESSTRADE_WEBHOOK_SECRET }}
@@ -77,7 +78,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,OPS_ALERT_ENV_LABEL,BACKUP_HEALTHCHECK_URL
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ZALO_OA_WEBHOOK_SECRET,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,OPS_ALERT_ENV_LABEL,BACKUP_HEALTHCHECK_URL
           script: |
             # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
             # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
@@ -182,7 +183,7 @@ jobs:
 
               gin)
                 echo "=== Tạo GIN index CONCURRENTLY (không khóa writes) ==="
-                bash tools/db/create-gin-indexes-concurrently.sh
+                COMPOSE_FILE="$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" bash tools/db/create-gin-indexes-concurrently.sh
                 echo "=== Kiểm tra index hợp lệ (indisvalid) ==="
                 psql_q -c "SELECT c.relname, i.indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid=c.oid WHERE c.relname LIKE 'products_%_gin';"
                 ;;
@@ -230,6 +231,7 @@ jobs:
                 set_if ZALO_OA_ID "${ZALO_OA_ID:-}"
                 set_if ZALO_OA_ACCESS_TOKEN "${ZALO_OA_ACCESS_TOKEN:-}"
                 set_if ZALO_OA_REFRESH_TOKEN "${ZALO_OA_REFRESH_TOKEN:-}"
+                set_if ZALO_OA_WEBHOOK_SECRET "${ZALO_OA_WEBHOOK_SECRET:-}"
                 set_if ACCESSTRADE_TOKEN "${ACCESSTRADE_TOKEN:-}"
                 set_if ACCESSTRADE_PUBLISHER_ID "${ACCESSTRADE_PUBLISHER_ID:-}"
                 # Webhook secret thật (nếu cấp) ĐÈ placeholder ngẫu nhiên sinh ở trên.

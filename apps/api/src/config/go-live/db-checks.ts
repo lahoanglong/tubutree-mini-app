@@ -29,15 +29,32 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
 
 /**
  * Migration nặng đã biết trong danh sách chờ áp khi PROD còn ở bản cũ hơn (không chỉ các migration của đợt). `ordersLock`: viết
- * lại bảng orders hoặc dựng chỉ mục trên đó. Chưa đo riêng từng cái: ước theo migration r6.
+ * lại bảng orders hoặc dựng chỉ mục (không CONCURRENTLY) trên đó. Các cái còn lại giữ khoá trên users hoặc points_transactions
+ * (UPDATE cả bảng, ràng buộc, chỉ mục duy nhất một phần). Chưa đo riêng từng cái: ước theo migration r6. Spec quét mọi migration sau
+ * bản PROD (UPDATE, chỉ mục, ràng buộc, LOCK TABLE, SQL động) để danh sách này không thiếu cái mới và cái nào đụng orders thì có ordersLock.
  */
 export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean }> = [
+  { name: '20261010170000_orders_invoice_open_index', ordersLock: true },
+  { name: '20261012100000_pd3_points_lot_schema', ordersLock: false },
   { name: '20261012110000_pd3_xu_to_points', ordersLock: false },
   { name: '20261012130000_pd3_freeze_coins', ordersLock: false },
+  { name: '20261013172522_p2_pancake_inbound_attention', ordersLock: true },
+  { name: '20261013173621_p3_gomdon_order_note_cleanup', ordersLock: true },
   { name: '20261014003644_p1_pancake_outbound_sync_state', ordersLock: true },
   { name: '20261014003831_p8_seller_merchant_fulfilment', ordersLock: true },
+  { name: '20261014090000_p5_refunds_returns_queue', ordersLock: false },
   { name: '20261014150000_p4_admin_ops_search', ordersLock: true },
   { name: ORDERS_LOCK_MIGRATION, ordersLock: true },
+  { name: '20261016210000_r11_delivered_effects_marker', ordersLock: true },
+  { name: '20261018000100_n1_indexes', ordersLock: false },
+  { name: '20261018140000_lr_reports_source_indexes', ordersLock: true },
+  { name: '20261018170100_lr_orders_filter_indexes', ordersLock: true },
+  { name: '20261018210000_points_1d', ordersLock: true },
+  { name: '20261019100000_external_orders', ordersLock: false },
+  { name: '20261019170000_chat_review1', ordersLock: false },
+  { name: '20261020000000_waste_exchange', ordersLock: false },
+  { name: '20261020100000_review_return_reversal', ordersLock: false },
+  { name: '20261020120000_q19_reversal_effects_marker', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;
@@ -76,6 +93,9 @@ export interface DbSnapshot {
   waste: { tableExists: boolean; totalPoints: number; activeWarehouses: number; activeWarehousesWithPhone: number };
   /** Giá trị các khoá SystemConfig cần xem; khoá không có trong DB thì không xuất hiện. */
   configs: Record<string, unknown>;
+  /** pointMultiplier của từng hạng trong membership_tiers; bảng chưa có hoặc trống thì []. */
+  membershipTiers: number[];
+  dealerTierCount: number;
   adminCount: number;
   pendingAdminGrants: number;
   znsTemplates: ZnsTemplateRow[];
@@ -160,7 +180,7 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
             G_DB,
             'db.pending_scope',
             scopeTitle,
-            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, 6)}` : ''}`,
+            `${pending.length} migration chờ áp, ${extra.length} cái nằm ngoài các migration của đợt${heavy.length > 0 ? `; nặng: ${listNames(heavy, HEAVY_MIGRATIONS.length)}` : ''}`,
             'Xin cửa sổ theo TOÀN BỘ danh sách chờ áp, không chỉ các migration của đợt (runbook mục 1.0 và 3). Quay lại chỉ bằng image cũ KHÔNG an toàn khi danh sách có migration ngoài sáu cái của đợt: chỉ còn khôi phục bản backup (runbook 7.3).',
           ),
     );
@@ -197,14 +217,15 @@ function migrationChecks(s: DbSnapshot, phase: GoLivePhase): CheckResult[] {
 function ordersLockCheck(s: DbSnapshot): CheckResult {
   const title = 'Số đơn và thời gian khoá bảng orders';
   const applied = new Set(s.appliedMigrations);
-  if (applied.has(ORDERS_LOCK_MIGRATION)) {
-    return pass(G_DB, 'db.orders_lock', title, `${s.orderCount.toLocaleString('vi-VN')} đơn; migration khoá bảng đã áp xong, không còn rủi ro này`);
-  }
   const expected = new Set(s.expectedMigrations);
   const heavy = HEAVY_MIGRATIONS.filter((h) => h.ordersLock && expected.has(h.name) && !applied.has(h.name)).map((h) => h.name);
+  if (applied.has(ORDERS_LOCK_MIGRATION) && heavy.length === 0) {
+    return pass(G_DB, 'db.orders_lock', title, `${s.orderCount.toLocaleString('vi-VN')} đơn; migration khoá bảng đã áp xong, không còn rủi ro này`);
+  }
   const seconds = estimateOrdersLockSeconds(s.orderCount, heavy.length);
   const window = Math.ceil(recommendedWindowSeconds(s.orderCount, heavy.length) / 60);
-  const many = heavy.length > 1 ? ` (${heavy.length} migration nặng trên orders chờ áp, mỗi cái tính ngang migration r6: ${listNames(heavy, 6)})` : '';
+  const named = heavy.length > 1 || (heavy.length === 1 && heavy[0] !== ORDERS_LOCK_MIGRATION);
+  const many = named ? ` (${heavy.length} migration nặng trên orders chờ áp, mỗi cái tính ngang migration r6: ${listNames(heavy, HEAVY_MIGRATIONS.length)})` : '';
   const detail = `${s.orderCount.toLocaleString('vi-VN')} đơn, ước tính khoá orders ~${seconds} giây${many}, cửa sổ nên xin ≥ ${window} phút`;
   if (s.orderCount < ORDERS_LOCK_SMALL) return pass(G_DB, 'db.orders_lock', title, detail);
   return warn(G_DB, 'db.orders_lock', title, detail, 'Đặt hàng và webhook bị chặn suốt lúc khoá: chọn giờ vắng nhất, báo trước, xin cửa sổ theo số trên (runbook mục 3).');
@@ -415,7 +436,37 @@ function adminCheck(s: DbSnapshot): CheckResult {
   if (s.pendingAdminGrants > 0) {
     return warn(G_DB, 'db.admin_user', title, `chưa có ADMIN nào, nhưng có ${s.pendingAdminGrants} quyền cấp theo SĐT chờ người đó đăng nhập`, 'Người được cấp phải đăng nhập một lần để quyền có hiệu lực; kiểm lại ngay sau đó.');
   }
-  return fail(G_DB, 'db.admin_user', title, 'không có tài khoản ADMIN nào', 'Cấp admin đầu tiên: `docker compose -f docker-compose.vietnix.yml run --rm --no-deps -e ADMIN_PHONE=<SĐT> api node scripts/grant-admin.js` (hoặc ops.yml, hành động grant-admin).');
+  return fail(G_DB, 'db.admin_user', title, 'không có tài khoản ADMIN nào', 'Cấp admin đầu tiên: `docker compose -f docker-compose.vietnix.yml run --rm --no-deps -e ADMIN_PHONE=<SĐT> api node scripts/grant-admin.js` (SĐT 10 số dạng 0912345678 hoặc +84912345678, script tự chuẩn hoá; hoặc ops.yml, hành động grant-admin).');
+}
+
+/** Hệ số điểm đã chốt cho Mầm Xanh, Lộc Biếc, Đại Thụ, Cổ Thụ (A8). */
+const REQUIRED_TIER_MULTIPLIERS = [1, 1.2, 1.5, 2] as const;
+const viNum = (n: number) => String(n).replace('.', ',');
+
+const SEED_FLAG_HINT = 'Chạy `pnpm run prisma:seed:reference --with-business-defaults` trong container api (chỉ tạo dòng thiếu, chạy lại an toàn; runbook bước 7b).';
+
+function membershipTierCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
+  const title = 'Hạng thành viên và hệ số điểm';
+  const have = new Set(s.membershipTiers.map((m) => Math.round(m * 100) / 100));
+  const missing = REQUIRED_TIER_MULTIPLIERS.filter((m) => !have.has(m));
+  if (s.membershipTiers.length === 0) {
+    // Trước deploy, DB mới chưa có hạng là bình thường: seed-reference chạy ở bước deploy.
+    const red = phase === 'pre-deploy' ? warn : fail;
+    const detail = phase === 'pre-deploy' ? 'chưa có hạng nào (sẽ nạp ở bước 7b khi deploy)' : 'chưa có hạng nào: mọi khách hệ số x1, không có freeship theo hạng';
+    return red(G_DB, 'db.membership_tiers', title, detail, SEED_FLAG_HINT);
+  }
+  if (missing.length > 0) {
+    return fail(G_DB, 'db.membership_tiers', title, `thiếu hạng có hệ số ${missing.map(viNum).join(', ')} (đã chốt x1, x1,2, x1,5, x2); đang có ${s.membershipTiers.map(viNum).join(', ')}`, `Sửa ở Quản trị, Hạng thành viên, hoặc ${SEED_FLAG_HINT}`);
+  }
+  return pass(G_DB, 'db.membership_tiers', title, `${s.membershipTiers.length} hạng, hệ số ${[...s.membershipTiers].sort((a, b) => a - b).map(viNum).join(', ')}`);
+}
+
+function dealerTierCheck(s: DbSnapshot): CheckResult {
+  const title = 'Bậc đại lý';
+  if (s.dealerTierCount === 0) {
+    return warn(G_DB, 'db.dealer_tiers', title, 'chưa có bậc đại lý nào: admin không duyệt được hồ sơ đại lý hay cấp vai trò DEALER', SEED_FLAG_HINT);
+  }
+  return pass(G_DB, 'db.dealer_tiers', title, `${s.dealerTierCount} bậc`);
 }
 
 function znsCheck(s: DbSnapshot): CheckResult {
@@ -453,6 +504,8 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     bankCheck(s),
     codCapCheck(s),
     ...gomdonToggleChecks(s, ctx.env),
+    membershipTierCheck(s, ctx.phase),
+    dealerTierCheck(s),
     adminCheck(s),
     znsCheck(s),
     ...evaluateDemoData(s.demoData, ctx.env, ctx.phase),

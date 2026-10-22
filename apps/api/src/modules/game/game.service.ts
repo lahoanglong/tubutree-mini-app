@@ -17,6 +17,7 @@ import { startOfVnDay } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
+import { returnedProductsByOrder, REVIEWABLE_ORDER, returnWindowClosed } from '../reviews/review-eligibility';
 
 interface SpinPrize {
   id: string;
@@ -32,6 +33,10 @@ interface EcoImpact {
   treeType: string;
   treesPlanted: number;
 }
+
+/** Thêm vào mô tả thẻ nhiệm vụ khi đơn đã giao nhưng chưa tính vì còn trong hạn đổi/trả. */
+const MISSION_WAITING_NOTE =
+  'Đơn đã giao đang trong thời gian đổi/trả hoặc đang chờ duyệt yêu cầu trả, thưởng mở khi hết hạn đổi/trả và yêu cầu trả (nếu có) đã được xử lý.';
 
 /** Vườn Xanh Tubu (Build Spec §6.7). Tham số đọc từ SystemConfig. */
 @Injectable()
@@ -532,30 +537,89 @@ export class GameService {
   }
 
   /**
-   * FIRST_ORDER chỉ tính đơn bán lẻ đã giao của chính khách: đơn đặt rồi huỷ không còn giữ được thưởng. INVITE_3 dùng đúng
+   * FIRST_ORDER chỉ tính đơn bán lẻ đã giao của chính khách và đã hết hạn đổi/trả: thưởng trả bằng điểm dùng ngay được, nên
+   * đơn còn có thể bị trả (còn trong returns.window_days hoặc đang có yêu cầu trả chờ duyệt) chưa được tính, nếu không khách
+   * nhận thưởng rồi trả đơn mà vẫn giữ điểm. INVITE_3 dùng đúng
    * số lượt giới thiệu thành công của chương trình giới thiệu (bạn được mời mua thành công, trừ lượt bị thu hồi), không
    * đếm tài khoản được mời: tài khoản khách tạo bằng deviceId không tốn gì (ENGAGE-1). REVIEW_3 chỉ tính đánh giá có ảnh,
-   * đúng điều mô tả nhiệm vụ hứa ("Viết 3 đánh giá có ảnh"), và đếm theo SẢN PHẨM khác nhau: mỗi lần mua được một đánh giá
-   * nên đếm theo dòng thì mua cùng một sản phẩm ba lần là xong nhiệm vụ.
+   * đúng điều mô tả nhiệm vụ hứa ("Viết 3 đánh giá có ảnh"), của đơn gốc cũng đã hết hạn đổi/trả, và đếm theo SẢN PHẨM khác
+   * nhau: mỗi lần mua được một đánh giá nên đếm theo dòng thì mua cùng một sản phẩm ba lần là xong nhiệm vụ.
+   *
+   * Đánh giá của sản phẩm đã có dòng trả được duyệt trên đơn đó (thưởng đánh giá đã thu hồi) không tính, dù đơn còn trong hạn
+   * hay đã qua hạn.
+   *
+   * `pending*` là phần đã có nhưng còn chờ hết hạn đổi/trả, để thẻ nhiệm vụ nói đúng lý do chưa tính.
    */
   private async missionMetrics(userId: string) {
-    const [profile, ordersCount, reviewedProducts, referralsCount] = await Promise.all([
+    const [profile, orders, imageReviews, referralsCount] = await Promise.all([
       this.prisma.gameProfile.findUnique({ where: { userId } }),
-      this.prisma.order.count({
-        where: { userId, status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false },
-      }),
-      this.prisma.review.groupBy({
-        by: ['productId'],
+      this.deliveredOrders(userId),
+      this.prisma.review.findMany({
         where: { userId, NOT: { images: { isEmpty: true } } },
+        select: { productId: true, orderId: true },
       }),
       countReferralSuccesses(this.prisma, userId),
     ]);
+    // Sản phẩm đã bị trả (dù một phần) trên đơn đó đã mất thưởng đánh giá nên không tính vào nhiệm vụ nữa.
+    const returned = await returnedProductsByOrder(this.prisma, [...new Set(imageReviews.map((r) => r.orderId))]);
+    const counted = imageReviews.filter((r) => !returned.get(r.orderId)?.has(r.productId));
+    const settledProducts = new Set(counted.filter((r) => orders.settled.has(r.orderId)).map((r) => r.productId));
+    const pendingProducts = new Set(
+      counted.filter((r) => orders.pending.has(r.orderId) && !settledProducts.has(r.productId)).map((r) => r.productId),
+    );
     return {
       streakDays: profile?.streakDays ?? 0,
-      ordersCount,
-      reviewedProductsCount: reviewedProducts.length,
+      ordersCount: orders.settled.size,
+      pendingOrdersCount: orders.pending.size,
+      reviewedProductsCount: settledProducts.size,
+      pendingReviewedProductsCount: pendingProducts.size,
       referralsCount,
     };
+  }
+
+  /**
+   * Đơn bán lẻ đã giao của khách (cùng REVIEWABLE_ORDER với đánh giá): `settled` đã qua hạn đổi/trả và không có yêu cầu trả
+   * chờ duyệt; `pending` là phần còn lại. Hết hạn thì khách không gửi thêm được yêu cầu trả (OrderReturnsService.request), nên
+   * đơn settled không còn đường nào bị trả sau lúc nhận thưởng.
+   */
+  private async deliveredOrders(userId: string): Promise<{ settled: Set<string>; pending: Set<string> }> {
+    const [windowDays, orders] = await Promise.all([
+      this.returnWindowDays(),
+      this.prisma.order.findMany({ where: { userId, ...REVIEWABLE_ORDER }, select: { id: true, deliveredAt: true, updatedAt: true } }),
+    ]);
+    const open =
+      orders.length > 0
+        ? await this.prisma.returnRequest.findMany({
+            where: { orderId: { in: orders.map((o) => o.id) }, status: 'REQUESTED' },
+            select: { orderId: true },
+          })
+        : [];
+    const withOpenRequest = new Set(open.map((r) => r.orderId));
+    const now = new Date();
+    const settled = new Set<string>();
+    const pending = new Set<string>();
+    for (const o of orders) {
+      (returnWindowClosed(o, windowDays, now) && !withOpenRequest.has(o.id) ? settled : pending).add(o.id);
+    }
+    return { settled, pending };
+  }
+
+  /** returns.window_days (cùng khoá và mặc định 7 với OrderReturnsService.request); sai kiểu → 7. */
+  private async returnWindowDays(): Promise<number> {
+    const v = Number(await this.config.get<number>('returns.window_days', 7));
+    return Number.isFinite(v) && v >= 0 ? v : 7;
+  }
+
+  /** Nhiệm vụ đã có đơn/đánh giá nhưng chưa tính vì đơn còn trong hạn đổi/trả (hoặc đang có yêu cầu trả). */
+  private missionWaitsForReturnWindow(
+    code: string,
+    goal: number,
+    metrics: { pendingOrdersCount: number; reviewedProductsCount: number; pendingReviewedProductsCount: number },
+  ): boolean {
+    if (code === 'FIRST_ORDER') return metrics.pendingOrdersCount > 0;
+    // Chỉ nói "chờ hết hạn" khi phần đang chờ đủ để hoàn thành nhiệm vụ; thiếu thì khách còn phải viết thêm đánh giá.
+    if (code === 'REVIEW_3') return metrics.pendingReviewedProductsCount > 0 && metrics.reviewedProductsCount + metrics.pendingReviewedProductsCount >= goal;
+    return false;
   }
 
   /** Nhiệm vụ không lặp lại: 1 chu kỳ duy nhất, cố định '0'. Nhiệm vụ lặp lại (isRepeatable, vd
@@ -590,11 +654,12 @@ export class GameService {
       const done = !m.isRepeatable && claimed;
       const progress = done ? targetGoal : Math.min(targetGoal, raw);
       const completed = done || raw >= targetGoal;
+      const waiting = !done && raw < targetGoal && this.missionWaitsForReturnWindow(m.code, targetGoal, metrics);
 
       return {
         code: m.code,
         title: m.title,
-        description: m.description,
+        description: waiting ? [m.description, MISSION_WAITING_NOTE].filter(Boolean).join(' ') : m.description,
         rewardPoints: m.rewardPoints,
         progress,
         goal: targetGoal,

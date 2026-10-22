@@ -31,6 +31,14 @@ export class ZaloOaEventsProcessor extends WorkerHost {
     const event = await this.prisma.oaInboundMessage.findUnique({ where: { id: job.data.eventId } });
     if (!event || event.status !== 'RECEIVED') return;
 
+    // Claim trước khi gửi: job stalled (tiến trình chết sau sendText, trước khi ghi trạng thái) chạy lại sẽ thấy
+    // PROCESSING và bỏ qua, thay vì gửi cùng tin trả lời hai lần. Đổi lại, crash giữa chừng mất tin trả lời đó.
+    const claim = await this.prisma.oaInboundMessage.updateMany({
+      where: { id: event.id, status: 'RECEIVED' },
+      data: { status: 'PROCESSING' },
+    });
+    if (claim.count !== 1) return;
+
     try {
       const template = (await this.cskh.matchTemplate(event.messageText ?? '')) ?? (await this.greetingIfFirstMessage(event.zaloUserId));
 

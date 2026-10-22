@@ -48,6 +48,18 @@ describe('WasteCatalogueService.listPoints', () => {
     expect(prisma.wastePoint.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { status: 'ACTIVE', provinceCode: '79' } }));
     expect(prisma.wastePointUsage.findMany).toHaveBeenCalledWith({ where: { pointId: { in: ['wh', 'p1', 'p2'] }, monthKey: '2026-10' }, select: { pointId: true, pointsUsed: true } });
   });
+  it('a PARTNER never lists a warehouse-only item as accepted, even when a link to it exists; the warehouse still does', async () => {
+    const { svc, prisma } = setup([
+      pt({ id: 'wh', kind: 'WAREHOUSE', monthlyQuotaPoints: null, activatedAt: day(500) }),
+      pt({ id: 'p1', items: [{ itemId: 'carton' }, { itemId: 'milk' }] }),
+    ]);
+    prisma.wasteItem.findMany.mockResolvedValue([
+      { id: 'carton', warehouseOnly: false },
+      { id: 'milk', warehouseOnly: true },
+    ]);
+    const list = await svc.listPoints();
+    expect(list.map((p) => [p.id, p.acceptedItemIds])).toEqual([['wh', ['carton', 'milk']], ['p1', ['carton']]]);
+  });
   it('returns at most 200 points', async () => {
     const { svc } = setup(Array.from({ length: 205 }, (_, i) => pt({ id: `p${i}` })));
     expect(await svc.listPoints()).toHaveLength(200);

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import axios from 'axios';
 import { newDeviceId } from '../utils/idempotency';
 import { setStorage, getStorage, removeStorage } from 'zmp-sdk/apis';
 import type { AuthUser, LoginResponse } from '@tubutree/shared-types';
@@ -15,6 +14,7 @@ import {
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
 import { loadFirstTouch } from '../services/first-touch';
 import { vi } from '../i18n/vi';
+import { isHttpError } from '../services/http';
 
 const REFRESH_KEY = 'tubu_refresh_token';
 const DEVICE_KEY = 'tubu_device_id';
@@ -37,7 +37,7 @@ interface AuthState {
    * phiên (chưa phải khách: trang phải nói mất kết nối và cho thử lại, xem hooks/use-auth-phase.ts).
    */
   status: 'idle' | 'loading' | 'authenticated' | 'error';
-  /** Câu tiếng Việt cho khách đọc; không bao giờ là message thô của axios/trình duyệt. */
+  /** Câu tiếng Việt cho khách đọc; không bao giờ là message thô của trình duyệt. */
   error?: string;
   /** Đăng nhập ngầm (không xin SĐT) — dùng khi mở app. */
   login: () => Promise<void>;
@@ -66,7 +66,7 @@ async function clearRefresh(): Promise<void> {
  * lần sau tự retry là đủ.
  */
 function isRefreshRejected(err: unknown): boolean {
-  return axios.isAxiosError(err) && (err.response?.status === 401 || err.response?.status === 403);
+  return isHttpError(err) && (err.response?.status === 401 || err.response?.status === 403);
 }
 
 /**
@@ -256,8 +256,13 @@ setUnauthorizedHandler(async () => {
     useAuthStore.setState({ user: res.user, status: 'authenticated' });
     return res.accessToken;
   } catch (err) {
-    if (isRefreshRejected(err)) await clearRefresh();
-    useAuthStore.setState({ user: null, status: 'idle' });
+    if (isRefreshRejected(err)) {
+      await clearRefresh();
+      useAuthStore.setState({ user: null, status: 'idle' });
+    } else {
+      // Mạng/5xx: chưa biết phiên còn hay không. 'error' (như restore()) để useSessionRecovery tự thử lại, thay vì mời đăng nhập.
+      useAuthStore.setState({ status: 'error', error: vi.errors.sessionUnavailable });
+    }
     return null;
   }
 });

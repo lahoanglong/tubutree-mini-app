@@ -34,7 +34,9 @@ export type InboxKey =
   | 'merchantPayoutsPending'
   | 'dealerApplications'
   | 'dealerClaims'
+  | 'dealerClaimsToPay'
   | 'payouts'
+  | 'payoutsToPay'
   | 'communityPending'
   | 'communityUnanswered'
   | 'invoicePending'
@@ -97,7 +99,11 @@ export class OpsInboxService {
       { key: 'merchantPayoutsPending', audience: ['KE_TOAN'], count: () => p.merchantPayout.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerApplications', audience: 'ADMIN', count: () => p.dealerApplication.count({ where: { status: 'PENDING' } }) },
       { key: 'dealerClaims', audience: 'ADMIN', count: () => p.dealerRewardClaim.count({ where: { status: 'PENDING' } }) },
+      // ADMIN đã duyệt, đang chờ kế toán chi và bấm "Đã chi" (DealerAdminController.markPaid mở cho KE_TOAN; duyệt vẫn chỉ ADMIN).
+      { key: 'dealerClaimsToPay', audience: ['KE_TOAN'], count: () => p.dealerRewardClaim.count({ where: { status: 'APPROVED' } }) },
       { key: 'payouts', audience: 'ADMIN', count: () => p.payout.count({ where: { status: 'REQUESTED' } }) },
+      // ADMIN đã duyệt, đang chờ kế toán chuyển tiền và bấm "Đã chi" (duyệt chỉ ADMIN, chi do kế toán nên hai khoá tách nhau).
+      { key: 'payoutsToPay', audience: ['KE_TOAN'], count: () => p.payout.count({ where: { status: 'APPROVED' } }) },
       // Cộng đồng: bài khách vừa đăng và câu hỏi chờ lâu là việc của người kiểm duyệt (cùng danh sách @AllowStaff ở CommunityFeedController).
       { key: 'communityPending', audience: COMMUNITY_MODERATORS, count: () => p.feedPost.count({ where: { status: 'PENDING' } }) },
       {
@@ -108,8 +114,8 @@ export class OpsInboxService {
           return countUnansweredQuestions(p, unansweredCutoff(hours, now));
         },
       },
-      // Cùng điều kiện với bộ lọc "VAT chờ xuất" ở tab Đơn hàng; xuất hoá đơn (issue-invoice) chỉ ADMIN nên chỉ ADMIN thấy số này.
-      { key: 'invoicePending', audience: 'ADMIN', count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
+      // Cùng điều kiện với bộ lọc "VAT chờ xuất" ở tab Đơn hàng; xuất hoá đơn (issue-invoice) là việc của kế toán.
+      { key: 'invoicePending', audience: ['KE_TOAN'], count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
       // Điểm đơn ngoài app cần người: claim chờ duyệt, lần gửi mã quá 3 ngày chưa thấy đơn (hoặc thấy đơn nguồn lạ), đơn hoàn một phần sau khi đã cộng.
       { key: 'externalPoints', audience: ['CSKH'], count: () => externalPointsAttentionCount(p, now) },
       // Đổi rác: mỗi khoá đếm đúng một hàng đợi bằng cùng `where` với bộ lọc ở màn nhân viên/admin. Cảnh báo bất thường không vào hộp việc.

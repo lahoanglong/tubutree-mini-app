@@ -103,11 +103,12 @@ export class WasteCatalogueService {
 
     const activeItems = await this.prisma.wasteItem.findMany({
       where: { status: 'ACTIVE' },
-      select: { id: true },
+      select: { id: true, warehouseOnly: true },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     const activeIds = activeItems.map((i) => i.id);
-    const activeSet = new Set(activeIds);
+    // A link left over from before the warehouse-only rule must not make a partner point look like it takes the item.
+    const partnerSet = new Set(activeItems.filter((i) => !i.warehouseOnly).map((i) => i.id));
     const usage = await this.prisma.wastePointUsage.findMany({
       where: { pointId: { in: kept.map((p) => p.id) }, monthKey: vnMonthKey(now) },
       select: { pointId: true, pointsUsed: true },
@@ -115,7 +116,7 @@ export class WasteCatalogueService {
     const used = new Map(usage.map((u) => [u.pointId, u.pointsUsed]));
 
     return kept.map((p) => {
-      const accepted = p.kind === 'WAREHOUSE' ? activeIds : p.items.map((l) => l.itemId).filter((id) => activeSet.has(id));
+      const accepted = p.kind === 'WAREHOUSE' ? activeIds : p.items.map((l) => l.itemId).filter((id) => partnerSet.has(id));
       const quotaFull = p.kind === 'PARTNER' && p.monthlyQuotaPoints !== null && (used.get(p.id) ?? 0) >= p.monthlyQuotaPoints;
       return toWastePointDTO(p, accepted, quotaFull, null);
     });

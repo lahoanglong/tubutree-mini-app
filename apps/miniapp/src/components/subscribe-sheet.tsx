@@ -20,13 +20,12 @@ import { Text } from './ui/text';
 import {
   AddressPicker,
   formatVnDate,
+  IntervalPicker,
   isStartDateAllowed,
   PaymentMethodPicker,
   SectionLabel,
   startDateRange,
 } from './subscription-options';
-
-const INTERVALS = [4, 6, 8, 10];
 
 export function SubscribeSheet({
   visible,
@@ -120,13 +119,7 @@ export function SubscribeSheet({
       }
     >
       <SectionLabel>{t.intervalLabel}</SectionLabel>
-      <div role="group" aria-label={t.intervalLabel} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
-        {INTERVALS.map((w) => (
-          <Chip key={w} selected={weeks === w} onPress={() => setWeeks(w)}>
-            {t.intervalOption(w)}
-          </Chip>
-        ))}
-      </div>
+      <IntervalPicker value={weeks} onChange={setWeeks} />
 
       <SectionLabel>{t.startLabel}</SectionLabel>
       <div role="group" aria-label={t.startLabel} style={{ display: 'flex', gap: 8, padding: '4px 0' }}>

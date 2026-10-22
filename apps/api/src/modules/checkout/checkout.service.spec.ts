@@ -150,13 +150,15 @@ function build(
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
   const cartData = (opts.cartData ?? CART) as { items: Array<Record<string, unknown>> };
+  const priced = async () => ({
+    unavailableItems: [],
+    ...cartData,
+    items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
+  });
   const cart = {
     // Đọc lúc gọi (không chụp lúc build): vài test sửa CART tại chỗ sau khi dựng service.
-    getCart: jest.fn().mockImplementation(async () => ({
-      unavailableItems: [],
-      ...cartData,
-      items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
-    })),
+    getCart: jest.fn().mockImplementation(priced),
+    getCartForCheckout: jest.fn().mockImplementation(priced),
     // Khoá giỏ trong tx đọc lại đúng các dòng giỏ hiện tại (không ai đổi giỏ giữa chừng).
     lockForCheckout: jest.fn().mockImplementation(async () =>
       cartData.items.map((it) => ({ id: it.id, variationId: it.variationId, quantity: it.quantity })),
@@ -2091,6 +2093,43 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
     expect(q.couponApplied).toBe(false);
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+
+  const FIRST_ORDER_FREESHIP_REASON = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+
+  it('mã freeship trên đơn đầu đã miễn phí giao → lời báo nói đúng lý do là đơn đầu, không nói "không có phí giao" (U1-B03)', async () => {
+    const { svc } = setup({
+      config: config(ON),
+      cartData: { ...SMALL, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${FIRST_ORDER_FREESHIP_REASON}`);
+  });
+
+  it('xem trước mã ở trang giỏ (chưa có địa chỉ): FREESHIP trên đơn đầu đã miễn phí giao → không dùng được, kèm lý do đơn đầu; mã giảm tiền vẫn dùng được', async () => {
+    const { svc, coupons, loyalty } = setup({ config: config(ON) });
+    (loyalty as unknown as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest.fn().mockResolvedValue([{ code: 'FREESHIP' }, { code: 'GIAM10' }]);
+    (coupons as unknown as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(
+      new Map([
+        ['FREESHIP', { discount: 0, freeship: true }],
+        ['GIAM10', { discount: 10000, freeship: false }],
+      ]),
+    );
+    const res = await svc.couponPreviews('u1', {} as never);
+    expect(res.coupons).toEqual([
+      { code: 'FREESHIP', eligible: false, reason: FIRST_ORDER_FREESHIP_REASON, discount: 0 },
+      { code: 'GIAM10', eligible: true, discount: 10000 },
+    ]);
+  });
+
+  it('xem trước mã ở trang giỏ: khách không còn freeship đơn đầu → FREESHIP vẫn dùng được như cũ', async () => {
+    const { svc, coupons, loyalty } = setup({ config: config(OFF) });
+    (loyalty as unknown as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest.fn().mockResolvedValue([{ code: 'FREESHIP' }]);
+    (coupons as unknown as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(new Map([['FREESHIP', { discount: 0, freeship: true }]]));
+    const res = await svc.couponPreviews('u1', {} as never);
+    expect(res.coupons).toEqual([{ code: 'FREESHIP', eligible: true, discount: 0 }]);
   });
 
   it('đơn khác của khách vừa ghi xong giữa lúc tính giá và lúc ghi đơn → kiểm trong tx từ chối, không ghi lượt mã', async () => {

@@ -141,9 +141,14 @@ export class PancakeSyncHooks {
 
   /**
    * Sau khi đơn đã CANCELLED ở Tubu (đã commit). `decision` undefined = đường huỷ không hỏi Pancake trước (Gomdon,
-   * hệ thống) → có dấu vết trên Pancake thì xếp job huỷ. Best-effort: lỗi chỉ log, cron cứu hộ quét PENDING.
+   * hệ thống) → có dấu vết trên Pancake thì xếp job huỷ. Best-effort: lỗi chỉ log, không ném.
+   *
+   * Trả false khi lỗi xảy ra TRƯỚC khi lệnh huỷ có chỗ đứng trong DB (chưa ghi kết quả, chưa đặt PENDING): cron cứu hộ chỉ quét
+   * PENDING/FAILED nên không ai biết còn lệnh huỷ phải gửi, người gọi không được ghi mốc "xong phần đảo". Đã đặt PENDING thì lỗi
+   * sau đó (cờ "Cần xử lý", xếp job) do cron cứu hộ làm nốt nên vẫn trả true.
    */
-  async afterLocalCancel(orderId: string, decision?: PancakeCancelDecision): Promise<void> {
+  async afterLocalCancel(orderId: string, decision?: PancakeCancelDecision): Promise<boolean> {
+    let queuedOrSettled = false;
     try {
       // NONE vẫn đọc lại bên dưới: lần đẩy chạy song song có thể đã tạo đơn Pancake sau lúc hỏi.
       if (decision?.kind === 'CONFIRMED') {
@@ -159,14 +164,15 @@ export class PancakeSyncHooks {
             ...(decision.pancakeOrderId ? { pancakeOrderId: decision.pancakeOrderId, pancakePushClaimedAt: null } : {}),
           },
         });
-        if (settled.count > 0) return;
+        if (settled.count > 0) return true;
       }
       const order = await this.prisma.order.findUnique({
         where: { id: orderId },
         select: { id: true, code: true, fulfiller: true, pancakeOrderId: true, pancakePushClaimedAt: true, pancakeCancelStatus: true },
       });
-      if (!order || isMerchantFulfilledOrder(order) || !mayExistOnPancake(order)) return;
+      if (!order || isMerchantFulfilledOrder(order) || !mayExistOnPancake(order)) return true;
       await this.prisma.order.update({ where: { id: orderId }, data: { pancakeCancelStatus: PANCAKE_CANCEL.PENDING } });
+      queuedOrSettled = true;
       if (decision?.kind === 'DEFERRED') {
         await flagPancakeAttention(
           this.prisma,
@@ -177,8 +183,12 @@ export class PancakeSyncHooks {
         );
       }
       await enqueuePancakeCancel(this.queue, orderId);
+      return true;
     } catch (err) {
-      this.logger.error(`Xếp lệnh huỷ Pancake lỗi cho đơn ${orderId}: ${pancakeErrorText(err)} — cron cứu hộ thử lại.`);
+      this.logger.error(
+        `Xếp lệnh huỷ Pancake lỗi cho đơn ${orderId}: ${pancakeErrorText(err)} — ${queuedOrSettled ? 'cron cứu hộ thử lại' : 'chưa đặt được PENDING nên cron huỷ Pancake không thấy đơn, cần chạy lại phần đảo sau huỷ'}.`,
+      );
+      return queuedOrSettled;
     }
   }
 

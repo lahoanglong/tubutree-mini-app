@@ -1,6 +1,7 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrderReversalService } from './order-reversal.service';
+import * as refundQueue from './refund-queue';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { CartService } from '../cart/cart.service';
@@ -22,7 +23,11 @@ jest.mock('../wallet/wallet-ledger.service', () => ({
   ),
 }));
 
-const loyalty = { reverseOrderPoints: jest.fn().mockResolvedValue(undefined) } as unknown as LoyaltyService;
+const POINTS_EXPIRES_AT = new Date('2027-10-20T00:00:00.000Z');
+const loyalty = {
+  reverseOrderPoints: jest.fn().mockResolvedValue(undefined),
+  pointsExpiresAt: jest.fn().mockResolvedValue(POINTS_EXPIRES_AT),
+} as unknown as LoyaltyService;
 const cart = {} as unknown as CartService;
 const notifications = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
 const config = { get: async <T>(_k: string, fb?: T): Promise<T> => fb as T } as unknown as SystemConfigService;
@@ -149,6 +154,42 @@ describe('OrdersService.cancel', () => {
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
   });
 
+  it('Q19: huỷ xong trọn vẹn ghi mốc reversalEffectsAt; đảo điểm lỗi thì KHÔNG ghi (cron chạy lại)', async () => {
+    const ok = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await ok.svc.cancel('u1', 'TUBU1');
+    expect(ok.updateMany).toHaveBeenCalledWith({ where: { id: 'o1', reversalEffectsAt: null }, data: { reversalEffectsAt: expect.any(Date) } });
+
+    (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+    const failed = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await expect(failed.svc.cancel('u1', 'TUBU1')).rejects.toThrow('P2024');
+    expect(failed.updateMany.mock.calls.some(([a]) => 'reversalEffectsAt' in (a as { data: object }).data)).toBe(false);
+  });
+
+  it('Q19: khoản hoàn số tiền chuyển thiếu lỗi hoặc xếp lệnh huỷ Pancake thất bại (afterPancakeCancel trả false) thì KHÔNG ghi mốc, huỷ vẫn thành công', async () => {
+    const markerWrites = (updateMany: jest.Mock) => updateMany.mock.calls.filter(([a]) => 'reversalEffectsAt' in (a as { data: object }).data);
+    const orderStatus = (afterPancakeCancel: jest.Mock) => ({
+      precheckPancakeCancel: jest.fn().mockResolvedValue({ kind: 'NONE' }),
+      afterPancakeCancel,
+    });
+
+    const spy = jest.spyOn(refundQueue, 'refundReportedUnderpayment').mockRejectedValue(new Error('P2024'));
+    try {
+      const refundFails = makeService({ ...baseOrder, status: 'CONFIRMED' }, { orderStatus: orderStatus(jest.fn().mockResolvedValue(true)) });
+      await expect(refundFails.svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
+      expect(markerWrites(refundFails.updateMany)).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const pancakeFails = makeService({ ...baseOrder, status: 'CONFIRMED' }, { orderStatus: orderStatus(jest.fn().mockResolvedValue(false)) });
+    await expect(pancakeFails.svc.cancel('u1', 'TUBU1')).resolves.toBeDefined();
+    expect(markerWrites(pancakeFails.updateMany)).toHaveLength(0);
+
+    const ok = makeService({ ...baseOrder, status: 'CONFIRMED' }, { orderStatus: orderStatus(jest.fn().mockResolvedValue(true)) });
+    await ok.svc.cancel('u1', 'TUBU1');
+    expect(markerWrites(ok.updateMany)).toHaveLength(1);
+  });
+
   it('R3-MONEY-7: khách tự huỷ đơn đã trả có dùng Điểm Xanh → tin huỷ nói cả số tiền vào Ví lẫn số điểm thường được hoàn', async () => {
     (loyalty.reverseOrderPoints as jest.Mock).mockResolvedValueOnce(19);
     const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', paymentMethod: 'WALLET', paymentStatus: 'PAID', total: 95000 });
@@ -254,6 +295,64 @@ describe('OrdersService.cancel', () => {
       }),
     );
     expect(coinCreate).not.toHaveBeenCalled();
+  });
+
+  // D12-02: hoàn điểm thường sau commit mà lỗi (đứt DB, SIGTERM) thì bấm huỷ lại bị chặn bởi "đã CANCELLED" → khách mất điểm vĩnh viễn.
+  it('đơn dùng 20.000 Điểm Xanh thường → hoàn trong CÙNG tx huỷ (ORDER_REFUND_POINTS, lô STANDARD, có hạn), kể cả khi reverseOrderPoints sau commit ném lỗi', async () => {
+    (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+    const { svc, pointsInsert, userUpdate } = makeService({ ...baseOrder, status: 'CONFIRMED', pointsUsed: 20000, pointsUsedConverted: 0 });
+    await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('P2024');
+    expect(pointsInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [expect.objectContaining({ userId: 'u1', delta: 20000, lot: 'STANDARD', reason: 'ORDER_REFUND_POINTS:TUBU1', refType: 'ORDER', refId: 'o1', expiresAt: POINTS_EXPIRES_AT })],
+      }),
+    );
+    expect(userUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: { pointsBalance: { increment: 20000 } } }));
+  });
+
+  // Lỗi đảo điểm/hoa hồng sau commit không được làm bỏ các bước sau: bấm huỷ lại thoát sớm vì đơn đã CANCELLED nên không còn lần chạy nào làm nốt.
+  describe('lỗi đảo điểm/hoa hồng sau commit vẫn chạy hết các bước sau rồi mới ném', () => {
+    const notifiedEvents = () => (notifications.notify as jest.Mock).mock.calls.map((c) => c[1]);
+    let underpayment: jest.SpyInstance;
+    beforeEach(() => {
+      underpayment = jest.spyOn(refundQueue, 'refundReportedUnderpayment').mockResolvedValue(50_000);
+    });
+    afterEach(() => underpayment.mockRestore());
+
+    it('reverseOrderPoints reject thì refundReportedUnderpayment và notify vẫn được gọi đúng một lần', async () => {
+      (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+      const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' });
+      await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('P2024');
+      expect(underpayment).toHaveBeenCalledTimes(1);
+      expect((affiliate.reverseCommissionsForOrder as jest.Mock)).toHaveBeenCalledTimes(1);
+      expect(notifiedEvents().filter((e) => e === 'ORDER_CANCELLED')).toHaveLength(1);
+    });
+
+    it('reverseCommissionsForOrder reject thì các bước sau vẫn chạy, đảo điểm không bị bỏ', async () => {
+      (affiliate.reverseCommissionsForOrder as jest.Mock).mockRejectedValueOnce(new Error('P1001'));
+      const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED' });
+      await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('P1001');
+      expect((loyalty.reverseOrderPoints as jest.Mock)).toHaveBeenCalledTimes(1);
+      expect(underpayment).toHaveBeenCalledTimes(1);
+      expect(notifiedEvents().filter((e) => e === 'ORDER_CANCELLED')).toHaveLength(1);
+    });
+
+    it('cả hai cùng lỗi: ném lỗi ĐẦU TIÊN (đảo điểm), huỷ vận đơn Gomdon của đơn thu gom vẫn được xếp', async () => {
+      (loyalty.reverseOrderPoints as jest.Mock).mockRejectedValueOnce(new Error('P2024'));
+      (affiliate.reverseCommissionsForOrder as jest.Mock).mockRejectedValueOnce(new Error('P1001'));
+      const gomdonQueue = { getJob: jest.fn().mockResolvedValue(null), add: jest.fn().mockResolvedValue({}) };
+      const { svc } = makeService({ ...baseOrder, status: 'CONFIRMED', hasRecyclingPickup: true }, { gomdonQueue });
+      await expect(svc.cancel('u1', 'TUBU1')).rejects.toThrow('P2024');
+      expect(gomdonQueue.add).toHaveBeenCalledTimes(1);
+      expect(notifiedEvents().filter((e) => e === 'ORDER_CANCELLED')).toHaveLength(1);
+    });
+  });
+
+  it('đơn không dùng điểm thường → không đọc cấu hình hạn điểm, không ghi dòng hoàn điểm', async () => {
+    const { svc, pointsInsert } = makeService({ ...baseOrder, status: 'CONFIRMED', pointsUsed: 0, pointsUsedConverted: 0 });
+    await svc.cancel('u1', 'TUBU1');
+    expect(loyalty.pointsExpiresAt as jest.Mock).not.toHaveBeenCalled();
+    expect(pointsInsert).not.toHaveBeenCalled();
   });
 
   it('hủy XU race THUA (count=0) → KHÔNG hoàn xu, KHÔNG ghi sổ cái', async () => {
@@ -425,8 +524,9 @@ describe('OrdersService.cancel — atomic flip+refund (B1)', () => {
     // A6-06 (docs/audit-2026-09/06-web.md): COD chỉ coi là "đã thu tiền" khi status snapshot TRƯỚC
     // lần đảo là DELIVERED (xem OrderReversalService.reverseFinancials) — khách tự huỷ đơn COD chỉ
     // được phép khi còn PENDING_PAYMENT/CONFIRMED (chưa giao), nên ở đây KHÔNG được thử bất kỳ guard
-    // hoàn tiền nào (khác bản cũ: luôn thử guard PAID rồi thua). Chỉ có 1 lệnh updateMany — flip status.
-    expect(updateMany).toHaveBeenCalledTimes(1);
+    // hoàn tiền nào (khác bản cũ: luôn thử guard PAID rồi thua). Chỉ có 1 lệnh updateMany — flip status (ghi mốc
+    // reversalEffectsAt sau commit là lệnh riêng, không phải guard hoàn tiền).
+    expect(updateMany.mock.calls.filter(([a]) => !('reversalEffectsAt' in (a as { data: object }).data))).toHaveLength(1);
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'o1', status: 'CONFIRMED' }, data: { status: 'CANCELLED' } }),
     );
@@ -1069,26 +1169,44 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     variations: ReturnType<typeof variation>[];
     inCart?: { variationId: string; quantity: number }[];
     addItem?: jest.Mock;
+    addItems?: jest.Mock;
   }) {
     const addItem = opts.addItem ?? jest.fn().mockResolvedValue(CART);
+    const addItems = opts.addItems ?? jest.fn().mockImplementation(async (_u: string, ls: unknown[]) => ls.map(() => ({ ok: true })));
     const getCart = jest.fn().mockResolvedValue(CART);
     const prisma = {
       order: { findUnique: jest.fn().mockResolvedValue({ ...baseOrder, status: 'DELIVERED', items: opts.items }) },
       variation: { findMany: jest.fn().mockResolvedValue(opts.variations) },
       cart: { findUnique: jest.fn().mockResolvedValue(opts.inCart ? { items: opts.inCart } : null) },
     } as unknown as PrismaService;
-    const cartSvc = { addItem, getCart } as unknown as CartService;
-    return { svc: new OrdersService(prisma, loyalty, cartSvc, notifications, config, affiliate, reversal), addItem, getCart };
+    const cartSvc = { addItem, addItems, getCart } as unknown as CartService;
+    return { svc: new OrdersService(prisma, loyalty, cartSvc, notifications, config, affiliate, reversal), addItem, addItems, getCart };
   }
 
+  it('D9-05: đơn 8 dòng → thêm cả loạt một lần và dựng giỏ đúng một lần, không gọi addItem từng dòng', async () => {
+    const ids = Array.from({ length: 8 }, (_, i) => i + 1);
+    const { svc, addItem, addItems, getCart } = makeRepurchaseService({
+      items: ids.map((i) => line(`i${i}`, `v${i}`, i)),
+      variations: ids.map((i) => variation(`v${i}`, 50)),
+    });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItem).not.toHaveBeenCalled();
+    expect(addItems).toHaveBeenCalledTimes(1);
+    expect(addItems.mock.calls[0][1]).toHaveLength(8);
+    expect(getCart).toHaveBeenCalledTimes(1);
+    expect(res.results).toHaveLength(8);
+  });
+
   it('không body (client cũ): thêm mọi dòng, addSource=repurchase; response VẪN là giỏ ở top-level + cart + results', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 2), line('i2', 'v2', 1)],
       variations: [variation('v1', 10), variation('v2', 10)],
     });
     const res = await svc.repurchase('u1', 'TUBU1');
-    expect(addItem).toHaveBeenNthCalledWith(1, 'u1', { variationId: 'v1', quantity: 2, addSource: 'repurchase' });
-    expect(addItem).toHaveBeenNthCalledWith(2, 'u1', { variationId: 'v2', quantity: 1, addSource: 'repurchase' });
+    expect(addItems).toHaveBeenCalledWith('u1', [
+      { variationId: 'v1', quantity: 2, addSource: 'repurchase' },
+      { variationId: 'v2', quantity: 1, addSource: 'repurchase' },
+    ], { topUp: expect.any(Function) });
     expect(res).toMatchObject({ items: CART.items, subtotal: 150000, itemCount: 3 });
     expect(res.cart).toEqual(CART);
     expect(res.results).toEqual([
@@ -1109,20 +1227,20 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
   });
 
   it('items: chỉ các dòng được chọn, số lượng theo client', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 2), line('i2', 'v2', 1)],
       variations: [variation('v2', 10)],
     });
     const res = await svc.repurchase('u1', 'TUBU1', { items: [{ orderItemId: 'i2', quantity: 4 }] });
-    expect(addItem).toHaveBeenCalledTimes(1);
-    expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v2', quantity: 4, addSource: 'repurchase' });
+    expect(addItems).toHaveBeenCalledTimes(1);
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v2', quantity: 4, addSource: 'repurchase' }], { topUp: expect.any(Function) });
     expect(res.results).toEqual([{ orderItemId: 'i2', status: 'added', addedQuantity: 4 }]);
   });
 
   it('orderItemId không thuộc đơn → 400 TRƯỚC mọi lần ghi', async () => {
-    const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 10)] });
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 10)] });
     await expect(svc.repurchase('u1', 'TUBU1', { items: [{ orderItemId: 'khac', quantity: 1 }] })).rejects.toBeInstanceOf(BadRequestException);
-    expect(addItem).not.toHaveBeenCalled();
+    expect(addItems).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1130,10 +1248,10 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     ['sản phẩm tắt', variation('v1', 10, { productActive: false }), 'INACTIVE'],
     ['sản phẩm chưa duyệt (trước đây thiếu kiểm này)', variation('v1', 10, { approval: 'REJECTED' }), 'NOT_APPROVED'],
     ['hết hàng', variation('v1', 0), 'OUT_OF_STOCK'],
-  ])('%s → skipped, không gọi addItem', async (_l, v, reason) => {
-    const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [v] });
+  ])('%s → skipped, không ghi giỏ', async (_l, v, reason) => {
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [v] });
     const res = await svc.repurchase('u1', 'TUBU1');
-    expect(addItem).not.toHaveBeenCalled();
+    expect(addItems).not.toHaveBeenCalled();
     expect(res.results).toEqual([{ orderItemId: 'i1', status: 'skipped', reason, addedQuantity: 0 }]);
   });
 
@@ -1143,8 +1261,8 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     expect(res.results[0]).toMatchObject({ status: 'skipped', reason: 'INACTIVE' });
   });
 
-  it('giỏ đã giữ hết tồn → EXCEEDS_STOCK; dòng sau vẫn được thêm (trước đây addItem ném giữa vòng lặp)', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+  it('giỏ đã giữ hết tồn → EXCEEDS_STOCK; dòng sau vẫn được thêm', async () => {
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 1), line('i2', 'v2', 1)],
       variations: [variation('v1', 3), variation('v2', 5)],
       inCart: [{ variationId: 'v1', quantity: 3 }],
@@ -1154,17 +1272,17 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
       { orderItemId: 'i1', status: 'skipped', reason: 'EXCEEDS_STOCK', addedQuantity: 0 },
       { orderItemId: 'i2', status: 'added', addedQuantity: 1 },
     ]);
-    expect(addItem).toHaveBeenCalledTimes(1);
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v2', quantity: 1, addSource: 'repurchase' }], { topUp: expect.any(Function) });
   });
 
   it('muốn 5, còn chỗ 2 → partial, kẹp đúng 2', async () => {
-    const { svc, addItem } = makeRepurchaseService({
+    const { svc, addItems } = makeRepurchaseService({
       items: [line('i1', 'v1', 5)],
       variations: [variation('v1', 3)],
       inCart: [{ variationId: 'v1', quantity: 1 }],
     });
     const res = await svc.repurchase('u1', 'TUBU1');
-    expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v1', quantity: 2, addSource: 'repurchase' });
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v1', quantity: 2, addSource: 'repurchase' }], { topUp: expect.any(Function) });
     expect(res.results).toEqual([{ orderItemId: 'i1', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 2 }]);
   });
 
@@ -1180,16 +1298,12 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     ]);
   });
 
-  it('addItem ném lỗi nghiệp vụ cho 1 dòng (race tồn kho / SP vừa bị ẩn) → dòng đó skipped, dòng khác vẫn chạy', async () => {
-    const addItem = jest
-      .fn()
-      .mockRejectedValueOnce(new BadRequestException('Chỉ còn 0 sản phẩm trong kho.'))
-      .mockRejectedValueOnce(new NotFoundException('Sản phẩm không khả dụng.'))
-      .mockResolvedValue(CART);
+  it('addItems báo lỗi nghiệp vụ cho 1 dòng (race tồn kho / SP vừa bị ẩn) → dòng đó skipped, dòng khác vẫn được thêm', async () => {
+    const addItems = jest.fn().mockResolvedValue([{ ok: false, error: 'STOCK' }, { ok: false, error: 'UNAVAILABLE' }, { ok: true }]);
     const { svc } = makeRepurchaseService({
       items: [line('i1', 'v1', 1), line('i2', 'v2', 1), line('i3', 'v3', 1)],
       variations: [variation('v1', 5), variation('v2', 5), variation('v3', 5)],
-      addItem,
+      addItems,
     });
     const res = await svc.repurchase('u1', 'TUBU1');
     expect(res.results.map((r) => [r.orderItemId, r.status, r.reason])).toEqual([
@@ -1199,16 +1313,70 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     ]);
   });
 
+  // Thêm bù là lần ghi thứ hai nếu đi addItems riêng: lỗi hạ tầng ở lần hai để giỏ nửa vời và add_to_cart ghi đôi. Nên bù chạy trong CÙNG lần
+  // addItems, qua callback nhận kết quả vòng đầu.
+  it('dòng đứng trước bị từ chối → phần chỗ nó giữ chỗ được trả cho dòng sau cùng variation, bù trong CÙNG một lần addItems (không có lần hai)', async () => {
+    let planned: unknown;
+    const addItems = jest.fn(async (_u: string, _ls: unknown[], opts?: { topUp?: (o: unknown[]) => unknown }) => {
+      const first = [{ ok: false, error: 'STOCK' }, { ok: true }];
+      planned = opts?.topUp?.(first);
+      return [first[0], { ok: true, toppedUp: 1 }];
+    });
+    const { svc } = makeRepurchaseService({
+      items: [line('i1', 'v1', 2), line('i2', 'v1', 2)],
+      variations: [variation('v1', 3)],
+      addItems,
+    });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItems).toHaveBeenCalledTimes(1);
+    expect(addItems.mock.calls[0]![1]).toEqual([
+      { variationId: 'v1', quantity: 2, addSource: 'repurchase' },
+      { variationId: 'v1', quantity: 1, addSource: 'repurchase' },
+    ]);
+    expect(planned).toEqual([{ index: 1, quantity: 1 }]);
+    expect(res.results).toEqual([
+      { orderItemId: 'i1', status: 'skipped', reason: 'EXCEEDS_STOCK', addedQuantity: 0 },
+      { orderItemId: 'i2', status: 'added', addedQuantity: 2 },
+    ]);
+  });
+
+  it('lượt bù không được nhận (outcome không có toppedUp) thì dòng sau giữ kết quả partial; không dòng nào bị từ chối thì callback không yêu cầu bù', async () => {
+    let planned: unknown;
+    const addItems = jest.fn(async (_u: string, _ls: unknown[], opts?: { topUp?: (o: unknown[]) => unknown }) => {
+      const first = [{ ok: false, error: 'STOCK' }, { ok: true }];
+      planned = opts?.topUp?.(first);
+      return first;
+    });
+    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 2), line('i2', 'v1', 2)], variations: [variation('v1', 3)], addItems });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(planned).toEqual([{ index: 1, quantity: 1 }]);
+    expect(res.results[1]).toEqual({ orderItemId: 'i2', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 1 });
+
+    let none: unknown = 'chưa gọi';
+    const plain = makeRepurchaseService({
+      items: [line('i1', 'v1', 2), line('i2', 'v2', 2)],
+      variations: [variation('v1', 3), variation('v2', 3)],
+      addItems: jest.fn(async (_u: string, ls: unknown[], opts?: { topUp?: (o: unknown[]) => unknown }) => {
+        const first = ls.map(() => ({ ok: true }));
+        none = opts?.topUp?.(first);
+        return first;
+      }),
+    });
+    await plain.svc.repurchase('u1', 'TUBU1');
+    expect(plain.addItems).toHaveBeenCalledTimes(1);
+    expect(none).toEqual([]);
+  });
+
   it('lỗi hạ tầng (không phải lỗi nghiệp vụ) → ném ra, không nuốt', async () => {
-    const addItem = jest.fn().mockRejectedValue(new Error('connection reset'));
-    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)], addItem });
+    const addItems = jest.fn().mockRejectedValue(new Error('connection reset'));
+    const { svc } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)], addItems });
     await expect(svc.repurchase('u1', 'TUBU1')).rejects.toThrow('connection reset');
   });
 
   it('addSource=reorder_notification được chuyển tới add_to_cart', async () => {
-    const { svc, addItem } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)] });
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 1)], variations: [variation('v1', 5)] });
     await svc.repurchase('u1', 'TUBU1', { addSource: 'reorder_notification' });
-    expect(addItem).toHaveBeenCalledWith('u1', { variationId: 'v1', quantity: 1, addSource: 'reorder_notification' });
+    expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v1', quantity: 1, addSource: 'reorder_notification' }], { topUp: expect.any(Function) });
   });
 });
 

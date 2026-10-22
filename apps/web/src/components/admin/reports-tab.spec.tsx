@@ -207,6 +207,13 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(mocks.downloadRefundsCsv).toHaveBeenCalledWith(range, 'OPEN');
     });
 
+    it('câu chỉ sang tab rút tiền dùng đúng tên mục trên thanh bên ("Yêu cầu rút tiền")', async () => {
+      const { container } = mount(<ReportsTab />);
+      await flush();
+      expect(container.textContent).toContain('mục Yêu cầu rút tiền');
+      expect(container.textContent).not.toContain('Duyệt yêu cầu rút tiền');
+    });
+
     it('lỗi tải (hết phiên, không đủ quyền) hiện thông báo; khoảng ngày sai thì khoá nút', async () => {
       mocks.downloadPitCsv.mockRejectedValue(new Error('Bạn không có quyền.'));
       const { container } = mount(<ReportsTab />);

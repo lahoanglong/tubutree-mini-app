@@ -6,7 +6,7 @@ import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } 
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass } from './ui';
+import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const PAGE_SIZE = 20;
 const STATUS_FILTERS: { value: CouponStatusFilter; label: string }[] = [
@@ -154,7 +154,7 @@ export function CouponList() {
       </div>
       {msg && <p className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách mã...</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mã.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách mã.</LoadError>}
       {q.data && q.data.data.length === 0 && <p className="text-sm text-stone-500">Chưa có mã nào khớp bộ lọc.</p>}
       <ul className="space-y-2">
         {q.data?.data.map((c) => {

@@ -32,6 +32,8 @@
   --color-brand-cobote-to: #5d4037;
   --color-brand-sokfram-from: #42a5f5;
   --color-brand-sokfram-to: #1565c0;
+  /* Nền tối nhẹ đặt sau chữ trắng trên gradient nhãn để đạt 4,5:1 (tính ở css/contrast.spec.ts) mà không đổi màu nhãn. */
+  --color-brand-tile-scrim: rgba(0, 0, 0, 0.45);
 
   /* Bản đồ gỗ 3D ở pages/brand-story.tsx: khung, đèn LED hắt sáng và các mảnh tỉnh (thang gỗ nâu). */
   --color-brandmap-frame-bg: var(--stone-200);

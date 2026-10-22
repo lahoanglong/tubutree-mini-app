@@ -378,6 +378,18 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Năm 2026: thu nhập hoa hồng 100.000đ');
   });
 
+  it('lệnh rút được hoàn thuế giữ dư (Q2b): hiện số đã hoàn vào Ví như Mini App', async () => {
+    state.payouts = [
+      { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 250_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-01T03:00:00Z', reviewedAt: null, paidAt: null },
+    ];
+    const { container } = mount();
+    await flush();
+    const t = container.textContent ?? '';
+    expect(t).toContain('Hoa hồng 1.000.000đ');
+    expect(t).toContain('đã hoàn 250.000đ thuế giữ dư vào Ví');
+    expect(t).not.toContain('đã khấu trừ thuế TNCN 0');
+  });
+
   it('lệnh rút rỗng: "Chưa có lệnh rút nào."', async () => {
     const { container } = mount();
     await flush();

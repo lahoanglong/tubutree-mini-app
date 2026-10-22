@@ -94,6 +94,21 @@ describe('OpsHealthTab (PLATFORM-5, ADMINOPS-17)', () => {
     expect(scrollRegionProblems(c)).toEqual([]);
   });
 
+  // D7-17: dòng "Lỗi gần nhất" từng nằm trong <dl> (con không phải dt/dd) và bị axe báo definition-list.
+  it('D7-17: thẻ Pancake/Gomdon chỉ có dt/dd trong <dl>; dòng "Lỗi gần nhất" nằm ngoài <dl> nhưng vẫn hiện', async () => {
+    const sick = {
+      ...HEALTH,
+      pancake: { ...HEALTH.pancake, catalog: { ...HEALTH.pancake.catalog, lastError: 'catalog 502' } },
+      gomdon: { ...HEALTH.gomdon, connection: { ...HEALTH.gomdon.connection, lastError: 'login 401' } },
+    };
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: sick } }).fn));
+    const c = await mount(<OpsHealthTab onOpenOrder={vi.fn()} />);
+    expect(c.textContent).toContain('Lỗi gần nhất: catalog 502');
+    expect(c.textContent).toContain('Lỗi gần nhất: login 401');
+    const bad = [...c.querySelectorAll('section[aria-label="Pancake"] > dl > *, section[aria-label^="Gomdon"] > dl > *')].filter((x) => x.tagName !== 'DIV');
+    expect(bad.map((x) => x.outerHTML.slice(0, 60))).toEqual([]);
+  });
+
   it('nút đồng bộ Pancake / ghi đè tồn kho / tính lại số đã bán qua hộp xác nhận rồi gọi đúng API', async () => {
     const api = mockFetch({
       '/admin/ops/health': { body: { ...HEALTH, problems: [] } },
@@ -324,6 +339,13 @@ describe('OpsHealthTab — kênh email báo động (R8)', () => {
     const { section } = await card({ email: email({ state: 'DISABLED', recipients: 0 }) });
     expect(section?.textContent).toContain('Chưa bật');
     expect(section?.textContent).toContain('OPS_ALERT_EMAIL_TO');
+  });
+
+  // D7-24: đường dẫn trong repo không mở được với nhân viên vận hành.
+  it('chưa bật: không dẫn tới đường dẫn docs/ trong repo', async () => {
+    const { section } = await card({ email: email({ state: 'DISABLED', recipients: 0 }) });
+    expect(section?.textContent).not.toMatch(/docs\/|GO-LIVE-KEYS|\.md/);
+    expect(section?.textContent).toMatch(/quản trị máy chủ|người quản trị/i);
   });
 
   it('cấu hình dở dang: liệt kê từng lỗi theo khoá, tô cảnh báo', async () => {

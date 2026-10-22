@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { AxiosAdapter, InternalAxiosRequestConfig } from 'axios';
+import { stubFetch, type FetchCall } from '../test/fetch-stub';
 import { api, setAccessToken, setAuthReady } from './api';
 
 // Interceptor của api.ts dynamic-import '../store/auth' để lấy getDeviceId() (X-Device-Id header).
@@ -16,32 +16,23 @@ vi.mock('../store/auth', () => ({
  * bay đi lúc chưa có access token thì BE trả 401, và React Query (retry:false cho 4xx) kẹt luôn
  * màn lỗi dù ~200ms sau phiên đã sẵn sàng.
  *
- * Thay adapter của axios để chặn ngay trước tầng mạng — interceptor request vẫn chạy thật.
+ * Thay fetch toàn cục để chặn ngay trước tầng mạng — bước chờ phiên và gắn header vẫn chạy thật.
  */
-const realAdapter = api.defaults.adapter;
-
-function captureAdapter(): { seen: () => InternalAxiosRequestConfig | null; calls: () => number } {
-  let last: InternalAxiosRequestConfig | null = null;
-  let count = 0;
-  const adapter: AxiosAdapter = (config) => {
-    last = config as InternalAxiosRequestConfig;
-    count += 1;
-    return Promise.resolve({ data: {}, status: 200, statusText: 'OK', headers: {}, config });
-  };
-  api.defaults.adapter = adapter;
-  return { seen: () => last, calls: () => count };
+function captureFetch(): { seen: () => FetchCall | null; calls: () => number } {
+  const { calls } = stubFetch(() => ({ status: 200, body: {} }));
+  return { seen: () => calls.at(-1) ?? null, calls: () => calls.length };
 }
 
 describe('request chờ phiên khôi phục xong mới gửi', () => {
   afterEach(() => {
     setAuthReady(null);
     setAccessToken(null);
-    api.defaults.adapter = realAdapter;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
   it('gắn Authorization bằng token CÓ SAU khi authReady xong, không phải lúc gọi', async () => {
-    const cap = captureAdapter();
+    const cap = captureFetch();
     let release!: () => void;
     setAuthReady(
       new Promise<void>((resolve) => {
@@ -62,15 +53,15 @@ describe('request chờ phiên khôi phục xong mới gửi', () => {
   });
 
   it('chính /auth/* KHÔNG chờ authReady (nếu chờ thì deadlock: nó là thứ tạo ra authReady)', async () => {
-    const cap = captureAdapter();
+    const cap = captureFetch();
     setAuthReady(new Promise<void>(() => {})); // không bao giờ xong
     await api.post('/auth/refresh', {});
     expect(cap.calls()).toBe(1);
   });
 
-  it('phiên treo → request vẫn đi sau trần chờ, không kẹt tới timeout của axios', async () => {
+  it('phiên treo → request vẫn đi sau trần chờ, không kẹt tới timeout của request', async () => {
     vi.useFakeTimers();
-    const cap = captureAdapter();
+    const cap = captureFetch();
     setAuthReady(new Promise<void>(() => {}));
 
     const inFlight = api.get('/cart');
@@ -81,14 +72,14 @@ describe('request chờ phiên khôi phục xong mới gửi', () => {
   });
 
   it('phiên khôi phục THẤT BẠI vẫn nhả request (không treo vì promise reject)', async () => {
-    const cap = captureAdapter();
+    const cap = captureFetch();
     setAuthReady(Promise.reject(new Error('mất mạng')));
     await api.get('/products');
     expect(cap.calls()).toBe(1);
   });
 
   it('không có authReady (app đã chạy ổn định) → gửi ngay kèm token hiện hành', async () => {
-    const cap = captureAdapter();
+    const cap = captureFetch();
     setAccessToken('token-cu');
     await api.get('/cart');
     expect(cap.seen()?.headers.get('Authorization')).toBe('Bearer token-cu');

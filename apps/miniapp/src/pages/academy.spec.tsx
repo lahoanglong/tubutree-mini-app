@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AcademyCourseDetail, AcademyCourseSummary } from '../services/academy-api';
 import { vi as viText } from '../i18n/vi';
+import { HttpError } from '../services/http';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -295,5 +296,36 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
     for (const t of targets) {
       expect(Number.parseFloat(t.style.minHeight), t.outerHTML.slice(0, 80)).toBeGreaterThanOrEqual(44);
     }
+  });
+});
+
+describe('AcademyPage — khách thường (API trả 403)', () => {
+  const forbidden = () => new HttpError('Request failed with status code 403', 'ERR_BAD_REQUEST', { status: 403, data: {} });
+  const NOTICE_TITLE = 'Học viện CTV dành cho cộng tác viên';
+  const NOTICE_BODY = 'Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.';
+
+  it('danh sách: hiện khối thông báo, nút dẫn tới /affiliate, không có Thử lại', async () => {
+    mocks.fetchCourses.mockRejectedValue(forbidden());
+    renderPage();
+    expect(await screen.findByText(NOTICE_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(NOTICE_BODY)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tìm hiểu về CTV' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
+  });
+
+  it('chi tiết: cùng khối thông báo, không có Thử lại', async () => {
+    mocks.params = { courseId: 'c1' };
+    mocks.fetchCourse.mockRejectedValue(forbidden());
+    renderPage();
+    expect(await screen.findByText(NOTICE_TITLE)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
+  });
+
+  it('lỗi khác 403 vẫn là lỗi tải có Thử lại', async () => {
+    mocks.fetchCourses.mockRejectedValue(new HttpError('x', 'ERR', { status: 500, data: {} }));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(screen.queryByText(NOTICE_TITLE)).toBeNull();
   });
 });

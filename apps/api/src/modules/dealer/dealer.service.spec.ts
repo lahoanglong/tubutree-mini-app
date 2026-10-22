@@ -4,9 +4,18 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import { SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
 import { TUBU_OWNED_VARIATION_WHERE } from '../cart/partner-goods';
 
+// Các ca ở file này kiểm tồn kho/idempotency/hạn mức với đơn vài trăm nghìn: tắt luật đơn sỉ (tối thiểu, phí giao,
+// khoá quá hạn) để chúng không phải dựng đơn 3 triệu. Luật đó có spec riêng: dealer-order-rules.spec.ts.
+const ORDER_RULES_OFF: Record<string, unknown> = {
+  'dealer.min_order_value_vnd': 0,
+  'dealer.shipping_fee_below_threshold_vnd': 0,
+  'dealer.block_credit_when_overdue': false,
+};
+
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
+  const all = { ...ORDER_RULES_OFF, ...values };
   return {
-    get: async <T>(key: string, fb?: T): Promise<T> => (key in values ? values[key] : fb) as T,
+    get: async <T>(key: string, fb?: T): Promise<T> => (key in all ? all[key] : fb) as T,
   } as unknown as SystemConfigService;
 }
 
@@ -128,6 +137,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
       },
+      dealerQuarterBonusTier: { findUnique: jest.fn().mockResolvedValue(null), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
     const prisma: Record<string, unknown> = { ...base, ...over };
@@ -167,7 +177,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     });
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
-    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026' });
+    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026', failed: 0 });
     const led = (prisma.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data;
     expect(led).toMatchObject({ userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026' }); // 120tr × 3%
     expect(notifications.notify).toHaveBeenCalledWith('d1', 'DEALER_BONUS_PAID', expect.objectContaining({ quarter: 'Q1/2026' }));
@@ -193,7 +203,11 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     expect(r.paid).toBe(0);
     expect(prisma.dealerCreditLedger.create).not.toHaveBeenCalled();
     const where = (prisma.dealerCreditLedger.findFirst as jest.Mock).mock.calls[0][0].where;
-    expect(where).toMatchObject({ userId: 'd1', refType: 'QUARTER_BONUS', refId: 'Q1/2026' });
+    expect(where).toMatchObject({ userId: 'd1' });
+    expect(where.OR).toEqual([
+      { refType: 'QUARTER_BONUS', refId: 'Q1/2026' },
+      { refType: 'QUARTER_BONUS_TOPUP', refId: { startsWith: 'Q1/2026:topup:' } },
+    ]);
   });
 
   // Việc 4 (audit round 2): findFirst rồi create không transaction — 2 lượt chạy cron/manual
@@ -212,7 +226,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     });
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
-    expect(r).toEqual({ paid: 0, quarter: 'Q1/2026' });
+    expect(r).toEqual({ paid: 0, quarter: 'Q1/2026', failed: 0 });
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 });

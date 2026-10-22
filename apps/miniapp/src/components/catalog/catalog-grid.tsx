@@ -30,7 +30,7 @@ export function CatalogTile({ product, listSource, onOpen }: CatalogTileProps) {
     <ProductTile
       product={product}
       variant="grid"
-      priceOverride={{ price: pricing.price }}
+      priceOverride={{ price: pricing.price, compareAt: pricing.compareAt }}
       badge={
         // Hết hàng: lớp phủ của ProductTile trong suốt 72% — không để badge % lộ ra bên dưới.
         // `inStock === false` (không phải falsy): API cũ không trả field → coi là còn hàng, giống ProductTile.

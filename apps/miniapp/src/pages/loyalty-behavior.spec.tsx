@@ -99,10 +99,33 @@ beforeEach(() => {
 describe('LoyaltyPage — thẻ hạng', () => {
   it('hiện hạng, hệ số, số dư Điểm Xanh và phần còn lại để lên hạng kế', async () => {
     const { container } = renderPage();
-    expect(await screen.findByText(/Tích điểm ×1 · 1\.250 điểm Xanh/)).toBeInTheDocument();
+    expect(await screen.findByText('Tích điểm ×1 · 1.250 Điểm Xanh')).toBeInTheDocument();
     expect(screen.getByText(/để lên hạng Lộc Biếc/)).toBeInTheDocument();
     // tierPoints 1.250 / ngưỡng 2.500 → 50%
     expect(container.querySelector('[style*="width: 50%"]')).not.toBeNull();
+  });
+
+  it('hệ số hạng viết dấu phẩy kiểu Việt và "Điểm Xanh" viết hoa (D6-06)', async () => {
+    mocks.getLoyalty.mockResolvedValue({
+      ...LOYALTY,
+      pointsBalance: 130_000,
+      tier: { id: 't2', name: 'Lộc Biếc', multiplier: 1.2, perks: [] },
+      nextTier: null,
+    });
+    mocks.getPointsTransactions.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText(/^Tích điểm ×1,2 ·/)).toBeInTheDocument();
+    expect(document.body.textContent).toContain('Điểm Xanh');
+    expect(document.body.textContent).not.toMatch(/×1\.2/);
+    expect(document.body.textContent).not.toMatch(/điểm Xanh/);
+    expect(screen.getByText(/· ×1,2$/)).toBeInTheDocument();
+  });
+
+  it('không còn tên "Vườn Cây" ở trang Điểm Xanh — một tên Vườn Xanh cho một tính năng (D6-07)', async () => {
+    renderPage();
+    await screen.findByText('Lịch sử Điểm Xanh');
+    expect(document.body.textContent).not.toContain('Vườn Cây');
+    expect(document.body.textContent).toContain('trong Vườn Xanh.');
   });
 
   it('hạng cao nhất: không có thanh tiến độ, hiện lời chúc', async () => {
@@ -112,9 +135,9 @@ describe('LoyaltyPage — thẻ hạng', () => {
     expect(container.querySelector('[style*="width: 50%"]')).toBeNull();
   });
 
-  it('các lối tắt dẫn đúng trang: Vườn Cây → /game, Đổi rác lấy quà → /recycle, Kho quà → /rewards, mua sắm → /browse', async () => {
+  it('các lối tắt dẫn đúng trang: Vườn Xanh → /game, Đổi rác lấy quà → /recycle, Kho quà → /rewards, mua sắm → /browse', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Vườn Cây Tubu'));
+    fireEvent.click(await screen.findByText('Vườn Xanh'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
     fireEvent.click(screen.getByText('Đổi rác lấy quà'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
@@ -174,7 +197,7 @@ describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (EN
       tiers: [TIERS[0], { ...TIERS[1], minPoints: 500, minSpending: 5_000_000 }],
     });
     renderPage();
-    expect(await screen.findByText('từ 5 triệu mua hàng trong 12 tháng · ×1.2')).toBeInTheDocument();
+    expect(await screen.findByText('từ 5 triệu mua hàng trong 12 tháng · ×1,2')).toBeInTheDocument();
     expect(screen.getByText('hạng khởi đầu · ×1')).toBeInTheDocument();
   });
 
@@ -197,6 +220,15 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Điểm danh thành công, +3 điểm', type: 'success' }));
     expect(mocks.postDailyCheckIn).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
+  });
+
+  it('ghi chú điểm danh nhắc "Vườn Xanh" đúng một lần (không lặp tên trong cùng câu)', async () => {
+    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
+    renderPage();
+    await screen.findByRole('button', { name: 'Điểm danh +3' });
+    const note = screen.getByText(/lỡ 1 ngày thì vòng 7 ngày bắt đầu lại/);
+    expect(note.textContent?.match(/Vườn Xanh/g) ?? []).toHaveLength(1);
+    expect(note.textContent).toContain('giọt nước điểm danh riêng trong Vườn Xanh');
   });
 
   it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
@@ -230,7 +262,7 @@ describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
   it('thẻ hạng hiện TỔNG hai lô và dòng "trong đó N điểm không hết hạn"', async () => {
     mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
     renderPage();
-    expect(await screen.findByText(/Tích điểm ×1 · 150 điểm Xanh/)).toBeInTheDocument();
+    expect(await screen.findByText(/Tích điểm ×1 · 150 Điểm Xanh/)).toBeInTheDocument();
     expect(screen.getByText('trong đó 30 điểm không hết hạn')).toBeInTheDocument();
   });
 
@@ -238,12 +270,12 @@ describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu (PD-3)', () => {
     mocks.getLoyalty.mockResolvedValue(WITH_CONVERTED);
     renderPage();
     fireEvent.click(await screen.findByText('Thẻ thành viên số (mã QR)'));
-    expect(await screen.findByText(/Hạng Mầm Xanh · 150 điểm Xanh/)).toBeInTheDocument();
+    expect(await screen.findByText(/Hạng Mầm Xanh · 150 Điểm Xanh/)).toBeInTheDocument();
   });
 
   it('không có lô quy đổi: không hiện dòng "không hết hạn" nào', async () => {
     renderPage();
-    await screen.findByText(/Tích điểm ×1 · 1\.250 điểm Xanh/);
+    await screen.findByText(/Tích điểm ×1 · 1\.250 Điểm Xanh/);
     expect(screen.queryByText(/không hết hạn/)).toBeNull();
   });
 
@@ -299,7 +331,7 @@ describe('LoyaltyPage — thẻ thành viên số', () => {
     expect(await screen.findByTestId('qr')).toHaveAttribute('data-value', 'TUBU123');
     expect(screen.getByText('TUBU123')).toBeInTheDocument();
     expect(screen.getByText(/Đây là mã thành viên của bạn/)).toBeInTheDocument();
-    expect(screen.getByText(/Hạng Mầm Xanh · 1\.250 điểm Xanh/)).toBeInTheDocument();
+    expect(screen.getByText(/Hạng Mầm Xanh · 1\.250 Điểm Xanh/)).toBeInTheDocument();
   });
 
   it('chép mã thành công: báo "Đã sao chép", nút đổi thành "Đã chép"', async () => {
@@ -342,7 +374,7 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
   it('lần đầu (chưa có mốc cũ): chỉ ghi mốc, không bật chúc mừng', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: TIER2, nextTier: null });
     renderPage();
-    await screen.findByText(/Tích điểm ×1\.2/);
+    await screen.findByText(/Tích điểm ×1,2/);
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
     expect(localStorage.getItem('tubu_last_tier_min_v2')).toBe('2500');
   });
@@ -351,7 +383,7 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
     localStorage.setItem('tubu_last_tier_min', '0');
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, tier: TIER2, nextTier: null });
     renderPage();
-    await screen.findByText(/Tích điểm ×1\.2/);
+    await screen.findByText(/Tích điểm ×1,2/);
     expect(screen.queryByText(/Chúc mừng lên hạng/)).not.toBeInTheDocument();
   });
 

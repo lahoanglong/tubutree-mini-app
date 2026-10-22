@@ -50,7 +50,7 @@ describe('thuật ngữ Q-26 — một chữ cho một khái niệm', () => {
 
   it('không còn "voucher" trong câu chữ hiển thị cho khách', () => {
     expect(
-      offenders(/Kho voucher|Nhận [Vv]oucher|Chưa có voucher|giá voucher|Dùng voucher|nhận 30k voucher|Voucher sau khi|lấy voucher/),
+      offenders(/Kho voucher|Nhận [Vv]oucher|Chưa có voucher|giá voucher|Dùng voucher|nhận 30k voucher|Voucher sau khi|lấy voucher|Voucher chào mừng/),
     ).toEqual([]);
   });
 
@@ -60,5 +60,59 @@ describe('thuật ngữ Q-26 — một chữ cho một khái niệm', () => {
 
   it('ô nhập mã ở giỏ/thanh toán nói "mã giảm giá"', () => {
     expect(vi.cart.couponPlaceholder).toBe('Nhập mã giảm giá');
+  });
+
+  it('Q14: trang chủ không ghi con số vùng đất (dữ liệu có 8 nhãn, 7 tỉnh) mà nói "từ nhiều vùng đất Việt Nam"', () => {
+    expect(vi.home.brandStoryBody).not.toMatch(/\d+ vùng đất/);
+    expect(vi.home.brandStoryBody).toContain('từ nhiều vùng đất Việt Nam');
+    expect(offenders(/\d+ vùng đất/)).toEqual([]);
+  });
+});
+
+/**
+ * Q13: một kiểu đặt dấu cho cả hệ thống: "Huỷ, Xoá, Khoá, hoá đơn, tuỳ, thuỷ" (dấu trên chữ cái thứ hai của vần oa/oe/uy),
+ * khớp tài liệu và admin. Địa danh giữ chính tả hành chính ("Thanh Hóa", "Khánh Hòa"). `zmp-bridge.ts` cố ý nhận cả hai
+ * kiểu vì so khớp lời người dùng/Zalo gõ, không phải chữ hiển thị.
+ */
+const OLD_STYLE_TONE = /(?:[òóỏõọ][ae]|[ùúủũụ]y)(?![\p{L}])/u;
+const PLACE_NAMES = /Thanh Hóa|Khánh Hòa/g;
+const MATCHES_USER_INPUT = new Set(['services/zmp-bridge.ts']);
+const stripComments = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/.*$/gm, '$1');
+
+describe('Q13 — thống nhất kiểu đặt dấu "Huỷ, Xoá, Khoá"', () => {
+  it('không còn "Hủy/Xóa/Khóa/hóa/hòa/tùy/thủy" kiểu cũ trong chữ hiển thị', () => {
+    const bad = sources
+      .filter((s) => !MATCHES_USER_INPUT.has(s.file))
+      .filter((s) => OLD_STYLE_TONE.test(stripComments(s.text).replace(PLACE_NAMES, '')))
+      .map((s) => s.file);
+    expect(bad).toEqual([]);
+  });
+
+  it('mẫu quét bắt đúng kiểu cũ và bỏ qua kiểu mới, địa danh (đối chứng)', () => {
+    for (const bad of ['Hủy đơn', 'Xóa ảnh', 'từ khóa', 'hóa đơn', 'ôn hòa', 'tùy chọn', 'thủy']) expect(OLD_STYLE_TONE.test(bad), bad).toBe(true);
+    for (const ok of ['Huỷ đơn', 'Xoá ảnh', 'từ khoá', 'hoá đơn', 'ôn hoà', 'tuỳ chọn', 'thuỷ', 'khoản', 'loại', 'hoạt động', 'quý']) {
+      expect(OLD_STYLE_TONE.test(ok), ok).toBe(false);
+    }
+    expect(OLD_STYLE_TONE.test('Thanh Hóa'.replace(PLACE_NAMES, ''))).toBe(false);
+  });
+});
+
+/** Q16: chữ tiếng Anh/biệt ngữ ở màn trò chơi, nhân viên, CTV đã Việt hoá; giữ "CTV" và tên riêng. */
+describe('Q16 — Việt hoá chữ tiếng Anh ở game, nhân viên, CTV', () => {
+  const visible = sources.map((s) => ({ file: s.file, text: stripComments(s.text) }));
+  const offendersVisible = (re: RegExp) => visible.filter((s) => re.test(s.text)).map((s) => s.file);
+
+  it('game: không còn Season Pass, XP, Premium, Quiz, Top', () => {
+    expect(offendersVisible(/Season Pass|\bXP\b|\bPremium\b|Quiz Sống Xanh|hoàn thành quiz|Top góp nước/)).toEqual([]);
+    expect(vi.game.seasonPass.title).toBe('Chặng Mùa');
+  });
+
+  it('nhân viên: "Vào ca/Ra ca" thay Checkin/Checkout, "Chép" thay Copy', () => {
+    expect(offendersVisible(/\bCheckin\b|\bCheckout\b|Đã checkin|Đã checkout|Đã tự checkout|Quên checkout|giờ checkin|Xác nhận checkout|Copy tuần trước|Đã copy|ca để copy/)).toEqual([]);
+  });
+
+  it('CTV: không còn Dashboard, Click, Caption, Academy', () => {
+    expect(offendersVisible(/Dashboard hoa hồng|"Click"|\bclick\b ·|theo dõi click|[Cc]aption gợi ý|đã sao chép caption|Đã sao chép caption|CTV Academy|\brealtime\b/)).toEqual([]);
+    expect(vi.academy.title).toBe('Học viện CTV');
   });
 });

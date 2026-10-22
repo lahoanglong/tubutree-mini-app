@@ -66,11 +66,21 @@ describe('AdminReportsController', () => {
     const res = Object.assign(out, { setHeader: jest.fn() }) as unknown as Response;
     let body = '';
     out.on('data', (c: Buffer) => (body += c.toString('utf8')));
-    await ctrl.exportOrderItems({ status: 'DELIVERED', from: '2026-10-01', to: '2026-10-07' }, res);
+    await ctrl.exportOrderItems({ status: 'DELIVERED', from: '2026-10-01', to: '2026-10-07' }, res, 'ADMIN');
     await new Promise((r) => setImmediate(r));
-    expect(adminOrderWhere).toHaveBeenCalledWith({ status: 'DELIVERED', from: '2026-10-01', to: '2026-10-07' });
+    expect(adminOrderWhere).toHaveBeenCalledWith({ status: 'DELIVERED', from: '2026-10-01', to: '2026-10-07' }, { exactPhoneOnly: false });
     expect(orderFind.mock.calls[0]![0]).toMatchObject({ where: { status: 'DELIVERED' } });
     expect(body.startsWith('﻿Mã đơn,')).toBe(true);
+  });
+
+  it('CSV dòng hàng: nhân viên (kế toán) chỉ tìm SĐT khi gõ đủ số, như file CSV đơn che SĐT (D2-04)', async () => {
+    const adminOrderWhere = jest.fn().mockResolvedValue({});
+    const ctrl = new AdminReportsController({ order: { findMany: jest.fn().mockResolvedValue([]) } } as never, { adminOrderWhere } as never, {} as never);
+    const out = new PassThrough();
+    const res = Object.assign(out, { setHeader: jest.fn() }) as unknown as Response;
+    out.resume();
+    await ctrl.exportOrderItems({ search: '0901' }, res, 'STAFF');
+    expect(adminOrderWhere).toHaveBeenCalledWith({ search: '0901' }, { exactPhoneOnly: true });
   });
 
   it('GET revenue chuyển khoảng ngày cho báo cáo', async () => {

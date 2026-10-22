@@ -80,6 +80,34 @@ describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
     expect(onOpen).toHaveBeenCalledWith('wasteGiftOverdue');
   });
 
+  it('kế toán có thẻ thưởng đại lý đã duyệt chờ "Đã chi"; bấm thẻ mở đúng khoá', async () => {
+    stubInbox([{ key: 'dealerClaimsToPay', count: 2 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="dealerClaimsToPay"]');
+    expect(card?.textContent).toContain('Thưởng đại lý chờ chi');
+    expect(card?.textContent).toContain('2');
+    click(card!);
+    expect(onOpen).toHaveBeenCalledWith('dealerClaimsToPay');
+  });
+
+  it('kế toán có thẻ rút tiền đã duyệt chờ "Đã chi"; bấm thẻ mở đúng khoá', async () => {
+    stubInbox([{ key: 'payoutsToPay', count: 3 }]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+
+    const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="payoutsToPay"]')!;
+    expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
+    expect(card.textContent).toContain('3');
+    click(card);
+    expect(onOpen).toHaveBeenCalledWith('payoutsToPay');
+  });
+
   it('mọi khoá của hộp việc có nhãn tiếng Việt có dấu và gợi ý', () => {
     for (const [key, l] of Object.entries(INBOX_LABELS)) {
       expect(l.title.length, key).toBeGreaterThan(5);

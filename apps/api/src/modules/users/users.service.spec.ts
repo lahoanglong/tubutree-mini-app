@@ -106,6 +106,7 @@ function prismaForAddress(opts: {
   const update = opts.update ?? jest.fn().mockImplementation(({ data }) => data);
   const txSpy = jest.fn();
   const base: Record<string, unknown> = {
+    $executeRaw: jest.fn().mockResolvedValue(0),
     address: {
       count: jest.fn().mockResolvedValue(opts.count ?? 0),
       findUnique: jest.fn().mockResolvedValue(opts.findUnique ?? { id: 'a1', userId: 'u1' }),
@@ -140,11 +141,13 @@ describe('UsersService.createAddress', () => {
     expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ isDefault: false }) });
   });
 
-  it('chạy trong transaction Serializable (chống race 2 request cùng đọc count=0)', async () => {
+  it('mở transaction bằng khoá advisory theo khách (U6-2), trước khi đếm địa chỉ, không Serializable', async () => {
     const { prisma, txSpy } = prismaForAddress({ count: 0 });
-    const svc = new UsersService(prisma);
-    await svc.createAddress('u1', { line1: 'A', ...GEO } as never);
-    expect(txSpy).toHaveBeenCalledWith({ isolationLevel: 'Serializable' });
+    await new UsersService(prisma).createAddress('u1', { line1: 'A', ...GEO } as never);
+    const tx = prisma as unknown as { $executeRaw: jest.Mock; address: { count: jest.Mock } };
+    expect(String((tx.$executeRaw.mock.calls[0] as [TemplateStringsArray])[0].join('?'))).toContain('pg_advisory_xact_lock');
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.address.count.mock.invocationCallOrder[0]!);
+    expect(txSpy).toHaveBeenCalledWith(undefined);
   });
 });
 
@@ -172,11 +175,67 @@ describe('UsersService.updateAddress', () => {
     );
   });
 
-  it('chạy trong transaction Serializable (chống race 2 update isDefault=true đồng thời)', async () => {
+  it('mở transaction bằng khoá advisory theo khách, không Serializable (tránh 40001 khi giao dịch khác UPDATE users)', async () => {
     const { prisma, txSpy } = prismaForAddress({});
-    const svc = new UsersService(prisma);
-    await svc.updateAddress('u1', 'a1', { isDefault: true } as never);
-    expect(txSpy).toHaveBeenCalledWith({ isolationLevel: 'Serializable' });
+    await new UsersService(prisma).updateAddress('u1', 'a1', { isDefault: true } as never);
+    const tx = prisma as unknown as { $executeRaw: jest.Mock; address: { updateMany: jest.Mock } };
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.address.updateMany.mock.invocationCallOrder[0]!);
+    expect(txSpy).toHaveBeenCalledWith(undefined);
+  });
+});
+
+/** Sổ địa chỉ trong bộ nhớ: deleteAddress cần đọc/ghi thật để kiểm "ai là mặc định sau khi xoá". */
+function prismaWithBook(rows: { id: string; userId: string; isDefault: boolean }[]) {
+  const book = rows.map((r) => ({ ...r }));
+  const txSpy = jest.fn();
+  const base: Record<string, unknown> = {
+    $executeRaw: jest.fn().mockResolvedValue(0),
+    $queryRaw: jest.fn().mockResolvedValue([]),
+    subscription: { findMany: jest.fn().mockResolvedValue([]), deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    address: {
+      findUnique: jest.fn(async ({ where }: { where: { id: string } }) => book.find((a) => a.id === where.id) ?? null),
+      findFirst: jest.fn(async ({ where }: { where: { userId: string } }) =>
+        [...book].filter((a) => a.userId === where.userId).sort((a, b) => (a.id < b.id ? -1 : 1))[0] ?? null),
+      delete: jest.fn(async ({ where }: { where: { id: string } }) => {
+        book.splice(book.findIndex((a) => a.id === where.id), 1);
+      }),
+      update: jest.fn(async ({ where, data }: { where: { id: string }; data: { isDefault: boolean } }) => {
+        Object.assign(book.find((a) => a.id === where.id)!, data);
+      }),
+    },
+  };
+  base.$transaction = jest.fn(async (cb: (tx: unknown) => unknown, txOpts?: unknown) => {
+    txSpy(txOpts);
+    return cb(base);
+  });
+  return { prisma: base as unknown as PrismaService, book, txSpy };
+}
+
+describe('UsersService.deleteAddress: giữ một địa chỉ mặc định (U6-B07)', () => {
+  it('xoá địa chỉ mặc định khi còn địa chỉ khác → địa chỉ đầu tiên còn lại (theo id) thành mặc định', async () => {
+    const { prisma, book } = prismaWithBook([
+      { id: 'a3', userId: 'u1', isDefault: false },
+      { id: 'a1', userId: 'u1', isDefault: true },
+      { id: 'a2', userId: 'u1', isDefault: false },
+    ]);
+    await expect(new UsersService(prisma).deleteAddress('u1', 'a1')).resolves.toEqual({ ok: true });
+    expect(book.map((a) => [a.id, a.isDefault]).sort()).toEqual([['a2', true], ['a3', false]]);
+  });
+
+  it('xoá địa chỉ không mặc định → mặc định giữ nguyên', async () => {
+    const { prisma, book } = prismaWithBook([
+      { id: 'a1', userId: 'u1', isDefault: true },
+      { id: 'a2', userId: 'u1', isDefault: false },
+    ]);
+    await new UsersService(prisma).deleteAddress('u1', 'a2');
+    expect(book).toEqual([{ id: 'a1', userId: 'u1', isDefault: true }]);
+  });
+
+  it('xoá địa chỉ cuối cùng → không lỗi, sổ trống', async () => {
+    const { prisma, book } = prismaWithBook([{ id: 'a1', userId: 'u1', isDefault: true }]);
+    await expect(new UsersService(prisma).deleteAddress('u1', 'a1')).resolves.toEqual({ ok: true });
+    expect(book).toEqual([]);
   });
 });
 

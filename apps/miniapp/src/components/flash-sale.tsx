@@ -12,16 +12,19 @@ import {
 import { formatVnd } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
+import { serverNow } from '../utils/server-clock';
 import { vi } from '../i18n/vi';
 import { useCountdown } from '../hooks/use-countdown';
 import { useAuthStore } from '../store/auth';
 import { HomeBlockError } from './home/home-block-error';
 import { useBlockQuery } from './home/use-block-query';
+import { flashDisplay } from './catalog/catalog-pricing';
 import { Badge } from './ui/badge';
 import { Icon } from './ui/icon';
 import { PriceTag } from './ui/price-tag';
 import { ProgressBar } from './ui/progress-bar';
 import { ScrollRow } from './ui/scroll-row';
+import { linkKeyboardProps, rowKeyboardProps } from './ui/row-keyboard';
 import { Heading, Text } from './ui/text';
 
 const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
@@ -41,17 +44,6 @@ const DISCOUNT_BADGE_STYLE: CSSProperties = {
   background: 'var(--color-flash-solid-bg)',
   color: 'var(--color-flash-solid-fg)',
 };
-
-/**
- * Giá khách thực trả = min(giá flash, giá đang bán), như giỏ hàng và trang sản phẩm. Giá niêm yết hạ sau khi tạo đợt
- * thì flash không còn rẻ hơn: không hiện % âm hay giá gạch thấp hơn giá bán.
- */
-function flashDisplay(item: { flashPrice: number; retailPrice: number; salePrice?: number | null }) {
-  const was = item.salePrice ?? item.retailPrice;
-  const price = Math.min(item.flashPrice, was);
-  const pct = was > 0 ? Math.round((1 - price / was) * 100) : 0;
-  return { price, was, pct };
-}
 
 /** Tên SP tối đa 2 dòng; minHeight bằng đúng 2 dòng caption để thẻ 1 dòng và 2 dòng cao bằng nhau. */
 const NAME_CLAMP_STYLE: CSSProperties = {
@@ -85,7 +77,7 @@ export function FlashSale() {
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
   const [expiredTick, setExpiredTick] = useState(0);
   const soonestEndAt = useMemo(() => {
-    const now = Date.now();
+    const now = serverNow();
     const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
     return live.length > 0 ? new Date(Math.min(...live)) : null;
   }, [items, expiredTick]);
@@ -127,6 +119,9 @@ export function FlashSale() {
             <div
               key={item.itemId}
               className="tubu-press"
+              // role=link (không phải button): thẻ mở trang sản phẩm; thẻ "Sắp diễn ra" chứa nút nhắc bên trong nên role=button sẽ lồng nút.
+              role="link"
+              {...linkKeyboardProps()}
               onClick={() => {
                 haptic('light');
                 // Truyền variationId: sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân
@@ -194,7 +189,7 @@ function UpcomingFlashCard({
   const { price, pct } = flashDisplay(item);
 
   return (
-    <div className="tubu-press" onClick={onOpen} style={CARD_STYLE}>
+    <div className="tubu-press" role="link" {...linkKeyboardProps()} onClick={onOpen} style={CARD_STYLE}>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
         {item.thumbnail && (
           <img
@@ -224,6 +219,7 @@ function UpcomingFlashCard({
         {startsIn && (
           <div
             role="button"
+            {...rowKeyboardProps()}
             className="tubu-press"
             onClick={(e: MouseEvent) => {
               e.stopPropagation();

@@ -10,7 +10,7 @@ export class AddItemDto {
 }
 
 export class UpdateItemDto {
-  @IsInt() @Min(0) @Max(999) quantity!: number; // 0 = xóa
+  @IsInt() @Min(0) @Max(999) quantity!: number; // 0 = xoá
 }
 
 export class ApplyCouponDto {

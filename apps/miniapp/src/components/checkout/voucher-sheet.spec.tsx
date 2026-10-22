@@ -100,8 +100,8 @@ describe('VoucherSheet — hành vi (C-076 di cư DS v2: giữ nguyên hành vi)
     expect(screen.getByText('Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá')).toBeInTheDocument();
     expect(screen.getByLabelText('Nhập mã giảm giá khác')).toBeInTheDocument();
     expect(await screen.findByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
-    expect(screen.getByText('Miễn phí ship')).toBeInTheDocument();
-    expect(screen.queryByText(/Miễn phí ship \(tối đa/)).toBeNull();
+    expect(screen.getByText('Miễn phí giao hàng')).toBeInTheDocument();
+    expect(screen.queryByText(/Miễn phí giao hàng \(tối đa/)).toBeNull();
     expect(screen.getByText('Cần đơn tối thiểu 500.000đ')).toBeInTheDocument();
     expect(screen.getAllByText('HSD: 01/01/2027')).toHaveLength(2);
   });
@@ -267,7 +267,7 @@ describe('VoucherSheet: mã freeship khi phí ship đã 0 (R6-BUYER-12)', () => 
   it('phí ship đã 0: mã freeship bị làm mờ và khoá, ghi lý do', async () => {
     mocks.getCoupons.mockResolvedValue([{ ...COUPONS[1], minOrder: null }]);
     renderSheet(undefined, { shippingFee: 0 });
-    expect(await screen.findByText('Đơn này đã miễn phí ship')).toBeInTheDocument();
+    expect(await screen.findByText('Đơn này đã miễn phí giao hàng')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Không cần dùng' })).toBeDisabled();
   });
 
@@ -299,7 +299,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     renderSheet(undefined, { previewParams: { addressId: 'a1', itemIds: ['l1'] }, shippingFee: 19_000 });
     expect(await screen.findByText('Giảm 43.800đ cho đơn này')).toBeInTheDocument();
     expect(screen.getByText('Giảm 10% (tối đa 50.000đ)')).toBeInTheDocument();
-    expect(screen.getByText('Miễn phí ship 19.000đ cho đơn này')).toBeInTheDocument();
+    expect(screen.getByText('Miễn phí giao hàng 19.000đ cho đơn này')).toBeInTheDocument();
     expect(screen.getByText('Giảm 12.000đ cho đơn này')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Dùng mã' })).toHaveLength(3);
     expect(mocks.getCouponPreviews).toHaveBeenCalledWith({ addressId: 'a1', itemIds: ['l1'] });
@@ -330,6 +330,29 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: HELD_NOTICE, type: 'warning' })));
   });
 
+  const FIRST_ORDER_REASON = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+
+  it('đơn đầu đã miễn phí giao: thẻ FREESHIP ghi lý do, khoá nút; mã gõ tay không báo "Đã áp dụng" mà nói đúng lý do như thanh toán (U1-B03)', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'GIAM10', eligible: true, discount: 5_000 },
+      { code: 'FREESHIP', eligible: false, reason: FIRST_ORDER_REASON, discount: 0 },
+      { code: 'MUACHUNG', eligible: true, discount: 1_000 },
+    ]);
+    mocks.applyCoupon.mockResolvedValue({ couponCode: 'FREESHIP', discount: 0, freeship: true, couponNotice: null });
+    renderSheet(undefined, { previewParams: {} });
+    expect(await screen.findByText(FIRST_ORDER_REASON)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Không áp dụng' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'freeship' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('FREESHIP'));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(
+        expect.objectContaining({ text: `Mã chưa được áp dụng cho đơn này: ${FIRST_ORDER_REASON}`, type: 'warning' }),
+      ),
+    );
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã FREESHIP' }));
+  });
+
   it('freeship không miễn được đồng nào (hoặc trang giỏ chưa có phí giao): không ghi số tiền', async () => {
     mocks.getCouponPreviews.mockResolvedValue([
       { code: 'GIAM10', eligible: true, discount: 5_000 },
@@ -338,7 +361,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     ]);
     renderSheet(undefined, { previewParams: {} });
     await screen.findByText('Giảm 5.000đ cho đơn này');
-    expect(screen.queryByText(/Miễn phí ship .*cho đơn này/)).toBeNull();
+    expect(screen.queryByText(/Miễn phí giao hàng .*cho đơn này/)).toBeNull();
   });
 
   it('mã không dùng được: hiện lý do của máy chủ và khoá nút, kể cả khi phép đoán phía máy nói đủ điều kiện', async () => {
@@ -360,7 +383,7 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
   it('API cũ / lỗi: giữ cách hiện cũ (không có số, phép đoán phía máy vẫn chạy)', async () => {
     mocks.getCouponPreviews.mockRejectedValue(new Error('404'));
     renderSheet(undefined, { previewParams: { addressId: 'a1' }, shippingFee: 0 });
-    expect(await screen.findByText('Đơn này đã miễn phí ship')).toBeInTheDocument();
+    expect(await screen.findByText('Đơn này đã miễn phí giao hàng')).toBeInTheDocument();
     await waitFor(() => expect(mocks.getCouponPreviews).toHaveBeenCalled());
     expect(screen.queryByText(/cho đơn này/)).toBeNull();
     expect(screen.getByText('Chỉ áp cho Chậu gốm')).toBeInTheDocument();

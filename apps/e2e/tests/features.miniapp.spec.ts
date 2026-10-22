@@ -2,7 +2,7 @@ import type { LoyaltyOverview, WalletSummary } from '../../miniapp/src/services/
 import type { OwnedBrand } from '../../miniapp/src/services/brand-owner-api';
 import type { DealerMe } from '../../miniapp/src/services/dealer-api';
 import type { QuestList, StorefrontEdit, StorefrontStats } from '../../miniapp/src/services/storefront-api';
-import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
+import { test, expect, makeUser, mockSession, type MockApi } from './support/mock-api';
 import { mockAffiliateDashboard } from './support/affiliate-mocks';
 
 /**
@@ -48,6 +48,7 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     // thiếu walletBalance làm ProfilePage crash ở formatVnd(user.walletBalance).
     mockSession(api, makeUser({ id: 'brand-1', role: 'ADMIN', fullName: 'Brand Owner 1', referralCode: 'BRAND1' }));
     mockProfile(api);
+    api.get('/auth/me', { ownsBrand: true });
 
     const brand: OwnedBrand = {
       id: 'brand-123',
@@ -83,8 +84,8 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
   test('Gian hàng Cộng tác viên (Storefront Builder Flow)', async ({ page, api }, testInfo) => {
     mockSession(api, makeUser({ id: 'aff-1', role: 'AFFILIATE', fullName: 'Affiliate 1', referralCode: 'AFF1' }));
     mockProfile(api);
-    // Không sở hữu nhãn → 404 (brand.controller owner/me) → menu không có "Quản lý nhãn hàng".
-    api.get('/brand/owner/me', reply(404, { message: 'Bạn chưa sở hữu nhãn hàng nào' }));
+    api.get('/auth/me', { ownsBrand: false });
+    // ownsBrand false → hub không hỏi /brand/owner/me (không mock ở đây: lời gọi sẽ làm fixture báo đỏ).
     // Dashboard CTV (isAffiliate:true để vào Dashboard thay vì RegisterGate) + /affiliate/tiers +
     // /affiliate/milestones (WIP bậc CTV & thưởng mốc).
     mockAffiliateDashboard(api);
@@ -111,6 +112,9 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     await page.goto('/profile');
 
     await expect(page.getByText('Cộng tác viên', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Quản lý nhãn hàng')).toHaveCount(0);
+    expect(api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
+    expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
     await page.getByText('Cộng tác viên', { exact: true }).click();
 
     // Dashboard CTV: bậc theo doanh số đã chốt (không còn "+X% bonus").

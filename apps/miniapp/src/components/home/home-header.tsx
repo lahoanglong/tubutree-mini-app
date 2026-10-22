@@ -1,13 +1,13 @@
 import { Bell } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
-import logo from '../../assets/tubu-logo.png';
+import logo from '../../assets/tubu-logo-home.png';
 import { vi } from '../../i18n/vi';
 import { haptic } from '../../utils/haptic';
 import { CartButton } from '../cart-button';
 import { CountBadge } from '../ui/cart-badge';
 import { IconButton } from '../ui/icon-button';
 
-// Logo gốc 1059x384 → cao 30px thì rộng 83px. Khai báo cả hai để trình duyệt giữ chỗ trước khi ảnh tải.
+// Hiện 83x30; ảnh 249x90 (3x) đủ nét cho màn 3x mà nhẹ (bản gốc 1059x384 ở assets/tubu-logo.png nặng ~54 KB). Khai báo cả hai để trình duyệt giữ chỗ trước khi ảnh tải.
 const LOGO_HEIGHT = 30;
 const LOGO_WIDTH = 83;
 

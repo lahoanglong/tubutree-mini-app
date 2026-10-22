@@ -197,3 +197,20 @@ describe('SubscriptionsTab', () => {
     expect(b.container.querySelector('[role="alert"]')?.textContent).toContain('Lỗi máy chủ');
   });
 });
+
+// D7-27: hai tab không có tiêu đề nên người dùng bàn phím/đọc màn hình không biết mình đang ở tab nào.
+describe('Tiêu đề tab (D7-27)', () => {
+  it('tab Đánh giá có h2 "Đánh giá"', async () => {
+    stub(() => ({ body: { data: [], meta: { page: 1, limit: 20, total: 0 } } }));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    expect(Array.from(container.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Đánh giá']);
+  });
+
+  it('tab Gói định kỳ có h2 "Gói định kỳ"', async () => {
+    stub(() => ({ body: { data: [], meta: { page: 1, limit: 20, total: 0 } } }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    expect(Array.from(container.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(['Gói định kỳ']);
+  });
+});

@@ -1,9 +1,9 @@
-import type { AxiosRequestConfig } from 'axios';
 import type { HttpClient, RequestOptions } from '@tubutree/app-core/http';
 import { api } from './api';
+import type { RequestConfig } from './http';
 
-// Chỉ đưa cho axios đúng thứ người gọi truyền: spec service đang kiểm mảng đối số (`['/waste/me']`, `['/x', { params: {} }]`).
-function toConfig(opts: RequestOptions | undefined): AxiosRequestConfig | undefined {
+// Chỉ đưa cho api đúng thứ người gọi truyền: spec service đang kiểm mảng đối số (`['/waste/me']`, `['/x', { params: {} }]`).
+function toConfig(opts: RequestOptions | undefined): RequestConfig | undefined {
   if (!opts || (opts.query === undefined && opts.headers === undefined)) return undefined;
   return {
     ...(opts.query !== undefined ? { params: opts.query } : {}),

@@ -135,6 +135,12 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     expect(screen.getByText('Còn lại 380.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.')).toBeInTheDocument();
   });
+  it('điểm không có hạn mức tháng: ghi "Không giới hạn theo tháng", không lặp chữ "hạn" (D8-13)', async () => {
+    mocks.getDeskPoints.mockResolvedValue([makeDeskPoint({ quota: null })]);
+    renderPage();
+    expect(await screen.findByText('Không giới hạn theo tháng')).toBeInTheDocument();
+    expect(screen.queryByText(/giới hạn hạn mức/)).toBeNull();
+  });
   it('một điểm: tên điểm hiện dưới tiêu đề; hạn mức có thanh tiến độ theo đã dùng trên giới hạn', async () => {
     renderPage();
     expect(await screen.findByText('Đại lý Cô Ba')).toBeInTheDocument();

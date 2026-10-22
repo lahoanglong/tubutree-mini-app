@@ -46,6 +46,7 @@ describe('walletTxLabel (sao kê Ví)', () => {
     expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('WITHDRAW_REFUND')).toBe('Hoàn lệnh rút bị từ chối');
+    expect(walletTxLabel('PIT_REFUND')).toBe('Hoàn thuế TNCN giữ dư');
     // Dòng sao kê cũ của lần đổi Ví → xu trước khi xu gộp vào Điểm Xanh.
     expect(walletTxLabel('XU_CONVERT')).toBe('Đổi sang xu cũ (nay là Điểm Xanh)');
   });

@@ -34,7 +34,7 @@ describe('ZnsClient — chờ Zalo đủ lâu và gắn tracking_id cố định
   it('có tracking_id thì gửi kèm để đối soát một tin với một NotificationLog', async () => {
     await make().sendTemplate('0910087109', 'tpl1', { order_code: 'T1' }, 'log-1');
     expect((axios.post as jest.Mock).mock.calls[0][1]).toEqual({
-      phone: '0910087109',
+      phone: '84910087109',
       template_id: 'tpl1',
       template_data: { order_code: 'T1' },
       tracking_id: 'log-1',
@@ -44,5 +44,28 @@ describe('ZnsClient — chờ Zalo đủ lâu và gắn tracking_id cố định
   it('không có tracking_id thì không thêm trường', async () => {
     await make().sendTemplate('0910087109', 'tpl1', {});
     expect((axios.post as jest.Mock).mock.calls[0][1]).not.toHaveProperty('tracking_id');
+  });
+});
+
+describe('ZnsClient — SĐT gửi Zalo theo dạng quốc tế 84xxxxxxxxx (D5-01)', () => {
+  const make = () =>
+    new ZnsClient({ get: () => 'http://zns.invalid' } as never, { getAccessToken: jest.fn().mockResolvedValue('tok') } as never);
+  const sentPhone = () => (axios.post as jest.Mock).mock.calls[0][1].phone;
+
+  beforeEach(() => (axios.post as jest.Mock).mockReset().mockResolvedValue({ data: { error: 0 } }));
+
+  it('SĐT nội địa 0 + 9 số được đổi thành 84 + 9 số trước khi gửi', async () => {
+    await make().sendTemplate('0910087109', 'tpl1', {});
+    expect(sentPhone()).toBe('84910087109');
+  });
+
+  it('SĐT đã bắt đầu bằng 84 giữ nguyên', async () => {
+    await make().sendTemplate('84910087109', 'tpl1', {});
+    expect(sentPhone()).toBe('84910087109');
+  });
+
+  it('dạng lạ (không phải 0 + 9 số) gửi nguyên để Zalo báo lỗi rõ thay vì tự đoán', async () => {
+    await make().sendTemplate('+84910087109', 'tpl1', {});
+    expect(sentPhone()).toBe('+84910087109');
   });
 });

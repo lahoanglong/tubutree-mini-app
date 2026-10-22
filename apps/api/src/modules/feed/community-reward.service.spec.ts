@@ -200,6 +200,43 @@ describe('CommunityRewardService.rewardBestAnswer', () => {
   });
 });
 
+describe('CommunityRewardService.rewardBestAnswer — trả về số điểm đã thật sự cộng (để tin báo không hứa suông)', () => {
+  it('cộng được → trả số điểm đã cộng', async () => {
+    const d = deps();
+    await expect(make(d).rewardBestAnswer('answerer', 'author', 'p1')).resolves.toBe(1000);
+  });
+
+  it('chạm trần ngày (đã 3 lần) → trả 0', async () => {
+    const d = deps();
+    d.prisma.pointsTransaction.count.mockResolvedValue(3);
+    await expect(make(d).rewardBestAnswer('answerer', 'author', 'p1')).resolves.toBe(0);
+  });
+
+  it('thưởng cấu hình 0 điểm → trả 0', async () => {
+    const d = deps();
+    d.config.get.mockImplementation(async (k: string, f: unknown) => (k === 'community.best_answer_reward_points' ? 0 : f));
+    await expect(make(d).rewardBestAnswer('answerer', 'author', 'p1')).resolves.toBe(0);
+  });
+
+  it('chính chủ bài → trả 0', async () => {
+    const d = deps();
+    await expect(make(d).rewardBestAnswer('same', 'same', 'p1')).resolves.toBe(0);
+  });
+
+  it('grant bỏ qua vì trùng (idempotent, đã thưởng bài này) → trả 0', async () => {
+    const d = deps();
+    d.rewards.grant.mockResolvedValue(false);
+    await expect(make(d).rewardBestAnswer('answerer', 'author', 'p1')).resolves.toBe(0);
+  });
+
+  it('hết lượt thử vì xung đột giao dịch → trả 0 (không cộng)', async () => {
+    const d = deps();
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    d.prisma.$transaction = jest.fn().mockRejectedValue({ code: 'P2034', message: 'serialization failure' });
+    await expect(make(d).rewardBestAnswer('answerer', 'author', 'p1')).resolves.toBe(0);
+  });
+});
+
 // C-026: trần thưởng "trong ngày" phải đếm từ 00:00 giờ VN dù host chạy UTC.
 describe('CommunityRewardService — đầu ngày theo giờ VN (C-026)', () => {
   it('01:30 ngày 10/3 giờ VN → đếm từ 2026-03-09T17:00Z', async () => {

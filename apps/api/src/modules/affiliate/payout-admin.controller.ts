@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { IsIn, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -19,6 +19,8 @@ export class PitReportQuery {
 
 export class ReviewPayoutDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+  /** Số thực nhận đang hiện trên màn admin; khác số hiện tại của lệnh thì 409 (tránh duyệt theo số cũ). Bỏ trống = không kiểm. */
+  @IsOptional() @IsInt() @Min(0) expectedAmount?: number;
 }
 
 export class RejectPayoutDto {
@@ -29,6 +31,8 @@ export class MarkPayoutPaidDto {
   /** Mã giao dịch ngân hàng (vd FT26270…) — lưu vào Payout.bankRef để đối soát. */
   @IsOptional() @IsString() @MaxLength(100) bankRef?: string;
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+  /** Số thực nhận đang hiện trên màn; khác số hiện tại của lệnh thì 409 (tránh chuyển khoản theo số cũ). Bỏ trống = không kiểm. */
+  @IsOptional() @IsInt() @Min(0) expectedAmount?: number;
 }
 
 /**
@@ -58,7 +62,7 @@ export class PayoutAdminController {
 
   @Post(':id/approve')
   approve(@CurrentUser('sub') adminId: string, @Param('id') id: string, @Body() dto: ReviewPayoutDto) {
-    return this.affiliate.approvePayout(adminId, id, dto.note);
+    return this.affiliate.approvePayout(adminId, id, dto.note, dto.expectedAmount);
   }
 
   @Post(':id/reject')

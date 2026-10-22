@@ -16,7 +16,7 @@ import {
   WASTE_STAFF_SECTIONS,
   type WasteSection,
 } from '@/lib/waste-labels';
-import { BTN_SECONDARY, chipClass, FIELD_XS, Notice, ToneBadge } from './ui';
+import { BTN_SECONDARY, chipClass, FIELD_XS, Notice, ToneBadge, LoadError } from './ui';
 import { WasteConfigCard } from './waste-config-card';
 import { WasteGiftsSection } from './waste-gifts-section';
 import { WasteItemsSection } from './waste-items-section';
@@ -71,7 +71,7 @@ export function WasteTab({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed
           Chương trình đang tắt với khách. Bật lại ở Cấu hình chung. Admin vẫn đăng ký kho, điểm nhận và quà được; kho vẫn xử lý kiện đang về.
         </Notice>
       )}
-      {isAdmin && overview.isError && <Notice tone="danger" role="alert">Không tải được số liệu tháng.</Notice>}
+      {isAdmin && overview.isError && <LoadError onRetry={() => void overview.refetch()} retrying={overview.isFetching}>Không tải được số liệu tháng.</LoadError>}
       {isAdmin && overview.data && <AlertList alerts={overview.data.alerts} />}
       {isAdmin && overview.data && <MonthStrip data={overview.data} />}
       {sectionBlock}

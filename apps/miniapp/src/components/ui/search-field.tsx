@@ -74,7 +74,7 @@ export const SearchField = forwardRef<HTMLInputElement, SearchFieldProps>(functi
           style={{
             flex: 1,
             minWidth: 0,
-            height: 42,
+            height: 44,
             border: 'none',
             outline: 'none',
             WebkitAppearance: 'none',

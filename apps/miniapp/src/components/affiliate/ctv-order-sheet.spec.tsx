@@ -1,5 +1,5 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { AxiosError, type AxiosResponse } from 'axios';
+import { HttpError } from '../../services/http';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { saveRecentCustomer, loadRecentCustomers } from './recent-customers';
@@ -317,10 +317,10 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng 
 });
 
 const rejected = (code: string, message: string) =>
-  new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, {
+  new HttpError('Bad Request', 'ERR_BAD_REQUEST', {
     status: 400,
     data: { statusCode: 400, code, message },
-  } as AxiosResponse);
+  });
 
 describe('CtvOrderSheet — đơn tạo ra đúng tổng CTV đã báo khách (R7 review #6)', () => {
   const FLASH_QUOTE = {
@@ -445,7 +445,7 @@ const REGULAR = {
   items: [{ variationId: 'var1', unitPrice: 65_000, quantity: 1, total: 65_000, isFlash: false, flashLimitNotice: null }],
   goods: 65_000, shippingFee: 19_000, total: 84_000, blockedPaymentMethods: {},
 };
-const timeoutError = () => new AxiosError('timeout of 15000ms exceeded', 'ECONNABORTED');
+const timeoutError = () => new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED');
 const submitBtn = () => screen.getByRole('button', { name: 'Tạo đơn hộ khách' });
 
 function resetMocks() {

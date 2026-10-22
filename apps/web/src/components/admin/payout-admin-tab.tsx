@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approvePayout,
@@ -13,19 +13,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutReasonError } from '@/lib/payout-admin';
-import {
-  BTN_DANGER_OUTLINE,
-  BTN_LINK,
-  BTN_PRIMARY,
-  BTN_SMALL,
-  FIELD_CLASS,
-  INPUT_CLASS,
-  Notice,
-  ScrollRegion,
-  TOUCH_H,
-  ToneBadge,
-  chipClass,
-} from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, ScrollRegion, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
@@ -37,15 +25,25 @@ const STATUS_TONE: Record<AdminPayoutStatus, Tone> = {
   REJECTED: 'danger',
 };
 
+// Thẻ ở Việc cần xử lý nhắn bộ lọc cho tab này qua biến module (trang admin không truyền seed xuống): số trên thẻ phải
+// khớp số dòng khi bấm vào. Chỉ có hiệu lực cho lần mở tab kế tiếp, tab đọc xong thì xoá.
+let inboxFilterSeed: AdminPayoutStatus | null = null;
+export const seedPayoutFilter = (status: AdminPayoutStatus | null) => {
+  inboxFilterSeed = status;
+};
+
 /**
- * Duyệt yêu cầu rút tiền (hoa hồng CTV / Ví Tubu → ngân hàng). Trước đây (P0 A5-08 = A6-05) Payout
+ * Yêu cầu rút tiền (hoa hồng CTV / Ví Tubu → ngân hàng). Trước đây (P0 A5-08 = A6-05) Payout
  * REQUESTED không có màn nào xử lý — tiền bị trừ khỏi số dư CTV (hoặc commission bị khoá) rồi
  * "biến mất" khỏi mọi hàng đợi. Từ chối BẮT BUỘC lý do và TỰ ĐỘNG hoàn tiền/commission (BE:
  * AffiliateService.rejectPayout) — không cần thao tác hoàn tiền thủ công nào thêm ở đây.
  * `canReview=false` (nhân viên KE_TOAN): chỉ chi lệnh đã được ADMIN duyệt, nên mặc định mở hàng "Đã duyệt, chờ chuyển khoản".
  */
 export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
-  const [filter, setFilter] = useState<AdminPayoutStatus | ''>(canReview ? 'REQUESTED' : 'APPROVED');
+  const [filter, setFilter] = useState<AdminPayoutStatus | ''>(inboxFilterSeed ?? (canReview ? 'REQUESTED' : 'APPROVED'));
+  useEffect(() => {
+    inboxFilterSeed = null;
+  }, []);
   const [page, setPage] = useState(1);
   const q = useQuery({
     queryKey: ['admin-payouts', filter, page],
@@ -56,7 +54,7 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-stone-900">Duyệt yêu cầu rút tiền</h2>
+        <h2 className="text-base font-semibold text-stone-900">Yêu cầu rút tiền</h2>
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
           {[...PAYOUT_STATUS_ORDER, ''].map((s) => (
             <button
@@ -157,7 +155,7 @@ function PitReportSection() {
         cấp chứng từ khấu trừ khi CTV yêu cầu. MST/CCCD là số CTV khai lúc rút.
       </Notice>
       {q.isLoading && valid && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được báo cáo thuế TNCN.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo thuế TNCN.</LoadError>}
       {q.data && (
         <>
           <p className="text-sm text-stone-700">
@@ -218,6 +216,15 @@ function PitReportSection() {
 
 type Action = 'approve' | 'reject' | 'markPaid';
 
+/** Người nhận, số tiền, ngân hàng và STK: để người bấm đối chiếu đúng lệnh, không nhầm với lệnh cùng số tiền của người khác. */
+function recipientLines(p: AdminPayout): string {
+  const who = p.user?.fullName || p.user?.phone || p.userId;
+  const bank = p.bankInfo;
+  const lines = [`CTV: ${who}${p.user?.referralCode ? ` (mã ${p.user.referralCode})` : ''}`, `Số tiền: ${formatVnd(p.amount)}`];
+  lines.push(bank && (bank.bankName || bank.accountNumber) ? `Ngân hàng: ${bank.bankName ?? ''} · STK ${bank.accountNumber ?? ''} · ${bank.accountName ?? ''}` : 'Ngân hàng: CTV chưa khai tài khoản');
+  return lines.join('\n');
+}
+
 export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout; canReview?: boolean }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
@@ -229,9 +236,9 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
 
   const mut = useMutation({
     mutationFn: (a: Action) => {
-      if (a === 'approve') return approvePayout(p.id, text);
+      if (a === 'approve') return approvePayout(p.id, text, p.amount);
       if (a === 'reject') return rejectPayout(p.id, text);
-      return markPayoutPaid(p.id, bankRef, text);
+      return markPayoutPaid(p.id, bankRef, text, p.amount);
     },
     onSuccess: () => {
       setErr(null);
@@ -246,8 +253,21 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
     },
   });
 
+  const recipient = recipientLines(p);
+
   const run = async (a: Action) => {
     setErr(null);
+    if (a === 'approve') {
+      // Sau khi duyệt, lệnh chỉ còn đường chi: không từ chối hay hoàn lại được nữa.
+      const ok = await confirm({
+        title: 'Duyệt lệnh rút tiền',
+        message: `${recipient}\n\nSau khi duyệt, lệnh KHÔNG còn từ chối hay hoàn tiền cho CTV được nữa; kế toán sẽ chuyển khoản theo thông tin trên.`,
+        confirmLabel: 'Duyệt lệnh rút',
+        cancelLabel: 'Chưa duyệt',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
     if (a === 'reject') {
       const e = rejectPayoutReasonError(text);
       if (e) return setErr(e);
@@ -263,8 +283,9 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
     if (a === 'markPaid') {
       const ok = await confirm({
         title: 'Xác nhận đã chuyển khoản',
-        message: `Xác nhận ĐÃ CHUYỂN KHOẢN ${formatVnd(p.amount)} cho CTV?`,
+        message: `Xác nhận ĐÃ CHUYỂN KHOẢN ${formatVnd(p.amount)} cho CTV?\n\n${recipient}\nMã giao dịch: ${bankRef.trim() || 'chưa nhập'}`,
         confirmLabel: 'Đã chuyển khoản',
+        tone: 'danger',
       });
       if (!ok) return;
     }
@@ -291,6 +312,7 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
           {(p.taxWithheld ?? 0) > 0 && (
             <div className="mt-0.5 text-xs text-stone-600">
               Hoa hồng {formatVnd(p.grossAmount ?? p.amount + (p.taxWithheld ?? 0))} · khấu trừ thuế TNCN {formatVnd(p.taxWithheld ?? 0)}
+              {(p.taxRefunded ?? 0) > 0 ? ` · đã hoàn ${formatVnd(p.taxRefunded ?? 0)} vào Ví` : ''}
               {p.taxId ? ` · MST/CCCD ${p.taxId}` : ''}
             </div>
           )}
@@ -328,26 +350,26 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
       {!canReview && flow.approve && <p className="mt-2 text-xs text-stone-500">Chờ quản trị viên duyệt trước khi chuyển khoản.</p>}
 
       {actionable && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
-          <input
-            aria-label="Ghi chú / lý do"
-            placeholder={acts.reject ? 'Ghi chú (tuỳ chọn) — BẮT BUỘC khi từ chối' : 'Ghi chú (tuỳ chọn)'}
-            value={text}
-            maxLength={500}
-            onChange={(e) => setText(e.target.value)}
-            className={`${INPUT_CLASS} min-w-[200px] flex-1`}
-            disabled={mut.isPending}
-          />
-          {acts.markPaid && (
+        <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3">
+          <Field label={acts.reject ? 'Ghi chú / lý do (bắt buộc khi từ chối)' : 'Ghi chú (tuỳ chọn)'} className="min-w-[200px] flex-1">
             <input
-              aria-label="Mã giao dịch ngân hàng"
-              placeholder="Mã giao dịch NH (tuỳ chọn)"
-              value={bankRef}
-              maxLength={100}
-              onChange={(e) => setBankRef(e.target.value)}
-              className={`${INPUT_CLASS} min-w-[160px] flex-1`}
+              value={text}
+              maxLength={500}
+              onChange={(e) => setText(e.target.value)}
+              className={INPUT_CLASS}
               disabled={mut.isPending}
             />
+          </Field>
+          {acts.markPaid && (
+            <Field label="Mã giao dịch ngân hàng (tuỳ chọn)" className="min-w-[160px] flex-1">
+              <input
+                value={bankRef}
+                maxLength={100}
+                onChange={(e) => setBankRef(e.target.value)}
+                className={INPUT_CLASS}
+                disabled={mut.isPending}
+              />
+            </Field>
           )}
           {acts.approve && (
             <button

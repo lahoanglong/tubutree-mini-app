@@ -26,7 +26,7 @@ import { OrderStatusService } from '../../src/modules/orders/order-status.servic
 import { OrderReturnsService } from '../../src/modules/orders/order-returns.service';
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import { DealerService } from '../../src/modules/dealer/dealer.service';
-import { createDealer, createOrder, createUser, deleteItData, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
+import { createDealer, createOrder, createUser, deleteItData, pinDealerOrderRulesOff, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const PRICE = 100_000;
 const STOCK = 100;
@@ -50,6 +50,7 @@ describe('Giữ/trả kho nhiều dòng theo thứ tự id biến thể (real Po
   let admin: { id: string };
   const CONFIG_KEYS = ['returns.window_days'];
   let savedConfig: { key: string; value: unknown }[] = [];
+  let restoreRules: () => Promise<void>;
   const created = { userIds: [] as string[], productIds: [] as string[] };
 
   beforeAll(async () => {
@@ -93,11 +94,13 @@ describe('Giữ/trả kho nhiều dòng theo thứ tự id biến thể (real Po
     returns = moduleRef.get(OrderReturnsService);
     savedConfig = await prisma.systemConfig.findMany({ where: { key: { in: CONFIG_KEYS } } });
     await setConfig(prisma, 'returns.window_days', 7);
+    restoreRules = await pinDealerOrderRulesOff(prisma);
     admin = await createUser(prisma, { role: 'ADMIN' });
     created.userIds.push(admin.id);
   });
 
   afterAll(async () => {
+    await restoreRules?.();
     if (prisma) {
       await deleteItData(prisma, created);
       await prisma.systemConfig.deleteMany({ where: { key: { in: CONFIG_KEYS.filter((k) => !savedConfig.some((c) => c.key === k)) } } });

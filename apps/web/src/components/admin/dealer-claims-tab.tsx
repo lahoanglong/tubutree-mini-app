@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveDealerRewardClaim,
@@ -36,8 +36,18 @@ const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
  * (bắt buộc lý do) → xác nhận đã trao. Từ chối là cuối với đại lý; admin từ chối nhầm thì "Mở lại yêu cầu". Luồng + kiểm doanh số đã chốt nằm ở DealerService; lỗi (vd doanh
  * số tụt dưới mốc vì có đơn huỷ/trả sau khi gửi) hiện NGUYÊN VĂN.
  */
+// Như tab rút tiền: thẻ ở Việc cần xử lý nhắn bộ lọc qua biến module, chỉ có hiệu lực cho lần mở tab kế tiếp.
+let inboxClaimSeed: DealerRewardClaimStatus | null = null;
+export const seedDealerClaimFilter = (status: DealerRewardClaimStatus | null) => {
+  inboxClaimSeed = status;
+};
+
 export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = {}) {
-  const [filter, setFilter] = useState<DealerRewardClaimStatus | ''>('PENDING');
+  // Kế toán không duyệt được, chỉ chi: mặc định đứng ở hàng đã duyệt chờ chi.
+  const [filter, setFilter] = useState<DealerRewardClaimStatus | ''>(inboxClaimSeed ?? (canReview ? 'PENDING' : 'APPROVED'));
+  useEffect(() => {
+    inboxClaimSeed = null;
+  }, []);
   const [page, setPage] = useState(1);
   const q = useQuery({
     queryKey: ['admin-dealer-claims', filter, page],

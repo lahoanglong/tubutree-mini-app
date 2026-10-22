@@ -8,7 +8,7 @@ import {
   type AdminNotificationTemplate,
   type NotificationDelivery,
 } from '@/lib/admin-client';
-import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge } from './ui';
+import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError } from './ui';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -33,10 +33,10 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
     <div className="space-y-3">
       <Notice tone={missing > 0 || zns === 0 ? 'warning' : 'info'}>
         {zns === 0
-          ? 'Chưa có mẫu nào gửi qua ZNS: mọi thông báo (đơn hàng, nhắc điểm sắp hết hạn, voucher...) chỉ hiện khi khách tự mở app. '
+          ? 'Chưa có mẫu nào gửi qua ZNS: mọi thông báo (đơn hàng, nhắc điểm sắp hết hạn, mã giảm giá...) chỉ hiện khi khách tự mở app. '
           : `${zns} mẫu đang gửi qua ZNS. `}
         {missing > 0 && `${missing} mẫu kênh ZNS chưa có mã mẫu nên đang chỉ gửi trong app. `}
-        Đăng ký mẫu ZNS trên Zalo (duyệt 7–14 ngày, xem docs/GO-LIVE-KEYS.md mục 2), duyệt xong thì nhập mã mẫu ở đây.
+        Đăng ký mẫu ZNS trên Zalo (Zalo duyệt trong 7–14 ngày), duyệt xong thì nhập mã mẫu ở đây. Chưa đăng ký được thì nhờ người quản trị kỹ thuật.
       </Notice>
       {!canEditAll && (
         <Notice tone="info">
@@ -44,7 +44,7 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
         </Notice>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách mẫu thông báo.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách mẫu thông báo.</LoadError>}
       <div className="space-y-2">
         {rows?.map((t) => <TemplateRow key={t.code} item={t} canEditDelivery={canEditAll} />)}
       </div>

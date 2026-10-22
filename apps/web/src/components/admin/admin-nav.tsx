@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Menu } from 'lucide-react';
 import { SideDrawer } from './side-drawer';
 
@@ -11,6 +11,27 @@ export interface NavItem<K extends string> {
 export interface NavGroup<K extends string> {
   label: string;
   items: NavItem<K>[];
+}
+
+const SKIP_TARGET_ID = 'admin-main';
+const SKIP_LINK_CLASS =
+  'sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[110] focus:rounded-control focus:bg-stone-0 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-forest-800 focus:shadow-raised';
+
+/**
+ * Trang đặt `id="admin-main"` cho vùng nội dung thì nhảy thẳng tới đó. Chưa đặt thì dùng phần tử anh em kế tiếp của khối
+ * menu (bố cục hiện tại của trang admin), bỏ qua các phần của menu tự đánh dấu `data-admin-nav-part`.
+ */
+function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
+  let target = document.getElementById(SKIP_TARGET_ID);
+  if (!target) {
+    target = e.currentTarget.nextElementSibling as HTMLElement | null;
+    while (target?.hasAttribute('data-admin-nav-part')) target = target.nextElementSibling as HTMLElement | null;
+  }
+  if (!target) return;
+  e.preventDefault();
+  if (!target.id) target.id = SKIP_TARGET_ID;
+  target.tabIndex = -1;
+  target.focus();
 }
 
 const ITEM_CLASS = 'flex min-h-[44px] w-full items-center gap-1.5 rounded-control px-3 py-2 text-left text-sm lg:min-h-[36px] lg:py-1.5';
@@ -69,15 +90,30 @@ export function AdminNav<K extends string>({
   badge?: (k: K) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  // Mở thẳng tab ở cuối menu (?tab=config) thì mục đang chọn nằm ngoài khung cuộn. Chỉ cuộn khung menu, không dùng
+  // scrollIntoView: nó kéo cả cửa sổ xuống và đẩy tiêu đề của tab ra khỏi màn hình.
+  useEffect(() => {
+    const list = listRef.current;
+    const item = list?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!list || !item) return;
+    const top = item.offsetTop;
+    const bottom = top + item.offsetHeight;
+    if (top >= list.scrollTop && bottom <= list.scrollTop + list.clientHeight) return;
+    list.scrollTop = top - (list.clientHeight - item.offsetHeight) / 2;
+  }, [active]);
   const current = groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g.label }))).find((i) => i.k === active);
   return (
     <>
-      <nav aria-label="Mục quản trị" className="hidden w-60 shrink-0 lg:block">
-        <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
+      <a href={`#${SKIP_TARGET_ID}`} data-admin-nav-part onClick={skipToContent} className={SKIP_LINK_CLASS}>
+        Bỏ qua tới nội dung
+      </a>
+      <nav aria-label="Mục quản trị" data-admin-nav-part className="hidden w-60 shrink-0 lg:block">
+        <div ref={listRef} className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
           <NavList groups={groups} active={active} onSelect={onSelect} badge={badge} />
         </div>
       </nav>
-      <div className="sticky z-30 -mx-4 border-b border-stone-200 bg-stone-50 px-4 py-2 lg:hidden" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
+      <div data-admin-nav-part className="sticky z-30 -mx-4 border-b border-stone-200 bg-stone-50 px-4 py-2 lg:hidden" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
         <button
           type="button"
           aria-haspopup="dialog"

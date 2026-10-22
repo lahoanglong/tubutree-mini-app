@@ -7,11 +7,11 @@ import { downloadOrderItemsCsv, getRevenueReport, type ReportRange, type Revenue
 import { REVENUE_MAX_DAYS, pivotRevenue, rangeError } from '@/lib/admin-reports';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { BTN_SECONDARY, Notice, ScrollRegion } from './ui';
+import { BTN_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 
 /**
  * KPI theo khoảng ngày và bảng doanh thu ngày × kênh. "Doanh thu" là tiền đã thu thật (đơn huỷ/trả/hoàn không tính, trừ phần
- * đã hoàn một phần): đúng định nghĩa của thẻ "Tổng quan KPI" (mọi thời gian) nên cộng cả khoảng "từ đầu tới nay" sẽ ra cùng số.
+ * đã hoàn một phần): đúng định nghĩa của thẻ "Tổng quan chỉ số" (mọi thời gian) nên cộng cả khoảng "từ đầu tới nay" sẽ ra cùng số.
  */
 export function ReportsRevenueSection({ range }: { range: ReportRange }) {
   const error = rangeError(range.from, range.to, REVENUE_MAX_DAYS);
@@ -28,7 +28,7 @@ export function ReportsRevenueSection({ range }: { range: ReportRange }) {
       </h3>
       {error && <Notice tone="warning" role="alert">{error}</Notice>}
       {!error && q.isLoading && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
-      {!error && q.isError && <p className="text-sm text-danger-fg">Không tải được báo cáo doanh thu.</p>}
+      {!error && q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo doanh thu.</LoadError>}
       {q.data && !error && <RevenueBody report={q.data} />}
       <ExportButtons range={range} disabled={!!error} />
     </section>

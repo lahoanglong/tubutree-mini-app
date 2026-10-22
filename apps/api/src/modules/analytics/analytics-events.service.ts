@@ -28,26 +28,34 @@ export class AnalyticsEventsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private toData(input: AnalyticsEventInput): Prisma.AnalyticsEventCreateManyInput {
+    return {
+      eventId: input.eventId ?? randomUUID(),
+      eventName: input.eventName,
+      occurredAt: input.occurredAt ?? new Date(),
+      userId: input.userId ?? null,
+      anonymousId: input.anonymousId ?? null,
+      sessionId: input.sessionId ?? null,
+      platform: input.platform,
+      appVersion: input.appVersion ?? null,
+      entrySource: input.entrySource ?? null,
+      campaign: input.campaign ?? null,
+      notificationId: input.notificationId ?? null,
+      refCode: input.refCode ?? null,
+      storefrontSlug: input.storefrontSlug ?? null,
+      props: (input.props ?? {}) as Prisma.InputJsonValue,
+    };
+  }
+
   /** Ghi sự kiện — gọi với `tx` khi cần atomic với nghiệp vụ đang chạy trong transaction đó. */
   async record(db: Db, input: AnalyticsEventInput): Promise<void> {
-    await db.analyticsEvent.create({
-      data: {
-        eventId: input.eventId ?? randomUUID(),
-        eventName: input.eventName,
-        occurredAt: input.occurredAt ?? new Date(),
-        userId: input.userId ?? null,
-        anonymousId: input.anonymousId ?? null,
-        sessionId: input.sessionId ?? null,
-        platform: input.platform,
-        appVersion: input.appVersion ?? null,
-        entrySource: input.entrySource ?? null,
-        campaign: input.campaign ?? null,
-        notificationId: input.notificationId ?? null,
-        refCode: input.refCode ?? null,
-        storefrontSlug: input.storefrontSlug ?? null,
-        props: (input.props ?? {}) as Prisma.InputJsonValue,
-      },
-    });
+    await db.analyticsEvent.create({ data: this.toData(input) });
+  }
+
+  /** Ghi cả lô bằng một INSERT; eventId trùng bị bỏ qua (cùng kết quả với việc nuốt P2002 từng dòng). */
+  async recordMany(db: Db, inputs: AnalyticsEventInput[]): Promise<void> {
+    if (inputs.length === 0) return;
+    await db.analyticsEvent.createMany({ data: inputs.map((i) => this.toData(i)), skipDuplicates: true });
   }
 
   /** Ghi best-effort NGOÀI transaction — không bao giờ throw, dùng cho sự kiện không phải tiền. */
@@ -56,6 +64,16 @@ export class AnalyticsEventsService {
       await this.record(this.prisma, input);
     } catch (err) {
       this.logger.warn(`Ghi analytics event thất bại (bỏ qua): ${input.eventName} — ${err}`);
+    }
+  }
+
+  /** Lô từ client: một INSERT; lỗi thì lùi về từng dòng để một dòng hỏng không làm mất cả lô. Không bao giờ throw. */
+  async recordManyBestEffort(inputs: AnalyticsEventInput[]): Promise<void> {
+    try {
+      await this.recordMany(this.prisma, inputs);
+    } catch (err) {
+      this.logger.warn(`Ghi lô ${inputs.length} analytics event thất bại, ghi lại từng dòng: ${err}`);
+      for (const input of inputs) await this.recordBestEffort(input);
     }
   }
 }

@@ -86,9 +86,11 @@ describe('thưởng game/đánh giá có hạn, cron hết hạn nhất quán v�
     });
     const user = await createUser(prisma);
     touched.push(user.id);
+    // Giao từ 30 ngày trước: qua hạn đổi/trả nên nhiệm vụ FIRST_ORDER tính đơn này.
     const order = await createOrder(prisma, {
       userId: user.id,
       status: 'DELIVERED',
+      deliveredAt: new Date(Date.now() - 30 * DAY),
       items: { create: [{ variationId: v.id, productName: 'SP IT', variationName: 'Chai', unitPrice: 100_000, quantity: 1, total: 100_000 }] },
     });
     return { user, product: p, order };

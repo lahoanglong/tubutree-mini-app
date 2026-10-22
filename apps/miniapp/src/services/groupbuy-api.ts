@@ -8,6 +8,8 @@ export interface GroupBuy {
   targetSize: number;
   currentSize: number;
   unitPrice: number;
+  /** Đơn tối thiểu của mã = giá nhóm của biến thể rẻ nhất đang bán (API bản cũ không trả → dùng unitPrice). */
+  minOrder?: number;
   basePrice: number;
   discountPct: number;
   status: GroupBuyStatus;

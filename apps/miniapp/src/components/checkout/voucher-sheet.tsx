@@ -81,12 +81,18 @@ export function VoucherSheet({
       setCustomCode('');
       // Mã được giữ nhưng chưa giảm cho giỏ này (vd combo kéo phần hàng dưới đơn tối thiểu): nói lý do, không báo "đã áp dụng".
       // Lời báo là của CẢ giỏ: nếu xem trước cho phần đang chọn (mua một phần) nói mã dùng được thì mã được áp cho đơn này.
-      const eligibleHere = previews.get(code.trim().toUpperCase())?.eligible === true;
+      const preview = previews.get(code.trim().toUpperCase());
+      const eligibleHere = preview?.eligible === true;
       const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship && !eligibleHere;
+      // Mã freeship giỏ coi là hợp lệ (freeship: true) nhưng xem trước của máy chủ nói không miễn được gì (đơn đầu đã miễn phí giao):
+      // nói đúng câu thanh toán sẽ nói, không báo "đã áp dụng" rồi thanh toán báo ngược lại.
+      const previewBlocked = preview && !preview.eligible && preview.reason && cart.discount === 0 ? preview.reason : null;
       openSnackbar(
         heldOnly
           ? { text: cart.couponNotice!, type: 'warning', duration: 5000 }
-          : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },
+          : previewBlocked
+            ? { text: `Mã chưa được áp dụng cho đơn này: ${previewBlocked}`, type: 'warning', duration: 5000 }
+            : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },
       );
       onCouponApplied?.();
       onClose();
@@ -116,7 +122,7 @@ export function VoucherSheet({
       return `Giảm ${coupon.value}%${maxText}`;
     }
     if (coupon.type === 'FREESHIP') {
-      return 'Miễn phí ship';
+      return 'Miễn phí giao hàng';
     }
     return `Giảm ${formatVnd(coupon.value)}`;
   };
@@ -208,7 +214,7 @@ export function VoucherSheet({
                   : preview.discount > 0
                     ? `Giảm ${formatVnd(preview.discount)} cho đơn này`
                     : (preview.freeshipSaving ?? 0) > 0
-                      ? `Miễn phí ship ${formatVnd(preview.freeshipSaving)} cho đơn này`
+                      ? `Miễn phí giao hàng ${formatVnd(preview.freeshipSaving)} cho đơn này`
                       : null;
                 const endAtDate = coupon.endAt ? new Date(coupon.endAt) : null;
                 const endAtText = endAtDate && !isNaN(endAtDate.getTime()) ? formatDate(endAtDate) : 'Không thời hạn';
@@ -269,7 +275,7 @@ export function VoucherSheet({
                       )}
                       {shipAlreadyFree && (
                         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-                          Đơn này đã miễn phí ship
+                          Đơn này đã miễn phí giao hàng
                         </Text>
                       )}
                       {scope && (

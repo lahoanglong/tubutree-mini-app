@@ -91,6 +91,7 @@ export function ProductPicker({
       )}
 
       <Input.Search
+        aria-label={vi.community.searchProduct}
         placeholder={vi.community.searchProduct}
         value={q}
         onChange={(e) => {

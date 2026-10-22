@@ -40,7 +40,7 @@ describe('useActiveOrderCount', () => {
     expect(mocks.fetchActiveOrderCount).not.toHaveBeenCalled();
   });
   it('API cũ 404 → query kết thúc ở trạng thái lỗi nhưng hook vẫn trả 0, không ném', async () => {
-    mocks.fetchActiveOrderCount.mockRejectedValue(Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404 } }));
+    mocks.fetchActiveOrderCount.mockRejectedValue(Object.assign(new Error('404'), { isHttpError: true, response: { status: 404 } }));
     const { client, wrapper } = makeWrapper();
     const { result } = renderHook(() => useActiveOrderCount(true), { wrapper });
     await waitFor(() => expect(client.getQueryState(ACTIVE_ORDER_COUNT_KEY)?.status).toBe('error'));

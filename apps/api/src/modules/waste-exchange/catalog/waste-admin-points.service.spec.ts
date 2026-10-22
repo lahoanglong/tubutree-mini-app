@@ -27,11 +27,17 @@ const NO_HANDOVER = 'Đợt này chưa bật trao quà tại điểm đại lý.
 const BAD_HOURS = 'Giờ mở cửa không hợp lệ.';
 const BAD_HOURS_BODY = { MON: [{ open: '18:00', close: '08:00' }] };
 
+const WAREHOUSE_ONLY_ITEMS = [
+  { id: 'i-milk', name: 'Vỏ hộp sữa sạch' },
+  { id: 'i-bottle', name: 'Vỏ chai, hộp Tubu Tree' },
+];
+const NOT_FOR_PARTNER = 'Điểm đại lý không nhận: Vỏ hộp sữa sạch. Món này chỉ kho Tubu HCMC nhận.';
+
 const addr = { addressLine: '1 Đường A', provinceCode: '79', provinceName: 'TP.HCM', communeCode: '1', communeName: 'P1' };
 const point = (o: Record<string, unknown> = {}) => ({
   id: 'p1', kind: 'PARTNER', name: 'Tạp hoá Cô Ba', ...addr, lat: null, lng: null, phone: null, openingHours: {}, status: 'ACTIVE',
   monthlyQuotaPoints: 100_000, perkText: null, perkPendingText: null, giftHandoverEnabled: false, note: null, sortOrder: 10,
-  activatedAt: new Date('2026-08-08T00:00:00Z'), lastConfirmedAt: null, items: [{ itemId: 'i1' }, { itemId: 'i2' }], staff: [], ...o,
+  activatedAt: new Date('2026-08-08T00:00:00Z'), lastConfirmedAt: null, items: [{ itemId: 'i1', item: { warehouseOnly: false } }, { itemId: 'i2', item: { warehouseOnly: false } }], staff: [], ...o,
 });
 
 async function expectHttp(p: Promise<unknown>, cls: new (...a: never[]) => Error, message: string) {
@@ -59,7 +65,12 @@ function setup() {
     deleteMany: jest.fn(),
     createMany: jest.fn(),
   };
-  const wasteItem = { count: jest.fn(async (a: { where: { id: { in: string[] } } }) => a.where.id.in.length) };
+  const wasteItem = {
+    count: jest.fn(async (a: { where: { id: { in: string[] } } }) => a.where.id.in.length),
+    findMany: jest.fn(async (a: { where: { id: { in: string[] }; warehouseOnly?: boolean } }) =>
+      a.where.warehouseOnly ? WAREHOUSE_ONLY_ITEMS.filter((i) => a.where.id.in.includes(i.id)) : [],
+    ),
+  };
   const wastePointUsage = { findMany: jest.fn().mockResolvedValue([]) };
   const $queryRaw = jest.fn().mockResolvedValue([point()]);
   const user = {
@@ -140,6 +151,20 @@ describe('WasteAdminPointsService', () => {
       expect(row!.quotaFull).toBe(false);
     });
 
+    it('a PARTNER row drops a legacy link to a warehouse-only item, the WAREHOUSE row keeps every link', async () => {
+      const links = [
+        { itemId: 'i1', item: { warehouseOnly: false } },
+        { itemId: 'i-milk', item: { warehouseOnly: true } },
+      ];
+      const h = setup();
+      h.wastePoint.findMany.mockResolvedValue([point({ items: links }), point({ id: 'wh', kind: 'WAREHOUSE', items: links })]);
+
+      const [partner, warehouse] = await h.svc.list('a1', {});
+
+      expect(partner!.acceptedItemIds).toEqual(['i1']);
+      expect(warehouse!.acceptedItemIds).toEqual(['i-milk', 'i1']);
+    });
+
     it('builds the where from status and perkPending', async () => {
       const h = setup();
       const whereOf = (i: number) => (h.wastePoint.findMany.mock.calls[i]![0] as { where: unknown }).where;
@@ -154,7 +179,7 @@ describe('WasteAdminPointsService', () => {
       expect(h.wastePoint.findMany.mock.calls[0]![0]).toMatchObject({
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
         include: {
-          items: { select: { itemId: true } },
+          items: { select: { itemId: true, item: { select: { warehouseOnly: true } } } },
           staff: {
             include: { user: { select: { id: true, fullName: true, phone: true } } },
             orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
@@ -267,6 +292,25 @@ describe('WasteAdminPointsService', () => {
         expect(h.wastePoint.create).not.toHaveBeenCalled();
         expect(writeEvent).not.toHaveBeenCalled();
       }
+    });
+
+    it('a PARTNER cannot be registered with a warehouse-only item, the WAREHOUSE can', async () => {
+      const partner = { kind: 'PARTNER', name: 'Tạp hoá Cô Ba', ...addr, monthlyQuotaPoints: 100_000 } as const;
+      const h = setup();
+      await expectHttp(h.svc.create('a1', { ...partner, itemIds: ['i1', 'i-milk'] }), BadRequestException, NOT_FOR_PARTNER);
+      expect(h.wastePoint.create).not.toHaveBeenCalled();
+      expect(writeEvent).not.toHaveBeenCalled();
+
+      const both = setup();
+      await expectHttp(
+        both.svc.create('a1', { ...partner, itemIds: ['i-milk', 'i-bottle'] }),
+        BadRequestException,
+        'Điểm đại lý không nhận: Vỏ hộp sữa sạch; Vỏ chai, hộp Tubu Tree. Các món này chỉ kho Tubu HCMC nhận.',
+      );
+
+      const wh = setup();
+      await wh.svc.create('a1', { kind: 'WAREHOUSE', name: 'Kho Tubu', ...addr, itemIds: ['i1', 'i-milk', 'i-bottle'] });
+      expect(wh.wastePoint.create).toHaveBeenCalledTimes(1);
     });
 
     it('maps a P2002 on the index name or on the field list to the one-warehouse 409', async () => {
@@ -384,6 +428,32 @@ describe('WasteAdminPointsService', () => {
       await h.svc.update('a1', 'p1', { openingHours: { MON: [], FRI: [] } });
       expect(h.wastePoint.update).not.toHaveBeenCalled();
       expect(writeEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update, warehouse-only items', () => {
+    it('refuses a warehouse-only item on a PARTNER without touching the links or the log', async () => {
+      const h = setup();
+      await expectHttp(h.svc.update('a1', 'p1', { itemIds: ['i1', 'i-milk'] }), BadRequestException, NOT_FOR_PARTNER);
+      expect(h.wastePointItem.deleteMany).not.toHaveBeenCalled();
+      expect(h.wastePointItem.createMany).not.toHaveBeenCalled();
+      expect(h.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeEvent).not.toHaveBeenCalled();
+    });
+
+    it('lets the WAREHOUSE take them, and does not block an unrelated edit of a PARTNER that predates the rule', async () => {
+      const wh = setup();
+      wh.$queryRaw.mockResolvedValue([point({ kind: 'WAREHOUSE', monthlyQuotaPoints: null })]);
+      wh.wastePointItem.findMany.mockResolvedValue([{ itemId: 'i1' }]);
+      await wh.svc.update('a1', 'p1', { itemIds: ['i1', 'i-milk', 'i-bottle'] });
+      expect(wh.wastePointItem.createMany).toHaveBeenCalledWith({
+        data: [{ pointId: 'p1', itemId: 'i1' }, { pointId: 'p1', itemId: 'i-milk' }, { pointId: 'p1', itemId: 'i-bottle' }],
+      });
+
+      const legacy = setup();
+      legacy.wastePoint.update.mockResolvedValue(point({ name: 'Tạp hoá Cô Tư' }));
+      await legacy.svc.update('a1', 'p1', { name: 'Tạp hoá Cô Tư' });
+      expect(legacy.wastePoint.update).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -178,16 +178,16 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       renderPage();
       expect(await screen.findByText('Hôm nay bạn không có ca đã duyệt.')).toBeInTheDocument();
       expect(screen.getByText('Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Checkin' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Vào ca' })).not.toBeInTheDocument();
     });
 
     it('Checkin: lấy vị trí rồi gửi cùng ca; đúng giờ báo thành công, tải lại trạng thái', async () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [{ ...TODAY_SHIFT, approvedStart: vn(TODAY, '08:00'), approvedEnd: vn(TODAY, '12:00') }], openSession: null });
       renderPage();
       expect(await screen.findByText('Ca 08:00–12:00')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Checkin' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Vào ca' }));
       await waitFor(() => expect(mocks.checkin).toHaveBeenCalledWith({ shiftId: 'sh1', lat: 10.1, lng: 106.2 }));
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã checkin. Chúc làm việc vui!', type: 'success' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã vào ca. Chúc làm việc vui!', type: 'success' }));
       await waitFor(() => expect(mocks.getAttendanceStatus).toHaveBeenCalledTimes(2));
     });
 
@@ -195,9 +195,9 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [TODAY_SHIFT], openSession: null });
       mocks.checkin.mockResolvedValue({ sessionId: 's1', isLate: true });
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Checkin' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Vào ca' }));
       await waitFor(() =>
-        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã checkin (đi trễ — có thể bị phạt).', type: 'info' }),
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã vào ca (đi trễ — có thể bị phạt).', type: 'info' }),
       );
     });
 
@@ -205,7 +205,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [TODAY_SHIFT], openSession: null });
       mocks.checkin.mockRejectedValue(new Error('Sai mạng WiFi'));
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Checkin' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Vào ca' }));
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Sai mạng WiFi', type: 'error' }));
     });
 
@@ -217,7 +217,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       });
       mocks.checkin.mockRejectedValue(new Error('Bạn đang ở ngoài vùng công ty.'));
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Checkin' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Vào ca' }));
       await waitFor(() =>
         expect(mocks.openSnackbar).toHaveBeenCalledWith({
           text: 'Không lấy được vị trí: hết thời gian chờ tín hiệu GPS. Bạn đang ở ngoài vùng công ty.',
@@ -258,36 +258,36 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
       renderPage();
       expect(await screen.findByText('Đang trong ca · vào lúc 08:30 · đi trễ')).toBeInTheDocument();
-      expect(screen.getByText('Nghỉ giữa ca? Checkout rồi Checkin lại khi quay lại.')).toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Checkout' }));
+      expect(screen.getByText('Nghỉ giữa ca? Ra ca rồi vào ca lại khi quay lại.')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Ra ca' }));
       await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith(undefined));
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã checkout.', type: 'success' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã ra ca.', type: 'success' }));
     });
 
     it('"Quên checkout?" mở khung chọn giờ đã về; chỉ cho giờ sau giờ vào và không ở tương lai', async () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
       renderPage();
-      fireEvent.click(await screen.findByText('Quên checkout? Chọn giờ đã về →'));
+      fireEvent.click(await screen.findByText('Quên ra ca? Chọn giờ đã về →'));
       expect(timeInputs().map((i) => i.value)).toEqual(['08:30']);
-      const confirm = screen.getByRole('button', { name: 'Xác nhận checkout' });
+      const confirm = screen.getByRole('button', { name: 'Xác nhận ra ca' });
       // Giờ mặc định = giờ vào nên chưa hợp lệ.
       expect(confirm).toBeDisabled();
-      expect(screen.getByText('Giờ đã chọn phải sau giờ checkin (08:30) và không được ở tương lai.')).toBeInTheDocument();
+      expect(screen.getByText('Giờ đã chọn phải sau giờ vào ca (08:30) và không được ở tương lai.')).toBeInTheDocument();
       // 13:00 > 12:00 (bây giờ) → tương lai.
       fireEvent.change(timeInputs()[0]!, { target: { value: '13:00' } });
-      expect(screen.getByRole('button', { name: 'Xác nhận checkout' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Xác nhận ra ca' })).toBeDisabled();
       fireEvent.change(timeInputs()[0]!, { target: { value: '11:00' } });
-      expect(screen.queryByText(/Giờ đã chọn phải sau giờ checkin/)).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận checkout' }));
+      expect(screen.queryByText(/Giờ đã chọn phải sau giờ vào ca/)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận ra ca' }));
       await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith(vn(TODAY, '11:00')));
-      await waitFor(() => expect(screen.queryByText('Checkout lùi giờ')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByText('Ra ca lùi giờ')).not.toBeInTheDocument());
     });
 
     it('khung "Checkout lùi giờ" có tiêu đề h2 và ô giờ có nhãn', async () => {
       mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: /Quên checkout\?/ }));
-      expect(screen.getByRole('heading', { level: 2, name: 'Checkout lùi giờ' })).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: /Quên ra ca\?/ }));
+      expect(screen.getByRole('heading', { level: 2, name: 'Ra ca lùi giờ' })).toBeInTheDocument();
       expect(screen.getByLabelText('Giờ đã về')).toHaveValue('08:30');
     });
 
@@ -303,7 +303,7 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       await (call![0] as () => Promise<void>)();
       expect(mocks.heartbeat).toHaveBeenCalledWith({ lat: 1, lng: 2 });
       await waitFor(() =>
-        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tự checkout (ra khỏi vùng công ty).', type: 'info' }),
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tự ra ca (ra khỏi vùng công ty).', type: 'info' }),
       );
       await waitFor(() => expect(mocks.getAttendanceStatus).toHaveBeenCalledTimes(2));
     });
@@ -379,12 +379,12 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
 
     it('Copy tuần trước: gửi mốc hai tuần; báo số ca đã copy hoặc không có ca', async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole('button', { name: 'Copy tuần trước' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Chép tuần trước' }));
       await waitFor(() => expect(mocks.copyWeek).toHaveBeenCalledWith('2026-03-02T00:00:00.000Z', '2026-03-09T00:00:00.000Z'));
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã copy 2 ca từ tuần trước.', type: 'success' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã chép 2 ca từ tuần trước.', type: 'success' }));
       mocks.copyWeek.mockResolvedValue({ created: 0, skipped: 3 });
-      fireEvent.click(screen.getByRole('button', { name: 'Copy tuần trước' }));
-      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tuần trước không có ca để copy.', type: 'info' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Chép tuần trước' }));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Tuần trước không có ca để chép.', type: 'info' }));
     });
   });
 

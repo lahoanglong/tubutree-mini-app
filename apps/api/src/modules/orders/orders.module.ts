@@ -6,6 +6,7 @@ import { OrderStatusService } from './order-status.service';
 import { PurchasedItemsService } from './purchased-items.service';
 import { PendingPaymentExpiryCron } from './pending-payment-expiry.cron';
 import { DeliveredEffectsResyncCron } from './delivered-effects-resync.cron';
+import { ReversalEffectsResyncCron } from './reversal-effects-resync.cron';
 import { PurchasedItemsController } from './purchased-items.controller';
 import { CustomerRefundsService } from './customer-refunds.service';
 import { CustomerRefundsAdminController } from './customer-refunds-admin.controller';
@@ -29,6 +30,7 @@ import { WastePickupModule } from '../waste-exchange/pickup/waste-pickup.module'
     OrderReturnsService,
     PendingPaymentExpiryCron,
     DeliveredEffectsResyncCron,
+    ReversalEffectsResyncCron,
   ],
   // Xuất cho AdminModule/MerchantModule/PancakeModule — nguồn ghi Order.status
   // dùng chung để không lặp lại khối restock/refund + guard chuyển trạng thái.

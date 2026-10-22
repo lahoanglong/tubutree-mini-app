@@ -135,10 +135,10 @@ export function staffCouponExposure(
 }
 
 /**
- * Ngân sách mã của mỗi nhân viên theo ngày VN: tổng số tiền tối đa có thể giảm của mọi mã người đó tạo trong ngày (kể cả mã
- * trong lô, mã đã tắt), cộng phần thêm, không vượt `coupon.staff_daily_budget_vnd`. Phần thêm của lần sửa tính vào ngày tạo mã,
- * nên sửa mã cũ cũng không vượt được ngân sách của ngày đó. Gọi trong transaction ghi: khoá theo người tạo để hai yêu cầu song
- * song không cùng lọt.
+ * Ngân sách khuyến mãi của mỗi nhân viên theo ngày VN: tổng số tiền tối đa có thể giảm của mọi mã người đó tạo trong ngày (kể
+ * cả mã trong lô, mã đã tắt) và mọi item flash sale trong đợt người đó tạo trong ngày, cộng phần thêm, không vượt
+ * `coupon.staff_daily_budget_vnd`. Phần thêm của lần sửa tính vào ngày tạo mã, nên sửa mã cũ cũng không vượt được ngân sách
+ * của ngày đó. Gọi trong transaction ghi: khoá theo người tạo để hai yêu cầu song song không cùng lọt.
  */
 export async function assertStaffDailyBudget(
   tx: Pick<Prisma.TransactionClient, '$executeRaw' | '$queryRaw'>,
@@ -152,16 +152,25 @@ export async function assertStaffDailyBudget(
   const from = startOfVnDay(day);
   const to = new Date(from.getTime() + 24 * 60 * 60 * 1000);
   const rows = await tx.$queryRaw<{ used: bigint | number | null }[]>`
-    SELECT COALESCE(SUM(
-      (CASE "type" WHEN 'AMOUNT' THEN "value" WHEN 'PERCENT' THEN COALESCE("maxDiscount", ${caps.maxAmount}) ELSE ${caps.maxAmount} END)::bigint
-      * COALESCE("usageLimit", ${caps.maxUsage})
-    ), 0)::bigint AS used
-    FROM "coupons"
-    WHERE "createdById" = ${creatorId} AND "createdAt" >= ${from} AND "createdAt" < ${to}`;
+    SELECT ((
+      SELECT COALESCE(SUM(
+        (CASE "type" WHEN 'AMOUNT' THEN "value" WHEN 'PERCENT' THEN COALESCE("maxDiscount", ${caps.maxAmount}) ELSE ${caps.maxAmount} END)::bigint
+        * COALESCE("usageLimit", ${caps.maxUsage})
+      ), 0)
+      FROM "coupons"
+      WHERE "createdById" = ${creatorId} AND "createdAt" >= ${from} AND "createdAt" < ${to}
+    ) + (
+      -- Item flash không có ngày riêng: tính vào ngày tạo đợt, như phần thêm của lần sửa mã tính vào ngày tạo mã.
+      SELECT COALESCE(SUM(GREATEST(COALESCE(v."salePrice", v."retailPrice") - fsi."flashPrice", 0)::bigint * fsi."quota"), 0)
+      FROM "flash_sale_items" fsi
+      JOIN "flash_sales" fs ON fs."id" = fsi."flashSaleId"
+      JOIN "variations" v ON v."id" = fsi."variationId"
+      WHERE fs."createdBy" = ${creatorId} AND fs."createdAt" >= ${from} AND fs."createdAt" < ${to}
+    ))::bigint AS used`;
   const used = Number(rows[0]?.used ?? 0);
   if (used + added > caps.dailyBudget) {
     throw new BadRequestException(
-      `Vượt ngân sách mã giảm giá của nhân viên ngày ${formatVnDate(from)} (${formatVnd(caps.dailyBudget)}/người/ngày): ` +
+      `Vượt ngân sách mã giảm giá và flash sale của nhân viên ngày ${formatVnDate(from)} (${formatVnd(caps.dailyBudget)}/người/ngày): ` +
         `phần này có thể giảm tới ${formatVnd(added)}, còn ${formatVnd(Math.max(caps.dailyBudget - used, 0))}. ` +
         'Cần hơn thì nhờ quản trị viên tạo.',
     );

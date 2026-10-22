@@ -20,7 +20,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { smtpErrorSummary } from '@/lib/ops-email-error';
 import { useConfirm } from './confirm-dialog';
-import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 
 const PUSH_STATUS_LABELS: Record<string, string> = {
   PENDING: 'chờ đẩy',
@@ -164,7 +164,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
         </button>
       </div>
       {q.isLoading && <p className="text-sm text-stone-500">Đang kiểm tra…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được tình trạng hệ thống.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được tình trạng hệ thống.</LoadError>}
       {msg && (
         <div ref={msgRef}>
           <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
@@ -283,7 +283,7 @@ function EmailChannelCard({ email, canTest }: { email: OpsEmailChannel; canTest:
       after={
         <div className="mt-1 space-y-1">
           {email.state === 'DISABLED' && (
-            <p className="text-xs text-stone-500">Đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM để nhận báo động qua email (docs/GO-LIVE-KEYS.md mục 8).</p>
+            <p className="text-xs text-stone-500">Muốn nhận báo động qua email, nhờ người quản trị máy chủ đặt OPS_ALERT_EMAIL_TO, SMTP_HOST và SMTP_FROM.</p>
           )}
           {email.issues.map((issue) => (
             <p key={issue} className="break-words text-xs text-danger-fg">
@@ -440,7 +440,10 @@ function HealthBody({
       )}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Card title="Pancake">
+        <Card
+          title="Pancake"
+          after={h.pancake.catalog.lastError && <p className="mt-1 break-words text-xs text-stone-500">Lỗi gần nhất: {h.pancake.catalog.lastError}</p>}
+        >
           <Row label="Cấu hình" value={h.pancake.configured ? 'Đã cấu hình' : 'Chưa cấu hình'} warn={!h.pancake.configured} />
           <Row label="Đẩy đơn thành công gần nhất" value={ago(h.pancake.lastPushOkAt)} />
           <Row label="Nhận webhook gần nhất" value={ago(h.pancake.lastWebhookAt)} />
@@ -459,9 +462,11 @@ function HealthBody({
             }
             warn={!!h.pancake.catalog.lastErrorAt && (!h.pancake.catalog.lastOkAt || h.pancake.catalog.lastErrorAt > h.pancake.catalog.lastOkAt)}
           />
-          {h.pancake.catalog.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.pancake.catalog.lastError}</p>}
         </Card>
-        <Card title="Gomdon (thu kèm rác)">
+        <Card
+          title="Gomdon (thu kèm rác)"
+          after={h.gomdon.connection?.lastError && <p className="mt-1 break-words text-xs text-stone-500">Lỗi gần nhất: {h.gomdon.connection.lastError}</p>}
+        >
           <Row label="Cấu hình" value={h.gomdon.configured ? 'Đã cấu hình' : 'Chưa cấu hình'} />
           <Row
             label="Kết nối Gomdon"
@@ -481,7 +486,6 @@ function HealthBody({
           <Row label={`Đơn thu gom chờ vận đơn quá ${t.gomdonBacklogMinutes} phút`} value={h.gomdon.backlog} warn={h.gomdon.backlog > 0} />
           <Row label="Báo động chưa đóng" value={h.gomdon.openAlerts} warn={h.gomdon.openAlerts > 0} />
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
-          {h.gomdon.connection?.lastError && <p className="break-words text-xs text-stone-500">Lỗi gần nhất: {h.gomdon.connection.lastError}</p>}
         </Card>
         {h.alertChannels?.email && <EmailChannelCard email={h.alertChannels.email} canTest={canTestEmail} />}
         {h.alertChannels?.webhook && <WebhookChannelCard webhook={h.alertChannels.webhook} />}

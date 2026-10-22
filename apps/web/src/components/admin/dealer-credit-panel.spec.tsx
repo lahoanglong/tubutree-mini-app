@@ -4,6 +4,12 @@ import { DealerCreditPanel } from './dealer-credit-panel';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -62,7 +68,7 @@ describe('DealerCreditPanel (chi tiết đơn admin) — A5-09', () => {
     expect(container.textContent).toContain('Đơn TB-199 ghi công nợ');
 
     typeInto(container.querySelector('input[aria-label="Số tiền đã nhận (đ)"]'), '2000000');
-    typeInto(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]'), 'FT999');
+    typeInto(field(container, 'Mã giao dịch (tuỳ chọn)'), 'FT999');
     const btn = byText(container, 'button', 'Xác nhận đã nhận, giảm nợ') as HTMLButtonElement;
 
     click(btn);
@@ -163,7 +169,7 @@ describe('DealerCreditPanel — DS v2', () => {
     click(byText(container, 'button', 'Công nợ đại lý'));
     await flush();
     for (const input of Array.from(container.querySelectorAll('input'))) expect(input.className).toContain('min-h-[44px]');
-    expect(container.querySelector('input[aria-label="Ghi chú"]')?.className).toContain('basis-40');
+    expect(field(container, 'Ghi chú (tuỳ chọn)')?.closest('label')?.className).toContain('basis-40');
     expect(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ')?.className).toContain('min-h-[44px]');
     expect(byText(container, 'button', 'Xác nhận đã nhận, giảm nợ')?.className).toContain('bg-warning-fg');
   });

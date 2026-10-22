@@ -25,7 +25,7 @@ const UNANSWERED = [
   { id: 'q1', title: 'Cây khô lá', excerpt: 'Cây để ngoài nắng bị khô.', createdAt: '2026-10-15T03:00:00.000Z', author: 'Bình', category: 'Hỏi đáp', waitingHours: 52 },
 ];
 
-function setup(routes: Parameters<typeof mockFetch>[0] = {}, props: { initialView?: 'pending' | 'published' | 'unanswered' } = {}) {
+function setup(routes: Parameters<typeof mockFetch>[0] = {}, props: { initialView?: 'pending' | 'published' | 'unanswered'; isAdmin?: boolean } = {}) {
   const api = mockFetch({
     '/feed/admin/pending': { body: PENDING },
     '/feed/admin/published': { body: PUBLISHED },
@@ -189,8 +189,8 @@ describe('CommunityModerationTab — bài chờ duyệt', () => {
 });
 
 describe('CommunityModerationTab — bài đã đăng', () => {
-  const openPublished = async (routes: Parameters<typeof mockFetch>[0] = {}) => {
-    const s = setup(routes);
+  const openPublished = async (routes: Parameters<typeof mockFetch>[0] = {}, isAdmin = true) => {
+    const s = setup(routes, { isAdmin });
     await flush();
     click(byText(s.r.container, 'button', 'Đã đăng'));
     await flush();
@@ -205,6 +205,27 @@ describe('CommunityModerationTab — bài đã đăng', () => {
     expect(pinned.textContent).toContain('Đang ghim');
     expect(byText(pinned, 'button', 'Bỏ ghim')).not.toBeNull();
     expect(byText(r.container.querySelector('[data-post="a2"]')!, 'button', 'Ghim')).not.toBeNull();
+  });
+
+  it('nhân viên không phải ADMIN (CSKH, MARKETING): không có nút Ghim/Bỏ ghim (API chỉ cho ADMIN ghim), vẫn thấy nhãn "Đang ghim" và nút Ẩn', async () => {
+    const { r } = await openPublished({}, false);
+
+    const pinned = r.container.querySelector('[data-post="a1"]')!;
+    const plain = r.container.querySelector('[data-post="a2"]')!;
+    expect(pinned.textContent).toContain('Đang ghim');
+    for (const row of [pinned, plain]) {
+      expect(byText(row, 'button', 'Ghim')).toBeNull();
+      expect(byText(row, 'button', 'Bỏ ghim')).toBeNull();
+      expect(byText(row, 'button', 'Ẩn')).not.toBeNull();
+    }
+  });
+
+  it('không truyền isAdmin thì coi như không phải ADMIN (mặc định ẩn nút ghim)', async () => {
+    const s = setup();
+    await flush();
+    click(byText(s.r.container, 'button', 'Đã đăng'));
+    await flush();
+    expect(byText(s.r.container.querySelector('[data-post="a2"]')!, 'button', 'Ghim')).toBeNull();
   });
 
   it('Ghim gửi pinned=true; Bỏ ghim gửi pinned=false', async () => {

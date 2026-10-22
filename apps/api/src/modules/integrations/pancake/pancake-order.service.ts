@@ -244,7 +244,6 @@ export class PancakeOrderService {
       },
       data: {
         pancakePushStatus: PANCAKE_PUSH.PUSHING,
-        pancakePushClaimedAt: now,
         pancakePushAttempts: { increment: 1 },
         pancakeLastAttemptAt: now,
       },
@@ -256,10 +255,18 @@ export class PancakeOrderService {
       throw new PancakeApiError(`Đơn ${order.code} đang được đẩy sang Pancake bởi tiến trình khác — thử lại sau.`, true);
     }
 
+    // Đặt mốc "đã gửi lệnh tạo" bằng cập nhật có điều kiện: mốc cũ chỉ đọc được từ chính câu lệnh này. Lần đọc đơn đầu
+    // hàm có thể cũ (tiến trình khác vừa đẩy xong và gặp lỗi tạm sau khi ta đọc), nên không dùng nó để quyết định tra đơn.
+    const marked = await this.prisma.order.updateMany({
+      where: { id: order.id, pancakeOrderId: null, pancakePushClaimedAt: null },
+      data: { pancakePushClaimedAt: now },
+    });
+    const sentBefore = marked.count === 0;
+
     let pancakeOrderId: string | null;
     try {
       // Lần trước đã gửi lệnh tạo mà không rõ kết quả → tra theo mã đơn, có thì nhận đơn đó thay vì tạo thêm.
-      if (order.pancakePushClaimedAt) {
+      if (sentBefore) {
         const found = await this.findOnPancake(order);
         if (found) {
           const adopted = await this.adopt(order, found);
@@ -276,7 +283,7 @@ export class PancakeOrderService {
         data: {
           pancakePushStatus: PANCAKE_PUSH.PENDING,
           pancakeSyncError: pancakeErrorText(err),
-          ...(definite && !order.pancakePushClaimedAt ? { pancakePushClaimedAt: null } : {}),
+          ...(definite && !sentBefore ? { pancakePushClaimedAt: null } : {}),
         },
       });
       throw err;

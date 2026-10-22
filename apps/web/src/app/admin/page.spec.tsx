@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import AdminPage from './page';
 import { click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
-import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
+import { headingProblems, scrollRegionProblems, unlabeledFields, unnamedControls } from '@/test-utils/a11y';
 import { ADMIN_CONFIG_ROWS } from '@/test-utils/fixtures/admin-config-rows';
 
 const mocks = vi.hoisted(() => ({
@@ -23,12 +23,15 @@ const mocks = vi.hoisted(() => ({
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
   ] as unknown[],
   setUserRole: vi.fn(),
+  reviewDealerApp: vi.fn(),
   listUsersArgs: [] as unknown[][],
+  listUsersGate: null as Promise<void> | null,
   blockUser: vi.fn(),
   unblockUser: vi.fn(),
   createCoupon: vi.fn(),
   config: [] as unknown[],
   configFails: false,
+  accessFails: false,
   brands: [] as unknown[],
   brandProducts: [] as unknown[],
   promotions: [] as unknown[],
@@ -138,10 +141,14 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'communityPending', count: 3 },
           { key: 'communityUnanswered', count: 1 },
           { key: 'invoicePending', count: 2 },
+          { key: 'payoutsToPay', count: 2 },
         ],
       };
     },
-    getOpsAccess: async () => mocks.access,
+    getOpsAccess: async () => {
+      if (mocks.accessFails) throw new Error('boom');
+      return mocks.access;
+    },
     getOpsHealth: async () => ({
       generatedAt: '2026-10-14T03:00:00.000Z',
       thresholds: { unsyncedMinutes: 30, stuckOrders: 1, webhookFailed: 1, queueFailed1h: 5, repeatHours: 6, gomdonBacklogMinutes: 15 },
@@ -214,9 +221,11 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
     }),
     listUsers: async (...args: unknown[]) => {
       mocks.listUsersArgs.push(args);
+      if (mocks.listUsersGate) await mocks.listUsersGate;
       return { data: mocks.users, meta: { total: 45, page: 1, limit: 20 } };
     },
     setUserRole: (...args: unknown[]) => mocks.setUserRole(...args),
+    reviewDealerApp: (...args: unknown[]) => mocks.reviewDealerApp(...args),
     blockUser: (...args: unknown[]) => mocks.blockUser(...args),
     unblockUser: (...args: unknown[]) => mocks.unblockUser(...args),
     createCoupon: (...args: unknown[]) => mocks.createCoupon(...args),
@@ -292,9 +301,11 @@ beforeEach(() => {
     { id: 'u1', fullName: 'Nguyễn An', phone: '0944444444', role: 'CUSTOMER', pointsBalance: 12, createdAt: '2026-09-01T00:00:00.000Z' },
   ];
   mocks.setUserRole.mockReset();
+  mocks.reviewDealerApp.mockReset();
   mocks.createCoupon.mockReset();
   mocks.config = [];
   mocks.configFails = false;
+  mocks.accessFails = false;
   mocks.brands = [];
   mocks.brandProducts = [];
   mocks.promotions = [];
@@ -328,6 +339,14 @@ afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
 });
+
+const answerDialog = async (accept: boolean, reason?: string) => {
+  const dialog = document.body.querySelector('[role="alertdialog"]');
+  expect(dialog).not.toBeNull();
+  if (reason !== undefined) typeInto(dialog!.querySelector('textarea'), reason);
+  act(() => (dialog!.querySelector(`[data-confirm="${accept ? 'accept' : 'cancel'}"]`) as HTMLElement).click());
+  await flush();
+};
 
 // C-097 (Q-25, Q-29): khung trang admin theo token DS v2, tối ưu máy tính nhưng dùng được ở 390px. Màu cụ thể
 // do bánh cóc ds-palette-pc11.spec.ts giữ; ở đây khoá bố cục/vùng chạm và ánh xạ màu trạng thái đơn.
@@ -372,7 +391,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Người bán')).toEqual(
       expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Danh mục sản phẩm', 'Đại lý & công nợ', 'Gian hàng']),
     );
-    expect(group('Khuyến mãi')).toEqual(['Voucher', 'Flash Sale', 'Nhiệm vụ & quà đổi điểm']);
+    expect(group('Khuyến mãi')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
@@ -398,7 +417,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Việc cần xử lý');
     expect(mocks.inbox).toHaveBeenCalled();
-    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Tổng quan KPI')!);
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Tổng quan chỉ số')!);
     await flush();
     expect(window.location.search).toBe('?tab=dashboard');
     expect(container.textContent).toContain('Doanh thu đã thu');
@@ -675,6 +694,28 @@ describe('admin/page — tab Đại lý', () => {
     expect(reject.className).toContain('min-h-[44px]');
   });
 
+  it('Từ chối hồ sơ: bấm nút chỉ mở hộp nhập lý do, không gọi API; lý do bắt buộc và là lý do admin gõ (D15-03)', async () => {
+    const { container } = await openDealers();
+    mocks.reviewDealerApp.mockResolvedValue({});
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Từ chối')!);
+    await flush();
+    expect(mocks.reviewDealerApp).not.toHaveBeenCalled();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.querySelector<HTMLButtonElement>('[data-confirm="accept"]')!.disabled).toBe(true);
+    await answerDialog(true, 'Ảnh CCCD bị mờ, nộp lại');
+    expect(mocks.reviewDealerApp).toHaveBeenCalledTimes(1);
+    expect(mocks.reviewDealerApp).toHaveBeenCalledWith('d1', false, undefined, 'Ảnh CCCD bị mờ, nộp lại');
+  });
+
+  it('Từ chối hồ sơ: huỷ hộp lý do thì không gọi API', async () => {
+    const { container } = await openDealers();
+    click([...container.querySelectorAll('button')].find((b) => b.textContent === 'Từ chối')!);
+    await flush();
+    await answerDialog(false, 'Lý do dở dang');
+    expect(mocks.reviewDealerApp).not.toHaveBeenCalled();
+  });
+
   it('còn trang chưa tải: thông báo cảnh báo theo token và nút Tải thêm cao 44px', async () => {
     const { container } = await openDealers();
     const notice = [...container.querySelectorAll('p')].find((p) => p.textContent?.includes('mới hơn chưa tải'))!;
@@ -766,7 +807,7 @@ describe('admin/page — tab Người dùng', () => {
   });
 
   // ADMINOPS-11: trước đây không tìm được người dùng (listUsers chỉ gửi page) và không có cách khoá tài khoản gian lận.
-  it('ô tìm kiếm gửi từ khoá lên API và quay về trang 1; Xóa lọc bỏ từ khoá', async () => {
+  it('ô tìm kiếm gửi từ khoá lên API và quay về trang 1; Xoá lọc bỏ từ khoá', async () => {
     mocks.listUsersArgs = [];
     const { container } = await openUsers();
     const input = container.querySelector('input[type="search"]') as HTMLInputElement;
@@ -775,7 +816,7 @@ describe('admin/page — tab Người dùng', () => {
     act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
     await flush();
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0944']);
-    const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xóa lọc')!;
+    const clear = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Xoá lọc')!;
     act(() => clear.click());
     await flush();
     expect(mocks.listUsersArgs.at(-1)).toEqual([1, undefined]);
@@ -860,7 +901,7 @@ describe('admin/page — tab Người dùng', () => {
     expect(container.textContent).toContain('Tổng số: 45 người dùng');
   });
 
-  it('form cấp quyền: nút Cấp quyền khoá khi chưa có SĐT; thành công báo màu success, lỗi báo màu danger', async () => {
+  it('form cấp quyền: khoá khi chưa có SĐT hoặc chưa chọn vai trò; thành công báo màu success, lỗi báo màu danger', async () => {
     const { container } = await openUsers();
     const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
     expect(grant.disabled).toBe(true);
@@ -869,38 +910,140 @@ describe('admin/page — tab Người dùng', () => {
     const phone = container.querySelector('input[placeholder^="SĐT"]') as HTMLInputElement;
     expect(phone.className).toContain('border-stone-450');
     typeInto(phone, '0955555555');
+    expect(grant.disabled).toBe(true);
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    selectValue(roleSelect, 'CUSTOMER');
     expect(grant.disabled).toBe(false);
 
     mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'CUSTOMER', role: 'CUSTOMER' });
     act(() => grant.click());
     await flush();
+    await answerDialog(true);
     const ok = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Đã đổi'))!;
     expect(ok.className).toContain('text-success-fg');
 
     typeInto(phone, '0966666666');
+    selectValue(roleSelect, 'CUSTOMER');
     mocks.setUserRole.mockRejectedValueOnce(new Error('Không tìm thấy SĐT'));
     act(() => grant.click());
     await flush();
+    await answerDialog(true);
     const bad = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tìm thấy SĐT')!;
     expect(bad.className).toContain('text-danger-fg');
     expect(mocks.setUserRole).toHaveBeenCalledTimes(2);
   });
 
+  it('D15-02: không có vai trò mặc định, mọi lần đổi vai trò đều hỏi xác nhận kèm hậu quả hạ quyền', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    expect([...roleSelect.options].map((o) => o.value)).toEqual(['', 'CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN']);
+    expect(roleSelect.value).toBe('');
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    selectValue(roleSelect, 'CUSTOMER');
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    act(() => grant.click());
+    await flush();
+    const dialog = document.body.querySelector('[role="alertdialog"]');
+    expect(mocks.setUserRole).not.toHaveBeenCalled();
+    expect(dialog?.textContent).toContain('0955555555');
+    expect(dialog?.textContent).toContain('Khách hàng');
+    expect(dialog?.textContent).toContain('mất toàn bộ nhóm việc');
+    expect(dialog?.textContent).toContain('tắt cờ đối tác');
+    await answerDialog(false);
+    expect(mocks.setUserRole).not.toHaveBeenCalled();
+
+    act(() => grant.click());
+    await flush();
+    mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
+    await answerDialog(true);
+    expect(mocks.setUserRole).toHaveBeenCalledWith('0955555555', 'CUSTOMER', undefined);
+  });
+
+  it('Q24: hạ về Khách hàng nói rõ chỉ là tạm ngừng, người này tự đăng ký CTV lại được; đích khác không nói câu này', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    selectValue(roleSelect, 'CUSTOMER');
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    act(() => grant.click());
+    await flush();
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      'Nếu tài khoản đang là CTV: hạ vai trò chỉ tạm ngừng, người này có thể tự đăng ký CTV lại.',
+    );
+    await answerDialog(false);
+
+    selectValue(roleSelect, 'STAFF');
+    act(() => grant.click());
+    await flush();
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).not.toContain('tự đăng ký CTV lại');
+    await answerDialog(false);
+  });
+
+  it('D15-02: lời cảnh báo bám đúng vai trò đích (khớp admin.service: nhóm việc chỉ mất khi đích khác STAFF, cờ đối tác chỉ tắt khi đích là CUSTOMER/AFFILIATE)', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    const dialogText = async (role: string) => {
+      selectValue(roleSelect, role);
+      if (role === 'DEALER') {
+        await flush();
+        const tier = container.querySelector('select[aria-label="Bậc đại lý"]') as HTMLSelectElement;
+        selectValue(tier, 't1');
+      }
+      act(() => grant.click());
+      await flush();
+      const text = document.body.querySelector('[role="alertdialog"]')?.textContent ?? '';
+      await answerDialog(false);
+      return text;
+    };
+
+    const asDealer = await dialogText('DEALER');
+    expect(asDealer).toContain('Đại lý');
+    expect(asDealer).not.toContain('tắt cờ đối tác');
+    expect(asDealer).not.toContain('MERCHANT');
+
+    const asStaff = await dialogText('STAFF');
+    expect(asStaff).toContain('Nhân viên');
+    expect(asStaff).not.toContain('mất toàn bộ nhóm việc');
+    expect(asStaff).not.toContain('tắt cờ đối tác');
+
+    for (const role of ['CUSTOMER', 'AFFILIATE']) {
+      const text = await dialogText(role);
+      expect(text).toContain('mất toàn bộ nhóm việc');
+      expect(text).toContain('tắt cờ đối tác');
+      expect(text).toContain('MERCHANT');
+      expect(text).toContain('nhân viên hoặc admin');
+    }
+    expect(mocks.setUserRole).not.toHaveBeenCalled();
+  });
+
+  it('D15-02: đổi vai trò xong thì ô vai trò và bậc về trống, lần sau lại phải chọn có chủ đích', async () => {
+    const { container } = await openUsers();
+    const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
+    typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+    selectValue(roleSelect, 'CUSTOMER');
+    mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
+    const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
+    act(() => grant.click());
+    await flush();
+    await answerDialog(true);
+    expect(roleSelect.value).toBe('');
+    expect(grant.disabled).toBe(true);
+  });
+
   it('cấp quyền ADMIN vẫn phải qua hộp xác nhận: chưa xác nhận thì không gọi API', async () => {
     const { container } = await openUsers();
     const roleSelect = container.querySelector('select[class*="min-h-[44px]"]') as HTMLSelectElement;
-    expect([...roleSelect.options].map((o) => o.value)).toEqual(['CUSTOMER', 'AFFILIATE', 'DEALER', 'STAFF', 'ADMIN']);
     selectValue(roleSelect, 'ADMIN');
     typeInto(container.querySelector('input[placeholder^="SĐT"]'), '0977777777');
     const grant = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Cấp quyền')!;
     act(() => grant.click());
     await flush();
-    const dialog = document.body.querySelector('[role="dialog"], [role="alertdialog"]');
+    const dialog = document.body.querySelector('[role="alertdialog"]');
     expect(dialog?.textContent).toContain('Cấp quyền ADMIN (toàn quyền quản trị) cho SĐT 0977777777?');
     expect(mocks.setUserRole).not.toHaveBeenCalled();
-    const cancel = [...document.body.querySelectorAll('button')].find((b) => b.textContent === 'Huỷ')!;
-    act(() => cancel.click());
-    await flush();
+    await answerDialog(false);
     expect(mocks.setUserRole).not.toHaveBeenCalled();
   });
 });
@@ -978,7 +1121,7 @@ describe('admin/page — tab Voucher', () => {
 
   it('Tạo voucher khoá tới khi có mã, gửi đúng dữ liệu; thành công báo success, lỗi báo danger', async () => {
     const { container } = await openCoupons();
-    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo voucher')!;
+    const create = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!;
     expect(create.disabled).toBe(true);
     expect(create.className).toContain('bg-forest-600');
     expect(create.className).toContain('min-h-[44px]');
@@ -991,7 +1134,7 @@ describe('admin/page — tab Voucher', () => {
     expect(mocks.createCoupon).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'WELCOME30', type: 'PERCENT', value: 10, perUserLimit: 1, scope: 'PUBLIC' }),
     );
-    const ok = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Đã tạo voucher!')!;
+    const ok = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Đã tạo mã giảm giá!')!;
     expect(ok.className).toContain('text-success-fg');
 
     mocks.createCoupon.mockRejectedValueOnce(new Error('Mã đã tồn tại'));
@@ -1007,7 +1150,7 @@ describe('admin/page — tab Voucher', () => {
     typeInto(codeInput, ' summer 10 ');
     expect(codeInput.value).toBe('SUMMER10');
     mocks.createCoupon.mockResolvedValueOnce({});
-    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo voucher')!.click());
+    act(() => [...container.querySelectorAll('button')].find((b) => b.textContent === 'Tạo mã giảm giá')!.click());
     await flush();
     expect(mocks.createCoupon).toHaveBeenCalledWith(expect.objectContaining({ code: 'SUMMER10' }));
   });
@@ -1115,6 +1258,8 @@ describe('admin/page — tab Nhãn hàng', () => {
     mocks.detachBrandProducts.mockResolvedValue({});
     click(detach);
     await flush();
+    expect(mocks.detachBrandProducts).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.detachBrandProducts).toHaveBeenCalledWith('b1', ['p1']);
   });
 
@@ -1156,6 +1301,8 @@ describe('admin/page — tab Nhãn hàng', () => {
     mocks.deletePromotion.mockResolvedValue({});
     click(del);
     await flush();
+    expect(mocks.deletePromotion).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deletePromotion).toHaveBeenCalledWith('pm1');
   });
 
@@ -1219,6 +1366,8 @@ describe('admin/page — tab Nhãn hàng', () => {
     mocks.deleteDealerReward.mockResolvedValue({});
     click(del);
     await flush();
+    expect(mocks.deleteDealerReward).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deleteDealerReward).toHaveBeenCalledWith('r1');
 
     const add = btn(section, 'Thêm');
@@ -1286,7 +1435,7 @@ describe('admin/page — tab Flash Sale', () => {
       startAt: new Date('2026-10-20T08:00').toISOString(),
       endAt: new Date('2026-10-21T08:00').toISOString(),
     });
-    expect(para(container, 'Đã tạo đợt flash sale!').className).toContain('text-success-fg');
+    expect(para(container, 'Đã tạo đợt giờ vàng!').className).toContain('text-success-fg');
 
     typeInto(inputs[0]!, 'Đợt hai');
     typeInto(inputs[1]!, '2026-10-20T08:00');
@@ -1310,6 +1459,7 @@ describe('admin/page — tab Flash Sale', () => {
     mocks.updateFlashSale.mockResolvedValue({});
     click(toggle);
     await flush();
+    await answerDialog(true);
     expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: false });
     expect(btn(container, 'Bật')).toBeTruthy();
     expect(container.textContent).toContain('Chưa có sản phẩm nào trong đợt này.');
@@ -1325,6 +1475,8 @@ describe('admin/page — tab Flash Sale', () => {
     mocks.deleteFlashSaleItem.mockResolvedValue({});
     click(del);
     await flush();
+    expect(mocks.deleteFlashSaleItem).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deleteFlashSaleItem).toHaveBeenCalledWith('i1');
 
     const add = btn(container, 'Thêm SP');
@@ -1539,6 +1691,8 @@ describe('admin/page — tab Câu hỏi thường gặp', () => {
     mocks.deleteFaq.mockResolvedValue({ ok: true });
     click(del);
     await flush();
+    expect(mocks.deleteFaq).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deleteFaq).toHaveBeenCalledWith('f1');
   });
 
@@ -1636,6 +1790,8 @@ describe('admin/page — tab CSKH mẫu tin nhanh', () => {
     mocks.deleteQuickReply.mockResolvedValue({});
     click(del);
     await flush();
+    expect(mocks.deleteQuickReply).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deleteQuickReply).toHaveBeenCalledWith('q1');
   });
 
@@ -1719,7 +1875,7 @@ describe('admin/page — tab Content Kit CTV', () => {
     expect(add.className).toContain('text-forest-700');
 
     typeInto(areas[2]!, 'https://v.test/1\n\n https://v.test/2 ');
-    const save = btn(container, 'Lưu Content Kit');
+    const save = btn(container, 'Lưu bộ nội dung');
     expect(save.className).toContain('bg-forest-600');
     mocks.saveContentKit.mockResolvedValueOnce({});
     click(save);
@@ -1730,7 +1886,7 @@ describe('admin/page — tab Content Kit CTV', () => {
       videoUrls: ['https://v.test/1', 'https://v.test/2'],
       faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }],
     });
-    expect(para(container, 'Đã lưu Content Kit!').className).toContain('text-success-fg');
+    expect(para(container, 'Đã lưu bộ nội dung!').className).toContain('text-success-fg');
 
     mocks.saveContentKit.mockRejectedValueOnce(new Error('Quá dài'));
     click(save);
@@ -1812,7 +1968,20 @@ describe('admin/page — tab Academy', () => {
     mocks.deleteAcademyCourse.mockResolvedValue({ ok: true });
     click(del);
     await flush();
+    expect(mocks.deleteAcademyCourse).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deleteAcademyCourse).toHaveBeenCalledWith('c1');
+  });
+
+  it('D15-04: Xoá khoá học nêu hậu quả mất bài học; Huỷ thì không xoá', async () => {
+    mocks.courses = [COURSE];
+    const { container } = await openAcademy();
+    await openCourse(container);
+    click(btn(container, 'Xoá khoá học'));
+    await flush();
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent).toContain('bài học');
+    await answerDialog(false);
+    expect(mocks.deleteAcademyCourse).not.toHaveBeenCalled();
   });
 
   it('thông tin khoá: khung stone-50, lưu gửi đúng dữ liệu, thông báo đã lưu có biểu tượng + success', async () => {
@@ -1823,7 +1992,7 @@ describe('admin/page — tab Academy', () => {
     const save = btn(container, 'Lưu thông tin');
     expect(save.className).toContain('bg-forest-600');
     expect(save.parentElement!.className).toContain('bg-stone-50');
-    typeInto(save.parentElement!.querySelector('input[placeholder="Cover URL"]'), 'https://c.test/x.png');
+    typeInto(save.parentElement!.querySelector('input[placeholder="Ảnh bìa (URL)"]'), 'https://c.test/x.png');
     mocks.updateAcademyCourse.mockResolvedValue({});
     click(save);
     await flush();
@@ -1894,6 +2063,8 @@ describe('admin/page — tab Academy', () => {
     mocks.deleteAcademyLesson.mockResolvedValue({ ok: true });
     click(btn(container, 'Xoá'));
     await flush();
+    expect(mocks.deleteAcademyLesson).not.toHaveBeenCalled();
+    await answerDialog(true);
     expect(mocks.deleteAcademyLesson).toHaveBeenCalledWith('l1');
   });
 });
@@ -2163,11 +2334,11 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Báo cáo',
       'Cộng đồng',
       'Đổi rác',
-      'Voucher',
-      'Flash Sale',
+      'Mã giảm giá',
+      'Giờ vàng',
       'Câu hỏi thường gặp',
-      'Content Kit CTV',
-      'Academy',
+      'Bộ nội dung CTV',
+      'Học viện CTV',
       'Mẫu thông báo',
     ]);
     expect(mocks.refundsCalls).toBe(0);
@@ -2186,7 +2357,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Hoàn tiền sàn ngoài',
       'Thưởng đại lý',
       'Đại lý & công nợ',
-      'Duyệt yêu cầu rút tiền',
+      'Yêu cầu rút tiền',
       'Đổi rác',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
@@ -2215,7 +2386,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
     const labels = [...container.querySelectorAll('button')].map((b) => b.textContent ?? '');
     expect(labels.some((l) => l.includes('Xuất CSV'))).toBe(true);
     expect(labels).toContain('Đã nhận tiền');
-    for (const bad of ['Hủy đơn', 'Đã đóng gói', 'Giao vận', 'Đã giao hàng', 'Xác nhận']) expect(labels).not.toContain(bad);
+    for (const bad of ['Huỷ đơn', 'Đã đóng gói', 'Giao vận', 'Đã giao hàng', 'Xác nhận']) expect(labels).not.toContain(bad);
     expect(labels.some((l) => l.includes('Đẩy lại Pancake'))).toBe(false);
   });
 
@@ -2608,6 +2779,18 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
 });
 
 describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
+  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Yêu cầu rút tiền', async () => {
+    const { container } = await mount();
+    const card = container.querySelector('[data-inbox="payoutsToPay"]')!;
+    expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
+    expect(card.textContent).toContain('2');
+
+    click(card);
+    await flush();
+
+    expect(window.location.search).toBe('?tab=payouts');
+  });
+
   const stubFeed = () => {
     const api = mockFetch({
       '/feed/admin/pending': { body: [{ id: 'p1', kind: 'SHOWCASE', title: 'Ban công', body: 'Khoe vườn', images: [], author: 'Lan', category: null, createdAt: '2026-10-17T03:00:00.000Z' }] },
@@ -2728,6 +2911,36 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     expect(navItems(kho.container)).not.toContain('Tích điểm đơn sàn');
   });
 
+  it('nút Ghim/Bỏ ghim chỉ hiện cho ADMIN: CSKH vào tab Cộng đồng không thấy nút ghim (API chỉ cho ADMIN ghim)', async () => {
+    const api = mockFetch({
+      '/feed/admin/pending': { body: [] },
+      '/feed/admin/unanswered': { body: [] },
+      '/feed/admin/published': {
+        body: { items: [{ id: 'a2', kind: 'MANUAL', title: null, excerpt: 'Chia sẻ nhỏ.', author: 'Quân', category: null, createdAt: '2026-10-16T04:00:00.000Z', isPinned: false, likeCount: 0, commentCount: 0 }], nextCursor: null },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const published = (c: HTMLElement) => [...c.querySelectorAll('button')].find((b) => b.textContent === 'Đã đăng')!;
+    const rowButtons = (c: HTMLElement) => [...c.querySelectorAll('[data-post="a2"] button')].map((b) => b.textContent);
+
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const cskh = await mount();
+    click(published(cskh.container));
+    await flush();
+    expect(rowButtons(cskh.container)).toEqual(['Ẩn']);
+    cskh.unmount();
+    mounted = [];
+
+    mocks.auth = { user: { role: 'ADMIN' }, status: 'authenticated', initialized: true };
+    window.history.replaceState(null, '', '/admin?tab=community');
+    const admin = await mount();
+    click(published(admin.container));
+    await flush();
+    expect(rowButtons(admin.container)).toEqual(['Ghim', 'Ẩn']);
+  });
+
   it('CSKH có mục Cộng đồng và vào được từ link ?tab=community; KHO thì không (link rơi về mục đầu)', async () => {
     stubFeed();
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
@@ -2744,5 +2957,434 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
     const kho = await mount();
     expect(navItems(kho.container)).not.toContain('Cộng đồng');
     expect(kho.container.querySelector('[aria-label="Mục kiểm duyệt cộng đồng"]')).toBeNull();
+  });
+});
+
+// UAT 2026-10-20 gói ui-admin-2 (D7-08/12/13/19/22/23/25, D8-10, P3 GrantRoleForm và DealerRow).
+describe('admin/page — UAT ui-admin-2', () => {
+  const typeText = (el: Element | null, v: string) => typeInto(el, v);
+  const labelOf = (root: ParentNode, text: string) =>
+    [...root.querySelectorAll('label')].find((l) => (l.textContent ?? '').replace(/\s+/g, ' ').trim().startsWith(text));
+  const configSection = (c: HTMLElement) => [...c.querySelectorAll('h2')].find((h) => h.textContent === 'Tất cả tham số (JSON)')!.parentElement!;
+  const keysShown = (c: HTMLElement) =>
+    [...configSection(c).querySelectorAll('span.break-all')].filter((s) => !s.closest('[hidden]')).map((s) => s.textContent);
+
+  describe('D7-08: tab Cấu hình có ô tìm và nhóm theo tiền tố khoá', () => {
+    const ROWS = [
+      { key: 'affiliate.commission_rate', value: 0.08, description: 'Tỷ lệ hoa hồng', category: 'affiliate' },
+      { key: 'affiliate.hold_days', value: 10, description: 'Số ngày giữ hoa hồng', category: 'affiliate' },
+      { key: 'loyalty.earn_rate', value: 0.02, description: 'Tỷ lệ cộng điểm', category: 'loyalty' },
+      { key: 'shipping.flat_fee', value: 19000, description: 'Phí giao đồng giá', category: 'shipping' },
+      { key: 'standalone_flag', value: true, description: 'Cờ lẻ', category: 'misc' },
+    ];
+    const open = async () => {
+      mocks.config = ROWS;
+      window.history.replaceState(null, '', '/admin?tab=config');
+      return mount();
+    };
+
+    it('ô "Tìm khoá cấu hình": gõ "affiliate" thì chỉ còn các khoá affiliate.*', async () => {
+      const { container } = await open();
+      expect(keysShown(container)).toHaveLength(5);
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      expect(search).not.toBeNull();
+      typeText(search, 'affiliate');
+      await flush();
+      expect(keysShown(container)).toEqual(['affiliate.commission_rate', 'affiliate.hold_days']);
+    });
+
+    it('tìm theo mô tả, không phân biệt hoa thường và dấu; không khớp thì báo rõ', async () => {
+      const { container } = await open();
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      typeText(search, 'PHI GIAO');
+      await flush();
+      expect(keysShown(container)).toEqual(['shipping.flat_fee']);
+      typeText(search, 'không-có-khoá-này');
+      await flush();
+      expect(keysShown(container)).toEqual([]);
+      expect(configSection(container).textContent).toContain('Không có khoá nào khớp');
+    });
+
+    it('chữ Đ hoa trong mô tả vẫn khớp khi gõ không dấu: "diem xanh" ra khoá có "Trần Điểm Xanh"', async () => {
+      mocks.config = [
+        ...ROWS,
+        { key: 'loyalty.monthly_cap', value: 100, description: 'Trần Điểm Xanh mỗi tháng', category: 'loyalty' },
+        { key: 'order.min_total', value: 1, description: 'Đơn tối thiểu', category: 'order' },
+      ];
+      window.history.replaceState(null, '', '/admin?tab=config');
+      const { container } = await mount();
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      typeText(search, 'diem xanh');
+      await flush();
+      expect(keysShown(container)).toEqual(['loyalty.monthly_cap']);
+      typeText(search, 'Điểm Xanh');
+      await flush();
+      expect(keysShown(container)).toEqual(['loyalty.monthly_cap']);
+      typeText(search, 'don toi');
+      await flush();
+      expect(keysShown(container)).toEqual(['order.min_total']);
+    });
+
+    it('giá trị đang sửa dở chưa Lưu không mất khi lọc rồi xoá ô tìm', async () => {
+      const { container } = await open();
+      const field = () => container.querySelector<HTMLInputElement>('input[aria-label="affiliate.commission_rate"]');
+      typeText(field(), '0.5');
+      await flush();
+      const search = container.querySelector('input[aria-label="Tìm khoá cấu hình"]');
+      typeText(search, 'loyalty');
+      await flush();
+      expect(keysShown(container)).toEqual(['loyalty.earn_rate']);
+      typeText(search, '');
+      await flush();
+      expect(field()?.value).toBe('0.5');
+    });
+
+    it('chia nhóm theo tiền tố: mỗi nhóm một tiêu đề h3 kèm số khoá, khoá không có tiền tố vào "Khác"', async () => {
+      const { container } = await open();
+      const heads = [...configSection(container).querySelectorAll('h3')].map((h) => h.textContent);
+      expect(heads).toEqual(['affiliate (2)', 'loyalty (1)', 'shipping (1)', 'Khác (1)']);
+    });
+  });
+
+  describe('D7-12: nhãn tiếng Việt thay mã thô', () => {
+    it('thông báo đổi vai trò dùng nhãn vai trò, không in STAFF → CUSTOMER', async () => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      typeText(container.querySelector('input[placeholder^="SĐT"]'), '0955555555');
+      selectValue(container.querySelector('select[aria-label="Vai trò cần cấp"]'), 'CUSTOMER');
+      mocks.setUserRole.mockResolvedValueOnce({ id: 'u9', phone: '0955555555', previousRole: 'STAFF', role: 'CUSTOMER' });
+      click(btn(container, 'Cấp quyền'));
+      await flush();
+      await answerDialog(true);
+      const msg = para(container, 'Đã đổi 0955555555: Nhân viên → Khách hàng');
+      expect(msg).toBeDefined();
+      expect(container.textContent).not.toMatch(/STAFF|CUSTOMER/);
+    });
+
+    it('danh sách chương trình thưởng đại lý in Tour/Quà/Khác, không in [TOUR]', async () => {
+      mocks.rewards = [
+        { id: 'r1', type: 'TOUR', title: 'Tour Phú Quốc', description: null, threshold: 50000000, period: 'QUARTER', brandId: null },
+        { id: 'r2', type: 'GIFT', title: 'Bộ ly', description: null, threshold: 10000000, period: 'YEAR', brandId: null },
+        { id: 'r3', type: 'OTHER', title: 'Voucher', description: null, threshold: 5000000, period: 'YEAR', brandId: null },
+      ];
+      window.history.replaceState(null, '', '/admin?tab=brands');
+      const { container } = await mount();
+      expect(container.textContent).toContain('Tour · Tour Phú Quốc');
+      expect(container.textContent).toContain('Quà · Bộ ly');
+      expect(container.textContent).toContain('Khác · Voucher');
+      expect(container.textContent).not.toMatch(/\[(TOUR|GIFT|OTHER)\]/);
+    });
+  });
+
+  describe('D7-13: tắt flash sale đang bật phải hỏi lại', () => {
+    const SALE = {
+      id: 's1', title: 'Flash Sale cuối tuần', startAt: '2026-10-17T01:00:00.000Z', endAt: '2099-10-18T16:00:00.000Z', isActive: true,
+      items: [{ id: 'i1', variationId: 'v1', flashPrice: 99000, quota: 20, soldCount: 3, perUserLimit: 2 }],
+    };
+    it('bấm "Tắt": mở hộp xác nhận, Giữ lại thì không gọi API, Xác nhận thì mới tắt', async () => {
+      mocks.flashSales = [SALE];
+      window.history.replaceState(null, '', '/admin?tab=flashSales');
+      const { container } = await mount();
+      mocks.updateFlashSale.mockResolvedValue({});
+      click(btn(container, 'Tắt'));
+      await flush();
+      expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull();
+      expect(mocks.updateFlashSale).not.toHaveBeenCalled();
+      await answerDialog(false);
+      expect(mocks.updateFlashSale).not.toHaveBeenCalled();
+      click(btn(container, 'Tắt'));
+      await flush();
+      await answerDialog(true);
+      expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: false });
+    });
+
+    it('đợt đang tắt: bấm "Bật" chạy ngay, không hỏi', async () => {
+      mocks.flashSales = [{ ...SALE, isActive: false }];
+      window.history.replaceState(null, '', '/admin?tab=flashSales');
+      const { container } = await mount();
+      mocks.updateFlashSale.mockResolvedValue({});
+      click(btn(container, 'Bật'));
+      await flush();
+      expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
+      expect(mocks.updateFlashSale).toHaveBeenCalledWith('s1', { isActive: true });
+    });
+  });
+
+  describe('D7-22: tab không có quyền thì URL đổi về tab thật', () => {
+    const asStaff = (perms: string[]) => {
+      mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+      mocks.access = { role: 'STAFF', staffPermissions: perms };
+    };
+    it('KE_TOAN mở ?tab=users: tab sáng là Việc cần xử lý và URL không còn ?tab=users', async () => {
+      asStaff(['KE_TOAN']);
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      await flush();
+      expect(container.querySelector('nav[aria-label="Mục quản trị"] button[aria-current="page"]')!.textContent).toBe('Việc cần xử lý');
+      expect(window.location.search).toBe('');
+    });
+    it('nhân viên chưa có nhóm việc: ?tab=users đổi thành ?tab=waste (tab đầu được phép)', async () => {
+      asStaff([]);
+      window.history.replaceState(null, '', '/admin?tab=users');
+      await mount();
+      await flush();
+      expect(window.location.search).toBe('?tab=waste');
+    });
+    // Khi getOpsAccess lỗi trang chỉ hiện "Không tải được quyền của bạn", không dựng tab nào: sửa URL lúc đó chỉ làm mất link hợp lệ.
+    it('getOpsAccess lỗi: trang báo lỗi quyền và giữ nguyên URL, không đè ?tab= của link có thể hợp lệ', async () => {
+      asStaff(['KE_TOAN']);
+      mocks.accessFails = true;
+      window.history.replaceState(null, '', '/admin?tab=payouts');
+      const { container } = await mount();
+      await flush();
+      expect(container.textContent).toContain('Không tải được quyền của bạn');
+      expect(window.location.search).toBe('?tab=payouts');
+    });
+    it('tab được phép giữ nguyên URL và bộ lọc kèm theo', async () => {
+      asStaff(['CSKH']);
+      window.history.replaceState(null, '', '/admin?tab=orders&pancake=attention');
+      await mount();
+      await flush();
+      expect(window.location.search).toBe('?tab=orders&pancake=attention');
+    });
+  });
+
+  describe('D7-23: tên tab đúng chức năng', () => {
+    it('hàng đợi rút tiền gồm cả lệnh rút Ví Tubu nên tên là "Yêu cầu rút tiền", không "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
+      const { container } = await mount();
+      const items = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+      expect(items).toContain('Yêu cầu rút tiền');
+      expect(items).not.toContain('Rút tiền CTV');
+      expect(items).toContain('Nhiệm vụ');
+      expect(items).not.toContain('Duyệt yêu cầu rút tiền');
+      expect(items).not.toContain('Nhiệm vụ & quà đổi điểm');
+    });
+  });
+
+  describe('D7-19: lỗi tải có nút Thử lại', () => {
+    it('tab Cấu hình lỗi: hiện nút "Thử lại", bấm thì tải lại và dựng danh sách', async () => {
+      mocks.configFails = true;
+      window.history.replaceState(null, '', '/admin?tab=config');
+      const { container } = await mount();
+      const retry = btn(container, 'Thử lại');
+      expect(retry).toBeDefined();
+      mocks.configFails = false;
+      mocks.config = [{ key: 'shipping.flat_fee', value: 19000, description: 'Phí', category: 'shipping' }];
+      click(retry);
+      await flush();
+      expect(container.textContent).toContain('shipping.flat_fee');
+      // Thẻ Gomdon trong tab Cấu hình tự gọi API thật (không giả trong spec này) nên có nút Thử lại riêng; chỉ lỗi của danh sách cấu hình phải hết.
+      expect(container.textContent).not.toContain('Không tải được danh sách cấu hình.');
+    });
+  });
+
+  describe('P3 GrantRoleForm: tra vai trò hiện tại của SĐT trước khi nêu hậu quả', () => {
+    const grant = async (phone: string, role: string) => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const r = await mount();
+      typeText(r.container.querySelector('input[placeholder^="SĐT"]'), phone);
+      selectValue(r.container.querySelector('select[aria-label="Vai trò cần cấp"]'), role);
+      click(btn(r.container, 'Cấp quyền'));
+      await flush();
+      return (document.body.querySelector('[role="alertdialog"]')?.textContent ?? '');
+    };
+    it('SĐT là ADMIN đổi sang STAFF: hộp nói rõ "Quản trị → Nhân viên" và mất toàn quyền quản trị', async () => {
+      mocks.users = [{ id: 'u7', fullName: 'Sếp', phone: '0966666666', role: 'ADMIN', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      const text = await grant('0966666666', 'STAFF');
+      expect(text).toContain('Hiện là Quản trị → đổi sang Nhân viên');
+      expect(text).toContain('mất toàn quyền quản trị');
+      expect(mocks.listUsersArgs.at(-1)).toEqual([1, '0966666666']);
+      await answerDialog(false);
+    });
+    it('khoá ô SĐT trong lúc tra vai trò để hộp xác nhận và lệnh đổi cùng một số', async () => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      const phoneInput = () => container.querySelector<HTMLInputElement>('input[placeholder^="SĐT"]')!;
+      typeText(phoneInput(), '0966666666');
+      selectValue(container.querySelector('select[aria-label="Vai trò cần cấp"]'), 'STAFF');
+      let release!: () => void;
+      mocks.listUsersGate = new Promise<void>((r) => { release = r; });
+      try {
+        click(btn(container, 'Cấp quyền'));
+        await flush();
+        expect(phoneInput().disabled).toBe(true);
+        expect(container.querySelector<HTMLSelectElement>('select[aria-label="Vai trò cần cấp"]')!.disabled).toBe(true);
+      } finally {
+        mocks.listUsersGate = null;
+        release();
+      }
+      await flush();
+      await answerDialog(false);
+      expect(phoneInput().disabled).toBe(false);
+    });
+    it('SĐT hiện là CUSTOMER đổi sang DEALER: không nhắc mất nhóm việc hay quyền quản trị', async () => {
+      mocks.users = [{ id: 'u8', fullName: 'An', phone: '0977777777', role: 'CUSTOMER', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      typeText(container.querySelector('input[placeholder^="SĐT"]'), '0977777777');
+      selectValue(container.querySelector('select[aria-label="Vai trò cần cấp"]'), 'DEALER');
+      await flush();
+      selectValue(container.querySelector('select[aria-label="Bậc đại lý"]'), 't1');
+      click(btn(container, 'Cấp quyền'));
+      await flush();
+      const text = document.body.querySelector('[role="alertdialog"]')?.textContent ?? '';
+      expect(text).toContain('Hiện là Khách hàng → đổi sang Đại lý');
+      expect(text).not.toContain('mất toàn bộ nhóm việc');
+      expect(text).not.toContain('mất toàn quyền quản trị');
+      await answerDialog(false);
+    });
+    // Server (admin-order-filter.searchPhone) đổi 912345678 và 840912345678 về 0912345678 trước khi tìm người cần đổi vai trò.
+    it.each(['912345678', '840912345678', '+84 912 345 678', '0912.345.678'])('SĐT gõ "%s" khớp người có SĐT 0912345678 như server', async (typed) => {
+      mocks.users = [{ id: 'u9', fullName: 'Bình', phone: '0912345678', role: 'STAFF', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      const text = await grant(typed, 'CUSTOMER');
+      expect(text).toContain('Hiện là Nhân viên → đổi sang Khách hàng');
+      await answerDialog(false);
+    });
+    it('Q24: câu "chỉ tạm ngừng" chỉ hiện khi người đó đang là CTV; nhân viên, đại lý, khách hạ về Khách hàng không có câu này', async () => {
+      mocks.users = [{ id: 'u5', fullName: 'Lan', phone: '0955555555', role: 'AFFILIATE', pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+      expect(await grant('0955555555', 'CUSTOMER')).toContain('Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại.');
+      await answerDialog(false);
+      for (const role of ['STAFF', 'DEALER', 'CUSTOMER']) {
+        mocks.users = [{ id: 'u6', fullName: 'Bình', phone: '0955555555', role, pointsBalance: 0, createdAt: '2026-09-01T00:00:00.000Z' }];
+        const text = await grant('0955555555', 'CUSTOMER');
+        expect(text).not.toContain('tạm ngừng');
+        expect(text).not.toContain('tự đăng ký CTV lại');
+        await answerDialog(false);
+      }
+    });
+    it('không tra được SĐT: giữ câu điều kiện, gồm cả "Nếu tài khoản đang là Quản trị"', async () => {
+      const text = await grant('0955555555', 'CUSTOMER');
+      expect(text).not.toContain('Hiện là');
+      expect(text).toContain('Nếu tài khoản đang là Quản trị: mất toàn quyền quản trị');
+      expect(text).toContain('mất toàn bộ nhóm việc');
+      await answerDialog(false);
+    });
+  });
+
+  describe('P3 DealerRow: lý do từ chối không mất khi API báo lỗi', () => {
+    it('API trả lỗi thì hộp mở lại với lý do đã gõ và dòng lỗi; gửi lại được', async () => {
+      window.history.replaceState(null, '', '/admin?tab=dealers');
+      const { container } = await mount();
+      mocks.reviewDealerApp.mockRejectedValueOnce(new Error('Đơn đã được xử lý.'));
+      click(btn(container, 'Từ chối'));
+      await flush();
+      await answerDialog(true, 'Ảnh CCCD bị mờ');
+      const dialog = document.body.querySelector('[role="alertdialog"]')!;
+      expect(dialog).not.toBeNull();
+      expect(dialog.querySelector('textarea')!.value).toBe('Ảnh CCCD bị mờ');
+      expect(dialog.querySelector('[data-input-error]')!.textContent).toBe('Đơn đã được xử lý.');
+      mocks.reviewDealerApp.mockResolvedValueOnce({});
+      await answerDialog(true);
+      expect(mocks.reviewDealerApp).toHaveBeenCalledTimes(2);
+      expect(mocks.reviewDealerApp).toHaveBeenLastCalledWith('d1', false, undefined, 'Ảnh CCCD bị mờ');
+    });
+  });
+
+  describe('D7-26: bảng đơn hàng không bẻ dòng cột trạng thái và nút', () => {
+    it('tiêu đề "Trạng thái", "Chi tiết / Cập nhật", huy hiệu trạng thái và nút "Xem & Sửa" có whitespace-nowrap', async () => {
+      mocks.orders = [
+        { id: 'o1', code: 'TT1', total: 100000, status: 'SHIPPING', paymentMethod: 'COD', createdAt: '2026-10-01T03:00:00.000Z', user: { fullName: 'Khách', phone: '0900000000' } },
+      ];
+      window.history.replaceState(null, '', '/admin?tab=orders');
+      const { container } = await mount();
+      const th = (t: string) => [...container.querySelectorAll('th')].find((x) => x.textContent === t)!;
+      expect(th('Trạng thái').className).toContain('whitespace-nowrap');
+      expect(th('Chi tiết / Cập nhật').className).toContain('whitespace-nowrap');
+      expect(btn(container, 'Xem & Sửa').className).toContain('whitespace-nowrap');
+      const badges = [...container.querySelectorAll('tbody span')].filter((x) => x.textContent === 'Đang vận chuyển');
+      expect(badges.length).toBeGreaterThan(0);
+      for (const b of badges) expect(b.className).toContain('whitespace-nowrap');
+    });
+  });
+
+  describe('D7-25 / D8-10: ô nhập có nhãn nhìn thấy', () => {
+    it('voucher: mỗi ô số có nhãn "Đơn tối thiểu (đ)", "Giảm tối đa (đ)", "Tổng lượt dùng", "Lượt / khách", "Giá trị"', async () => {
+      window.history.replaceState(null, '', '/admin?tab=coupons');
+      const { container } = await mount();
+      const form = container.querySelector('[data-testid="coupon-create-form"]')!;
+      for (const t of ['Mã giảm giá', 'Giá trị', 'Đơn tối thiểu (đ)', 'Giảm tối đa (đ)', 'Tổng lượt dùng', 'Lượt / khách', 'Bắt đầu từ ngày', 'Hết hạn ngày']) {
+        const l = labelOf(form, t);
+        expect(l, t).toBeDefined();
+        expect(l!.querySelector('input'), t).not.toBeNull();
+      }
+    });
+
+    it('Nhãn hàng: "Ảnh bìa (URL)" thay "Cover URL", mọi ô thông tin nhãn có nhãn nhìn thấy', async () => {
+      mocks.brands = [{
+        id: 'b1', slug: 'dua', name: 'Dừa', tagline: null, logoUrl: null, coverUrl: null, story: null, origin: null,
+        certifications: [], isVerified: false, isPublished: true, followerCount: 0,
+      }];
+      window.history.replaceState(null, '', '/admin?tab=brands');
+      const { container } = await mount();
+      click(btn(container, 'Quản lý'));
+      await flush();
+      expect(container.querySelector('[placeholder="Cover URL"]')).toBeNull();
+      for (const t of ['Logo (URL)', 'Ảnh bìa (URL)', 'Tagline', 'Nguồn gốc', 'Câu chuyện thương hiệu']) {
+        expect(labelOf(container, t), t).toBeDefined();
+      }
+    });
+
+    it('FAQ: "Thứ tự hiển thị" có nhãn nhìn thấy dù ô đang mang giá trị 0', async () => {
+      window.history.replaceState(null, '', '/admin?tab=faqs');
+      const { container } = await mount();
+      const l = labelOf(container, 'Thứ tự hiển thị');
+      expect(l).toBeDefined();
+      expect((l!.querySelector('input') as HTMLInputElement).value).toBe('0');
+    });
+
+    it('form cấp quyền: ô SĐT có nhãn nhìn thấy, placeholder ngắn không bị cắt', async () => {
+      window.history.replaceState(null, '', '/admin?tab=users');
+      const { container } = await mount();
+      const l = labelOf(container, 'SĐT cần cấp quyền');
+      expect(l).toBeDefined();
+      expect(l!.querySelector('input')!.getAttribute('placeholder')!.length).toBeLessThanOrEqual(24);
+    });
+
+    it('Content Kit đã tải và đợt Flash Sale đang mở sửa: mọi ô có tên truy cập thật', async () => {
+      mocks.kit = { id: 'k1', productId: 'p1', captions: ['Caption 1'], usps: ['USP 1'], faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }], videoUrls: [], updatedAt: '' };
+      window.history.replaceState(null, '', '/admin?tab=contentKit');
+      const kit = await mount();
+      typeInto(kit.container.querySelector('input[type="search"]'), 'dừa');
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 320));
+      });
+      await flush();
+      click(kit.container.querySelector('button[role="option"]'));
+      click(btn(kit.container, 'Tải'));
+      await flush();
+      expect(kit.container.querySelectorAll('textarea').length).toBeGreaterThan(0);
+      expect(unnamedControls(kit.container).filter((d) => /^<(input|select|textarea)/.test(d))).toEqual([]);
+      kit.unmount();
+      mounted = [];
+
+      mocks.flashSales = [{
+        id: 's1', title: 'Flash', startAt: '2026-10-17T01:00:00.000Z', endAt: '2099-10-18T16:00:00.000Z', isActive: false,
+        items: [{ id: 'i1', variationId: 'v1', flashPrice: 99000, quota: 20, soldCount: 3, perUserLimit: 2 }],
+      }];
+      window.history.replaceState(null, '', '/admin?tab=flashSales');
+      const sale = await mount();
+      click(btn(sale.container, 'Sửa đợt'));
+      await flush();
+      expect(unnamedControls(sale.container).filter((d) => /^<(input|select|textarea)/.test(d))).toEqual([]);
+    });
+
+    const FIELD_TABS = ['dealers', 'orders', 'returns', 'dashboard', 'users', 'coupons', 'brands', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'config'];
+    it.each(FIELD_TABS)('tab %s: mọi ô nhập/chọn có tên truy cập thật (placeholder không tính)', async (tab) => {
+      mocks.brands = [{
+        id: 'b1', slug: 'dua', name: 'Dừa', tagline: null, logoUrl: null, coverUrl: null, story: null, origin: null,
+        certifications: [{ code: 'ORG', label: 'Hữu cơ', proofUrl: null, verified: false }], isVerified: false, isPublished: true, followerCount: 0,
+      }];
+      mocks.faqs = [{ id: 'f1', category: 'Vận chuyển', question: 'Ship bao lâu?', answer: '2-3 ngày', sortOrder: 2, isActive: true }];
+      mocks.quickReplies = [{ id: 'q1', category: null, title: 'Chào', content: 'Xin chào', keywords: ['chào'], isGreeting: false, sortOrder: 1, isActive: true }];
+      mocks.courses = [{
+        id: 'c1', title: 'Bán hàng', description: null, level: 'BEGINNER', sortOrder: 1, isActive: true,
+        lessons: [{ id: 'l1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://v.test/1', body: null, sortOrder: 1 }],
+      }];
+      window.history.replaceState(null, '', `/admin?tab=${tab}`);
+      const { container } = await mount();
+      for (const label of ['Quản lý', 'Sửa']) for (const b of [...container.querySelectorAll('button')].filter((x) => x.textContent === label)) { click(b); await flush(); }
+      const unnamed = unnamedControls(container).filter((d) => /^<(input|select|textarea)/.test(d));
+      expect(unnamed).toEqual([]);
+    });
   });
 });

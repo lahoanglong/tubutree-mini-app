@@ -1,7 +1,10 @@
 /** MST cá nhân 10 số (hoặc 10-3), hoặc số CCCD 12 số — cùng luật affiliate.service PERSONAL_TAX_ID_PATTERN. */
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 
-/** Thuế TNCN giữ lại cho một lần rút — cùng công thức affiliate.service.personalIncomeTax. */
+/**
+ * Thuế TNCN nếu chỉ xét RIÊNG một lần rút: dự phòng khi API chưa trả `withdrawTaxPreview`. Máy chủ cộng dồn các lần rút trong tháng
+ * VN (affiliate.service.personalIncomeTax) nên số thật có thể khác, nhất là lần rút nhỏ sau các lần rút trước trong tháng.
+ */
 export function payoutTax(gross: number, pit: { pct: number; threshold: number } | undefined): number {
   if (!pit || !(pit.pct > 0) || gross < pit.threshold) return 0;
   return Math.round(gross * Math.min(pit.pct, 1));
@@ -49,6 +52,8 @@ export interface WithdrawInput {
   knownMax: boolean;
   bank: { bankName: string; accountNumber: string; accountName: string };
   pending?: boolean;
+  /** Thuế máy chủ sẽ khấu trừ nếu rút hết ngay (cộng dồn tháng VN, dashboard.withdrawTaxPreview); thiếu khi API cũ. */
+  taxPreview?: number;
 }
 
 export interface WithdrawView {
@@ -64,7 +69,7 @@ export interface WithdrawView {
 /** Điều kiện gửi lệnh rút hoa hồng: cùng luật nút "Rút" của Mini App, để web và Mini App chặn đúng chỗ máy chủ chặn. */
 export function withdrawView(i: WithdrawInput): WithdrawView {
   const amount = i.max;
-  const tax = payoutTax(amount, i.pit);
+  const tax = i.taxPreview ?? payoutTax(amount, i.pit);
   // Lần rút bị khấu trừ thuế TNCN cần MST/CCCD để kê khai và cấp chứng từ (máy chủ trả PIT_TAX_ID_REQUIRED nếu thiếu).
   const askTaxId = tax > 0 && !i.taxIdOnFile;
   const taxIdValid = !askTaxId || PERSONAL_TAX_ID_PATTERN.test(i.taxId.trim());

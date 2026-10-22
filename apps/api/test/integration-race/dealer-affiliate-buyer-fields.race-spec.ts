@@ -13,7 +13,7 @@ import { FlashSaleService } from '../../src/modules/flash-sale/flash-sale.servic
 import { DealerService } from '../../src/modules/dealer/dealer.service';
 import { OrdersService } from '../../src/modules/orders/orders.service';
 import { BUYER_HIDDEN_ORDER_FIELDS } from '../../src/modules/orders/buyer-order-fields';
-import { createDealer, createOrder, createUser, randCode, warmPool } from './helpers';
+import { createDealer, createOrder, createUser, pinDealerOrderRulesOff, randCode, warmPool } from './helpers';
 
 /**
  * Đơn trả cho người đặt (khách, đại lý, CTV lên đơn hộ) trên Postgres THẬT: cột tìm kiếm người nhận do trigger điền, mốc hệ thống
@@ -25,6 +25,7 @@ describe('Đơn trả cho người đặt không kèm cột nội bộ (real Pos
   let affiliate: AffiliateService;
   let dealer: DealerService;
   let orders: OrdersService;
+  let restoreRules: () => Promise<void>;
   const ATTENTION = 'Đơn CHƯA thanh toán — hệ thống thôi tự huỷ vì đã bàn giao vận chuyển. Gọi khách thu tiền.';
 
   beforeAll(async () => {
@@ -45,6 +46,7 @@ describe('Đơn trả cho người đặt không kèm cột nội bộ (real Pos
     await moduleRef.init();
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
+    restoreRules = await pinDealerOrderRulesOff(prisma);
     affiliate = moduleRef.get(AffiliateService);
     dealer = moduleRef.get(DealerService);
     const none = {} as never;
@@ -52,6 +54,7 @@ describe('Đơn trả cho người đặt không kèm cột nội bộ (real Pos
   });
 
   afterAll(async () => {
+    await restoreRules?.();
     await moduleRef?.close();
   });
 

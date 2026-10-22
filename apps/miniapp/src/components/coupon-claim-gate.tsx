@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'zmp-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
@@ -7,6 +6,7 @@ import type { AuthUser } from '@tubutree/shared-types';
 import { useAuthStore } from '../store/auth';
 import { useCartCount } from '../hooks/use-cart-count';
 import { getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { isHttpError } from '../services/http';
 import {
   claimCoupon,
   claimOfferLabel,
@@ -35,7 +35,7 @@ export function isGuestUser(u: Pick<AuthUser, 'phone' | 'zaloId'>): boolean {
   return !u.zaloId || u.zaloId.startsWith('guest_');
 }
 
-const isRateLimited = (err: unknown) => axios.isAxiosError(err) && err.response?.status === 429;
+const isRateLimited = (err: unknown) => isHttpError(err) && err.response?.status === 429;
 const needsZaloLogin = (message: string) => /đăng nhập Zalo/i.test(message);
 
 /**

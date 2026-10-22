@@ -1,4 +1,4 @@
-import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary), nên
@@ -57,10 +57,15 @@ export class UpdateOwnedBrandDto {
   @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
 }
 
+// themeColor được nội suy thẳng vào style của trang công khai (border-color), nên chỉ nhận mã hex:
+// chuỗi tự do cho phép chủ nhãn chèn thêm khai báo CSS (position:fixed, background:url(...)).
+const THEME_COLOR_HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const THEME_COLOR_MESSAGE = 'themeColor phải là mã màu hex dạng #RGB hoặc #RRGGBB.';
+
 export class PromotionDto {
   @IsString() title!: string;
   @IsOptional() @IsString() subtitle?: string;
-  @IsOptional() @IsString() themeColor?: string;
+  @IsOptional() @IsString() @Matches(THEME_COLOR_HEX, { message: THEME_COLOR_MESSAGE }) themeColor?: string;
   @IsOptional() @IsString() @MaxLength(64) couponCode?: string;
   // @IsDateString: endpoint self-service /brand/owner/* dùng chung DTO này với client ít
   // tin cậy hơn admin → chặn chuỗi không phải ngày (new Date('x')→Invalid Date→Prisma 500).
@@ -72,7 +77,7 @@ export class PromotionDto {
 export class UpdatePromotionDto {
   @OptionalNotNull() @IsString() title?: string;
   @OptionalNotNull() @IsString() subtitle?: string;
-  @OptionalNotNull() @IsString() themeColor?: string;
+  @OptionalNotNull() @IsString() @Matches(THEME_COLOR_HEX, { message: THEME_COLOR_MESSAGE }) themeColor?: string;
   @OptionalNotNull() @IsString() @MaxLength(64) couponCode?: string;
   @OptionalNotNull() @IsDateString() startAt?: string;
   @OptionalNotNull() @IsDateString() endAt?: string;

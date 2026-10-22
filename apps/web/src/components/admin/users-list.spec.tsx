@@ -84,3 +84,19 @@ describe('UsersList — R4-ADMIN-12', () => {
     expect(root.querySelector<HTMLButtonElement>('[aria-label="Mở khoá 0900000002"]')!.disabled).toBe(true);
   });
 });
+
+// D7-07 / D7-11: số điểm lớn đọc lướt dễ nhầm nếu thiếu dấu chấm; vai trò hiện nhãn tiếng Việt, không lộ mã enum.
+describe('UsersList — định dạng điểm và nhãn vai trò (D7-07)', () => {
+  const BIG: AdminUser[] = [
+    { id: 'u9', fullName: 'Khách Điểm Lớn', phone: '0900000009', role: 'AFFILIATE', pointsBalance: 100_000, pointsConvertedBalance: 30_000, createdAt: '2026-10-01T03:00:00.000Z', isBlocked: false },
+  ];
+
+  it.each([false, true])('narrow=%s: tổng điểm 130.000 có dấu chấm ngăn cách, vai trò là "CTV"', (narrow) => {
+    const { root } = setup({ users: BIG, narrow });
+    const text = root.textContent ?? '';
+    expect(text).toContain('130.000');
+    expect(text).not.toContain('130000');
+    expect(text).toContain('CTV');
+    expect(text).not.toContain('AFFILIATE');
+  });
+});

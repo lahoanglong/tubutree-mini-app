@@ -3,7 +3,8 @@ import { WasteHoldService, type WasteCapUsage, type WasteHoldInput } from './was
 
 const NOW = new Date('2026-10-17T03:00:00.000Z');
 const CFG = { laneDropoff: true, laneMailin: true, lanePickup: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7 };
-const carton = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, gramsPerUnit: 300, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', hazardous: false };
+const carton = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, gramsPerUnit: 300, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', hazardous: false, warehouseOnly: false };
+const milk = { ...carton, id: 'milk', code: 'MILK_CARTON', name: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, dailyCapQty: null, monthlyCapQty: null, warehouseOnly: true };
 const battery = { ...carton, id: 'pin', code: 'PIN', name: 'Pin cũ', unitLabel: 'viên', status: 'COMING_SOON', hazardous: true };
 function setup(o: { items?: unknown[]; storedLines?: unknown[]; flags?: unknown; partner?: unknown; links?: string[]; usageRow?: unknown; usage?: Partial<WasteCapUsage>; available?: boolean } = {}) {
   const tx = {
@@ -21,6 +22,38 @@ function setup(o: { items?: unknown[]; storedLines?: unknown[]; flags?: unknown;
 }
 const input = (o: Partial<WasteHoldInput> = {}): WasteHoldInput => ({ path: 'CREATE', userId: 'u1', method: 'DROP_OFF', lines: [{ itemId: 'carton', declaredQty: 5 }], pointId: 'p1', now: NOW, ...o });
 const existing = { id: 'r1', pointId: 'p1', capDayKey: '2026-10-15', capMonthKey: '2026-10' };
+
+describe('WasteHoldService, warehouse-only items', () => {
+  const milkLines = [{ itemId: 'milk', declaredQty: 50 }];
+  const POINT_REFUSES = 'Điểm nhận này không nhận: Vỏ hộp sữa';
+
+  it('DROP_OFF at a PARTNER refuses a warehouse-only line even when the point is linked to the item', async () => {
+    const { svc, tx } = setup({ items: [milk], links: ['milk'] });
+    const call = svc.validateAndHold(tx, input({ lines: milkLines }), CFG);
+    await expect(call).rejects.toThrow(new ConflictException(POINT_REFUSES));
+    await expect(call).rejects.toBeInstanceOf(ConflictException);
+  });
+  it('EDIT keeps the same refusal for a PARTNER request that predates the rule', async () => {
+    const { svc, tx } = setup({ items: [carton, milk], links: ['carton', 'milk'] });
+    await expect(
+      svc.validateAndHold(tx, input({ path: 'EDIT', existing, lines: [{ itemId: 'carton', declaredQty: 5 }, ...milkLines] }), CFG),
+    ).rejects.toThrow(POINT_REFUSES);
+  });
+  it('preview reports POINT_MISSING_ITEMS for that line', async () => {
+    const { svc, tx } = setup({ items: [carton, milk], links: ['carton', 'milk'] });
+    const r = await svc.evaluate(tx, input({ lines: [{ itemId: 'carton', declaredQty: 5 }, ...milkLines] }), CFG);
+    expect(r.blocks).toEqual([{ code: 'POINT_MISSING_ITEMS', itemId: 'milk' }]);
+  });
+  it('the WAREHOUSE (MAIL_IN, and DROP_OFF at the warehouse point) takes them', async () => {
+    const a = setup({ items: [milk], links: [] });
+    await expect(a.svc.validateAndHold(a.tx, input({ method: 'MAIL_IN', pointId: null, lines: [{ itemId: 'milk', declaredQty: 100 }] }), CFG)).resolves.toMatchObject({
+      pointId: 'wh',
+      estimatedPoints: 20_000,
+    });
+    const b = setup({ items: [milk], links: [] });
+    await expect(b.svc.validateAndHold(b.tx, input({ pointId: 'wh', lines: milkLines }), CFG)).resolves.toMatchObject({ pointId: 'wh', estimatedPoints: 10_000 });
+  });
+});
 
 describe('WasteHoldService.validateAndHold', () => {
   it('CREATE DROP_OFF: snapshot lines, totals, VN cap keys, expiresAt = now + requestHoldDays', async () => {

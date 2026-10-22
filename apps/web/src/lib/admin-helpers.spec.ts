@@ -249,6 +249,10 @@ describe('admin-client — endpoint mới gọi đúng đường dẫn/body', ()
     );
     await m.markPayoutPaid('p1');
     expect(f.mock.calls[4]![1]).toEqual(expect.objectContaining({ body: '{}' }));
+    await m.approvePayout('p1', undefined, 750_000);
+    expect(f.mock.calls[5]![1]).toEqual(expect.objectContaining({ body: JSON.stringify({ expectedAmount: 750_000 }) }));
+    await m.markPayoutPaid('p1', 'FT1', undefined, 750_000);
+    expect(f.mock.calls[6]![1]).toEqual(expect.objectContaining({ body: JSON.stringify({ bankRef: 'FT1', expectedAmount: 750_000 }) }));
   });
 
   it('listPendingMerchantProducts (P0 A6-07): gọi kèm page/limit, chuẩn hoá {data,meta} lẫn mảng trần cũ về Page<T>', async () => {

@@ -43,8 +43,8 @@ export function Ns1Card({ rows }: { rows: RetentionDailyRow[] }) {
       <div className="text-2xl font-semibold text-forest-900">{s.pct === null ? '—' : formatPct(s.pct)}</div>
       <p className="mt-0.5 text-xs text-stone-600">
         {s.pct === null
-          ? 'Chưa có cohort nào đủ 30 ngày để tính. Số liệu tự cập nhật mỗi đêm.'
-          : `${s.repeat}/${s.cohort} khách mới, gộp cohort của ${s.days} ngày (mỗi khách đã đủ 30 ngày theo dõi).${
+          ? 'Chưa có nhóm khách nào đủ 30 ngày để tính. Số liệu tự cập nhật mỗi đêm.'
+          : `${s.repeat}/${s.cohort} khách mới, gộp nhóm khách của ${s.days} ngày (mỗi khách đã đủ 30 ngày theo dõi).${
               s.cohort < SMALL_SAMPLE ? ' Mẫu còn nhỏ, chỉ tham khảo.' : ''
             }`}
       </p>

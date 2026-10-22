@@ -305,7 +305,8 @@ describe('/recycle/r/:id — trạng thái đóng và kết quả (§4.6)', () =
     expect(await screen.findByText('Bị từ chối')).toBeInTheDocument();
     expect(screen.getByText('Ướt: thùng ướt')).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Tiến độ yêu cầu' })).toBeNull();
-    expect(screen.getByText('Cần hỗ trợ? Nhắn Tubu Tree')).toBeInTheDocument();
+    expect(screen.queryByText('Cần hỗ trợ? Nhắn Tubu Tree')).toBeNull();
+    expect(screen.queryAllByText(/Cần hỗ trợ/)).toHaveLength(0);
     expect(screen.getByTestId('support-contact')).toBeInTheDocument();
   });
   it('COMPLETED: bảng có số đếm và lý do nhận thiếu; liên kết tới /recycle/done/:id', async () => {

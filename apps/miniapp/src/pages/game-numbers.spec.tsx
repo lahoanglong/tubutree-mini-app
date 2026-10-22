@@ -81,7 +81,7 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     const { container } = renderPage();
     expect(await screen.findByText(/Góp quỹ trồng cây/)).toBeInTheDocument();
     await screen.findByText(/Rừng Tubu/);
-    await screen.findByText(/Top góp nước mùa này/);
+    await screen.findByText(/Xếp hạng góp nước mùa này/);
     const text = container.textContent ?? '';
 
     expect(text).toContain('Mua (1.500💧)');

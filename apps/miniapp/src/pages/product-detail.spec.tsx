@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useNavigate as useRouterNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { AxiosError, type AxiosResponse } from 'axios';
+import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -135,7 +135,7 @@ describe('ProductDetailPage ghi "Đã xem gần đây" (spec 5b.4)', () => {
   });
 
   it('404 → "Không tìm thấy sản phẩm" kèm "Về trang chủ", không có "Thử lại" (R6-BUYER-6)', async () => {
-    mocks.fetchProduct.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    mocks.fetchProduct.mockRejectedValue(new HttpError('nf', '404', { status: 404, data: {} }));
     renderPdp('zzz');
     expect(await screen.findByText('Không tìm thấy sản phẩm này.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();
@@ -147,7 +147,7 @@ describe('ProductDetailPage ghi "Đã xem gần đây" (spec 5b.4)', () => {
       data: [{ id: 'g1', slug: 'g1', brand: 'Tubu', name: 'Gợi ý một', thumbnail: null, basePrice: 90_000, salePrice: null, isFeatured: false, inStock: true }],
       meta: { page: 1, limit: 4, total: 1 },
     });
-    mocks.fetchProduct.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    mocks.fetchProduct.mockRejectedValue(new HttpError('nf', '404', { status: 404, data: {} }));
     const first = renderPdp('zzz');
     expect(await screen.findByText('Không tìm thấy')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { level: 2, name: 'Có thể bạn thích' })).toBeInTheDocument();

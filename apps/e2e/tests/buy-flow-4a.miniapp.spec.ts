@@ -157,7 +157,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
     const tabs = page.getByRole('tablist');
-    for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã hủy/hoàn', 'Định kỳ']) {
+    for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn', 'Định kỳ']) {
       await expect(tabs.getByRole('tab', { name: t, exact: true })).toBeVisible();
     }
 
@@ -519,14 +519,14 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     });
   }
 
-  test('Chi tiết đơn 320px (followups DS v2): "Hủy đơn" + "Thanh toán ngay" nằm trọn và không bị cắt chữ', async ({ page, api }) => {
+  test('Chi tiết đơn 320px (followups DS v2): "Huỷ đơn" + "Thanh toán ngay" nằm trọn và không bị cắt chữ', async ({ page, api }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     mockBuyFlowSession(api);
     api.get('/orders/:code', makeOrder({ code: 'TUBU-PAY-320', status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER' }));
     await page.goto('/order/TUBU-PAY-320');
 
     const bar = page.getByTestId('sticky-bar');
-    for (const name of ['Hủy đơn', 'Thanh toán ngay']) {
+    for (const name of ['Huỷ đơn', 'Thanh toán ngay']) {
       const btn = bar.getByRole('button', { name });
       await expect(btn).toBeVisible({ timeout: 15_000 });
       const b = await btn.boundingBox();

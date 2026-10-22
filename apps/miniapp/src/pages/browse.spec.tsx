@@ -121,21 +121,21 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Khám phá']);
   });
 
-  it('header có nút giỏ khi không gõ (CartButton), và không có nút "Hủy"', async () => {
+  it('header có nút giỏ khi không gõ (CartButton), và không có nút "Huỷ"', async () => {
     renderAt('/browse');
     await listPainted();
     expect(screen.getByRole('button', { name: 'Giỏ hàng' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Huỷ' })).toBeNull();
   });
 
-  it('?focus=search: ô tìm được focus, bỏ focus khỏi URL, hiện gợi ý thay nội dung + nút "Hủy" (giỏ nhường chỗ)', async () => {
+  it('?focus=search: ô tìm được focus, bỏ focus khỏi URL, hiện gợi ý thay nội dung + nút "Huỷ" (giỏ nhường chỗ)', async () => {
     localStorage.setItem('tubu_recent_searches', JSON.stringify(['nước rửa']));
     renderAt('/browse?focus=search');
     const input = screen.getByRole('searchbox', { name: 'Tìm sản phẩm' });
     await waitFor(() => expect(document.activeElement).toBe(input));
     await waitFor(() => expect(loc()).toBe('/browse'));
     expect(screen.getByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Huỷ' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Giỏ hàng' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Sắp xếp' })).toBeNull();
   });
@@ -177,14 +177,14 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/product/p9', { state: { listSource: 'search_suggest' } });
   });
 
-  it('"Hủy" thoát chế độ gõ, trả ô tìm về q của URL và hiện lại nội dung', async () => {
+  it('"Huỷ" thoát chế độ gõ, trả ô tìm về q của URL và hiện lại nội dung', async () => {
     renderAt('/browse?q=nuoc');
     await listPainted();
     const input = screen.getByRole('searchbox');
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'dang go do' } });
     expect(screen.queryByRole('group', { name: 'Sắp xếp' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
     expect(screen.getByRole('searchbox')).toHaveValue('nuoc');
     expect(await screen.findByRole('group', { name: 'Sắp xếp' })).toBeInTheDocument();
     expect(loc()).toBe('/browse?q=nuoc');
@@ -385,12 +385,12 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(await screen.findByRole('button', { name: 'Nước rửa chén' })).toBeInTheDocument();
     };
 
-    it('?focus=search (không có lịch sử): ô tìm được focus, có "Hủy", vẫn thấy lưới Danh mục, sắp xếp và sản phẩm', async () => {
+    it('?focus=search (không có lịch sử): ô tìm được focus, có "Huỷ", vẫn thấy lưới Danh mục, sắp xếp và sản phẩm', async () => {
       renderAt('/browse?focus=search');
       const input = screen.getByRole('searchbox', { name: 'Tìm sản phẩm' });
       await waitFor(() => expect(document.activeElement).toBe(input));
       await waitFor(() => expect(loc()).toBe('/browse'));
-      expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Huỷ' })).toBeInTheDocument();
       expect(screen.queryByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeNull();
       await contentVisible();
     });
@@ -399,21 +399,21 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       renderAt('/browse');
       await listPainted();
       fireEvent.focus(screen.getByRole('searchbox'));
-      expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Huỷ' })).toBeInTheDocument();
       await contentVisible();
       fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nu' } });
       expect(await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' })).toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'Sắp xếp' })).toBeNull();
     });
 
-    it('chạm chip sắp xếp khi đang ở chế độ gõ mà ô trống → thoát chế độ gõ: "Hủy" biến mất, giỏ hàng trở lại', async () => {
+    it('chạm chip sắp xếp khi đang ở chế độ gõ mà ô trống → thoát chế độ gõ: "Huỷ" biến mất, giỏ hàng trở lại', async () => {
       renderAt('/browse');
       await listPainted();
       fireEvent.focus(screen.getByRole('searchbox'));
-      expect(screen.getByRole('button', { name: 'Hủy' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Huỷ' })).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Bán chạy' }));
       await waitFor(() => expect(loc()).toBe('/browse?sort=best_seller'));
-      expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Huỷ' })).toBeNull();
       expect(screen.getByRole('button', { name: 'Giỏ hàng' })).toBeInTheDocument();
     });
 
@@ -427,7 +427,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Bán chạy' }));
       await waitFor(() => expect(loc()).toBe('/browse?q=nuoc&sort=best_seller'));
       expect(screen.getByRole('searchbox')).toHaveValue('nuoc');
-      expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Huỷ' })).toBeNull();
     });
 
     it('cùng tình huống với chip lọc đang bật: gỡ chip thoát chế độ gõ và ô tìm trả về q đang lọc', async () => {
@@ -439,7 +439,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Bỏ lọc Tubu' }));
       await waitFor(() => expect(loc()).toBe('/browse?q=nuoc'));
       expect(screen.getByRole('searchbox')).toHaveValue('nuoc');
-      expect(screen.queryByRole('button', { name: 'Hủy' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Huỷ' })).toBeNull();
     });
 
     it('có lịch sử + ô trống → vẫn hiện lịch sử (thay nội dung)', async () => {
@@ -472,6 +472,16 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
       expect(await screen.findByRole('button', { name: 'Bột giặt' })).toBeInTheDocument();
       expect(catalogCalls().map((q) => q.page)).toEqual([1, 2, 2]);
       expect(screen.queryByText('Không tải thêm được sản phẩm')).toBeNull();
+    });
+  });
+
+  describe('API sản phẩm lỗi ở lần tải đầu (D6-08)', () => {
+    it('hiện khối lỗi + "Thử lại" và KHÔNG ghi "0 sản phẩm" (khách không nghĩ cửa hàng hết hàng)', async () => {
+      mocks.fetchCatalog.mockRejectedValue(new Error('network'));
+      renderAt('/browse');
+      expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+      expect(screen.queryByText('0 sản phẩm')).toBeNull();
+      expect(screen.getByTestId('result-count').textContent?.trim()).toBe('');
     });
   });
 
@@ -560,7 +570,7 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
         await screen.findByRole('region', { name: 'Gợi ý tìm kiếm' });
         await wait(50);
         expect(scroller.scrollTop).toBe(0);
-        fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
         await listPainted();
         expect(scroller.scrollTop).toBe(500);
       });

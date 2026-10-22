@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
@@ -9,6 +8,7 @@ import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { isHttpError } from '../services/http';
 import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
@@ -23,6 +23,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { shippingEtaLabel } from '../utils/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
@@ -88,6 +89,8 @@ export default function CheckoutPage() {
   // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ server; chưa tải xong → ẩn, không hứa dịch vụ chưa chắc có.
   const publicConfig = usePublicConfig();
   const pickupFlag = publicConfig.isLoaded && publicConfig.waste.pickup === true;
+  // Cùng điều kiện với màn thành công: chưa có cấu hình thì không hứa ngày giao.
+  const etaLabel = publicConfig.isLoaded && publicConfig.shippingEta ? shippingEtaLabel(publicConfig.shippingEta) : null;
   const wasteMeQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: pickupFlag });
   const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
@@ -310,7 +313,7 @@ export default function CheckoutPage() {
         return;
       }
       // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
-      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      const status = isHttpError(e) ? e.response?.status : undefined;
       const rejectedBeforeService = status !== undefined && [401, 408, 429].includes(status);
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;
@@ -584,6 +587,8 @@ export default function CheckoutPage() {
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
           className="tubu-press"
+          role="button"
+          {...rowKeyboardProps()}
           onClick={() => {
             haptic('light');
             setVoucherSheetOpen(true);
@@ -786,7 +791,7 @@ export default function CheckoutPage() {
         <Text bold size="small" style={{ marginBottom: 8 }}>
           {vi.checkout.note}
         </Text>
-        <Input placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
+        <Input aria-label={vi.checkout.note} placeholder={vi.checkout.notePlaceholder} maxLength={500} value={note} onChange={(e) => {
           choiceRev.current += 1;
           setNote(e.target.value);
         }} />
@@ -936,6 +941,9 @@ export default function CheckoutPage() {
         p={4}
         mt={2}
         className="tubu-press"
+        // Lỗi báo giá có nút Thử lại nằm trong thẻ: lúc đó thẻ không là nút nữa (nút lồng nút) nhưng chạm vẫn mở như trước.
+        role={quote.isError ? undefined : 'button'}
+        {...(quote.isError ? null : rowKeyboardProps())}
         onClick={() => {
           haptic('light');
           setSummarySheetOpen(true);
@@ -970,6 +978,7 @@ export default function CheckoutPage() {
             </Box>
             <Text
               role="button"
+              {...rowKeyboardProps()}
               size="xSmall"
               bold
               className="tubu-hit-44"
@@ -999,6 +1008,7 @@ export default function CheckoutPage() {
               value={quote.data.shippingFee === 0 ? vi.common.freeShip : formatVnd(quote.data.shippingFee)}
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
+            {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
             <KeyValueRow label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>

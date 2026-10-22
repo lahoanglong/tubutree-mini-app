@@ -5,7 +5,7 @@ import { getSourceReport, type ReportRange, type SourceReport } from '@/lib/admi
 import { SOURCES_MAX_DAYS, formatPct, rangeError } from '@/lib/admin-reports';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { Notice, ScrollRegion } from './ui';
+import { Notice, ScrollRegion, LoadError } from './ui';
 
 /**
  * Khách mới theo nguồn chạm đầu (sàn, thẻ hộp hàng, OA, CTV...) × tuần: đo chiến dịch kéo khách về app có ra đơn không. Số "đang tăng" là
@@ -30,7 +30,7 @@ export function ReportsSourcesSection({ range }: { range: ReportRange }) {
         </Notice>
       )}
       {!error && q.isLoading && <p className="text-sm text-stone-500">Đang tải báo cáo nguồn…</p>}
-      {!error && q.isError && <p className="text-sm text-danger-fg">Không tải được báo cáo nguồn khách.</p>}
+      {!error && q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo nguồn khách.</LoadError>}
       {q.data && !error && <SourcesBody report={q.data} />}
     </section>
   );
@@ -50,7 +50,7 @@ function SourcesBody({ report }: { report: SourceReport }) {
       <Notice>
         Khách mới = tài khoản tạo trong khoảng ngày (không tính quản trị/nhân viên, và khách cũ được gắn nguồn lúc gộp khách). Đơn là đơn còn hiệu
         lực (đã xác nhận trở đi, không huỷ/trả). Có đơn đầu = đặt trong {d} ngày sau khi tạo tài khoản; có đơn 2 = đặt đơn thứ hai trong {d} ngày sau đơn
-        đầu; doanh thu tính {d} ngày đầu theo cùng định nghĩa với KPI (đã thu, trừ hoàn một phần). &quot;Không rõ&quot; là tài khoản chưa ghi nguồn.
+        đầu; doanh thu tính {d} ngày đầu theo cùng định nghĩa với Tổng quan chỉ số (đã thu, trừ hoàn một phần). &quot;Không rõ&quot; là tài khoản chưa ghi nguồn.
       </Notice>
       <SourceTable
         label="Tổng theo nguồn trong khoảng ngày"

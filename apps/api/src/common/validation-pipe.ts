@@ -26,6 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
   district: 'Quận/huyện',
   province: 'Tỉnh/thành',
   quantity: 'Số lượng',
+  intervalWeeks: 'Chu kỳ giao',
   amount: 'Số tiền',
   code: 'Mã',
   startAt: 'Thời gian bắt đầu',

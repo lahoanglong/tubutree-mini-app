@@ -151,6 +151,17 @@ describe('/recycle trang vào (§4.1)', () => {
     expect(battery).toHaveAttribute('data-status', 'COMING_SOON');
     expect(within(battery).getByText('Sắp nhận')).toBeInTheDocument();
   });
+  it('món sắp nhận không làm mờ cả khối bằng opacity (chữ phải đạt 4,5:1) và báo aria-disabled; món đang nhận thì không', async () => {
+    renderPage();
+    await screen.findByText('1 thùng = 1.000 điểm');
+    const battery = screen.getByText('Pin cũ').closest('[data-item]') as HTMLElement;
+    expect(battery.style.opacity).toBe('');
+    expect(battery).toHaveAttribute('aria-disabled', 'true');
+    const active = document.querySelector('[data-item][data-status="ACTIVE"]') as HTMLElement;
+    expect(active).not.toBeNull();
+    expect(active.style.opacity).toBe('');
+    expect(active).not.toHaveAttribute('aria-disabled');
+  });
   it('yêu cầu đang xử lý: mã, cách giao, mini timeline; bấm tới /recycle/r/:id; biểu tượng lịch sử tới /recycle/requests', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ openRequests: [makeRequestSummary({ method: 'MAIL_IN', status: 'IN_TRANSIT', pointName: 'Kho Tubu TP.HCM' })] }));
     renderPage();

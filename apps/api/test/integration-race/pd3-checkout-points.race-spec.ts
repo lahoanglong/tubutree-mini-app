@@ -149,11 +149,11 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
    * không chạm tới guard trừ điểm.
    */
   function barrierOnGetCart(n: number) {
-    const original = cart.getCart.bind(cart);
+    const original = cart.getCartForCheckout.bind(cart);
     let arrived = 0;
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
-    return jest.spyOn(cart, 'getCart').mockImplementation(async (userId: string) => {
+    return jest.spyOn(cart, 'getCartForCheckout').mockImplementation(async (userId: string) => {
       const res = await original(userId);
       if (++arrived === n) release();
       await gate;
@@ -171,6 +171,7 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
   it('T6: 5 đơn song song, mỗi đơn cần 100 điểm lô CONVERTED, số dư chỉ đủ 2 → đúng 2 đơn, lô không âm', async () => {
     const { u, addr, lineIds } = await buyer(0, 250, 5);
     const spy = barrierOnGetCart(5);
+    let barrierCalls = 0;
     let results: PromiseSettledResult<unknown>[];
     try {
       results = await Promise.allSettled(
@@ -179,8 +180,10 @@ describe('PD-3 T6: checkout tiêu hai lô dưới tải song song (real Postgres
         ),
       );
     } finally {
+      barrierCalls = spy.mock.calls.length;
       spy.mockRestore();
     }
+    expect(barrierCalls).toBe(5);
     const s = summarize(results);
     console.log('[T6a] fulfilled=%d rejected=%d errors=%j', s.fulfilled.length, s.rejected.length, [...new Set(s.errors)]);
     expect(s.fulfilled).toHaveLength(2);

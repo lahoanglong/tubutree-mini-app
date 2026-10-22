@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { act } from 'react';
 import { MerchantFulfilmentTab, pctInputToFraction, storeFeesText } from './merchant-fulfilment-tab';
 import { MerchantProductsTab } from './merchant-products-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -262,6 +263,8 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     typeInto(root.querySelector('input')!, ' FT555 ');
     click(byText(root, 'button', 'Đã chuyển'));
     await flush();
+    answerConfirm(true);
+    await flush();
     const paid = api.calls.find((c) => c.url.includes('/payouts/mp1/paid'))!;
     expect(JSON.parse(String(paid.init!.body))).toEqual({ bankRef: 'FT555' });
     click(byText(root, 'button', 'Huỷ phiếu'));
@@ -335,7 +338,73 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     typeInto(root.querySelector('input')!, 'FT777');
     click(byText(root, 'button', 'Đã thu'));
     await flush();
+    answerConfirm(true);
+    await flush();
     expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(true);
+  });
+
+  // Ô chỉ có dấu cách qua được `required` của trình duyệt, nhưng API từ chối mã rỗng (IsNotEmpty): chặn ngay ở ô.
+  it('ô mã giao dịch chỉ có dấu cách: báo lỗi ngay ở ô, không mở hộp xác nhận, không gọi API', async () => {
+    const api = setup();
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    const input = root.querySelector('input')!;
+    typeInto(input, '    ');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('Nhập mã giao dịch');
+    typeInto(input, 'FT1');
+    expect(input.getAttribute('aria-invalid')).not.toBe('true');
+  });
+
+  // D7-02: "Đã chuyển"/"Đã thu" ghi sổ đối soát; Enter trong ô mã giao dịch từng gửi thẳng không qua bước hỏi.
+  it('D7-02: "Đã chuyển" hỏi lại (danger) nêu số tiền, đối tác, tài khoản và mã GD; Huỷ thì không gọi API', async () => {
+    const api = setup();
+    const r = render(<MerchantFulfilmentTab />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    typeInto(root.querySelector('input')!, 'FT555');
+    click(byText(root, 'button', 'Đã chuyển'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d).not.toBeNull();
+    const text = d.textContent ?? '';
+    expect(text).toContain('Mật ong Linh');
+    expect(text).toContain('500.000');
+    expect(text).toContain('FT555');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(false);
+  });
+
+  it('D7-02: Enter trong ô mã giao dịch (gửi form) chỉ mở hộp xác nhận, không gọi API; "Đã thu" cũng hỏi lại', async () => {
+    const NEG = { ...PAYOUT, amount: -103500, direction: 'TO_TUBU', transferMemo: 'TUBU DS ABCD1234', dueAt: '2026-10-19T03:00:00.000Z' };
+    const api = setup({
+      '/admin/merchant-fulfilment/payouts?': { body: { data: [NEG], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    const r = render(<MerchantFulfilmentTab isAdmin />);
+    mounted.push(r);
+    await flush();
+    const root = r.container;
+    const input = root.querySelector('input')!;
+    typeInto(input, 'FT777');
+    act(() => input.form!.requestSubmit());
+    await flush();
+    const d = confirmDialog()!;
+    expect(d).not.toBeNull();
+    expect(d.textContent).toContain('103.500');
+    expect(d.textContent).toContain('FT777');
+    expect(api.calls.some((c) => c.url.includes('/payouts/mp1/paid'))).toBe(false);
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.filter((c) => c.url.includes('/payouts/mp1/paid'))).toHaveLength(1);
   });
 
   it('R4-ADMIN-7: ở màn hẹp mỗi gian hàng một thẻ có nút "Lập phiếu đối soát" ngay trong tầm nhìn (không phải vuốt ngang bảng 760px)', async () => {

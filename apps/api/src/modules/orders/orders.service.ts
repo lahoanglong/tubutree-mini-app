@@ -25,6 +25,7 @@ import { toPublicCart } from '../checkout/checkout-split';
 import { forBuyer, type BuyerHiddenOrderField } from './buyer-order-fields';
 import { ACTIVE_ORDER_STATUSES, ORDER_STATUS_GROUPS, type OrderStatusGroup } from './order-status-groups';
 import { returnPointsTaken } from './return-ledger';
+import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 
@@ -355,6 +356,10 @@ export class OrdersService {
     // khách liên hệ CSKH); không hỏi được Pancake thì cũng dừng ("Kho chưa phản hồi…") — webhook "Đã gửi hàng" có thể
     // chưa về, huỷ lúc này là hoàn tiền cho hàng đang ở hãng.
     const pancakeDecision = await this.orderStatus?.precheckPancakeCancel(order, 'CUSTOMER');
+    // Điểm thường khách đã tiêu hoàn trong tx huỷ (cùng commit với lần lật CANCELLED): hoàn sau commit mà lỗi thì bấm huỷ lại bị
+    // chặn bởi "đã huỷ" và khách mất điểm vĩnh viễn. Hạn của điểm hoàn đọc ngoài tx để không giữ kết nối trong lúc chờ cấu hình.
+    const standardPointsExpiresAt =
+      order.pointsUsed > order.pointsUsedConverted ? await this.loyalty.pointsExpiresAt(new Date()) : undefined;
     // Chuyển trạng thái ATOMIC — chống hủy đồng thời (double-tap/retry) gây HOÀN VÍ 2 LẦN: chỉ request
     // THẮNG (count=1) mới hoàn điểm/ví. Bọc flip-status + hoàn ví trong CÙNG $transaction để chống crash
     // giữa chừng: nếu process chết sau khi đơn đã CANCELLED nhưng trước khi increment ví → retry bị guard
@@ -390,7 +395,7 @@ export class OrdersService {
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED
       // trong reverseFinancials (DB quyết, không phải paymentStatus của bản đọc).
-      reversed = await this.reversal.reverseFinancials(tx, current, { destination });
+      reversed = await this.reversal.reverseFinancials(tx, current, { destination, ...(standardPointsExpiresAt ? { standardPointsExpiresAt } : {}) });
       return true;
     }).catch(async (err: unknown) => {
       // Pancake đã huỷ đơn ở bước trên mà tx này không huỷ được (vừa PAID/giao vận, hay lỗi DB): để lại dấu cho CSKH; lỗi trả khách giữ nguyên.
@@ -399,21 +404,32 @@ export class OrdersService {
     });
     if (!won) {
       await this.orderStatus?.flagPancakeCancelDivergence(order.id, pancakeDecision, 'đơn đổi trạng thái trong lúc khách bấm huỷ');
-      return this.detail(userId, code); // đã bị hủy bởi request khác → không hoàn lần 2
+      return this.detail(userId, code); // đã bị huỷ bởi request khác → không hoàn lần 2
     }
     await this.wastePickupHooks?.onOrderCancelled(order.id).catch((err: unknown) => this.logger.error(`Hook thu kèm rác (huỷ) lỗi cho đơn ${code}: ${err instanceof Error ? err.message : err}`));
-    await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision);
-    // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội
-    // bộ) nên để ngoài tx được. Trước đây THIẾU reverseCommissionsForOrder ở luồng khách tự hủy
-    // — CTV vẫn giữ hoa hồng PENDING cho đơn khách đã hủy trước khi giao (không tự dọn, dù
-    // không trả được vì payout chỉ rút từ status APPROVED — nhưng làm sai lệch số "chờ duyệt"
-    // hiển thị cho CTV vĩnh viễn). Nhất quán với admin/pancake — cả hai đều gọi cặp đôi này.
-    const standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
-    await this.affiliate.reverseCommissionsForOrder(order.id);
+    let swallowedFailure = (await this.orderStatus?.afterPancakeCancel(order.id, pancakeDecision)) === false;
+    // reverseOrderPoints/reverseCommissionsForOrder idempotent (guard riêng + $transaction nội bộ) nên để ngoài tx được; khách tự huỷ
+    // cũng phải thu hồi hoa hồng PENDING của CTV như admin/pancake. Đơn đã CANCELLED nên bấm huỷ lại thoát sớm ở đầu hàm: lỗi đảo ở
+    // đây không được làm bỏ các bước sau (hoàn tiền thiếu, vận đơn Gomdon, tin khách), chúng chạy hết rồi mới ném lỗi đầu tiên.
+    let reversalFailure: unknown = null;
+    let standardPointsBack = 0;
+    try {
+      standardPointsBack = (await this.loyalty.reverseOrderPoints(order.id)) || 0;
+    } catch (err) {
+      reversalFailure ??= err;
+      this.logger.error(`Đảo điểm của đơn ${code} sau khi khách huỷ lỗi: ${err instanceof Error ? err.message : err}`);
+    }
+    try {
+      await this.affiliate.reverseCommissionsForOrder(order.id);
+    } catch (err) {
+      reversalFailure ??= err;
+      this.logger.error(`Thu hồi hoa hồng của đơn ${code} sau khi khách huỷ lỗi: ${err instanceof Error ? err.message : err}`);
+    }
     const receivedBack = await refundReportedUnderpayment(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
       order.id,
     ).catch((err: unknown) => {
+      swallowedFailure = true;
       this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${code}: ${err instanceof Error ? err.message : err}`);
       return 0;
     });
@@ -448,6 +464,12 @@ export class OrdersService {
       order_code: code,
       reason: 'Khách huỷ đơn',
     });
+    // Đảo điểm/hoa hồng lỗi đã ném ở dòng trên nên tới đây là đảo xong: lỗi thì đơn không có mốc và ReversalEffectsResyncCron làm nốt
+    // (bấm huỷ lại bị chặn vì đã huỷ).
+    if (reversalFailure !== null) throw reversalFailure;
+    // Hoàn số tiền chuyển thiếu và lệnh huỷ Pancake lỗi bị nuốt để khách vẫn thấy huỷ thành công, nhưng chưa xong thì không ghi mốc.
+    if (swallowedFailure) this.logger.warn(`Đơn ${code}: hoàn số tiền chuyển thiếu hoặc xếp lệnh huỷ Pancake chưa xong, chưa ghi mốc để cron chạy lại.`);
+    else await markReversalEffectsDone(this.prisma, order.id, this.logger);
     return this.detail(userId, code);
   }
 
@@ -487,6 +509,8 @@ export class OrdersService {
     const inCart = new Map<string, number>((cartRow?.items ?? []).map((ci) => [ci.variationId, ci.quantity]));
     const addSource = input.addSource ?? 'repurchase';
     const results: RepurchaseLineResult[] = [];
+    // Dòng qua được kiểm tra đọc sẵn; ghi cả loạt một lần (addItems) rồi mới chốt kết quả, để không dựng lại giỏ theo từng dòng.
+    const pending: { slot: number; line: (typeof lines)[number]; variationId: string; qty: number; want: number }[] = [];
 
     for (const line of lines) {
       const skip = (reason: RepurchaseSkipReason) =>
@@ -499,21 +523,44 @@ export class OrdersService {
       if (room <= 0) { skip('EXCEEDS_STOCK'); continue; }
       const want = requested?.get(line.id) ?? line.quantity;
       const qty = Math.min(want, room);
-      try {
-        await this.cart.addItem(userId, { variationId: v.id, quantity: qty, addSource });
-      } catch (err) {
-        // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua
-        // dòng; lỗi hạ tầng ném ra (mỗi addItem là một tx riêng nên giỏ không lệch).
-        if (err instanceof BadRequestException) { skip('EXCEEDS_STOCK'); continue; }
-        if (err instanceof NotFoundException) { skip('INACTIVE'); continue; }
-        throw err;
-      }
       inCart.set(v.id, (inCart.get(v.id) ?? 0) + qty);
-      results.push(
-        qty < want
-          ? { orderItemId: line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: qty }
-          : { orderItemId: line.id, status: 'added', addedQuantity: qty },
-      );
+      pending.push({ slot: results.length, line, variationId: v.id, qty, want });
+      results.push({ orderItemId: line.id, status: 'added', addedQuantity: qty });
+    }
+
+    if (pending.length > 0) {
+      // Thêm bù chạy trong CÙNG lần addItems (callback nhận kết quả vòng đầu): lần ghi thứ hai riêng để lại giỏ nửa vời khi lỗi hạ tầng và ghi add_to_cart hai lần.
+      // Chỗ mà dòng bị từ chối đã giữ trong inCart nhưng không vào giỏ được trả lại cho dòng sau cùng variation đã bị kẹp nhỏ vì phần đó.
+      const outcomes = await this.cart.addItems(userId, pending.map((p) => ({ variationId: p.variationId, quantity: p.qty, addSource })), {
+        topUp: (first) => {
+          const freed = new Map<string, number>();
+          const topUps: { index: number; quantity: number }[] = [];
+          pending.forEach((p, i) => {
+            const outcome = first[i]!;
+            if (!outcome.ok) {
+              freed.set(p.variationId, (freed.get(p.variationId) ?? 0) + p.qty);
+            } else if (p.qty < p.want) {
+              const extra = Math.min(p.want - p.qty, freed.get(p.variationId) ?? 0);
+              if (extra > 0) {
+                freed.set(p.variationId, (freed.get(p.variationId) ?? 0) - extra);
+                topUps.push({ index: i, quantity: extra });
+              }
+            }
+          });
+          return topUps;
+        },
+      });
+      pending.forEach((p, i) => {
+        const outcome = outcomes[i]!;
+        // Lỗi nghiệp vụ của RIÊNG dòng này (tồn kho đổi giữa lúc đọc và ghi, SP vừa bị ẩn) → bỏ qua dòng; lỗi hạ tầng do addItems ném ra.
+        if (!outcome.ok) {
+          results[p.slot] = { orderItemId: p.line.id, status: 'skipped', reason: outcome.error === 'UNAVAILABLE' ? 'INACTIVE' : 'EXCEEDS_STOCK', addedQuantity: 0 };
+          return;
+        }
+        const added = p.qty + (outcome.toppedUp ?? 0);
+        if (added < p.want) results[p.slot] = { orderItemId: p.line.id, status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: added };
+        else if (outcome.toppedUp) results[p.slot] = { orderItemId: p.line.id, status: 'added', addedQuantity: added };
+      });
     }
     const cart = toPublicCart(await this.cart.getCart(userId));
     return { ...cart, cart, results };

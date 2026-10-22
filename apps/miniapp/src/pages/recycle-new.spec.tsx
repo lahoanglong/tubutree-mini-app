@@ -105,7 +105,10 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(within(battery).queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
     expect(within(battery).getByText('Sắp nhận')).toBeInTheDocument();
     expect(within(battery).getByText('Đợt này Tubu chưa nhận pin')).toBeInTheDocument();
-    expect(battery).toHaveStyle({ opacity: '0.55' });
+    expect(battery.style.opacity).toBe('');
+    expect(battery).toHaveAttribute('aria-disabled', 'true');
+    expect(carton.style.opacity).toBe('');
+    expect(carton).not.toHaveAttribute('aria-disabled');
   });
   it('toLineInputs bỏ số lượng 0 và xếp theo itemId', () => {
     expect(toLineInputs({ 'item-milk': 2, 'item-carton': 0, 'item-battery': 1 })).toEqual([{ itemId: 'item-battery', declaredQty: 1 }, { itemId: 'item-milk', declaredQty: 2 }]);

@@ -127,15 +127,14 @@ export class AdminReportsService {
           AND o."createdAt" >= c.created_at AND o."createdAt" < c.created_at + ${window2}
         GROUP BY c.id, COALESCE(o."checkoutGroup", o.code)
       ),
-      valid AS (
-        SELECT p.user_id, p.at, ROW_NUMBER() OVER (PARTITION BY p.user_id ORDER BY p.at, p.purchase_key) AS n
+      -- Một lần gộp theo khách thay cho các CTE tự join: Postgres không có thống kê cho CTE nên ước 1 dòng, và ở kế hoạch
+      -- generic (Prisma tái dùng câu đã prepare từ lần gọi thứ 6) chọn Nested Loop bình phương theo số khách mới.
+      by_user AS (
+        SELECT p.user_id,
+               (array_agg(p.at ORDER BY p.at, p.purchase_key))[1] AS first_at,
+               (array_agg(p.at ORDER BY p.at, p.purchase_key))[2] AS second_at
         FROM purchase p
-      ),
-      first_order AS (
-        SELECT v.user_id, v.at FROM valid v JOIN cohort c ON c.id = v.user_id WHERE v.n = 1 AND v.at < c.created_at + ${window}
-      ),
-      second_order AS (
-        SELECT v.user_id FROM valid v JOIN first_order f ON f.user_id = v.user_id WHERE v.n = 2 AND v.at <= f.at + ${window}
+        GROUP BY p.user_id
       ),
       revenue AS (
         SELECT c.id AS user_id, SUM(o.total - COALESCE(pr.refund, 0)) AS amount
@@ -152,12 +151,11 @@ export class AdminReportsService {
       )
       SELECT c.week, c.source,
              COUNT(*)::int AS new_users,
-             COUNT(f.user_id)::int AS first_order_users,
-             COUNT(s.user_id)::int AS second_order_users,
+             (COUNT(*) FILTER (WHERE b.first_at < c.created_at + ${window}))::int AS first_order_users,
+             (COUNT(*) FILTER (WHERE b.first_at < c.created_at + ${window} AND b.second_at <= b.first_at + ${window}))::int AS second_order_users,
              COALESCE(SUM(r.amount), 0)::bigint AS revenue
       FROM cohort c
-      LEFT JOIN first_order f ON f.user_id = c.id
-      LEFT JOIN second_order s ON s.user_id = c.id
+      LEFT JOIN by_user b ON b.user_id = c.id
       LEFT JOIN revenue r ON r.user_id = c.id
       GROUP BY c.week, c.source`);
     const folded = foldSourceRows(

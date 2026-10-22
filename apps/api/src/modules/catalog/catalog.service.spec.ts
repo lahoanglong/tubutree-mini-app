@@ -45,6 +45,68 @@ describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
     expect(r.map((c) => c.id)).toEqual(['p3', 'p2']); // giữ thứ tự từ query
   });
 
+  describe('cache co-occurrence (D9-04)', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('hai lần xem cùng sản phẩm trong TTL chỉ quét order_items một lần; danh sách card vẫn đọc tươi', async () => {
+      const prisma = {
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', slug: 'tinh-dau' }), findMany: jest.fn().mockResolvedValue([card('p2')]) },
+        $queryRaw: jest.fn().mockResolvedValue([{ productId: 'p2' }]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      await svc.boughtTogether('tinh-dau');
+      await svc.boughtTogether('tinh-dau');
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.product.findMany).toHaveBeenCalledTimes(2);
+    });
+
+    it('hết TTL thì quét lại', async () => {
+      const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const prisma = {
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'p1', slug: 'tinh-dau' }), findMany: jest.fn().mockResolvedValue([]) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      await svc.boughtTogether('tinh-dau');
+      now.mockReturnValue(1_000_000 + 10 * 60_000);
+      await svc.boughtTogether('tinh-dau');
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(2);
+    });
+
+    it('cache đầy mà khoá đang làm mới chính là khoá hết hạn → không xoá nhầm khoá còn hạn của sản phẩm khác', async () => {
+      const prisma = {
+        product: { findUnique: jest.fn().mockResolvedValue({ id: 'target' }), findMany: jest.fn().mockResolvedValue([]) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      const cache = (svc as unknown as { boughtTogetherCache: Map<string, { ids: string[]; expiresAt: number }> }).boughtTogetherCache;
+      const alive = Date.now() + 60_000;
+      cache.set('oldest-still-valid', { ids: [], expiresAt: alive });
+      for (let i = 0; i < 498; i++) cache.set(`k${i}`, { ids: [], expiresAt: alive });
+      cache.set('target', { ids: [], expiresAt: Date.now() - 1 });
+      expect(cache.size).toBe(500);
+
+      await svc.boughtTogether('tinh-dau');
+
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(cache.has('oldest-still-valid')).toBe(true);
+      expect(cache.get('target')!.expiresAt).toBeGreaterThan(Date.now());
+      expect(cache.size).toBe(500);
+    });
+
+    it('sản phẩm khác nhau không dùng chung kết quả; bộ nhớ có trần', async () => {
+      let id = 0;
+      const prisma = {
+        product: { findUnique: jest.fn().mockImplementation(async () => ({ id: `p${++id}` })), findMany: jest.fn().mockResolvedValue([]) },
+        $queryRaw: jest.fn().mockResolvedValue([]),
+      } as unknown as PrismaService;
+      const svc = new CatalogService(prisma);
+      for (let i = 0; i < 700; i++) await svc.boughtTogether(`s${i}`);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(700);
+      expect((svc as unknown as { boughtTogetherCache: Map<string, unknown> }).boughtTogetherCache.size).toBeLessThanOrEqual(500);
+    });
+  });
+
   it('không có đơn co-occurrence → trả rỗng (FE fallback related)', async () => {
     const svc = setup([], []);
     const r = await svc.boughtTogether('tinh-dau');
@@ -794,6 +856,68 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     const { svc } = setup([card('b')]); // 'a' vừa bị tắt
     const r = await svc.list({ page: 1, limit: 2, sort: 'best_seller' });
     expect(r.data.map((c) => c.id)).toEqual(['b']);
+  });
+});
+
+describe('CatalogService.list — sắp theo giá đang bán (U1-B01)', () => {
+  // Giá đang bán = salePrice ?? basePrice, cùng quy tắc với bộ lọc giá và thẻ SP.
+  const ROWS = [
+    { id: 'a', basePrice: 89000, salePrice: null },
+    { id: 'b', basePrice: 100000, salePrice: 75000 }, // base cao hơn 'a' nhưng giá đang bán rẻ hơn
+    { id: 'c', basePrice: 95000, salePrice: null },
+    { id: 'd', basePrice: 79000, salePrice: null },
+    { id: 'e', basePrice: 95000, salePrice: 95000 }, // hoà với 'c'
+  ];
+  type Row = (typeof ROWS)[number];
+
+  // Bảng sản phẩm giả: hiểu lọc theo id và orderBy theo cột đơn giản, để test chạy cả hai cách làm (orderBy của Prisma hay xếp ở TS).
+  function setup() {
+    const findMany = jest.fn(async (args: { skip?: number; take?: number; where?: { AND?: { id?: { in: string[] } }[] }; orderBy?: Record<string, 'asc' | 'desc'>[] | Record<string, 'asc' | 'desc'> }) => {
+      const ids = args.where?.AND?.find((c) => c.id)?.id?.in;
+      let rows: Row[] = ids ? ROWS.filter((r) => ids.includes(r.id)) : [...ROWS];
+      const keys = ([] as Record<string, 'asc' | 'desc'>[]).concat(args.orderBy ?? []);
+      rows = rows.sort((x, y) => {
+        for (const k of keys) {
+          const [col, dir] = Object.entries(k)[0] as [keyof Row, 'asc' | 'desc'];
+          const vx = x[col] as string | number | null;
+          const vy = y[col] as string | number | null;
+          if (vx === vy) continue;
+          return ((vx ?? 0) < (vy ?? 0) ? -1 : 1) * (dir === 'asc' ? 1 : -1);
+        }
+        return 0;
+      });
+      if (args.take !== undefined) rows = rows.slice(args.skip ?? 0, (args.skip ?? 0) + args.take);
+      return rows.map((r) => ({ ...card(r.id), basePrice: r.basePrice, salePrice: r.salePrice }));
+    });
+    const count = jest.fn().mockResolvedValue(ROWS.length);
+    const prisma = { product: { findMany, count }, $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)) } as unknown as PrismaService;
+    return { svc: new CatalogService(prisma), findMany };
+  }
+
+  it('Giá tăng: SP có sale rẻ hơn base của SP khác đứng trước; hoà thì id tăng dần', async () => {
+    const r = await setup().svc.list({ page: 1, limit: 5, sort: 'price_asc' });
+    expect(r.data.map((c) => c.id)).toEqual(['b', 'd', 'a', 'c', 'e']);
+    expect(r.meta).toEqual({ page: 1, limit: 5, total: 5 });
+  });
+
+  it('Giá giảm: đảo chiều theo giá đang bán, hoà thì id tăng dần', async () => {
+    const r = await setup().svc.list({ page: 1, limit: 5, sort: 'price_desc' });
+    expect(r.data.map((c) => c.id)).toEqual(['c', 'e', 'a', 'd', 'b']);
+  });
+
+  it('trang 2 nối tiếp trang 1 theo giá đang bán, không trùng, total = số SP khớp', async () => {
+    const { svc } = setup();
+    const p1 = await svc.list({ page: 1, limit: 3, sort: 'price_asc' });
+    const p2 = await svc.list({ page: 2, limit: 3, sort: 'price_asc' });
+    expect([...p1.data, ...p2.data].map((c) => c.id)).toEqual(['b', 'd', 'a', 'c', 'e']);
+    expect(p2.meta).toEqual({ page: 2, limit: 3, total: 5 });
+  });
+
+  it('giữ bộ lọc ở bước xếp hạng (brand + inStock)', async () => {
+    const { svc, findMany } = setup();
+    await svc.list({ page: 1, limit: 3, sort: 'price_asc', brand: 'Tubu', inStock: true });
+    const where = { isActive: true, approvalStatus: 'APPROVED', brand: 'Tubu', variations: { some: { isActive: true, stock: { gt: 0 } } } };
+    expect(findMany.mock.calls[0]?.[0].where).toEqual(where);
   });
 });
 

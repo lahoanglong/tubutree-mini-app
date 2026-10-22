@@ -43,7 +43,7 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code === 'RETURN_RECEIVED') return { Icon: PackageOpen, title: 'Tubu đã nhận lại hàng' };
   if (code === 'RETURN_REJECTED') return { Icon: XCircle, title: 'Yêu cầu đổi/trả bị từ chối' };
   if (code.startsWith('ORDER')) return { Icon: Receipt, title: 'Cập nhật đơn hàng' };
-  if (code.startsWith('INVOICE')) return { Icon: FileText, title: 'Hóa đơn điện tử' };
+  if (code.startsWith('INVOICE')) return { Icon: FileText, title: 'Hoá đơn điện tử' };
   if (code.startsWith('COMMISSION')) return { Icon: Coins, title: 'Hoa hồng CTV' };
   if (code.startsWith('CASHBACK')) return { Icon: ShoppingBag, title: 'Hoàn tiền' };
   if (code.startsWith('BIRTHDAY') || code.startsWith('VOUCHER')) return { Icon: Gift, title: 'Ưu đãi cho bạn' };

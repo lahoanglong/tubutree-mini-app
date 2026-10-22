@@ -1,9 +1,9 @@
 import { QueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
+import { isHttpError } from './http';
 
 /** Lỗi tạm (mất mạng, timeout, 5xx, 429, 408): tải lại sau có thể khỏi. 4xx còn lại là nghiệp vụ, tải lại vẫn y vậy. */
 function isTransientError(error: unknown): boolean {
-  if (!isAxiosError(error)) return false;
+  if (!isHttpError(error)) return false;
   const status = error.response?.status;
   return !status || status >= 500 || status === 408 || status === 429;
 }
@@ -33,7 +33,7 @@ export function createQueryClient(): QueryClient {
         // retry thêm chỉ làm tăng churn. Chỉ retry 1 lần cho lỗi mạng/5xx, và không retry khi máy đang offline.
         retry: (failureCount, error) => {
           if (isOffline()) return false;
-          const status = isAxiosError(error) ? error.response?.status : undefined;
+          const status = isHttpError(error) ? error.response?.status : undefined;
           if (status && status >= 400 && status < 500) return false;
           return failureCount < 1;
         },

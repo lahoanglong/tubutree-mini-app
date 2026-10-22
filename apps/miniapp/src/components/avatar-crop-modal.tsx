@@ -184,6 +184,7 @@ export function AvatarCropModal({
           <ZoomOut size={18} color="var(--color-text-inverse)" style={{ opacity: 0.7 }} aria-hidden />
           <input
             type="range"
+            aria-label="Phóng to ảnh"
             min={1}
             max={3}
             step={0.05}
@@ -209,7 +210,7 @@ export function AvatarCropModal({
             }}
             style={{ background: 'var(--stone-700)', color: 'var(--color-text-inverse)' }}
           >
-            <X size={16} style={{ marginRight: 6 }} aria-hidden /> Hủy chọn
+            <X size={16} style={{ marginRight: 6 }} aria-hidden /> Huỷ chọn
           </Button>
 
           <Button fullWidth loading={processing} icon={Check} onPress={handleConfirm}>

@@ -30,7 +30,7 @@ vi.mock('../services/account-api', () => ({
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 50000 }),
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
 }));
-vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null) }));
+vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null), getOwnsBrand: vi.fn().mockResolvedValue(null) }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
@@ -71,6 +71,16 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     expect(balances.map((b) => (b.getAttribute('aria-label') ?? '').split(':')[0])).toEqual(['Điểm Xanh', 'Ví Tubu', 'Mã giảm giá']);
     expect(screen.queryByText(/TubuXu/)).toBeNull();
     expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
+  });
+
+  it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {
+    renderPage();
+    const tile = await screen.findByRole('button', { name: /^Ví Tubu: 50\.000đ$/ });
+    const value = Array.from(tile.querySelectorAll<HTMLElement>('*')).find((el) => el.textContent === '50.000đ' && el.children.length === 0)!;
+    expect(value).toBeTruthy();
+    expect(value.style.fontFamily).toContain('--font-ui');
+    expect(value.style.fontFamily).not.toContain('--font-display');
+    expect(value.style.fontVariantNumeric).toBe('tabular-nums');
   });
 
   it('không còn mục Hoàn tiền sàn ngoài; bấm mục menu điều hướng thật, không báo "đang hoàn thiện"', async () => {

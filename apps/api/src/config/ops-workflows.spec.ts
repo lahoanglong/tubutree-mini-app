@@ -62,6 +62,16 @@ describe('ops.yml audit/set-env', () => {
   });
 });
 
+describe('ops.yml: ZALO_OA_WEBHOOK_SECRET đi từ GitHub Secret vào .env', () => {
+  const wf = read('.github/workflows/ops.yml');
+
+  it('secret được khai báo, chuyển qua SSH và set-env ghi được (GO-LIVE-KEYS mục 5 dặn đúng quy trình này)', () => {
+    expect(wf).toContain('ZALO_OA_WEBHOOK_SECRET: ${{ secrets.ZALO_OA_WEBHOOK_SECRET }}');
+    expect((/envs: ([^\n]*)/.exec(wf)?.[1] ?? '').split(',')).toContain('ZALO_OA_WEBHOOK_SECRET');
+    expect(wf).toContain('set_if ZALO_OA_WEBHOOK_SECRET ');
+  });
+});
+
 describe('docs/GO-LIVE-KEYS.md', () => {
   it('có mục Pancake và Gomdon', () => {
     const doc = read('docs/GO-LIVE-KEYS.md');
@@ -70,6 +80,25 @@ describe('docs/GO-LIVE-KEYS.md', () => {
     for (const k of ['PANCAKE_API_KEY', 'PANCAKE_SHOP_ID', 'PANCAKE_WEBHOOK_SECRET', 'GOMDON_PHONE', 'GOMDON_PASSWORD', 'GOMDON_WEBHOOK_SECRET']) {
       expect(doc).toContain(k);
     }
+  });
+});
+
+describe('tham số discount của mẫu ZNS GROUP_BUY_SUCCESS là phần trăm (groupbuy.service)', () => {
+  const keys = read('docs/GO-LIVE-KEYS.md');
+  const playbook = read('docs/launch/pilot-order-playbook.md');
+  const discountRow = keys.split('\n').find((l) => /\|\s*`discount`\s*\|/.test(l)) ?? '';
+
+  it('mã gửi discount dạng "N%" nên bảng khoá ghi mức giảm theo %, ví dụ có dấu % và không còn mô tả "số tiền mã giảm"', () => {
+    expect(read('apps/api/src/modules/groupbuy/groupbuy.service.ts')).toContain('discount: `${terms.pct}%`');
+    expect(discountRow).toMatch(/%/);
+    expect(discountRow).not.toMatch(/Số tiền mã giảm/);
+    expect(discountRow).not.toMatch(/`15\.000`/);
+  });
+
+  it('GO-LIVE-KEYS và playbook dặn mẫu có chữ "đ" sau discount phải nộp lại', () => {
+    const rule = /chữ "đ" sau[^\n]*discount[^\n]*nộp lại/;
+    expect(keys).toMatch(rule);
+    expect(playbook).toMatch(rule);
   });
 });
 

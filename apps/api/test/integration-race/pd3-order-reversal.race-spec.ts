@@ -149,7 +149,7 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
 
   // Review B1: lô CONVERTED là tiền trả trước, phải hoàn TRONG tx huỷ (reverseFinancials). reverseOrderPoints chạy
   // sau commit và có thể ném (đứt DB, SIGTERM); lần huỷ lại bị guard trạng thái chặn nên không có đường thử lại.
-  it('B1: reverseOrderPoints ném lỗi sau khi tx huỷ commit → lô CONVERTED đã hoàn, retry chỉ hoàn STANDARD (không hoàn lô quy đổi lần 2)', async () => {
+  it('B1: reverseOrderPoints ném lỗi sau khi tx huỷ commit → lô CONVERTED và điểm thường đã hoàn trong tx, gọi lại không hoàn thêm', async () => {
     const user = await userWithLots(500, 300);
     const order = await orderSpendingBothLots(user.id, 30, 120);
 
@@ -160,7 +160,8 @@ describe('PD-3 hoàn điểm theo lô khi huỷ đơn (real Postgres)', () => {
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('CANCELLED');
     const mid = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
     expect(mid.pointsConvertedBalance).toBe(300);
-    expect(mid.pointsBalance).toBe(470);
+    // D12-02: điểm thường cũng hoàn trong tx huỷ, nên lỗi sau commit không để khách thiếu điểm tới lần gọi lại.
+    expect(mid.pointsBalance).toBe(500);
 
     await loyalty.reverseOrderPoints(order.id);
     await loyalty.reverseOrderPoints(order.id);
