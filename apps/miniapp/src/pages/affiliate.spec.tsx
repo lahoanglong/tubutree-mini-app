@@ -296,6 +296,16 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     expect(screen.getByText(/Lý do: Thiếu số tài khoản/)).toBeInTheDocument();
   });
 
+  it('Q2b: lệnh đã được hoàn thuế giữ dư vào Ví → ghi rõ số đã hoàn, không ghi thuế đã khấu trừ 0đ', async () => {
+    vi.mocked(getMyPayouts).mockResolvedValue([
+      { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 250_000, fee: 0, method: 'WALLET_BALANCE', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-09T03:00:00.000Z', reviewedAt: null, paidAt: '2026-10-09T03:00:00.000Z' },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Đã chuyển')).toBeInTheDocument();
+    expect(screen.getByText(/đã hoàn 250\.000đ thuế giữ dư vào Ví/)).toBeInTheDocument();
+    expect(screen.queryByText(/đã khấu trừ thuế TNCN 0đ/)).toBeNull();
+  });
+
   it('SELLER-11: có khấu trừ trong năm → tổng thu nhập và thuế đã khấu trừ năm nay, cách nhận chứng từ khấu trừ', async () => {
     vi.mocked(getTaxStatement).mockResolvedValue({
       year: 2026, fullName: 'Nguyễn An', taxId: '079201001234', items: [],

@@ -625,6 +625,7 @@ function Dashboard() {
         max={d?.withdrawableCommission ?? 0}
         knownMax={!dashQ.isError}
         taxIdOnFile={me?.personalTaxId ?? null}
+        taxPreview={d?.withdrawTaxPreview}
         onDone={withdrawDone}
       />
     </Shell>

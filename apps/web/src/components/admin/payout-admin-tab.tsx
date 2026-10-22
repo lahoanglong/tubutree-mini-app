@@ -312,6 +312,7 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
           {(p.taxWithheld ?? 0) > 0 && (
             <div className="mt-0.5 text-xs text-stone-600">
               Hoa hồng {formatVnd(p.grossAmount ?? p.amount + (p.taxWithheld ?? 0))} · khấu trừ thuế TNCN {formatVnd(p.taxWithheld ?? 0)}
+              {(p.taxRefunded ?? 0) > 0 ? ` · đã hoàn ${formatVnd(p.taxRefunded ?? 0)} vào Ví` : ''}
               {p.taxId ? ` · MST/CCCD ${p.taxId}` : ''}
             </div>
           )}

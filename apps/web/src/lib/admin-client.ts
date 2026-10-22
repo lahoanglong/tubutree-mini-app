@@ -1322,6 +1322,8 @@ export interface AdminPayout {
   /** Hoa hồng trước khấu trừ thuế TNCN (null: rút Ví hoặc lệnh cũ). */
   grossAmount?: number | null;
   taxWithheld?: number;
+  /** Phần thuế giữ dư đã hoàn vào Ví khi lệnh khác cùng tháng bị từ chối (thuế thực giữ = taxWithheld − taxRefunded). */
+  taxRefunded?: number;
   /** MST/CCCD người nhận chụp lúc khấu trừ. */
   taxId?: string | null;
   method: string;

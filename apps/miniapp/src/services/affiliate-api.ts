@@ -109,7 +109,10 @@ export interface AffiliatePayout {
   /** Số thực nhận (sau thuế TNCN và phí). */
   amount: number;
   grossAmount: number | null;
+  /** Thuế TNCN thực giữ (đã trừ phần hoàn về Ví). */
   taxWithheld: number;
+  /** Phần thuế giữ dư đã hoàn về Ví khi lệnh khác cùng tháng bị từ chối; thiếu khi API cũ. */
+  taxRefunded?: number;
   fee: number;
   method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY';
   status: PayoutStatus;

@@ -25,19 +25,21 @@ export interface WithdrawSheetProps {
   /** false khi dashboard lỗi: `max` tạm bằng 0, để máy chủ tự kiểm số dư thật. */
   knownMax: boolean;
   taxIdOnFile: string | null;
+  /** Thuế máy chủ sẽ khấu trừ nếu rút hết ngay (dashboard.withdrawTaxPreview, cộng dồn tháng); thiếu khi API cũ. */
+  taxPreview?: number;
   onDone: (message: string) => void;
 }
 
 /** Sheet "Rút hoa hồng": mount khi mở để form lấy đúng `max` hiện tại và một Idempotency-Key mới cho mỗi lần mở. */
-export function WithdrawSheet({ open, onClose, max, knownMax, taxIdOnFile, onDone }: WithdrawSheetProps) {
+export function WithdrawSheet({ open, onClose, max, knownMax, taxIdOnFile, taxPreview, onDone }: WithdrawSheetProps) {
   return (
     <Sheet open={open} onClose={onClose} title="Rút hoa hồng">
-      {open && <WithdrawForm max={max} knownMax={knownMax} taxIdOnFile={taxIdOnFile} onDone={onDone} />}
+      {open && <WithdrawForm max={max} knownMax={knownMax} taxIdOnFile={taxIdOnFile} taxPreview={taxPreview} onDone={onDone} />}
     </Sheet>
   );
 }
 
-function WithdrawForm({ max, knownMax, taxIdOnFile, onDone }: Omit<WithdrawSheetProps, 'open' | 'onClose'>) {
+function WithdrawForm({ max, knownMax, taxIdOnFile, taxPreview, onDone }: Omit<WithdrawSheetProps, 'open' | 'onClose'>) {
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
   const cfgLoaded = cfgQ.isSuccess;
   const minBank = cfgQ.data?.affiliateMinWithdrawBank ?? DEFAULT_MIN_BANK;
@@ -64,7 +66,7 @@ function WithdrawForm({ max, knownMax, taxIdOnFile, onDone }: Omit<WithdrawSheet
     },
   });
 
-  const view = withdrawView({ max, method, pit, taxIdOnFile, taxId, minBank, cfgLoaded, knownMax, bank, pending: mut.isPending });
+  const view = withdrawView({ max, method, pit, taxPreview, taxIdOnFile, taxId, minBank, cfgLoaded, knownMax, bank, pending: mut.isPending });
   const submit = () => {
     // `disabled` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
     if (busy.current || !view.valid) return;

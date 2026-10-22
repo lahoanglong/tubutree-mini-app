@@ -193,6 +193,14 @@ describe('Thuế TNCN trên lệnh rút và báo cáo tháng (SELLER-11)', () =>
     expect(container.textContent).toContain('MST/CCCD 079201001234');
   });
 
+  it('lệnh đã được hoàn thuế giữ dư (Q2b): hiện số đã khấu trừ và số đã hoàn vào Ví', () => {
+    const { container } = mount(
+      <PayoutRow payout={payout({ status: 'PAID', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 250_000, taxRefunded: 250_000, taxId: '079201001234' })} />,
+    );
+    expect(container.textContent).toContain('khấu trừ thuế TNCN 250.000');
+    expect(container.textContent).toContain('đã hoàn 250.000');
+  });
+
   it('báo cáo tháng: gọi đúng tháng, bảng theo người nhận cuộn ngang, tổng tháng, người bị khấu trừ thiếu MST được tô cảnh báo', async () => {
     const report = {
       month: '2026-10',
