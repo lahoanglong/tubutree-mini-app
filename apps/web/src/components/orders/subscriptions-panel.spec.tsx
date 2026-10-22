@@ -153,6 +153,82 @@ describe('SubscriptionsPanel', () => {
     expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ quantity: 1 });
   });
 
+  describe('đổi chu kỳ giao (Q22)', () => {
+    const SUB_Q22 = { ...SUB, nextRunAt: '2026-11-07T03:00:00.000Z', lastOrderAt: '2026-10-10T03:00:00.000Z' };
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-20T05:00:00.000Z') });
+      subs = [SUB_Q22];
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('có đúng 4 lựa chọn 4/6/8/10 tuần, chu kỳ hiện tại chọn sẵn', async () => {
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      const group = document.body.querySelector('[role="group"][aria-label="Chu kỳ giao"]')!;
+      const opts = Array.from(group.querySelectorAll('button'));
+      expect(opts.map((o) => o.textContent)).toEqual(['4 tuần', '6 tuần', '8 tuần', '10 tuần']);
+      expect(opts[0]!.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('chọn 6 tuần: hiện ngày giao kế trước khi lưu, PATCH chỉ có intervalWeeks', async () => {
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      expect(btn('Lưu thay đổi').disabled).toBe(true);
+      click(btn('6 tuần'));
+      expect(document.body.textContent).toContain('Lần giao kế tiếp: 21/11/2026');
+      click(btn('Lưu thay đổi'));
+      await flush(8);
+      expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 6 });
+    });
+
+    it('chọn lại chu kỳ cũ: hết thay đổi, nút lưu tắt, không hiện ngày mới', async () => {
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      click(btn('8 tuần'));
+      click(btn('4 tuần'));
+      expect(btn('Lưu thay đổi').disabled).toBe(true);
+      expect(document.body.textContent).not.toContain('Lần giao kế tiếp');
+    });
+
+    it('gói tạm dừng: hiện ngày giao kế và lời nhắc ngày chỉ đổi khi đã qua lúc bật lại', async () => {
+      subs = [{ ...SUB_Q22, status: 'PAUSED' }];
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      click(btn('10 tuần'));
+      expect(document.body.textContent).toContain('Lần giao kế tiếp: 19/12/2026');
+      expect(document.body.textContent).toContain('Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.');
+    });
+
+    it('API cũ không có khoá lastOrderAt: không hiện chọn chu kỳ, không bao giờ gửi intervalWeeks', async () => {
+      subs = [SUB];
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      expect(document.body.querySelector('[role="group"][aria-label="Chu kỳ giao"]')).toBeNull();
+      expect(document.body.textContent).not.toContain('Chu kỳ giao');
+      click(btn('Giảm số lượng'));
+      click(btn('Lưu thay đổi'));
+      await flush(8);
+      expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ quantity: 1 });
+    });
+
+    it('API mới trả lastOrderAt là null (chưa có đơn kỳ): vẫn hiện chọn chu kỳ', async () => {
+      subs = [{ ...SUB_Q22, lastOrderAt: null }];
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      expect(document.body.querySelector('[role="group"][aria-label="Chu kỳ giao"]')).not.toBeNull();
+      click(btn('8 tuần'));
+      click(btn('Lưu thay đổi'));
+      await flush(8);
+      expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 8 });
+    });
+  });
+
   it('gói tạm dừng cũng sửa được; API từ chối (trùng gói 409) → báo lỗi, sheet vẫn mở', async () => {
     subs = [{ ...SUB, status: 'PAUSED' }];
     failures['PATCH /me/subscriptions/s1'] = { status: 409, message: 'Bạn đã có gói định kỳ cho sản phẩm này tại địa chỉ đó.' };
@@ -184,9 +260,9 @@ describe('SubscriptionsPanel', () => {
     expect(sent('POST', '/me/subscriptions/s1/status')[0]!.body).toEqual({ status: 'ACTIVE' });
   });
 
-  it('"Hủy" mở sheet giữ chân; "Bỏ qua kỳ này" gọi POST /skip; "Vẫn hủy" gọi CANCELLED', async () => {
+  it('"Huỷ" mở sheet giữ chân; "Bỏ qua kỳ này" gọi POST /skip; "Vẫn huỷ" gọi CANCELLED', async () => {
     const c = await mount();
-    click(btn('Hủy', c));
+    click(btn('Huỷ', c));
     await flush(6);
     expect(document.body.textContent).toContain('Giữ lại lịch định kỳ?');
     click(btn('Bỏ qua kỳ này'));
@@ -195,9 +271,9 @@ describe('SubscriptionsPanel', () => {
     expect(c.textContent).toContain('Đã bỏ qua kỳ này');
     expect(document.body.textContent).not.toContain('Giữ lại lịch định kỳ?');
 
-    click(btn('Hủy', c));
+    click(btn('Huỷ', c));
     await flush(6);
-    click(btn('Vẫn hủy'));
+    click(btn('Vẫn huỷ'));
     await flush(8);
     expect(sent('POST', '/me/subscriptions/s1/status').pop()!.body).toEqual({ status: 'CANCELLED' });
   });
@@ -205,7 +281,7 @@ describe('SubscriptionsPanel', () => {
   it('gói đang tạm dừng thì sheet giữ chân không có "Bỏ qua kỳ này"', async () => {
     subs = [{ ...SUB, status: 'PAUSED' }];
     const c = await mount();
-    click(btn('Hủy', c));
+    click(btn('Huỷ', c));
     await flush(6);
     expect(btn('Bỏ qua kỳ này')).toBeUndefined();
   });
@@ -235,7 +311,7 @@ describe('SubscriptionsPanel', () => {
     expect(Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Khám phá sản phẩm')?.getAttribute('href')).toBe('/san-pham');
   });
 
-  it('hàng nút Sửa/Tạm dừng/Hủy có tên, vùng chạm >= 44px, xuống dòng khi thiếu chỗ', async () => {
+  it('hàng nút Sửa/Tạm dừng/Huỷ có tên, vùng chạm >= 44px, xuống dòng khi thiếu chỗ', async () => {
     const c = await mount();
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
@@ -244,11 +320,16 @@ describe('SubscriptionsPanel', () => {
 });
 
 describe('subscriptionPatch', () => {
-  const sub = { quantity: 2, addressId: 'a1', paymentMethod: 'COD' as const };
+  const sub = { quantity: 2, addressId: 'a1', paymentMethod: 'COD' as const, intervalWeeks: 4 };
+  const next = { quantity: 2, addressId: 'a1' as string | undefined, paymentMethod: 'COD' as const, intervalWeeks: 4 };
   it('chỉ gửi trường đã đổi; thiếu paymentMethod coi như COD', () => {
-    expect(subscriptionPatch(sub, { quantity: 2, addressId: 'a1', paymentMethod: 'COD' })).toEqual({});
-    expect(subscriptionPatch({ quantity: 2, addressId: 'a1' }, { quantity: 2, addressId: 'a1', paymentMethod: 'COD' })).toEqual({});
-    expect(subscriptionPatch(sub, { quantity: 3, addressId: 'a2', paymentMethod: 'WALLET' })).toEqual({ quantity: 3, addressId: 'a2', paymentMethod: 'WALLET' });
-    expect(subscriptionPatch(sub, { quantity: 2, addressId: undefined, paymentMethod: 'COD' })).toEqual({});
+    expect(subscriptionPatch(sub, next)).toEqual({});
+    expect(subscriptionPatch({ quantity: 2, addressId: 'a1', intervalWeeks: 4 }, next)).toEqual({});
+    expect(subscriptionPatch(sub, { ...next, quantity: 3, addressId: 'a2', paymentMethod: 'WALLET' })).toEqual({ quantity: 3, addressId: 'a2', paymentMethod: 'WALLET' });
+    expect(subscriptionPatch(sub, { ...next, addressId: undefined })).toEqual({});
+  });
+  it('gửi intervalWeeks chỉ khi đổi, cùng các trường khác', () => {
+    expect(subscriptionPatch(sub, { ...next, intervalWeeks: 8 })).toEqual({ intervalWeeks: 8 });
+    expect(subscriptionPatch(sub, { ...next, quantity: 3, intervalWeeks: 8 })).toEqual({ quantity: 3, intervalWeeks: 8 });
   });
 });

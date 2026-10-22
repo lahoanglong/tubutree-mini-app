@@ -3,6 +3,7 @@ import {
   checkInView,
   earnRuleLine,
   expiringPointsNote,
+  formatMultiplier,
   memberCardHint,
   moneyShort,
   pointExpiryPolicyNote,
@@ -120,5 +121,15 @@ describe('pointsRulesNote', () => {
     expect(pointsRulesNote({ pointExpireMonths: 6 })).toBe('Điểm Xanh thường có hạn 6 tháng kể từ ngày nhận, điểm cũ được dùng trước.');
     expect(pointsRulesNote(undefined)).toBeNull();
     expect(pointsRulesNote({ maxRedeemPct: 0, pointExpireMonths: 0 })).toBeNull();
+  });
+});
+
+describe('formatMultiplier', () => {
+  it('dấu phẩy thập phân, bỏ số 0 thừa, thiếu thì "1"', () => {
+    expect(formatMultiplier(1.5)).toBe('1,5');
+    expect(formatMultiplier(2)).toBe('2');
+    expect(formatMultiplier(1.25)).toBe('1,25');
+    expect(formatMultiplier(undefined)).toBe('1');
+    expect(formatMultiplier(0)).toBe('1');
   });
 });

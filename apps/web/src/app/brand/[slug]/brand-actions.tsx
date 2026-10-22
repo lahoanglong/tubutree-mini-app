@@ -15,6 +15,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { phoneSecondary } from '@/lib/phone-ui';
 import { platformBridge } from '@/lib/platform-bridge';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -67,28 +68,35 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
 
   return (
     <div className="mt-3">
-      {count > 0 && <p className="text-xs text-stone-600">{count} người theo dõi</p>}
-      <div className="mt-2 flex gap-2">
-        <button
-          type="button"
-          aria-pressed={authed ? following : undefined}
-          disabled={followMut.isPending}
-          onClick={onFollow}
-          className={`${ui.btnSecondary} flex-1 gap-1.5`}
-        >
-          {following ? <Check className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-          {following ? 'Đang theo dõi' : 'Theo dõi'}
-        </button>
-        <button type="button" onClick={() => setShareOpen(true)} className={`${ui.btnPrimary} flex-1 gap-1.5`}>
-          <Share2 className="h-4 w-4" aria-hidden="true" />
-          Chia sẻ
-        </button>
+      {count > 0 && <p className="text-xs text-stone-600 max-md:mt-0.5 max-md:text-[length:var(--type-caption-size)] max-md:text-[var(--color-text-tertiary)]">{count} người theo dõi</p>}
+      {/* Điện thoại: thanh dính đáy như StickyActionBar của Mini App (Theo dõi nền nhạt + Chia sẻ nền đậm); từ md nằm ngay dưới tên. */}
+      <div
+        data-testid="brand-actions-bar"
+        data-sticky-bar
+        className="max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]"
+      >
+        <div className="mt-2 flex gap-2 max-md:mt-0">
+          <button
+            type="button"
+            aria-pressed={authed ? following : undefined}
+            disabled={followMut.isPending}
+            onClick={onFollow}
+            className={`${ui.btnSecondary} ${phoneSecondary} flex-1 gap-1.5`}
+          >
+            {following ? <Check className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+            {following ? 'Đang theo dõi' : 'Theo dõi'}
+          </button>
+          <button type="button" onClick={() => setShareOpen(true)} className={`${ui.btnPrimary} flex-1 gap-1.5`}>
+            <Share2 className="h-4 w-4" aria-hidden="true" />
+            Chia sẻ
+          </button>
+        </div>
+        {note && (
+          <p role={note.error ? 'alert' : 'status'} className={`mt-2 text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>
+            {note.text}
+          </p>
+        )}
       </div>
-      {note && (
-        <p role={note.error ? 'alert' : 'status'} className={`mt-2 text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>
-          {note.text}
-        </p>
-      )}
 
       {ste?.eligible && (
         <button
@@ -100,7 +108,7 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
             <BadgePercent className="h-[18px] w-[18px]" aria-hidden="true" />
             {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
           </span>
-          <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + caption gắn mã giới thiệu của bạn.</span>
+          <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.</span>
         </button>
       )}
 
@@ -182,7 +190,7 @@ function BrandShareSheet({
       </div>
       {captions.length > 0 && (
         <>
-          <p className="mb-1.5 text-sm font-semibold text-stone-900">Caption gợi ý (chạm để sao chép)</p>
+          <p className="mb-1.5 text-sm font-semibold text-stone-900">Lời đăng gợi ý (chạm để sao chép)</p>
           <div className="flex flex-col gap-1.5">
             {captions.map((c) => (
               <button

@@ -112,7 +112,7 @@ export function AddressForm({
       )}
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} disabled={save.isPending} className={ui.btnSecondary}>
-          Hủy
+          Huỷ
         </button>
         <button type="submit" disabled={save.isPending} className={`${ui.btnPrimary} flex-1`}>
           {save.isPending ? 'Đang lưu…' : submitLabel}

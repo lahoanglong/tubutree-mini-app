@@ -168,7 +168,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh?tab=community');
     await expect(page.getByRole('heading', { name: 'Chuỗi điểm danh dài nhất' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Top góp nước mùa này' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Xếp hạng góp nước mùa này' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đã tặng hôm nay' })).toBeDisabled();
     await page.getByRole('button', { name: 'Tặng 💧' }).dblclick();
     await expect(page.getByText('Đã tặng 5💧 cho bạn 🎁')).toBeVisible();
@@ -239,12 +239,35 @@ test.describe('Trợ lý AI (/tu-van)', () => {
     await expect(page.getByText('Xin chào', { exact: true })).toHaveCount(1);
   });
 
+  test('khổ điện thoại: dòng "đang soạn" và câu trả lời nằm trên thanh nhập, không bị thanh che', async ({ page, api }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockAdvisor(api);
+    let answer: () => void = () => {};
+    const gate = new Promise<void>((r) => (answer = r));
+    api.post('/ai-advisor/chat', async () => {
+      await gate;
+      return { reply: 'Bạn thử loại này nhé', products: [] };
+    });
+    await page.goto('/tu-van');
+    await page.getByRole('textbox', { name: 'Nhập câu hỏi' }).fill('Xin chào');
+    await page.getByRole('button', { name: 'Gửi' }).click();
+    const bar = page.getByRole('textbox', { name: 'Nhập câu hỏi' }).locator('xpath=..');
+    const status = page.getByRole('status').filter({ hasText: 'Trợ lý đang soạn' });
+    await expect(status).toBeVisible();
+    const barTop = async () => (await bar.boundingBox())!.y;
+    await expect.poll(async () => (await status.boundingBox())!.y + (await status.boundingBox())!.height).toBeLessThanOrEqual(await barTop() + 1);
+    answer();
+    const reply = page.getByText('Bạn thử loại này nhé');
+    await expect(reply).toBeVisible();
+    await expect.poll(async () => (await reply.boundingBox())!.y + (await reply.boundingBox())!.height).toBeLessThanOrEqual(await barTop() + 1);
+  });
+
   test('server báo tắt AI: về Trang chủ, không gọi chat', async ({ page, api }) => {
     mockAdvisor(api, false);
     // Trang chủ mở sau khi chuyển hướng gọi nhiều khối không liên quan tới luồng này.
     api.allowUnmocked(
       'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/active', 'GET /flash-sales/upcoming',
-      'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you',
+      'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you', 'GET /me/wishlist/ids',
     );
     await page.goto('/tu-van');
     await expect(page).toHaveURL(/\/$/);

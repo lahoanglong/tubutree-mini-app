@@ -1,0 +1,412 @@
+{
+ "group": "mv-pro",
+ "lanes": [
+  "recycle",
+  "pro"
+ ],
+ "result": {
+  "screens": [
+   {
+    "name": "Đại lý",
+    "miniappRoute": "/dealer",
+    "webRoute": "/dai-ly",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Web có đầu trang website (logo Tubu Tree, giỏ hàng badge 2, avatar An, ô 'Tìm sản phẩm...'); Mini App có thanh tiêu đề trắng với nút quay lại tròn nổi",
+     "Web có dòng '← Tài khoản' và tiêu đề 'Kênh đại lý' serif lớn trong thân trang; Mini App đặt tiêu đề trên thanh đầu",
+     "Nền trang: Mini App xanh xám nhạt #f4f6f9 (--color-dealer-bg, dealer.tsx:73), web nền be chung",
+     "Web có chân trang website (Hotline, email, Facebook, TikTok, Điều khoản...)"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ tổng quan (Bậc đại lý / Công nợ hiện tại / Hạn mức)",
+      "miniapp": "Nền xanh navy #1f2a44 (--color-dealer-ink)",
+      "web": "Nền đen stone-900",
+      "miniappSource": "apps/miniapp/src/pages/dealer.tsx:242",
+      "webSource": "apps/web/src/components/dealer/dealer-hub.tsx:30"
+     },
+     {
+      "where": "Nút 'Dán đơn' cạnh ô tìm",
+      "miniapp": "Nút secondary ZaUI: nền xanh lá nhạt, chữ xanh đậm, không viền",
+      "web": "Nút trắng có viền xám, chữ đen (ui.btnSecondary)",
+      "miniappSource": "apps/miniapp/src/pages/dealer.tsx:436",
+      "webSource": "apps/web/src/components/dealer/price-tab.tsx:234"
+     },
+     {
+      "where": "Hàng bảng giá - dòng giá",
+      "miniapp": "Giá đại lý màu navy (INK), '-20%' chữ thường màu brand",
+      "web": "Giá đại lý đen đậm, '-20%' semibold forest-700",
+      "miniappSource": "apps/miniapp/src/pages/dealer.tsx:658",
+      "webSource": "apps/web/src/components/dealer/price-tab.tsx:46"
+     },
+     {
+      "where": "Khung danh sách bảng giá",
+      "miniapp": "Khối trắng không viền trên nền xám xanh, hàng cao hơn (dòng SKU xuống 2 dòng)",
+      "web": "Thẻ có viền + bóng, hàng thấp hơn",
+      "miniappSource": "apps/miniapp/src/pages/dealer.tsx:636",
+      "webSource": "apps/web/src/components/dealer/price-tab.tsx:285"
+     }
+    ],
+    "note": "Web thiếu toàn bộ theme B2B navy của Mini App (dealer-theme.css). Ảnh full-page Mini App bằng đúng khung nhìn vì Mini App cuộn trong container riêng. Tên/số sản phẩm giống nhau."
+   },
+   {
+    "name": "Ca làm nhân viên",
+    "miniappRoute": "/staff",
+    "webRoute": "/nhan-vien",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề với nút quay lại tròn nổi",
+     "Web có '← Tài khoản' và tiêu đề 'Ca làm của tôi' trong thân trang",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ 'Chấm công hôm nay'",
+      "miniapp": "Có dòng chú thích 'Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.'; tiêu đề serif cỡ title-sm (~15px)",
+      "web": "Thiếu dòng chú thích WiFi; tiêu đề serif lớn hơn (text-lg)",
+      "miniappSource": "apps/miniapp/src/pages/staff.tsx:251",
+      "webSource": "apps/web/src/components/staff/today-card.tsx:26"
+     },
+     {
+      "where": "Nút 'Copy tuần trước'",
+      "miniapp": "Secondary nền xanh lá nhạt không viền, chữ xanh",
+      "web": "Nền trắng có viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/pages/staff.tsx:480",
+      "webSource": "apps/web/src/components/staff/staff-hub.tsx:177"
+     },
+     {
+      "where": "Thẻ từng ngày (T2 · 19/10 ...)",
+      "miniapp": "Thẻ raised không viền (chỉ bóng), tiêu đề ngày serif ~16px, nút '+ Thêm' ghost tách icon/chữ",
+      "web": "Thẻ có viền, tiêu đề ngày serif lớn hơn (ui.sectionTitle text-lg), '+ Thêm' liền icon",
+      "miniappSource": "apps/miniapp/src/pages/staff.tsx:494",
+      "webSource": "apps/web/src/components/staff/staff-hub.tsx:192"
+     }
+    ],
+    "note": "Ở Mini App nút 'Đăng ký n...' và 'Copy tuần ...' bị cắt chữ, icon lệch lên trên — lỗi hiển thị phía Mini App, web không nên chép. Full-page Mini App chỉ bằng khung nhìn (cuộn trong container)."
+   },
+   {
+    "name": "Bảng lương",
+    "miniappRoute": "/my-payroll",
+    "webRoute": "/nhan-vien/bang-luong",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn",
+     "Web có '← Tài khoản' và tiêu đề 'Lương của tôi' trong thân",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ tổng kết tháng",
+      "miniapp": "Nền gradient xanh (action-primary → pressed); số '270.000đ' chữ sans đậm (price-xl); 'Giờ công/Đơn giá' và 'Lương gộp/Phạt' cách dòng rộng",
+      "web": "Nền phẳng forest-800; số tiền font serif (font-display text-3xl); các dòng sát nhau",
+      "miniappSource": "apps/miniapp/src/pages/my-payroll.tsx:154",
+      "webSource": "apps/web/src/components/staff/payroll-hub.tsx:132"
+     },
+     {
+      "where": "Nút 'Thông tin nhận lương'",
+      "miniapp": "Secondary nền xanh nhạt, không viền, icon ngân hàng xanh",
+      "web": "Nền trắng viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/pages/my-payroll.tsx:185",
+      "webSource": "apps/web/src/components/staff/payroll-hub.tsx:156"
+     },
+     {
+      "where": "Trạng thái trống",
+      "miniapp": "EmptyState có hình hộp minh hoạ, chữ 'Chưa có dữ liệu công tháng này.' cỡ lớn đậm, nằm trên nền (không thẻ)",
+      "web": "Không minh hoạ; chữ nhỏ xám căn giữa trong thẻ trắng có viền",
+      "miniappSource": "apps/miniapp/src/pages/my-payroll.tsx:254",
+      "webSource": "apps/web/src/components/staff/payroll-hub.tsx:211"
+     }
+    ],
+    "note": "Dữ liệu hai bên giống nhau (9h00, 30.000đ/h, Đã chốt)."
+   },
+   {
+    "name": "Chủ thương hiệu",
+    "miniappRoute": "/brand-owner",
+    "webRoute": "/chu-thuong-hieu",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn",
+     "Web có '← Tài khoản' và tiêu đề 'Quản lý nhãn hàng' trong thân",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Nút 'Xem trang nhãn'",
+      "miniapp": "Secondary nền xanh nhạt không viền, chữ xanh",
+      "web": "Nền trắng viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/pages/brand-owner.tsx:184",
+      "webSource": "apps/web/src/components/brand-owner/view-brand-link.tsx:12"
+     },
+     {
+      "where": "Tiêu đề thẻ 'Thông tin nhãn'",
+      "miniapp": "Serif (Heading title-sm)",
+      "web": "Sans semibold text-base",
+      "miniappSource": "apps/miniapp/src/pages/brand-owner.tsx:209",
+      "webSource": "apps/web/src/components/brand-owner/profile-tab.tsx:98"
+     },
+     {
+      "where": "Ô tải ảnh Logo / Ảnh bìa",
+      "miniapp": "Nhãn 'Logo', 'Ảnh bìa' chữ đen đậm (Text label); khung viền đứt 1.5px màu nhạt",
+      "web": "Nhãn xám thường text-xs; khung viền đứt 2px đậm stone-450",
+      "miniappSource": "apps/miniapp/src/components/image-upload.tsx:151",
+      "webSource": "apps/web/src/components/brand-owner/brand-image-field.tsx:44"
+     },
+     {
+      "where": "Ô nhập Tagline / Nguồn gốc",
+      "miniapp": "Chữ trong ô cỡ ~17px, ô cao hơn",
+      "web": "Chữ text-sm ~15px",
+      "miniappSource": "apps/miniapp/src/pages/brand-owner.tsx:213",
+      "webSource": "apps/web/src/components/brand-owner/profile-tab.tsx:101"
+     }
+    ],
+    "note": "Full-page Mini App chỉ bằng khung nhìn nên không so được khối 'Khuyến mãi' phía dưới."
+   },
+   {
+    "name": "Quản trị",
+    "miniappRoute": "/admin",
+    "webRoute": "/admin",
+    "severity": "khong-so-duoc",
+    "shellDiffs": [],
+    "contentDiffs": [],
+    "note": "Bỏ qua: webRoute bắt đầu bằng /admin, web admin do phiên khác giữ."
+   },
+   {
+    "name": "Quản trị cộng đồng",
+    "miniappRoute": "/admin/community",
+    "webRoute": "/admin?tab=community",
+    "severity": "khong-so-duoc",
+    "shellDiffs": [],
+    "contentDiffs": [],
+    "note": "Bỏ qua: webRoute bắt đầu bằng /admin, web admin do phiên khác giữ."
+   },
+   {
+    "name": "Đổi rác lấy quà",
+    "miniappRoute": "/recycle",
+    "webRoute": "/doi-rac",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn",
+     "Tiêu đề 'Đổi rác lấy quà' nằm trong thân ở web",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Nút lịch sử (Yêu cầu của tôi) góc phải tiêu đề",
+      "miniapp": "Icon đồng hồ History hiện rõ, không khung",
+      "web": "Ô vuông viền 44px nhưng icon KHÔNG hiện (chỉ còn một chấm): lớp `${ui.btnSecondary} w-11 px-0` chồng px-5 với px-0, px-5 thắng nên vùng nội dung còn ~4px, svg bị co",
+      "miniappSource": "apps/miniapp/src/pages/recycle.tsx:162",
+      "webSource": "apps/web/src/components/recycle/recycle-home.tsx:56"
+     },
+     {
+      "where": "Hàng 'Kho quà' / 'Thể lệ chương trình'",
+      "miniapp": "ListRow trơn trên nền trang, không thẻ",
+      "web": "Gộp trong một thẻ trắng có viền, chia vạch",
+      "miniappSource": "apps/miniapp/src/pages/recycle.tsx:324",
+      "webSource": "apps/web/src/components/recycle/recycle-home.tsx:258"
+     },
+     {
+      "where": "Thẻ 'Điểm Xanh của bạn'",
+      "miniapp": "Card raised không viền (bóng)",
+      "web": "Thẻ có viền (ui.card)",
+      "miniappSource": "apps/miniapp/src/pages/recycle.tsx:236",
+      "webSource": "apps/web/src/components/recycle/recycle-home.tsx:203"
+     }
+    ],
+    "note": "Chữ khối 'Tubu nhận những món này' ở web nhỏ hơn một bậc (1 thùng = 1.000 điểm). Dữ liệu giống nhau."
+   },
+   {
+    "name": "Thể lệ đổi rác",
+    "miniappRoute": "/recycle/rules",
+    "webRoute": "/doi-rac/quy-dinh",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn",
+     "Web có nút '<' và tiêu đề trong thân",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Đoạn thể lệ",
+      "miniapp": "Text body-md ~15px",
+      "web": "text-base ~17px, xuống dòng khác ('...không đổi ra / tiền.')",
+      "miniappSource": "apps/miniapp/src/pages/recycle-rules.tsx:26",
+      "webSource": "apps/web/src/components/recycle/recycle-rules-view.tsx:35"
+     }
+    ],
+    "note": "Nội dung chữ giống hệt."
+   },
+   {
+    "name": "Tạo yêu cầu đổi rác",
+    "miniappRoute": "/recycle/new",
+    "webRoute": "/doi-rac/tao",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề 'Đổi rác' + phụ đề 'Bước 1/3: Chọn món' + nút quay lại tròn",
+     "Web có chân trang lọt giữa nội dung và thanh dính đáy; ở full-page thanh 'Tiếp tục' (fixed) đè lên giữa chân trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Ảnh đại diện món (Thùng carton cũ, Vỏ hộp sữa sạch)",
+      "miniapp": "Placeholder ProductThumb: lá nhỏ xanh nhạt",
+      "web": "Icon Recycle (mũi tên tái chế) xanh đậm",
+      "miniappSource": "apps/miniapp/src/pages/recycle-new.tsx:138",
+      "webSource": "apps/web/src/components/recycle/waste-item-step.tsx:42"
+     },
+     {
+      "where": "Chữ trong thẻ món",
+      "miniapp": "Mô tả/giới hạn cỡ ~13px, dòng thưa",
+      "web": "Nhỏ hơn (text-xs), dòng sát",
+      "miniappSource": "apps/miniapp/src/pages/recycle-new.tsx:138",
+      "webSource": "apps/web/src/components/recycle/waste-item-step.tsx:38"
+     }
+    ],
+    "note": "Khi có summary, Actions của web xếp hàng ngang (recycle-new.tsx:89) khác Mini App xếp dọc — chưa thấy ở bước 1."
+   },
+   {
+    "name": "Điểm nhận rác",
+    "miniappRoute": "/recycle/points",
+    "webRoute": "/doi-rac/diem-nhan",
+    "severity": "khong-so-duoc",
+    "shellDiffs": [],
+    "contentDiffs": [],
+    "note": "pairs.json chụp miniappUrl=/recycle/new và webUrl=/doi-rac/tao; hai ảnh trùng hệt ảnh 'Tạo yêu cầu đổi rác' (Bước 1/3). Màn chọn điểm nhận chưa được chụp nên không so được (miniapp recycle-points.tsx, web components/recycle/recycle-points.tsx)."
+   },
+   {
+    "name": "Chi tiết yêu cầu đổi rác",
+    "miniappRoute": "/recycle/r/:id",
+    "webRoute": "/doi-rac/yeu-cau/:id",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề 'TR-7K3QP' + phụ đề + nút quay lại tròn",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Nút 'Sửa món'",
+      "miniapp": "Secondary nền xanh nhạt không viền, chữ xanh",
+      "web": "Trắng có viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/pages/recycle-request.tsx:336",
+      "webSource": "apps/web/src/components/recycle/recycle-request.tsx:334"
+     },
+     {
+      "where": "Nút 'Huỷ yêu cầu'",
+      "miniapp": "Secondary nền xanh nhạt không viền, chữ xanh",
+      "web": "Trắng có viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/pages/recycle-request.tsx:215",
+      "webSource": "apps/web/src/components/recycle/recycle-request.tsx:197"
+     }
+    ],
+    "note": "Timeline, bảng món, 'Ước tính 3.000 điểm' giống nhau."
+   },
+   {
+    "name": "Sửa yêu cầu đổi rác",
+    "miniappRoute": "/recycle/r/:id/edit",
+    "webRoute": "/doi-rac/yeu-cau/:id/sua",
+    "severity": "lech-lon",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề 'Sửa yêu cầu' + nút quay lại tròn",
+     "Web full-page: thanh dính đáy fixed đè lên giữa chân trang"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thanh dính đáy",
+      "miniapp": "Xếp dọc: 2 dòng chú thích ở trên, nút 'Lưu thay đổi' full-width bên dưới",
+      "web": "Xếp ngang: khối chữ bên trái, nút 'Lưu thay đổi' nhỏ bên phải",
+      "miniappSource": "apps/miniapp/src/components/ui/sticky-action-bar.tsx:23",
+      "webSource": "apps/web/src/components/recycle/recycle-edit.tsx:41"
+     },
+     {
+      "where": "Nút 'Đổi điểm nhận'",
+      "miniapp": "Secondary nền xanh nhạt không viền",
+      "web": "Trắng có viền xám",
+      "miniappSource": "apps/miniapp/src/pages/recycle-edit.tsx:178",
+      "webSource": "apps/web/src/components/recycle/recycle-edit.tsx:208"
+     },
+     {
+      "where": "Ảnh đại diện món",
+      "miniapp": "Placeholder lá xanh nhạt",
+      "web": "Icon Recycle xanh đậm",
+      "miniappSource": "apps/miniapp/src/pages/recycle-edit.tsx:22",
+      "webSource": "apps/web/src/components/recycle/waste-item-step.tsx:42"
+     }
+    ],
+    "note": "Web có dòng 'Ước tính mới 3.000 điểm', Mini App không — cả hai code đều có dòng này (miniapp recycle-edit.tsx:131), chỉ hiện khi preview trả về; khác do mock/thời điểm chụp."
+   },
+   {
+    "name": "Yêu cầu đổi rác của tôi",
+    "miniappRoute": "/recycle/requests",
+    "webRoute": "/doi-rac/yeu-cau",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn",
+     "Web có nút '<' và tiêu đề trong thân, có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Hàng yêu cầu 'TR-7K3QP · Mang tới điểm nhận'",
+      "miniapp": "ListRow trơn trên nền, kéo sát mép 16px, không thẻ",
+      "web": "Nằm trong thẻ trắng có viền, đệm trong",
+      "miniappSource": "apps/miniapp/src/pages/recycle-requests.tsx:70",
+      "webSource": "apps/web/src/components/recycle/recycle-requests.tsx:76"
+     }
+    ],
+    "note": "Ngày khác: Mini App 17/10/2026, web 17/10/2026 cùng; tab 'Đang xử lý 1 / Đã đóng 1' giống."
+   },
+   {
+    "name": "Đổi rác hoàn tất",
+    "miniappRoute": "/recycle/done/:id",
+    "webRoute": "/doi-rac/xong/:id",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề 'Kết quả đổi rác' + nút quay lại tròn",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Nút 'Đổi thêm rác'",
+      "miniapp": "Secondary nền xanh nhạt không viền, chữ xanh",
+      "web": "Trắng có viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/pages/recycle-done.tsx:99",
+      "webSource": "apps/web/src/components/recycle/recycle-done.tsx:102"
+     }
+    ],
+    "note": "Vạch kẻ bảng Mini App màu be, web xám — rất nhỏ."
+   },
+   {
+    "name": "Quầy nhận rác",
+    "miniappRoute": "/recycle/desk",
+    "webRoute": "/doi-rac/quay",
+    "severity": "lech-nho",
+    "shellDiffs": [
+     "Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn",
+     "Web có chân trang website"
+    ],
+    "contentDiffs": [
+     {
+      "where": "Thẻ 'Hạn mức điểm tháng này'",
+      "miniapp": "Card raised không viền, chữ ~15px, đệm 12px, các dòng sát",
+      "web": "Thẻ có viền, chữ text-base lớn hơn, đệm 16px, dòng thưa (thẻ cao gần gấp rưỡi)",
+      "miniappSource": "apps/miniapp/src/pages/recycle-desk.tsx:91",
+      "webSource": "apps/web/src/components/recycle/recycle-desk.tsx:100"
+     },
+     {
+      "where": "Nút 'Chỉnh sửa' trong thẻ 'Ưu đãi riêng của cửa hàng'",
+      "miniapp": "Secondary nền xanh nhạt không viền, chữ xanh",
+      "web": "Trắng có viền xám, chữ đen",
+      "miniappSource": "apps/miniapp/src/components/waste-desk-perk.tsx:58",
+      "webSource": "apps/web/src/components/recycle/recycle-desk-perk.tsx:65"
+     },
+     {
+      "where": "Thẻ 'Báo cáo tháng này'",
+      "miniapp": "Card raised không viền, chữ nhỏ",
+      "web": "Thẻ có viền, chữ lớn hơn",
+      "miniappSource": "apps/miniapp/src/pages/recycle-desk.tsx:401",
+      "webSource": "apps/web/src/components/recycle/recycle-desk-perk.tsx:105"
+     }
+    ],
+    "note": "Chữ giống hệt."
+   }
+  ],
+  "summary": "Nhóm mv-pro có 14 cặp. 2 cặp admin bỏ qua. Cặp 'Điểm nhận rác' không so được: ảnh chụp lại màn /recycle/new, /doi-rac/tao nên chưa có màn chọn điểm nhận.\nLệch lớn ở 3 màn. Dealer: web mất theme B2B navy, thẻ đen và nền chung thay cho navy #1f2a44 và nền #f4f6f9. Bảng lương: thẻ tổng kết phẳng, số tiền dùng font serif, trạng thái trống là thẻ chữ, không có hình minh hoạ. Sửa yêu cầu đổi rác: thanh dính đáy xếp ngang thay vì xếp dọc với nút full-width.\nLỗi cụ thể: nút lịch sử ở /doi-rac không hiện icon History. Nguyên nhân là `${ui.btnSecondary} w-11 px-0` chồng px-5 với px-0 (recycle-home.tsx:56). Staff còn thiếu dòng 'Cần ở đúng mạng WiFi công ty...'.\nLệch lặp lại khắp nhóm: nút phụ web là ui.btnSecondary trắng có viền (guest-ui.ts:21), Mini App là secondary nền xanh nhạt không viền. Thẻ web là ui.card có viền (guest-ui.ts:11), Mini App là Card raised không viền. Sửa hai token này sẽ xử lý phần lớn lệch nhỏ.\nVỏ trang khác ở mọi màn: đầu trang website, dòng '← Tài khoản', tiêu đề nằm trong thân, chân trang. Thanh dính đáy fixed đè lên chân trang trong ảnh full-page."
+ }
+}

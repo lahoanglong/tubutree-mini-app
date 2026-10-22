@@ -7,7 +7,7 @@ export function couponValueLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDisco
     return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   }
   if (c.type === 'FREESHIP') {
-    return 'Miễn phí vận chuyển';
+    return 'Miễn phí giao hàng';
   }
   return `Giảm ${formatVnd(c.value)}`;
 }

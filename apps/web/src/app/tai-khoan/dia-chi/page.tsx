@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { MapPin } from 'lucide-react';
+import { MapPin, Plus } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
@@ -10,6 +9,11 @@ import { createAddress, deleteAddress, getAddresses, updateAddress, type Address
 import { ui } from '@/lib/guest-ui';
 import { AddressForm } from '@/components/address-form';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { mini } from '@/components/order-mobile/mobile-ui';
+import { PageHeader } from '@/components/ui/page-header';
+
+/** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
+const LINK_MINI = 'max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
 
 const NOTICE_MS = 4000;
 
@@ -110,7 +114,7 @@ export default function AddressBookPage() {
       )}
       {removedNotice && (
         <p role="status" className="mb-3 text-sm font-medium text-success-fg">
-          Đã xóa địa chỉ.
+          Đã xoá địa chỉ.
         </p>
       )}
       {actionError && (
@@ -131,7 +135,14 @@ export default function AddressBookPage() {
       {addresses.length > 0 && (
         <ul className="space-y-3">
           {addresses.map((a) => (
-            <li key={a.id} className={`p-4 ${ui.card}`}>
+            <li
+              key={a.id}
+              className={`p-4 ${ui.card} ${
+                a.isDefault
+                  ? 'max-md:border-[1.5px] max-md:border-[color:var(--color-action-primary-bg)] max-md:shadow-none'
+                  : mini.card
+              }`}
+            >
               {editingId === a.id ? (
                 <AddressForm
                   title="Sửa địa chỉ"
@@ -148,14 +159,14 @@ export default function AddressBookPage() {
               ) : (
                 <>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-0 break-words font-semibold text-stone-900">
+                    <span className="min-w-0 break-words font-semibold text-stone-900 max-md:text-sm">
                       {a.recipient} · {a.phone}
                     </span>
                     {a.isDefault && (
                       <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs font-medium text-forest-800">Mặc định</span>
                     )}
                   </div>
-                  <p className="mt-1 break-words text-sm text-stone-700">{line(a)}</p>
+                  <p className="mt-1 break-words text-sm text-stone-700 max-md:mt-0.5 max-md:text-[length:var(--type-caption-size)] max-md:text-[color:var(--color-text-secondary)]">{line(a)}</p>
                   {isLegacyGeo(a) && (
                     <p className="mt-1 text-xs font-medium text-warning-fg">
                       Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025) — chưa giao được, bấm Sửa để chọn lại tỉnh/phường.
@@ -170,7 +181,7 @@ export default function AddressBookPage() {
                       className="mt-3 rounded-control border border-danger-fg bg-danger-bg p-3"
                     >
                       <p id={`del-${a.id}`} className="font-semibold text-stone-900">
-                        Xóa địa chỉ này?
+                        Xoá địa chỉ này?
                       </p>
                       <p id={`del-note-${a.id}`} className="mt-1 text-sm text-stone-700">
                         Các đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.
@@ -185,7 +196,7 @@ export default function AddressBookPage() {
                           disabled={remove.isPending}
                           className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
                         >
-                          {remove.isPending ? 'Đang xóa…' : 'Xóa'}
+                          {remove.isPending ? 'Đang xoá…' : 'Xoá'}
                         </button>
                       </div>
                     </div>
@@ -198,7 +209,7 @@ export default function AddressBookPage() {
                           setEditingId(a.id);
                         }}
                         aria-label={`Sửa địa chỉ của ${a.recipient}`}
-                        className={ui.btnText}
+                        className={`${ui.btnText} ${LINK_MINI}`}
                       >
                         Sửa
                       </button>
@@ -208,9 +219,9 @@ export default function AddressBookPage() {
                           onClick={() => makeDefault.mutate(a.id)}
                           disabled={makeDefault.isPending}
                           aria-label={`Đặt địa chỉ của ${a.recipient} làm mặc định`}
-                          className={ui.btnText}
+                          className={`${ui.btnText} ${LINK_MINI}`}
                         >
-                          Đặt làm mặc định
+                          Đặt mặc định
                         </button>
                       )}
                       <button
@@ -223,10 +234,10 @@ export default function AddressBookPage() {
                           remove.reset();
                           setConfirmId(a.id);
                         }}
-                        aria-label={`Xóa địa chỉ của ${a.recipient}`}
-                        className={`${ui.btnText} text-danger-fg`}
+                        aria-label={`Xoá địa chỉ của ${a.recipient}`}
+                        className={`${ui.btnText} text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
                       >
-                        Xóa
+                        Xoá
                       </button>
                     </div>
                   )}
@@ -259,9 +270,10 @@ export default function AddressBookPage() {
                 setEditingId(null);
                 setAdding(true);
               }}
-              className={`${ui.btnPrimary} w-full sm:w-auto`}
+              className={`${ui.btnPrimary} w-full gap-2 sm:w-auto max-md:border-transparent max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)] max-md:shadow-none max-md:hover:bg-[var(--color-action-secondary-bg-pressed)]`}
             >
-              + Thêm địa chỉ mới
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Thêm địa chỉ mới
             </button>
           )
         )}
@@ -272,12 +284,9 @@ export default function AddressBookPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
-        ← Tài khoản
-      </Link>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>Sổ địa chỉ</h1>
-      <div className="mt-4">{children}</div>
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+      <PageHeader title="Sổ địa chỉ" backHref="/tai-khoan" backLabel="Tài khoản" />
+      <div className="mt-4 max-md:px-4">{children}</div>
     </main>
   );
 }

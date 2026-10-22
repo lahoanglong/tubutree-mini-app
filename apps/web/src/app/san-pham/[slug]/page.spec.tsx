@@ -82,17 +82,73 @@ afterEach(() => {
 });
 
 describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB-18)', () => {
-  it('nhãn đã công khai: tên nhãn là liên kết tới /brand/:slug', async () => {
-    api.product = { ...PRODUCT, brandSlug: 'xanh-viet' };
+  it('tên nhãn mở danh mục lọc theo nhãn như Mini App (brandBrowsePath), kể cả nhãn chưa có trang riêng', async () => {
+    for (const brandSlug of ['xanh-viet', undefined]) {
+      api.product = { ...PRODUCT, brandSlug };
+      const c = await mount();
+      const a = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm nhãn Xanh Việt"]')!;
+      expect(a.getAttribute('href')).toBe('/san-pham?brand=Xanh%20Vi%E1%BB%87t');
+    }
+  });
+});
+
+describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
+  const PRODUCT_TUBU = { ...PRODUCT, brandSlug: 'xanh-viet', fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
+
+  it('trang hero: ảnh tràn mép, khối thông tin nền trắng có đệm, không đệm trang ở điện thoại', async () => {
+    api.product = PRODUCT_TUBU;
     const c = await mount();
-    const a = Array.from(c.querySelectorAll('a')).find((x) => x.textContent === 'Xanh Việt')!;
-    expect(a.getAttribute('href')).toBe('/brand/xanh-viet');
+    expect(c.querySelector('main')!.className).toContain('max-md:px-0');
+    expect(c.querySelector('[aria-roledescription="carousel"]')!.className).toContain('max-md:rounded-none');
+    expect(c.querySelector('[data-testid="pdp-info"]')!.className).toContain('max-md:bg-stone-0');
   });
 
-  it('nhãn chưa có trang: tên nhãn chỉ là chữ, không có liên kết chết', async () => {
+  it('chống tràn ngang ở điện thoại: lưới một cột minmax(0,1fr), cột thông tin min-w-0 (jsdom không đo layout, e2e 390px kiểm thật)', async () => {
+    api.product = PRODUCT_TUBU;
     const c = await mount();
-    expect(Array.from(c.querySelectorAll('a')).find((x) => x.textContent === 'Xanh Việt')).toBeUndefined();
-    expect(c.textContent).toContain('Xanh Việt');
+    const info = c.querySelector('[data-testid="pdp-info"]')!;
+    expect(info.className.split(' ')).toContain('min-w-0');
+    expect(info.parentElement!.className.split(' ')).toContain('grid-cols-1');
+    expect(info.parentElement!.className).toContain('md:grid-cols-2');
+  });
+
+  it('hàng nhãn: chấm màu + tên + mũi tên, không gạch chân ở điện thoại; chia sẻ chỉ là biểu tượng', async () => {
+    api.product = PRODUCT_TUBU;
+    const c = await mount();
+    const link = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm nhãn Xanh Việt"]')!;
+    expect(link.className).toContain('max-md:no-underline');
+    expect(link.querySelector('[data-testid="brand-dot"]')).not.toBeNull();
+    expect(link.querySelector('svg')).not.toBeNull();
+    const share = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Chia sẻ')!;
+    expect(share.querySelector('span')!.className).toContain('max-md:sr-only');
+  });
+
+  it('tên sản phẩm chữ UI 18px ở điện thoại, serif từ md', async () => {
+    const c = await mount();
+    expect(c.querySelector('h1')!.className).toContain('max-md:text-lg');
+  });
+
+  it('thứ tự như Mini App: mô tả ngắn → giao hàng → freeship → chứng nhận', async () => {
+    api.product = PRODUCT_TUBU;
+    const c = await mount();
+    const q = (t: string) => c.querySelector(`[data-testid="${t}"]`)!;
+    const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(q('pdp-short-desc'), q('pdp-fulfiller'))).toBe(true);
+    expect(before(q('pdp-fulfiller'), q('pdp-certs'))).toBe(true);
+    expect(q('pdp-fulfiller').className).toContain('max-md:font-semibold');
+    expect(q('pdp-certs').firstElementChild!.className).toContain('max-md:border-0');
+  });
+
+  it('có dòng Điểm Xanh dưới giá như Mini App (nói chung khi chưa biết mốc tích điểm)', async () => {
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-points-earn"]')!.textContent).toBe('Nhận Điểm Xanh khi đơn giao thành công');
+  });
+
+  it('"Đã bán" dồn sang phải dòng giá ở điện thoại', async () => {
+    api.product = { ...PRODUCT, sold: 12 };
+    const c = await mount();
+    const sold = Array.from(c.querySelectorAll('span')).find((s) => s.textContent === 'Đã bán 12')!;
+    expect(sold.className).toContain('max-md:ml-auto');
   });
 });
 

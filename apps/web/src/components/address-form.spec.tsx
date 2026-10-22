@@ -125,9 +125,9 @@ describe('AddressForm — báo lỗi tại từng ô (BUYERWEB-14)', () => {
     expect((c.querySelector('select[aria-label="Phường/xã"]') as HTMLSelectElement).value).toBe('w1');
   });
 
-  it('Hủy gọi onCancel; truy cập: mọi ô có nhãn, vùng chạm đủ 44px', async () => {
+  it('Huỷ gọi onCancel; truy cập: mọi ô có nhãn, vùng chạm đủ 44px', async () => {
     const c = await mount();
-    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Hủy') ?? null);
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Huỷ') ?? null);
     expect(cancel).toHaveBeenCalledTimes(1);
     click(saveBtn(c));
     await flush();

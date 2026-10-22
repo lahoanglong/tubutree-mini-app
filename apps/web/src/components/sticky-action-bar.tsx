@@ -39,6 +39,7 @@ export function StickyActionBar({ children, label }: { children: ReactNode; labe
       role="region"
       aria-label={label}
       data-testid="sticky-bar"
+      data-sticky-bar
       className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-stone-0 pt-3 shadow-raised md:hidden"
       style={{ ...safeAreaPadX('1rem'), paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
     >

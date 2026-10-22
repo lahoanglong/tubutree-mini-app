@@ -22,7 +22,7 @@ function mockAccount(api: MockApi, profile: Profile, role = 'CUSTOMER') {
   api.get('/me/coupons', [{ id: 'c1', code: 'A' }, { id: 'c2', code: 'B' }]);
   api.get('/me/notifications', [{ id: 'n1', templateCode: 'x', payload: {}, status: 'SENT', sentAt: new Date().toISOString() }]);
   api.get('/config/public', { aiAdvisorEnabled: false });
-  api.get('/brand/owner/me', () => reply(404, { message: 'Không tìm thấy' }));
+  api.get('/auth/me', () => ({ ...me(), ownsBrand: false }));
   api.get('/dealer/me', { status: 'NONE', isDealer: false });
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
 }
@@ -49,9 +49,17 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('link', { name: /Mã giảm giá/ })).toContainText('2 mã');
     await expect(page.getByRole('heading', { name: 'Tài sản', level: 2 })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
-    await expect(page.getByRole('heading', { name: /Đơn hàng của tôi/ })).toBeVisible();
+    // Điện thoại giống Mini App (hub không có khối đơn hàng); máy tính còn danh sách đơn.
+    const narrow = (page.viewportSize()?.width ?? 1280) < 768;
+    const orders = page.getByRole('heading', { name: /Đơn hàng của tôi/ });
+    if (narrow) await expect(orders).toBeHidden();
+    else await expect(orders).toBeVisible();
     // Khách thường không thấy nhóm công việc nội bộ.
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toHaveCount(0);
+    // Cờ ownsBrand=false trên /auth/me: khỏi hỏi /brand/owner/me (chờ /auth/me trả lời rồi mới đếm).
+    await expect.poll(() => api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
+    await page.waitForLoadState('networkidle');
+    expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
   });
 
   test('hub: quản trị viên thấy nhóm Công việc', async ({ page, api }) => {
@@ -68,7 +76,10 @@ test.describe('Web khách: tài khoản', () => {
 
     await expect(page.getByRole('heading', { name: 'Sửa hồ sơ', level: 1 })).toBeVisible();
     await expect(page.getByLabel('Họ và tên')).toHaveValue('Nguyễn Văn An');
-    await expect(page.getByText('0912 345 678')).toBeVisible();
+    const narrow = (page.viewportSize()?.width ?? 1280) < 768;
+    const phone = page.getByText('0912 345 678');
+    if (narrow) await expect(phone).toBeHidden();
+    else await expect(phone).toBeVisible();
     await expect(page.getByText('dịch vụ lưu ảnh chưa được bật')).toBeVisible();
 
     const email = page.getByLabel('Email');
@@ -159,7 +170,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/thong-bao')}`);
   });
 
-  test('giới thiệu: khách chưa đăng nhập xem FAQ, lọc nhóm, mở câu hỏi, liên hệ và link chính sách; không có Xóa tài khoản', async ({ page, api }) => {
+  test('giới thiệu: khách chưa đăng nhập xem FAQ, lọc nhóm, mở câu hỏi, liên hệ và link chính sách; không có Xoá tài khoản', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
     api.get('/faqs', [
       { id: 'f1', category: 'Vận chuyển', question: 'Bao lâu thì nhận hàng?', answer: '2-4 ngày.' },
@@ -188,24 +199,24 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('main').getByRole('link', { name: /Hotline/ })).toHaveAttribute('href', 'tel:0984606774');
     await expect(page.getByRole('main').getByRole('link', { name: 'tubutree@gmail.com' })).toHaveAttribute('href', 'mailto:tubutree@gmail.com');
     await expect(page.getByRole('main').getByRole('link', { name: 'Chính sách đổi trả' })).toHaveAttribute('href', '/chinh-sach/doi-tra');
-    await expect(page.getByRole('button', { name: 'Xóa tài khoản' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Xoá tài khoản' })).toHaveCount(0);
   });
 
-  test('giới thiệu: đã đăng nhập gửi yêu cầu xóa tài khoản sau khi xác nhận', async ({ page, api }) => {
+  test('giới thiệu: đã đăng nhập gửi yêu cầu xoá tài khoản sau khi xác nhận', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
     api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
     api.get('/faqs', []);
     api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
-    api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xóa tài khoản' });
+    api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xoá tài khoản' });
     await page.goto('/gioi-thieu');
 
     await expect(page.getByText('Tubu Tree bán những gì?')).toBeVisible();
-    await page.getByRole('button', { name: 'Xóa tài khoản' }).click();
-    await expect(page.getByText('Xóa tài khoản vĩnh viễn?')).toBeVisible();
+    await page.getByRole('button', { name: 'Xoá tài khoản' }).click();
+    await expect(page.getByText('Xoá tài khoản vĩnh viễn?')).toBeVisible();
     const sent = api.waitForCall('POST', '/me/deletion-request');
-    await page.getByRole('button', { name: 'Gửi yêu cầu xóa' }).click();
+    await page.getByRole('button', { name: 'Gửi yêu cầu xoá' }).click();
     await sent;
-    await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xóa tài khoản' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xoá tài khoản' })).toBeVisible();
   });
 
   test('nhận mã từ thẻ QR: đã đăng nhập thì POST /coupons/claim một lần, hiện ưu đãi và xoá ?claim= khỏi URL', async ({ page, api }) => {
@@ -245,7 +256,8 @@ test.describe('Web khách: tài khoản', () => {
     api.post('/me/onboarding', ({ call }) => ({ id: 'u1', onboarded: true, segments: (call.body as { segments: string[] }).segments }));
     // Trang chủ có thể gọi thêm vài API phụ không liên quan tới quiz.
     api.allowUnmocked('POST /events', 'GET /flash-sales/active', 'GET /me/coupons', 'POST /affiliate/touch',
-      'GET /config/public', 'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/upcoming', 'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you');
+      'GET /config/public', 'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/upcoming', 'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you',
+      'GET /me/wishlist/ids');
     await page.goto('/');
 
     const quiz = page.getByRole('dialog', { name: 'Chào mừng đến Tubu Tree' });

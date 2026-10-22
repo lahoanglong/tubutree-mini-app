@@ -204,7 +204,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setStatus('idle');
     setSessionUnavailable(false);
-    qc.clear(); // xóa cache giỏ/đơn để không hiện dữ liệu user cũ
+    qc.clear(); // xoá cache giỏ/đơn để không hiện dữ liệu user cũ
     clearSavedInvoices();
     clearRecentCustomers();
     clearWizardStorage();

@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { ChevronRight, type LucideIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ui } from '@/lib/guest-ui';
+import { miniOutline } from '@/components/loyalty/mini-surface';
 
 export function GameLinkRow({ icon: Icon, title, hint, badge, href }: { icon: LucideIcon; title: string; hint: string; badge?: string; href: string }) {
   return (
-    <Link href={href} className={`flex min-h-11 items-center gap-3 px-4 py-2 hover:bg-stone-50 ${ui.card}`}>
+    <Link href={href} className={`flex min-h-11 items-center gap-3 px-4 py-2 hover:bg-stone-50 ${miniOutline}`}>
       <span aria-hidden="true" className="grid h-9 w-9 flex-none place-items-center rounded-control bg-stone-50">
         <Icon className="h-5 w-5 text-forest-600" />
       </span>

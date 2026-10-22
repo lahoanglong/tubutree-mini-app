@@ -287,6 +287,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
     await press('Xoá khuyến mãi MUA 2 TẶNG 1');
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(Array.from(dialog.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Xoá khuyến mãi này?');
+    expect(byText(dialog, 'button', 'Huỷ')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     click(byText(dialog, 'button', 'Huỷ'));
     await flush();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -357,5 +358,40 @@ describe('tab Doanh thu', () => {
     m.fail.set('GET /brand/owner/me/sales', httpError(403, 'Forbidden resource'));
     await mount();
     expect(text()).toContain('Tài khoản này không có quyền quản lý nhãn hàng.');
+  });
+});
+
+describe('/chu-thuong-hieu — diện mạo Mini App ở điện thoại', () => {
+  it('Xem trang nhãn là nút secondary; thẻ không viền; tiêu đề thẻ serif title-sm', async () => {
+    await mount();
+    expect(document.querySelector('a[href="/brand/sachi"]')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    const info = document.querySelector('section[aria-label="Thông tin nhãn"]')!;
+    expect(info.className).toContain('max-md:border-transparent');
+    expect(info.querySelector('h2')!.className).toContain('font-display');
+    expect(info.querySelector('h2')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+  });
+
+  it('ô Tagline và Nguồn gốc cỡ chữ body-lg như Mini App', async () => {
+    await mount();
+    expect(field('Tagline')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
+    expect(field('Nguồn gốc')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
+  });
+});
+
+describe('/chu-thuong-hieu — khối Khuyến mãi và tiêu đề thẻ', () => {
+  it('tiêu đề thẻ giữ sans 16px ở máy tính, chỉ điện thoại đổi serif title-sm', async () => {
+    await mount();
+    const h = document.querySelector('section[aria-label="Thông tin nhãn"] h2')!;
+    expect(h.className).toContain('text-base');
+    expect(h.className).not.toMatch(/(^|\s)font-display/);
+    expect(h.className).toContain('max-md:font-display');
+  });
+
+  it('Thêm khuyến mãi là nút secondary kiểu Mini App; ô ngày co được để trang không tràn ngang', async () => {
+    await mount();
+    const add = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent?.includes('Thêm khuyến mãi'))!;
+    expect(add.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(document.querySelector('input[aria-label="Từ ngày"]')!.className).toContain('min-w-0');
+    expect(document.querySelector('input[aria-label="Đến ngày"]')!.className).toContain('min-w-0');
   });
 });

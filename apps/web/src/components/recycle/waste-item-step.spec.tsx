@@ -37,7 +37,10 @@ describe('WasteItemStep (web)', () => {
     const battery = card(c, 'Pin cũ');
     expect(battery.textContent).toContain('Sắp nhận');
     expect(battery.textContent).toContain('Đợt này Tubu chưa nhận pin');
-    expect(battery.className).toContain('opacity-[.55]');
+    expect(battery.className).not.toContain('opacity-');
+    expect(battery.getAttribute('aria-disabled')).toBe('true');
+    expect(card(c, 'Pin cũ').querySelector('span.text-stone-500')?.textContent).toBe('Pin cũ');
+    expect(card(c, 'Thùng carton').hasAttribute('aria-disabled')).toBe(false);
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');
   });
@@ -76,5 +79,15 @@ describe('WasteItemStep (web)', () => {
   it('mọi điều khiển có tên', () => {
     const { c } = mount();
     expect(unnamedControls(c)).toEqual([]);
+  });
+});
+
+describe('WasteItemStep — diện mạo Mini App ở điện thoại', () => {
+  it('món chưa có ảnh dùng lá xanh nhạt của ProductThumb thay icon Recycle; chữ phụ cỡ caption', () => {
+    const { c } = mount({ items: [{ ...ITEM_CARTON, imageUrl: null }] });
+    const media = c.querySelector('[data-item-media]')!;
+    expect(media.querySelector('svg[class*="lucide"]')).toBeNull();
+    expect(media.querySelector('path')?.getAttribute('fill')).toBe('var(--forest-200)');
+    expect(card(c, 'Thùng carton').querySelector('p')!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
   });
 });

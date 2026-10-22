@@ -1,6 +1,6 @@
 import { Gift, Sprout } from 'lucide-react';
 import type { Friend } from '@tubutree/app-core/api/game';
-import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { GameCard } from './game-card';
 
 // Tặng nước bạn bè (social). 💧 trên nút và 🌿 ở lời nhắn là nội dung game.
@@ -25,7 +25,7 @@ export function FriendGifts({
               <Sprout className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
               <span className="truncate">{f.nickname}</span>
             </span>
-            <button type="button" disabled={f.giftedToday || sending} onClick={() => onGift(f.id)} className={`${ui.btnSecondary} flex-none`}>
+            <button type="button" disabled={f.giftedToday || sending} onClick={() => onGift(f.id)} className={`${miniBtnSecondary} flex-none`}>
               {f.giftedToday ? 'Đã tặng hôm nay' : 'Tặng 💧'}
             </button>
           </div>

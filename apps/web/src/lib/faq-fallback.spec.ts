@@ -13,11 +13,10 @@ describe('fallbackFaq sau khi gộp TubuXu vào Điểm Xanh (PD-3)', () => {
     expect(a).not.toMatch(/xu/i);
   });
 
-  it('câu Điểm Xanh nói rõ điểm quy đổi từ xu cũ không hết hạn và không đổi được mã giảm giá', () => {
+  it('câu Điểm Xanh không nhắc điểm quy đổi từ xu cũ', () => {
     const a = answer(/Điểm Xanh là gì/);
-    expect(a).toContain('xu cũ');
-    expect(a).toMatch(/không hết hạn/);
-    expect(a).toMatch(/không dùng để đổi mã giảm giá/);
+    expect(a).not.toContain('xu cũ');
+    expect(a).not.toMatch(/100% giá trị hàng/);
   });
 });
 

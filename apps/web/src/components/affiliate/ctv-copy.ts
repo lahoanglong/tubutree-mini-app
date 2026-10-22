@@ -45,5 +45,5 @@ export const COMMISSION_ORDER_STATUS: Record<string, string> = {
   SHIPPING: 'Đang giao',
   DELIVERED: 'Giao thành công',
   RETURNED: 'Đã hoàn',
-  CANCELLED: 'Đã hủy',
+  CANCELLED: 'Đã huỷ',
 };

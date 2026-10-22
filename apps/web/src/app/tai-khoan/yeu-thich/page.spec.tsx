@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
 import WishlistPage from './page';
@@ -81,7 +82,8 @@ describe('/tai-khoan/yeu-thich — Sản phẩm yêu thích', () => {
     expect(c.querySelector('[role="alert"]')).not.toBeNull();
     click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Thử lại')!);
     await flush(4);
-    expect(mocks.get).toHaveBeenCalledTimes(2);
+    // Tim trên thẻ gọi thêm danh sách id yêu thích; chỉ đếm lần tải danh sách.
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/me/wishlist')).toHaveLength(2);
     expect(c.textContent).toContain('Nước rửa chén');
   });
 

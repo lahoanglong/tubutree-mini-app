@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Recycle } from 'lucide-react';
 import type { WasteMeItemDTO } from '@tubutree/shared-types';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
+import { ProductThumb } from '@/components/mini';
 import { UNCAPPED_QTY_MAX, capSentence, groupProgressText, monthRemainingText, ruleText } from './recycle-labels';
 
 interface WasteItemStepProps {
@@ -32,25 +32,21 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
             key={item.id}
             data-item
             data-status={item.status}
-            className={`flex gap-3 rounded-card border border-stone-200 bg-stone-0 p-3 ${comingSoon ? 'opacity-[.55]' : ''}`}
+            aria-disabled={comingSoon || undefined}
+            className="flex gap-3 rounded-card border border-stone-200 bg-stone-0 p-3"
           >
-            <span data-item-media className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-control bg-forest-50 text-forest-600">
-              {item.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- ảnh món do admin tải lên, kích thước cố định 48px
-                <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <Recycle className="h-6 w-6" aria-hidden="true" />
-              )}
+            <span data-item-media>
+              <ProductThumb src={item.imageUrl} alt="" size={48} />
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-stone-900">{item.name}</span>
+                <span className={`text-sm font-semibold max-md:text-[length:var(--type-body-md-size)] ${comingSoon ? 'text-stone-500' : 'text-stone-900'}`}>{item.name}</span>
                 {comingSoon && <Badge>Sắp nhận</Badge>}
               </div>
-              <p className="text-xs text-stone-700">{ruleText(item)}</p>
-              {item.prepInstructions && <p className="text-xs text-stone-600">{item.prepInstructions}</p>}
-              {cap && <p className="text-xs text-stone-600">{cap}</p>}
-              {monthLeft && <p className={`text-xs ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
+              <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
+              {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
+              {cap && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{cap}</p>}
+              {monthLeft && <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
               {item.status === 'ACTIVE' && (
                 <div className="mt-1 flex flex-col gap-2">
                   <div>

@@ -5,6 +5,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 const mocks = vi.hoisted(() => ({ serverGet: vi.fn(), get: vi.fn() }));
 vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks.serverGet }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn() } }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 
 import RulesPage, { metadata } from './page';
 

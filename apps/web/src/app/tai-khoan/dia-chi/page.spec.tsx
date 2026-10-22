@@ -69,7 +69,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(a?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Ftai-khoan%2Fdia-chi');
   });
 
-  it('liệt kê địa chỉ, đánh dấu mặc định, chỉ địa chỉ chưa mặc định mới có nút "Đặt làm mặc định"', async () => {
+  it('liệt kê địa chỉ, đánh dấu mặc định, chỉ địa chỉ chưa mặc định mới có nút "Đặt mặc định"', async () => {
     const c = await mount();
     const items = Array.from(c.querySelectorAll('ul > li'));
     expect(items).toHaveLength(2);
@@ -84,7 +84,7 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     mocks.list = [];
     const c = await mount();
     expect(c.textContent).toContain('Bạn chưa lưu địa chỉ nào');
-    expect(btn(c, '+ Thêm địa chỉ mới')).toBeDefined();
+    expect(btn(c, 'Thêm địa chỉ mới')).toBeDefined();
   });
 
   it('không tải được: báo lỗi và có nút Thử lại', async () => {
@@ -127,57 +127,57 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(mocks.update).toHaveBeenCalledWith('a2', { isDefault: true });
   });
 
-  it('xoá phải xác nhận: "Giữ lại" thì không xoá; "Xóa" thì gọi DELETE đúng id', async () => {
+  it('xoá phải xác nhận: "Giữ lại" thì không xoá; "Xoá" thì gọi DELETE đúng id', async () => {
     const c = await mount();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
     expect(c.querySelector('[role="alertdialog"]')).not.toBeNull();
     click(btn(c, 'Giữ lại')!);
     await flush(2);
     expect(mocks.remove).not.toHaveBeenCalled();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
     await flush(4);
     expect(mocks.remove).toHaveBeenCalledWith('a2');
     expect(c.querySelector('[role="alertdialog"]')).toBeNull();
   });
 
-  it('xoá xong: báo "Đã xóa địa chỉ." như Mini App', async () => {
+  it('xoá xong: báo "Đã xoá địa chỉ." như Mini App', async () => {
     const c = await mount();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
     await flush(4);
-    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã xóa địa chỉ.');
+    expect(c.querySelector('[role="status"]')?.textContent).toBe('Đã xoá địa chỉ.');
   });
 
-  it('WEB-13: mở hộp xác nhận xóa thì focus vào "Giữ lại"; "Giữ lại" trả focus về nút "Xóa" của đúng dòng đó', async () => {
+  it('WEB-13: mở hộp xác nhận xoá thì focus vào "Giữ lại"; "Giữ lại" trả focus về nút "Xoá" của đúng dòng đó', async () => {
     const c = await mount();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
     expect(document.activeElement).toBe(btn(c, 'Giữ lại'));
     expect(document.getElementById(c.querySelector('[role="alertdialog"]')!.getAttribute('aria-describedby')!)!.textContent).toContain('vẫn giữ nguyên địa chỉ giao');
     click(btn(c, 'Giữ lại')!);
     await flush(2);
-    expect(document.activeElement).toBe(btn(c, 'Xóa địa chỉ của Trần Bình'));
+    expect(document.activeElement).toBe(btn(c, 'Xoá địa chỉ của Trần Bình'));
   });
 
-  it('WEB-13: xóa lỗi thì focus về nút "Xóa" của dòng; xóa xong (dòng sắp biến mất) thì về nút "Thêm địa chỉ mới", không rơi về <body>', async () => {
-    mocks.remove.mockRejectedValueOnce(new Error('Không xóa được.'));
+  it('WEB-13: xoá lỗi thì focus về nút "Xoá" của dòng; xoá xong (dòng sắp biến mất) thì về nút "Thêm địa chỉ mới", không rơi về <body>', async () => {
+    mocks.remove.mockRejectedValueOnce(new Error('Không xoá được.'));
     const c = await mount();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
     await flush(4);
-    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không xóa được.');
-    expect(document.activeElement).toBe(btn(c, 'Xóa địa chỉ của Trần Bình'));
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không xoá được.');
+    expect(document.activeElement).toBe(btn(c, 'Xoá địa chỉ của Trần Bình'));
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
     await flush(4);
     expect(mocks.remove).toHaveBeenCalledTimes(2);
-    expect(document.activeElement).toBe(btn(c, '+ Thêm địa chỉ mới'));
+    expect(document.activeElement).toBe(btn(c, 'Thêm địa chỉ mới'));
   });
 
-  it('xoá xong rồi đặt mặc định thất bại: thông báo đã xóa biến mất, chỉ còn lỗi', async () => {
+  it('xoá xong rồi đặt mặc định thất bại: thông báo đã xoá biến mất, chỉ còn lỗi', async () => {
     const c = await mount();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
     await flush(4);
     expect(c.querySelector('[role="status"]')).not.toBeNull();
     mocks.update.mockRejectedValue(new Error('Không đặt được mặc định'));
@@ -189,13 +189,13 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Không đặt được mặc định');
   });
 
-  it('thông báo đã xóa tự tắt sau vài giây', async () => {
+  it('thông báo đã xoá tự tắt sau vài giây', async () => {
     const c = await mount();
     vi.useFakeTimers();
     const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
     try {
-      click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-      click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+      click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+      click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
       await advance(100);
       expect(c.querySelector('[role="status"]')).not.toBeNull();
       await advance(5000);
@@ -208,18 +208,18 @@ describe('/tai-khoan/dia-chi — Sổ địa chỉ (BUYERWEB-14)', () => {
   it('BE không cho xoá (địa chỉ đang gắn gói giao định kỳ): hiện nguyên văn lời BE', async () => {
     mocks.remove.mockRejectedValue(new Error('Địa chỉ đang dùng cho gói giao định kỳ: Dầu gội. Hãy đổi địa chỉ của gói trước.'));
     const c = await mount();
-    click(btn(c, 'Xóa địa chỉ của Trần Bình')!);
-    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xóa') ?? null);
+    click(btn(c, 'Xoá địa chỉ của Trần Bình')!);
+    click(Array.from(c.querySelectorAll('[role="alertdialog"] button')).find((b) => b.textContent === 'Xoá') ?? null);
     await flush(4);
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('đang dùng cho gói giao định kỳ');
   });
 
   it('thêm mới: gọi POST và đóng form', async () => {
     const c = await mount();
-    click(btn(c, '+ Thêm địa chỉ mới')!);
+    click(btn(c, 'Thêm địa chỉ mới')!);
     await flush(2);
     expect(c.querySelector('form[aria-label="Thêm địa chỉ mới"]')).not.toBeNull();
-    click(btn(c, 'Hủy')!);
+    click(btn(c, 'Huỷ')!);
     expect(c.querySelector('form')).toBeNull();
   });
 

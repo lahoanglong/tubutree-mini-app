@@ -35,7 +35,7 @@ describe('OrderCard', () => {
     expect(c.textContent).toContain('Nước rửa chén +1');
     expect(c.textContent).toContain('3 món · 20/09/2026');
     expect(c.textContent).toContain('149.000đ');
-    expect(c.textContent).toContain('Đã giao');
+    expect(c.textContent).toContain('Giao thành công');
   });
 
   it('mã đơn là liên kết tới chi tiết đơn, có mô tả là tóm tắt (món, ngày, tổng)', () => {

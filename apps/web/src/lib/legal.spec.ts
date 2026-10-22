@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug } from './legal';
+import { DEFAULT_LEGAL_VARS, LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug } from './legal';
 
-const VARS = { returnWindowDays: 7, freeshipThreshold: 200000 };
+const VARS = { returnWindowDays: 7, freeshipThreshold: 199000 };
 const SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
+
+describe('DEFAULT_LEGAL_VARS (Q12)', () => {
+  it('ngưỡng freeship dự phòng 199.000đ', () => {
+    expect(DEFAULT_LEGAL_VARS.freeshipThreshold).toBe(199000);
+  });
+});
 
 describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
   it('đúng bốn trang, theo thứ tự hiển thị ở chân trang', () => {
@@ -47,23 +53,25 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
   it('đổi trả: số ngày và ngưỡng freeship lấy từ biến truyền vào, không cứng trong chữ', () => {
     const doiTra = defaultLegalContent('doi-tra', { returnWindowDays: 10, freeshipThreshold: 300000 }, SUPPORT);
     expect(doiTra).toContain('10 ngày');
-    expect(doiTra).not.toContain('7 ngày');
+    // Thời gian hoàn tiền (7 ngày làm việc) là mốc cố định riêng, không phải số ngày đổi trả.
+    expect(doiTra).toContain('Thời gian hoàn tiền: 7 ngày làm việc kể từ khi');
+    expect(doiTra.replace('7 ngày làm việc', '')).not.toContain('7 ngày');
     const vanChuyen = defaultLegalContent('van-chuyen', { returnWindowDays: 10, freeshipThreshold: 300000 }, SUPPORT);
     expect(vanChuyen).toContain('300.000đ');
-    expect(vanChuyen).not.toContain('200.000đ');
+    expect(vanChuyen).not.toContain('199.000đ');
   });
 
-  it('ngưỡng freeship 0: ghi "miễn phí vận chuyển cho mọi đơn", không in "Đơn từ 0đ" hay mốc mặc định 200.000đ', () => {
+  it('ngưỡng freeship 0: ghi "miễn phí vận chuyển cho mọi đơn", không in "Đơn từ 0đ" hay mốc mặc định 199.000đ', () => {
     const text = defaultLegalContent('van-chuyen', { returnWindowDays: 7, freeshipThreshold: 0 }, SUPPORT);
     expect(text).toContain('Mọi đơn đều được miễn phí vận chuyển');
     expect(text).not.toContain('Đơn từ');
     expect(text).not.toContain('0đ');
-    expect(text).not.toContain('200.000đ');
+    expect(text).not.toContain('199.000đ');
     expect(text).not.toContain('ngưỡng miễn phí khác');
   });
 
   it('hạn đổi trả 0 ngày: nói thẳng chưa nhận đổi trả sau khi giao, không in "trong vòng 0 ngày"', () => {
-    const text = defaultLegalContent('doi-tra', { returnWindowDays: 0, freeshipThreshold: 200000 }, SUPPORT);
+    const text = defaultLegalContent('doi-tra', { returnWindowDays: 0, freeshipThreshold: 199000 }, SUPPORT);
     expect(text).not.toContain('0 ngày');
     expect(text).toContain('chưa nhận yêu cầu đổi trả sau khi giao');
   });
@@ -87,5 +95,13 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
     expect(dk).toContain('chuyển khoản ngân hàng');
     expect(dk).toContain('Ví Tubu');
     expect(dk).not.toMatch(/Visa|MasterCard|MoMo|ZaloPay|VNPay/i);
+  });
+});
+
+describe('legal — chính sách đổi trả: tiền hoàn đi đâu', () => {
+  const text = defaultLegalContent('doi-tra', VARS, SUPPORT);
+  it('nói đúng như Mini App và luồng hoàn tiền của API: Ví Tubu hoặc tài khoản ngân hàng khách chọn sau khi duyệt', () => {
+    expect(text).toContain('hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt');
+    expect(text).not.toContain('theo cách bạn đã thanh toán');
   });
 });

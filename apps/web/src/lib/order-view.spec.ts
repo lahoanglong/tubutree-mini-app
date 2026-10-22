@@ -37,12 +37,12 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
 
   it('nhãn trạng thái đơn bằng tiếng Việt có dấu, lạ thì giữ nguyên', () => {
     expect(orderStatusLabel('PENDING_PAYMENT')).toBe('Chờ thanh toán');
-    expect(orderStatusLabel('DELIVERED')).toBe('Đã giao');
-    expect(orderStatusLabel('CANCELLED')).toBe('Đã hủy');
+    expect(orderStatusLabel('DELIVERED')).toBe('Giao thành công');
+    expect(orderStatusLabel('CANCELLED')).toBe('Đã huỷ');
     expect(orderStatusLabel('WHATEVER')).toBe('WHATEVER');
   });
 
-  it('tông màu: chờ thanh toán = cảnh báo, hủy/hoàn = trung tính, còn lại = xanh', () => {
+  it('tông màu: chờ thanh toán = cảnh báo, huỷ/hoàn = trung tính, còn lại = xanh', () => {
     expect(orderStatusTone('PENDING_PAYMENT')).toContain('warning');
     expect(orderStatusTone('CANCELLED')).toContain('stone');
     expect(orderStatusTone('RETURNED')).toContain('stone');
@@ -180,8 +180,8 @@ describe('isRefundInProgress — một luật "Đang hoàn tiền" cho khách v�
   });
 });
 
-describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', () => {
-  it('hủy được tới trước khi bàn giao vận chuyển (D1, BUYERWEB-5): Chờ thanh toán / Đã xác nhận / Đang đóng gói', () => {
+describe('canCancelOrder — khớp luật tự huỷ của BE (BUYERWEB-13)', () => {
+  it('huỷ được tới trước khi bàn giao vận chuyển (D1, BUYERWEB-5): Chờ thanh toán / Đã xác nhận / Đang đóng gói', () => {
     expect(canCancelOrder({ status: 'PENDING_PAYMENT' }, 'u1')).toBe(true);
     expect(canCancelOrder({ status: 'CONFIRMED' }, 'u1')).toBe(true);
     expect(canCancelOrder({ status: 'PACKED' }, 'u1')).toBe(true);
@@ -190,19 +190,19 @@ describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', (
     }
   });
 
-  it('đơn đại lý giữ mốc cũ: Đang đóng gói thì không tự hủy', () => {
+  it('đơn đại lý giữ mốc cũ: Đang đóng gói thì không tự huỷ', () => {
     expect(canCancelOrder({ status: 'PACKED', type: 'DEALER' }, 'u1')).toBe(false);
     expect(canCancelOrder({ status: 'CONFIRMED', type: 'DEALER' }, 'u1')).toBe(true);
   });
 
-  it('đơn CTV lên hộ khách đã trả tiền: CTV không tự hủy; khách cuối hoặc đơn chưa trả thì vẫn hủy', () => {
+  it('đơn CTV lên hộ khách đã trả tiền: CTV không tự huỷ; khách cuối hoặc đơn chưa trả thì vẫn huỷ', () => {
     const o = { status: 'CONFIRMED', placedForCustomer: true, paymentStatus: 'PAID', referrerUserId: 'ctv1' };
     expect(canCancelOrder(o, 'ctv1')).toBe(false);
     expect(canCancelOrder(o, 'khach')).toBe(true);
     expect(canCancelOrder({ ...o, paymentStatus: 'UNPAID' }, 'ctv1')).toBe(true);
   });
 
-  it('kho đã đặt hãng (mã vận đơn không phải của Gomdon): không bày nút hủy — BE từ chối "đã bàn giao" (R3-CANCEL-2)', () => {
+  it('kho đã đặt hãng (mã vận đơn không phải của Gomdon): không bày nút huỷ — BE từ chối "đã bàn giao" (R3-CANCEL-2)', () => {
     expect(canCancelOrder({ status: 'PACKED', shippingCode: 'GHN1933' }, 'u1')).toBe(false);
     expect(canCancelOrder({ status: 'PACKED', shippingCode: 'BE1', hasRecyclingPickup: true, gomdonPartnerCode: 'BE1' }, 'u1')).toBe(true);
   });
@@ -213,7 +213,7 @@ describe('canCancelOrder — khớp luật tự hủy của BE (BUYERWEB-13)', (
     expect(canCancelOrder({ status: 'CANCELLED', canCancel: true }, 'u1')).toBe(false);
   });
 
-  it('thu gom tái chế mà bưu tá đã lấy hàng: không hủy được nữa; chưa lấy (mã 1/2/10) thì vẫn hủy được', () => {
+  it('thu gom tái chế mà bưu tá đã lấy hàng: không huỷ được nữa; chưa lấy (mã 1/2/10) thì vẫn huỷ được', () => {
     expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '3' }, 'u')).toBe(false);
     expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: true, gomdonStatus: '1' }, 'u')).toBe(true);
     expect(canCancelOrder({ status: 'CONFIRMED', hasRecyclingPickup: false, gomdonStatus: '3' }, 'u')).toBe(true);
@@ -230,12 +230,12 @@ describe('buyerOrderStatusLabel — đơn đã có mã vận đơn hãng (R3-CAN
     expect(buyerOrderStatusLabel({ status: 'PACKED' })).toBe('Đang đóng gói');
     expect(buyerOrderStatusLabel({ status: 'PACKED', shippingCode: 'BE1', gomdonOrderId: 'BE1' })).toBe('Đang đóng gói');
     expect(buyerOrderStatusLabel({ status: 'SHIPPING', shippingCode: 'GHN1933' })).toBe('Đang giao');
-    expect(buyerOrderStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1933' })).toBe('Đã hủy');
+    expect(buyerOrderStatusLabel({ status: 'CANCELLED', shippingCode: 'GHN1933' })).toBe('Đã huỷ');
   });
 });
 
 describe('hành trình đơn và mua lại', () => {
-  it('timelineIndex: 5 bước chuẩn, Đã hủy/Đã hoàn nằm ngoài (-1)', () => {
+  it('timelineIndex: 5 bước chuẩn, Đã huỷ/Đã hoàn nằm ngoài (-1)', () => {
     expect(['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING', 'DELIVERED'].map(timelineIndex)).toEqual([0, 1, 2, 3, 4]);
     expect(timelineIndex('CANCELLED')).toBe(-1);
     expect(timelineIndex('RETURNED')).toBe(-1);

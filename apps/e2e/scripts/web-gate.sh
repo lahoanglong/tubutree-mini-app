@@ -84,6 +84,7 @@ export E2E_LOG_DIR="${E2E_LOG_DIR:-$E2E_DIR/server-logs}"
   npx prisma migrate deploy
   npx tsx prisma/check-partial-indexes.ts
   npx tsx prisma/seed.ts
+  npx tsx -e "const w = require('../e2e/tests/support/waste-db'); w.seedWasteRulesText(w.WASTE_RULES_TEXT)"
 )
 
 cd "$E2E_DIR"

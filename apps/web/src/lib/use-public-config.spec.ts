@@ -7,6 +7,9 @@ describe('PUBLIC_CONFIG_FALLBACK', () => {
     expect(PUBLIC_CONFIG_FALLBACK.shippingEta).toBeNull();
     expect(PUBLIC_CONFIG_FALLBACK.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
   });
+  it('ngưỡng freeship dự phòng 199.000đ, khớp ngưỡng đơn đầu (Q12)', () => {
+    expect(PUBLIC_CONFIG_FALLBACK.freeshipThreshold).toBe(199_000);
+  });
 });
 
 describe('resolvePublicConfig', () => {

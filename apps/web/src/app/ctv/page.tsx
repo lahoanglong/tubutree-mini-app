@@ -28,6 +28,7 @@ import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatVndShort } from '@/components/affiliate/vnd-short';
 import { ui } from '@/lib/guest-ui';
+import { phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -45,6 +46,8 @@ import {
   PAYOUT_META,
   WITHDRAWING_META,
 } from '@/components/affiliate/ctv-copy';
+import BackLink from '@/components/back-link';
+import { PageHeader } from '@/components/ui/page-header';
 
 const TITLE = 'Cộng tác viên';
 const DEFAULT_MIN_WITHDRAW_BANK = 50_000;
@@ -64,10 +67,10 @@ async function copyToClipboard(text: string): Promise<boolean> {
 function Shell({ children }: { children: ReactNode }) {
   return (
     <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
+      <BackLink href="/tai-khoan">
         ← Tài khoản
-      </Link>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>{TITLE}</h1>
+      </BackLink>
+      <PageHeader title={TITLE} parentHref="/tai-khoan" className="md:mt-1" />
       <div className="mt-4">{children}</div>
     </main>
   );
@@ -165,9 +168,9 @@ function RegisterGate() {
 
   const benefits = [
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
-    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
+    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
     { Icon: Landmark, text: `Rút về ngân hàng (tối thiểu ${formatVndShort(minBank)}) hoặc quy đổi 1:1 vào Ví Tubu` },
-    { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
+    { Icon: TrendingUp, text: 'Bảng hoa hồng cập nhật liên tục, minh bạch' },
   ];
 
   return (
@@ -183,7 +186,7 @@ function RegisterGate() {
 
         <ul className="mt-4 space-y-3">
           {benefits.map(({ Icon, text }) => (
-            <li key={text} className={`${ui.card} flex items-center gap-3 p-4`}>
+            <li key={text} className={`${ui.card} ${phoneFlatCard} flex items-center gap-3 p-4`}>
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-control bg-stone-100">
                 <Icon className="h-5 w-5 text-forest-600" aria-hidden="true" />
               </span>
@@ -192,7 +195,7 @@ function RegisterGate() {
           ))}
         </ul>
 
-        <section aria-label={CTV_TERMS.heading} className={`${ui.card} mt-4 p-4`}>
+        <section aria-label={CTV_TERMS.heading} className={`${ui.card} ${phoneFlatCard} mt-4 p-4`}>
           <h2 className="text-sm font-semibold text-stone-900">{CTV_TERMS.heading}</h2>
           <ul className="mt-2 list-disc space-y-1.5 pl-5">
             {CTV_TERMS.items.map((item) => (
@@ -221,7 +224,7 @@ function RegisterGate() {
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section aria-label={title} className={`${ui.card} p-4`}>
+    <section aria-label={title} className={`${ui.card} ${phoneFlatCard} p-4`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className={ui.sectionTitle}>{title}</h2>
         {action}
@@ -242,7 +245,7 @@ function SectionSkeleton() {
 
 function Kpi({ label, value, hint, highlight }: { label: string; value: string; hint?: string; highlight?: boolean }) {
   return (
-    <div className={`${ui.card} flex-1 p-4`}>
+    <div className={`${ui.card} ${phoneFlatCard} flex-1 p-4`}>
       <div className={`text-lg font-bold tabular-nums ${highlight ? 'text-forest-700' : 'text-stone-900'}`}>{value}</div>
       <div className="text-xs text-stone-700">{label}</div>
       {hint && <div className="text-xs text-stone-600">{hint}</div>}
@@ -411,7 +414,7 @@ function Dashboard() {
               <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(d?.monthCommission ?? 0)}</div>
               <div className="mt-3 flex gap-4">
                 <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
-                <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
+                <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
                 <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
               </div>
             </section>
@@ -432,11 +435,11 @@ function Dashboard() {
           {d?.tier && <TierCard dash={d} tiers={tiersQ.data} />}
 
           {milestonesQ.isError ? (
-            <div className={`${ui.card} p-4`}>
+            <div className={`${ui.card} ${phoneFlatCard} p-4`}>
               <ErrorState message={errText(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
             </div>
           ) : milestonesQ.isLoading ? (
-            <div className={`${ui.card} p-4`}>
+            <div className={`${ui.card} ${phoneFlatCard} p-4`}>
               <SectionSkeleton />
             </div>
           ) : milestonesQ.data ? (
@@ -445,11 +448,11 @@ function Dashboard() {
 
           {isWebRouteReady('/hoc-vien') && (
             <div>
-              <Link href="/hoc-vien" className={`${ui.btnSecondary} w-full gap-2`}>
+              <Link href="/hoc-vien" className={`${ui.btnSecondary} ${phoneSecondary} w-full gap-2`}>
                 <GraduationCap className="h-5 w-5" aria-hidden="true" />
-                Học viện Tubu
+                Học viện CTV
               </Link>
-              <p className="mt-1 text-center text-xs text-stone-600">Học cách bán hàng và nhận hoa hồng hiệu quả hơn.</p>
+              <p className="mt-1 text-center text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:text-[var(--color-text-tertiary)]">Khoá học đào tạo dành cho CTV</p>
             </div>
           )}
 
@@ -460,13 +463,13 @@ function Dashboard() {
                 Chia sẻ
               </button>
             </div>
-            <div className="mb-1.5 mt-3 text-xs font-semibold text-stone-900">Caption gợi ý (chạm để sao chép)</div>
+            <div className="mb-1.5 mt-3 text-xs font-semibold text-stone-900">Lời đăng gợi ý (chạm để sao chép)</div>
             <ul className="space-y-1.5">
               {captions.map((cap) => (
                 <li key={cap}>
                   <button
                     type="button"
-                    onClick={() => void copy(cap, 'Đã sao chép caption', 'Không sao chép được — hãy chọn và chép thủ công.')}
+                    onClick={() => void copy(cap, 'Đã sao chép lời đăng', 'Không sao chép được — hãy chọn và chép thủ công.')}
                     className="min-h-11 w-full rounded-control bg-stone-50 p-2 text-left text-xs text-stone-700 hover:bg-stone-100"
                   >
                     {cap}
@@ -494,9 +497,7 @@ function Dashboard() {
                   <li key={l.id} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2">
                     <div>
                       <div className="text-sm font-semibold text-stone-900">{l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}</div>
-                      <div className="text-xs text-stone-600">
-                        {l.clicks} click · {l.conversions} đơn
-                      </div>
+                      <div className="text-xs text-stone-600">{l.clicks} lượt bấm</div>
                     </div>
                     <button
                       type="button"

@@ -72,7 +72,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
     return [];
   },
   getAddresses: async () => state.noAddress ? [] : [
-    { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: 'p', districtCode: '', wardCode: 'w', isDefault: true },
+    { id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Cầu Giấy', street: '1 Xuân Thuỷ', provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN01_001', isDefault: true },
   ],
   checkoutQuote: async () => {
     state.quoteCalls += 1;
@@ -285,7 +285,7 @@ describe('/thanh-toan — Mã giảm giá (C-025)', () => {
     expect(container.querySelector<HTMLButtonElement>('button[aria-label="Bỏ mã giảm giá WELCOME30"]')!.disabled).toBe(true);
     release();
     await flush(6);
-    expect(container.textContent).toContain('Đặt hàng thành công');
+    expect(container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
   });
 
   it('đang đặt hàng thì mã trong ví và nút Áp dụng bị khoá', async () => {

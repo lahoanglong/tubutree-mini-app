@@ -2,12 +2,13 @@ import { Check, Lock, Star, Ticket } from 'lucide-react';
 import type { SeasonPassReward, SeasonPassState, SeasonPassTier } from '@tubutree/app-core/api/game';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { GameCard } from './game-card';
 
 type Track = 'free' | 'premium';
 
-const xpText = (n: number) => `${formatNumber(n)} XP`;
+const xpText = (n: number) => `${formatNumber(n)} điểm kinh nghiệm`;
 const rewardText = (r: SeasonPassReward) => (r.type === 'SEEDS' ? formatDrops(r.amount) : formatPoints(r.amount));
 
 function ClaimedMark() {
@@ -36,7 +37,7 @@ export function SeasonPass({
   const maxXp = tiers[tiers.length - 1]?.xpRequired ?? 1;
   const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
   return (
-    <GameCard title="Chặng Mùa (Season Pass)" icon={Ticket}>
+    <GameCard title="Chặng Mùa" icon={Ticket}>
       <p className="text-xs text-stone-700">{`Điểm danh mỗi ngày để lên bậc mùa "${pass.seasonTitle ?? ''}"`}</p>
       <div className="mb-1 mt-2.5 flex justify-between text-xs">
         <span className="font-semibold text-forest-700">{xpText(xp)}</span>
@@ -47,7 +48,7 @@ export function SeasonPass({
       {!pass.premiumEligible && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-promo-fg">
           <Lock className="h-4 w-4 flex-none" aria-hidden="true" />
-          Cần đăng ký định kỳ để mở phần thưởng Premium.
+          Cần đăng ký định kỳ để mở phần thưởng Cao cấp.
         </p>
       )}
 
@@ -56,7 +57,11 @@ export function SeasonPass({
           const busy = (track: Track) => claimPending && claimVariables?.tier === t.tier && claimVariables?.track === track;
           const premiumLocked = !t.unlocked || !pass.premiumEligible;
           return (
-            <div key={t.tier} className={`rounded-control p-3 ${t.unlocked ? 'bg-stone-50' : 'bg-stone-100 opacity-70'}`}>
+            // Bậc khoá khác bậc mở bằng nền trắng + viền nét đứt, không làm mờ: chữ phải giữ ≥ 4,5:1.
+            <div
+              key={t.tier}
+              className={`rounded-control border p-3 ${t.unlocked ? 'border-transparent bg-stone-50' : 'border-dashed border-[color:var(--color-border-strong)] bg-stone-0'}`}
+            >
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="font-semibold text-stone-900">{`Bậc ${t.tier + 1}`}</span>
                 <span className="text-stone-600">{xpText(t.xpRequired)}</span>
@@ -82,7 +87,7 @@ export function SeasonPass({
                 <div className="min-w-0 flex-1 text-center">
                   <div className="flex items-center justify-center gap-1 text-xs text-honey-600">
                     <Star className="h-4 w-4" aria-hidden="true" />
-                    Premium
+                    Cao cấp
                   </div>
                   <div className="text-xs font-semibold text-honey-600">{rewardText(t.premium)}</div>
                   {t.claimedPremium ? (
@@ -92,7 +97,7 @@ export function SeasonPass({
                       type="button"
                       disabled={premiumLocked || busy('premium')}
                       onClick={() => onClaim(t.tier, 'premium')}
-                      className={`${ui.btnSecondary} mt-1 w-full gap-1`}
+                      className={`${miniBtnSecondary} mt-1 w-full gap-1`}
                     >
                       {premiumLocked && <Lock className="h-4 w-4" aria-hidden="true" />}
                       {premiumLocked ? 'Chưa mở' : 'Nhận'}

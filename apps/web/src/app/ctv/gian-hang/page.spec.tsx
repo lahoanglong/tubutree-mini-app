@@ -265,6 +265,28 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     expect(text().match(/Khách không thấy/g)).toHaveLength(1);
   });
 
+  it('nhãn "Khách không thấy" được xuống dòng, không tràn khung 375px', async () => {
+    state.sf = storefront({
+      collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ id: 'i1', hiddenReason: 'Sản phẩm không còn cho CTV bán' })] }],
+    });
+    const { container } = mount();
+    await flush();
+    const badge = Array.from(container.querySelectorAll('span')).find((s) => s.textContent?.startsWith('Khách không thấy'))!;
+    expect(badge.className).toContain('!whitespace-normal');
+    expect(badge.className).toContain('max-w-full');
+  });
+
+  it('tên món bị ẩn đổi sang chữ nhạt đủ tương phản, không làm mờ bằng opacity (D6)', async () => {
+    state.sf = storefront({
+      collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item({ id: 'i1', isHidden: true })] }],
+    });
+    const { container } = mount();
+    await flush();
+    const name = Array.from(container.querySelectorAll('div')).find((d) => d.children.length === 0 && d.textContent === 'Trà xanh')!;
+    expect(name.className).toContain('text-stone-500');
+    expect(name.className).not.toContain('opacity-');
+  });
+
   it('ghim và ẩn gọi đúng API', async () => {
     mount();
     await flush();
@@ -569,7 +591,7 @@ describe('chia sẻ', () => {
     click(btn('Chia sẻ gian hàng'));
     await flush();
     expect(dialog()?.textContent).toContain('/s/shop-aff-1?ref=SHOP-AFF-1');
-    expect(dialog()?.textContent).toContain('Caption gợi ý');
+    expect(dialog()?.textContent).toContain('Lời đăng gợi ý');
     click(btn('Sao chép link', dialog()!));
     await flush();
     expect(state.copied[0]).toMatch(/\/s\/shop-aff-1\?ref=SHOP-AFF-1$/);
@@ -872,5 +894,45 @@ describe('không vỡ ở màn hẹp', () => {
     expect(container.querySelector('main')?.className).toContain('max-w-5xl');
     expect(container.innerHTML).not.toMatch(/min-w-\[\d{3,}px\]|w-\[\d{4,}px\]/);
     expect(container.querySelector('.sticky')).not.toBeNull();
+  });
+});
+
+// Kiểu Mini App ở điện thoại (pages/storefront-builder.tsx): nút phụ nền nhạt không viền, ảnh bìa gradient, không nhãn bố cục, thẻ phẳng.
+describe('kiểu Mini App ở điện thoại', () => {
+  it('Sửa hồ sơ / Cấu hình nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
+    state.sf = storefront({ isPublished: true });
+    mount();
+    await flush();
+    for (const name of ['Sửa hồ sơ', 'Cấu hình', 'Gỡ đăng']) {
+      expect(btn(name).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+      expect(btn(name).className).toContain('max-md:border-0');
+    }
+  });
+
+  it('ảnh bìa thiếu: gradient xanh nhạt, chữ "Thêm ảnh bìa" không đậm; ảnh bìa lấy từ dữ liệu được bọc url("...")', async () => {
+    const a = mount();
+    await flush();
+    const cover = a.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!;
+    expect(cover.className).toContain('max-md:bg-[linear-gradient(135deg,var(--sage-100),var(--forest-100))]');
+    expect(Array.from(cover.querySelectorAll('span')).find((s) => s.textContent === 'Thêm ảnh bìa')!.className).toContain('max-md:font-normal');
+    a.unmount();
+    state.sf = storefront({ coverUrl: 'https://cdn.example/c.jpg");background:red;("' });
+    const b = mount();
+    await flush();
+    const style = b.container.querySelector<HTMLElement>('[data-testid="profile-cover"]')!.getAttribute('style')!;
+    expect(style).toContain('url("https://cdn.example/c.jpg%22);background:red;(%22")');
+  });
+
+  it('chip bố cục không hiện ở điện thoại; "Nội dung" xanh đậm không gạch chân; thanh dưới nền nhạt, không xuống dòng', async () => {
+    state.sf = storefront({ isPublished: true });
+    mount();
+    await flush();
+    const layout = Array.from(document.querySelectorAll('span')).find((s) => s.textContent === 'Lưới');
+    if (layout) expect(layout.className).toContain('max-md:hidden');
+    const content = Array.from(document.querySelectorAll('button')).find((b) => b.textContent === 'Nội dung');
+    if (content) expect(content.className).toContain('max-md:no-underline');
+    const preview = document.querySelector<HTMLElement>('a[href^="/s/"]')!;
+    expect(preview.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(btn('Chia sẻ gian hàng').className).toContain('max-md:whitespace-nowrap');
   });
 });

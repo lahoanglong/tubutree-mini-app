@@ -3,7 +3,7 @@ import type { CartSummary } from '@tubutree/app-core/api/cart';
 import { summarizeReorder } from './reorder-summary';
 import type { ReorderLine } from './reorder-types';
 
-const CART: CartSummary = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 0 };
+const CART: CartSummary = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 0 };
 const line = (key: string, productName: string): ReorderLine => ({
   key, variationId: `v-${key}`, productName, variationName: '', thumbnail: null, unitPrice: 1, defaultQuantity: 1, maxQuantity: 9, available: true,
 });

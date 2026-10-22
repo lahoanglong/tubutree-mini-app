@@ -13,6 +13,8 @@ export interface FlashItem {
   soldCount: number;
   quota: number;
   endAt: string;
+  /** Giờ máy chủ lúc dựng danh sách; thiếu thì dùng đồng hồ trình duyệt. */
+  serverNow?: string;
 }
 
 export interface CardPricing {

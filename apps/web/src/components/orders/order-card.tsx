@@ -9,6 +9,7 @@ import { bankPaymentHref, buyerOrderStatusLabel, isReorderable, orderDetailHref 
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 import { canPayNow, orderUnitCount, showsPaymentDeadline } from './order-rules';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
@@ -38,20 +39,20 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
   const canPay = canPayNow(o);
   const summaryId = useId();
   return (
-    <li data-testid="order-card" className={`relative isolate flex flex-col gap-2.5 p-3 ${ui.card}`}>
+    <li data-testid="order-card" className={`relative isolate flex flex-col gap-2.5 p-3 ${ui.card} ${mini.card}`}>
       <div className="flex items-center justify-between gap-2">
         <Link
           href={orderDetailHref(o.code)}
           aria-label={`Đơn ${o.code}`}
           aria-describedby={summaryId}
-          className="flex min-h-11 min-w-0 items-center break-all text-sm font-semibold tracking-wide text-stone-900 after:absolute after:inset-0 after:content-['']"
+          className="flex min-h-11 min-w-0 items-center break-all text-sm font-semibold tracking-wide text-stone-900 max-md:min-h-6 max-md:text-xs max-md:font-bold after:absolute after:inset-0 after:content-['']"
         >
           {o.code}
         </Link>
         <Badge tone={STATUS_TONE[o.status] ?? 'neutral'}>{buyerOrderStatusLabel(o)}</Badge>
       </div>
       <div id={summaryId} className="flex items-center gap-3">
-        <div className="flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-stone-100">
+        <div className={`flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-stone-100 ${mini.thumb}`}>
           {first?.thumbnail ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={first.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -82,7 +83,7 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
       )}
       {canReorder && (
         <div data-testid="order-card-actions" className="flex justify-end">
-          <button type="button" onClick={onReorder} className={`${ui.btnSecondary} relative z-10`}>
+          <button type="button" onClick={onReorder} className={`${ui.btnSecondary} ${mini.secondary} relative z-10 max-md:text-base`}>
             Mua lại
           </button>
         </div>

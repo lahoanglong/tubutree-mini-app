@@ -300,3 +300,42 @@ describe('/hoan-tien — truy cập', () => {
     expect(c.textContent).not.toMatch(/⚠|↩/);
   });
 });
+
+describe('/hoan-tien — giao diện điện thoại như Mini App', () => {
+  it('thẻ đã duyệt chờ về Ví dùng gradient cam đất ở điện thoại, giữ xanh rừng từ md', async () => {
+    const c = await mount();
+    const cls = c.querySelector('section[aria-label="Hoàn tiền đã duyệt"]')!.className;
+    expect(cls).toContain('max-md:from-[var(--clay-500)]');
+    expect(cls).toContain('max-md:to-[var(--clay-700)]');
+    expect(cls).toContain('from-forest-600');
+  });
+
+  it('sàn không có logo: vòng tròn gradient xanh như Avatar ZaUI, không in chữ cái đầu', async () => {
+    const c = await mount();
+    const logo = tile(c, 'Shopee')!.querySelector('span[aria-hidden="true"]')!;
+    expect(logo.textContent).toBe('');
+    expect(logo.className).toContain('rounded-full');
+    expect(logo.className).toContain('from-forest-500');
+  });
+
+  it('tên sàn đậm; ô sàn và thẻ giao dịch không viền ở điện thoại', async () => {
+    const c = await mount();
+    const name = Array.from(tile(c, 'Shopee')!.querySelectorAll('span')).find((x) => x.textContent === 'Shopee')!;
+    expect(name.className).toContain('max-md:font-semibold');
+    expect(tile(c, 'Shopee')!.classList.contains('border')).toBe(false);
+    expect(c.querySelector('section[aria-labelledby="cashback-txns"]')!.classList.contains('border')).toBe(false);
+  });
+
+  it('dòng giao dịch cuối vẫn có đường kẻ dưới ở điện thoại', async () => {
+    const c = await mount();
+    const rows = c.querySelectorAll('section[aria-labelledby="cashback-txns"] li');
+    expect(rows[rows.length - 1]!.className).toContain('max-md:last:border-b');
+  });
+
+  it('trang bỏ đệm 48px của body và tiêu đề nằm trên thanh trắng', async () => {
+    const c = await mount();
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+});
+

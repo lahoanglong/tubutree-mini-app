@@ -192,7 +192,7 @@ describe('/tai-khoan/thong-bao: nhắc mua lại (REORDER_REMINDER)', () => {
     variationId: 'v1', productId: 'p1', slug: 'dau-goi', productName: 'Dầu gội', variationName: '500ml', brand: 'Tubu', thumbnail: null,
     price: 90000, salePrice: null, stock: 5, inStock: true, timesBought: 3, lastPurchasedAt: '2026-09-01T00:00:00Z',
   };
-  const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
+  const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 1 };
   const route = (items: unknown[] | Error) =>
     mocks.get.mockImplementation(async (path: string) => {
       if (path === '/me/purchased-items') {

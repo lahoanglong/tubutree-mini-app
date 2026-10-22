@@ -252,7 +252,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     const today = panel(c, 'Hôm nay');
     for (const t of ['Tưới cây', 'Điểm danh chuỗi']) expect(today.textContent).toContain(t);
     expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
-      expect.arrayContaining(['Nhiệm vụ', 'Quiz Sống Xanh hôm nay', 'Vòng quay may mắn']),
+      expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn']),
     );
     expect(panel(c, 'Vườn').textContent).toContain('Tác động xanh của bạn');
     expect(today.textContent).not.toContain('Tác động xanh của bạn');
@@ -504,7 +504,7 @@ describe('Vườn Xanh: quiz Sống Xanh', () => {
   it('hết quiz: lời chúc hoàn thành', async () => {
     state.data['/game/quiz/today'] = [];
     const c = await mount();
-    expect(c.textContent).toContain('Bạn đã hoàn thành quiz hôm nay 🎉');
+    expect(c.textContent).toContain('Bạn đã hoàn thành câu đố hôm nay 🎉');
   });
 
   it('nhiều câu: nhãn phân loại, Câu n/N, trả lời gọi API đúng id và lựa chọn, khoá đáp án, Câu tiếp theo sang câu kế, câu cuối Hoàn thành', async () => {
@@ -532,7 +532,7 @@ describe('Vườn Xanh: quiz Sống Xanh', () => {
     expect(c.textContent).toContain('Chính xác! +5💧');
     click(btn(c, 'Hoàn thành'));
     await flush(4);
-    expect(c.textContent).toContain('Bạn đã hoàn thành quiz hôm nay 🎉');
+    expect(c.textContent).toContain('Bạn đã hoàn thành câu đố hôm nay 🎉');
   });
 
   it('lỗi gửi đáp án: báo lỗi, chưa hiện đáp án, đáp án bật lại; phân loại lạ rơi về Thiên nhiên', async () => {
@@ -748,5 +748,40 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
     await flush(6);
     expect(keys()).toEqual(expect.arrayContaining(['["game","missions"]', '["me"]']));
     expect(keys()).not.toContain('["loyalty"]');
+  });
+});
+
+describe('Vườn Xanh: giao diện điện thoại như Mini App', () => {
+  it('nút phụ (Mua vé giữ lửa, Hứng giọt sương, Góp quỹ) là nút ZaUI secondary ở điện thoại', async () => {
+    const c = await mount();
+    for (const label of ['Mua (', 'Hứng giọt sương', 'Góp quỹ trồng cây']) {
+      const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes(label));
+      expect(btn, label).toBeTruthy();
+      expect(btn!.className, label).toContain('max-md:bg-forest-50');
+    }
+  });
+
+  it('thẻ khối không viền; dòng lối vào là thẻ viền mảnh không bóng', async () => {
+    state.config = { waste: { enabled: true } };
+    state.wasteReady = true;
+    const c = await mount();
+    const sections = Array.from(c.querySelectorAll('section')).filter((s) => s.querySelector('h2'));
+    expect(sections.length).toBeGreaterThan(2);
+    expect(sections.filter((s) => s.classList.contains('border'))).toEqual([]);
+    expect(c.querySelector('a[href="/doi-rac"]')!.className).toContain('max-md:shadow-none');
+  });
+
+  it('trang bỏ đệm đỉnh và tiêu đề nằm trên thanh trắng', async () => {
+    const c = await mount();
+    expect(c.querySelector('main')!.className).toContain('max-md:pt-0');
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+});
+
+describe('Vườn Xanh: tiêu đề khối như Mini App', () => {
+  it('tiêu đề khối cỡ title-sm ở điện thoại', async () => {
+    const c = await mount();
+    const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === 'Nhiệm vụ')!;
+    expect(h.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
   });
 });

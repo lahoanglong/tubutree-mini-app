@@ -28,7 +28,7 @@ describe('/hoc-vien — trang công khai', () => {
     mounted.push(r);
     await flush();
     expect(r.container.querySelectorAll('h1')).toHaveLength(1);
-    expect(r.container.querySelector('h1')?.textContent).toBe('CTV Academy');
+    expect(r.container.querySelector('h1')?.textContent).toBe('Học viện CTV');
     expect(r.container.textContent).toContain('Học kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày');
     expect(headingProblems(r.container)).toEqual([]);
   });
@@ -38,6 +38,25 @@ describe('/hoc-vien — trang công khai', () => {
     mounted.push(r);
     await flush();
     expect(r.container.querySelectorAll('h1')).toHaveLength(1);
-    expect(r.container.querySelector('h1')?.textContent).toBe('CTV Academy');
+    expect(r.container.querySelector('h1')?.textContent).toBe('Học viện CTV');
+  });
+});
+
+describe('/hoc-vien — giao diện điện thoại như Mini App', () => {
+  it('tiêu đề trên thanh trắng, trang bỏ đệm 48px của body', async () => {
+    const r = render(await HocVienPage());
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(r.container.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+});
+
+describe('/hoc-vien — tiêu đề chừa chỗ nút lùi', () => {
+  it('thanh tiêu đề chừa 64px bên trái cho nút lùi nổi', async () => {
+    const r = render(await HocVienPage());
+    mounted.push(r);
+    await flush();
+    expect(r.container.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
   });
 });

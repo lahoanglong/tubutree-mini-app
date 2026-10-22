@@ -69,13 +69,13 @@ afterEach(() => {
 });
 
 describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10)', () => {
-  it('dòng hết hàng: không có nút +/− (không thể làm mất dòng), có nhãn Hết hàng và nút Xóa rõ ràng', async () => {
+  it('dòng hết hàng: không có nút +/− (không thể làm mất dòng), có nhãn Hết hàng và nút Xoá rõ ràng', async () => {
     state.cart = cartOf([line({ stock: 0 })]);
     const { container } = await mount();
     expect(container.textContent).toContain('Hết hàng');
     expect(button(container, 'Tăng số lượng Dầu gội bồ kết')).toBeNull();
     expect(button(container, 'Giảm số lượng Dầu gội bồ kết')).toBeNull();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     expect(state.removed).toEqual(['i1']);
     expect(state.updates).toEqual([]);
@@ -107,7 +107,7 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([{ id: 'i1', q: 3 }]);
   });
 
-  it('có dòng hết hàng: nút Thanh toán bị khoá và giải thích phải xóa dòng đó', async () => {
+  it('có dòng hết hàng: nút Thanh toán bị khoá và giải thích phải xoá dòng đó', async () => {
     state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const { container } = await mount();
     expect(container.querySelector('a[href="/thanh-toan"]')).toBeNull();
@@ -167,10 +167,12 @@ describe('/gio-hang — chia theo nơi giao (D4)', () => {
     expect(sections[0]!.textContent).toContain('Dầu gội bồ kết');
     expect(sections[1]!.textContent).toContain('Mật ong rừng');
     expect(container.textContent).toContain('mỗi nơi giao thành một đơn riêng');
-    expect(container.textContent).toContain('miễn phí vận chuyển phần hàng Tubu Tree giao');
+    expect(container.textContent).toContain('miễn phí giao hàng cho phần hàng Tubu Tree giao');
+    const banner = Array.from(container.querySelectorAll('.max-md\\:hidden')).find((e) => e.textContent?.includes('Mua thêm'));
+    expect(banner?.textContent).toContain('miễn phí giao hàng cho phần hàng Tubu Tree giao');
   });
 
-  it('ngưỡng miễn phí vận chuyển tính trên phần hàng Tubu Tree giao, không cộng hàng gian hàng tự giao', async () => {
+  it('ngưỡng miễn phí giao hàng tính trên phần hàng Tubu Tree giao, không cộng hàng gian hàng tự giao', async () => {
     state.cart = {
       ...cartOf([
         line({ id: 'm1', productName: 'Mật ong rừng', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } }),
@@ -182,7 +184,7 @@ describe('/gio-hang — chia theo nơi giao (D4)', () => {
     expect(container.textContent).toMatch(/Mua thêm\s*200\.000/);
   });
 
-  it('chỉ có hàng gian hàng tự giao: không hiện lời mời mua thêm để được miễn phí vận chuyển', async () => {
+  it('chỉ có hàng gian hàng tự giao: không hiện lời mời mua thêm để được miễn phí giao hàng', async () => {
     state.cart = cartOf([line({ id: 'm1', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } })]);
     const { container } = await mount();
     expect(container.textContent).not.toContain('Mua thêm');

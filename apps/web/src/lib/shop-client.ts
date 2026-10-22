@@ -1,5 +1,6 @@
 'use client';
 
+import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
 import type { FlashItem } from './flash-price';
@@ -160,6 +161,8 @@ export interface PublicConfig {
   returnWindowDays?: number;
   /** Cờ chương trình đổi rác do máy chủ bật; API cũ chưa trả thì coi như tắt. */
   waste?: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
+  /** Khoảng ngày giao dự kiến; null/thiếu khi chủ shop chưa cấu hình (hoặc API cũ) thì ẩn dòng "Giao dự kiến". */
+  shippingEta?: { minDays: number; maxDays: number } | null;
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 
@@ -180,7 +183,9 @@ export async function getProductStock(slug: string): Promise<Record<string, numb
  * HTML; trình duyệt hỏi lại cái này để giá hiển thị khớp giá giỏ và đơn.
  */
 export async function getActiveFlashSales(): Promise<FlashItem[]> {
-  return apiFetch<FlashItem[]>('/flash-sales/active', { auth: false, cache: 'no-store' });
+  const items = await apiFetch<FlashItem[]>('/flash-sales/active', { auth: false, cache: 'no-store' });
+  syncServerClock(Array.isArray(items) ? items[0]?.serverNow : undefined);
+  return items;
 }
 
 // Cart
@@ -525,7 +530,13 @@ export interface BankQrDTO {
   qrImageUrl: string;
   /** Hạn chuyển khoản (ISO) khi đơn còn chờ tiền; null khi đã trả hoặc không có hạn. */
   paymentDeadline?: string | null;
+  /** Giờ máy chủ lúc trả lời; thiếu thì dùng đồng hồ trình duyệt. */
+  serverNow?: string;
 }
-export const getBankQr = (code: string) => apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
+export const getBankQr = async (code: string) => {
+  const qr = await apiFetch<BankQrDTO>(`/payments/bank-qr/${code}`);
+  syncServerClock(qr?.serverNow);
+  return qr;
+};
 
 export { formatVnd } from './format-vnd';

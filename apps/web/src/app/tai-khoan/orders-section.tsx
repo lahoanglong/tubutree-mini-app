@@ -104,7 +104,7 @@ export function OrdersSection() {
         <div className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-stone-700">
           <span role="status">Kết quả cho “{query}”</span>
           <button type="button" onClick={clearSearch} className={`${ui.btnText} text-forest-700`}>
-            Xóa tìm kiếm
+            Xoá tìm kiếm
           </button>
         </div>
       )}

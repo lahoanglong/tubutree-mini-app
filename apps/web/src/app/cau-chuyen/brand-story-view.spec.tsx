@@ -33,9 +33,21 @@ describe('/cau-chuyen — Hành trình nguyên liệu', () => {
     const h1 = c.querySelectorAll('h1');
     expect(h1).toHaveLength(1);
     expect(h1[0]!.textContent).toBe('Hành trình nguyên liệu');
-    expect(c.textContent).toContain('Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ');
+    expect(c.textContent).toContain('Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ.');
+    // Mini App: chữ phụ cỡ body-md, giãn dòng 1.5 (không còn chữ 16px màu stone-700).
+    expect(c.querySelector('main p')!.className).toContain('max-md:text-[var(--color-text-secondary)]');
     expect(c.querySelector('h2')?.textContent).toBe(`${BRAND_ORIGINS.length} Thương hiệu & Tỉnh thành xuất xứ`);
     expect(headingProblems(c)).toEqual([]);
+  });
+
+  it('tên nhãn và tỉnh trên ô nằm trên nền tối nhẹ (D8-1), chữ không bị làm mờ bằng opacity', () => {
+    const c = mount();
+    const tile = gridTile(c, 'Pơ Lang');
+    const scrim = tile.querySelector<HTMLElement>('[data-testid="brand-tile-scrim"]')!;
+    expect(scrim.className).toContain('bg-[var(--color-brand-tile-scrim)]');
+    expect(scrim.textContent).toContain('Pơ Lang');
+    expect(scrim.textContent).toContain('Đắk Lắk');
+    expect(scrim.innerHTML).not.toContain('opacity-');
   });
 
   it('bản đồ SVG tĩnh có nhãn cho trình đọc màn hình', () => {

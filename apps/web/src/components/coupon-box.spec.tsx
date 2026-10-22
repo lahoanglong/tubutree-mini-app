@@ -80,7 +80,7 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
       c('TIEN20', { type: 'AMOUNT', value: 20000, maxDiscount: null, endAt: null }),
     ];
     const box = await mount();
-    expect(card(box, 'SHIP0').textContent).toContain('Miễn phí vận chuyển');
+    expect(card(box, 'SHIP0').textContent).toContain('Miễn phí giao hàng');
     expect(card(box, 'TIEN20').textContent).toContain('Giảm 20.000đ');
     expect(card(box, 'TIEN20').textContent).toContain('Không thời hạn');
   });
@@ -111,7 +111,7 @@ describe('CouponBox — thẻ voucher (R2-BUYERWEB-7)', () => {
     expect(free.querySelector('button')!.disabled).toBe(true);
     expect(free.querySelector('button')!.textContent).toBe('Không cần');
     expect(free.querySelector('button')!.getAttribute('aria-label')).toBe('Không cần dùng mã SHIP');
-    expect(free.textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(free.textContent).toContain('Đơn này đã miễn phí giao hàng');
     expect(free.textContent).not.toContain('cho đơn này');
     expect(free.className).toContain('opacity-60');
 
@@ -166,7 +166,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     const giam = card(box, 'GIAM30').textContent!;
     expect(giam).toContain('Giảm 30% (tối đa 50.000đ)');
     expect(giam).toContain('Giảm 43.800đ cho đơn này');
-    expect(card(box, 'FS').textContent).toContain('Miễn phí ship 19.000đ cho đơn này');
+    expect(card(box, 'FS').textContent).toContain('Miễn phí giao hàng 19.000đ cho đơn này');
   });
 
   it('trang giỏ (không phí giao) hoặc freeship không miễn được gì: không ghi số tiền freeship', async () => {
@@ -196,7 +196,7 @@ describe('CouponBox — mức giảm thật của từng mã từ máy chủ (/c
     state.previews.mockRejectedValue(new Error('404'));
     const box = await mountWith({ addressId: 'a1' }, 0);
     expect(state.previews).toHaveBeenCalled();
-    expect(card(box, 'FS').textContent).toContain('Đơn này đã miễn phí vận chuyển');
+    expect(card(box, 'FS').textContent).toContain('Đơn này đã miễn phí giao hàng');
     expect(card(box, 'FS').textContent).not.toContain('cho đơn này');
   });
 
@@ -223,13 +223,14 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
   const toggle = (box: HTMLElement) => box.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
   const panel = (box: HTMLElement) => box.querySelector<HTMLElement>('#coupon-panel')!;
 
-  it('mặc định thu gọn: chỉ một dòng "Mã giảm giá" có gợi ý số mã trong ví, phần nhập và danh sách ẩn', async () => {
+  it('mặc định thu gọn: chỉ một dòng "Mã giảm giá" có lời mời "Chọn mã" như Mini App (không đếm số mã), phần nhập và danh sách ẩn', async () => {
     state.coupons = [c('A1'), c('B2')];
     const box = await mount();
     expect(toggle(box).getAttribute('aria-expanded')).toBe('false');
     expect(toggle(box).getAttribute('aria-controls')).toBe('coupon-panel');
     expect(toggle(box).textContent).toContain('Mã giảm giá');
-    expect(toggle(box).textContent).toContain('Bạn có 2 mã');
+    expect(toggle(box).textContent).toContain('Chọn hoặc nhập mã giảm giá');
+    expect(toggle(box).textContent).toContain('Chọn mã');
     expect(panel(box).hidden).toBe(true);
   });
 
@@ -244,9 +245,9 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     expect(panel(box).hidden).toBe(true);
   });
 
-  it('ví không có mã nào: gợi ý "Thêm mã"', async () => {
+  it('ví không có mã nào: vẫn mời "Chọn mã" như Mini App', async () => {
     const box = await mount();
-    expect(toggle(box).textContent).toContain('Thêm mã');
+    expect(toggle(box).textContent).toContain('Chọn mã');
   });
 
   it('áp mã lỗi thì mở lại ô nhập cùng lời báo, kể cả khi khách đã thu gọn dòng trong lúc chờ', async () => {
@@ -270,7 +271,56 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
     mounted.push(r);
     await flush(4);
     expect(r.container.textContent).toContain('WELCOME30');
-    expect(r.container.querySelector('button[aria-expanded]')).toBeNull();
+    // Thẻ "Thay đổi" chỉ dành cho điện thoại (md:hidden): ở máy tính vẫn không có dòng mở rộng.
+    expect(r.container.querySelector('button[aria-expanded]:not([data-testid="coupon-change"])')).toBeNull();
+  });
+
+  it('điện thoại, đã áp mã: thẻ như Mini App có chip mã, số đã giảm và chữ "Thay đổi"; bấm mở ô nhập, có nút bỏ mã', async () => {
+    state.coupons = [c('A1')];
+    const r = render(<CouponBox currentCode="WELCOME30" subtotal={100000} appliedDiscount={30000} />);
+    mounted.push(r);
+    await flush(4);
+    const card = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-change"]')!;
+    expect(card.className).toMatch(/\bmd:hidden\b/);
+    expect(card.textContent).toContain('WELCOME30');
+    expect(card.textContent).toContain('-30.000đ');
+    expect(card.textContent).toContain('Thay đổi');
+    expect(card.textContent).not.toContain('Chọn mã');
+    expect(r.container.querySelector('#coupon-panel')).toBeNull();
+    click(card);
+    const panel = r.container.querySelector<HTMLElement>('#coupon-panel')!;
+    expect(panel.hidden).toBe(false);
+    expect(panel.className).toMatch(/\bmd:hidden\b/);
+    expect(byText(panel, 'button', 'Bỏ mã đang áp dụng')).not.toBeNull();
+  });
+
+  it('điện thoại, đã áp FREESHIP30 và phí ship 0: mở "Thay đổi" thì hỏi máy chủ, mã đang dùng ghi "Đang dùng", mã freeship khác không bị "Không cần"', async () => {
+    state.coupons = [c('FREESHIP30', { type: 'FREESHIP', value: 30000, maxDiscount: null }), c('FREESHIP15', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
+    state.previews.mockResolvedValue([
+      { code: 'FREESHIP30', eligible: true, discount: 0 },
+      { code: 'FREESHIP15', eligible: true, discount: 0 },
+    ]);
+    const r = render(<CouponBox currentCode="FREESHIP30" subtotal={300000} shippingFee={0} preview={{ addressId: 'a1' }} />);
+    mounted.push(r);
+    await flush(8);
+    expect(state.previews).not.toHaveBeenCalled();
+    click(r.container.querySelector('[data-testid="coupon-change"]'));
+    await flush(8);
+    expect(state.previews).toHaveBeenCalledWith({ addressId: 'a1' });
+    expect(card(r.container, 'FREESHIP30').textContent).toContain('Đang dùng');
+    expect(card(r.container, 'FREESHIP30').textContent).not.toContain('Dùng mã');
+    expect(card(r.container, 'FREESHIP15').textContent).not.toContain('Không cần');
+  });
+
+  it('chưa có số máy chủ: mã đang áp vẫn ghi "Đang dùng", không bị khoá "Không cần"', async () => {
+    state.coupons = [c('FREESHIP30', { type: 'FREESHIP', value: 30000, maxDiscount: null })];
+    const r = render(<CouponBox currentCode="FREESHIP30" subtotal={300000} shippingFee={0} />);
+    mounted.push(r);
+    await flush(4);
+    click(r.container.querySelector('[data-testid="coupon-change"]'));
+    const t = card(r.container, 'FREESHIP30').textContent!;
+    expect(t).toContain('Đang dùng');
+    expect(t).not.toContain('Không cần');
   });
 
   it('nhãn của ô nhập vẫn là "Mã giảm giá" (cho trình đọc màn hình) và vùng chạm 44px', async () => {

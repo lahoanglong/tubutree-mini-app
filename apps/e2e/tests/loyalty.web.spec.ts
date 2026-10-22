@@ -53,11 +53,11 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     mockLoyalty(api, { done: false });
     await page.goto('/tai-khoan/diem-xanh');
     await expect(page.getByRole('heading', { name: 'Hạng thành viên & Điểm Xanh', level: 1 })).toBeVisible();
-    await expect(page.getByText('1.800 điểm Xanh')).toBeVisible();
+    await expect(page.getByText('1.800 Điểm Xanh')).toBeVisible();
     await expect(page.getByText('trong đó 119 điểm không hết hạn')).toBeVisible();
     await expect(page.getByText('Còn 2,5 triệu mua hàng để lên hạng Lộc Biếc')).toBeVisible();
-    await expect(page.getByText('Miễn phí vận chuyển')).toBeVisible();
-    await expect(page.getByText('Tích điểm từ đơn hàng · TB0')).toBeVisible();
+    await expect(page.getByText('Miễn phí giao hàng')).toBeVisible();
+    await expect(page.getByText('Tích điểm từ đơn hàng', { exact: true })).toBeVisible();
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {

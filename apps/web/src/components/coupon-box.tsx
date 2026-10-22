@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, Ticket, X } from 'lucide-react';
+import { ChevronRight, Ticket, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   applyCoupon,
@@ -64,6 +64,9 @@ export function CouponBox({
   disabled = false,
   preview,
   previewKey,
+  actionLabel = 'Chọn mã',
+  band = false,
+  appliedDiscount = 0,
 }: {
   currentCode: string | null;
   subtotal: number;
@@ -83,6 +86,12 @@ export function CouponBox({
    * dấu này là số xem trước cũ hết đúng và phải hỏi lại.
    */
   previewKey?: string;
+  /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán "Xem mã" như Mini App. */
+  actionLabel?: string;
+  /** Thanh toán: dải phẳng tràn ngang như các khối khác của Mini App thay vì thẻ nổi của giỏ. */
+  band?: boolean;
+  /** Số đã giảm bởi mã đang áp; thẻ điện thoại ghi cạnh chip mã như Mini App. */
+  appliedDiscount?: number;
 }) {
   const qc = useQueryClient();
   const [code, setCode] = useState('');
@@ -97,12 +106,15 @@ export function CouponBox({
     queryKey: ['coupon-previews', settledSig],
     queryFn: () => getCouponPreviews((JSON.parse(settledSig!) as [CouponPreviewParams, string])[0]),
     // Ví không có mã nào thì không có gì để tính: khỏi gọi máy chủ mỗi lần đổi giỏ.
-    enabled: !!settledSig && !currentCode && (couponsQ.data?.length ?? 0) > 0,
+    enabled: !!settledSig && (!currentCode || open) && (couponsQ.data?.length ?? 0) > 0,
     retry: false,
   });
   // Số chỉ đúng cho đúng giỏ đã hỏi: giỏ vừa đổi (chưa hỏi lại) hoặc đang tải lại thì quay về phép đoán phía máy, không hiện số cũ.
-  const previewTrusted = !!previewSig && settledSig === previewSig && previewsQ.isSuccess && !previewsQ.isFetching;
-  const previews = new Map((previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]));
+  const previewTrusted =
+    !!previewSig && settledSig === previewSig && previewsQ.isSuccess && !previewsQ.isFetching;
+  const previews = new Map(
+    (previewTrusted ? (previewsQ.data ?? []) : []).map((p) => [p.code.toUpperCase(), p]),
+  );
   const usable = (c: { code: string; minOrder: number | null }) => {
     const p = previews.get(c.code.toUpperCase());
     return p ? p.eligible : isCouponEligible(c, subtotal);
@@ -118,6 +130,7 @@ export function CouponBox({
     onSuccess: (cart) => {
       setErr(null);
       setCode('');
+      setOpen(false);
       afterChange(cart);
     },
     onError: (e) => {
@@ -135,131 +148,219 @@ export function CouponBox({
   const busy = apply.isPending || drop.isPending || disabled;
 
   return (
-    <div className="mt-3 border-t border-stone-200 pt-3">
+    <div
+      className={`mt-3 border-t border-stone-200 pt-3 max-md:mt-0 max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] ${
+        band ? 'max-md:p-4' : 'max-md:rounded-card max-md:p-3 max-md:shadow-[var(--elevation-1)]'
+      }`}
+    >
       {currentCode ? (
-        <div className="flex items-center justify-between rounded-control border border-dashed border-promo-solid bg-promo-bg pl-3">
-          <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">
-            <Ticket className="h-4 w-4" aria-hidden="true" /> {currentCode}
-          </span>
-          <button
-            type="button"
-            onClick={() => drop.mutate()}
-            disabled={busy}
-            aria-label={`Bỏ mã giảm giá ${currentCode}`}
-            className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      ) : (
         <>
+          <div className="flex items-center justify-between rounded-control border border-dashed border-promo-solid bg-promo-bg pl-3 max-md:hidden">
+            <span className="flex items-center gap-2 text-sm font-semibold text-promo-fg">
+              <Ticket className="h-4 w-4" aria-hidden="true" /> {currentCode}
+            </span>
+            <button
+              type="button"
+              onClick={() => drop.mutate()}
+              disabled={busy}
+              aria-label={`Bỏ mã giảm giá ${currentCode}`}
+              className="flex h-11 w-11 items-center justify-center text-promo-fg disabled:opacity-50"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls="coupon-panel"
-            className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-stone-900"
+            data-testid="coupon-change"
+            className="flex min-h-11 w-full items-center justify-between gap-2 text-left md:hidden"
           >
-            <span className="inline-flex items-center gap-2">
-              <Ticket className="h-4 w-4 text-promo-fg" aria-hidden="true" />
-              Mã giảm giá
+            <span className="inline-flex items-center gap-2.5">
+              <span className="grid h-9 w-9 flex-none place-items-center rounded-control bg-[var(--clay-50)]">
+                <Ticket className="h-5 w-5 text-[color:var(--clay-700)]" aria-hidden="true" />
+              </span>
+              <span className="flex flex-col text-sm font-semibold text-stone-900">
+                Mã giảm giá
+                <span className="inline-flex items-center gap-2">
+                  <span className="rounded-control border border-dashed border-[var(--clay-500)] bg-[var(--clay-50)] px-1.5 py-0.5 text-xs font-bold text-[color:var(--clay-700)]">
+                    {currentCode}
+                  </span>
+                  {appliedDiscount > 0 && (
+                    <span className="text-xs font-normal text-success-fg">
+                      -{formatVnd(appliedDiscount)}
+                    </span>
+                  )}
+                </span>
+              </span>
             </span>
-            <span className="inline-flex items-center gap-1 font-medium text-forest-700">
-              {(couponsQ.data?.length ?? 0) > 0 ? `Bạn có ${couponsQ.data!.length} mã` : 'Thêm mã'}
-              <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-[color:var(--color-text-brand)]">
+              Thay đổi
+              <ChevronRight
+                className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              />
             </span>
           </button>
-          <div id="coupon-panel" hidden={!open}>
-            <label htmlFor="coupon-code" className="sr-only">
-              Mã giảm giá
-            </label>
-            <div className="mt-1 flex gap-2">
-              <input
-                id="coupon-code"
-                name="coupon-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="Nhập mã giảm giá"
-                autoCapitalize="characters"
-                autoComplete="off"
-                className={`${ui.field} min-w-0 flex-1`}
-              />
-              <button
-                type="button"
-                onClick={() => apply.mutate(code)}
-                disabled={!code.trim() || busy}
-                className={`${ui.btnPrimary} px-4`}
-              >
-                Áp dụng
-              </button>
-            </div>
-            {(couponsQ.data?.length ?? 0) > 0 && (
-              <>
-                <ul aria-label="Mã giảm giá của bạn" className="mt-3 space-y-2">
-                  {(previews.size > 0
-                    ? [...couponsQ.data!.filter(usable), ...couponsQ.data!.filter((c) => !usable(c))]
-                    : sortCouponsForCart(couponsQ.data!, subtotal)
-                  )
-                    .slice(0, showAll ? undefined : VISIBLE_COUPONS)
-                    .map((c) => {
-                      const pv = previews.get(c.code.toUpperCase());
-                      // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
-                      const redundant = !pv && isFreeshipRedundant(c, shippingFee);
-                      const meetsMin = !!pv || isCouponEligible(c, subtotal);
-                      const serverBlocked = !!pv && !pv.eligible;
-                      const eligible = meetsMin && !redundant && !serverBlocked;
-                      const saving = !pv
-                        ? null
-                        : pv.discount > 0
-                          ? `Giảm ${formatVnd(pv.discount)} cho đơn này`
-                          : (pv.freeshipSaving ?? 0) > 0
-                            ? `Miễn phí ship ${formatVnd(pv.freeshipSaving!)} cho đơn này`
-                            : null;
-                      return (
-                        <li
-                          key={c.code}
-                          className={`flex items-center gap-3 rounded-control border border-dashed border-promo-solid bg-promo-bg p-3 ${
-                            eligible ? '' : redundant ? 'opacity-60' : 'opacity-80'
-                          }`}
-                        >
-                          <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
-                          <div className="min-w-0 flex-1">
-                            <div className="break-all text-sm font-bold text-promo-fg">{autoCouponName(c.code) ?? c.code}</div>
-                            <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
-                            {saving && <div className="text-xs font-semibold text-success-fg">{saving}</div>}
-                            {serverBlocked && pv.reason && <div className="text-xs font-medium text-warning-fg">{pv.reason}</div>}
-                            {redundant && <div className="text-xs text-stone-700">Đơn này đã miễn phí vận chuyển</div>}
-                            {c.minOrder != null && (
-                              <div className={`text-xs ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}>
-                                {meetsMin
-                                  ? `Đơn tối thiểu ${formatVnd(c.minOrder)}`
-                                  : `Cần đơn tối thiểu ${formatVnd(c.minOrder)} — mua thêm ${formatVnd(c.minOrder - subtotal)} để dùng mã này`}
-                              </div>
-                            )}
-                            <div className="text-xs text-stone-700">{couponExpiryLabel(c.endAt)}</div>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={!eligible || busy}
-                            onClick={() => apply.mutate(c.code)}
-                            aria-label={`${redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
-                            className={`${ui.btnPrimary} flex-none px-3`}
-                          >
-                            {redundant ? 'Không cần' : serverBlocked ? 'Không áp dụng' : eligible ? 'Dùng mã' : 'Chưa đủ'}
-                          </button>
-                        </li>
-                      );
-                    })}
-                </ul>
-                {couponsQ.data!.length > VISIBLE_COUPONS && (
-                  <button type="button" onClick={() => setShowAll((v) => !v)} className={`${ui.btnText} mt-1 text-forest-700`}>
-                    {showAll ? 'Thu gọn' : `Xem thêm ${couponsQ.data!.length - VISIBLE_COUPONS} mã`}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
         </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="coupon-panel"
+          className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-stone-900"
+        >
+          <span className="inline-flex items-center gap-2 max-md:gap-2.5">
+            <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-[var(--clay-50)]">
+              <Ticket
+                className="h-4 w-4 text-promo-fg max-md:h-5 max-md:w-5 max-md:text-[color:var(--clay-700)]"
+                aria-hidden="true"
+              />
+            </span>
+            <span className="flex flex-col">
+              Mã giảm giá
+              <span className="text-xs font-normal text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
+                Chọn hoặc nhập mã giảm giá
+              </span>
+            </span>
+          </span>
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-forest-700">
+            {actionLabel}
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
+              aria-hidden="true"
+            />
+          </span>
+        </button>
+      )}
+      {(!currentCode || open) && (
+        <div id="coupon-panel" hidden={!open} className={currentCode ? 'md:hidden' : undefined}>
+          {currentCode && (
+            <button
+              type="button"
+              onClick={() => drop.mutate()}
+              disabled={busy}
+              className={`${ui.btnText} mt-1 text-danger-fg`}
+            >
+              Bỏ mã đang áp dụng
+            </button>
+          )}
+          <label htmlFor="coupon-code" className="sr-only">
+            Mã giảm giá
+          </label>
+          <div className="mt-1 flex gap-2">
+            <input
+              id="coupon-code"
+              name="coupon-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="Nhập mã giảm giá"
+              autoCapitalize="characters"
+              autoComplete="off"
+              className={`${ui.field} min-w-0 flex-1`}
+            />
+            <button
+              type="button"
+              onClick={() => apply.mutate(code)}
+              disabled={!code.trim() || busy}
+              className={`${ui.btnPrimary} px-4`}
+            >
+              Áp dụng
+            </button>
+          </div>
+          {(couponsQ.data?.length ?? 0) > 0 && (
+            <>
+              <ul aria-label="Mã giảm giá của bạn" className="mt-3 space-y-2">
+                {(previews.size > 0
+                  ? [...couponsQ.data!.filter(usable), ...couponsQ.data!.filter((c) => !usable(c))]
+                  : sortCouponsForCart(couponsQ.data!, subtotal)
+                )
+                  .slice(0, showAll ? undefined : VISIBLE_COUPONS)
+                  .map((c) => {
+                    const pv = previews.get(c.code.toUpperCase());
+                    const isApplied = currentCode?.toUpperCase() === c.code.toUpperCase();
+                    // Có số của máy chủ thì theo số đó; các phép đoán dưới đây chỉ dùng khi chưa có (API cũ, đang tải, lỗi).
+                    const redundant = !isApplied && !pv && isFreeshipRedundant(c, shippingFee);
+                    const meetsMin = !!pv || isCouponEligible(c, subtotal);
+                    const serverBlocked = !isApplied && !!pv && !pv.eligible;
+                    const eligible = meetsMin && !redundant && !serverBlocked;
+                    const saving = !pv
+                      ? null
+                      : pv.discount > 0
+                        ? `Giảm ${formatVnd(pv.discount)} cho đơn này`
+                        : (pv.freeshipSaving ?? 0) > 0
+                          ? `Miễn phí giao hàng ${formatVnd(pv.freeshipSaving!)} cho đơn này`
+                          : null;
+                    return (
+                      <li
+                        key={c.code}
+                        className={`flex items-center gap-3 rounded-control border border-dashed border-promo-solid bg-promo-bg p-3 ${
+                          eligible ? '' : redundant ? 'opacity-60' : 'opacity-80'
+                        }`}
+                      >
+                        <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
+                        <div className="min-w-0 flex-1">
+                          <div className="break-all text-sm font-bold text-promo-fg">
+                            {autoCouponName(c.code) ?? c.code}
+                          </div>
+                          <div className="text-xs text-stone-800">{couponValueLabel(c)}</div>
+                          {saving && (
+                            <div className="text-xs font-semibold text-success-fg">{saving}</div>
+                          )}
+                          {serverBlocked && pv.reason && (
+                            <div className="text-xs font-medium text-warning-fg">{pv.reason}</div>
+                          )}
+                          {redundant && (
+                            <div className="text-xs text-stone-700">
+                              Đơn này đã miễn phí giao hàng
+                            </div>
+                          )}
+                          {c.minOrder != null && (
+                            <div
+                              className={`text-xs ${meetsMin ? 'text-stone-700' : 'font-medium text-warning-fg'}`}
+                            >
+                              {meetsMin
+                                ? `Đơn tối thiểu ${formatVnd(c.minOrder)}`
+                                : `Cần đơn tối thiểu ${formatVnd(c.minOrder)} — mua thêm ${formatVnd(c.minOrder - subtotal)} để dùng mã này`}
+                            </div>
+                          )}
+                          <div className="text-xs text-stone-700">{couponExpiryLabel(c.endAt)}</div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isApplied || !eligible || busy}
+                          onClick={() => apply.mutate(c.code)}
+                          aria-label={`${isApplied ? 'Đang dùng' : redundant ? 'Không cần dùng' : 'Dùng'} mã ${autoCouponName(c.code) ?? c.code}`}
+                          className={`${ui.btnPrimary} flex-none px-3`}
+                        >
+                          {isApplied
+                            ? 'Đang dùng'
+                            : redundant
+                              ? 'Không cần'
+                              : serverBlocked
+                                ? 'Không áp dụng'
+                                : eligible
+                                  ? 'Dùng mã'
+                                  : 'Chưa đủ'}
+                        </button>
+                      </li>
+                    );
+                  })}
+              </ul>
+              {couponsQ.data!.length > VISIBLE_COUPONS && (
+                <button
+                  type="button"
+                  onClick={() => setShowAll((v) => !v)}
+                  className={`${ui.btnText} mt-1 text-forest-700`}
+                >
+                  {showAll ? 'Thu gọn' : `Xem thêm ${couponsQ.data!.length - VISIBLE_COUPONS} mã`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       )}
       {currentCode && notice && (
         <p role="status" data-testid="coupon-notice" className="mt-2 text-xs text-warning-fg">

@@ -325,7 +325,7 @@ export interface BrandDetail {
 }
 
 export async function getBrand(slug: string): Promise<BrandDetail | null> {
-  return fetchDetail<BrandDetail>(`/brand/public/${slug}`, 300);
+  return fetchDetail<BrandDetail>(`/brand/public/${slug}`, 60);
 }
 
 /** Thông tin liên hệ hiển thị ở chân trang. */

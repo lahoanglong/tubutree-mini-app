@@ -316,7 +316,9 @@ describe('/ctv — bảng điều khiển', () => {
     const full = mount();
     await flush();
     expect(full.container.textContent).toContain('Trang chủ');
-    expect(full.container.textContent).toContain('3 click · 1 đơn');
+    expect(full.container.textContent).toContain('3 lượt bấm');
+    expect(full.container.textContent).not.toContain('3 lượt bấm ·');
+    expect(full.container.textContent).toContain('Lượt bấm');
     click(byText(full.container, 'button', 'Sao chép'));
     await flush();
     expect(state.copied[0]).toMatch(/\/\?ref=TUBU88&l=abc123$/);
@@ -399,7 +401,12 @@ describe('/ctv — bảng điều khiển', () => {
   it('lối sang /hoc-vien chỉ hiện khi route web đã sẵn sàng', async () => {
     const { container } = mount();
     await flush();
-    expect(container.querySelector('a[href="/hoc-vien"]')).not.toBeNull();
+    const academy = container.querySelector('a[href="/hoc-vien"]')!;
+    expect(academy).not.toBeNull();
+    // Chữ như Mini App (vi.academy.entry / entryHint), nút phụ nền nhạt không viền ở điện thoại.
+    expect(academy.textContent).toBe('Học viện CTV');
+    expect(academy.nextElementSibling!.textContent).toBe('Khoá học đào tạo dành cho CTV');
+    expect(academy.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
 });
 

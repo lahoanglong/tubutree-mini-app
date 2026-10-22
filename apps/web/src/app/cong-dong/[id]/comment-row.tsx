@@ -2,6 +2,7 @@ import { CheckCircle2, Flag, Trash2 } from 'lucide-react';
 import type { FeedComment } from '@tubutree/app-core/api/feed';
 import { AuthorLine, Avatar, timeAgo } from '@/components/community/post-parts';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 
 const ICON_BTN = 'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-700 hover:bg-stone-100';
 
@@ -51,7 +52,7 @@ export function CommentRow({
       </div>
       <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-stone-800">{comment.body}</p>
       {canMarkBest && !comment.isAccepted && (
-        <button type="button" disabled={marking} onClick={onMarkBest} className={`${ui.btnSecondary} mt-2`}>
+        <button type="button" disabled={marking} onClick={onMarkBest} className={`${miniBtnSecondary} mt-2`}>
           Chọn hay nhất
         </button>
       )}

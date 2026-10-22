@@ -3,6 +3,7 @@
 import type { FeedItem } from '@tubutree/app-core/api/feed';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 
 const TITLE_PLACEHOLDER = 'Tiêu đề câu hỏi (vd: Nước rửa chén sinh học dùng được cho bình sữa không?)';
 
@@ -73,8 +74,8 @@ export function ConfirmDeleteSheet({ open, onClose, onConfirm, deleting }: { ope
   return (
     <Sheet open={open} onClose={onClose} title="Xoá bài viết này?">
       <div className="mt-3 flex flex-col gap-2.5">
-        <button type="button" onClick={onClose} className={`${ui.btnSecondary} w-full`}>
-          Hủy
+        <button type="button" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
+          Huỷ
         </button>
         <button
           type="button"

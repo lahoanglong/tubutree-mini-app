@@ -11,6 +11,7 @@ import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { notificationAction, notificationMeta, relativeTime } from '@/components/account/notification-view';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
+import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
@@ -100,21 +101,21 @@ export default function NotificationsPage() {
   };
 
   const shell = (body: ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6">
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
       <PageHeader
         title="Thông báo"
         backHref="/tai-khoan"
         backLabel="Quay lại tài khoản"
         actions={
           phase === 'authenticated' && unreadCount > 0 ? (
-            <button type="button" disabled={readAllMut.isPending} onClick={() => readAllMut.mutate()} className={`${ui.btnText} text-forest-700`}>
+            <button type="button" disabled={readAllMut.isPending} onClick={() => readAllMut.mutate()} className={`${ui.btnText} text-forest-700 max-md:text-[color:var(--color-text-brand)] max-md:no-underline`}>
               {readAllMut.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />}
               Đọc tất cả
             </button>
           ) : undefined
         }
       />
-      {body}
+      <div className="max-md:px-4">{body}</div>
     </main>
   );
 
@@ -171,7 +172,7 @@ export default function NotificationsPage() {
                   unread ? 'border-forest-200 bg-forest-50' : 'border-stone-200 bg-stone-0'
                 }`}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-100 text-forest-600">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-100 text-forest-600 max-md:bg-[var(--color-bg-subtle)]">
                   <m.Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -179,7 +180,7 @@ export default function NotificationsPage() {
                     <span className="text-sm font-semibold text-stone-900">{m.title}</span>
                     {unread && <span role="img" aria-label="chưa đọc" className="h-2 w-2 rounded-full bg-forest-600" />}
                   </span>
-                  {n.payload.body && <span className="mt-0.5 block text-sm text-stone-700">{n.payload.body}</span>}
+                  {n.payload.body && <span className="mt-0.5 block text-sm text-stone-700 max-md:text-[color:var(--color-text-secondary)]">{n.payload.body}</span>}
                   <span className="mt-1 block text-xs text-stone-600">{relativeTime(n.sentAt)}</span>
                 </span>
               </button>

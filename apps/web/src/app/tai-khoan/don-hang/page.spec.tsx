@@ -101,7 +101,7 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
     const c = await mount();
     expect(c.querySelector('h1')?.textContent).toBe('Đơn hàng');
     const tabs = Array.from(c.querySelectorAll('[role="tab"]')).map((t) => t.textContent);
-    expect(tabs).toEqual(['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã hủy/hoàn', 'Định kỳ']);
+    expect(tabs).toEqual(['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn', 'Định kỳ']);
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
   });

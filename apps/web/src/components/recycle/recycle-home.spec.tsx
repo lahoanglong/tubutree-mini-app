@@ -131,6 +131,8 @@ describe('/doi-rac trang vào (§4.1)', () => {
     const battery = Array.from(c.querySelectorAll<HTMLElement>('[data-item]')).find((e) => e.textContent?.includes('Pin cũ'))!;
     expect(battery.getAttribute('data-status')).toBe('COMING_SOON');
     expect(battery.textContent).toContain('Sắp nhận');
+    expect(battery.className).not.toContain('opacity-');
+    expect(battery.getAttribute('aria-disabled')).toBe('true');
   });
 
   it('yêu cầu đang xử lý: mã, cách giao, mini timeline; link tới /doi-rac/yeu-cau/:id; biểu tượng lịch sử tới /doi-rac/yeu-cau', async () => {
@@ -329,5 +331,34 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(c.querySelector('a a, button button, a button, button a')).toBeNull();
+  });
+});
+
+describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
+  it('nút lịch sử không chồng px-5 với px-0 nên icon History hiện đủ; thẻ điểm không viền; hàng Kho quà trơn trên nền trang', async () => {
+    const c = await mount();
+    const history = c.querySelector<HTMLAnchorElement>('a[aria-label="Yêu cầu của tôi"]')!;
+    expect(history.className).not.toContain('px-5');
+    expect(history.querySelector('svg')).not.toBeNull();
+    const pointsCard = byText(c, 'p', 'Điểm Xanh của bạn')!.parentElement!;
+    expect(pointsCard.className).toContain('max-md:border-transparent');
+    const rows = link(c, '/kho-qua')!.parentElement!;
+    expect(rows.className).toContain('max-md:bg-transparent');
+    expect(rows.className).toContain('max-md:shadow-none');
+    expect(rows.className).not.toContain('box-shadow:var(--elevation');
+    expect(link(c, '/kho-qua')!.className).toContain('max-md:px-0');
+  });
+
+  it('tiêu đề chừa 48px cho nút lùi nổi vì thân trang được kéo lên ngang nút', async () => {
+    const c = await mount();
+    expect(c.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
+    expect(c.querySelector('a[aria-label="Trang chủ"]')).toBeNull();
+  });
+
+  it('thẻ Cách đổi giữ viền, không bóng như Card outline của Mini App', async () => {
+    const c = await mount();
+    const card = byText(c, 'p', 'Mang tới điểm nhận')!.parentElement!;
+    expect(card.className).toContain('max-md:shadow-none');
+    expect(card.className).not.toContain('max-md:border-transparent');
   });
 });

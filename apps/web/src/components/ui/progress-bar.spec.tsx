@@ -16,6 +16,12 @@ afterEach(() => {
 const fill = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="progress-fill"]')!;
 
 describe('ProgressBar', () => {
+  it('ariaLabel đặt tên cho thanh mà không in thêm chữ nhìn thấy', () => {
+    const { container } = mount(<ProgressBar value={1} max={4} ariaLabel="Đã bán 25%" />);
+    expect(container.querySelector('[role="progressbar"]')!.getAttribute('aria-label')).toBe('Đã bán 25%');
+    expect(container.textContent).toBe('');
+  });
+
   it('độ rộng theo phần trăm, kẹp 0..100', () => {
     expect(fill(mount(<ProgressBar value={30} max={120} />).container).style.width).toBe('25%');
     expect(fill(mount(<ProgressBar value={500} max={100} />).container).style.width).toBe('100%');

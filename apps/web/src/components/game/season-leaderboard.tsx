@@ -6,7 +6,7 @@ import { GameCard } from './game-card';
 // Huy chương top 3 là nội dung xếp hạng của game.
 export function SeasonLeaderboard({ rows }: { rows: SeasonLeaderRow[] }) {
   return (
-    <GameCard title="Top góp nước mùa này" icon={Droplets}>
+    <GameCard title="Xếp hạng góp nước mùa này" icon={Droplets}>
       {rows.map((r) => (
         <div key={r.rank} className={`flex justify-between gap-2 py-1.5 ${r.rank > 1 ? 'border-t border-stone-200' : ''}`}>
           <span className="min-w-0 truncate text-sm text-stone-900">

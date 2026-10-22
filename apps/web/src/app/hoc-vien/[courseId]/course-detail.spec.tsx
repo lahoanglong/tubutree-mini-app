@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AcademyCourseDetail } from '@tubutree/app-core/api/academy';
+import { ApiError } from '@/lib/client-api';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -59,7 +60,7 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     mocks.auth.status = 'idle';
     mocks.auth.user = null;
     const { container } = await mount();
-    expect(container.textContent).toContain('Đăng nhập để vào CTV Academy');
+    expect(container.textContent).toContain('Đăng nhập để vào Học viện CTV');
     expect(container.querySelector('a[href="/dang-nhap?returnTo=%2Fhoc-vien%2Fc1"]')).not.toBeNull();
     expect(mocks.get).not.toHaveBeenCalled();
   });
@@ -146,9 +147,44 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     expect(container.textContent).toContain('Khoá bán hàng');
   });
 
+  it('khoá không xem được (403): giải thích Học viện CTV dành cho CTV, lối tới /ctv, không Thử lại', async () => {
+    mocks.get.mockReset().mockRejectedValue(new ApiError('Forbidden', 403));
+    const { container } = await mount();
+    expect(container.textContent).toContain('Học viện CTV dành cho cộng tác viên');
+    expect(container.querySelector('a[href="/ctv"]')).not.toBeNull();
+    expect(byText(container, 'button', 'Thử lại')).toBeNull();
+  });
+
   it('vùng chạm >= 44px và mọi điều khiển có tên', async () => {
     const { container } = await mount();
     expect(smallTouchTargets(container)).toEqual([]);
     expect(unnamedControls(container)).toEqual([]);
+  });
+});
+
+describe('/hoc-vien/[courseId] — như Mini App', () => {
+  it('bài đã học: nút "Đã học xong" có dấu tích trước chữ và là nút phụ ZaUI', async () => {
+    const { container } = await mount();
+    const done = buttons(container, 'Đã học xong')[0]!;
+    expect(done.querySelector('svg.lucide-circle-check-big, svg.lucide-check-circle-2, svg.lucide-circle-check')).not.toBeNull();
+    expect(done.className).toContain('max-md:bg-forest-50');
+  });
+
+  it('link "Mở video bài học" không gạch chân ở điện thoại', async () => {
+    const { container } = await mount();
+    expect(byText(container, 'a', 'Mở video bài học')!.className).toContain('max-md:no-underline');
+  });
+
+  it('"Danh sách khoá học" vẫn hiện ở điện thoại như nút ghost của Mini App; bài học là thẻ không viền', async () => {
+    const { container } = await mount();
+    const back = byText(container, 'a', 'Danh sách khoá học')!;
+    expect(back.className).not.toContain('max-md:hidden');
+    expect(container.querySelector('section')!.classList.contains('border')).toBe(false);
+  });
+
+  it('tên khoá cỡ title-md ở điện thoại', async () => {
+    const { container } = await mount();
+    const h = Array.from(container.querySelectorAll('h2')).find((x) => x.textContent === 'Khoá bán hàng')!;
+    expect(h.className).toContain('max-md:text-[length:var(--type-title-md-size)]');
   });
 });

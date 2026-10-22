@@ -298,3 +298,20 @@ describe('truy cập', () => {
     expect(unlabeledFields(document.body)).toEqual([]);
   });
 });
+
+describe('/nhan-vien/bang-luong — diện mạo Mini App ở điện thoại', () => {
+  it('thẻ tổng kết nền gradient xanh, số tiền chữ sans đậm; nút nhận lương secondary', async () => {
+    await mount();
+    const card = document.querySelector('section[aria-label="Tổng kết tháng"]')!;
+    expect(card.className).toContain('max-md:[background:linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))]');
+    expect(Array.from(card.querySelectorAll('div')).find((d) => d.textContent === formatVnd(415000))!.className).toContain('max-md:font-sans');
+    expect(btn('Thông tin nhận lương').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+  });
+
+  it('trạng thái trống dùng EmptyState có hình hộp minh hoạ', async () => {
+    m.payroll = (q) => ({ ...payroll(Number(q.year), Number(q.month)), days: [] });
+    await mount();
+    const empty = Array.from(document.querySelectorAll('span')).find((s) => s.textContent === 'Chưa có dữ liệu công tháng này.')!;
+    expect(empty.parentElement!.querySelector('svg')).not.toBeNull();
+  });
+});

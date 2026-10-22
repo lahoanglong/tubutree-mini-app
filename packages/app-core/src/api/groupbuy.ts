@@ -17,6 +17,8 @@ export interface GroupBuy {
   isOwner?: boolean;
   /** Mã giảm của người đang xem khi nhóm đã đủ người và người đó là thành viên. */
   couponCode?: string;
+  /** Đơn tối thiểu của mã = giá nhóm của biến thể rẻ nhất đang bán (API bản cũ không trả → dùng unitPrice). */
+  minOrder?: number;
 }
 
 export const listGroupBuys = (http: HttpClient) => http.get<GroupBuy[]>('/group-buy');

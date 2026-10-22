@@ -7,9 +7,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import type { WasteMethod, WastePointDTO } from '@tubutree/shared-types';
 import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { loadPointsNav, saveReturn, type WastePointsNav } from '@/lib/recycle-wizard';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { includesFolded } from '@/lib/vn-fold';
@@ -25,8 +27,6 @@ import { WastePointPicker } from './waste-point-picker';
 
 const WIZARD_METHOD_STEP = '/doi-rac/tao?step=method';
 const SWITCH_METHODS: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP'];
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 /** Khớp không phân biệt hoa thường và dấu trên tên điểm, phường/xã và tên đường. */
 export function filterPointsByText(points: readonly WastePointDTO[], q: string): WastePointDTO[] {
@@ -157,14 +157,14 @@ export function RecyclePoints() {
           selectedItemIds={nav.selectedItemIds}
         />
       ) : (
-        <p className={`${ui.card} p-6 text-center text-sm text-stone-700`}>Không tìm thấy điểm nhận nào</p>
+        <p className={`${skin.card} p-6 text-center text-sm text-stone-700`}>Không tìm thấy điểm nhận nào</p>
       )}
       <section className="flex flex-col gap-2">
         <h2 className="text-base font-semibold text-stone-900">Chưa có điểm gần bạn?</h2>
         <p className="text-sm text-stone-700">Gửi gói nhỏ qua hãng vận chuyển thường tốn hơn giá trị điểm.</p>
         <div className="flex flex-wrap gap-2">
           {switchMethods.map((m) => (
-            <button key={m} type="button" className={ui.btnSecondary} onClick={() => switchMethod(m)}>
+            <button key={m} type="button" className={skin.btnSecondary} onClick={() => switchMethod(m)}>
               {METHOD_LABELS[m]}
             </button>
           ))}

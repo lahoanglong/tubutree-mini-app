@@ -148,7 +148,10 @@ describe('HomeView — nội dung các khối', () => {
 
   it('ô tìm là vỏ: dẫn sang /san-pham?focus=search; chạm danh mục sang /san-pham lọc theo danh mục', async () => {
     const c = await mount();
-    expect(c.querySelector('a[aria-label="Bạn đang tìm gì hôm nay?"]')?.getAttribute('href')).toBe('/san-pham?focus=search');
+    const search = c.querySelector('a[aria-label="Bạn đang tìm gì hôm nay?"]');
+    expect(search?.getAttribute('href')).toBe('/san-pham?focus=search');
+    // D7-31: từ md thanh đầu website đã có ô tìm, ô này chỉ còn ở điện thoại.
+    expect(search?.className).toMatch(/\bmd:hidden\b/);
     click(byText(c, 'button', 'Dầu gội'));
     expect(mocks.push).toHaveBeenCalledWith('/san-pham?category=c-goi');
   });
@@ -170,6 +173,12 @@ describe('HomeView — chuông và khách vãng lai', () => {
     expect(bell.querySelector('[aria-label="2 thông báo chưa đọc"]')?.textContent).toBe('2');
   });
 
+  it('"Xem tất cả" không gạch chân như Mini App', async () => {
+    const c = await mount();
+    const link = c.querySelector<HTMLAnchorElement>('a[aria-label^="Xem tất cả"]')!;
+    expect(link.className).not.toContain('underline');
+  });
+
   it('trang Thông báo chưa xong (pending) → ẩn chuông', async () => {
     routeState.pending = new Set(['/tai-khoan/thong-bao']);
     const c = await mount();
@@ -182,13 +191,14 @@ describe('HomeView — chuông và khách vãng lai', () => {
     expect(c.querySelector('[aria-label$="thông báo chưa đọc"]')).toBeNull();
   });
 
-  it('khách chưa đăng nhập: không gọi for-you/notifications/purchased-items, không có chuông và "Dành cho bạn"; vẫn thấy Quà khách mới (chỉ lợi ích)', async () => {
+  it('khách chưa đăng nhập: không gọi for-you/notifications/purchased-items, chuông không huy hiệu, không có "Dành cho bạn"; vẫn thấy Quà khách mới (chỉ lợi ích)', async () => {
     mocks.phase = 'guest';
     const c = await mount();
     for (const p of ['/products/for-you', '/me/notifications', '/me/purchased-items', '/me/new-customer-offer', '/orders/active-count']) {
       expect(calls(p)).toHaveLength(0);
     }
-    expect(c.querySelector('a[aria-label^="Thông báo"]')).toBeNull();
+    expect(c.querySelector('a[aria-label="Thông báo"]')!.getAttribute('href')).toBe('/tai-khoan/thong-bao');
+    expect(c.querySelector('[aria-label$="thông báo chưa đọc"]')).toBeNull();
     expect(region(c, 'Dành cho bạn')).toBeNull();
     expect(region(c, 'Quà khách mới')).not.toBeNull();
   });

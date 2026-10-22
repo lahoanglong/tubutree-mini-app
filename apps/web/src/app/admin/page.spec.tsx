@@ -492,7 +492,7 @@ describe('admin/page — tab Tổng quan', () => {
     ['Đã đóng gói', 'bg-sage-100', 'text-sage-700'],
     ['Đang vận chuyển', 'bg-forest-100', 'text-forest-800'],
     ['Đã giao hàng', 'bg-success-bg', 'text-success-fg'],
-    ['Đã hủy', 'bg-danger-bg', 'text-danger-fg'],
+    ['Đã huỷ', 'bg-danger-bg', 'text-danger-fg'],
     ['Đã trả hàng', 'bg-promo-bg', 'text-promo-fg'],
   ];
 

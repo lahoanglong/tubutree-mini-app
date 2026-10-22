@@ -9,6 +9,7 @@ import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { DealerShell, errText } from './dealer-shell';
@@ -50,7 +51,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   return (
     <DealerShell title="Đăng ký đại lý">
       <div className="mx-auto max-w-xl">
-        <div className="rounded-card bg-stone-900 p-4 text-stone-0">
+        <div className="rounded-card bg-stone-900 p-4 text-stone-0 max-md:bg-[var(--color-dealer-ink)]">
           <Store className="h-6 w-6" aria-hidden="true" />
           <h2 className="mt-1 font-display text-lg font-semibold">Trở thành đại lý Tubu</h2>
           <p className="mt-1 text-sm text-stone-100">{applyPitch(config.isLoaded ? config.dealer?.maxDiscountPct : null)}</p>
@@ -107,7 +108,7 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
               {errText(mut.error)}
             </p>
           )}
-          <button type="submit" disabled={!valid || mut.isPending} className={`${ui.btnPrimary} mt-2 w-full`}>
+          <button type="submit" disabled={!valid || mut.isPending} className={`${ui.btnPrimary} ${skin.dealerInkBtn} mt-2 w-full`}>
             {mut.isPending ? 'Đang gửi...' : 'Gửi hồ sơ đăng ký'}
           </button>
         </form>

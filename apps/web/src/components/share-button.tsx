@@ -37,9 +37,10 @@ export default function ShareButton({ title, path }: { title: string; path: stri
 
   return (
     <div className="flex flex-col items-end">
-      <button type="button" onClick={() => void onShare()} className="inline-flex min-h-11 items-center gap-1.5 rounded-control px-2 text-sm font-semibold text-forest-700 hover:underline">
-        <Share2 className="h-4 w-4" aria-hidden="true" />
-        Chia sẻ
+      <button type="button" onClick={() => void onShare()} className="inline-flex min-h-11 items-center gap-1.5 rounded-control px-2 text-sm font-semibold text-forest-700 hover:underline max-md:min-w-11 max-md:justify-center max-md:px-0 max-md:text-[var(--color-text-brand)]">
+        <Share2 className="h-4 w-4 max-md:h-5 max-md:w-5" aria-hidden="true" />
+        {/* Mini App chỉ có biểu tượng; chữ vẫn là tên truy cập. */}
+        <span className="max-md:sr-only">Chia sẻ</span>
       </button>
       {note && (
         <p role="status" className={`text-xs ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>

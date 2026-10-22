@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
+import { mini } from '@/components/order-mobile/mobile-ui';
 
 const MISS_MESSAGE = 'Không tìm thấy mã này, hoặc đây là mã của chính bạn. Bạn kiểm tra lại giúp Tubu nhé.';
 
@@ -47,7 +48,7 @@ export function ReferralCodeBox({
   const [checking, setChecking] = useState(false);
 
   const shell = (children: React.ReactNode) => (
-    <section aria-label="Mã giới thiệu" className={`p-4 ${ui.card}`}>
+    <section aria-label="Mã giới thiệu" className={`p-4 ${ui.card} ${mini.band}`}>
       {children}
     </section>
   );
@@ -166,7 +167,7 @@ export function ReferralCodeBox({
       )}
       <div className="flex gap-2">
         <button type="button" onClick={() => setOpen(false)} disabled={checking} className={ui.btnSecondary}>
-          Hủy
+          Huỷ
         </button>
         <button type="submit" disabled={checking} className={`${ui.btnPrimary} flex-1`}>
           {checking ? 'Đang kiểm tra…' : 'Áp dụng'}
