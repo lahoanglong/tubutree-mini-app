@@ -83,6 +83,9 @@ describe('pitCsvChunks (TNCN CTV, D1-14)', () => {
     expect(strings).toContain(`p.status = 'PAID'`);
     expect(strings).toContain('"grossAmount" IS NOT NULL');
     expect(strings).toContain('GROUP BY');
+    // Thuế thực giữ = taxWithheld − taxRefunded; thu nhập = thuế thực giữ + thực nhận nên phần đã hoàn về Ví cộng vào thực nhận.
+    expect(strings).toContain('SUM(p."taxWithheld" - p."taxRefunded")');
+    expect(strings).toContain('SUM(p.amount + p."taxRefunded")');
     expect((queryRaw.mock.calls[0]![0] as { values: unknown[] }).values).toEqual(expect.arrayContaining([RANGE.start, RANGE.end]));
   });
 });
@@ -100,6 +103,7 @@ describe('payoutExportWhere / payoutCsvChunks (danh sách rút tiền, D1-14)', 
     fee: 10_000,
     grossAmount: 1_000_000,
     taxWithheld: 90_000,
+    taxRefunded: 0,
     taxId: '0123456789',
     method: 'BANK',
     bankInfo: { bankName: 'Vietcombank', accountNumber: '0011223344', accountName: 'NGUYEN VAN LAN' },
@@ -125,6 +129,7 @@ describe('payoutExportWhere / payoutCsvChunks (danh sách rút tiền, D1-14)', 
     expect(a[col('Loại')]).toBe('Hoa hồng CTV');
     expect(a[col('Thu nhập gộp (VNĐ)')]).toBe('1000000');
     expect(a[col('Thuế TNCN (VNĐ)')]).toBe('90000');
+    expect(a[col('Thuế đã hoàn về Ví (VNĐ)')]).toBe('0');
     expect(a[col('Phí chuyển khoản (VNĐ)')]).toBe('10000');
     expect(a[col('Thực nhận (VNĐ)')]).toBe('900000');
     expect(a[col('Trạng thái')]).toBe('Đã chuyển khoản');
@@ -140,6 +145,16 @@ describe('payoutExportWhere / payoutCsvChunks (danh sách rút tiền, D1-14)', 
     expect(b[col('Trạng thái')]).toBe('Bị từ chối (đã hoàn)');
     expect(b[col('Lý do từ chối')]).toBe('Sai STK');
     expect(b[col('Số tài khoản')]).toBe('');
+  });
+
+  it('lệnh đã được hoàn thuế giữ dư: cột Thuế TNCN là thuế thực giữ, số đã hoàn ghi riêng, thực nhận vẫn là số đã chuyển khoản', async () => {
+    const findMany = cursorModel([payout(1, { taxWithheld: 250_000, taxRefunded: 250_000, amount: 750_000, fee: 0, grossAmount: 1_000_000 })]);
+    const csv = await collect(payoutCsvChunks({ payout: { findMany } } as unknown as PrismaService, {}));
+    const a = parseLine(csv.trimEnd().split('\r\n')[1]!);
+    const col = (n: string) => PAYOUT_CSV_HEADERS.indexOf(n);
+    expect(a[col('Thuế TNCN (VNĐ)')]).toBe('0');
+    expect(a[col('Thuế đã hoàn về Ví (VNĐ)')]).toBe('250000');
+    expect(a[col('Thực nhận (VNĐ)')]).toBe('750000');
   });
 
   it('đọc theo lô con trỏ, không dựng cả file trong bộ nhớ', async () => {

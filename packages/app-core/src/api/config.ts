@@ -13,7 +13,7 @@ export interface PublicConfig {
   affiliateWalletMultiplier: number;
   /** Mốc tối thiểu rút hoa hồng về ngân hàng. */
   affiliateMinWithdrawBank: number;
-  /** Thuế TNCN khấu trừ khi rút hoa hồng: `pct` (phân số) áp cho lần rút từ `threshold`; thiếu khi API cũ. */
+  /** Thuế TNCN khấu trừ khi rút hoa hồng: `pct` (phân số) áp cho tổng các lần rút trong tháng VN khi tổng từ `threshold`; thiếu khi API cũ. */
   affiliatePitWithhold?: { pct: number; threshold: number };
   /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
   cashbackHoldDays: number;

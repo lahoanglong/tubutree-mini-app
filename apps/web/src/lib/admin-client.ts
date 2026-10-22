@@ -1322,6 +1322,8 @@ export interface AdminPayout {
   /** Hoa hồng trước khấu trừ thuế TNCN (null: rút Ví hoặc lệnh cũ). */
   grossAmount?: number | null;
   taxWithheld?: number;
+  /** Phần thuế giữ dư đã hoàn vào Ví khi lệnh khác cùng tháng bị từ chối (thuế thực giữ = taxWithheld − taxRefunded). */
+  taxRefunded?: number;
   /** MST/CCCD người nhận chụp lúc khấu trừ. */
   taxId?: string | null;
   method: string;
@@ -1357,22 +1359,27 @@ export const getPitReport = (month: string) =>
   apiFetch<PitReport>(`/admin/payouts/pit-report?month=${encodeURIComponent(month)}`);
 export const listPayouts = (status?: AdminPayoutStatus, page = 1, limit = 20) =>
   apiFetch<Page<AdminPayout>>(`/admin/payouts?page=${page}&limit=${limit}${status ? `&status=${status}` : ''}`);
-export const approvePayout = (id: string, note?: string) =>
+/** `expectedAmount` = số thực nhận đang hiện trên màn; máy chủ trả 409 nếu lệnh đã đổi số (thuế giữ dư vừa được hoàn). */
+export const approvePayout = (id: string, note?: string, expectedAmount?: number) =>
   apiFetch<AdminPayout>(`/admin/payouts/${encodeURIComponent(id)}/approve`, {
     method: 'POST',
-    body: note?.trim() ? { note: note.trim() } : {},
+    body: {
+      ...(note?.trim() ? { note: note.trim() } : {}),
+      ...(expectedAmount !== undefined ? { expectedAmount } : {}),
+    },
   });
 export const rejectPayout = (id: string, reason: string) =>
   apiFetch<AdminPayout>(`/admin/payouts/${encodeURIComponent(id)}/reject`, {
     method: 'POST',
     body: { reason: reason.trim() },
   });
-export const markPayoutPaid = (id: string, bankRef?: string, note?: string) =>
+export const markPayoutPaid = (id: string, bankRef?: string, note?: string, expectedAmount?: number) =>
   apiFetch<AdminPayout>(`/admin/payouts/${encodeURIComponent(id)}/mark-paid`, {
     method: 'POST',
     body: {
       ...(bankRef?.trim() ? { bankRef: bankRef.trim() } : {}),
       ...(note?.trim() ? { note: note.trim() } : {}),
+      ...(expectedAmount !== undefined ? { expectedAmount } : {}),
     },
   });
 

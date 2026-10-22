@@ -150,6 +150,23 @@ describe('WithdrawSheet — rút hoa hồng', () => {
     expect(posts()[0]!.body).toEqual({ amount: 80_000, method: 'WALLET_BALANCE', bankInfo: undefined, taxId: '0123456789' });
   });
 
+  it('thuế cộng dồn tháng: số thực nhận theo taxPreview của máy chủ, không tính riêng lần rút này', async () => {
+    // Lần này 1.000.000đ dưới ngưỡng 2.000.000đ nếu tính riêng, nhưng tháng đã rút 1.500.000đ nên máy chủ báo thuế 250.000đ.
+    state.config = { affiliateMinWithdrawBank: 50_000, affiliatePitWithhold: { pct: 0.1, threshold: 2_000_000 } };
+    mount({ max: 1_000_000, taxPreview: 250_000, taxIdOnFile: '0123456789' });
+    await flush();
+    expect(dialog().textContent).toContain('Khấu trừ thuế TNCN 250.000đ · thực nhận 750.000đ');
+    expect(submitBtn().textContent).toBe('Nhận 750.000đ vào Ví');
+  });
+
+  it('taxPreview 0 (tháng chưa tới ngưỡng cộng dồn): không hiện khấu trừ dù tính riêng lần này sẽ bị trừ', async () => {
+    state.config = { affiliateMinWithdrawBank: 50_000, affiliatePitWithhold: { pct: 0.1, threshold: 50_000 } };
+    mount({ taxPreview: 0 });
+    await flush();
+    expect(dialog().textContent).not.toContain('Khấu trừ thuế TNCN');
+    expect(submitBtn().textContent).toBe('Nhận 80.000đ vào Ví');
+  });
+
   it('đã khai MST: không hỏi lại, nói đang kê khai theo MST đó, không gửi taxId', async () => {
     state.config = { affiliateMinWithdrawBank: 50_000, affiliatePitWithhold: { pct: 0.1, threshold: 50_000 } };
     mount({ taxIdOnFile: '0123456789' });

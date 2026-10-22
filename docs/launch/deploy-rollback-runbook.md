@@ -15,6 +15,8 @@ Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã ch
 1. Bật API mới TRƯỚC khi phát hành bản Zalo Mini App mới (màn đánh giá của Mini App cần dữ liệu `can-review` mới từ API).
 2. DỪNG API cũ TRƯỚC khi chạy `prisma migrate deploy` (migration đổi chỉ mục duy nhất của bảng đánh giá).
 3. Web mới lên CÙNG LÚC hoặc TRƯỚC API mới. Tab admin đã mở từ trước deploy phải được tải lại (xem mục 5, bước 12).
+
+   Đừng để web mới chạy cạnh API cũ khi API đã nhận request: web admin mới gửi thêm `expectedAmount` khi duyệt và chi lệnh rút, mà `ValidationPipe` của API bật `forbidNonWhitelisted` nên API cũ trả 400 và admin không duyệt hay chi được. Thứ tự ở mục 5 vẫn đúng vì API đang dừng từ bước 5 tới bước 9 (không có request nào tới API cũ); sau bước 9 cả hai đều là bản mới. Nếu API mới chưa lên được mà phải bật tạm API cũ, quay luôn web về image cũ (7.4). Ngược lại (web cũ, API mới) thì không sao vì `expectedAmount` là tuỳ chọn.
 4. Migration `20261014213300` khoá bảng `orders` (khoảng 14 giây cho mỗi 300.000 đơn, khoảng 2 giây dưới 50.000 đơn). Nếu PROD còn ở bản cũ, danh sách chờ áp còn có các migration nặng khác trên `orders` và `users` (bảng ở mục 1.0). Cách chọn giờ nằm ở mục 3.
 5. Quay lại bằng image chỉ hợp lệ khi schema sau migrate vẫn tương thích với image cũ (mục 7.0). Nếu danh sách chờ áp có BẤT KỲ migration nào ngoài sáu migration của đợt (ba chính: r6, r8 điểm nhận vỏ, r8 đánh giá; hai nhỏ thêm sau: r9 mốc tồn kho, r10 hàng trả cũ; một mới: Đổi rác lấy quà `20261020000000_waste_exchange`) thì đường quay lại duy nhất là khôi phục bản backup (7.3). Bản nhánh UAT ngày 2026-10-20 (nền `main` sau PR #20, #21, #22, cộng sáu migration thêm trong đêm UAT: `20261020010000_waste_item_warehouse_only`, `20261020100000_best_answer_reward_note_template`, `20261020100000_review_return_reversal`, `20261020110000_coupons_admin_list_index`, `20261020120000_groupbuy_success_template_percent`, `20261020120000_q19_reversal_effects_marker`) có 213 thư mục migration và thêm 27 migration ngoài sáu cái này (mọi `20261018*`, `20261019*` và `20261020*` trừ `20261020000000_waste_exchange`; đếm lại bằng `ls apps/api/prisma/migrations | grep -E '^2026101[89]|^20261020' | grep -vc waste_exchange`, con số đổi mỗi khi thêm migration), nên lần deploy bản đó chỉ quay lại được bằng 7.3. Sáu migration thêm trong đêm UAT cố ý KHÔNG đưa vào danh sách tương thích image (`IMAGE_COMPATIBLE_MIGRATIONS` trong `db-checks.ts`): chưa xét riêng việc image cũ chạy trên chúng, nên giữ đường quay lại an toàn là 7.3.
 
@@ -860,6 +862,7 @@ cat .pending-migrations
 - PD-3 quy đổi số dư xu về 0 và thêm ràng buộc `coinsBalance = 0`: code cũ vẫn ghi xu sẽ bị từ chối, và số dư xu đã bị đổi thành điểm không tự quay lại.
 - `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
+- `20261022100000_payout_tax_refunded` thêm giá trị `PIT_REFUND` cho enum `WalletTxType` (cùng cột `payouts.taxRefunded`): dòng sổ ví loại `PIT_REFUND` làm code cũ lỗi khi đọc (Prisma báo enum lạ), và giá trị enum đã thêm không gỡ được. Migration này không nằm trong `IMAGE_COMPATIBLE_MIGRATIONS`; đã có dòng `PIT_REFUND` (admin từ chối lệnh rút hoa hồng làm hoàn thuế TNCN giữ dư vào Ví) thì đường quay lại là 7.3.
 
 Vì vậy: danh sách chờ áp có migration ngoài sáu cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
 
@@ -931,6 +934,8 @@ Kỳ vọng: in `CREATE INDEX`, rồi hai id image giống nhau, và `mã thoát
 
 Giải thích: dựng lại chỉ mục cũ để code cũ chạy đúng ràng buộc của nó. Chỉ mục mới `reviews_userId_productId_orderId_key` cứ để đó (vô hại với code cũ). Hai id in ra phải giống nhau: chứng tỏ container API đang chạy đúng image cũ. Image cũ chạy `prisma migrate deploy` trên DB đã có thêm các migration mới sẽ báo "No pending migrations to apply" và không kẹt (đã thử cục bộ: thư mục migration bản cũ chạy với DB đã migrate đủ, kết quả đúng như vậy; mục 8 của `99-release-readiness.md` ghi nhận cùng hành vi cho lần phát hành trước).
 
+Quay API và web cùng nhau (hai lệnh `docker tag` ở khối trên đã gắn lại cả hai). Không quay API một mình: web admin mới gửi `expectedAmount` khi duyệt/chi lệnh rút, API cũ từ chối vì `forbidNonWhitelisted` (400), admin không duyệt hay chi được. Báo admin và kế toán tải lại mọi tab Quản trị (như bước 12): tab đã mở từ lúc web mới chạy vẫn giữ mã web mới, bấm Duyệt hoặc Đã chi sẽ bị 400.
+
 Sau khi quay image: màn Quản trị, Sức khoẻ hệ thống và `curl .../api/health` phải ổn. Dữ liệu phát sinh sau deploy được giữ nguyên.
 
 **Khi sau này phát hành lại bản mới (sau 7.2) phải gỡ chỉ mục cũ**, nếu không tính năng đánh giá nhiều lần sẽ bị chặn âm thầm (migration đã ghi là áp rồi nên sẽ không chạy lại):
@@ -968,6 +973,7 @@ Kỳ vọng: bộ 4 số khớp bộ ghi ở bước 6 (migrations là số cũ,
 
 Việc sau khôi phục:
 
+0. Báo admin và kế toán tải lại mọi tab Quản trị (như bước 12): tab mở từ lúc web mới chạy gửi `expectedAmount` khi duyệt/chi lệnh rút, API cũ trả 400.
 1. Đối chiếu các đơn phát sinh giữa bước 6 và lúc khôi phục (không có nếu quay lại ngay sau migrate, vì API dừng từ bước 5): so với Pancake POS và sao kê ngân hàng; đơn nào có tiền mà không có trong DB thì tạo lại hoặc hoàn tiền.
 2. Hàng đợi Redis còn job cũ tham chiếu đơn không còn: xem Sức khoẻ hệ thống, các dòng `queue.<tên>`; xử lý hoặc xoá job lỗi sau khi đối chiếu.
 3. DB `<db>_before_restore_...` chỉ xoá khi Tech lead đồng ý (lệnh `DROP DATABASE` nằm cuối đầu ra của `restore-db.sh`).
@@ -975,7 +981,7 @@ Việc sau khôi phục:
 
 ### 7.4 Chỉ web có vấn đề
 
-Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME" && $DC up -d --no-build --no-deps web`. Lưu ý cặp web cũ với API mới: tab admin cũ sẽ gửi `null` cho mã Pancake rỗng (xem bước 12), nên chỉ làm tạm.
+Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME" && $DC up -d --no-build --no-deps web`. Lưu ý cặp web cũ với API mới: tab admin cũ sẽ gửi `null` cho mã Pancake rỗng (xem bước 12), nên chỉ làm tạm. Riêng việc duyệt/chi lệnh rút thì cặp web cũ với API mới không lỗi, vì `expectedAmount` là tuỳ chọn; chỉ cặp web mới với API cũ là hỏng (xem mục 0.2, ràng buộc 3).
 
 ## 8. Tham chiếu
 
