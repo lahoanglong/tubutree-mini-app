@@ -7,7 +7,7 @@ import type { LoyaltyService } from '../loyalty/loyalty.service';
 import type { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { WalletLedgerService } from '../wallet/wallet-ledger.service';
-import { formatVnDate, vnDateKey } from '../../common/vn-time';
+import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 
 /** Stub tối thiểu cho các test không quan tâm việc đẩy Pancake. */
 const pancakeStub = () => ({ enqueuePush: jest.fn().mockResolvedValue(undefined) }) as unknown as PancakeOrderService;
@@ -184,6 +184,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       existingOrder?: unknown;
       retryDays?: number;
       dueRows?: unknown[];
+      lockedIntervalWeeks?: number;
     } = {},
   ) {
     const due = opts.dueRows ?? [
@@ -193,9 +194,9 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const orderCreate = jest.fn().mockImplementation((args) =>
       opts.orderCreateError
         ? Promise.reject(opts.orderCreateError)
-        : Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status }),
+        : Promise.resolve({ id: 'o1', code: args.data.code, total: args.data.total, status: args.data.status, createdAt: new Date() }),
     );
-    const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: new Date(Date.now() + 9e9), intervalWeeks: 4 });
+    const subUpdate = jest.fn().mockResolvedValue({ nextRunAt: new Date(Date.now() + 9e9), intervalWeeks: opts.lockedIntervalWeeks ?? 4 });
     // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
     const stockExecuteRaw = jest.fn().mockResolvedValue(opts.stockCount ?? 1);
     const findMany = jest.fn().mockResolvedValue(due);
@@ -316,6 +317,22 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     expect(data.platform).toBe('system');
     expect(data.subscriptionId).toBe('s1');
     expect(data.code).toMatch(/^TUBUSUB\d{10}$/);
+  });
+
+  it('khách đổi chu kỳ chen giữa claim và khoá dòng: đơn kỳ này đặt lại nextRunAt theo chu kỳ mới, không để ngày PATCH tính từ đơn cũ', async () => {
+    // Quét thấy chu kỳ 4, lúc khoá dòng đã là 6 (PATCH vừa ghi nextRunAt = 0h ngày mai vì thấy đơn cũ quá xa).
+    const { svc, subUpdate } = makeProcess(1, { lockedIntervalWeeks: 6 });
+    await svc.processDue();
+    const reset = subUpdate.mock.calls.find((c) => (c[0].data as { nextRunAt?: Date }).nextRunAt !== undefined);
+    expect(reset).toBeDefined();
+    expect((reset![0].data.nextRunAt as Date).getTime()).toBe(startOfVnDay().getTime() + 6 * 7 * 864e5);
+  });
+
+  it('chu kỳ không đổi giữa claim và khoá dòng → không ghi đè nextRunAt do bước claim', async () => {
+    const { svc, subUpdate } = makeProcess(1);
+    await svc.processDue();
+    const reset = subUpdate.mock.calls.find((c) => (c[0].data as { nextRunAt?: Date }).nextRunAt !== undefined);
+    expect(reset).toBeUndefined();
   });
 
   it('instance khác đã claim (count=0) → KHÔNG tạo đơn trùng', async () => {
@@ -936,6 +953,13 @@ describe('SubscriptionsService.setStatus', () => {
     );
   });
 
+  it('ACTIVE (bật lại từ PAUSED, nextRunAt còn ở tương lai do đổi chu kỳ lúc tạm dừng) → giữ nguyên nextRunAt', async () => {
+    const future = new Date(Date.now() + 40 * 864e5);
+    const { svc, update } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 10, nextRunAt: future });
+    await svc.setStatus('u1', 's1', 'ACTIVE');
+    expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(future.toISOString());
+  });
+
   it('ACTIVE (bật lại từ PAUSED, đã quá hạn) → dời nextRunAt + phát subscription_changed action=resumed', async () => {
     const pastRunAt = new Date(Date.now() - 999_999_999);
     const { svc, update, analytics } = makeSetStatus({ id: 's1', userId: 'u1', status: 'PAUSED', intervalWeeks: 4, nextRunAt: pastRunAt });
@@ -1001,6 +1025,30 @@ describe('SubscriptionsService.list', () => {
     expect(row).toMatchObject({ cycleSubtotal: 299_970, cycleDiscount: 41_995, cycleGoods: 257_975 });
   });
 
+  it('Q22: trả lastOrderAt (ngày đơn kỳ gần nhất) để Mini App tính trước ngày giao kế khi đổi chu kỳ; chưa có đơn → null', async () => {
+    const at = new Date('2026-10-10T03:00:00.000Z');
+    const orderFindMany = jest.fn().mockResolvedValue([{ id: 'o1', createdAt: at }]);
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date(), lastOrderId: 'o1' },
+          { id: 's2', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', nextRunAt: new Date(), lastOrderId: null },
+        ]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', name: 'V', salePrice: null, retailPrice: 100000, product: { name: 'P', thumbnail: null, slug: 'p' } },
+        ]),
+      },
+      order: { findMany: orderFindMany },
+    } as unknown as PrismaService;
+    const svc = new SubscriptionsService(prisma, { get: async <T>(_k: string, fb?: T) => fb as T } as unknown as SystemConfigService, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    const rows = await svc.list('u1');
+    expect(rows.map((r) => r.lastOrderAt)).toEqual([at, null]);
+    expect(orderFindMany).toHaveBeenCalledWith({ where: { id: { in: ['o1'] } }, select: { id: true, createdAt: true } });
+  });
+
   it('giới hạn số gói trả về (mặc định 100, tối đa 200) và hỗ trợ cursor, C-100', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const prisma = { subscription: { findMany } } as unknown as PrismaService;
@@ -1013,5 +1061,148 @@ describe('SubscriptionsService.list', () => {
     });
     await svc.list('u1', { take: 9999, cursor: 's7' });
     expect(findMany).toHaveBeenLastCalledWith(expect.objectContaining({ take: 200, cursor: { id: 's7' }, skip: 1 }));
+  });
+});
+
+describe('SubscriptionsService.update — đổi chu kỳ giao (Q22)', () => {
+  const DAY = 864e5;
+  const WEEK = 7 * DAY;
+  const NOW = new Date('2026-10-20T05:00:00.000Z');
+  /** 0h giờ VN ngày kế tiếp: mốc sớm nhất một gói hẹn ngày được phép (cùng luật parseStartDate lúc tạo gói). */
+  const TOMORROW_VN = new Date('2026-10-20T17:00:00.000Z');
+
+  function makeUpdate(row: Record<string, unknown>, lastOrderCreatedAt: Date | null = null) {
+    const update = jest.fn().mockImplementation((args) => Promise.resolve({ id: 's1', ...row, ...args.data }));
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([
+        { id: 's1', userId: 'u1', variationId: 'v1', quantity: 2, addressId: 'a1', status: 'ACTIVE', paymentMethod: 'COD', intervalWeeks: 4, ...row },
+      ]),
+      variation: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'v1', isActive: true, product: { name: 'P', isActive: true, approvalStatus: 'APPROVED' } }),
+      },
+      order: {
+        findUnique: jest.fn().mockResolvedValue(lastOrderCreatedAt ? { createdAt: lastOrderCreatedAt } : null),
+      },
+      subscription: { update },
+    };
+    const prisma = { $transaction: jest.fn((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    const analytics = makeAnalytics();
+    const svc = new SubscriptionsService(prisma, config, pricing, loyalty, notifications, pancakeStub(), analytics, walletLedger());
+    return { svc, update, tx, analytics };
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: NOW });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('4 → 6 tuần: ngày giao kế = 0h VN của ngày đơn kỳ gần nhất + 6 tuần, ghi đúng chu kỳ mới', async () => {
+    const lastOrderAt = new Date('2026-10-10T03:00:00.000Z'); // 10h VN ngày 10/10
+    const { svc, update } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(lastOrderAt.getTime() + 4 * WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(6);
+    expect((data.nextRunAt as Date).toISOString()).toBe('2026-11-20T17:00:00.000Z'); // 0h VN ngày 21/11
+    expect(data.retryCount).toBe(0);
+  });
+
+  it('đơn do cron ghi lúc 03:00:00.200 giờ VN: nextRunAt neo 0h VN của ngày đơn, cron 03:00:00.010 ngày đến hạn vẫn bốc gói', async () => {
+    // createdAt của đơn cron luôn sau `now` lúc cron bắt đầu; neo thẳng createdAt + N tuần thì lỡ nhịp một ngày.
+    const lastOrderAt = new Date('2026-10-09T20:00:00.200Z'); // 03:00:00.200 ngày 10/10 giờ VN
+    const { svc, update } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(lastOrderAt.getTime() + 4 * WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    const nextRunAt = update.mock.calls[0][0].data.nextRunAt as Date;
+    const cronStartOnDueDay = new Date('2026-11-20T20:00:00.010Z'); // 03:00:00.010 ngày 21/11 giờ VN
+    expect(nextRunAt.getTime()).toBeLessThanOrEqual(cronStartOnDueDay.getTime());
+    expect(nextRunAt.toISOString()).toBe('2026-11-20T17:00:00.000Z');
+  });
+
+  it('6 → 4 tuần mà mốc mới đã qua hoặc sát hơn mức báo trước tối thiểu → đặt 0h ngày mai giờ VN', async () => {
+    const lastOrderAt = new Date(NOW.getTime() - 5 * WEEK);
+    const { svc, update } = makeUpdate({ intervalWeeks: 6, lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 4 });
+    expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(TOMORROW_VN.toISOString());
+  });
+
+  it('mốc mới rơi vào chính hôm nay (chưa tới 0h ngày mai) → vẫn đặt 0h ngày mai, không giao trong ngày', async () => {
+    const lastOrderAt = new Date(NOW.getTime() - 4 * WEEK + 3600e3);
+    const { svc, update } = makeUpdate({ intervalWeeks: 6, lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 3600e3) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 4 });
+    expect((update.mock.calls[0][0].data.nextRunAt as Date).toISOString()).toBe(TOMORROW_VN.toISOString());
+  });
+
+  it('gói chưa ra đơn nào (hẹn ngày bắt đầu): giữ ngày bắt đầu khách chọn, chỉ đổi chu kỳ', async () => {
+    const start = new Date(NOW.getTime() + 30 * DAY);
+    const { svc, update, tx } = makeUpdate({ lastOrderId: null, nextRunAt: start });
+    await svc.update('u1', 's1', { intervalWeeks: 10 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(10);
+    expect(data.nextRunAt).toBeUndefined();
+    expect(tx.order.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('gói PAUSED có nextRunAt còn ở tương lai: vẫn tính lại theo đơn kỳ gần nhất + chu kỳ mới, để bật lại giữ đúng ngày', async () => {
+    // Đơn cuối cách 6 ngày, chu kỳ cũ 4 tuần → nextRunAt cũ còn 22 ngày; đổi 10 tuần mà giữ ngày cũ là giao sớm hơn 6 tuần.
+    const lastOrderAt = new Date(NOW.getTime() - 6 * DAY);
+    const { svc, update } = makeUpdate({ status: 'PAUSED', lastOrderId: 'o1', nextRunAt: new Date(lastOrderAt.getTime() + 4 * WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 10 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(10);
+    expect((data.nextRunAt as Date).toISOString()).toBe(
+      new Date(startOfVnDay(lastOrderAt).getTime() + 10 * WEEK).toISOString(),
+    );
+  });
+
+  it('gói PAUSED chưa ra đơn nào: chỉ đổi chu kỳ, giữ ngày bắt đầu', async () => {
+    const { svc, update } = makeUpdate({ status: 'PAUSED', lastOrderId: null, nextRunAt: new Date(NOW.getTime() + 9 * DAY) });
+    await svc.update('u1', 's1', { intervalWeeks: 8 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBe(8);
+    expect(data.nextRunAt).toBeUndefined();
+  });
+
+  it('gửi lại đúng chu kỳ đang dùng → không tính lại ngày giao kế', async () => {
+    const { svc, update } = makeUpdate({ intervalWeeks: 6, lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 2 * WEEK) }, new Date(NOW.getTime() - 4 * WEEK));
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    expect(update.mock.calls[0][0].data.nextRunAt).toBeUndefined();
+  });
+
+  it('chỉ sửa số lượng (không gửi intervalWeeks) → không đụng chu kỳ lẫn ngày giao kế', async () => {
+    const { svc, update } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 2 * WEEK) }, new Date(NOW.getTime() - 2 * WEEK));
+    await svc.update('u1', 's1', { quantity: 3 });
+    const data = update.mock.calls[0][0].data;
+    expect(data.intervalWeeks).toBeUndefined();
+    expect(data.nextRunAt).toBeUndefined();
+  });
+
+  it('chu kỳ ngoài 4/6/8/10 → 400 trước khi mở transaction', async () => {
+    const $transaction = jest.fn();
+    const svc = new SubscriptionsService({ $transaction } as unknown as PrismaService, config, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    await expect(svc.update('u1', 's1', { intervalWeeks: 5 })).rejects.toThrow('4/6/8/10');
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it('gói đã huỷ → 400, không ghi gì', async () => {
+    const { svc, update } = makeUpdate({ status: 'CANCELLED' });
+    await expect(svc.update('u1', 's1', { intervalWeeks: 6 })).rejects.toThrow('đã huỷ');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('không đổi bậc giảm: không đụng thang bậc theo số gói ACTIVE', async () => {
+    const { svc, tx } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(NOW.getTime() + 2 * WEEK) }, new Date(NOW.getTime() - 2 * WEEK));
+    await svc.update('u1', 's1', { intervalWeeks: 8 });
+    expect(Object.keys(tx.subscription)).toEqual(['update']);
+  });
+
+  it('phát subscription_changed action=updated kèm chu kỳ mới và ngày giao kế', async () => {
+    const lastOrderAt = new Date('2026-10-10T03:00:00.000Z');
+    const { svc, analytics } = makeUpdate({ lastOrderId: 'o1', nextRunAt: new Date(lastOrderAt.getTime() + 4 * WEEK) }, lastOrderAt);
+    await svc.update('u1', 's1', { intervalWeeks: 6 });
+    expect(analytics.record).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ props: expect.objectContaining({ action: 'updated', intervalWeeks: 6 }) }),
+    );
   });
 });

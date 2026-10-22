@@ -15,35 +15,47 @@ import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { QuantitySelector } from './ui/quantity-selector';
 import { LineItemSkeleton } from './ui/skeleton';
-import { AddressPicker, PaymentMethodPicker, SectionLabel } from './subscription-options';
+import { Text } from './ui/text';
+import {
+  AddressPicker,
+  formatVnDate,
+  IntervalPicker,
+  nextRunAfterIntervalChange,
+  PaymentMethodPicker,
+  SectionLabel,
+  vnDateOf,
+} from './subscription-options';
 
 /** Trần ở client chỉ để nút + không chạy vô hạn; còn hàng hay không do API kiểm khi sinh đơn kỳ. */
 const MAX_QTY = 99;
 
 /** Chỉ gửi trường đã đổi: PATCH trống không làm gì, và đổi địa chỉ là bước API kiểm trùng gói. */
 export function subscriptionPatch(
-  sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod'>,
-  next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod },
+  sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod' | 'intervalWeeks'>,
+  next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number },
 ) {
-  const patch: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod } = {};
+  const patch: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number } = {};
   if (next.quantity !== sub.quantity) patch.quantity = next.quantity;
   if (next.addressId && next.addressId !== sub.addressId) patch.addressId = next.addressId;
   if (next.paymentMethod !== (sub.paymentMethod ?? 'COD')) patch.paymentMethod = next.paymentMethod;
+  if (next.intervalWeeks !== sub.intervalWeeks) patch.intervalWeeks = next.intervalWeeks;
   return patch;
 }
 
-/** Sửa số lượng / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng (C-015). Mount khi mở để state lấy từ gói đang chọn. */
+/** Sửa số lượng / chu kỳ / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng (C-015). Mount khi mở để state lấy từ gói đang chọn. */
 export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; onClose: () => void }) {
   const t = vi.subscriptions;
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const [quantity, setQuantity] = useState(sub.quantity);
+  const [weeks, setWeeks] = useState(sub.intervalWeeks);
   const [addressId, setAddressId] = useState(sub.addressId);
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>(sub.paymentMethod ?? 'COD');
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
 
-  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment });
+  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks });
+  const nextRun = nextRunAfterIntervalChange(sub, weeks);
   const dirty = Object.keys(patch).length > 0;
 
   const save = useMutation({
@@ -74,6 +86,19 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       <div style={{ padding: '4px 0' }}>
         <QuantitySelector value={quantity} min={1} max={MAX_QTY} onChange={setQuantity} />
       </div>
+
+      <SectionLabel>{t.intervalLabel}</SectionLabel>
+      <IntervalPicker value={weeks} onChange={setWeeks} />
+      {nextRun && (
+        <Text variant="caption" tone="tertiary" as="div">
+          {t.intervalNextRun(formatVnDate(vnDateOf(nextRun)))}
+        </Text>
+      )}
+      {sub.status === 'PAUSED' && weeks !== sub.intervalWeeks && (
+        <Text variant="caption" tone="tertiary" as="div">
+          {t.intervalPausedHint}
+        </Text>
+      )}
 
       <SectionLabel>{t.paymentLabel}</SectionLabel>
       <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} />
