@@ -231,6 +231,18 @@ describe('ConfigItem (tab Cấu hình)', () => {
       expect(confirmDialog()?.textContent).toContain('600 → 6');
     });
 
+    it('dealer.quarterly_bonus_tiers: hộp xác nhận nói bậc mới chỉ áp cho quý chưa trả, không nói "mọi đơn"', async () => {
+      const value = [{ min: 50_000_000, pct: 2 }];
+      const { container } = setup(row({ key: 'dealer.quarterly_bonus_tiers', value, category: 'dealer' }));
+      typeInto(container.querySelector('input'), JSON.stringify([{ min: 70_000_000, pct: 2.5 }]));
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      const text = confirmDialog()?.textContent ?? '';
+      expect(text).toContain('quý chưa trả thưởng');
+      expect(text).toContain('quý đã trả giữ bảng bậc đã chụp');
+      expect(text).not.toContain('Áp dụng ngay cho mọi đơn');
+    });
+
     it.each([
       ['community.facebook_url', 'https://a.example', '"https://b.example"'],
     ])('%s: khoá không phải tiền/điểm vẫn lưu thẳng, không hỏi', async (key, oldValue, next) => {

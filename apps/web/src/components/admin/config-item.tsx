@@ -38,6 +38,11 @@ const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|
 /** Khoá tiền nằm ngoài các nhóm trên: phạt đi trễ trừ thẳng vào lương nhân viên. */
 const MONEY_KEYS = new Set(['attendance.late_fine']);
 
+/** Bảng bậc thưởng quý được chụp lại lúc trả thưởng nên đổi bảng chỉ chạm quý chưa trả, câu "mọi đơn" ở hộp xác nhận chung sẽ làm admin hiểu sai. */
+const BONUS_TIERS_KEY = 'dealer.quarterly_bonus_tiers';
+const APPLY_NOTE_DEFAULT = 'Áp dụng ngay cho mọi đơn, ví và điểm của khách.';
+const APPLY_NOTE_BONUS_TIERS = 'Có hiệu lực cho quý chưa trả thưởng; quý đã trả giữ bảng bậc đã chụp.';
+
 const isMoneyKey = (key: string) =>
   MONEY_KEYS.has(key) ||
   MONEY_PREFIXES.some((p) => key.startsWith(p)) ||
@@ -66,7 +71,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
       if (isMoneyKey(row.key)) {
         const ok = await confirm({
           title: 'Xác nhận đổi cấu hình tiền/điểm',
-          message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\nÁp dụng ngay cho mọi đơn, ví và điểm của khách.`,
+          message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\n${row.key === BONUS_TIERS_KEY ? APPLY_NOTE_BONUS_TIERS : APPLY_NOTE_DEFAULT}`,
           confirmLabel: 'Lưu thay đổi',
         });
         if (!ok) return null;
