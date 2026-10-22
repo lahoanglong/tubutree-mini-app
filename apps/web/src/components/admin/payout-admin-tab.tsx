@@ -236,9 +236,9 @@ export function PayoutRow({ payout: p, canReview = true }: { payout: AdminPayout
 
   const mut = useMutation({
     mutationFn: (a: Action) => {
-      if (a === 'approve') return approvePayout(p.id, text);
+      if (a === 'approve') return approvePayout(p.id, text, p.amount);
       if (a === 'reject') return rejectPayout(p.id, text);
-      return markPayoutPaid(p.id, bankRef, text);
+      return markPayoutPaid(p.id, bankRef, text, p.amount);
     },
     onSuccess: () => {
       setErr(null);

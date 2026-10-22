@@ -272,9 +272,11 @@ function PayoutRow({ p }: { p: AffiliatePayout }) {
         </div>
         <Badge tone={m.tone}>{m.label}</Badge>
       </div>
-      {p.taxWithheld > 0 && (
+      {(p.taxWithheld > 0 || (p.taxRefunded ?? 0) > 0) && (
         <div className="text-xs text-stone-600">
-          Hoa hồng {formatVnd(p.grossAmount ?? p.amount + p.taxWithheld)} · đã khấu trừ thuế TNCN {formatVnd(p.taxWithheld)}
+          Hoa hồng {formatVnd(p.grossAmount ?? p.amount + p.taxWithheld)}
+          {p.taxWithheld > 0 ? ` · đã khấu trừ thuế TNCN ${formatVnd(p.taxWithheld)}` : ''}
+          {(p.taxRefunded ?? 0) > 0 ? ` · đã hoàn ${formatVnd(p.taxRefunded ?? 0)} thuế giữ dư vào Ví` : ''}
         </div>
       )}
       {p.status === 'REJECTED' && (

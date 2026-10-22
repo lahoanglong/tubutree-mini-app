@@ -141,6 +141,54 @@ describe('PayoutRow — hỏi lại khi duyệt và khi chi (D7-01, D7-16)', () 
   });
 });
 
+// Lệnh REQUESTED tăng số thực nhận khi lệnh khác bị từ chối (hoàn thuế giữ dư ngay trên lệnh): màn gửi kèm số đang hiện để
+// máy chủ chặn duyệt/chi theo số cũ.
+describe('PayoutRow — gửi expectedAmount là số đang hiện trên dòng', () => {
+  it('"Duyệt" gửi expectedAmount = amount của dòng', async () => {
+    const api = mockFetch({ '/approve': { body: payout({ status: 'APPROVED' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ amount: 750_000 })} />);
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/admin/payouts/p1/approve'))!;
+    expect(JSON.parse(String(call.init?.body))).toEqual({ expectedAmount: 750_000 });
+  });
+
+  it('"Đã chuyển khoản" gửi expectedAmount = amount của dòng', async () => {
+    const api = mockFetch({ '/mark-paid': { body: payout({ status: 'PAID' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED', amount: 750_000 })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/admin/payouts/p1/mark-paid'))!;
+    expect(JSON.parse(String(call.init?.body))).toEqual({ expectedAmount: 750_000 });
+  });
+
+  it('409 số thực nhận đã đổi: hiện lỗi của máy chủ và tải lại danh sách', async () => {
+    const msg = 'Số thực nhận của lệnh đã đổi từ 750.000đ thành 1.000.000đ (thuế giữ dư vừa được hoàn), vui lòng tải lại trước khi duyệt.';
+    const api = mockFetch({
+      '/approve': { status: 409, body: { statusCode: 409, message: msg } },
+      '/pit-report': { body: EMPTY_PIT },
+      '/admin/payouts': { body: { data: [payout({ amount: 750_000 })], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab />);
+    await flush();
+    const listCalls = () => api.calls.filter((c) => c.url.includes('/admin/payouts?')).length;
+    const before = listCalls();
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã đổi từ 750.000đ thành 1.000.000đ');
+    expect(listCalls()).toBeGreaterThan(before);
+  });
+});
+
 // C-097 (Q-29): màn duyệt/chi tiền chỉ đổi giao diện sang DS v2; nút thao tác tiền chạm được ở 390px.
 describe('PayoutRow / PayoutAdminTab — DS v2', () => {
   it('lệnh REQUESTED: "Duyệt" là nút chính forest, "Từ chối (hoàn tiền)" viền danger, cả hai cao 44px', () => {
