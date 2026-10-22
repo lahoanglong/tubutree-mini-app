@@ -137,6 +137,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
         findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn().mockResolvedValue({}),
       },
+      dealerQuarterBonusTier: { findUnique: jest.fn().mockResolvedValue(null), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $executeRaw: jest.fn().mockResolvedValue(1),
     };
     const prisma: Record<string, unknown> = { ...base, ...over };

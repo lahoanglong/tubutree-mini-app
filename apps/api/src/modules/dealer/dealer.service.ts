@@ -1364,6 +1364,26 @@ export class DealerService {
     return [...tiers].sort((a, b) => a.min - b.min);
   }
 
+  /** Bản chụp bảng bậc của quý (null = quý chưa có: chưa tính thưởng hoặc đã trả trước khi có bản chụp). */
+  private async quarterTiersSnapshot(db: Pick<Prisma.TransactionClient, 'dealerQuarterBonusTier'>, quarter: string): Promise<BonusTier[] | null> {
+    const row = await db.dealerQuarterBonusTier.findUnique({ where: { quarter } });
+    if (!row) return null;
+    return [...(row.tiers as unknown as BonusTier[])].sort((a, b) => a.min - b.min);
+  }
+
+  /**
+   * Chụp bảng bậc hiện hành cho quý ở lần tính thưởng đầu tiên, rồi trả bản đang lưu. Ghi kiểu tạo-một-lần (ON CONFLICT DO
+   * NOTHING) và đọc lại, nên hai lượt chạy chồng nhau cùng thấy MỘT bản chụp dù mỗi lượt đọc cấu hình ở một thời điểm.
+   * Chạy ngoài transaction của từng đại lý để bản chụp không bị rollback theo một đại lý lỗi.
+   */
+  private async freezeQuarterTiers(quarter: string, current: BonusTier[]): Promise<BonusTier[]> {
+    await this.prisma.dealerQuarterBonusTier.createMany({
+      data: [{ quarter, tiers: current as unknown as Prisma.InputJsonValue }],
+      skipDuplicates: true,
+    });
+    return (await this.quarterTiersSnapshot(this.prisma, quarter)) ?? current;
+  }
+
   /**
    * Cron (ngày 10 tháng đầu mỗi quý — xem DealerCron): trả thưởng doanh số cho quý VỪA KẾT THÚC
    * cho mọi đại lý, CHỈ trên doanh số đã chốt (dealerVolume). Chạy trễ vài ngày để đơn đặt cuối
@@ -1382,7 +1402,8 @@ export class DealerService {
     const { start, end } = DealerService.vnQuarterRange(year, q);
     const quarter = `Q${q + 1}/${year}`;
 
-    const sorted = await this.bonusTiers();
+    // Lần tính thưởng đầu của quý chụp bảng bậc; chạy lại (cron lỗi giữa chừng, chạy tay) dùng lại bản đã chụp.
+    const sorted = await this.freezeQuarterTiers(quarter, await this.bonusTiers());
     const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
 
     let paid = 0;
@@ -1480,11 +1501,32 @@ export class DealerService {
   }
 
   /**
+   * Bảng bậc cho bước trả bù của quý. Có bản chụp (lần trả ngày 10 đã chạy) thì dùng bản đó. Chưa có bản chụp mà đã có dòng
+   * thưởng là quý trả trước khi có bản chụp: giữ bảng hiện hành. Chưa ai được trả (ngày 10 không chạy) thì đây là lần tính
+   * đầu của quý: chụp bảng hiện hành.
+   */
+  private async tiersForTopUp(quarter: string, current: BonusTier[]): Promise<BonusTier[]> {
+    const snapshot = await this.quarterTiersSnapshot(this.prisma, quarter);
+    if (snapshot) return snapshot;
+    const anyPaid = await this.prisma.dealerCreditLedger.findFirst({
+      where: {
+        OR: [
+          { refType: 'QUARTER_BONUS', refId: quarter },
+          { refType: 'QUARTER_BONUS_TOPUP', refId: { startsWith: `${quarter}:topup:` } },
+        ],
+      },
+      select: { id: true },
+    });
+    return anyPaid ? current : this.freezeQuarterTiers(quarter, current);
+  }
+
+  /**
    * Cron hằng ngày: trả bù thưởng quý cho đơn chốt (đóng gói + có tiền/ghi nợ) SAU lần trả ngày 10, trong cửa sổ
    * `dealer.bonus_topup_window_days` ngày sau ngày cuối quý. Chỉ trả phần do đơn chốt muộn sinh ra: nếu doanh số đã chốt
    * (cắt ở cuối cửa sổ) không lớn hơn doanh số lần trả muộn nhất đã thấy thì không trả gì (đổi bậc thưởng sau ngày 10
    * KHÔNG sinh khoản bù); nếu lớn hơn thì ghi một dòng QUARTER_BONUS_TOPUP = min(thưởng mới − phần đang giữ, thưởng mới(V) −
-   * thưởng mới(V lúc trả muộn nhất)), cả hai theo bảng bậc hiện hành, nên chênh do đổi bậc của đơn cũ không lọt vào.
+   * thưởng mới(V lúc trả muộn nhất)), cả hai theo bản chụp bảng bậc của quý (xem freezeQuarterTiers; quý trả trước khi có bản chụp
+   * dùng bảng hiện hành), nên chênh do đổi bậc của đơn cũ không lọt vào.
    * Phần đang giữ = QUARTER_BONUS + các khoản bù + điều chỉnh thu hồi. Không bao giờ thu bớt: thu hồi vẫn chỉ qua
    * clawbackQuarterBonusForOrder. Quý chưa có dòng thưởng nào mà doanh số đã đạt bậc từ trước giờ trả ngày 10 (lần trả
    * ngày 10 không chạy được) thì ghi QUARTER_BONUS "trả muộn" và báo như thưởng thường, không gọi là đơn chốt muộn.
@@ -1499,10 +1541,11 @@ export class DealerService {
     const periods = DealerService.topUpQuarters(now, windowDays);
     if (periods.length === 0) return { toppedUp: 0, quarters: [] };
 
-    const tiers = await this.bonusTiers();
+    const currentTiers = await this.bonusTiers();
     const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
     let toppedUp = 0;
     for (const period of periods) {
+      const tiers = await this.tiersForTopUp(period.key, currentTiers);
       // Doanh số cắt ở expiresAt; lượt quét thêm chạy SAU mốc đó nên createdAt của dòng ghi phải ép về expiresAt, nếu không
       // thu hồi coi đơn chốt trong khoảng expiresAt..giờ chạy là đã được tính. Trong cửa sổ thì để giờ DB mặc định.
       const stampedAt = now.getTime() > period.expiresAt.getTime() ? period.expiresAt : undefined;
@@ -1601,7 +1644,7 @@ export class DealerService {
    * 2 quy tắc. CHỈ thu khi đơn ĐANG được tính vào doanh số đã chốt ngay trước lần huỷ: trạng thái cũ
    * (ảnh chụp `order.status` trước lần lật) ∈ PACKED/SHIPPING/DELIVERED và (đã PAID — theo
    * `opts.paidBeforeReversal` của guard hoàn tiền, mặc định ảnh chụp paymentStatus — hoặc là đơn ghi
-   * công nợ có dòng ledger ORDER). Cùng bậc/công thức với payout (bonusTiers + bonusForRevenue).
+   * công nợ có dòng ledger ORDER). Cùng bậc/công thức với payout: bản chụp bảng bậc của quý (quý chưa có bản chụp thì bonusTiers).
    * "Doanh số đã chốt" ở đây là doanh số MÀ LẦN TRẢ THƯỞNG ĐÃ THẤY: đơn (kể cả "các đơn khác") chỉ tính khi đã chốt
    * (lên PACKED + có tiền/ghi nợ) không muộn hơn createdAt của dòng QUARTER_BONUS — xem wasCountedByPayout/settledAtByOrder.
    * Thưởng còn giữ = dòng QUARTER_BONUS + mọi dòng QUARTER_BONUS_TOPUP (trả bù, xem topUpQuarterlyBonuses) + mọi dòng
@@ -1667,7 +1710,7 @@ export class DealerService {
 
     const others = (await this.dealerVolume(order.userId, qStart, qEnd, tx, order.id, payoutAt)).settled;
     const before = others + order.total;
-    const tiers = await this.bonusTiers();
+    const tiers = (await this.quarterTiersSnapshot(tx, quarter)) ?? (await this.bonusTiers());
     const marginal = bonusForRevenue(before, tiers).bonusAmount - bonusForRevenue(others, tiers).bonusAmount;
     const clawback = Math.min(heldBonus, marginal);
     if (clawback <= 0) return { quarter, clawedBack: 0 };

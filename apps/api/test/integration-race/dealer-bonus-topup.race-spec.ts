@@ -172,7 +172,7 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
   });
 
-  it('admin đổi bậc thưởng sau ngày 10 + đơn chốt muộn, 4 lượt song song: chỉ bù phần biên của đơn muộn theo bậc mới, một lần', async () => {
+  it('admin đổi bậc thưởng sau ngày 10 + đơn chốt muộn, 4 lượt song song: chỉ bù phần biên của đơn muộn theo bản chụp bậc lúc trả, một lần', async () => {
     const QUARTER = 'Q1/2022';
     const d = await createUser(prisma, { role: 'DEALER' });
     await dealerOrder(d.id, 120_000_000, new Date('2022-02-10T03:00:00Z'), 'DELIVERED', true);
@@ -194,8 +194,8 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
       await Promise.all([1, 2, 3, 4].map(() => topUp(new Date('2022-04-20T03:00:00Z'))));
       const topups = (await ledgerOf(d.id, QUARTER)).filter((r) => r.refType === 'QUARTER_BONUS_TOPUP');
       expect(topups).toHaveLength(1);
-      // bonus(150tr) = 7,5tr, bonus(120tr) = 6tr → biên 1,5tr.
-      expect(topups[0]).toMatchObject({ delta: -1_500_000 });
+      // Bản chụp 2/3/4%: bonus(150tr) = 4,5tr, bonus(120tr) = 3,6tr → biên 0,9tr (bảng mới 3/5% sẽ cho 1,5tr).
+      expect(topups[0]).toMatchObject({ delta: -900_000 });
     } finally {
       await setConfig(prisma, 'dealer.quarterly_bonus_tiers', TIERS);
       dropTiersCache();
@@ -227,5 +227,68 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
     await returnOrder(late.id);
     expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+  });
+
+  const dropTiersCache = () => (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.delete('dealer.quarterly_bonus_tiers');
+  const payout = (now: Date) => dealer.payoutQuarterlyBonuses(now);
+  const snapshotsOf = (quarter: string) => prisma.dealerQuarterBonusTier.findMany({ where: { quarter } });
+
+  it('hai lượt payout và hai lượt bù song song cho cùng quý: đúng một bản chụp, thưởng trả đúng một lần', async () => {
+    const QUARTER = 'Q2/2022';
+    const d = await createUser(prisma, { role: 'DEALER' });
+    await dealerOrder(d.id, 120_000_000, new Date('2022-05-10T03:00:00Z'), 'DELIVERED', true);
+
+    await Promise.all([payout(new Date('2022-07-12T03:00:00Z')), payout(new Date('2022-07-12T03:00:00Z')), topUp(new Date('2022-07-20T03:00:00Z')), topUp(new Date('2022-07-20T03:00:00Z'))]);
+
+    const snaps = await snapshotsOf(QUARTER);
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]!.tiers).toEqual(TIERS);
+    const rows = (await ledgerOf(d.id, QUARTER)).filter((r) => r.refType !== 'QUARTER_BONUS_ADJ');
+    expect(rows).toHaveLength(1);
+    expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+  });
+
+  it('đổi bậc sau ngày 10: bù song song và thu hồi đều theo bản chụp 2/3/4%, không theo bảng mới', async () => {
+    const QUARTER = 'Q3/2022';
+    const d = await createUser(prisma, { role: 'DEALER' });
+    await dealerOrder(d.id, 120_000_000, new Date('2022-08-10T03:00:00Z'), 'DELIVERED', true);
+    const late = await dealerOrder(d.id, 90_000_000, new Date('2022-09-28T03:00:00Z'), 'CONFIRMED', true);
+    await payoutAt(new Date('2022-10-12T03:00:00Z'));
+    expect((await snapshotsOf(QUARTER))[0]!.tiers).toEqual(TIERS);
+
+    const newTiers = [{ min: 50_000_000, pct: 3 }, { min: 100_000_000, pct: 5 }, { min: 200_000_000, pct: 6 }];
+    await setConfig(prisma, 'dealer.quarterly_bonus_tiers', newTiers);
+    dropTiersCache();
+    try {
+      await settleAt(late.id, new Date('2022-10-15T03:00:00Z'));
+      await Promise.all([1, 2, 3, 4].map(() => topUp(new Date('2022-10-20T03:00:00Z'))));
+      const topups = (await ledgerOf(d.id, QUARTER)).filter((r) => r.refType === 'QUARTER_BONUS_TOPUP');
+      expect(topups).toHaveLength(1);
+      expect(topups[0]).toMatchObject({ delta: -4_800_000 });
+      expect(await heldOf(d.id, QUARTER)).toBe(8_400_000);
+
+      await sleep(20);
+      await returnOrder(late.id);
+      expect(await heldOf(d.id, QUARTER)).toBe(3_600_000);
+      expect(await snapshotsOf(QUARTER)).toHaveLength(1);
+    } finally {
+      await setConfig(prisma, 'dealer.quarterly_bonus_tiers', TIERS);
+      dropTiersCache();
+    }
+  });
+
+  it('ngày 10 không chạy: 4 lượt bù song song trả muộn đúng một lần và chụp đúng một bản bậc', async () => {
+    const QUARTER = 'Q4/2023';
+    const d = await createUser(prisma, { role: 'DEALER' });
+    await dealerOrder(d.id, 120_000_000, new Date('2023-11-10T03:00:00Z'), 'DELIVERED', true);
+
+    await Promise.all([1, 2, 3, 4].map(() => topUp(new Date('2024-01-12T03:00:00Z'))));
+
+    const snaps = await snapshotsOf(QUARTER);
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]!.tiers).toEqual(TIERS);
+    const rows = await ledgerOf(d.id, QUARTER);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ refType: 'QUARTER_BONUS', delta: -3_600_000 });
   });
 });

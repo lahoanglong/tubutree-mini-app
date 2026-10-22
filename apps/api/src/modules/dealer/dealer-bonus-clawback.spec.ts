@@ -79,6 +79,7 @@ function makeTx(opts: {
   if (opts.reversed?.packedAt) packedOf.set('o9', opts.reversed.packedAt);
   const tx = {
     $executeRaw: jest.fn(async () => 1),
+    dealerQuarterBonusTier: { findUnique: jest.fn(async () => null) },
     $queryRaw: jest.fn(async () =>
       [
         ...(opts.bonusDelta === null ? [] : [{ id: 'qb1', delta: opts.bonusDelta, createdAt: opts.payoutAt ?? PAYOUT_AT }]),

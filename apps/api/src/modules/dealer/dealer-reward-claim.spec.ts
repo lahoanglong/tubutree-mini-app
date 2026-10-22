@@ -204,6 +204,7 @@ function buildPrisma(opts: {
     },
     dealerApplication: { findMany: jest.fn().mockResolvedValue([{ userId: 'd1', businessName: 'Cty Đại lý A' }]) },
     dealerRewardClaim: claims,
+    dealerQuarterBonusTier: { findUnique: jest.fn().mockResolvedValue(null), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
   prisma.$transaction = jest.fn(async (arg: unknown) =>

@@ -25,6 +25,14 @@ type OrderRow = { id: string; total: number; status: string; paymentStatus: stri
 
 /** prisma giả: 1 đại lý d1, sổ công nợ và đơn nằm trong bộ nhớ; transaction chạy thẳng trên chính nó. */
 function makePrisma(orders: OrderRow[], ledger: Ledger[] = []) {
+  const snapshots = new Map<string, { quarter: string; tiers: unknown }>();
+  const snapshotModel = {
+    findUnique: jest.fn(async ({ where }: { where: { quarter: string } }) => snapshots.get(where.quarter) ?? null),
+    createMany: jest.fn(async ({ data }: { data: { quarter: string; tiers: unknown }[] }) => {
+      for (const d of data) if (!snapshots.has(d.quarter)) snapshots.set(d.quarter, d);
+      return { count: data.length };
+    }),
+  };
   const tx = {
     $executeRaw: jest.fn(async () => 1),
     order: { findMany: jest.fn(async () => orders) },
@@ -41,6 +49,8 @@ function makePrisma(orders: OrderRow[], ledger: Ledger[] = []) {
   };
   const prisma = {
     user: { findMany: jest.fn(async () => [{ id: 'd1' }]) },
+    dealerQuarterBonusTier: snapshotModel,
+    dealerCreditLedger: { findFirst: jest.fn(async ({ where }: { where: Where }) => ledger.find((l) => matches(l, where)) ?? null) },
     $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
   };
   return { prisma, tx, ledger };
