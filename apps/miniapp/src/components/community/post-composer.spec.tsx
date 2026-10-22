@@ -136,13 +136,13 @@ describe('PostComposer — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(mocks.createPost.mock.calls[0]![0]).toMatchObject({ kind: 'SHOWCASE', eventId: 'ev1' });
   });
 
-  it('thẻ nhập có nút gỡ: bấm Hủy trên thẻ bỏ thẻ đó khỏi danh sách gửi', async () => {
+  it('thẻ nhập có nút gỡ: bấm Huỷ trên thẻ bỏ thẻ đó khỏi danh sách gửi', async () => {
     renderComposer();
     fireEvent.click(kindChip(/Mẹo hay/));
     fireEvent.change(bodyInput(), { target: { value: 'Mẹo' } });
     fireEvent.change(screen.getByPlaceholderText(/vd: da nhạy cảm/), { target: { value: 'sen đá, da nhạy cảm' } });
     const tag = screen.getByText('sen đá', { selector: 'span' });
-    fireEvent.click(tag.parentElement!.querySelector('[aria-label="Hủy"]')!);
+    fireEvent.click(tag.parentElement!.querySelector('[aria-label="Huỷ"]')!);
     fireEvent.click(submitBtn());
     await waitFor(() => expect(mocks.createPost).toHaveBeenCalled());
     expect(mocks.createPost.mock.calls[0]![0]).toMatchObject({ tagSlugs: ['da nhạy cảm'] });
@@ -170,7 +170,7 @@ describe('PostComposer — tiêu đề, vùng chạm, biểu tượng (C-076, C-
   it('nút gỡ thẻ có vùng chạm 44x44', () => {
     renderComposer();
     fireEvent.change(screen.getByPlaceholderText(/vd: da nhạy cảm/), { target: { value: 'sen đá' } });
-    const btn = document.querySelector('[aria-label="Hủy"]') as HTMLElement;
+    const btn = document.querySelector('[aria-label="Huỷ"]') as HTMLElement;
     expect(Number.parseFloat(btn.style.minWidth)).toBeGreaterThanOrEqual(44);
     expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
   });

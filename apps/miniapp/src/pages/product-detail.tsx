@@ -700,7 +700,7 @@ export default function ProductDetailPage() {
               {vi.contentKit.sheetTitle}
             </Text>
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              Bài mẫu đã gắn sẵn link giới thiệu của bạn — copy là đăng được
+              Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được
             </Text>
           </Box>
           <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />

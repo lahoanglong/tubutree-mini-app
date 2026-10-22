@@ -243,19 +243,19 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
     expect(body.textContent).toMatch(/Ví Tubu hoặc tài khoản ngân hàng/);
   });
 
-  it('Xóa tài khoản: bấm → hỏi lại → "Gửi yêu cầu xóa" gọi API đúng một lần, "Hủy" quay về', async () => {
+  it('Xoá tài khoản: bấm → hỏi lại → "Gửi yêu cầu xoá" gọi API đúng một lần, "Huỷ" quay về', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xóa tài khoản' }));
-    expect(screen.getByText('Xóa tài khoản vĩnh viễn?')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
-    expect(screen.queryByText('Xóa tài khoản vĩnh viễn?')).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá tài khoản' }));
+    expect(screen.getByText('Xoá tài khoản vĩnh viễn?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+    expect(screen.queryByText('Xoá tài khoản vĩnh viễn?')).toBeNull();
     expect(mocks.requestAccountDeletion).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Xóa tài khoản' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu xóa' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xoá tài khoản' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' }));
     await waitFor(() => expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã ghi nhận yêu cầu', type: 'info' }));
-    await waitFor(() => expect(screen.queryByText('Xóa tài khoản vĩnh viễn?')).toBeNull());
+    await waitFor(() => expect(screen.queryByText('Xoá tài khoản vĩnh viễn?')).toBeNull());
   });
 
   it('nút Đăng xuất gọi logout', async () => {

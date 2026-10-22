@@ -85,7 +85,7 @@ export function parseGomdonCustomerId(value: string): { code: string; attempt: n
 /** Bảng mã trạng thái — đã đối chiếu tài liệu Gomdon (mục Webhook), khớp cả 12 mã. */
 export const GOMDON_STATUS_TEXT: Record<number, string> = {
   1: 'Tạo đơn thành công',
-  2: 'Đơn hủy',
+  2: 'Đơn huỷ',
   3: 'Đã lấy hàng',
   4: 'Đang vận chuyển đến bưu cục nhận',
   5: 'Đang đi giao hàng',

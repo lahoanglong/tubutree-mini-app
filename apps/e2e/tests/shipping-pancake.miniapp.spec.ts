@@ -81,7 +81,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     await page.goto(`/order/${ORDER_HANDED_OVER_UNPAID.code}`);
     await expect(page.getByText('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/quá hạn đơn sẽ tự huỷ/)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Hủy đơn' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Huỷ đơn' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Thanh toán ngay' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Xem tất cả đơn' })).toBeVisible();
     expect(api.callsTo('POST', '/orders/:code/cancel')).toHaveLength(0);

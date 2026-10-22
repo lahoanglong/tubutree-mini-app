@@ -649,12 +649,12 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(getCtvMilestones).toHaveBeenCalledTimes(2);
   });
 
-  it('dòng link chỉ ghi số click, không ghi "0 đơn" (cột conversions của link không được cập nhật)', async () => {
+  it('dòng link chỉ ghi số lượt bấm, không ghi "0 đơn" (cột conversions của link không được cập nhật)', async () => {
     vi.mocked(getAffiliateLinks).mockResolvedValueOnce([
       { id: 'L1', shortCode: 'abc123', targetType: 'HOMEPAGE', targetId: null, clicks: 1, conversions: 0, revenue: 0, createdAt: '2026-10-20T00:00:00Z' },
     ]);
     renderPage();
-    expect(await screen.findByText('1 click')).toBeInTheDocument();
+    expect(await screen.findByText('1 lượt bấm')).toBeInTheDocument();
     expect(screen.queryByText(/\d+ đơn/)).toBeNull();
   });
 });

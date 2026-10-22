@@ -271,7 +271,7 @@ export function VideoUpload({
               <Text variant="caption" tone="brand" as="span">Đổi video</Text>
             </button>
             <button type="button" onClick={() => onChange('')} style={LINK_BUTTON}>
-              <Text variant="caption" tone="danger" as="span">Xóa video</Text>
+              <Text variant="caption" tone="danger" as="span">Xoá video</Text>
             </button>
           </div>
         </div>
@@ -409,7 +409,7 @@ export function MultiImageUpload({
                 vòng 20px nhìn thấy vẫn cách góc 3px. */}
             <button
               type="button"
-              aria-label="Xóa ảnh"
+              aria-label="Xoá ảnh"
               onClick={() => {
                 haptic('light');
                 onChange(value.filter((_, i) => i !== idx));

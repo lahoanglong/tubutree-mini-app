@@ -85,30 +85,30 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
     await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
 
     // Nút "Hủy đơn" ở action bar (nút cùng tên trong sheet đang ẩn → role query bỏ qua).
-    await page.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+    await page.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
 
     // Gốc .zaui-sheet có kích thước 0 (nội dung định vị fixed) nên Playwright coi là "hidden" —
     // kiểm tra nội dung sheet thay vì chính gốc.
-    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Bạn muốn hủy đơn này?' });
-    await expect(sheet.getByText('Bạn muốn hủy đơn này?')).toBeVisible({ timeout: 5_000 });
+    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Bạn muốn huỷ đơn này?' });
+    await expect(sheet.getByText('Bạn muốn huỷ đơn này?')).toBeVisible({ timeout: 5_000 });
     await expect(sheet.getByRole('button', { name: 'Giữ đơn' })).toBeVisible();
 
     const cancelled = api.waitForCall('POST', '/orders/:code/cancel');
-    await sheet.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+    await sheet.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
     const call = await cancelled;
     expect(call.path).toBe(`/orders/${ORDER_CONFIRMED.code}/cancel`);
 
     // Refetch còn đang treo: hero đã "Đã hủy", hết nút huỷ, snackbar xác nhận.
-    await expect(page.getByText('Đã hủy đơn cho bạn')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Đã hủy', { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Đã huỷ đơn cho bạn')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Đã huỷ', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Huỷ đơn', exact: true })).toHaveCount(0);
     // Xác nhận refetch THẬT SỰ đang treo (không phải chưa kịp chạy) khi các khẳng định trên đúng.
     await expect.poll(() => refetchStarted, { timeout: 5_000 }).toBe(true);
 
     // Thả refetch → dữ liệu đầy đủ, vẫn hết nút huỷ, có "Mua lại đơn này".
     releaseRefetch();
     await expect(page.getByRole('button', { name: 'Mua lại đơn này' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Huỷ đơn', exact: true })).toHaveCount(0);
     expect(api.callsTo('POST', '/orders/:code/cancel')).toHaveLength(1);
   });
 
@@ -122,17 +122,17 @@ test.describe('Zalo Mini App E2E - Luồng Huỷ đơn & Đổi trả (Phase 5)'
 
     await page.goto(`/order/${ORDER_CONFIRMED.code}`);
     await expect(page.getByText('Đã xác nhận').first()).toBeVisible({ timeout: 15_000 });
-    await page.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
-    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Bạn muốn hủy đơn này?' });
-    await expect(sheet.getByText('Bạn muốn hủy đơn này?')).toBeVisible({ timeout: 5_000 });
-    await sheet.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+    await page.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
+    const sheet = page.locator('.zaui-sheet').filter({ hasText: 'Bạn muốn huỷ đơn này?' });
+    await expect(sheet.getByText('Bạn muốn huỷ đơn này?')).toBeVisible({ timeout: 5_000 });
+    await sheet.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
 
-    await expect(page.getByText('Đã hủy đơn cho bạn')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Đã huỷ đơn cho bạn')).toBeVisible({ timeout: 5_000 });
     // Chờ refetch lỗi thật sự xảy ra (query mặc định có thể retry) rồi mới khẳng định trang còn nguyên.
     await expect.poll(() => api.callsTo('GET', '/orders/:code').length, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
     await page.waitForTimeout(1_500);
-    await expect(page.getByText('Đã hủy', { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hủy đơn', exact: true })).toHaveCount(0);
+    await expect(page.getByText('Đã huỷ', { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Huỷ đơn', exact: true })).toHaveCount(0);
     await expect(page.getByText('Lỗi máy chủ tạm thời')).toHaveCount(0);
   });
 

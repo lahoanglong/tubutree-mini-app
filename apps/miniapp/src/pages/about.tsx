@@ -276,25 +276,25 @@ export default function AboutPage() {
         </Text>
       </BottomSheet>
 
-      {/* Xóa tài khoản */}
+      {/* Xoá tài khoản */}
       <div style={{ margin: '12px 16px 0' }}>
         {!confirmDelete ? (
-          <ListRow destructive title="Xóa tài khoản" onPress={() => setConfirmDelete(true)} style={{ justifyContent: 'center', textAlign: 'center' }} />
+          <ListRow destructive title="Xoá tài khoản" onPress={() => setConfirmDelete(true)} style={{ justifyContent: 'center', textAlign: 'center' }} />
         ) : (
           <Card padding={16} style={{ background: 'var(--color-status-danger-bg)' }}>
             <Text variant="body-sm" tone="danger" as="p" style={{ fontWeight: 700 }}>
-              Xóa tài khoản vĩnh viễn?
+              Xoá tài khoản vĩnh viễn?
             </Text>
             <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
-              Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xóa tài khoản theo quy định — tài khoản
-              CHƯA bị xóa ngay khi bạn bấm nút này.
+              Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản
+              CHƯA bị xoá ngay khi bạn bấm nút này.
             </Text>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <Button variant="secondary" onPress={() => setConfirmDelete(false)} style={{ flex: 1 }}>
-                Hủy
+                Huỷ
               </Button>
               <Button variant="danger" loading={deleteM.isPending} onPress={() => deleteM.mutate()} style={{ flex: 1 }}>
-                Gửi yêu cầu xóa
+                Gửi yêu cầu xoá
               </Button>
             </div>
           </Card>

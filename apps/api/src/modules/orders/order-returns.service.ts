@@ -386,7 +386,7 @@ export class OrderReturnsService {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${req.orderId} FOR UPDATE`;
       const order = await tx.order.findUniqueOrThrow({ where: { id: req.orderId }, include: { items: true } });
       if (order.status !== 'DELIVERED') {
-        throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+        throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã huỷ/đã trả).');
       }
       const prior = await partialReturnTotals(tx, order.id, id);
       const lines = this.linesOf(req, order, prior.approvedQty);
@@ -407,7 +407,7 @@ export class OrderReturnsService {
       let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
-        if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+        if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã huỷ/đã trả).');
         await tx.orderStatusHistory.create({
           data: { orderId: order.id, fromStatus: 'DELIVERED', toStatus: 'RETURNED', actorType: 'ADMIN', actorId: adminId, note: note ?? null },
         });

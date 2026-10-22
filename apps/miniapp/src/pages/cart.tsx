@@ -281,7 +281,7 @@ export default function CartPage() {
         </>
       )}
 
-      {/* Undo bar — hiện 3.5s sau khi xóa (DI #3) */}
+      {/* Undo bar — hiện 3.5s sau khi xoá (DI #3) */}
       {removed && (
         <Box
           className="tubu-rise"

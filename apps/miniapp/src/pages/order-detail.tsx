@@ -762,7 +762,7 @@ export default function OrderDetailPage() {
         }
       />
 
-      {/* ── Confirm hủy (DI #10): giữ đơn là primary. Đơn đã trả tiền: khách chọn nơi nhận tiền hoàn (D2). ── */}
+      {/* ── Confirm huỷ (DI #10): giữ đơn là primary. Đơn đã trả tiền: khách chọn nơi nhận tiền hoàn (D2). ── */}
       <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
         <Box p={5}>
           <Box style={{ textAlign: 'center' }}>

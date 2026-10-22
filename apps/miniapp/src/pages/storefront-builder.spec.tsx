@@ -325,7 +325,7 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Xoá bộ sưu tập' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Xoá bộ sưu tập này?')).toBeInTheDocument();
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Hủy' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Huỷ' }));
     expect(mocks.deleteCollection).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Xoá bộ sưu tập' }));
     const sheet2 = await screen.findByTestId('sheet');
@@ -413,7 +413,7 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
     fireEvent.click(await screen.findByRole('button', { name: 'Gỡ đăng' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByText('Gỡ đăng gian hàng này?')).toBeInTheDocument();
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Hủy' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Huỷ' }));
     expect(mocks.publishStorefront).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Gỡ đăng' }));
     const again = await screen.findByTestId('sheet');

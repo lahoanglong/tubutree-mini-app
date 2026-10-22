@@ -46,7 +46,7 @@ const NUMERIC: Record<string, PancakeStatusAction | null> = {
     reason: 'Pancake báo HOÀN MỘT PHẦN. Kiểm tra hàng nhận lại rồi hoàn tiền/điểm cho phần bị trả bằng tay.',
   }, // Hoàn một phần
   '5': RETURNED, // Đã hoàn
-  '6': to('CANCELLED'), // Đã hủy
+  '6': to('CANCELLED'), // Đã huỷ
   '7': {
     kind: 'attention',
     reason: 'Đơn bị XOÁ trên Pancake nên kho sẽ không giao. Xác nhận với kho rồi huỷ đơn (hoàn tiền, hoàn kho) nếu đúng.',

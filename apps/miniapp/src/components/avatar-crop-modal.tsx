@@ -210,7 +210,7 @@ export function AvatarCropModal({
             }}
             style={{ background: 'var(--stone-700)', color: 'var(--color-text-inverse)' }}
           >
-            <X size={16} style={{ marginRight: 6 }} aria-hidden /> Hủy chọn
+            <X size={16} style={{ marginRight: 6 }} aria-hidden /> Huỷ chọn
           </Button>
 
           <Button fullWidth loading={processing} icon={Check} onPress={handleConfirm}>

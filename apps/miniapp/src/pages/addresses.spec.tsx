@@ -42,9 +42,9 @@ describe('Sổ địa chỉ: nút hành động (C-078)', () => {
     mocks.updateAddress.mockResolvedValue({});
   });
 
-  it('Đặt mặc định / Sửa / Xóa là nút thật, vùng chạm tối thiểu 44x44 (R2-BUYERMINI-12)', async () => {
+  it('Đặt mặc định / Sửa / Xoá là nút thật, vùng chạm tối thiểu 44x44 (R2-BUYERMINI-12)', async () => {
     renderPage();
-    for (const name of ['Đặt mặc định', 'Sửa', 'Xóa']) {
+    for (const name of ['Đặt mặc định', 'Sửa', 'Xoá']) {
       const btn = await screen.findByRole('button', { name });
       expect(btn.tagName).toBe('BUTTON');
       expect(btn.style.minHeight).toBe('44px');
@@ -58,10 +58,10 @@ describe('Sổ địa chỉ: nút hành động (C-078)', () => {
     await waitFor(() => expect(mocks.updateAddress).toHaveBeenCalledWith('a1', { isDefault: true }));
   });
 
-  it('bấm Xóa mở hộp xác nhận', async () => {
+  it('bấm Xoá mở hộp xác nhận', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xóa' }));
-    expect(await screen.findByText('Xóa địa chỉ này?')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá' }));
+    expect(await screen.findByText('Xoá địa chỉ này?')).toBeInTheDocument();
   });
 });
 
@@ -127,24 +127,24 @@ describe('Sổ địa chỉ: khung trang DS v2 (C-076, C-114)', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Sửa địa chỉ' })).toBeInTheDocument();
   });
 
-  it('xác nhận xoá: "Hủy" đóng khung và không gọi API', async () => {
+  it('xác nhận xoá: "Huỷ" đóng khung và không gọi API', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xóa' }));
-    const dialogTitle = await screen.findByRole('heading', { level: 2, name: 'Xóa địa chỉ này?' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá' }));
+    const dialogTitle = await screen.findByRole('heading', { level: 2, name: 'Xoá địa chỉ này?' });
     expect(dialogTitle).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
-    expect(screen.queryByText('Xóa địa chỉ này?')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+    expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull();
     expect(mocks.deleteAddress).not.toHaveBeenCalled();
   });
 
-  it('xác nhận xoá: "Xóa" trong khung gọi deleteAddress đúng id, báo thành công và đóng khung', async () => {
+  it('xác nhận xoá: "Xoá" trong khung gọi deleteAddress đúng id, báo thành công và đóng khung', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Xóa' }));
-    const title = await screen.findByRole('heading', { level: 2, name: 'Xóa địa chỉ này?' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá' }));
+    const title = await screen.findByRole('heading', { level: 2, name: 'Xoá địa chỉ này?' });
     const sheet = title.closest('[data-testid="page"] > div') as HTMLElement;
-    fireEvent.click(within(sheet).getByRole('button', { name: 'Xóa' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Xoá' }));
     await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledWith('a1'));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xóa địa chỉ.', type: 'success' }));
-    await waitFor(() => expect(screen.queryByText('Xóa địa chỉ này?')).toBeNull());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã xoá địa chỉ.', type: 'success' }));
+    await waitFor(() => expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull());
   });
 });
