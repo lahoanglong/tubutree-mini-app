@@ -10,7 +10,8 @@ mkdir -p "$OUT"
 kids() { for c in $(pgrep -P $1); do kids $c; echo $c; done; }
 trap 'for p in $(kids $$); do kill $p 2>/dev/null; done; exit 143' TERM INT
 step() { echo "=== $1 $(date +%T)"; }
-run() { local name=$1; shift; ( "$@" ) > $OUT/$name.log 2>&1 & wait $!; local c=$?; echo "$name exit $c"; return $c; }
+FAILS=""
+run() { local name=$1; shift; ( "$@" ) > $OUT/$name.log 2>&1 & wait $!; local c=$?; echo "$name exit $c"; [ $c -ne 0 ] && FAILS="$FAILS $name"; return $c; }
 
 step "shared-types + prisma generate"
 run shared-types bash -c "cd $WT && pnpm --filter @tubutree/shared-types build"
@@ -43,6 +44,7 @@ bash $T/race-shard.sh $WT 1 2 25541 $OUT & p1=$!
 bash $T/race-shard.sh $WT 2 2 25542 $OUT & p2=$!
 wait $p1; wait $p2
 grep -h '^Test Suites:\|^Tests:' $OUT/race-1.log $OUT/race-2.log
+for sh in 1 2; do [ -s $OUT/race-$sh-rerun.log ] && grep -q '^Tests:.*failed' $OUT/race-$sh-rerun.log && FAILS="$FAILS race-$sh"; done
 bash $T/pg-native.sh stop 25541 >/dev/null 2>&1; bash $T/pg-native.sh stop 25542 >/dev/null 2>&1
 step vitest
 run vitest-miniapp bash -c "cd $WT/apps/miniapp && npx vitest run"; grep -E 'Test Files|Tests ' $OUT/vitest-miniapp.log
@@ -57,3 +59,4 @@ if [ -n "$FULL" ]; then
   run build-miniapp bash -c "cd $WT/apps/miniapp && VITE_API_BASE_URL=https://api.tubutree.com/api npm run -s build"; tail -3 $OUT/build-miniapp.log
 fi
 step DONE
+if [ -n "$FAILS" ]; then echo "ĐỎ:$FAILS"; exit 1; fi
