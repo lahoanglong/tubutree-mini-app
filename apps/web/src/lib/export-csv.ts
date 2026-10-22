@@ -85,7 +85,7 @@ export function generateOrdersCsvString(orders: AdminOrder[]): string {
 }
 
 export function generateUsersCsvString(users: AdminUser[]): string {
-  const headers = ['User ID', 'Họ và tên', 'Số điện thoại', 'Vai trò', 'Điểm tích lũy', 'Trong đó không hết hạn', 'Ngày tham gia'];
+  const headers = ['User ID', 'Họ và tên', 'Số điện thoại', 'Vai trò', 'Điểm tích luỹ', 'Trong đó không hết hạn', 'Ngày tham gia'];
 
   const rows = users.map((u) => {
     const pts = pointsSummary({ pointsBalance: u.pointsBalance ?? 0, pointsConvertedBalance: u.pointsConvertedBalance });

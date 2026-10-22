@@ -318,7 +318,7 @@ describe('CSV export utility', () => {
     ];
 
     const csv = generateUsersCsvString(sampleUsers);
-    expect(csv).toContain('User ID,Họ và tên,Số điện thoại,Vai trò,Điểm tích lũy');
+    expect(csv).toContain('User ID,Họ và tên,Số điện thoại,Vai trò,Điểm tích luỹ');
     expect(csv).toContain('user-1');
     expect(csv).toContain('Trần Thị B');
     expect(csv).toContain('0987654321');
@@ -326,7 +326,7 @@ describe('CSV export utility', () => {
     expect(csv).toContain('120');
   });
 
-  it('generateUsersCsvString: Điểm tích lũy là tổng hai lô, thêm cột điểm không hết hạn (PD-3)', async () => {
+  it('generateUsersCsvString: Điểm tích luỹ là tổng hai lô, thêm cột điểm không hết hạn (PD-3)', async () => {
     const { generateUsersCsvString } = await import('./export-csv');
     const csv = generateUsersCsvString([
       { id: 'user-2', fullName: 'Lê C', phone: null, role: 'CUSTOMER', pointsBalance: 5, pointsConvertedBalance: 30, createdAt: '2026-08-15T08:30:00Z' },
@@ -334,7 +334,7 @@ describe('CSV export utility', () => {
     const [header, row] = csv.split('\r\n');
     const cols = header!.split(',');
     const cells = row!.split(',');
-    expect(cells[cols.indexOf('Điểm tích lũy')]).toBe('35');
+    expect(cells[cols.indexOf('Điểm tích luỹ')]).toBe('35');
     expect(cells[cols.indexOf('Trong đó không hết hạn')]).toBe('30');
   });
 });
