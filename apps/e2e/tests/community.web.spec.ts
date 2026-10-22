@@ -228,7 +228,7 @@ test.describe('Web khách: cộng đồng', () => {
     });
     api.post('/academy/lessons/l1/complete', { ok: true });
     await page.goto('/hoc-vien');
-    await expect(page.getByRole('heading', { name: 'CTV Academy', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Học viện CTV', level: 1 })).toBeVisible();
     await expect(page.getByText('0/2 bài đã học')).toBeVisible();
     await page.getByRole('link', { name: /Khoá bán hàng/ }).click();
     await expect(page).toHaveURL(/\/hoc-vien\/c1$/);

@@ -168,9 +168,9 @@ function RegisterGate() {
 
   const benefits = [
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
-    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
+    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
     { Icon: Landmark, text: `Rút về ngân hàng (tối thiểu ${formatVndShort(minBank)}) hoặc quy đổi 1:1 vào Ví Tubu` },
-    { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
+    { Icon: TrendingUp, text: 'Bảng hoa hồng cập nhật liên tục, minh bạch' },
   ];
 
   return (
@@ -412,7 +412,7 @@ function Dashboard() {
               <div className="mt-1 font-display text-3xl font-bold tabular-nums">{formatVnd(d?.monthCommission ?? 0)}</div>
               <div className="mt-3 flex gap-4">
                 <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
-                <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
+                <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
                 <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
               </div>
             </section>
@@ -448,7 +448,7 @@ function Dashboard() {
             <div>
               <Link href="/hoc-vien" className={`${ui.btnSecondary} ${phoneSecondary} w-full gap-2`}>
                 <GraduationCap className="h-5 w-5" aria-hidden="true" />
-                CTV Academy
+                Học viện CTV
               </Link>
               <p className="mt-1 text-center text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:text-[var(--color-text-tertiary)]">Khoá học đào tạo dành cho CTV</p>
             </div>
@@ -461,13 +461,13 @@ function Dashboard() {
                 Chia sẻ
               </button>
             </div>
-            <div className="mb-1.5 mt-3 text-xs font-semibold text-stone-900">Caption gợi ý (chạm để sao chép)</div>
+            <div className="mb-1.5 mt-3 text-xs font-semibold text-stone-900">Lời đăng gợi ý (chạm để sao chép)</div>
             <ul className="space-y-1.5">
               {captions.map((cap) => (
                 <li key={cap}>
                   <button
                     type="button"
-                    onClick={() => void copy(cap, 'Đã sao chép caption', 'Không sao chép được — hãy chọn và chép thủ công.')}
+                    onClick={() => void copy(cap, 'Đã sao chép lời đăng', 'Không sao chép được — hãy chọn và chép thủ công.')}
                     className="min-h-11 w-full rounded-control bg-stone-50 p-2 text-left text-xs text-stone-700 hover:bg-stone-100"
                   >
                     {cap}
@@ -496,7 +496,7 @@ function Dashboard() {
                     <div>
                       <div className="text-sm font-semibold text-stone-900">{l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}</div>
                       <div className="text-xs text-stone-600">
-                        {l.clicks} click · {l.conversions} đơn
+                        {l.clicks} lượt bấm · {l.conversions} đơn
                       </div>
                     </div>
                     <button

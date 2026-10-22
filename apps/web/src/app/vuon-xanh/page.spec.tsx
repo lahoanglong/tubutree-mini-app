@@ -252,7 +252,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     const today = panel(c, 'Hôm nay');
     for (const t of ['Tưới cây', 'Điểm danh chuỗi']) expect(today.textContent).toContain(t);
     expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
-      expect.arrayContaining(['Nhiệm vụ', 'Quiz Sống Xanh hôm nay', 'Vòng quay may mắn']),
+      expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn']),
     );
     expect(panel(c, 'Vườn').textContent).toContain('Tác động xanh của bạn');
     expect(today.textContent).not.toContain('Tác động xanh của bạn');
@@ -504,7 +504,7 @@ describe('Vườn Xanh: quiz Sống Xanh', () => {
   it('hết quiz: lời chúc hoàn thành', async () => {
     state.data['/game/quiz/today'] = [];
     const c = await mount();
-    expect(c.textContent).toContain('Bạn đã hoàn thành quiz hôm nay 🎉');
+    expect(c.textContent).toContain('Bạn đã hoàn thành câu đố hôm nay 🎉');
   });
 
   it('nhiều câu: nhãn phân loại, Câu n/N, trả lời gọi API đúng id và lựa chọn, khoá đáp án, Câu tiếp theo sang câu kế, câu cuối Hoàn thành', async () => {
@@ -532,7 +532,7 @@ describe('Vườn Xanh: quiz Sống Xanh', () => {
     expect(c.textContent).toContain('Chính xác! +5💧');
     click(btn(c, 'Hoàn thành'));
     await flush(4);
-    expect(c.textContent).toContain('Bạn đã hoàn thành quiz hôm nay 🎉');
+    expect(c.textContent).toContain('Bạn đã hoàn thành câu đố hôm nay 🎉');
   });
 
   it('lỗi gửi đáp án: báo lỗi, chưa hiện đáp án, đáp án bật lại; phân loại lạ rơi về Thiên nhiên', async () => {

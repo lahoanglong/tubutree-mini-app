@@ -591,7 +591,7 @@ describe('chia sẻ', () => {
     click(btn('Chia sẻ gian hàng'));
     await flush();
     expect(dialog()?.textContent).toContain('/s/shop-aff-1?ref=SHOP-AFF-1');
-    expect(dialog()?.textContent).toContain('Caption gợi ý');
+    expect(dialog()?.textContent).toContain('Lời đăng gợi ý');
     click(btn('Sao chép link', dialog()!));
     await flush();
     expect(state.copied[0]).toMatch(/\/s\/shop-aff-1\?ref=SHOP-AFF-1$/);

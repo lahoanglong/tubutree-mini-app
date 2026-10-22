@@ -157,7 +157,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(garden.textContent).toContain('Mục tiêu cộng đồng');
     expect(garden.textContent).not.toContain('Tặng nước cho bạn bè');
     const community = panel(c, 'Cộng đồng');
-    for (const t of ['Tặng nước cho bạn bè', 'Chuỗi điểm danh dài nhất', 'Top góp nước mùa này']) {
+    for (const t of ['Tặng nước cho bạn bè', 'Chuỗi điểm danh dài nhất', 'Xếp hạng góp nước mùa này']) {
       expect(community.textContent).toContain(t);
     }
     expect(panel(c, 'Hôm nay').textContent).not.toContain('Lô đất');
@@ -392,7 +392,7 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
 
   it('top góp nước mùa này: huy chương top 3, #hạng từ 4; không có dữ liệu thì ẩn khối', async () => {
     const c = await mount('tab=community');
-    const s = card(c, 'Top góp nước mùa này')!;
+    const s = card(c, 'Xếp hạng góp nước mùa này')!;
     expect(s.textContent).toContain('🥇 Bạn 1');
     expect(s.textContent).toContain('🥉 Bạn 3');
     expect(s.textContent).toContain('#4 Bạn 4');
@@ -401,7 +401,7 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
     mounted = [];
     state.data['/game/season/leaderboard'] = [];
     const c2 = await mount('tab=community');
-    expect(c2.textContent).not.toContain('Top góp nước mùa này');
+    expect(c2.textContent).not.toContain('Xếp hạng góp nước mùa này');
   });
 
   it('Bảng tin cộng đồng: chỉ hiện khi trang /cong-dong đã có trên web', async () => {
@@ -425,15 +425,16 @@ describe('Vườn Xanh: Chặng Mùa theo SEASON_PASS_ENABLED', () => {
     expect(c.textContent).not.toContain('Chặng Mùa');
   });
 
-  it('cờ bật: hiện XP, gợi ý Premium, bậc đã mở nhận được, Premium và bậc khoá đều tắt', async () => {
+  it('cờ bật: hiện điểm kinh nghiệm, gợi ý Cao cấp, bậc đã mở nhận được, Cao cấp và bậc khoá đều tắt', async () => {
     state.seasonPass = true;
     state.data['/game/season-pass'] = PASS;
     const c = await mount('tab=community');
-    const p = card(c, 'Chặng Mùa (Season Pass)')!;
+    const p = card(c, 'Chặng Mùa')!;
     expect(p.textContent).toContain('Điểm danh mỗi ngày để lên bậc mùa "Xuân"');
-    expect(p.textContent).toContain('150 XP');
-    expect(p.textContent).toContain('200 XP');
-    expect(p.textContent).toContain('Cần đăng ký định kỳ để mở phần thưởng Premium.');
+    expect(p.textContent).toContain('150 điểm kinh nghiệm');
+    expect(p.textContent).toContain('200 điểm kinh nghiệm');
+    expect(p.textContent).toContain('Cao cấp');
+    expect(p.textContent).toContain('Cần đăng ký định kỳ để mở phần thưởng Cao cấp.');
     const buttons = Array.from(p.querySelectorAll<HTMLButtonElement>('button'));
     expect(buttons.map((b) => [b.textContent, b.disabled])).toEqual([
       ['Nhận', false],
@@ -460,7 +461,7 @@ describe('Vườn Xanh: Chặng Mùa theo SEASON_PASS_ENABLED', () => {
     state.data['/game/season-pass'] = PASS;
     state.posts['/game/season-pass/claim'] = () => ({ claimed: true, reward: { type: 'SEEDS', amount: 10 } });
     const c = await mount('tab=community');
-    const b = btn(card(c, 'Chặng Mùa (Season Pass)')!, 'Nhận');
+    const b = btn(card(c, 'Chặng Mùa')!, 'Nhận');
     click(b);
     click(b);
     await flush(8);
@@ -479,7 +480,7 @@ describe('Vườn Xanh: Chặng Mùa theo SEASON_PASS_ENABLED', () => {
     };
     state.posts['/game/season-pass/claim'] = () => ({ claimed: true, reward: { type: 'POINTS', amount: 20 } });
     const c = await mount('tab=community');
-    const p = card(c, 'Chặng Mùa (Season Pass)')!;
+    const p = card(c, 'Chặng Mùa')!;
     expect(p.textContent).toContain('Đã nhận');
     expect(p.textContent).toContain('20 điểm');
     click(btn(p, 'Nhận'));
@@ -612,7 +613,7 @@ describe('Vườn Xanh: làm mới Điểm Xanh ở tab Vườn và Cộng đồ
     state.posts['/game/season-pass/claim'] = () => ({ claimed: true, reward: { type: 'POINTS', amount: 20 } });
     const c = await mount('tab=community');
     spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
-    click(btn(card(c, 'Chặng Mùa (Season Pass)')!, 'Nhận'));
+    click(btn(card(c, 'Chặng Mùa')!, 'Nhận'));
     await flush(8);
     expect(keys()).toEqual(expect.arrayContaining(['["game","seasonPass"]', '["loyalty"]']));
   });

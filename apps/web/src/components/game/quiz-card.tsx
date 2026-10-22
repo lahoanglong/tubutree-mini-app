@@ -28,7 +28,7 @@ export function QuizCard({
 }) {
   const shownReveal = currentQuiz && reveal && reveal.quizId === currentQuiz.id ? reveal : null;
   return (
-    <GameCard title="Quiz Sống Xanh hôm nay" icon={Brain}>
+    <GameCard title="Câu đố Sống Xanh hôm nay" icon={Brain}>
       {currentQuiz ? (
         <>
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -57,7 +57,7 @@ export function QuizCard({
           )}
         </>
       ) : (
-        <p className="text-sm text-stone-600">Bạn đã hoàn thành quiz hôm nay 🎉</p>
+        <p className="text-sm text-stone-600">Bạn đã hoàn thành câu đố hôm nay 🎉</p>
       )}
     </GameCard>
   );

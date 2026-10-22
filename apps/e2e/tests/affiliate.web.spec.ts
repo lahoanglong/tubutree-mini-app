@@ -108,7 +108,7 @@ test.describe('Web khách: CTV', () => {
     await expect(page.getByText('Giao thành công')).toBeVisible();
     await expect(page.getByText('Chưa có link')).toBeVisible();
     await page.getByRole('button', { name: '+ Tạo link' }).dblclick();
-    await expect(page.getByText('0 click · 0 đơn')).toBeVisible();
+    await expect(page.getByText('0 lượt bấm · 0 đơn')).toBeVisible();
     const calls = api.callsTo('POST', '/affiliate/links');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ targetType: 'HOMEPAGE' });

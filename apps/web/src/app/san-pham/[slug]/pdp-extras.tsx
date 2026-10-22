@@ -308,7 +308,7 @@ export function PdpContentKitRow({ slug }: { slug: string }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-forest-700">Nội dung bán hàng</span>
-          <span className="block text-xs text-stone-600">Bài mẫu đã gắn sẵn link giới thiệu của bạn — copy là đăng được</span>
+          <span className="block text-xs text-stone-600">Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được</span>
         </span>
         <ChevronRight className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
       </button>

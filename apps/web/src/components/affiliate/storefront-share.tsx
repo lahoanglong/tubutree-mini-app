@@ -91,7 +91,7 @@ export function StorefrontShareSheet({
           Sao chép link
         </button>
       </div>
-      <div className="mb-1.5 text-sm font-medium text-stone-800">Caption gợi ý (chạm để sao chép)</div>
+      <div className="mb-1.5 text-sm font-medium text-stone-800">Lời đăng gợi ý (chạm để sao chép)</div>
       {captions.map((c) => (
         <CopyRow key={c} onPress={() => void copy(c)}>
           {c}
