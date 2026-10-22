@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-10-22T11:30:15.924Z",
+  "builtAt": "2026-10-22T13:20:00.103Z",
   "lane": 9,
   "db": "tubutree_uat_tpl",
   "personas": [
@@ -193,7 +193,7 @@
     "uat_ctv": {
       "slug": "uatctv",
       "isPublished": true,
-      "approvedAt": "2026-10-22T11:30:16.120Z"
+      "approvedAt": "2026-10-22T13:20:00.237Z"
     },
     "uat_ctv_pending": {
       "slug": "uatctvpending",
@@ -205,42 +205,42 @@
   "couponBatch": {
     "prefix": "HOPSAN",
     "codes": [
-      "HOPSAN-38X362LH",
-      "HOPSAN-7QKSXFLR",
-      "HOPSAN-7XBDCA7D",
-      "HOPSAN-9CF8ZG2J",
-      "HOPSAN-9Q3EPQZY",
-      "HOPSAN-AWEK42AS",
-      "HOPSAN-C2KUA66H",
-      "HOPSAN-CYBL253A",
-      "HOPSAN-DLHJ3E3S",
-      "HOPSAN-DQ6KDGAE",
-      "HOPSAN-GE9DQ2NE",
-      "HOPSAN-HZR8EDJU",
-      "HOPSAN-LFWR4HNL",
-      "HOPSAN-LVXQZGTF",
-      "HOPSAN-N7J2SSUW",
-      "HOPSAN-NDDUC5JJ",
-      "HOPSAN-NTFT7ELC",
-      "HOPSAN-P4NJP4DK",
-      "HOPSAN-RYPGUYQF",
-      "HOPSAN-S9YRHKQQ",
-      "HOPSAN-SYBCN4F2",
-      "HOPSAN-SZVEBTSM",
-      "HOPSAN-T7TD4B94",
-      "HOPSAN-VRWR7A99",
-      "HOPSAN-WKJPACAF",
-      "HOPSAN-WTGKUE9Z",
-      "HOPSAN-X2R5N8GA",
-      "HOPSAN-XF9LESBA",
-      "HOPSAN-XFGX57YW",
-      "HOPSAN-XXN5ALRC"
+      "HOPSAN-24WAGD5K",
+      "HOPSAN-2U5A3RB2",
+      "HOPSAN-5ZENQGH4",
+      "HOPSAN-6T9GW2K5",
+      "HOPSAN-7QGA3T2M",
+      "HOPSAN-ADC9QXB6",
+      "HOPSAN-CF7UGQNL",
+      "HOPSAN-D8VXD4QX",
+      "HOPSAN-DFGZD9AB",
+      "HOPSAN-E3ECH2VA",
+      "HOPSAN-EGNN4BWD",
+      "HOPSAN-FUSUBB9L",
+      "HOPSAN-G64DZDW8",
+      "HOPSAN-JCA9J6S4",
+      "HOPSAN-JKP6CLG7",
+      "HOPSAN-K9HF2XBA",
+      "HOPSAN-LWPEL7HX",
+      "HOPSAN-N38G8ME5",
+      "HOPSAN-PD6JPXAP",
+      "HOPSAN-QNTURUMD",
+      "HOPSAN-QRCANUP6",
+      "HOPSAN-UCMR7CNN",
+      "HOPSAN-USGQK9LE",
+      "HOPSAN-UTLQ92V6",
+      "HOPSAN-Y7WNXHJG",
+      "HOPSAN-Z4QSEY6G",
+      "HOPSAN-ZMXX5QE7",
+      "HOPSAN-ZQLA3B9C",
+      "HOPSAN-ZSECLRJF",
+      "HOPSAN-ZWZW8M67"
     ]
   },
   "flashSale": {
-    "id": "cmvjgm169002i14876cpwo4h2",
-    "startAt": "2026-10-22T11:20:15.924Z",
-    "endAt": "2026-10-28T11:30:15.924Z",
+    "id": "cmvjkj5il002nqafunmkrfa8m",
+    "startAt": "2026-10-22T13:10:00.103Z",
+    "endAt": "2026-10-28T13:20:00.103Z",
     "items": [
       {
         "sku": "BHN-CGL-100",
@@ -268,8 +268,8 @@
     ]
   },
   "returning": {
-    "orderCode": "TUBU2026102246913",
-    "addressId": "cmvjgm16o002u148769fcqbhm",
+    "orderCode": "TUBU2026102264181",
+    "addressId": "cmvjkj5j9002zqafur34xfkpk",
     "tierId": "LOC_BIEC",
     "pointsBalance": 34400
   }

@@ -204,7 +204,7 @@ const cases = [
     steps:
       '(a) khách mới giỏ 199.000đ gõ FREESHIP → thanh toán → đặt COD; (b) khách đã có 1 đơn, giỏ FUWA-DW-1L 120.000đ: thanh toán không mã (xem phí) rồi gõ FREESHIP → đặt COD',
     expected:
-      '(a) mã giữ nhưng báo "không giảm thêm" (đơn đã miễn phí giao), đơn KHÔNG ghi couponCode, không tốn lượt FREESHIP; (b) không mã: phí 19.000đ (120k < 200k); có FREESHIP: phí 0, tổng 120.000đ, DB 1 lượt FREESHIP',
+      '(a) snackbar giỏ KHÔNG ghi "Đã áp dụng mã FREESHIP" mà báo "Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau." (sau Q12); couponNotice của báo giá cùng lý do; đơn KHÔNG ghi couponCode, không tốn lượt FREESHIP; (b) không mã: phí 19.000đ (120k < 200k); có FREESHIP: phí 0, tổng 120.000đ, DB 1 lượt FREESHIP',
     async run(c) {
       const u = await freshCustomer('c14a');
       await addAddress(u);
@@ -214,7 +214,9 @@ const cases = [
       try {
         const r = await buyFlow(c, s, { code: 'FREESHIP', shotName: 'U1-14a' });
         c.evidence('(a) snackbar áp FREESHIP', r.applied.snack);
-        c.check('(a) báo giá: couponApplied=false + couponNotice', r.quote.couponApplied === false && !!r.quote.couponNotice, { couponApplied: r.quote.couponApplied, couponNotice: r.quote.couponNotice });
+        const NOTICE_A = 'Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+        c.check('(a) snackbar giỏ: đúng câu "chưa được áp dụng", không còn "Đã áp dụng mã FREESHIP"', r.applied.snack === NOTICE_A && !/Đã áp dụng mã/.test(r.applied.snack), r.applied.snack);
+        c.check('(a) báo giá: couponApplied=false + couponNotice cùng lý do', r.quote.couponApplied === false && r.quote.couponNotice === NOTICE_A, { couponApplied: r.quote.couponApplied, couponNotice: r.quote.couponNotice });
         c.check('(a) ship 0 nhờ freeship đơn đầu, tổng 199.000đ', r.quote.shippingFee === 0 && r.quote.total === 199000);
         const o = await orderEvidence(r.placed.code);
         c.evidence('(a) SQL đơn', o);

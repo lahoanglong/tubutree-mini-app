@@ -106,9 +106,11 @@ try {
   });
 
   // ---------- U3-51 bảng bậc đã chụp: đổi bậc sau đó không ảnh hưởng quý cũ ----------
-  // Khoá này không có trong bảng cấu hình mặc định nên PUT /admin/config từ chối ("Không có khoá cấu hình"): ghi thẳng DB lane.
+  // Đổi bậc bằng đường thật PUT /admin/config (API nhận khoá dealer.quarterly_bonus_tiers từ gói q8-bac-admin).
   // Mỗi lượt run-job là tiến trình mới nên không dính bộ nhớ đệm cấu hình của API.
-  await exec(`INSERT INTO system_configs (key, value, category, "updatedAt") VALUES ($1, $2::jsonb, 'dealer', now()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "updatedAt" = now()`, TIER_KEY, JSON.stringify([{ min: 50_000_000, pct: 10 }]));
+  const put = await api(L, 'PUT', '/admin/config', { user: 'uat_admin', body: { key: TIER_KEY, value: [{ min: 50_000_000, pct: 10 }] } });
+  log('PUT /admin/config', { status: put.status, body: put.body });
+  if (put.status >= 300) throw new Error(`PUT /admin/config ${TIER_KEY} ${put.status}: ${JSON.stringify(put.body).slice(0, 300)}`);
   const held1 = await held();
   const o51 = await lateOrder(6_000_000, 'b');
   const v2 = await settled();
@@ -120,10 +122,10 @@ try {
   const top3 = rows3.filter((r) => r.refType === 'QUARTER_BONUS_TOPUP');
   R.add({
     id: 'U3-51', role: 'ADMIN / hệ thống', journey: 'Bản chụp bảng bậc theo quý (Q8b)', title: `Admin đổi bậc thưởng lên 10% sau khi quý ${QUARTER} đã trả: trả bù vẫn theo bậc 2% đã chụp`,
-    steps: `ghi system_configs ${TIER_KEY} = [{min 50.000.000, pct 10}] (không có đường admin đổi khoá này); đơn chốt muộn ${o51.code} (${vnd(o51.total)}) vào ${QUARTER}; run-job topUpQuarterlyBonuses; xoá khoá trả về bậc mặc định`,
+    steps: `PUT /admin/config ${TIER_KEY} = [{min 50.000.000, pct 10}] (đường admin thật, status ${put.status}); đơn chốt muộn ${o51.code} (${vnd(o51.total)}) vào ${QUARTER}; run-job topUpQuarterlyBonuses; xoá khoá trả về bậc mặc định`,
     expected: `Bản chụp ${QUARTER} không đổi (2% / 3% / 4%); dòng trả bù thứ 2 "${QUARTER}:topup:2" = −${vnd(exp51)} theo bậc đã chụp (nếu theo bậc mới 10% sẽ là ${vnd(naive)})`,
-    actual: { snapshotBefore: snap0, snapshotAfter: snap1, held1, v2, exp51, naive, job3: job3.result ?? job3.error, top3 },
-    evidence: `SQL dealer_quarter_bonus_tiers ${QUARTER} ${short(snap1)}; dealer_credit_ledgers ${short(top3.slice(1))}; doanh số ${v2}; số theo bậc cũ ${exp51} vs bậc mới ${naive}`,
+    actual: { putStatus: put.status, snapshotBefore: snap0, snapshotAfter: snap1, held1, v2, exp51, naive, job3: job3.result ?? job3.error, top3 },
+    evidence: `PUT /admin/config → ${put.status}; SQL dealer_quarter_bonus_tiers ${QUARTER} ${short(snap1)}; dealer_credit_ledgers ${short(top3.slice(1))}; doanh số ${v2}; số theo bậc cũ ${exp51} vs bậc mới ${naive}`,
     status: JSON.stringify(snap1) === JSON.stringify(snap0) && exp51 > 0 && exp51 !== naive && (job3.result?.toppedUp ?? 0) >= 1 && top3.length === 2 && top3[1].refId === `${QUARTER}:topup:2` && top3[1].delta === -exp51 ? 'PASS' : 'FAIL',
   });
 } catch (e) {

@@ -4,16 +4,21 @@
   "role": "Khách mới / khách đã có 1 đơn hạng Mầm Xanh",
   "journey": "FREESHIP: chồng lên freeship đơn đầu (không được gì) và dùng cho đơn thường dưới ngưỡng",
   "steps": "(a) khách mới giỏ 199.000đ gõ FREESHIP → thanh toán → đặt COD; (b) khách đã có 1 đơn, giỏ FUWA-DW-1L 120.000đ: thanh toán không mã (xem phí) rồi gõ FREESHIP → đặt COD",
-  "expected": "(a) mã giữ nhưng báo \"không giảm thêm\" (đơn đã miễn phí giao), đơn KHÔNG ghi couponCode, không tốn lượt FREESHIP; (b) không mã: phí 19.000đ (120k < 200k); có FREESHIP: phí 0, tổng 120.000đ, DB 1 lượt FREESHIP",
+  "expected": "(a) snackbar giỏ KHÔNG ghi \"Đã áp dụng mã FREESHIP\" mà báo \"Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.\" (sau Q12); couponNotice của báo giá cùng lý do; đơn KHÔNG ghi couponCode, không tốn lượt FREESHIP; (b) không mã: phí 19.000đ (120k < 200k); có FREESHIP: phí 0, tổng 120.000đ, DB 1 lượt FREESHIP",
   "status": "PASS",
   "error": null,
   "checks": [
     {
-      "name": "(a) báo giá: couponApplied=false + couponNotice",
+      "name": "(a) snackbar giỏ: đúng câu \"chưa được áp dụng\", không còn \"Đã áp dụng mã FREESHIP\"",
+      "ok": true,
+      "detail": "Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau."
+    },
+    {
+      "name": "(a) báo giá: couponApplied=false + couponNotice cùng lý do",
       "ok": true,
       "detail": {
         "couponApplied": false,
-        "couponNotice": "Mã chưa được áp dụng cho đơn này: Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó."
+        "couponNotice": "Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau."
       }
     },
     {
@@ -37,7 +42,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvjgt0eb00cizw9c3gk3vd0h"
+              "cmvjklcic005bhzg6q7nz32o7"
             ],
             "subtotal": 120000,
             "discount": 0,
@@ -69,7 +74,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvjgt0eb00cizw9c3gk3vd0h",
+            "id": "cmvjklcic005bhzg6q7nz32o7",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -109,7 +114,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvjgt0eb00cizw9c3gk3vd0h"
+              "cmvjklcic005bhzg6q7nz32o7"
             ],
             "subtotal": 120000,
             "discount": 0,
@@ -141,7 +146,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvjgt0eb00cizw9c3gk3vd0h",
+            "id": "cmvjklcic005bhzg6q7nz32o7",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -178,7 +183,7 @@
       "label": "áp mã FREESHIP",
       "data": {
         "status": 201,
-        "snackbar": "Đã áp dụng mã FREESHIP",
+        "snackbar": "Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.",
         "couponCode": "FREESHIP",
         "discount": 0,
         "message": null
@@ -190,7 +195,7 @@
         "subtotal": 199000,
         "discount": 0,
         "couponApplied": false,
-        "couponNotice": "Mã chưa được áp dụng cho đơn này: Mã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này không có phí giao đó.",
+        "couponNotice": "Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.",
         "tierDiscount": 0,
         "pointsUsed": 0,
         "pointsDiscount": 0,
@@ -208,7 +213,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026102272604",
+        "code": "TUBU2026102213271",
         "button": "Đặt hàng · 199.000đ"
       }
     },
@@ -218,14 +223,14 @@
     },
     {
       "label": "(a) snackbar áp FREESHIP",
-      "data": "Đã áp dụng mã FREESHIP"
+      "data": "Mã chưa được áp dụng cho đơn này: Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau."
     },
     {
       "label": "(a) SQL đơn",
       "data": {
-        "id": "cmvjgsz4o00bgzw9cvr3x1h7u",
-        "code": "TUBU2026102272604",
-        "userId": "u1_c14a_gsucf3z",
+        "id": "cmvjklb7l0045hzg6wxh1hi3c",
+        "code": "TUBU2026102213271",
+        "userId": "u1_c14a_kl3ct1e",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -244,7 +249,7 @@
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-22T11:35:45.625Z",
+        "createdAt": "2026-10-22T13:21:46.498Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -272,7 +277,7 @@
     {
       "label": "(b) đơn đầu qua API",
       "data": {
-        "code": "TUBU2026102254095",
+        "code": "TUBU2026102216684",
         "total": 225000
       }
     },
@@ -330,7 +335,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026102261783",
+        "code": "TUBU2026102254987",
         "button": "Đặt hàng · 120.000đ"
       }
     },
@@ -341,9 +346,9 @@
     {
       "label": "(b) SQL đơn",
       "data": {
-        "id": "cmvjgt6xo00d8zw9c8scmkp18",
-        "code": "TUBU2026102261783",
-        "userId": "u1_c14b_gt0cu1i",
+        "id": "cmvjklj420061hzg6u0glms90",
+        "code": "TUBU2026102254987",
+        "userId": "u1_c14b_klcgawn",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -362,7 +367,7 @@
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-22T11:35:55.740Z",
+        "createdAt": "2026-10-22T13:21:56.738Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -386,5 +391,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-22T11:35:57.335Z"
+  "ranAt": "2026-10-22T13:21:58.330Z"
 }
