@@ -1517,7 +1517,8 @@ export class DealerService {
       },
       select: { id: true },
     });
-    return anyPaid ? current : this.freezeQuarterTiers(quarter, current);
+    // Có dòng thưởng nghĩa là payout vừa chụp xen vào giữa hai lần đọc: đọc lại bản chụp, chỉ khi vẫn null mới là quý trả trước khi có bản chụp.
+    return anyPaid ? ((await this.quarterTiersSnapshot(this.prisma, quarter)) ?? current) : this.freezeQuarterTiers(quarter, current);
   }
 
   /**

@@ -198,6 +198,61 @@ describe('Bản chụp bảng bậc thưởng theo quý', () => {
     expect(w.snapshots.has('Q1/2026')).toBe(false);
   });
 
+  it('quý chưa có bản chụp: thu hồi dùng bảng hiện hành 3/5/6%', async () => {
+    const tiersConfig = { value: NEW_TIERS as unknown };
+    const a = order('a', 120_000_000, '2026-03-10T03:00:00Z');
+    const d = order('d', 90_000_000, '2026-03-28T03:00:00Z', '2026-04-12T03:00:00Z');
+    const w = makeWorld([a, d], tiersConfig);
+    w.ledger.push({ userId: 'd1', delta: -6_000_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026', createdAt: new Date('2026-04-09T21:00:00Z') });
+    w.state.clock = TOPUP_DAY;
+    const svc = w.service as unknown as Api;
+    await svc.topUpQuarterlyBonuses(TOPUP_DAY);
+    const r = await svc.clawbackQuarterBonusForOrder(w.tx, {
+      id: 'd',
+      code: 'D',
+      userId: 'd1',
+      type: 'DEALER',
+      createdAt: d.createdAt,
+      total: d.total,
+      status: 'DELIVERED',
+      paymentStatus: 'PAID',
+    });
+    // bonus(210tr)=12,6tr − bonus(120tr)=6tr = 6,6tr theo 3/5/6%; theo 2/3/4% sẽ là 4,8tr. Còn giữ 12,6tr nên không bị kẹp.
+    expect(r.clawedBack).toBe(6_600_000);
+    expect(w.snapshots.has('Q1/2026')).toBe(false);
+  });
+
+  it('payout chụp ngay sau lần đọc đầu của trả bù (TOCTOU): trả bù đọc lại bản chụp, không rơi về bảng hiện hành', async () => {
+    const tiersConfig = { value: NEW_TIERS as unknown };
+    const a = order('a', 120_000_000, '2026-03-10T03:00:00Z');
+    const d = order('d', 90_000_000, '2026-03-28T03:00:00Z', '2026-04-12T03:00:00Z');
+    const w = makeWorld([a, d], tiersConfig);
+    // Lúc trả bù đọc lần 1 chưa có bản chụp; ngay sau đó payout chụp C0 (2/3/4%) và ghi QUARTER_BONUS 3,6tr.
+    w.snapshots.set('Q1/2026', { quarter: 'Q1/2026', tiers: OLD_TIERS, createdAt: new Date('2026-04-09T21:00:00Z') });
+    w.ledger.push({ userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026', createdAt: new Date('2026-04-09T21:00:00Z') });
+    const prisma = (w.service as unknown as { prisma: { dealerQuarterBonusTier: { findUnique: jest.Mock } } }).prisma;
+    prisma.dealerQuarterBonusTier.findUnique.mockImplementationOnce(async () => null);
+    w.state.clock = TOPUP_DAY;
+    await (w.service as unknown as Api).topUpQuarterlyBonuses(TOPUP_DAY);
+    // 210tr theo 2/3/4% = 8,4tr, giữ 3,6tr → bù 4,8tr. Theo bảng hiện hành 3/5/6% sẽ là 6,6tr.
+    expect(w.ledger.find((l) => l.refType === 'QUARTER_BONUS_TOPUP')!.delta).toBe(-4_800_000);
+  });
+
+  it('trả bù ghi bản chụp trùng khoá với payout: bản của payout (C0) thắng, số bù theo C0', async () => {
+    const tiersConfig = { value: NEW_TIERS as unknown };
+    const w = makeWorld([order('a', 120_000_000, '2026-03-10T03:00:00Z')], tiersConfig);
+    // Payout đã chụp C0 nhưng chưa ghi dòng thưởng; trả bù đọc lần 1 vẫn thấy null rồi tự chụp C1 → trùng khoá.
+    w.snapshots.set('Q1/2026', { quarter: 'Q1/2026', tiers: OLD_TIERS, createdAt: new Date('2026-04-09T21:00:00Z') });
+    const prisma = (w.service as unknown as { prisma: { dealerQuarterBonusTier: { findUnique: jest.Mock } } }).prisma;
+    prisma.dealerQuarterBonusTier.findUnique.mockImplementationOnce(async () => null);
+    w.state.clock = TOPUP_DAY;
+    await (w.service as unknown as Api).topUpQuarterlyBonuses(TOPUP_DAY);
+    expect(w.ledger).toHaveLength(1);
+    // 120tr theo C0 2/3/4% = 3,6tr; theo C1 3/5/6% sẽ là 6tr.
+    expect(w.ledger[0]).toMatchObject({ refType: 'QUARTER_BONUS', delta: -3_600_000 });
+    expect(w.snapshots.get('Q1/2026')!.tiers).toEqual(OLD_TIERS);
+  });
+
   it('lần ngày 10 không chạy: trả muộn đầu tiên của bước bù chụp bảng bậc, rồi đổi cấu hình không làm lệch lần bù sau', async () => {
     const tiersConfig = { value: OLD_TIERS as unknown };
     const a = order('a', 120_000_000, '2026-03-10T03:00:00Z');
