@@ -370,6 +370,33 @@ describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () =>
     expect(warn(box)).toBeNull();
   });
 
+  it('giỏ giữ mã kèm couponNotice, chưa giảm, không freeship: không báo thêm (chỉ couponNotice của giỏ)', async () => {
+    const box = await apply('FS', { couponCode: 'FS', couponNotice: 'Mã chưa được áp dụng cho đơn này (phần giảm combo không được tính vào điều kiện của mã): Đơn tối thiểu 500.000đ' }, [
+      { code: 'FS', eligible: false, reason: 'Đơn tối thiểu 500.000đ', discount: 0 },
+    ]);
+    expect(state.applied).toEqual(['FS']);
+    expect(warn(box)).toBeNull();
+  });
+
+  it('prop notice trùng lời báo: chỉ một dòng trạng thái hiện', async () => {
+    state.coupons = [c('FS', { type: 'FREESHIP', value: 15000, maxDiscount: null })];
+    state.previews.mockResolvedValue([{ code: 'FS', eligible: false, reason: REASON, discount: 0 }]);
+    state.applyCart = { couponCode: 'FS', freeship: true };
+    const text = `Mã chưa được áp dụng cho đơn này: ${REASON}`;
+    const r = render(<CouponBox currentCode="FS" subtotal={300000} shippingFee={0} preview={{ addressId: 'a1' }} notice={text} />);
+    mounted.push(r);
+    await flush(8);
+    const box = r.container;
+    click(box.querySelector<HTMLButtonElement>('button[aria-controls="coupon-panel"]')!);
+    await flush(8);
+    typeInto(box.querySelector('input[name="coupon-code"]'), 'fs');
+    click(byText(box, 'button', 'Áp dụng'));
+    await flush(6);
+    expect(state.applied).toEqual(['FS']);
+    expect(box.querySelector('[data-testid="coupon-notice"]')!.textContent).toBe(text);
+    expect(warn(box)).toBeNull();
+  });
+
   it('lời báo tự tắt sau 5 giây', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

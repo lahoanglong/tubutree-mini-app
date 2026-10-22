@@ -145,8 +145,9 @@ export function CouponBox({
       // Mã freeship giỏ coi là hợp lệ nhưng xem trước của máy chủ nói không miễn được gì (đơn đã miễn phí giao): nói đúng câu
       // thanh toán sẽ nói thay vì để chip mã hiện như đã áp. Mã giữ nhưng chưa giảm đã có `notice` của giỏ.
       const pv = previews.get(appliedCode.trim().toUpperCase());
+      const heldOnly = !!cart.couponNotice && cart.discount === 0 && !cart.freeship && pv?.eligible !== true;
       showApplyWarning(
-        pv && !pv.eligible && pv.reason && cart.discount === 0
+        !heldOnly && pv && !pv.eligible && pv.reason && cart.discount === 0
           ? `Mã chưa được áp dụng cho đơn này: ${pv.reason}`
           : null,
       );
@@ -389,7 +390,7 @@ export function CouponBox({
           {notice}
         </p>
       )}
-      {applyWarning && (
+      {applyWarning && !(currentCode && notice) && (
         <p role="status" data-testid="coupon-apply-warning" className="mt-2 text-xs text-warning-fg">
           {applyWarning}
         </p>
