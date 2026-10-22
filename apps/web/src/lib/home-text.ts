@@ -20,7 +20,7 @@ export const homeText = {
   aiCardLabel: 'Hỏi trợ lý AI 24/7',
   groupBuyCard: 'Mua chung giá tốt',
   brandStoryTitle: 'Hành trình nguyên liệu',
-  brandStoryBody: 'Khám phá 6 vùng đất làm nên sản phẩm Tubu',
+  brandStoryBody: 'Khám phá sản phẩm Tubu từ nhiều vùng đất Việt Nam',
   communityTitle: 'Cộng đồng Vườn Tubu',
   communitySubtitle: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm, cổ vũ nhau 🌿',
   greeting: (name: string) => `Chào ${name}`,
