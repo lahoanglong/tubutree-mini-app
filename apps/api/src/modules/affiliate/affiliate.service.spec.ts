@@ -995,7 +995,7 @@ describe('AffiliateService.dashboard (doanh số tháng = doanh số ĐÃ CHỐT
     );
     const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: 1_500_000, taxWithheld: 0 } });
     const prisma = {
-      commission: { aggregate },
+      commission: { aggregate, count: jest.fn().mockResolvedValue(0) },
       payout: { aggregate: payoutAggregate },
       affiliateLink: { aggregate: jest.fn().mockResolvedValue({ _sum: { clicks: 0, conversions: 0 } }) },
     } as unknown as PrismaService;
