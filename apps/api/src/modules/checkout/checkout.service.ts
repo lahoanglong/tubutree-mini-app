@@ -59,6 +59,7 @@ import {
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
   couponFreeshipThresholdReason,
+  couponFreeshipTubuPartReason,
   couponNotAppliedNotice,
   couponRejectReason,
 } from '../coupons/coupon-notice';
@@ -181,16 +182,23 @@ type ShipmentTerm = {
   firstOrderWaived: number;
   /** Kiện Tubu có phí giao bằng 0 vì tiền hàng đạt ngưỡng miễn phí giao thường của hạng; giá trị là ngưỡng đó. */
   thresholdFree: number | null;
+  /** Phí giao còn thu của kiện gian hàng đối tác (mã freeship không miễn được); 0 với kiện Tubu. */
+  partnerFee: number;
 };
 
 /**
  * Lý do mã freeship không miễn thêm được gì khi kiện Tubu đã hết phí giao từ trước, theo thứ tự freeship đơn đầu rồi ngưỡng
- * thường. null = không kiện Tubu nào hết phí giao sẵn (đơn chỉ có hàng gian hàng tự giao): giữ câu chung COUPON_FREESHIP_NOTHING_REASON.
+ * thường; đơn còn kiện đối tác thu phí giao thì câu nói rõ phạm vi Tubu. null = không kiện Tubu nào hết phí giao sẵn (đơn chỉ có hàng gian hàng tự giao): giữ câu chung COUPON_FREESHIP_NOTHING_REASON.
  */
 function shipAlreadyFreeReason(terms: ShipmentTerm[]): string | null {
-  if (terms.some((t) => t.firstOrderWaived > 0)) return COUPON_FREESHIP_FIRST_ORDER_REASON;
+  // Còn kiện đối tác thu phí giao thì câu "đơn đã được miễn phí giao" sai với số tiền khách thấy: giới hạn câu ở phần hàng Tubu.
+  const partnerCharged = terms.some((t) => t.partnerFee > 0);
+  if (terms.some((t) => t.firstOrderWaived > 0)) {
+    return partnerCharged ? couponFreeshipTubuPartReason('FIRST_ORDER') : COUPON_FREESHIP_FIRST_ORDER_REASON;
+  }
   const threshold = terms.find((t) => t.thresholdFree != null)?.thresholdFree;
   if (threshold == null) return null;
+  if (partnerCharged) return couponFreeshipTubuPartReason(threshold > 0 ? { threshold } : null);
   return threshold > 0 ? couponFreeshipThresholdReason(threshold) : COUPON_FREESHIP_ALREADY_FREE_REASON;
 }
 
@@ -1273,18 +1281,20 @@ export class CheckoutService {
           const t = await freeShipThreshold(this.config, tierId);
           thresholdFree = subtotals[i]! >= t ? t : 0;
         }
-        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee, thresholdFree });
+        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee, thresholdFree, partnerFee: 0 });
         continue;
       }
       const sf = byId.get(g.fulfiller.storefrontId);
       const freeByShop = sf?.freeShipFrom != null && subtotals[i]! >= sf.freeShipFrom;
+      const partnerFee = freeByShop ? 0 : sf?.shippingFee ?? defaultFee;
       out.push({
         // Mã freeship là Tubu tài trợ phí kho Tubu; phí giao của đối tác là tiền của đối tác nên chỉ miễn theo ngưỡng của shop.
-        shippingFee: freeByShop ? 0 : sf?.shippingFee ?? defaultFee,
+        shippingFee: partnerFee,
         commissionPct: sf?.commissionPct != null ? Number(sf.commissionPct) : defaultPct,
         freeshipWaived: 0,
         firstOrderWaived: 0,
         thresholdFree: null,
+        partnerFee,
       });
     }
     return out;

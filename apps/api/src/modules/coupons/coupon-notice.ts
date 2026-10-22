@@ -20,6 +20,15 @@ export function couponFreeshipThresholdReason(threshold: number): string {
 }
 
 /**
+ * Đơn có kiện Tubu đã hết phí giao nhưng còn kiện gian hàng đối tác có phí giao: nói rõ mã chỉ miễn phần hàng Tubu Tree, nếu không
+ * khách thấy phí giao của kiện đối tác vẫn còn mà hiểu mã bị lỗi. `why` là lý do kiện Tubu hết phí giao; null = hạng được freeship toàn shop.
+ */
+export function couponFreeshipTubuPartReason(why: 'FIRST_ORDER' | { threshold: number } | null): string {
+  const detail = why === null ? '' : why === 'FIRST_ORDER' ? ' (đơn đầu)' : ` (đơn từ ${vnd(why.threshold)})`;
+  return `Phần hàng Tubu Tree giao đã được miễn phí giao${detail}, mã FREESHIP chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.`;
+}
+
+/**
  * Câu giải thích cho khách khi giỏ vẫn giữ mã nhưng mã chưa được áp cho đơn này (giảm 0đ, không tiêu
  * lượt). `reason` là thông điệp tiếng Việt của CouponsService (vd "Đơn tối thiểu 150.000đ để dùng mã này.").
  */

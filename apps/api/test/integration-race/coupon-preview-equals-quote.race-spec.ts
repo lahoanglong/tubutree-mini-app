@@ -24,6 +24,8 @@ import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/c
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import {
   COUPON_FREESHIP_NOTHING_REASON,
+  couponFreeshipThresholdReason,
+  couponFreeshipTubuPartReason,
   COUPON_PRODUCT_FLASH_REASON,
 } from '../../src/modules/coupons/coupon-notice';
 import { createOrder, createUser, randCode, setConfig, warmPool } from './helpers';
@@ -315,7 +317,7 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     expect(sub.byCode.get(scopedA)).toMatchObject({ eligible: false, discount: 0 });
   });
 
-  it('(h) freeship: kiện đối tác tự giao không có gì để miễn, kiện Tubu đã miễn phí giao cũng vậy', async () => {
+  it('(h) freeship: kiện đối tác tự giao không có gì để miễn; kiện Tubu đã miễn phí giao vì đạt ngưỡng thì câu lý do nêu ngưỡng', async () => {
     const owner = await createUser(prisma, { role: 'DEALER' });
     const tag = randCode(8).toLowerCase();
     const store = await prisma.storefront.create({
@@ -340,7 +342,8 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     await cart.addItem(free.userId, { variationId: big.variationId, quantity: 1 });
     const fsFree = await coupon(free.userId, 'FREESHIP', 30_000);
     const r2 = await expectPreviewEqualsQuote(free);
-    expect(r2.byCode.get(fsFree)).toMatchObject({ eligible: false, freeshipSaving: 0, reason: COUPON_FREESHIP_NOTHING_REASON });
+    // Ngưỡng 200.000đ do beforeAll đặt; câu phải nêu ngưỡng chứ không nói "không có phí giao đó" (giỏ 250.000đ đạt ngưỡng).
+    expect(r2.byCode.get(fsFree)).toMatchObject({ eligible: false, freeshipSaving: 0, reason: couponFreeshipThresholdReason(200_000) });
 
     // Giỏ trộn: kiện Tubu 60.000đ (phí 19.000đ) + kiện đối tác: chỉ phí kho Tubu được miễn.
     const mixed = await buyer();
@@ -350,6 +353,18 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     const fsMixed = await coupon(mixed.userId, 'FREESHIP', 0);
     const r3 = await expectPreviewEqualsQuote(mixed);
     expect(r3.byCode.get(fsMixed)).toMatchObject({ eligible: true, freeshipSaving: 19_000 });
+
+    // Giỏ trộn mà kiện Tubu đã đạt ngưỡng còn kiện đối tác có phí giao: câu nói rõ mã chỉ miễn phần hàng Tubu, giỏ và báo giá cùng câu.
+    const mixedFree = await buyer();
+    await cart.addItem(mixedFree.userId, { variationId: big.variationId, quantity: 1 });
+    await cart.addItem(mixedFree.userId, { variationId: shopGoods.variationId, quantity: 1 });
+    const fsMixedFree = await coupon(mixedFree.userId, 'FREESHIP', 0);
+    const r4 = await expectPreviewEqualsQuote(mixedFree);
+    expect(r4.byCode.get(fsMixedFree)).toMatchObject({
+      eligible: false,
+      freeshipSaving: 0,
+      reason: couponFreeshipTubuPartReason({ threshold: 200_000 }),
+    });
   });
 
   it('hết tổng lượt (usageLimit), mã theo hạng, và chọn rỗng (itemIds [] = cả giỏ như báo giá)', async () => {

@@ -2013,10 +2013,18 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
   const OFF = { 'shipping.first_order_free_enabled': false };
 
   function setup(
-    opts: { config?: { get: jest.Mock }; user?: unknown; priorOrders?: Array<unknown>; cartData?: unknown; validateAndCompute?: jest.Mock } = {},
+    opts: {
+      config?: { get: jest.Mock };
+      user?: unknown;
+      priorOrders?: Array<unknown>;
+      cartData?: unknown;
+      validateAndCompute?: jest.Mock;
+      merchantStores?: Array<{ id: string; shippingFee: number | null; freeShipFrom: number | null; commissionPct: number | null }>;
+    } = {},
   ) {
     const systemConfig = opts.config ?? config();
     const b = build({
+      merchantStores: opts.merchantStores,
       cartData: opts.cartData ?? SMALL,
       pricing: new PricingService(systemConfig as never),
       systemConfig,
@@ -2226,6 +2234,81 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
       const q = await svc.quote('u1', { addressId: 'addr1' } as never);
       expect(q.couponApplied).toBe(false);
       expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${THRESHOLD_REASON}`);
+    });
+
+    describe('đơn hỗn hợp: kiện Tubu đã miễn phí giao nhưng còn kiện gian hàng đối tác có phí giao', () => {
+      const SHOP_A = { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u-a' };
+      const MIXED = {
+        items: [
+          ...BIG.items,
+          { id: 'l2', variationId: 'vm', productId: 'pm', productName: 'Xà phòng', variationName: '100g', unitPrice: 80000, quantity: 1, total: 80000, fulfiller: SHOP_A },
+        ],
+        subtotal: 330000, discount: 0, freeship: false, couponCode: null,
+      };
+      const SHOP_FEE = [{ id: 'sf-a', shippingFee: 25000, freeShipFrom: null, commissionPct: null }];
+      const SHOP_FREE = [{ id: 'sf-a', shippingFee: 25000, freeShipFrom: 80000, commissionPct: null }];
+      const TAIL = 'mã FREESHIP chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.';
+      const MIXED_THRESHOLD = `Phần hàng Tubu Tree giao đã được miễn phí giao (đơn từ 199.000đ), ${TAIL}`;
+      const MIXED_FIRST_ORDER = `Phần hàng Tubu Tree giao đã được miễn phí giao (đơn đầu), ${TAIL}`;
+      const MIXED_GENERIC = `Phần hàng Tubu Tree giao đã được miễn phí giao, ${TAIL}`;
+      const NOT_FIRST_ORDER = { ...Q12, 'shipping.first_order_free_enabled': false };
+      // Ngưỡng thường cao hơn giỏ Tubu nên kiện Tubu chỉ được miễn nhờ đơn đầu.
+      const FIRST_ORDER_ONLY = { ...Q12, 'shipping.free_threshold': 500000 };
+
+      it.each([
+        ['đạt ngưỡng thường', NOT_FIRST_ORDER, MIXED_THRESHOLD],
+        ['đơn đầu', FIRST_ORDER_ONLY, MIXED_FIRST_ORDER],
+      ])('báo giá, %s: nói rõ chỉ phần hàng Tubu Tree được miễn, mã được giữ, không tiêu lượt', async (_n, extra, reason) => {
+        const { svc, coupons } = setup({
+          config: config(extra),
+          cartData: { ...MIXED, couponCode: 'FREESHIP' },
+          merchantStores: SHOP_FEE,
+          validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+        });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        expect(q.couponApplied).toBe(false);
+        expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${reason}`);
+        await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+        expect(coupons.redeem).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['đạt ngưỡng thường', NOT_FIRST_ORDER, MIXED_THRESHOLD],
+        ['đơn đầu', FIRST_ORDER_ONLY, MIXED_FIRST_ORDER],
+      ])('xem trước, %s: giỏ và thanh toán cùng một câu', async (_n, extra, reason) => {
+        const { svc, coupons, loyalty } = setup({ config: config(extra), cartData: MIXED, merchantStores: SHOP_FEE });
+        const view = previewOf(svc, coupons, loyalty);
+        const cart = await view.couponPreviews('u1', {} as never);
+        const checkout = await view.couponPreviews('u1', { addressId: 'addr1' } as never);
+        expect(cart.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason });
+        expect(checkout.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason, freeshipSaving: 0 });
+      });
+
+      it('hạng được freeship toàn shop (ngưỡng 0đ) mà còn kiện đối tác có phí: câu hỗn hợp không kèm số ngưỡng', async () => {
+        const { svc, coupons, loyalty, prisma } = setup({
+          config: config({ ...NOT_FIRST_ORDER, 'shipping.tier_freeship_overrides': { DAI_THU: 0 } }),
+          cartData: MIXED,
+          merchantStores: SHOP_FEE,
+        });
+        (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+          id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: 'DAI_THU',
+        });
+        const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+        expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: MIXED_GENERIC });
+      });
+
+      it('kiện đối tác cũng hết phí giao (đạt ngưỡng của shop): cả đơn không còn phí giao nên giữ câu của đơn chỉ có hàng Tubu', async () => {
+        const { svc, coupons, loyalty } = setup({ config: config(NOT_FIRST_ORDER), cartData: MIXED, merchantStores: SHOP_FREE });
+        const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+        expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: THRESHOLD_REASON });
+      });
+
+      it('kiện Tubu chưa đạt ngưỡng + kiện đối tác: mã vẫn miễn phí giao Tubu như cũ', async () => {
+        const small = { ...MIXED, items: [{ ...BIG.items[0]!, unitPrice: 60000, total: 60000 }, MIXED.items[1]!] };
+        const { svc, coupons, loyalty } = setup({ config: config(NOT_FIRST_ORDER), cartData: small, merchantStores: SHOP_FEE });
+        const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', { addressId: 'addr1' } as never);
+        expect(res.coupons[0]).toEqual({ code: 'FREESHIP', eligible: true, discount: 0, freeshipSaving: 19000 });
+      });
     });
 
     it('đơn chưa đạt ngưỡng: FREESHIP vẫn dùng được và miễn phí giao như cũ', async () => {
