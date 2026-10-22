@@ -365,6 +365,10 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
       freeshipSaving: 0,
       reason: couponFreeshipTubuPartReason({ threshold: 200_000 }),
     });
+    expect(r4.cartByCode.get(fsMixedFree)).toMatchObject({
+      eligible: false,
+      reason: couponFreeshipTubuPartReason({ threshold: 200_000 }),
+    });
   });
 
   it('hết tổng lượt (usageLimit), mã theo hạng, và chọn rỗng (itemIds [] = cả giỏ như báo giá)', async () => {
