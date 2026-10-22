@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPitch, formatRatePct, pendingBody, rewardClaimView, vnLastDayLabel } from './dealer-view';
+import { applyPitch, bonusPctText, formatRatePct, pendingBody, rewardClaimView, vnLastDayLabel } from './dealer-view';
 
 const base = { achieved: true, canClaim: true, claimStatus: null, rejectionReason: null, toGo: 0, pendingVolume: 0, isCurrentPeriod: true, claimDeadline: '2026-11-01T00:00:00+07:00' } as const;
 
@@ -46,6 +46,13 @@ describe('vnLastDayLabel', () => {
 });
 
 describe('chữ có số theo cấu hình', () => {
+  it('bonusPctText: % bậc thưởng đi qua formatRatePct, như Mini App', () => {
+    expect(bonusPctText(4.5)).toBe('4,5%');
+    expect(bonusPctText(4)).toBe('4%');
+    expect(bonusPctText(1000)).toBe('1000%');
+    expect(bonusPctText(-4)).toBe('0%');
+  });
+
   it('formatRatePct: tỉ lệ 0..1 ra phần trăm kiểu Việt', () => {
     expect(formatRatePct(0.45)).toBe('45%');
     expect(formatRatePct(0.035)).toBe('3,5%');

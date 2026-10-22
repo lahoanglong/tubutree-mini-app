@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { dealerReportQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
+import { bonusPctText } from '@/lib/dealer-view';
 import { formatVnd } from '@/lib/format-vnd';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { ErrorState } from '@/components/ui/error-state';
@@ -32,7 +33,7 @@ export function ReportTab() {
           <div className="text-xs text-stone-100">Doanh số {d.quarter}</div>
           <div className="mt-0.5 text-3xl font-bold tabular-nums">{formatVnd(d.revenue)}</div>
           <div className="mt-0.5 text-xs text-stone-100">
-            {d.orderCount} đơn đã chốt · Thưởng hiện tại {d.bonusPct}% = <b className="text-promo-solid max-md:text-[var(--color-dealer-accent)]">{formatVnd(d.bonusAmount)}</b>
+            {d.orderCount} đơn đã chốt · Thưởng hiện tại {bonusPctText(d.bonusPct)} = <b className="text-promo-solid max-md:text-[var(--color-dealer-accent)]">{formatVnd(d.bonusAmount)}</b>
           </div>
           {d.pendingRevenue > 0 && (
             <div className="mt-0.5 text-xs text-stone-100">
@@ -52,7 +53,7 @@ export function ReportTab() {
                 <div className="h-full rounded-full bg-promo-solid max-md:bg-[var(--color-dealer-accent)]" style={{ width: `${progress}%` }} />
               </div>
               <div className="mt-1.5 text-xs text-stone-100">
-                Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {d.nextTier.pct}%
+                Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {bonusPctText(d.nextTier.pct)}
               </div>
             </div>
           )}
@@ -70,7 +71,7 @@ export function ReportTab() {
                     {reached && <Check className="h-4 w-4 flex-none" aria-hidden="true" />}
                     Từ {formatVnd(t.min)}
                   </span>
-                  <span className={`text-sm font-semibold ${tone}`}>thưởng {t.pct}%</span>
+                  <span className={`text-sm font-semibold ${tone}`}>thưởng {bonusPctText(t.pct)}</span>
                 </li>
               );
             })}
