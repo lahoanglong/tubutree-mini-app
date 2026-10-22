@@ -130,6 +130,13 @@ describe('/mua-chung — danh sách nhóm', () => {
     expect(c.textContent).not.toContain(`mã giảm ${formatVnd(20_000)}`);
   });
 
+  it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (minOrder) khi API trả, thiếu thì dùng giá nhóm', async () => {
+    mocks.list = [GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })];
+    const c = await mount();
+    expect(c.textContent).toContain(`Đủ nhóm: nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`);
+    expect(c.textContent).not.toContain(`dùng cho đơn từ ${formatVnd(365_500)}`);
+  });
+
   it('% lấy từ discountPct của nhóm, không tính lại từ basePrice - unitPrice', async () => {
     mocks.list = [GROUP('a', { discountPct: 15, basePrice: 100_000, unitPrice: 80_000 })];
     const c = await mount();
