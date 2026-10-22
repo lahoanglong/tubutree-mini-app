@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { dealerReportQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
+import { bonusPctText } from '@/lib/dealer-view';
 import { formatVnd } from '@/lib/format-vnd';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { ErrorState } from '@/components/ui/error-state';
