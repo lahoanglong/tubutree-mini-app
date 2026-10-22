@@ -65,8 +65,8 @@ import '../css/dealer-theme.css';
 
 const INK = 'var(--color-dealer-ink)';
 
-/** Bậc thưởng quý admin đặt được 1 chữ số lẻ (2,5%), nên in kiểu Việt thay vì để JS ghi "2.5". */
-const bonusPctText = (pct: number) => `${pct.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
+/** Bậc thưởng quý admin đặt được 1 chữ số lẻ (2,5%), nên in kiểu Việt thay vì để JS ghi "2.5". API trả đơn vị %, formatRatePct nhận phân số. */
+const bonusPctText = (pct: number) => formatRatePct(pct / 100);
 
 /** Nút chính mang màu ink B2B; khi vô hiệu để ZaUI bridge tự vẽ trạng thái disabled, đừng đè nền ink lên. */
 const inkButton = (disabled?: boolean): CSSProperties | undefined => (disabled ? undefined : { background: INK });
