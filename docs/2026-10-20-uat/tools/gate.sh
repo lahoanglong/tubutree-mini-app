@@ -4,14 +4,15 @@
 # Postgres chạy thẳng: cụm 25544 cho migrate/drift, 25541/25542 cho race 2 luồng.
 set -uo pipefail
 export PATH=$HOME/.local/node/node-v22.23.3-darwin-arm64/bin:$PATH
-WT=$1; OUT=$2; FULL=${3:-}
+WT=$1; FULL=${3:-}
 T=$(cd "$(dirname "$0")" && pwd)
-mkdir -p "$OUT"
+# Tuyệt đối: race-shard.sh cd vào apps/api trước khi ghi log.
+OUT=$(mkdir -p "$2" && cd "$2" && pwd)
+: > $OUT/exits.txt
 kids() { for c in $(pgrep -P $1); do kids $c; echo $c; done; }
 trap 'for p in $(kids $$); do kill $p 2>/dev/null; done; exit 143' TERM INT
 step() { echo "=== $1 $(date +%T)"; }
-FAILS=""
-run() { local name=$1; shift; ( "$@" ) > $OUT/$name.log 2>&1 & wait $!; local c=$?; echo "$name exit $c"; [ $c -ne 0 ] && FAILS="$FAILS $name"; return $c; }
+run() { local name=$1; shift; ( "$@" ) > $OUT/$name.log 2>&1 & wait $!; local c=$?; echo "$name exit $c"; echo "$name $c" >> $OUT/exits.txt; return $c; }
 
 step "shared-types + prisma generate"
 run shared-types bash -c "cd $WT && pnpm --filter @tubutree/shared-types build"
@@ -42,9 +43,8 @@ run jest-api bash -c "cd $WT/apps/api && npx jest --maxWorkers=4"; grep -E '^(Te
 step "race 2 luồng"
 bash $T/race-shard.sh $WT 1 2 25541 $OUT & p1=$!
 bash $T/race-shard.sh $WT 2 2 25542 $OUT & p2=$!
-wait $p1; wait $p2
+wait $p1; echo "race-shard-1 $?" >> $OUT/exits.txt; wait $p2; echo "race-shard-2 $?" >> $OUT/exits.txt
 grep -h '^Test Suites:\|^Tests:' $OUT/race-1.log $OUT/race-2.log
-for sh in 1 2; do [ -s $OUT/race-$sh-rerun.log ] && grep -q '^Tests:.*failed' $OUT/race-$sh-rerun.log && FAILS="$FAILS race-$sh"; done
 bash $T/pg-native.sh stop 25541 >/dev/null 2>&1; bash $T/pg-native.sh stop 25542 >/dev/null 2>&1
 step vitest
 run vitest-miniapp bash -c "cd $WT/apps/miniapp && npx vitest run"; grep -E 'Test Files|Tests ' $OUT/vitest-miniapp.log
@@ -59,4 +59,4 @@ if [ -n "$FULL" ]; then
   run build-miniapp bash -c "cd $WT/apps/miniapp && VITE_API_BASE_URL=https://api.tubutree.com/api npm run -s build"; tail -3 $OUT/build-miniapp.log
 fi
 step DONE
-if [ -n "$FAILS" ]; then echo "ĐỎ:$FAILS"; exit 1; fi
+bash $T/gate-verdict.sh $OUT $FULL
