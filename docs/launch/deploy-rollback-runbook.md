@@ -858,6 +858,7 @@ cat .pending-migrations
 - PD-3 quy đổi số dư xu về 0 và thêm ràng buộc `coinsBalance = 0`: code cũ vẫn ghi xu sẽ bị từ chối, và số dư xu đã bị đổi thành điểm không tự quay lại.
 - `20261018210000_points_1d` nhân 1.000 mọi số điểm: image cũ đọc số điểm theo đơn vị cũ nên giá quà, trần và số dư sai nghiêm trọng. Hoàn tác = khôi phục backup trước migrate (7.3); không quay image, không có script đảo ngược.
 - Các migration q1 và r5 thêm giá trị mới `PROCESSING`, `UNVERIFIED`, `DISMISSED` cho enum `CustomerRefundStatus`: dòng hoàn tiền mang giá trị mới làm code cũ lỗi khi đọc, và giá trị enum đã thêm không gỡ được.
+- `20261022100000_payout_tax_refunded` thêm giá trị `PIT_REFUND` cho enum `WalletTxType` (cùng cột `payouts.taxRefunded`): dòng sổ ví loại `PIT_REFUND` làm code cũ lỗi khi đọc (Prisma báo enum lạ), và giá trị enum đã thêm không gỡ được. Migration này không nằm trong `IMAGE_COMPATIBLE_MIGRATIONS`; đã có dòng `PIT_REFUND` (admin từ chối lệnh rút hoa hồng làm hoàn thuế TNCN giữ dư vào Ví) thì đường quay lại là 7.3.
 
 Vì vậy: danh sách chờ áp có migration ngoài sáu cái của đợt, hoặc bất kỳ migration nào ở trên đã chạy (kể cả chỉ một phần), thì đường quay lại duy nhất là 7.3 (khôi phục bản backup trước deploy). 7.2 giữ nguyên cho đúng trường hợp hẹp nó đúng: PROD đã ở bản mà chỉ còn các migration của đợt chờ áp.
 
