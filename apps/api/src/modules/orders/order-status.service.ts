@@ -51,6 +51,7 @@ import { receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
+import { markReversalEffectsDone } from './reversal-effects';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
 export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
@@ -107,6 +108,11 @@ export type DeliveredEffectsResult =
   | { outcome: 'NOT_DELIVERED' | 'ALREADY_DONE' }
   | { outcome: 'DONE'; pointsCredited: boolean; commissionsLocked: number }
   | { outcome: 'INCOMPLETE'; pointsCredited: boolean; commissionsLocked: number; error: string };
+
+export type ReversalEffectsResult =
+  | { outcome: 'NOT_CLOSED' | 'ALREADY_DONE' }
+  | { outcome: 'DONE' }
+  | { outcome: 'INCOMPLETE'; error: string };
 
 /**
  * Nguồn ghi Order.status DUY NHẤT cho mọi nơi KHÔNG PHẢI là luồng khách tự hủy
@@ -411,6 +417,9 @@ export class OrderStatusService {
     // Lỗi đảo điểm/hoa hồng không được chặn xếp lệnh huỷ Pancake, báo merchant, báo khách ở dưới (đơn đã CANCELLED, lần gọi lại
     // không còn đi đường này): ghi nhận rồi ném SAU CÙNG để người gọi biết mà thử lại (nhánh idempotent ở đầu hàm).
     let closedEffectsFailure: unknown = null;
+    // Hai bước sau commit mà lỗi bị nuốt (không được làm hỏng lần huỷ đã commit) nhưng cũng không được coi là xong: ghi mốc thì cron
+    // không còn thấy đơn, khoản hoàn số tiền chuyển thiếu hay lệnh huỷ Pancake mất luôn.
+    let swallowedFailure = false;
     if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
       const done = await this.reverseClosedOrderEffects(order);
       standardPointsBack = done.standardPointsBack;
@@ -426,11 +435,12 @@ export class OrderStatusService {
         order.id,
         { notifyCustomer: !noteCarriesRefund },
       ).catch((err: unknown) => {
+        swallowedFailure = true;
         this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
         return 0;
       });
       await this.enqueueGomdonCancel(order);
-      if (opts.actorType !== 'PANCAKE') await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision);
+      if (opts.actorType !== 'PANCAKE' && (await this.pancakeHooks?.afterLocalCancel(order.id, pancakeDecision)) === false) swallowedFailure = true;
       if (opts.actorType !== 'MERCHANT') {
         await notifyMerchantOwner(this.prisma, this.notifications, this.logger, order.id, 'MERCHANT_ORDER_CANCELLED', {
           order_code: order.code,
@@ -459,6 +469,12 @@ export class OrderStatusService {
       .catch(() => undefined);
 
     if (closedEffectsFailure !== null) throw closedEffectsFailure;
+    // Mọi việc sau commit đã chạy: cron chạy lại (ReversalEffectsResyncCron) chỉ còn thấy đơn mà tiến trình chết trước dòng này.
+    if (swallowedFailure) {
+      this.logger.warn(`Đơn ${order.code}: hoàn số tiền chuyển thiếu hoặc xếp lệnh huỷ Pancake chưa xong, chưa ghi mốc để cron chạy lại.`);
+    } else if (targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') {
+      await markReversalEffectsDone(this.prisma, order.id, this.logger);
+    }
     return this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
   }
 
@@ -497,6 +513,94 @@ export class OrderStatusService {
     if (order.status !== 'DELIVERED') return { outcome: 'NOT_DELIVERED' };
     if (order.deliveredEffectsAt) return { outcome: 'ALREADY_DONE' };
     return this.runDeliveredEffects(order);
+  }
+
+  /**
+   * Chạy lại phần đảo sau commit của đơn CANCELLED/RETURNED chưa có mốc reversalEffectsAt (cron gọi): lần huỷ/trả commit rồi tiến
+   * trình chết (SIGTERM lúc deploy, mất kết nối) trước khi đảo điểm tích, thu hồi hoa hồng, xếp lệnh huỷ Pancake/Gomdon và báo —
+   * gọi lại setStatus không làm gì vì trạng thái đã đặt. Mỗi việc idempotent (dòng sổ điểm unique, hoa hồng chỉ đảo PENDING/LOCKED,
+   * lệnh huỷ Pancake chỉ xếp khi chưa có kết quả, tin chỉ gửi khi log chưa có tin của đơn) nên chạy song song hay chạy lại vẫn chỉ
+   * làm một lần. Mốc chỉ ghi khi mọi việc xong; việc đảo điểm/hoa hồng lỗi thì chưa báo khách (lần sau xong rồi mới báo).
+   */
+  async resyncReversalEffects(orderIdOrCode: string): Promise<ReversalEffectsResult> {
+    const order = await this.prisma.order.findFirst({
+      where: { OR: [{ id: orderIdOrCode }, { code: orderIdOrCode }] },
+      select: {
+        id: true,
+        code: true,
+        userId: true,
+        status: true,
+        updatedAt: true,
+        reversalEffectsAt: true,
+        hasRecyclingPickup: true,
+        placedForCustomer: true,
+        pancakeCancelStatus: true,
+        fulfiller: true,
+        fulfillerStorefront: { select: { ownerUserId: true } },
+      },
+    });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    if (order.status !== 'CANCELLED' && order.status !== 'RETURNED') return { outcome: 'NOT_CLOSED' };
+    if (order.reversalEffectsAt) return { outcome: 'ALREADY_DONE' };
+
+    const closure = await this.prisma.orderStatusHistory.findFirst({
+      where: { orderId: order.id, toStatus: order.status },
+      orderBy: { createdAt: 'desc' },
+      select: { actorType: true, createdAt: true },
+    });
+    const actor = (closure?.actorType ?? 'SYSTEM') as StatusActor;
+    const cancelled = order.status === 'CANCELLED';
+
+    const { standardPointsBack, failure: reverseFailure } = await this.reverseClosedOrderEffects(order);
+    let failure: unknown = reverseFailure;
+    let receivedBack = 0;
+    if (cancelled) {
+      receivedBack = await refundReportedUnderpayment({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, order.id, {
+        notifyCustomer: false,
+      }).catch((err: unknown) => {
+        failure ??= err;
+        this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
+        return 0;
+      });
+      await this.enqueueGomdonCancel(order);
+      // Pancake tự báo huỷ thì đơn Pancake đã huỷ; đã có kết quả huỷ (kể cả đang chờ thử lại) thì cron huỷ Pancake lo.
+      if (actor !== 'PANCAKE' && order.pancakeCancelStatus === null && (await this.pancakeHooks?.afterLocalCancel(order.id, undefined)) === false) {
+        failure ??= new Error('Chưa xếp được lệnh huỷ Pancake');
+      }
+    }
+    await this.settleClosedOrderAlerts(order);
+    if (failure !== null) {
+      const error = failure instanceof Error ? failure.message : String(failure);
+      this.logger.warn(`Đơn ${order.code}: chạy lại phần đảo sau huỷ/trả chưa xong — ${error}`);
+      return { outcome: 'INCOMPLETE', error };
+    }
+
+    const since = closure?.createdAt ?? order.updatedAt;
+    if (!(await this.closureNoticeSent(order.userId, order.code, since))) {
+      await this.notifications
+        .notify(order.userId, `ORDER_${order.status}`, {
+          order_code: order.code,
+          refund_note: refundNote(null, null, standardPointsBack) + receivedRefundNote(receivedBack, order.placedForCustomer),
+        })
+        .catch(() => undefined);
+    }
+    const ownerId = order.fulfiller === 'MERCHANT' ? order.fulfillerStorefront?.ownerUserId : null;
+    if (cancelled && actor !== 'MERCHANT' && ownerId && !(await this.closureNoticeSent(ownerId, order.code, since))) {
+      await this.notifications
+        .notify(ownerId, 'MERCHANT_ORDER_CANCELLED', { order_code: order.code, reason: MERCHANT_CANCEL_REASON[actor] ?? MERCHANT_CANCEL_REASON.SYSTEM })
+        .catch(() => undefined);
+    }
+    await markReversalEffectsDone(this.prisma, order.id, this.logger);
+    return { outcome: 'DONE' };
+  }
+
+  /** Người nhận đã có tin về đơn này kể từ lúc đóng đơn (tin huỷ/trả/hoàn tiền, đường nào gửi cũng tính) thì không gửi bù thêm. */
+  private async closureNoticeSent(userId: string, orderCode: string, since: Date): Promise<boolean> {
+    const sent = await this.prisma.notificationLog.findFirst({
+      where: { userId, sentAt: { gte: since }, payload: { path: ['data', 'order_code'], equals: orderCode } },
+      select: { id: true },
+    });
+    return sent !== null;
   }
 
   /**
@@ -721,12 +825,13 @@ export class OrderStatusService {
   }
 
   /** Sau khi đơn đã huỷ ở Tubu bằng đường riêng (khách tự huỷ): ghi kết quả huỷ Pancake / xếp job huỷ. */
-  async afterPancakeCancel(orderId: string, decision?: PancakeCancelDecision): Promise<void> {
-    await this.pancakeHooks?.afterLocalCancel(orderId, decision);
+  async afterPancakeCancel(orderId: string, decision?: PancakeCancelDecision): Promise<boolean> {
+    const settled = (await this.pancakeHooks?.afterLocalCancel(orderId, decision)) !== false;
     // Lần huỷ trước của khách có thể đã để dấu lệch Pancake–Tubu (xem flagPancakeCancelDivergence); lần này huỷ xong thì hết lệch.
     await clearPancakeAttention(this.prisma, orderId, ATTENTION_CANCELLED_ON_PANCAKE_ONLY).catch((err: unknown) =>
       this.logger.warn(`Không đóng dấu lệch huỷ Pancake của đơn ${orderId}: ${err instanceof Error ? err.message : err}`),
     );
+    return settled;
   }
 
   /**

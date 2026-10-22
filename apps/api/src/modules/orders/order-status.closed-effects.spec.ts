@@ -1,4 +1,5 @@
 import { OrderStatusService } from './order-status.service';
+import * as refundQueue from './refund-queue';
 import type { OrderReversalService } from './order-reversal.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -206,6 +207,72 @@ describe('OrderStatusService — việc sau commit của CANCELLED/RETURNED (D12
       const writes = prisma.order.updateMany.mock.calls.map(([a]) => a as { data: Record<string, unknown> });
       expect(writes.some((w) => w.data.pancakeAttention === null)).toBe(false);
       expect(writes.some((w) => w.data.pancakeAttention === ATTENTION_COD_RETURN_UNVERIFIED)).toBe(true);
+    });
+  });
+
+  describe('Q19: mốc reversalEffectsAt chỉ ghi khi mọi việc sau commit đã xong', () => {
+    const markerWrites = (prisma: ReturnType<typeof build>['prisma']) =>
+      prisma.order.updateMany.mock.calls.filter(([a]) => 'reversalEffectsAt' in ((a as { data: Record<string, unknown> }).data ?? {}));
+
+    it('huỷ xong trọn vẹn: ghi mốc một lần, chỉ lên dòng còn null', async () => {
+      const { svc, prisma } = build(makeOrder());
+
+      await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
+
+      const writes = markerWrites(prisma);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]![0]).toEqual({ where: { id: 'o1', reversalEffectsAt: null }, data: { reversalEffectsAt: expect.any(Date) } });
+    });
+
+    it('trả hàng xong trọn vẹn: cũng ghi mốc', async () => {
+      const { svc, prisma } = build(makeOrder({ status: 'DELIVERED' }));
+
+      await svc.setStatus('o1', 'RETURNED' as never, { actorType: 'ADMIN' });
+
+      expect(markerWrites(prisma)).toHaveLength(1);
+    });
+
+    it('đảo điểm hoặc hoa hồng lỗi: KHÔNG ghi mốc (cron còn thấy đơn để chạy lại)', async () => {
+      const a = build(makeOrder(), { loyalty: { reverseOrderPoints: jest.fn().mockRejectedValue(dbDown()) } });
+      await expect(a.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow();
+      expect(markerWrites(a.prisma)).toHaveLength(0);
+
+      const b = build(makeOrder(), { affiliate: { reverseCommissionsForOrder: jest.fn().mockRejectedValue(dbDown()) } });
+      await expect(b.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).rejects.toThrow();
+      expect(markerWrites(b.prisma)).toHaveLength(0);
+    });
+
+    it('khoản hoàn số tiền khách chuyển thiếu lỗi (bị nuốt thành 0): KHÔNG ghi mốc, cron còn thấy đơn để ghi khoản hoàn', async () => {
+      const spy = jest.spyOn(refundQueue, 'refundReportedUnderpayment').mockRejectedValue(dbDown());
+      try {
+        const { svc, prisma } = build(makeOrder());
+        await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).resolves.toBeDefined();
+        expect(markerWrites(prisma)).toHaveLength(0);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('xếp lệnh huỷ Pancake thất bại trước khi đặt PENDING (afterLocalCancel trả false): KHÔNG ghi mốc', async () => {
+      const { svc, prisma } = build(makeOrder(), { hooks: { afterLocalCancel: jest.fn().mockResolvedValue(false) } });
+      await expect(svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).resolves.toBeDefined();
+      expect(markerWrites(prisma)).toHaveLength(0);
+    });
+
+    it('afterLocalCancel trả true hoặc không trả gì (đã xếp job/không có đơn Pancake): vẫn ghi mốc', async () => {
+      const { svc, prisma } = build(makeOrder(), { hooks: { afterLocalCancel: jest.fn().mockResolvedValue(true) } });
+      await svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' });
+      expect(markerWrites(prisma)).toHaveLength(1);
+    });
+
+    it('ghi mốc lỗi không làm hỏng lần huỷ đã commit', async () => {
+      const built = build(makeOrder());
+      built.prisma.order.updateMany.mockImplementation(async (a: { data: Record<string, unknown> }) => {
+        if ('reversalEffectsAt' in a.data) throw dbDown();
+        return { count: 1 };
+      });
+
+      await expect(built.svc.setStatus('o1', 'CANCELLED' as never, { actorType: 'ADMIN' })).resolves.toBeDefined();
     });
   });
 });

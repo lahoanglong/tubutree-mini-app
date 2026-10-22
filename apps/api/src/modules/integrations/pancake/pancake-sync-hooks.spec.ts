@@ -182,8 +182,34 @@ describe('PancakeSyncHooks.afterLocalCancel', () => {
   it('lỗi xếp job không ném ra (huỷ đã commit; cron cứu hộ quét PENDING)', async () => {
     const t = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' });
     t.queue.add.mockRejectedValue(new Error('redis down'));
-    await expect(t.hooks.afterLocalCancel('o1')).resolves.toBeUndefined();
+    await expect(t.hooks.afterLocalCancel('o1')).resolves.toBe(true);
     expect(t.row().pancakeCancelStatus).toBe('PENDING');
+  });
+
+  it('Q19: đã đặt PENDING thì trả true (cron quét PENDING lo); lỗi TRƯỚC khi đặt PENDING trả false để người gọi không ghi mốc xong', async () => {
+    const queued = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' });
+    await expect(queued.hooks.afterLocalCancel('o1')).resolves.toBe(true);
+
+    const blip = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' });
+    blip.prisma.order.findUnique.mockRejectedValueOnce(new Error('P2024: hết kết nối trong pool'));
+    await expect(blip.hooks.afterLocalCancel('o1')).resolves.toBe(false);
+    expect(blip.row().pancakeCancelStatus).toBeNull();
+
+    const updateBlip = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' });
+    updateBlip.prisma.order.update.mockRejectedValueOnce(new Error('P2024'));
+    await expect(updateBlip.hooks.afterLocalCancel('o1', { kind: 'DEFERRED', reason: 'timeout' })).resolves.toBe(false);
+    expect(updateBlip.queue.add).not.toHaveBeenCalled();
+
+    const settleBlip = setup({ status: 'CANCELLED', pancakeOrderId: 'pk-1' });
+    settleBlip.prisma.order.updateMany.mockRejectedValueOnce(new Error('P2024'));
+    await expect(settleBlip.hooks.afterLocalCancel('o1', { kind: 'CONFIRMED', cancelStatus: 'CANCELLED', pancakeOrderId: 'pk-1' })).resolves.toBe(false);
+  });
+
+  it('Q19: không có gì để huỷ trên Pancake (chưa lên / đơn gian hàng tự giao) trả true, không phải lỗi', async () => {
+    const none = setup({ status: 'CANCELLED' });
+    await expect(none.hooks.afterLocalCancel('o1', { kind: 'NONE' })).resolves.toBe(true);
+    const merchant = setup({ fulfiller: 'MERCHANT', status: 'CANCELLED', pancakePushClaimedAt: new Date() });
+    await expect(merchant.hooks.afterLocalCancel('o1')).resolves.toBe(true);
   });
 });
 

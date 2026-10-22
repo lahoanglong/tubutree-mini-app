@@ -1029,6 +1029,11 @@ model Order {
   /// Lúc mọi việc sau giao đã xong (cộng Điểm Xanh, khoá hoa hồng CTV, xét thưởng giới thiệu) — các việc đó chạy sau khi lần lật
   /// DELIVERED commit nên có thể lỡ; null trên đơn DELIVERED quá 10 phút = DeliveredEffectsResyncCron chạy lại.
   deliveredEffectsAt     DateTime?
+  /// Lúc mọi việc sau commit của lần huỷ/trả đã xong (đảo điểm tích và điểm thường còn lại, thu hồi hoa hồng, xếp lệnh huỷ
+  /// Pancake/Gomdon, báo khách) — các việc đó chạy sau khi lần lật CANCELLED/RETURNED commit nên tiến trình chết giữa chừng làm
+  /// lỡ; null trên đơn CANCELLED/RETURNED quá vài phút = ReversalEffectsResyncCron chạy lại. Đơn huỷ/trả trước migration được
+  /// điền sẵn (không quét lại lịch sử). Đơn chưa đóng luôn null.
+  reversalEffectsAt      DateTime?
   /// Lúc cron ReviewInviteService nhận đơn để gửi tin mời đánh giá (claim trước khi gửi, null lại nếu gửi lỗi).
   reviewInvitedAt        DateTime?
   /// Hàng đợi "Cần xử lý Pancake": lý do mới nhất Pancake báo một việc hệ thống không tự làm được (đang hoàn,

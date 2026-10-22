@@ -272,12 +272,13 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
   // Giao dịch duyệt đã commit (yêu cầu APPROVED, đơn RETURNED) nên gọi lại báo "đã xử lý": mọi việc sau commit phải chạy hết rồi mới ném.
   function setupFullApprove(over: { points?: Error; commissions?: Error } = {}) {
     const order = deliveredOrder({ pancakeOrderId: 'pk1', fulfiller: 'TUBU', fulfillerStorefront: null });
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const prisma = {
       returnRequest: {
         findUnique: jest.fn().mockResolvedValue({ id: 'r1', orderId: 'o1', userId: 'u1', status: 'REQUESTED', refundMethod: 'BANK', bankName: 'TCB', bankAccountNo: '1234567890', items: [] }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'r1', items: [] }),
       },
-      order: { findUnique: jest.fn().mockResolvedValue(null) },
+      order: { findUnique: jest.fn().mockResolvedValue(null), updateMany },
       $transaction: jest.fn().mockResolvedValue({
         order,
         shares: { isFull: true, lines: [] },
@@ -295,7 +296,8 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
     const flag = jest.fn().mockResolvedValue(undefined);
     (svc as unknown as { flagPancakeReturn: unknown }).flagPancakeReturn = flag;
     (svc as unknown as { withContext: unknown }).withContext = jest.fn().mockResolvedValue({ id: 'r1' });
-    return { svc, loyalty, affiliate, flag };
+    const markerWrites = () => updateMany.mock.calls.filter(([a]) => 'reversalEffectsAt' in ((a as { data: Record<string, unknown> }).data ?? {}));
+    return { svc, loyalty, affiliate, flag, markerWrites };
   }
   const events = () => (notifications.notify as jest.Mock).mock.calls.map((c) => c[1]);
 
@@ -322,6 +324,20 @@ describe('OrderReturnsService.review — duyệt trả cả đơn, lỗi đảo 
     await expect(both.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P2024');
     const ok = setupFullApprove();
     await expect(ok.svc.review('a1', 'r1', { approve: true, shopFault: true })).resolves.toBeDefined();
+  });
+
+  it('Q19: trả cả đơn xong trọn vẹn ghi mốc reversalEffectsAt; đảo điểm hoặc hoa hồng lỗi thì KHÔNG ghi (cron chạy lại)', async () => {
+    const ok = setupFullApprove();
+    await ok.svc.review('a1', 'r1', { approve: true, shopFault: true });
+    expect(ok.markerWrites()).toHaveLength(1);
+
+    const points = setupFullApprove({ points: new Error('P2024') });
+    await expect(points.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P2024');
+    expect(points.markerWrites()).toHaveLength(0);
+
+    const commissions = setupFullApprove({ commissions: new Error('P1001') });
+    await expect(commissions.svc.review('a1', 'r1', { approve: true, shopFault: true })).rejects.toThrow('P1001');
+    expect(commissions.markerWrites()).toHaveLength(0);
   });
 });
 

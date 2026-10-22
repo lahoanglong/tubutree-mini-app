@@ -103,6 +103,10 @@ export async function createOrder(
   const total = data.total ?? 100_000;
   const effectsDone =
     data.status === 'DELIVERED' && data.deliveredEffectsAt === undefined ? { deliveredEffectsAt: data.deliveredAt ?? new Date() } : {};
+  // Đơn dựng thẳng ở CANCELLED/RETURNED cũng đã xong phần đảo sau commit (như đơn qua setStatus thật); ca cần đơn chưa xong truyền
+  // `reversalEffectsAt: null`.
+  const reversalDone =
+    (data.status === 'CANCELLED' || data.status === 'RETURNED') && data.reversalEffectsAt === undefined ? { reversalEffectsAt: new Date() } : {};
   return prisma.order.create({
     data: {
       code: `IT${Date.now()}${randCode(5)}`,
@@ -124,6 +128,7 @@ export async function createOrder(
         wardCode: '00001',
       },
       ...effectsDone,
+      ...reversalDone,
       ...data,
     },
   });
@@ -137,6 +142,13 @@ export async function markDeliveredEffectsDone(prisma: PrismaService) {
   await prisma.$executeRaw`
     UPDATE "orders" SET "deliveredEffectsAt" = COALESCE("deliveredAt", now())
      WHERE "status" = 'DELIVERED' AND "deliveredEffectsAt" IS NULL`;
+}
+
+/** Như markDeliveredEffectsDone cho đơn CANCELLED/RETURNED còn thiếu mốc reversalEffectsAt (cron chạy lại phần đảo của spec khác). */
+export async function markReversalEffectsDone(prisma: PrismaService) {
+  await prisma.$executeRaw`
+    UPDATE "orders" SET "reversalEffectsAt" = now()
+     WHERE "status" IN ('CANCELLED', 'RETURNED') AND "reversalEffectsAt" IS NULL`;
 }
 
 /** Tóm tắt Promise.allSettled: số fulfilled/rejected + message các lỗi (để in khi assert fail). */

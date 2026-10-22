@@ -209,7 +209,7 @@ describe('OrderStatusService — huỷ đơn đã lên Pancake (D1: PANCAKE-2, S
     it('lỗi khi xoá dấu không làm hỏng lần huỷ đã xong', async () => {
       const { svc, prisma } = make(makeOrder());
       prisma.order.updateMany.mockRejectedValue(new Error('db down'));
-      await expect(svc.afterPancakeCancel('o1')).resolves.toBeUndefined();
+      await expect(svc.afterPancakeCancel('o1')).resolves.toBe(true);
     });
   });
 
