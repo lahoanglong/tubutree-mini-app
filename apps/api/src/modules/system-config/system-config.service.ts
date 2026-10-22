@@ -12,6 +12,7 @@ import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pa
 import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
 import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
+import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
@@ -275,6 +276,7 @@ export class SystemConfigService {
     [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
     // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để khoá mua chịu quá hạn không bị tắt/bật nhầm.
     'dealer.block_credit_when_overdue': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [DEALER_BONUS_TIERS_KEY]: dealerBonusTiersProblem,
     // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
     [STOREFRONT_REQUIRE_APPROVAL_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_SUBDOMAIN_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),

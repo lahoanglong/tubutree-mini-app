@@ -439,6 +439,25 @@ describe('DealerPage — đơn hàng, công nợ, báo cáo', () => {
     expect(screen.getByRole('button', { name: 'Yêu cầu nhận thưởng' })).toBeInTheDocument();
   });
 
+  it('báo cáo quý: % bậc thưởng ghi kiểu Việt, 4,5% và 4% (không "4.5%")', async () => {
+    mockReport();
+    mocks.getQuarterlyReport.mockResolvedValue({
+      quarter: 'Q3/2026', periodStart: '', periodEnd: '', revenue: 120_000_000, orderCount: 14,
+      pendingRevenue: 0, pendingOrderCount: 0, bonusPct: 2.5, bonusAmount: 3_000_000,
+      nextTier: { min: 200_000_000, pct: 4.5, toNext: 80_000_000 },
+      tiers: [{ min: 100_000_000, pct: 2.5 }, { min: 200_000_000, pct: 4.5 }, { min: 300_000_000, pct: 4 + 0 }],
+    });
+    renderPage();
+    await screen.findByText('Bạc');
+    openTab('Báo cáo');
+    expect(await screen.findByText('Còn 80.000.000đ để đạt thưởng 4,5%')).toBeInTheDocument();
+    expect(screen.getByText(/Thưởng hiện tại 2,5% =/)).toBeInTheDocument();
+    expect(screen.getByText('thưởng 2,5%')).toBeInTheDocument();
+    expect(screen.getByText('thưởng 4,5%')).toBeInTheDocument();
+    expect(screen.getByText('thưởng 4%')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\d\.\d%/);
+  });
+
   it('báo cáo quý: mốc đã đạt báo bằng icon, không dùng ký tự ✓ trong chữ', async () => {
     mockReport();
     renderPage();

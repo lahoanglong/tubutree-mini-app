@@ -65,6 +65,9 @@ import '../css/dealer-theme.css';
 
 const INK = 'var(--color-dealer-ink)';
 
+/** Bậc thưởng quý admin đặt được 1 chữ số lẻ (2,5%), nên in kiểu Việt thay vì để JS ghi "2.5". */
+const bonusPctText = (pct: number) => `${pct.toLocaleString('vi-VN', { maximumFractionDigits: 1 })}%`;
+
 /** Nút chính mang màu ink B2B; khi vô hiệu để ZaUI bridge tự vẽ trạng thái disabled, đừng đè nền ink lên. */
 const inkButton = (disabled?: boolean): CSSProperties | undefined => (disabled ? undefined : { background: INK });
 
@@ -946,7 +949,7 @@ function DealerReport() {
           {formatVnd(d.revenue)}
         </Text>
         <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 2, opacity: 0.7 }}>
-          {d.orderCount} đơn đã chốt · Thưởng hiện tại {d.bonusPct}% = <b style={{ color: 'var(--color-dealer-accent)' }}>{formatVnd(d.bonusAmount)}</b>
+          {d.orderCount} đơn đã chốt · Thưởng hiện tại {bonusPctText(d.bonusPct)} = <b style={{ color: 'var(--color-dealer-accent)' }}>{formatVnd(d.bonusAmount)}</b>
         </Text>
         {d.pendingRevenue > 0 && (
           <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 2, opacity: 0.7 }}>
@@ -979,7 +982,7 @@ function DealerReport() {
               />
             </div>
             <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 6, opacity: 0.85 }}>
-              Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {d.nextTier.pct}%
+              Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {bonusPctText(d.nextTier.pct)}
             </Text>
           </div>
         )}
@@ -1010,7 +1013,7 @@ function DealerReport() {
                 </Text>
               </span>
               <Text variant="body-sm" tone={tone} style={{ fontWeight: 600 }}>
-                thưởng {t.pct}%
+                thưởng {bonusPctText(t.pct)}
               </Text>
             </div>
           );
