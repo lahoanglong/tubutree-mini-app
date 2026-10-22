@@ -1,0 +1,155 @@
+{
+  "id": "U2-15",
+  "title": "Đơn TikTok đang giao: claim chờ giao; giao xong + 14 ngày → job cộng 2.670 điểm (1%, ×1), không tính hạng; sau đó đơn hoàn → thu hồi. Đơn Shopee hoàn khi claim còn chờ → huỷ claim, không ghi sổ",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:25:12.088Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "đơn đang giao: CLAIMED 2.670 điểm, claim PENDING, chưa có ngày dự kiến",
+      "ok": true,
+      "detail": {
+        "status": "CLAIMED",
+        "points": 2670,
+        "expectedCreditAt": null
+      }
+    },
+    {
+      "name": "sau webhook giao: releaseAt = giao + 14 ngày",
+      "ok": true,
+      "detail": {
+        "releaseAt": "2026-11-02T16:25:00.000Z",
+        "deliveredAt": "2026-10-19T16:25:00.000Z"
+      }
+    },
+    {
+      "name": "job release ngay sau giao: chưa cộng",
+      "ok": true
+    },
+    {
+      "name": "claim CREDITED, 1 dòng MARKETPLACE_ORDER:7700003 +2.670 (lô STANDARD), số dư +2.670 = SUM sổ",
+      "ok": true,
+      "detail": {
+        "state": "CREDITED",
+        "rows": [
+          2670
+        ],
+        "before": 6242,
+        "after": 8912,
+        "sum": 8912
+      }
+    },
+    {
+      "name": "không tính hạng: spent12m và tierPoints không đổi",
+      "ok": true,
+      "detail": {
+        "spent12m": [
+          1980100,
+          1980100
+        ],
+        "tierPoints": [
+          40642,
+          40642
+        ]
+      }
+    },
+    {
+      "name": "đơn hoàn sau khi cộng: claim REVERSED, dòng −2.670, số dư về như trước = SUM sổ",
+      "ok": true,
+      "detail": {
+        "state": "REVERSED",
+        "rows": [
+          {
+            "delta": 2670,
+            "reason": "MARKETPLACE_ORDER:7700003"
+          },
+          {
+            "delta": -2670,
+            "reason": "MARKETPLACE_ORDER_REVERSED:7700003"
+          }
+        ],
+        "balance": 6242,
+        "sum": 6242
+      }
+    },
+    {
+      "name": "claim chờ + đơn hoàn → VOIDED, không có dòng sổ",
+      "ok": true,
+      "detail": {
+        "state": "VOIDED",
+        "rows": 0
+      }
+    }
+  ],
+  "evidence": {
+    "gửi GHNUAT00000003": {
+      "status": 201,
+      "body": {
+        "status": "CLAIMED",
+        "claimId": "cmvfgtedd00fn5ksf48nnjj7v",
+        "channel": "tiktok",
+        "maskedCode": "GHN********003",
+        "points": 2670,
+        "expectedCreditAt": null,
+        "message": "Đã ghi nhận 2.670 Điểm Xanh chờ cộng. Điểm được cộng sau khi đơn giao thành công 14 ngày."
+      }
+    },
+    "webhook giao": {
+      "http": 200,
+      "event": "PROCESSED",
+      "ext": {
+        "status": "DELIVERED",
+        "deliveredAt": "2026-10-19T16:25:00.000Z"
+      }
+    },
+    "job release sau lùi 15 ngày": {
+      "lane": 7,
+      "job": "ExternalClaimCron.everyThirtyMinutes",
+      "ms": 602,
+      "result": null
+    },
+    "sau cộng": {
+      "claim": "CREDITED",
+      "rows": [
+        {
+          "delta": 2670,
+          "reason": "MARKETPLACE_ORDER:7700003",
+          "lot": "STANDARD",
+          "expiresAt": "2027-10-19T16:25:06.824Z"
+        }
+      ],
+      "balance": [
+        6242,
+        8912
+      ],
+      "tier": [
+        "LOC_BIEC",
+        "LOC_BIEC"
+      ],
+      "spent12m": [
+        1980100,
+        1980100
+      ],
+      "tierPoints": [
+        40642,
+        40642
+      ]
+    },
+    "webhook hoàn sau cộng": {
+      "http": 200,
+      "event": "PROCESSED",
+      "ext": "RETURNED"
+    },
+    "Shopee hoàn khi claim còn chờ": {
+      "http": 200,
+      "event": "PROCESSED",
+      "claim": "VOIDED",
+      "ledgerRows": 0
+    },
+    "danh sách đơn ngoài app trên Mini App": [
+      "Đã thu hồi",
+      "Đã huỷ"
+    ]
+  }
+}

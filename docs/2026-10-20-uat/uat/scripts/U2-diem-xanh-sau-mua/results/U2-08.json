@@ -1,0 +1,96 @@
+{
+  "id": "U2-08",
+  "title": "Điểm hết hạn 12 tháng: lùi hạn lô về quá khứ, chạy points.expire → trừ đúng phần còn lại (FIFO), số dư = sổ, chạy lại không trừ lần hai",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:24:17.792Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "(a) lô 500 điểm chưa tiêu: 1 dòng POINTS_EXPIRED −500, số dư −500, = SUM sổ",
+      "ok": true,
+      "detail": {
+        "exp": [
+          -500
+        ],
+        "before": 28180,
+        "after": 27680,
+        "sum": 27680
+      }
+    },
+    {
+      "name": "(b) lô 34400 đã bị tiêu 24000 (FIFO): chỉ trừ 10400, số dư = SUM sổ",
+      "ok": true,
+      "detail": {
+        "exp": [
+          -10400
+        ],
+        "before": 16642,
+        "after": 6242,
+        "sum": 6242
+      }
+    },
+    {
+      "name": "chạy points.expire lần 2: không trừ thêm",
+      "ok": true,
+      "detail": {
+        "R": 6242,
+        "MAM": 27680
+      }
+    },
+    {
+      "name": "/me/loyalty: pointsBalance = số dư DB sau hết hạn",
+      "ok": true,
+      "detail": {
+        "api": 6242,
+        "db": 6242
+      }
+    }
+  ],
+  "evidence": {
+    "(a) Mầm Xanh": {
+      "before": 28180,
+      "after": 27680,
+      "expiredRows": [
+        -500
+      ],
+      "job": 426
+    },
+    "(b) sổ uat_returning trước": [
+      {
+        "delta": 34400,
+        "reason": "ORDER_DELIVERED:TUBU2026101960369",
+        "createdAt": "2026-09-09T15:27:58.920Z",
+        "expiresAt": "2027-09-09T15:27:58.918Z"
+      },
+      {
+        "delta": 6242,
+        "reason": "ORDER_DELIVERED:TUBU2026101991671",
+        "createdAt": "2026-10-19T16:22:36.161Z",
+        "expiresAt": "2027-10-19T16:22:36.158Z"
+      },
+      {
+        "delta": -24000,
+        "reason": "ORDER_REDEEM:TUBU2026101966279",
+        "createdAt": "2026-10-19T16:23:17.811Z",
+        "expiresAt": null
+      }
+    ],
+    "(b) sau": {
+      "oldLot": 34400,
+      "spent": 24000,
+      "expectExpire": 10400,
+      "before": 16642,
+      "after": 6242,
+      "expiredRows": [
+        -10400
+      ]
+    },
+    "dòng sổ hết hạn": [
+      {
+        "delta": -10400,
+        "reason": "POINTS_EXPIRED"
+      }
+    ]
+  }
+}

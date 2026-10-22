@@ -112,6 +112,11 @@ for (const w of WIDTHS) {
 
   await rec.run(`U6-23-${w}`, { role: 'Khách quay lại (Lộc Biếc)', journey: 'Giỏ', steps: `Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (${w}px)`, expected: 'Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ "giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường" và cả dòng tính giá thường (660.000đ)' }, async (c) => {
     await clearCart(U);
+    // Giới hạn giờ vàng cộng dồn theo người, đúng nguồn API dùng (flash-sale.service.ts resolveEffective): perUserLimit trừ
+    // flash_sale_purchases.quantity, và không vượt số suất còn của đợt. Lane đã chạy U6-39 (mua 1 chiếc giờ vàng) thì còn 1.
+    const lim = (await sql(`SELECT fi."perUserLimit"::int AS lim, (fi.quota - fi."soldCount")::int AS quota_left, COALESCE((SELECT p.quantity FROM flash_sale_purchases p WHERE p."flashSaleItemId" = fi.id AND p."userId" = 'uat_returning'), 0)::int AS bought FROM flash_sale_items fi JOIN variations v ON v.id = fi."variationId" WHERE v.sku = 'BHN-CGL-100'`))[0];
+    const allow = Math.min(lim.quota_left, Math.max(0, lim.lim - lim.bought));
+    c.ev('giới hạn giờ vàng của khách', { ...lim, allow });
     const r = await addViaPdp(s, 'cao-ca-gai-leo-bhnong', { qty: 1 });
     c.ok('thêm giờ vàng → 2xx', r.status >= 200 && r.status < 300, r.status);
     await nav(s, '/gio-hang');
@@ -127,10 +132,10 @@ for (const w of WIDTHS) {
     const it = api3.body?.items?.[0];
     c.ev('giỏ khi có 3 chiếc', { qty: it?.quantity, unitPrice: it?.unitPrice, total: it?.total, limitNotice: it?.flashLimitNotice, subtotal: api3.body?.subtotal });
     // Luật của app: vượt giới hạn thì CẢ dòng tính giá thường (3 × 220.000) kèm lời nhắc giảm còn 2 để được giá giờ vàng.
-    c.ok('3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng', api3.body?.subtotal === 3 * 220000 && /tối đa 2/.test(it?.flashLimitNotice ?? ''), { subtotal: api3.body?.subtotal, notice: it?.flashLimitNotice });
+    c.ok('3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng', api3.body?.subtotal === 3 * 220000 && new RegExp(`tối đa ${allow}\\b`).test(it?.flashLimitNotice ?? ''), { subtotal: api3.body?.subtotal, notice: it?.flashLimitNotice });
     await nav(s, '/gio-hang');
     t = await bodyText(s.page);
-    c.ok('giỏ hiện thông báo giới hạn giờ vàng', /giới hạn|tối đa|Giờ vàng/i.test(t) && /2/.test(t), t.slice(0, 500));
+    c.ok('giỏ hiện thông báo giới hạn giờ vàng', /giới hạn|tối đa|Giờ vàng/i.test(t) && new RegExp(`tối đa ${allow}\\b`).test(t), t.slice(0, 500));
     await c.shot(s.page, `gio-vuot-gioi-han-gio-vang-${w}`);
     await clearCart(U);
   });

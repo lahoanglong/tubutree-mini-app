@@ -1,0 +1,1043 @@
+{
+  "name": "d-checkout",
+  "at": "2026-10-19T17:15:33.221Z",
+  "cases": [
+    {
+      "id": "U6-30-390",
+      "role": "Khách quay lại (Lộc Biếc, 34.400 điểm)",
+      "journey": "Thanh toán COD",
+      "steps": "Thêm nước rửa tay ×2 (178.000đ) → /gio-hang → Thanh toán → COD → Đặt hàng (390px); Pancake báo giao xong; đối chiếu sổ điểm",
+      "expected": "Báo giá: tạm tính 178.000đ, ship Miễn phí (Lộc Biếc freeship từ 99.000đ), tổng 178.000đ, +4.272 điểm (178.000 × 2% × 1,2). Đơn COD CONFIRMED, tổng DB = báo giá, tồn kho được giữ, giả Pancake nhận đơn cod=178.000, giỏ sạch; sau giao: đúng 1 dòng sổ ORDER_DELIVERED:<mã> +4.272, pointsBalance = trước + 4.272 = SUM(sổ)",
+      "checks": [
+        {
+          "name": "báo giá: tạm tính 178.000đ, ship 0, tổng 178.000đ",
+          "ok": true,
+          "detail": "{\"s\":178000,\"f\":0,\"t\":178000}"
+        },
+        {
+          "name": "báo giá: điểm = floor(178.000 × 2% × 1,2) = 4.272",
+          "ok": true,
+          "detail": "{\"got\":4272,\"expect\":4272}"
+        },
+        {
+          "name": "trang hiện Miễn phí vận chuyển + tổng 178.000đ",
+          "ok": true
+        },
+        {
+          "name": "COD đang được chọn sẵn",
+          "ok": true,
+          "detail": "[{\"checked\":true,\"label\":\"Nguyễn Thị Quay Lại · 0901000003\\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\"},{\"checked\":true,\"label\":\"Thanh toán khi nhận hàng (COD)\"},{\"checked\":false,\"label\":\"Chuyển khoản ngân hàng\"},{\"checked\":false,\"label\":\"Ví Tubu (0đ)\"}]"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390}"
+        },
+        {
+          "name": "POST /checkout/place-order → 201",
+          "ok": true,
+          "detail": "{\"status\":201,\"code\":\"TUBU2026101969520\"}"
+        },
+        {
+          "name": "màn thành công hiện \"Đặt hàng thành công!\" + mã đơn + 178.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐặt hàng thành công!\n\nMã đơn TUBU2026101969520 · 178.000đ\n\nXem chi tiết đơn\nĐơn của tôi\nTiếp tục mua sắm\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.co"
+        },
+        {
+          "name": "DB: COD CONFIRMED, UNPAID, của uat_returning",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101969520\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":178000,\"discount\":0,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700001\",\"paidAt\":null,\"deliv…"
+        },
+        {
+          "name": "DB: tổng = báo giá (178.000đ), ship 0, giảm 0",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101969520\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":178000,\"discount\":0,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700001\",\"paidAt\":null,\"deliv…"
+        },
+        {
+          "name": "DB: pointsEarned = báo giá",
+          "ok": true,
+          "detail": "{\"db\":4272,\"quote\":4272}"
+        },
+        {
+          "name": "DB: 1 dòng FUWA-HW-500 × 2 × 89.000 = 178.000",
+          "ok": true,
+          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":2,\"unit\":89000,\"total\":178000}]"
+        },
+        {
+          "name": "DB: tồn kho bị giữ/trừ đúng 2 (stock + reserved không lệch)",
+          "ok": true,
+          "detail": "{\"before\":{\"stock\":260,\"reserved\":0},\"after\":{\"stock\":258,\"reserved\":2}}"
+        },
+        {
+          "name": "giả Pancake nhận đơn của khách",
+          "ok": true,
+          "detail": "{\"id\":\"9700001\"}"
+        },
+        {
+          "name": "giỏ trống sau khi đặt",
+          "ok": true
+        },
+        {
+          "name": "không request API lỗi trong cả chuỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "chi tiết đơn: mã, 178.000đ, COD, địa chỉ 12 Lê Lợi",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Đơn hàng của tôi\nĐơn hàng #TUBU2026101969520\nĐã xác nhận\nĐặt lúc 23:23 19/10/2026\nHành trình đơn hàng\nĐã đặt hàng\n— đã qua\nĐã xác nhận\n— hiện tại\nĐang đóng gói\nĐang giao\nĐã giao\nHủy đơn\nSản phẩm\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ × 2\n178.000đ\nThanh toán\nTạm tính\n178.000đ\nPhí vận chuyển\nMiễn phí\nTổng cộng\n178.000đ\nPhương thức\nThanh toán khi nhận hàng (COD)\nTình trạng\nCh"
+        },
+        {
+          "name": "webhook shipped xử lý xong → đơn SHIPPING",
+          "ok": true,
+          "detail": "{\"ev\":{\"id\":\"cmvfgs71100o6o4t3ytdv3ezm\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1},\"st\":\"SHIPPING\"}"
+        },
+        {
+          "name": "webhook delivered xử lý xong → đơn DELIVERED",
+          "ok": true,
+          "detail": "{\"ev\":{\"id\":\"cmvfgs7kv00oco4t3he6nhs9l\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1},\"st\":\"DELIVERED\"}"
+        },
+        {
+          "name": "sổ điểm: đúng 1 dòng ORDER_DELIVERED:<mã> = +4.272",
+          "ok": true,
+          "detail": "[{\"delta\":4272,\"reason\":\"ORDER_DELIVERED:TUBU2026101969520\",\"lot\":\"STANDARD\",\"createdAt\":\"2026-10-19T16:24:05.307Z\"}]"
+        },
+        {
+          "name": "sau giao: users.pointsBalance = SUM(sổ STANDARD)",
+          "ok": true,
+          "detail": "{\"balance\":38672,\"ledgerSum\":38672,\"rows\":2}"
+        },
+        {
+          "name": "pointsBalance = trước + 4.272",
+          "ok": true,
+          "detail": "{\"before\":34400,\"after\":38672}"
+        },
+        {
+          "name": "trang Điểm Xanh hiện số dư 38.672",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Tài khoản\nHạng thành viên & Điểm Xanh\n🌿\nLộc Biếc\n\nTích điểm ×1.2 · 38.672 điểm Xanh\n\n34.400 Điểm Xanh sẽ hết hạn ngày 09/09/2027\n\nĐiểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.\n\n4.272 điểm đang chờ, mở khoá ngày 26/10\n\nTiến độ lên hạng kế\n\nCòn 18,1 t"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "sổ điểm trước",
+          "value": "{\"balance\":34400,\"ledgerSum\":34400,\"rows\":1}"
+        },
+        {
+          "label": "tồn trước",
+          "value": "{\"stock\":260,\"reserved\":0}"
+        },
+        {
+          "label": "báo giá",
+          "value": "{\"subtotal\":178000,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272}"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101969520\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":178000,\"discount\":0,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700001\",\"paidAt\":null,\"deliveredAt\":null}"
+        },
+        {
+          "label": "tồn sau",
+          "value": "{\"stock\":258,\"reserved\":2}"
+        },
+        {
+          "label": "đơn trên giả Pancake",
+          "value": "{\"id\":\"9700001\",\"custom_id\":\"TUBU2026101969520\",\"total_price\":178000,\"total_price_after_sub_discount\":178000,\"cod\":178000,\"shipping_fee\":0,\"status\":0}"
+        },
+        {
+          "label": "dòng sổ điểm",
+          "value": "[{\"delta\":4272,\"reason\":\"ORDER_DELIVERED:TUBU2026101969520\",\"lot\":\"STANDARD\",\"createdAt\":\"2026-10-19T16:24:05.307Z\"}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-30-390-thanh-toan-cod-390.png",
+        "uat/shots/U6-web-khach/U6-30-390-dat-hang-thanh-cong-390.png",
+        "uat/shots/U6-web-khach/U6-30-390-chi-tiet-don-cod-390.png",
+        "uat/shots/U6-web-khach/U6-30-390-diem-xanh-sau-giao-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-30-1440",
+      "role": "Khách quay lại (Lộc Biếc, 34.400 điểm)",
+      "journey": "Thanh toán COD",
+      "steps": "Thêm nước rửa tay ×2 (178.000đ) → /gio-hang → Thanh toán → COD → Đặt hàng (1440px)",
+      "expected": "Báo giá: tạm tính 178.000đ, ship Miễn phí (Lộc Biếc freeship từ 99.000đ), tổng 178.000đ, +4.272 điểm (178.000 × 2% × 1,2). Đơn COD CONFIRMED, tổng DB = báo giá, tồn kho được giữ, giả Pancake nhận đơn cod=178.000, giỏ sạch",
+      "checks": [
+        {
+          "name": "báo giá: tạm tính 178.000đ, ship 0, tổng 178.000đ",
+          "ok": true,
+          "detail": "{\"s\":178000,\"f\":0,\"t\":178000}"
+        },
+        {
+          "name": "báo giá: điểm = floor(178.000 × 2% × 1,2) = 4.272",
+          "ok": true,
+          "detail": "{\"got\":4272,\"expect\":4272}"
+        },
+        {
+          "name": "trang hiện Miễn phí vận chuyển + tổng 178.000đ",
+          "ok": true
+        },
+        {
+          "name": "COD đang được chọn sẵn",
+          "ok": true,
+          "detail": "[{\"checked\":true,\"label\":\"Nguyễn Thị Quay Lại · 0901000003\\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\"},{\"checked\":true,\"label\":\"Thanh toán khi nhận hàng (COD)\"},{\"checked\":false,\"label\":\"Chuyển khoản ngân hàng\"},{\"checked\":false,\"label\":\"Ví Tubu (0đ)\"}]"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440}"
+        },
+        {
+          "name": "POST /checkout/place-order → 201",
+          "ok": true,
+          "detail": "{\"status\":201,\"code\":\"TUBU2026101926961\"}"
+        },
+        {
+          "name": "màn thành công hiện \"Đặt hàng thành công!\" + mã đơn + 178.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐặt hàng thành công!\n\nMã đơn TUBU2026101926961 · 178.000đ\n\nXem chi tiết đơn\nĐơn của tôi\nTiếp tục mua sắm\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khác"
+        },
+        {
+          "name": "DB: COD CONFIRMED, UNPAID, của uat_returning",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101926961\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":178000,\"discount\":0,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700002\",\"paidAt\":null,\"deliv…"
+        },
+        {
+          "name": "DB: tổng = báo giá (178.000đ), ship 0, giảm 0",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101926961\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":178000,\"discount\":0,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700002\",\"paidAt\":null,\"deliv…"
+        },
+        {
+          "name": "DB: pointsEarned = báo giá",
+          "ok": true,
+          "detail": "{\"db\":4272,\"quote\":4272}"
+        },
+        {
+          "name": "DB: 1 dòng FUWA-HW-500 × 2 × 89.000 = 178.000",
+          "ok": true,
+          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":2,\"unit\":89000,\"total\":178000}]"
+        },
+        {
+          "name": "DB: tồn kho bị giữ/trừ đúng 2 (stock + reserved không lệch)",
+          "ok": true,
+          "detail": "{\"before\":{\"stock\":258,\"reserved\":2},\"after\":{\"stock\":256,\"reserved\":4}}"
+        },
+        {
+          "name": "giả Pancake nhận đơn của khách",
+          "ok": true,
+          "detail": "{\"id\":\"9700002\"}"
+        },
+        {
+          "name": "giỏ trống sau khi đặt",
+          "ok": true
+        },
+        {
+          "name": "không request API lỗi trong cả chuỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "sổ điểm trước",
+          "value": "{\"balance\":38672,\"ledgerSum\":38672,\"rows\":2}"
+        },
+        {
+          "label": "tồn trước",
+          "value": "{\"stock\":258,\"reserved\":2}"
+        },
+        {
+          "label": "báo giá",
+          "value": "{\"subtotal\":178000,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272}"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101926961\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":178000,\"discount\":0,\"shippingFee\":0,\"total\":178000,\"pointsEarned\":4272,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700002\",\"paidAt\":null,\"deliveredAt\":null}"
+        },
+        {
+          "label": "tồn sau",
+          "value": "{\"stock\":256,\"reserved\":4}"
+        },
+        {
+          "label": "đơn trên giả Pancake",
+          "value": "{\"id\":\"9700002\",\"custom_id\":\"TUBU2026101926961\",\"total_price\":178000,\"total_price_after_sub_discount\":178000,\"cod\":178000,\"shipping_fee\":0,\"status\":0}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-30-1440-thanh-toan-cod-1440.png",
+        "uat/shots/U6-web-khach/U6-30-1440-dat-hang-thanh-cong-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-31",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Điểm Xanh khi thanh toán",
+      "steps": "Giỏ nước rửa chén 1L (120.000đ) → Thanh toán → tick \"Bạn có … Điểm Xanh\" → Đặt hàng COD → vào đơn bấm Huỷ đơn (390px)",
+      "expected": "Điểm dùng = min(điểm dùng được, 20% × 120.000 = 24.000); tổng giảm đúng số đó; DB: orders.pointsUsed=24.000, sổ có dòng −24.000, pointsBalance giảm đúng 24.000 = SUM(sổ); huỷ đơn thì hoàn lại +24.000 (sổ + số dư) và trả tồn kho",
+      "checks": [
+        {
+          "name": "có ô \"Bạn có … Điểm Xanh\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐịa chỉ giao hàng\nNguyễn Thị Quay Lại · 0901000003\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\nSửa\n+ Thêm địa chỉ mới\nQuản lý sổ địa chỉ\nPhương thứ"
+        },
+        {
+          "name": "điểm dùng = min(dùng được, 20% giá trị đơn)",
+          "ok": true,
+          "detail": "{\"used\":24000,\"usable\":34400,\"cap\":24000}"
+        },
+        {
+          "name": "giảm = điểm dùng (1 điểm = 1đ)",
+          "ok": true,
+          "detail": "{\"d\":24000,\"u\":24000}"
+        },
+        {
+          "name": "tổng = tạm tính − giảm điểm + ship",
+          "ok": true,
+          "detail": "{\"total\":96000,\"sub\":120000,\"pd\":24000,\"fee\":0}"
+        },
+        {
+          "name": "trang hiện dòng \"Dùng 24.000 Điểm Xanh — giảm 24.000đ\"",
+          "ok": true,
+          "detail": "Mã giảm giá\nBạn có 3 mã\nDùng 24.000 Điểm Xanh — giảm 24.000đ\n\nĐơn này dùng tối đa 24.000 Điểm Xanh, tính theo giá trị hàng của đơn\n\n4.272 điểm từ đơn mới giao chưa dùng được vì còn trong hạn hoặc đang chờ xử lý đổi/trả; sẽ dùng được khi hết hạn đổi/trả\n\nTổng cộng\n96.000đ\n\n+2304 Điểm Xanh sau khi gia"
+        },
+        {
+          "name": "đặt hàng → 201",
+          "ok": true,
+          "detail": "{\"status\":201}"
+        },
+        {
+          "name": "DB: pointsUsed = pointsDiscount = 24.000 và tổng khớp báo giá",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101955822\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":120000,\"discount\":24000,\"shippingFee\":0,\"total\":96000,\"pointsEarned\":2304,\"pointsUsed\":24000,\"pointsDiscount\":24000,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700003\",\"paidAt\":…"
+        },
+        {
+          "name": "sổ có dòng trừ −24.000",
+          "ok": true,
+          "detail": "[{\"delta\":-24000,\"reason\":\"ORDER_REDEEM:TUBU2026101955822\",\"lot\":\"STANDARD\"}]"
+        },
+        {
+          "name": "sau đặt: users.pointsBalance = SUM(sổ STANDARD)",
+          "ok": true,
+          "detail": "{\"balance\":14672,\"ledgerSum\":14672,\"rows\":3}"
+        },
+        {
+          "name": "pointsBalance = trước − 24.000",
+          "ok": true,
+          "detail": "{\"before\":38672,\"mid\":14672}"
+        },
+        {
+          "name": "POST /orders/:code/cancel → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "DB: đơn CANCELLED",
+          "ok": true,
+          "detail": "CANCELLED"
+        },
+        {
+          "name": "sau huỷ: users.pointsBalance = SUM(sổ STANDARD)",
+          "ok": true,
+          "detail": "{\"balance\":38672,\"ledgerSum\":38672,\"rows\":4}"
+        },
+        {
+          "name": "hoàn điểm: pointsBalance về đúng số ban đầu",
+          "ok": true,
+          "detail": "{\"before\":38672,\"after\":38672}"
+        },
+        {
+          "name": "tồn kho trả lại sau huỷ",
+          "ok": true,
+          "detail": "{\"before\":{\"stock\":200,\"reserved\":0},\"after\":{\"stock\":200,\"reserved\":0}}"
+        },
+        {
+          "name": "trang báo \"Đã hủy đơn hàng\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Đơn hàng của tôi\nĐơn hàng #TUBU2026101955822\nĐã hủy\nĐặt lúc 23:24 19/10/2026\n\nĐã hủy đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.\n\nMua lại đơn này\nSản phẩm\nNước rửa chén sinh học Fuwa3e\n1L\n120.000"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "/me/loyalty",
+          "value": "{\"rates\":{\"earnPct\":2,\"vndPerPoint\":50,\"vndPerPointRedeem\":1,\"maxRedeemPct\":0.2},\"pointsBalance\":38672,\"expiringPoints\":{\"amount\":34400,\"expiresAt\":\"2027-09-09T15:27:58.918Z\"},\"pointExpireMonths\":12,\"pointsConvertedBalance\":0,\"pointsTotal\":38672,\"tierPoints\":38672,\"spent12m\":1898000,\"lockedPoints\":4272,\"lockedReturnPoints\":0,\"lockedUntil\":\"2026-10-26T16:24:05.296Z\",\"redeemablePoints\":34400,\"redeemableTotal\":34400,\"earnMultiplier\":1.2,\"tier\":{\"id\":\"LOC_BIEC\",\"name\":\"Lộc Biếc\",\"multiplier\":1.2,\"perks\":[\"Tích Điểm Xanh x1.2\",\"Freeship đơn ≥ 99k\",\"Mã giảm giá sinh nhật 50k\"]},\"nextTier\":{\"id\":\"DAI_THU\",\"name\":\"Đại Thụ\",\"minPoints\":400000,\"minSpending\":20000000,\"pointsToGo\":361328,\"spendingToGo\":18102000},\"tiers\":[{\"id\":\"MAM_XANH\",\"name\":\"Mầm Xanh\",\"minPoints\":0,\"minSpending\":null,\"multiplier\":1},{\"id\":\"LOC_BIEC\",\"name\":\"Lộc Biếc\",\"minPoints\":30000,\"minSpending\":1500000,\"multiplier\":1.2},{\"id…"
+        },
+        {
+          "label": "báo giá khi dùng điểm",
+          "value": "{\"subtotal\":120000,\"shippingFee\":0,\"pointsUsed\":24000,\"pointsDiscount\":24000,\"total\":96000,\"pointsEarned\":2304}"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101955822\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":120000,\"discount\":24000,\"shippingFee\":0,\"total\":96000,\"pointsEarned\":2304,\"pointsUsed\":24000,\"pointsDiscount\":24000,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700003\",\"paidAt\":null,\"deliveredAt\":null}"
+        },
+        {
+          "label": "sổ điểm của đơn",
+          "value": "[{\"delta\":-24000,\"reason\":\"ORDER_REDEEM:TUBU2026101955822\",\"lot\":\"STANDARD\"}]"
+        },
+        {
+          "label": "sổ điểm sau huỷ",
+          "value": "[{\"delta\":-24000,\"reason\":\"ORDER_REDEEM:TUBU2026101955822\",\"lot\":\"STANDARD\"},{\"delta\":24000,\"reason\":\"ORDER_REFUND_POINTS:TUBU2026101955822\",\"lot\":\"STANDARD\"}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-31-dung-diem.png",
+        "uat/shots/U6-web-khach/U6-31-huy-don-hoi-lai.png",
+        "uat/shots/U6-web-khach/U6-31-sau-huy-don.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-33",
+      "role": "Khách mới (uat_new, chưa đơn, chưa có địa chỉ)",
+      "journey": "Chuyển khoản QR",
+      "steps": "Giỏ 199.000đ (Pơ Lang tinh dầu 110.000 + dầu tràm bé 89.000): thêm địa chỉ trong form thanh toán (thử bỏ trống/SĐT sai), áp mã HOPSAN, chọn Chuyển khoản, Đặt hàng; QR; ngân hàng: sai nội dung, chuyển thiếu, chuyển đủ; giao xong (390px)",
+      "expected": "Form địa chỉ báo từng ô sai; HOPSAN −30.000đ (đơn từ 199.000đ, khách mới); trang QR: STK 8386790906, CONG TY TNHH TUBU TREE, Techcombank, nội dung = mã đơn, số tiền = tổng đơn; sai nội dung/thiếu tiền không lên PAID; đủ tiền thì PAID và trang tự cập nhật \"Đã nhận thanh toán!\"; điểm sau giao = 2% × tiền hàng sau giảm × 1 (Mầm Xanh)",
+      "checks": [
+        {
+          "name": "chưa có địa chỉ: hiện form/nhắc thêm địa chỉ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n2\nL\nMới\n← Về giỏ hàng\nThanh toán\nĐịa chỉ giao hàng\n+ Thêm địa chỉ mới\nPhương thức thanh toán\nThanh toán khi nhận hàng (COD)\nChuyển khoản ngân hàng\nVí Tubu (0đ)\nGhi chú cho đơn hàng\nLời nhắn cho người giao hàng (không bắt buộc)\n\n0/500 ký tự\n\nMã giới thiệu\nCó người giới thiệu Tubu cho bạn"
+        },
+        {
+          "name": "bỏ trống: báo lỗi từng ô (tên, SĐT, tỉnh, phường, đường)",
+          "ok": true,
+          "detail": "5"
+        },
+        {
+          "name": "SĐT \"12345\" bị báo sai định dạng",
+          "ok": true,
+          "detail": "Số điện thoại\n\nSố điện thoại chưa đúng. Nhập 10 số bắt đầu bằng 0 (hoặc +84 và 9 số).\n\nChọn tỉnh/thành\nThành phố Cần Thơ\nThành phố Đà Nẵng\nThành phố Hà Nội\nThành phố Hồ Chí Minh\n\nChọn tỉnh/thành.\n\nChọ"
+        },
+        {
+          "name": "DB: địa chỉ mới lưu đúng và là mặc định (địa chỉ đầu tiên)",
+          "ok": true,
+          "detail": "[{\"recipient\":\"Lê Thu Mới\",\"phone\":\"0901000001\",\"province\":\"Thành phố Hồ Chí Minh\",\"ward\":\"Phường Bến Thành\",\"street\":\"45 Nguyễn Huệ\",\"isDefault\":true}]"
+        },
+        {
+          "name": "báo giá: tạm tính 199.000đ",
+          "ok": true,
+          "detail": "{\"subtotal\":199000,\"ship\":0}"
+        },
+        {
+          "name": "khách mới đơn đầu 199.000đ: miễn phí ship (shipping.first_order_free_min_subtotal = 199.000)",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "HOPSAN: giảm 30.000đ",
+          "ok": true,
+          "detail": "30000"
+        },
+        {
+          "name": "điểm báo giá = floor(2% × tiền hàng sau giảm 169.000 × 1) = 3.380",
+          "ok": true,
+          "detail": "{\"got\":3380,\"expect\":3380}"
+        },
+        {
+          "name": "còn miễn phí ship sau khi trừ mã (đơn đầu, tạm tính vẫn 199.000đ)",
+          "ok": true,
+          "detail": "{\"ship\":0,\"total\":169000}"
+        },
+        {
+          "name": "đặt hàng → 201",
+          "ok": true,
+          "detail": "{\"status\":201}"
+        },
+        {
+          "name": "chuyển sang trang QR /thanh-toan/chuyen-khoan/<mã>",
+          "ok": true,
+          "detail": "http://localhost:3262/thanh-toan/chuyen-khoan/TUBU2026101999534"
+        },
+        {
+          "name": "DB: BANK_TRANSFER, PENDING_PAYMENT, UNPAID, tổng = báo giá",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101999534\",\"status\":\"PENDING_PAYMENT\",\"paymentMethod\":\"BANK_TRANSFER\",\"paymentStatus\":\"UNPAID\",\"subtotal\":199000,\"discount\":30000,\"shippingFee\":0,\"total\":169000,\"pointsEarned\":3380,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":\"HOPSAN-2BWSJQ6N\",\"couponDiscount\":30000,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_new\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\"…"
+        },
+        {
+          "name": "DB: couponCode HOPSAN, giảm 30.000",
+          "ok": true,
+          "detail": "{\"code\":\"HOPSAN-2BWSJQ6N\",\"d\":30000}"
+        },
+        {
+          "name": "trang QR: số tài khoản 8386790906",
+          "ok": true
+        },
+        {
+          "name": "trang QR: chủ TK CONG TY TNHH TUBU TREE",
+          "ok": true
+        },
+        {
+          "name": "trang QR: ngân hàng Techcombank / Kỹ Thương",
+          "ok": true
+        },
+        {
+          "name": "trang QR: nội dung CK = mã đơn",
+          "ok": true,
+          "detail": "Nội dung CK\nTUBU2026101999534\nSao chép\n\nGiữ nguyên nội dung TUBU2026101999534 để hệ thống tự xác nhận.\n\nChuyển khoản trước 23:26 20/10/2026 — quá hạn đơn sẽ tự huỷ.\n\nCòn 23 giờ 59 phút để chuyển khoản\n\nĐang chờ thanh toán… tự cập nhật khi nhận được tiền\nTôi đã chuyển khoản, kiểm tra lại\nĐể sau / Xem đơn hàng\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việ…"
+        },
+        {
+          "name": "trang QR: số tiền = tổng đơn (169.000đ)",
+          "ok": true,
+          "detail": "169.000đ"
+        },
+        {
+          "name": "URL ảnh QR chứa STK, số tiền và nội dung = mã đơn",
+          "ok": true,
+          "detail": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=169000&addInfo=TUBU2026101999534&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
+        },
+        {
+          "name": "trang QR không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390}"
+        },
+        {
+          "name": "CK sai nội dung: Pancake không ghép được (matched=false)",
+          "ok": true,
+          "detail": "nội dung CK không chứa mã đơn — Pancake không ghép được"
+        },
+        {
+          "name": "CK sai nội dung: đơn vẫn UNPAID/PENDING_PAYMENT",
+          "ok": true,
+          "detail": "{\"st\":\"PENDING_PAYMENT\",\"pay\":\"UNPAID\"}"
+        },
+        {
+          "name": "CK thiếu 100.000đ: đơn chưa PAID",
+          "ok": true,
+          "detail": "{\"st\":\"PENDING_PAYMENT\",\"pay\":\"UNPAID\"}"
+        },
+        {
+          "name": "trang QR vẫn hiện \"Đang chờ thanh toán\" (không báo đã nhận)",
+          "ok": true,
+          "detail": " toán… tự cập nhật khi nhận được tiền\nTôi đã chuyển khoản, kiểm tra lại\nĐể sau / Xem đơn hàng\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "CK nốt phần còn lại: webhook xử lý xong",
+          "ok": true,
+          "detail": "{\"id\":\"cmvfgw6s300uzo4t3y7e4f935\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1}"
+        },
+        {
+          "name": "DB: PAID + CONFIRMED + paidAt",
+          "ok": true,
+          "detail": "{\"st\":\"CONFIRMED\",\"pay\":\"PAID\",\"paidAt\":\"2026-10-19T16:27:11.044Z\"}"
+        },
+        {
+          "name": "trang QR tự cập nhật \"Đã nhận thanh toán!\" (không cần tải lại)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nL\nMới\nThanh toán chuyển khoản\n\nĐã nhận thanh toán!\n\nĐơn TUBU2026101999534 đã được xác nhận. Cảm ơn bạn.\n\nXem đơn hàng\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên"
+        },
+        {
+          "name": "delivered xử lý xong",
+          "ok": true,
+          "detail": "{\"id\":\"cmvfgw92r00vbo4t3o8awnwxu\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1}"
+        },
+        {
+          "name": "sổ: đúng 1 dòng ORDER_DELIVERED +3.380 (2% × 169.000 × hệ số Mầm Xanh 1)",
+          "ok": true,
+          "detail": "[{\"delta\":3380,\"reason\":\"ORDER_DELIVERED:TUBU2026101999534\",\"lot\":\"STANDARD\",\"createdAt\":\"2026-10-19T16:27:13.885Z\"}]"
+        },
+        {
+          "name": "sau giao: users.pointsBalance = SUM(sổ STANDARD)",
+          "ok": true,
+          "detail": "{\"balance\":3380,\"ledgerSum\":3380,\"rows\":1}"
+        },
+        {
+          "name": "pointsBalance = trước + 3.380",
+          "ok": true,
+          "detail": "{\"before\":0,\"after\":3380}"
+        },
+        {
+          "name": "khách khác không áp lại được mã HOPSAN đã dùng (4xx)",
+          "ok": true,
+          "detail": "{\"status\":400,\"body\":{\"message\":\"Mã giảm giá này đã được tài khoản khác nhận.\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        },
+        {
+          "name": "DB: mã HOPSAN usedCount = 1 (mỗi mã dùng 1 lần)",
+          "ok": true,
+          "detail": "{\"used\":1,\"lim\":1}"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "lỗi khi bỏ trống",
+          "value": "Thêm địa chỉ mới\nNgười nhận\n\nNhập tên người nhận.\n\nSố điện thoại\n\nNhập số điện thoại.\n\nChọn tỉnh/thành\nThành phố Cần Thơ\nThành phố Đà Nẵng\nThành phố Hà Nội\nThành phố Hồ Chí Minh\n\nChọn tỉnh/thành.\n\nChọn tỉnh/thành trước\n\nChọn phường/xã.\n\nSố nhà, đường\n\nNhập số nhà, tên đường.\n\nHủy\nLưu địa chỉ\nPhương thức thanh toán\nThanh toán khi nhận hàng (COD)\nChuyển khoản ngân hàng\nVí Tubu (0đ)\nGhi chú cho đơn hàng\nLời nhắn cho người giao hàng (không bắt buộc)\n\n0/500 ký tự\n\nMã giới thiệu\nCó người giới thiệu Tu"
+        },
+        {
+          "label": "DB addresses",
+          "value": "[{\"recipient\":\"Lê Thu Mới\",\"phone\":\"0901000001\",\"province\":\"Thành phố Hồ Chí Minh\",\"ward\":\"Phường Bến Thành\",\"street\":\"45 Nguyễn Huệ\",\"isDefault\":true}]"
+        },
+        {
+          "label": "báo giá chưa mã",
+          "value": "{\"subtotal\":199000,\"shippingFee\":0,\"total\":199000,\"pointsEarned\":3980}"
+        },
+        {
+          "label": "báo giá có HOPSAN",
+          "value": "{\"subtotal\":199000,\"discount\":30000,\"shippingFee\":0,\"total\":169000,\"pointsEarned\":3380}"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101999534\",\"status\":\"PENDING_PAYMENT\",\"paymentMethod\":\"BANK_TRANSFER\",\"paymentStatus\":\"UNPAID\",\"subtotal\":199000,\"discount\":30000,\"shippingFee\":0,\"total\":169000,\"pointsEarned\":3380,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":\"HOPSAN-2BWSJQ6N\",\"couponDiscount\":30000,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_new\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700004\",\"paidAt\":null,\"deliveredAt\":null}"
+        },
+        {
+          "label": "src ảnh QR",
+          "value": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=169000&addInfo=TUBU2026101999534&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
+        },
+        {
+          "label": "CK thiếu",
+          "value": "{\"event\":{\"id\":\"cmvfgw1kq00uso4t3plv9eshf\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1},\"after\":{\"code\":\"TUBU2026101999534\",\"total\":169000,\"status\":\"PENDING_PAYMENT\",\"paymentStatus\":\"UNPAID\",\"paidAt\":null,\"pancakeAttention\":\"Khách chuyển thiếu: Pancake ghi nhận 100.000đ/169.000đ, còn thiếu 69.000đ — chưa xác nhận thanh toán. Liên hệ khách chuyển thêm, hoặc huỷ đơn để hoàn số đã nhận.\"}}"
+        },
+        {
+          "label": "orders sau CK đủ",
+          "value": "{\"code\":\"TUBU2026101999534\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"BANK_TRANSFER\",\"paymentStatus\":\"PAID\",\"subtotal\":199000,\"discount\":30000,\"shippingFee\":0,\"total\":169000,\"pointsEarned\":3380,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":\"HOPSAN-2BWSJQ6N\",\"couponDiscount\":30000,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_new\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700004\",\"paidAt\":\"2026-10-19T16:27:11.044Z\",\"deliveredAt\":null}"
+        },
+        {
+          "label": "sổ điểm",
+          "value": "[{\"delta\":3380,\"reason\":\"ORDER_DELIVERED:TUBU2026101999534\",\"lot\":\"STANDARD\",\"createdAt\":\"2026-10-19T16:27:13.885Z\"}]"
+        },
+        {
+          "label": "khách khác áp lại mã đã dùng",
+          "value": "{\"status\":400,\"body\":{\"message\":\"Mã giảm giá này đã được tài khoản khác nhận.\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-33-dia-chi-loi-bo-trong.png",
+        "uat/shots/U6-web-khach/U6-33-hopsan-ap-dung.png",
+        "uat/shots/U6-web-khach/U6-33-qr-cho-thanh-toan.png",
+        "uat/shots/U6-web-khach/U6-33-qr-da-nhan-tien.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-34",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Chống đặt trùng",
+      "steps": "Giỏ 1 sản phẩm; bấm \"Đặt hàng\" hai lần trong cùng một tick (bấm đúp/mạng chậm) (390px)",
+      "expected": "Chỉ tạo đúng 1 đơn (DB đếm theo user + thời điểm), tồn kho chỉ giữ 1 lần, điểm/mã không bị trừ hai lần",
+      "checks": [
+        {
+          "name": "DB: chỉ +1 đơn",
+          "ok": true,
+          "detail": "{\"n0\":4,\"n1\":5}"
+        },
+        {
+          "name": "tồn kho chỉ bị giữ 1 lần",
+          "ok": true,
+          "detail": "{\"stock0\":{\"stock\":160,\"reserved\":0},\"stock1\":{\"stock\":159,\"reserved\":1}}"
+        },
+        {
+          "name": "hiện \"Đặt hàng thành công!\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐặt hàng thành công!\n\nMã đơn TUBU2026101929561 · 98.000đ\n\nXem chi tiết đơn\nĐơn của tôi\nTiếp tục mua sắm\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên n"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "số request place-order trình duyệt gửi",
+          "value": "[\"2008c1d3-785a-47d7-a773-59156a6a64f6\",\"2008c1d3-785a-47d7-a773-59156a6a64f6\",\"2008c1d3-785a-47d7-a773-59156a6a64f6\"]"
+        },
+        {
+          "label": "đơn trước/sau",
+          "value": "{\"n0\":4,\"n1\":5}"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-36",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Hết hàng khi thanh toán",
+      "steps": "Mở trang thanh toán với 2 chiếc nước lau kính; đặt tồn FUWA-GL-500 = 1 (SQL); bấm Đặt hàng (390px)",
+      "expected": "Không tạo đơn; trang báo \"còn lại 1 sản phẩm\"/hết hàng bằng câu dễ hiểu kèm nút \"Về giỏ hàng để sửa\"; DB không có đơn mới, tồn không âm",
+      "checks": [
+        {
+          "name": "API từ chối (4xx)",
+          "ok": true,
+          "detail": "400"
+        },
+        {
+          "name": "trang báo hết hàng/còn lại 1 bằng câu tiếng Việt",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n2\nN\nLại\n← Về giỏ hàng\nThanh toán\n\nSản phẩm \"Nước lau kính enzyme Fuwa3e\" chỉ còn 1 sản phẩm. Vui lòng sửa số lượng trong giỏ.\n\nVề giỏ hàng để sửa\nĐịa chỉ giao hàng\nNguyễn Thị Quay Lại · 0901000003\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\nSửa\n+ Thêm địa chỉ mới\nQuản lý sổ địa chỉ\nPhương thức thanh toán\nThanh toán khi nhận hàng (COD)\nChuyển khoản ngân hàng\nVí Tubu (0đ)\n\nSố dư …"
+        },
+        {
+          "name": "có nút \"Về giỏ hàng để sửa\"",
+          "ok": true
+        },
+        {
+          "name": "DB: không có đơn mới",
+          "ok": true,
+          "detail": "{\"n0\":5,\"n1\":5}"
+        },
+        {
+          "name": "tồn kho không âm",
+          "ok": true,
+          "detail": "{\"stock\":1,\"reserved\":0}"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "phản hồi place-order",
+          "value": "{\"status\":400,\"body\":{\"message\":\"Sản phẩm \\\"Nước lau kính enzyme Fuwa3e\\\" không đủ tồn kho.\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-36-het-hang-khi-dat.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-37",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Phương thức thanh toán",
+      "steps": "Mở /thanh-toan với 1 sản phẩm, liệt kê các lựa chọn thanh toán (390 và 1440px)",
+      "expected": "Q4: web chỉ có chuyển khoản QR + COD (không ZaloPay, không cổng khác)",
+      "checks": [
+        {
+          "name": "390: có COD và Chuyển khoản",
+          "ok": true,
+          "detail": "[\"Thanh toán khi nhận hàng (COD)\",\"Chuyển khoản ngân hàng\",\"Ví Tubu (0đ)\"]"
+        },
+        {
+          "name": "390: chỉ 2 phương thức theo Q4 (không có Ví Tubu/ZaloPay)",
+          "ok": false,
+          "detail": "[\"Thanh toán khi nhận hàng (COD)\",\"Chuyển khoản ngân hàng\",\"Ví Tubu (0đ)\"]"
+        },
+        {
+          "name": "1440: có COD và Chuyển khoản",
+          "ok": true,
+          "detail": "[\"Thanh toán khi nhận hàng (COD)\",\"Chuyển khoản ngân hàng\",\"Ví Tubu (0đ)\"]"
+        },
+        {
+          "name": "1440: chỉ 2 phương thức theo Q4 (không có Ví Tubu/ZaloPay)",
+          "ok": false,
+          "detail": "[\"Thanh toán khi nhận hàng (COD)\",\"Chuyển khoản ngân hàng\",\"Ví Tubu (0đ)\"]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "390: các lựa chọn thanh toán",
+          "value": "[\"Thanh toán khi nhận hàng (COD)\",\"Chuyển khoản ngân hàng\",\"Ví Tubu (0đ)\"]"
+        },
+        {
+          "label": "1440: các lựa chọn thanh toán",
+          "value": "[\"Thanh toán khi nhận hàng (COD)\",\"Chuyển khoản ngân hàng\",\"Ví Tubu (0đ)\"]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-37-phuong-thuc-390.png",
+        "uat/shots/U6-web-khach/U6-37-phuong-thuc-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "U6-38",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Ví Tubu",
+      "steps": "Cấp ví 200.000đ cho uat_returning (SQL + dòng wallet_transactions); đặt đơn 89.000đ bằng Ví Tubu trên web (390px); huỷ đơn",
+      "expected": "Ví trừ đúng tổng đơn, có dòng wallet_transactions; đơn PAID; huỷ đơn hoàn tiền về ví; walletBalance = SUM(wallet_transactions)",
+      "checks": [
+        {
+          "name": "có lựa chọn Ví Tubu (ngoài Q4 — xem U6-37)",
+          "ok": true
+        },
+        {
+          "name": "Ví Tubu chọn được khi đủ tiền",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐịa chỉ giao hàng\nNguyễn Thị Quay "
+        },
+        {
+          "name": "đặt hàng bằng Ví → 201",
+          "ok": true,
+          "detail": "{\"status\":201}"
+        },
+        {
+          "name": "DB: paymentMethod WALLET, PAID",
+          "ok": true,
+          "detail": "{\"pm\":\"WALLET\",\"pay\":\"PAID\",\"st\":\"CONFIRMED\"}"
+        },
+        {
+          "name": "ví giảm đúng tổng đơn (200.000 − 89.000)",
+          "ok": true,
+          "detail": "{\"wallet\":92000,\"total\":108000}"
+        },
+        {
+          "name": "có dòng wallet_transactions trừ tiền cho đơn",
+          "ok": true,
+          "detail": "[{\"id\":\"cmvfgxxob017wo4t37ul3uqkf\",\"userId\":\"uat_returning\",\"delta\":-108000,\"balanceAfter\":92000,\"type\":\"ORDER_PAY\",\"refType\":\"ORDER\",\"refId\":\"cmvfgxxo4017to4t3p968puq8\",\"reason\":\"Thanh toán đơn TUBU2026101916657\",\"createdAt\":\"2026-10-19T16:28:32.315Z\"}]"
+        },
+        {
+          "name": "huỷ đơn: hoàn tiền về ví (200.000)",
+          "ok": true,
+          "detail": "{\"wallet\":200000}"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "cột wallet_transactions",
+          "value": "id,userId,delta,balanceAfter,type,refType,refId,reason,createdAt"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101916657\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"WALLET\",\"paymentStatus\":\"PAID\",\"subtotal\":89000,\"discount\":0,\"shippingFee\":19000,\"total\":108000,\"pointsEarned\":2136,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":null,\"referrerUserId\":null,\"pancakeOrderId\":\"9700006\",\"paidAt\":\"2026-10-19T16:28:32.307Z\",\"deliveredAt\":null}"
+        },
+        {
+          "label": "wallet_transactions",
+          "value": "[{\"id\":\"cmvfgxxob017wo4t37ul3uqkf\",\"userId\":\"uat_returning\",\"delta\":-108000,\"balanceAfter\":92000,\"type\":\"ORDER_PAY\",\"refType\":\"ORDER\",\"refId\":\"cmvfgxxo4017to4t3p968puq8\",\"reason\":\"Thanh toán đơn TUBU2026101916657\",\"createdAt\":\"2026-10-19T16:28:32.315Z\"}]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-39",
+      "role": "Khách quay lại mua qua gian hàng /s/uatctv",
+      "journey": "Gian hàng CTV",
+      "steps": "Mở /s/uatctv rồi thêm sản phẩm, thanh toán COD (390px); giao xong; xem hoa hồng của CTV",
+      "expected": "Đơn gắn storefrontSlug=uatctv và referrer = CTV; sau giao có dòng hoa hồng của uat_ctv = 8% tiền hàng (sau giảm), giữ 10 ngày (chưa rút được)",
+      "checks": [
+        {
+          "name": "gian hàng có sản phẩm để bấm",
+          "ok": true,
+          "detail": "/san-pham/cao-ca-gai-leo-bhnong"
+        },
+        {
+          "name": "đặt hàng → 201",
+          "ok": true,
+          "detail": "{\"status\":201}"
+        },
+        {
+          "name": "DB: storefrontSlug = uatctv",
+          "ok": true,
+          "detail": "uatctv"
+        },
+        {
+          "name": "DB: referrerUserId = uat_ctv",
+          "ok": true,
+          "detail": "uat_ctv"
+        },
+        {
+          "name": "delivered xử lý xong",
+          "ok": true,
+          "detail": "{\"id\":\"cmvfgye5601a7o4t3znyedttd\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1}"
+        },
+        {
+          "name": "hoa hồng = 8% × 165.000đ = 13.200đ",
+          "ok": true,
+          "detail": "{\"amt\":13200,\"expected\":13200,\"rows\":1}"
+        },
+        {
+          "name": "hoa hồng của uat_ctv, trạng thái chờ (giữ 10 ngày)",
+          "ok": true,
+          "detail": "{\"affiliateUserId\":\"uat_ctv\",\"orderTotal\":165000,\"commissionableTotal\":165000,\"rate\":8,\"amount\":13200,\"status\":\"LOCKED\",\"approvedAt\":null,\"lockedAt\":\"2026-10-19T16:28:53.842Z\"}"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "gian hàng",
+          "value": "Tìm sản phẩm\nN\nLại\nG\nĐã được Tubu Tree duyệt\nGóc Xanh Của Phạm CTV\nCTV tuyển chọn\n🌱\nTân binh\nXem sản phẩm\n\nGian hàng UAT — sản phẩm xanh chọn lọc\n\nCam kết của gian hàng\nSản phẩm đã qua duyệt của Tubu Tree\nTheo dõi đơn trên Tubu Tree\nThanh toán qua Tubu Tree\nĐổi trả 7 ngày (hàng lỗi NSX)\nSản phẩm nổ"
+        },
+        {
+          "label": "báo giá",
+          "value": "{\"subtotal\":165000,\"total\":165000}"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101927562\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":165000,\"discount\":0,\"shippingFee\":0,\"total\":165000,\"pointsEarned\":3960,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":null,\"couponDiscount\":0,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":\"uatctv\",\"referrerUserId\":\"uat_ctv\",\"pancakeOrderId\":\"9700007\",\"paidAt\":null,\"deliveredAt\":null}"
+        },
+        {
+          "label": "commissions",
+          "value": "[{\"affiliateUserId\":\"uat_ctv\",\"orderTotal\":165000,\"commissionableTotal\":165000,\"rate\":8,\"amount\":13200,\"status\":\"LOCKED\",\"approvedAt\":null,\"lockedAt\":\"2026-10-19T16:28:53.842Z\"}]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-35",
+      "role": "Khách mới chưa từng đặt (uat_new_nophone, không SĐT) và khách quay lại",
+      "journey": "Phí vận chuyển",
+      "steps": "Báo giá cho giỏ: (khách mới) 199.000 / 110.000; (Lộc Biếc) 110.000 / 89.000; đọc dòng \"Phí vận chuyển\" trên trang thanh toán (390px)",
+      "expected": "Khách mới đơn đầu: từ 199.000đ miễn phí, dưới đó 19.000đ; Lộc Biếc: freeship từ 99.000đ (shipping.tier_freeship_overrides), dưới đó 19.000đ; trang hiển thị đúng số của báo giá; khách không có SĐT vẫn đặt được trên web (Q2)",
+      "checks": [
+        {
+          "name": "new_nophone 199.000đ (đơn đầu ≥ 199.000đ): báo giá ship 0đ",
+          "ok": true,
+          "detail": "{\"subtotal\":199000,\"ship\":0}"
+        },
+        {
+          "name": "new_nophone 199.000đ: trang hiển thị phí ship đúng",
+          "ok": true,
+          "detail": "Phí vận chuyển\nMiễn phí\nMã giảm giá\nBạn có 4 mã\nTổng cộng\n19"
+        },
+        {
+          "name": "new_nophone 110.000đ (đơn đầu < 199.000đ): báo giá ship 19.000đ",
+          "ok": true,
+          "detail": "{\"subtotal\":110000,\"ship\":19000}"
+        },
+        {
+          "name": "new_nophone 110.000đ: trang hiển thị phí ship đúng",
+          "ok": true,
+          "detail": "Phí vận chuyển\n19.000đ\nMã giảm giá\nBạn có 4 mã\nTổng cộng\n129"
+        },
+        {
+          "name": "khách không SĐT vẫn thấy nút \"Đặt hàng\" bấm được (Q2: web không bắt xác minh SĐT)",
+          "ok": true
+        },
+        {
+          "name": "returning 110.000đ (Lộc Biếc freeship từ 99.000đ): báo giá ship 0đ",
+          "ok": true,
+          "detail": "{\"subtotal\":110000,\"ship\":0}"
+        },
+        {
+          "name": "returning 110.000đ: trang hiển thị phí ship đúng",
+          "ok": true,
+          "detail": "Phí vận chuyển\nMiễn phí\nMã giảm giá\nBạn có 3 mã\nBạn có 34.40"
+        },
+        {
+          "name": "returning 89.000đ (Lộc Biếc dưới 99.000đ): báo giá ship 19.000đ",
+          "ok": true,
+          "detail": "{\"subtotal\":89000,\"ship\":19000}"
+        },
+        {
+          "name": "returning 89.000đ: trang hiển thị phí ship đúng",
+          "ok": true,
+          "detail": "Phí vận chuyển\n19.000đ\nMã giảm giá\nBạn có 3 mã\nBạn có 34.400"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "số đơn cũ của uat_new_nophone",
+          "value": "0"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-35-ship-19k-khach-moi-khong-sdt.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-32",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Voucher",
+      "steps": "Giỏ Vitamin C Visante (329.000đ): mã sai, WELCOME30, XANH10; đặt đơn với XANH10; huỷ đơn; (390px)",
+      "expected": "Mã sai báo lỗi dễ hiểu; WELCOME30 −30.000đ; XANH10 −10% tối đa 50.000đ = −32.900đ; đơn lưu couponCode/couponDiscount đúng; huỷ đơn trả lại mã dùng được",
+      "checks": [
+        {
+          "name": "mã sai hiện lời báo (không im lặng, không lỗi kỹ thuật)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐịa chỉ giao hàng\nNguyễn Thị Quay Lại · 0901000003\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\nSửa\n+ Thêm địa chỉ mới\nQuản lý sổ địa chỉ\nPhương thứ"
+        },
+        {
+          "name": "WELCOME30: discount 30.000đ, tổng 299.000đ",
+          "ok": true,
+          "detail": "{\"d\":30000,\"t\":299000}"
+        },
+        {
+          "name": "trang hiện dòng Giảm giá (WELCOME30) −30.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Về giỏ hàng\nThanh toán\nĐịa chỉ giao hàng\nNguyễn Thị Quay Lại · 0901000003\n12 "
+        },
+        {
+          "name": "bỏ mã: giảm giá về 0, tổng 329.000đ",
+          "ok": true,
+          "detail": "{\"d\":0,\"t\":329000}"
+        },
+        {
+          "name": "XANH10: 10% × 329.000 = 32.900đ (trần 50.000đ)",
+          "ok": true,
+          "detail": "{\"discount\":32900}"
+        },
+        {
+          "name": "đặt hàng với XANH10 → 201",
+          "ok": true,
+          "detail": "{\"status\":201}"
+        },
+        {
+          "name": "DB: couponCode XANH10, couponDiscount 32.900, tổng = subtotal − 32.900 + ship",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026101977733\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":329000,\"discount\":32900,\"shippingFee\":0,\"total\":296100,\"pointsEarned\":7106,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":\"XANH10\",\"couponDiscount\":32900,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":\"uatctv\",\"referrerUserId\":\"uat_ctv\",\"pancakeOrderId\":\"9700022\"…"
+        },
+        {
+          "name": "DB: có đúng 1 dòng coupon_redemptions gắn đơn (XANH10 không có usageLimit nên usedCount không đếm, xem coupons.service.ts:328)",
+          "ok": true,
+          "detail": "[{\"id\":\"cmvfim8xf03eao4t311lai226\"}]"
+        },
+        {
+          "name": "XANH10 (perUserLimit 2) vẫn còn trong ví mã sau 1 lần dùng",
+          "ok": true,
+          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
+        },
+        {
+          "name": "đơn CANCELLED",
+          "ok": true,
+          "detail": "CANCELLED"
+        },
+        {
+          "name": "huỷ đơn: dòng redemption bị gỡ (lượt dùng trả lại)",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "lời báo mã sai",
+          "value": "Mã giảm giá\nBạn có 3 mã\nMã giảm giá\nÁp dụng\nWELCOME30\nGiảm 30.000đ\nGiảm 30.000đ cho đơn này\nĐơn tối thiểu 199.000đ\nHSD 01/01/2027\nDùng mã\nXANH10\nGiảm 10% (tối đa 50.000đ)\nGiảm 32.900đ cho đơn này\nĐơn tối thiểu 250.000đ\nHSD 01/01/2027\nDùng mã\nFREESHIP\nMiễn phí vận chuyển\nMã miễn phí vận chuyển chỉ áp cho phí giao hàng do Tubu Tree giao, và đơn này k"
+        },
+        {
+          "label": "báo giá XANH10",
+          "value": "{\"subtotal\":329000,\"discount\":32900,\"total\":296100,\"shipping\":0}"
+        },
+        {
+          "label": "orders",
+          "value": "{\"code\":\"TUBU2026101977733\",\"status\":\"CONFIRMED\",\"paymentMethod\":\"COD\",\"paymentStatus\":\"UNPAID\",\"subtotal\":329000,\"discount\":32900,\"shippingFee\":0,\"total\":296100,\"pointsEarned\":7106,\"pointsUsed\":0,\"pointsDiscount\":0,\"couponCode\":\"XANH10\",\"couponDiscount\":32900,\"tierDiscount\":0,\"comboDiscount\":0,\"userId\":\"uat_returning\",\"storefrontSlug\":\"uatctv\",\"referrerUserId\":\"uat_ctv\",\"pancakeOrderId\":\"9700022\",\"paidAt\":null,\"deliveredAt\":null}"
+        },
+        {
+          "label": "coupon_redemptions XANH10 của returning sau đặt",
+          "value": "[{\"id\":\"cmvfim8xf03eao4t311lai226\"}]"
+        },
+        {
+          "label": "coupon_redemptions sau huỷ",
+          "value": "[]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-32-ma-sai.png",
+        "uat/shots/U6-web-khach/U6-32-welcome30.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    }
+  ]
+}

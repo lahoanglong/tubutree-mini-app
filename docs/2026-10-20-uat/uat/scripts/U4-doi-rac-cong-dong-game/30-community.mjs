@@ -256,7 +256,7 @@ cases.push(
 
 async function webDialogAction(p, row, buttonName, confirmLabel, reason, urlSuffix) {
   await row.getByRole('button', { name: buttonName, exact: true }).click();
-  const dlg = p.getByRole('dialog');
+  const dlg = p.getByRole('alertdialog');
   await dlg.waitFor({ timeout: 10_000 });
   await dlg.getByRole('textbox').fill(reason);
   const resp = p.waitForResponse((r) => r.url().endsWith(urlSuffix), { timeout: 20_000 });
@@ -406,14 +406,16 @@ cases.push(
     new Case('U4-27', {
       role: 'KHÁCH chưa đăng nhập',
       journey: 'Xem trước cộng đồng (community.public_preview, B14)',
-      steps: 'GET /feed/public-preview không token; Mini App khách (guest) mở /feed',
-      expected: 'Cờ bật: 200, chỉ bài đã đăng (không có bài chờ duyệt/đã gỡ), bài ghim lên đầu; chỉ trường công khai (không id người dùng, SĐT, ảnh đại diện); tác giả chỉ tên gọi; SĐT trong nội dung bị che; Mini App hiện danh sách + nút đăng nhập',
+      steps: 'GET /feed/public-preview không token; web 390 không cookie mở /cong-dong',
+      expected: 'Cờ bật: 200, chỉ bài đã đăng (không có bài chờ duyệt/đã gỡ), bài ghim lên đầu; chỉ trường công khai (không id người dùng, SĐT, ảnh đại diện); tác giả chỉ tên gọi; SĐT trong nội dung bị che; web hiện thẻ xem trước + nút "Đăng nhập với Zalo"',
     }),
     async (c) => {
       let r;
       for (let i = 0; i < 16; i++) {
         r = await call('GET', '/feed/public-preview', null);
-        if ((r.body?.posts ?? []).some((x) => x.id === state.post1 && x.isPinned)) break;
+        // API đặt cache công khai cho nội dung người dùng: chờ tới khi thấy bài ghim và bài đã gỡ biến mất (tối đa ~80 giây).
+        const got = r.body?.posts ?? [];
+        if (got[0]?.id === state.post1 && got[0]?.isPinned && ![state.postFlagged, state.newPost2, state.post2].some((id) => got.some((x) => x.id === id))) break;
         await sleep(5000);
       }
       const posts = r.body?.posts ?? [];
@@ -426,16 +428,22 @@ cases.push(
       const p1 = posts.find((x) => x.id === state.post1);
       c.check('Tác giả chỉ tên gọi "Lại"', p1?.author === 'Lại', p1?.author);
       c.check('SĐT trong nội dung bị che (không còn 0901 234 567)', !/0901 ?234 ?567/.test(flat) && /…/.test(p1?.snippet ?? ''), p1?.snippet);
-      const s = await open(L.n, 'guest', { headless, path: '/feed' });
+      // Mini App luôn có phiên (đăng nhập Zalo im lặng, hoặc tài khoản khách theo deviceId khi Zalo chưa sẵn), nên khách chưa
+      // đăng nhập thật chỉ có ở web: /cong-dong không cookie.
+      let cardText = '';
+      const w = await openWeb(L.n, 'guest', { width: 390, path: '/cong-dong', headless });
       try {
-        const pg = s.page;
-        await pg.getByText('Gom vỏ hộp với túi nilon', { exact: false }).first().waitFor({ timeout: 30_000 });
-        c.check('Mini App khách thấy bài xem trước', true);
+        const pg = w.page;
+        const cards = pg.getByTestId('preview-card');
+        await cards.first().waitFor({ timeout: 60_000 });
+        cardText = (await cards.first().innerText()).replace(/\s+/g, ' ');
+        c.check('Web chưa đăng nhập /cong-dong: thẻ xem trước đầu là bài ghim, tác giả "Lại", SĐT bị che', /Gom vỏ hộp với túi nilon/.test(cardText) && /\bLại\b/.test(cardText) && !cardText.includes('Nguyễn Thị') && !/0901 ?234 ?567/.test(cardText), short(cardText, 240));
+        c.check('Có lời mời "Đăng nhập với Zalo"', await pg.getByText('Đăng nhập với Zalo').first().isVisible());
         await pg.screenshot({ path: shot('U4-27-guest-preview') });
       } finally {
-        await s.close();
+        await w.close();
       }
-      c.actual(`200, ${posts.length} bài, đầu là bài ghim ${posts[0]?.id}; trường ${keys.join(',')}; tác giả "${p1?.author}"; đoạn "${short(p1?.snippet, 160)}".`);
+      c.actual(`200, ${posts.length} bài, đầu là bài ghim ${posts[0]?.id}; trường ${keys.join(',')}; tác giả "${p1?.author}"; đoạn "${short(p1?.snippet, 160)}". Thẻ web đầu: "${short(cardText, 160)}".`);
       c.ev(relShot('U4-27-guest-preview'));
       c.ev(`GET /api/feed/public-preview (không token) → ${r.status} ${short(posts[0], 360)}`);
     },

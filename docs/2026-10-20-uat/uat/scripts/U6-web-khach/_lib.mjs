@@ -23,7 +23,21 @@ const pancakeM = await h('pancake-webhook.mjs');
 export const { api, apiOk, findUser, sleep, closePrisma, prismaFor, realLogin, mintAccessFor, laneEnv, playwright } = libM;
 export const L = libM.lane(6);
 /** Mở web thật đã đăng nhập (hoặc 'guest'); gắn thêm s.consoleErrors và s.failed (request web/API hỏng). */
+// /auth/refresh (mỗi lần tải trang đầy đủ khi đã đăng nhập) bị giới hạn 30 lần/phút/IP và 10 lần/phút/refresh token (throttle.config.ts,
+// đã biết C-005). Toàn bộ phiên UAT chung IP 127.0.0.1 nên phải tự giãn nhịp để không tự gây 429 giả.
+const navLog = [];
+export async function paceNav(maxPerMin = 16) {
+  for (;;) {
+    const now = Date.now();
+    while (navLog.length && now - navLog[0] > 60_000) navLog.shift();
+    if (navLog.length < maxPerMin) break;
+    await new Promise((r) => setTimeout(r, 60_000 - (now - navLog[0]) + 200));
+  }
+  navLog.push(Date.now());
+}
+
 export async function openWeb(user, opts = {}) {
+  await paceNav();
   const s = await webM.openWeb(6, user, opts);
   const origClose = s.close;
   s.close = () => Promise.race([origClose(), sleep(15_000)]);
@@ -38,10 +52,11 @@ export async function openWeb(user, opts = {}) {
 
 /** Đi tới đường dẫn web; trả {status, reqs (API mới), errs (lỗi trang mới), consoleErrs, url}. */
 export async function nav(s, p, { wait = 1200 } = {}) {
+  await paceNav();
   const r0 = s.requests.length;
   const e0 = s.errors.length;
   const c0 = s.consoleErrors.length;
-  const resp = await s.page.goto(`${L.webUrl}${p}`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+  const resp = await s.page.goto(`${L.webUrl}${p}`, { waitUntil: 'domcontentloaded', timeout: 300_000 });
   await s.page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => undefined);
   await s.page.waitForTimeout(wait);
   return {
@@ -68,6 +83,19 @@ export async function sql(q, ...params) {
 
 /** Gọi API lane bằng bí danh khách (token ký tại chỗ). */
 export const call = (user, method, p, body) => api(L, method, p, { user, body });
+
+/** Đặt số dư ví của khách thử và ghi một dòng sổ ADJUST bù chênh lệch, để walletBalance luôn bằng SUM(wallet_transactions). */
+export async function seedWallet(userId, amount) {
+  const cur = (await sql(`SELECT "walletBalance"::int AS w FROM users WHERE id = $1`, userId))[0].w;
+  if (cur === amount) return;
+  await sql(`UPDATE users SET "walletBalance" = $2::int WHERE id = $1`, userId, amount);
+  await sql(
+    `INSERT INTO wallet_transactions (id, "userId", delta, "balanceAfter", type, "refType", reason, "createdAt") VALUES (md5(random()::text), $1, $3::int, $2::int, 'ADJUST', 'UAT', 'UAT: đặt số dư ví thử', now())`,
+    userId,
+    amount,
+    amount - cur,
+  );
+}
 
 export const vnd = (n) => `${new Intl.NumberFormat('vi-VN').format(n)}đ`;
 const short = (v, n = 600) => {
@@ -112,9 +140,20 @@ export class Recorder {
     this.name = name;
     this.cases = [];
     this.t0 = Date.now();
+    // ONLY=U6-32,U6-33 chạy lại đúng các ca đó và giữ nguyên kết quả cũ của ca khác trong cùng file.
+    this.only = process.env.ONLY ? process.env.ONLY.split(',').map((x) => x.trim()).filter(Boolean) : null;
+    if (this.only) {
+      try {
+        this.cases = JSON.parse(fs.readFileSync(path.join(RESULTS, `${name}.json`), 'utf8')).cases ?? [];
+      } catch {
+        this.cases = [];
+      }
+    }
   }
 
   async run(id, meta, fn) {
+    if (this.only && !this.only.some((o) => id === o || id.startsWith(`${o}-`))) return null;
+    this.cases = this.cases.filter((x) => x.id !== id);
     const c = {
       id,
       ...meta,
@@ -177,7 +216,8 @@ export async function pageText(page, n = 500) {
 
 /** Cuộn ngang trang (trang không được tràn ngang). */
 export async function overflowX(page) {
-  return page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth }));
+  // Điện thoại giả lập tự nới "viewport bố cục" khi nội dung tràn (innerWidth phình theo), nên so với screen.width (khổ máy thật).
+  return page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: Math.min(window.innerWidth, window.screen.width || window.innerWidth), layoutVw: window.innerWidth }));
 }
 
 export async function finish(rec) {
@@ -192,9 +232,16 @@ export async function addViaPdp(s, slug, { qty = 1, variantRe = null } = {}) {
   await nav(s, `/san-pham/${slug}`, { wait: 800 });
   if (variantRe) await s.page.getByRole('button', { name: variantRe }).first().click();
   for (let i = 1; i < qty; i++) await s.page.getByRole('button', { name: 'Tăng số lượng' }).click();
-  const respP = s.page.waitForResponse((r) => /\/cart\/items$/.test(r.url()) && r.request().method() === 'POST', { timeout: 20_000 });
-  await s.page.getByRole('button', { name: /Thêm vào giỏ/ }).first().click();
-  const resp = await respP.catch(() => null);
+  const respP = s.page.waitForResponse((r) => /\/cart\/items$/.test(r.url()) && r.request().method() === 'POST', { timeout: 20_000 }).catch(() => null);
+  const addBtn = s.page.getByRole('button', { name: /Thêm vào giỏ/ }).first();
+  try {
+    await addBtn.click({ timeout: 8000 });
+  } catch {
+    // Trang phình rộng hơn màn hình (xem U6-B01) làm Playwright kiểm tra điểm bấm sai: bấm bằng DOM, ghi lại để báo cáo.
+    s.domClickFallback = (s.domClickFallback ?? 0) + 1;
+    await addBtn.evaluate((el) => el.click());
+  }
+  const resp = await respP;
   if (!resp) return { status: 0, body: null };
   return { status: resp.status(), body: await resp.json().catch(() => null) };
 }

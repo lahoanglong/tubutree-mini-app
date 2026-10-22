@@ -1,0 +1,33 @@
+{
+  "id": "U2-20",
+  "title": "Bỏ qua kỳ trên Mini App (\"Hủy\" → \"Bỏ qua kỳ này\"): nextRunAt lùi đúng 1 chu kỳ, gói vẫn ACTIVE",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:31:13.425Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "nextRunAt + 28 ngày, status ACTIVE",
+      "ok": true,
+      "detail": {
+        "diff": 28,
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "name": "bỏ qua không tạo đơn",
+      "ok": true,
+      "detail": 1
+    }
+  ],
+  "evidence": {
+    "skip": {
+      "http": 201,
+      "before": "2026-11-16T16:31:02.107Z",
+      "after": "2026-12-14T16:31:02.107Z",
+      "diffDays": 28,
+      "intervalWeeks": 4,
+      "status": "ACTIVE"
+    }
+  }
+}

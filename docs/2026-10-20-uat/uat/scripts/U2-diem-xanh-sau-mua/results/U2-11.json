@@ -1,0 +1,35 @@
+{
+  "id": "U2-11",
+  "title": "Khách khác nhập mã đã được người khác tích: 409 ALREADY_CLAIMED, không claim mới",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:24:36.235Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "409 ALREADY_CLAIMED, Mini App báo mã đã được dùng để tích điểm",
+      "ok": true,
+      "detail": {
+        "http": 409,
+        "code": "ALREADY_CLAIMED",
+        "alert": "Mã này đã được dùng để tích điểm trước đó. Cần hỗ trợ, bạn liên hệ Tubu nhé."
+      }
+    },
+    {
+      "name": "DB: vẫn 1 claim của uat_returning",
+      "ok": true
+    }
+  ],
+  "evidence": {
+    "uat_new gửi SPXVN05UAT0001": {
+      "http": 409,
+      "body": {
+        "statusCode": 409,
+        "error": "ALREADY_CLAIMED",
+        "code": "ALREADY_CLAIMED",
+        "message": "Mã này đã được tích điểm."
+      },
+      "alert": "Mã này đã được dùng để tích điểm trước đó. Cần hỗ trợ, bạn liên hệ Tubu nhé."
+    }
+  }
+}

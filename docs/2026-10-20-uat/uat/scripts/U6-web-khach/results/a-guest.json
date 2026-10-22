@@ -1,6 +1,6 @@
 {
   "name": "a-guest",
-  "at": "2026-10-19T15:59:09.566Z",
+  "at": "2026-10-20T01:01:46.852Z",
   "cases": [
     {
       "id": "U6-01",
@@ -17,7 +17,7 @@
         {
           "name": "390: không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390}"
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
         },
         {
           "name": "390: API không lỗi",
@@ -49,7 +49,7 @@
         {
           "name": "1440: không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440}"
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
         },
         {
           "name": "1440: API không lỗi",
@@ -117,7 +117,7 @@
         {
           "name": "390: không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390}"
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
         },
         {
           "name": "390: Giá tăng sắp đúng thứ tự (20 thẻ đầu)",
@@ -142,7 +142,7 @@
         {
           "name": "1440: không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440}"
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
         },
         {
           "name": "1440: Giá tăng sắp đúng thứ tự (20 thẻ đầu)",
@@ -179,12 +179,12 @@
       "role": "Khách chưa đăng nhập",
       "journey": "Tìm",
       "steps": "Gõ \"cà phê\", \"ca phe\" (không dấu), chuỗi vô nghĩa vào ô tìm",
-      "expected": "Có dấu và không dấu đều ra 6 sản phẩm Le Plateau; chuỗi vô nghĩa ra trạng thái rỗng, không lỗi",
+      "expected": "Có dấu và không dấu đều ra đủ sản phẩm có \"cà phê\" trong tên (4 trong DB lane); chuỗi vô nghĩa ra trạng thái rỗng, không lỗi",
       "checks": [
         {
-          "name": "390: \"cà phê\" ra đúng số SP cà phê (5)",
-          "ok": false,
-          "detail": "{\"ui\":\"4\",\"db\":5}"
+          "name": "390: \"cà phê\" ra đúng số SP cà phê (4)",
+          "ok": true,
+          "detail": "{\"ui\":\"4\",\"db\":4}"
         },
         {
           "name": "390: \"cà phê\" API không lỗi",
@@ -192,9 +192,9 @@
           "detail": "[]"
         },
         {
-          "name": "390: \"ca phe\" ra đúng số SP cà phê (5)",
-          "ok": false,
-          "detail": "{\"ui\":\"4\",\"db\":5}"
+          "name": "390: \"ca phe\" ra đúng số SP cà phê (4)",
+          "ok": true,
+          "detail": "{\"ui\":\"4\",\"db\":4}"
         },
         {
           "name": "390: \"ca phe\" API không lỗi",
@@ -212,9 +212,9 @@
           "detail": "http://localhost:3262/san-pham?q=serum"
         },
         {
-          "name": "1440: \"cà phê\" ra đúng số SP cà phê (5)",
-          "ok": false,
-          "detail": "{\"ui\":\"4\",\"db\":5}"
+          "name": "1440: \"cà phê\" ra đúng số SP cà phê (4)",
+          "ok": true,
+          "detail": "{\"ui\":\"4\",\"db\":4}"
         },
         {
           "name": "1440: \"cà phê\" API không lỗi",
@@ -222,9 +222,9 @@
           "detail": "[]"
         },
         {
-          "name": "1440: \"ca phe\" ra đúng số SP cà phê (5)",
-          "ok": false,
-          "detail": "{\"ui\":\"4\",\"db\":5}"
+          "name": "1440: \"ca phe\" ra đúng số SP cà phê (4)",
+          "ok": true,
+          "detail": "{\"ui\":\"4\",\"db\":4}"
         },
         {
           "name": "1440: \"ca phe\" API không lỗi",
@@ -242,7 +242,12 @@
           "detail": "http://localhost:3262/san-pham?q=serum"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "label": "số sản phẩm có \"cà phê\" trong tên (DB, bỏ dấu)",
+          "value": "4"
+        }
+      ],
       "shots": [
         "uat/shots/U6-web-khach/U6-03-tim-ca-phe-390.png",
         "uat/shots/U6-web-khach/U6-03-tim-rong-390.png",
@@ -252,7 +257,7 @@
       "notes": [],
       "blockedReason": null,
       "bugs": [],
-      "verdict": "FAIL"
+      "verdict": "PASS"
     },
     {
       "id": "U6-04",
@@ -320,7 +325,7 @@
         {
           "name": "390: PDP giờ vàng hiện 165.000đ",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nCòn 143h 31m\nĐã bán 0%\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 200.000đ\n\nHỗ t"
+          "detail": "Tìm sản phẩm\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nCòn 142h 18m\nĐã bán 2%\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 200.000đ\n\nHỗ t"
         },
         {
           "name": "390: giá gốc 220.000đ gạch",
@@ -347,7 +352,7 @@
         {
           "name": "1440: PDP giờ vàng hiện 165.000đ",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nCòn 143h 31m\nĐã bán 0%\n\nTubu Tree giao hàng\n"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nCòn 142h 17m\nĐã bán 2%\n\nTubu Tree giao hàng\n"
         },
         {
           "name": "1440: giá gốc 220.000đ gạch",
@@ -461,7 +466,7 @@
         {
           "name": "390: không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390}"
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
         },
         {
           "name": "390: API không lỗi",
@@ -471,7 +476,7 @@
         {
           "name": "1440: không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440}"
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
         },
         {
           "name": "1440: API không lỗi",
@@ -507,68 +512,6 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-08",
-      "role": "Khách chưa đăng nhập",
-      "journey": "Nhãn hàng",
-      "steps": "GET /brand/fuwa3e khi nhãn chưa đăng (404), admin đăng nhãn (PATCH /admin/brands/:id), mở lại ở 390 và 1440",
-      "expected": "Chưa đăng thì 404; đăng rồi 200, HTML thô có tên nhãn + sản phẩm Fuwa3e; trang không tràn ngang",
-      "checks": [
-        {
-          "name": "trước khi đăng: 404",
-          "ok": true,
-          "detail": "404"
-        },
-        {
-          "name": "admin đăng nhãn → 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "sau khi đăng: 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "HTML thô có tên nhãn",
-          "ok": true
-        },
-        {
-          "name": "HTML thô liệt kê đủ sản phẩm của nhãn",
-          "ok": true,
-          "detail": "{\"total\":6,\"missing\":[]}"
-        },
-        {
-          "name": "390: không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390}"
-        },
-        {
-          "name": "390: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "1440: không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440}"
-        },
-        {
-          "name": "1440: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        }
-      ],
-      "evidence": [],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-08-brand-390.png",
-        "uat/shots/U6-web-khach/U6-08-brand-1440.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
       "id": "U6-09",
       "role": "Khách chưa đăng nhập",
       "journey": "Trang tĩnh",
@@ -581,7 +524,7 @@
           "detail": "200"
         },
         {
-          "name": "/gioi-thieu không còn chỗ trống [..]",
+          "name": "/gioi-thieu không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
           "ok": true,
           "detail": "[]"
         },
@@ -591,9 +534,9 @@
           "detail": "200"
         },
         {
-          "name": "/cau-chuyen không còn chỗ trống [..]",
-          "ok": false,
-          "detail": "[\"[minmax(0,370px)_1fr]\"]"
+          "name": "/cau-chuyen không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": true,
+          "detail": "[]"
         },
         {
           "name": "/chinh-sach/dieu-khoan 200",
@@ -601,7 +544,7 @@
           "detail": "200"
         },
         {
-          "name": "/chinh-sach/dieu-khoan không còn chỗ trống [..]",
+          "name": "/chinh-sach/dieu-khoan không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
           "ok": false,
           "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
         },
@@ -611,7 +554,7 @@
           "detail": "200"
         },
         {
-          "name": "/chinh-sach/bao-mat không còn chỗ trống [..]",
+          "name": "/chinh-sach/bao-mat không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
           "ok": false,
           "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
         },
@@ -621,7 +564,7 @@
           "detail": "200"
         },
         {
-          "name": "/chinh-sach/doi-tra không còn chỗ trống [..]",
+          "name": "/chinh-sach/doi-tra không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
           "ok": false,
           "detail": "[\"[số ngày làm việc]\",\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
         },
@@ -631,7 +574,7 @@
           "detail": "200"
         },
         {
-          "name": "/chinh-sach/van-chuyen không còn chỗ trống [..]",
+          "name": "/chinh-sach/van-chuyen không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
           "ok": false,
           "detail": "[\"[số ngày]\",\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
         }
@@ -822,8 +765,9 @@
       "expected": "Có nút \"Đăng nhập với Zalo\", liên kết Điều khoản/Bảo mật, nút quay lại; khi build thiếu Zalo App ID thì nói rõ \"tạm ngưng\" kèm hotline thay vì để khách bấm gặp lỗi",
       "checks": [
         {
-          "name": "390: có nút đăng nhập",
-          "ok": true
+          "name": "390: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu \"tạm ngưng\" kèm hotline",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thươ"
         },
         {
           "name": "390: có Điều khoản + Bảo mật",
@@ -835,8 +779,9 @@
           "detail": "[]"
         },
         {
-          "name": "1440: có nút đăng nhập",
-          "ok": true
+          "name": "1440: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu \"tạm ngưng\" kèm hotline",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đ"
         },
         {
           "name": "1440: có Điều khoản + Bảo mật",
@@ -850,12 +795,20 @@
       ],
       "evidence": [
         {
+          "label": "390 chế độ web",
+          "value": "có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo"
+        },
+        {
           "label": "390 chữ",
-          "value": "Tìm sản phẩm\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nĐăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline 0984 606 774 để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi "
+          "value": "Tìm sản phẩm\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "label": "1440 chế độ web",
+          "value": "có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo"
         },
         {
           "label": "1440 chữ",
-          "value": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nĐăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline 0984 606 774 để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gma"
+          "value": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         }
       ],
       "shots": [
@@ -863,6 +816,75 @@
         "uat/shots/U6-web-khach/U6-11-dang-nhap-1440.png"
       ],
       "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-08",
+      "role": "Khách chưa đăng nhập",
+      "journey": "Nhãn hàng",
+      "steps": "GET /brand/fuwa3e khi nhãn chưa đăng (404), admin đăng nhãn (PATCH /admin/brands/:id), mở lại ở 390 và 1440",
+      "expected": "Chưa đăng thì 404; đăng rồi 200, HTML thô có tên nhãn + sản phẩm Fuwa3e; trang không tràn ngang",
+      "checks": [
+        {
+          "name": "trước khi đăng: 404",
+          "ok": true,
+          "detail": "{\"web\":404,\"api\":404}"
+        },
+        {
+          "name": "admin đăng nhãn → 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "sau khi đăng: 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "HTML thô có tên nhãn",
+          "ok": true
+        },
+        {
+          "name": "HTML thô liệt kê đủ sản phẩm của nhãn",
+          "ok": true,
+          "detail": "{\"total\":6,\"missing\":[]}"
+        },
+        {
+          "name": "390: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "390: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "1440: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "1440: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trước khi đăng: API /brand/public/fuwa3e, web bỏ cache, web qua Data Cache",
+          "value": "{\"api\":404,\"web\":404,\"webCached\":200}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-08-brand-390.png",
+        "uat/shots/U6-web-khach/U6-08-brand-1440.png"
+      ],
+      "notes": [
+        "web qua Data Cache vẫn trả 200 ngay sau khi gỡ đăng (ISR revalidate 300 giây)"
+      ],
       "blockedReason": null,
       "bugs": [],
       "verdict": "PASS"

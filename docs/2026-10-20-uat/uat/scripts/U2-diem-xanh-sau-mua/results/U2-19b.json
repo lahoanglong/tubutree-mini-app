@@ -1,0 +1,60 @@
+{
+  "id": "U2-19b",
+  "title": "Sửa kỳ (đổi chu kỳ giao 4 → 6 tuần) của gói đang chạy: màn sửa Mini App và PATCH /me/subscriptions/:id",
+  "verdict": "FAIL",
+  "blocked": null,
+  "at": "2026-10-19T16:31:10.391Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "màn sửa có chọn chu kỳ giao",
+      "ok": false,
+      "detail": {
+        "sheet": [
+          "Mỗi 4 tuần · 156.640đ",
+          "Thanh toán: COD",
+          "Giao tới: 12 Lê Lợi, Phường Bến Thành",
+          "Sửa gói định kỳ",
+          "Số lượng mỗi kỳ",
+          "Thanh toán mỗi kỳ",
+          "Thanh toán khi nhận hàng (COD)",
+          "Giao tới"
+        ],
+        "hasInterval": 0
+      }
+    },
+    {
+      "name": "API đổi chu kỳ 4 → 6 tuần",
+      "ok": false,
+      "detail": {
+        "status": 400,
+        "message": [
+          "Không nhận trường «intervalWeeks»."
+        ],
+        "intervalWeeks": 4
+      }
+    }
+  ],
+  "evidence": {
+    "màn Sửa gói định kỳ": {
+      "sheet": [
+        "Mỗi 4 tuần · 156.640đ",
+        "Thanh toán: COD",
+        "Giao tới: 12 Lê Lợi, Phường Bến Thành",
+        "Sửa gói định kỳ",
+        "Số lượng mỗi kỳ",
+        "Thanh toán mỗi kỳ",
+        "Thanh toán khi nhận hàng (COD)",
+        "Giao tới"
+      ],
+      "hasInterval": 0
+    },
+    "PATCH intervalWeeks 6 (API)": {
+      "status": 400,
+      "message": [
+        "Không nhận trường «intervalWeeks»."
+      ],
+      "intervalWeeks": 4
+    }
+  }
+}

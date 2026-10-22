@@ -2,13 +2,13 @@
   {
     "id": "U5-40",
     "role": "ADMIN",
-    "journey": "Cấu hình: đổi một khoá tiền rồi đổi lại",
-    "steps": "Tab Cấu hình, khoá affiliate.min_withdraw_bank: gõ \"abc\" → Lưu; gõ 60000 → Lưu → hộp \"Xác nhận đổi cấu hình tiền/điểm\" → Lưu thay đổi; CTV rút 56.000đ (dưới mức mới) qua API; đổi lại 50000",
-    "expected": "JSON sai báo lỗi, không gọi API; đổi 60000 có hộp xác nhận tiền, DB = 60000, system_config_history ghi người đổi; mức mới có hiệu lực ngay (API đọc lại); đổi lại DB = 50000, lịch sử thêm dòng",
-    "actual": "Lỗi khi chạy ca: locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n  - waiting for getByRole('alertdialog') to be visible\n",
-    "evidence": "",
-    "verdict": "FAIL",
-    "at": "2026-10-19T16:22:44.067Z"
+    "journey": "Cấu hình: đổi một khoá điểm rồi đổi lại",
+    "steps": "Tab Cấu hình, khoá loyalty.max_redeem_pct (trần dùng điểm 20%): gõ \"abc\" → Lưu; gõ 0.25 → Lưu → hộp \"Xác nhận đổi cấu hình tiền/điểm\" → \"Lưu thay đổi\"; GET /admin/config đọc lại; đổi lại 0.2 như cũ",
+    "expected": "JSON sai: báo \"JSON không hợp lệ\", không gọi API; đổi 0.25 có hộp xác nhận (config-item.tsx:9,31-37), DB = 0.25, system_config_history ghi uat_admin; đổi lại: DB = 0.2, thêm một dòng lịch sử",
+    "actual": "JSON sai: 0 lời gọi PUT, lỗi \"JSON không hợp lệ\". Đổi 0.25: hộp \"Xác nhận đổi cấu hình tiền/điểm / loyalty.max_redeem_pct / 0.2 → 0.25 / Áp dụng ngay cho mọi đơn, ví và điểm của khách. / Huỷ / Lưu thay đổi\" → PUT 200; DB 0.25; GET /admin/config đọc 0.25. Đổi lại: hộp có → PUT 200; DB 0.2 (trước 0.2). Lịch sử 2 dòng mới nhất: [{\"oldValue\":0.25,\"newValue\":0.2,\"changedBy\":\"uat_admin\"},{\"oldValue\":0.2,\"newValue\":0.25,\"changedBy\":\"uat_admin\"}]",
+    "evidence": "shots/U5-admin-noi-bo/config-badjson-admin-1440.png, shots/U5-admin-noi-bo/config-changed-admin-1440.png; SQL system_configs + system_config_history WHERE key='loyalty.max_redeem_pct'",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:27:28.413Z"
   },
   {
     "id": "U5-41",
@@ -53,5 +53,50 @@
     "evidence": "shots/U5-admin-noi-bo/reports-ketoan-1440.png; GET /admin/reports/revenue?from=2026-10-19&to=2026-10-19; SQL tự tính (điều kiện REVENUE_ORDER_SQL, apps/api/src/modules/admin/admin-revenue.ts:16-20)",
     "verdict": "PASS",
     "at": "2026-10-19T16:23:12.342Z"
+  },
+  {
+    "id": "U5-45",
+    "role": "ADMIN + KHO",
+    "journey": "\"Cần xử lý Pancake\": khách chuyển thiếu → xử lý → rời hàng đợi",
+    "steps": "uat_returning đặt 3×SOK-RC-1KG chuyển khoản; giả NH + Pancake ghi nhận 50.000đ đúng nội dung (thiếu); ADMIN mở trang chủ \"Việc cần xử lý\" → bấm mục \"Cần xử lý Pancake\"; KHO mở đơn → ghi chú → \"Đã xử lý\" → xác nhận",
+    "expected": "Đơn vẫn PENDING_PAYMENT/UNPAID, pancakeAttention bắt đầu \"Khách chuyển thiếu\"; số mục +1 (ADMIN và KHO); bấm mục mở tab Đơn hàng lọc đúng đơn; \"Đã xử lý\": pancakeAttention null, số mục −1, ghi chú + người xử lý vào log API (admin.service.ts:1249-1266, DTO admin.controller.ts:398-401 ghi \"chỉ vào log vết\")",
+    "actual": "Đơn TUBU2026101922374 tổng 225000đ; giả NH 50.000đ ({\"matched\":true,\"txn\":{\"at\":\"2026-10-19T16:23:13.398Z\",\"account\":\"8386790906 Tec…); đơn PENDING_PAYMENT/UNPAID, pancakePaidReported 50000, \"Khách chuyển thiếu: Pancake ghi nhận 50.000đ/225.000đ, còn thiếu 175.000đ — chưa xác nhận thanh toán. Liên hệ khách chuy…\". Hộp việc ADMIN 1→2, KHO 1→2; bấm mục → tab Đơn hàng lọc \"Cần xử lý Pancake\" có đơn: true. KHO \"Đã xử lý\" → 201; pancakeAttention=null; hộp việc ADMIN → 1. Log API: \"\u001b[33m[Nest] 42900 - \u001b[39m10/19/2026, 11:23:19 PM \u001b[33m WARN\u001b[39m \u001b[38;5;3m[AdminService] \u001b[39m\u001b[33mAdmin uat_kho đánh dấu đã xử lý việc Pancake của đơn TUBU2026101922374: \"Khách chuyển thiếu: Pancake …\"",
+    "evidence": "shots/U5-admin-noi-bo/inbox-admin-pancake-1440.png, shots/U5-admin-noi-bo/orders-pancake-attention-admin-1440.png, shots/U5-admin-noi-bo/orders-pancake-confirm-kho-1440.png, shots/U5-admin-noi-bo/orders-pancake-resolved-kho-1440.png; SQL orders.pancakeAttention/pancakePaidReported; GET /admin/ops/inbox (admin, kho); state/lane-5/logs/api.log",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:23:21.048Z"
+  },
+  {
+    "id": "U5-46",
+    "role": "ADMIN / KẾ TOÁN / MARKETING / CSKH / KHO / NHÂN VIÊN",
+    "journey": "\"Việc cần xử lý\": số mục từng vai trò so với DB",
+    "steps": "GET /admin/ops/inbox bằng token từng vai trò; đếm bằng SQL các hàng đợi (cùng điều kiện ops-inbox.service.ts:75-121); mở trang chủ /admin từng vai trò, chụp",
+    "expected": "Mỗi vai trò chỉ thấy mục của nhóm mình (audience ở ops-inbox.service.ts); số khớp SQL; KẾ TOÁN thấy hoàn tiền khách, và theo B18 cả hoá đơn VAT chờ xuất + rút tiền đã duyệt chờ chi (kế toán là người bấm \"Đã xuất hoá đơn\"/\"Đã chuyển khoản\")",
+    "actual": "SQL {\"pancakeAttention\":1,\"customerRefunds\":0,\"payouts\":0,\"invoicePending\":0,\"returnsPending\":0,\"communityPending\":0}; payout APPROVED chờ chi 0. ADMIN 26 mục, các mục đối chiếu khớp SQL. KẾ TOÁN: {\"customerRefunds\":0,\"merchantToSettle\":0,\"merchantPayoutsPending\":0,\"wasteToCount\":0,\"wasteUnmatched\":0} → THIẾU invoicePending → không có mục rút tiền chờ chi. MARKETING: communityPending,communityUnanswered,wasteToCount,wasteUnmatched. CSKH: returnsPending,communityPending,communityUnanswered,externalPoints,wasteToCount,wasteUnmatched. KHO: pancakeAttention,pancakeUnsynced,gomdonAttention,returnsToReceive,wasteToCount,wasteUnmatched. NHÂN VIÊN (không nhóm): GET 403 (đúng @AllowStaff ở ops.controller.ts:31-33, tab duy nhất là Thu gom). Không vai trò nào thấy mục ngoài nhóm",
+    "evidence": "shots/U5-admin-noi-bo/inbox-admin-1440.png, shots/U5-admin-noi-bo/inbox-ketoan-1440.png, shots/U5-admin-noi-bo/inbox-marketing-1440.png, shots/U5-admin-noi-bo/inbox-cskh-1440.png, shots/U5-admin-noi-bo/inbox-kho-1440.png, shots/U5-admin-noi-bo/inbox-staff-1440.png; GET /admin/ops/inbox theo vai trò; SQL đếm hàng đợi; ops-inbox.service.ts:100,111-112",
+    "verdict": "FAIL",
+    "note": "Xác nhận D2-03 (chưa sửa)",
+    "at": "2026-10-19T16:29:20.314Z"
+  },
+  {
+    "id": "U5-47",
+    "role": "ADMIN",
+    "journey": "Bảng điều khiển \"Tổng quan\" so với DB",
+    "steps": "Mở /admin?tab=dashboard; GET /admin/dashboard/stats; đếm SQL: tổng đơn, chờ xử lý (PENDING_PAYMENT+CONFIRMED), đang giao (PACKED+SHIPPING), đã giao, huỷ, trả, đổi/trả chờ, COD chưa thu, dư nợ đại lý, doanh thu (REVENUE_ORDER_SQL − hoàn một phần), GMV",
+    "expected": "Mọi số API = SQL; trang hiện cùng số",
+    "actual": "API {\"totalOrders\":14,\"pendingOrders\":9,\"shippingOrders\":0,\"deliveredOrders\":3,\"cancelledOrders\":2,\"returnedOrders\":0,\"pendingReturns\":0,\"codPendingValue\":363000,\"dealerDebtOutstanding\":7954000,\"totalRevenue\":3076000,\"gmv\":13488000} · SQL khớp mọi khoá · số SQL có trên trang: totalOrders:true, totalRevenue:true, dealerDebtOutstanding:true, codPendingValue:true",
+    "evidence": "shots/U5-admin-noi-bo/dashboard-admin-1440.png; GET /admin/dashboard/stats; SQL đếm (điều kiện admin.service.ts:734-820, admin-revenue.ts:16-20)",
+    "verdict": "PASS",
+    "at": "2026-10-19T16:25:08.488Z"
+  },
+  {
+    "id": "U5-48",
+    "role": "ADMIN",
+    "journey": "Cấu hình: khoá tiền affiliate.* / coupon.* có hỏi lại như khoá tiền khác không",
+    "steps": "Tab Cấu hình, affiliate.min_withdraw_bank (mức rút tối thiểu CTV, luật 50.000đ): gõ 60000 → Lưu; rồi coupon.staff_max_percent (trần 30%): gõ 30 → Lưu (giữ nguyên giá trị); cuối cùng trả affiliate.min_withdraw_bank về 50000",
+    "expected": "Khoá tiền/điểm nào cũng hiện hộp \"Xác nhận đổi cấu hình tiền/điểm\" trước khi ghi (cùng lý do như payment./loyalty./wallet.: \"Áp dụng ngay cho mọi đơn, ví và điểm\"); giá trị cuối = 50000 và 30",
+    "actual": "affiliate.min_withdraw_bank 60000: hộp xác nhận KHÔNG, PUT 200, DB ngay sau 60000. coupon.staff_max_percent: hộp KHÔNG, PUT 200. Trả về 50000: hộp KHÔNG, PUT 200. Cuối: {\"aff\":50000,\"coupon\":30}; lịch sử [{\"oldValue\":60000,\"newValue\":50000,\"changedBy\":\"uat_admin\"},{\"oldValue\":50000,\"newValue\":60000,\"changedBy\":\"uat_admin\"}]",
+    "evidence": "shots/U5-admin-noi-bo/config-affiliate-noconfirm-admin-1440.png; SQL system_configs, system_config_history; apps/web/src/components/admin/config-item.tsx:9 (MONEY_PREFIXES chỉ có payment., loyalty., shipping., wallet., waste.)",
+    "verdict": "FAIL",
+    "at": "2026-10-19T16:46:40.607Z"
   }
 ]

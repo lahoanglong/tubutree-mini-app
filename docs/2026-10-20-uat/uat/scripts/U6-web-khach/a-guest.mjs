@@ -7,16 +7,23 @@ const WIDTHS = [390, 1440];
 const sessions = {};
 for (const w of WIDTHS) sessions[w] = await openWeb('guest', { width: w, path: '/' });
 
-const fetchHtml = async (p) => {
-  const r = await fetch(`${L.webUrl}${p}`, { redirect: 'manual' });
+const fetchHtml = async (p, headers = {}) => {
+  const r = await fetch(`${L.webUrl}${p}`, { redirect: 'manual', headers });
   return { status: r.status, html: await r.text(), headers: Object.fromEntries(r.headers) };
 };
+// Trang nhãn đọc API qua fetch có revalidate 300 (apps/web/src/lib/api.ts getBrand): Data Cache của Next giữ bản đã đăng tới 5 phút
+// sau khi gỡ đăng, nên lần chạy lại đo "trước khi đăng" ra 200. `next dev` bỏ qua cache khi request có Cache-Control: no-cache.
+const NO_CACHE = { 'cache-control': 'no-cache' };
 const noScript = (html) => html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<style[\s\S]*?<\/style>/g, ' ');
 
 // Brand Fuwa3e mặc định chưa đăng (isPublished=false): ghi nhận 404 trước, rồi admin đăng để thử trang SSR.
-const brandBefore = await fetchHtml('/brand/fuwa3e');
+// Chạy lại trên lane đã dùng: gỡ đăng trước để "trước khi đăng" luôn đo đúng.
 const brands = await apiOk(L, 'GET', '/admin/brands', { user: 'admin' });
 const fuwa = brands.find((b) => b.slug === 'fuwa3e');
+await call('admin', 'PATCH', `/admin/brands/${fuwa.id}`, { isPublished: false });
+const brandBefore = await fetchHtml('/brand/fuwa3e', NO_CACHE);
+const brandBeforeApi = (await fetch(`${L.apiUrl127}/brand/public/fuwa3e`)).status;
+const brandBeforeCached = (await fetchHtml('/brand/fuwa3e')).status;
 
 // ───────────── U6-01 trang chủ
 await rec.run('U6-01', { role: 'Khách chưa đăng nhập', journey: 'Duyệt', steps: 'Mở / ở 390 và 1440; đọc khối Danh mục, Ưu đãi giờ vàng, Bán chạy', expected: 'Trang 200, không tràn ngang, không request API lỗi, giá giờ vàng = giá flash sale trong DB (BHN-CGL-100 165.000đ, BHN-CW-500 119.000đ, BHN-HN-500 195.000đ)' }, async (c) => {
@@ -212,10 +219,12 @@ await rec.run('U6-07', { role: 'Khách chưa đăng nhập', journey: 'Gian hàn
 
 // ───────────── U6-08 nhãn hàng
 await rec.run('U6-08', { role: 'Khách chưa đăng nhập', journey: 'Nhãn hàng', steps: 'GET /brand/fuwa3e khi nhãn chưa đăng (404), admin đăng nhãn (PATCH /admin/brands/:id), mở lại ở 390 và 1440', expected: 'Chưa đăng thì 404; đăng rồi 200, HTML thô có tên nhãn + sản phẩm Fuwa3e; trang không tràn ngang' }, async (c) => {
-  c.ok('trước khi đăng: 404', brandBefore.status === 404, brandBefore.status);
+  c.ev('trước khi đăng: API /brand/public/fuwa3e, web bỏ cache, web qua Data Cache', { api: brandBeforeApi, web: brandBefore.status, webCached: brandBeforeCached });
+  c.ok('trước khi đăng: 404', brandBefore.status === 404 && brandBeforeApi === 404, { web: brandBefore.status, api: brandBeforeApi });
+  if (brandBeforeCached !== 404) c.note(`web qua Data Cache vẫn trả ${brandBeforeCached} ngay sau khi gỡ đăng (ISR revalidate 300 giây)`);
   const up = await call('admin', 'PATCH', `/admin/brands/${fuwa.id}`, { isPublished: true });
   c.ok('admin đăng nhãn → 200', up.status < 300, up.status);
-  const ssr = await fetchHtml('/brand/fuwa3e');
+  const ssr = await fetchHtml('/brand/fuwa3e', NO_CACHE);
   c.ok('sau khi đăng: 200', ssr.status === 200, ssr.status);
   const txt = noScript(ssr.html);
   c.ok('HTML thô có tên nhãn', txt.includes('Fuwa3e'));
@@ -273,7 +282,9 @@ await rec.run('U6-11', { role: 'Khách chưa đăng nhập', journey: 'Đăng nh
     const s = sessions[w];
     const r = await nav(s, '/dang-nhap?returnTo=%2Fgio-hang');
     const t = await bodyText(s.page);
-    c.ok(`${w}: có nút đăng nhập`, /Đăng nhập với Zalo/.test(t));
+    const hasBtn = /Đăng nhập với Zalo/.test(t);
+    c.ev(`${w} chế độ web`, hasBtn ? 'có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo' : 'thiếu NEXT_PUBLIC_ZALO_APP_ID: trang báo tạm ngưng');
+    c.ok(`${w}: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu "tạm ngưng" kèm hotline`, hasBtn || (/tạm ngưng/.test(t) && /0984 606 774/.test(t)), t.slice(0, 300));
     c.ok(`${w}: có Điều khoản + Bảo mật`, /Điều khoản/.test(t) && /Chính sách bảo mật/.test(t));
     c.ok(`${w}: API không lỗi`, badReqs(r.reqs).length === 0, badReqs(r.reqs));
     c.ev(`${w} chữ`, t.slice(0, 600));

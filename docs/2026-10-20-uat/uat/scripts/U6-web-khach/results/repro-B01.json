@@ -1,0 +1,42 @@
+{
+  "name": "repro-B01",
+  "at": "2026-10-20T00:55:35.822Z",
+  "cases": [
+    {
+      "id": "U6-B01",
+      "role": "Khách có 3 và 4 mã trong ví",
+      "journey": "Trang sản phẩm",
+      "steps": "Mở /san-pham/dau-tram-be-cobote ở 390px bằng uat_returning (3 mã) và uat_new_nophone (4 mã)",
+      "expected": "scrollWidth ≤ 390 (không tràn ngang)",
+      "checks": [
+        {
+          "name": "returning: scrollWidth 465 ≤ khổ máy 390 (có 4 thẻ mã trên trang)",
+          "ok": false,
+          "detail": "{\"sw\":465,\"iw\":390,\"layoutVw\":465}"
+        },
+        {
+          "name": "new_nophone: scrollWidth 461 ≤ khổ máy 390 (có 4 thẻ mã trên trang)",
+          "ok": false,
+          "detail": "{\"sw\":461,\"iw\":390,\"layoutVw\":461}"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "returning",
+          "value": "{\"sw\":465,\"iw\":390,\"layoutVw\":465,\"chipMaGiamGia\":4}"
+        },
+        {
+          "label": "new_nophone",
+          "value": "{\"sw\":461,\"iw\":390,\"layoutVw\":461,\"chipMaGiamGia\":4}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-B01-B01-pdp-tran-ngang-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    }
+  ]
+}

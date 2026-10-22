@@ -1,0 +1,133 @@
+{
+  "id": "U2-06",
+  "title": "Lên hạng Mầm Xanh → Lộc Biếc theo ngưỡng 1.500.000đ (×1.000): dưới ngưỡng giữ hạng, đạt ngưỡng lên ngay khi giao",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:23:31.963Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "ngưỡng Lộc Biếc = 1.500.000đ, Đại Thụ 20.000.000đ, Cổ Thụ 50.000.000đ (bảng hạng)",
+      "ok": true,
+      "detail": [
+        [
+          "MAM_XANH",
+          null,
+          0,
+          1
+        ],
+        [
+          "LOC_BIEC",
+          1500000,
+          30000,
+          1.2
+        ],
+        [
+          "DAI_THU",
+          20000000,
+          400000,
+          1.5
+        ],
+        [
+          "CO_THU",
+          50000000,
+          1000000,
+          2
+        ]
+      ]
+    },
+    {
+      "name": "chi tiêu < 1.500.000 → vẫn Mầm Xanh",
+      "ok": true,
+      "detail": {
+        "spent12m": 1447000,
+        "tierId": "MAM_XANH"
+      }
+    },
+    {
+      "name": "chi tiêu ≥ 1.500.000 → Lộc Biếc ngay khi giao (không chờ cron), hệ số 1,2",
+      "ok": true,
+      "detail": {
+        "spent12m": 1657000,
+        "tierId": "LOC_BIEC",
+        "mult": 1.2
+      }
+    },
+    {
+      "name": "điểm đơn vừa đưa lên hạng tính theo hệ số lúc đặt (×1)",
+      "ok": true,
+      "detail": 4200
+    },
+    {
+      "name": "đơn kế tiếp 199.000đ báo 4.776 điểm (×1,2)",
+      "ok": true,
+      "detail": {
+        "pointsEarned": 4776,
+        "shippingFee": 0
+      }
+    }
+  ],
+  "evidence": {
+    "trước": {
+      "tier": "MAM_XANH",
+      "spent12m": 262000,
+      "nextTier": {
+        "id": "LOC_BIEC",
+        "name": "Lộc Biếc",
+        "minPoints": 30000,
+        "minSpending": 1500000,
+        "pointsToGo": 25520,
+        "spendingToGo": 1238000
+      }
+    },
+    "còn thiếu": 1238000,
+    "sau đơn 1": {
+      "code": "TUBU2026101918786",
+      "total": 1185000,
+      "spent12m": 1447000,
+      "tier": "MAM_XANH",
+      "spendingToGo": 53000
+    },
+    "đơn 2": {
+      "code": "TUBU2026101958961",
+      "total": 210000,
+      "pointsEarned": 4200,
+      "multAtQuote": 1
+    },
+    "sau đơn 2": {
+      "spent12m": 1657000,
+      "tier": "LOC_BIEC",
+      "earnMultiplier": 1.2
+    },
+    "spent12m có tính phí giao": {
+      "note": "spending12m cộng orders.total (gồm ship)",
+      "totals": [
+        {
+          "code": "TUBU2026101915769",
+          "subtotal": 25000,
+          "shippingFee": 19000,
+          "total": 44000
+        },
+        {
+          "code": "TUBU2026101980251",
+          "subtotal": 199000,
+          "shippingFee": 19000,
+          "total": 218000
+        },
+        {
+          "code": "TUBU2026101918786",
+          "subtotal": 1185000,
+          "shippingFee": 0,
+          "total": 1185000
+        },
+        {
+          "code": "TUBU2026101958961",
+          "subtotal": 210000,
+          "shippingFee": 0,
+          "total": 210000
+        }
+      ]
+    },
+    "màn /loyalty": "shots/U2-diem-xanh-sau-mua/U2-06-loyalty-loc-biec.png"
+  }
+}

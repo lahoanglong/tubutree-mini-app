@@ -1,0 +1,266 @@
+{
+  "id": "U1-25",
+  "browser": "chromium",
+  "role": "Khách mới / khách đã mua giờ vàng",
+  "journey": "Giờ vàng: giá, giới hạn 2 suất mỗi khách, hết suất",
+  "steps": "(a) Khách A mở trang SP Hạt điều BHN-CW-500 → giỏ 2 hộp → COD; (b) khách A mua tiếp 1 hộp; (c) khách B bỏ 3 hộp vào giỏ; (d) khách C đang ở checkout 1 hũ mật ong giờ vàng BHN-HN-500 thì suất bán hết (soldCount = quota) → bấm Đặt hàng; (e) mở lại trang SP khi hết suất",
+  "expected": "(a) giá giờ vàng 119.000đ (thay 159.000đ), đơn 238.000đ ship 0 (đơn đầu ≥199k), order_items flash, soldCount +2, flash_sale_purchases 2; (b) giá thường 159.000đ + \"Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường.\"; (c) cả dòng giá thường + \"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2…\"; (d) không ghi đơn giá giờ vàng đã hết, khách được hỏi lại giá mới; soldCount không vượt quota; (e) giá thường 260.000đ",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "(a) trang SP hiện giá giờ vàng 119.000đ",
+      "ok": true,
+      "detail": [
+        "119.000đ",
+        "119.000đ"
+      ]
+    },
+    {
+      "name": "(a) giỏ: 2 × 119.000đ, isFlash",
+      "ok": true
+    },
+    {
+      "name": "(a) DB: đơn 238.000đ, ship 0, dòng flash 119.000đ",
+      "ok": true,
+      "detail": [
+        {
+          "sku": "BHN-CW-500",
+          "quantity": 2,
+          "unitPrice": 119000,
+          "total": 238000,
+          "paidTotal": 238000,
+          "pointsDiscount": 0,
+          "flash": true
+        }
+      ]
+    },
+    {
+      "name": "(a) DB: soldCount +2, flash_sale_purchases = 2",
+      "ok": true
+    },
+    {
+      "name": "(a) DB: điểm dự kiến 2% × 238.000 = 4.760",
+      "ok": true,
+      "detail": 4760
+    },
+    {
+      "name": "(b) giá thường 159.000đ + báo đã dùng hết suất",
+      "ok": true
+    },
+    {
+      "name": "(c) cả dòng giá thường 159.000đ + \"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn…\"",
+      "ok": true
+    },
+    {
+      "name": "(d) báo giá trước khi hết suất: 195.000đ",
+      "ok": true,
+      "detail": 195000
+    },
+    {
+      "name": "(d) không ghi đơn nào giá giờ vàng (400), soldCount = quota",
+      "ok": true,
+      "detail": {
+        "status": 400,
+        "orders": 0,
+        "sold": 50,
+        "quota": 50
+      }
+    },
+    {
+      "name": "(d) màn hỏi lại giá mới",
+      "ok": true
+    },
+    {
+      "name": "(e) trang SP hết suất về giá thường 260.000đ, không còn 195.000đ",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "SQL giờ vàng BHN-CW-500 trước",
+      "data": {
+        "id": "cmvfes19u002m13zttfc0j4lk",
+        "flashPrice": 119000,
+        "quota": 50,
+        "soldCount": 0,
+        "perUserLimit": 2,
+        "salePrice": 159000,
+        "retailPrice": 180000
+      }
+    },
+    {
+      "label": "ảnh trang SP giờ vàng",
+      "data": "shots/U1-mua-hang/U1-25-flash-pdp.png"
+    },
+    {
+      "label": "(a) GET /cart dòng giờ vàng",
+      "data": {
+        "unitPrice": 119000,
+        "quantity": 2,
+        "isFlash": true,
+        "flashLimitNotice": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvfh0cmz01df14pjjweuh2k3",
+          "pointsToUse": 0
+        },
+        "subtotal": 238000,
+        "discount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 238000,
+        "pointsEarned": 4760
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "true",
+        "text": "Điểm Xanh Tích điểm từ đơn đầu tiên nhé"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-25a-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101958498",
+        "button": "Đặt hàng · 238.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-25a-placed.png"
+    },
+    {
+      "label": "(a) SQL đơn + suất",
+      "data": {
+        "order": {
+          "subtotal": 238000,
+          "shippingFee": 0,
+          "total": 238000,
+          "pointsEarned": 4760,
+          "items": [
+            {
+              "sku": "BHN-CW-500",
+              "quantity": 2,
+              "unitPrice": 119000,
+              "total": 238000,
+              "paidTotal": 238000,
+              "pointsDiscount": 0,
+              "flash": true
+            }
+          ]
+        },
+        "soldBefore": 0,
+        "soldAfter": 2,
+        "purchase": 2
+      }
+    },
+    {
+      "label": "ảnh giỏ khi đã hết suất của khách",
+      "data": "shots/U1-mua-hang/U1-25b-flash-used.png"
+    },
+    {
+      "label": "(b) GET /cart",
+      "data": {
+        "unitPrice": 159000,
+        "isFlash": false,
+        "flashLimitNotice": "Bạn đã dùng hết suất giờ vàng của sản phẩm này, sản phẩm đang tính giá thường."
+      }
+    },
+    {
+      "label": "ảnh giỏ 3 hộp",
+      "data": "shots/U1-mua-hang/U1-25c-flash-over-limit.png"
+    },
+    {
+      "label": "(c) GET /cart",
+      "data": {
+        "unitPrice": 159000,
+        "isFlash": false,
+        "flashLimitNotice": "Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường."
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvfh0pm801ff14pj718g999k",
+          "pointsToUse": 0
+        },
+        "subtotal": 195000,
+        "discount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "shippingFee": 19000,
+        "firstOrderShipWaived": 0,
+        "total": 214000,
+        "pointsEarned": 3900
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "true",
+        "text": "Điểm Xanh Tích điểm từ đơn đầu tiên nhé"
+      }
+    },
+    {
+      "label": "(d) đặt khi vừa hết suất",
+      "data": {
+        "status": 400,
+        "body": {
+          "statusCode": 400,
+          "error": "Bad Request",
+          "code": "TOTAL_CHANGED",
+          "message": "Tổng tiền đơn vừa thay đổi từ 214.000đ thành 260.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt."
+        },
+        "button": "Đặt hàng · 214.000đ"
+      }
+    },
+    {
+      "label": "(d) chữ trên màn",
+      "data": [
+        "Mã giảm giá",
+        "Chọn hoặc nhập mã giảm giá",
+        "Tổng tiền đơn vừa thay đổi",
+        "Tổng tiền đơn vừa thay đổi từ 214.000đ thành 260.000đ do giá, phí giao hoặc ưu đãi vừa thay đổi. Vui lòng xem lại trước khi đặt."
+      ]
+    },
+    {
+      "label": "ảnh checkout khi hết suất",
+      "data": "shots/U1-mua-hang/U1-25d-flash-soldout-checkout.png"
+    },
+    {
+      "label": "ảnh trang SP hết suất",
+      "data": "shots/U1-mua-hang/U1-25e-flash-soldout-pdp.png"
+    },
+    {
+      "label": "(e) trang SP khi hết suất",
+      "data": {
+        "has260": true,
+        "has195": false,
+        "lines": [
+          "260.000đ",
+          "260.000đ"
+        ]
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:30:48.953Z"
+}

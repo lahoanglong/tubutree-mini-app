@@ -1,0 +1,124 @@
+{
+  "id": "U2-05",
+  "title": "Dùng điểm trên Mini App: trần 20% tiền hàng; sổ trừ đúng, đơn ghi pointsUsed; điểm tích tính trên tiền hàng sau giảm",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:23:19.922Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "Mini App: bật Điểm Xanh, đặt đơn 201",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "code": "TUBU2026101966279",
+        "bad": []
+      }
+    },
+    {
+      "name": "trần: pointsUsed = min(dùng được 40642, 20% × 120.000 = 24000)",
+      "ok": true,
+      "detail": {
+        "pointsUsed": 24000,
+        "pointsDiscount": 24000
+      }
+    },
+    {
+      "name": "SQL: một dòng trừ điểm = −pointsUsed; số dư = trước − pointsUsed = SUM sổ",
+      "ok": true,
+      "detail": {
+        "spend": [
+          {
+            "delta": -24000,
+            "reason": "ORDER_REDEEM:TUBU2026101966279"
+          }
+        ],
+        "before": 40642,
+        "after": 16642,
+        "stdSum": 16642
+      }
+    },
+    {
+      "name": "điểm tích của đơn dùng điểm = 2% × 1,2 × (120.000 − điểm dùng)",
+      "ok": true,
+      "detail": {
+        "pointsEarned": 2304,
+        "goodsAfterPoints": 96000
+      }
+    },
+    {
+      "name": "API: pointsToUse 999.999 bị kẹp về trần 20% (không lỗi, không vượt)",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "pointsUsed": 16642
+      }
+    }
+  ],
+  "evidence": {
+    "trước": {
+      "balance": 40642,
+      "stdSum": 40642,
+      "rows": 2,
+      "converted": 0,
+      "convSum": 0,
+      "wallet": 0,
+      "walletSum": 0,
+      "walletRows": 0,
+      "tierId": "LOC_BIEC",
+      "lots": [
+        {
+          "lot": "STANDARD",
+          "sum": 40642,
+          "n": 2
+        }
+      ],
+      "redeemable": 40642,
+      "maxRedeemPct": 0.2
+    },
+    "báo giá": {
+      "subtotal": 120000,
+      "pointsUsed": 24000,
+      "pointsDiscount": 24000,
+      "pointsMax": 24000,
+      "shippingFee": 0,
+      "total": 96000,
+      "pointsEarned": 2304
+    },
+    "đơn + sổ": {
+      "order": {
+        "id": "cmvfgr6zh008f5ksfyrj63w2c",
+        "pointsUsed": 24000,
+        "pointsUsedConverted": 0,
+        "total": 96000,
+        "pointsEarned": 2304,
+        "discount": 24000
+      },
+      "spend": [
+        {
+          "delta": -24000,
+          "reason": "ORDER_REDEEM:TUBU2026101966279"
+        }
+      ],
+      "after": {
+        "balance": 16642,
+        "stdSum": 16642,
+        "rows": 3,
+        "converted": 0,
+        "convSum": 0,
+        "wallet": 0,
+        "walletSum": 0,
+        "walletRows": 0,
+        "tierId": "LOC_BIEC",
+        "lots": [
+          {
+            "lot": "STANDARD",
+            "sum": 16642,
+            "n": 3
+          }
+        ]
+      }
+    },
+    "mã đơn": "TUBU2026101966279"
+  }
+}

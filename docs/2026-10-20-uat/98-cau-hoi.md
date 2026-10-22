@@ -49,3 +49,20 @@ Mỗi câu có 2–4 phương án, phương án (1) là phương án agent khuy�
 | Q15 | Thay axios bằng fetch trong Mini App để giảm gói tải đầu | Đợt 6 |
 | Q19 | Làm ngay: thêm cột đánh dấu đã chạy xong phần đảo sau huỷ/trả + cron quét chạy lại | Đợt 6 (migration: review 2 lượt) |
 | Q20 | Đổi tên tab thành "Yêu cầu rút tiền" | Đã làm ở đợt 5 (77023047) |
+| Web Q4 (U6-B08) | Web được trả bằng Ví Tubu (số dư nội bộ, không phải cổng mới); ZaloPay vẫn ẩn. Q4 hiểu là "không thêm cổng thanh toán mới" | Không đổi mã; phiên web sửa chữ Q4 trong docs/2026-10-19-web-parity/PROMPT.md |
+| U6-B06 | Bỏ dòng "điểm đang chờ, mở khoá ngày" ở web mọi khổ (theo Mini App) | Phiên web làm |
+
+## Chủ trả lời 2026-10-22 (hai câu sinh ra khi review đợt 6)
+
+| Câu | Chủ chọn | Việc tiếp |
+|---|---|---|
+| Q2b (thuế giữ dư) | Admin từ chối một lệnh rút làm tổng tháng tụt dưới ngưỡng hoặc giảm: phần thuế đã giữ dư ở các lệnh khác trong tháng **tự hoàn**, không chờ kế toán | Gói q2-tncn. Cách hoàn (chọn an toàn, ghi lại): lệnh còn "Yêu cầu" thì giảm thuế giữ và tăng số thực nhận ngay trên lệnh đó, vì lệnh này còn có thể bị từ chối; lệnh đã duyệt/đã chi hoặc rút về Ví thì cộng phần dư vào Ví Tubu, ghi số đã hoàn để lần rút sau trong tháng không truy thu sai |
+| Q8b (bậc quý cũ) | Chụp bảng bậc thưởng theo quý: trả bù và thu hồi của quý cũ dùng bảng bậc đã dùng khi trả thưởng quý đó, admin đổi bậc cho quý mới không ảnh hưởng quý cũ | Gói q8-thuong-quy. Mốc chụp: lần trả thưởng ngày 10 (hoặc lần trả muộn/trả bù đầu tiên của quý). Quý chưa có bản chụp (trả trước bản này) dùng bảng hiện hành |
+
+### Câu mở sau W13 (không chặn mở khách, hỏi kế toán khi rảnh)
+
+| Câu | Vấn đề | Đã chọn tạm (an toàn, đổi được) |
+|---|---|---|
+| Q2c | Phần thuế hoàn cho lệnh đã chi làm giảm "thuế đã khấu trừ" ở tháng của ngày chi lệnh đó. Lệnh gửi cuối tháng, chi đầu tháng sau, rồi lệnh khác bị từ chối muộn: báo cáo tháng đã kê khai có thể đổi | Ghi trong sổ tay kế toán: điều chỉnh ở kỳ kê khai sau. Câu hỏi: có chốt sổ tháng (không hoàn vào lệnh đã kê khai) không |
+| Q2d | CTV được hoàn thuế vào Ví chỉ thấy dòng sổ ví "Hoàn thuế TNCN giữ dư…", không có thông báo riêng | Không gửi thông báo (tránh thêm mẫu tin). Câu hỏi: có muốn báo qua thông báo trong app không |
+| Q2e | Admin tắt khấu trừ (pct 0) rồi có lệnh bị từ chối: thuế đã giữ lúc còn bật được hoàn hết | Giữ theo công thức (tháng không còn phải khấu trừ) |

@@ -214,6 +214,6 @@ export async function matureCommissions(orderCode) {
 }
 
 export function short(v, n = 600) {
-  const s = typeof v === 'string' ? v : JSON.stringify(v);
+  const s = typeof v === 'string' ? v : (JSON.stringify(v) ?? String(v));
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }

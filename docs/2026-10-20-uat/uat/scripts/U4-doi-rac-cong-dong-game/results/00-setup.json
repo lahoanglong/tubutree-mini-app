@@ -97,7 +97,7 @@
     "journey": "Bật đổi rác: đăng ký kho HCMC và đại lý (checklist mục 2)",
     "steps": "PUT waste.enabled=true; POST /admin/waste/points WAREHOUSE (4 món, SĐT kho); POST /admin/storefronts/:id/partner (gian hàng uatctv); POST /admin/waste/points PARTNER (carton + nilon, hạn mức 200.000); thêm OWNER uat_ctv; PATCH ACTIVE; khách GET /waste/points",
     "expected": "Kho ACTIVE nhận 4 món; đại lý ACTIVE chỉ nhận carton + nilon; khách thấy 2 điểm với acceptedItemIds đúng",
-    "actual": "Kho cmvfg8bah000hhoebm7hp8m2q nhận wi-carton,wi-bubble-wrap,wi-milk-carton,wi-tubu-bottle; đại lý cmvfg8bas000mhoebrp2tgp9d nhận wi-carton,wi-bubble-wrap.",
+    "actual": "Kho cmvficxct000h14k930m2k6ap nhận wi-carton,wi-bubble-wrap,wi-milk-carton,wi-tubu-bottle; đại lý cmvficxd8000m14k9bqk2p52v nhận wi-carton,wi-bubble-wrap.",
     "evidence": [
       "SQL waste_points ⨝ waste_point_items → WAREHOUSE/ACTIVE: wi-bubble-wrap,wi-carton,wi-milk-carton,wi-tubu-bottle | PARTNER/ACTIVE: wi-bubble-wrap,wi-carton"
     ],
@@ -107,7 +107,7 @@
         "ok": true,
         "detail": {
           "status": 201,
-          "body": "{\"id\":\"cmvfg8bah000hhoebm7hp8m2q\",\"kind\":\"WAREHOUSE\",\"name\":\"Kho Tubu Tree HCM\",\"addressLine\":\"12 Nguyễn Huệ\",\"provinceCode\":\"79\",\"provinceName\":\"Thành phố Hồ Chí Minh\",\"communeCode\":\"84_VN7926734\",\"c…"
+          "body": "{\"id\":\"cmvficxct000h14k930m2k6ap\",\"kind\":\"WAREHOUSE\",\"name\":\"Kho Tubu Tree HCM\",\"addressLine\":\"12 Nguyễn Huệ\",\"provinceCode\":\"79\",\"provinceName\":\"Thành phố Hồ Chí Minh\",\"communeCode\":\"84_VN7926734\",\"c…"
         }
       },
       {
@@ -145,7 +145,7 @@
         "name": "Khách thấy kho, nhận 4 món",
         "ok": true,
         "detail": {
-          "id": "cmvfg8bah000hhoebm7hp8m2q",
+          "id": "cmvficxct000h14k930m2k6ap",
           "accepted": [
             "wi-carton",
             "wi-bubble-wrap",
@@ -158,7 +158,7 @@
         "name": "Khách thấy đại lý, chỉ carton + nilon",
         "ok": true,
         "detail": {
-          "id": "cmvfg8bas000mhoebrp2tgp9d",
+          "id": "cmvficxd8000m14k9bqk2p52v",
           "accepted": [
             "wi-carton",
             "wi-bubble-wrap"
@@ -202,7 +202,7 @@
     "expected": "Luật đã chốt: đại lý chỉ nhận carton + nilon, nên API từ chối gắn hộp sữa / vỏ chai Tubu cho điểm PARTNER",
     "actual": "PATCH → 200; DB đại lý nhận wi-bubble-wrap,wi-carton,wi-milk-carton,wi-tubu-bottle; khách thấy đại lý nhận wi-carton,wi-bubble-wrap,wi-milk-carton,wi-tubu-bottle.",
     "evidence": [
-      "PATCH /admin/waste/points/cmvfg8bas000mhoebrp2tgp9d {itemIds:[carton,bubble,milk,tubu]} → 200",
+      "PATCH /admin/waste/points/cmvficxd8000m14k9bqk2p52v {itemIds:[carton,bubble,milk,tubu]} → 200",
       "SELECT array_agg(\"itemId\") FROM waste_point_items WHERE \"pointId\"=đại lý → wi-bubble-wrap,wi-carton,wi-milk-carton,wi-tubu-bottle",
       "trả lại carton + nilon → 200, DB wi-bubble-wrap,wi-carton"
     ],

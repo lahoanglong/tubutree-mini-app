@@ -1,0 +1,82 @@
+{
+  "name": "i-blocked",
+  "at": "2026-10-19T17:31:41.188Z",
+  "cases": [
+    {
+      "id": "U6-95",
+      "role": "Khách mới",
+      "journey": "Đăng nhập Zalo thật",
+      "steps": "Đăng nhập web bằng tài khoản Zalo thật qua OAuth của Zalo, lần đầu: tạo khách mới",
+      "expected": "Khách mới được tạo với zaloId thật, tên và ảnh đại diện lấy từ Zalo; lần sau vào lại đúng tài khoản",
+      "checks": [],
+      "evidence": [
+        {
+          "label": "cấu hình lane",
+          "value": "[\"ZALO_APP_SECRET=(có giá trị giả, không ghi ra)\",\"NEXT_PUBLIC_ZALO_APP_ID=uat-fake-zalo-app-id (nhóm B) hoặc để trống (nhóm A)\"]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": "Cần ứng dụng Zalo thật, tài khoản Zalo thật và địa chỉ gọi lại đã đăng ký với Zalo. Lane chỉ có Zalo giả (nhóm B đã kiểm vòng đăng nhập, làm mới phiên, đăng xuất và các đường lỗi trên Zalo giả). Việc tạo khách mới qua OAuth thật cần người thật thử trên máy chủ chạy thật.",
+      "bugs": [],
+      "verdict": "BLOCKED"
+    },
+    {
+      "id": "U6-96",
+      "role": "Khách quay lại",
+      "journey": "Chuyển khoản thật",
+      "steps": "Chuyển tiền thật tới CONG TY TNHH TUBU TREE, 8386790906, Techcombank, đúng nội dung mã đơn; chờ ngân hàng báo về",
+      "expected": "Đơn tự chuyển sang đã trả khi tiền về đúng số, đúng nội dung; thiếu tiền thì chưa trả",
+      "checks": [],
+      "evidence": [
+        {
+          "label": "webhook ngân hàng",
+          "value": "bank-webhook.mjs (UAT) gọi đường webhook thật của API với chữ ký giả của lane"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": "Không có tiền thật chạy qua tài khoản và không có nhà cung cấp đối soát thật trong lane. Phần xử lý của API đã được kiểm bằng webhook giả (U6-33: sai nội dung, chuyển thiếu, chuyển đủ). Cần thử một khoản chuyển khoản nhỏ thật trước khi mở khách.",
+      "bugs": [],
+      "verdict": "BLOCKED"
+    },
+    {
+      "id": "U6-97",
+      "role": "Khách quay lại",
+      "journey": "Pancake thật",
+      "steps": "Đặt đơn thật để Pancake nhận đơn, in vận đơn, báo trạng thái giao thật",
+      "expected": "Đơn sang Pancake đúng sản phẩm, số lượng, địa chỉ, tiền thu hộ; trạng thái từ Pancake về web đúng",
+      "checks": [],
+      "evidence": [
+        {
+          "label": "cấu hình lane",
+          "value": "[\"http://127.0.0.1:3268/api/v1\",\"PANCAKE_SHOP_ID=uatshop6\",\"PANCAKE_API_KEY=(có giá trị giả, không ghi ra)\"]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": "Khoá Pancake thật chưa có (đã ghi nhận: khoá điền khi deploy). Lane dùng Pancake giả ở cổng 3268; đơn sang Pancake giả và các trạng thái vận chuyển được kiểm ở nhóm D, E.",
+      "bugs": [],
+      "verdict": "BLOCKED"
+    },
+    {
+      "id": "U6-98",
+      "role": "Khách quay lại",
+      "journey": "Gomdon, Zalo OA, ZaloPay",
+      "steps": "Chọn thu gom rác tận nhà (Gomdon); nhận tin Zalo OA khi đơn đổi trạng thái; trả bằng ZaloPay",
+      "expected": "Gomdon nhận yêu cầu; tin OA đến máy khách; ZaloPay không xuất hiện ở web (Q4: web chỉ nhận chuyển khoản và COD)",
+      "checks": [],
+      "evidence": [
+        {
+          "label": "cấu hình lane",
+          "value": "[\"http://127.0.0.1:3268/gomdon-disabled\",\"ZALO_OA_ACCESS_TOKEN=(có giá trị giả, không ghi ra)\",\"waste.lane_pickup_enabled=false\"]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": "Không có tài khoản Gomdon, OA và ZaloPay thật; đường thu gom tận nhà đang tắt trong cấu hình mặc định. Web phải chỉ nhận chuyển khoản và COD theo Q4; thực tế còn hiện Ví Tubu (xem U6-37).",
+      "bugs": [],
+      "verdict": "BLOCKED"
+    }
+  ]
+}

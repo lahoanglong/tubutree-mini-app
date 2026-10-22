@@ -1,0 +1,268 @@
+{
+  "name": "h-layout",
+  "at": "2026-10-20T00:55:01.092Z",
+  "cases": [
+    {
+      "id": "U6-80-guest-390",
+      "role": "khách ghé",
+      "journey": "Quét bố cục",
+      "steps": "Mở 22 trang chính (khách quay lại thêm chi tiết đơn từng trạng thái và trang QR chuyển khoản), đo scrollWidth so với khổ máy 390px và đếm lỗi console/request (390px)",
+      "expected": "Không trang nào tràn ngang (scrollWidth ≤ khổ máy), không lỗi console ngoài nhiễu đã biết, không request 5xx/lỗi mạng",
+      "checks": [
+        {
+          "name": "không trang nào tràn ngang (22 trang)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không lỗi console/trang ngoài nhiễu đã biết",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không request 5xx/lỗi mạng",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trang tràn ngang",
+          "value": "[]"
+        },
+        {
+          "label": "lỗi console/trang",
+          "value": "[]"
+        },
+        {
+          "label": "request 5xx",
+          "value": "[]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-80-returning-390",
+      "role": "khách quay lại (3 mã)",
+      "journey": "Quét bố cục",
+      "steps": "Mở 22 trang chính (khách quay lại thêm chi tiết đơn từng trạng thái và trang QR chuyển khoản), đo scrollWidth so với khổ máy 390px và đếm lỗi console/request (390px)",
+      "expected": "Không trang nào tràn ngang (scrollWidth ≤ khổ máy), không lỗi console ngoài nhiễu đã biết, không request 5xx/lỗi mạng",
+      "checks": [
+        {
+          "name": "không trang nào tràn ngang (28 trang)",
+          "ok": false,
+          "detail": "[{\"page\":\"/san-pham/dau-tram-be-cobote\",\"sw\":465,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=448\",\"div. w=448\",\"div.flex items-center justify-between gap-2 w=448\",\"div.flex items-center w=133\"]},{\"page\":\"/san-pham/serum-duong-am-visante\",\"sw\":465,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border bord…"
+        },
+        {
+          "name": "không lỗi console/trang ngoài nhiễu đã biết",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không request 5xx/lỗi mạng",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trang tràn ngang",
+          "value": "[{\"page\":\"/san-pham/dau-tram-be-cobote\",\"sw\":465,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=448\",\"div. w=448\",\"div.flex items-center justify-between gap-2 w=448\",\"div.flex items-center w=133\"]},{\"page\":\"/san-pham/serum-duong-am-visante\",\"sw\":465,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=448\",\"div. w=448\",\"div.flex items-center justify-between gap-2 w=448\",\"div.flex items-center w=133\"]},{\"page\":\"/san-pham/nuoc-rua-chen-fuwa3e\",\"sw\":465,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=448\",\"div. w=448\",\"div.flex items-center justify-between gap-2 w=448\",\"div.flex items-center w=133\"]}]"
+        },
+        {
+          "label": "lỗi console/trang",
+          "value": "[]"
+        },
+        {
+          "label": "request 5xx",
+          "value": "[]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-80-returning-390-pdp-tran-ngang.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "U6-80-new_nophone-390",
+      "role": "khách mới không SĐT (4 mã)",
+      "journey": "Quét bố cục",
+      "steps": "Mở 22 trang chính (khách quay lại thêm chi tiết đơn từng trạng thái và trang QR chuyển khoản), đo scrollWidth so với khổ máy 390px và đếm lỗi console/request (390px)",
+      "expected": "Không trang nào tràn ngang (scrollWidth ≤ khổ máy), không lỗi console ngoài nhiễu đã biết, không request 5xx/lỗi mạng",
+      "checks": [
+        {
+          "name": "không trang nào tràn ngang (22 trang)",
+          "ok": false,
+          "detail": "[{\"page\":\"/san-pham/dau-tram-be-cobote\",\"sw\":461,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=445\",\"div. w=445\",\"div.flex items-center justify-between gap-2 w=445\",\"div.flex items-center w=133\"]},{\"page\":\"/san-pham/serum-duong-am-visante\",\"sw\":461,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border bord…"
+        },
+        {
+          "name": "không lỗi console/trang ngoài nhiễu đã biết",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không request 5xx/lỗi mạng",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trang tràn ngang",
+          "value": "[{\"page\":\"/san-pham/dau-tram-be-cobote\",\"sw\":461,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=445\",\"div. w=445\",\"div.flex items-center justify-between gap-2 w=445\",\"div.flex items-center w=133\"]},{\"page\":\"/san-pham/serum-duong-am-visante\",\"sw\":461,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=445\",\"div. w=445\",\"div.flex items-center justify-between gap-2 w=445\",\"div.flex items-center w=133\"]},{\"page\":\"/san-pham/nuoc-rua-chen-fuwa3e\",\"sw\":461,\"device\":390,\"culprits\":[\"div.relative aspect-square overflow-hidden rounded-sheet border border-sto w=445\",\"div. w=445\",\"div.flex items-center justify-between gap-2 w=445\",\"div.flex items-center w=133\"]}]"
+        },
+        {
+          "label": "lỗi console/trang",
+          "value": "[]"
+        },
+        {
+          "label": "request 5xx",
+          "value": "[]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-80-new_nophone-390-pdp-tran-ngang.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "U6-80-guest-1440",
+      "role": "khách ghé",
+      "journey": "Quét bố cục",
+      "steps": "Mở 22 trang chính (khách quay lại thêm chi tiết đơn từng trạng thái và trang QR chuyển khoản), đo scrollWidth so với khổ máy 1440px và đếm lỗi console/request (1440px)",
+      "expected": "Không trang nào tràn ngang (scrollWidth ≤ khổ máy), không lỗi console ngoài nhiễu đã biết, không request 5xx/lỗi mạng",
+      "checks": [
+        {
+          "name": "không trang nào tràn ngang (22 trang)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không lỗi console/trang ngoài nhiễu đã biết",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không request 5xx/lỗi mạng",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trang tràn ngang",
+          "value": "[]"
+        },
+        {
+          "label": "lỗi console/trang",
+          "value": "[]"
+        },
+        {
+          "label": "request 5xx",
+          "value": "[]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-80-returning-1440",
+      "role": "khách quay lại (3 mã)",
+      "journey": "Quét bố cục",
+      "steps": "Mở 22 trang chính (khách quay lại thêm chi tiết đơn từng trạng thái và trang QR chuyển khoản), đo scrollWidth so với khổ máy 1440px và đếm lỗi console/request (1440px)",
+      "expected": "Không trang nào tràn ngang (scrollWidth ≤ khổ máy), không lỗi console ngoài nhiễu đã biết, không request 5xx/lỗi mạng",
+      "checks": [
+        {
+          "name": "không trang nào tràn ngang (28 trang)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không lỗi console/trang ngoài nhiễu đã biết",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không request 5xx/lỗi mạng",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trang tràn ngang",
+          "value": "[]"
+        },
+        {
+          "label": "lỗi console/trang",
+          "value": "[]"
+        },
+        {
+          "label": "request 5xx",
+          "value": "[]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-80-new_nophone-1440",
+      "role": "khách mới không SĐT (4 mã)",
+      "journey": "Quét bố cục",
+      "steps": "Mở 22 trang chính (khách quay lại thêm chi tiết đơn từng trạng thái và trang QR chuyển khoản), đo scrollWidth so với khổ máy 1440px và đếm lỗi console/request (1440px)",
+      "expected": "Không trang nào tràn ngang (scrollWidth ≤ khổ máy), không lỗi console ngoài nhiễu đã biết, không request 5xx/lỗi mạng",
+      "checks": [
+        {
+          "name": "không trang nào tràn ngang (22 trang)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không lỗi console/trang ngoài nhiễu đã biết",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không request 5xx/lỗi mạng",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trang tràn ngang",
+          "value": "[]"
+        },
+        {
+          "label": "lỗi console/trang",
+          "value": "[]"
+        },
+        {
+          "label": "request 5xx",
+          "value": "[]"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    }
+  ]
+}

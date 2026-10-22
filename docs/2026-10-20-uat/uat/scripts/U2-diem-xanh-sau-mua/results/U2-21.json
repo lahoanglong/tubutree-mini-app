@@ -1,0 +1,112 @@
+{
+  "id": "U2-21",
+  "title": "Job subscriptions.process-due: tới hạn → tạo đơn kỳ (số lượng 2, giảm 12%, điểm đúng); chạy lại không tạo trùng; giao → cộng điểm",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:31:22.862Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "job tạo đúng 1 đơn kỳ mới (tổng 2 đơn), số lượng 2",
+      "ok": true,
+      "detail": {
+        "n": 2,
+        "qty": 2
+      }
+    },
+    {
+      "name": "đơn kỳ: subtotal 178000, giảm 12% 21360, điểm = floor(156640 × 2% × 1,2)",
+      "ok": true,
+      "detail": {
+        "code": "TUBUSUB7476863180",
+        "subtotal": 178000,
+        "discount": 21360,
+        "shippingFee": 0,
+        "total": 156640,
+        "pointsEarned": 3759,
+        "status": "CONFIRMED",
+        "source": "subscription",
+        "items": [
+          {
+            "quantity": 2,
+            "unitPrice": 89000
+          }
+        ]
+      }
+    },
+    {
+      "name": "nextRunAt ≈ hôm nay + 28 ngày",
+      "ok": true,
+      "detail": {
+        "days": 28
+      }
+    },
+    {
+      "name": "tồn kho −2",
+      "ok": true,
+      "detail": {
+        "before": 259,
+        "after": 257
+      }
+    },
+    {
+      "name": "chạy job lần 2: không tạo đơn trùng",
+      "ok": true
+    },
+    {
+      "name": "giao đơn kỳ: dòng sổ = pointsEarned, số dư = SUM sổ",
+      "ok": true,
+      "detail": {
+        "rows": [
+          3759
+        ],
+        "balance": 16920,
+        "sum": 16920
+      }
+    }
+  ],
+  "evidence": {
+    "job 1": {
+      "result": null,
+      "orders": [
+        {
+          "code": "TUBUSUB7462102476",
+          "subtotal": 89000,
+          "discount": 10680,
+          "shippingFee": 19000,
+          "total": 97320,
+          "pointsEarned": 1879,
+          "status": "DELIVERED",
+          "source": "subscription",
+          "items": [
+            {
+              "quantity": 1,
+              "unitPrice": 89000
+            }
+          ]
+        },
+        {
+          "code": "TUBUSUB7476863180",
+          "subtotal": 178000,
+          "discount": 21360,
+          "shippingFee": 0,
+          "total": 156640,
+          "pointsEarned": 3759,
+          "status": "CONFIRMED",
+          "source": "subscription",
+          "items": [
+            {
+              "quantity": 2,
+              "unitPrice": 89000
+            }
+          ]
+        }
+      ],
+      "nextRunAt": "2026-11-16T16:31:16.853Z"
+    },
+    "giao đơn kỳ": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    }
+  }
+}

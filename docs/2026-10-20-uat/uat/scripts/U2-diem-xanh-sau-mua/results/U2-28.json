@@ -1,0 +1,47 @@
+{
+  "id": "U2-28",
+  "title": "reconcile-wallet.ts (DRY-RUN) trên DB lane: walletBalance = SUM(wallet_transactions) mọi user",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:42:13.034Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "thoát mã 0",
+      "ok": true,
+      "detail": {
+        "code": 0
+      }
+    },
+    {
+      "name": "SQL: 0 user lệch ví",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "evidence": {
+    "output": [
+      "=== ĐỐI SOÁT Ví Tubu vs sổ cái wallet_transactions ===",
+      "User bị lệch   : 0",
+      "Chênh ròng     : 0đ (dương = ví nhiều hơn sổ ghi nhận)",
+      "Chênh tuyệt đối: 0đ",
+      "",
+      "Không có user nào lệch."
+    ],
+    "SQL lệch": [],
+    "ví khác 0": [
+      {
+        "id": "uat_returning",
+        "wallet": 224375
+      },
+      {
+        "id": "uat_u2_daithu",
+        "wallet": 199000
+      },
+      {
+        "id": "uat_u2_mam",
+        "wallet": 210000
+      }
+    ]
+  }
+}

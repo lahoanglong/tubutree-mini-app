@@ -1,0 +1,63 @@
+{
+  "id": "U2-24b",
+  "title": "Trả đơn bằng Ví Tubu trên Mini App: ví − total (ORDER_PAY), đơn PAID; giao xong cộng điểm như đơn thường",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:41:58.178Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "Mini App đặt 201, WALLET + PAID, ví − total (ORDER_PAY), = SUM sổ ví",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "pm": "WALLET",
+        "ps": "PAID",
+        "wallet": [
+          270000,
+          150000
+        ],
+        "sum": 150000
+      }
+    },
+    {
+      "name": "điểm đơn trả bằng ví = 2% × 1,2 × 120.000 = 2.880",
+      "ok": true,
+      "detail": 2880
+    },
+    {
+      "name": "giao: dòng sổ +2.880",
+      "ok": true,
+      "detail": [
+        2880
+      ]
+    }
+  ],
+  "evidence": {
+    "đơn ví": {
+      "code": "TUBU2026101927358",
+      "order": {
+        "id": "cmvfhf6kv00ow5ksf2vpe78m2",
+        "status": "CONFIRMED",
+        "paymentMethod": "WALLET",
+        "paymentStatus": "PAID",
+        "total": 120000,
+        "pointsEarned": 2880
+      },
+      "wallet": [
+        270000,
+        150000
+      ],
+      "wtx": [
+        {
+          "delta": -120000,
+          "type": "ORDER_PAY"
+        }
+      ]
+    },
+    "giao": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    }
+  }
+}

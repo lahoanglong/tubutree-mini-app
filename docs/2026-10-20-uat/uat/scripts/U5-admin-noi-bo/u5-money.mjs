@@ -250,7 +250,7 @@ if (want('U5-23')) {
     const row = (acc.data ?? acc.items ?? acc).find?.((x) => (x.userId ?? x.id) === 'uat_dealer');
     const ok = o.status === 'CONFIRMED' && led.some((x) => x.refType === 'ORDER' && x.note?.includes(code) && x.delta === o.total) && st < 300 && debt === led0[0].debt - 1_000_000 && led.filter((x) => x.note?.includes(bankRef)).length === 1 && row?.debt === debt;
     return {
-      actual: `Đơn sỉ ${code} ${o.status}/${o.paymentMethod} tổng ${o.total}đ (45×99.000×70%); dư nợ sau đặt ${led0[0].debt}. UI credit-payment (mã GD ${bankRef}) → ${st}; gửi lại cùng mã → ${replay.status}, dòng sổ mang mã này: ${led.filter((x) => x.note?.includes(bankRef)).length}. Sổ: ${brief(led.map((x) => `${x.delta} ${x.refType}`), 160)} → dư nợ ${debt}. API accounts: ${brief(row, 160)}. Tab hiện: ${tabDebt}`,
+      actual: `Đơn sỉ ${code} ${o.status}/${o.paymentMethod} tổng ${o.total}đ (${qty}×${v.sku} ${v.rp}đ, giá đại lý DEALER_2 −30%); dư nợ sau đặt ${led0[0].debt}. UI credit-payment (mã GD ${bankRef}) → ${st}; gửi lại cùng mã → ${replay.status}, dòng sổ mang mã này: ${led.filter((x) => x.note?.includes(bankRef)).length}. Sổ: ${brief(led.map((x) => `${x.delta} ${x.refType}`), 160)} → dư nợ ${debt}. API accounts: ${brief(row, 160)}. Tab hiện: ${tabDebt}`,
       evidence: `${ev}; SQL SUM(dealer_credit_ledgers.delta) WHERE userId='uat_dealer'`,
       verdict: ok ? 'PASS' : 'FAIL',
     };

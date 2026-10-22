@@ -15,12 +15,34 @@ const waitApi = (page, re, method = 'POST') =>
   page.waitForResponse((r) => re.test(new URL(r.url()).pathname) && r.request().method() === method, { timeout: 30_000 });
 const vnToday = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
 
-// ---------- U5-40 SystemConfig
+// ---------- U5-40 SystemConfig (khoá tiền/điểm có hỏi lại) + U5-48 (khoá tiền ngoài danh sách hỏi lại)
+/** Gõ giá trị vào thẻ cấu hình `key` rồi bấm Lưu. Trả {dialog: chữ hộp xác nhận hoặc null, status PUT}. Có hộp thì bấm "Lưu thay đổi". */
+async function saveConfig(p, key, value) {
+  const input = p.getByLabel(key, { exact: true });
+  await input.waitFor({ timeout: 90_000 });
+  const card = p.locator('div.rounded-card').filter({ has: input }).last();
+  await input.fill(value);
+  const put = waitApi(p, /\/api\/admin\/config$/, 'PUT');
+  put.catch(() => undefined);
+  await card.getByRole('button', { name: 'Lưu', exact: true }).click();
+  const d = p.getByRole('alertdialog');
+  const seen = await d.waitFor({ timeout: 4000 }).then(() => true).catch(() => false);
+  let dialog = null;
+  if (seen) {
+    dialog = (await d.innerText()).replace(/\n+/g, ' / ');
+    await d.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
+  }
+  const status = (await put).status();
+  await p.waitForLoadState('networkidle').catch(() => undefined);
+  return { dialog, status };
+}
+const cfg = async (key) => (await q(`SELECT value FROM system_configs WHERE key = $1`, key))[0]?.value;
+const cfgHist = (key, n) => q(`SELECT "oldValue", "newValue", "changedBy" FROM system_config_history WHERE key = $1 ORDER BY "changedAt" DESC LIMIT ${n}`, key);
+
 if (want('U5-40')) {
-  await runCase(rec, { id: 'U5-40', role: 'ADMIN', journey: 'Cấu hình: đổi một khoá tiền rồi đổi lại', steps: 'Tab Cấu hình, khoá affiliate.min_withdraw_bank: gõ "abc" → Lưu; gõ 60000 → Lưu → hộp "Xác nhận đổi cấu hình tiền/điểm" → Lưu thay đổi; CTV rút 56.000đ (dưới mức mới) qua API; đổi lại 50000', expected: 'JSON sai báo lỗi, không gọi API; đổi 60000 có hộp xác nhận tiền, DB = 60000, system_config_history ghi người đổi; mức mới có hiệu lực ngay (API đọc lại); đổi lại DB = 50000, lịch sử thêm dòng' }, async () => {
-    const key = 'affiliate.min_withdraw_bank';
-    const [before] = await q(`SELECT value FROM system_configs WHERE key = $1`, key);
-    const h0 = await q(`SELECT COUNT(*)::int AS n FROM system_config_history WHERE key = $1`, key);
+  await runCase(rec, { id: 'U5-40', role: 'ADMIN', journey: 'Cấu hình: đổi một khoá điểm rồi đổi lại', steps: 'Tab Cấu hình, khoá loyalty.max_redeem_pct (trần dùng điểm 20%): gõ "abc" → Lưu; gõ 0.25 → Lưu → hộp "Xác nhận đổi cấu hình tiền/điểm" → "Lưu thay đổi"; GET /admin/config đọc lại; đổi lại 0.2 như cũ', expected: 'JSON sai: báo "JSON không hợp lệ", không gọi API; đổi 0.25 có hộp xác nhận (config-item.tsx:9,31-37), DB = 0.25, system_config_history ghi uat_admin; đổi lại: DB = 0.2, thêm một dòng lịch sử' }, async () => {
+    const key = 'loyalty.max_redeem_pct';
+    const before = await cfg(key);
     const s = await openWebSession('admin', '/admin?tab=config');
     let ev = '';
     const out = {};
@@ -31,44 +53,56 @@ if (want('U5-40')) {
       const card = p.locator('div.rounded-card').filter({ has: input }).last();
       let calls = 0;
       p.on('request', (r) => {
-        if (r.method() === 'PUT' && r.url().endsWith('/api/admin/config')) calls++;
+        if (r.method() === 'PUT' && /\/api\/admin\/config$/.test(r.url())) calls++;
       });
       await input.fill('abc');
       await card.getByRole('button', { name: 'Lưu', exact: true }).click();
-      await p.waitForTimeout(500);
+      await p.waitForTimeout(800);
       out.badJson = { calls, err: (await card.locator('.text-danger-fg').innerText().catch(() => '')).trim() };
-      await input.fill('60000');
-      const r1 = waitApi(p, /\/api\/admin\/config$/, 'PUT');
-      await card.getByRole('button', { name: 'Lưu', exact: true }).click();
-      const d = p.getByRole('alertdialog');
-      await d.waitFor({ timeout: 10_000 });
-      out.dialog = (await d.innerText()).replace(/\n+/g, ' / ');
-      await d.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
-      out.put1 = (await r1).status();
-      await p.waitForLoadState('networkidle').catch(() => undefined);
-      ev = await shot(p, 'config-changed-admin-1440');
-      const [mid] = await q(`SELECT value FROM system_configs WHERE key = $1`, key);
-      out.mid = mid.value;
-      out.read = (await apiOk('GET', '/admin/config', { user: 'admin' })).find?.((x) => x.key === key)?.value ?? '(không đọc được)';
-      const input2 = p.getByLabel(key, { exact: true });
-      await input2.fill(String(before.value));
-      const r2 = waitApi(p, /\/api\/admin\/config$/, 'PUT');
-      await p.locator('div.rounded-card').filter({ has: input2 }).last().getByRole('button', { name: 'Lưu', exact: true }).click();
-      const d2 = p.getByRole('alertdialog');
-      await d2.waitFor({ timeout: 10_000 });
-      await d2.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click();
-      out.put2 = (await r2).status();
-      await p.waitForLoadState('networkidle').catch(() => undefined);
+      ev = await shot(p, 'config-badjson-admin-1440');
+      out.up = await saveConfig(p, key, '0.25');
+      out.mid = await cfg(key);
+      const all = await apiOk('GET', '/admin/config', { user: 'admin' });
+      out.read = (Array.isArray(all) ? all : (all.items ?? [])).find((x) => x.key === key)?.value;
+      ev += `, ${await shot(p, 'config-changed-admin-1440')}`;
+      out.back = await saveConfig(p, key, JSON.stringify(before));
     } finally {
       await s.close();
     }
-    const [after] = await q(`SELECT value FROM system_configs WHERE key = $1`, key);
-    const hist = await q(`SELECT "oldValue", "newValue", "changedBy" FROM system_config_history WHERE key = $1 ORDER BY "changedAt" DESC LIMIT 2`, key);
-    const ok = out.badJson.calls === 0 && out.badJson.err && /tiền\/điểm/.test(out.dialog) && out.put1 < 300 && Number(out.mid) === 60000 && out.put2 < 300 && JSON.stringify(after.value) === JSON.stringify(before.value) && hist.length === 2 && hist.every((x) => x.changedBy === 'uat_admin');
+    const after = await cfg(key);
+    const hist = await cfgHist(key, 2);
+    const ok = out.badJson.calls === 0 && /JSON không hợp lệ/.test(out.badJson.err) && /tiền\/điểm/.test(out.up.dialog ?? '') && out.up.status < 300 && Number(out.mid) === 0.25 && out.back.status < 300 && JSON.stringify(after) === JSON.stringify(before) && hist.length === 2 && hist.every((x) => x.changedBy === 'uat_admin') && Number(hist[0].newValue) === Number(before) && Number(hist[1].newValue) === 0.25;
     return {
-      actual: `JSON sai: ${out.badJson.calls} lời gọi, lỗi "${out.badJson.err}". Hộp thoại: "${brief(out.dialog, 140)}". PUT 60000 → ${out.put1}, DB ${JSON.stringify(out.mid)}, GET /admin/config đọc ${JSON.stringify(out.read)}. Đổi lại → ${out.put2}, DB ${JSON.stringify(after.value)} (trước ${JSON.stringify(before.value)}). Lịch sử: ${h0[0].n}→${h0[0].n + hist.length} dòng ${brief(hist, 160)}`,
+      actual: `JSON sai: ${out.badJson.calls} lời gọi PUT, lỗi "${out.badJson.err}". Đổi 0.25: hộp "${brief(out.up.dialog, 150)}" → PUT ${out.up.status}; DB ${JSON.stringify(out.mid)}; GET /admin/config đọc ${JSON.stringify(out.read)}. Đổi lại: hộp ${out.back.dialog ? 'có' : 'không'} → PUT ${out.back.status}; DB ${JSON.stringify(after)} (trước ${JSON.stringify(before)}). Lịch sử 2 dòng mới nhất: ${brief(hist, 200)}`,
       evidence: `${ev}; SQL system_configs + system_config_history WHERE key='${key}'`,
       verdict: ok ? 'PASS' : 'FAIL',
+    };
+  });
+}
+
+if (want('U5-48')) {
+  await runCase(rec, { id: 'U5-48', role: 'ADMIN', journey: 'Cấu hình: khoá tiền affiliate.* / coupon.* có hỏi lại như khoá tiền khác không', steps: 'Tab Cấu hình, affiliate.min_withdraw_bank (mức rút tối thiểu CTV, luật 50.000đ): gõ 60000 → Lưu; rồi coupon.staff_max_percent (trần 30%): gõ 30 → Lưu (giữ nguyên giá trị); cuối cùng trả affiliate.min_withdraw_bank về 50000', expected: 'Khoá tiền/điểm nào cũng hiện hộp "Xác nhận đổi cấu hình tiền/điểm" trước khi ghi (cùng lý do như payment./loyalty./wallet.: "Áp dụng ngay cho mọi đơn, ví và điểm"); giá trị cuối = 50000 và 30' }, async () => {
+    const s = await openWebSession('admin', '/admin?tab=config');
+    let ev = '';
+    const out = {};
+    try {
+      const p = s.page;
+      out.aff = await saveConfig(p, 'affiliate.min_withdraw_bank', '60000');
+      out.affDb = await cfg('affiliate.min_withdraw_bank');
+      ev = await shot(p, 'config-affiliate-noconfirm-admin-1440');
+      out.coupon = await saveConfig(p, 'coupon.staff_max_percent', '30');
+      out.restore = await saveConfig(p, 'affiliate.min_withdraw_bank', '50000');
+    } finally {
+      await s.close();
+      if (Number(await cfg('affiliate.min_withdraw_bank')) !== 50000) await apiOk('PUT', '/admin/config', { user: 'admin', body: { key: 'affiliate.min_withdraw_bank', value: 50000 } });
+    }
+    const final = { aff: await cfg('affiliate.min_withdraw_bank'), coupon: await cfg('coupon.staff_max_percent') };
+    const hist = await cfgHist('affiliate.min_withdraw_bank', 2);
+    const asked = Boolean(out.aff.dialog) && Boolean(out.coupon.dialog);
+    return {
+      actual: `affiliate.min_withdraw_bank 60000: hộp xác nhận ${out.aff.dialog ? 'CÓ' : 'KHÔNG'}, PUT ${out.aff.status}, DB ngay sau ${JSON.stringify(out.affDb)}. coupon.staff_max_percent: hộp ${out.coupon.dialog ? 'CÓ' : 'KHÔNG'}, PUT ${out.coupon.status}. Trả về 50000: hộp ${out.restore.dialog ? 'CÓ' : 'KHÔNG'}, PUT ${out.restore.status}. Cuối: ${JSON.stringify(final)}; lịch sử ${brief(hist, 160)}`,
+      evidence: `${ev}; SQL system_configs, system_config_history; apps/web/src/components/admin/config-item.tsx:9 (MONEY_PREFIXES chỉ có payment., loyalty., shipping., wallet., waste.)`,
+      verdict: asked && Number(final.aff) === 50000 ? 'PASS' : 'FAIL',
     };
   });
 }
@@ -390,9 +424,11 @@ if (want('U5-46')) {
     const approvedPayouts = await one(`SELECT COUNT(*)::int n FROM payouts WHERE status = 'APPROVED'`);
     const per = {};
     let ev = '';
+    const statusOf = {};
     for (const role of ['admin', 'ketoan', 'marketing', 'cskh', 'kho', 'staff']) {
-      const r = await apiOk('GET', '/admin/ops/inbox', { user: role });
-      per[role] = Object.fromEntries(r.items.map((i) => [i.key, i.count]));
+      const r = await api('GET', '/admin/ops/inbox', { user: role });
+      statusOf[role] = r.status;
+      per[role] = r.ok ? Object.fromEntries(r.body.items.map((i) => [i.key, i.count])) : {};
       const s = await openWebSession(role, '/admin');
       try {
         await s.page.getByRole('heading', { name: 'Việc cần xử lý' }).first().waitFor({ timeout: 90_000 }).catch(() => undefined);
@@ -414,9 +450,10 @@ if (want('U5-46')) {
     if (staffExtra.length) leak.push(`staff: ${staffExtra.join(',')}`);
     const ktMissing = ['customerRefunds', 'invoicePending'].filter((k) => !(k in per.ketoan));
     const ktPayoutKey = Object.keys(per.ketoan).some((k) => /payout/i.test(k) && k !== 'merchantPayoutsPending');
-    const fail = mism.length || leak.length || ktMissing.length || !ktPayoutKey;
+    const nonOk = Object.entries(statusOf).filter(([r, st]) => r !== "staff" && st !== 200).map(([r, st]) => `${r}=${st}`);
+    const fail = mism.length || leak.length || ktMissing.length || !ktPayoutKey || nonOk.length || statusOf.staff !== 403;
     return {
-      actual: `SQL ${brief(sql, 220)}; payout APPROVED chờ chi ${approvedPayouts}. ADMIN ${Object.keys(per.admin).length} mục${mism.length ? `, LỆCH ${mism.join('; ')}` : ', các mục đối chiếu khớp SQL'}. KẾ TOÁN: ${brief(per.ketoan, 160)}${ktMissing.length ? ` → THIẾU ${ktMissing.join(',')}` : ''}${ktPayoutKey ? '' : ' → không có mục rút tiền chờ chi'}. MARKETING: ${Object.keys(per.marketing).join(',')}. CSKH: ${Object.keys(per.cskh).join(',')}. KHO: ${Object.keys(per.kho).join(',')}. NHÂN VIÊN: ${Object.keys(per.staff).join(',')}${leak.length ? `. Lộ mục: ${leak.join('; ')}` : '. Không vai trò nào thấy mục ngoài nhóm'}`,
+      actual: `SQL ${brief(sql, 220)}; payout APPROVED chờ chi ${approvedPayouts}. ADMIN ${Object.keys(per.admin).length} mục${mism.length ? `, LỆCH ${mism.join('; ')}` : ', các mục đối chiếu khớp SQL'}. KẾ TOÁN: ${brief(per.ketoan, 160)}${ktMissing.length ? ` → THIẾU ${ktMissing.join(',')}` : ''}${ktPayoutKey ? '' : ' → không có mục rút tiền chờ chi'}. MARKETING: ${Object.keys(per.marketing).join(',')}. CSKH: ${Object.keys(per.cskh).join(',')}. KHO: ${Object.keys(per.kho).join(',')}. NHÂN VIÊN (không nhóm): GET ${statusOf.staff} (đúng @AllowStaff ở ops.controller.ts:31-33, tab duy nhất là Thu gom)${nonOk.length ? `. Lỗi gọi: ${nonOk.join(",")}` : ""}${leak.length ? `. Lộ mục: ${leak.join('; ')}` : '. Không vai trò nào thấy mục ngoài nhóm'}`,
       evidence: `${ev}; GET /admin/ops/inbox theo vai trò; SQL đếm hàng đợi; ops-inbox.service.ts:100,111-112`,
       verdict: fail ? 'FAIL' : 'PASS',
       note: ktMissing.includes('invoicePending') || !ktPayoutKey ? 'Xác nhận D2-03 (chưa sửa)' : '',

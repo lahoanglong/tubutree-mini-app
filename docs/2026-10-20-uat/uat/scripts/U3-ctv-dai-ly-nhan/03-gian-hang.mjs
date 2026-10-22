@@ -12,22 +12,20 @@ const R = recorder('03-gian-hang');
 const RUN = Date.now().toString(36).slice(-5);
 const PENDING_SLUG = 'uatctvpending';
 const pub = (slug) => api(L, 'GET', `/storefront/public/${slug}`, { bypass: true });
-async function ssr(slug, needle) {
-  const r = await fetch(`${L.webUrl}/s/${slug}`, { redirect: 'manual' });
+async function ssr(slug, needle, headers = {}) {
+  const r = await fetch(`${L.webUrl}/s/${slug}`, { redirect: 'manual', headers });
   const html = await r.text();
   return { status: r.status, has: needle ? html.includes(needle) : null, len: html.length };
 }
-// /s/[slug] dùng fetch revalidate 300 (Next data cache, có cả ở next dev): bản đã render được phục vụ tiếp tới khi hết 300 giây,
-// lượt đầu sau đó vẫn trả bản cũ và làm mới nền. Hỏi lại mỗi 15 giây, ghi số giây tới khi web trả wantStatus.
-async function ssrUntil(slug, wantStatus, needle, maxMs = 420_000) {
-  const t0 = Date.now();
-  const first = await ssr(slug, needle);
-  let last = first;
-  while (last.status !== wantStatus && Date.now() - t0 < maxMs) {
-    await sleep(15_000);
-    last = await ssr(slug, needle);
-  }
-  return { ...last, first: { status: first.status, has: first.has }, waitedSec: Math.round((Date.now() - t0) / 1000) };
+// /s/[slug] đọc API bằng fetch revalidate 300. Ở next dev (bộ khung) không có ISR theo trang: mỗi lượt render lấy dữ liệu từ data
+// cache, hết hạn thì trả bản cũ và tải lại nền, mà Next 14.2 chỉ ghi cache khi API trả 200 (dist/server/lib/patch-fetch.js:458),
+// nên gian hàng từng hiện vẫn hiện mãi trên next dev. Production tái tạo trang ISR ở chế độ isRevalidate (tải lại tiền cảnh) nên
+// thấy 404 của API. Để kiểm chính logic trang, gửi thêm một lượt "cache-control: no-cache" (next dev bỏ qua data cache) và chấm
+// theo lượt đó; lượt dùng cache ghi kèm làm bằng chứng cho mục "Hạn chế bộ khung".
+async function ssrBoth(slug, needle) {
+  const cached = await ssr(slug, needle);
+  const fresh = await ssr(slug, needle, { 'cache-control': 'no-cache' });
+  return { ...fresh, cached: { status: cached.status, has: cached.has } };
 }
 const sfRow = async (slug) =>
   (await sql(`SELECT s.id, s.slug, s.title, s."isPublished", s."approvedAt", s."takenDownAt", u.role::text AS "ownerRole" FROM storefronts s LEFT JOIN users u ON u.id = s."ownerUserId" WHERE s.slug = $1`, slug))[0];
@@ -42,7 +40,7 @@ try {
 
   // ---------- U3-16 gian hàng chờ duyệt bị ẩn ----------
   const api16 = await pub(PENDING_SLUG);
-  const web16 = await ssrUntil(PENDING_SLUG, 404, 'Gian hàng UAT');
+  const web16 = await ssrBoth(PENDING_SLUG, 'Gian hàng UAT');
   mini = await openMini('returning', { path: `/s/${PENDING_SLUG}` });
   await mini.page.getByText('Gian hàng này không tồn tại hoặc đã ngừng hoạt động.').waitFor({ timeout: 20_000 }).catch(() => undefined);
   const miniText16 = await mini.page.evaluate(() => document.body.innerText);
@@ -57,9 +55,9 @@ try {
   R.add({
     id: 'U3-16', role: 'CTV / khách', journey: 'Gian hàng chờ duyệt lần đầu', title: 'Gian hàng đã đăng nhưng chưa duyệt không hiện với khách',
     steps: `GET /storefront/public/${PENDING_SLUG}; web SSR /s/${PENDING_SLUG}; Mini App khách mở /s/${PENDING_SLUG}; chủ mở /storefront`,
-    expected: 'API 404; web 404 (lượt chạy lại: trong cửa sổ revalidate 300 giây); Mini App "Gian hàng này không tồn tại…"; chủ thấy "Gian hàng đang chờ Tubu Tree duyệt lần đầu…"',
+    expected: 'API 404; web 404 (lượt render mới); Mini App "Gian hàng này không tồn tại…"; chủ thấy "Gian hàng đang chờ Tubu Tree duyệt lần đầu…"',
     actual: { api: api16.status, web: web16, miniNotFound: miniText16.includes('không tồn tại'), ownerReason, db: await sfRow(PENDING_SLUG) },
-    evidence: `${s16a}, ${s16b}; HTTP API ${api16.status}, web lượt đầu ${web16.first.status} rồi ${web16.status} sau ${web16.waitedSec}s; SQL storefronts ${short(pend0)}`,
+    evidence: `${s16a}, ${s16b}; HTTP API ${api16.status}, web render mới ${web16.status} (bản data cache next dev: ${web16.cached.status}); SQL storefronts ${short(pend0)}`,
     status: api16.status === 404 && web16.status === 404 && miniText16.includes('không tồn tại') && /chờ Tubu Tree duyệt/.test(ownerReason ?? '') ? 'PASS' : 'FAIL',
   });
 
@@ -77,7 +75,7 @@ try {
   await web.close();
   web = null;
   const api17 = await pub(PENDING_SLUG);
-  const web17 = await ssr(PENDING_SLUG, api17.body?.title ?? 'Gian hàng');
+  const web17 = await ssr(PENDING_SLUG, api17.body?.title ?? 'Gian hàng', { 'cache-control': 'no-cache' });
   mini = await openMini('returning', { path: `/s/${PENDING_SLUG}` });
   await mini.page.waitForTimeout(1500);
   const miniText17 = await mini.page.evaluate(() => document.body.innerText);
@@ -154,7 +152,7 @@ try {
   mini = null;
   await apiOk(L, 'POST', `/admin/storefronts/${sf2.id}/approval`, { user: 'uat_admin', body: { approved: true } });
   const api19 = await pub(sf2.slug);
-  const web19 = await ssr(sf2.slug, newTitle);
+  const web19 = await ssr(sf2.slug, newTitle, { 'cache-control': 'no-cache' });
   mini = await openMini('returning', { path: `/s/${sf2.slug}` });
   await mini.page.getByText(newTitle).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
   const mini19 = (await mini.page.evaluate(() => document.body.innerText)).includes(newTitle);
@@ -212,7 +210,7 @@ try {
   const demote = await api(L, 'POST', '/admin/users/role', { user: 'uat_admin', body: { phone: ctv2Phone, role: 'CUSTOMER' } });
   await sleep(6_000); // SessionStateService cache vai trò 5 giây
   const api21 = await pub(sf2.slug);
-  const web21 = await ssrUntil(sf2.slug, 404, newTitle);
+  const web21 = await ssrBoth(sf2.slug, newTitle);
   mini = await openMini('returning', { path: `/s/${sf2.slug}` });
   await mini.page.waitForTimeout(1500);
   const mini21 = (await mini.page.evaluate(() => document.body.innerText)).includes('không tồn tại');
@@ -227,9 +225,9 @@ try {
   R.add({
     id: 'U3-21', role: 'ADMIN / khách', journey: 'Ẩn gian hàng khi CTV bị hạ vai trò', title: 'ADMIN hạ CTV về CUSTOMER → gian hàng ẩn ở API, web, Mini App',
     steps: `POST /admin/users/role {phone ${ctv2Phone}, role CUSTOMER}; chờ 6s; GET public, web SSR, Mini App /s/${sf2.slug}`,
-    expected: 'role đổi 2xx; API 404; web 404 (chậm tối đa cửa sổ revalidate 300 giây); Mini App "không tồn tại"',
+    expected: 'role đổi 2xx; API 404; web 404 (lượt render mới); Mini App "không tồn tại"',
     actual: { demote: demote.status, api: api21.status, web: web21, mini21, db: await sfRow(sf2.slug), ctvPageHead: ctvView.slice(0, 160) },
-    evidence: `${s21a}, ${s21b}; HTTP role ${demote.status}, API ${api21.status}, web lượt đầu ${web21.first.status} (còn tên=${web21.first.has}) rồi ${web21.status} sau ${web21.waitedSec}s`,
+    evidence: `${s21a}, ${s21b}; HTTP role ${demote.status}, API ${api21.status}, web render mới ${web21.status} (bản data cache next dev: ${web21.cached.status}, còn tên=${web21.cached.has})`,
     status: demote.status < 300 && api21.status === 404 && web21.status === 404 && mini21 ? 'PASS' : 'FAIL',
     data: { ctvPageShowsDashboard: ctvView.includes('Có thể rút'), ctvPageShowsRegister: ctvView.includes('Đăng ký miễn phí ngay') },
   });

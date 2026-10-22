@@ -240,18 +240,21 @@ const cases = [
       try {
         const t = bankTransfer(A.code, A.total);
         c.evidence('(a) lần 1', { event: t.event, after: t.orderAfter });
+        // Pancake gửi lại đúng một thông báo: dựng body từ đơn trên giả Pancake rồi gửi HAI lần y hệt.
         const body = { type: 'orders', ...(await fakePancakeOrder(A.code)) };
         const key = dedupeKey(body);
         const cnt = async () => (await sql(`SELECT COUNT(*)::int AS n FROM pancake_webhook_events WHERE "dedupeKey" = $1`, key))[0].n;
-        const before = await cnt();
-        c.evidence('(a) body gửi lại có cùng dedupeKey với lần 1?', { key: key.slice(0, 40), rowsBefore: before });
-        const again = await postWebhook(L, body);
-        c.evidence('(a) gửi lại cùng body', { http: again.http, reply: again.reply, event: again.event });
-        const ev = { n: await cnt() };
+        const paidAt0 = (await orderEvidence(A.code)).paidAt;
+        const r1 = await postWebhook(L, body);
+        const n1 = await cnt();
+        const r2 = await postWebhook(L, body);
+        const n2 = await cnt();
+        c.evidence('(a) gửi body lần 1 / lần 2', { key: key.slice(0, 40), first: { http: r1.http, reply: r1.reply, event: r1.event, rows: n1 }, second: { http: r2.http, reply: r2.reply, event: r2.event, rows: n2 } });
         const o = await orderEvidence(A.code);
         const rf = await refunds(o.id);
-        c.evidence('(a) SQL', { events: ev, status: o.status, ps: o.paymentStatus, refunds: rf });
-        c.check('(a) HTTP 200 + vẫn 1 dòng sự kiện cùng dedupeKey', again.http === 200 && ev.n === 1, { http: again.http, reply: again.reply, events: ev });
+        c.evidence('(a) SQL', { status: o.status, ps: o.paymentStatus, paidAt0, paidAt: o.paidAt, refunds: rf });
+        c.check('(a) lần 2 HTTP 200, gộp vào cùng 1 dòng sự kiện (không xử lý lại)', r2.http === 200 && n1 === 1 && n2 === 1 && r2.event?.id === r1.event?.id, { r1: r1.event, r2: r2.event, n1, n2 });
+        c.check('(a) paidAt không đổi', String(o.paidAt) === String(paidAt0));
         c.check('(a) đơn PAID một lần, 0 khoản hoàn', o.paymentStatus === 'PAID' && rf.length === 0);
       } finally {
         await A.s.close();
@@ -300,7 +303,7 @@ const cases = [
     steps:
       'Đơn chuyển khoản 199k dùng voucher chào mừng → lùi createdAt 25 giờ → run-job orders.pending-payment-expiry (PendingPaymentExpiryCron.expireStale) → mở lại màn QR → chuyển 169.000đ muộn',
     expected:
-      'Đơn CANCELLED; lượt voucher chào mừng trả lại (usedCount 0, 0 redemption); tồn kho trả; màn QR không cho trả tiền (báo đơn đã huỷ); tiền về muộn: đơn KHÔNG sống lại, ghi khoản hoàn LATE_PAYMENT 169.000đ',
+      'Đơn CANCELLED; lượt voucher chào mừng trả lại (usedCount 0, 0 redemption); tồn kho trả; màn QR (đang mở lẫn mở lại) thôi hiện STK/QR và nói rõ đơn đã huỷ vì quá hạn; tiền về muộn: đơn KHÔNG sống lại, ghi khoản hoàn LATE_PAYMENT 169.000đ và báo khách chọn nơi nhận',
     async run(c) {
       const { u, s, code, total } = await placeBankOrder(c, 'd24', { coupon: 'Quà chào mừng thành viên mới' });
       const since = new Date();
@@ -318,12 +321,19 @@ const cases = [
         c.check('DB: đơn CANCELLED', o.status === 'CANCELLED');
         c.check('DB: voucher chào mừng trả lượt (usedCount 0, 0 redemption)', cs.usedCount === 0 && cs.redemptions === 0, cs);
         c.check('DB: tồn kho FUWA-DW-1L trả lại 1', stock1.stock === stock0.stock + 1 || stock1.reservedStock === stock0.reservedStock - 1, { stock0, stock1 });
+        // Màn QR khách đang mở từ trước (poll 4 giây/lần) — trường hợp hay gặp nhất khi quá hạn.
+        await s.page.waitForTimeout(9000);
+        const open = await s.page.locator('body').innerText();
+        c.evidence('ảnh màn QR đang mở lúc đơn bị huỷ', await shot(s.page, 'U1-24-bank-expired-open'));
+        c.evidence('chữ màn QR đang mở sau huỷ', open.split('\n').filter((x) => x.trim()).slice(0, 22));
+        c.check('màn QR đang mở thôi hiện STK/QR sau khi đơn huỷ', !open.includes(BANK.accountNo));
         await s.goto(`/bank-payment/${code}`);
         await s.page.waitForTimeout(2000);
         const txt = await s.page.locator('body').innerText();
-        c.evidence('ảnh màn QR sau huỷ', await shot(s.page, 'U1-24-bank-expired'));
-        c.evidence('chữ màn QR sau huỷ', txt.split('\n').filter((x) => x.trim()).slice(0, 12));
-        c.check('màn QR không còn hiện STK để chuyển', !txt.includes(BANK.accountNo));
+        c.evidence('ảnh màn QR mở lại sau huỷ', await shot(s.page, 'U1-24-bank-expired'));
+        c.evidence('chữ màn QR mở lại sau huỷ', txt.split('\n').filter((x) => x.trim()).slice(0, 12));
+        c.check('màn QR mở lại không còn hiện STK để chuyển', !txt.includes(BANK.accountNo));
+        c.check('màn QR mở lại nói rõ đơn đã huỷ (không phải "Không tải được… Thử lại")', /huỷ|hủy|quá hạn/i.test(txt), txt.split('\n').slice(0, 4));
         const late = bankTransfer(code, total);
         c.evidence('tiền về muộn', { event: late.event, after: late.orderAfter });
         const o2 = await orderEvidence(code);
@@ -332,7 +342,8 @@ const cases = [
         c.check('đơn không sống lại (vẫn CANCELLED)', o2.status === 'CANCELLED');
         c.check('ghi khoản LATE_PAYMENT 169.000đ', rf.some((r) => r.kind === 'LATE_PAYMENT' && r.amount === total), rf);
         const n = await notes(u.id, since);
-        c.evidence('thông báo cho khách', n);
+        c.evidence('thông báo cho khách', n.map((x) => ({ templateCode: x.templateCode, text: x.text.slice(0, 220) })));
+        c.check('khách nhận ORDER_PAYMENT_EXPIRED + REFUND_LATE_PAYMENT', ['ORDER_PAYMENT_EXPIRED', 'REFUND_LATE_PAYMENT'].every((t) => n.some((x) => x.templateCode === t)), n.map((x) => x.templateCode));
       } finally {
         await s.close();
       }

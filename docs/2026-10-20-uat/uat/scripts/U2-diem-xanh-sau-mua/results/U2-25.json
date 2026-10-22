@@ -1,0 +1,217 @@
+{
+  "id": "U2-25",
+  "title": "Trả một phần sau giao (Đại Thụ, COD 199.000đ: trả nước lau kính 79.000đ, lý do lỗi): điểm khoá khi chờ, duyệt → thu hồi điểm theo tỉ lệ, hoàn 79.000đ vào Ví Tubu",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:42:12.556Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "yêu cầu trả 1 dòng tạo được (REQUESTED, nhận về Ví)",
+      "ok": true,
+      "detail": {
+        "http": 201,
+        "status": "REQUESTED"
+      }
+    },
+    {
+      "name": "đang chờ xử lý trả: điểm đơn bị khoá (lockedReturnPoints)",
+      "ok": true,
+      "detail": {
+        "lockedReturnPoints": 5970,
+        "pointsEarned": 5970
+      }
+    },
+    {
+      "name": "return APPROVED, refundAmount 79.000",
+      "ok": true,
+      "detail": {
+        "status": "APPROVED",
+        "refundAmount": 79000,
+        "shippingRefund": 0,
+        "pointsReversed": 2370,
+        "pointsRefunded": 0,
+        "fullReturn": false,
+        "refundMethod": "WALLET"
+      }
+    },
+    {
+      "name": "thu hồi điểm theo tỉ lệ 79.000/199.000 × 5970 ≈ 2370 (±1)",
+      "ok": true,
+      "detail": {
+        "pointsReversed": 2370,
+        "rows": [
+          {
+            "delta": 5970,
+            "reason": "ORDER_DELIVERED:TUBU2026101985096",
+            "refType": "ORDER"
+          },
+          {
+            "delta": -2370,
+            "reason": "RETURN_REVERSED:TUBU2026101985096",
+            "refType": "RETURN_REQUEST"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SQL: số dư điểm = trước − pointsReversed = SUM sổ",
+      "ok": true,
+      "detail": {
+        "bal": [
+          421940,
+          419570
+        ],
+        "sum": 419570
+      }
+    },
+    {
+      "name": "Ví Tubu + 79.000 (ORDER_REFUND), walletBalance = SUM sổ ví",
+      "ok": true,
+      "detail": {
+        "wallet": [
+          0,
+          79000
+        ],
+        "sum": 79000
+      }
+    },
+    {
+      "name": "chi tiêu xét hạng trừ phần đã hoàn (spent12m −79.000)",
+      "ok": true,
+      "detail": {
+        "spent12m": [
+          20648000,
+          20569000
+        ]
+      }
+    },
+    {
+      "name": "sau xử lý trả: hết khoá do chờ trả",
+      "ok": true,
+      "detail": 0
+    }
+  ],
+  "evidence": {
+    "giao": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    },
+    "đơn": {
+      "id": "cmvfhfcia00sj5ksfnxfz4wyz",
+      "pointsEarned": 5970,
+      "total": 199000,
+      "items": [
+        {
+          "id": "cmvfhfcia00sk5ksf7t1pd16m",
+          "productName": "Nước rửa chén sinh học Fuwa3e",
+          "variationName": "1L",
+          "total": 120000
+        },
+        {
+          "id": "cmvfhfcia00sl5ksf3a956aop",
+          "productName": "Nước lau kính enzyme Fuwa3e",
+          "variationName": "500ml",
+          "total": 79000
+        }
+      ]
+    },
+    "POST return-request": {
+      "http": 201,
+      "id": "cmvfhfez400tc5ksfb2cpaz05",
+      "status": "REQUESTED",
+      "refundMethod": "WALLET"
+    },
+    "admin preview": {
+      "requestId": "cmvfhfez400tc5ksfb2cpaz05",
+      "shopFault": true,
+      "defaultShopFault": true,
+      "isFull": false,
+      "goods": 79000,
+      "shipping": 0,
+      "refund": 79000,
+      "moneyRefundable": true,
+      "destination": {
+        "method": "WALLET"
+      },
+      "pointsUsedBack": 0,
+      "pointsEarnedBack": 2370,
+      "lines": [
+        {
+          "orderItemId": "cmvfhfcia00sl5ksf3a956aop",
+          "quantity": 1,
+          "refundAmount": 79000,
+          "productName": "Nước lau kính enzyme Fuwa3e",
+          "variationName": "500ml",
+          "orderedQuantity": 1
+        }
+      ],
+      "pancakeTask": true,
+      "returnTo": {
+        "kind": "TUBU",
+        "name": "Kho Tubu Tree"
+      }
+    },
+    "admin duyệt": {
+      "status": 201,
+      "refundAmount": 79000,
+      "pointsReversed": 2370
+    },
+    "admin đã nhận hàng": {
+      "status": 201
+    },
+    "sau duyệt": {
+      "request": {
+        "status": "APPROVED",
+        "refundAmount": 79000,
+        "shippingRefund": 0,
+        "pointsReversed": 2370,
+        "pointsRefunded": 0,
+        "fullReturn": false,
+        "refundMethod": "WALLET"
+      },
+      "points": [
+        {
+          "delta": 5970,
+          "reason": "ORDER_DELIVERED:TUBU2026101985096",
+          "refType": "ORDER"
+        },
+        {
+          "delta": -2370,
+          "reason": "RETURN_REVERSED:TUBU2026101985096",
+          "refType": "RETURN_REQUEST"
+        }
+      ],
+      "wallet": [
+        0,
+        79000
+      ],
+      "walletRows": [
+        {
+          "delta": 79000,
+          "type": "ORDER_REFUND",
+          "reason": "Hoàn tiền trả hàng đơn TUBU2026101985096",
+          "refType": "RETURN_REQUEST",
+          "refId": "cmvfhfez400tc5ksfb2cpaz05"
+        }
+      ],
+      "balance": [
+        421940,
+        419570
+      ],
+      "spent12m": [
+        20648000,
+        20569000
+      ]
+    },
+    "chi tiết đơn sau trả (Mini App)": [
+      "Đã cộng +5.970, đã thu lại 2.370 điểm do trả hàng",
+      "Hoàn tiền",
+      "Hoàn tiền trả hàng: đã hoàn vào Ví Tubu · 79.000đ",
+      "Đã cộng vào Ví Tubu lúc 23:42 19/10/2026.",
+      "Đổi/trả đã duyệt — đã hoàn 79.000đ vào Ví Tubu",
+      "Trả: Nước lau kính enzyme Fuwa3e ×1",
+      "Trả thêm sản phẩm"
+    ]
+  }
+}

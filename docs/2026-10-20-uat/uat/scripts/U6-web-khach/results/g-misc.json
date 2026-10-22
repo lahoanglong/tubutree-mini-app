@@ -1,0 +1,553 @@
+{
+  "name": "g-misc",
+  "at": "2026-10-20T01:00:22.590Z",
+  "cases": [
+    {
+      "id": "U6-71",
+      "role": "Khách quay lại",
+      "journey": "Xếp hạng + sự kiện",
+      "steps": "Mở /cong-dong/xep-hang và /cong-dong/su-kien ở 390 và 1440px",
+      "expected": "Hai trang mở được, không lỗi API, không tràn ngang, trạng thái trống có câu hướng dẫn",
+      "checks": [
+        {
+          "name": "390 /cong-dong/xep-hang: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":390,\"iw\":390,\"layoutVw\":390}}"
+        },
+        {
+          "name": "390 /cong-dong/xep-hang: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nBảng xếp hạng\nHạng\nThành viên\nđiểm uy tín\n🥇\nNguyễn Thị Quay Lại\n🌱 Mầm\n5 điểm uy tín\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiê"
+        },
+        {
+          "name": "390 /cong-dong/su-kien: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":390,\"iw\":390,\"layoutVw\":390}}"
+        },
+        {
+          "name": "390 /cong-dong/su-kien: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nSự kiện\nChưa có sự kiện nào\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nH"
+        },
+        {
+          "name": "1440 /cong-dong/xep-hang: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}}"
+        },
+        {
+          "name": "1440 /cong-dong/xep-hang: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nBảng xếp hạng\nHạng\nThành viên\nđiểm uy tín\n🥇\nNguyễn Thị Quay Lại\n🌱 Mầm\n5 điểm uy tín\n\nSống xan"
+        },
+        {
+          "name": "1440 /cong-dong/su-kien: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}}"
+        },
+        {
+          "name": "1440 /cong-dong/su-kien: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nSự kiện\nChưa có sự kiện nào\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn"
+        }
+      ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-71-xep-hang-390.png",
+        "uat/shots/U6-web-khach/U6-71-su-kien-390.png",
+        "uat/shots/U6-web-khach/U6-71-xep-hang-1440.png",
+        "uat/shots/U6-web-khach/U6-71-su-kien-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-75",
+      "role": "Khách quay lại (CUSTOMER)",
+      "journey": "Phân quyền",
+      "steps": "Mở /admin, /nhan-vien, /nhan-vien/bang-luong, /hoc-vien, /chu-thuong-hieu trên web; gọi API quản trị/nhân viên/CTV bằng token khách (390px)",
+      "expected": "Web: câu từ chối dễ hiểu, không lộ dữ liệu, không trang trắng; API: /admin/*, /staff/* trả 403, không trả dữ liệu người khác",
+      "checks": [
+        {
+          "name": "/admin: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Tubu Tree\nQuản trị\nVề cửa hàng\nĐăng xuất\nBạn không có quyền truy cập trang quản trị."
+        },
+        {
+          "name": "/nhan-vien: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Tài khoản\nCa làm của tôi\n\nTrang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt"
+        },
+        {
+          "name": "/nhan-vien/bang-luong: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Tài khoản\nLương của tôi\n\nTrang dành cho nhân viên.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 60"
+        },
+        {
+          "name": "/chu-thuong-hieu: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\n← Tài khoản\nQuản lý nhãn hàng\nQuản lý nhãn hàng\n\nBạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên"
+        },
+        {
+          "name": "/hoc-vien (CTV Academy): khách thường thấy lời mời/giải thích, không phải lỗi thô \"Bạn không có quyền truy cập tài nguyên này\" kèm nút Thử lại",
+          "ok": false,
+          "detail": "Tìm sản phẩm\nN\nLại\nCTV Academy\nHọc kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày\n\nBạn không có quyền truy cập tài nguyên này.\n\nThử lại\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotli"
+        },
+        {
+          "name": "API GET /admin/users với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":403,\"body\":\"{\\\"message\\\":\\\"Bạn không có quyền truy cập tài nguyên này.\\\",\\\"error\\\":\\\"Forbidden\\\",\\\"statusCode\\\":403}\"}"
+        },
+        {
+          "name": "API GET /admin/orders với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":403,\"body\":\"{\\\"message\\\":\\\"Bạn không có quyền truy cập tài nguyên này.\\\",\\\"error\\\":\\\"Forbidden\\\",\\\"statusCode\\\":403}\"}"
+        },
+        {
+          "name": "API GET /admin/config với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":403,\"body\":\"{\\\"message\\\":\\\"Bạn không có quyền truy cập tài nguyên này.\\\",\\\"error\\\":\\\"Forbidden\\\",\\\"statusCode\\\":403}\"}"
+        },
+        {
+          "name": "API GET /staff/today với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":404,\"body\":\"{\\\"message\\\":\\\"Cannot GET /api/staff/today\\\",\\\"error\\\":\\\"Not Found\\\",\\\"statusCode\\\":404}\"}"
+        },
+        {
+          "name": "API GET /affiliate/dashboard với token khách: 401/403/404, hoặc 200 chỉ gồm số 0/danh sách rỗng của chính họ",
+          "ok": true,
+          "detail": "{\"status\":200,\"body\":\"{\\\"withdrawingCommission\\\":0,\\\"todayCommission\\\":0,\\\"monthCommission\\\":0,\\\"pendingCommission\\\":0,\\\"withdrawableCommission\\\":0,\\\"totalClicks\\\":0,\\\"totalConversions\\\":0,\\\"monthR\"}"
+        },
+        {
+          "name": "API GET /dealer/orders với token khách: 401/403/404, hoặc 200 chỉ gồm số 0/danh sách rỗng của chính họ",
+          "ok": true,
+          "detail": "{\"status\":200,\"body\":\"[]\"}"
+        },
+        {
+          "name": "API PUT /admin/config với token khách → 401/403/404",
+          "ok": true,
+          "detail": "403"
+        },
+        {
+          "name": "cấu hình waste.gift_claim_days không bị khách đổi (vẫn 60)",
+          "ok": true
+        }
+      ],
+      "evidence": [
+        {
+          "label": "/hoc-vien với khách thường",
+          "value": "{\"text\":\"Tìm sản phẩm\\nN\\nLại\\nCTV Academy\\nHọc kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày\\n\\nBạn không có quyền truy cập tài nguyên này.\\n\\nThử lại\\n\\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\\n\\nHỗ trợ khách hàng\\nHotli\",\"bad\":[\"GET /academy/courses 403\",\"GET /academy/courses 403\"]}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-75-hoc-vien-khach-thuong.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "U6-76",
+      "role": "Khách quay lại, khách mới, khách ghé",
+      "journey": "Trang lỗi và IDOR",
+      "steps": "Mở sản phẩm/gian hàng/đơn không tồn tại; khách khác mở trang QR chuyển khoản của đơn người khác; khách ghé mở QR (390px)",
+      "expected": "Trang 404 thân thiện có đường quay về; trang QR của đơn người khác trả 404 và KHÔNG lộ STK/số tiền/mã đơn; khách ghé bị mời đăng nhập",
+      "checks": [
+        {
+          "name": "sản phẩm không tồn tại: 404 + câu thân thiện + đường quay về",
+          "ok": true,
+          "detail": "{\"status\":404,\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nKhông tìm thấy trang\\n\\nTrang bạn tìm không tồn tại hoặc đã được chuyển đi.\\n\\nVề trang chủ\\n\\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Vi\"}"
+        },
+        {
+          "name": "gian hàng không tồn tại: 404 + câu thân thiện",
+          "ok": true,
+          "detail": "{\"status\":404,\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nKhông tìm thấy trang\\n\\nTrang bạn tìm không tồn tại hoặc đã được chuyển đi.\\n\\nVề trang chủ\\n\\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiê\"}"
+        },
+        {
+          "name": "khách ghé mở đơn: mời đăng nhập, không lộ gì",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nĐăng nhập\n← Đơn hàng của tôi\nChi tiết đơn hàng\n\nĐăng nhập để xem đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nSống xanh An Lành — mỹ phẩm và đồ t"
+        },
+        {
+          "name": "dựng đơn chuyển khoản của returning",
+          "ok": true,
+          "detail": "{\"status\":201,\"ok\":true,\"body\":{\"id\":\"cmvfif77o02yco4t3qtbsjk8a\",\"code\":\"TUBU2026101981919\",\"userId\":\"uat_returning\",\"type\":\"RETAIL\",\"status\":\"PENDING_PAYMENT\",\"subtotal\":89000,\"discount\":0,\"couponDiscount\":0,\"comboDiscount\":0,\"tierDiscount\":0,\"pointsDiscount\":0,\"shippingFee\":19000,\"total\":108000,\"pointsEarned\":2136,\"pointsUsed\":0,\"pointsUsedConverted\":0,\"paymentMethod\":\"BANK_TRANSFER\",\"paymentSta…"
+        },
+        {
+          "name": "API: khách khác lấy QR đơn của returning → 404",
+          "ok": true,
+          "detail": "{\"status\":404,\"body\":\"{\\\"message\\\":\\\"Không tìm thấy đơn hàng.\\\",\\\"error\\\":\\\"Not Found\\\",\\\"statusCode\\\":404}\"}"
+        },
+        {
+          "name": "web: khách khác mở trang QR đơn người khác → không lộ STK/số tiền/mã đơn",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nL\nMới\nThanh toán chuyển khoản\n\nMở app ngân hàng / ví bất kỳ để quét mã VietQR bên dưới.\n\nKhông tải được thông tin thanh toán.\n\nThử lại\nĐể sau / Xem đơn hàng\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thươn"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "khách ghé gọi QR",
+          "value": "0"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-76-404-san-pham.png",
+        "uat/shots/U6-web-khach/U6-76-idor-qr.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-72",
+      "role": "Khách mới chưa có SĐT (uat_new_nophone)",
+      "journey": "Vườn Xanh",
+      "steps": "Mở /vuon-xanh; điểm danh; điểm danh lần hai; tưới cây khi chưa đủ giọt nước; góp quỹ khi chưa đủ điểm; trả lời quiz (390px)",
+      "expected": "Điểm danh lần đầu cộng giọt nước + game_profiles.streakDays=1; lần hai bị chặn (DB không đổi); tưới cây thiếu giọt báo rõ không trừ; góp quỹ thiếu điểm báo rõ không trừ điểm; quiz ghi đúng 1 lượt/ngày (game_quiz_attempts)",
+      "checks": [
+        {
+          "name": "trang mở được, có cây + \"Điểm danh\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n1\nT\nSố\nVườn Xanh\n🌱\nCây Dứa Fuwa3e\n\n0/600💧 · 💧 0 · 🔥 0 ngày · 🌳 góp quỹ: 0\n\nHôm nay\nVườn\nCộng đồng\nTưới cây (20💧)\nGóp quỹ trồng cây (50.000 điểm)\n\nGóp bằng Điểm Xanh — dùng điểm thườ"
+        },
+        {
+          "name": "không request API lỗi (ngoài /brand/owner/me)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "DB: streakDays = 1 sau điểm danh",
+          "ok": true,
+          "detail": "{\"sd\":1}"
+        },
+        {
+          "name": "giọt nước tăng sau điểm danh",
+          "ok": true,
+          "detail": "{\"user0\":{\"coins\":0},\"user1\":{\"coins\":10}}"
+        },
+        {
+          "name": "điểm danh lần 2 không cộng thêm (DB không đổi)",
+          "ok": true,
+          "detail": "{\"gp1\":{\"sd\":1},\"gp2\":{\"sd\":1},\"user1\":{\"coins\":10},\"user2\":{\"coins\":10}}"
+        },
+        {
+          "name": "tưới cây thiếu giọt: số giọt không âm và có câu báo (đủ/không đủ)",
+          "ok": true,
+          "detail": "{\"coinsAfterWater\":0}"
+        },
+        {
+          "name": "góp quỹ khi 0 điểm: không trừ điểm và có câu báo",
+          "ok": true,
+          "detail": "{\"pts0\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"pts1\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"text\":\"Tìm sản phẩm\\n1\\nT\\nSố\\nVườn Xanh\\n🌱\\nCây Dứa Fuwa3e\\n\\n0/600💧 · 💧 0 · 🔥 1 ngày · 🌳 góp quỹ: 0\\n\\nHôm nay\\nVườn\\nCộng đồng\\nTưới cây (20💧)\\nGóp quỹ trồng cây (50.000 điểm)\\n\\nGóp bằng Điểm Xanh — dùng điểm thườ\"}"
+        },
+        {
+          "name": "góp quỹ thiếu điểm hiện câu báo rõ ràng",
+          "ok": true,
+          "detail": "Góp quỹ trồng cây (50.000 điểm)\n\nGóp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.\n\nĐiểm danh chuỗi 1 ngày\n\nNhận giọt nước tưới cây mỗi ngày\n\nĐã điểm danh\n💧\nN1\n2\nN2\n🎁\nN"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trước",
+          "value": "{\"gp0\":{\"sd\":0},\"user0\":{\"coins\":0},\"pts0\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1}}"
+        },
+        {
+          "label": "POST điểm danh Vườn Xanh",
+          "value": "{\"status\":201,\"body\":\"{\\\"seedsEarned\\\":10,\\\"pointsEarned\\\":0,\\\"streakDays\\\":1,\\\"totalSeeds\\\":10,\\\"streakFrozeUsed\\\":false,\\\"bonusNote\\\":\\\"\\\"}\"}"
+        },
+        {
+          "label": "sau điểm danh",
+          "value": "{\"gp1\":{\"sd\":1},\"user1\":{\"coins\":10}}"
+        },
+        {
+          "label": "điểm danh Vườn Xanh lần 2 (API)",
+          "value": "{\"status\":400,\"body\":{\"message\":\"Hôm nay bạn đã điểm danh rồi 🌿\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        },
+        {
+          "label": "sau khi tưới thiếu giọt",
+          "value": "Tìm sản phẩm\n1\nT\nSố\nVườn Xanh\n🌱\nCây Dứa Fuwa3e\n\n0/600💧 · 💧 0 · 🔥 1 ngày · 🌳 góp quỹ: 0\n\nHôm nay\nVườn\nCộng đồng\nTưới cây (20💧)\nGóp quỹ trồng cây (50.000 điểm)\n\nGóp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.\n\nĐiểm danh chuỗi 1 ngày\n\nNhận giọt nước tưới cây mỗi ngày\n\nĐã điểm danh\n💧\nN1\n2\nN2\n🎁\nN3\n4\nN4\n5\nN5\n6\nN6\n🎁\nN7\nVé giữ lửa:\n0\nMua (80💧)\nHứng giọt sương\n\nVé "
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-72-vuon-xanh-dau.png",
+        "uat/shots/U6-web-khach/U6-72-tuoi-cay-thieu-giot.png",
+        "uat/shots/U6-web-khach/U6-72-gop-quy-thieu-diem.png"
+      ],
+      "notes": [
+        "không tìm thấy nút đáp án quiz theo tên (quiz đổi theo ngày)"
+      ],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-70",
+      "role": "Khách quay lại + khách chưa đăng nhập",
+      "journey": "Cộng đồng",
+      "steps": "Khách ghé mở /cong-dong rồi bấm \"Đăng bài\"; khách đăng nhập: đăng bài Hỏi đáp, mở bài, thích, bình luận, xoá bài (390px)",
+      "expected": "Khách ghé xem được feed nhưng \"Đăng bài\" đưa tới đăng nhập; đăng bài tạo feed_posts (userId, kind, body, status hiển thị); thích tăng likeCount + feed_reactions đúng 1 dòng, bỏ thích về 0; bình luận tạo feed_comments; xoá bài làm bài biến mất khỏi feed",
+      "checks": [
+        {
+          "name": "khách ghé /cong-dong thấy lời mời đăng nhập (feed chỉ dành cho người đã đăng nhập, giống Mini App luôn đăng nhập)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nĐăng nhập\nCộng đồng Vườn Tubu\nFacebook\nTikTok\n\nĐăng nhập để xem cộng đồng\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng "
+        },
+        {
+          "name": "API feed không trả bài cho khách chưa đăng nhập (401/403)",
+          "ok": true,
+          "detail": "401"
+        },
+        {
+          "name": "POST /feed → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "DB: có bài QUESTION của uat_returning",
+          "ok": true,
+          "detail": "{\"id\":\"cmvfyo2yw04lqo4t3ih5pwlvi\",\"kind\":\"QUESTION\",\"status\":\"PUBLISHED\",\"body\":\"UAT web: bé nhà mình 4 tháng tuổi dùng dầu tràm được chưa ạ?\",\"lc\":0}"
+        },
+        {
+          "name": "trang bài hiện nội dung vừa đăng",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nCộng đồng Vườn Tubu\nNguyễn Thị Quay Lại\nvừa xong\nHỏi đáp\nUAT web: dầu tràm dùng cho bé mấy tháng?\n\nUAT web: bé nhà mình 4 tháng tuổi dùng dầu tràm được chưa ạ?\n\nLượt thích:\n0\nBình luận:\n0\nTrả lời (0)\n\nHãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!\n\nGửi\n\nSống xanh An Lành — mỹ phẩ"
+        },
+        {
+          "name": "thích → 1 dòng feed_reactions và likeCount = 1",
+          "ok": true,
+          "detail": "{\"status\":201,\"reacts\":1,\"lc\":1}"
+        },
+        {
+          "name": "bỏ thích → likeCount về 0",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "bình luận → 1 dòng feed_comments đúng nội dung",
+          "ok": true,
+          "detail": "{\"status\":201,\"cm\":[{\"body\":\"UAT web: bình luận thử\"}]}"
+        },
+        {
+          "name": "bình luận hiện ngay trên trang",
+          "ok": true
+        },
+        {
+          "name": "xoá bài: bài không còn hiển thị (bị xoá hoặc ẩn)",
+          "ok": true,
+          "detail": "{\"status\":\"REMOVED\"}"
+        },
+        {
+          "name": "feed không còn bài đã xoá",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nCộng đồng Vườn Tubu\nHỏi đáp cách dùng, chia sẻ trải nghiệm, cổ vũ nhau 🌿\nFacebook\nTikTok\nĐăng bài\nTất cả\n🧴 Mỹ phẩm & cá nhân\n🧼 Tẩy rửa & nhà cửa\n👶 Mẹ & bé\n☕ Cà phê & thực phẩm\n\ud83c"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "GET /feed không token",
+          "value": "401"
+        },
+        {
+          "label": "POST đăng bài",
+          "value": "{\"status\":201,\"body\":\"{\\\"id\\\":\\\"cmvfyo2yw04lqo4t3ih5pwlvi\\\",\\\"status\\\":\\\"PUBLISHED\\\"}\"}"
+        },
+        {
+          "label": "feed_posts",
+          "value": "{\"id\":\"cmvfyo2yw04lqo4t3ih5pwlvi\",\"kind\":\"QUESTION\",\"status\":\"PUBLISHED\",\"body\":\"UAT web: bé nhà mình 4 tháng tuổi dùng dầu tràm được chưa ạ?\",\"lc\":0}"
+        },
+        {
+          "label": "trạng thái bài mới (hiển thị ngay hay chờ duyệt)",
+          "value": "PUBLISHED"
+        },
+        {
+          "label": "bài sau xoá",
+          "value": "{\"status\":\"REMOVED\"}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-70-khach-bam-dang-bai.png",
+        "uat/shots/U6-web-khach/U6-70-soan-bai.png",
+        "uat/shots/U6-web-khach/U6-70-bai-viet.png",
+        "uat/shots/U6-web-khach/U6-70-bai-viet-binh-luan.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-73",
+      "role": "Khách quay lại + khách ghé",
+      "journey": "Đổi rác",
+      "steps": "waste.enabled=false: mở /doi-rac và /doi-rac/tao; bật waste.enabled + đặt thể lệ có \"khoảng ngày\": mở /doi-rac, /doi-rac/quy-dinh (đăng nhập và chưa đăng nhập), so với Mini App (390px)",
+      "expected": "Tắt: \"Chương trình đang tạm dừng\" và không vào được trang tạo; bật: điểm hiển thị khớp /me/loyalty, bảng món + quy đổi khớp cấu hình (carton 1.000 điểm, vỏ chai Tubu 2.000 điểm…); thể lệ hiện cho CẢ khách ghé (trang công khai) với chữ \"khoảng ngày\"; cùng nội dung với Mini App /recycle",
+      "checks": [
+        {
+          "name": "tắt chương trình: /doi-rac báo \"Chương trình đang tạm dừng\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác lấy quà\n\nChương trình đang tạm dừng\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntub"
+        },
+        {
+          "name": "tắt chương trình: /doi-rac/tao không cho tạo yêu cầu",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác lấy quà\n\nChương trình đang tạm dừng\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntub"
+        },
+        {
+          "name": "bật: hiện điểm Điểm Xanh 67.512",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác lấy quà\n\nĐiểm Xanh của bạn\n\n67.512 điểm\n\nDùng như 67.512đ khi mua sắm\n\nCòn 14.600 điểm tới mã giảm 50.000đ\n\ntương đương khoảng 15 thùng carton cũ\n\nĐổi rác ngay\nCách đổi\n\nMang tới điểm nhận\n\nMiễn phí, nhận điểm khi người ở điểm xác nhận\n\nGửi về kho Tubu HCM\n\nTự gửi qua hãng"
+        },
+        {
+          "name": "bật: có nút \"Đổi rác ngay\" + 2 cách (mang tới điểm nhận / gửi về kho Tubu HCM)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác lấy quà\n\nĐiểm Xanh của bạn\n\n67.512 điểm\n\nDùng như 67.512đ khi mua sắm\n\nCòn 14.600 điểm tới mã giảm 50.000đ\n\ntương đương khoảng 15 thùng carton cũ\n\nĐổi rác ngay\nCách đổi\n\nMang tới điểm nhận\n\nMiễn phí, nhận điểm khi người ở điểm xác nhận\n\nGửi về kho Tubu HCM\n\nTự gửi qua hãng bất kỳ và tự trả phí ship\n\nTubu nhận những món này\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng…"
+        },
+        {
+          "name": "bảng quy đổi: carton 1.000 điểm, nilon 1.000 điểm, 5 vỏ hộp sữa = 1.000 điểm, vỏ chai Tubu 2.000 điểm",
+          "ok": true,
+          "detail": "Tubu nhận những món này\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n\nNilon chống sốc\n\n1 túi lớn = 1.000 điểm\n\nTúi còn nguyên, khô, không dính băng keo hay nhãn.\n\nVỏ hộp sữa sạch\n\n5 vỏ = 1.000 điểm\n\nRửa sạch, để ráo, ép dẹt.\n\nVỏ chai, hộp Tubu Tree\n\n1 vỏ = 2.000 điểm\n\nVỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.\n\nPin đã dùng\nSắp nhận\n\n1 viên = 1.000 điểm\n\nKho quà…"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"1 thùng = 1.000 điểm\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"5 vỏ = 1.000 điểm\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"1 vỏ = 2.000 điểm\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"Gửi về kho Tubu HCM\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"67.512\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "thể lệ công khai: khách ghé đọc được nội dung có \"khoảng ngày\"",
+          "ok": false,
+          "detail": "Tìm sản phẩm\nĐăng nhập\nThể lệ Đổi rác lấy quà\n\nUnauthorized\n\nThử lại\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "thể lệ khi đã đăng nhập hiện nội dung có \"khoảng ngày\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nThể lệ Đổi rác lấy quà\nThể lệ UAT: chương trình nhận hàng từ khoảng ngày 01 đến khoảng ngày 30 hàng tháng. 1 thùng carton = 1.000 điểm.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gm"
+        },
+        {
+          "name": "trang thể lệ không phát sinh request lỗi 401/403",
+          "ok": false,
+          "detail": "[\"GET /waste/rules 401\"]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "thể lệ cho khách ghé",
+          "value": "{\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nThể lệ Đổi rác lấy quà\\n\\nUnauthorized\\n\\nThử lại\\n\\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\\n\\nHỗ trợ khách hàng\\nHotline: 0984 606 774\\ntubutree@gmail.com\\nFacebook\\nTikTok\\nĐiều khoản\\nBảo mật\\nĐổi trả\\nVận chuyển\",\"bad\":[\"GET /waste/rules 401\",\"GET /waste/rules 401\"]}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-73-doi-rac-tam-dung.png",
+        "uat/shots/U6-web-khach/U6-73-doi-rac-bat.png",
+        "uat/shots/U6-web-khach/U6-73-quy-dinh-khach.png",
+        "uat/shots/U6-web-khach/U6-73-quy-dinh-dang-nhap.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "U6-74",
+      "role": "Khách chưa có SĐT (uat_new_nophone) so với khách đã xác minh",
+      "journey": "Thông báo mở Mini App (Q2)",
+      "steps": "Khi chương trình đổi rác bật: mở /doi-rac, /doi-rac/tao, /doi-rac/diem-nhan, /doi-rac/yeu-cau bằng khách không SĐT và khách có SĐT (390px)",
+      "expected": "Khách không SĐT thấy câu \"Tính năng này cần mở Tubu Tree trên Zalo.\" thay vì chức năng; khách có SĐT dùng được; khách không SĐT vẫn mua hàng và điểm danh được trên web (Q2: web không bắt xác minh)",
+      "checks": [
+        {
+          "name": "/doi-rac: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nT\nSố\nĐổi rác lấy quà\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều"
+        },
+        {
+          "name": "/doi-rac: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác lấy quà\n\nĐiểm Xanh của bạn\n\n67.512 điểm\n\nDùng như 67.512đ khi mua sắm\n\nCòn 14.600 điểm tới mã giảm 50.000đ\n\ntương đương khoảng 15 thùng carton cũ\n\nĐổi rác ngay\nCách đổi\n\nMang tới điểm nhận\n\nMiễn phí, nhận điểm khi người ở đ"
+        },
+        {
+          "name": "/doi-rac/tao: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nT\nSố\nĐổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\n"
+        },
+        {
+          "name": "/doi-rac/tao: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác\nBước 1/3: Chọn món\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n\nTối đa 60 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày\n\n0\nNilon chống sốc\n\n1 túi lớn = 1.000 điểm\n\nTúi còn nguyên, khô,"
+        },
+        {
+          "name": "/doi-rac/diem-nhan: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nT\nSố\nĐổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\n"
+        },
+        {
+          "name": "/doi-rac/diem-nhan: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nĐổi rác\nBước 1/3: Chọn món\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n\nTối đa 60 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày\n\n0\nNilon chống sốc\n\n1 túi lớn = 1.000 điểm\n\nTúi còn nguyên, khô,"
+        },
+        {
+          "name": "/doi-rac/yeu-cau: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": false,
+          "detail": "Tìm sản phẩm\nT\nSố\nYêu cầu của tôi\n\nBạn cần chia sẻ số điện thoại để dùng Đổi rác lấy quà.\n\nThử lại\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.co"
+        },
+        {
+          "name": "/doi-rac/yeu-cau: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nN\nLại\nYêu cầu của tôi\n\nChưa có yêu cầu nào\n\nĐổi rác ngay\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\n"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "/doi-rac khách không SĐT",
+          "value": "Tìm sản phẩm\nT\nSố\nĐổi rác lấy quà\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 09"
+        },
+        {
+          "label": "/doi-rac/tao khách không SĐT",
+          "value": "Tìm sản phẩm\nT\nSố\nĐổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\n"
+        },
+        {
+          "label": "/doi-rac/diem-nhan khách không SĐT",
+          "value": "Tìm sản phẩm\nT\nSố\nĐổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\n"
+        },
+        {
+          "label": "/doi-rac/yeu-cau khách không SĐT",
+          "value": "Tìm sản phẩm\nT\nSố\nYêu cầu của tôi\n\nBạn cần chia sẻ số điện thoại để dùng Đổi rác lấy quà.\n\nThử lại\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ "
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-74-q2-doi-rac-tao.png",
+        "uat/shots/U6-web-khach/U6-74-q2-doi-rac-yeu-cau.png",
+        "uat/shots/U6-web-khach/U6-74-q2-doi-rac.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    }
+  ]
+}

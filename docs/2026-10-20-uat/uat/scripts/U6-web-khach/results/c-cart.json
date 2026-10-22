@@ -1,6 +1,6 @@
 {
   "name": "c-cart",
-  "at": "2026-10-19T16:17:04.399Z",
+  "at": "2026-10-20T00:56:12.953Z",
   "cases": [
     {
       "id": "U6-20-390",
@@ -46,7 +46,7 @@
         {
           "name": "không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390}"
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
         },
         {
           "name": "badge giỏ ở header = 3",
@@ -84,7 +84,7 @@
         {
           "name": "tạm tính 356.000đ sau khi tăng",
           "ok": true,
-          "detail": "Tìm sản phẩm\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (2)\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n356.000đ\nTổng cộng\n356.000đ\nThanh toán (4) · 356.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotli…"
+          "detail": "Tìm sản phẩm\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (2)\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n356.000đ\nTổng cộng\n356.000đ\nThanh toán (4) · 356.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotli…"
         },
         {
           "name": "Giảm 2 lần không đưa số lượng xuống dưới 1",
@@ -185,58 +185,6 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-23-390",
-      "role": "Khách quay lại (Lộc Biếc)",
-      "journey": "Giỏ",
-      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (390px)",
-      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; vượt giới hạn 2 chiếc giờ vàng/người có thông báo rõ và không tính giá giờ vàng cho chiếc thứ 3",
-      "checks": [
-        {
-          "name": "thêm giờ vàng → 2xx",
-          "ok": true,
-          "detail": "201"
-        },
-        {
-          "name": "giỏ hiện 165.000đ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 0%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n165.000đ\nTổng cộng\n165.000đ\nThanh toán (1) · 165.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com"
-        },
-        {
-          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
-          "ok": true
-        },
-        {
-          "name": "API: unitPrice 165000, isFlash",
-          "ok": true,
-          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
-        },
-        {
-          "name": "chiếc thứ 3 tính giá thường, 2 chiếc đầu giá giờ vàng (550.000đ) và có thông báo giới hạn",
-          "ok": false,
-          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
-        },
-        {
-          "name": "giỏ hiện thông báo giới hạn giờ vàng",
-          "ok": true,
-          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n660.000đ\nTổng cộng\n660.000đ\nThanh toán (3) · 660.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùn…"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "giỏ khi có 3 chiếc",
-          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-23-390-gio-gio-vang-390.png",
-        "uat/shots/U6-web-khach/U6-23-390-gio-vuot-gioi-han-gio-vang-390.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "FAIL"
-    },
-    {
       "id": "U6-20-1440",
       "role": "Khách quay lại (Lộc Biếc)",
       "journey": "Giỏ",
@@ -280,7 +228,7 @@
         {
           "name": "không tràn ngang",
           "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440}"
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
         },
         {
           "name": "badge giỏ ở header = 3",
@@ -318,7 +266,7 @@
         {
           "name": "tạm tính 356.000đ sau khi tăng",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (2)\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n356.000đ\nThanh toán (4)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ …"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (2)\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n356.000đ\nThanh toán (4)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ …"
         },
         {
           "name": "Giảm 2 lần không đưa số lượng xuống dưới 1",
@@ -419,58 +367,6 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-23-1440",
-      "role": "Khách quay lại (Lộc Biếc)",
-      "journey": "Giỏ",
-      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (1440px)",
-      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; vượt giới hạn 2 chiếc giờ vàng/người có thông báo rõ và không tính giá giờ vàng cho chiếc thứ 3",
-      "checks": [
-        {
-          "name": "thêm giờ vàng → 2xx",
-          "ok": true,
-          "detail": "201"
-        },
-        {
-          "name": "giỏ hiện 165.000đ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 0%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n165.000đ\nThanh toán (1)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntu"
-        },
-        {
-          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
-          "ok": true
-        },
-        {
-          "name": "API: unitPrice 165000, isFlash",
-          "ok": true,
-          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
-        },
-        {
-          "name": "chiếc thứ 3 tính giá thường, 2 chiếc đầu giá giờ vàng (550.000đ) và có thông báo giới hạn",
-          "ok": false,
-          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
-        },
-        {
-          "name": "giỏ hiện thông báo giới hạn giờ vàng",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n660.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩ…"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "giỏ khi có 3 chiếc",
-          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-23-1440-gio-gio-vang-1440.png",
-        "uat/shots/U6-web-khach/U6-23-1440-gio-vuot-gioi-han-gio-vang-1440.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "FAIL"
-    },
-    {
       "id": "U6-24",
       "role": "Khách quay lại (Lộc Biếc)",
       "journey": "Giỏ",
@@ -512,6 +408,118 @@
       ],
       "shots": [
         "uat/shots/U6-web-khach/U6-24-mini-gio-hang.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-23-390",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Giỏ",
+      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (390px)",
+      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ \"giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường\" và cả dòng tính giá thường (660.000đ)",
+      "checks": [
+        {
+          "name": "thêm giờ vàng → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "giỏ hiện 165.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 2%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n165.000đ\nTổng cộng\n165.000đ\nThanh toán (1) · 165.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com"
+        },
+        {
+          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
+          "ok": true
+        },
+        {
+          "name": "API: unitPrice 165000, isFlash",
+          "ok": true,
+          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
+        },
+        {
+          "name": "3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng",
+          "ok": true,
+          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
+        },
+        {
+          "name": "giỏ hiện thông báo giới hạn giờ vàng",
+          "ok": true,
+          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n660.000đ\nTổng cộng\n660.000đ\nThanh toán (3) · 660.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùn…"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "giới hạn giờ vàng của khách",
+          "value": "{\"lim\":2,\"quota_left\":49,\"bought\":1,\"allow\":1}"
+        },
+        {
+          "label": "giỏ khi có 3 chiếc",
+          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-23-390-gio-gio-vang-390.png",
+        "uat/shots/U6-web-khach/U6-23-390-gio-vuot-gioi-han-gio-vang-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-23-1440",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Giỏ",
+      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (1440px)",
+      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ \"giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường\" và cả dòng tính giá thường (660.000đ)",
+      "checks": [
+        {
+          "name": "thêm giờ vàng → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "giỏ hiện 165.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 2%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n165.000đ\nThanh toán (1)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntu"
+        },
+        {
+          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
+          "ok": true
+        },
+        {
+          "name": "API: unitPrice 165000, isFlash",
+          "ok": true,
+          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
+        },
+        {
+          "name": "3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng",
+          "ok": true,
+          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
+        },
+        {
+          "name": "giỏ hiện thông báo giới hạn giờ vàng",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n660.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩ…"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "giới hạn giờ vàng của khách",
+          "value": "{\"lim\":2,\"quota_left\":49,\"bought\":1,\"allow\":1}"
+        },
+        {
+          "label": "giỏ khi có 3 chiếc",
+          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-23-1440-gio-gio-vang-1440.png",
+        "uat/shots/U6-web-khach/U6-23-1440-gio-vuot-gioi-han-gio-vang-1440.png"
       ],
       "notes": [],
       "blockedReason": null,

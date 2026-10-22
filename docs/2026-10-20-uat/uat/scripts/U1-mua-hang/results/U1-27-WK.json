@@ -1,0 +1,298 @@
+{
+  "id": "U1-27-WK",
+  "browser": "webkit",
+  "role": "Khách quay lại (uat_returning, Lộc Biếc, 34.400 điểm, đơn cũ đã giao)",
+  "journey": "Mua lại từ Trang chủ → địa chỉ cũ chọn sẵn → COD; quyền lợi hạng Lộc Biếc",
+  "steps": "Trang chủ kệ \"Mua lại\" → \"Mua lại\" (Nước rửa chén Can 5L) → \"Thêm vào giỏ (1)\" → giỏ → \"Thanh toán (1)\" (không tick Điểm Xanh) → COD; thêm: báo giá API 1 chai 120k để xem ngưỡng miễn ship riêng của hạng",
+  "expected": "Kệ Mua lại có SP đơn cũ; sang giỏ với 1 can 430.000đ; checkout chọn sẵn địa chỉ mặc định 12 Lê Lợi, Phường Bến Thành; không tự tiêu điểm; phí giao 0; điểm tích 2% × 1,2 × 430.000 = 10.320; DB: đơn COD đúng địa chỉ, pointsUsed 0, số dư điểm không đổi; giỏ 120k: Lộc Biếc miễn ship từ 99k → phí 0 (khách hạng thường đã có đơn trả 19.000đ, U1-14b)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "kệ Mua lại có Nước rửa chén Can 5L",
+      "ok": true
+    },
+    {
+      "name": "Mua lại → tự sang giỏ, 1 can 430.000đ",
+      "ok": true
+    },
+    {
+      "name": "không tự tiêu điểm (pointsUsed 0)",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "name": "phí giao 0, tổng 430.000đ, điểm tích 10.320 (2% × 1,2)",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfhcjiy01vh14pjkqsud5v1"
+            ],
+            "subtotal": 430000,
+            "discount": 0,
+            "shippingFee": 0,
+            "total": 430000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 430000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 34400,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 430000,
+        "pointsEarned": 10320,
+        "pointsBalance": 34400,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 34400,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfhcjiy01vh14pjkqsud5v1",
+            "variationId": "cmqfuw9jv0007w1vfb1njbw7k",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "Can 5L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 430000,
+            "quantity": 1,
+            "stock": 30,
+            "weight": 5200,
+            "total": 430000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "DB: đơn COD giao tới 12 Lê Lợi, Phường Bến Thành",
+      "ok": true
+    },
+    {
+      "name": "DB: total 430000, pointsEarned 10320, pointsUsed 0; số dư điểm không đổi",
+      "ok": true
+    },
+    {
+      "name": "màn thành công",
+      "ok": true,
+      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026101999987\nTổng thanh toán\n430.000đ\nChuẩn b"
+    },
+    {
+      "name": "Lộc Biếc miễn ship từ 99k: 120k → phí 0, điểm 2.880 (2% × 1,2)",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfhcok601we14pjp8l2eqag"
+            ],
+            "subtotal": 120000,
+            "discount": 0,
+            "shippingFee": 0,
+            "total": 120000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 24000,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 120000,
+        "pointsEarned": 2880,
+        "pointsBalance": 34400,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 34400,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfhcok601we14pjp8l2eqag",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 172,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "kệ Mua lại",
+      "data": "Mua lại Fuwa3e Nước rửa chén sinh học Fuwa3e · Can 5L ★ Mới 430.000đ 480.000đ Mua lại"
+    },
+    {
+      "label": "ảnh trang chủ khách quay lại",
+      "data": "shots/U1-mua-hang/U1-27-home-rebuy-webkit.png"
+    },
+    {
+      "label": "ảnh sheet Mua lại",
+      "data": "shots/U1-mua-hang/U1-27-rebuy-sheet-webkit.png"
+    },
+    {
+      "label": "GET /cart sau Mua lại",
+      "data": [
+        {
+          "name": "Nước rửa chén sinh học Fuwa3e",
+          "variation": "Can 5L",
+          "qty": 1,
+          "unitPrice": 430000
+        }
+      ]
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvfes1a5002r13zt85xtsoyn",
+          "pointsToUse": 0
+        },
+        "subtotal": 430000,
+        "discount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 34400,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 430000,
+        "pointsEarned": 10320
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "false",
+        "text": "Điểm Xanh Bạn đang có 34.400 điểm"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-27-checkout-webkit.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101999987",
+        "button": "Đặt hàng · 430.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-27-placed-webkit.png"
+    },
+    {
+      "label": "SQL đơn + địa chỉ + điểm",
+      "data": {
+        "order": {
+          "status": "CONFIRMED",
+          "paymentMethod": "COD",
+          "total": 430000,
+          "shippingFee": 0,
+          "pointsEarned": 10320,
+          "pointsUsed": 0
+        },
+        "address": {
+          "ward": "Phường Bến Thành",
+          "phone": "0901000003",
+          "street": "12 Lê Lợi",
+          "district": "",
+          "province": "Thành phố Hồ Chí Minh",
+          "wardCode": "84_VN7926743",
+          "recipient": "Nguyễn Thị Quay Lại",
+          "districtCode": "",
+          "provinceCode": "84_VN79"
+        },
+        "before": {
+          "balance": 34400,
+          "converted": 0,
+          "ledgerStd": 34400,
+          "ledgerConv": 0,
+          "rows": 1
+        },
+        "after": {
+          "balance": 34400,
+          "converted": 0,
+          "ledgerStd": 34400,
+          "ledgerConv": 0,
+          "rows": 1
+        }
+      }
+    },
+    {
+      "label": "báo giá 120k của khách Lộc Biếc",
+      "data": {
+        "subtotal": 120000,
+        "shippingFee": 0,
+        "total": 120000,
+        "pointsEarned": 2880
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:40:00.389Z"
+}

@@ -39,9 +39,9 @@
     "journey": "Công nợ đại lý: ghi nhận đại lý trả một phần nợ",
     "steps": "uat_dealer (DEALER_2, hạn mức 20 triệu) đặt đơn sỉ ghi công nợ ≥ 3 triệu; KẾ TOÁN mở đơn → \"Công nợ đại lý\" → nhập 1.000.000đ + mã GD → \"Xác nhận đã nhận, giảm nợ\" → xác nhận; tab \"Đại lý & công nợ\"",
     "expected": "Đơn ghi nợ vào thẳng CONFIRMED (dealer.service.ts:303-308 lưu paymentMethod BANK_TRANSFER); sổ công nợ +tổng đơn khi đặt, −1.000.000 khi kế toán ghi nhận; dư nợ = tổng − 1.000.000 (SUM(delta) khớp số hiện ở tab); thao tác ghi người làm",
-    "actual": "Đơn sỉ DLR26150939027 CONFIRMED/BANK_TRANSFER tổng 3318000đ (60×79.000×70%); dư nợ sau đặt 8954000. UI credit-payment (mã GD FT26UATDEBT6150969) → 201; gửi lại cùng mã → 201, dòng sổ mang mã này: 1. Sổ: [\"3318000 ORDER\",\"-1000000 PAYMENT\",\"3318000 ORDER\",\"3318000 ORDER\",\"-1000000 PAYMENT\"] → dư nợ 7954000. API accounts: {\"userId\":\"uat_dealer\",\"fullName\":\"Đại Lý Xanh Tươi\",\"phone\":\"0901000006\",\"tier\":{\"id\":\"DEALER_2\",\"name\":\"Đại lý Cấp 2\"},\"creditLimit\":20000000,\"debt\":7954000,\"…. Tab hiện: 1 đ 7.954.000đ 7.954.000đ 20.000.000đ 0đ 3 đ",
+    "actual": "Đơn sỉ DLR28145695059 CONFIRMED/BANK_TRANSFER tổng 3118500đ (45×HEC-DEO-50 99000đ, giá đại lý DEALER_2 −30%); dư nợ sau đặt 11072500. UI credit-payment (mã GD FT26UATDEBT8145711) → 201; gửi lại cùng mã → 201, dòng sổ mang mã này: 1. Sổ: [\"3318000 ORDER\",\"-1000000 PAYMENT\",\"3318000 ORDER\",\"3318000 ORDER\",\"-1000000 PAYMENT\",\"3118500 ORDER\",\"-1000000 PAYMENT\"] → dư nợ 10072500. API accounts: {\"userId\":\"uat_dealer\",\"fullName\":\"Đại Lý Xanh Tươi\",\"phone\":\"0901000006\",\"tier\":{\"id\":\"DEALER_2\",\"name\":\"Đại lý Cấp 2\"},\"creditLimit\":20000000,\"debt\":10072500,…. Tab hiện: 1 đ 10.072.500đ 10.072.500đ 20.000.000đ 0đ 4 đ",
     "evidence": "shots/U5-admin-noi-bo/dealer-debt-ketoan-paid-1440.png, shots/U5-admin-noi-bo/dealer-accounts-ketoan-1440.png; SQL SUM(dealer_credit_ledgers.delta) WHERE userId='uat_dealer'",
     "verdict": "PASS",
-    "at": "2026-10-19T16:09:13.641Z"
+    "at": "2026-10-19T16:42:27.879Z"
   }
 ]

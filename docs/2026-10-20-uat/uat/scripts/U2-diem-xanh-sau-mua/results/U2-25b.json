@@ -1,0 +1,131 @@
+{
+  "id": "U2-25b",
+  "title": "Trả một phần đơn có dùng Điểm Xanh (COD 289.000đ, dùng điểm): hoàn điểm đã tiêu theo phần trả + tiền phần còn lại vào Ví, thu hồi điểm tích theo tỉ lệ; sổ khớp",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:42:02.848Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "đơn dùng điểm > 0",
+      "ok": true,
+      "detail": 16920
+    },
+    {
+      "name": "APPROVED; tiền hoàn + điểm hoàn = giá dòng 79.000 (±1)",
+      "ok": true,
+      "detail": {
+        "refundAmount": 74375,
+        "pointsRefunded": 4625
+      }
+    },
+    {
+      "name": "điểm hoàn ≈ phần điểm đã tiêu của dòng (±1)",
+      "ok": true,
+      "detail": {
+        "pointsRefunded": 4625,
+        "share": 4625.190311418685
+      }
+    },
+    {
+      "name": "thu hồi điểm tích ≈ pointsEarned × 79.000/subtotal (±1)",
+      "ok": true,
+      "detail": {
+        "pointsReversed": 1785,
+        "expect": 1784.7439446366782
+      }
+    },
+    {
+      "name": "SQL: số dư điểm = sau giao + điểm hoàn − thu hồi = SUM sổ; ví + refundAmount = SUM sổ ví",
+      "ok": true,
+      "detail": {
+        "bal": [
+          9409,
+          12249
+        ],
+        "sum": 12249,
+        "wallet": [
+          150000,
+          224375
+        ],
+        "wsum": 224375
+      }
+    }
+  ],
+  "evidence": {
+    "đơn": {
+      "id": "cmvfhfa5c00qh5ksftzckhzg1",
+      "pointsUsed": 16920,
+      "pointsEarned": 6529,
+      "total": 272080,
+      "subtotal": 289000,
+      "items": [
+        {
+          "id": "cmvfhfa5c00qi5ksfiwe0cuv6",
+          "total": 210000
+        },
+        {
+          "id": "cmvfhfa5c00qj5ksfayi62i3t",
+          "total": 79000
+        }
+      ]
+    },
+    "giao": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    },
+    "ước tính hoàn (khách thấy)": {
+      "isFull": false,
+      "goods": 74375,
+      "shipping": 0,
+      "refund": 74375,
+      "moneyRefundable": true,
+      "pointsUsedBack": 4625,
+      "lines": [
+        {
+          "orderItemId": "cmvfhfa5c00qj5ksfayi62i3t",
+          "quantity": 1,
+          "refundAmount": 74375
+        }
+      ]
+    },
+    "sau duyệt": {
+      "review": 201,
+      "request": {
+        "status": "APPROVED",
+        "refundAmount": 74375,
+        "shippingRefund": 0,
+        "pointsReversed": 1785,
+        "pointsRefunded": 4625
+      },
+      "points": [
+        {
+          "delta": -16920,
+          "reason": "ORDER_REDEEM:TUBU2026101950451"
+        },
+        {
+          "delta": 6529,
+          "reason": "ORDER_DELIVERED:TUBU2026101950451"
+        },
+        {
+          "delta": 4625,
+          "reason": "RETURN_REFUND_POINTS:TUBU2026101950451"
+        },
+        {
+          "delta": -1785,
+          "reason": "RETURN_REVERSED:TUBU2026101950451"
+        }
+      ],
+      "balance": [
+        19800,
+        9409,
+        12249
+      ],
+      "wallet": [
+        150000,
+        224375
+      ],
+      "pointsShareOfLine": 4625.19
+    }
+  }
+}

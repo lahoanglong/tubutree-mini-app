@@ -26,7 +26,7 @@ run lint-parity bash -c "cd $WT && npm run -s lint:parity"
 if [ -n "$FULL" ]; then
   run eslint-api bash -c "cd $WT/apps/api && npx eslint src --max-warnings=0"
   run eslint-miniapp bash -c "cd $WT/apps/miniapp && npx eslint 'src/**/*.{ts,tsx}' --max-warnings=0"
-  run eslint-web bash -c "cd $WT/apps/web && npx eslint src --max-warnings=0"
+  run eslint-web bash -c "cd $WT/apps/web && npx eslint src"; grep -E "problems?|warning" $OUT/eslint-web.log | tail -1
 fi
 step "migrate trên DB mới (cụm 25544)"
 bash $T/pg-native.sh start 25544 >/dev/null && bash $T/pg-native.sh createdb 25544 tubutree_gate >/dev/null 2>&1

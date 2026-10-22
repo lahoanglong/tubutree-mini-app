@@ -1,10 +1,10 @@
 {
   "retDealer": {
-    "id": "cmvfg8f2f0014hoebpv7fk5sb",
-    "code": "TR-5SGCJ",
+    "id": "cmvfid0sn001414k9cz311p8d",
+    "code": "TR-TQWY5",
     "method": "DROP_OFF",
     "status": "OPEN",
-    "pointId": "cmvfg8bas000mhoebrp2tgp9d",
+    "pointId": "cmvficxd8000m14k9bqk2p52v",
     "estimatedPoints": 5000,
     "estimatedDrops": 0,
     "trackingCode": null,
@@ -23,13 +23,13 @@
   "retWarehouseCreate": {
     "status": 201,
     "body": {
-      "id": "cmvfg8hwl001fhoeb6z8jdt1f",
-      "code": "TR-RKRFX",
+      "id": "cmvfid3p8001f14k9ip2o5jyu",
+      "code": "TR-DKG2W",
       "method": "DROP_OFF",
       "status": "OPEN",
       "closeReason": null,
-      "createdAt": "2026-10-19T16:08:45.478Z",
-      "expiresAt": "2026-10-26T16:08:45.475Z",
+      "createdAt": "2026-10-19T17:08:19.581Z",
+      "expiresAt": "2026-10-26T17:08:19.574Z",
       "estimatedPoints": 6000,
       "pointsAwarded": null,
       "pointName": "Kho Tubu Tree HCM",
@@ -63,7 +63,7 @@
         }
       ],
       "point": {
-        "id": "cmvfg8bah000hhoebm7hp8m2q",
+        "id": "cmvficxct000h14k930m2k6ap",
         "kind": "WAREHOUSE",
         "name": "Kho Tubu Tree HCM",
         "addressLine": "12 Nguyễn Huệ",
@@ -91,11 +91,11 @@
     }
   },
   "retWarehouse": {
-    "id": "cmvfg8hwl001fhoeb6z8jdt1f",
-    "code": "TR-RKRFX",
+    "id": "cmvfid3p8001f14k9ip2o5jyu",
+    "code": "TR-DKG2W",
     "method": "DROP_OFF",
     "status": "OPEN",
-    "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+    "pointId": "cmvficxct000h14k930m2k6ap",
     "estimatedPoints": 6000,
     "estimatedDrops": 4,
     "trackingCode": null,
@@ -112,11 +112,11 @@
     ]
   },
   "retMail": {
-    "id": "cmvfg8ju2001thoeb7p44kpxd",
-    "code": "TR-42RNG",
+    "id": "cmvfid5ny001t14k9gg75d8dc",
+    "code": "TR-EDS86",
     "method": "MAIL_IN",
     "status": "IN_TRANSIT",
-    "pointId": "cmvfg8bah000hhoebm7hp8m2q",
+    "pointId": "cmvficxct000h14k930m2k6ap",
     "estimatedPoints": 15000,
     "estimatedDrops": 0,
     "trackingCode": "GHTKUATWASTE0001",
@@ -129,13 +129,13 @@
     ]
   },
   "newEdit": {
-    "id": "cmvfg8ka10021hoeb1ukpebq3",
-    "code": "TR-6QJMR",
+    "id": "cmvfid66f002114k96nkqox0e",
+    "code": "TR-GGER4",
     "method": "DROP_OFF",
     "status": "OPEN",
     "closeReason": null,
-    "createdAt": "2026-10-19T16:08:48.553Z",
-    "expiresAt": "2026-10-26T16:08:48.550Z",
+    "createdAt": "2026-10-19T17:08:22.791Z",
+    "expiresAt": "2026-10-26T17:08:22.781Z",
     "estimatedPoints": 2000,
     "pointsAwarded": null,
     "pointName": "Đại lý Xanh Quận 3",
@@ -156,7 +156,7 @@
       }
     ],
     "point": {
-      "id": "cmvfg8bas000mhoebrp2tgp9d",
+      "id": "cmvficxd8000m14k9bqk2p52v",
       "kind": "PARTNER",
       "name": "Đại lý Xanh Quận 3",
       "addressLine": "45 Võ Văn Tần",
@@ -185,18 +185,18 @@
   "newOpen": [
     {
       "status": 201,
-      "id": "cmvfg8m34002mhoeb2t2gd1ta",
-      "code": "TR-YBFNG"
+      "id": "cmvfid8fk002m14k9xd6ru3jy",
+      "code": "TR-BP5W5"
     },
     {
       "status": 201,
-      "id": "cmvfg8m3a002shoeb2nj7v54k",
-      "code": "TR-CYWXS"
+      "id": "cmvfid8ga002s14k9aq04muk8",
+      "code": "TR-G5ANG"
     },
     {
       "status": 201,
-      "id": "cmvfg8m3h002yhoeby6qqkeiu",
-      "code": "TR-3BBMV"
+      "id": "cmvfid8h8002y14k9ui7ojtnx",
+      "code": "TR-7TNNS"
     }
   ]
 }

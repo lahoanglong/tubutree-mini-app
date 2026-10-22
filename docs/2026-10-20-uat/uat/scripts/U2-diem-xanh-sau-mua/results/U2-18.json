@@ -1,0 +1,95 @@
+{
+  "id": "U2-18",
+  "title": "Tạo gói định kỳ 4 tuần trên Mini App (giao ngay, COD): đơn đầu giảm 12%, phí giao không tính điểm, điểm = 2% × 1,2 × tiền hàng sau giảm",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-19T16:31:04.597Z",
+  "lane": 7,
+  "checks": [
+    {
+      "name": "201, gói ACTIVE 4 tuần, có đơn đầu",
+      "ok": true,
+      "detail": {
+        "status": 201
+      }
+    },
+    {
+      "name": "đơn đầu: subtotal 89000, giảm 12% = 10680, phí giao 19000, total = 97320",
+      "ok": true,
+      "detail": {
+        "id": "cmvfh159l00jf5ksf6hjxidhh",
+        "code": "TUBUSUB7462102476",
+        "subtotal": 89000,
+        "discount": 10680,
+        "shippingFee": 19000,
+        "total": 97320,
+        "pointsEarned": 1879,
+        "status": "CONFIRMED",
+        "source": "subscription",
+        "paymentMethod": "COD"
+      }
+    },
+    {
+      "name": "điểm đơn kỳ = floor(78320 × 2% × 1,2) = 1879 (không tính ship)",
+      "ok": true,
+      "detail": 1879
+    },
+    {
+      "name": "tồn kho −1",
+      "ok": true,
+      "detail": {
+        "before": 260,
+        "after": 259
+      }
+    },
+    {
+      "name": "nextRunAt ≈ hôm nay + 28 ngày",
+      "ok": true,
+      "detail": {
+        "nextRunAt": "2026-11-16T16:31:02.107Z",
+        "days": 28
+      }
+    },
+    {
+      "name": "giao đơn đầu: dòng sổ = pointsEarned",
+      "ok": true,
+      "detail": [
+        1879
+      ]
+    }
+  ],
+  "evidence": {
+    "POST /me/subscriptions": {
+      "status": 201,
+      "sub": {
+        "id": "cmvfh159700jc5ksfc0r2b3au",
+        "intervalWeeks": 4,
+        "nextRunAt": "2026-11-16T16:31:02.107Z",
+        "status": "ACTIVE"
+      },
+      "firstOrder": {
+        "id": "cmvfh159l00jf5ksf6hjxidhh",
+        "code": "TUBUSUB7462102476",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "total": 97320
+      }
+    },
+    "đơn đầu": {
+      "id": "cmvfh159l00jf5ksf6hjxidhh",
+      "code": "TUBUSUB7462102476",
+      "subtotal": 89000,
+      "discount": 10680,
+      "shippingFee": 19000,
+      "total": 97320,
+      "pointsEarned": 1879,
+      "status": "CONFIRMED",
+      "source": "subscription",
+      "paymentMethod": "COD"
+    },
+    "deliver đơn đầu": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    }
+  }
+}

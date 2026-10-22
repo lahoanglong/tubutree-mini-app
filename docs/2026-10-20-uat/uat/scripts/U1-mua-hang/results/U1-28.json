@@ -1,0 +1,218 @@
+{
+  "id": "U1-28",
+  "browser": "chromium",
+  "role": "Khách quay lại hạng Lộc Biếc có sinh nhật hôm nay",
+  "journey": "Voucher sinh nhật theo hạng → dùng ở giỏ",
+  "steps": "Khách Lộc Biếc đặt ngày sinh = hôm nay qua PATCH /me → cron vouchers sinh nhật (VouchersService.birthdayVouchers, 1 giờ sáng) → ví mã → giỏ 1 chai 120k → \"Dùng mã\" sinh nhật → COD; thử đổi ngày sinh lần 2",
+  "expected": "Mã BIRTHDAY-<năm>-<tháng> 50.000đ (mức Lộc Biếc), không đơn tối thiểu, hạn 30 ngày, chỉ của khách này; thông báo BIRTHDAY_VOUCHER; đơn 120k giảm 50.000đ (ship 0 theo hạng), redemption 1; đổi ngày sinh lần 2 bị chặn \"Ngày sinh chỉ có thể đặt một lần…\"",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "đổi ngày sinh lần 2 bị chặn",
+      "ok": true
+    },
+    {
+      "name": "mã BIRTHDAY 50.000đ, không tối thiểu, ~30 ngày, USER_GROUP của khách",
+      "ok": true
+    },
+    {
+      "name": "có thông báo BIRTHDAY_VOUCHER",
+      "ok": true
+    },
+    {
+      "name": "báo giá: giảm 50.000đ, tổng 70.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvfh1t5i01kx14pj5bz8b6y9"
+            ],
+            "subtotal": 120000,
+            "discount": 50000,
+            "shippingFee": 0,
+            "total": 70000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 120000,
+        "discount": 50000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 70000,
+        "pointsEarned": 1680,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvfh1t5i01kx14pj5bz8b6y9",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 180,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "DB: couponDiscount 50000, 1 redemption, usedCount 1",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "PATCH /me dob",
+      "data": {
+        "status": 200,
+        "dob": "1990-10-19"
+      }
+    },
+    {
+      "label": "PATCH /me dob lần 2",
+      "data": {
+        "status": 400,
+        "message": "Ngày sinh chỉ có thể đặt một lần và không tự sửa lại được. Vui lòng liên hệ CSKH nếu cần đính chính."
+      }
+    },
+    {
+      "label": "run-job birthdayVouchers",
+      "data": {
+        "ms": 679
+      }
+    },
+    {
+      "label": "SQL mã sinh nhật",
+      "data": {
+        "code": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "type": "AMOUNT",
+        "value": 50000,
+        "minOrder": null,
+        "endAt": "2026-11-18T16:31:33.028Z",
+        "usageLimit": 1,
+        "scope": "USER_GROUP",
+        "scopeMeta": {
+          "reason": "BIRTHDAY-2026-10",
+          "userId": "u1_e28_h1q7mtm"
+        }
+      }
+    },
+    {
+      "label": "thông báo",
+      "data": [
+        {
+          "templateCode": "BIRTHDAY_VOUCHER",
+          "text": "{\"body\":\"Chúc mừng sinh nhật! 🎂 Tặng bạn voucher BIRTHDAY-2026-10-U1_E28_H1Q7MTM giảm 50.000đ, dùng trước 18/11/2026.\",\"data\":{\"code\":\"BIRTHDAY-2026-10-U1_E28_H1Q7MTM\",\"value\":\"50.000\",\"expires\":\"18/11/2026\",\"min_order_note\":\"\"}}"
+        }
+      ]
+    },
+    {
+      "label": "áp mã BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+      "data": {
+        "status": 201,
+        "snackbar": "Đã áp dụng mã BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "couponCode": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "discount": 50000,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvfh1q8101ks14pj0p9u262h",
+          "pointsToUse": 0
+        },
+        "subtotal": 120000,
+        "discount": 50000,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 70000,
+        "pointsEarned": 1680
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "true",
+        "text": "Điểm Xanh Tích điểm từ đơn đầu tiên nhé"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-28-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026101917257",
+        "button": "Đặt hàng · 70.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-28-placed.png"
+    },
+    {
+      "label": "SQL đơn",
+      "data": {
+        "couponCode": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "couponDiscount": 50000,
+        "shippingFee": 0,
+        "total": 70000,
+        "pointsEarned": 1680,
+        "redemptions": [
+          {
+            "code": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+            "usedCount": 1,
+            "usageLimit": 1
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-19T16:31:41.748Z"
+}

@@ -25,9 +25,11 @@ const SKUS = ['COBOTE-TR-50', 'POLANG-LG-10', 'FUWA-HW-500', 'HEC-FW-120', 'HEC-
 async function dealerLines(target, price, { skip = [] } = {}) {
   const out = [];
   let left = target;
-  for (const sku of SKUS) {
+  const FLASH = ['BHN-CGL-100', 'BHN-CW-500', 'BHN-HN-500'];
+  const rest = price.filter((x) => !SKUS.includes(x.sku)).sort((a, b) => b.stock * b.dealerPrice - a.stock * a.dealerPrice).map((x) => x.sku);
+  for (const sku of [...SKUS, ...rest]) {
     if (left <= 0) break;
-    if (skip.includes(sku)) continue;
+    if (skip.includes(sku) || FLASH.includes(sku)) continue;
     const r = price.find((x) => x.sku === sku);
     if (!r) continue;
     const q = Math.min(Math.max(0, r.stock - 10), Math.ceil(left / r.dealerPrice), 999);
@@ -39,6 +41,22 @@ async function dealerLines(target, price, { skip = [] } = {}) {
   return out;
 }
 const sumLines = (ls) => ls.reduce((s, l) => s + l.unit * l.quantity, 0);
+/** Doanh số đã chốt của đại lý trong [from, to) theo đúng luật DealerService.dealerVolume. */
+const settledVolume = async (from, to) =>
+  (await sql(
+    `SELECT COALESCE(SUM(o.total),0)::bigint s FROM orders o WHERE o."userId" = $1 AND o.type = 'DEALER' AND o."createdAt" >= $2 AND o."createdAt" < $3
+       AND o.status::text IN ('PACKED','SHIPPING','DELIVERED') AND o."paymentStatus"::text NOT IN ('REFUNDED','FAILED')
+       AND (o."paymentStatus" = 'PAID' OR EXISTS (SELECT 1 FROM dealer_credit_ledgers l WHERE l."userId" = o."userId" AND l."refType" = 'ORDER' AND l."refId" = o.id))`,
+    D, from, to,
+  ))[0].s;
+/** 'Q4/2026' → [đầu quý, đầu quý sau) giờ VN. */
+function quarterRange(key) {
+  const [, qn, yr] = key.match(/^Q(\d)\/(\d{4})$/);
+  const q = Number(qn) - 1;
+  const y = Number(yr);
+  const VN = 7 * 3600_000;
+  return [new Date(Date.UTC(y, q * 3, 1) - VN), new Date(Date.UTC(q === 3 ? y + 1 : y, q === 3 ? 0 : q * 3 + 3, 1) - VN)];
+}
 async function placeDealer(items, paymentMethod, key) {
   return api(L, 'POST', '/dealer/orders', {
     user: D,
@@ -256,10 +274,11 @@ try {
   const nextQ = new Date(Date.UTC(qi === 3 ? qy + 1 : qy, qi === 3 ? 0 : qi * 3 + 3, 10, 4) - VN);
   const qCodes = [];
   const usedSkus = [...l26, ...l28, ...l29].map((l) => l.sku);
-  const price32 = await apiOk(L, 'GET', '/dealer/pricelist', { user: D });
   for (let i = 0; i < 3; i++) {
     const dnow = Number((await debtOf()).d);
-    const ls = await dealerLines(Math.min(18_000_000, 19_500_000 - Math.max(0, dnow)), price32, { skip: i === 0 ? usedSkus : [] });
+    if (dnow > 0) await ketoanPay(dnow, `pre${i}`);
+    const price32 = await apiOk(L, 'GET', '/dealer/pricelist', { user: D });
+    const ls = await dealerLines(18_000_000, price32, { skip: usedSkus });
     const r = await placeDealer(ls, 'CREDIT');
     if (!r.ok) throw new Error(`đơn thưởng quý ${i} ${r.status}: ${JSON.stringify(r.body).slice(0, 300)}`);
     await deliver(r.body.code);
@@ -268,7 +287,9 @@ try {
     await ketoanPay(o.total, `q${i}`);
   }
   for (const o of qCodes) await exec(`UPDATE orders SET "createdAt" = $2 WHERE id = $1`, o.id, qMid);
-  const revenue = qCodes.reduce((s, o) => s + o.total, 0);
+  // Doanh số đã chốt của kỳ theo đúng luật dealerVolume (gồm cả đơn lượt trước đã lùi vào kỳ này nếu kỳ chưa trả thưởng).
+  const qEnd = new Date(Date.UTC(qi === 3 ? qy + 1 : qy, qi === 3 ? 0 : qi * 3 + 3, 1) - VN);
+  const revenue = await settledVolume(qStart, qEnd);
   const expPct = revenue >= 200_000_000 ? 4 : revenue >= 100_000_000 ? 3 : revenue >= 50_000_000 ? 2 : 0;
   const expBonus = Math.round((revenue * expPct) / 100);
   const before32 = await debtOf();
@@ -279,11 +300,11 @@ try {
   const bonusRows = (await sql(`SELECT count(*)::int n FROM dealer_credit_ledgers WHERE "userId" = $1 AND "refType" = 'QUARTER_BONUS' AND "refId" = $2`, D, qKey))[0].n;
   const noti = (await sql(`SELECT count(*)::int n FROM notification_logs WHERE "userId" = $1 AND "templateCode" = 'DEALER_BONUS_PAID' AND "sentAt" > now() - interval '30 minutes'`, D).catch((e) => [{ n: e.meta?.message ?? 'lỗi' }]))[0].n;
   R.add({
-    id: 'U3-32', role: 'Đại lý / hệ thống', journey: 'Thưởng doanh số quý', title: `Thưởng ${qKey}: 3 đơn công nợ đã giao, doanh số ${vnd(revenue)}`,
+    id: 'U3-32', role: 'Đại lý / hệ thống', journey: 'Thưởng doanh số quý', title: `Thưởng ${qKey}: đơn công nợ đã giao, doanh số đã chốt ${vnd(revenue)}`,
     steps: `3 đơn CREDIT (${qCodes.map((o) => o.code).join(', ')}) → webhook giao → kế toán ghi trả từng đơn → lùi orders.createdAt vào ${qKey} → run-job DealerService.payoutQuarterlyBonuses(now=${nextQ.toISOString()}) hai lần`,
     expected: `Bậc mặc định ≥50tr 2%, ≥100tr 3%, ≥200tr 4% → thưởng ${vnd(expBonus)}; 1 dòng sổ QUARTER_BONUS −thưởng; chạy lại không trả lần 2; dư nợ giảm đúng số thưởng`,
     actual: { revenue, expBonus, job: job.result ?? job.error, job2: job2.result ?? job2.error, bonusRow, bonusRows, debt: [Number(before32.d), Number(after32.d)], noti },
-    evidence: `SQL SUM(orders.total) ${qKey} ${revenue}; dealer_credit_ledgers QUARTER_BONUS ${short(bonusRow)} (${bonusRows} dòng); SUM sổ ${before32.d}→${after32.d}; notifications DEALER_BONUS_PAID ${noti}`,
+    evidence: `SQL doanh số đã chốt ${qKey} (DELIVERED/PACKED/SHIPPING + PAID hoặc có dòng sổ ORDER) ${revenue}; dealer_credit_ledgers QUARTER_BONUS ${short(bonusRow)} (${bonusRows} dòng); SUM sổ ${before32.d}→${after32.d}; notifications DEALER_BONUS_PAID ${noti}`,
     status: expBonus > 0 && bonusRow?.delta === -expBonus && bonusRows === 1 && Number(after32.d) === Number(before32.d) - expBonus ? 'PASS' : 'FAIL',
   });
 
@@ -300,7 +321,8 @@ try {
   await card.waitFor({ timeout: 20_000 }).catch(() => undefined);
   await card.scrollIntoViewIfNeeded().catch(() => undefined);
   const claimResp = p.waitForResponse((r) => /\/api\/dealer\/rewards\/[^/]+\/claim$/.test(new URL(r.url()).pathname), { timeout: 20_000 });
-  const claimBtn = p.locator('div').filter({ hasText: `Quà mốc UAT ${RUN}` }).getByRole('button', { name: 'Yêu cầu nhận thưởng' }).last();
+  // Thẻ kỳ hiện tại đứng trước thẻ kỳ trước (rewardsProgress: [...current, ...previous]).
+  const claimBtn = card.locator('xpath=ancestor::*[.//button[normalize-space()="Yêu cầu nhận thưởng"]][1]').getByRole('button', { name: 'Yêu cầu nhận thưởng' }).first();
   await claimBtn.click();
   const cr = await claimResp;
   await p.waitForTimeout(1000);
@@ -312,14 +334,14 @@ try {
   const ap = await api(L, 'POST', `/admin/dealer-reward-claims/${claim.id}/approve`, { user: 'uat_admin', body: { note: 'UAT' } });
   const mp = await api(L, 'POST', `/admin/dealer-reward-claims/${claim.id}/mark-paid`, { user: 'uat_ketoan', body: { note: 'Đã trao quà' } });
   const claim2 = (await sql(`SELECT status::text, "reviewedBy", "paidBy" FROM dealer_reward_claims WHERE id = $1`, claim.id))[0];
-  const curVol = (await sql(`SELECT COALESCE(SUM(total),0)::int s FROM orders o WHERE o."userId" = $1 AND o.type = 'DEALER' AND o.status IN ('PACKED','SHIPPING','DELIVERED') AND o."createdAt" >= $2 AND (o."paymentStatus" = 'PAID' OR EXISTS (SELECT 1 FROM dealer_credit_ledgers l WHERE l."refType" = 'ORDER' AND l."refId" = o.id)) AND o."paymentStatus" NOT IN ('REFUNDED','FAILED')`, D, new Date(Date.UTC(2026, 9, 1) - VN)))[0].s;
+  const curVol = await settledVolume(...quarterRange(claim.periodKey));
   R.add({
     id: 'U3-33', role: 'Đại lý / ADMIN / Kế toán', journey: 'Phần thưởng mốc đại lý', title: 'ADMIN tạo quà mốc 5 triệu/quý; đại lý bấm "Yêu cầu nhận thưởng"; duyệt rồi chi',
     steps: `POST /admin/dealer-rewards (brand Fuwa3e, 5.000.000/quý); giao ${o28.code}; /dealer → "Báo cáo" → "Yêu cầu nhận thưởng"; uat_ketoan approve (kỳ vọng 403), uat_admin approve, uat_ketoan mark-paid`,
-    expected: 'claim PENDING với volumeAtClaim = doanh số đã chốt Q4/2026 (SQL); KẾ TOÁN không duyệt được (403); ADMIN duyệt → APPROVED; KẾ TOÁN chi → PAID (paidBy)',
+    expected: 'claim kỳ hiện tại (Q4/2026) PENDING với volumeAtClaim = doanh số đã chốt của kỳ (SQL); KẾ TOÁN không duyệt được (403); ADMIN duyệt → APPROVED; KẾ TOÁN chi → PAID (paidBy)',
     actual: { deliver28: o28d, claimHttp: cr.status(), claim, sqlVol: curVol, ktApprove: ktApprove.status, approve: ap.status, markPaid: mp.status, claim2 },
-    evidence: `${s33}; HTTP claim ${cr.status()}; SQL dealer_reward_claims ${short(claim)} → ${short(claim2)}; SQL doanh số đã chốt Q4 ${curVol}`,
-    status: cr.status() < 300 && claim?.status === 'PENDING' && claim.vol === curVol && ktApprove.status === 403 && ap.ok && mp.ok && claim2.status === 'PAID' && claim2.paidBy === 'uat_ketoan' ? 'PASS' : 'FAIL',
+    evidence: `${s33}; HTTP claim ${cr.status()}; SQL dealer_reward_claims ${short(claim)} → ${short(claim2)}; SQL doanh số đã chốt ${claim.periodKey} ${curVol}`,
+    status: cr.status() < 300 && claim?.status === 'PENDING' && claim.periodKey === 'Q4/2026' && claim.vol === curVol && ktApprove.status === 403 && ap.ok && mp.ok && claim2.status === 'PAID' && claim2.paidBy === 'uat_ketoan' ? 'PASS' : 'FAIL',
     data: { rewardId: reward.id },
   });
 
