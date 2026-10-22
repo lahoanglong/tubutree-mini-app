@@ -353,6 +353,27 @@ describe('VoucherSheet: mức giảm thật của từng mã từ máy chủ (/c
     expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã FREESHIP' }));
   });
 
+  const THRESHOLD_REASON = 'Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+
+  it('đơn đạt ngưỡng miễn phí giao: thẻ FREESHIP ghi lý do, mã gõ tay báo cảnh báo đúng câu của máy chủ, không báo "Đã áp dụng" (U1-B03 sau Q12)', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([
+      { code: 'GIAM10', eligible: true, discount: 5_000 },
+      { code: 'FREESHIP', eligible: false, reason: THRESHOLD_REASON, discount: 0 },
+    ]);
+    mocks.applyCoupon.mockResolvedValue({ couponCode: 'FREESHIP', discount: 0, freeship: true, couponNotice: null });
+    renderSheet(undefined, { previewParams: {} });
+    expect(await screen.findByText(THRESHOLD_REASON)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value: 'freeship' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledWith('FREESHIP'));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(
+        expect.objectContaining({ text: `Mã chưa được áp dụng cho đơn này: ${THRESHOLD_REASON}`, type: 'warning' }),
+      ),
+    );
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã FREESHIP' }));
+  });
+
   it('freeship không miễn được đồng nào (hoặc trang giỏ chưa có phí giao): không ghi số tiền', async () => {
     mocks.getCouponPreviews.mockResolvedValue([
       { code: 'GIAM10', eligible: true, discount: 5_000 },
