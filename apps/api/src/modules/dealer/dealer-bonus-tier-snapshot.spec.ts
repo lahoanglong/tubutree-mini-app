@@ -1,6 +1,6 @@
 import { DealerService } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import type { SystemConfigService } from '../system-config/system-config.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 
 /**
  * Q8b: thưởng quý trả ngày 10 theo bảng bậc lúc đó. Trả bù (60 ngày sau quý) và thu hồi của quý đó phải dùng đúng bảng ấy,
@@ -46,7 +46,7 @@ const order = (id: string, total: number, createdAt: string, settledAt: string =
 });
 
 /** DB giả trong bộ nhớ: 1 đại lý d1; `clock` là giờ mô phỏng gán cho createdAt của dòng ghi mới. */
-function makeWorld(orders: OrderRow[], tiersConfig: { value: unknown }) {
+function makeWorld(orders: OrderRow[], tiersConfig: { value: unknown }, configOverride?: SystemConfigService) {
   const state = { clock: new Date('2026-04-09T21:00:00Z') };
   const ledger: Ledger[] = [];
   const snapshots = new Map<string, { quarter: string; tiers: unknown; createdAt: Date }>();
@@ -101,7 +101,9 @@ function makeWorld(orders: OrderRow[], tiersConfig: { value: unknown }) {
     dealerQuarterBonusTier: snapshotModel,
     $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
   };
-  const config = { get: async <T>(key: string, fb?: T): Promise<T> => (key === 'dealer.quarterly_bonus_tiers' ? tiersConfig.value : fb) as T } as unknown as SystemConfigService;
+  const config =
+    configOverride ??
+    ({ get: async <T>(key: string, fb?: T): Promise<T> => (key === 'dealer.quarterly_bonus_tiers' ? tiersConfig.value : fb) as T } as unknown as SystemConfigService);
   const notify = jest.fn().mockResolvedValue(undefined);
   const service = new DealerService(prisma as unknown as PrismaService, config, { notify } as never);
   return { service, ledger, snapshots, tx, state };
@@ -269,5 +271,46 @@ describe('Bản chụp bảng bậc thưởng theo quý', () => {
     w.state.clock = TOPUP_DAY;
     await svc.topUpQuarterlyBonuses(TOPUP_DAY);
     expect(w.ledger.find((l) => l.refType === 'QUARTER_BONUS_TOPUP')!.delta).toBe(-4_800_000);
+  });
+
+  // U3-B03: bảng bậc đi qua đúng đường ghi của admin (SystemConfigService.set, có luật hình dạng) rồi mới tới cron.
+  it('admin đổi bậc qua luật ghi: quý đã chụp giữ bản chụp, quý chưa chụp dùng bảng mới', async () => {
+    const store = new Map<string, unknown>([['dealer.quarterly_bonus_tiers', OLD_TIERS]]);
+    const tx = {
+      systemConfig: {
+        findUnique: jest.fn(async ({ where }: { where: { key: string } }) => (store.has(where.key) ? { key: where.key, value: store.get(where.key) } : null)),
+        upsert: jest.fn(async ({ where, update }: { where: { key: string }; update: { value: unknown } }) => {
+          store.set(where.key, update.value);
+        }),
+      },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const realConfig = new SystemConfigService({
+      systemConfig: tx.systemConfig,
+      $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    } as never);
+
+    const orders = [order('a', 120_000_000, '2026-03-10T03:00:00Z')];
+    const w = makeWorld(orders, { value: null }, realConfig);
+    const svc = w.service as unknown as Api;
+
+    await svc.payoutQuarterlyBonuses(PAYOUT_DAY);
+    expect(w.snapshots.get('Q1/2026')!.tiers).toEqual(OLD_TIERS);
+
+    await realConfig.set('dealer.quarterly_bonus_tiers', NEW_TIERS, 'admin-1');
+    await expect(realConfig.set('dealer.quarterly_bonus_tiers', [{ min: 100, pct: 0 }], 'admin-1')).rejects.toThrow(/lớn hơn 0/);
+
+    await svc.payoutQuarterlyBonuses(PAYOUT_DAY);
+    expect(w.snapshots.get('Q1/2026')!.tiers).toEqual(OLD_TIERS);
+    expect(w.ledger.filter((l) => l.refId === 'Q1/2026')).toHaveLength(1);
+
+    // DB giả không lọc theo ngày: thay bằng đơn của quý 2.
+    orders.splice(0, orders.length, order('b', 120_000_000, '2026-06-10T03:00:00Z'));
+    const julyPayout = new Date('2026-07-10T03:00:00Z');
+    w.state.clock = julyPayout;
+    await svc.payoutQuarterlyBonuses(julyPayout);
+    expect(w.snapshots.get('Q2/2026')!.tiers).toEqual(NEW_TIERS);
+    // 120tr theo bảng mới 3/5/6% = 6tr; theo bảng cũ 2/3/4% sẽ là 3,6tr.
+    expect(w.ledger.find((l) => l.refId === 'Q2/2026')).toMatchObject({ delta: -6_000_000 });
   });
 });

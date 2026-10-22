@@ -151,6 +151,28 @@ describe('ConfigItem (tab Cấu hình)', () => {
       expect(puts).toEqual([{ key, value: JSON.parse(next) }]);
     });
 
+    // U3-B03: bậc thưởng doanh số quý đại lý là bảng tiền thật; giá trị là mảng nên hộp xác nhận phải nêu cả bảng cũ và bảng mới.
+    it('dealer.quarterly_bonus_tiers: hộp xác nhận nêu bảng bậc cũ → mới, Huỷ thì không gửi, Lưu gửi mảng đã parse', async () => {
+      const oldTiers = [{ min: 50_000_000, pct: 2 }, { min: 100_000_000, pct: 3 }];
+      const next = '[{"min":50000000,"pct":3},{"min":100000000,"pct":5}]';
+      const { container, puts } = setup(row({ key: 'dealer.quarterly_bonus_tiers', value: oldTiers, category: 'dealer' }));
+      typeInto(container.querySelector('input'), next);
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      const d = confirmDialog();
+      expect(d?.textContent).toContain('Xác nhận đổi cấu hình tiền/điểm');
+      expect(d?.textContent).toContain('dealer.quarterly_bonus_tiers');
+      expect(d?.textContent).toContain(`${JSON.stringify(oldTiers)} → ${next}`);
+      answerConfirm(false);
+      await flush();
+      expect(puts).toHaveLength(0);
+      click(byText(container, 'button', 'Lưu'));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(puts).toEqual([{ key: 'dealer.quarterly_bonus_tiers', value: JSON.parse(next) }]);
+    });
+
     // Khoá lấy từ dòng GET /admin/config thật (fixture), không bịa tên: giải POINTS tới 100.000 điểm, thưởng premium 5.000-30.000 điểm,
     // đơn tối thiểu của coupon thu hoạch/voucher vòng quay, số lượt mua quay bằng điểm, tiền phạt đi trễ.
     it.each([

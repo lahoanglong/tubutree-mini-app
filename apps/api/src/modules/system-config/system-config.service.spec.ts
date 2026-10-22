@@ -323,6 +323,36 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     ],
     // Vai trò hưởng hoa hồng CTV: rỗng là không ai hưởng, sai tên vai trò là âm thầm về mặc định — chặn ngay lúc ghi.
     ['affiliate.commission_eligible_roles', ['AFFILIATE', 'DEALER'], [[], 'AFFILIATE', ['CTV'], ['AFFILIATE', 1], { AFFILIATE: true }]],
+    // Bậc thưởng doanh số quý đại lý (DealerService.bonusTiers): ngưỡng tăng dần không trùng, % trong (0, 10], không rỗng.
+    [
+      'dealer.quarterly_bonus_tiers',
+      [{ min: 50_000_000, pct: 3 }, { min: 100_000_000, pct: 4.5 }],
+      [
+        [],
+        'x',
+        { min: 50_000_000, pct: 3 },
+        [{ min: 50_000_000, pct: 3 }, { min: 50_000_000, pct: 4 }],
+        [{ min: 100_000_000, pct: 3 }, { min: 50_000_000, pct: 4 }],
+        [{ min: 0, pct: 3 }],
+        [{ min: -1, pct: 3 }],
+        [{ min: 50_000_000.5, pct: 3 }],
+        [{ min: '50000000', pct: 3 }],
+        [{ min: 50_000_000, pct: 0 }],
+        [{ min: 50_000_000, pct: -2 }],
+        [{ min: 50_000_000, pct: 10.5 }],
+        [{ min: 50_000_000, pct: 300 }],
+        [{ min: 50_000_000, pct: '3' }],
+        [{ min: 50_000_000, pct: null }],
+        [{ min: 50_000_000 }],
+        [{ pct: 3 }],
+        [{ min: 50_000_000, percent: 3 }],
+        [{ min: 50_000_000, pct: 3, note: 'x' }],
+        [null],
+        [[50_000_000, 3]],
+        Array.from({ length: 11 }, (_, i) => ({ min: (i + 1) * 10_000_000, pct: 1 })),
+        [{ min: 100_000_000_001, pct: 3 }],
+      ],
+    ],
     // Cờ gian hàng: chuỗi "false" hay số 0 mà lọt vào thì đọc ra tắt âm thầm, nên chỉ nhận boolean ngay lúc ghi.
     ['storefront.require_approval', true, ['true', 'false', 1, 0, null, {}]],
     ['storefront.subdomain_enabled', false, ['true', 'false', 1, 0, null, []]],
@@ -334,6 +364,18 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
       const bad = mk(null);
       await expect(bad.svc.set(key, v as never, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
     }
+  });
+
+  it('dealer.quarterly_bonus_tiers: lỗi trả tiếng Việt nêu đúng chỗ sai', async () => {
+    const msg = async (v: unknown) =>
+      mk(null).svc.set('dealer.quarterly_bonus_tiers', v as never, 'admin1').then(
+        () => '',
+        (e: Error) => e.message,
+      );
+    expect(await msg([])).toMatch(/ít nhất một bậc/);
+    expect(await msg([{ min: 50_000_000, pct: 3 }, { min: 50_000_000, pct: 4 }])).toMatch(/tăng dần, không trùng/);
+    expect(await msg([{ min: 50_000_000, pct: 30 }])).toMatch(/lớn hơn 0 và không quá 10/);
+    expect(await msg([{ min: 50_000_000, pct: 3, note: 'x' }])).toMatch(/chỉ gồm "min"/);
   });
 
   it.each([
