@@ -1465,3 +1465,77 @@ describe('LoyaltyService.getNewCustomerOffer', () => {
     expect((await svc.getNewCustomerOffer('me')).welcomeVoucher).toBeNull();
   });
 });
+
+describe('LoyaltyService chi tiêu xét hạng: chỉ đơn khách tự mua lẻ cho mình', () => {
+  const TIERS = [
+    { id: 'mam', name: 'Mầm Xanh', sortOrder: 0, minPoints: 0, minSpending: null, pointMultiplier: 1 },
+    { id: 'loc', name: 'Lộc Biếc', sortOrder: 1, minPoints: 1000, minSpending: 5_000_000, pointMultiplier: 1.2 },
+    { id: 'co', name: 'Cổ Thụ', sortOrder: 2, minPoints: 5000, minSpending: 20_000_000, pointMultiplier: 2 },
+  ];
+  type FakeOrder = { id: string; userId: string; type: 'RETAIL' | 'DEALER'; placedForCustomer: boolean; total: number };
+  type OrderWhere = { userId?: string; type?: string; placedForCustomer?: boolean; id?: { in: string[] } };
+
+  /** Đơn DELIVERED trong 12 tháng của một khách: lẻ tự mua, nhập sỉ đại lý, và lên hộ khách (userId = người lên đơn). */
+  const orders = (retail: number, dealer: number, assisted: number): FakeOrder[] => [
+    { id: 'o-retail', userId: 'u1', type: 'RETAIL', placedForCustomer: false, total: retail },
+    { id: 'o-dealer', userId: 'u1', type: 'DEALER', placedForCustomer: false, total: dealer },
+    { id: 'o-assisted', userId: 'u1', type: 'RETAIL', placedForCustomer: true, total: assisted },
+  ];
+
+  function setup(rows: FakeOrder[], tierId = 'mam') {
+    const hit = (w: OrderWhere) =>
+      rows.filter(
+        (o) =>
+          (w.userId === undefined || o.userId === w.userId) &&
+          (w.type === undefined || o.type === w.type) &&
+          (w.placedForCustomer === undefined || o.placedForCustomer === w.placedForCustomer) &&
+          (!w.id || w.id.in.includes(o.id)),
+      );
+    const update = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: 0, tierId, tierGraceUntil: null, tier: null }), update },
+      membershipTier: { findMany: jest.fn().mockResolvedValue(TIERS) },
+      order: {
+        aggregate: jest.fn(async ({ where }: { where: OrderWhere }) => ({ _sum: { total: hit(where).reduce((s, o) => s + o.total, 0) } })),
+        findMany: jest.fn(async ({ where }: { where: OrderWhere }) => hit(where).map(({ id, total }) => ({ id, total }))),
+      },
+      returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+      externalPointsClaim: { findMany: jest.fn().mockResolvedValue([]) },
+      pointsTransaction: fakeLedger([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    return { prisma, update, service: new LoyaltyService(prisma, makeConfig()) };
+  }
+
+  it('đại lý nhập sỉ 50 triệu (đơn DEALER) không đưa vào hạng Cổ Thụ', async () => {
+    const { service, update } = setup(orders(0, 50_000_000, 0));
+    await service.recalcTier('u1');
+    expect(update).not.toHaveBeenCalled(); // vẫn Mầm Xanh
+    const { service: overview } = setup(orders(0, 50_000_000, 0));
+    expect((await overview.getOverview('u1')).spent12m).toBe(0);
+  });
+
+  it('CTV lên hộ khách 1,5 triệu và 6 triệu (placedForCustomer) không tính cho CTV', async () => {
+    const { service, update } = setup(orders(0, 0, 6_000_000));
+    await service.recalcTier('u1');
+    expect(update).not.toHaveBeenCalled();
+    const ov = await setup(orders(0, 0, 6_000_000)).service.getOverview('u1');
+    expect(ov.spent12m).toBe(0);
+    expect(ov.nextTier?.spendingToGo).toBe(5_000_000);
+  });
+
+  it('ba loại đơn cùng có: chỉ đơn lẻ tự mua được cộng, tiến độ "còn X đ" cũng theo số đó', async () => {
+    const { service, update } = setup(orders(2_000_000, 50_000_000, 6_000_000));
+    await service.recalcTier('u1');
+    expect(update).not.toHaveBeenCalled(); // 2 triệu chưa tới mốc 5 triệu
+    const ov = await setup(orders(2_000_000, 50_000_000, 6_000_000)).service.getOverview('u1');
+    expect(ov.spent12m).toBe(2_000_000);
+    expect(ov.nextTier?.spendingToGo).toBe(3_000_000);
+  });
+
+  it('đơn lẻ tự mua vẫn lên hạng bình thường và phí giao vẫn nằm trong total', async () => {
+    const { service, update } = setup(orders(5_000_000, 50_000_000, 6_000_000));
+    await service.recalcTier('u1');
+    expect(update.mock.calls[0][0].data.tierId).toBe('loc');
+  });
+});
