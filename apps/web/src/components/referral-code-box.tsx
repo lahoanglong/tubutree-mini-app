@@ -167,7 +167,7 @@ export function ReferralCodeBox({
       )}
       <div className="flex gap-2">
         <button type="button" onClick={() => setOpen(false)} disabled={checking} className={ui.btnSecondary}>
-          Hủy
+          Huỷ
         </button>
         <button type="submit" disabled={checking} className={`${ui.btnPrimary} flex-1`}>
           {checking ? 'Đang kiểm tra…' : 'Áp dụng'}

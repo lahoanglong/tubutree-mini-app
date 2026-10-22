@@ -170,7 +170,7 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
     expect(labels).toEqual(expect.arrayContaining(['Giảm số lượng', 'Tăng số lượng']));
   });
 
-  it('/gio-hang có hàng: nút −/+/Xóa gắn với đúng sản phẩm, ô mã giảm giá có nhãn', async () => {
+  it('/gio-hang có hàng: nút −/+/Xoá gắn với đúng sản phẩm, ô mã giảm giá có nhãn', async () => {
     const { container } = mount(<CartPage />);
     await flush();
     expectAccessible(container);

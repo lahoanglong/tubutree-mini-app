@@ -352,7 +352,7 @@ export default function OrderDetailPage() {
       )}
 
       <p className="mt-6 px-4 text-sm text-stone-600 md:px-0">
-        Cần hủy hoặc đổi đơn? Gọi hotline {formatPhoneDisplay(support.hotline)} hoặc email {support.email}
+        Cần huỷ hoặc đổi đơn? Gọi hotline {formatPhoneDisplay(support.hotline)} hoặc email {support.email}
         {support.zaloOaName ? `, hoặc nhắn Zalo OA ${support.zaloOaName}` : ''} để được hỗ trợ.
       </p>
     </Shell>

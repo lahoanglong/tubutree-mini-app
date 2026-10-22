@@ -113,9 +113,9 @@ describe('giới thiệu như Mini App (điện thoại)', () => {
     expect(policy.className).toContain('max-md:font-semibold');
   });
 
-  it('Đăng xuất là nút nền xanh nhạt; Xóa tài khoản chữ đỏ', async () => {
+  it('Đăng xuất là nút nền xanh nhạt; Xoá tài khoản chữ đỏ', async () => {
     const { container } = await mount();
     expect(button(container, 'Đăng xuất').className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-    expect(button(container, 'Xóa tài khoản').className).toContain('max-md:text-[color:var(--color-text-danger)]');
+    expect(button(container, 'Xoá tài khoản').className).toContain('max-md:text-[color:var(--color-text-danger)]');
   });
 });

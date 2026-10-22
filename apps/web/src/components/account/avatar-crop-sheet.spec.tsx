@@ -65,9 +65,9 @@ describe('AvatarCropSheet', () => {
     expect(unnamedControls(dialog as HTMLElement)).toEqual([]);
   });
 
-  it('"Hủy chọn" đóng, không xác nhận', () => {
+  it('"Huỷ chọn" đóng, không xác nhận', () => {
     const { onClose, onConfirm } = mount();
-    click(byText(document.body, 'button', 'Hủy chọn'));
+    click(byText(document.body, 'button', 'Huỷ chọn'));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
   });

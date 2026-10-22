@@ -184,9 +184,9 @@ describe('SubscriptionsPanel', () => {
     expect(sent('POST', '/me/subscriptions/s1/status')[0]!.body).toEqual({ status: 'ACTIVE' });
   });
 
-  it('"Hủy" mở sheet giữ chân; "Bỏ qua kỳ này" gọi POST /skip; "Vẫn hủy" gọi CANCELLED', async () => {
+  it('"Huỷ" mở sheet giữ chân; "Bỏ qua kỳ này" gọi POST /skip; "Vẫn huỷ" gọi CANCELLED', async () => {
     const c = await mount();
-    click(btn('Hủy', c));
+    click(btn('Huỷ', c));
     await flush(6);
     expect(document.body.textContent).toContain('Giữ lại lịch định kỳ?');
     click(btn('Bỏ qua kỳ này'));
@@ -195,9 +195,9 @@ describe('SubscriptionsPanel', () => {
     expect(c.textContent).toContain('Đã bỏ qua kỳ này');
     expect(document.body.textContent).not.toContain('Giữ lại lịch định kỳ?');
 
-    click(btn('Hủy', c));
+    click(btn('Huỷ', c));
     await flush(6);
-    click(btn('Vẫn hủy'));
+    click(btn('Vẫn huỷ'));
     await flush(8);
     expect(sent('POST', '/me/subscriptions/s1/status').pop()!.body).toEqual({ status: 'CANCELLED' });
   });
@@ -205,7 +205,7 @@ describe('SubscriptionsPanel', () => {
   it('gói đang tạm dừng thì sheet giữ chân không có "Bỏ qua kỳ này"', async () => {
     subs = [{ ...SUB, status: 'PAUSED' }];
     const c = await mount();
-    click(btn('Hủy', c));
+    click(btn('Huỷ', c));
     await flush(6);
     expect(btn('Bỏ qua kỳ này')).toBeUndefined();
   });
@@ -235,7 +235,7 @@ describe('SubscriptionsPanel', () => {
     expect(Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Khám phá sản phẩm')?.getAttribute('href')).toBe('/san-pham');
   });
 
-  it('hàng nút Sửa/Tạm dừng/Hủy có tên, vùng chạm >= 44px, xuống dòng khi thiếu chỗ', async () => {
+  it('hàng nút Sửa/Tạm dừng/Huỷ có tên, vùng chạm >= 44px, xuống dòng khi thiếu chỗ', async () => {
     const c = await mount();
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);

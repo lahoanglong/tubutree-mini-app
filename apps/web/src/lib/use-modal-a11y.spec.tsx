@@ -45,7 +45,7 @@ const byId = (id: string) => document.getElementById(id) as HTMLElement;
 const dialogEl = () => document.querySelector('[role="dialog"]') as HTMLElement;
 
 describe('useModalA11y', () => {
-  it('mở: focus vào khung, khóa cuộn nền; đóng: trả focus về chỗ đã mở và mở lại cuộn nền', () => {
+  it('mở: focus vào khung, khoá cuộn nền; đóng: trả focus về chỗ đã mở và mở lại cuộn nền', () => {
     const opener = document.createElement('button');
     document.body.appendChild(opener);
     opener.focus();

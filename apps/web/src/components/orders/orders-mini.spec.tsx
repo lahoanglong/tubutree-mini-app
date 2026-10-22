@@ -73,9 +73,9 @@ describe('SubscriptionsPanel như Mini App', () => {
     expect(c.querySelector('li svg')!.parentElement!.className).toMatch(/max-md:bg-\[var\(--color-bg-subtle\)\]/);
   });
 
-  it('"Hủy" chữ đỏ thật: không mang lớp màu chữ stone của nút phụ để thắng thua không phụ thuộc thứ tự CSS', async () => {
+  it('"Huỷ" chữ đỏ thật: không mang lớp màu chữ stone của nút phụ để thắng thua không phụ thuộc thứ tự CSS', async () => {
     const c = await mount(<SubscriptionsPanel />);
-    const cancel = button(c, 'Hủy');
+    const cancel = button(c, 'Huỷ');
     expect(cancel.className).toMatch(/\btext-danger-fg\b/);
     expect(cancel.className).not.toMatch(/\btext-stone-800\b/);
     expect(cancel.className).not.toMatch(/\bborder-stone-450\b/);

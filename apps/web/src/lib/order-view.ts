@@ -8,7 +8,7 @@ const STATUS_LABEL: Record<string, string> = {
   SHIPPING: 'Đang giao',
   DELIVERED: 'Giao thành công',
   RETURNED: 'Đã hoàn',
-  CANCELLED: 'Đã hủy',
+  CANCELLED: 'Đã huỷ',
 };
 
 /** Tab lọc danh sách đơn — cùng nhóm với tab của Mini App (Đang xử lý gồm Đang đóng gói, Đã hủy/hoàn gồm Đã hoàn). */
@@ -18,7 +18,7 @@ export const ORDER_TABS = [
   { key: 'processing', label: 'Đang xử lý', filter: { group: 'processing' } },
   { key: 'shipping', label: 'Đang giao', filter: { status: 'SHIPPING' } },
   { key: 'delivered', label: 'Đã giao', filter: { status: 'DELIVERED' } },
-  { key: 'closed', label: 'Đã hủy/hoàn', filter: { group: 'closed' } },
+  { key: 'closed', label: 'Đã huỷ/hoàn', filter: { group: 'closed' } },
 ] as const satisfies readonly { key: string; label: string; filter: { status?: string; group?: 'processing' | 'closed' } }[];
 export type OrderTabKey = (typeof ORDER_TABS)[number]['key'];
 

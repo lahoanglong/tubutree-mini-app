@@ -98,7 +98,7 @@ describe('EvidenceUpload — ảnh minh chứng đổi/trả', () => {
 
   it('xoá một ảnh theo nút có tên rõ ràng', async () => {
     const c = await mount({ initial: ['data:image/jpeg;base64,1', 'data:image/jpeg;base64,2'] });
-    click(c.querySelector('button[aria-label="Xóa ảnh minh chứng 1"]'));
+    click(c.querySelector('button[aria-label="Xoá ảnh minh chứng 1"]'));
     await flush(2);
     expect(value(c)).toEqual(['data:image/jpeg;base64,2']);
   });

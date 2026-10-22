@@ -119,7 +119,7 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
         if (calls === 1) {
           return new Response(JSON.stringify({ ...QR_BODY, paymentStatus: 'PAID' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
-        return new Response(JSON.stringify({ message: 'Đơn đã hủy/trả, không thể thanh toán.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ message: 'Đơn đã huỷ/trả, không thể thanh toán.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }),
     );
     const { container } = mount(<BankTransferPanel order={order()} />);

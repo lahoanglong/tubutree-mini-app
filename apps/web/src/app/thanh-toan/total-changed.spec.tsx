@@ -141,7 +141,7 @@ describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () 
       click(editBtn(r, 'Bình'));
       await flush(2);
       expect(alertOf(r)).toBeUndefined();
-      click([...r.container.querySelectorAll('button')].find((b) => /^Huỷ|^Hủy|^Đóng/.test(b.textContent ?? ''))!);
+      click([...r.container.querySelectorAll('button')].find((b) => /^Huỷ|^Huỷ|^Đóng/.test(b.textContent ?? ''))!);
       await flush(2);
       expect(alertOf(r)).toBeDefined();
     });

@@ -68,7 +68,7 @@ describe('SiteSearch', () => {
     expect(container.querySelector('input')!.value).toBe('dầu gội');
   });
 
-  it('URL đổi q (vd. bấm "Xóa tìm kiếm") thì ô nhập đổi theo, còn đang gõ dở thì không bị ghi đè', () => {
+  it('URL đổi q (vd. bấm "Xoá tìm kiếm") thì ô nhập đổi theo, còn đang gõ dở thì không bị ghi đè', () => {
     nav.params = new URLSearchParams('q=dầu gội');
     const { container } = mount();
     const field = () => container.querySelector('input')!;

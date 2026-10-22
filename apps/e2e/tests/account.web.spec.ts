@@ -166,7 +166,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('link', { name: /Đăng nhập với Zalo/ })).toHaveAttribute('href', `/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/thong-bao')}`);
   });
 
-  test('giới thiệu: khách chưa đăng nhập xem FAQ, lọc nhóm, mở câu hỏi, liên hệ và link chính sách; không có Xóa tài khoản', async ({ page, api }) => {
+  test('giới thiệu: khách chưa đăng nhập xem FAQ, lọc nhóm, mở câu hỏi, liên hệ và link chính sách; không có Xoá tài khoản', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'no session' }));
     api.get('/faqs', [
       { id: 'f1', category: 'Vận chuyển', question: 'Bao lâu thì nhận hàng?', answer: '2-4 ngày.' },
@@ -195,24 +195,24 @@ test.describe('Web khách: tài khoản', () => {
     await expect(page.getByRole('main').getByRole('link', { name: /Hotline/ })).toHaveAttribute('href', 'tel:0984606774');
     await expect(page.getByRole('main').getByRole('link', { name: 'tubutree@gmail.com' })).toHaveAttribute('href', 'mailto:tubutree@gmail.com');
     await expect(page.getByRole('main').getByRole('link', { name: 'Chính sách đổi trả' })).toHaveAttribute('href', '/chinh-sach/doi-tra');
-    await expect(page.getByRole('button', { name: 'Xóa tài khoản' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Xoá tài khoản' })).toHaveCount(0);
   });
 
-  test('giới thiệu: đã đăng nhập gửi yêu cầu xóa tài khoản sau khi xác nhận', async ({ page, api }) => {
+  test('giới thiệu: đã đăng nhập gửi yêu cầu xoá tài khoản sau khi xác nhận', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
     api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
     api.get('/faqs', []);
     api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
-    api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xóa tài khoản' });
+    api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xoá tài khoản' });
     await page.goto('/gioi-thieu');
 
     await expect(page.getByText('Tubu Tree bán những gì?')).toBeVisible();
-    await page.getByRole('button', { name: 'Xóa tài khoản' }).click();
-    await expect(page.getByText('Xóa tài khoản vĩnh viễn?')).toBeVisible();
+    await page.getByRole('button', { name: 'Xoá tài khoản' }).click();
+    await expect(page.getByText('Xoá tài khoản vĩnh viễn?')).toBeVisible();
     const sent = api.waitForCall('POST', '/me/deletion-request');
-    await page.getByRole('button', { name: 'Gửi yêu cầu xóa' }).click();
+    await page.getByRole('button', { name: 'Gửi yêu cầu xoá' }).click();
     await sent;
-    await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xóa tài khoản' })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xoá tài khoản' })).toBeVisible();
   });
 
   test('nhận mã từ thẻ QR: đã đăng nhập thì POST /coupons/claim một lần, hiện ưu đãi và xoá ?claim= khỏi URL', async ({ page, api }) => {

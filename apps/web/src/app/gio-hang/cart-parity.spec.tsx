@@ -87,7 +87,7 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
 
   it('xoá xong hiện "Đã bỏ khỏi giỏ" kèm Hoàn tác; bấm Hoàn tác thêm lại đúng phân loại và số lượng đã xoá', async () => {
     const { container } = await mount();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     expect(container.textContent).toContain('Đã bỏ khỏi giỏ');
     click(undoButton(container)!);
@@ -98,7 +98,7 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
 
   it('hộp hoàn tác ở điện thoại nằm trên thanh dính theo chiều cao đo được, không cố định 128px', async () => {
     const { container } = await mount();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     const box = container.querySelector<HTMLElement>('[role="status"].fixed')!;
     expect(box.className).not.toMatch(/\bbottom-32\b/);
@@ -108,7 +108,7 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
   it('thanh hoàn tác tự tắt sau 3,5 giây', async () => {
     const { container } = await mount();
     vi.useFakeTimers();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await vi.advanceTimersByTimeAsync(50);
     expect(undoButton(container)).toBeDefined();
     await vi.advanceTimersByTimeAsync(3600);
@@ -118,7 +118,7 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
   it('xoá lỗi (máy chủ từ chối) → không có thanh hoàn tác', async () => {
     state.removeError = new Error('Không xoá được');
     const { container } = await mount();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     expect(undoButton(container)).toBeUndefined();
   });
@@ -126,7 +126,7 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
   it('hoàn tác lỗi → báo lỗi, thanh hoàn tác đã đóng', async () => {
     state.addError = new Error('Hết hàng rồi');
     const { container } = await mount();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     click(undoButton(container)!);
     await flush();

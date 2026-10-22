@@ -226,15 +226,15 @@ function AccountSection() {
           <p className="text-sm text-stone-900">{del.data.message}</p>
           {oa && (
             <button type="button" onClick={() => void platformBridge.oa.openChat(DELETE_OA_MESSAGE)} className={`${ui.btnSecondary} mt-3`}>
-              Nhắn Zalo OA về việc xóa tài khoản
+              Nhắn Zalo OA về việc xoá tài khoản
             </button>
           )}
         </div>
       ) : confirming ? (
         <div className="rounded-card bg-danger-bg p-4">
-          <p className="text-sm font-bold text-danger-fg">Xóa tài khoản vĩnh viễn?</p>
+          <p className="text-sm font-bold text-danger-fg">Xoá tài khoản vĩnh viễn?</p>
           <p className="mt-1 text-xs text-stone-700">
-            Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xóa tài khoản theo quy định — tài khoản CHƯA bị xóa ngay khi bạn bấm nút này.
+            Gửi yêu cầu để CSKH liên hệ xác minh và xử lý xoá tài khoản theo quy định — tài khoản CHƯA bị xoá ngay khi bạn bấm nút này.
           </p>
           {del.isError && (
             <p role="alert" className={`mt-2 ${ui.error}`}>
@@ -243,7 +243,7 @@ function AccountSection() {
           )}
           <div className="mt-3 flex gap-2">
             <button type="button" onClick={() => setConfirming(false)} className={`${ui.btnSecondary} flex-1`}>
-              Hủy
+              Huỷ
             </button>
             <button
               type="button"
@@ -251,13 +251,13 @@ function AccountSection() {
               onClick={() => del.mutate()}
               className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60"
             >
-              Gửi yêu cầu xóa
+              Gửi yêu cầu xoá
             </button>
           </div>
         </div>
       ) : (
         <button type="button" onClick={() => setConfirming(true)} className={`${ui.btnSecondary} w-full text-danger-fg max-md:border-transparent max-md:bg-[var(--color-bg-surface)] max-md:text-[color:var(--color-text-danger)] max-md:shadow-[var(--elevation-1)]`}>
-          Xóa tài khoản
+          Xoá tài khoản
         </button>
       )}
       <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>

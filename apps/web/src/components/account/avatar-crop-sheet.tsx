@@ -98,7 +98,7 @@ export function AvatarCropSheet({
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className={`${ui.btnSecondary} flex-1 gap-1.5`}>
             <X className="h-4 w-4" aria-hidden="true" />
-            Hủy chọn
+            Huỷ chọn
           </button>
           <button type="button" onClick={confirm} disabled={processing} className={`${ui.btnPrimary} flex-1 gap-1.5`}>
             <Check className="h-4 w-4" aria-hidden="true" />

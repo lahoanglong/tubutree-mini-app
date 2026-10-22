@@ -25,7 +25,7 @@ export const GOMDON_CARRIER = 'BestExpress';
 /** Mã số Gomdon gửi qua webhook — trùng GOMDON_STATUS_TEXT phía BE. */
 export const GOMDON_STATUS_TEXT: Record<string, string> = {
   '1': 'Tạo đơn thành công',
-  '2': 'Đơn hủy',
+  '2': 'Đơn huỷ',
   '3': 'Đã lấy hàng',
   '4': 'Đang vận chuyển đến bưu cục nhận',
   '5': 'Đang đi giao hàng',

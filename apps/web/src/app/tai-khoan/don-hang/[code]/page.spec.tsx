@@ -97,8 +97,8 @@ afterEach(() => {
   mounted = [];
 });
 
-describe('/tai-khoan/don-hang/[code] — lời liên hệ hủy/đổi đơn (Q-17)', () => {
-  const contact = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => (p.textContent ?? '').includes('Cần hủy hoặc đổi đơn'))?.textContent ?? '';
+describe('/tai-khoan/don-hang/[code] — lời liên hệ huỷ/đổi đơn (Q-17)', () => {
+  const contact = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => (p.textContent ?? '').includes('Cần huỷ hoặc đổi đơn'))?.textContent ?? '';
 
   it('chưa có Zalo OA: ghi thẳng hotline và email, không nhắc Zalo OA', async () => {
     const { container } = await mount();
@@ -245,7 +245,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).not.toContain('Chưa thanh toán');
   });
 
-  it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không QR, không hạn "tự huỷ", không nút hủy', async () => {
+  it('R5-SYNC-1: chờ chuyển khoản mà hàng đã bàn giao (Tubu xử lý tay) — câu trung tính, không QR, không hạn "tự huỷ", không nút huỷ', async () => {
     mocks.order = { ...ORDER, paymentDeadline: '2026-10-02T03:00:00Z', canCancel: false, manualHandling: true };
     const { container } = await mount();
     expect(container.textContent).toContain('Tubu đang xử lý đơn này, liên hệ CSKH nếu cần hỗ trợ.');
@@ -253,7 +253,7 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.textContent).not.toContain('quá hạn đơn sẽ tự huỷ');
     expect(container.textContent).not.toContain('Thanh toán trước');
     expect(container.textContent).not.toContain('Đơn đang chờ bạn chuyển khoản');
-    expect(buttons(container).map((b) => b.textContent)).not.toContain('Hủy đơn');
+    expect(buttons(container).map((b) => b.textContent)).not.toContain('Huỷ đơn');
   });
 
   it('chờ chuyển khoản mà đã quá hạn thanh toán: không dựng QR, không mời trả, vẫn ghi hạn và "quá hạn đơn sẽ tự huỷ" như Mini App', async () => {
@@ -323,11 +323,11 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     }
   });
 
-  it('đơn đã hủy: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã hủy)', async () => {
+  it('đơn đã huỷ: không dựng QR dù là chuyển khoản (API từ chối QR cho đơn đã huỷ)', async () => {
     mocks.order = { ...ORDER, status: 'CANCELLED' };
     const { container } = await mount();
     expect(mocks.qr.calls).toBe(0);
-    expect(container.textContent).toContain('Đã hủy');
+    expect(container.textContent).toContain('Đã huỷ');
   });
 
   it('link tra cứu vận đơn không phải http(s) bị bỏ, không thành liên kết', async () => {

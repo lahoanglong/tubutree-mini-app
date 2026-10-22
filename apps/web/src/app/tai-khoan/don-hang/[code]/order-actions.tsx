@@ -124,12 +124,12 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     <section aria-label="Thao tác với đơn hàng" className={`mt-4 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mt-2 max-md:py-0 ${mini.band}`}>
       {cancel.isSuccess && (
         <p ref={cancelNoticeRef} tabIndex={-1} role="status" className="mb-3 text-sm font-medium text-success-fg outline-none">
-          Đã hủy đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.
+          Đã huỷ đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.
         </p>
       )}
       {cancel.isError && (
         <p ref={cancelNoticeRef} tabIndex={-1} role="alert" className={`mb-3 outline-none ${ui.error}`}>
-          {cancel.error instanceof Error ? cancel.error.message : 'Không hủy được đơn hàng.'}
+          {cancel.error instanceof Error ? cancel.error.message : 'Không huỷ được đơn hàng.'}
         </p>
       )}
 
@@ -141,10 +141,10 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           className="rounded-control border border-danger-fg bg-danger-bg p-3"
         >
           <p id="cancel-title" className="font-semibold text-stone-900">
-            Bạn muốn hủy đơn này?
+            Bạn muốn huỷ đơn này?
           </p>
           <p id="cancel-note" className="mt-1 text-sm text-stone-700">
-            Đơn đã hủy không thể khôi phục lại.
+            Đơn đã huỷ không thể khôi phục lại.
           </p>
           {refundMode === 'choose' && (
             <div className="mt-3 rounded-control bg-stone-0 p-3">
@@ -180,7 +180,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
               disabled={cancel.isPending}
               className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
             >
-              {cancel.isPending ? 'Đang hủy…' : 'Hủy đơn'}
+              {cancel.isPending ? 'Đang huỷ…' : 'Huỷ đơn'}
             </button>
           </div>
         </div>
@@ -197,7 +197,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
               }}
               className={`${ui.btnSecondary} border-danger-fg text-danger-fg max-md:flex-1`}
             >
-              Hủy đơn
+              Huỷ đơn
             </button>
           )}
           {canReorder && (

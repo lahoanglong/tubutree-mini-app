@@ -30,7 +30,7 @@ const PAY_LABEL: Record<SubscriptionPaymentMethod, string> = {
 const PAY_HINT: Record<SubscriptionPaymentMethod, string> = {
   COD: 'Trả tiền mặt cho shipper mỗi lần giao.',
   WALLET: 'Tự trừ Ví Tubu mỗi kỳ. Ví không đủ tiền thì gói tạm dừng và Tubu báo cho bạn.',
-  BANK_TRANSFER: 'Mỗi kỳ Tubu tạo đơn chờ chuyển khoản. Quá hạn chưa chuyển thì đơn tự hủy.',
+  BANK_TRANSFER: 'Mỗi kỳ Tubu tạo đơn chờ chuyển khoản. Quá hạn chưa chuyển thì đơn tự huỷ.',
 };
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -150,7 +150,7 @@ export function SubscribeSheet({
       open={visible}
       onClose={onClose}
       title={`Đặt định kỳ — tiết kiệm ${discountPct}%`}
-      description="Tự động giao lại theo chu kỳ bạn chọn. Tạm dừng, sửa hoặc hủy bất kỳ lúc nào."
+      description="Tự động giao lại theo chu kỳ bạn chọn. Tạm dừng, sửa hoặc huỷ bất kỳ lúc nào."
       size="full"
       footer={
         noAddress ? undefined : (

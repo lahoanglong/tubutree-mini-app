@@ -93,7 +93,7 @@ describe('/gioi-thieu: trang công khai', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Bao lâu thì nhận hàng?');
     expect(container.textContent).toContain('0984 606 774');
-    expect(byText(container, 'button', 'Xóa tài khoản')).toBeNull();
+    expect(byText(container, 'button', 'Xoá tài khoản')).toBeNull();
     expect(byText(container, 'button', 'Đăng xuất')).toBeNull();
   });
 
@@ -262,31 +262,31 @@ describe('/gioi-thieu: chính sách', () => {
 });
 
 describe('/gioi-thieu: tài khoản', () => {
-  it('Xóa tài khoản: bấm, hỏi lại, "Gửi yêu cầu xóa" gọi API đúng một lần; "Hủy" quay về', async () => {
+  it('Xoá tài khoản: bấm, hỏi lại, "Gửi yêu cầu xoá" gọi API đúng một lần; "Huỷ" quay về', async () => {
     const { container } = await mount();
-    click(button(container, 'Xóa tài khoản'));
-    expect(container.textContent).toContain('Xóa tài khoản vĩnh viễn?');
-    click(button(container, 'Hủy'));
-    expect(container.textContent).not.toContain('Xóa tài khoản vĩnh viễn?');
+    click(button(container, 'Xoá tài khoản'));
+    expect(container.textContent).toContain('Xoá tài khoản vĩnh viễn?');
+    click(button(container, 'Huỷ'));
+    expect(container.textContent).not.toContain('Xoá tài khoản vĩnh viễn?');
     expect(mocks.post).not.toHaveBeenCalled();
 
-    click(button(container, 'Xóa tài khoản'));
-    click(button(container, 'Gửi yêu cầu xóa'));
+    click(button(container, 'Xoá tài khoản'));
+    click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
     expect(mocks.post).toHaveBeenCalledTimes(1);
     expect(mocks.post.mock.calls[0]![0]).toBe('/me/deletion-request');
     expect(container.querySelector('[role="status"]')?.textContent).toContain('Đã ghi nhận yêu cầu');
-    expect(byText(container, 'button', 'Gửi yêu cầu xóa')).toBeNull();
+    expect(byText(container, 'button', 'Gửi yêu cầu xoá')).toBeNull();
   });
 
   it('gửi yêu cầu lỗi: báo lỗi và cho gửi lại', async () => {
     mocks.post.mockRejectedValueOnce(new Error('Máy chủ bận'));
     const { container } = await mount();
-    click(button(container, 'Xóa tài khoản'));
-    click(button(container, 'Gửi yêu cầu xóa'));
+    click(button(container, 'Xoá tài khoản'));
+    click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
-    click(button(container, 'Gửi yêu cầu xóa'));
+    click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
     expect(mocks.post).toHaveBeenCalledTimes(2);
   });
@@ -294,10 +294,10 @@ describe('/gioi-thieu: tài khoản', () => {
   it('có OA cấu hình: sau khi gửi yêu cầu có nút nhắn Zalo OA để trao đổi trực tiếp', async () => {
     mocks.oaAvailable = true;
     const { container } = await mount();
-    click(button(container, 'Xóa tài khoản'));
-    click(button(container, 'Gửi yêu cầu xóa'));
+    click(button(container, 'Xoá tài khoản'));
+    click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
-    click(button(container, 'Nhắn Zalo OA về việc xóa tài khoản'));
+    click(button(container, 'Nhắn Zalo OA về việc xoá tài khoản'));
     expect(mocks.openChat).toHaveBeenCalledWith('Tôi muốn xoá tài khoản Tubu Tree');
   });
 
