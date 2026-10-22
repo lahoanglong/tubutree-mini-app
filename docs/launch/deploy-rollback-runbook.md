@@ -932,7 +932,7 @@ Kỳ vọng: in `CREATE INDEX`, rồi hai id image giống nhau, và `mã thoát
 
 Giải thích: dựng lại chỉ mục cũ để code cũ chạy đúng ràng buộc của nó. Chỉ mục mới `reviews_userId_productId_orderId_key` cứ để đó (vô hại với code cũ). Hai id in ra phải giống nhau: chứng tỏ container API đang chạy đúng image cũ. Image cũ chạy `prisma migrate deploy` trên DB đã có thêm các migration mới sẽ báo "No pending migrations to apply" và không kẹt (đã thử cục bộ: thư mục migration bản cũ chạy với DB đã migrate đủ, kết quả đúng như vậy; mục 8 của `99-release-readiness.md` ghi nhận cùng hành vi cho lần phát hành trước).
 
-Quay API và web cùng nhau (hai lệnh `docker tag` ở khối trên đã gắn lại cả hai). Không quay API một mình: web admin mới gửi `expectedAmount` khi duyệt/chi lệnh rút, API cũ từ chối vì `forbidNonWhitelisted` (400), admin không duyệt hay chi được.
+Quay API và web cùng nhau (hai lệnh `docker tag` ở khối trên đã gắn lại cả hai). Không quay API một mình: web admin mới gửi `expectedAmount` khi duyệt/chi lệnh rút, API cũ từ chối vì `forbidNonWhitelisted` (400), admin không duyệt hay chi được. Báo admin và kế toán tải lại mọi tab Quản trị (như bước 12): tab đã mở từ lúc web mới chạy vẫn giữ mã web mới, bấm Duyệt hoặc Đã chi sẽ bị 400.
 
 Sau khi quay image: màn Quản trị, Sức khoẻ hệ thống và `curl .../api/health` phải ổn. Dữ liệu phát sinh sau deploy được giữ nguyên.
 
@@ -971,6 +971,7 @@ Kỳ vọng: bộ 4 số khớp bộ ghi ở bước 6 (migrations là số cũ,
 
 Việc sau khôi phục:
 
+0. Báo admin và kế toán tải lại mọi tab Quản trị (như bước 12): tab mở từ lúc web mới chạy gửi `expectedAmount` khi duyệt/chi lệnh rút, API cũ trả 400.
 1. Đối chiếu các đơn phát sinh giữa bước 6 và lúc khôi phục (không có nếu quay lại ngay sau migrate, vì API dừng từ bước 5): so với Pancake POS và sao kê ngân hàng; đơn nào có tiền mà không có trong DB thì tạo lại hoặc hoàn tiền.
 2. Hàng đợi Redis còn job cũ tham chiếu đơn không còn: xem Sức khoẻ hệ thống, các dòng `queue.<tên>`; xử lý hoặc xoá job lỗi sau khi đối chiếu.
 3. DB `<db>_before_restore_...` chỉ xoá khi Tech lead đồng ý (lệnh `DROP DATABASE` nằm cuối đầu ra của `restore-db.sh`).
@@ -978,7 +979,7 @@ Việc sau khôi phục:
 
 ### 7.4 Chỉ web có vấn đề
 
-Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME" && $DC up -d --no-build --no-deps web`. Lưu ý cặp web cũ với API mới: tab admin cũ sẽ gửi `null` cho mã Pancake rỗng (xem bước 12), nên chỉ làm tạm. Chiều ngược lại (web cũ với API mới) không lỗi với duyệt/chi lệnh rút vì `expectedAmount` là tuỳ chọn; chỉ riêng cặp web mới với API cũ là hỏng (xem mục 0.2, ràng buộc 3).
+Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAME%%:*}:rollback" "$WEB_NAME" && $DC up -d --no-build --no-deps web`. Lưu ý cặp web cũ với API mới: tab admin cũ sẽ gửi `null` cho mã Pancake rỗng (xem bước 12), nên chỉ làm tạm. Riêng việc duyệt/chi lệnh rút thì cặp web cũ với API mới không lỗi, vì `expectedAmount` là tuỳ chọn; chỉ cặp web mới với API cũ là hỏng (xem mục 0.2, ràng buộc 3).
 
 ## 8. Tham chiếu
 
