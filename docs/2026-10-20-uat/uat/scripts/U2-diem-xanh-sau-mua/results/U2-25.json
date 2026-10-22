@@ -3,8 +3,8 @@
   "title": "Trả một phần sau giao (Đại Thụ, COD 199.000đ: trả nước lau kính 79.000đ, lý do lỗi): điểm khoá khi chờ, duyệt → thu hồi điểm theo tỉ lệ, hoàn 79.000đ vào Ví Tubu",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:42:12.556Z",
-  "lane": 7,
+  "at": "2026-10-22T11:40:29.590Z",
+  "lane": 2,
   "checks": [
     {
       "name": "yêu cầu trả 1 dòng tạo được (REQUESTED, nhận về Ví)",
@@ -43,12 +43,12 @@
         "rows": [
           {
             "delta": 5970,
-            "reason": "ORDER_DELIVERED:TUBU2026101985096",
+            "reason": "ORDER_DELIVERED:TUBU2026102288023",
             "refType": "ORDER"
           },
           {
             "delta": -2370,
-            "reason": "RETURN_REVERSED:TUBU2026101985096",
+            "reason": "RETURN_REVERSED:TUBU2026102288023",
             "refType": "RETURN_REQUEST"
           }
         ]
@@ -98,18 +98,18 @@
       "delivered": "PROCESSED/DELIVERED"
     },
     "đơn": {
-      "id": "cmvfhfcia00sj5ksfnxfz4wyz",
+      "id": "cmvjgyw8500s6h9r1hmozxzt2",
       "pointsEarned": 5970,
       "total": 199000,
       "items": [
         {
-          "id": "cmvfhfcia00sk5ksf7t1pd16m",
+          "id": "cmvjgyw8500s7h9r1fvwuylsg",
           "productName": "Nước rửa chén sinh học Fuwa3e",
           "variationName": "1L",
           "total": 120000
         },
         {
-          "id": "cmvfhfcia00sl5ksf3a956aop",
+          "id": "cmvjgyw8500s8h9r18e5iqgsx",
           "productName": "Nước lau kính enzyme Fuwa3e",
           "variationName": "500ml",
           "total": 79000
@@ -118,12 +118,12 @@
     },
     "POST return-request": {
       "http": 201,
-      "id": "cmvfhfez400tc5ksfb2cpaz05",
+      "id": "cmvjgyyo800szh9r11qwmfw9h",
       "status": "REQUESTED",
       "refundMethod": "WALLET"
     },
     "admin preview": {
-      "requestId": "cmvfhfez400tc5ksfb2cpaz05",
+      "requestId": "cmvjgyyo800szh9r11qwmfw9h",
       "shopFault": true,
       "defaultShopFault": true,
       "isFull": false,
@@ -138,7 +138,7 @@
       "pointsEarnedBack": 2370,
       "lines": [
         {
-          "orderItemId": "cmvfhfcia00sl5ksf3a956aop",
+          "orderItemId": "cmvjgyw8500s8h9r18e5iqgsx",
           "quantity": 1,
           "refundAmount": 79000,
           "productName": "Nước lau kính enzyme Fuwa3e",
@@ -173,12 +173,12 @@
       "points": [
         {
           "delta": 5970,
-          "reason": "ORDER_DELIVERED:TUBU2026101985096",
+          "reason": "ORDER_DELIVERED:TUBU2026102288023",
           "refType": "ORDER"
         },
         {
           "delta": -2370,
-          "reason": "RETURN_REVERSED:TUBU2026101985096",
+          "reason": "RETURN_REVERSED:TUBU2026102288023",
           "refType": "RETURN_REQUEST"
         }
       ],
@@ -190,9 +190,9 @@
         {
           "delta": 79000,
           "type": "ORDER_REFUND",
-          "reason": "Hoàn tiền trả hàng đơn TUBU2026101985096",
+          "reason": "Hoàn tiền trả hàng đơn TUBU2026102288023",
           "refType": "RETURN_REQUEST",
-          "refId": "cmvfhfez400tc5ksfb2cpaz05"
+          "refId": "cmvjgyyo800szh9r11qwmfw9h"
         }
       ],
       "balance": [
@@ -208,7 +208,7 @@
       "Đã cộng +5.970, đã thu lại 2.370 điểm do trả hàng",
       "Hoàn tiền",
       "Hoàn tiền trả hàng: đã hoàn vào Ví Tubu · 79.000đ",
-      "Đã cộng vào Ví Tubu lúc 23:42 19/10/2026.",
+      "Đã cộng vào Ví Tubu lúc 18:40 22/10/2026.",
       "Đổi/trả đã duyệt — đã hoàn 79.000đ vào Ví Tubu",
       "Trả: Nước lau kính enzyme Fuwa3e ×1",
       "Trả thêm sản phẩm"

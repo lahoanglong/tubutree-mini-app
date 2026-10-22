@@ -3,8 +3,8 @@
   "title": "Đơn CSKH của SĐT chưa vào Mini App (0901000013): giữ 30 ngày (HELD_NO_MEMBER); khách mới vào Mini App, chia sẻ SĐT đó lúc đặt đơn → nhận điểm",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:30:40.200Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:37.685Z",
+  "lane": 2,
   "checks": [
     {
       "name": "claim PHONE chưa có chủ (userId null), PENDING, orderPhone 0901000013",
@@ -29,7 +29,7 @@
       "ok": true,
       "detail": {
         "phone": "0901000013",
-        "phoneVerifiedAt": "2026-10-19T16:30:33.957Z",
+        "phoneVerifiedAt": "2026-10-22T11:39:33.502Z",
         "pointsBalance": 0
       }
     },
@@ -61,8 +61,8 @@
     },
     "sau job": {
       "state": "HELD_NO_MEMBER",
-      "releaseAt": "2026-10-16T16:22:11.000Z",
-      "holdUntil": "2026-11-15T16:22:11.000Z",
+      "releaseAt": "2026-10-19T11:38:08.000Z",
+      "holdUntil": "2026-11-18T11:38:08.000Z",
       "holdDays": 30
     },
     "Mini App": {
@@ -82,7 +82,7 @@
       ]
     },
     "claim sau khi khách vào app": {
-      "id": "cmvfh0gma00hl5ksfio21p6jq",
+      "id": "cmvjgxso900h7h9r1c1kbo1r9",
       "userId": "uat_u2_chatnew",
       "kind": "PHONE",
       "state": "PENDING",
@@ -90,13 +90,13 @@
       "ratePct": "2.0000",
       "multiplier": "1.000",
       "countsForTier": true,
-      "releaseAt": "2026-10-16T16:22:11.000Z",
+      "releaseAt": "2026-10-19T11:38:08.000Z",
       "holdUntil": null,
       "reviewReason": null,
       "orderPhone": "0901000013",
       "orderStatus": "DELIVERED",
       "goodsValue": 180000,
-      "deliveredAt": "2026-10-02T16:22:11.000Z"
+      "deliveredAt": "2026-10-05T11:38:08.000Z"
     },
     "sau liên kết": {
       "claim": {
@@ -118,13 +118,13 @@
         "templateCode": "CHAT_ORDER_POINTS_LINKED",
         "channel": "INAPP",
         "status": "SENT",
-        "sentAt": "2026-10-19T16:30:33.995Z"
+        "sentAt": "2026-10-22T11:39:33.519Z"
       },
       {
         "templateCode": "CHAT_ORDER_POINTS_CREDITED",
         "channel": "INAPP",
         "status": "SENT",
-        "sentAt": "2026-10-19T16:30:36.833Z"
+        "sentAt": "2026-10-22T11:39:35.819Z"
       }
     ],
     "đơn chat 7700008 không ai nhận": {

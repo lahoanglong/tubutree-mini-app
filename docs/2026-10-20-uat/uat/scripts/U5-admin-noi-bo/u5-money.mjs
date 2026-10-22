@@ -42,6 +42,9 @@ if (want('U5-20')) {
     if (!req.ok) throw new Error(`CTV rút ${req.status} ${brief(req.body, 300)}`);
     const payoutId = req.body.payoutId ?? req.body.id;
     const ktApprove = await api('POST', `/admin/payouts/${payoutId}/approve`, { user: 'ketoan', body: {} });
+    // Duyệt/chi nay gửi expectedAmount (số đang hiện trên màn): lệch số thực nhận thì 409 "tải lại", không ghi gì.
+    const staleApprove = await api('POST', `/admin/payouts/${payoutId}/approve`, { user: 'admin', body: { expectedAmount: avail + 1000 } });
+    const [poStale] = await q(`SELECT status FROM payouts WHERE id = $1`, payoutId);
     // KẾ TOÁN xem tab
     let s = await openWebSession('ketoan', '/admin?tab=payouts');
     let ktButtons;
@@ -60,10 +63,15 @@ if (want('U5-20')) {
     // ADMIN duyệt trên UI
     s = await openWebSession('admin', '/admin?tab=payouts');
     let apSt = 0;
+    let approveBody = '';
+    let markBody = '';
     try {
       const btn = s.page.getByRole('button', { name: 'Duyệt', exact: true }).first();
       await btn.waitFor({ timeout: 90_000 });
       const r = waitApi(s.page, /\/api\/admin\/payouts\/[^/]+\/approve$/);
+      s.page.on('request', (rq) => {
+        if (/\/api\/admin\/payouts\/[^/]+\/approve$/.test(new URL(rq.url()).pathname)) approveBody = rq.postData() ?? '';
+      });
       await btn.click();
       const d = s.page.getByRole('alertdialog');
       if (await d.isVisible({ timeout: 2000 }).catch(() => false)) await d.getByRole('button').last().click();
@@ -73,6 +81,8 @@ if (want('U5-20')) {
     } finally {
       await s.close();
     }
+    const staleMark = await api('POST', `/admin/payouts/${payoutId}/mark-paid`, { user: 'ketoan', body: { expectedAmount: avail + 1000, bankRef: 'FT26UATSTALE' } });
+    const [poStale2] = await q(`SELECT status FROM payouts WHERE id = $1`, payoutId);
     // KẾ TOÁN chi
     s = await openWebSession('ketoan', '/admin?tab=payouts');
     let paySt = 0;
@@ -84,6 +94,9 @@ if (want('U5-20')) {
       await input.waitFor({ timeout: 90_000 });
       await input.fill('FT26UATPAYOUT20');
       const r = waitApi(p, /\/api\/admin\/payouts\/[^/]+\/mark-paid$/);
+      p.on('request', (rq) => {
+        if (/\/api\/admin\/payouts\/[^/]+\/mark-paid$/.test(new URL(rq.url()).pathname)) markBody = rq.postData() ?? '';
+      });
       await p.getByRole('button', { name: 'Đã chuyển khoản', exact: true }).first().click();
       const d = p.getByRole('alertdialog');
       await d.waitFor({ timeout: 10_000 });
@@ -95,13 +108,20 @@ if (want('U5-20')) {
     } finally {
       await s.close();
     }
+    const day = new Date().toISOString().slice(0, 10);
+    const csv = await api('GET', `/admin/reports/exports/payouts?from=${day}&to=${day}`, { user: 'ketoan' });
+    const csvHead = String(csv.body).split('\n')[0] ?? '';
     const [po] = await q(`SELECT status, amount::int, "grossAmount"::int, "taxWithheld"::int, fee::int, "reviewedBy", "paidBy", "bankRef" FROM payouts WHERE id = $1`, payoutId);
     const [com1] = await q(`SELECT status, amount::int, "payoutBatchId" FROM commissions WHERE id = $1`, com0.id);
     const dash2 = await apiOk('GET', '/affiliate/dashboard', { user: 'ctv' });
     const expectCom = Math.round(o.order.subtotal * 0.08);
-    const ok = com0.amount === expectCom && ktApprove.status === 403 && ktButtons.duyet === 0 && apSt < 300 && paySt < 300 && po.status === 'PAID' && po.reviewedBy === 'uat_admin' && po.paidBy === 'uat_ketoan' && po.bankRef === 'FT26UATPAYOUT20' && po.grossAmount === com0.amount;
+    const ok = com0.amount === expectCom && ktApprove.status === 403 && ktButtons.duyet === 0 && apSt < 300 && paySt < 300 && po.status === 'PAID' && po.reviewedBy === 'uat_admin' && po.paidBy === 'uat_ketoan' && po.bankRef === 'FT26UATPAYOUT20' && po.grossAmount === com0.amount
+      && staleApprove.status === 409 && /tải lại/.test(JSON.stringify(staleApprove.body)) && poStale.status === 'REQUESTED'
+      && staleMark.status === 409 && /tải lại/.test(JSON.stringify(staleMark.body)) && poStale2.status === 'APPROVED'
+      && JSON.parse(approveBody || '{}').expectedAmount === avail && JSON.parse(markBody || '{}').expectedAmount === avail
+      && csv.status === 200 && csvHead.includes('Thuế đã hoàn về Ví');
     return {
-      actual: `Đơn ${o.code} tiền hàng ${o.order.subtotal}đ → hoa hồng ${com0.amount}đ (8% = ${expectCom}), ${com0.status}; job ${brief(job.result ?? job, 60)}; khả dụng ${avail}. CTV rút → ${req.status}. KẾ TOÁN approve API → ${ktApprove.status}; nút trên tab: Duyệt=${ktButtons.duyet}, Từ chối=${ktButtons.tuchoi}. ADMIN Duyệt → ${apSt}. KẾ TOÁN chi → ${paySt}. payouts: ${brief(po, 200)}. commission: ${brief(com1, 100)}. Khả dụng sau: ${dash2.withdrawableCommission ?? brief(dash2, 80)}`,
+      actual: `Đơn ${o.code} tiền hàng ${o.order.subtotal}đ → hoa hồng ${com0.amount}đ (8% = ${expectCom}), ${com0.status}; job ${brief(job.result ?? job, 60)}; khả dụng ${avail}. CTV rút → ${req.status}. KẾ TOÁN approve API → ${ktApprove.status}; nút trên tab: Duyệt=${ktButtons.duyet}, Từ chối=${ktButtons.tuchoi}. ADMIN Duyệt → ${apSt}. KẾ TOÁN chi → ${paySt}. payouts: ${brief(po, 200)}. commission: ${brief(com1, 100)}. Khả dụng sau: ${dash2.withdrawableCommission ?? brief(dash2, 80)}. Luật mới: approve lệch expectedAmount → ${staleApprove.status} "${brief(staleApprove.body?.message ?? '', 150)}" (payout vẫn ${poStale.status}); mark-paid lệch → ${staleMark.status} (vẫn ${poStale2.status}); UI gửi approve ${approveBody}, mark-paid ${markBody}; CSV lệnh rút ${csv.status} có cột "Thuế đã hoàn về Ví (VNĐ)": ${csvHead.includes('Thuế đã hoàn về Ví')}`,
       evidence: `${ev}; SQL payouts (reviewedBy/paidBy/bankRef), commissions`,
       verdict: ok ? 'PASS' : 'FAIL',
     };
@@ -226,7 +246,7 @@ if (want('U5-23')) {
       await sec.waitFor({ timeout: 20_000 });
       await sec.getByRole('button').first().click();
       await sec.getByLabel('Số tiền đã nhận (đ)').fill('1000000');
-      await sec.getByLabel('Mã giao dịch ngân hàng').fill(bankRef);
+      await sec.getByLabel('Mã giao dịch').fill(bankRef);
       const r = waitApi(p, /\/api\/admin\/dealers\/[^/]+\/credit-payment$/);
       await sec.getByRole('button', { name: /Xác nhận đã nhận, giảm nợ/ }).click();
       const dl = p.getByRole('alertdialog');

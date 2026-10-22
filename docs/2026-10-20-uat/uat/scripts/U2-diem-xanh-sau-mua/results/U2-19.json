@@ -3,8 +3,8 @@
   "title": "Sửa gói trên Mini App: số lượng 1 → 2 → PATCH 200, DB quantity 2",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:31:07.140Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:44.968Z",
+  "lane": 2,
   "checks": [
     {
       "name": "UI sửa số lượng: 200, DB quantity 2",

@@ -80,7 +80,7 @@
     {
       "label": "SQL giờ vàng BHN-CW-500 trước",
       "data": {
-        "id": "cmvfes19u002m13zttfc0j4lk",
+        "id": "cmvjgm16f002o1487d9opw9db",
         "flashPrice": 119000,
         "quota": 50,
         "soldCount": 0,
@@ -106,7 +106,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfh0cmz01df14pjjweuh2k3",
+          "addressId": "cmvjgvu8f00wbzw9cijw3anst",
           "pointsToUse": 0
         },
         "subtotal": 238000,
@@ -136,7 +136,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101958498",
+        "code": "TUBU2026102200507",
         "button": "Đặt hàng · 238.000đ"
       }
     },
@@ -197,7 +197,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfh0pm801ff14pj718g999k",
+          "addressId": "cmvjgw5p600ybzw9czxjh2it4",
           "pointsToUse": 0
         },
         "subtotal": 195000,
@@ -262,5 +262,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:30:48.953Z"
+  "ranAt": "2026-10-22T11:38:21.168Z"
 }

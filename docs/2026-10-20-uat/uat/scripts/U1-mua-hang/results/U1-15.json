@@ -26,8 +26,8 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgdvaw00m414pjdxu3riap",
-              "cmvfgdvbe00mc14pj2jiltk5b"
+              "cmvjgta0a00f9zw9cxwb2yb4l",
+              "cmvjgta0i00fhzw9c5w2vsk5k"
             ],
             "subtotal": 595000,
             "discount": 50000,
@@ -59,7 +59,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgdvaw00m414pjdxu3riap",
+            "id": "cmvjgta0a00f9zw9cxwb2yb4l",
             "variationId": "cmqfv2cky0003zxpl45lh4ggm",
             "productId": "p-visante-serum",
             "productName": "Serum dưỡng ẩm Visante",
@@ -84,7 +84,7 @@
             "partnerOwned": false
           },
           {
-            "id": "cmvfgdvbe00mc14pj2jiltk5b",
+            "id": "cmvjgta0i00fhzw9c5w2vsk5k",
             "variationId": "cmqfv2cmq0011zxpl67fkxph0",
             "productId": "p-fuwa-bottle",
             "productName": "Nước rửa bình sữa Fuwa3e",
@@ -131,15 +131,16 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nĐơn tối thiểu 250.000đ để dùng mã này.",
-        "message": "Đơn tối thiểu 250.000đ để dùng mã này."
+        "snack": "Đơn tối thiểu 250.000đ để dùng mã này.",
+        "message": "Đơn tối thiểu 250.000đ để dùng mã này.",
+        "sheetNote": true
       }
     },
     {
       "label": "áp mã XANH10",
       "data": {
         "status": 201,
-        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã XANH10",
+        "snackbar": "Đã áp dụng mã XANH10",
         "couponCode": "XANH10",
         "discount": 50000,
         "message": null
@@ -169,7 +170,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101982315",
+        "code": "TUBU2026102293654",
         "button": "Đặt hàng · 545.000đ"
       }
     },
@@ -180,9 +181,9 @@
     {
       "label": "(b) SQL đơn",
       "data": {
-        "id": "cmvfge04a00mw14pj2y5xs57t",
-        "code": "TUBU2026101982315",
-        "userId": "u1_c15_gds5uvj",
+        "id": "cmvjgteqw00g1zw9c0c32d6oi",
+        "code": "TUBU2026102293654",
+        "userId": "u1_c15_gt85zun",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -201,7 +202,7 @@
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:13:02.362Z",
+        "createdAt": "2026-10-22T11:36:05.865Z",
         "items": [
           {
             "sku": "FUWA-BT-500",
@@ -234,5 +235,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:13:05.206Z"
+  "ranAt": "2026-10-22T11:36:07.472Z"
 }

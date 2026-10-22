@@ -27,11 +27,11 @@
       "name": "(c) DB: vẫn 1 dòng claim",
       "ok": true,
       "detail": {
-        "code": "HOPSAN-C424S4N4",
+        "code": "HOPSAN-38X362LH",
         "usedCount": 0,
         "usageLimit": 1,
         "perUserLimit": 1,
-        "endAt": "2026-12-18T15:27:52.028Z",
+        "endAt": "2026-12-21T11:30:15.924Z",
         "isActive": true,
         "redemptions": 0,
         "claims": 1
@@ -59,16 +59,16 @@
     },
     {
       "label": "(b) mã đã lùi hạn (để nguyên, không dùng lại)",
-      "data": "HOPSAN-C7HDAGD9"
+      "data": "HOPSAN-7XBDCA7D"
     },
     {
       "label": "(c) sheet",
       "data": {
         "title": "Ưu đãi đã có trong ví của bạn",
-        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-C424S4N4 đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 18/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-38X362LH đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 21/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
       }
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:00:03.973Z"
+  "ranAt": "2026-10-22T11:34:16.138Z"
 }

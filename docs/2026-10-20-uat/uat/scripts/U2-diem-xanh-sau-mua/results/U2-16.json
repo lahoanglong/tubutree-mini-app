@@ -3,8 +3,8 @@
   "title": "Đơn CSKH (chat) 210.000đ của SĐT khách Lộc Biếc: webhook giao → claim PHONE tự tạo, 5.040 điểm (2% × 1,2); giao + 14 ngày → job cộng, tính vào hạng",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:30:30.133Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:30.526Z",
+  "lane": 2,
   "checks": [
     {
       "name": "claim PHONE của uat_returning, PENDING, 5040 điểm, ratePct 2, multiplier 1,2, countsForTier",
@@ -23,8 +23,8 @@
       "name": "releaseAt = giao + 14 ngày",
       "ok": true,
       "detail": {
-        "releaseAt": "2026-10-31T16:22:11.000Z",
-        "deliveredAt": "2026-10-17T16:22:11.000Z"
+        "releaseAt": "2026-11-03T11:38:08.000Z",
+        "deliveredAt": "2026-10-20T11:38:08.000Z"
       }
     },
     {
@@ -87,7 +87,7 @@
       }
     },
     "claim sau webhook": {
-      "id": "cmvfh0cml00he5ksflpxfnp5j",
+      "id": "cmvjgxqto00h0h9r1y5eixb3h",
       "userId": "uat_returning",
       "kind": "PHONE",
       "state": "PENDING",
@@ -95,21 +95,21 @@
       "ratePct": "2.0000",
       "multiplier": "1.200",
       "countsForTier": true,
-      "releaseAt": "2026-10-31T16:22:11.000Z",
+      "releaseAt": "2026-11-03T11:38:08.000Z",
       "holdUntil": null,
       "reviewReason": null,
       "orderPhone": "0901000003",
       "orderStatus": "DELIVERED",
       "goodsValue": 210000,
-      "deliveredAt": "2026-10-17T16:22:11.000Z"
+      "deliveredAt": "2026-10-20T11:38:08.000Z"
     },
     "GET /me/external-points/claims?kind=PHONE": {
       "status": 200
     },
     "job release": {
-      "lane": 7,
+      "lane": 2,
       "job": "ExternalClaimCron.everyThirtyMinutes",
-      "ms": 288,
+      "ms": 174,
       "result": null
     },
     "sau cộng": {
@@ -139,7 +139,7 @@
         "templateCode": "CHAT_ORDER_POINTS_CREDITED",
         "channel": "INAPP",
         "status": "SENT",
-        "sentAt": "2026-10-19T16:30:29.063Z"
+        "sentAt": "2026-10-22T11:39:29.911Z"
       }
     ]
   }

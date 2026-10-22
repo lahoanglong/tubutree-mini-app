@@ -3,8 +3,8 @@
   "title": "Điểm hết hạn 12 tháng: lùi hạn lô về quá khứ, chạy points.expire → trừ đúng phần còn lại (FIFO), số dư = sổ, chạy lại không trừ lần hai",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:24:17.792Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:54.613Z",
+  "lane": 2,
   "checks": [
     {
       "name": "(a) lô 500 điểm chưa tiêu: 1 dòng POINTS_EXPIRED −500, số dư −500, = SUM sổ",
@@ -13,9 +13,9 @@
         "exp": [
           -500
         ],
-        "before": 28180,
-        "after": 27680,
-        "sum": 27680
+        "before": 28680,
+        "after": 28180,
+        "sum": 28180
       }
     },
     {
@@ -35,7 +35,7 @@
       "ok": true,
       "detail": {
         "R": 6242,
-        "MAM": 27680
+        "MAM": 28180
       }
     },
     {
@@ -49,30 +49,30 @@
   ],
   "evidence": {
     "(a) Mầm Xanh": {
-      "before": 28180,
-      "after": 27680,
+      "before": 28680,
+      "after": 28180,
       "expiredRows": [
         -500
       ],
-      "job": 426
+      "job": 100
     },
     "(b) sổ uat_returning trước": [
       {
         "delta": 34400,
-        "reason": "ORDER_DELIVERED:TUBU2026101960369",
-        "createdAt": "2026-09-09T15:27:58.920Z",
-        "expiresAt": "2027-09-09T15:27:58.918Z"
+        "reason": "ORDER_DELIVERED:TUBU2026102246913",
+        "createdAt": "2026-09-12T11:30:22.768Z",
+        "expiresAt": "2027-09-12T11:30:22.766Z"
       },
       {
         "delta": 6242,
-        "reason": "ORDER_DELIVERED:TUBU2026101991671",
-        "createdAt": "2026-10-19T16:22:36.161Z",
-        "expiresAt": "2027-10-19T16:22:36.158Z"
+        "reason": "ORDER_DELIVERED:TUBU2026102271966",
+        "createdAt": "2026-10-22T11:38:21.203Z",
+        "expiresAt": "2027-10-22T11:38:21.201Z"
       },
       {
         "delta": -24000,
-        "reason": "ORDER_REDEEM:TUBU2026101966279",
-        "createdAt": "2026-10-19T16:23:17.811Z",
+        "reason": "ORDER_REDEEM:TUBU2026102297301",
+        "createdAt": "2026-10-22T11:38:38.061Z",
         "expiresAt": null
       }
     ],

@@ -3,8 +3,8 @@
   "title": "Trả đơn bằng Ví Tubu trên Mini App: ví − total (ORDER_PAY), đơn PAID; giao xong cộng điểm như đơn thường",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:41:58.178Z",
-  "lane": 7,
+  "at": "2026-10-22T11:40:15.153Z",
+  "lane": 2,
   "checks": [
     {
       "name": "Mini App đặt 201, WALLET + PAID, ví − total (ORDER_PAY), = SUM sổ ví",
@@ -35,9 +35,9 @@
   ],
   "evidence": {
     "đơn ví": {
-      "code": "TUBU2026101927358",
+      "code": "TUBU2026102201031",
       "order": {
-        "id": "cmvfhf6kv00ow5ksf2vpe78m2",
+        "id": "cmvjgyq8w00ojh9r1hzd5olo2",
         "status": "CONFIRMED",
         "paymentMethod": "WALLET",
         "paymentStatus": "PAID",

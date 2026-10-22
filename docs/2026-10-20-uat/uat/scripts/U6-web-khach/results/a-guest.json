@@ -1,102 +1,7 @@
 {
   "name": "a-guest",
-  "at": "2026-10-20T01:01:46.852Z",
+  "at": "2026-10-22T12:13:01.293Z",
   "cases": [
-    {
-      "id": "U6-01",
-      "role": "Khách chưa đăng nhập",
-      "journey": "Duyệt",
-      "steps": "Mở / ở 390 và 1440; đọc khối Danh mục, Ưu đãi giờ vàng, Bán chạy",
-      "expected": "Trang 200, không tràn ngang, không request API lỗi, giá giờ vàng = giá flash sale trong DB (BHN-CGL-100 165.000đ, BHN-CW-500 119.000đ, BHN-HN-500 195.000đ)",
-      "checks": [
-        {
-          "name": "390: HTTP 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "390: không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
-        },
-        {
-          "name": "390: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "390: không lỗi JS",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "390: có khối Danh mục / giờ vàng / Bán chạy",
-          "ok": true
-        },
-        {
-          "name": "390: giá giờ vàng đúng",
-          "ok": true
-        },
-        {
-          "name": "390: hiện nút Đăng nhập",
-          "ok": true
-        },
-        {
-          "name": "1440: HTTP 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "1440: không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
-        },
-        {
-          "name": "1440: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "1440: không lỗi JS",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "1440: có khối Danh mục / giờ vàng / Bán chạy",
-          "ok": true
-        },
-        {
-          "name": "1440: giá giờ vàng đúng",
-          "ok": true
-        },
-        {
-          "name": "1440: hiện nút Đăng nhập",
-          "ok": true
-        }
-      ],
-      "evidence": [
-        {
-          "label": "390 request API",
-          "value": "GET /config/public 200; GET /flash-sales/active 200; GET /flash-sales/active 200"
-        },
-        {
-          "label": "1440 request API",
-          "value": "GET /config/public 200; GET /flash-sales/active 200; GET /flash-sales/active 200"
-        },
-        {
-          "label": "DB flash_sale_items",
-          "value": "[{\"sku\":\"BHN-CGL-100\",\"price\":165000},{\"sku\":\"BHN-CW-500\",\"price\":119000},{\"sku\":\"BHN-HN-500\",\"price\":195000}]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-01-home-390.png",
-        "uat/shots/U6-web-khach/U6-01-home-1440.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
     {
       "id": "U6-02",
       "role": "Khách chưa đăng nhập",
@@ -121,13 +26,13 @@
         },
         {
           "name": "390: Giá tăng sắp đúng thứ tự (20 thẻ đầu)",
-          "ok": false,
-          "detail": "[25000,75000,79000,79000,85000,89000,89000,75000,95000,95000,79000,99000]"
+          "ok": true,
+          "detail": "[25000,75000,75000,79000,79000,79000,85000,89000,89000,95000,95000,99000]"
         },
         {
           "name": "390: Giá giảm — thẻ đầu đắt nhất",
-          "ok": false,
-          "detail": "[329000,345000,289000,295000,290000,195000]"
+          "ok": true,
+          "detail": "[345000,329000,295000,290000,289000,195000]"
         },
         {
           "name": "1440: số sản phẩm hiển thị = DB",
@@ -146,23 +51,23 @@
         },
         {
           "name": "1440: Giá tăng sắp đúng thứ tự (20 thẻ đầu)",
-          "ok": false,
-          "detail": "[25000,75000,79000,79000,85000,89000,89000,75000,95000,95000,79000,99000]"
+          "ok": true,
+          "detail": "[25000,75000,75000,79000,79000,79000,85000,89000,89000,95000,95000,99000]"
         },
         {
           "name": "1440: Giá giảm — thẻ đầu đắt nhất",
-          "ok": false,
-          "detail": "[329000,345000,289000,295000,290000,195000]"
+          "ok": true,
+          "detail": "[345000,329000,295000,290000,289000,195000]"
         }
       ],
       "evidence": [
         {
           "label": "390 giá sau Giá tăng",
-          "value": "25000,75000,79000,79000,85000,89000,89000,75000,95000,95000,79000,99000"
+          "value": "25000,75000,75000,79000,79000,79000,85000,89000,89000,95000,95000,99000"
         },
         {
           "label": "1440 giá sau Giá tăng",
-          "value": "25000,75000,79000,79000,85000,89000,89000,75000,95000,95000,79000,99000"
+          "value": "25000,75000,75000,79000,79000,79000,85000,89000,89000,95000,95000,99000"
         }
       ],
       "shots": [
@@ -172,7 +77,7 @@
       "notes": [],
       "blockedReason": null,
       "bugs": [],
-      "verdict": "FAIL"
+      "verdict": "PASS"
     },
     {
       "id": "U6-03",
@@ -204,12 +109,7 @@
         {
           "name": "390: chuỗi vô nghĩa hiện trạng thái rỗng",
           "ok": true,
-          "detail": "Đăng nhập\nKhám phá\nTìm sản phẩm\nGợi ý\nBán chạy\nMới nhất\nGiá tăng\nGiá giảm\n\n0 sản phẩm\n\nBộ lọc\nDanh sách sản phẩm\nKhông tìm thấy \"zzzxyz không có\"\n\nThử từ khóa khác hoặc bỏ bớt bộ lọc\n\nXoá tìm kiếm & bộ lọc\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\n"
-        },
-        {
-          "name": "390: ô tìm ở header dẫn tới kết quả \"serum\"",
-          "ok": true,
-          "detail": "http://localhost:3262/san-pham?q=serum"
+          "detail": "Khám phá\nTìm sản phẩm\nGợi ý\nBán chạy\nMới nhất\nGiá tăng\nGiá giảm\n\n0 sản phẩm\n\nBộ lọc\nDanh sách sản phẩm\nKhông tìm thấy \"zzzxyz không có\"\n\nThử từ khóa khác hoặc bỏ bớt bộ lọc\n\nXoá tìm kiếm & bộ lọc\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhâ"
         },
         {
           "name": "1440: \"cà phê\" ra đúng số SP cà phê (4)",
@@ -254,7 +154,9 @@
         "uat/shots/U6-web-khach/U6-03-tim-ca-phe-1440.png",
         "uat/shots/U6-web-khach/U6-03-tim-rong-1440.png"
       ],
-      "notes": [],
+      "notes": [
+        "390: ô tìm header không hiện ở khổ này"
+      ],
       "blockedReason": null,
       "bugs": [],
       "verdict": "PASS"
@@ -325,7 +227,7 @@
         {
           "name": "390: PDP giờ vàng hiện 165.000đ",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nCòn 142h 18m\nĐã bán 2%\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 200.000đ\n\nHỗ t"
+          "detail": "BH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nNhận tối đa 3.300 Điểm Xanh (≈3.300đ) khi đơn giao thành công\n\nCòn 143h 56m\nĐã bán 0%\n\nHỗ trợ mát gan, giải độc tự nhiên.\n\nTubu "
         },
         {
           "name": "390: giá gốc 220.000đ gạch",
@@ -347,12 +249,12 @@
         {
           "name": "390: chọn 50ml hiện 460.000đ",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 200.000đ\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nUSDA Organic\nVegan\nĐặt định kỳ — tiết kiệm 12%\nPhân loại\n30ml · 289.000đ\n50ml · 460.000đ\nSố lượng\n−\n1\n+\nTạm tính\n"
+          "detail": "Visante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nNhận tối đa 9.200 Điểm Xanh (≈9.200đ) khi đơn giao thành công\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 199.000đ\n\nUSDA Organic\nVegan\nĐặt định kỳ — tiết kiệm 12%\nPhân loại\n30ml · 289.000đ\n50ml · 460.000đ\n"
         },
         {
           "name": "1440: PDP giờ vàng hiện 165.000đ",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nCòn 142h 17m\nĐã bán 2%\n\nTubu Tree giao hàng\n"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Về trang chủ\nBH.Nong\nChia sẻ\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -25%\n\nNhận tối đa 3.300 Điểm Xanh (≈3.300đ) khi đơ"
         },
         {
           "name": "1440: giá gốc 220.000đ gạch",
@@ -374,7 +276,7 @@
         {
           "name": "1440: chọn 50ml hiện 460.000đ",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 200.000đ\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nUSDA Organic\nVegan\nĐặt định kỳ — tiết kiệm 12%\nPhân loại\n30ml · 289"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nNhận tối đa 9.200 Điểm Xanh (≈9.200đ) khi đơn giao thành công\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 199.000đ\n\nUSDA "
         }
       ],
       "evidence": [],
@@ -491,11 +393,11 @@
         },
         {
           "label": "390 chữ",
-          "value": "Tìm sản phẩm\nĐăng nhập\nG\nĐã được Tubu Tree duyệt\nGóc Xanh Của Phạm CTV\nCTV tuyển chọn\n🌱\nTân binh\nXem sản phẩm\n\nGian hàng UAT — sản phẩm xanh chọn lọc\n\nCam kết của gian hàng\nSản phẩm đã qua duyệt của Tubu Tree\nTheo dõi đơn trên Tubu Tree\nThanh toán qua Tubu Tree\nĐổi trả 7 ngày (hàng lỗi NSX)\nSản phẩm nổi bật\n(4 sản phẩm)\nGiờ vàng -25%\n\nBH.Nong\n\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -34%\n\nBH.Nong\n\nHạt điều rang mộc BH.Nong\n119.000đ\n180.000đ\nGiờ vàng -25%\n\nBH.Nong\n\nMật ong rừng nguyên "
+          "value": "Đã được Tubu Tree duyệt\nGóc Xanh Của Phạm CTV\nCTV tuyển chọn\n🌱\nTân binh\nXem sản phẩm\n\nGian hàng UAT — sản phẩm xanh chọn lọc\n\nSản phẩm nổi bật\nGiờ vàng -25%\nBH.Nong\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\n★ Mới\nGiờ vàng -34%\nBH.Nong\nHạt điều rang mộc BH.Nong\n119.000đ\n180.000đ\n★ Mới\nGiờ vàng -25%\nBH.Nong\nMật ong rừng nguyên chất BH.Nong\n195.000đ\n260.000đ\n★ Mới\nBH.Nong\nTiêu đen Chư Sê BH.Nong\n95.000đ\n★ Mới"
         },
         {
           "label": "1440 chữ",
-          "value": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nG\nĐã được Tubu Tree duyệt\nGóc Xanh Của Phạm CTV\nCTV tuyển chọn\n🌱\nTân binh\nXem sản phẩm\n\nGian hàng UAT — sản phẩm xanh chọn lọc\n\nCam kết của gian hàng\nSản phẩm đã qua duyệt của Tubu Tree\nTheo dõi đơn trên Tubu Tree\nThanh toán qua Tubu Tree\nĐổi trả 7 ngày (hàng lỗi NSX)\nSản phẩm nổi bật\n(4 sản phẩm)\nGiờ vàng -25%\n\nBH.Nong\n\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\nGiờ vàng -34%\n\nBH.Nong\n\nHạt điều rang mộc BH.Nong\n119.000đ\n180.000"
+          "value": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nG\nĐã được Tubu Tree duyệt\nGóc Xanh Của Phạm CTV\nCTV tuyển chọn\n🌱\nTân binh\nXem sản phẩm\n\nGian hàng UAT — sản phẩm xanh chọn lọc\n\nCam kết của gian hàng\nSản phẩm đã qua duyệt của Tubu Tree\nTheo dõi đơn trên Tubu Tree\nThanh toán qua Tubu Tree\nĐổi trả 7 ngày (hàng lỗi NSX)\nSản phẩm nổi bật\n(4 sản phẩm)\nGiờ vàng -25%\nBH.Nong\nCao cà gai leo BH.Nong\n165.000đ\n220.000đ\n★ Mới\nGiờ vàng -34%\nBH.Nong\nHạt điều rang mộc BH.Nong\n119.000đ\n180.0"
         },
         {
           "label": "DB storefronts",
@@ -505,315 +407,6 @@
       "shots": [
         "uat/shots/U6-web-khach/U6-07-gian-hang-390.png",
         "uat/shots/U6-web-khach/U6-07-gian-hang-1440.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
-      "id": "U6-09",
-      "role": "Khách chưa đăng nhập",
-      "journey": "Trang tĩnh",
-      "steps": "Mở /gioi-thieu, /cau-chuyen, /chinh-sach/{dieu-khoan,bao-mat,doi-tra,van-chuyen}",
-      "expected": "Mọi trang 200, không còn chỗ trống chưa điền \"[Tên công ty]\", \"[số ngày]\" (đã biết D8-5: chủ tự điền)",
-      "checks": [
-        {
-          "name": "/gioi-thieu 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "/gioi-thieu không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "/cau-chuyen 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "/cau-chuyen không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "/chinh-sach/dieu-khoan 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "/chinh-sach/dieu-khoan không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
-          "ok": false,
-          "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
-        },
-        {
-          "name": "/chinh-sach/bao-mat 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "/chinh-sach/bao-mat không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
-          "ok": false,
-          "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
-        },
-        {
-          "name": "/chinh-sach/doi-tra 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "/chinh-sach/doi-tra không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
-          "ok": false,
-          "detail": "[\"[số ngày làm việc]\",\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
-        },
-        {
-          "name": "/chinh-sach/van-chuyen 200",
-          "ok": true,
-          "detail": "200"
-        },
-        {
-          "name": "/chinh-sach/van-chuyen không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
-          "ok": false,
-          "detail": "[\"[số ngày]\",\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
-        }
-      ],
-      "evidence": [],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-09-chinh-sach-doi-tra-390.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "FAIL"
-    },
-    {
-      "id": "U6-10",
-      "role": "Khách chưa đăng nhập",
-      "journey": "Cổng đăng nhập",
-      "steps": "Mở các trang riêng tư khi chưa đăng nhập",
-      "expected": "Mỗi trang hiện lời mời đăng nhập (không trắng trang, không lộ dữ liệu), có liên kết /dang-nhap?returnTo=<trang>; không gọi API riêng tư",
-      "checks": [
-        {
-          "name": "390 /gio-hang: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/gio-hang\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\n← Tiếp tục mua sắm\\nGiỏ hàng\\n\\nĐăng nhập để xem giỏ hàng của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xo\",\"login\":2}"
-        },
-        {
-          "name": "390 /thanh-toan: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/thanh-toan\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\n← Về giỏ hàng\\nThanh toán\\n\\nĐăng nhập để thanh toán đơn hàng.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong b\",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nTài khoản\\n\\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạ\",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan/don-hang: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/don-hang\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nĐơn hàng\\n\\nĐăng nhập để xem đơn hàng của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại \",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan/diem-xanh: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/diem-xanh\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\n← Tài khoản\\nHạng thành viên & Điểm Xanh\\n\\nĐăng nhập để xem hạng thành viên và Điểm Xanh của bạn.\\n\\n\",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan/vi-tubu: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/vi-tubu\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\n← Tài khoản\\nVí Tubu\\n\\nĐăng nhập để xem Ví Tubu của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ\",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan/yeu-thich: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/yeu-thich\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nSản phẩm yêu thích\\n\\nĐăng nhập để xem sản phẩm yêu thích của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập x\",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan/dia-chi: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/dia-chi\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\n← Tài khoản\\nSổ địa chỉ\\n\\nĐăng nhập để quản lý sổ địa chỉ của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập x\",\"login\":2}"
-        },
-        {
-          "name": "390 /tai-khoan/thong-bao: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/thong-bao\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nThông báo\\n\\nĐăng nhập để xem thông báo của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lạ\",\"login\":2}"
-        },
-        {
-          "name": "390 /kho-qua: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/kho-qua\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\n← Tài khoản\\nKho quà\\n\\nĐăng nhập để đổi Điểm Xanh lấy quà.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn \",\"login\":2}"
-        },
-        {
-          "name": "390 /vuon-xanh: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/vuon-xanh\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nVườn Xanh\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng tr\",\"login\":2}"
-        },
-        {
-          "name": "390 /doi-rac: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/doi-rac\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nĐổi rác lấy quà\\n\\nChương trình đang tạm dừng\\n\\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nh\",\"login\":1}"
-        },
-        {
-          "name": "390 /tu-van: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nTubu Tree — Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiết\\nBạn đang tìm gì hôm nay?\\nQuà khách mới\\n\\nMua \",\"login\":1}"
-        },
-        {
-          "name": "390 /hoc-vien: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/hoc-vien\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nCTV Academy\\nHọc kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày\\n\\nĐăng nhập để vào CTV Academy\\n\\nĐăng n\",\"login\":2}"
-        },
-        {
-          "name": "390 /cong-dong/xep-hang: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/cong-dong/xep-hang\",\"text\":\"Tìm sản phẩm\\nĐăng nhập\\nBảng xếp hạng\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đún\",\"login\":2}"
-        },
-        {
-          "name": "1440 /gio-hang: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/gio-hang\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tiếp tục mua sắm\\nGiỏ hàng\\n\\nĐăng nhập để xem giỏ h\",\"login\":2}"
-        },
-        {
-          "name": "1440 /thanh-toan: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/thanh-toan\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Về giỏ hàng\\nThanh toán\\n\\nĐăng nhập để thanh toán đ\",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nTài khoản\\n\\nĐăng nhập để xem tài khoản và đơn hàng c\",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan/don-hang: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/don-hang\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nĐơn hàng\\n\\nĐăng nhập để xem đơn hàng của bạn.\\n\\nĐăng \",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan/diem-xanh: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/diem-xanh\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nHạng thành viên & Điểm Xanh\\n\\nĐăng nhập \",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan/vi-tubu: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/vi-tubu\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nVí Tubu\\n\\nĐăng nhập để xem Ví Tubu của b\",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan/yeu-thich: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/yeu-thich\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nSản phẩm yêu thích\\n\\nĐăng nhập để xem sản phẩm yêu t\",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan/dia-chi: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/dia-chi\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nSổ địa chỉ\\n\\nĐăng nhập để quản lý sổ địa\",\"login\":2}"
-        },
-        {
-          "name": "1440 /tai-khoan/thong-bao: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/tai-khoan/thong-bao\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nThông báo\\n\\nĐăng nhập để xem thông báo của bạn.\\n\\nĐăn\",\"login\":2}"
-        },
-        {
-          "name": "1440 /kho-qua: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/kho-qua\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nKho quà\\n\\nĐăng nhập để đổi Điểm Xanh lấy\",\"login\":2}"
-        },
-        {
-          "name": "1440 /vuon-xanh: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/vuon-xanh\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nVườn Xanh\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhập vớ\",\"login\":2}"
-        },
-        {
-          "name": "1440 /doi-rac: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/doi-rac\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nĐổi rác lấy quà\\n\\nChương trình đang tạm dừng\\n\\nSống x\",\"login\":1}"
-        },
-        {
-          "name": "1440 /tu-van: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nTubu Tree — Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiế\",\"login\":1}"
-        },
-        {
-          "name": "1440 /hoc-vien: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/hoc-vien\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nCTV Academy\\nHọc kỹ năng bán hàng, làm CTV giỏi hơn \",\"login\":2}"
-        },
-        {
-          "name": "1440 /cong-dong/xep-hang: có lời mời đăng nhập + liên kết",
-          "ok": true,
-          "detail": "{\"url\":\"/cong-dong/xep-hang\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nBảng xếp hạng\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhậ\",\"login\":2}"
-        }
-      ],
-      "evidence": [],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-10-cong-dang-nhap-gio-hang-390.png",
-        "uat/shots/U6-web-khach/U6-10-cong-dang-nhap-tai-khoan-390.png",
-        "uat/shots/U6-web-khach/U6-10-cong-dang-nhap-vuon-xanh-390.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
-      "id": "U6-11",
-      "role": "Khách chưa đăng nhập",
-      "journey": "Đăng nhập",
-      "steps": "Mở /dang-nhap?returnTo=/gio-hang ở 390 và 1440",
-      "expected": "Có nút \"Đăng nhập với Zalo\", liên kết Điều khoản/Bảo mật, nút quay lại; khi build thiếu Zalo App ID thì nói rõ \"tạm ngưng\" kèm hotline thay vì để khách bấm gặp lỗi",
-      "checks": [
-        {
-          "name": "390: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu \"tạm ngưng\" kèm hotline",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thươ"
-        },
-        {
-          "name": "390: có Điều khoản + Bảo mật",
-          "ok": true
-        },
-        {
-          "name": "390: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "1440: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu \"tạm ngưng\" kèm hotline",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đ"
-        },
-        {
-          "name": "1440: có Điều khoản + Bảo mật",
-          "ok": true
-        },
-        {
-          "name": "1440: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "390 chế độ web",
-          "value": "có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo"
-        },
-        {
-          "label": "390 chữ",
-          "value": "Tìm sản phẩm\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
-        },
-        {
-          "label": "1440 chế độ web",
-          "value": "có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo"
-        },
-        {
-          "label": "1440 chữ",
-          "value": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-11-dang-nhap-390.png",
-        "uat/shots/U6-web-khach/U6-11-dang-nhap-1440.png"
       ],
       "notes": [],
       "blockedReason": null,
@@ -875,16 +468,419 @@
       "evidence": [
         {
           "label": "trước khi đăng: API /brand/public/fuwa3e, web bỏ cache, web qua Data Cache",
-          "value": "{\"api\":404,\"web\":404,\"webCached\":200}"
+          "value": "{\"api\":404,\"web\":404,\"webCached\":404}"
         }
       ],
       "shots": [
         "uat/shots/U6-web-khach/U6-08-brand-390.png",
         "uat/shots/U6-web-khach/U6-08-brand-1440.png"
       ],
-      "notes": [
-        "web qua Data Cache vẫn trả 200 ngay sau khi gỡ đăng (ISR revalidate 300 giây)"
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-09",
+      "role": "Khách chưa đăng nhập",
+      "journey": "Trang tĩnh",
+      "steps": "Mở /gioi-thieu, /cau-chuyen, /chinh-sach/{dieu-khoan,bao-mat,doi-tra,van-chuyen}",
+      "expected": "Mọi trang 200, không còn chỗ trống chưa điền \"[Tên công ty]\", \"[số ngày]\" (đã biết D8-5: chủ tự điền)",
+      "checks": [
+        {
+          "name": "/gioi-thieu 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "/gioi-thieu không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "/cau-chuyen 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "/cau-chuyen không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "/chinh-sach/dieu-khoan 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "/chinh-sach/dieu-khoan không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": false,
+          "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
+        },
+        {
+          "name": "/chinh-sach/bao-mat 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "/chinh-sach/bao-mat không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": false,
+          "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
+        },
+        {
+          "name": "/chinh-sach/doi-tra 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "/chinh-sach/doi-tra không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": false,
+          "detail": "[\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
+        },
+        {
+          "name": "/chinh-sach/van-chuyen 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "/chinh-sach/van-chuyen không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)",
+          "ok": false,
+          "detail": "[\"[số ngày]\",\"[Tên công ty]\",\"[Mã số thuế]\",\"[Địa chỉ trụ sở]\"]"
+        }
       ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-09-chinh-sach-doi-tra-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "FAIL"
+    },
+    {
+      "id": "U6-10",
+      "role": "Khách chưa đăng nhập",
+      "journey": "Cổng đăng nhập",
+      "steps": "Mở các trang riêng tư khi chưa đăng nhập",
+      "expected": "Mỗi trang hiện lời mời đăng nhập (không trắng trang, không lộ dữ liệu), có liên kết /dang-nhap?returnTo=<trang>; không gọi API riêng tư",
+      "checks": [
+        {
+          "name": "390 /gio-hang: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/gio-hang\",\"text\":\"Giỏ hàng\\n\\nĐăng nhập để xem giỏ hàng của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotlin\",\"login\":2}"
+        },
+        {
+          "name": "390 /thanh-toan: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/thanh-toan\",\"text\":\"Thanh toán\\n\\nĐăng nhập để thanh toán đơn hàng.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotli\",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan\",\"text\":\"Tài khoản\\n\\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng tran\",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan/don-hang: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/don-hang\",\"text\":\"Đơn hàng\\n\\nĐăng nhập để xem đơn hàng của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotlin\",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan/diem-xanh: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/diem-xanh\",\"text\":\"Hạng thành viên & Điểm Xanh\\n\\nĐăng nhập để xem hạng thành viên và Điểm Xanh của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong \",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan/vi-tubu: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/vi-tubu\",\"text\":\"Ví Tubu\\n\\nĐăng nhập để xem Ví Tubu của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotline:\",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan/yeu-thich: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/yeu-thich\",\"text\":\"Sản phẩm yêu thích\\n\\nĐăng nhập để xem sản phẩm yêu thích của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đún\",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan/dia-chi: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/dia-chi\",\"text\":\"Sổ địa chỉ\\n\\nĐăng nhập để quản lý sổ địa chỉ của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\",\"login\":2}"
+        },
+        {
+          "name": "390 /tai-khoan/thong-bao: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/thong-bao\",\"text\":\"Thông báo\\n\\nĐăng nhập để xem thông báo của bạn.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotl\",\"login\":2}"
+        },
+        {
+          "name": "390 /kho-qua: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/kho-qua\",\"text\":\"Kho quà\\n\\nĐăng nhập để đổi Điểm Xanh lấy quà.\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotlin\",\"login\":2}"
+        },
+        {
+          "name": "390 /vuon-xanh: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/vuon-xanh\",\"text\":\"Vườn Xanh\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotline: 0984\",\"login\":2}"
+        },
+        {
+          "name": "390 /doi-rac: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/doi-rac\",\"text\":\"Đổi rác lấy quà\\n\\nChương trình đang tạm dừng\\n\\nHotline: 0984 606 774\\nĐiều khoản\\nBảo mật\\nĐổi trả\\nVận chuyển\",\"login\":1}"
+        },
+        {
+          "name": "390 /tu-van: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/\",\"text\":\"Tubu Tree — Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiết\\nBạn đang tìm gì hôm nay?\\nQuà khách mới\\n\\nMua trực tiếp tại Tubu Tree\",\"login\":1}"
+        },
+        {
+          "name": "390 /hoc-vien: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/hoc-vien\",\"text\":\"CTV Academy\\nHọc kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày\\n\\nĐăng nhập để vào CTV Academy\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập\",\"login\":2}"
+        },
+        {
+          "name": "390 /cong-dong/xep-hang: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/cong-dong/xep-hang\",\"text\":\"Bảng xếp hạng\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhập với Zalo\\n\\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\\n\\nHotline: \",\"login\":2}"
+        },
+        {
+          "name": "1440 /gio-hang: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/gio-hang\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tiếp tục mua sắm\\nGiỏ hàng\\n\\nĐăng nhập để xem giỏ h\",\"login\":2}"
+        },
+        {
+          "name": "1440 /thanh-toan: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/thanh-toan\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Về giỏ hàng\\nThanh toán\\n\\nĐăng nhập để thanh toán đ\",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nTài khoản\\n\\nĐăng nhập để xem tài khoản và đơn hàng c\",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan/don-hang: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/don-hang\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nĐơn hàng\\n\\nĐăng nhập để xem đơn hàng của bạn.\\n\\nĐăng \",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan/diem-xanh: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/diem-xanh\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nHạng thành viên & Điểm Xanh\\n\\nĐăng nhập \",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan/vi-tubu: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/vi-tubu\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nVí Tubu\\n\\nĐăng nhập để xem Ví Tubu của b\",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan/yeu-thich: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/yeu-thich\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nSản phẩm yêu thích\\n\\nĐăng nhập để xem sản phẩm yêu t\",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan/dia-chi: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/dia-chi\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nSổ địa chỉ\\n\\nĐăng nhập để quản lý sổ địa chỉ của bạn\",\"login\":2}"
+        },
+        {
+          "name": "1440 /tai-khoan/thong-bao: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/tai-khoan/thong-bao\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nThông báo\\n\\nĐăng nhập để xem thông báo của bạn.\\n\\nĐăn\",\"login\":2}"
+        },
+        {
+          "name": "1440 /kho-qua: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/kho-qua\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\n← Tài khoản\\nKho quà\\n\\nĐăng nhập để đổi Điểm Xanh lấy\",\"login\":2}"
+        },
+        {
+          "name": "1440 /vuon-xanh: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/vuon-xanh\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nVườn Xanh\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhập vớ\",\"login\":2}"
+        },
+        {
+          "name": "1440 /doi-rac: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/doi-rac\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nĐổi rác lấy quà\\n\\nChương trình đang tạm dừng\\n\\nSống x\",\"login\":1}"
+        },
+        {
+          "name": "1440 /tu-van: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nTubu Tree — Mỹ Phẩm & Tiêu Dùng Sinh Học Thuần Khiế\",\"login\":1}"
+        },
+        {
+          "name": "1440 /hoc-vien: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/hoc-vien\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nCTV Academy\\nHọc kỹ năng bán hàng, làm CTV giỏi hơn \",\"login\":2}"
+        },
+        {
+          "name": "1440 /cong-dong/xep-hang: có lời mời đăng nhập + liên kết",
+          "ok": true,
+          "detail": "{\"url\":\"/cong-dong/xep-hang\",\"text\":\"Tìm sản phẩm\\nTrang chủ\\nDanh mục\\nVườn Xanh\\nĐơn hàng\\nCá nhân\\nĐăng nhập\\nBảng xếp hạng\\n\\nĐăng nhập để xem cộng đồng\\n\\nĐăng nhậ\",\"login\":2}"
+        }
+      ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-10-cong-dang-nhap-gio-hang-390.png",
+        "uat/shots/U6-web-khach/U6-10-cong-dang-nhap-tai-khoan-390.png",
+        "uat/shots/U6-web-khach/U6-10-cong-dang-nhap-vuon-xanh-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-11",
+      "role": "Khách chưa đăng nhập",
+      "journey": "Đăng nhập",
+      "steps": "Mở /dang-nhap?returnTo=/gio-hang ở 390 và 1440",
+      "expected": "Có nút \"Đăng nhập với Zalo\", liên kết Điều khoản/Bảo mật, nút quay lại; khi build thiếu Zalo App ID thì nói rõ \"tạm ngưng\" kèm hotline thay vì để khách bấm gặp lỗi",
+      "checks": [
+        {
+          "name": "390: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu \"tạm ngưng\" kèm hotline",
+          "ok": true,
+          "detail": "Tubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nĐăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline 0984 606 774 để được hỗ trợ đ"
+        },
+        {
+          "name": "390: có Điều khoản + Bảo mật",
+          "ok": true
+        },
+        {
+          "name": "390: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "1440: có nút đăng nhập, hoặc (khi build thiếu Zalo App ID) câu \"tạm ngưng\" kèm hotline",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nĐăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui"
+        },
+        {
+          "name": "1440: có Điều khoản + Bảo mật",
+          "ok": true
+        },
+        {
+          "name": "1440: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "390 chế độ web",
+          "value": "có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo"
+        },
+        {
+          "label": "390 chữ",
+          "value": "Tubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nĐăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline 0984 606 774 để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.\n\nQuay lại trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "label": "1440 chế độ web",
+          "value": "có NEXT_PUBLIC_ZALO_APP_ID: nút Đăng nhập với Zalo"
+        },
+        {
+          "label": "1440 chữ",
+          "value": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nĐăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline 0984 606 774 để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gma"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-11-dang-nhap-390.png",
+        "uat/shots/U6-web-khach/U6-11-dang-nhap-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-01",
+      "role": "Khách chưa đăng nhập",
+      "journey": "Duyệt",
+      "steps": "Mở / ở 390 và 1440; đọc khối Danh mục, Ưu đãi giờ vàng, Bán chạy",
+      "expected": "Trang 200, không tràn ngang, không request API lỗi, giá giờ vàng = giá flash sale trong DB (BHN-CGL-100 165.000đ, BHN-CW-500 119.000đ, BHN-HN-500 195.000đ)",
+      "checks": [
+        {
+          "name": "390: HTTP 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "390: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "390: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "390: không lỗi JS",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "390: có khối Danh mục / giờ vàng / Bán chạy",
+          "ok": true
+        },
+        {
+          "name": "390: giá giờ vàng đúng",
+          "ok": true
+        },
+        {
+          "name": "390: có tab \"Cá nhân\" ở thanh dưới để đăng nhập (Mini App không có nút Đăng nhập ở đầu trang)",
+          "ok": true,
+          "detail": " cổ vũ nhau 🌿\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân"
+        },
+        {
+          "name": "1440: HTTP 200",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "1440: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "1440: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "1440: không lỗi JS",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "1440: có khối Danh mục / giờ vàng / Bán chạy",
+          "ok": true
+        },
+        {
+          "name": "1440: giá giờ vàng đúng",
+          "ok": true
+        },
+        {
+          "name": "1440: hiện nút Đăng nhập",
+          "ok": true
+        }
+      ],
+      "evidence": [
+        {
+          "label": "390 request API",
+          "value": "GET /config/public 200; GET /flash-sales/active 200; GET /flash-sales/active 200"
+        },
+        {
+          "label": "1440 request API",
+          "value": "GET /config/public 200; GET /flash-sales/active 200; GET /flash-sales/active 200"
+        },
+        {
+          "label": "DB flash_sale_items",
+          "value": "[{\"sku\":\"BHN-CGL-100\",\"price\":165000},{\"sku\":\"BHN-CW-500\",\"price\":119000},{\"sku\":\"BHN-HN-500\",\"price\":195000}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-01-home-390.png",
+        "uat/shots/U6-web-khach/U6-01-home-1440.png"
+      ],
+      "notes": [],
       "blockedReason": null,
       "bugs": [],
       "verdict": "PASS"

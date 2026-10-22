@@ -22,7 +22,7 @@
         "Nhận tối đa 2.400 Điểm Xanh (≈2.400đ) khi đơn giao thành công",
         "Lên men enzyme dứa, an toàn cho da tay.",
         "Tubu Tree giao hàng",
-        "Miễn phí vận chuyển cho đơn từ 199.000đ",
+        "Miễn phí giao hàng cho đơn từ 199.000đ",
         "Eco"
       ]
     },
@@ -47,7 +47,7 @@
     },
     {
       "label": "chữ đầu trang SP giờ vàng",
-      "data": "BH.Nong | Hạt điều rang mộc BH.Nong | 119.000đ | 180.000đ | Nhận tối đa 2.380 Điểm Xanh (≈2.380đ) khi đơn giao thành công | -34% | Còn 143h 24m | Đã bán 0% | Điều Bình Phước rang mộc, giòn bùi. | Tubu Tree giao hàng | Miễn phí vận chuyển cho đơn từ 199.000đ | OCOP"
+      "data": "BH.Nong | Hạt điều rang mộc BH.Nong | 119.000đ | 159.000đ | Nhận tối đa 2.380 Điểm Xanh (≈2.380đ) khi đơn giao thành công | -25% | Còn 143h 56m | Đã bán 0% | Điều Bình Phước rang mộc, giòn bùi. | Tubu Tree giao hàng | Miễn phí giao hàng cho đơn từ 199.000đ | OCOP"
     },
     {
       "label": "DB variation BHN-CW-500",
@@ -58,7 +58,7 @@
     },
     {
       "label": "giá gạch ở chi tiết",
-      "data": "180.000đ"
+      "data": "159.000đ"
     },
     {
       "label": "SQL cart_items",
@@ -75,5 +75,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:04:51.169Z"
+  "ranAt": "2026-10-22T11:34:37.263Z"
 }

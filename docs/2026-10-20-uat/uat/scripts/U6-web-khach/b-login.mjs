@@ -110,7 +110,8 @@ for (const w of [390, 1440]) {
     c.ok('về đúng returnTo /gio-hang', s.page.url().replace(ORIGIN, '') === '/gio-hang', s.page.url());
     let t = await bodyText(s.page);
     c.ok('đã đăng nhập: thấy giỏ hàng (không còn lời mời đăng nhập)', /Giỏ hàng/.test(t) && !/Đăng nhập để xem giỏ hàng/.test(t), t.slice(0, 200));
-    c.ok('header có tên người dùng (Lại / Nguyễn Thị Quay Lại)', /Quay Lại|\bLại\b/.test(t), t.slice(0, 160));
+    // Khổ điện thoại (PR #24): trang giỏ chỉ có tiêu đề + nút lùi như Mini App, tên người dùng nằm ở hub /tai-khoan, không ở header.
+    if (w >= 768) c.ok('header có tên người dùng (Lại / Nguyễn Thị Quay Lại)', /Quay Lại|\bLại\b/.test(t), t.slice(0, 160));
     const cookies = await s.context.cookies(L.webUrl);
     const rt = cookies.find((k) => k.name === 'tubu_rt');
     const rtApi = (await s.context.cookies('http://localhost:3261/api/auth')).find((k) => k.name === 'tubu_rt');
@@ -122,7 +123,10 @@ for (const w of [390, 1440]) {
     // Phiên sống qua tải lại
     const r1 = await nav(s, '/tai-khoan', { wait: 1500 });
     t = await bodyText(s.page);
-    c.ok('tải lại /tai-khoan vẫn đăng nhập', /34\.400/.test(t) && /Lộc Biếc/.test(t), t.slice(0, 200));
+    // Số dư đọc từ DB lúc đó: chạy lại sau các nhóm đặt đơn thì số dư đã khác 34.400 của lane mới dựng.
+    const [bal] = await sql(`SELECT ("pointsBalance" + "pointsConvertedBalance")::int AS n FROM users WHERE id = 'uat_returning'`);
+    const balText = new Intl.NumberFormat('vi-VN').format(bal.n);
+    c.ok(`tải lại /tai-khoan vẫn đăng nhập (hiện ${balText} điểm và hạng Lộc Biếc)`, t.includes(balText) && /Lộc Biếc/.test(t), t.slice(0, 200));
     c.ok('tải lại gọi /auth/refresh → 200', r1.reqs.some((x) => /auth\/refresh/.test(x.path) && x.status === 200), r1.reqs.map((x) => `${x.method} ${x.path} ${x.status}`));
     await c.shot(s.page, `da-dang-nhap-${tag}`);
     // Đăng xuất
@@ -191,7 +195,8 @@ for (const w of [390, 1440]) {
 
   await rec.run(`U6-17-${tag}`, { role: 'Khách quay lại', journey: 'Phiên', steps: `Phiên hết hạn: thu hồi refresh token trong DB rồi mở /tai-khoan (${w}px)`, expected: 'Web nhận 401 từ /auth/refresh, xoá cờ phiên và coi là khách (lời mời đăng nhập), không treo ở "Đang tải" và không lặp request vô hạn' }, async (c) => {
     const s4 = await openWeb('returning', { width: w, path: '/tai-khoan' });
-    c.ok('đã đăng nhập ban đầu', /34\.400/.test(await bodyText(s4.page)));
+    const [bal4] = await sql(`SELECT ("pointsBalance" + "pointsConvertedBalance")::int AS n FROM users WHERE id = 'uat_returning'`);
+    c.ok('đã đăng nhập ban đầu', (await bodyText(s4.page)).includes(new Intl.NumberFormat('vi-VN').format(bal4.n)));
     await sql(`UPDATE refresh_tokens SET "revokedAt" = now() WHERE "userId" = 'uat_returning' AND "revokedAt" IS NULL`);
     const b = s4.requests.length;
     await nav(s4, '/tai-khoan', { wait: 2000 });

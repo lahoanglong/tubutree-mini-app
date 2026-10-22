@@ -38,7 +38,9 @@ await rec.run('U6-01', { role: 'Khách chưa đăng nhập', journey: 'Duyệt',
     c.ok(`${w}: không lỗi JS`, r.errs.length === 0, r.errs);
     c.ok(`${w}: có khối Danh mục / giờ vàng / Bán chạy`, /Danh mục/.test(t) && /Ưu đãi giờ vàng/.test(t) && /Bán chạy/.test(t));
     c.ok(`${w}: giá giờ vàng đúng`, t.includes('165.000đ') && t.includes('119.000đ') && t.includes('195.000đ'));
-    c.ok(`${w}: hiện nút Đăng nhập`, /Đăng nhập/.test(t));
+    // Từ PR #24 web điện thoại giống Mini App: trang chủ không có nút Đăng nhập ở đầu trang, khách vào đăng nhập qua tab "Cá nhân" ở thanh dưới.
+    if (w >= 768) c.ok(`${w}: hiện nút Đăng nhập`, /Đăng nhập/.test(t));
+    else c.ok(`${w}: có tab "Cá nhân" ở thanh dưới để đăng nhập (Mini App không có nút Đăng nhập ở đầu trang)`, /Cá nhân/.test(t), t.slice(-120));
     await c.shot(s.page, `home-${w}`);
     c.ev(`${w} request API`, r.reqs.map((x) => `${x.method} ${x.path} ${x.status}`).join('; '));
   }

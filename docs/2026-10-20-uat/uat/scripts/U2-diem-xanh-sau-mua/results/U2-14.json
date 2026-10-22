@@ -3,8 +3,8 @@
   "title": "Đơn đã hoàn trên sàn (Lazada) → 400 CLOSED; mã vận đơn của đơn app → 409 APP_ORDER; đơn chat nhập mã → 409 CHAT_ORDER; khách chưa có SĐT → 403",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:25:00.625Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:20.653Z",
+  "lane": 2,
   "checks": [
     {
       "name": "đơn Lazada đã hoàn: 400 CLOSED",
@@ -52,7 +52,7 @@
     },
     "mã vận đơn đơn app": {
       "order": {
-        "code": "TUBU2026101960369",
+        "code": "TUBU2026102246913",
         "shippingCode": "UATGHN0000019"
       },
       "status": 409,

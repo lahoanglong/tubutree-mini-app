@@ -44,7 +44,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfhcuey01xz14pj00qot5sd"
+              "cmvjgy76x01bxzw9c8p3wk8ts"
             ],
             "subtotal": 120000,
             "discount": 24000,
@@ -76,7 +76,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfhcuey01xz14pj00qot5sd",
+            "id": "cmvjgy76x01bxzw9c8p3wk8ts",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -85,7 +85,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 1,
-            "stock": 172,
+            "stock": 179,
             "weight": 1050,
             "total": 120000,
             "isFlash": false,
@@ -116,7 +116,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfhcuey01xz14pj00qot5sd"
+              "cmvjgy76x01bxzw9c8p3wk8ts"
             ],
             "subtotal": 120000,
             "discount": 24000,
@@ -148,7 +148,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfhcuey01xz14pj00qot5sd",
+            "id": "cmvjgy76x01bxzw9c8p3wk8ts",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -157,7 +157,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 1,
-            "stock": 172,
+            "stock": 179,
             "weight": 1050,
             "total": 120000,
             "isFlash": false,
@@ -216,7 +216,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfhd2br01z414pj0s91budo"
+              "cmvjgyeur01d2zw9cacqno5dj"
             ],
             "subtotal": 430000,
             "discount": 10400,
@@ -248,7 +248,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfhd2br01z414pj0s91budo",
+            "id": "cmvjgyeur01d2zw9cacqno5dj",
             "variationId": "cmqfuw9jv0007w1vfb1njbw7k",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -257,7 +257,7 @@
             "thumbnail": null,
             "unitPrice": 430000,
             "quantity": 1,
-            "stock": 25,
+            "stock": 26,
             "weight": 5200,
             "total": 430000,
             "isFlash": false,
@@ -288,7 +288,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfhd2br01z414pj0s91budo"
+              "cmvjgyeur01d2zw9cacqno5dj"
             ],
             "subtotal": 430000,
             "discount": 10400,
@@ -320,7 +320,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfhd2br01z414pj0s91budo",
+            "id": "cmvjgyeur01d2zw9cacqno5dj",
             "variationId": "cmqfuw9jv0007w1vfb1njbw7k",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -329,7 +329,7 @@
             "thumbnail": null,
             "unitPrice": 430000,
             "quantity": 1,
-            "stock": 25,
+            "stock": 26,
             "weight": 5200,
             "total": 430000,
             "isFlash": false,
@@ -371,10 +371,10 @@
     {
       "label": "đơn 1 + giao xong (webhook Pancake)",
       "data": {
-        "code": "TUBU2026101997143",
+        "code": "TUBU2026102242372",
         "total": 1720000,
         "deliveredEvent": {
-          "id": "cmvfhctzz01xk14pjcqw8bxuf",
+          "id": "cmvjgy6sa01bizw9cnwclfonc",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
@@ -394,7 +394,7 @@
         "ledger": [
           {
             "delta": 34400,
-            "reason": "ORDER_DELIVERED:TUBU2026101997143",
+            "reason": "ORDER_DELIVERED:TUBU2026102242372",
             "lot": "STANDARD"
           }
         ],
@@ -414,7 +414,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfhct5401ws14pjcdpw4h3h",
+          "addressId": "cmvjgy5xt01aqzw9c2erhfbxy",
           "pointsToUse": 0
         },
         "subtotal": 120000,
@@ -452,7 +452,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfhct5401ws14pjcdpw4h3h",
+          "addressId": "cmvjgy5xt01aqzw9c2erhfbxy",
           "pointsToUse": 34400
         },
         "subtotal": 120000,
@@ -484,7 +484,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101973415",
+        "code": "TUBU2026102291249",
         "button": "Đặt hàng · 96.000đ"
       }
     },
@@ -517,7 +517,7 @@
         "ledger": [
           {
             "delta": -24000,
-            "reason": "ORDER_REDEEM:TUBU2026101973415",
+            "reason": "ORDER_REDEEM:TUBU2026102291249",
             "lot": "STANDARD"
           }
         ],
@@ -534,7 +534,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfhct5401ws14pjcdpw4h3h",
+          "addressId": "cmvjgy5xt01aqzw9c2erhfbxy",
           "pointsToUse": 10400
         },
         "subtotal": 430000,
@@ -566,7 +566,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101973463",
+        "code": "TUBU2026102277722",
         "button": "Đặt hàng · 419.600đ"
       }
     },
@@ -588,7 +588,7 @@
         "ledger": [
           {
             "delta": -10400,
-            "reason": "ORDER_REDEEM:TUBU2026101973463",
+            "reason": "ORDER_REDEEM:TUBU2026102277722",
             "lot": "STANDARD"
           }
         ],
@@ -603,5 +603,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:40:25.082Z"
+  "ranAt": "2026-10-22T11:40:06.414Z"
 }

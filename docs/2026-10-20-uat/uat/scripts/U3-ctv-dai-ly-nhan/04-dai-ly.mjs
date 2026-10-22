@@ -124,33 +124,49 @@ try {
   });
 
   // ---------- U3-25 đơn sỉ dưới 3 triệu ----------
-  const r25 = await pasteAndPlace(p, 'FUWA-DW-1L 2', 'PREPAID');
-  await p.waitForURL(/\/bank-payment\//, { timeout: 15_000 }).catch(() => undefined);
-  await p.waitForTimeout(1200);
-  const url25 = p.url();
-  const s25 = await shot(p, 'U3-25-don-si-duoi-3-trieu-van-dat-duoc');
-  const o25 = r25.body?.code ? await dorder(r25.body.code) : null;
+  // Luật (gói dai-ly, D11-01): tối thiểu dealer.min_order_value_vnd = 3.000.000đ tiền hàng; Mini App chặn trước ở thanh đặt (hai nút tắt),
+  // API trả 400 DEALER_ORDER_BELOW_MIN.
+  const orders25a = (await sql(`SELECT count(*)::int n FROM orders WHERE "userId" = $1 AND type = 'DEALER'`, D))[0].n;
+  const r25 = await pasteAndPlace(p, 'FUWA-DW-1L 2');
+  await p.waitForTimeout(800);
+  const minText = await p.getByText(/Đơn tối thiểu 3\.000\.000/).first().innerText().catch(() => null);
+  const prepaidOff = await p.getByRole('button', { name: 'Trả trước' }).isDisabled().catch(() => null);
+  const creditOff = await p.getByRole('button', { name: 'Ghi công nợ' }).isDisabled().catch(() => null);
+  const s25 = await shot(p, 'U3-25-don-si-duoi-3-trieu-bi-chan');
+  const v25 = price.find((r) => r.sku === 'FUWA-DW-1L');
+  const a25 = await placeDealer([{ variationId: v25.variationId, quantity: 2 }], 'PREPAID');
+  const orders25b = (await sql(`SELECT count(*)::int n FROM orders WHERE "userId" = $1 AND type = 'DEALER'`, D))[0].n;
   R.add({
-    id: 'U3-25', role: 'Đại lý', journey: 'Đơn sỉ tối thiểu 3 triệu', title: 'Dán đơn "FUWA-DW-1L 2" (168.000đ) → "Trả trước"',
-    steps: '/dealer → "Dán đơn" → "FUWA-DW-1L 2" → "Thêm vào đơn" → "Trả trước"',
-    expected: 'Luật đã chốt: đơn sỉ tối thiểu 3.000.000đ → API 400, không tạo đơn',
-    actual: { paste: r25.matched, status: r25.status, order: o25, url: url25.replace(/^https?:\/\/[^/]+/, '') },
-    evidence: `${s25}; HTTP POST /dealer/orders ${r25.status}; SQL orders ${short(o25)}`,
-    status: r25.status === 400 ? 'PASS' : 'FAIL',
+    id: 'U3-25', role: 'Đại lý', journey: 'Đơn sỉ tối thiểu 3 triệu', title: 'Dán đơn "FUWA-DW-1L 2" (168.000đ): giao diện chặn, API 400',
+    steps: '/dealer → "Dán đơn" → "FUWA-DW-1L 2" → "Thêm vào đơn" → xem thanh đặt; POST /dealer/orders PREPAID cùng dòng',
+    expected: 'Thanh đặt báo "Đơn tối thiểu 3.000.000đ tiền hàng — thêm …", cả "Trả trước" và "Ghi công nợ" tắt; API 400 code DEALER_ORDER_BELOW_MIN; số đơn đại lý không đổi',
+    actual: { paste: r25.matched, minText, prepaidOff, creditOff, api: [a25.status, a25.body?.code, a25.body?.message], ordersBefore: orders25a, ordersAfter: orders25b },
+    evidence: `${s25}; UI "${minText}"; nút Trả trước tắt=${prepaidOff}, Ghi công nợ tắt=${creditOff}; HTTP POST /dealer/orders ${a25.status} ${short(a25.body, 240)}; SQL count(orders DEALER) ${orders25a}→${orders25b}`,
+    status: !!minText && prepaidOff === true && creditOff === true && a25.status === 400 && a25.body?.code === 'DEALER_ORDER_BELOW_MIN' && orders25b === orders25a ? 'PASS' : 'FAIL',
     data: { knownId: 'D11-01' },
   });
 
   // ---------- U3-26 đơn 3–5 triệu: phí giao ----------
+  // Luật (Q7 chọn (1), gói dai-ly): dưới 5.000.000đ tiền hàng thu dealer.shipping_fee_below_threshold_vnd (19.000đ), tính vào total.
+  const fee = Number((await sql(`SELECT value::text v FROM system_configs WHERE key = 'dealer.shipping_fee_below_threshold_vnd'`))[0].v);
   const l26 = await dealerLines(4_000_000, price);
+  await p.getByRole('button', { name: 'Dán đơn' }).click();
+  await p.locator('textarea').fill(l26.map((l) => `${l.sku} ${l.quantity}`).join('\n'));
+  await p.getByRole('button', { name: 'Thêm vào đơn' }).click();
+  await p.getByText(/Khớp \d+ dòng/).waitFor({ timeout: 10_000 });
+  await p.keyboard.press('Escape');
+  await p.waitForTimeout(800);
+  const feeText = await p.getByText(/Phí giao/).first().innerText().catch(() => null);
+  const s26 = await shot(p, 'U3-26-don-si-duoi-5-trieu-phi-giao');
   const p26 = await placeDealer(l26, 'PREPAID');
   const o26 = p26.ok ? await dorder(p26.body.code) : null;
   R.add({
-    id: 'U3-26', role: 'Đại lý', journey: 'Miễn ship từ 5 triệu', title: `Đơn sỉ trả trước ${vnd(sumLines(l26))} (dưới 5 triệu)`,
-    steps: `POST /dealer/orders PREPAID ${l26.map((l) => `${l.sku}×${l.quantity}`).join(', ')}`,
-    expected: 'Luật đã chốt: miễn phí giao từ 5.000.000đ → đơn 3–5 triệu có shippingFee > 0 (mức phí: cần chủ quyết)',
-    actual: { status: p26.status, order: o26 },
-    evidence: `HTTP ${p26.status}; SQL orders ${short(o26)}`,
-    status: p26.ok && o26?.ship > 0 ? 'PASS' : 'FAIL',
+    id: 'U3-26', role: 'Đại lý', journey: 'Phí giao đơn sỉ dưới 5 triệu', title: `Đơn sỉ trả trước ${vnd(sumLines(l26))} (dưới 5 triệu)`,
+    steps: `Dán ${l26.length} dòng vào /dealer xem thanh đặt; POST /dealer/orders PREPAID ${l26.map((l) => `${l.sku}×${l.quantity}`).join(', ')}`,
+    expected: `Luật mới: đơn 3–5 triệu thu phí giao ${vnd(fee)} (dealer.shipping_fee_below_threshold_vnd): Mini App hiện "Phí giao ${vnd(fee)}"; orders.shippingFee ${fee}, total = tiền hàng + phí`,
+    actual: { feeCfg: fee, feeText, status: p26.status, order: o26, sumLines: sumLines(l26) },
+    evidence: `${s26}; UI "${feeText}"; HTTP ${p26.status}; SQL orders ${short(o26)}`,
+    status: p26.ok && o26?.ship === fee && o26.subtotal === sumLines(l26) && o26.total === o26.subtotal + fee && new RegExp(`Phí giao ${vnd(fee).replace('.', '\\.')}`).test(feeText ?? '') ? 'PASS' : 'FAIL',
     data: { knownId: 'D11-01' },
   });
 
@@ -215,18 +231,23 @@ try {
   });
 
   // ---------- U3-30 nợ quá hạn NET 15 ----------
+  // Luật (Q7 (1)): còn nợ đơn quá hạn NET 15 thì khoá đơn CREDIT (400 DEALER_CREDIT_OVERDUE); đơn PREPAID vẫn đặt được.
   await exec(`UPDATE dealer_credit_ledgers SET "createdAt" = now() - interval '20 days' WHERE "userId" = $1 AND "refType" = 'ORDER' AND "refId" = $2`, D, o28.id);
-  const v30 = price.find((r) => r.sku === 'FUWA-DW-1L');
-  const p30 = await placeDealer([{ variationId: v30.variationId, quantity: 1 }], 'CREDIT');
-  const o30 = p30.ok ? await dorder(p30.body.code) : null;
+  const usedFor30 = [...l26, ...l28, ...l29].map((l) => l.sku);
+  const l30 = await dealerLines(3_100_000, price, { skip: usedFor30 });
+  const debt30a = await debtOf();
+  const p30 = await placeDealer(l30, 'CREDIT');
+  const debt30b = await debtOf();
+  const p30pre = await placeDealer(l30, 'PREPAID');
+  const o30pre = p30pre.ok ? await dorder(p30pre.body.code) : null;
   const age = (await sql(`SELECT "createdAt"::text c FROM dealer_credit_ledgers WHERE "refId" = $1`, o28.id))[0];
   R.add({
-    id: 'U3-30', role: 'Đại lý', journey: 'Khoá mua chịu khi nợ quá hạn', title: 'Nợ đơn cũ đã 20 ngày (NET 15) → đặt thêm đơn "Ghi công nợ"',
-    steps: `Lùi dealer_credit_ledgers.createdAt của ${o28.code} về 20 ngày trước; POST /dealer/orders CREDIT FUWA-DW-1L×1`,
-    expected: 'Luật đã chốt: quá hạn NET 15 thì khoá CREDIT → 400; PREPAID vẫn được',
-    actual: { status: p30.status, order: o30, overdueLedgerCreatedAt: age.c },
-    evidence: `SQL ledger ${o28.code} createdAt ${age.c}; HTTP ${p30.status}; SQL orders ${short(o30)}`,
-    status: p30.status === 400 ? 'PASS' : 'FAIL',
+    id: 'U3-30', role: 'Đại lý', journey: 'Khoá mua chịu khi nợ quá hạn', title: 'Nợ đơn cũ đã 20 ngày (NET 15) → đặt thêm đơn "Ghi công nợ"; trả trước vẫn được',
+    steps: `Lùi dealer_credit_ledgers.createdAt của ${o28.code} về 20 ngày trước; POST /dealer/orders CREDIT ${vnd(sumLines(l30))} (${l30.length} dòng), rồi PREPAID cùng giỏ`,
+    expected: 'CREDIT 400 code DEALER_CREDIT_OVERDUE, sổ công nợ không đổi; PREPAID 201 (PENDING_PAYMENT, không dòng sổ)',
+    actual: { credit: [p30.status, p30.body?.code, p30.body?.message], debt: [Number(debt30a.d), Number(debt30b.d)], prepaid: [p30pre.status, o30pre?.status], overdueLedgerCreatedAt: age.c },
+    evidence: `SQL ledger ${o28.code} createdAt ${age.c}; HTTP CREDIT ${p30.status} ${short(p30.body, 240)}; SQL SUM sổ ${debt30a.d}→${debt30b.d}; HTTP PREPAID ${p30pre.status} ${short(o30pre)}`,
+    status: p30.status === 400 && p30.body?.code === 'DEALER_CREDIT_OVERDUE' && Number(debt30b.d) === Number(debt30a.d) && p30pre.status === 201 && o30pre?.status === 'PENDING_PAYMENT' ? 'PASS' : 'FAIL',
     data: { knownId: 'D11-01' },
   });
 
@@ -273,7 +294,7 @@ try {
   const qMid = new Date(qStart.getTime() + 20 * 86_400_000);
   const nextQ = new Date(Date.UTC(qi === 3 ? qy + 1 : qy, qi === 3 ? 0 : qi * 3 + 3, 10, 4) - VN);
   const qCodes = [];
-  const usedSkus = [...l26, ...l28, ...l29].map((l) => l.sku);
+  const usedSkus = [...l26, ...l28, ...l29, ...l30].map((l) => l.sku);
   for (let i = 0; i < 3; i++) {
     const dnow = Number((await debtOf()).d);
     if (dnow > 0) await ketoanPay(dnow, `pre${i}`);

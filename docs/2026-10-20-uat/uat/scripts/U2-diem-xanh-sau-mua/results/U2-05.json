@@ -3,15 +3,15 @@
   "title": "Dùng điểm trên Mini App: trần 20% tiền hàng; sổ trừ đúng, đơn ghi pointsUsed; điểm tích tính trên tiền hàng sau giảm",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:23:19.922Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:38.201Z",
+  "lane": 2,
   "checks": [
     {
       "name": "Mini App: bật Điểm Xanh, đặt đơn 201",
       "ok": true,
       "detail": {
         "status": 201,
-        "code": "TUBU2026101966279",
+        "code": "TUBU2026102297301",
         "bad": []
       }
     },
@@ -30,7 +30,7 @@
         "spend": [
           {
             "delta": -24000,
-            "reason": "ORDER_REDEEM:TUBU2026101966279"
+            "reason": "ORDER_REDEEM:TUBU2026102297301"
           }
         ],
         "before": 40642,
@@ -87,7 +87,7 @@
     },
     "đơn + sổ": {
       "order": {
-        "id": "cmvfgr6zh008f5ksfyrj63w2c",
+        "id": "cmvjgwo6f008fh9r1yqha580b",
         "pointsUsed": 24000,
         "pointsUsedConverted": 0,
         "total": 96000,
@@ -97,7 +97,7 @@
       "spend": [
         {
           "delta": -24000,
-          "reason": "ORDER_REDEEM:TUBU2026101966279"
+          "reason": "ORDER_REDEEM:TUBU2026102297301"
         }
       ],
       "after": {
@@ -119,6 +119,6 @@
         ]
       }
     },
-    "mã đơn": "TUBU2026101966279"
+    "mã đơn": "TUBU2026102297301"
   }
 }

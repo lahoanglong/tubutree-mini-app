@@ -9,7 +9,7 @@
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-31-loyalty-before.png",
       "shots/U4-doi-rac-cong-dong-game/U4-31-loyalty-after.png",
-      "SQL DAILY_CHECKIN → [{\"reason\":\"DAILY_CHECKIN:DAY_1\",\"delta\":1000,\"refType\":\"CHECKIN\",\"expiresAt\":\"2027-10-19T17:08:54.001Z\"}]"
+      "SQL DAILY_CHECKIN → [{\"reason\":\"DAILY_CHECKIN:DAY_1\",\"delta\":1000,\"refType\":\"CHECKIN\",\"expiresAt\":\"2027-10-22T11:41:03.387Z\"}]"
     ],
     "checks": [
       {
@@ -29,16 +29,16 @@
             "delta": 1000,
             "reason": "DAILY_CHECKIN:DAY_1",
             "refType": "CHECKIN",
-            "refId": "2026-10-20",
+            "refId": "2026-10-22",
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:54.001Z"
+            "expiresAt": "2027-10-22T11:41:03.387Z"
           }
         ]
       },
       {
         "name": "SQL: hạn ≈ 12 tháng",
         "ok": true,
-        "detail": "2027-10-19T17:08:54.001Z"
+        "detail": "2027-10-22T11:41:03.387Z"
       },
       {
         "name": "SQL: số dư = trước + 1.000 = SUM(delta)",
@@ -93,7 +93,7 @@
     "actual": "Giọt 4 → 14, chuỗi 1; Điểm Xanh 90400 → 90400; lần hai → 400.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-32-game-checkin.png",
-      "SQL game_profiles {\"seeds\":4,\"streak\":0,\"lastCheckInAt\":null} → {\"seeds\":14,\"streak\":1,\"lastCheckInAt\":\"2026-10-19T17:08:55.006Z\"}"
+      "SQL game_profiles {\"seeds\":4,\"streak\":0,\"lastCheckInAt\":null} → {\"seeds\":14,\"streak\":1,\"lastCheckInAt\":\"2026-10-22T11:41:04.342Z\"}"
     ],
     "checks": [
       {
@@ -116,7 +116,7 @@
           "pAfter": {
             "seeds": 14,
             "streak": 1,
-            "lastCheckInAt": "2026-10-19T17:08:55.006Z"
+            "lastCheckInAt": "2026-10-22T11:41:04.342Z"
           }
         }
       },
@@ -157,7 +157,7 @@
     "actual": "+20000 (MISSION:FIRST_ORDER:0); sổ 90400 → 110400 (SUM 110400); lần hai → 400; uat_new → 400.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-33-mission-claimed.png",
-      "SQL MISSION:% → [{\"reason\":\"MISSION:FIRST_ORDER:0\",\"delta\":20000,\"expiresAt\":\"2027-10-19T17:08:56.013Z\"}]"
+      "SQL MISSION:% → [{\"reason\":\"MISSION:FIRST_ORDER:0\",\"delta\":20000,\"expiresAt\":\"2027-10-22T11:41:05.297Z\"}]"
     ],
     "checks": [
       {
@@ -182,14 +182,14 @@
             "refType": "GAME",
             "refId": null,
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:56.013Z"
+            "expiresAt": "2027-10-22T11:41:05.297Z"
           }
         ]
       },
       {
         "name": "SQL: hạn ≈ 12 tháng",
         "ok": true,
-        "detail": "2027-10-19T17:08:56.013Z"
+        "detail": "2027-10-22T11:41:05.297Z"
       },
       {
         "name": "SQL: số dư = trước + 20.000 = SUM(delta)",
@@ -243,10 +243,10 @@
     "journey": "Vòng quay may mắn bằng Điểm Xanh",
     "steps": "/game → \"Quay ngay (10.000 Điểm Xanh)\"",
     "expected": "Trừ 10.000 (sổ GAME_SPIN_COST −10.000); trúng điểm thì cộng GAME_SPIN_WIN:<giải> có hạn 12 tháng; trúng mã thì mã thuộc khách 1 lượt; số dư = SUM; game_spins +1",
-    "actual": "Giải 5.000 điểm Xanh (POINTS 5000); sổ 110400 → 105400 (SUM 105400).",
+    "actual": "Giải Voucher 20k (COUPON 20000); sổ 110400 → 100400 (SUM 100400).",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-34-spin-result.png",
-      "SQL pointsBalance 110400 → 105400, SUM 105400; game_spins hôm nay 0 → 1"
+      "SQL pointsBalance 110400 → 100400, SUM 100400; game_spins hôm nay 0 → 1"
     ],
     "checks": [
       {
@@ -255,22 +255,32 @@
         "detail": {
           "status": 201,
           "prize": {
-            "id": "p1",
-            "name": "5.000 điểm Xanh",
-            "rewardType": "POINTS",
-            "value": 5000
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-7898",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:06.210Z"
+            }
           }
         }
       },
       {
-        "name": "Lượt UI: số dư đổi -5000 (phí −10.000 + giải 5000) = SUM",
+        "name": "Lượt UI: số dư đổi -10000 (phí −10.000) = SUM",
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p1",
-            "name": "5.000 điểm Xanh",
-            "rewardType": "POINTS",
-            "value": 5000
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-7898",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:06.210Z"
+            }
           },
           "before": {
             "balance": 110400,
@@ -278,29 +288,26 @@
             "rows": 7
           },
           "after": {
-            "balance": 105400,
-            "ledgerSum": 105400,
-            "rows": 9
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 8
           }
+        }
+      },
+      {
+        "name": "Lượt UI: mã giảm giá GAME20000-RNING-7898 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
+        "ok": true,
+        "detail": {
+          "code": "GAME20000-RNING-7898",
+          "usageLimit": null,
+          "perUserLimit": 1,
+          "scope": "USER_GROUP",
+          "owner": "uat_returning"
         }
       },
       {
         "name": "SQL: 1 dòng GAME_SPIN_COST −10.000",
         "ok": true
-      },
-      {
-        "name": "SQL: dòng GAME_SPIN_WIN có hạn ≈ 12 tháng",
-        "ok": true,
-        "detail": [
-          {
-            "delta": 5000,
-            "reason": "GAME_SPIN_WIN:p1",
-            "refType": "GAME",
-            "refId": null,
-            "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:57.018Z"
-          }
-        ]
       },
       {
         "name": "game_spins hôm nay +1",
@@ -319,7 +326,7 @@
     "journey": "Trần lượt quay mỗi ngày",
     "steps": "POST /game/spin thêm tới đủ 5 lượt trong ngày, rồi lượt thứ 6",
     "expected": "game.spin_buy_daily_limit = 5: lượt 2–5 thành công, mỗi lượt số dư = SUM; lượt 6 → 400 \"Bạn đã quay đủ 5 lượt hôm nay\", không trừ phí (giao dịch huỷ cả)",
-    "actual": "Lượt 2–5: 2:201/POINTS 10000, 3:201/SEEDS 30, 4:201/COUPON 20000, 5:201/POINTS 10000; lượt 6 → 400 \"Bạn đã quay đủ 5 lượt hôm nay. Hẹn bạn ngày mai nhé!\"; sổ 85400 → 85400.",
+    "actual": "Lượt 2–5: 2:201/COUPON 20000, 3:201/POINTS 20000, 4:201/POINTS 5000, 5:201/COUPON 20000; lượt 6 → 400 \"Bạn đã quay đủ 5 lượt hôm nay. Hẹn bạn ngày mai nhé!\"; sổ 85400 → 85400.",
     "evidence": [
       "SQL users.pointsBalance = SUM(delta) = 85400; game_spins hôm nay = 5"
     ],
@@ -329,33 +336,54 @@
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p2",
-            "name": "10.000 điểm Xanh",
-            "rewardType": "POINTS",
-            "value": 10000
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-9167",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.099Z"
+            }
           }
         }
       },
       {
-        "name": "Lượt 2: số dư đổi 0 (phí −10.000 + giải 10000) = SUM",
+        "name": "Lượt 2: số dư đổi -10000 (phí −10.000) = SUM",
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p2",
-            "name": "10.000 điểm Xanh",
-            "rewardType": "POINTS",
-            "value": 10000
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-9167",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.099Z"
+            }
           },
           "before": {
-            "balance": 105400,
-            "ledgerSum": 105400,
-            "rows": 9
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 8
           },
           "after": {
-            "balance": 105400,
-            "ledgerSum": 105400,
-            "rows": 11
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 9
           }
+        }
+      },
+      {
+        "name": "Lượt 2: mã giảm giá GAME20000-RNING-9167 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
+        "ok": true,
+        "detail": {
+          "code": "GAME20000-RNING-9167",
+          "usageLimit": null,
+          "perUserLimit": 1,
+          "scope": "USER_GROUP",
+          "owner": "uat_returning"
         }
       },
       {
@@ -363,32 +391,32 @@
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p5",
-            "name": "30 💧",
-            "rewardType": "SEEDS",
-            "value": 30
+            "id": "p3",
+            "name": "20.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 20000
           }
         }
       },
       {
-        "name": "Lượt 3: số dư đổi -10000 (phí −10.000) = SUM",
+        "name": "Lượt 3: số dư đổi 10000 (phí −10.000 + giải 20000) = SUM",
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p5",
-            "name": "30 💧",
-            "rewardType": "SEEDS",
-            "value": 30
+            "id": "p3",
+            "name": "20.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 20000
           },
           "before": {
-            "balance": 105400,
-            "ledgerSum": 105400,
-            "rows": 11
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 9
           },
           "after": {
-            "balance": 95400,
-            "ledgerSum": 95400,
-            "rows": 12
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 11
           }
         }
       },
@@ -397,54 +425,33 @@
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p4",
-            "name": "Voucher 20k",
-            "rewardType": "COUPON",
-            "value": 20000,
-            "coupon": {
-              "code": "GAME20000-RNING-5013",
-              "minOrder": 120000,
-              "expiresAt": "2026-11-18T17:09:07.024Z"
-            }
+            "id": "p1",
+            "name": "5.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 5000
           }
         }
       },
       {
-        "name": "Lượt 4: số dư đổi -10000 (phí −10.000) = SUM",
+        "name": "Lượt 4: số dư đổi -5000 (phí −10.000 + giải 5000) = SUM",
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p4",
-            "name": "Voucher 20k",
-            "rewardType": "COUPON",
-            "value": 20000,
-            "coupon": {
-              "code": "GAME20000-RNING-5013",
-              "minOrder": 120000,
-              "expiresAt": "2026-11-18T17:09:07.024Z"
-            }
+            "id": "p1",
+            "name": "5.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 5000
           },
           "before": {
-            "balance": 95400,
-            "ledgerSum": 95400,
-            "rows": 12
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 11
           },
           "after": {
-            "balance": 85400,
-            "ledgerSum": 85400,
+            "balance": 95400,
+            "ledgerSum": 95400,
             "rows": 13
           }
-        }
-      },
-      {
-        "name": "Lượt 4: mã giảm giá GAME20000-RNING-5013 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
-        "ok": true,
-        "detail": {
-          "code": "GAME20000-RNING-5013",
-          "usageLimit": null,
-          "perUserLimit": 1,
-          "scope": "USER_GROUP",
-          "owner": "uat_returning"
         }
       },
       {
@@ -452,33 +459,54 @@
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p2",
-            "name": "10.000 điểm Xanh",
-            "rewardType": "POINTS",
-            "value": 10000
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-1558",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.113Z"
+            }
           }
         }
       },
       {
-        "name": "Lượt 5: số dư đổi 0 (phí −10.000 + giải 10000) = SUM",
+        "name": "Lượt 5: số dư đổi -10000 (phí −10.000) = SUM",
         "ok": true,
         "detail": {
           "prize": {
-            "id": "p2",
-            "name": "10.000 điểm Xanh",
-            "rewardType": "POINTS",
-            "value": 10000
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-1558",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.113Z"
+            }
           },
           "before": {
-            "balance": 85400,
-            "ledgerSum": 85400,
+            "balance": 95400,
+            "ledgerSum": 95400,
             "rows": 13
           },
           "after": {
             "balance": 85400,
             "ledgerSum": 85400,
-            "rows": 15
+            "rows": 14
           }
+        }
+      },
+      {
+        "name": "Lượt 5: mã giảm giá GAME20000-RNING-1558 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
+        "ok": true,
+        "detail": {
+          "code": "GAME20000-RNING-1558",
+          "usageLimit": null,
+          "perUserLimit": 1,
+          "scope": "USER_GROUP",
+          "owner": "uat_returning"
         }
       },
       {
@@ -497,12 +525,12 @@
           "b6": {
             "balance": 85400,
             "ledgerSum": 85400,
-            "rows": 15
+            "rows": 14
           },
           "a6": {
             "balance": 85400,
             "ledgerSum": 85400,
-            "rows": 15
+            "rows": 14
           }
         }
       },
@@ -520,10 +548,10 @@
     "journey": "Đổi quà \"Miễn phí vận chuyển\" bằng 20.000 Điểm Xanh",
     "steps": "/rewards → thẻ \"Miễn phí vận chuyển\" → \"Đổi\" → \"Xác nhận đổi\"; rồi đổi qua API hai lần cùng Idempotency-Key",
     "expected": "Trừ 20.000 (sổ LOYALTY_REDEEM_VOUCHER:reward-freeship), số dư = trước − 20.000 = SUM; mã FREESHIP thuộc khách 1 lượt; waste_gift_redemptions FULFILLED; gọi lại cùng khoá không trừ lần hai",
-    "actual": "UI đổi: mã REWARD-FRESHIP-3DC975H2; sổ 85400 → 65400; API cùng khoá ×2 → 201/201, sổ → 45400 (SUM 45400), 2 dòng trừ.",
+    "actual": "UI đổi: mã REWARD-FRESHIP-EHC7K7P3; sổ 85400 → 65400; API cùng khoá ×2 → 201/201, sổ → 45400 (SUM 45400), 2 dòng trừ.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-36-redeem-done.png",
-      "SQL coupons {\"code\":\"REWARD-FRESHIP-3DC975H2\",\"type\":\"FREESHIP\",\"usageLimit\":1,\"perUserLimit\":1,\"owner\":\"uat_returning\"}; waste_gift_redemptions {\"status\":\"FULFILLED\",\"pointsCost\":20000}"
+      "SQL coupons {\"code\":\"REWARD-FRESHIP-EHC7K7P3\",\"type\":\"FREESHIP\",\"usageLimit\":1,\"perUserLimit\":1,\"owner\":\"uat_returning\"}; waste_gift_redemptions {\"status\":\"FULFILLED\",\"pointsCost\":20000}"
     ],
     "checks": [
       {
@@ -531,7 +559,7 @@
         "ok": true,
         "detail": {
           "status": 201,
-          "body": "{\"success\":true,\"message\":\"Đổi thành công Miễn phí vận chuyển!\",\"pointsSpent\":20000,\"remainingPoints\":65400,\"redemption\":{\"id\":\"cmvfie5b7009f14k9787z3p9r\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHE…"
+          "body": "{\"success\":true,\"message\":\"Đổi thành công Miễn phí vận chuyển!\",\"pointsSpent\":20000,\"remainingPoints\":65400,\"redemption\":{\"id\":\"cmvjh03620096vxsorg6ucp7b\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHE…"
         }
       },
       {
@@ -546,7 +574,7 @@
             "delta": -20000,
             "reason": "LOYALTY_REDEEM_VOUCHER:reward-freeship",
             "refType": "REWARD",
-            "refId": "cmvfie5b6009d14k9k5gzds5l",
+            "refId": "cmvjh03610094vxso0sgtwsr3",
             "lot": "STANDARD",
             "expiresAt": null
           }
@@ -559,12 +587,12 @@
           "before": {
             "balance": 85400,
             "ledgerSum": 85400,
-            "rows": 15
+            "rows": 14
           },
           "mid": {
             "balance": 65400,
             "ledgerSum": 65400,
-            "rows": 16
+            "rows": 15
           }
         }
       },
@@ -572,7 +600,7 @@
         "name": "Mã FREESHIP thuộc uat_returning, 1 lượt",
         "ok": true,
         "detail": {
-          "code": "REWARD-FRESHIP-3DC975H2",
+          "code": "REWARD-FRESHIP-EHC7K7P3",
           "type": "FREESHIP",
           "usageLimit": 1,
           "perUserLimit": 1,
@@ -591,8 +619,8 @@
         "name": "API cùng khoá hai lần: 2xx cả hai, cùng mã",
         "ok": true,
         "detail": {
-          "r1": "{\"id\":\"cmvfie5fl009l14k9z33juuhr\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHER\",\"giftName\":\"Miễn phí vận chuyển\",\"poin…",
-          "r2": "{\"id\":\"cmvfie5fl009l14k9z33juuhr\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHER\",\"giftName\":\"Miễn phí vận chuyển\",\"poin…"
+          "r1": "{\"id\":\"cmvjh0395009cvxsozau3772a\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHER\",\"giftName\":\"Miễn phí vận chuyển\",\"poin…",
+          "r2": "{\"id\":\"cmvjh0395009cvxsozau3772a\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHER\",\"giftName\":\"Miễn phí vận chuyển\",\"poin…"
         }
       },
       {
@@ -602,12 +630,12 @@
           "mid": {
             "balance": 65400,
             "ledgerSum": 65400,
-            "rows": 16
+            "rows": 15
           },
           "after": {
             "balance": 45400,
             "ledgerSum": 45400,
-            "rows": 17
+            "rows": 16
           },
           "n": 2
         }

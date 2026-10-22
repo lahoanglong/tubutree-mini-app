@@ -3,8 +3,8 @@
   "title": "Job subscriptions.process-due: tới hạn → tạo đơn kỳ (số lượng 2, giảm 12%, điểm đúng); chạy lại không tạo trùng; giao → cộng điểm",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:31:22.862Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:53.535Z",
+  "lane": 2,
   "checks": [
     {
       "name": "job tạo đúng 1 đơn kỳ mới (tổng 2 đơn), số lượng 2",
@@ -18,7 +18,7 @@
       "name": "đơn kỳ: subtotal 178000, giảm 12% 21360, điểm = floor(156640 × 2% × 1,2)",
       "ok": true,
       "detail": {
-        "code": "TUBUSUB7476863180",
+        "code": "TUBUSUB9191756952",
         "subtotal": 178000,
         "discount": 21360,
         "shippingFee": 0,
@@ -35,10 +35,10 @@
       }
     },
     {
-      "name": "nextRunAt ≈ hôm nay + 28 ngày",
+      "name": "nextRunAt ≈ hôm nay + 42 ngày",
       "ok": true,
       "detail": {
-        "days": 28
+        "days": 42
       }
     },
     {
@@ -70,7 +70,7 @@
       "result": null,
       "orders": [
         {
-          "code": "TUBUSUB7462102476",
+          "code": "TUBUSUB9180167227",
           "subtotal": 89000,
           "discount": 10680,
           "shippingFee": 19000,
@@ -86,7 +86,7 @@
           ]
         },
         {
-          "code": "TUBUSUB7476863180",
+          "code": "TUBUSUB9191756952",
           "subtotal": 178000,
           "discount": 21360,
           "shippingFee": 0,
@@ -102,7 +102,7 @@
           ]
         }
       ],
-      "nextRunAt": "2026-11-16T16:31:16.853Z"
+      "nextRunAt": "2026-12-03T11:39:51.752Z"
     },
     "giao đơn kỳ": {
       "shipped": "PROCESSED/SHIPPING",

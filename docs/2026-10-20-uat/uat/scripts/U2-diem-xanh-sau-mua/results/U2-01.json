@@ -1,10 +1,10 @@
 {
   "id": "U2-01",
-  "title": "Mầm Xanh: đơn app 199.000đ, phí giao 19.000đ → 3.980 điểm (×1, không tính ship)",
+  "title": "Mầm Xanh: đơn app 199.000đ (Q12: ngưỡng miễn phí giao 199.000đ nên ship 0) → 3.980 điểm (×1). Phần \"ship không tính điểm\" kiểm ở U2-18 (đơn có ship 19.000đ)",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:22:32.756Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:18.624Z",
+  "lane": 2,
   "checks": [
     {
       "name": "khách đang hạng Mầm Xanh (MAM_XANH)",
@@ -18,17 +18,17 @@
       "ok": true,
       "detail": {
         "status": 201,
-        "code": "TUBU2026101980251",
+        "code": "TUBU2026102298126",
         "bad": [],
         "blocked": []
       }
     },
     {
-      "name": "báo giá: tiền hàng sau giảm 199000đ, phí giao 19000đ",
+      "name": "báo giá: tiền hàng sau giảm 199000đ, phí giao 0đ",
       "ok": true,
       "detail": {
         "goods": 199000,
-        "shippingFee": 19000
+        "shippingFee": 0
       }
     },
     {
@@ -42,9 +42,9 @@
       "name": "DB: orders.pointsEarned = báo giá",
       "ok": true,
       "detail": {
-        "id": "cmvfgq5at001v5ksfzh8s2c23",
-        "total": 218000,
-        "shippingFee": 19000,
+        "id": "cmvjgw7p9001vh9r15nnmo5oi",
+        "total": 199000,
+        "shippingFee": 0,
         "pointsEarned": 3980,
         "status": "CONFIRMED",
         "discount": 0
@@ -76,7 +76,7 @@
       "ok": true,
       "detail": {
         "days": 365,
-        "expiresAt": "2027-10-19T16:22:29.693Z"
+        "expiresAt": "2027-10-22T11:38:17.362Z"
       }
     },
     {
@@ -108,11 +108,11 @@
       "subtotal": 199000,
       "discount": 0,
       "tierDiscount": 0,
-      "shippingFee": 19000,
-      "total": 218000,
+      "shippingFee": 0,
+      "total": 199000,
       "pointsEarned": 3980
     },
-    "nút đặt": "Đặt hàng · 218.000đ",
+    "nút đặt": "Đặt hàng · 199.000đ",
     "giao": {
       "shipped": "PROCESSED/SHIPPING",
       "delivered": "PROCESSED/DELIVERED"
@@ -121,11 +121,11 @@
       "rows": [
         {
           "delta": 3980,
-          "reason": "ORDER_DELIVERED:TUBU2026101980251",
+          "reason": "ORDER_DELIVERED:TUBU2026102298126",
           "lot": "STANDARD",
-          "refId": "cmvfgq5at001v5ksfzh8s2c23",
-          "createdAt": "2026-10-19T16:22:29.701Z",
-          "expiresAt": "2027-10-19T16:22:29.693Z"
+          "refId": "cmvjgw7p9001vh9r15nnmo5oi",
+          "createdAt": "2026-10-22T11:38:17.365Z",
+          "expiresAt": "2027-10-22T11:38:17.362Z"
         }
       ],
       "after": {
@@ -147,6 +147,6 @@
         ]
       }
     },
-    "mã đơn": "TUBU2026101980251"
+    "mã đơn": "TUBU2026102298126"
   }
 }

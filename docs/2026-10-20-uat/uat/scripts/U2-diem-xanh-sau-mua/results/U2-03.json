@@ -3,15 +3,15 @@
   "title": "Đại Thụ: đơn app 199.000đ → 199.000 × 2% × 1,5 = 5.970 điểm",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:22:49.504Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:28.689Z",
+  "lane": 2,
   "checks": [
     {
       "name": "Mini App: đặt đơn 201, không request lỗi/ra ngoài",
       "ok": true,
       "detail": {
         "status": 201,
-        "code": "TUBU2026101952200",
+        "code": "TUBU2026102216069",
         "bad": [],
         "blocked": []
       }
@@ -35,7 +35,7 @@
       "name": "DB: orders.pointsEarned = báo giá",
       "ok": true,
       "detail": {
-        "id": "cmvfgqg0j006j5ksf5nifd6x7",
+        "id": "cmvjgwfiq006jh9r1x3v6sxuy",
         "total": 199000,
         "shippingFee": 0,
         "pointsEarned": 5970,
@@ -69,7 +69,7 @@
       "ok": true,
       "detail": {
         "days": 365,
-        "expiresAt": "2027-10-19T16:22:43.640Z"
+        "expiresAt": "2027-10-22T11:38:27.521Z"
       }
     },
     {
@@ -114,11 +114,11 @@
       "rows": [
         {
           "delta": 5970,
-          "reason": "ORDER_DELIVERED:TUBU2026101952200",
+          "reason": "ORDER_DELIVERED:TUBU2026102216069",
           "lot": "STANDARD",
-          "refId": "cmvfgqg0j006j5ksf5nifd6x7",
-          "createdAt": "2026-10-19T16:22:43.641Z",
-          "expiresAt": "2027-10-19T16:22:43.640Z"
+          "refId": "cmvjgwfiq006jh9r1x3v6sxuy",
+          "createdAt": "2026-10-22T11:38:27.523Z",
+          "expiresAt": "2027-10-22T11:38:27.521Z"
         }
       ],
       "after": {
@@ -140,6 +140,6 @@
         ]
       }
     },
-    "mã đơn": "TUBU2026101952200"
+    "mã đơn": "TUBU2026102216069"
   }
 }

@@ -81,20 +81,28 @@ try {
   const after = (await sql(`SELECT clicks, conversions FROM affiliate_links WHERE "shortCode" = $1`, link.shortCode))[0];
   const me1 = await apiOk(L, 'GET', '/affiliate/dashboard', { user: 'uat_ctv' });
   const totalComm = (await sql(`SELECT count(DISTINCT "orderId")::int n FROM commissions WHERE "affiliateUserId" = 'uat_ctv'`))[0].n;
+  const notRejected = (await sql(`SELECT count(*)::int n FROM commissions WHERE "affiliateUserId" = 'uat_ctv' AND status <> 'REJECTED'`))[0].n;
+  // Luật 2026-10-22: "Chuyển đổi" = số đơn đã ghi công (commission không REJECTED); Mini App chỉ ghi số lượt bấm của link, không ghi "0 đơn".
   mini = await openMini('ctv', { path: '/affiliate' });
-  await mini.page.getByText(`${after.clicks} click`).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
-  await mini.page.getByText(`${after.clicks} click`).first().scrollIntoViewIfNeeded().catch(() => undefined);
+  const clickLine = mini.page.getByText(`${after.clicks} lượt bấm`).first();
+  const clickShown = await clickLine.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+  await clickLine.scrollIntoViewIfNeeded().catch(() => undefined);
   const s37 = await shot(mini.page, 'U3-37-link-click-chuyen-doi');
+  const bodyText = (await mini.page.innerText('body')).replace(/\s+/g, ' ');
+  const zeroDon = /\d+ lượt bấm\s*·\s*\d+ đơn/.test(bodyText) || /click\s*·\s*\d+ đơn/.test(bodyText);
+  // MiniStat vẽ số trước, nhãn sau.
+  const statShown = new RegExp(`(?<!\\d)${me1.totalConversions}\\s*Chuyển đổi`).test(bodyText);
   await mini.close();
   mini = null;
   R.add({
     id: 'U3-37', role: 'Khách mới / CTV', journey: 'Theo dõi click và chuyển đổi của link', title: `Khách mới mở /?ref=UATCTV&l=${link.shortCode} rồi đặt đơn`,
     steps: `Mini App khách ${BUY2} mở link → POST /affiliate/click; place-order (gán CTV bằng lượt chạm) → CTV mở /affiliate`,
-    expected: 'clicks +1; đơn gán uat_ctv có hoa hồng; conversions của link +1 và "Chuyển đổi" trên trang CTV tăng',
-    actual: { clickReq, before, mid, after, ref: r37.referrerUserId, commissions: c37.map((x) => [x.status, x.amount]), dashConversions: [me0.totalConversions, me1.totalConversions], ordersWithCommission: totalComm },
-    evidence: `${s37}; SQL affiliate_links ${link.shortCode} clicks ${before.clicks}→${mid.clicks}→${after.clicks}, conversions ${before.conversions}→${after.conversions}; orders.referrerUserId ${r37.referrerUserId}; GET /affiliate/dashboard totalConversions ${me0.totalConversions}→${me1.totalConversions} (CTV có ${totalComm} đơn có hoa hồng)`,
-    status: mid.clicks === before.clicks + 1 && r37.referrerUserId === 'uat_ctv' && after.conversions === before.conversions + 1 ? 'PASS' : 'FAIL',
-    data: { knownId: 'D3-06 (2026-10-18), phần chuyển đổi' },
+    expected: 'clicks +1; đơn gán uat_ctv có hoa hồng; "Chuyển đổi" (dashboard totalConversions) +1 và = số đơn đã ghi công (commission không REJECTED); Mini App ghi "N lượt bấm" cho link, không ghi "· 0 đơn"; ô "Chuyển đổi" hiện đúng số',
+    actual: { clickReq, before, mid, after, ref: r37.referrerUserId, commissions: c37.map((x) => [x.status, x.amount]), dashConversions: [me0.totalConversions, me1.totalConversions], ordersWithCommission: totalComm, notRejected, clickShown, zeroDon, statShown },
+    evidence: `${s37}; SQL affiliate_links ${link.shortCode} clicks ${before.clicks}→${mid.clicks}→${after.clicks}, cột conversions ${before.conversions}→${after.conversions} (không dùng nữa); orders.referrerUserId ${r37.referrerUserId}; GET /affiliate/dashboard totalConversions ${me0.totalConversions}→${me1.totalConversions} (CTV có ${totalComm} đơn có hoa hồng)`,
+    status: mid.clicks === before.clicks + 1 && r37.referrerUserId === 'uat_ctv' && c37.length === 1 && me1.totalConversions === me0.totalConversions + 1 &&
+      me1.totalConversions === notRejected && clickShown && !zeroDon && statShown ? 'PASS' : 'FAIL',
+    data: { knownId: 'D3-06 / U3-B01 (chuyển đổi = số đơn đã ghi công, chủ chốt 2026-10-22)' },
   });
 } catch (e) {
   console.error(e);

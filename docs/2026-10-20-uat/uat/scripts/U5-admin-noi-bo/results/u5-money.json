@@ -5,10 +5,10 @@
     "journey": "Duyệt rút tiền (chỉ ADMIN) và \"Đã chi\" (kế toán)",
     "steps": "uat_returning mua qua gian hàng /s/uatctv (COD 8×FUWA-HW-500), Pancake giao xong; lùi deliveredAt/lockedAt 11 ngày, chạy commissions.approve-due; CTV rút hết về ngân hàng; KẾ TOÁN mở tab rút tiền (thử Duyệt bằng API); ADMIN bấm \"Duyệt\"; KẾ TOÁN nhập mã GD → \"Đã chuyển khoản\"",
     "expected": "Hoa hồng 8% tiền hàng; KẾ TOÁN không thấy nút Duyệt, API approve 403; ADMIN duyệt → APPROVED; KẾ TOÁN chi → PAID, bankRef, paidBy = kế toán; commission PAID, không còn hoa hồng khả dụng",
-    "actual": "Đơn TUBU2026101994391 tiền hàng 712000đ → hoa hồng 56960đ (8% = 56960), LOCKED; job {\"lane\":5,\"job\":\"AffiliateService.approveDueCommissions\",\"ms…; khả dụng 56960. CTV rút → 201. KẾ TOÁN approve API → 403; nút trên tab: Duyệt=0, Từ chối=0. ADMIN Duyệt → 201. KẾ TOÁN chi → 201. payouts: {\"status\":\"PAID\",\"amount\":56960,\"grossAmount\":56960,\"taxWithheld\":0,\"fee\":0,\"reviewedBy\":\"uat_admin\",\"paidBy\":\"uat_ketoan\",\"bankRef\":\"FT26UATPAYOUT20\"}. commission: {\"status\":\"PAID\",\"amount\":56960,\"payoutBatchId\":\"cmvfg7czv00a112kzedezc3sm\"}. Khả dụng sau: 0",
-    "evidence": "shots/U5-admin-noi-bo/payouts-ketoan-requested-1440.png, shots/U5-admin-noi-bo/payouts-admin-approved-1440.png, shots/U5-admin-noi-bo/payouts-ketoan-paid-1440.png (hộp thoại: \"Xác nhận đã chuyển khoản /  / Xác nhận ĐÃ CHUYỂN KHOẢN 56.960đ cho CTV? /  / Huỷ / Đã chuyển khoản\"); SQL payouts (reviewedBy/paidBy/bankRef), commissions",
+    "actual": "Đơn TUBU2026102207929 tiền hàng 712000đ → hoa hồng 56960đ (8% = 56960), LOCKED; job {\"lane\":5,\"job\":\"AffiliateService.approveDueCommissions\",\"ms…; khả dụng 56960. CTV rút → 201. KẾ TOÁN approve API → 403; nút trên tab: Duyệt=0, Từ chối=0. ADMIN Duyệt → 201. KẾ TOÁN chi → 201. payouts: {\"status\":\"PAID\",\"amount\":56960,\"grossAmount\":56960,\"taxWithheld\":0,\"fee\":0,\"reviewedBy\":\"uat_admin\",\"paidBy\":\"uat_ketoan\",\"bankRef\":\"FT26UATPAYOUT20\"}. commission: {\"status\":\"PAID\",\"amount\":56960,\"payoutBatchId\":\"cmvjhe62j0120ljw94bamm5k5\"}. Khả dụng sau: 0. Luật mới: approve lệch expectedAmount → 409 \"Số thực nhận của lệnh đã đổi từ 57.960đ thành 56.960đ (thuế giữ dư vừa được hoàn), vui lòng tải lại trước khi duyệt.\" (payout vẫn REQUESTED); mark-paid lệch → 409 (vẫn APPROVED); UI gửi approve {\"expectedAmount\":56960}, mark-paid {\"bankRef\":\"FT26UATPAYOUT20\",\"expectedAmount\":56960}; CSV lệnh rút 200 có cột \"Thuế đã hoàn về Ví (VNĐ)\": true",
+    "evidence": "shots/U5-admin-noi-bo/payouts-ketoan-requested-1440.png, shots/U5-admin-noi-bo/payouts-admin-approved-1440.png, shots/U5-admin-noi-bo/payouts-ketoan-paid-1440.png (hộp thoại: \"Xác nhận đã chuyển khoản /  / Xác nhận ĐÃ CHUYỂN KHOẢN 56.960đ cho CTV? /  / CTV: Phạm Văn CTV (mã UATCTV) / Số tiền: 56.960đ / Ngân hàng: T…\"); SQL payouts (reviewedBy/paidBy/bankRef), commissions",
     "verdict": "PASS",
-    "at": "2026-10-19T16:07:55.786Z"
+    "at": "2026-10-22T11:52:18.070Z"
   },
   {
     "id": "U5-21",
@@ -16,10 +16,10 @@
     "journey": "Duyệt hoàn tiền mua trên sàn (Hoàn tiền sàn ngoài)",
     "steps": "uat_returning bấm mua Shopee qua app (POST /cashback/click); giả AccessTrade postback pending (đơn 500.000đ, hoa hồng 25.000đ); KẾ TOÁN tab \"Hoàn tiền sàn ngoài\" → \"Duyệt hoàn tiền\" → xác nhận; lùi confirmedAt quá cashback.hold_days, chạy cashback.settle",
     "expected": "Khách nhận 70% hoa hồng = 17.500đ: PENDING (chưa giữ tiền) → CONFIRMED (cashbackPending +17.500) → PAID, Ví +17.500, cashbackPending về như trước, walletBalance = SUM(sổ ví); SĐT trên danh sách của kế toán bị che",
-    "actual": "Click {\"deeplink\":\"https://gostore.accesstrade.vn/deep_link/shopee…. Postback đúng token → 201 {\"ok\":true}; token sai → 401. Giao dịch PENDING userReward 17500. cashbackPending 0→0→17500→0. UI duyệt → 201, CONFIRMED. Settle (hold 30 ngày) {\"lane\":5,\"job\":\"CashbackService.settleConfirmed\",\"ms\":79,\"r… → PAID. Ví 249500→267000, SUM(sổ ví) 267000. SĐT trong danh sách kế toán: che",
+    "actual": "Click {\"deeplink\":\"https://gostore.accesstrade.vn/deep_link/shopee…. Postback đúng token → 201 {\"ok\":true}; token sai → 401. Giao dịch PENDING userReward 17500. cashbackPending 0→0→17500→0. UI duyệt → 201, CONFIRMED. Settle (hold 30 ngày) {\"lane\":5,\"job\":\"CashbackService.settleConfirmed\",\"ms\":152,\"… → PAID. Ví 481500→499000, SUM(sổ ví) 499000. SĐT trong danh sách kế toán: che",
     "evidence": "shots/U5-admin-noi-bo/cashback-ketoan-pending-1440.png, shots/U5-admin-noi-bo/cashback-ketoan-confirmed-1440.png; SQL cashback_transactions, users.cashbackPending/walletBalance, wallet_transactions",
     "verdict": "PASS",
-    "at": "2026-10-19T16:08:44.711Z"
+    "at": "2026-10-22T11:52:20.117Z"
   },
   {
     "id": "U5-22",
@@ -27,11 +27,11 @@
     "journey": "Hoá đơn VAT: ghi nhận \"Đã xuất hoá đơn\"",
     "steps": "uat_returning đặt COD có yêu cầu hoá đơn công ty; xem \"Việc cần xử lý\" của ADMIN và KẾ TOÁN; KẾ TOÁN mở đơn → khối \"Hoá đơn VAT\" → link https → \"Đã xuất hoá đơn\" → xác nhận; gọi lại API",
     "expected": "invoiceStatus ISSUED + invoiceUrl; lần 2 bị chặn 400 \"đã được phát hành\"; B18: hoá đơn chờ xuất nằm trong việc của kế toán",
-    "actual": "UI issue-invoice → 201; DB invoiceStatus=ISSUED, url=https://hoadon.uat-xanh.vn/HD0001. Gọi lại → 400 Hóa đơn của đơn TUBU2026101997196 đã được phát hành.. Hộp việc: ADMIN \"invoicePending\", KẾ TOÁN (không có khoá invoicePending) → kế toán KHÔNG thấy hoá đơn chờ (D2-03 còn mở)",
+    "actual": "UI issue-invoice → 201; DB invoiceStatus=ISSUED, url=https://hoadon.uat-xanh.vn/HD0001. Gọi lại → 400 Hoá đơn của đơn TUBU2026102252430 đã được phát hành.. Hộp việc: ADMIN \"invoicePending\", KẾ TOÁN \"invoicePending\"",
     "evidence": "shots/U5-admin-noi-bo/invoice-ketoan-issued-1440.png; SQL orders.invoiceStatus/invoiceUrl; GET /admin/ops/inbox theo vai trò",
     "verdict": "PASS",
-    "note": "D2-03",
-    "at": "2026-10-19T16:08:15.123Z"
+    "note": "",
+    "at": "2026-10-22T11:52:21.609Z"
   },
   {
     "id": "U5-23",
@@ -39,9 +39,9 @@
     "journey": "Công nợ đại lý: ghi nhận đại lý trả một phần nợ",
     "steps": "uat_dealer (DEALER_2, hạn mức 20 triệu) đặt đơn sỉ ghi công nợ ≥ 3 triệu; KẾ TOÁN mở đơn → \"Công nợ đại lý\" → nhập 1.000.000đ + mã GD → \"Xác nhận đã nhận, giảm nợ\" → xác nhận; tab \"Đại lý & công nợ\"",
     "expected": "Đơn ghi nợ vào thẳng CONFIRMED (dealer.service.ts:303-308 lưu paymentMethod BANK_TRANSFER); sổ công nợ +tổng đơn khi đặt, −1.000.000 khi kế toán ghi nhận; dư nợ = tổng − 1.000.000 (SUM(delta) khớp số hiện ở tab); thao tác ghi người làm",
-    "actual": "Đơn sỉ DLR28145695059 CONFIRMED/BANK_TRANSFER tổng 3118500đ (45×HEC-DEO-50 99000đ, giá đại lý DEALER_2 −30%); dư nợ sau đặt 11072500. UI credit-payment (mã GD FT26UATDEBT8145711) → 201; gửi lại cùng mã → 201, dòng sổ mang mã này: 1. Sổ: [\"3318000 ORDER\",\"-1000000 PAYMENT\",\"3318000 ORDER\",\"3318000 ORDER\",\"-1000000 PAYMENT\",\"3118500 ORDER\",\"-1000000 PAYMENT\"] → dư nợ 10072500. API accounts: {\"userId\":\"uat_dealer\",\"fullName\":\"Đại Lý Xanh Tươi\",\"phone\":\"0901000006\",\"tier\":{\"id\":\"DEALER_2\",\"name\":\"Đại lý Cấp 2\"},\"creditLimit\":20000000,\"debt\":10072500,…. Tab hiện: 1 đ 10.072.500đ 10.072.500đ 20.000.000đ 0đ 4 đ",
+    "actual": "Đơn sỉ DLR69941625814 CONFIRMED/BANK_TRANSFER tổng 3137500đ (45×HEC-DEO-50 99000đ, giá đại lý DEALER_2 −30%); dư nợ sau đặt 8412500. UI credit-payment (mã GD FT26UATDEBT9941657) → 201; gửi lại cùng mã → 201, dòng sổ mang mã này: 1. Sổ: [\"3137500 ORDER\",\"3137500 ORDER\",\"-1000000 PAYMENT\",\"3137500 ORDER\",\"-1000000 PAYMENT\"] → dư nợ 7412500. API accounts: {\"userId\":\"uat_dealer\",\"fullName\":\"Đại Lý Xanh Tươi\",\"phone\":\"0901000006\",\"tier\":{\"id\":\"DEALER_2\",\"name\":\"Đại lý Cấp 2\"},\"creditLimit\":20000000,\"debt\":7412500,\"…. Tab hiện: 1 đ 7.412.500đ 7.412.500đ 20.000.000đ 0đ 3 đ",
     "evidence": "shots/U5-admin-noi-bo/dealer-debt-ketoan-paid-1440.png, shots/U5-admin-noi-bo/dealer-accounts-ketoan-1440.png; SQL SUM(dealer_credit_ledgers.delta) WHERE userId='uat_dealer'",
     "verdict": "PASS",
-    "at": "2026-10-19T16:42:27.879Z"
+    "at": "2026-10-22T11:52:23.880Z"
   }
 ]

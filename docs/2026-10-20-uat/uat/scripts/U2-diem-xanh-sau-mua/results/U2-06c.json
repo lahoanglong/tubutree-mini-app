@@ -3,8 +3,8 @@
   "title": "Rớt hạng có ân hạn: trả cả đơn vừa đưa khách lên Lộc Biếc → chi tiêu < 1.500.000; cron tiers.recalc giữ Lộc Biếc + ân hạn 30 ngày; hết ân hạn, cron hạ về Mầm Xanh",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:23:43.759Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:47.153Z",
+  "lane": 2,
   "checks": [
     {
       "name": "đơn RETURNED, thu hồi đủ điểm đơn, số dư = SUM sổ, ví + tiền hàng",
@@ -25,7 +25,7 @@
       "name": "ngay sau trả: chi tiêu < 1.500.000 nhưng chưa rớt hạng (vẫn LOC_BIEC)",
       "ok": true,
       "detail": {
-        "spent12m": 1447000,
+        "spent12m": 1453000,
         "tierId": "LOC_BIEC"
       }
     },
@@ -43,8 +43,8 @@
       "detail": {
         "tierId": "LOC_BIEC",
         "grace": [
-          "2026-11-18T16:23:36.690Z",
-          "2026-11-18T16:23:36.690Z"
+          "2026-11-21T11:38:45.064Z",
+          "2026-11-21T11:38:45.064Z"
         ]
       }
     },
@@ -60,9 +60,9 @@
   ],
   "evidence": {
     "khách trả cả đơn": {
-      "code": "TUBU2026101958961",
+      "code": "TUBU2026102287604",
       "status": 201,
-      "id": "cmvfgrhy900cj5ksfapvz0zb5"
+      "id": "cmvjgwszu00cjh9r14882vsms"
     },
     "sau trả": {
       "review": 201,
@@ -71,13 +71,13 @@
         "tierId": "LOC_BIEC",
         "tierGraceUntil": null
       },
-      "spent12m": 1447000,
+      "spent12m": 1453000,
       "reversed": [
         -4200
       ],
       "balance": [
-        32380,
-        28180
+        32880,
+        28680
       ],
       "wallet": [
         0,
@@ -92,7 +92,7 @@
       "job": null,
       "tier": {
         "tierId": "LOC_BIEC",
-        "tierGraceUntil": "2026-11-18T16:23:36.690Z"
+        "tierGraceUntil": "2026-11-21T11:38:45.064Z"
       }
     },
     "sau hết ân hạn + tiers.recalc": {

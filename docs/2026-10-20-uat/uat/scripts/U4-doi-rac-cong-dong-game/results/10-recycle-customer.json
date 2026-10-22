@@ -5,11 +5,11 @@
     "journey": "Đổi rác: mang tới đại lý (carton + nilon)",
     "steps": "/recycle → \"Đổi rác ngay\" → carton +3, nilon +2 → Tiếp tục → \"Mang tới điểm nhận\" → \"Chọn điểm nhận\" → Đại lý Xanh Quận 3 → \"Chọn điểm này\" → tick đồng ý → \"Tạo yêu cầu\"",
     "expected": "Tạo yêu cầu OPEN mã TR-xxxxx tại đại lý, ước tính 3×1.000 + 2×1.000 = 5.000 điểm (bảng ×1.000); chưa cộng điểm vào sổ",
-    "actual": "Tạo TR-TQWY5 OPEN tại đại lý, ước tính 5000 điểm, lines [{\"item\":\"wi-bubble-wrap\",\"qty\":2},{\"item\":\"wi-carton\",\"qty\":3}].",
+    "actual": "Tạo TR-7G76Y OPEN tại đại lý, ước tính 5000 điểm, lines [{\"item\":\"wi-bubble-wrap\",\"qty\":2},{\"item\":\"wi-carton\",\"qty\":3}].",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-05-step1.png",
       "shots/U4-doi-rac-cong-dong-game/U4-05-created.png",
-      "SQL waste_requests → {\"id\":\"cmvfid0sn001414k9cz311p8d\",\"code\":\"TR-TQWY5\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvficxd8000m14k9bqk2p52v\",\"estimatedPoints\":5000,\"estimatedDrops\":0,\"trackingCode\":null,\"carrier\":null,\"lines\":[{\"item\":\"wi-bubble-wrap\",\"qty\":2},{\"item\":\"wi-ca…"
+      "SQL waste_requests → {\"id\":\"cmvjgz1g40012vxsopw6neb3n\",\"code\":\"TR-7G76Y\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvjgyx9e000mvxso2v3foa0a\",\"estimatedPoints\":5000,\"estimatedDrops\":0,\"trackingCode\":null,\"carrier\":null,\"lines\":[{\"item\":\"wi-bubble-wrap\",\"qty\":2},{\"item\":\"wi-ca…"
     ],
     "checks": [
       {
@@ -25,18 +25,18 @@
         "ok": true,
         "detail": {
           "status": 201,
-          "code": "TR-TQWY5"
+          "code": "TR-7G76Y"
         }
       },
       {
         "name": "DB: OPEN, DROP_OFF, điểm = đại lý, ước tính 5.000",
         "ok": true,
         "detail": {
-          "id": "cmvfid0sn001414k9cz311p8d",
-          "code": "TR-TQWY5",
+          "id": "cmvjgz1g40012vxsopw6neb3n",
+          "code": "TR-7G76Y",
           "method": "DROP_OFF",
           "status": "OPEN",
-          "pointId": "cmvficxd8000m14k9bqk2p52v",
+          "pointId": "cmvjgyx9e000mvxso2v3foa0a",
           "estimatedPoints": 5000,
           "estimatedDrops": 0,
           "trackingCode": null,
@@ -56,7 +56,7 @@
       {
         "name": "Mã dạng TR-XXXXX",
         "ok": true,
-        "detail": "TR-TQWY5"
+        "detail": "TR-7G76Y"
       },
       {
         "name": "Sổ điểm: chưa có dòng RECYCLE (chỉ cộng khi nơi nhận xác nhận)",
@@ -132,10 +132,10 @@
     "journey": "Đổi rác: hộp sữa + vỏ chai Tubu mang tới kho HCMC",
     "steps": "Tiếp U4-06: chọn \"Kho Tubu Tree HCM\" → \"Chọn điểm này\" → tick đồng ý → \"Tạo yêu cầu\"",
     "expected": "Tạo yêu cầu OPEN tại kho, ước tính floor(12/5)×1.000 + 2×2.000 = 6.000 điểm, 4 giọt nước",
-    "actual": "TR-DKG2W OPEN tại kho, ước tính 6000 điểm, 4 giọt.",
+    "actual": "TR-9Z3XF OPEN tại kho, ước tính 6000 điểm, 4 giọt.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-07-created-warehouse.png",
-      "SQL → {\"id\":\"cmvfid3p8001f14k9ip2o5jyu\",\"code\":\"TR-DKG2W\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvficxct000h14k930m2k6ap\",\"estimatedPoints\":6000,\"estimatedDrops\":4,\"trackingCode\":null,\"carrier\":null,\"lines\":[{\"item\":\"wi-milk-carton\",\"qty\":12},{\"item\":\"wi-t…"
+      "SQL → {\"id\":\"cmvjgz4kz001dvxso7o0rwzzr\",\"code\":\"TR-9Z3XF\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvjgyx86000hvxso33ayr9vc\",\"estimatedPoints\":6000,\"estimatedDrops\":4,\"trackingCode\":null,\"carrier\":null,\"lines\":[{\"item\":\"wi-milk-carton\",\"qty\":12},{\"item\":\"wi-t…"
     ],
     "checks": [
       {
@@ -149,11 +149,11 @@
         "name": "DB: OPEN tại kho, 6.000 điểm, 4 giọt",
         "ok": true,
         "detail": {
-          "id": "cmvfid3p8001f14k9ip2o5jyu",
-          "code": "TR-DKG2W",
+          "id": "cmvjgz4kz001dvxso7o0rwzzr",
+          "code": "TR-9Z3XF",
           "method": "DROP_OFF",
           "status": "OPEN",
-          "pointId": "cmvficxct000h14k930m2k6ap",
+          "pointId": "cmvjgyx86000hvxso33ayr9vc",
           "estimatedPoints": 6000,
           "estimatedDrops": 4,
           "trackingCode": null,
@@ -179,12 +179,12 @@
     "journey": "Đổi rác: gửi kiện về kho (MAIL_IN) + nhập mã vận đơn",
     "steps": "API preview MAIL_IN carton 10 (dưới tối thiểu) và tạo thiếu 2 ô đồng ý; UI /recycle/new carton +15 → \"Gửi về kho Tubu HCM\" → tick 3 ô → Tạo yêu cầu → nhập Hãng \"GHTK\", Mã vận đơn → \"Đã gửi\"",
     "expected": "Dưới 15.000 điểm: chặn BELOW_MIN; thiếu đồng ý: 400; đủ: yêu cầu OPEN 15.000 điểm; nhập vận đơn → IN_TRANSIT, lưu mã",
-    "actual": "Preview carton 10 → BELOW_MIN; thiếu đồng ý → 400; TR-EDS86 tạo 15.000 điểm, sau \"Đã gửi\" status=IN_TRANSIT.",
+    "actual": "Preview carton 10 → BELOW_MIN; thiếu đồng ý → 400; TR-YX9E4 tạo 15.000 điểm, sau \"Đã gửi\" status=IN_TRANSIT.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-08-mailin-created.png",
       "shots/U4-doi-rac-cong-dong-game/U4-08-mailin-tracking.png",
       "POST /waste/preview MAIL_IN carton10 → blocks [{\"code\":\"BELOW_MIN\",\"missingPoints\":5000}]",
-      "SQL → {\"id\":\"cmvfid5ny001t14k9gg75d8dc\",\"code\":\"TR-EDS86\",\"method\":\"MAIL_IN\",\"status\":\"IN_TRANSIT\",\"pointId\":\"cmvficxct000h14k930m2k6ap\",\"estimatedPoints\":15000,\"estimatedDrops\":0,\"trackingCode\":\"GHTKUATWASTE0001\",\"carrier\":\"GHTK\",\"lines\":[{\"item\":\"wi-carton\",\"qty\":…"
+      "SQL → {\"id\":\"cmvjgz6bn001rvxso05s1i03y\",\"code\":\"TR-YX9E4\",\"method\":\"MAIL_IN\",\"status\":\"IN_TRANSIT\",\"pointId\":\"cmvjgyx86000hvxso33ayr9vc\",\"estimatedPoints\":15000,\"estimatedDrops\":0,\"trackingCode\":\"GHTKUATWASTE0001\",\"carrier\":\"GHTK\",\"lines\":[{\"item\":\"wi-carton\",\"qty\":…"
     ],
     "checks": [
       {
@@ -216,11 +216,11 @@
         "name": "DB: OPEN, MAIL_IN, kho, 15.000 điểm",
         "ok": true,
         "detail": {
-          "id": "cmvfid5ny001t14k9gg75d8dc",
-          "code": "TR-EDS86",
+          "id": "cmvjgz6bn001rvxso05s1i03y",
+          "code": "TR-YX9E4",
           "method": "MAIL_IN",
           "status": "OPEN",
-          "pointId": "cmvficxct000h14k930m2k6ap",
+          "pointId": "cmvjgyx86000hvxso33ayr9vc",
           "estimatedPoints": 15000,
           "estimatedDrops": 0,
           "trackingCode": null,
@@ -242,11 +242,11 @@
         "name": "DB: IN_TRANSIT, carrier GHTK, mã vận đơn lưu",
         "ok": true,
         "detail": {
-          "id": "cmvfid5ny001t14k9gg75d8dc",
-          "code": "TR-EDS86",
+          "id": "cmvjgz6bn001rvxso05s1i03y",
+          "code": "TR-YX9E4",
           "method": "MAIL_IN",
           "status": "IN_TRANSIT",
-          "pointId": "cmvficxct000h14k930m2k6ap",
+          "pointId": "cmvjgyx86000hvxso33ayr9vc",
           "estimatedPoints": 15000,
           "estimatedDrops": 0,
           "trackingCode": "GHTKUATWASTE0001",
@@ -271,7 +271,7 @@
     "actual": "UI sửa → carton 4, 4000 điểm; sửa yêu cầu đã gửi kiện → 409 \"Yêu cầu này không còn sửa được\".",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-09-edited.png",
-      "SQL waste_requests → {\"id\":\"cmvfid66f002114k96nkqox0e\",\"code\":\"TR-GGER4\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvficxd8000m14k9bqk2p52v\",\"estimatedPoints\":4000,\"estimatedDrops\":0,\"trackingCode\":null,\"carrier\":nu…; waste_events REQUEST_EDITED=1"
+      "SQL waste_requests → {\"id\":\"cmvjgz74p001zvxsonpy76yez\",\"code\":\"TR-65J8Q\",\"method\":\"DROP_OFF\",\"status\":\"OPEN\",\"pointId\":\"cmvjgyx9e000mvxso2v3foa0a\",\"estimatedPoints\":4000,\"estimatedDrops\":0,\"trackingCode\":null,\"carrier\":nu…; waste_events REQUEST_EDITED=1"
     ],
     "checks": [
       {
@@ -290,11 +290,11 @@
         "name": "DB: carton 4, ước tính 4.000",
         "ok": true,
         "detail": {
-          "id": "cmvfid66f002114k96nkqox0e",
-          "code": "TR-GGER4",
+          "id": "cmvjgz74p001zvxsonpy76yez",
+          "code": "TR-65J8Q",
           "method": "DROP_OFF",
           "status": "OPEN",
-          "pointId": "cmvficxd8000m14k9bqk2p52v",
+          "pointId": "cmvjgyx9e000mvxso2v3foa0a",
           "estimatedPoints": 4000,
           "estimatedDrops": 0,
           "trackingCode": null,
@@ -419,18 +419,18 @@
         "detail": [
           {
             "status": 201,
-            "id": "cmvfid8fk002m14k9xd6ru3jy",
-            "code": "TR-BP5W5"
+            "id": "cmvjgz9iy002kvxso51bp9z6q",
+            "code": "TR-424A4"
           },
           {
             "status": 201,
-            "id": "cmvfid8ga002s14k9aq04muk8",
-            "code": "TR-G5ANG"
+            "id": "cmvjgz9j7002qvxsoeckfmfbn",
+            "code": "TR-SGKGW"
           },
           {
             "status": 201,
-            "id": "cmvfid8h8002y14k9ui7ojtnx",
-            "code": "TR-7TNNS"
+            "id": "cmvjgz9je002wvxsoofxulk46",
+            "code": "TR-ECEZA"
           }
         ]
       },

@@ -1,61 +1,201 @@
 {
   "name": "f-account",
-  "at": "2026-10-20T00:41:45.663Z",
+  "at": "2026-10-22T12:19:37.387Z",
   "cases": [
     {
-      "id": "U6-63",
+      "id": "U6-64",
       "role": "Khách mới chưa có SĐT (uat_new_nophone)",
-      "journey": "Điểm danh Điểm Xanh",
-      "steps": "Mở /tai-khoan/diem-xanh, bấm \"Điểm danh +1000\", bấm lại (390px)",
-      "expected": "Lần đầu: +1.000 điểm (ngày 1 của chu kỳ), 1 dòng sổ + loyalty_check_ins (dayKey hôm nay, cycleDay 1, streak 1), pointsBalance tăng đúng 1.000 = SUM(sổ), nút chuyển \"đã điểm danh\"; bấm lần hai không cộng thêm (DB không đổi). Q2: web không bắt xác minh SĐT để điểm danh",
+      "journey": "Ví Tubu",
+      "steps": "Cấp ví 150.000đ bằng SQL + 1 dòng sổ ví; mở /tai-khoan/vi-tubu; bấm \"Rút ngân hàng\" (390 và 1440px)",
+      "expected": "Số dư = walletBalance = SUM(wallet_transactions); lịch sử hiện đúng dòng +150.000đ; \"Rút ngân hàng\" khách chưa có SĐT được hướng dẫn rõ (không lỗi trắng); không có chữ \"xu\"",
       "checks": [
         {
-          "name": "có nút \"Điểm danh +1000\"",
+          "name": "390: số dư 150.000đ = SUM(sổ ví) 150000",
           "ok": true,
-          "detail": "Điểm danh +1000"
+          "detail": "số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh "
         },
         {
-          "name": "POST điểm danh → 2xx",
+          "name": "390: lịch sử có dòng +150.000đ",
           "ok": true,
-          "detail": "201"
+          "detail": "Lịch sử Ví\nĐiều chỉnh\n18:52 22/10/2026 · Cấp thử UAT\n+150.000đ\nSố dư 150.000đ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
-          "name": "DB: đúng 1 dòng điểm danh, ngày 1, +1.000, streak 1",
+          "name": "390: không có chữ \"xu\"",
           "ok": true,
-          "detail": "[{\"cd\":1,\"sd\":1,\"p\":1000,\"dk\":\"2026-10-19\"}]"
+          "detail": "[]"
         },
         {
-          "name": "pointsBalance +1.000 và = SUM(sổ)",
+          "name": "390: không tràn ngang",
           "ok": true,
-          "detail": "{\"before\":{\"balance\":0,\"ledgerSum\":0,\"rows\":0},\"mid\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1}}"
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
         },
         {
-          "name": "trang hiện \"Đã điểm danh\" / chuỗi 1 ngày và số dư 1.000",
+          "name": "bấm \"Rút ngân hàng\": có biểu mẫu/hướng dẫn hiển thị (không im lặng)",
           "ok": true,
-          "detail": "Điểm danh nhận Điểm Xanh\nChuỗi: 1 ngày liên tiếp 🔥\nĐã điểm danh\n\nĐiểm danh Ngày 1 thành công! Nhận +1.000 Điểm Xanh.\n\nN1\n+1.000\nN2\n+1.000\nN3\n+1.000\nN4\n+1.000\nN5\n+1.000\nN6\n+1.000\nN7\n+2.000\n\nMỗi ngày 1"
+          "detail": "Ví Tubu\nVí Tubu (số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh toán đơn\n\nĐiểm Xanh (đổi giảm giá)\n1.000 điểm\nMầm Xanh\n\nTích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau & lên hạng thành viên.\n\nMẹo: dùng Ví Tubu để trả đơn hàng — miễn phí, thay vì rút về ngân hàng (phí chuyển khoản 3.0"
         },
         {
-          "name": "điểm danh lần 2 không cộng thêm điểm (DB không đổi)",
+          "name": "390: không request API lỗi (ngoài /brand/owner/me)",
           "ok": true,
-          "detail": "{\"mid\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"end\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"again\":400}"
+          "detail": "[]"
+        },
+        {
+          "name": "1440: số dư 150.000đ = SUM(sổ ví) 150000",
+          "ok": true,
+          "detail": "số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh "
+        },
+        {
+          "name": "1440: lịch sử có dòng +150.000đ",
+          "ok": true,
+          "detail": "Lịch sử Ví\nĐiều chỉnh\n18:52 22/10/2026 · Cấp thử UAT\n+150.000đ\nSố dư 150.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương "
+        },
+        {
+          "name": "1440: không có chữ \"xu\"",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "1440: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "1440: không request API lỗi (ngoài /brand/owner/me)",
+          "ok": true,
+          "detail": "[]"
         }
       ],
       "evidence": [
         {
-          "label": "POST điểm danh",
-          "value": "{\"status\":201,\"body\":{\"success\":true,\"cycleDay\":1,\"streakDays\":1,\"pointsEarned\":1000,\"totalPoints\":1000,\"message\":\"Điểm danh Ngày 1 thành công! Nhận +1.000 Điểm Xanh.\"}}"
-        },
-        {
-          "label": "loyalty_check_ins",
-          "value": "[{\"cd\":1,\"sd\":1,\"p\":1000,\"dk\":\"2026-10-19\"}]"
-        },
-        {
-          "label": "điểm danh lần 2 qua API",
-          "value": "{\"status\":400,\"body\":{\"message\":\"Hôm nay bạn đã điểm danh nhận điểm rồi 🌿\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+          "label": "sau khi bấm Rút ngân hàng",
+          "value": "Ví Tubu\nVí Tubu (số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh toán đơn\n\nĐiểm Xanh (đổi giảm giá)\n1.000 điểm\nMầm Xanh\n\nTích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau & lên hạng thành viên.\n\nMẹo: dùng Ví Tubu để trả đơn hàng — miễn phí, thay vì rút về ngân hàng (phí chuyển khoản 3.000đ/lần).\n\nMời bạn — nhận Điểm Xanh\n\nBạn bè vào app bằng mã của bạn và có đơn thứ hai từ 200.000đ giao thành công trong 30 ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.\n\n0\nbạn thành công\n0 điểm\nđã nhận từ giới thiệu\n\nMời thêm 3 bạn để nhận 20.000 điểm\n\nUATNEWNOPHONE\nChia sẻ\n\nLịch sử Ví\nĐiều chỉnh\n18:52 22/10/2026 · Cấp thử UAT\n+150.000đ\nSố dư 150.000đ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi"
         }
       ],
       "shots": [
-        "uat/shots/U6-web-khach/U6-63-diem-danh-xong.png"
+        "uat/shots/U6-web-khach/U6-64-vi-tubu-390.png",
+        "uat/shots/U6-web-khach/U6-64-vi-tubu-rut.png",
+        "uat/shots/U6-web-khach/U6-64-vi-tubu-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-65",
+      "role": "Khách quay lại + khách chưa đăng nhập",
+      "journey": "Sản phẩm yêu thích",
+      "steps": "Khách ghé: bấm tim trên PDP → mời đăng nhập; khách đăng nhập: bấm tim → /tai-khoan/yeu-thich có sản phẩm; bỏ tim → trống (390px)",
+      "expected": "Khách ghé bị đưa tới /dang-nhap có returnTo; khách đăng nhập: wishlists có dòng đúng productId, trang yêu thích hiện sản phẩm, bỏ tim thì dòng DB mất",
+      "checks": [
+        {
+          "name": "khách ghé bấm tim → sang /dang-nhap có returnTo về sản phẩm",
+          "ok": true,
+          "detail": "http://localhost:3262/dang-nhap?returnTo=%2Fsan-pham%2Fdau-tram-be-cobote"
+        },
+        {
+          "name": "POST /me/wishlist → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "DB: 1 dòng wishlists đúng productId",
+          "ok": true,
+          "detail": "[{\"productId\":\"p-cobote-tram\"}]"
+        },
+        {
+          "name": "trang yêu thích hiện \"Dầu tràm cho bé Cobote\"",
+          "ok": true,
+          "detail": "Sản phẩm yêu thích\nDanh sách sản phẩm yêu thích\nCobote\nDầu tràm cho bé Cobote\n89.000đ\n★ Mới\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "DELETE /me/wishlist/:id → 2xx",
+          "ok": true,
+          "detail": "200"
+        },
+        {
+          "name": "DB: không còn dòng wishlists",
+          "ok": true
+        },
+        {
+          "name": "trang yêu thích trống: \"Chưa có sản phẩm yêu thích\"",
+          "ok": true
+        }
+      ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-65-yeu-thich-co.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-66",
+      "role": "Khách quay lại",
+      "journey": "Thông báo",
+      "steps": "Mở /tai-khoan/thong-bao; so với GET /me/notifications; \"Đọc tất cả\"; bấm một thông báo đơn hàng (390px)",
+      "expected": "Danh sách = API (mới nhất trước), thông báo đơn hàng có mã đơn; \"Đọc tất cả\" đặt mọi dòng thành READ (notification_logs.status) và số chưa đọc ở menu/hub về 0; bấm thông báo đơn dẫn tới chi tiết đơn đó",
+      "checks": [
+        {
+          "name": "thông báo mới nhất của API hiện trên đầu danh sách",
+          "ok": true,
+          "detail": "{\"first\":\"Đã nhận yêu cầu đổi/trả đơn TUBU20261022\",\"text\":\"Thông báo\\nĐọc tất cả\\nĐã nhận yêu cầu đổi/trả\\nĐã nhận yêu cầu đổi/trả đơn TUBU2026102223432. Tubu sẽ phản hồi trong 24h.\\n3 phút trước\\nCập nhật đơn hàng\\nĐơn TUBU2026102260591 đã bị huỷ. Đã hoàn 110.000đ vào Ví Tubu.\\n4 phút trước\\nĐơn đã xác nhận\\nĐơn TUBU2026102260591 đã được xác nhận. Cảm ơn bạn đã mua\"}"
+        },
+        {
+          "name": "trang không báo lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "badge thông báo ở hub = số chưa đọc API (31)",
+          "ok": true,
+          "detail": "{\"badge0\":31,\"unread0\":31}"
+        },
+        {
+          "name": "POST read-all → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "sau \"Đọc tất cả\": API không còn thông báo chưa đọc",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "badge hub về 0",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "bấm thông báo → mở \"Chi tiết thông báo\" với nội dung đầy đủ",
+          "ok": true,
+          "detail": "Thông báo\nĐã nhận yêu cầu đổi/trả\nĐã nhận yêu cầu đổi/trả đơn TUBU2026102223432. Tubu sẽ phản hồi trong 24h.\n4 phút trước\nCập nhật đơn hàng\nĐơn TUBU2026102260591 đã bị huỷ. Đã hoàn 110.000đ vào Ví Tubu.\n4 phút trước\nĐơn đã xác nhận\nĐơn TUBU2026102260591 đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tu"
+        },
+        {
+          "name": "nút trong chi tiết thông báo dẫn tới đúng đơn (href khớp mã đơn trong thông báo)",
+          "ok": true,
+          "detail": "/tai-khoan/don-hang/TUBU2026102260591 -> http://localhost:3262/tai-khoan/don-hang/TUBU2026102260591"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "API",
+          "value": "{\"total\":31,\"unread\":31,\"first\":{\"code\":\"RETURN_REQUESTED\",\"body\":\"Đã nhận yêu cầu đổi/trả đơn TUBU2026102223432. Tubu sẽ phản hồi trong 24h.\"}}"
+        },
+        {
+          "label": "badge hub trước",
+          "value": "31"
+        },
+        {
+          "label": "notification_logs theo trạng thái",
+          "value": "[]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-66-thong-bao.png",
+        "uat/shots/U6-web-khach/U6-66-thong-bao-chi-tiet.png"
       ],
       "notes": [],
       "blockedReason": null,
@@ -146,18 +286,18 @@
         {
           "name": "sau khi xoá địa chỉ mặc định (Nhà B): còn 1 địa chỉ (Nhà A)",
           "ok": true,
-          "detail": "[{\"recipient\":\"Nhà A\",\"d\":false}]"
+          "detail": "[{\"recipient\":\"Nhà A\",\"d\":true}]"
         },
         {
           "name": "địa chỉ còn lại tự thành mặc định (không để khách mất mặc định)",
-          "ok": false,
-          "detail": "[{\"recipient\":\"Nhà A\",\"d\":false}]"
+          "ok": true,
+          "detail": "[{\"recipient\":\"Nhà A\",\"d\":true}]"
         }
       ],
       "evidence": [
         {
           "label": "trạng thái trống",
-          "value": "Sổ địa chỉ\n\nBạn chưa lưu địa chỉ nào. Thêm địa chỉ để thanh toán nhanh hơn.\n\n+ Thêm địa chỉ mới\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khá"
+          "value": "Sổ địa chỉ\n\nBạn chưa lưu địa chỉ nào. Thêm địa chỉ để thanh toán nhanh hơn.\n\nThêm địa chỉ mới\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "label": "DB sau khi thêm 2",
@@ -165,11 +305,11 @@
         },
         {
           "label": "hộp xoá (Nhà B đang là mặc định)",
-          "value": "Tìm sản phẩm\nT\nSố\n← Tài khoản\nSổ địa chỉ\nNhà B · 0901000099\nMặc định\n\n2 Đường B, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nXóa địa chỉ này?\n\nCác đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.\n\nGiữ lại\nXóa\nNhà A · 0901000099\n\n99 Đường Đã Sửa, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nSửa\nĐặt làm mặc định\nXóa\n+ Thêm địa chỉ mới\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ "
+          "value": "Sổ địa chỉ\nNhà B · 0901000099\nMặc định\n\n2 Đường B, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nXóa địa chỉ này?\n\nCác đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.\n\nGiữ lại\nXóa\nNhà A · 0901000099\n\n99 Đường Đã Sửa, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nSửa\nĐặt mặc định\nXóa\nThêm địa chỉ mới\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "label": "DB sau xoá",
-          "value": "[{\"recipient\":\"Nhà A\",\"d\":false}]"
+          "value": "[{\"recipient\":\"Nhà A\",\"d\":true}]"
         }
       ],
       "shots": [
@@ -177,273 +317,6 @@
         "uat/shots/U6-web-khach/U6-68-dia-chi-sau-xoa.png"
       ],
       "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "FAIL"
-    },
-    {
-      "id": "U6-62-390",
-      "role": "Khách quay lại (Lộc Biếc)",
-      "journey": "Điểm Xanh",
-      "steps": "Mở /tai-khoan/diem-xanh và đối chiếu sổ điểm với DB (390px)",
-      "expected": "Tổng điểm = pointsBalance; \"điểm đang chờ\" = lockedPoints của /me/loyalty; điểm sắp hết hạn + ngày = lô sớm nhất trong DB; mỗi dòng lịch sử (số điểm có dấu, ngày, \"Hết hạn\" = +12 tháng) khớp points_transactions; \"Còn X triệu để lên hạng\" khớp spent12m; danh sách mã giảm giá = /me/coupons; cùng nội dung với Mini App",
-      "checks": [
-        {
-          "name": "DB: pointsBalance = SUM(sổ STANDARD)",
-          "ok": true,
-          "detail": "{\"balance\":52184,\"ledgerSum\":52184,\"rows\":7}"
-        },
-        {
-          "name": "tổng điểm hiển thị 52.184",
-          "ok": true,
-          "detail": "Tích điểm ×1.2 · 52.184 điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 09/09/2027\n\nĐiểm Xanh thường có hạn 12 tháng kể từ n"
-        },
-        {
-          "name": "\"13.008 điểm đang chờ, mở khoá ngày …\" đúng lockedPoints − lockedReturnPoints",
-          "ok": true,
-          "detail": "được dùng trước.\n\n13.008 điểm đang chờ, mở khoá ngày 26/10\n\n4.776 điểm đang chờ xử lý đổi/"
-        },
-        {
-          "name": "\"4.776 điểm đang chờ xử lý đổi/trả\" đúng lockedReturnPoints",
-          "ok": true,
-          "detail": "ở khoá ngày 26/10\n\n4.776 điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong\n\nTiến độ lên hạng kế"
-        },
-        {
-          "name": "\"10.400 Điểm Xanh sẽ hết hạn\" đúng lô sớm nhất",
-          "ok": true,
-          "detail": "4 điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 09/09/2027\n\nĐiểm Xanh th"
-        },
-        {
-          "name": "lịch sử: 7 dòng, từng số điểm khớp DB",
-          "ok": true,
-          "detail": "{\"shown\":[-24000,3960,4272,4776,4776,24000,34400],\"db\":[-24000,3960,4272,4776,4776,24000,34400]}"
-        },
-        {
-          "name": "DB: mỗi lô cộng điểm có hạn = ngày nhận + 12 tháng",
-          "ok": true,
-          "detail": "[\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-09-09→2027-09-09\"]"
-        },
-        {
-          "name": "mã giảm giá của tôi: 3 mã khớp /me/coupons",
-          "ok": true,
-          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
-        },
-        {
-          "name": "có dòng luật \"Tích 2% tiền hàng\" và \"1 điểm = 1đ … tối đa 20% giá trị đơn\"",
-          "ok": true
-        },
-        {
-          "name": "Điểm Xanh có hạn 12 tháng được nêu",
-          "ok": true
-        },
-        {
-          "name": "không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
-        },
-        {
-          "name": "không request API lỗi (ngoài /brand/owner/me)",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "web và Mini App cùng hiện số điểm + mã giảm giá + điểm danh",
-          "ok": true,
-          "detail": "Hạng thành viên & Điểm Xanh\n🌿\nLộc Biếc\nTích điểm ×1.2 · 52.184 điểm Xanh\n10.400 Điểm Xanh sẽ hết hạn ngày 09/09/2027\nĐiểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.\nCòn 17,"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "loyalty",
-          "value": "{\"pointsBalance\":52184,\"lockedPoints\":17784,\"lockedUntil\":\"2026-10-26T16:48:15.752Z\",\"redeemable\":34400,\"expiring\":{\"amount\":10400,\"expiresAt\":\"2027-09-09T15:27:58.918Z\"},\"spent12m\":2461000}"
-        },
-        {
-          "label": "lô điểm sớm hết hạn nhất (DB)",
-          "value": "2027-09-09T15:27:58.918Z"
-        },
-        {
-          "label": "lịch sử trên trang",
-          "value": "[-24000,3960,4272,4776,4776,24000,34400]"
-        },
-        {
-          "label": "lịch sử DB (≤100)",
-          "value": "[-24000,3960,4272,4776,4776,24000,34400]"
-        },
-        {
-          "label": "dòng chỉ có ở Mini App",
-          "value": "[\"Tích điểm từ đơn hàng\",\"Tích điểm từ đơn hàng\",\"Tích điểm từ đơn hàng\",\"Hoàn lại điểm đã dùng\",\"Dùng điểm khi thanh toán\",\"-24.000\",\"Tích điểm từ đơn hàng\",\"Tích điểm từ đơn hàng\",\"09/09/2026\"]"
-        },
-        {
-          "label": "dòng chỉ có ở web",
-          "value": "[\"13.008 điểm đang chờ, mở khoá ngày 26/10\",\"4.776 điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong\",\"Tiến độ lên hạng kế\",\"›\",\"Tích điểm từ đơn hàng · TUBU2026101986207\",\"19/10/2026 · Hết hạn 19/10/2027\",\"Tích điểm từ đơn hàng · TUBU2026101968794\",\"Tích điểm từ đơn hàng · TUBU2026101927562\",\"Hoàn lại điểm đã dùng · TUBU2026101955822\",\"Dùng điểm khi thanh toán · TUBU2026101955822\",\"−24.000\",\"Tích điểm từ đơn hàng · TUBU2026101969520\",\"Tích điểm từ đơn hàng · TUBU2026101960369\",\"09/09/2026 · Hết hạn 09/09/2027\",\"Hiển thị tối đa 100 giao dịch gần nhất.\"]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-62-390-diem-xanh-390.png"
-      ],
-      "notes": [
-        "Mini App KHÔNG hiện \"13.008 điểm đang chờ\" (web có): [\"13.008 điểm đang chờ, mở khoá ngày 26/10\",\"4.776 điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong\"]"
-      ],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
-      "id": "U6-62-1440",
-      "role": "Khách quay lại (Lộc Biếc)",
-      "journey": "Điểm Xanh",
-      "steps": "Mở /tai-khoan/diem-xanh và đối chiếu sổ điểm với DB (1440px)",
-      "expected": "Tổng điểm = pointsBalance; \"điểm đang chờ\" = lockedPoints của /me/loyalty; điểm sắp hết hạn + ngày = lô sớm nhất trong DB; mỗi dòng lịch sử (số điểm có dấu, ngày, \"Hết hạn\" = +12 tháng) khớp points_transactions; \"Còn X triệu để lên hạng\" khớp spent12m; danh sách mã giảm giá = /me/coupons; cùng nội dung với Mini App",
-      "checks": [
-        {
-          "name": "DB: pointsBalance = SUM(sổ STANDARD)",
-          "ok": true,
-          "detail": "{\"balance\":52184,\"ledgerSum\":52184,\"rows\":7}"
-        },
-        {
-          "name": "tổng điểm hiển thị 52.184",
-          "ok": true,
-          "detail": "Tích điểm ×1.2 · 52.184 điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 09/09/2027\n\nĐiểm Xanh thường có hạn 12 tháng kể từ n"
-        },
-        {
-          "name": "\"13.008 điểm đang chờ, mở khoá ngày …\" đúng lockedPoints − lockedReturnPoints",
-          "ok": true,
-          "detail": "được dùng trước.\n\n13.008 điểm đang chờ, mở khoá ngày 26/10\n\n4.776 điểm đang chờ xử lý đổi/"
-        },
-        {
-          "name": "\"4.776 điểm đang chờ xử lý đổi/trả\" đúng lockedReturnPoints",
-          "ok": true,
-          "detail": "ở khoá ngày 26/10\n\n4.776 điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong\n\nTiến độ lên hạng kế"
-        },
-        {
-          "name": "\"10.400 Điểm Xanh sẽ hết hạn\" đúng lô sớm nhất",
-          "ok": true,
-          "detail": "4 điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 09/09/2027\n\nĐiểm Xanh th"
-        },
-        {
-          "name": "lịch sử: 7 dòng, từng số điểm khớp DB",
-          "ok": true,
-          "detail": "{\"shown\":[-24000,3960,4272,4776,4776,24000,34400],\"db\":[-24000,3960,4272,4776,4776,24000,34400]}"
-        },
-        {
-          "name": "DB: mỗi lô cộng điểm có hạn = ngày nhận + 12 tháng",
-          "ok": true,
-          "detail": "[\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-10-19→2027-10-19\",\"2026-09-09→2027-09-09\"]"
-        },
-        {
-          "name": "mã giảm giá của tôi: 3 mã khớp /me/coupons",
-          "ok": true,
-          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
-        },
-        {
-          "name": "có dòng luật \"Tích 2% tiền hàng\" và \"1 điểm = 1đ … tối đa 20% giá trị đơn\"",
-          "ok": true
-        },
-        {
-          "name": "Điểm Xanh có hạn 12 tháng được nêu",
-          "ok": true
-        },
-        {
-          "name": "không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
-        },
-        {
-          "name": "không request API lỗi (ngoài /brand/owner/me)",
-          "ok": true,
-          "detail": "[]"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "loyalty",
-          "value": "{\"pointsBalance\":52184,\"lockedPoints\":17784,\"lockedUntil\":\"2026-10-26T16:48:15.752Z\",\"redeemable\":34400,\"expiring\":{\"amount\":10400,\"expiresAt\":\"2027-09-09T15:27:58.918Z\"},\"spent12m\":2461000}"
-        },
-        {
-          "label": "lô điểm sớm hết hạn nhất (DB)",
-          "value": "2027-09-09T15:27:58.918Z"
-        },
-        {
-          "label": "lịch sử trên trang",
-          "value": "[-24000,3960,4272,4776,4776,24000,34400]"
-        },
-        {
-          "label": "lịch sử DB (≤100)",
-          "value": "[-24000,3960,4272,4776,4776,24000,34400]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-62-1440-diem-xanh-1440.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
-      "id": "U6-66",
-      "role": "Khách quay lại",
-      "journey": "Thông báo",
-      "steps": "Mở /tai-khoan/thong-bao; so với GET /me/notifications; \"Đọc tất cả\"; bấm một thông báo đơn hàng (390px)",
-      "expected": "Danh sách = API (mới nhất trước), thông báo đơn hàng có mã đơn; \"Đọc tất cả\" đặt mọi dòng thành READ (notification_logs.status) và số chưa đọc ở menu/hub về 0; bấm thông báo đơn dẫn tới chi tiết đơn đó",
-      "checks": [
-        {
-          "name": "thông báo mới nhất của API hiện trên đầu danh sách",
-          "ok": true,
-          "detail": "{\"first\":\"Đơn TUBU2026101943165 đã bị hủy.\",\"text\":\"Tìm sản phẩm\\nN\\nLại\\nThông báo\\nCập nhật đơn hàng\\nĐơn TUBU2026101943165 đã bị hủy.\\n10 phút trước\\nCập nhật đơn hàng\\nĐơn TUBU2026101972764 đã bị hủy.\\n10 phút trước\\nCập nhật đơn hàng\\nĐơn TUBU2026101991795 đã bị hủy.\\n10 phút trước\\nĐã giao thành công\\nĐơn TUBU2026101986207 đã giao thành công. Bạn được cộng 4\"}"
-        },
-        {
-          "name": "trang không báo lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "badge thông báo ở hub = số chưa đọc API (0)",
-          "ok": true,
-          "detail": "{\"badge0\":0,\"unread0\":0}"
-        },
-        {
-          "name": "sau \"Đọc tất cả\": API không còn thông báo chưa đọc",
-          "ok": true,
-          "detail": "0"
-        },
-        {
-          "name": "badge hub về 0",
-          "ok": true,
-          "detail": "0"
-        },
-        {
-          "name": "bấm thông báo → mở \"Chi tiết thông báo\" với nội dung đầy đủ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nN\nLại\nThông báo\nCập nhật đơn hàng\nĐơn TUBU2026101943165 đã bị hủy.\n10 phút trước\nCập nhật đơn hàng\nĐơn TUBU2026101972764 đã bị hủy.\n10 phút trước\nCập nhật đơn hàng\nĐơn TUBU2026101991795 đã bị hủy.\n11 phút trước\nĐã giao thành công\nĐơn TUBU2026101986207 đã giao thành công. Bạn được cộng 4"
-        },
-        {
-          "name": "nút trong chi tiết thông báo dẫn tới đúng đơn (href khớp mã đơn trong thông báo)",
-          "ok": true,
-          "detail": "/tai-khoan/don-hang/TUBU2026101943165 -> http://localhost:3262/tai-khoan/don-hang/TUBU2026101943165"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "API",
-          "value": "{\"total\":44,\"unread\":0,\"first\":{\"code\":\"ORDER_CANCELLED\",\"body\":\"Đơn TUBU2026101943165 đã bị hủy.\"}}"
-        },
-        {
-          "label": "badge hub trước",
-          "value": "0"
-        },
-        {
-          "label": "notification_logs theo trạng thái",
-          "value": "[]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-66-thong-bao.png",
-        "uat/shots/U6-web-khach/U6-66-thong-bao-chi-tiet.png"
-      ],
-      "notes": [
-        "không có nút \"Đọc tất cả\" (đã đọc hết)"
-      ],
       "blockedReason": null,
       "bugs": [],
       "verdict": "PASS"
@@ -456,9 +329,9 @@
       "expected": "Điểm Xanh = users.pointsBalance + pointsConvertedBalance; Ví Tubu = users.walletBalance; số mã giảm giá = GET /me/coupons; mã giới thiệu = users.referralCode; tên + hạng đúng DB; \"Đơn hàng của tôi (N)\" = số đơn DB; mỗi mục menu mở được không lỗi; không tràn ngang; cùng số với Mini App /profile",
       "checks": [
         {
-          "name": "Điểm Xanh hiện 67.512 (= pointsBalance 67512 + quy đổi 0)",
+          "name": "Điểm Xanh hiện 57.456 (= pointsBalance 57456 + quy đổi 0)",
           "ok": true,
-          "detail": "Mã giới thiệu: UATRETURNING\nSao chép\n\n67.512\nĐiểm Xanh\nXem lịch sử\n0đ\nVí Tubu\nXem lịch sử\n4 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy "
+          "detail": "Mã giới thiệu: UATRETURNING\nSao chép\n\n57.456 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm "
         },
         {
           "name": "Ví Tubu hiện 0đ",
@@ -466,9 +339,9 @@
           "detail": ""
         },
         {
-          "name": "\"4 mã\" giảm giá khớp /me/coupons",
+          "name": "\"3 mã\" giảm giá khớp /me/coupons",
           "ok": true,
-          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\",\"MILESTONE1000000-2026-10-UAT_RETURNING\"]"
+          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
         },
         {
           "name": "mã giới thiệu UATRETURNING",
@@ -479,9 +352,9 @@
           "ok": true
         },
         {
-          "name": "\"Đơn hàng của tôi (42)\"",
+          "name": "hub có đường vào \"Đơn hàng\" (thanh tab dưới)",
           "ok": true,
-          "detail": "Đơn hàng của tôi (42)\nTìm đơn theo mã đơ"
+          "detail": "khoản\nBảo mật\nĐổi trả\nVận chuyển\nTrang chủ\nDanh mục\nVườn Xanh\n7\nĐơn hàng\nCá nhân"
         },
         {
           "name": "mọi liên kết menu mở được, không 5xx/trang lỗi",
@@ -499,34 +372,34 @@
           "detail": "[\"GET /brand/owner/me 404\"]"
         },
         {
-          "name": "Mini App /profile cùng hiện Điểm Xanh (67.512)",
+          "name": "Mini App /profile cùng hiện Điểm Xanh (57.456)",
           "ok": true,
-          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n67.512 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n4 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
+          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n57.456 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
         },
         {
-          "name": "Mini App /profile cùng hiện mã giảm giá (4 mã)",
+          "name": "Mini App /profile cùng hiện mã giảm giá (3 mã)",
           "ok": true,
-          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n67.512 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n4 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
+          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n57.456 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
         },
         {
           "name": "Mini App /profile cùng hiện mã giới thiệu (UATRETURNING)",
           "ok": true,
-          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n67.512 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n4 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
+          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n57.456 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
         },
         {
           "name": "Mini App /profile cùng hiện Ví Tubu (0đ)",
           "ok": true,
-          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n67.512 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n4 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
+          "detail": "Cá nhân\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n57.456 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy Điểm Xanh\nSản phẩm yêu thích\nSổ địa chỉ\nCộng đồng hỏi đáp\nHỏi cách dùng ·"
         }
       ],
       "evidence": [
         {
           "label": "DB",
-          "value": "{\"pb\":67512,\"pc\":0,\"wb\":0,\"rc\":\"UATRETURNING\",\"fn\":\"Nguyễn Thị Quay Lại\",\"t\":\"LOC_BIEC\",\"coupons\":4,\"nOrders\":42}"
+          "value": "{\"pb\":57456,\"pc\":0,\"wb\":0,\"rc\":\"UATRETURNING\",\"fn\":\"Nguyễn Thị Quay Lại\",\"t\":\"LOC_BIEC\",\"coupons\":3,\"nOrders\":26}"
         },
         {
           "label": "các liên kết trên hub",
-          "value": "[\"/\",\"/tai-khoan/ho-so\",\"/tai-khoan/diem-xanh\",\"/tai-khoan/vi-tubu\",\"/mua-chung\",\"/doi-rac\",\"/tai-khoan/yeu-thich\",\"/tai-khoan/dia-chi\",\"/cong-dong\",\"/ctv\",\"/dai-ly\",\"/tai-khoan/thong-bao\",\"/cau-chuyen\",\"/tai-khoan/cai-dat\",\"/gioi-thieu\",\"/thanh-toan/chuyen-khoan/TUBU2026102081360\",\"/thanh-toan/chuyen-khoan/TUBU2026101920893\",\"/thanh-toan/chuyen-khoan/TUBU2026101911614\",\"/thanh-toan/chuyen-khoan/TUBU2026101922938\"]"
+          "value": "[\"/\",\"/tai-khoan/ho-so\",\"/tai-khoan/diem-xanh\",\"/tai-khoan/vi-tubu\",\"/mua-chung\",\"/doi-rac\",\"/tai-khoan/yeu-thich\",\"/tai-khoan/dia-chi\",\"/cong-dong\",\"/ctv\",\"/dai-ly\",\"/tai-khoan/thong-bao\",\"/cau-chuyen\",\"/tai-khoan/cai-dat\",\"/gioi-thieu\",\"/thanh-toan/chuyen-khoan/TUBU2026102269779\",\"/thanh-toan/chuyen-khoan/TUBU2026102270639\"]"
         }
       ],
       "shots": [
@@ -547,9 +420,9 @@
       "expected": "Điểm Xanh = users.pointsBalance + pointsConvertedBalance; Ví Tubu = users.walletBalance; số mã giảm giá = GET /me/coupons; mã giới thiệu = users.referralCode; tên + hạng đúng DB; \"Đơn hàng của tôi (N)\" = số đơn DB; mỗi mục menu mở được không lỗi; không tràn ngang; cùng số với Mini App /profile",
       "checks": [
         {
-          "name": "Điểm Xanh hiện 67.512 (= pointsBalance 67512 + quy đổi 0)",
+          "name": "Điểm Xanh hiện 57.456 (= pointsBalance 57456 + quy đổi 0)",
           "ok": true,
-          "detail": "Mã giới thiệu: UATRETURNING\nSao chép\n\n67.512\nĐiểm Xanh\nXem lịch sử\n0đ\nVí Tubu\nXem lịch sử\n4 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì lấy "
+          "detail": "Mã giới thiệu: UATRETURNING\nSao chép\n\n57.456 điểm\nĐiểm Xanh\nXem lịch sử\n0đ\nVí Tubu\nXem lịch sử\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐổi rác lấy quà\nĐổi bao bì"
         },
         {
           "name": "Ví Tubu hiện 0đ",
@@ -557,9 +430,9 @@
           "detail": ""
         },
         {
-          "name": "\"4 mã\" giảm giá khớp /me/coupons",
+          "name": "\"3 mã\" giảm giá khớp /me/coupons",
           "ok": true,
-          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\",\"MILESTONE1000000-2026-10-UAT_RETURNING\"]"
+          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
         },
         {
           "name": "mã giới thiệu UATRETURNING",
@@ -570,9 +443,9 @@
           "ok": true
         },
         {
-          "name": "\"Đơn hàng của tôi (42)\"",
+          "name": "\"Đơn hàng của tôi (26)\"",
           "ok": true,
-          "detail": "Đơn hàng của tôi (42)\nTìm đơn theo mã đơ"
+          "detail": "Đơn hàng của tôi (26)\nTìm đơn theo mã đơ"
         },
         {
           "name": "mọi liên kết menu mở được, không 5xx/trang lỗi",
@@ -593,11 +466,11 @@
       "evidence": [
         {
           "label": "DB",
-          "value": "{\"pb\":67512,\"pc\":0,\"wb\":0,\"rc\":\"UATRETURNING\",\"fn\":\"Nguyễn Thị Quay Lại\",\"t\":\"LOC_BIEC\",\"coupons\":4,\"nOrders\":42}"
+          "value": "{\"pb\":57456,\"pc\":0,\"wb\":0,\"rc\":\"UATRETURNING\",\"fn\":\"Nguyễn Thị Quay Lại\",\"t\":\"LOC_BIEC\",\"coupons\":3,\"nOrders\":26}"
         },
         {
           "label": "các liên kết trên hub",
-          "value": "[\"/\",\"/tai-khoan/ho-so\",\"/tai-khoan/diem-xanh\",\"/tai-khoan/vi-tubu\",\"/mua-chung\",\"/doi-rac\",\"/tai-khoan/yeu-thich\",\"/tai-khoan/dia-chi\",\"/cong-dong\",\"/ctv\",\"/dai-ly\",\"/tai-khoan/thong-bao\",\"/cau-chuyen\",\"/tai-khoan/cai-dat\",\"/gioi-thieu\",\"/thanh-toan/chuyen-khoan/TUBU2026102081360\",\"/thanh-toan/chuyen-khoan/TUBU2026101920893\",\"/thanh-toan/chuyen-khoan/TUBU2026101911614\",\"/thanh-toan/chuyen-khoan/TUBU2026101922938\"]"
+          "value": "[\"/\",\"/tai-khoan/ho-so\",\"/tai-khoan/diem-xanh\",\"/tai-khoan/vi-tubu\",\"/mua-chung\",\"/doi-rac\",\"/tai-khoan/yeu-thich\",\"/tai-khoan/dia-chi\",\"/cong-dong\",\"/ctv\",\"/dai-ly\",\"/tai-khoan/thong-bao\",\"/cau-chuyen\",\"/tai-khoan/cai-dat\",\"/gioi-thieu\",\"/thanh-toan/chuyen-khoan/TUBU2026102269779\",\"/thanh-toan/chuyen-khoan/TUBU2026102270639\"]"
         }
       ],
       "shots": [
@@ -618,7 +491,12 @@
       "expected": "Email sai: lỗi \"Email không hợp lệ\" và nút Lưu khoá; lưu đúng → users.fullName/email/dob cập nhật; ngày sinh chỉ đặt một lần (ô khoá sau khi có); SĐT hiển thị \"Chưa có số điện thoại\" và không sửa được ở đây",
       "checks": [
         {
-          "name": "SĐT hiện \"Chưa có số điện thoại\"",
+          "name": "khổ 390: không có khối SĐT, giống Mini App (web không xác minh SĐT, Q2)",
+          "ok": true,
+          "detail": "Sửa hồ sơ\n\nChưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.\n\nHọ và tên\nEmail\nNgày sinh\n\nNhận mã giảm giá quà tặng vào tháng sinh nhật.\n\nLư"
+        },
+        {
+          "name": "khổ 1440: SĐT hiện \"Chưa có số điện thoại\"",
           "ok": true,
           "detail": "Số điện thoại\nChưa có số điện thoại\n\nLưu thay đổi\n\nSống xanh An Lành — mỹ phẩm v"
         },
@@ -675,128 +553,255 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-64",
-      "role": "Khách mới chưa có SĐT (uat_new_nophone)",
-      "journey": "Ví Tubu",
-      "steps": "Cấp ví 150.000đ bằng SQL + 1 dòng sổ ví; mở /tai-khoan/vi-tubu; bấm \"Rút ngân hàng\" (390 và 1440px)",
-      "expected": "Số dư = walletBalance = SUM(wallet_transactions); lịch sử hiện đúng dòng +150.000đ; \"Rút ngân hàng\" khách chưa có SĐT được hướng dẫn rõ (không lỗi trắng); không có chữ \"xu\"",
+      "id": "U6-62-390",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Điểm Xanh",
+      "steps": "Mở /tai-khoan/diem-xanh và đối chiếu sổ điểm với DB (390px)",
+      "expected": "Tổng điểm = pointsBalance; \"điểm đang chờ\" = lockedPoints của /me/loyalty; điểm sắp hết hạn + ngày = lô sớm nhất trong DB; mỗi dòng lịch sử (số điểm có dấu, ngày, \"Hết hạn\" = +12 tháng) khớp points_transactions; \"Còn X triệu để lên hạng\" khớp spent12m; danh sách mã giảm giá = /me/coupons; cùng nội dung với Mini App",
       "checks": [
         {
-          "name": "390: số dư 150.000đ = SUM(sổ ví) 150000",
+          "name": "DB: pointsBalance = SUM(sổ STANDARD)",
           "ok": true,
-          "detail": "số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh "
+          "detail": "{\"balance\":57456,\"ledgerSum\":57456,\"rows\":9}"
         },
         {
-          "name": "390: lịch sử có dòng +150.000đ",
+          "name": "tổng điểm hiển thị 57.456",
           "ok": true,
-          "detail": "Lịch sử Ví\nĐiều chỉnh\n07:40 20/10/2026 · Cấp thử UAT\n+150.000đ\nSố dư 150.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương "
+          "detail": "Tích điểm ×1,2 · 57.456 Điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 12/09/2027\n\nĐiểm Xanh thường có hạn 12 tháng kể từ n"
         },
         {
-          "name": "390: không có chữ \"xu\"",
+          "name": "không còn dòng \"điểm đang chờ, mở khoá ngày\" (U6-B06)",
           "ok": true,
-          "detail": "[]"
+          "detail": "{\"lockedPoints\":22056,\"lockedReturnPoints\":4776,\"lockedUntil\":\"2026-10-29T12:15:02.845Z\"}"
         },
         {
-          "name": "390: không tràn ngang",
+          "name": "\"10.400 Điểm Xanh sẽ hết hạn\" đúng lô sớm nhất",
+          "ok": true,
+          "detail": "6 Điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 12/09/2027\n\nĐiểm Xanh th"
+        },
+        {
+          "name": "lịch sử: 9 dòng, từng số điểm khớp DB",
+          "ok": true,
+          "detail": "{\"shown\":[-24000,1000,3960,4272,4272,4776,4776,24000,34400],\"db\":[-24000,1000,3960,4272,4272,4776,4776,24000,34400]}"
+        },
+        {
+          "name": "DB: mỗi lô cộng điểm có hạn = ngày nhận + 12 tháng",
+          "ok": true,
+          "detail": "[\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-09-12→2027-09-12\"]"
+        },
+        {
+          "name": "mã giảm giá của tôi: 3 mã khớp /me/coupons",
+          "ok": true,
+          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
+        },
+        {
+          "name": "có dòng luật \"Tích 2% tiền hàng\" và \"1 điểm = 1đ … tối đa 20% giá trị đơn\"",
+          "ok": true
+        },
+        {
+          "name": "Điểm Xanh có hạn 12 tháng được nêu",
+          "ok": true
+        },
+        {
+          "name": "không tràn ngang",
           "ok": true,
           "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
         },
         {
-          "name": "bấm \"Rút ngân hàng\": có biểu mẫu/hướng dẫn hiển thị (không im lặng)",
-          "ok": true,
-          "detail": "Tìm sản phẩm\n1\nT\nSố\n← Tài khoản\nVí Tubu\nVí Tubu (số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh toán đơn\n\nĐiểm Xanh (đổi giảm giá)\n1.000 điểm\nMầm Xanh\n\nTích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau & lên hạng thành viên.\n\nMẹo: dùng Ví Tubu để trả đơn hàng — miễn phí, thay vì rút về"
-        },
-        {
-          "name": "390: không request API lỗi (ngoài /brand/owner/me)",
+          "name": "không request API lỗi (ngoài /brand/owner/me)",
           "ok": true,
           "detail": "[]"
         },
         {
-          "name": "1440: số dư 150.000đ = SUM(sổ ví) 150000",
+          "name": "web và Mini App cùng hiện số điểm + mã giảm giá + điểm danh",
           "ok": true,
-          "detail": "số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh "
+          "detail": "Hạng thành viên & Điểm Xanh\n🌿\nLộc Biếc\nTích điểm ×1,2 · 57.456 Điểm Xanh\n10.400 Điểm Xanh sẽ hết hạn ngày 12/09/2027\nĐiểm Xanh thường có hạn 12 tháng kể từ ngày nhận, điểm cũ được dùng trước.\nCòn 17,"
         },
         {
-          "name": "1440: lịch sử có dòng +150.000đ",
+          "name": "Mini App cũng không có dòng \"điểm đang chờ\" (khớp web sau U6-B06)",
           "ok": true,
-          "detail": "Lịch sử Ví\nĐiều chỉnh\n07:40 20/10/2026 · Cấp thử UAT\n+150.000đ\nSố dư 150.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương "
+          "detail": "Hạng thành viên & Điểm Xanh\n🌿\nLộc Biếc\nTích điểm ×1,2 · 57.456 Điểm Xanh\n10.400 Điểm Xanh sẽ hết hạn ngày 12/09/2027\nĐi"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "loyalty",
+          "value": "{\"pointsBalance\":57456,\"lockedPoints\":22056,\"lockedUntil\":\"2026-10-29T12:15:02.845Z\",\"redeemable\":35400,\"expiring\":{\"amount\":10400,\"expiresAt\":\"2027-09-12T11:30:22.766Z\"},\"spent12m\":2639000}"
         },
         {
-          "name": "1440: không có chữ \"xu\"",
-          "ok": true,
-          "detail": "[]"
+          "label": "lô điểm sớm hết hạn nhất (DB)",
+          "value": "2027-09-12T11:30:22.766Z"
         },
         {
-          "name": "1440: không tràn ngang",
+          "label": "lịch sử trên trang",
+          "value": "[-24000,1000,3960,4272,4272,4776,4776,24000,34400]"
+        },
+        {
+          "label": "lịch sử DB (≤100)",
+          "value": "[-24000,1000,3960,4272,4272,4776,4776,24000,34400]"
+        },
+        {
+          "label": "dòng chỉ có ở Mini App",
+          "value": "[\"-24.000\"]"
+        },
+        {
+          "label": "dòng chỉ có ở web",
+          "value": "[\"−24.000\"]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-62-390-diem-xanh-390.png"
+      ],
+      "notes": [
+        "Dòng \"4.776 điểm đang chờ xử lý đổi/trả\" cũng không còn trên trang Điểm Xanh (cùng hàm bị xoá ở d0e4bee3); Mini App không có dòng này. Số điểm khoá vẫn nằm ở trang thanh toán."
+      ],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-62-1440",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Điểm Xanh",
+      "steps": "Mở /tai-khoan/diem-xanh và đối chiếu sổ điểm với DB (1440px)",
+      "expected": "Tổng điểm = pointsBalance; \"điểm đang chờ\" = lockedPoints của /me/loyalty; điểm sắp hết hạn + ngày = lô sớm nhất trong DB; mỗi dòng lịch sử (số điểm có dấu, ngày, \"Hết hạn\" = +12 tháng) khớp points_transactions; \"Còn X triệu để lên hạng\" khớp spent12m; danh sách mã giảm giá = /me/coupons; cùng nội dung với Mini App",
+      "checks": [
+        {
+          "name": "DB: pointsBalance = SUM(sổ STANDARD)",
+          "ok": true,
+          "detail": "{\"balance\":57456,\"ledgerSum\":57456,\"rows\":9}"
+        },
+        {
+          "name": "tổng điểm hiển thị 57.456",
+          "ok": true,
+          "detail": "Tích điểm ×1,2 · 57.456 Điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 12/09/2027\n\nĐiểm Xanh thường có hạn 12 tháng kể từ n"
+        },
+        {
+          "name": "không còn dòng \"điểm đang chờ, mở khoá ngày\" (U6-B06)",
+          "ok": true,
+          "detail": "{\"lockedPoints\":22056,\"lockedReturnPoints\":4776,\"lockedUntil\":\"2026-10-29T12:15:02.845Z\"}"
+        },
+        {
+          "name": "\"10.400 Điểm Xanh sẽ hết hạn\" đúng lô sớm nhất",
+          "ok": true,
+          "detail": "6 Điểm Xanh\n\n10.400 Điểm Xanh sẽ hết hạn ngày 12/09/2027\n\nĐiểm Xanh th"
+        },
+        {
+          "name": "lịch sử: 9 dòng, từng số điểm khớp DB",
+          "ok": true,
+          "detail": "{\"shown\":[-24000,1000,3960,4272,4272,4776,4776,24000,34400],\"db\":[-24000,1000,3960,4272,4272,4776,4776,24000,34400]}"
+        },
+        {
+          "name": "DB: mỗi lô cộng điểm có hạn = ngày nhận + 12 tháng",
+          "ok": true,
+          "detail": "[\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-10-22→2027-10-22\",\"2026-09-12→2027-09-12\"]"
+        },
+        {
+          "name": "mã giảm giá của tôi: 3 mã khớp /me/coupons",
+          "ok": true,
+          "detail": "[\"WELCOME30\",\"FREESHIP\",\"XANH10\"]"
+        },
+        {
+          "name": "có dòng luật \"Tích 2% tiền hàng\" và \"1 điểm = 1đ … tối đa 20% giá trị đơn\"",
+          "ok": true
+        },
+        {
+          "name": "Điểm Xanh có hạn 12 tháng được nêu",
+          "ok": true
+        },
+        {
+          "name": "không tràn ngang",
           "ok": true,
           "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
         },
         {
-          "name": "1440: không request API lỗi (ngoài /brand/owner/me)",
+          "name": "không request API lỗi (ngoài /brand/owner/me)",
           "ok": true,
           "detail": "[]"
         }
       ],
       "evidence": [
         {
-          "label": "sau khi bấm Rút ngân hàng",
-          "value": "Tìm sản phẩm\n1\nT\nSố\n← Tài khoản\nVí Tubu\nVí Tubu (số dư khả dụng)\n150.000đ\nRút ngân hàng\n\nSố dư dùng để thanh toán đơn\n\nĐiểm Xanh (đổi giảm giá)\n1.000 điểm\nMầm Xanh\n\nTích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau & lên hạng thành viên.\n\nMẹo: dùng Ví Tubu để trả đơn hàng — miễn phí, thay vì rút về ngân hàng (phí chuyển khoản 3.000đ/lần).\n\nMời bạn — nhận Điểm Xanh\n\nBạn bè vào app bằng mã của bạn và có đơn thứ hai từ 200.000đ giao thành công trong 30 ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.\n\n0\nbạn thành công\n0 điểm\nđã nhận từ giới thiệu\n\nMời thêm 3 bạn để nhận 20.000 điểm\n\nUATNEWNOPHONE\nChia sẻ\n\nLịch sử Ví\nĐiều chỉnh\n07:40 20/10/2026 · Cấp thử UAT\n+150.000đ\nSố dư 150.000đ\n\nSống xanh A"
+          "label": "loyalty",
+          "value": "{\"pointsBalance\":57456,\"lockedPoints\":22056,\"lockedUntil\":\"2026-10-29T12:15:02.845Z\",\"redeemable\":35400,\"expiring\":{\"amount\":10400,\"expiresAt\":\"2027-09-12T11:30:22.766Z\"},\"spent12m\":2639000}"
+        },
+        {
+          "label": "lô điểm sớm hết hạn nhất (DB)",
+          "value": "2027-09-12T11:30:22.766Z"
+        },
+        {
+          "label": "lịch sử trên trang",
+          "value": "[-24000,1000,3960,4272,4272,4776,4776,24000,34400]"
+        },
+        {
+          "label": "lịch sử DB (≤100)",
+          "value": "[-24000,1000,3960,4272,4272,4776,4776,24000,34400]"
         }
       ],
       "shots": [
-        "uat/shots/U6-web-khach/U6-64-vi-tubu-390.png",
-        "uat/shots/U6-web-khach/U6-64-vi-tubu-rut.png",
-        "uat/shots/U6-web-khach/U6-64-vi-tubu-1440.png"
+        "uat/shots/U6-web-khach/U6-62-1440-diem-xanh-1440.png"
       ],
-      "notes": [],
+      "notes": [
+        "Dòng \"4.776 điểm đang chờ xử lý đổi/trả\" cũng không còn trên trang Điểm Xanh (cùng hàm bị xoá ở d0e4bee3); Mini App không có dòng này. Số điểm khoá vẫn nằm ở trang thanh toán."
+      ],
       "blockedReason": null,
       "bugs": [],
       "verdict": "PASS"
     },
     {
-      "id": "U6-65",
-      "role": "Khách quay lại + khách chưa đăng nhập",
-      "journey": "Sản phẩm yêu thích",
-      "steps": "Khách ghé: bấm tim trên PDP → mời đăng nhập; khách đăng nhập: bấm tim → /tai-khoan/yeu-thich có sản phẩm; bỏ tim → trống (390px)",
-      "expected": "Khách ghé bị đưa tới /dang-nhap có returnTo; khách đăng nhập: wishlists có dòng đúng productId, trang yêu thích hiện sản phẩm, bỏ tim thì dòng DB mất",
+      "id": "U6-63",
+      "role": "Khách mới chưa có SĐT (uat_new_nophone)",
+      "journey": "Điểm danh Điểm Xanh",
+      "steps": "Mở /tai-khoan/diem-xanh, bấm \"Điểm danh +1000\", bấm lại (390px)",
+      "expected": "Lần đầu: +1.000 điểm (ngày 1 của chu kỳ), 1 dòng sổ + loyalty_check_ins (dayKey hôm nay, cycleDay 1, streak 1), pointsBalance tăng đúng 1.000 = SUM(sổ), nút chuyển \"đã điểm danh\"; bấm lần hai không cộng thêm (DB không đổi). Q2: web không bắt xác minh SĐT để điểm danh",
       "checks": [
         {
-          "name": "khách ghé bấm tim → sang /dang-nhap có returnTo về sản phẩm",
+          "name": "có nút \"Điểm danh +1000\"",
           "ok": true,
-          "detail": "http://localhost:3262/dang-nhap?returnTo=%2Fsan-pham%2Fdau-tram-be-cobote"
+          "detail": "Điểm danh +1000"
         },
         {
-          "name": "POST /me/wishlist → 2xx",
+          "name": "POST điểm danh → 2xx",
           "ok": true,
           "detail": "201"
         },
         {
-          "name": "DB: 1 dòng wishlists đúng productId",
+          "name": "DB: đúng 1 dòng điểm danh, ngày 1, +1.000, streak 1",
           "ok": true,
-          "detail": "[{\"productId\":\"p-cobote-tram\"}]"
+          "detail": "[{\"cd\":1,\"sd\":1,\"p\":1000,\"dk\":\"2026-10-22\"}]"
         },
         {
-          "name": "trang yêu thích hiện \"Dầu tràm cho bé Cobote\"",
+          "name": "pointsBalance +1.000 và = SUM(sổ)",
           "ok": true,
-          "detail": "Tìm sản phẩm\nN\nLại\nSản phẩm yêu thích\nDanh sách sản phẩm yêu thích\nCobote\nDầu tràm cho bé Cobote\n89.000đ\nĐã bán 1\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu"
+          "detail": "{\"before\":{\"balance\":0,\"ledgerSum\":0,\"rows\":0},\"mid\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1}}"
         },
         {
-          "name": "DELETE /me/wishlist/:id → 2xx",
+          "name": "trang hiện \"Đã điểm danh\" / chuỗi 1 ngày và số dư 1.000",
           "ok": true,
-          "detail": "200"
+          "detail": "Điểm danh nhận Điểm Xanh\nChuỗi: 1 ngày liên tiếp 🔥\nĐã điểm danh\n\nĐiểm danh Ngày 1 thành công! Nhận +1.000 Điểm Xanh.\n\nN1\n+1.000\nN2\n+1.000\nN3\n+1.000\nN4\n+1.000\nN5\n+1.000\nN6\n+1.000\nN7\n+2.000\n\nMỗi ngày 1"
         },
         {
-          "name": "DB: không còn dòng wishlists",
-          "ok": true
-        },
-        {
-          "name": "trang yêu thích trống: \"Chưa có sản phẩm yêu thích\"",
-          "ok": true
+          "name": "điểm danh lần 2 không cộng thêm điểm (DB không đổi)",
+          "ok": true,
+          "detail": "{\"mid\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"end\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"again\":400}"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "label": "POST điểm danh",
+          "value": "{\"status\":201,\"body\":{\"success\":true,\"cycleDay\":1,\"streakDays\":1,\"pointsEarned\":1000,\"totalPoints\":1000,\"message\":\"Điểm danh Ngày 1 thành công! Nhận +1.000 Điểm Xanh.\"}}"
+        },
+        {
+          "label": "loyalty_check_ins",
+          "value": "[{\"cd\":1,\"sd\":1,\"p\":1000,\"dk\":\"2026-10-22\"}]"
+        },
+        {
+          "label": "điểm danh lần 2 qua API",
+          "value": "{\"status\":400,\"body\":{\"message\":\"Hôm nay bạn đã điểm danh nhận điểm rồi 🌿\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        }
+      ],
       "shots": [
-        "uat/shots/U6-web-khach/U6-65-yeu-thich-co.png"
+        "uat/shots/U6-web-khach/U6-63-diem-danh-xong.png"
       ],
       "notes": [],
       "blockedReason": null,

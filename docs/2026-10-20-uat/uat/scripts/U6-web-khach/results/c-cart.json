@@ -1,74 +1,7 @@
 {
   "name": "c-cart",
-  "at": "2026-10-20T00:56:12.953Z",
+  "at": "2026-10-22T12:13:45.616Z",
   "cases": [
-    {
-      "id": "U6-20-390",
-      "role": "Khách quay lại (Lộc Biếc)",
-      "journey": "Giỏ",
-      "steps": "PDP nước rửa tay (390px): Thêm vào giỏ ×1 rồi ×2 nữa; mở /gio-hang",
-      "expected": "Giỏ chỉ có 1 dòng FUWA-HW-500 số lượng 3 (gộp dòng), thành tiền 267.000đ = 3 × 89.000đ; DB cart_items khớp; badge giỏ ở header hiện 3; thông báo \"Đã thêm vào giỏ!\"",
-      "checks": [
-        {
-          "name": "POST /cart/items lần 1 → 2xx",
-          "ok": true,
-          "detail": "201"
-        },
-        {
-          "name": "hiện \"Đã thêm vào giỏ!\"",
-          "ok": true
-        },
-        {
-          "name": "POST /cart/items lần 2 → 2xx",
-          "ok": true,
-          "detail": "201"
-        },
-        {
-          "name": "DB: 1 dòng FUWA-HW-500 × 3",
-          "ok": true,
-          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
-        },
-        {
-          "name": "cart page: có sản phẩm + số lượng 3",
-          "ok": true,
-          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n3\n+\nXóa\n267.000đ\nTạm tính\n267.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n267.000đ\nTổng cộng\n267.000đ\nThanh toán (3) · 267.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ c"
-        },
-        {
-          "name": "cart page: thành tiền 267.000đ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n3\n+\nXóa\n267.000đ\nTạm tính\n267.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n267.000đ\nTổng cộng\n267.000đ\nThanh toán (3) · 267.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiề"
-        },
-        {
-          "name": "cart page: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
-        },
-        {
-          "name": "badge giỏ ở header = 3",
-          "ok": true,
-          "detail": "Tìm sản phẩm | 3 | N | Lại"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "DB cart_items",
-          "value": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-20-390-pdp-da-them-390.png",
-        "uat/shots/U6-web-khach/U6-20-390-gio-hang-390.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
     {
       "id": "U6-21-390",
       "role": "Khách quay lại (Lộc Biếc)",
@@ -84,7 +17,7 @@
         {
           "name": "tạm tính 356.000đ sau khi tăng",
           "ok": true,
-          "detail": "Tìm sản phẩm\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (2)\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n356.000đ\nTổng cộng\n356.000đ\nThanh toán (4) · 356.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotli…"
+          "detail": "Giỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\nThành tiền 178.000đ\n2\nDầu tràm cho bé Cobote\n50ml\n89.000đ\nThành tiền 178.000đ\n2\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n356.000đ\nThanh toán (4)"
         },
         {
           "name": "Giảm 2 lần không đưa số lượng xuống dưới 1",
@@ -99,7 +32,7 @@
         {
           "name": "hiện thanh \"Đã bỏ khỏi giỏ\"",
           "ok": true,
-          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nMua thêm 10.000đ để được miễn phí vận chuyển\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n1\n+\nXóa\n89.000đ\nTạm tính\n89.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n89.000đ\nĐã bỏ khỏi giỏ\nHoàn tác\nTổng cộng\n89.000đ\nThanh toán (1) · 89.000đ\n\nSống xa"
+          "detail": "Giỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n1\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nĐã bỏ khỏi giỏ\nHoàn tác\nMua thêm 10.000đ để được miễn phí giao hàng\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n89.000đ\nThanh toán (1)"
         },
         {
           "name": "Hoàn tác → DB lại có COBOTE-TR-50 × 2",
@@ -136,7 +69,7 @@
         {
           "name": "PDP nhắc \"Chỉ còn 3 sản phẩm\"",
           "ok": true,
-          "detail": "Tìm sản phẩm\nN\nLại\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 99.000đ\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP · Miễn phí vận chuyển\nĐơn từ 99.000đ\nXANH10 · Giảm 10% (tối đa 50.000đ)\nĐơn từ 250.000đ\nĐặt định kỳ — tiết kiệm 12%\nPhân loại\n30ml · 289.000đ\n50ml · "
+          "detail": "Visante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nNhận Điểm Xanh khi đơn giao thành công\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 99.000đ\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP · Miễn phí giao hàng\nĐơn từ 99.000đ\nXANH10 · Giảm 10% (tối đa 50.000đ)\nĐơn từ 250.000đ\nĐặt định kỳ — tiết kiệm 12%\nPhân loại\n30ml · 289.000đ\n50m"
         },
         {
           "name": "bộ đếm số lượng dừng ở 3",
@@ -156,7 +89,7 @@
         {
           "name": "giỏ báo hết hàng / vượt tồn",
           "ok": true,
-          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nSerum dưỡng ẩm Visante\n50ml\n460.000đ\n\nHết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại\n\nXóa\n1.380.000đ\nTạm tính\n1.380.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n1.380.000đ\n\nCó sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.\n\nTổng cộng\n1.380.000đ\nThanh toán (3)\n\nSống xa…"
+          "detail": "Giỏ hàng\nChọn tất cả\nSerum dưỡng ẩm Visante\n50ml\n460.000đ\nThành tiền 1.380.000đ\n\nHết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại\n\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\n\nCó sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.\n\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n1.380.000đ\nThanh toá…"
         },
         {
           "name": "nút Thanh toán bị khoá",
@@ -166,7 +99,7 @@
         {
           "name": "PDP hiện \"Hết hàng\"",
           "ok": true,
-          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 99.000đ\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP · Miễn phí vận chuyển\nĐơn từ 99.000đ\nXANH10 · G"
+          "detail": "Visante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nNhận Điểm Xanh khi đơn giao thành công\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 99.000đ\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP · Miễn phí giao hàng\nĐơn từ 99.000đ\nXANH10 ·"
         }
       ],
       "evidence": [
@@ -185,66 +118,55 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-20-1440",
+      "id": "U6-23-390",
       "role": "Khách quay lại (Lộc Biếc)",
       "journey": "Giỏ",
-      "steps": "PDP nước rửa tay (1440px): Thêm vào giỏ ×1 rồi ×2 nữa; mở /gio-hang",
-      "expected": "Giỏ chỉ có 1 dòng FUWA-HW-500 số lượng 3 (gộp dòng), thành tiền 267.000đ = 3 × 89.000đ; DB cart_items khớp; badge giỏ ở header hiện 3; thông báo \"Đã thêm vào giỏ!\"",
+      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (390px)",
+      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ \"giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường\" và cả dòng tính giá thường (660.000đ)",
       "checks": [
         {
-          "name": "POST /cart/items lần 1 → 2xx",
+          "name": "thêm giờ vàng → 2xx",
           "ok": true,
           "detail": "201"
         },
         {
-          "name": "hiện \"Đã thêm vào giỏ!\"",
+          "name": "giỏ hiện 165.000đ",
+          "ok": true,
+          "detail": "Giỏ hàng\nChọn tất cả\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 0%\n1\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n165.000đ\nThanh toán (1)"
+        },
+        {
+          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
           "ok": true
         },
         {
-          "name": "POST /cart/items lần 2 → 2xx",
+          "name": "API: unitPrice 165000, isFlash",
           "ok": true,
-          "detail": "201"
+          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
         },
         {
-          "name": "DB: 1 dòng FUWA-HW-500 × 3",
+          "name": "3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng",
           "ok": true,
-          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
+          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
         },
         {
-          "name": "cart page: có sản phẩm + số lượng 3",
+          "name": "giỏ hiện thông báo giới hạn giờ vàng",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n3\n+\nXóa\n267.000đ\nTạm tính\n267.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n267.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên"
-        },
-        {
-          "name": "cart page: thành tiền 267.000đ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n3\n+\nXóa\n267.000đ\nTạm tính\n267.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n267.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFac"
-        },
-        {
-          "name": "cart page: API không lỗi",
-          "ok": true,
-          "detail": "[]"
-        },
-        {
-          "name": "không tràn ngang",
-          "ok": true,
-          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
-        },
-        {
-          "name": "badge giỏ ở header = 3",
-          "ok": true,
-          "detail": "Tìm sản phẩm | Trang chủ | Danh mục | Vườn Xanh | Đơn hàng | Cá nhân | 3 | N | Lại"
+          "detail": "Giỏ hàng\nChọn tất cả\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\nThành tiền 660.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n3\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n660.000đ\nThanh toán (3)"
         }
       ],
       "evidence": [
         {
-          "label": "DB cart_items",
-          "value": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
+          "label": "giới hạn giờ vàng của khách",
+          "value": "{\"lim\":2,\"quota_left\":50,\"bought\":0,\"allow\":2}"
+        },
+        {
+          "label": "giỏ khi có 3 chiếc",
+          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
         }
       ],
       "shots": [
-        "uat/shots/U6-web-khach/U6-20-1440-pdp-da-them-1440.png",
-        "uat/shots/U6-web-khach/U6-20-1440-gio-hang-1440.png"
+        "uat/shots/U6-web-khach/U6-23-390-gio-gio-vang-390.png",
+        "uat/shots/U6-web-khach/U6-23-390-gio-vuot-gioi-han-gio-vang-390.png"
       ],
       "notes": [],
       "blockedReason": null,
@@ -266,7 +188,7 @@
         {
           "name": "tạm tính 356.000đ sau khi tăng",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (2)\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n356.000đ\nThanh toán (4)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ …"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n4\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nDầu tràm cho bé Cobote\n50ml\n89.000đ\n−\n2\n+\nXóa\n178.000đ\nTạm tính\n356.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n356.000đ\nThanh toán (4)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương …"
         },
         {
           "name": "Giảm 2 lần không đưa số lượng xuống dưới 1",
@@ -281,7 +203,7 @@
         {
           "name": "hiện thanh \"Đã bỏ khỏi giỏ\"",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nMua thêm 10.000đ để được miễn phí vận chuyển\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n1\n+\nXóa\n89.000đ\nTạm tính\n89.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n89.000đ\nThanh toán (1)\nĐã bỏ khỏi giỏ"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nMua thêm 10.000đ để được miễn phí giao hàng\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n1\n+\nXóa\n89.000đ\nTạm tính\n89.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n89.000đ\nThanh toán "
         },
         {
           "name": "Hoàn tác → DB lại có COBOTE-TR-50 × 2",
@@ -318,7 +240,7 @@
         {
           "name": "PDP nhắc \"Chỉ còn 3 sản phẩm\"",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 99.000đ\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP · Miễn phí vận chuyển\nĐơn từ 99.000đ\nXANH10 · Giảm 10% (tối đa 50.000đ)\nĐơn từ 250.000đ\nĐặt định kỳ — t"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nNhận Điểm Xanh khi đơn giao thành công\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 99.000đ\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP · Miễn phí giao hàng\nĐơn từ 99.000đ\nXANH10 · Giảm 10% (tối đa 50"
         },
         {
           "name": "bộ đếm số lượng dừng ở 3",
@@ -338,7 +260,7 @@
         {
           "name": "giỏ báo hết hàng / vượt tồn",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nSerum dưỡng ẩm Visante\n50ml\n460.000đ\n\nHết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại\n\nXóa\n1.380.000đ\nTạm tính\n1.380.000đ\nMã giảm giá\nBạn có 3 mã\nTổng\n1.380.000đ\nThanh toán (3)\n\nCó sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn …"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nSerum dưỡng ẩm Visante\n50ml\n460.000đ\n\nHết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại\n\nXóa\n1.380.000đ\nTạm tính\n1.380.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n1.380.000đ\nThanh toán (3)\n\nCó sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số …"
         },
         {
           "name": "nút Thanh toán bị khoá",
@@ -348,7 +270,7 @@
         {
           "name": "PDP hiện \"Hết hàng\"",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nTubu Tree giao hàng\n\nMiễn phí vận chuyển cho đơn từ 99.000đ\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nUSDA Organic\nVegan\nWELCOME30 · Giảm 30.000đ\nĐơn từ 199.000đ\nFREESHIP ·"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Về trang chủ\nVisante\nChia sẻ\nSerum dưỡng ẩm Visante\n460.000đ\n\nNhận Điểm Xanh khi đơn giao thành công\n\nCấp ẩm chuyên sâu chiết xuất rau má.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 99.000đ\n\nUSDA Organic\nVegan\nWELCOME30 · "
         }
       ],
       "evidence": [
@@ -360,6 +282,62 @@
       "shots": [
         "uat/shots/U6-web-khach/U6-22-1440-het-hang-trong-gio-1440.png",
         "uat/shots/U6-web-khach/U6-22-1440-pdp-het-hang-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-23-1440",
+      "role": "Khách quay lại (Lộc Biếc)",
+      "journey": "Giỏ",
+      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (1440px)",
+      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ \"giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường\" và cả dòng tính giá thường (660.000đ)",
+      "checks": [
+        {
+          "name": "thêm giờ vàng → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "giỏ hiện 165.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 0%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n165.000đ\nThanh toán (1)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotli"
+        },
+        {
+          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
+          "ok": true
+        },
+        {
+          "name": "API: unitPrice 165000, isFlash",
+          "ok": true,
+          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
+        },
+        {
+          "name": "3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng",
+          "ok": true,
+          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
+        },
+        {
+          "name": "giỏ hiện thông báo giới hạn giờ vàng",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n660.000đ\nThanh toán (3)\n\nSống xa…"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "giới hạn giờ vàng của khách",
+          "value": "{\"lim\":2,\"quota_left\":50,\"bought\":0,\"allow\":2}"
+        },
+        {
+          "label": "giỏ khi có 3 chiếc",
+          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 2 sản phẩm cho bạn. Giảm số lượng còn 2 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-23-1440-gio-gio-vang-1440.png",
+        "uat/shots/U6-web-khach/U6-23-1440-gio-vuot-gioi-han-gio-vang-1440.png"
       ],
       "notes": [],
       "blockedReason": null,
@@ -399,7 +377,7 @@
         },
         {
           "label": "chữ Mini App /cart",
-          "value": "Giỏ hàng | Chọn tất cả | Chọn Nước rửa tay sinh học Fuwa3e | Nước rửa tay sinh học Fuwa3e | 500ml | 89.000đ | 2 | Chọn Serum dưỡng ẩm Visante | Serum dưỡng ẩm Visante | 30ml | 289.000đ | 1 | Mã giảm giá | Chọn hoặc nhập mã giảm giá | Chọn mã | Bạn được miễn phí ship 🌿 | Tạm tính (đã giảm, chưa gồm ship) | 467.000đ | Thanh toán (3)"
+          "value": "Giỏ hàng | Chọn tất cả | Chọn Nước rửa tay sinh học Fuwa3e | Nước rửa tay sinh học Fuwa3e | 500ml | 89.000đ | Thành tiền 178.000đ | 2 | Chọn Serum dưỡng ẩm Visante | Serum dưỡng ẩm Visante | 30ml | 289.000đ | 1 | Mã giảm giá | Chọn hoặc nhập mã giảm giá | Chọn mã | Bạn được miễn phí giao hàng 🌿 | Tạm tính (đã giảm, chưa gồm phí giao hàng) | 467.000đ | Thanh toán (3)"
         },
         {
           "label": "DB sau khi bấm + trên Mini App",
@@ -415,55 +393,66 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-23-390",
+      "id": "U6-20-390",
       "role": "Khách quay lại (Lộc Biếc)",
       "journey": "Giỏ",
-      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (390px)",
-      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ \"giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường\" và cả dòng tính giá thường (660.000đ)",
+      "steps": "PDP nước rửa tay (390px): Thêm vào giỏ ×1 rồi ×2 nữa; mở /gio-hang",
+      "expected": "Giỏ chỉ có 1 dòng FUWA-HW-500 số lượng 3 (gộp dòng), thành tiền 267.000đ = 3 × 89.000đ; DB cart_items khớp; badge giỏ ở header hiện 3; thông báo \"Đã thêm vào giỏ!\"",
       "checks": [
         {
-          "name": "thêm giờ vàng → 2xx",
+          "name": "POST /cart/items lần 1 → 2xx",
           "ok": true,
           "detail": "201"
         },
         {
-          "name": "giỏ hiện 165.000đ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 2%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n165.000đ\nTổng cộng\n165.000đ\nThanh toán (1) · 165.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com"
-        },
-        {
-          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
+          "name": "hiện \"Đã thêm vào giỏ!\"",
           "ok": true
         },
         {
-          "name": "API: unitPrice 165000, isFlash",
+          "name": "POST /cart/items lần 2 → 2xx",
           "ok": true,
-          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
+          "detail": "201"
         },
         {
-          "name": "3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng",
+          "name": "DB: 1 dòng FUWA-HW-500 × 3",
           "ok": true,
-          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
+          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
         },
         {
-          "name": "giỏ hiện thông báo giới hạn giờ vàng",
+          "name": "cart page: có sản phẩm + số lượng 3",
           "ok": true,
-          "detail": "Tìm sản phẩm\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n660.000đ\nTổng cộng\n660.000đ\nThanh toán (3) · 660.000đ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùn…"
+          "detail": "Giỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\nThành tiền 267.000đ\n3\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n267.000đ\nThanh toán (3)"
+        },
+        {
+          "name": "cart page: thành tiền 267.000đ",
+          "ok": true,
+          "detail": "Giỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\nThành tiền 267.000đ\n3\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n267.000đ\nThanh toán (3)"
+        },
+        {
+          "name": "cart page: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "nút \"Thanh toán (3)\" hiện đúng số món",
+          "ok": true,
+          "detail": "tay sinh học Fuwa3e\n500ml\n89.000đ\nThành tiền 267.000đ\n3\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nBạn được miễn phí giao hàng 🌿\nTạm tính (đã giảm, chưa gồm phí giao hàng)\n267.000đ\nThanh toán (3)"
         }
       ],
       "evidence": [
         {
-          "label": "giới hạn giờ vàng của khách",
-          "value": "{\"lim\":2,\"quota_left\":49,\"bought\":1,\"allow\":1}"
-        },
-        {
-          "label": "giỏ khi có 3 chiếc",
-          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
+          "label": "DB cart_items",
+          "value": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
         }
       ],
       "shots": [
-        "uat/shots/U6-web-khach/U6-23-390-gio-gio-vang-390.png",
-        "uat/shots/U6-web-khach/U6-23-390-gio-vuot-gioi-han-gio-vang-390.png"
+        "uat/shots/U6-web-khach/U6-20-390-pdp-da-them-390.png",
+        "uat/shots/U6-web-khach/U6-20-390-gio-hang-390.png"
       ],
       "notes": [],
       "blockedReason": null,
@@ -471,55 +460,66 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-23-1440",
+      "id": "U6-20-1440",
       "role": "Khách quay lại (Lộc Biếc)",
       "journey": "Giỏ",
-      "steps": "Giờ vàng trong giỏ: thêm Cao cà gai leo (flash 165.000đ, mỗi người tối đa 2) ×1 rồi cố thêm tới 3 (1440px)",
-      "expected": "Giỏ tính 165.000đ/chiếc (không phải 220.000đ), thành tiền 165.000đ; khi vượt giới hạn 2 chiếc giờ vàng/người thì có lời nhắc rõ \"giảm còn 2 để được giá giờ vàng, hoặc mua 3 với giá thường\" và cả dòng tính giá thường (660.000đ)",
+      "steps": "PDP nước rửa tay (1440px): Thêm vào giỏ ×1 rồi ×2 nữa; mở /gio-hang",
+      "expected": "Giỏ chỉ có 1 dòng FUWA-HW-500 số lượng 3 (gộp dòng), thành tiền 267.000đ = 3 × 89.000đ; DB cart_items khớp; badge giỏ ở header hiện 3; thông báo \"Đã thêm vào giỏ!\"",
       "checks": [
         {
-          "name": "thêm giờ vàng → 2xx",
+          "name": "POST /cart/items lần 1 → 2xx",
           "ok": true,
           "detail": "201"
         },
         {
-          "name": "giỏ hiện 165.000đ",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n1\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n165.000đ\nGiá Giờ vàng\nĐã bán 2%\n−\n1\n+\nXóa\n165.000đ\nTạm tính\n165.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n165.000đ\nThanh toán (1)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntu"
-        },
-        {
-          "name": "giỏ không tính 220.000đ cho dòng giờ vàng",
+          "name": "hiện \"Đã thêm vào giỏ!\"",
           "ok": true
         },
         {
-          "name": "API: unitPrice 165000, isFlash",
+          "name": "POST /cart/items lần 2 → 2xx",
           "ok": true,
-          "detail": "{\"unitPrice\":165000,\"isFlash\":true}"
+          "detail": "201"
         },
         {
-          "name": "3 chiếc: cả dòng tính giá thường 660.000đ và có lời nhắc giới hạn giờ vàng",
+          "name": "DB: 1 dòng FUWA-HW-500 × 3",
           "ok": true,
-          "detail": "{\"subtotal\":660000,\"notice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\"}"
+          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
         },
         {
-          "name": "giỏ hiện thông báo giới hạn giờ vàng",
+          "name": "cart page: có sản phẩm + số lượng 3",
           "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả (1)\nCao cà gai leo BH.Nong\nHũ 100g\n220.000đ\n\nGiá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\n\n−\n3\n+\nXóa\n660.000đ\nTạm tính\n660.000đ\nMã giảm giá\nBạn có 4 mã\nTổng\n660.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩ…"
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n3\n+\nXóa\n267.000đ\nTạm tính\n267.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n267.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩm và đồ ti"
+        },
+        {
+          "name": "cart page: thành tiền 267.000đ",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\n3\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nChọn tất cả\nNước rửa tay sinh học Fuwa3e\n500ml\n89.000đ\n−\n3\n+\nXóa\n267.000đ\nTạm tính\n267.000đ\nMã giảm giá\nChọn hoặc nhập mã giảm giá\nChọn mã\nTổng\n267.000đ\nThanh toán (3)\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntub"
+        },
+        {
+          "name": "cart page: API không lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "badge giỏ ở header = 3",
+          "ok": true,
+          "detail": "Tìm sản phẩm | Trang chủ | Danh mục | Vườn Xanh | Đơn hàng | Cá nhân | 3 | N | Lại"
         }
       ],
       "evidence": [
         {
-          "label": "giới hạn giờ vàng của khách",
-          "value": "{\"lim\":2,\"quota_left\":49,\"bought\":1,\"allow\":1}"
-        },
-        {
-          "label": "giỏ khi có 3 chiếc",
-          "value": "{\"qty\":3,\"unitPrice\":220000,\"total\":660000,\"limitNotice\":\"Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn. Giảm số lượng còn 1 để được giá giờ vàng, hoặc mua 3 sản phẩm với giá thường.\",\"subtotal\":660000}"
+          "label": "DB cart_items",
+          "value": "[{\"sku\":\"FUWA-HW-500\",\"qty\":3,\"retail\":89000,\"sale\":null}]"
         }
       ],
       "shots": [
-        "uat/shots/U6-web-khach/U6-23-1440-gio-gio-vang-1440.png",
-        "uat/shots/U6-web-khach/U6-23-1440-gio-vuot-gioi-han-gio-vang-1440.png"
+        "uat/shots/U6-web-khach/U6-20-1440-pdp-da-them-1440.png",
+        "uat/shots/U6-web-khach/U6-20-1440-gio-hang-1440.png"
       ],
       "notes": [],
       "blockedReason": null,

@@ -18,8 +18,9 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nĐơn tối thiểu 199.000đ để dùng mã này.",
-        "message": "Đơn tối thiểu 199.000đ để dùng mã này."
+        "snack": "Đơn tối thiểu 199.000đ để dùng mã này.",
+        "message": "Đơn tối thiểu 199.000đ để dùng mã này.",
+        "sheetNote": true
       }
     },
     {
@@ -37,21 +38,21 @@
       "ok": true,
       "detail": {
         "before": {
-          "code": "HOPSAN-ED4SEYDE",
+          "code": "HOPSAN-9Q3EPQZY",
           "usedCount": 0,
           "usageLimit": 1,
           "perUserLimit": 1,
-          "endAt": "2026-12-18T15:27:52.028Z",
+          "endAt": "2026-12-21T11:30:15.924Z",
           "isActive": true,
           "redemptions": 0,
           "claims": 1
         },
         "after": {
-          "code": "HOPSAN-ED4SEYDE",
+          "code": "HOPSAN-9Q3EPQZY",
           "usedCount": 0,
           "usageLimit": 1,
           "perUserLimit": 1,
-          "endAt": "2026-12-18T15:27:52.028Z",
+          "endAt": "2026-12-21T11:30:15.924Z",
           "isActive": true,
           "redemptions": 0,
           "claims": 1
@@ -76,8 +77,9 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nĐơn tối thiểu 199.000đ để dùng mã này.",
-        "message": "Đơn tối thiểu 199.000đ để dùng mã này."
+        "snack": "Đơn tối thiểu 199.000đ để dùng mã này.",
+        "message": "Đơn tối thiểu 199.000đ để dùng mã này.",
+        "sheetNote": true
       }
     },
     {
@@ -93,8 +95,9 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nĐơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ.",
-        "message": "Đơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ."
+        "snack": "Đơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ.",
+        "message": "Đơn tối thiểu 199.000đ để dùng mã này. Hàng giờ vàng không được tính vào điều kiện của mã, phần được tính là 0đ.",
+        "sheetNote": true
       }
     },
     {
@@ -106,8 +109,9 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nMã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.",
-        "message": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree."
+        "snack": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.",
+        "message": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.",
+        "sheetNote": true
       }
     },
     {
@@ -116,5 +120,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:12:06.745Z"
+  "ranAt": "2026-10-22T11:35:20.290Z"
 }

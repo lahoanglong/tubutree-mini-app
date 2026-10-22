@@ -13,13 +13,13 @@
       "ok": true,
       "detail": {
         "r1": {
-          "id": "cmvfhbisq01q014pj2lf96usp",
+          "id": "cmvjgv0am00ryzw9cz7nesrfk",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
         },
         "r2": {
-          "id": "cmvfhbisq01q014pj2lf96usp",
+          "id": "cmvjgv0am00ryzw9cz7nesrfk",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
@@ -54,7 +54,7 @@
       "label": "đặt đơn chuyển khoản",
       "data": {
         "status": 201,
-        "code": "TUBU2026101994786",
+        "code": "TUBU2026102266447",
         "button": "Đặt hàng · 199.000đ",
         "total": 199000
       }
@@ -63,17 +63,17 @@
       "label": "(a) lần 1",
       "data": {
         "event": {
-          "id": "cmvfhbicg01pu14pjqqp882rk",
+          "id": "cmvjguzvz00rszw9cw09yrp27",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
         },
         "after": {
-          "code": "TUBU2026101994786",
+          "code": "TUBU2026102266447",
           "total": 199000,
           "status": "CONFIRMED",
           "paymentStatus": "PAID",
-          "paidAt": "2026-10-19T16:39:05.697Z",
+          "paidAt": "2026-10-22T11:37:19.929Z",
           "pancakeAttention": null
         }
       }
@@ -81,14 +81,14 @@
     {
       "label": "(a) gửi body lần 1 / lần 2",
       "data": {
-        "key": "orders|e831eb255a036fc2ffa22b6e061f02820",
+        "key": "orders|d5408668f55427a9aebfdf70c559697ab",
         "first": {
           "http": 200,
           "reply": {
             "received": true
           },
           "event": {
-            "id": "cmvfhbisq01q014pj2lf96usp",
+            "id": "cmvjgv0am00ryzw9cz7nesrfk",
             "status": "PROCESSED",
             "error": null,
             "attempts": 1
@@ -102,7 +102,7 @@
             "duplicate": true
           },
           "event": {
-            "id": "cmvfhbisq01q014pj2lf96usp",
+            "id": "cmvjgv0am00ryzw9cz7nesrfk",
             "status": "PROCESSED",
             "error": null,
             "attempts": 1
@@ -116,8 +116,8 @@
       "data": {
         "status": "CONFIRMED",
         "ps": "PAID",
-        "paidAt0": "2026-10-19T16:39:05.697Z",
-        "paidAt": "2026-10-19T16:39:05.697Z",
+        "paidAt0": "2026-10-22T11:37:19.929Z",
+        "paidAt": "2026-10-22T11:37:19.929Z",
         "refunds": []
       }
     },
@@ -125,7 +125,7 @@
       "label": "đặt đơn chuyển khoản",
       "data": {
         "status": 201,
-        "code": "TUBU2026101932501",
+        "code": "TUBU2026102214448",
         "button": "Đặt hàng · 199.000đ",
         "total": 199000
       }
@@ -134,13 +134,13 @@
       "label": "(b) hai lần chuyển",
       "data": {
         "first": {
-          "id": "cmvfhbo2u01r514pjy26wg83f",
+          "id": "cmvjgv4dd00t3zw9crngidfzq",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
         },
         "second": {
-          "id": "cmvfhbolm01rb14pjclgbazng",
+          "id": "cmvjgv4tg00t9zw9ccxlzgr95",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
@@ -165,5 +165,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:39:14.428Z"
+  "ranAt": "2026-10-22T11:37:26.850Z"
 }

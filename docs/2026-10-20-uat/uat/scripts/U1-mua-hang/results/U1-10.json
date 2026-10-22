@@ -5,7 +5,7 @@
   "journey": "Giỏ có dòng hết hàng / vượt tồn",
   "steps": "Giỏ COBOTE-PW-100×2 + SOK-RC-1KG×1; đặt stock COBOTE-PW-100 = 0 → mở /cart; bỏ chọn dòng hết hàng → xem nút Thanh toán; đặt stock = 1 → mở lại; khôi phục stock",
   "expected": "Dòng hết hàng ghi \"Sản phẩm đã hết hàng\", nút Thanh toán khoá, lời nhắc chỉ đúng việc cần làm (xoá/bỏ chọn dòng hết hàng); tạm tính không tính dòng không mua được; bỏ chọn dòng đó thì thanh toán được; stock=1 qty=2 → nhắc giảm số lượng",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
     {
@@ -18,15 +18,15 @@
     },
     {
       "name": "lời nhắc nói đúng việc cần làm với hàng đã hết (xoá/bỏ chọn), không chỉ \"giảm số lượng\"",
-      "ok": false,
+      "ok": true,
       "detail": [
-        "Giảm số lượng sản phẩm vượt tồn kho để thanh toán."
+        "\"Phấn rôm thảo dược Cobote\" đã hết hàng. Bỏ chọn hoặc xoá sản phẩm này để thanh toán."
       ]
     },
     {
       "name": "tạm tính không cộng dòng hết hàng (= 75.000đ)",
-      "ok": false,
-      "detail": "233.000đ"
+      "ok": true,
+      "detail": "75.000đ"
     },
     {
       "name": "bỏ chọn dòng hết hàng → Thanh toán (1) bấm được",
@@ -45,10 +45,10 @@
       "label": "stock=0: chữ trên giỏ",
       "data": {
         "status": [
-          "Giảm số lượng sản phẩm vượt tồn kho để thanh toán."
+          "\"Phấn rôm thảo dược Cobote\" đã hết hàng. Bỏ chọn hoặc xoá sản phẩm này để thanh toán."
         ],
-        "subtotal": "233.000đ",
-        "freeshipLine": "Bạn được miễn phí ship 🌿"
+        "subtotal": "75.000đ",
+        "freeshipLine": null
       }
     },
     {
@@ -78,5 +78,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:06:21.377Z"
+  "ranAt": "2026-10-22T11:34:43.349Z"
 }

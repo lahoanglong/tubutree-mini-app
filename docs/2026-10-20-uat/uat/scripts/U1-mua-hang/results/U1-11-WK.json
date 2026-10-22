@@ -11,7 +11,7 @@
     {
       "name": "áp mã thẻ: snackbar \"Đã áp dụng mã …\"",
       "ok": true,
-      "detail": "Đã áp dụng mã HOPSAN-ENA8WBPC"
+      "detail": "Đã áp dụng mã HOPSAN-C2KUA66H"
     },
     {
       "name": "báo giá: giảm 30.000đ, phí giao 0đ, tổng 169.000đ",
@@ -26,8 +26,8 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfhbug801rm14pj7d561761",
-              "cmvfhbugr01ru14pjloznxdb6"
+              "cmvjgxn710173zw9ct5vvaqev",
+              "cmvjgxn7k017bzw9cxegj0kim"
             ],
             "subtotal": 199000,
             "discount": 30000,
@@ -49,7 +49,7 @@
         "pointsPartnerNote": null,
         "pointsNotice": null,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 169000,
         "pointsEarned": 3380,
         "pointsBalance": 0,
@@ -59,7 +59,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfhbug801rm14pj7d561761",
+            "id": "cmvjgxn710173zw9ct5vvaqev",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -68,7 +68,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 1,
-            "stock": 175,
+            "stock": 182,
             "weight": 1050,
             "total": 120000,
             "isFlash": false,
@@ -84,7 +84,7 @@
             "partnerOwned": false
           },
           {
-            "id": "cmvfhbugr01ru14pjloznxdb6",
+            "id": "cmvjgxn7k017bzw9cxegj0kim",
             "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
             "productId": "p-fuwa-glass",
             "productName": "Nước lau kính enzyme Fuwa3e",
@@ -93,7 +93,7 @@
             "thumbnail": null,
             "unitPrice": 79000,
             "quantity": 1,
-            "stock": 150,
+            "stock": 157,
             "weight": 540,
             "total": 79000,
             "isFlash": false,
@@ -129,7 +129,7 @@
     {
       "name": "màn thành công",
       "ok": true,
-      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026101975832\nTổng thanh toán\n169.000đ\nChuẩn bị tiền mặt khi nhận hàng\nĐiểm Xanh sẽ nhận\n+3.380 điểm\n3.380 Điểm Xanh sẽ về tay"
+      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026102237354\nTổng thanh toán\n169.000đ\nChuẩn bị tiền mặt khi nhận hàng\nĐiểm Xanh sẽ nhận\n+3.380 điểm\n3.380 Điểm Xanh sẽ về tay"
     },
     {
       "name": "DB: CONFIRMED/COD/UNPAID",
@@ -189,16 +189,16 @@
     {
       "label": "nhận thẻ",
       "data": {
-        "code": "HOPSAN-ENA8WBPC",
+        "code": "HOPSAN-C2KUA66H",
         "alreadyClaimed": false
       }
     },
     {
-      "label": "áp mã HOPSAN-ENA8WBPC",
+      "label": "áp mã HOPSAN-C2KUA66H",
       "data": {
         "status": 201,
-        "snackbar": "Đã áp dụng mã HOPSAN-ENA8WBPC",
-        "couponCode": "HOPSAN-ENA8WBPC",
+        "snackbar": "Đã áp dụng mã HOPSAN-C2KUA66H",
+        "couponCode": "HOPSAN-C2KUA66H",
         "discount": 30000,
         "message": null
       }
@@ -223,7 +223,7 @@
         "pointsUsed": 0,
         "pointsDiscount": 0,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 169000,
         "pointsEarned": 3380
       }
@@ -236,7 +236,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101975832",
+        "code": "TUBU2026102237354",
         "button": "Đặt hàng · 169.000đ"
       }
     },
@@ -247,9 +247,9 @@
     {
       "label": "SQL đơn",
       "data": {
-        "id": "cmvfhc1fo01sh14pj9hmrr6tl",
-        "code": "TUBU2026101975832",
-        "userId": "u1_c11_hbt923k",
+        "id": "cmvjgxtu0017yzw9c8aoibe7y",
+        "code": "TUBU2026102237354",
+        "userId": "u1_c11_gxmhzzj",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -263,12 +263,12 @@
         "total": 169000,
         "pointsEarned": 3380,
         "pointsUsed": 0,
-        "couponCode": "HOPSAN-ENA8WBPC",
-        "pancakeOrderId": "9200037",
+        "couponCode": "HOPSAN-C2KUA66H",
+        "pancakeOrderId": "9200028",
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:39:30.373Z",
+        "createdAt": "2026-10-22T11:39:32.040Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -291,7 +291,7 @@
         ],
         "redemptions": [
           {
-            "code": "HOPSAN-ENA8WBPC",
+            "code": "HOPSAN-C2KUA66H",
             "usedCount": 1,
             "usageLimit": 1
           }
@@ -302,11 +302,11 @@
     {
       "label": "SQL mã thẻ",
       "data": {
-        "code": "HOPSAN-ENA8WBPC",
+        "code": "HOPSAN-C2KUA66H",
         "usedCount": 1,
         "usageLimit": 1,
         "perUserLimit": 1,
-        "endAt": "2026-12-18T15:27:52.028Z",
+        "endAt": "2026-12-21T11:30:15.924Z",
         "isActive": true,
         "redemptions": 1,
         "claims": 1
@@ -317,22 +317,22 @@
       "data": {
         "stock0": {
           "dw": {
-            "stock": 175,
-            "reservedStock": 25
+            "stock": 182,
+            "reservedStock": 18
           },
           "gl": {
-            "stock": 150,
-            "reservedStock": 20
+            "stock": 157,
+            "reservedStock": 13
           }
         },
         "stock1": {
           "dw": {
-            "stock": 174,
-            "reservedStock": 26
+            "stock": 181,
+            "reservedStock": 19
           },
           "gl": {
-            "stock": 149,
-            "reservedStock": 21
+            "stock": 156,
+            "reservedStock": 14
           }
         }
       }
@@ -340,14 +340,14 @@
     {
       "label": "giả Pancake",
       "data": {
-        "id": "9200037",
+        "id": "9200028",
         "cod": 169000,
         "total_discount": 30000,
         "shipping_fee": 0,
-        "custom_id": "TUBU2026101975832"
+        "custom_id": "TUBU2026102237354"
       }
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:39:32.046Z"
+  "ranAt": "2026-10-22T11:39:33.634Z"
 }

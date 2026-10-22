@@ -3,8 +3,8 @@
   "title": "Lên hạng theo ngưỡng chi tiêu 12 tháng: đơn 20.250.000đ giao xong → Đại Thụ (ngưỡng 20.000.000đ)",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:22:40.599Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:24.685Z",
+  "lane": 2,
   "checks": [
     {
       "name": "DB: tierId = DAI_THU sau đơn giao đầu (spent12m ≥ 20.000.000)",
@@ -22,7 +22,7 @@
   ],
   "evidence": {
     "đơn lớn": {
-      "code": "TUBU2026101927053",
+      "code": "TUBU2026102269802",
       "subtotal": 20250000,
       "total": 20250000,
       "pointsEarned": 405000
@@ -30,10 +30,10 @@
     "chuyển khoản": {
       "matched": true,
       "txn": {
-        "at": "2026-10-19T16:22:38.919Z",
+        "at": "2026-10-22T11:38:23.095Z",
         "account": "8386790906 Techcombank",
         "amount": 20250000,
-        "content": "TUBU2026101927053"
+        "content": "TUBU2026102269802"
       },
       "bankPaymentTotal": 20250000,
       "orderTotal": 20250000,
@@ -42,25 +42,25 @@
         "received": true
       },
       "event": {
-        "id": "cmvfgqd0s00565ksfa2izyw9e",
+        "id": "cmvjgwcnj0056h9r1tblkz9wv",
         "status": "PROCESSED",
         "error": null,
         "attempts": 1
       },
       "orderBefore": {
-        "code": "TUBU2026101927053",
+        "code": "TUBU2026102269802",
         "total": 20250000,
         "status": "PENDING_PAYMENT",
         "paymentMethod": "BANK_TRANSFER",
         "paymentStatus": "UNPAID",
-        "pancakeOrderId": "9800004"
+        "pancakeOrderId": "9300004"
       },
       "orderAfter": {
-        "code": "TUBU2026101927053",
+        "code": "TUBU2026102269802",
         "total": 20250000,
         "status": "CONFIRMED",
         "paymentStatus": "PAID",
-        "paidAt": "2026-10-19T16:22:38.970Z",
+        "paidAt": "2026-10-22T11:38:23.132Z",
         "pancakeAttention": null
       }
     },
@@ -84,7 +84,7 @@
     "điểm đơn lớn": [
       {
         "delta": 405000,
-        "reason": "ORDER_DELIVERED:TUBU2026101927053"
+        "reason": "ORDER_DELIVERED:TUBU2026102269802"
       }
     ]
   }

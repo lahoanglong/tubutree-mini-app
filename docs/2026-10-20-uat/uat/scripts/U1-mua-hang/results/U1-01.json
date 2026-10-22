@@ -51,7 +51,7 @@
     {
       "name": "máy ghi chạm đầu source=shopee (gửi kèm đăng nhập)",
       "ok": true,
-      "detail": "{\"source\":\"shopee\",\"at\":\"2026-10-19T15:59:49.069Z\"}"
+      "detail": "{\"source\":\"shopee\",\"at\":\"2026-10-22T11:34:08.699Z\"}"
     },
     {
       "name": "mã chờ nhận đã xoá khỏi máy sau khi nhận",
@@ -68,7 +68,7 @@
       "label": "sheet",
       "data": {
         "title": "Bạn nhận được ưu đãi",
-        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-C424S4N4 đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 18/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-38X362LH đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 21/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
       }
     },
     {
@@ -79,15 +79,15 @@
       "label": "SQL coupon_claims của khách",
       "data": [
         {
-          "claimedAt": "2026-10-19T15:59:49.164Z",
-          "code": "HOPSAN-C424S4N4",
-          "endAt": "2026-12-18T15:27:52.028Z"
+          "claimedAt": "2026-10-22T11:34:08.815Z",
+          "code": "HOPSAN-38X362LH",
+          "endAt": "2026-12-21T11:30:15.924Z"
         }
       ]
     },
     {
       "label": "localStorage tubu_first_touch",
-      "data": "{\"source\":\"shopee\",\"at\":\"2026-10-19T15:59:49.069Z\"}"
+      "data": "{\"source\":\"shopee\",\"at\":\"2026-10-22T11:34:08.699Z\"}"
     },
     {
       "label": "GET /me/coupons",
@@ -95,11 +95,11 @@
         "WELCOME30",
         "FREESHIP",
         "XANH10",
-        "HOPSAN-C424S4N4",
-        "WELCOME-U1_A01_FWVWOFF"
+        "HOPSAN-38X362LH",
+        "WELCOME-U1_A01_GQTRAE2"
       ]
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T15:59:50.940Z"
+  "ranAt": "2026-10-22T11:34:09.460Z"
 }

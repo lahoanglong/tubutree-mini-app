@@ -18,6 +18,21 @@ const available = async (u = CTV) =>
 const wallet = async (u = CTV) =>
   (await sql(`SELECT "walletBalance"::int b, (SELECT COALESCE(SUM(delta),0)::int FROM wallet_transactions w WHERE w."userId" = $1) AS led FROM users WHERE id = $1`, u))[0];
 
+// Q2 (chủ chốt 2026-10-20): thuế TNCN cộng dồn các lần rút trong tháng VN, giữ 10% tổng tháng khi tổng từ 2.000.000đ, trừ phần đã giữ ở các lệnh trước.
+// Lệnh bị từ chối và lệnh không có grossAmount không tính (affiliate.service.ts personalIncomeTax).
+const pitPrior = async (u = CTV) =>
+  (await sql(
+    `SELECT COALESCE(SUM("grossAmount"),0)::int g, COALESCE(SUM("taxWithheld" - "taxRefunded"),0)::int held FROM payouts
+      WHERE "userId" = $1 AND "grossAmount" IS NOT NULL AND status <> 'REJECTED'
+        AND "requestedAt" >= date_trunc('month', now() AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh'`,
+    u,
+  ))[0];
+const pitExpect = (prior, gross) => {
+  const total = prior.g + gross;
+  const owed = total >= 2_000_000 ? Math.round(total * 0.1) - prior.held : 0;
+  return Math.min(Math.max(owed, 0), gross);
+};
+
 let mini;
 let web;
 try {
@@ -77,6 +92,8 @@ try {
 
   // ---------- U3-10 rút về Ví Tubu trên Mini App ----------
   const w0 = await wallet();
+  const prior10 = await pitPrior();
+  const tax10 = pitExpect(prior10, a0.s);
   const rows10 = await sql(`SELECT id FROM commissions WHERE "affiliateUserId" = $1 AND status = 'APPROVED' AND "payoutBatchId" IS NULL`, CTV);
   mini = await openMini(CTV, { path: '/affiliate' });
   let p = mini.page;
@@ -100,10 +117,10 @@ try {
   R.add({
     id: 'U3-10', role: 'CTV', journey: 'Rút tiền về Ví Tubu (Mini App)', title: 'Rút toàn bộ hoa hồng < 2 triệu về Ví: quy đổi 1:1, không trừ TNCN',
     steps: '/affiliate → "Rút tiền" → "Ví Tubu" → "Nhận … vào Ví"',
-    expected: `201; payout WALLET_BALANCE PAID amount = gross = ${vnd(a0.s)}, taxWithheld 0 (dưới ngưỡng 2.000.000đ); walletBalance += ${vnd(a0.s)} = SUM(wallet_transactions); commissions PAID`,
-    actual: { http: r10.status(), body: b10, w0, w1, pay10, paidRows: paidRows[0].n, of: rows10.length, wt },
+    expected: `201; payout WALLET_BALANCE PAID gross ${vnd(a0.s)}, taxWithheld ${vnd(tax10)} (Q2: tổng tháng ${vnd(prior10.g + a0.s)}${prior10.g + a0.s < 2_000_000 ? ' dưới ngưỡng 2.000.000đ nên 0' : ''}); walletBalance += ${vnd(a0.s - tax10)} = SUM(wallet_transactions); commissions PAID`,
+    actual: { http: r10.status(), body: b10, prior10, tax10, w0, w1, pay10, paidRows: paidRows[0].n, of: rows10.length, wt },
     evidence: `${s10a}, ${s10b}; SQL walletBalance ${w0.b}→${w1.b}, SUM ledger ${w1.led}; payout ${short(pay10)}; wallet_tx ${short(wt)}`,
-    status: r10.status() < 300 && w1.b === w0.b + a0.s && w1.b === w1.led && pay10[0]?.status === 'PAID' && pay10[0]?.tax === 0 && pay10[0]?.amount === a0.s &&
+    status: r10.status() < 300 && w1.b === w0.b + a0.s - tax10 && w1.b === w1.led && pay10[0]?.status === 'PAID' && pay10[0]?.tax === tax10 && pay10[0]?.amount === a0.s - tax10 &&
       paidRows[0].n === rows10.length ? 'PASS' : 'FAIL',
   });
 
@@ -132,16 +149,18 @@ try {
   // ---------- U3-11 TNCN 10% bắt MST/CCCD ----------
   await exec(`UPDATE users SET "personalTaxId" = NULL WHERE id = $1`, CTV);
   const a11 = await available();
+  const prior11 = await pitPrior();
+  const tax11 = pitExpect(prior11, a11.s);
   const noTax = await api(L, 'POST', '/affiliate/payouts', { user: CTV, headers: { 'idempotency-key': `u3-11-${RUN}` }, body: { amount: a11.s, method: 'BANK', bankInfo: bank } });
   const p11 = (await sql(`SELECT count(*)::int n FROM payouts WHERE "userId" = $1 AND status = 'REQUESTED'`, CTV))[0].n;
   R.add({
     id: 'U3-11', role: 'CTV', journey: 'Trừ TNCN 10% (≥ 2.000.000đ)', title: 'Lệnh rút ≥ 2 triệu chưa có MST/CCCD bị chặn, báo số thuế',
     steps: `Đơn hộ chuyển khoản ${bigCode} ${vnd(bigOrder.total)} → giao → đủ 10 ngày → APPROVED ${vnd(a11.s)}; POST /affiliate/payouts BANK không taxId`,
-    expected: `400 code PIT_TAX_ID_REQUIRED, câu báo khấu trừ ${vnd(Math.round(a11.s * 0.1))}; không tạo payout`,
-    actual: { bigComm: bigComm.map((c) => ({ s: c.status, amt: c.amount, base: c.commissionableTotal })), a11, status: noTax.status, body: noTax.body, requested: p11 },
+    expected: `400 code PIT_TAX_ID_REQUIRED, câu báo khấu trừ ${vnd(tax11)} (Q2: 10% × (đã rút trong tháng ${vnd(prior11.g)} + lần này ${vnd(a11.s)}) − thuế đã giữ ${vnd(prior11.held)}); không tạo payout`,
+    actual: { bigComm: bigComm.map((c) => ({ s: c.status, amt: c.amount, base: c.commissionableTotal })), a11, prior11, tax11, status: noTax.status, body: noTax.body, requested: p11 },
     evidence: `SQL commissions ${bigCode}: ${short(bigComm.map((c) => [c.status, c.amount]))}; HTTP ${noTax.status} ${short(noTax.body)}`,
     status: bigComm[0]?.amount === bigExpect && a11.s >= 2_000_000 && noTax.status === 400 && noTax.body?.code === 'PIT_TAX_ID_REQUIRED' &&
-      String(noTax.body?.message).includes(vnd(Math.round(a11.s * 0.1))) && p11 === 0 ? 'PASS' : 'FAIL',
+      String(noTax.body?.message).includes(vnd(tax11)) && p11 === 0 ? 'PASS' : 'FAIL',
   });
 
   // ---------- U3-12 hai lệnh rút cùng lúc ----------
@@ -156,7 +175,7 @@ try {
   const pay12 = win ? (await sql(`SELECT id, amount::int, "grossAmount"::int AS gross, "taxWithheld"::int AS tax, "taxId", status::text FROM payouts WHERE id = $1`, win.body.payoutId))[0] : null;
   const batched = win ? (await sql(`SELECT COALESCE(SUM(amount),0)::int s, count(*)::int n, string_agg(DISTINCT status::text, ',') st FROM commissions WHERE "payoutBatchId" = $1`, win.body.payoutId))[0] : null;
   const a12 = await available();
-  const tax = Math.round(a11.s * 0.1);
+  const tax = tax11;
   R.add({
     id: 'U3-12', role: 'CTV', journey: 'Rút 2 lần cùng lúc + trừ TNCN', title: 'Hai POST /affiliate/payouts song song (khoá khác nhau), có MST',
     steps: 'Promise.all 2 lệnh rút BANK cùng số dư, Idempotency-Key khác nhau, taxId 079123456789',
@@ -175,6 +194,10 @@ try {
   await card().waitFor({ timeout: 90_000 });
   const ap = w.waitForResponse((r) => /\/api\/admin\/payouts\/[^/]+\/approve$/.test(new URL(r.url()).pathname), { timeout: 20_000 });
   await card().getByRole('button', { name: 'Duyệt', exact: true }).click();
+  // Duyệt giờ có hộp xác nhận "Duyệt lệnh rút tiền" (gói q2-tncn: gửi kèm expectedAmount để không duyệt theo số cũ).
+  const dlg13 = w.getByRole('alertdialog');
+  await dlg13.waitFor({ timeout: 10_000 });
+  await dlg13.getByRole('button', { name: 'Duyệt lệnh rút' }).click();
   const apr = await ap;
   await w.waitForTimeout(800);
   const s13 = await shot(w, 'U3-13-admin-duyet-rut');

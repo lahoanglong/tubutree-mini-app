@@ -3,8 +3,8 @@
   "title": "Huỷ đơn chuyển khoản đã trả tiền trước giao: chọn nhận hoàn về Ví Tubu → ví + total, sổ ví khớp; điểm đã tiêu được hoàn",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:41:53.755Z",
-  "lane": 7,
+  "at": "2026-10-22T11:40:10.856Z",
+  "lane": 2,
   "checks": [
     {
       "name": "đơn PAID trước khi huỷ",
@@ -30,7 +30,7 @@
             "delta": 270000,
             "type": "ORDER_REFUND",
             "balanceAfter": 270000,
-            "reason": "Hoàn tiền đơn TUBU2026101917711"
+            "reason": "Hoàn tiền đơn TUBU2026102238914"
           }
         ]
       }
@@ -46,7 +46,7 @@
   ],
   "evidence": {
     "đơn chuyển khoản": {
-      "code": "TUBU2026101917711",
+      "code": "TUBU2026102238914",
       "total": 270000,
       "after": {
         "status": "CONFIRMED",
@@ -56,10 +56,10 @@
       "bank": {
         "matched": true,
         "txn": {
-          "at": "2026-10-19T16:41:47.253Z",
+          "at": "2026-10-22T11:40:04.218Z",
           "account": "8386790906 Techcombank",
           "amount": 270000,
-          "content": "TUBU2026101917711"
+          "content": "TUBU2026102238914"
         },
         "bankPaymentTotal": 270000,
         "orderTotal": 270000,
@@ -68,25 +68,25 @@
           "received": true
         },
         "event": {
-          "id": "cmvfhez2e00nq5ksfsdtrmqp0",
+          "id": "cmvjgyioj00ndh9r1a2pwbszx",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
         },
         "orderBefore": {
-          "code": "TUBU2026101917711",
+          "code": "TUBU2026102238914",
           "total": 270000,
           "status": "PENDING_PAYMENT",
           "paymentMethod": "BANK_TRANSFER",
           "paymentStatus": "UNPAID",
-          "pancakeOrderId": "9800013"
+          "pancakeOrderId": "9300013"
         },
         "orderAfter": {
-          "code": "TUBU2026101917711",
+          "code": "TUBU2026102238914",
           "total": 270000,
           "status": "CONFIRMED",
           "paymentStatus": "PAID",
-          "paidAt": "2026-10-19T16:41:47.284Z",
+          "paidAt": "2026-10-22T11:40:04.267Z",
           "pancakeAttention": null
         }
       }
@@ -95,19 +95,19 @@
       "http": 201,
       "body": {
         "status": "CANCELLED",
-        "code": "TUBU2026101917711"
+        "code": "TUBU2026102238914"
       },
       "sheetText": [
-        "Hủy đơn",
-        "Bạn muốn hủy đơn này?",
-        "Đơn đã hủy không thể khôi phục lại",
+        "Huỷ đơn",
+        "Bạn muốn huỷ đơn này?",
+        "Đơn đã huỷ không thể khôi phục lại",
         "Ví Tubu",
-        "Hủy đơn"
+        "Huỷ đơn"
       ]
     },
     "sau huỷ": {
       "order": {
-        "id": "cmvfheymb00nl5ksf89oxqylh",
+        "id": "cmvjgyi7g00n8h9r1z1har5s0",
         "status": "CANCELLED",
         "paymentStatus": "REFUNDED"
       },
@@ -121,7 +121,7 @@
           "delta": 270000,
           "type": "ORDER_REFUND",
           "balanceAfter": 270000,
-          "reason": "Hoàn tiền đơn TUBU2026101917711"
+          "reason": "Hoàn tiền đơn TUBU2026102238914"
         }
       ],
       "refunds": [
@@ -135,7 +135,7 @@
     "màn /wallet": [
       "270.000đ",
       "Hoàn tiền đơn hàng",
-      "19/10 23:41 · Hoàn tiền đơn TUBU2026101917711",
+      "22/10 18:40 · Hoàn tiền đơn TUBU2026102238914",
       "+270.000đ",
       "Số dư 270.000đ"
     ]

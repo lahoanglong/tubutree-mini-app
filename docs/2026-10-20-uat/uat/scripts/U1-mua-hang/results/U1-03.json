@@ -42,11 +42,11 @@
     {
       "label": "SQL coupons",
       "data": {
-        "code": "HOPSAN-C7HDAGD9",
+        "code": "HOPSAN-7XBDCA7D",
         "usedCount": 0,
         "usageLimit": 1,
         "perUserLimit": 1,
-        "endAt": "2026-12-18T15:27:52.028Z",
+        "endAt": "2026-12-21T11:30:15.924Z",
         "isActive": true,
         "redemptions": 0,
         "claims": 0
@@ -54,5 +54,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T15:59:57.264Z"
+  "ranAt": "2026-10-22T11:34:12.322Z"
 }

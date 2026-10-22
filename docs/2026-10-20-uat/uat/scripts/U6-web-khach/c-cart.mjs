@@ -30,8 +30,13 @@ for (const w of WIDTHS) {
     c.ok('cart page: API không lỗi', badReqs(r.reqs).length === 0, badReqs(r.reqs));
     const ox = await overflowX(s.page);
     c.ok('không tràn ngang', ox.sw <= ox.iw + 1, ox);
-    const badge = await s.page.locator('header').first().innerText();
-    c.ok('badge giỏ ở header = 3', /(^|\s)3(\s|$)/.test(badge), badge.replace(/\n/g, ' | ').slice(0, 120));
+    if (w >= 768) {
+      const badge = await s.page.locator('header').first().innerText();
+      c.ok('badge giỏ ở header = 3', /(^|\s)3(\s|$)/.test(badge), badge.replace(/\n/g, ' | ').slice(0, 120));
+    } else {
+      // Khổ điện thoại: trang giỏ không có header; số món hiện ở nút "Thanh toán (3)" như Mini App.
+      c.ok('nút "Thanh toán (3)" hiện đúng số món', /Thanh toán \(3\)/.test(t), t.slice(-200));
+    }
     await c.shot(s.page, `gio-hang-${w}`);
   });
 

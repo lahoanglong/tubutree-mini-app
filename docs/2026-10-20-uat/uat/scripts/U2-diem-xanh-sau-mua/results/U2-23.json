@@ -3,8 +3,8 @@
   "title": "Huỷ đơn COD trước giao trên Mini App: đơn dùng WELCOME30 + Điểm Xanh → hoàn điểm đã tiêu, trả lượt mã, cộng lại tồn kho, không cộng điểm tích",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:41:46.652Z",
-  "lane": 7,
+  "at": "2026-10-22T11:40:03.561Z",
+  "lane": 2,
   "checks": [
     {
       "name": "áp WELCOME30 vào giỏ",
@@ -90,7 +90,7 @@
   ],
   "evidence": {
     "đặt": {
-      "code": "TUBU2026101922027",
+      "code": "TUBU2026102223141",
       "status": 201,
       "quote": {
         "subtotal": 210000,
@@ -102,7 +102,7 @@
     },
     "sau đặt": {
       "order": {
-        "id": "cmvfheutn00lv5ksf6xzlz2hy",
+        "id": "cmvjgyf7k00lch9r1afzbt37p",
         "status": "CONFIRMED",
         "pointsUsed": 16920,
         "couponDiscount": 30000,
@@ -114,8 +114,8 @@
         "usedCount": 0,
         "redemptions": [
           {
-            "orderId": "cmvfheutn00lv5ksf6xzlz2hy",
-            "redeemedAt": "2026-10-19T16:41:41.781Z"
+            "orderId": "cmvjgyf7k00lch9r1afzbt37p",
+            "redeemedAt": "2026-10-22T11:39:59.751Z"
           }
         ]
       },
@@ -125,13 +125,13 @@
       "http": 201,
       "body": {
         "status": "CANCELLED",
-        "code": "TUBU2026101922027"
+        "code": "TUBU2026102223141"
       },
       "sheetText": [
-        "Hủy đơn",
-        "Bạn muốn hủy đơn này?",
-        "Đơn đã hủy không thể khôi phục lại",
-        "Hủy đơn"
+        "Huỷ đơn",
+        "Bạn muốn huỷ đơn này?",
+        "Đơn đã huỷ không thể khôi phục lại",
+        "Huỷ đơn"
       ]
     },
     "sau huỷ": {

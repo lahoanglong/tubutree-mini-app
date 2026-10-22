@@ -11,7 +11,7 @@
     {
       "name": "đơn 1: áp voucher chào mừng",
       "ok": true,
-      "detail": "WELCOME-U1_C13_GCT7EUY"
+      "detail": "WELCOME-U1_C13_GSFKZBH"
     },
     {
       "name": "đơn 1: giảm 30.000đ, ship 0, tổng 169.000đ",
@@ -26,8 +26,8 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgcvgx00en14pjcxlc7ru0",
-              "cmvfgcvhd00ev14pj3vihaq4p"
+              "cmvjgsg7u007szw9c3hmdg0eq",
+              "cmvjgsg830080zw9c4ii0081q"
             ],
             "subtotal": 199000,
             "discount": 30000,
@@ -49,7 +49,7 @@
         "pointsPartnerNote": null,
         "pointsNotice": null,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 169000,
         "pointsEarned": 3380,
         "pointsBalance": 0,
@@ -59,7 +59,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgcvgx00en14pjcxlc7ru0",
+            "id": "cmvjgsg7u007szw9c3hmdg0eq",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -84,7 +84,7 @@
             "partnerOwned": false
           },
           {
-            "id": "cmvfgcvhd00ev14pj3vihaq4p",
+            "id": "cmvjgsg830080zw9c4ii0081q",
             "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
             "productId": "p-fuwa-glass",
             "productName": "Nước lau kính enzyme Fuwa3e",
@@ -132,7 +132,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgd20100fv14pjqn6b4lj7"
+              "cmvjgsmbu0090zw9ct1i6nwqc"
             ],
             "subtotal": 210000,
             "discount": 30000,
@@ -164,7 +164,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgd20100fv14pjqn6b4lj7",
+            "id": "cmvjgsmbu0090zw9ct1i6nwqc",
             "variationId": "cmqfuw9k2000bw1vfnqnknvfc",
             "productId": "p-fuwa-laundry",
             "productName": "Nước giặt sinh học Fuwa3e",
@@ -205,8 +205,9 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nBạn đã dùng hết lượt cho mã này.",
-        "message": "Bạn đã dùng hết lượt cho mã này."
+        "snack": "Bạn đã dùng hết lượt cho mã này.",
+        "message": "Bạn đã dùng hết lượt cho mã này.",
+        "sheetNote": true
       }
     },
     {
@@ -223,7 +224,7 @@
       "data": {
         "lane": 1,
         "job": "VouchersService.grantWelcomeNow",
-        "ms": 818,
+        "ms": 105,
         "result": true
       }
     },
@@ -231,8 +232,8 @@
       "label": "áp mã Quà chào mừng thành viên mới",
       "data": {
         "status": 201,
-        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã WELCOME-U1_C13_GCT7EUY",
-        "couponCode": "WELCOME-U1_C13_GCT7EUY",
+        "snackbar": "Đã áp dụng mã WELCOME-U1_C13_GSFKZBH",
+        "couponCode": "WELCOME-U1_C13_GSFKZBH",
         "discount": 30000,
         "message": null
       }
@@ -248,7 +249,7 @@
         "pointsUsed": 0,
         "pointsDiscount": 0,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 169000,
         "pointsEarned": 3380
       }
@@ -261,7 +262,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101928741",
+        "code": "TUBU2026102213344",
         "button": "Đặt hàng · 169.000đ"
       }
     },
@@ -272,9 +273,9 @@
     {
       "label": "SQL đơn 1",
       "data": {
-        "id": "cmvfgd0di00ff14pj65hppgao",
-        "code": "TUBU2026101928741",
-        "userId": "u1_c13_gct7euy",
+        "id": "cmvjgsl1k008kzw9cum86us3m",
+        "code": "TUBU2026102213344",
+        "userId": "u1_c13_gsfkzbh",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -288,12 +289,12 @@
         "total": 169000,
         "pointsEarned": 3380,
         "pointsUsed": 0,
-        "couponCode": "WELCOME-U1_C13_GCT7EUY",
+        "couponCode": "WELCOME-U1_C13_GSFKZBH",
         "pancakeOrderId": "9200002",
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:12:16.038Z",
+        "createdAt": "2026-10-22T11:35:27.369Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -316,7 +317,7 @@
         ],
         "redemptions": [
           {
-            "code": "WELCOME-U1_C13_GCT7EUY",
+            "code": "WELCOME-U1_C13_GSFKZBH",
             "usedCount": 1,
             "usageLimit": 1
           }
@@ -328,7 +329,7 @@
       "label": "áp mã WELCOME30",
       "data": {
         "status": 201,
-        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã WELCOME30",
+        "snackbar": "Đã áp dụng mã WELCOME30",
         "couponCode": "WELCOME30",
         "discount": 30000,
         "message": null
@@ -358,7 +359,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101966976",
+        "code": "TUBU2026102293813",
         "button": "Đặt hàng · 180.000đ"
       }
     },
@@ -369,9 +370,9 @@
     {
       "label": "SQL đơn 2",
       "data": {
-        "id": "cmvfgd77b00gf14pjth66z2kq",
-        "code": "TUBU2026101966976",
-        "userId": "u1_c13_gct7euy",
+        "id": "cmvjgsrbv009kzw9cui6y4usv",
+        "code": "TUBU2026102293813",
+        "userId": "u1_c13_gsfkzbh",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -390,7 +391,7 @@
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:12:24.888Z",
+        "createdAt": "2026-10-22T11:35:35.515Z",
         "items": [
           {
             "sku": "FUWA-LD-2L",
@@ -421,11 +422,12 @@
           "error": "Bad Request",
           "statusCode": 400
         },
-        "snack": "zi_close_circle_solid\nBạn đã dùng hết lượt cho mã này.",
-        "message": "Bạn đã dùng hết lượt cho mã này."
+        "snack": "Bạn đã dùng hết lượt cho mã này.",
+        "message": "Bạn đã dùng hết lượt cho mã này.",
+        "sheetNote": true
       }
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:12:30.050Z"
+  "ranAt": "2026-10-22T11:35:39.422Z"
 }

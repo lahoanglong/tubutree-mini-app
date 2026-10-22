@@ -81,7 +81,7 @@ async function composeOnFeed(p, { kindLabel, body, image, productQuery, productN
   await p.getByRole('textbox', { name: 'Chia sẻ chi tiết…' }).fill(body);
   if (image) {
     await p.locator('input[type=file][accept="image/*"][multiple]').setInputFiles(image);
-    await p.getByRole('button', { name: 'Xóa ảnh' }).first().waitFor({ timeout: 15_000 });
+    await p.getByRole('button', { name: 'Xoá ảnh' }).first().waitFor({ timeout: 15_000 });
   }
   if (productQuery) {
     await p.getByPlaceholder('Tìm sản phẩm để gắn…').fill(productQuery);
@@ -367,35 +367,36 @@ cases.push(
     new Case('U4-26', {
       role: 'KIỂM DUYỆT (uat_cskh), ADMIN (uat_admin)',
       journey: 'Ghim bài cộng đồng',
-      steps: 'CSKH: web /admin?tab=community → "Đã đăng" → bài U4-20 → "Ghim"; ADMIN: POST /feed/admin/:id/pin {pinned:true}',
-      expected: 'Theo B8 chỉ ADMIN được ghim: CSKH bấm "Ghim" → 403, bài không ghim; ADMIN ghim → 2xx, isPinned = true',
+      steps: 'CSKH: web /admin?tab=community → "Đã đăng" → bài U4-20 (không còn nút "Ghim"); CSKH gọi thẳng POST /feed/admin/:id/pin; ADMIN: POST /feed/admin/:id/pin {pinned:true}',
+      expected: 'Theo B8 chỉ ADMIN được ghim (bản sửa D2-02): web CSKH không hiện nút "Ghim"/"Bỏ ghim"; CSKH gọi API → 403, bài không ghim; ADMIN ghim → 2xx, isPinned = true',
     }),
     async (c) => {
       const s = await openWeb(L.n, 'cskh', { width: 1440, path: '/admin?tab=community', headless });
-      let cskhStatus = 0;
+      let pinButtons = -1;
       try {
         const p = s.page;
         await p.getByRole('button', { name: 'Đã đăng', exact: true }).click();
         const row = p.locator(`li[data-post="${state.post1}"]`);
         await row.waitFor({ timeout: 60_000 });
-        const resp = p.waitForResponse((r) => r.url().endsWith(`/api/feed/admin/${state.post1}/pin`), { timeout: 15_000 });
-        await row.getByRole('button', { name: 'Ghim', exact: true }).click();
-        cskhStatus = (await resp).status();
         await p.waitForTimeout(1000);
+        pinButtons = await row.getByRole('button', { name: /^(Bỏ )?[Gg]him$/ }).count();
         await p.screenshot({ path: shot('U4-26-cskh-pin') });
       } finally {
         await s.close();
       }
+      const rc = await call('POST', `/feed/admin/${state.post1}/pin`, 'cskh', { pinned: true });
+      const cskhStatus = rc.status;
       const afterCskh = await postRow(state.post1);
-      c.check('CSKH ghim → 403', cskhStatus === 403, cskhStatus);
+      c.check('Web CSKH: bài đã đăng không có nút Ghim/Bỏ ghim', pinButtons === 0, pinButtons);
+      c.check('CSKH gọi API ghim → 403', cskhStatus === 403, cskhStatus);
       c.check('Sau lượt CSKH bài chưa ghim', afterCskh?.isPinned === false, afterCskh?.isPinned);
       if (afterCskh?.isPinned) await call('POST', `/feed/admin/${state.post1}/pin`, 'admin', { pinned: false });
       const ra = await call('POST', `/feed/admin/${state.post1}/pin`, 'admin', { pinned: true });
       const afterAdmin = await postRow(state.post1);
       c.check('ADMIN ghim → 2xx, isPinned = true', ra.status < 300 && afterAdmin?.isPinned === true, { status: ra.status, isPinned: afterAdmin?.isPinned });
-      c.actual(`CSKH bấm "Ghim" → ${cskhStatus}, isPinned sau lượt CSKH = ${afterCskh?.isPinned}; ADMIN ghim → ${ra.status}, isPinned = ${afterAdmin?.isPinned}.`);
+      c.actual(`Web CSKH: ${pinButtons} nút Ghim/Bỏ ghim trên bài; CSKH gọi API ghim → ${cskhStatus}, isPinned sau lượt CSKH = ${afterCskh?.isPinned}; ADMIN ghim → ${ra.status}, isPinned = ${afterAdmin?.isPinned}.`);
       c.ev(relShot('U4-26-cskh-pin'));
-      c.ev(`POST /api/feed/admin/${state.post1}/pin (web, cookie uat_cskh) → ${cskhStatus}; SQL feed_posts.isPinned = ${afterCskh?.isPinned}`);
+      c.ev(`web CSKH: ${pinButtons} nút Ghim; POST /api/feed/admin/${state.post1}/pin (token uat_cskh) → ${cskhStatus}; SQL feed_posts.isPinned = ${afterCskh?.isPinned}`);
     },
   ),
 );

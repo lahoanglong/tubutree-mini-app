@@ -5,10 +5,10 @@
     "journey": "Đăng bài cộng đồng có ảnh, gắn sản phẩm, hashtag; nhận thưởng đăng bài",
     "steps": "/feed → \"Đăng bài\" → \"Trải nghiệm\" → gõ nội dung → chọn ảnh (input file thật) → tìm \"rau má\" gắn sản phẩm → hashtag \"tái chế, đổi rác\" → \"Đăng\"",
     "expected": "Khách có đơn DELIVERED được đăng thẳng (PUBLISHED); bài lưu 1 ảnh, 1 sản phẩm, 2 thẻ; thưởng 1.000 Điểm Xanh (sổ COMMUNITY_POST:<id>, hạn 12 tháng); số dư = trước + 1.000 = SUM(delta)",
-    "actual": "Bài cmvfidg3h004q14k9e8sy1hh5 PUBLISHED, 1 ảnh, sản phẩm [\"bot-rau-ma-sokfram\"], thẻ [\"tai-che\",\"doi-rac\"]; sổ 59400 → 60400 (SUM 60400).",
+    "actual": "Bài cmvjgzgks004pvxsof53df11m PUBLISHED, 1 ảnh, sản phẩm [\"bot-rau-ma-sokfram\"], thẻ [\"tai-che\",\"doi-rac\"]; sổ 59400 → 60400 (SUM 60400).",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-20-feed-posted.png",
-      "SQL points_transactions COMMUNITY_POST:cmvfidg3h004q14k9e8sy1hh5 → [{\"delta\":1000,\"refType\":\"COMMUNITY\",\"expiresAt\":\"2027-10-19T17:08:35.653Z\"}]",
+      "SQL points_transactions COMMUNITY_POST:cmvjgzgks004pvxsof53df11m → [{\"delta\":1000,\"refType\":\"COMMUNITY\",\"expiresAt\":\"2027-10-22T11:40:48.177Z\"}]",
       "SQL users.pointsBalance 59400 → 60400, SUM = 60400"
     ],
     "checks": [
@@ -18,7 +18,7 @@
         "detail": {
           "status": 201,
           "body": {
-            "id": "cmvfidg3h004q14k9e8sy1hh5",
+            "id": "cmvjgzgks004pvxsof53df11m",
             "status": "PUBLISHED"
           }
         }
@@ -31,7 +31,7 @@
         "name": "DB feed_posts: PUBLISHED, SHOWCASE, 1 ảnh, sản phẩm bot-rau-ma-sokfram, 2 thẻ",
         "ok": true,
         "detail": {
-          "id": "cmvfidg3h004q14k9e8sy1hh5",
+          "id": "cmvjgzgks004pvxsof53df11m",
           "status": "PUBLISHED",
           "kind": "SHOWCASE",
           "isPinned": false,
@@ -54,18 +54,18 @@
         "detail": [
           {
             "delta": 1000,
-            "reason": "COMMUNITY_POST:cmvfidg3h004q14k9e8sy1hh5",
+            "reason": "COMMUNITY_POST:cmvjgzgks004pvxsof53df11m",
             "refType": "COMMUNITY",
-            "refId": "cmvfidg3h004q14k9e8sy1hh5",
+            "refId": "cmvjgzgks004pvxsof53df11m",
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:35.653Z"
+            "expiresAt": "2027-10-22T11:40:48.177Z"
           }
         ]
       },
       {
         "name": "SQL: hạn ≈ 12 tháng",
         "ok": true,
-        "detail": "2027-10-19T17:08:35.653Z"
+        "detail": "2027-10-22T11:40:48.177Z"
       },
       {
         "name": "SQL: số dư = trước + 1.000 = SUM(delta)",
@@ -94,7 +94,7 @@
     "expected": "Bài 2 PUBLISHED nhưng không có dòng thưởng (community.daily_post_reward_cap = 1); số dư không đổi = SUM; bài có từ cấm vào PENDING dù khách tin cậy, không thưởng",
     "actual": "Bài 2 PUBLISHED, bài từ cấm PENDING; sổ 60400 → 60400 (SUM 60400).",
     "evidence": [
-      "POST /feed → 201 {\"id\":\"cmvfidgva005014k9vf0agb1g\",\"status\":\"PUBLISHED\"}; 201 {\"id\":\"cmvfidgvs005614k9da865gpz\",\"status\":\"PENDING\"}",
+      "POST /feed → 201 {\"id\":\"cmvjgzhau004zvxsoojzzg61t\",\"status\":\"PUBLISHED\"}; 201 {\"id\":\"cmvjgzhb10055vxsoeolm7jqg\",\"status\":\"PENDING\"}",
       "SQL COMMUNITY_POST:<bài 2> 0 dòng, <bài từ cấm> 0 dòng"
     ],
     "checks": [
@@ -102,7 +102,7 @@
         "name": "Bài 2 → 201 PUBLISHED",
         "ok": true,
         "detail": {
-          "id": "cmvfidgva005014k9vf0agb1g",
+          "id": "cmvjgzhau004zvxsoojzzg61t",
           "status": "PUBLISHED"
         }
       },
@@ -110,7 +110,7 @@
         "name": "Bài có \"casino\" → 201 PENDING",
         "ok": true,
         "detail": {
-          "id": "cmvfidgvs005614k9da865gpz",
+          "id": "cmvjgzhb10055vxsoeolm7jqg",
           "status": "PENDING"
         }
       },
@@ -147,10 +147,10 @@
     "journey": "Bài của khách mới vào hàng chờ duyệt",
     "steps": "/feed → \"Đăng bài\" → \"Mẹo hay\" → gõ nội dung → \"Đăng\"; đăng thêm bài 2 qua API (để CSKH từ chối ở U4-24)",
     "expected": "POST /feed → PENDING; Mini App báo \"Bài đang chờ duyệt…\"; người khác mở bài → 404; chưa thưởng điểm",
-    "actual": "Hai bài cmvfidhtt005c14k9edukorec, cmvfidiba005e14k9akx5lgdw PENDING; người khác xem → 404; chưa có thưởng.",
+    "actual": "Hai bài cmvjgzi4p005bvxsocliozjc4, cmvjgzi8k005dvxso7zgsvwln PENDING; người khác xem → 404; chưa có thưởng.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-22-pending-notice.png",
-      "GET /feed/cmvfidhtt005c14k9edukorec (uat_returning) → 404"
+      "GET /feed/cmvjgzi4p005bvxsocliozjc4 (uat_returning) → 404"
     ],
     "checks": [
       {
@@ -159,7 +159,7 @@
         "detail": {
           "status": 201,
           "body": {
-            "id": "cmvfidhtt005c14k9edukorec",
+            "id": "cmvjgzi4p005bvxsocliozjc4",
             "status": "PENDING"
           }
         }
@@ -172,7 +172,7 @@
         "name": "Bài 2 → PENDING",
         "ok": true,
         "detail": {
-          "id": "cmvfidiba005e14k9akx5lgdw",
+          "id": "cmvjgzi8k005dvxso7zgsvwln",
           "status": "PENDING"
         }
       },
@@ -198,7 +198,7 @@
     "actual": "Bài PUBLISHED, isTrusted true; sổ uat_new 0 → 1000 (SUM 1000); tin \"🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.\".",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-23-web-pending.png",
-      "SQL COMMUNITY_POST:cmvfidhtt005c14k9edukorec → [1000]; pointsBalance 0 → 1000, SUM 1000"
+      "SQL COMMUNITY_POST:cmvjgzi4p005bvxsocliozjc4 → [1000]; pointsBalance 0 → 1000, SUM 1000"
     ],
     "checks": [
       {
@@ -228,11 +228,11 @@
         "detail": [
           {
             "delta": 1000,
-            "reason": "COMMUNITY_POST:cmvfidhtt005c14k9edukorec",
+            "reason": "COMMUNITY_POST:cmvjgzi4p005bvxsocliozjc4",
             "refType": "COMMUNITY",
-            "refId": "cmvfidhtt005c14k9edukorec",
+            "refId": "cmvjgzi4p005bvxsocliozjc4",
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:42.295Z"
+            "expiresAt": "2027-10-22T11:40:52.446Z"
           }
         ]
       },
@@ -323,8 +323,8 @@
         "name": "GET /feed không còn ba bài đã gỡ",
         "ok": true,
         "detail": [
-          "cmvfidhtt005c14k9edukorec",
-          "cmvfidg3h004q14k9e8sy1hh5"
+          "cmvjgzi4p005bvxsocliozjc4",
+          "cmvjgzgks004pvxsof53df11m"
         ]
       },
       {
@@ -374,7 +374,7 @@
         "name": "DB: 2 tim (uat_new + chủ bài), 1 bình luận",
         "ok": true,
         "detail": {
-          "id": "cmvfidg3h004q14k9e8sy1hh5",
+          "id": "cmvjgzgks004pvxsof53df11m",
           "status": "PUBLISHED",
           "kind": "SHOWCASE",
           "isPinned": false,
@@ -412,23 +412,28 @@
     "id": "U4-26",
     "role": "KIỂM DUYỆT (uat_cskh), ADMIN (uat_admin)",
     "journey": "Ghim bài cộng đồng",
-    "steps": "CSKH: web /admin?tab=community → \"Đã đăng\" → bài U4-20 → \"Ghim\"; ADMIN: POST /feed/admin/:id/pin {pinned:true}",
-    "expected": "Theo B8 chỉ ADMIN được ghim: CSKH bấm \"Ghim\" → 403, bài không ghim; ADMIN ghim → 2xx, isPinned = true",
-    "actual": "CSKH bấm \"Ghim\" → 201, isPinned sau lượt CSKH = true; ADMIN ghim → 201, isPinned = true.",
+    "steps": "CSKH: web /admin?tab=community → \"Đã đăng\" → bài U4-20 (không còn nút \"Ghim\"); CSKH gọi thẳng POST /feed/admin/:id/pin; ADMIN: POST /feed/admin/:id/pin {pinned:true}",
+    "expected": "Theo B8 chỉ ADMIN được ghim (bản sửa D2-02): web CSKH không hiện nút \"Ghim\"/\"Bỏ ghim\"; CSKH gọi API → 403, bài không ghim; ADMIN ghim → 2xx, isPinned = true",
+    "actual": "Web CSKH: 0 nút Ghim/Bỏ ghim trên bài; CSKH gọi API ghim → 403, isPinned sau lượt CSKH = false; ADMIN ghim → 201, isPinned = true.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-26-cskh-pin.png",
-      "POST /api/feed/admin/cmvfidg3h004q14k9e8sy1hh5/pin (web, cookie uat_cskh) → 201; SQL feed_posts.isPinned = true"
+      "web CSKH: 0 nút Ghim; POST /api/feed/admin/cmvjgzgks004pvxsof53df11m/pin (token uat_cskh) → 403; SQL feed_posts.isPinned = false"
     ],
     "checks": [
       {
-        "name": "CSKH ghim → 403",
-        "ok": false,
-        "detail": 201
+        "name": "Web CSKH: bài đã đăng không có nút Ghim/Bỏ ghim",
+        "ok": true,
+        "detail": 0
+      },
+      {
+        "name": "CSKH gọi API ghim → 403",
+        "ok": true,
+        "detail": 403
       },
       {
         "name": "Sau lượt CSKH bài chưa ghim",
-        "ok": false,
-        "detail": true
+        "ok": true,
+        "detail": false
       },
       {
         "name": "ADMIN ghim → 2xx, isPinned = true",
@@ -439,7 +444,7 @@
         }
       }
     ],
-    "status": "FAIL"
+    "status": "PASS"
   },
   {
     "id": "U4-27",
@@ -447,10 +452,10 @@
     "journey": "Xem trước cộng đồng (community.public_preview, B14)",
     "steps": "GET /feed/public-preview không token; web 390 không cookie mở /cong-dong",
     "expected": "Cờ bật: 200, chỉ bài đã đăng (không có bài chờ duyệt/đã gỡ), bài ghim lên đầu; chỉ trường công khai (không id người dùng, SĐT, ảnh đại diện); tác giả chỉ tên gọi; SĐT trong nội dung bị che; web hiện thẻ xem trước + nút \"Đăng nhập với Zalo\"",
-    "actual": "200, 2 bài, đầu là bài ghim cmvfidg3h004q14k9e8sy1hh5; trường author,badge,category,commentCount,createdAt,id,image,isPinned,kind,likeCount,snippet,title; tác giả \"Lại\"; đoạn \"Gom vỏ hộp với túi nilon cả tháng, mang ra đại lý đổi được Điểm Xanh. Nhà mình dùng bột rau má này hằng ngày. Ai cần hỏi thì nhắn Zalo … nha.\". Thẻ web đầu: \"Lại vừa xong Trải nghiệm Gom vỏ hộp với túi nilon cả tháng, mang ra đại lý đổi được Điểm Xanh. Nhà mình dùng bột rau má này hằng ngày. Ai cần hỏi thì nhắn Zalo …\".",
+    "actual": "200, 2 bài, đầu là bài ghim cmvjgzgks004pvxsof53df11m; trường author,badge,category,commentCount,createdAt,id,image,isPinned,kind,likeCount,snippet,title; tác giả \"Lại\"; đoạn \"Gom vỏ hộp với túi nilon cả tháng, mang ra đại lý đổi được Điểm Xanh. Nhà mình dùng bột rau má này hằng ngày. Ai cần hỏi thì nhắn Zalo … nha.\". Thẻ web đầu: \"Lại vừa xong Trải nghiệm Gom vỏ hộp với túi nilon cả tháng, mang ra đại lý đổi được Điểm Xanh. Nhà mình dùng bột rau má này hằng ngày. Ai cần hỏi thì nhắn Zalo …\".",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-27-guest-preview.png",
-      "GET /api/feed/public-preview (không token) → 200 {\"id\":\"cmvfidg3h004q14k9e8sy1hh5\",\"kind\":\"SHOWCASE\",\"title\":null,\"snippet\":\"Gom vỏ hộp với túi nilon cả tháng, mang ra đại lý đổi được Điểm Xanh. Nhà mình dùng bột rau má này hằng ngày. Ai cần hỏi thì nhắn Zalo … nha.\",\"image\":\"/feed/posts/cmvfidg3h004q14k9e8sy1hh5/images/0?v=d3e017585e1a49f330f2aea47bee3eb8\",\"createdAt\":\"2026-10-19T17:08:35.645Z\",\"author\":\"…"
+      "GET /api/feed/public-preview (không token) → 200 {\"id\":\"cmvjgzgks004pvxsof53df11m\",\"kind\":\"SHOWCASE\",\"title\":null,\"snippet\":\"Gom vỏ hộp với túi nilon cả tháng, mang ra đại lý đổi được Điểm Xanh. Nhà mình dùng bột rau má này hằng ngày. Ai cần hỏi thì nhắn Zalo … nha.\",\"image\":\"/feed/posts/cmvjgzgks004pvxsof53df11m/images/0?v=1c6f0e2be85825b5a9fc6ea471885c44\",\"createdAt\":\"2026-10-22T11:40:48.173Z\",\"author\":\"…"
     ],
     "checks": [
       {
@@ -459,8 +464,8 @@
         "detail": {
           "status": 200,
           "ids": [
-            "cmvfidg3h004q14k9e8sy1hh5",
-            "cmvfidhtt005c14k9edukorec"
+            "cmvjgzgks004pvxsof53df11m",
+            "cmvjgzi4p005bvxsocliozjc4"
           ]
         }
       },
@@ -468,8 +473,8 @@
         "name": "Không có bài chờ duyệt/đã gỡ",
         "ok": true,
         "detail": [
-          "cmvfidg3h004q14k9e8sy1hh5",
-          "cmvfidhtt005c14k9edukorec"
+          "cmvjgzgks004pvxsof53df11m",
+          "cmvjgzi4p005bvxsocliozjc4"
         ]
       },
       {
@@ -521,7 +526,7 @@
     "actual": "CSKH tạo/chọn → 403/403; ADMIN chốt; sổ 60400 → 90400 (SUM 90400); tin \"🏆 Chúc mừng! Bạn là người thắng sự kiện \"UAT Khoe góc tái chế tháng 10\" của cộng đồng Tubu. Bạn được thưởng 30.000 Điểm Xanh.\"; chọn lần hai → 400.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-28-admin-pick-winner.png",
-      "SQL COMMUNITY_EVENT_WIN:cmvfidrjn006q14k9bv6sm32c:uat_returning → [{\"delta\":30000,\"expiresAt\":\"2027-10-19T17:08:51.770Z\"}]; pointsBalance 60400 → 90400, SUM 90400"
+      "SQL COMMUNITY_EVENT_WIN:cmvjgzpom006pvxsot92iv1hw:uat_returning → [{\"delta\":30000,\"expiresAt\":\"2027-10-22T11:41:01.211Z\"}]; pointsBalance 60400 → 90400, SUM 90400"
     ],
     "checks": [
       {
@@ -532,13 +537,13 @@
       {
         "name": "ADMIN POST /feed/events → 201",
         "ok": true,
-        "detail": "{\"id\":\"cmvfidrjn006q14k9bv6sm32c\",\"title\":\"UAT Khoe góc tái chế tháng 10\",\"description\":\"Chụp góc gom rác tái chế ở nhà\",\"coverUrl\":null,\"startAt\":\"2026-10-19T16:08:50.468Z\",\"endAt\":\"2026-10-26T17:08:50.468Z\",\"rewardXu\":0,\"rewardPoints\":30000,\"status\":\"OPEN\",\"winnerUserId\":null,\"createdAt\":\"2026-10-…"
+        "detail": "{\"id\":\"cmvjgzpom006pvxsot92iv1hw\",\"title\":\"UAT Khoe góc tái chế tháng 10\",\"description\":\"Chụp góc gom rác tái chế ở nhà\",\"coverUrl\":null,\"startAt\":\"2026-10-22T10:40:59.958Z\",\"endAt\":\"2026-10-29T11:40:59.958Z\",\"rewardXu\":0,\"rewardPoints\":30000,\"status\":\"OPEN\",\"winnerUserId\":null,\"createdAt\":\"2026-10-…"
       },
       {
         "name": "Khách nộp bài dự thi → 201 PUBLISHED",
         "ok": true,
         "detail": {
-          "id": "cmvfidrjs006s14k9k9w7q079",
+          "id": "cmvjgzpou006rvxsoetrmirwt",
           "status": "PUBLISHED"
         }
       },
@@ -557,11 +562,11 @@
         "detail": [
           {
             "delta": 30000,
-            "reason": "COMMUNITY_EVENT_WIN:cmvfidrjn006q14k9bv6sm32c:uat_returning",
+            "reason": "COMMUNITY_EVENT_WIN:cmvjgzpom006pvxsot92iv1hw:uat_returning",
             "refType": "COMMUNITY",
-            "refId": "cmvfidrjn006q14k9bv6sm32c",
+            "refId": "cmvjgzpom006pvxsot92iv1hw",
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:51.770Z"
+            "expiresAt": "2027-10-22T11:41:01.211Z"
           }
         ]
       },
@@ -613,10 +618,10 @@
     "journey": "Mức quà sự kiện cộng đồng",
     "steps": "POST /feed/events với rewardPoints 30.000 / 5.000 / 1.000.000; đóng các sự kiện thử",
     "expected": "Quyết định C: quà sự kiện 20.000–50.000 điểm. 30.000 nhận; 5.000 và 1.000.000 nằm ngoài khoảng đã chốt nên bị chặn (hoặc ít nhất cảnh báo admin)",
-    "actual": "30.000 → 201; 5.000 → 201; 1.000.000 → 201. Ghi thêm: chọn uat_marketing (không dự thi) làm người thắng sự kiện 30.000 → 201, trả [30000].",
+    "actual": "30.000 → 201; 5.000 → 400; 1.000.000 → 400. Ghi thêm: chọn uat_marketing (không dự thi) làm người thắng sự kiện 30.000 → 400, trả [].",
     "evidence": [
-      "POST /feed/events rewardPoints 5000 → 201 {\"id\":\"cmvfidsks007614k9l7wqik7k\",\"title\":\"UAT quà 5000\",\"description\":null,\"coverUrl\":null,\"startAt\":\"2026-10-19T17:07:…; 1000000 → 201 {\"id\":\"cmvfidsku007714k95tghp3vs\",\"title\":\"UAT quà 1000000\",\"description\":null,\"coverUrl\":null,\"startAt\":\"2026-10-19T17:…",
-      "POST /feed/events/:id/winner userId=uat_marketing (không có bài dự thi) → 201; SQL COMMUNITY_EVENT_WIN uat_marketing → [30000]"
+      "POST /feed/events rewardPoints 5000 → 400 {\"message\":\"Quà sự kiện phải từ 20.000 đến 50.000 Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.\",\"error\":\"Bad Request\",…; 1000000 → 400 {\"message\":\"Quà sự kiện phải từ 20.000 đến 50.000 Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.\",\"error\":\"Bad Request\",…",
+      "POST /feed/events/:id/winner userId=uat_marketing (không có bài dự thi) → 400; SQL COMMUNITY_EVENT_WIN uat_marketing → []"
     ],
     "checks": [
       {
@@ -626,22 +631,22 @@
       },
       {
         "name": "5.000 (dưới 20.000) bị chặn 4xx",
-        "ok": false,
+        "ok": true,
         "detail": {
-          "status": 201,
-          "body": "{\"id\":\"cmvfidsks007614k9l7wqik7k\",\"title\":\"UAT quà 5000\",\"description\":null,\"coverUrl\":null,\"startAt\":\"2026-10-19T17:07:51.816Z\",\"endAt\":\"2026-10-20T17:08:51.81…"
+          "status": 400,
+          "body": "{\"message\":\"Quà sự kiện phải từ 20.000 đến 50.000 Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.\",\"error\":\"Bad Request\",\"statusCode\":400}"
         }
       },
       {
         "name": "1.000.000 (trên 50.000) bị chặn 4xx",
-        "ok": false,
+        "ok": true,
         "detail": {
-          "status": 201,
-          "body": "{\"id\":\"cmvfidsku007714k95tghp3vs\",\"title\":\"UAT quà 1000000\",\"description\":null,\"coverUrl\":null,\"startAt\":\"2026-10-19T17:07:51.816Z\",\"endAt\":\"2026-10-20T17:08:51…"
+          "status": 400,
+          "body": "{\"message\":\"Quà sự kiện phải từ 20.000 đến 50.000 Điểm Xanh, hoặc để 0 nếu sự kiện không có quà.\",\"error\":\"Bad Request\",\"statusCode\":400}"
         }
       }
     ],
-    "status": "FAIL"
+    "status": "PASS"
   },
   {
     "id": "U4-30",

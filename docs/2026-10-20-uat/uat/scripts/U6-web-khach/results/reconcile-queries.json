@@ -24,9 +24,9 @@
       },
       {
         "id": "uat_returning",
-        "balance": 67512,
-        "ledger_sum": 67512,
-        "rows": 11
+        "balance": 57456,
+        "ledger_sum": 57456,
+        "rows": 9
       }
     ]
   },
@@ -57,7 +57,7 @@
         "id": "uat_returning",
         "balance": 0,
         "ledger_sum": 0,
-        "rows": 7
+        "rows": 6
       }
     ]
   },
@@ -109,7 +109,7 @@
     ],
     "rows": [
       {
-        "code": "TUBU2026101969520",
+        "code": "TUBU2026102203254",
         "tierId": "LOC_BIEC",
         "subtotal": 178000,
         "coupon": 0,
@@ -120,7 +120,7 @@
         "expect_after_points": 4272
       },
       {
-        "code": "TUBU2026101999534",
+        "code": "TUBU2026102289039",
         "tierId": "MAM_XANH",
         "subtotal": 199000,
         "coupon": 30000,
@@ -131,7 +131,7 @@
         "expect_after_points": 3380
       },
       {
-        "code": "TUBU2026101927562",
+        "code": "TUBU2026102207437",
         "tierId": "LOC_BIEC",
         "subtotal": 165000,
         "coupon": 0,
@@ -142,7 +142,7 @@
         "expect_after_points": 3960
       },
       {
-        "code": "TUBU2026101968794",
+        "code": "TUBU2026102223432",
         "tierId": "LOC_BIEC",
         "subtotal": 199000,
         "coupon": 0,
@@ -153,40 +153,18 @@
         "expect_after_points": 4776
       },
       {
-        "code": "TUBU2026101986207",
+        "code": "TUBU2026102217213",
         "tierId": "LOC_BIEC",
-        "subtotal": 199000,
+        "subtotal": 178000,
         "coupon": 0,
         "pts_disc": 0,
-        "earned": 4776,
-        "ledger": 4776,
-        "expect_before_points": 4776,
-        "expect_after_points": 4776
+        "earned": 4272,
+        "ledger": 4272,
+        "expect_before_points": 4272,
+        "expect_after_points": 4272
       },
       {
-        "code": "TUBU2026101987058",
-        "tierId": "LOC_BIEC",
-        "subtotal": 199000,
-        "coupon": 0,
-        "pts_disc": 0,
-        "earned": 4776,
-        "ledger": 4776,
-        "expect_before_points": 4776,
-        "expect_after_points": 4776
-      },
-      {
-        "code": "TUBU2026101937408",
-        "tierId": "LOC_BIEC",
-        "subtotal": 199000,
-        "coupon": 0,
-        "pts_disc": 0,
-        "earned": 4776,
-        "ledger": 4776,
-        "expect_before_points": 4776,
-        "expect_after_points": 4776
-      },
-      {
-        "code": "TUBU2026102097612",
+        "code": "TUBU2026102255484",
         "tierId": "LOC_BIEC",
         "subtotal": 199000,
         "coupon": 0,
@@ -210,19 +188,13 @@
     ],
     "rows": [
       {
-        "code": "TUBU2026101999534",
+        "code": "TUBU2026102289039",
         "status": "DELIVERED",
-        "couponCode": "HOPSAN-2BWSJQ6N",
+        "couponCode": "HOPSAN-38X362LH",
         "redemptions": 1
       },
       {
-        "code": "TUBU2026101913944",
-        "status": "CANCELLED",
-        "couponCode": "XANH10",
-        "redemptions": 0
-      },
-      {
-        "code": "TUBU2026101977733",
+        "code": "TUBU2026102264535",
         "status": "CANCELLED",
         "couponCode": "XANH10",
         "redemptions": 0
@@ -241,29 +213,18 @@
     ],
     "rows": [
       {
-        "code": "TUBU2026101927562",
+        "code": "TUBU2026102207437",
         "status": "LOCKED",
         "base": 165000,
         "rate": 8,
         "amount": 13200,
         "expect_8pct": 13200,
-        "deliveredAt": "2026-10-19T16:28:53.826Z",
-        "lockedAt": "2026-10-19T16:28:53.842Z",
+        "deliveredAt": "2026-10-22T11:46:36.632Z",
+        "lockedAt": "2026-10-22T11:46:36.639Z",
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101913944",
-        "status": "REJECTED",
-        "base": 296100,
-        "rate": 8,
-        "amount": 23688,
-        "expect_8pct": 23688,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101945928",
+        "code": "TUBU2026102213485",
         "status": "PENDING",
         "base": 158000,
         "rate": 8,
@@ -274,18 +235,18 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101968794",
+        "code": "TUBU2026102223432",
         "status": "LOCKED",
         "base": 199000,
         "rate": 8,
         "amount": 15920,
         "expect_8pct": 15920,
-        "deliveredAt": "2026-10-19T16:45:37.644Z",
-        "lockedAt": "2026-10-19T16:45:37.673Z",
+        "deliveredAt": "2026-10-22T11:46:40.178Z",
+        "lockedAt": "2026-10-22T11:46:40.189Z",
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101954990",
+        "code": "TUBU2026102252965",
         "status": "REJECTED",
         "base": 109000,
         "rate": 8,
@@ -296,7 +257,7 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101929058",
+        "code": "TUBU2026102241766",
         "status": "REJECTED",
         "base": 247000,
         "rate": 8,
@@ -307,7 +268,7 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101977159",
+        "code": "TUBU2026102207895",
         "status": "REJECTED",
         "base": 110000,
         "rate": 8,
@@ -318,7 +279,7 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101941905",
+        "code": "TUBU2026102260591",
         "status": "REJECTED",
         "base": 110000,
         "rate": 8,
@@ -329,62 +290,7 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101925491",
-        "status": "PENDING",
-        "base": 158000,
-        "rate": 8,
-        "amount": 12640,
-        "expect_8pct": 12640,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101986207",
-        "status": "LOCKED",
-        "base": 199000,
-        "rate": 8,
-        "amount": 15920,
-        "expect_8pct": 15920,
-        "deliveredAt": "2026-10-19T16:48:15.752Z",
-        "lockedAt": "2026-10-19T16:48:15.760Z",
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101991795",
-        "status": "REJECTED",
-        "base": 109000,
-        "rate": 8,
-        "amount": 8720,
-        "expect_8pct": 8720,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101972764",
-        "status": "REJECTED",
-        "base": 247000,
-        "rate": 8,
-        "amount": 19760,
-        "expect_8pct": 19760,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101943165",
-        "status": "REJECTED",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101976168",
+        "code": "TUBU2026102293962",
         "status": "REJECTED",
         "base": 89000,
         "rate": 8,
@@ -395,18 +301,62 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101981919",
+        "code": "TUBU2026102233082",
         "status": "REJECTED",
-        "base": 89000,
+        "base": 110000,
         "rate": 8,
-        "amount": 7120,
-        "expect_8pct": 7120,
+        "amount": 8800,
+        "expect_8pct": 8800,
         "deliveredAt": null,
         "lockedAt": null,
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101977733",
+        "code": "TUBU2026102207521",
+        "status": "REJECTED",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102270639",
+        "status": "PENDING",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102217213",
+        "status": "LOCKED",
+        "base": 178000,
+        "rate": 8,
+        "amount": 14240,
+        "expect_8pct": 14240,
+        "deliveredAt": "2026-10-22T12:13:56.135Z",
+        "lockedAt": "2026-10-22T12:13:56.149Z",
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102299956",
+        "status": "PENDING",
+        "base": 178000,
+        "rate": 8,
+        "amount": 14240,
+        "expect_8pct": 14240,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102264535",
         "status": "REJECTED",
         "base": 296100,
         "rate": 8,
@@ -417,73 +367,18 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101916410",
-        "status": "PENDING",
-        "base": 158000,
-        "rate": 8,
-        "amount": 12640,
-        "expect_8pct": 12640,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101987058",
-        "status": "LOCKED",
-        "base": 199000,
-        "rate": 8,
-        "amount": 15920,
-        "expect_8pct": 15920,
-        "deliveredAt": "2026-10-19T17:15:34.799Z",
-        "lockedAt": "2026-10-19T17:15:34.813Z",
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101974406",
+        "code": "TUBU2026102234039",
         "status": "REJECTED",
-        "base": 109000,
+        "base": 79000,
         "rate": 8,
-        "amount": 8720,
-        "expect_8pct": 8720,
+        "amount": 6320,
+        "expect_8pct": 6320,
         "deliveredAt": null,
         "lockedAt": null,
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101949443",
-        "status": "REJECTED",
-        "base": 247000,
-        "rate": 8,
-        "amount": 19760,
-        "expect_8pct": 19760,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101986968",
-        "status": "REJECTED",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101938064",
-        "status": "REJECTED",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101922938",
+        "code": "TUBU2026102269779",
         "status": "PENDING",
         "base": 110000,
         "rate": 8,
@@ -494,29 +389,7 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101911614",
-        "status": "PENDING",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101920893",
-        "status": "PENDING",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101961352",
+        "code": "TUBU2026102226620",
         "status": "PENDING",
         "base": 247000,
         "rate": 8,
@@ -527,7 +400,7 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101912055",
+        "code": "TUBU2026102203449",
         "status": "PENDING",
         "base": 158000,
         "rate": 8,
@@ -538,122 +411,23 @@
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101937408",
+        "code": "TUBU2026102255484",
         "status": "LOCKED",
         "base": 199000,
         "rate": 8,
         "amount": 15920,
         "expect_8pct": 15920,
-        "deliveredAt": "2026-10-19T17:31:26.052Z",
-        "lockedAt": "2026-10-19T17:31:26.097Z",
+        "deliveredAt": "2026-10-22T12:15:02.845Z",
+        "lockedAt": "2026-10-22T12:15:02.855Z",
         "approvedAt": null
       },
       {
-        "code": "TUBU2026101970163",
+        "code": "TUBU2026102251701",
         "status": "REJECTED",
         "base": 109000,
         "rate": 8,
         "amount": 8720,
         "expect_8pct": 8720,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026101937085",
-        "status": "PENDING",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102081360",
-        "status": "PENDING",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102069708",
-        "status": "PENDING",
-        "base": 247000,
-        "rate": 8,
-        "amount": 19760,
-        "expect_8pct": 19760,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102056754",
-        "status": "PENDING",
-        "base": 158000,
-        "rate": 8,
-        "amount": 12640,
-        "expect_8pct": 12640,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102097612",
-        "status": "LOCKED",
-        "base": 199000,
-        "rate": 8,
-        "amount": 15920,
-        "expect_8pct": 15920,
-        "deliveredAt": "2026-10-20T00:37:25.315Z",
-        "lockedAt": "2026-10-20T00:37:25.333Z",
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102071179",
-        "status": "REJECTED",
-        "base": 109000,
-        "rate": 8,
-        "amount": 8720,
-        "expect_8pct": 8720,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102098229",
-        "status": "REJECTED",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102085446",
-        "status": "REJECTED",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
-        "deliveredAt": null,
-        "lockedAt": null,
-        "approvedAt": null
-      },
-      {
-        "code": "TUBU2026102079050",
-        "status": "REJECTED",
-        "base": 110000,
-        "rate": 8,
-        "amount": 8800,
-        "expect_8pct": 8800,
         "deliveredAt": null,
         "lockedAt": null,
         "approvedAt": null

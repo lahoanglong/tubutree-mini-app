@@ -33,7 +33,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfh2cfj01np14pjepjyjvpm"
+              "cmvjgx3mm015wzw9c03a1xdms"
             ],
             "subtotal": 240000,
             "discount": 50000,
@@ -65,7 +65,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfh2cfj01np14pjepjyjvpm",
+            "id": "cmvjgx3mm015wzw9c03a1xdms",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -74,7 +74,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 2,
-            "stock": 179,
+            "stock": 184,
             "weight": 1050,
             "total": 240000,
             "isFlash": false,
@@ -102,11 +102,11 @@
       "label": "SQL mã win-back",
       "data": {
         "coupon": {
-          "code": "WINBACK-2026-10-U1_E29_H2774VG",
+          "code": "WINBACK-2026-10-U1_E29_GX1TPV9",
           "type": "AMOUNT",
           "value": 50000,
           "minOrder": null,
-          "endAt": "2026-11-09T16:31:57.976Z",
+          "endAt": "2026-11-12T11:38:58.033Z",
           "scope": "USER_GROUP"
         },
         "returningBefore": [],
@@ -118,16 +118,16 @@
       "data": [
         {
           "templateCode": "WINBACK_VOUCHER",
-          "text": "{\"body\":\"Tubu nhớ bạn! Quay lại với voucher WINBACK-2026-10-U1_E29_H2774VG giảm 50.000đ, dùng trước 9/11/2026 💚\",\"data\":{\"code\":\"WINBACK-2026-10-U1_E29_H2774VG\",\"value\":\"50.000\",\"expires\":\"9/11/2026\",\"min_order_note\":\"\"}}"
+          "text": "{\"body\":\"Tubu nhớ bạn! Quay lại với voucher WINBACK-2026-10-U1_E29_GX1TPV9 giảm 50.000đ, dùng trước 12/11/2026 💚\",\"data\":{\"code\":\"WINBACK-2026-10-U1_E29_GX1TPV9\",\"value\":\"50.000\",\"expires\":\"12/11/2026\",\"min_order_note\":\"\"}}"
         }
       ]
     },
     {
-      "label": "áp mã WINBACK-2026-10-U1_E29_H2774VG",
+      "label": "áp mã WINBACK-2026-10-U1_E29_GX1TPV9",
       "data": {
         "status": 201,
-        "snackbar": "Đã áp dụng mã WINBACK-2026-10-U1_E29_H2774VG",
-        "couponCode": "WINBACK-2026-10-U1_E29_H2774VG",
+        "snackbar": "Đã áp dụng mã WINBACK-2026-10-U1_E29_GX1TPV9",
+        "couponCode": "WINBACK-2026-10-U1_E29_GX1TPV9",
         "discount": 50000,
         "message": null
       }
@@ -136,7 +136,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfh27by01mi14pjre3hf4fs",
+          "addressId": "cmvjgx1u5014pzw9c5e8f17ha",
           "pointsToUse": 0
         },
         "subtotal": 240000,
@@ -166,7 +166,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101933213",
+        "code": "TUBU2026102209310",
         "button": "Đặt hàng · 190.000đ"
       }
     },
@@ -177,13 +177,13 @@
     {
       "label": "SQL đơn",
       "data": {
-        "couponCode": "WINBACK-2026-10-U1_E29_H2774VG",
+        "couponCode": "WINBACK-2026-10-U1_E29_GX1TPV9",
         "couponDiscount": 50000,
         "shippingFee": 0,
         "total": 190000,
         "redemptions": [
           {
-            "code": "WINBACK-2026-10-U1_E29_H2774VG",
+            "code": "WINBACK-2026-10-U1_E29_GX1TPV9",
             "usedCount": 1,
             "usageLimit": 1
           }
@@ -192,5 +192,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:32:37.624Z"
+  "ranAt": "2026-10-22T11:39:06.138Z"
 }

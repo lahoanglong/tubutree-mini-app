@@ -57,11 +57,11 @@ await main(async (results) => {
   }
 
   if (want('U2-01')) {
-    const c = kase('U2-01', 'Mầm Xanh: đơn app 199.000đ, phí giao 19.000đ → 3.980 điểm (×1, không tính ship)');
+    const c = kase('U2-01', 'Mầm Xanh: đơn app 199.000đ (Q12: ngưỡng miễn phí giao 199.000đ nên ship 0) → 3.980 điểm (×1). Phần "ship không tính điểm" kiểm ở U2-18 (đơn có ship 19.000đ)');
     try {
       const u = await prisma.user.findUnique({ where: { id: MAM }, select: { tierId: true } });
       c.check('khách đang hạng Mầm Xanh (MAM_XANH)', u.tierId === 'MAM_XANH', u);
-      const r = await earnCase(c, { user: MAM, mult: 1, lines: [['FUWA-DW-1L', 1], ['FUWA-GL-500', 1]], expectGoods: 199000, expectShip: 19000, shot: 'U2-01' });
+      const r = await earnCase(c, { user: MAM, mult: 1, lines: [['FUWA-DW-1L', 1], ['FUWA-GL-500', 1]], expectGoods: 199000, expectShip: 0, shot: 'U2-01' });
       c.check('đúng ví dụ luật: 199.000đ Mầm Xanh = 3.980 điểm', r.points === 3980, r.points);
       c.ev('mã đơn', r.code);
     } catch (e) {

@@ -4,7 +4,7 @@
 //   U5-53 /admin/community: ADMIN duyệt bài, CSKH bị chặn · U5-54 web Cộng đồng: CSKH duyệt bài + thử "Ghim" (luật B8: chỉ ADMIN ghim)
 //   U5-55 Checkin/Checkout ca (BLOCKED: vị trí giải mã qua graph.zalo.me)
 // Dùng: node u5-miniapp.mjs [--only=U5-50,…]
-import { api, apiOk, brief, done, openMini, openWebSession, q, recorder, runCase, shot } from './u5lib.mjs';
+import { api, apiOk, brief, done, exec, openMini, openWebSession, q, recorder, runCase, shot } from './u5lib.mjs';
 
 const rec = recorder('u5-miniapp');
 const only = (process.argv.find((a) => a.startsWith('--only=')) ?? '').slice(7).split(',').filter(Boolean);
@@ -159,9 +159,12 @@ if (want('U5-52')) {
 async function newPendingPost(tag) {
   // Tác giả chưa được tin (không đơn DELIVERED, communityProfile.isTrusted khác true): bài một khách đã được duyệt có thể làm khách
   // đó thành "tin cậy", nên mỗi lần chọn lại trong các persona khách thay vì cố định một người.
+  // AFFILIATE nằm trong TRUSTED_ROLES (community-feed.service.ts:153) nên bài CTV lên PUBLISHED thẳng, không vào hàng chờ duyệt: chỉ chọn CUSTOMER.
+  // Trả cờ tin cậy về false cho các persona khách để chạy lại script trên cùng lane vẫn có người đăng bài PENDING.
+  await exec(`UPDATE community_profiles SET "isTrusted" = false WHERE "userId" IN ('uat_new_nophone','uat_brand','uat_new')`);
   const [a] = await q(
     `SELECT u.id FROM users u LEFT JOIN community_profiles cp ON cp."userId" = u.id
-      WHERE u.id IN ('uat_new_nophone','uat_brand','uat_ctv_pending','uat_new') AND u.role IN ('CUSTOMER','AFFILIATE')
+      WHERE u.id IN ('uat_new_nophone','uat_brand','uat_new') AND u.role = 'CUSTOMER'
         AND COALESCE(cp."isTrusted", false) = false AND NOT EXISTS (SELECT 1 FROM orders o WHERE o."userId" = u.id AND o.status = 'DELIVERED')
       ORDER BY u.id LIMIT 1`,
   );

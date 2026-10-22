@@ -33,9 +33,9 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgfya400st14pjd2elmqre",
-              "cmvfgfyai00t114pjxh5ipep2",
-              "cmvfgfyau00t914pj9ykf5vkq"
+              "cmvjgtpcz00iezw9c6vuuc3x8",
+              "cmvjgtpd500imzw9c4rfnx02v",
+              "cmvjgtpdc00iuzw9czb2m9s8e"
             ],
             "subtotal": 278000,
             "discount": 27800,
@@ -67,7 +67,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgfya400st14pjd2elmqre",
+            "id": "cmvjgtpcz00iezw9c6vuuc3x8",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -76,7 +76,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 1,
-            "stock": 193,
+            "stock": 195,
             "weight": 1050,
             "total": 120000,
             "isFlash": false,
@@ -92,7 +92,7 @@
             "partnerOwned": false
           },
           {
-            "id": "cmvfgfyai00t114pjxh5ipep2",
+            "id": "cmvjgtpd500imzw9c4rfnx02v",
             "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
             "productId": "p-fuwa-glass",
             "productName": "Nước lau kính enzyme Fuwa3e",
@@ -101,7 +101,7 @@
             "thumbnail": null,
             "unitPrice": 79000,
             "quantity": 1,
-            "stock": 166,
+            "stock": 167,
             "weight": 540,
             "total": 79000,
             "isFlash": false,
@@ -117,7 +117,7 @@
             "partnerOwned": false
           },
           {
-            "id": "cmvfgfyau00t914pj9ykf5vkq",
+            "id": "cmvjgtpdc00iuzw9czb2m9s8e",
             "variationId": "cmqfv2cn10017zxpl3ga9aqov",
             "productId": "p-cobote-powder",
             "productName": "Phấn rôm thảo dược Cobote",
@@ -126,7 +126,7 @@
             "thumbnail": null,
             "unitPrice": 79000,
             "quantity": 1,
-            "stock": 159,
+            "stock": 160,
             "weight": 130,
             "total": 79000,
             "isFlash": false,
@@ -188,7 +188,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101997634",
+        "code": "TUBU2026102285609",
         "button": "Đặt hàng · 250.200đ"
       }
     },
@@ -199,9 +199,9 @@
     {
       "label": "SQL đơn",
       "data": {
-        "id": "cmvfgg57900tx14pjgj0amafg",
-        "code": "TUBU2026101997634",
-        "userId": "u1_c17_gfy9044",
+        "id": "cmvjgtw8100jizw9cf4s6edv0",
+        "code": "TUBU2026102285609",
+        "userId": "u1_c17_gtpcf0q",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -216,11 +216,11 @@
         "pointsEarned": 5004,
         "pointsUsed": 0,
         "couponCode": "XANH10",
-        "pancakeOrderId": "9200012",
+        "pancakeOrderId": "9200010",
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:14:42.261Z",
+        "createdAt": "2026-10-22T11:36:28.513Z",
         "items": [
           {
             "sku": "COBOTE-PW-100",
@@ -262,5 +262,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:14:44.495Z"
+  "ranAt": "2026-10-22T11:36:30.102Z"
 }

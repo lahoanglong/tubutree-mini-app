@@ -178,10 +178,11 @@ if (want('U5-42')) {
     const phone = '0901000011';
     const s = await openWebSession('admin', '/admin?tab=users');
     const out = {};
+    const dlgText = {};
     let ev = '';
     try {
       const p = s.page;
-      const ph = p.getByPlaceholder('SĐT (user đã mở Mini App)');
+      const ph = p.getByPlaceholder('SĐT, vd 0912345678');
       await ph.waitFor({ timeout: 90_000 });
       const box = p.locator('div.rounded-card').filter({ has: ph }).last();
       for (const [label, role] of [['CTV', 'AFFILIATE'], ['Khách hàng', 'CUSTOMER']]) {
@@ -189,6 +190,10 @@ if (want('U5-42')) {
         await p.getByLabel('Vai trò cần cấp').selectOption({ label });
         const r = waitApi(p, /\/api\/admin\/users\/role$/);
         await box.getByRole('button', { name: 'Cấp quyền', exact: true }).click();
+        const dlg = p.getByRole('alertdialog');
+        await dlg.waitFor({ timeout: 15_000 });
+        dlgText[role] = (await dlg.innerText()).replace(/\s+/g, ' ');
+        await dlg.getByRole('button', { name: 'Đổi vai trò', exact: true }).click();
         const st = (await r).status();
         await p.waitForTimeout(400);
         const msg = (await box.locator('p.text-sm').innerText().catch(() => '')).trim();
@@ -200,9 +205,9 @@ if (want('U5-42')) {
       await s.close();
     }
     const evs = await q(`SELECT kind, "fromValue", "toValue", "actorId" FROM user_admin_events WHERE "userId" = 'uat_brand' ORDER BY "createdAt" DESC LIMIT 2`);
-    const ok = out.AFFILIATE.st < 300 && out.AFFILIATE.db === 'AFFILIATE' && out.CUSTOMER.st < 300 && out.CUSTOMER.db === 'CUSTOMER' && evs.length === 2 && evs.every((e) => e.actorId === 'uat_admin');
+    const ok = out.AFFILIATE.st < 300 && out.AFFILIATE.db === 'AFFILIATE' && out.CUSTOMER.st < 300 && out.CUSTOMER.db === 'CUSTOMER' && evs.length === 2 && evs.every((e) => e.actorId === 'uat_admin') && /Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại\./.test(dlgText.CUSTOMER ?? '');
     return {
-      actual: `CTV: ${out.AFFILIATE.st}, DB ${out.AFFILIATE.db}, "${out.AFFILIATE.msg}". Khách hàng: ${out.CUSTOMER.st}, DB ${out.CUSTOMER.db}, "${out.CUSTOMER.msg}". user_admin_events: ${brief(evs, 200)}`,
+      actual: `CTV: ${out.AFFILIATE.st}, DB ${out.AFFILIATE.db}, "${out.AFFILIATE.msg}". Khách hàng: ${out.CUSTOMER.st}, DB ${out.CUSTOMER.db}, "${out.CUSTOMER.msg}". user_admin_events: ${brief(evs, 200)}. Hộp xác nhận hạ về khách: "${brief(dlgText.CUSTOMER ?? '', 330)}"`,
       evidence: `${ev}; SQL users.role + user_admin_events WHERE userId='uat_brand'`,
       verdict: ok ? 'PASS' : 'FAIL',
     };
@@ -380,7 +385,7 @@ if (want('U5-45')) {
       await row.getByRole('button', { name: /Xem & Sửa/ }).click();
       const sec = p.getByRole('region', { name: 'Cần xử lý Pancake' });
       await sec.waitFor({ timeout: 20_000 });
-      await sec.getByLabel('Ghi chú đã xử lý Pancake').fill(note);
+      await sec.getByLabel('Ghi chú xử lý Pancake').fill(note);
       const r = waitApi(p, /\/api\/admin\/orders\/[^/]+\/pancake-attention\/resolve$/);
       await sec.getByRole('button', { name: 'Đã xử lý', exact: true }).click();
       const d = p.getByRole('alertdialog');
@@ -422,6 +427,7 @@ if (want('U5-46')) {
       communityPending: await one(`SELECT COUNT(*)::int n FROM feed_posts WHERE status = 'PENDING'`),
     };
     const approvedPayouts = await one(`SELECT COUNT(*)::int n FROM payouts WHERE status = 'APPROVED'`);
+    const approvedDealerClaims = await one(`SELECT COUNT(*)::int n FROM dealer_reward_claims WHERE status = 'APPROVED'`);
     const per = {};
     let ev = '';
     const statusOf = {};
@@ -438,8 +444,10 @@ if (want('U5-46')) {
         await s.close();
       }
     }
+    const ktSql = { customerRefunds: sql.customerRefunds, invoicePending: sql.invoicePending, payoutsToPay: approvedPayouts, dealerClaimsToPay: approvedDealerClaims };
+    const ktMism = Object.entries(ktSql).filter(([k, v]) => per.ketoan[k] !== v).map(([k, v]) => `ketoan.${k}=${per.ketoan[k]}≠SQL ${v}`);
     const mism = Object.entries(sql).filter(([k, v]) => per.admin[k] !== v).map(([k, v]) => `admin.${k}=${per.admin[k]}≠SQL ${v}`);
-    const AUD = { ketoan: ['customerRefunds', 'merchantToSettle', 'merchantPayoutsPending'], marketing: ['communityPending', 'communityUnanswered'], cskh: ['returnsPending', 'communityPending', 'communityUnanswered', 'externalPoints'], kho: ['pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'returnsToReceive'] };
+    const AUD = { ketoan: ['customerRefunds', 'merchantToSettle', 'merchantPayoutsPending', 'dealerClaimsToPay', 'payoutsToPay', 'invoicePending'], marketing: ['communityPending', 'communityUnanswered'], cskh: ['returnsPending', 'communityPending', 'communityUnanswered', 'externalPoints'], kho: ['pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'returnsToReceive'] };
     const STAFF_ALL = ['wasteToCount', 'wasteUnmatched'];
     const leak = [];
     for (const [role, keys] of Object.entries(AUD)) {
@@ -451,9 +459,9 @@ if (want('U5-46')) {
     const ktMissing = ['customerRefunds', 'invoicePending'].filter((k) => !(k in per.ketoan));
     const ktPayoutKey = Object.keys(per.ketoan).some((k) => /payout/i.test(k) && k !== 'merchantPayoutsPending');
     const nonOk = Object.entries(statusOf).filter(([r, st]) => r !== "staff" && st !== 200).map(([r, st]) => `${r}=${st}`);
-    const fail = mism.length || leak.length || ktMissing.length || !ktPayoutKey || nonOk.length || statusOf.staff !== 403;
+    const fail = mism.length || ktMism.length || leak.length || ktMissing.length || !ktPayoutKey || nonOk.length || statusOf.staff !== 403;
     return {
-      actual: `SQL ${brief(sql, 220)}; payout APPROVED chờ chi ${approvedPayouts}. ADMIN ${Object.keys(per.admin).length} mục${mism.length ? `, LỆCH ${mism.join('; ')}` : ', các mục đối chiếu khớp SQL'}. KẾ TOÁN: ${brief(per.ketoan, 160)}${ktMissing.length ? ` → THIẾU ${ktMissing.join(',')}` : ''}${ktPayoutKey ? '' : ' → không có mục rút tiền chờ chi'}. MARKETING: ${Object.keys(per.marketing).join(',')}. CSKH: ${Object.keys(per.cskh).join(',')}. KHO: ${Object.keys(per.kho).join(',')}. NHÂN VIÊN (không nhóm): GET ${statusOf.staff} (đúng @AllowStaff ở ops.controller.ts:31-33, tab duy nhất là Thu gom)${nonOk.length ? `. Lỗi gọi: ${nonOk.join(",")}` : ""}${leak.length ? `. Lộ mục: ${leak.join('; ')}` : '. Không vai trò nào thấy mục ngoài nhóm'}`,
+      actual: `SQL ${brief(sql, 220)}; payout APPROVED chờ chi ${approvedPayouts}${ktMism.length ? ` (LỆCH ${ktMism.join('; ')})` : ', số KẾ TOÁN khớp SQL'}. ADMIN ${Object.keys(per.admin).length} mục${mism.length ? `, LỆCH ${mism.join('; ')}` : ', các mục đối chiếu khớp SQL'}. KẾ TOÁN: ${brief(per.ketoan, 160)}${ktMissing.length ? ` → THIẾU ${ktMissing.join(',')}` : ''}${ktPayoutKey ? '' : ' → không có mục rút tiền chờ chi'}. MARKETING: ${Object.keys(per.marketing).join(',')}. CSKH: ${Object.keys(per.cskh).join(',')}. KHO: ${Object.keys(per.kho).join(',')}. NHÂN VIÊN (không nhóm): GET ${statusOf.staff} (đúng @AllowStaff ở ops.controller.ts:31-33, tab duy nhất là Thu gom)${nonOk.length ? `. Lỗi gọi: ${nonOk.join(",")}` : ""}${leak.length ? `. Lộ mục: ${leak.join('; ')}` : '. Không vai trò nào thấy mục ngoài nhóm'}`,
       evidence: `${ev}; GET /admin/ops/inbox theo vai trò; SQL đếm hàng đợi; ops-inbox.service.ts:100,111-112`,
       verdict: fail ? 'FAIL' : 'PASS',
       note: ktMissing.includes('invoicePending') || !ktPayoutKey ? 'Xác nhận D2-03 (chưa sửa)' : '',

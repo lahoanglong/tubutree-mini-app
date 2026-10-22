@@ -3,8 +3,8 @@
   "title": "Đơn TikTok đang giao: claim chờ giao; giao xong + 14 ngày → job cộng 2.670 điểm (1%, ×1), không tính hạng; sau đó đơn hoàn → thu hồi. Đơn Shopee hoàn khi claim còn chờ → huỷ claim, không ghi sổ",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:25:12.088Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:26.758Z",
+  "lane": 2,
   "checks": [
     {
       "name": "đơn đang giao: CLAIMED 2.670 điểm, claim PENDING, chưa có ngày dự kiến",
@@ -19,8 +19,8 @@
       "name": "sau webhook giao: releaseAt = giao + 14 ngày",
       "ok": true,
       "detail": {
-        "releaseAt": "2026-11-02T16:25:00.000Z",
-        "deliveredAt": "2026-10-19T16:25:00.000Z"
+        "releaseAt": "2026-11-05T11:39:20.000Z",
+        "deliveredAt": "2026-10-22T11:39:20.000Z"
       }
     },
     {
@@ -87,7 +87,7 @@
       "status": 201,
       "body": {
         "status": "CLAIMED",
-        "claimId": "cmvfgtedd00fn5ksf48nnjj7v",
+        "claimId": "cmvjgxl2700fkh9r1hr6yjbsv",
         "channel": "tiktok",
         "maskedCode": "GHN********003",
         "points": 2670,
@@ -100,13 +100,13 @@
       "event": "PROCESSED",
       "ext": {
         "status": "DELIVERED",
-        "deliveredAt": "2026-10-19T16:25:00.000Z"
+        "deliveredAt": "2026-10-22T11:39:20.000Z"
       }
     },
     "job release sau lùi 15 ngày": {
-      "lane": 7,
+      "lane": 2,
       "job": "ExternalClaimCron.everyThirtyMinutes",
-      "ms": 602,
+      "ms": 151,
       "result": null
     },
     "sau cộng": {
@@ -116,7 +116,7 @@
           "delta": 2670,
           "reason": "MARKETPLACE_ORDER:7700003",
           "lot": "STANDARD",
-          "expiresAt": "2027-10-19T16:25:06.824Z"
+          "expiresAt": "2027-10-22T11:39:22.724Z"
         }
       ],
       "balance": [

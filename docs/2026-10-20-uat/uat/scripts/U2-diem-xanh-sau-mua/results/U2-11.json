@@ -3,8 +3,8 @@
   "title": "Khách khác nhập mã đã được người khác tích: 409 ALREADY_CLAIMED, không claim mới",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:24:36.235Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:06.739Z",
+  "lane": 2,
   "checks": [
     {
       "name": "409 ALREADY_CLAIMED, Mini App báo mã đã được dùng để tích điểm",

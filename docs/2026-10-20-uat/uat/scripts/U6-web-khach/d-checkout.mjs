@@ -106,7 +106,8 @@ for (const w of WIDTHS) {
     c.ok('POST /checkout/place-order → 201', r.status === 201 && !!r.code, { status: r.status, code: r.code, body: r.status >= 300 ? r.body : undefined });
     const code = r.code;
     const tt = await bodyText(s.page);
-    c.ok('màn thành công hiện "Đặt hàng thành công!" + mã đơn + 178.000đ', /Đặt hàng thành công/.test(tt) && tt.includes(code) && tt.includes('178.000đ'), tt.slice(0, 300));
+    // Màn thành công giống OrderSuccess của Mini App (PR #24): "Cảm ơn bạn đã chọn Tubu / Đơn hàng của bạn đã được ghi nhận".
+    c.ok('màn thành công hiện "Đơn hàng của bạn đã được ghi nhận" + mã đơn + 178.000đ', /Đơn hàng của bạn đã được ghi nhận/.test(tt) && tt.includes(code) && tt.includes('178.000đ'), tt.slice(0, 300));
     await c.shot(s.page, `dat-hang-thanh-cong-${w}`);
     const o = await orderRow(code);
     c.ev('orders', o);
@@ -239,8 +240,10 @@ await rec.run('U6-32', { role: 'Khách quay lại (Lộc Biếc)', journey: 'Vou
   t = await bodyText(s.page);
   c.ok('trang hiện dòng Giảm giá (WELCOME30) −30.000đ', /Giảm giá \(WELCOME30\)/.test(t) && t.includes('-30.000đ'), t.slice(0, 100));
   await c.shot(s.page, 'welcome30');
-  // bỏ WELCOME30 (nút X) rồi dùng XANH10
-  await s.page.getByRole('button', { name: /Bỏ mã giảm giá WELCOME30/ }).click();
+  // bỏ WELCOME30 rồi dùng XANH10
+  // Khổ điện thoại (PR #24) không còn nút X cạnh mã đang áp: mở "Thay đổi" rồi bấm "Bỏ mã đang áp dụng" như Mini App.
+  await openCouponBox(s);
+  await s.page.getByRole('button', { name: 'Bỏ mã đang áp dụng' }).click();
   await waitReady(s);
   await s.page.waitForTimeout(1200);
   c.ok('bỏ mã: giảm giá về 0, tổng 329.000đ', (s.lastQuote?.discount ?? 0) === 0 && s.lastQuote?.total === 329000, s.lastQuote && { d: s.lastQuote.discount, t: s.lastQuote.total });
@@ -435,7 +438,7 @@ await rec.run('U6-34', { role: 'Khách quay lại (Lộc Biếc)', journey: 'Ch�
   c.ok('DB: chỉ +1 đơn', n1 === n0 + 1, { n0, n1 });
   c.ok('tồn kho chỉ bị giữ 1 lần', stock0.stock - stock1.stock === 1 || stock1.reserved - stock0.reserved === 1, { stock0, stock1 });
   const t = await bodyText(s.page);
-  c.ok('hiện "Đặt hàng thành công!"', /Đặt hàng thành công/.test(t), t.slice(0, 200));
+  c.ok('hiện màn thành công "Đơn hàng của bạn đã được ghi nhận"', /Đơn hàng của bạn đã được ghi nhận/.test(t), t.slice(0, 200));
   const last = (await sql(`SELECT code FROM orders WHERE "userId" = $1 ORDER BY "createdAt" DESC LIMIT 1`, UID))[0];
   // dọn: huỷ đơn để trả tồn
   await call(U, 'POST', `/orders/${last.code}/cancel`, {});
@@ -511,7 +514,7 @@ await rec.run('U6-36', { role: 'Khách quay lại (Lộc Biếc)', journey: 'H�
 });
 
 // ───────────── U6-37 phương thức thanh toán hiển thị trên web (Q4)
-await rec.run('U6-37', { role: 'Khách quay lại (Lộc Biếc)', journey: 'Phương thức thanh toán', steps: 'Mở /thanh-toan với 1 sản phẩm, liệt kê các lựa chọn thanh toán (390 và 1440px)', expected: 'Q4: web chỉ có chuyển khoản QR + COD (không ZaloPay, không cổng khác)' }, async (c) => {
+await rec.run('U6-37', { role: 'Khách quay lại (Lộc Biếc)', journey: 'Phương thức thanh toán', steps: 'Mở /thanh-toan với 1 sản phẩm, liệt kê các lựa chọn thanh toán (390 và 1440px)', expected: 'Chủ trả lời Web Q4 (2026-10-20): web trả được bằng COD, chuyển khoản QR và Ví Tubu (số dư nội bộ); ZaloPay và cổng khác vẫn ẩn' }, async (c) => {
   const U = 'returning';
   await clearCart(U);
   for (const w of WIDTHS) {
@@ -521,7 +524,7 @@ await rec.run('U6-37', { role: 'Khách quay lại (Lộc Biếc)', journey: 'Ph�
     const labels = await s.page.getByRole('radio').evaluateAll((els) => els.filter((e) => e.name === 'pay').map((e) => e.closest('label')?.innerText?.trim()));
     c.ev(`${w}: các lựa chọn thanh toán`, labels);
     c.ok(`${w}: có COD và Chuyển khoản`, labels.some((x) => /COD/.test(x)) && labels.some((x) => /Chuyển khoản/.test(x)), labels);
-    c.ok(`${w}: chỉ 2 phương thức theo Q4 (không có Ví Tubu/ZaloPay)`, labels.length === 2, labels);
+    c.ok(`${w}: đúng 3 phương thức: COD, Chuyển khoản, Ví Tubu (Web Q4: Ví Tubu được phép, ZaloPay ẩn)`, labels.length === 3 && labels.some((x) => /Ví Tubu/.test(x)) && !labels.some((x) => /ZaloPay|Zalo Pay|MoMo|thẻ/i.test(x)), labels);
     await c.shot(s.page, `phuong-thuc-${w}`);
     await s.close();
   }
@@ -542,7 +545,7 @@ await rec.run('U6-38', { role: 'Khách quay lại (Lộc Biếc)', journey: 'Ví
     await addViaPdp(s, 'dau-tram-be-cobote', { qty: 1 });
     await openCheckout(s);
     const wallet = s.page.getByRole('radio', { name: /Ví Tubu/ });
-    c.ok('có lựa chọn Ví Tubu (ngoài Q4 — xem U6-37)', (await wallet.count()) > 0);
+    c.ok('có lựa chọn Ví Tubu (Web Q4: được phép, xem U6-37)', (await wallet.count()) > 0);
     if ((await wallet.count()) === 0) {
       c.blocked('web không còn lựa chọn Ví Tubu');
     } else {

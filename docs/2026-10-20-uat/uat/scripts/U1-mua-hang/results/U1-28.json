@@ -33,7 +33,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfh1t5i01kx14pj5bz8b6y9"
+              "cmvjgwvkc013szw9cpuwzauz4"
             ],
             "subtotal": 120000,
             "discount": 50000,
@@ -65,7 +65,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfh1t5i01kx14pj5bz8b6y9",
+            "id": "cmvjgwvkc013szw9cpuwzauz4",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -74,7 +74,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 1,
-            "stock": 180,
+            "stock": 185,
             "weight": 1050,
             "total": 120000,
             "isFlash": false,
@@ -102,7 +102,7 @@
       "label": "PATCH /me dob",
       "data": {
         "status": 200,
-        "dob": "1990-10-19"
+        "dob": "1990-10-22"
       }
     },
     {
@@ -115,22 +115,22 @@
     {
       "label": "run-job birthdayVouchers",
       "data": {
-        "ms": 679
+        "ms": 130
       }
     },
     {
       "label": "SQL mã sinh nhật",
       "data": {
-        "code": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "code": "BIRTHDAY-2026-10-U1_E28_GWUJSA3",
         "type": "AMOUNT",
         "value": 50000,
         "minOrder": null,
-        "endAt": "2026-11-18T16:31:33.028Z",
+        "endAt": "2026-11-21T11:38:47.560Z",
         "usageLimit": 1,
         "scope": "USER_GROUP",
         "scopeMeta": {
           "reason": "BIRTHDAY-2026-10",
-          "userId": "u1_e28_h1q7mtm"
+          "userId": "u1_e28_gwujsa3"
         }
       }
     },
@@ -139,16 +139,16 @@
       "data": [
         {
           "templateCode": "BIRTHDAY_VOUCHER",
-          "text": "{\"body\":\"Chúc mừng sinh nhật! 🎂 Tặng bạn voucher BIRTHDAY-2026-10-U1_E28_H1Q7MTM giảm 50.000đ, dùng trước 18/11/2026.\",\"data\":{\"code\":\"BIRTHDAY-2026-10-U1_E28_H1Q7MTM\",\"value\":\"50.000\",\"expires\":\"18/11/2026\",\"min_order_note\":\"\"}}"
+          "text": "{\"body\":\"Chúc mừng sinh nhật! 🎂 Tặng bạn voucher BIRTHDAY-2026-10-U1_E28_GWUJSA3 giảm 50.000đ, dùng trước 21/11/2026.\",\"data\":{\"code\":\"BIRTHDAY-2026-10-U1_E28_GWUJSA3\",\"value\":\"50.000\",\"expires\":\"21/11/2026\",\"min_order_note\":\"\"}}"
         }
       ]
     },
     {
-      "label": "áp mã BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+      "label": "áp mã BIRTHDAY-2026-10-U1_E28_GWUJSA3",
       "data": {
         "status": 201,
-        "snackbar": "Đã áp dụng mã BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
-        "couponCode": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "snackbar": "Đã áp dụng mã BIRTHDAY-2026-10-U1_E28_GWUJSA3",
+        "couponCode": "BIRTHDAY-2026-10-U1_E28_GWUJSA3",
         "discount": 50000,
         "message": null
       }
@@ -157,7 +157,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfh1q8101ks14pj0p9u262h",
+          "addressId": "cmvjgwuk3013nzw9c1nth0j96",
           "pointsToUse": 0
         },
         "subtotal": 120000,
@@ -187,7 +187,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101917257",
+        "code": "TUBU2026102202834",
         "button": "Đặt hàng · 70.000đ"
       }
     },
@@ -198,14 +198,14 @@
     {
       "label": "SQL đơn",
       "data": {
-        "couponCode": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+        "couponCode": "BIRTHDAY-2026-10-U1_E28_GWUJSA3",
         "couponDiscount": 50000,
         "shippingFee": 0,
         "total": 70000,
         "pointsEarned": 1680,
         "redemptions": [
           {
-            "code": "BIRTHDAY-2026-10-U1_E28_H1Q7MTM",
+            "code": "BIRTHDAY-2026-10-U1_E28_GWUJSA3",
             "usedCount": 1,
             "usageLimit": 1
           }
@@ -214,5 +214,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:31:41.748Z"
+  "ranAt": "2026-10-22T11:38:55.741Z"
 }

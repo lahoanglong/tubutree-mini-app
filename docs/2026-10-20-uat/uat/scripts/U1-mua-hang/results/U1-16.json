@@ -9,7 +9,7 @@
   "error": null,
   "checks": [
     {
-      "name": "U1EXPFNSV → \"Mã giảm giá đã hết hạn hoặc chưa hiệu lực.\" (API + snackbar)",
+      "name": "U1EXPTFZK → \"Mã giảm giá đã hết hạn hoặc chưa hiệu lực.\" (API + snackbar)",
       "ok": true,
       "detail": {
         "message": "Mã giảm giá đã hết hạn hoặc chưa hiệu lực.",
@@ -17,7 +17,7 @@
       }
     },
     {
-      "name": "U1ONEFNSV → \"Mã giảm giá đã hết lượt sử dụng.\" (API + snackbar)",
+      "name": "U1ONETFZK → \"Mã giảm giá đã hết lượt sử dụng.\" (API + snackbar)",
       "ok": true,
       "detail": {
         "message": "Mã giảm giá đã hết lượt sử dụng.",
@@ -25,7 +25,7 @@
       }
     },
     {
-      "name": "U1OFFFNSV → \"Mã giảm giá đã ngừng áp dụng.\" (API + snackbar)",
+      "name": "U1OFFTFZK → \"Mã giảm giá đã ngừng áp dụng.\" (API + snackbar)",
       "ok": true,
       "detail": {
         "message": "Mã giảm giá đã ngừng áp dụng.",
@@ -33,7 +33,7 @@
       }
     },
     {
-      "name": "U1TIERFNSV → \"Mã chỉ áp dụng cho hạng thành viên khác.\" (API + snackbar)",
+      "name": "U1TIERTFZK → \"Mã chỉ áp dụng cho hạng thành viên khác.\" (API + snackbar)",
       "ok": true,
       "detail": {
         "message": "Mã chỉ áp dụng cho hạng thành viên khác.",
@@ -60,13 +60,13 @@
     {
       "label": "khách khác dùng hết U1ONE",
       "data": {
-        "order": "TUBU2026101987070",
+        "order": "TUBU2026102277878",
         "coupon": {
-          "code": "U1ONEFNSV",
+          "code": "U1ONETFZK",
           "usedCount": 1,
           "usageLimit": 1,
           "perUserLimit": 1,
-          "endAt": "2026-10-29T16:14:19.711Z",
+          "endAt": "2026-11-01T11:36:07.472Z",
           "isActive": true,
           "redemptions": 1,
           "claims": 0
@@ -74,7 +74,7 @@
       }
     },
     {
-      "label": "U1EXPFNSV",
+      "label": "U1EXPTFZK",
       "data": {
         "status": 400,
         "message": "Mã giảm giá đã hết hạn hoặc chưa hiệu lực.",
@@ -82,7 +82,7 @@
       }
     },
     {
-      "label": "U1ONEFNSV",
+      "label": "U1ONETFZK",
       "data": {
         "status": 400,
         "message": "Mã giảm giá đã hết lượt sử dụng.",
@@ -90,7 +90,7 @@
       }
     },
     {
-      "label": "U1OFFFNSV",
+      "label": "U1OFFTFZK",
       "data": {
         "status": 400,
         "message": "Mã giảm giá đã ngừng áp dụng.",
@@ -98,7 +98,7 @@
       }
     },
     {
-      "label": "U1TIERFNSV",
+      "label": "U1TIERTFZK",
       "data": {
         "status": 400,
         "message": "Mã chỉ áp dụng cho hạng thành viên khác.",
@@ -119,5 +119,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:14:33.251Z"
+  "ranAt": "2026-10-22T11:36:19.599Z"
 }

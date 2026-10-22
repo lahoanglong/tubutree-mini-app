@@ -37,7 +37,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgdi0700jd14pjg56vd2mq"
+              "cmvjgt0eb00cizw9c3gk3vd0h"
             ],
             "subtotal": 120000,
             "discount": 0,
@@ -69,7 +69,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgdi0700jd14pjg56vd2mq",
+            "id": "cmvjgt0eb00cizw9c3gk3vd0h",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -109,7 +109,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgdi0700jd14pjg56vd2mq"
+              "cmvjgt0eb00cizw9c3gk3vd0h"
             ],
             "subtotal": 120000,
             "discount": 0,
@@ -141,7 +141,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgdi0700jd14pjg56vd2mq",
+            "id": "cmvjgt0eb00cizw9c3gk3vd0h",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -178,7 +178,7 @@
       "label": "áp mã FREESHIP",
       "data": {
         "status": 201,
-        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã FREESHIP",
+        "snackbar": "Đã áp dụng mã FREESHIP",
         "couponCode": "FREESHIP",
         "discount": 0,
         "message": null
@@ -195,7 +195,7 @@
         "pointsUsed": 0,
         "pointsDiscount": 0,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 199000,
         "pointsEarned": 3980
       }
@@ -208,7 +208,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101938333",
+        "code": "TUBU2026102272604",
         "button": "Đặt hàng · 199.000đ"
       }
     },
@@ -218,14 +218,14 @@
     },
     {
       "label": "(a) snackbar áp FREESHIP",
-      "data": "zi_check_circle_solid\nĐã áp dụng mã FREESHIP"
+      "data": "Đã áp dụng mã FREESHIP"
     },
     {
       "label": "(a) SQL đơn",
       "data": {
-        "id": "cmvfgdgey00ib14pjn32v98ro",
-        "code": "TUBU2026101938333",
-        "userId": "u1_c14a_gdb6r95",
+        "id": "cmvjgsz4o00bgzw9cvr3x1h7u",
+        "code": "TUBU2026102272604",
+        "userId": "u1_c14a_gsucf3z",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -244,7 +244,7 @@
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:12:36.826Z",
+        "createdAt": "2026-10-22T11:35:45.625Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -272,7 +272,7 @@
     {
       "label": "(b) đơn đầu qua API",
       "data": {
-        "code": "TUBU2026101948202",
+        "code": "TUBU2026102254095",
         "total": 225000
       }
     },
@@ -300,7 +300,7 @@
       "label": "áp mã FREESHIP",
       "data": {
         "status": 201,
-        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã FREESHIP",
+        "snackbar": "Đã áp dụng mã FREESHIP",
         "couponCode": "FREESHIP",
         "discount": 0,
         "message": null
@@ -330,7 +330,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101963213",
+        "code": "TUBU2026102261783",
         "button": "Đặt hàng · 120.000đ"
       }
     },
@@ -341,9 +341,9 @@
     {
       "label": "(b) SQL đơn",
       "data": {
-        "id": "cmvfgdomn00k314pjlpapxorv",
-        "code": "TUBU2026101963213",
-        "userId": "u1_c14b_gdhvkw6",
+        "id": "cmvjgt6xo00d8zw9c8scmkp18",
+        "code": "TUBU2026102261783",
+        "userId": "u1_c14b_gt0cu1i",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -362,7 +362,7 @@
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:12:47.471Z",
+        "createdAt": "2026-10-22T11:35:55.740Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -386,5 +386,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:12:52.049Z"
+  "ranAt": "2026-10-22T11:35:57.335Z"
 }

@@ -49,7 +49,12 @@ if (want('U5-10')) {
       const sqlPhone = (await q(`SELECT code FROM orders o JOIN users u ON u.id = o."userId" WHERE u.phone = '0901000001' OR o."shippingAddress"->>'phone' = '0901000001' ORDER BY code`)).map((r) => r.code);
       const ev1 = await shot(p, 'orders-search-phone-1440');
       // lọc trạng thái
+      // Ô tìm chỉ áp dụng khi bấm "Tìm kiếm" (page.tsx:1124): xoá chữ mà không bấm thì lọc trạng thái vẫn chạy trên SĐT cũ,
+      // đúng khi lane mới có 1 đơn chờ thanh toán nhưng lệch khi lane tích nhiều đơn.
       await search.fill('');
+      const clearResp = waitApi(p, /\/api\/admin\/orders$/, 'GET');
+      await p.getByRole('button', { name: 'Tìm kiếm', exact: true }).click();
+      await clearResp;
       const fResp = waitApi(p, /\/api\/admin\/orders$/, 'GET');
       await p.getByLabel('Lọc đơn theo trạng thái').selectOption('PENDING_PAYMENT');
       const fr = await (await fResp).json();
@@ -84,13 +89,13 @@ async function confirmPaymentCase(id, role, label) {
       await openOrder(p, o.code);
       const extra = {};
       if (role === 'ketoan') {
-        extra.statusButtons = await p.getByRole('button', { name: /^(Hủy đơn|Đã đóng gói|Giao vận|Đã giao hàng)$/ }).count();
+        extra.statusButtons = await p.getByRole('button', { name: /^(Huỷ đơn|Đã đóng gói|Giao vận|Đã giao hàng)$/ }).count();
         const lr = await api('GET', `/admin/orders?search=${o.code}`, { user: 'ketoan' });
         const row = lr.body?.data?.[0];
         extra.phoneSeen = JSON.stringify({ user: row?.user?.phone, ship: row?.shippingAddress?.phone }).slice(0, 120);
         extra.pageHasFullPhone = (await p.locator('body').innerText()).includes('0901000003');
       }
-      await p.getByLabel('Mã giao dịch ngân hàng').first().fill(`FT26UAT${id.replace('-', '')}`);
+      await p.getByLabel('Mã giao dịch').first().fill(`FT26UAT${id.replace('-', '')}`);
       const resp = waitApi(p, /\/api\/admin\/orders\/[^/]+\/confirm-payment$/);
       await p.getByRole('button', { name: 'Đã nhận tiền', exact: true }).first().click();
       const dlg = p.getByRole('alertdialog');
@@ -124,7 +129,7 @@ if (want('U5-12')) await confirmPaymentCase('U5-12', 'ketoan', 'KẾ TOÁN');
 
 // ---------- U5-13: huỷ đơn COD
 if (want('U5-13')) {
-  await runCase(rec, { id: 'U5-13', role: 'ADMIN', journey: 'Huỷ đơn COD đã xác nhận', steps: 'uat_returning đặt COD 3×FUWA-HW-500 (đã lên giả Pancake); admin mở đơn → "Hủy đơn" → lý do → "Huỷ đơn"', expected: 'Đơn CANCELLED, tồn kho trả lại đủ 3, giả Pancake nhận lệnh huỷ, không phát sinh hoàn tiền/ví (khách chưa trả), lịch sử đơn ghi lý do' }, async () => {
+  await runCase(rec, { id: 'U5-13', role: 'ADMIN', journey: 'Huỷ đơn COD đã xác nhận', steps: 'uat_returning đặt COD 3×FUWA-HW-500 (đã lên giả Pancake); admin mở đơn → "Huỷ đơn" → lý do → "Huỷ đơn"', expected: 'Đơn CANCELLED, tồn kho trả lại đủ 3, giả Pancake nhận lệnh huỷ, không phát sinh hoàn tiền/ví (khách chưa trả), lịch sử đơn ghi lý do' }, async () => {
     const [v0] = await q(`SELECT stock FROM variations WHERE sku = 'FUWA-HW-500'`);
     const before = await money('uat_returning');
     const o = await placeOrder('returning', { lines: [{ sku: 'FUWA-HW-500', qty: 3 }], paymentMethod: 'COD' });
@@ -134,7 +139,7 @@ if (want('U5-13')) {
     try {
       const p = s.page;
       await openOrder(p, o.code);
-      await p.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+      await p.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
       const dlg = p.getByRole('alertdialog');
       await dlg.waitFor({ timeout: 10_000 });
       const dlgText = await dlg.innerText();
@@ -166,7 +171,7 @@ if (want('U5-13')) {
 
 // ---------- U5-14: huỷ đơn chuyển khoản đã trả = hoàn toàn phần vào Ví
 if (want('U5-14')) {
-  await runCase(rec, { id: 'U5-14', role: 'ADMIN', journey: 'Hoàn tiền toàn phần: huỷ đơn chuyển khoản đã PAID (dùng điểm)', steps: 'uat_returning đặt chuyển khoản, dùng 5.000 điểm; giả NH chuyển đủ đúng nội dung (Pancake ghép → PAID); admin mở đơn → "Hủy đơn" → xác nhận', expected: 'D2: hoàn đủ tổng đơn vào Ví Tubu ngay; trả lại 5.000 điểm đã dùng; walletBalance = SUM(wallet_transactions.delta); pointsBalance = SUM(sổ STANDARD); đơn CANCELLED/REFUNDED' }, async () => {
+  await runCase(rec, { id: 'U5-14', role: 'ADMIN', journey: 'Hoàn tiền toàn phần: huỷ đơn chuyển khoản đã PAID (dùng điểm)', steps: 'uat_returning đặt chuyển khoản, dùng 5.000 điểm; giả NH chuyển đủ đúng nội dung (Pancake ghép → PAID); admin mở đơn → "Huỷ đơn" → xác nhận', expected: 'D2: hoàn đủ tổng đơn vào Ví Tubu ngay; trả lại 5.000 điểm đã dùng; walletBalance = SUM(wallet_transactions.delta); pointsBalance = SUM(sổ STANDARD); đơn CANCELLED/REFUNDED' }, async () => {
     const before = await money('uat_returning');
     const o = await placeOrder('returning', { lines: [{ sku: 'COBOTE-PW-100', qty: 3 }], paymentMethod: 'BANK_TRANSFER', pointsToUse: 5000 });
     await waitPancake(o.code);
@@ -177,7 +182,7 @@ if (want('U5-14')) {
     try {
       const p = s.page;
       await openOrder(p, o.code);
-      await p.getByRole('button', { name: 'Hủy đơn', exact: true }).click();
+      await p.getByRole('button', { name: 'Huỷ đơn', exact: true }).click();
       const dlg = p.getByRole('alertdialog');
       await dlg.waitFor({ timeout: 10_000 });
       const dlgText = await dlg.innerText();

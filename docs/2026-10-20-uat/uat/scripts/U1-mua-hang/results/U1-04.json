@@ -33,11 +33,11 @@
     {
       "label": "SQL coupons",
       "data": {
-        "code": "HOPSAN-C424S4N4",
+        "code": "HOPSAN-38X362LH",
         "usedCount": 0,
         "usageLimit": 1,
         "perUserLimit": 1,
-        "endAt": "2026-12-18T15:27:52.028Z",
+        "endAt": "2026-12-21T11:30:15.924Z",
         "isActive": true,
         "redemptions": 0,
         "claims": 1
@@ -45,5 +45,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T15:59:58.821Z"
+  "ranAt": "2026-10-22T11:34:13.363Z"
 }

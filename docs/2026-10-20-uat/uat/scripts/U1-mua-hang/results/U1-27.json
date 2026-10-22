@@ -34,7 +34,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfh1kw601jl14pj4buzzska"
+              "cmvjgwpdv012gzw9c55fc29uq"
             ],
             "subtotal": 430000,
             "discount": 0,
@@ -66,7 +66,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfh1kw601jl14pj4buzzska",
+            "id": "cmvjgwpdv012gzw9c55fc29uq",
             "variationId": "cmqfuw9jv0007w1vfb1njbw7k",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -104,7 +104,7 @@
     {
       "name": "màn thành công",
       "ok": true,
-      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026101928490\nTổng thanh toán\n430.000đ\nChuẩn b"
+      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026102224551\nTổng thanh toán\n430.000đ\nChuẩn b"
     },
     {
       "name": "Lộc Biếc miễn ship từ 99k: 120k → phí 0, điểm 2.880 (2% × 1,2)",
@@ -119,7 +119,7 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfh1q5a01ke14pj5zpi3l0p"
+              "cmvjgwuie0139zw9c5c5h4ops"
             ],
             "subtotal": 120000,
             "discount": 0,
@@ -151,7 +151,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfh1q5a01ke14pj5zpi3l0p",
+            "id": "cmvjgwuie0139zw9c5c5h4ops",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -160,7 +160,7 @@
             "thumbnail": null,
             "unitPrice": 120000,
             "quantity": 1,
-            "stock": 180,
+            "stock": 185,
             "weight": 1050,
             "total": 120000,
             "isFlash": false,
@@ -207,7 +207,7 @@
       "label": "báo giá cuối (POST /checkout/quote)",
       "data": {
         "req": {
-          "addressId": "cmvfes1a5002r13zt85xtsoyn",
+          "addressId": "cmvjgm16o002u148769fcqbhm",
           "pointsToUse": 0
         },
         "subtotal": 430000,
@@ -237,7 +237,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101928490",
+        "code": "TUBU2026102224551",
         "button": "Đặt hàng · 430.000đ"
       }
     },
@@ -294,5 +294,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:31:29.265Z"
+  "ranAt": "2026-10-22T11:38:46.312Z"
 }

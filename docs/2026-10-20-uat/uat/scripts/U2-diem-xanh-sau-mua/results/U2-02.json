@@ -3,8 +3,8 @@
   "title": "Lộc Biếc: 289.000đ, mã XANH10 giảm 28.900đ → 2% × 1,2 trên 260.100đ = 6.242 điểm",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:22:38.161Z",
-  "lane": 7,
+  "at": "2026-10-22T11:38:22.430Z",
+  "lane": 2,
   "checks": [
     {
       "name": "áp mã XANH10 vào giỏ",
@@ -18,7 +18,7 @@
       "ok": true,
       "detail": {
         "status": 201,
-        "code": "TUBU2026101991671",
+        "code": "TUBU2026102271966",
         "bad": [],
         "blocked": []
       }
@@ -42,7 +42,7 @@
       "name": "DB: orders.pointsEarned = báo giá",
       "ok": true,
       "detail": {
-        "id": "cmvfgqa2h003h5ksfxrfuudp4",
+        "id": "cmvjgwaoe003hh9r1q072zj6e",
         "total": 260100,
         "shippingFee": 0,
         "pointsEarned": 6242,
@@ -76,7 +76,7 @@
       "ok": true,
       "detail": {
         "days": 365,
-        "expiresAt": "2027-10-19T16:22:36.158Z"
+        "expiresAt": "2027-10-22T11:38:21.201Z"
       }
     }
   ],
@@ -116,11 +116,11 @@
       "rows": [
         {
           "delta": 6242,
-          "reason": "ORDER_DELIVERED:TUBU2026101991671",
+          "reason": "ORDER_DELIVERED:TUBU2026102271966",
           "lot": "STANDARD",
-          "refId": "cmvfgqa2h003h5ksfxrfuudp4",
-          "createdAt": "2026-10-19T16:22:36.161Z",
-          "expiresAt": "2027-10-19T16:22:36.158Z"
+          "refId": "cmvjgwaoe003hh9r1q072zj6e",
+          "createdAt": "2026-10-22T11:38:21.203Z",
+          "expiresAt": "2027-10-22T11:38:21.201Z"
         }
       ],
       "after": {
@@ -142,6 +142,6 @@
         ]
       }
     },
-    "mã đơn": "TUBU2026101991671"
+    "mã đơn": "TUBU2026102271966"
   }
 }

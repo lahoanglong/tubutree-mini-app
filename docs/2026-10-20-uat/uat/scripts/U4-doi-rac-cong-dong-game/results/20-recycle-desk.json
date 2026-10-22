@@ -5,11 +5,11 @@
     "journey": "Quầy kho HCMC nhận hàng, nhận thiếu, cộng điểm theo bảng",
     "steps": "/recycle (có dòng \"Nhận hàng tại điểm\") → /recycle/desk → nhập mã TR- của U4-07 → \"Tra mã\" → hộp sữa giảm 12 → 8, lý do \"Bẩn\" → \"Xác nhận đã nhận\"",
     "expected": "Điểm theo số thực nhận: floor(8/5)×1.000 + 2×2.000 = 5.000 điểm, +4 giọt; sổ có đúng 1 dòng RECYCLE:<mã> +5.000 hạn 12 tháng; số dư = trước + 5.000 = SUM(delta); khách nhận tin WASTE_POINTS_CREDITED",
-    "actual": "TR-DKG2W: 5000 điểm, 4 giọt; sổ 34400 → 39400 (SUM 39400); tin: \"Yêu cầu TR-DKG2W đã đếm xong. Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước.\".",
+    "actual": "TR-9Z3XF: 5000 điểm, 4 giọt; sổ 34400 → 39400 (SUM 39400); tin: \"Yêu cầu TR-9Z3XF đã đếm xong. Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước.\".",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-13-desk-short.png",
       "shots/U4-doi-rac-cong-dong-game/U4-13-desk-done.png",
-      "SQL points_transactions reason=RECYCLE:TR-DKG2W → [{\"delta\":5000,\"lot\":\"STANDARD\",\"expiresAt\":\"2027-10-19T17:08:28.939Z\"}]",
+      "SQL points_transactions reason=RECYCLE:TR-9Z3XF → [{\"delta\":5000,\"lot\":\"STANDARD\",\"expiresAt\":\"2027-10-22T11:40:42.322Z\"}]",
       "SQL users.pointsBalance 34400 → 39400, SUM(delta STANDARD) = 39400"
     ],
     "checks": [
@@ -30,19 +30,19 @@
         "ok": true,
         "detail": {
           "status": 201,
-          "body": "{\"requestId\":\"cmvfid3p8001f14k9ip2o5jyu\",\"code\":\"TR-DKG2W\",\"status\":\"COMPLETED\",\"pointsAwarded\":5000,\"dropsAwarded\":4,\"quota\":null,\"staffDailyCapRemaining\":995000}"
+          "body": "{\"requestId\":\"cmvjgz4kz001dvxso7o0rwzzr\",\"code\":\"TR-9Z3XF\",\"status\":\"COMPLETED\",\"pointsAwarded\":5000,\"dropsAwarded\":4,\"quota\":null,\"staffDailyCapRemaining\":995000}"
         }
       },
       {
         "name": "Thẻ xong: \"Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách\"",
         "ok": true,
-        "detail": "Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách Yêu cầu TR-DKG2W của Lại*** đã xong Còn được xác nhận hôm nay: 995.000 điểm Nhận yêu cầu khác"
+        "detail": "Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách Yêu cầu TR-9Z3XF của Lại*** đã xong Còn được xác nhận hôm nay: 995.000 điểm Nhận yêu cầu khác"
       },
       {
         "name": "DB yêu cầu: COMPLETED, 5.000 điểm, hộp sữa nhận 8 lý do DIRTY",
         "ok": true,
         "detail": {
-          "code": "TR-DKG2W",
+          "code": "TR-9Z3XF",
           "status": "COMPLETED",
           "pointsAwarded": 5000,
           "dropsAwarded": 4,
@@ -71,18 +71,18 @@
         "detail": [
           {
             "delta": 5000,
-            "reason": "RECYCLE:TR-DKG2W",
+            "reason": "RECYCLE:TR-9Z3XF",
             "refType": "RECYCLE",
-            "refId": "cmvfid3p8001f14k9ip2o5jyu",
+            "refId": "cmvjgz4kz001dvxso7o0rwzzr",
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:28.939Z"
+            "expiresAt": "2027-10-22T11:40:42.322Z"
           }
         ]
       },
       {
         "name": "SQL: hạn điểm ≈ 12 tháng",
         "ok": true,
-        "detail": "2027-10-19T17:08:28.939Z"
+        "detail": "2027-10-22T11:40:42.322Z"
       },
       {
         "name": "SQL: số dư = trước + 5.000 = SUM(delta)",
@@ -112,7 +112,7 @@
         "name": "notification_logs: WASTE_POINTS_CREDITED \"Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước\"",
         "ok": true,
         "detail": [
-          "Yêu cầu TR-DKG2W đã đếm xong. Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước."
+          "Yêu cầu TR-9Z3XF đã đếm xong. Tubu đã cộng 5.000 Điểm Xanh và 4 giọt nước."
         ]
       }
     ],
@@ -124,7 +124,7 @@
     "journey": "Đại lý nhận carton + nilon, trừ hạn mức điểm của đại lý",
     "steps": "/recycle/desk bằng uat_ctv → tra mã TR- của U4-05 → giữ nguyên số khai → \"Xác nhận đã nhận\"",
     "expected": "Cộng 5.000 điểm cho khách (sổ RECYCLE:<mã>, số dư = SUM); hạn mức đại lý dùng 5.000/200.000, còn 195.000 hiện trên thẻ",
-    "actual": "TR-TQWY5: +5.000; sổ 39400 → 44400; hạn mức đại lý dùng 5000.",
+    "actual": "TR-7G76Y: +5.000; sổ 39400 → 44400; hạn mức đại lý dùng 5000.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-14-dealer-done.png",
       "SQL waste_point_usage.pointsUsed = 5000; users.pointsBalance 39400 → 44400 = SUM 44400"
@@ -137,12 +137,12 @@
       {
         "name": "POST confirm → 2xx, 5.000 điểm, quota còn 195.000",
         "ok": true,
-        "detail": "{\"requestId\":\"cmvfid0sn001414k9cz311p8d\",\"code\":\"TR-TQWY5\",\"status\":\"COMPLETED\",\"pointsAwarded\":5000,\"dropsAwarded\":0,\"quota\":{\"limit\":200000,\"used\":5000,\"remaining\":195000},\"staffDailyCapRemaining\":995000}"
+        "detail": "{\"requestId\":\"cmvjgz1g40012vxsopw6neb3n\",\"code\":\"TR-7G76Y\",\"status\":\"COMPLETED\",\"pointsAwarded\":5000,\"dropsAwarded\":0,\"quota\":{\"limit\":200000,\"used\":5000,\"remaining\":195000},\"staffDailyCapRemaining\":995000}"
       },
       {
         "name": "Thẻ xong ghi \"Hạn mức còn lại: 195.000 điểm\"",
         "ok": true,
-        "detail": "Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách Yêu cầu TR-TQWY5 của Lại*** đã xong Hạn mức còn lại: 195.000 điểm Nhận yêu cầu khác"
+        "detail": "Đã ghi nhận. Tubu sẽ cộng 5.000 điểm cho khách Yêu cầu TR-7G76Y của Lại*** đã xong Hạn mức còn lại: 195.000 điểm Nhận yêu cầu khác"
       },
       {
         "name": "SQL: 1 dòng RECYCLE:<mã> +5.000",
@@ -150,11 +150,11 @@
         "detail": [
           {
             "delta": 5000,
-            "reason": "RECYCLE:TR-TQWY5",
+            "reason": "RECYCLE:TR-7G76Y",
             "refType": "RECYCLE",
-            "refId": "cmvfid0sn001414k9cz311p8d",
+            "refId": "cmvjgz1g40012vxsopw6neb3n",
             "lot": "STANDARD",
-            "expiresAt": "2027-10-19T17:08:30.119Z"
+            "expiresAt": "2027-10-22T11:40:43.341Z"
           }
         ]
       },
@@ -190,10 +190,10 @@
     "journey": "Kho nhận kiện gửi về (MAIL_IN) theo mã TR- trên kiện",
     "steps": "/recycle/desk → tra mã TR- của U4-08 (IN_TRANSIT) → đủ 15 thùng → \"Xác nhận đã nhận\"",
     "expected": "Cộng 15.000 điểm (sổ RECYCLE:<mã>, số dư = SUM); yêu cầu COMPLETED; trần tháng của khách còn 60.000 − 25.000 = 35.000",
-    "actual": "TR-EDS86: COMPLETED, +15000; sổ 44400 → 59400; trần tháng còn 35000.",
+    "actual": "TR-YX9E4: COMPLETED, +15000; sổ 44400 → 59400; trần tháng còn 35000.",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-15-mailin-done.png",
-      "SQL RECYCLE:TR-EDS86 → 15000; balance 59400 = SUM 59400"
+      "SQL RECYCLE:TR-YX9E4 → 15000; balance 59400 = SUM 59400"
     ],
     "checks": [
       {
@@ -203,7 +203,7 @@
       {
         "name": "POST confirm (match parcelCode) → 2xx, 15.000 điểm",
         "ok": true,
-        "detail": "{\"requestId\":\"cmvfid5ny001t14k9gg75d8dc\",\"code\":\"TR-EDS86\",\"status\":\"COMPLETED\",\"pointsAwarded\":15000,\"dropsAwarded\":0,\"quota\":null,\"staffDailyCapRemaining\":980000}"
+        "detail": "{\"requestId\":\"cmvjgz6bn001rvxso05s1i03y\",\"code\":\"TR-YX9E4\",\"status\":\"COMPLETED\",\"pointsAwarded\":15000,\"dropsAwarded\":0,\"quota\":null,\"staffDailyCapRemaining\":980000}"
       },
       {
         "name": "DB: COMPLETED",
@@ -217,11 +217,11 @@
           "rows": [
             {
               "delta": 15000,
-              "reason": "RECYCLE:TR-EDS86",
+              "reason": "RECYCLE:TR-YX9E4",
               "refType": "RECYCLE",
-              "refId": "cmvfid5ny001t14k9gg75d8dc",
+              "refId": "cmvjgz6bn001rvxso05s1i03y",
               "lot": "STANDARD",
-              "expiresAt": "2027-10-19T17:08:31.204Z"
+              "expiresAt": "2027-10-22T11:40:44.296Z"
             }
           ],
           "before": {
@@ -252,7 +252,7 @@
     "expected": "Lần 2 trả lại kết quả cũ, sổ vẫn 1 dòng, số dư không đổi; số khác → 409",
     "actual": "lần 2 → 201; số khác → 409 \"Yêu cầu đã được xác nhận với số liệu khác\"; sổ 1 dòng, số dư 59400 → 59400.",
     "evidence": [
-      "SQL count RECYCLE:TR-EDS86 = 1; balance 59400 = SUM 59400"
+      "SQL count RECYCLE:TR-YX9E4 = 1; balance 59400 = SUM 59400"
     ],
     "checks": [
       {
@@ -297,7 +297,7 @@
     "journey": "Quầy từ chối cả yêu cầu (hàng ướt)",
     "steps": "/recycle/desk → tra mã yêu cầu kho của uat_new (carton 2) → \"Từ chối cả yêu cầu\" → chọn \"Ướt\" → \"Từ chối yêu cầu\"",
     "expected": "REJECTED, không cộng điểm (sổ không đổi), khách nhận tin WASTE_REQUEST_REJECTED \"hàng bị ướt\"",
-    "actual": "TR-BP5W5 → REJECTED/WET; sổ 0 → 0; tin \"Yêu cầu TR-BP5W5 chưa được nhận: hàng bị ướt. Bạn xem chi tiết trong mục Đổi rác.\".",
+    "actual": "TR-424A4 → REJECTED/WET; sổ 0 → 0; tin \"Yêu cầu TR-424A4 chưa được nhận: hàng bị ướt. Bạn xem chi tiết trong mục Đổi rác.\".",
     "evidence": [
       "shots/U4-doi-rac-cong-dong-game/U4-17-rejected.png"
     ],
@@ -339,7 +339,7 @@
         "name": "Tin WASTE_REQUEST_REJECTED \"hàng bị ướt\"",
         "ok": true,
         "detail": [
-          "Yêu cầu TR-BP5W5 chưa được nhận: hàng bị ướt. Bạn xem chi tiết trong mục Đổi rác."
+          "Yêu cầu TR-424A4 chưa được nhận: hàng bị ướt. Bạn xem chi tiết trong mục Đổi rác."
         ]
       }
     ],

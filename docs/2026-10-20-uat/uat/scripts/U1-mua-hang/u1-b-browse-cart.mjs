@@ -55,8 +55,8 @@ const cases = [
         const giftText = await gift.innerText();
         c.evidence('chữ vùng Quà khách mới', giftText);
         c.check('khách mới: Quà khách mới < Danh mục < Ưu đãi giờ vàng', order['Quà khách mới'] < order['Danh mục'] && order['Danh mục'] < order['Ưu đãi giờ vàng'], order);
-        c.check('Quà khách mới nêu voucher chào mừng 30.000đ đơn từ 199.000đ', /Voucher chào mừng 30\.000đ/.test(giftText) && /199\.000đ/.test(giftText));
-        c.check('Quà khách mới nêu freeship đơn đầu từ 199.000đ', giftText.includes('Miễn phí giao cho đơn đầu tiên từ 199.000đ'));
+        c.check('Quà khách mới nêu voucher chào mừng 30.000đ đơn từ 199.000đ', /Mã giảm giá chào mừng 30\.000đ/.test(giftText) && /199\.000đ/.test(giftText));
+        c.check('Quà khách mới nêu freeship đơn đầu từ 199.000đ', giftText.includes('Miễn phí giao hàng cho đơn đầu tiên từ 199.000đ'));
         c.check('Quà khách mới nêu 2% Điểm Xanh, 1 điểm = 1đ', giftText.includes('2% tiền hàng thành Điểm Xanh, 1 điểm = 1đ'));
       } finally {
         await s.close();

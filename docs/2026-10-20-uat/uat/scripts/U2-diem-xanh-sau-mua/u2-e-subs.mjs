@@ -94,22 +94,41 @@ await main(async (results) => {
   }
 
   {
-    const c = kase('U2-19b', 'Sửa kỳ (đổi chu kỳ giao 4 → 6 tuần) của gói đang chạy: màn sửa Mini App và PATCH /me/subscriptions/:id');
+    const c = kase('U2-19b', 'Sửa kỳ (Q22: đổi chu kỳ giao 4 → 6 tuần) trên màn Sửa gói Mini App: ngày giao kế tính lại từ đơn kỳ gần nhất (0h VN + chu kỳ, sớm nhất ngày mai); chu kỳ ngoài 4/6/8/10 bị từ chối');
     try {
       const sub = await subOf();
+      const lastOrder = await prisma.order.findUnique({ where: { id: sub.lastOrderId }, select: { code: true, createdAt: true } });
+      const vnDay = (d) => new Date(Math.floor((d.getTime() + 7 * 3_600_000) / 86_400_000) * 86_400_000 - 7 * 3_600_000);
+      const earliest = new Date(vnDay(new Date()).getTime() + 86_400_000);
+      const due = new Date(vnDay(lastOrder.createdAt).getTime() + 6 * 7 * 86_400_000);
+      const expectNext = due < earliest ? earliest : due;
+      c.ev('trước', { intervalWeeks: sub.intervalWeeks, nextRunAt: sub.nextRunAt, lastOrder, expectNext });
       const ui = await onSubsPanel(async (p) => {
         await p.getByRole('button', { name: 'Sửa', exact: true }).first().click();
         await sleep(800);
-        const sheet = (await p.evaluate(() => document.body.innerText)).split('\n').filter((t) => /Sửa gói|Số lượng|Chu kỳ|tuần|Thanh toán|Giao tới/.test(t));
-        const hasInterval = await p.getByText('6 tuần', { exact: true }).count();
-        return { sheet, hasInterval };
+        const sheet = (await p.evaluate(() => document.body.innerText)).split('\n').filter((t) => /Sửa gói|Số lượng|Chu kỳ|tuần|Thanh toán|Giao tới|Giao kế|kỳ tới/i.test(t));
+        const options = await p.getByRole('group', { name: 'Chu kỳ giao' }).last().getByText(/^\d+ tuần$/).allInnerTexts();
+        await p.getByRole('group', { name: 'Chu kỳ giao' }).last().getByText('6 tuần', { exact: true }).click();
+        await sleep(300);
+        const hint = (await p.evaluate(() => document.body.innerText)).split('\n').filter((t) => /kế tiếp|tiếp theo|ngày giao|Giao kỳ/i.test(t));
+        const resp = p.waitForResponse((r2) => /\/api\/me\/subscriptions\/[^/]+$/.test(new URL(r2.url()).pathname) && r2.request().method() === 'PATCH', { timeout: 20_000 });
+        await p.getByRole('button', { name: 'Lưu thay đổi' }).click();
+        const rr = await resp;
+        return { sheet, options, hint, status: rr.status(), reqBody: rr.request().postData(), body: await rr.json() };
       }, 'U2-19b-edit-sheet');
-      c.ev('màn Sửa gói định kỳ', ui);
-      c.check('màn sửa có chọn chu kỳ giao', ui.hasInterval > 0, ui);
-      const iv = await api(L, 'PATCH', `/me/subscriptions/${sub.id}`, { user: R, body: { intervalWeeks: 6 } });
+      c.ev('màn Sửa gói định kỳ (bấm "6 tuần" rồi "Lưu thay đổi")', { sheet: ui.sheet, options: ui.options, hint: ui.hint, status: ui.status, reqBody: ui.reqBody, resp: { intervalWeeks: ui.body.intervalWeeks, nextRunAt: ui.body.nextRunAt } });
+      c.check('màn sửa có đủ 4 lựa chọn chu kỳ 4/6/8/10 tuần', ['4 tuần', '6 tuần', '8 tuần', '10 tuần'].every((o) => ui.options.includes(o)), ui.options);
       const sub2 = await subOf();
-      c.ev('PATCH intervalWeeks 6 (API)', { status: iv.status, message: iv.body?.message, intervalWeeks: sub2.intervalWeeks });
-      c.check('API đổi chu kỳ 4 → 6 tuần', iv.status < 300 && sub2.intervalWeeks === 6, { status: iv.status, message: iv.body?.message, intervalWeeks: sub2.intervalWeeks });
+      c.check('UI: PATCH 200, DB intervalWeeks 6', ui.status < 300 && sub2.intervalWeeks === 6, { status: ui.status, intervalWeeks: sub2.intervalWeeks });
+      const driftMs = Math.abs(new Date(sub2.nextRunAt).getTime() - expectNext.getTime());
+      c.check('nextRunAt tính lại từ đơn kỳ gần nhất: 0h VN ngày tạo đơn + 42 ngày, sớm nhất 0h VN ngày mai', driftMs < 1000, { nextRunAt: sub2.nextRunAt, expectNext, driftMs });
+      c.check('API trả nextRunAt khớp DB', ui.body.nextRunAt && Math.abs(new Date(ui.body.nextRunAt).getTime() - new Date(sub2.nextRunAt).getTime()) < 1000, ui.body.nextRunAt);
+      const bad = await api(L, 'PATCH', `/me/subscriptions/${sub.id}`, { user: R, body: { intervalWeeks: 5 } });
+      const sub3 = await subOf();
+      c.ev('PATCH intervalWeeks 5 (API)', { status: bad.status, message: bad.body?.message, intervalWeeks: sub3.intervalWeeks });
+      c.check('chu kỳ 5 tuần bị từ chối 400, DB giữ 6', bad.status === 400 && sub3.intervalWeeks === 6, { status: bad.status, intervalWeeks: sub3.intervalWeeks });
+      const orders = await prisma.order.count({ where: { subscriptionId: sub.id } });
+      c.check('đổi chu kỳ không tạo đơn', orders === 1, orders);
     } catch (e) {
       c.error(e);
     }
@@ -117,11 +136,11 @@ await main(async (results) => {
   }
 
   {
-    const c = kase('U2-20', 'Bỏ qua kỳ trên Mini App ("Hủy" → "Bỏ qua kỳ này"): nextRunAt lùi đúng 1 chu kỳ, gói vẫn ACTIVE');
+    const c = kase('U2-20', 'Bỏ qua kỳ trên Mini App ("Huỷ" → "Bỏ qua kỳ này"): nextRunAt lùi đúng 1 chu kỳ, gói vẫn ACTIVE');
     try {
       const s0 = await subOf();
       const r = await onSubsPanel(async (p) => {
-        await p.getByRole('button', { name: 'Hủy', exact: true }).first().click();
+        await p.getByRole('button', { name: 'Huỷ', exact: true }).first().click();
         const resp = p.waitForResponse((r2) => /\/skip$/.test(new URL(r2.url()).pathname) && r2.request().method() === 'POST', { timeout: 20_000 });
         await p.getByRole('button', { name: 'Bỏ qua kỳ này' }).click();
         const rr = await resp;
@@ -171,12 +190,12 @@ await main(async (results) => {
   }
 
   {
-    const c = kase('U2-22', 'Huỷ gói trên Mini App ("Hủy" → "Vẫn hủy"): CANCELLED; tới hạn chạy job không tạo đơn');
+    const c = kase('U2-22', 'Huỷ gói trên Mini App ("Huỷ" → "Vẫn huỷ"): CANCELLED; tới hạn chạy job không tạo đơn');
     try {
       const r = await onSubsPanel(async (p) => {
-        await p.getByRole('button', { name: 'Hủy', exact: true }).first().click();
+        await p.getByRole('button', { name: 'Huỷ', exact: true }).first().click();
         const resp = p.waitForResponse((r2) => /\/status$/.test(new URL(r2.url()).pathname) && r2.request().method() === 'POST', { timeout: 20_000 });
-        await p.getByRole('button', { name: 'Vẫn hủy' }).click();
+        await p.getByRole('button', { name: 'Vẫn huỷ' }).click();
         const rr = await resp;
         return { status: rr.status(), body: await rr.json() };
       }, 'U2-22-cancel');

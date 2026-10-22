@@ -3,8 +3,8 @@
   "title": "Trần điểm đơn sàn theo tháng (loyalty.marketplace_claim_monthly_points_cap): vượt trần → 429 MONTHLY_CAP, không tạo claim",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:25:12.182Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:26.814Z",
+  "lane": 2,
   "checks": [
     {
       "name": "429 MONTHLY_CAP",

@@ -25,13 +25,13 @@
       "ok": true
     },
     {
-      "name": "màn có Nội dung CK: TUBU2026101928027",
+      "name": "màn có Nội dung CK: TUBU2026102299808",
       "ok": true
     },
     {
       "name": "ảnh QR trỏ 970407-8386790906, amount=199000, addInfo=mã đơn",
       "ok": true,
-      "detail": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=199000&addInfo=TUBU2026101928027&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
+      "detail": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=199000&addInfo=TUBU2026102299808&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
     },
     {
       "name": "VietQR: BIN 970407 + STK 8386790906 + NAPAS QRIBFTTA",
@@ -58,8 +58,8 @@
       "name": "DB: tồn kho đã giữ (reservedStock > 0)",
       "ok": true,
       "detail": {
-        "stock": 173,
-        "reservedStock": 27
+        "stock": 180,
+        "reservedStock": 20
       }
     }
   ],
@@ -68,7 +68,7 @@
       "label": "đặt đơn chuyển khoản",
       "data": {
         "status": 201,
-        "code": "TUBU2026101928027",
+        "code": "TUBU2026102299808",
         "button": "Đặt hàng · 199.000đ",
         "total": 199000
       }
@@ -92,9 +92,9 @@
         "Số tiền",
         "199.000đ",
         "Nội dung CK",
-        "TUBU2026101928027",
-        "Giữ nguyên nội dung TUBU2026101928027 để hệ thống tự xác nhận.",
-        "Vui lòng chuyển khoản trước 23:39 20/10/2026. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó Tubu sẽ hoàn lại cho bạn.",
+        "TUBU2026102299808",
+        "Giữ nguyên nội dung TUBU2026102299808 để hệ thống tự xác nhận.",
+        "Vui lòng chuyển khoản trước 18:39 23/10/2026. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó Tubu sẽ hoàn lại cho bạn.",
         "Còn 23 giờ 59 phút để chuyển khoản",
         "Đang chờ thanh toán… tự cập nhật khi nhận được tiền",
         "Tôi đã chuyển khoản — Kiểm tra",
@@ -103,7 +103,7 @@
     },
     {
       "label": "ảnh QR src",
-      "data": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=199000&addInfo=TUBU2026101928027&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
+      "data": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=199000&addInfo=TUBU2026102299808&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
     },
     {
       "label": "GET /payments/bank-qr",
@@ -115,23 +115,23 @@
           "accountNo": "8386790906",
           "accountName": "CONG TY TNHH TUBU TREE"
         },
-        "memo": "TUBU2026101928027",
-        "paymentDeadline": "2026-10-20T16:39:41.659Z",
+        "memo": "TUBU2026102299808",
+        "paymentDeadline": "2026-10-23T11:39:37.835Z",
         "emv": {
           "bin": "970407",
           "acc": "8386790906",
           "amount": "199000",
-          "addInfo": "TUBU2026101928027",
-          "crc": "EFDD"
+          "addInfo": "TUBU2026102299808",
+          "crc": "52DF"
         }
       }
     },
     {
       "label": "SQL đơn",
       "data": {
-        "id": "cmvfhca5701to14pj26zy3r4w",
-        "code": "TUBU2026101928027",
-        "userId": "u1_d18_hc6r2dv",
+        "id": "cmvjgxyaz0195zw9chnzs3no6",
+        "code": "TUBU2026102299808",
+        "userId": "u1_d18_gxv3ft0",
         "status": "PENDING_PAYMENT",
         "paymentMethod": "BANK_TRANSFER",
         "paymentStatus": "UNPAID",
@@ -146,11 +146,11 @@
         "pointsEarned": 3980,
         "pointsUsed": 0,
         "couponCode": null,
-        "pancakeOrderId": "9200038",
+        "pancakeOrderId": "9200029",
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:39:41.659Z",
+        "createdAt": "2026-10-22T11:39:37.835Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -177,5 +177,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:39:43.352Z"
+  "ranAt": "2026-10-22T11:39:39.503Z"
 }

@@ -1,6 +1,6 @@
 {
   "name": "reconcile",
-  "at": "2026-10-20T01:02:00.946Z",
+  "at": "2026-10-22T12:18:11.045Z",
   "cases": [
     {
       "id": "U6-90",
@@ -12,12 +12,12 @@
         {
           "name": "pointsBalance = SUM(sổ STANDARD) cho cả 3 khách",
           "ok": true,
-          "detail": "[{\"id\":\"uat_new\",\"balance\":3380,\"ledger_sum\":3380,\"rows\":1},{\"id\":\"uat_new_nophone\",\"balance\":1000,\"ledger_sum\":1000,\"rows\":1},{\"id\":\"uat_returning\",\"balance\":67512,\"ledger_sum\":67512,\"rows\":11}]"
+          "detail": "[{\"id\":\"uat_new\",\"balance\":3380,\"ledger_sum\":3380,\"rows\":1},{\"id\":\"uat_new_nophone\",\"balance\":1000,\"ledger_sum\":1000,\"rows\":1},{\"id\":\"uat_returning\",\"balance\":57456,\"ledger_sum\":57456,\"rows\":9}]"
         },
         {
           "name": "walletBalance = SUM(sổ ví) cho cả 3 khách",
           "ok": true,
-          "detail": "[{\"id\":\"uat_new\",\"balance\":0,\"ledger_sum\":0,\"rows\":0},{\"id\":\"uat_new_nophone\",\"balance\":0,\"ledger_sum\":0,\"rows\":0},{\"id\":\"uat_returning\",\"balance\":0,\"ledger_sum\":0,\"rows\":7}]"
+          "detail": "[{\"id\":\"uat_new\",\"balance\":0,\"ledger_sum\":0,\"rows\":0},{\"id\":\"uat_new_nophone\",\"balance\":0,\"ledger_sum\":0,\"rows\":0},{\"id\":\"uat_returning\",\"balance\":0,\"ledger_sum\":0,\"rows\":6}]"
         },
         {
           "name": "mọi đơn: total = subtotal − discount + shippingFee",
@@ -42,12 +42,12 @@
         {
           "name": "đơn có mã chưa huỷ: 1 redemption; đơn huỷ: 0",
           "ok": true,
-          "detail": "[{\"code\":\"TUBU2026101999534\",\"status\":\"DELIVERED\",\"couponCode\":\"HOPSAN-2BWSJQ6N\",\"redemptions\":1},{\"code\":\"TUBU2026101913944\",\"status\":\"CANCELLED\",\"couponCode\":\"XANH10\",\"redemptions\":0},{\"code\":\"TUBU2026101977733\",\"status\":\"CANCELLED\",\"couponCode\":\"XANH10\",\"redemptions\":0}]"
+          "detail": "[{\"code\":\"TUBU2026102289039\",\"status\":\"DELIVERED\",\"couponCode\":\"HOPSAN-38X362LH\",\"redemptions\":1},{\"code\":\"TUBU2026102264535\",\"status\":\"CANCELLED\",\"couponCode\":\"XANH10\",\"redemptions\":0}]"
         },
         {
           "name": "hoa hồng = 8% × tiền hàng tính hoa hồng",
           "ok": true,
-          "detail": "[{\"code\":\"TUBU2026101927562\",\"status\":\"LOCKED\",\"base\":165000,\"rate\":8,\"amount\":13200,\"expect_8pct\":13200,\"deliveredAt\":\"2026-10-19T16:28:53.826Z\",\"lockedAt\":\"2026-10-19T16:28:53.842Z\",\"approvedAt\":null},{\"code\":\"TUBU2026101913944\",\"status\":\"REJECTED\",\"base\":296100,\"rate\":8,\"amount\":23688,\"expect_8pct\":23688,\"deliveredAt\":null,\"lockedAt\":null,\"approvedAt\":null},{\"code\":\"TUBU2026101945928\",\"status\":…"
+          "detail": "[{\"code\":\"TUBU2026102207437\",\"status\":\"LOCKED\",\"base\":165000,\"rate\":8,\"amount\":13200,\"expect_8pct\":13200,\"deliveredAt\":\"2026-10-22T11:46:36.632Z\",\"lockedAt\":\"2026-10-22T11:46:36.639Z\",\"approvedAt\":null},{\"code\":\"TUBU2026102213485\",\"status\":\"PENDING\",\"base\":158000,\"rate\":8,\"amount\":12640,\"expect_8pct\":12640,\"deliveredAt\":null,\"lockedAt\":null,\"approvedAt\":null},{\"code\":\"TUBU2026102223432\",\"status\":\"…"
         },
         {
           "name": "không SKU nào có tồn hoặc tồn giữ chỗ âm",
@@ -63,7 +63,7 @@
       "evidence": [
         {
           "label": "khoảng cách giao → khoá/duyệt hoa hồng (ngày)",
-          "value": "{\"lockedAt\":\"2026-10-19T16:28:53.842Z\",\"approvedAt\":null,\"days\":1.8518518518518518e-7,\"status\":\"LOCKED\"}"
+          "value": "{\"lockedAt\":\"2026-10-22T11:46:36.639Z\",\"approvedAt\":null,\"days\":8.101851851851852e-8,\"status\":\"LOCKED\"}"
         },
         {
           "label": "số truy vấn đối chiếu",

@@ -6,7 +6,7 @@
 // Dùng: node u5-marketing.mjs [--only=U5-30,…]
 import fs from 'node:fs';
 import path from 'node:path';
-import { api, apiOk, brief, done, openWebSession, q, recorder, runCase, shot, SHOTS } from './u5lib.mjs';
+import { api, apiOk, brief, done, exec, openWebSession, q, recorder, runCase, shot, SHOTS } from './u5lib.mjs';
 
 const rec = recorder('u5-marketing');
 const only = (process.argv.find((a) => a.startsWith('--only=')) ?? '').slice(7).split(',').filter(Boolean);
@@ -14,6 +14,11 @@ const want = (id) => !only.length || only.includes(id);
 const tag = String(Date.now() % 1e6);
 const dayKey = (d) => new Date(d.getTime() + 7 * 3600e3).toISOString().slice(0, 10);
 const iso = (days) => new Date(Date.now() + days * 864e5).toISOString();
+
+// Ngân sách 10 triệu/ngày của nhân viên cộng dồn mã + flash sale tạo trong ngày (coupon-input-rules.ts:143-171). U5-32 cố ý dùng hết,
+// nên chạy lại trên cùng lane trong ngày sẽ hết ngân sách trước khi tới U5-30/U5-32. Lùi ngày tạo của dữ liệu lần trước để mỗi lần chạy bắt đầu từ ngân sách đầy.
+await exec(`UPDATE coupons SET "createdAt" = "createdAt" - interval '2 days' WHERE "createdById" = 'uat_marketing' AND "createdAt" > now() - interval '1 day'`);
+await exec(`UPDATE flash_sales SET "createdAt" = "createdAt" - interval '2 days' WHERE "createdBy" = 'uat_marketing' AND "createdAt" > now() - interval '1 day'`);
 
 // ---------- U5-30 lô thẻ hộp hàng sàn
 if (want('U5-30')) {
@@ -77,7 +82,7 @@ if (want('U5-30')) {
 
 // ---------- U5-31 trần mã trên form voucher (UI)
 if (want('U5-31')) {
-  await runCase(rec, { id: 'U5-31', role: 'MARKETING', journey: 'Tạo voucher vượt trần trên form web', steps: 'Form "Tạo voucher": (a) % giảm 31, giảm tối đa 50.000, 100 lượt; (b) % giảm 30, giảm tối đa 100.001; (c) Giảm tiền 100.001đ; (d) Giảm tiền 50.000đ, 1.001 lượt', expected: 'Cả 4 lần: API 403, form hiện lý do "Nhân viên tạo mã giảm tối đa…/Giảm tối đa…/Tổng lượt dùng… không quá…", không mã nào vào DB' }, async () => {
+  await runCase(rec, { id: 'U5-31', role: 'MARKETING', journey: 'Tạo voucher vượt trần trên form web', steps: 'Form "Tạo mã giảm giá": (a) % giảm 31, giảm tối đa 50.000, 100 lượt; (b) % giảm 30, giảm tối đa 100.001; (c) Giảm tiền 100.001đ; (d) Giảm tiền 50.000đ, 1.001 lượt', expected: 'Cả 4 lần: API 403, form hiện lý do "Nhân viên tạo mã giảm tối đa…/Giảm tối đa…/Tổng lượt dùng… không quá…", không mã nào vào DB' }, async () => {
     const s = await openWebSession('marketing', '/admin?tab=coupons');
     const tries = [
       { code: `UATP31${tag}`, type: 'PERCENT', value: '31', max: '50000', usage: '100' },
@@ -92,13 +97,13 @@ if (want('U5-31')) {
       const form = p.getByTestId('coupon-create-form');
       await form.waitFor({ timeout: 90_000 });
       for (const t of tries) {
-        await form.getByLabel('Mã voucher').fill(t.code);
-        await form.getByLabel('Loại voucher').selectOption(t.type);
+        await form.getByLabel('Mã giảm giá', { exact: true }).fill(t.code);
+        await form.getByLabel('Loại mã giảm giá', { exact: true }).selectOption(t.type);
         await form.getByPlaceholder('Giá trị').fill(t.value);
         await form.getByPlaceholder('Giảm tối đa (đ)').fill(t.max);
         await form.getByPlaceholder('Tổng lượt dùng').fill(t.usage);
         const r = p.waitForResponse((x) => /\/api\/admin\/coupons$/.test(new URL(x.url()).pathname) && x.request().method() === 'POST', { timeout: 30_000 });
-        await form.getByRole('button', { name: 'Tạo voucher', exact: true }).click();
+        await form.getByRole('button', { name: 'Tạo mã giảm giá', exact: true }).click();
         const resp = await r;
         await p.waitForTimeout(400);
         const msg = (await form.locator('p.text-sm').last().innerText().catch(() => '')).trim();

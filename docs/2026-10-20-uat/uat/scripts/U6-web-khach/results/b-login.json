@@ -1,6 +1,6 @@
 {
   "name": "b-login",
-  "at": "2026-10-19T16:15:35.300Z",
+  "at": "2026-10-22T12:19:30.901Z",
   "cases": [
     {
       "id": "U6-12-390",
@@ -12,12 +12,12 @@
         {
           "name": "không còn câu \"tạm ngưng\" khi đã có Zalo App ID",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nTubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thươ"
+          "detail": "Tubu Tree\n\nĐăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.\n\nĐăng nhập với Zalo\n\nBằng việc đăng nhập, bạn đồng ý với Điều khoản và Chính sách bảo mật.\n\nQuay lại trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "đi tới oauth.zaloapp.com",
           "ok": true,
-          "detail": "[\"https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=8nLo66_dLi1C0MHVuu8FrYWlGONsJggTMSbfu7GYLPU&state=89960b0ba99a6b0014438e6bc737f9d4\"]"
+          "detail": "[\"https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=N7yvjf_4WFy7UTs9pBoQVbO7oGMuqR1dzjyviaGTovM&state=dfeb7fb9dc4437c0041c40bcfc83f4fa\"]"
         },
         {
           "name": "có app_id",
@@ -32,12 +32,12 @@
         {
           "name": "code_challenge PKCE 43 ký tự",
           "ok": true,
-          "detail": "8nLo66_dLi1C0MHVuu8FrYWlGONsJggTMSbfu7GYLPU"
+          "detail": "N7yvjf_4WFy7UTs9pBoQVbO7oGMuqR1dzjyviaGTovM"
         },
         {
           "name": "state trên URL = state trong sessionStorage",
           "ok": true,
-          "detail": "{\"url\":\"89960b0ba99a6b0014438e6bc737f9d4\",\"st\":\"89960b0ba99a6b0014438e6bc737f9d4\"}"
+          "detail": "{\"url\":\"dfeb7fb9dc4437c0041c40bcfc83f4fa\",\"st\":\"dfeb7fb9dc4437c0041c40bcfc83f4fa\"}"
         },
         {
           "name": "có PKCE verifier trong sessionStorage",
@@ -48,7 +48,7 @@
       "evidence": [
         {
           "label": "URL OAuth (rút gọn)",
-          "value": "https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=8nLo66_dLi1C0MHVuu8FrYWlGONsJggTMSbfu7GYLPU&state=89960b0ba99a6b0014438e6bc737f9d4"
+          "value": "https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=N7yvjf_4WFy7UTs9pBoQVbO7oGMuqR1dzjyviaGTovM&state=dfeb7fb9dc4437c0041c40bcfc83f4fa"
         }
       ],
       "shots": [
@@ -69,7 +69,7 @@
         {
           "name": "access_denied: câu thông báo đúng",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nBạn đã từ chối cấp quyền trên Zalo nên Tubu Tree chưa thể đăng nhập cho bạn. Hãy đăng nhập lại và bấm “Cho phép”.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách h"
+          "detail": "Đăng nhập chưa thành công\n\nBạn đã từ chối cấp quyền trên Zalo nên Tubu Tree chưa thể đăng nhập cho bạn. Hãy đăng nhập lại và bấm “Cho phép”.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "access_denied: có nút đăng nhập lại + về trang chủ",
@@ -78,12 +78,12 @@
         {
           "name": "access_denied: không lộ chuỗi kỹ thuật",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nBạn đã từ chối cấp quyền trên Zalo nên Tubu Tree chưa thể đăng nhập cho bạn. Hãy đăng nhập lại và bấm “Cho phép”.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xa"
+          "detail": "Đăng nhập chưa thành công\n\nBạn đã từ chối cấp quyền trên Zalo nên Tubu Tree chưa thể đăng nhập cho bạn. Hãy đăng nhập lại và bấm “Cho phép”.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoả"
         },
         {
           "name": "thiếu code: câu thông báo đúng",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nZalo không gửi kèm mã đăng nhập. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTik"
+          "detail": "Đăng nhập chưa thành công\n\nZalo không gửi kèm mã đăng nhập. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "thiếu code: có nút đăng nhập lại + về trang chủ",
@@ -92,12 +92,12 @@
         {
           "name": "thiếu code: không lộ chuỗi kỹ thuật",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nZalo không gửi kèm mã đăng nhập. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển ch"
+          "detail": "Đăng nhập chưa thành công\n\nZalo không gửi kèm mã đăng nhập. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "sai state: câu thông báo đúng",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nPhiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com"
+          "detail": "Đăng nhập chưa thành công\n\nPhiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "sai state: có nút đăng nhập lại + về trang chủ",
@@ -106,7 +106,7 @@
         {
           "name": "sai state: không lộ chuỗi kỹ thuật",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nPhiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên n"
+          "detail": "Đăng nhập chưa thành công\n\nPhiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "API từ chối code giả (không 2xx)",
@@ -116,12 +116,12 @@
         {
           "name": "trang hiện lỗi thân thiện thay vì kẹt",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nĐăng nhập Zalo (web) chưa được cấu hình.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+          "detail": "Đăng nhập chưa thành công\n\nĐăng nhập Zalo (web) chưa được cấu hình.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         },
         {
           "name": "không lộ chuỗi kỹ thuật của Zalo/Axios",
           "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nĐăng nhập chưa thành công\n\nĐăng nhập Zalo (web) chưa được cấu hình.\n\nĐăng nhập lại\nVề trang chủ\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ trợ khách hàng\nHotline: 0984 606 774\ntubutree@gmail.com\nFacebook\nTikTok\nĐiều khoản\nB"
+          "detail": "Đăng nhập chưa thành công\n\nĐăng nhập Zalo (web) chưa được cấu hình.\n\nĐăng nhập lại\nVề trang chủ\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
         }
       ],
       "evidence": [
@@ -132,101 +132,6 @@
       ],
       "shots": [
         "uat/shots/U6-web-khach/U6-13-390-callback-loi-api-390.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
-      "id": "U6-14-390",
-      "role": "Khách → khách quay lại (uat_returning)",
-      "journey": "Đăng nhập",
-      "steps": "Bấm đăng nhập, callback đúng state (đổi code do bộ khung giả, token do API lane cấp), vào /gio-hang (390px), tải lại, đăng xuất",
-      "expected": "Về đúng returnTo=/gio-hang, đã đăng nhập (tên trên header), cookie tubu_rt HttpOnly; tải lại vẫn đăng nhập; đăng xuất thì refresh token bị thu hồi trong DB và cookie cũ không dùng lại được (401)",
-      "checks": [
-        {
-          "name": "POST /auth/zalo-oauth gửi code + codeVerifier",
-          "ok": true,
-          "detail": "{\"code\":\"FAKEOK\",\"verifierLen\":96}"
-        },
-        {
-          "name": "về đúng returnTo /gio-hang",
-          "ok": true,
-          "detail": "http://localhost:3262/gio-hang"
-        },
-        {
-          "name": "đã đăng nhập: thấy giỏ hàng (không còn lời mời đăng nhập)",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree\n\nKhám phá sản phẩm\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên"
-        },
-        {
-          "name": "header có tên người dùng (Lại / Nguyễn Thị Quay Lại)",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree\n\nKhám phá sản phẩm\n\nSống xanh"
-        },
-        {
-          "name": "cookie tubu_rt là HttpOnly",
-          "ok": true,
-          "detail": "{\"name\":\"tubu_rt\",\"value\":\"7cOOr-GqANGsHv8RHLzqI2x5CRyy7KhW_UsxK5GKrJdrMIDOWl3fk9oE_3qlgDiA\",\"domain\":\"localhost\",\"path\":\"/api/auth\",\"expires\":1795018421.175076,\"httpOnly\":true,\"secure\":false,\"sameSite\":\"Lax\"}"
-        },
-        {
-          "name": "JS không đọc được cookie refresh",
-          "ok": true
-        },
-        {
-          "name": "cờ phiên localStorage = 1",
-          "ok": true,
-          "detail": "1"
-        },
-        {
-          "name": "tải lại /tai-khoan vẫn đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nN\nLại\n← Trang chủ\nTài khoản\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n\n34.400\nĐiểm Xanh\nXem lịch sử\n0đ\nVí Tubu\nXem lịch sử\n3 mã\nMã giảm giá\nMUA SẮM\nMua c"
-        },
-        {
-          "name": "tải lại gọi /auth/refresh → 200",
-          "ok": true,
-          "detail": "[\"POST /auth/refresh 200\",\"GET /me 200\",\"GET /config/public 200\",\"GET /me/notifications 200\",\"GET /orders?page=1&limit=20 200\",\"GET /brand/owner/me 404\",\"GET /orders/active-count 200\",\"GET /cart 200\",\"GET /me/coupons 200\",\"GET /dealer/me 200\",\"GET /me/loyalty 200\"]"
-        },
-        {
-          "name": "POST /auth/logout → 2xx",
-          "ok": true,
-          "detail": "{\"method\":\"POST\",\"status\":204}"
-        },
-        {
-          "name": "sau đăng xuất: header hiện Đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nTài khoản\n\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n"
-        },
-        {
-          "name": "sau đăng xuất: /gio-hang hiện lời mời đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\n← Tiếp tục mua sắm\nGiỏ hàng\n\nĐăng nhập để xem giỏ hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng "
-        },
-        {
-          "name": "cookie refresh cũ sau đăng xuất bị từ chối (401/400/403)",
-          "ok": true,
-          "detail": "401"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "cookie tubu_rt",
-          "value": "{\"httpOnly\":true,\"sameSite\":\"Lax\",\"path\":\"/api/auth\",\"secure\":false}"
-        },
-        {
-          "label": "refresh_tokens của cookie cũ",
-          "value": "[{\"revoked\":true}]"
-        },
-        {
-          "label": "refresh token còn sống của uat_returning sau đăng xuất (mọi thiết bị)",
-          "value": "[{\"n\":0}]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-14-390-da-dang-nhap-390.png",
-        "uat/shots/U6-web-khach/U6-14-390-sau-dang-xuat-390.png"
       ],
       "notes": [],
       "blockedReason": null,
@@ -301,46 +206,6 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-17-390",
-      "role": "Khách quay lại",
-      "journey": "Phiên",
-      "steps": "Phiên hết hạn: thu hồi refresh token trong DB rồi mở /tai-khoan (390px)",
-      "expected": "Web nhận 401 từ /auth/refresh, xoá cờ phiên và coi là khách (lời mời đăng nhập), không treo ở \"Đang tải\" và không lặp request vô hạn",
-      "checks": [
-        {
-          "name": "đã đăng nhập ban đầu",
-          "ok": true
-        },
-        {
-          "name": "hiện lời mời đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nĐăng nhập\nTài khoản\n\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên"
-        },
-        {
-          "name": "không lặp refresh quá 2 lần",
-          "ok": true,
-          "detail": "1"
-        },
-        {
-          "name": "cờ phiên đã xoá",
-          "ok": true
-        }
-      ],
-      "evidence": [
-        {
-          "label": "refresh khi phiên chết",
-          "value": "[{\"method\":\"POST\",\"path\":\"/auth/refresh\",\"status\":401}]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-17-390-phien-het-han-390.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
       "id": "U6-12-1440",
       "role": "Khách chưa đăng nhập",
       "journey": "Đăng nhập",
@@ -355,7 +220,7 @@
         {
           "name": "đi tới oauth.zaloapp.com",
           "ok": true,
-          "detail": "[\"https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=JYbH-dlUFoE1SkxnfSHBAAHbbfO4SyZLbRHRH7_4pgE&state=2ac955c8e3fb1dbb31cd73e015a2b81d\"]"
+          "detail": "[\"https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=-GEZXPVQDUEpNXa36zpJf5q8sKYx973YSZihC_U8xHg&state=de27882ea436fb16cc53627da55c66df\"]"
         },
         {
           "name": "có app_id",
@@ -370,12 +235,12 @@
         {
           "name": "code_challenge PKCE 43 ký tự",
           "ok": true,
-          "detail": "JYbH-dlUFoE1SkxnfSHBAAHbbfO4SyZLbRHRH7_4pgE"
+          "detail": "-GEZXPVQDUEpNXa36zpJf5q8sKYx973YSZihC_U8xHg"
         },
         {
           "name": "state trên URL = state trong sessionStorage",
           "ok": true,
-          "detail": "{\"url\":\"2ac955c8e3fb1dbb31cd73e015a2b81d\",\"st\":\"2ac955c8e3fb1dbb31cd73e015a2b81d\"}"
+          "detail": "{\"url\":\"de27882ea436fb16cc53627da55c66df\",\"st\":\"de27882ea436fb16cc53627da55c66df\"}"
         },
         {
           "name": "có PKCE verifier trong sessionStorage",
@@ -386,7 +251,7 @@
       "evidence": [
         {
           "label": "URL OAuth (rút gọn)",
-          "value": "https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=JYbH-dlUFoE1SkxnfSHBAAHbbfO4SyZLbRHRH7_4pgE&state=2ac955c8e3fb1dbb31cd73e015a2b81d"
+          "value": "https://oauth.zaloapp.com/v4/permission?app_id=uat-fake-zalo-app-id&redirect_uri=http%3A%2F%2Flocalhost%3A3262%2Fdang-nhap%2Fcallback&code_challenge=-GEZXPVQDUEpNXa36zpJf5q8sKYx973YSZihC_U8xHg&state=de27882ea436fb16cc53627da55c66df"
         }
       ],
       "shots": [
@@ -477,101 +342,6 @@
       "verdict": "PASS"
     },
     {
-      "id": "U6-14-1440",
-      "role": "Khách → khách quay lại (uat_returning)",
-      "journey": "Đăng nhập",
-      "steps": "Bấm đăng nhập, callback đúng state (đổi code do bộ khung giả, token do API lane cấp), vào /gio-hang (1440px), tải lại, đăng xuất",
-      "expected": "Về đúng returnTo=/gio-hang, đã đăng nhập (tên trên header), cookie tubu_rt HttpOnly; tải lại vẫn đăng nhập; đăng xuất thì refresh token bị thu hồi trong DB và cookie cũ không dùng lại được (401)",
-      "checks": [
-        {
-          "name": "POST /auth/zalo-oauth gửi code + codeVerifier",
-          "ok": true,
-          "detail": "{\"code\":\"FAKEOK\",\"verifierLen\":96}"
-        },
-        {
-          "name": "về đúng returnTo /gio-hang",
-          "ok": true,
-          "detail": "http://localhost:3262/gio-hang"
-        },
-        {
-          "name": "đã đăng nhập: thấy giỏ hàng (không còn lời mời đăng nhập)",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree\n\nKhám phá sản phẩm\n\nSốn"
-        },
-        {
-          "name": "header có tên người dùng (Lại / Nguyễn Thị Quay Lại)",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trườn"
-        },
-        {
-          "name": "cookie tubu_rt là HttpOnly",
-          "ok": true,
-          "detail": "{\"name\":\"tubu_rt\",\"value\":\"f-TrhHNT9RmVl6yQpPt0L5g8PiVxrKw_odUAAfJNw_gSHSTCv_EHtidRqnhWWocb\",\"domain\":\"localhost\",\"path\":\"/api/auth\",\"expires\":1795018487.907281,\"httpOnly\":true,\"secure\":false,\"sameSite\":\"Lax\"}"
-        },
-        {
-          "name": "JS không đọc được cookie refresh",
-          "ok": true
-        },
-        {
-          "name": "cờ phiên localStorage = 1",
-          "ok": true,
-          "detail": "1"
-        },
-        {
-          "name": "tải lại /tai-khoan vẫn đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Trang chủ\nTài khoản\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n\n34.400\nĐiểm Xanh\nXem lịch sử\n0đ\nVí T"
-        },
-        {
-          "name": "tải lại gọi /auth/refresh → 200",
-          "ok": true,
-          "detail": "[\"POST /auth/refresh 200\",\"GET /me 200\",\"GET /config/public 200\",\"GET /brand/owner/me 404\",\"GET /orders?page=1&limit=20 200\",\"GET /me/notifications 200\",\"GET /cart 200\",\"GET /orders/active-count 200\",\"GET /me/coupons 200\",\"GET /dealer/me 200\",\"GET /me/loyalty 200\"]"
-        },
-        {
-          "name": "POST /auth/logout → 2xx",
-          "ok": true,
-          "detail": "{\"method\":\"POST\",\"status\":204}"
-        },
-        {
-          "name": "sau đăng xuất: header hiện Đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTài khoản\n\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐ"
-        },
-        {
-          "name": "sau đăng xuất: /gio-hang hiện lời mời đăng nhập",
-          "ok": true,
-          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Tiếp tục mua sắm\nGiỏ hàng\n\nĐăng nhập để xem giỏ hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này."
-        },
-        {
-          "name": "cookie refresh cũ sau đăng xuất bị từ chối (401/400/403)",
-          "ok": true,
-          "detail": "401"
-        }
-      ],
-      "evidence": [
-        {
-          "label": "cookie tubu_rt",
-          "value": "{\"httpOnly\":true,\"sameSite\":\"Lax\",\"path\":\"/api/auth\",\"secure\":false}"
-        },
-        {
-          "label": "refresh_tokens của cookie cũ",
-          "value": "[{\"revoked\":true}]"
-        },
-        {
-          "label": "refresh token còn sống của uat_returning sau đăng xuất (mọi thiết bị)",
-          "value": "[{\"n\":0}]"
-        }
-      ],
-      "shots": [
-        "uat/shots/U6-web-khach/U6-14-1440-da-dang-nhap-1440.png",
-        "uat/shots/U6-web-khach/U6-14-1440-sau-dang-xuat-1440.png"
-      ],
-      "notes": [],
-      "blockedReason": null,
-      "bugs": [],
-      "verdict": "PASS"
-    },
-    {
       "id": "U6-15-1440",
       "role": "Khách → khách mới (uat_new)",
       "journey": "Đăng nhập + Giỏ",
@@ -633,6 +403,231 @@
       ],
       "evidence": [],
       "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-14-390",
+      "role": "Khách → khách quay lại (uat_returning)",
+      "journey": "Đăng nhập",
+      "steps": "Bấm đăng nhập, callback đúng state (đổi code do bộ khung giả, token do API lane cấp), vào /gio-hang (390px), tải lại, đăng xuất",
+      "expected": "Về đúng returnTo=/gio-hang, đã đăng nhập (tên trên header), cookie tubu_rt HttpOnly; tải lại vẫn đăng nhập; đăng xuất thì refresh token bị thu hồi trong DB và cookie cũ không dùng lại được (401)",
+      "checks": [
+        {
+          "name": "POST /auth/zalo-oauth gửi code + codeVerifier",
+          "ok": true,
+          "detail": "{\"code\":\"FAKEOK\",\"verifierLen\":96}"
+        },
+        {
+          "name": "về đúng returnTo /gio-hang",
+          "ok": true,
+          "detail": "http://localhost:3262/gio-hang"
+        },
+        {
+          "name": "đã đăng nhập: thấy giỏ hàng (không còn lời mời đăng nhập)",
+          "ok": true,
+          "detail": "Giỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree\n\nKhám phá sản phẩm\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "cookie tubu_rt là HttpOnly",
+          "ok": true,
+          "detail": "{\"name\":\"tubu_rt\",\"value\":\"TgsxAZSg5P4VpYX3jWa1B7cKtHIvpuXmqgnHNuDA9kSKuEHs6H4hIajMPAadn_QL\",\"domain\":\"localhost\",\"path\":\"/api/auth\",\"expires\":1795263541.620113,\"httpOnly\":true,\"secure\":false,\"sameSite\":\"Lax\"}"
+        },
+        {
+          "name": "JS không đọc được cookie refresh",
+          "ok": true
+        },
+        {
+          "name": "cờ phiên localStorage = 1",
+          "ok": true,
+          "detail": "1"
+        },
+        {
+          "name": "tải lại /tai-khoan vẫn đăng nhập (hiện 57.456 điểm và hạng Lộc Biếc)",
+          "ok": true,
+          "detail": "Tài khoản\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n\n57.456 điểm\nĐiểm Xanh\n0đ\nVí Tubu\n3 mã\nMã giảm giá\nMUA SẮM\nMua chung nhóm\nRủ bạn mua chung, đủ nhóm nhận mã giảm\nĐ"
+        },
+        {
+          "name": "tải lại gọi /auth/refresh → 200",
+          "ok": true,
+          "detail": "[\"POST /auth/refresh 200\",\"GET /me 200\",\"GET /config/public 200\",\"GET /brand/owner/me 404\",\"GET /orders?page=1&limit=20 200\",\"GET /me/notifications 200\",\"GET /me/coupons 200\",\"GET /orders/active-count 200\",\"GET /cart 200\",\"GET /dealer/me 200\",\"GET /me/loyalty 200\"]"
+        },
+        {
+          "name": "POST /auth/logout → 2xx",
+          "ok": true,
+          "detail": "{\"method\":\"POST\",\"status\":204}"
+        },
+        {
+          "name": "sau đăng xuất: header hiện Đăng nhập",
+          "ok": true,
+          "detail": "Tài khoản\n\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nHotline: 0984 606 774\n"
+        },
+        {
+          "name": "sau đăng xuất: /gio-hang hiện lời mời đăng nhập",
+          "ok": true,
+          "detail": "Giỏ hàng\n\nĐăng nhập để xem giỏ hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "cookie refresh cũ sau đăng xuất bị từ chối (401/400/403)",
+          "ok": true,
+          "detail": "401"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "cookie tubu_rt",
+          "value": "{\"httpOnly\":true,\"sameSite\":\"Lax\",\"path\":\"/api/auth\",\"secure\":false}"
+        },
+        {
+          "label": "refresh_tokens của cookie cũ",
+          "value": "[{\"revoked\":true}]"
+        },
+        {
+          "label": "refresh token còn sống của uat_returning sau đăng xuất (mọi thiết bị)",
+          "value": "[{\"n\":68}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-14-390-da-dang-nhap-390.png",
+        "uat/shots/U6-web-khach/U6-14-390-sau-dang-xuat-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-17-390",
+      "role": "Khách quay lại",
+      "journey": "Phiên",
+      "steps": "Phiên hết hạn: thu hồi refresh token trong DB rồi mở /tai-khoan (390px)",
+      "expected": "Web nhận 401 từ /auth/refresh, xoá cờ phiên và coi là khách (lời mời đăng nhập), không treo ở \"Đang tải\" và không lặp request vô hạn",
+      "checks": [
+        {
+          "name": "đã đăng nhập ban đầu",
+          "ok": true
+        },
+        {
+          "name": "hiện lời mời đăng nhập",
+          "ok": true,
+          "detail": "Tài khoản\n\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển\nTrang chủ\nDa"
+        },
+        {
+          "name": "không lặp refresh quá 2 lần",
+          "ok": true,
+          "detail": "1"
+        },
+        {
+          "name": "cờ phiên đã xoá",
+          "ok": true
+        }
+      ],
+      "evidence": [
+        {
+          "label": "refresh khi phiên chết",
+          "value": "[{\"method\":\"POST\",\"path\":\"/auth/refresh\",\"status\":401}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-17-390-phien-het-han-390.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-14-1440",
+      "role": "Khách → khách quay lại (uat_returning)",
+      "journey": "Đăng nhập",
+      "steps": "Bấm đăng nhập, callback đúng state (đổi code do bộ khung giả, token do API lane cấp), vào /gio-hang (1440px), tải lại, đăng xuất",
+      "expected": "Về đúng returnTo=/gio-hang, đã đăng nhập (tên trên header), cookie tubu_rt HttpOnly; tải lại vẫn đăng nhập; đăng xuất thì refresh token bị thu hồi trong DB và cookie cũ không dùng lại được (401)",
+      "checks": [
+        {
+          "name": "POST /auth/zalo-oauth gửi code + codeVerifier",
+          "ok": true,
+          "detail": "{\"code\":\"FAKEOK\",\"verifierLen\":96}"
+        },
+        {
+          "name": "về đúng returnTo /gio-hang",
+          "ok": true,
+          "detail": "http://localhost:3262/gio-hang"
+        },
+        {
+          "name": "đã đăng nhập: thấy giỏ hàng (không còn lời mời đăng nhập)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trường cùng Tubu Tree\n\nKhám phá sản phẩm\n\nSốn"
+        },
+        {
+          "name": "header có tên người dùng (Lại / Nguyễn Thị Quay Lại)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Tiếp tục mua sắm\nGiỏ hàng\nGiỏ hàng đang trống\n\nKhám phá các sản phẩm xanh và bảo vệ môi trườn"
+        },
+        {
+          "name": "cookie tubu_rt là HttpOnly",
+          "ok": true,
+          "detail": "{\"name\":\"tubu_rt\",\"value\":\"OyyXCnpVeYkAQs_wXVUGCt1aatsUB05Gj8zP69ZxRxlCuW3H1Q8VnmfMiN0Dtfbd\",\"domain\":\"localhost\",\"path\":\"/api/auth\",\"expires\":1795263558.470659,\"httpOnly\":true,\"secure\":false,\"sameSite\":\"Lax\"}"
+        },
+        {
+          "name": "JS không đọc được cookie refresh",
+          "ok": true
+        },
+        {
+          "name": "cờ phiên localStorage = 1",
+          "ok": true,
+          "detail": "1"
+        },
+        {
+          "name": "tải lại /tai-khoan vẫn đăng nhập (hiện 57.456 điểm và hạng Lộc Biếc)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\n← Trang chủ\nTài khoản\nNguyễn Thị Quay Lại\nLộc Biếc\nSửa hồ sơ\nMã giới thiệu: UATRETURNING\nSao chép\n\n57.456 điểm\nĐiểm Xanh\nXem lịch sử\n0đ"
+        },
+        {
+          "name": "tải lại gọi /auth/refresh → 200",
+          "ok": true,
+          "detail": "[\"POST /auth/refresh 200\",\"GET /me 200\",\"GET /config/public 200\",\"GET /brand/owner/me 404\",\"GET /orders?page=1&limit=20 200\",\"GET /me/notifications 200\",\"GET /me/coupons 200\",\"GET /orders/active-count 200\",\"GET /cart 200\",\"GET /dealer/me 200\",\"GET /me/loyalty 200\"]"
+        },
+        {
+          "name": "POST /auth/logout → 2xx",
+          "ok": true,
+          "detail": "{\"method\":\"POST\",\"status\":204}"
+        },
+        {
+          "name": "sau đăng xuất: header hiện Đăng nhập",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\nTài khoản\n\nĐăng nhập để xem tài khoản và đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐ"
+        },
+        {
+          "name": "sau đăng xuất: /gio-hang hiện lời mời đăng nhập",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nĐăng nhập\n← Tiếp tục mua sắm\nGiỏ hàng\n\nĐăng nhập để xem giỏ hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này."
+        },
+        {
+          "name": "cookie refresh cũ sau đăng xuất bị từ chối (401/400/403)",
+          "ok": true,
+          "detail": "401"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "cookie tubu_rt",
+          "value": "{\"httpOnly\":true,\"sameSite\":\"Lax\",\"path\":\"/api/auth\",\"secure\":false}"
+        },
+        {
+          "label": "refresh_tokens của cookie cũ",
+          "value": "[{\"revoked\":true}]"
+        },
+        {
+          "label": "refresh token còn sống của uat_returning sau đăng xuất (mọi thiết bị)",
+          "value": "[{\"n\":0}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-14-1440-da-dang-nhap-1440.png",
+        "uat/shots/U6-web-khach/U6-14-1440-sau-dang-xuat-1440.png"
+      ],
       "notes": [],
       "blockedReason": null,
       "bugs": [],

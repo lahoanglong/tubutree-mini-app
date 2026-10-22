@@ -26,7 +26,7 @@
       "label": "đặt đơn chuyển khoản",
       "data": {
         "status": 201,
-        "code": "TUBU2026101976860",
+        "code": "TUBU2026102282703",
         "button": "Đặt hàng · 199.000đ",
         "total": 199000
       }
@@ -36,17 +36,17 @@
       "data": {
         "matched": true,
         "event": {
-          "id": "cmvfhcfq301v114pjkw5s9e5o",
+          "id": "cmvjgy3nr01aizw9cnb64p127",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
         },
         "after": {
-          "code": "TUBU2026101976860",
+          "code": "TUBU2026102282703",
           "total": 199000,
           "status": "CONFIRMED",
           "paymentStatus": "PAID",
-          "paidAt": "2026-10-19T16:39:48.904Z",
+          "paidAt": "2026-10-22T11:39:44.786Z",
           "pancakeAttention": null
         }
       }
@@ -58,9 +58,9 @@
     {
       "label": "SQL đơn",
       "data": {
-        "id": "cmvfhcef301ur14pjydi4ibq7",
-        "code": "TUBU2026101976860",
-        "userId": "u1_d19_hcbg9cb",
+        "id": "cmvjgy2ef01a8zw9ckox3ttst",
+        "code": "TUBU2026102282703",
+        "userId": "u1_d19_gxzlbv4",
         "status": "CONFIRMED",
         "paymentMethod": "BANK_TRANSFER",
         "paymentStatus": "PAID",
@@ -75,11 +75,11 @@
         "pointsEarned": 3980,
         "pointsUsed": 0,
         "couponCode": null,
-        "pancakeOrderId": "9200039",
-        "paidAt": "2026-10-19T16:39:48.904Z",
+        "pancakeOrderId": "9200030",
+        "paidAt": "2026-10-22T11:39:44.786Z",
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:39:47.200Z",
+        "createdAt": "2026-10-22T11:39:43.143Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -106,5 +106,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:39:51.753Z"
+  "ranAt": "2026-10-22T11:39:47.631Z"
 }

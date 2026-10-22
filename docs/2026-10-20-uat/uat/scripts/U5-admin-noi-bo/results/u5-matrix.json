@@ -5,10 +5,10 @@
     "journey": "Ma trận tab: menu web admin + gọi thẳng API từng tab",
     "steps": "Mở /admin 1440 bằng phiên web thật; đọc menu \"Mục quản trị\"; mint token admin, gọi GET đại diện của 40 tab + 2 báo cáo",
     "expected": "Thấy mọi tab, mọi API ≠ 403",
-    "actual": "Khớp. menu 41 mục: Việc cần xử lý, Tổng quan KPI, Retention & North-star, Báo cáo, Đơn hàng, Đơn ngoài app, Tích điểm đơn sàn, Đơn đối tác & đối soát, Đổi / Trả, Hoàn tiền khách, Hoàn tiền sàn ngoài, Đại lý, Thưởng đại lý, Đại lý & công nợ, Lịch sử giá đại lý, Hoa hồng & giá sỉ, Danh mục sản phẩm, Duyệt yêu cầu rút tiền, Duyệt SP đối tác, Gian hàng, Nhãn hàng, Người dùng, Đánh giá, Cộng đồng, Gói định kỳ, Tích điểm tại quầy, Đổi rác, Voucher, Flash Sale, Nhiệm vụ & quà đổi điểm, Câu hỏi thường gặp, Content Kit CTV, Academy, CSKH mẫu tin nhanh, Mẫu thông báo, Nhân sự & quyền, Duyệt ca, Lương, Chấm công, Cấu hình, Sức khoẻ hệ thống",
+    "actual": "Khớp. menu 41 mục: Việc cần xử lý, Tổng quan chỉ số, Giữ chân khách & chỉ số chính, Báo cáo, Đơn hàng, Đơn ngoài app, Tích điểm đơn sàn, Đơn đối tác & đối soát, Đổi / Trả, Hoàn tiền khách, Hoàn tiền sàn ngoài, Đại lý, Thưởng đại lý, Đại lý & công nợ, Lịch sử giá đại lý, Hoa hồng & giá sỉ, Danh mục sản phẩm, Yêu cầu rút tiền, Duyệt SP đối tác, Gian hàng, Nhãn hàng, Người dùng, Đánh giá, Cộng đồng, Gói định kỳ, Tích điểm tại quầy, Đổi rác, Mã giảm giá, Giờ vàng, Nhiệm vụ, Câu hỏi thường gặp, Bộ nội dung CTV, Học viện CTV, CSKH mẫu tin nhanh, Mẫu thông báo, Nhân sự & quyền, Duyệt ca, Lương, Chấm công, Cấu hình, Sức khoẻ hệ thống",
     "evidence": "shots/U5-admin-noi-bo/matrix-admin-1440.png · API: inbox=200 dashboard=200 analytics=200 orders=200 externalOrders=200 externalClaims=200 merchantFulfilment=200 returns=200 customerRefunds=200 cashback=200 dealers=200 dealerClaims=200 dealerAccounts=200 dealerPrices=200 commissionRates=200 productCategories=200 payouts=200 merchantProducts=200 storefronts=200 brands=200 users=200 reviews=200 community=200 subscriptions=200 posCredits=200 waste=200 coupons=200 flashSales=200 engagement=200 faqs=200 contentKit=200 academy=200 quickReplies=200 notificationTemplates=200 staffRoster=200 shiftApproval=400 payroll=400 attendance=200 config=200 opsHealth=200 reports.revenue=200 reports.sources=200",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:44.819Z"
+    "at": "2026-10-22T11:51:49.998Z"
   },
   {
     "id": "U5-02",
@@ -16,10 +16,10 @@
     "journey": "Ma trận tab: menu web admin + gọi thẳng API từng tab",
     "steps": "Mở /admin 1440 bằng phiên web thật; đọc menu \"Mục quản trị\"; mint token ketoan, gọi GET đại diện của 40 tab + 2 báo cáo",
     "expected": "Chỉ thấy/gọi được: waste, inbox, orders, externalClaims, reports, merchantFulfilment, customerRefunds, cashback, dealerClaims, dealerAccounts, payouts; còn lại API 403",
-    "actual": "Khớp. menu 11 mục: Việc cần xử lý, Báo cáo, Đơn hàng, Tích điểm đơn sàn, Đơn đối tác & đối soát, Hoàn tiền khách, Hoàn tiền sàn ngoài, Thưởng đại lý, Đại lý & công nợ, Duyệt yêu cầu rút tiền, Đổi rác",
+    "actual": "Khớp. menu 11 mục: Việc cần xử lý, Báo cáo, Đơn hàng, Tích điểm đơn sàn, Đơn đối tác & đối soát, Hoàn tiền khách, Hoàn tiền sàn ngoài, Thưởng đại lý, Đại lý & công nợ, Yêu cầu rút tiền, Đổi rác",
     "evidence": "shots/U5-admin-noi-bo/matrix-ketoan-1440.png · API: inbox=200 dashboard=403 analytics=403 orders=200 externalOrders=403 externalClaims=200 merchantFulfilment=200 returns=403 customerRefunds=200 cashback=200 dealers=403 dealerClaims=200 dealerAccounts=200 dealerPrices=403 commissionRates=403 productCategories=403 payouts=200 merchantProducts=403 storefronts=403 brands=403 users=403 reviews=403 community=403 subscriptions=403 posCredits=403 waste=200 coupons=403 flashSales=403 engagement=403 faqs=403 contentKit=403 academy=403 quickReplies=403 notificationTemplates=403 staffRoster=403 shiftApproval=403 payroll=403 attendance=403 config=403 opsHealth=403 reports.revenue=200 reports.sources=403",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:46.816Z"
+    "at": "2026-10-22T11:51:51.395Z"
   },
   {
     "id": "U5-03",
@@ -27,10 +27,10 @@
     "journey": "Ma trận tab: menu web admin + gọi thẳng API từng tab",
     "steps": "Mở /admin 1440 bằng phiên web thật; đọc menu \"Mục quản trị\"; mint token marketing, gọi GET đại diện của 40 tab + 2 báo cáo",
     "expected": "Chỉ thấy/gọi được: waste, inbox, reports, community, coupons, flashSales, faqs, contentKit, academy, notificationTemplates; còn lại API 403",
-    "actual": "Khớp. menu 10 mục: Việc cần xử lý, Báo cáo, Cộng đồng, Đổi rác, Voucher, Flash Sale, Câu hỏi thường gặp, Content Kit CTV, Academy, Mẫu thông báo",
+    "actual": "Khớp. menu 10 mục: Việc cần xử lý, Báo cáo, Cộng đồng, Đổi rác, Mã giảm giá, Giờ vàng, Câu hỏi thường gặp, Bộ nội dung CTV, Học viện CTV, Mẫu thông báo",
     "evidence": "shots/U5-admin-noi-bo/matrix-marketing-1440.png · API: inbox=200 dashboard=403 analytics=403 orders=403 externalOrders=403 externalClaims=403 merchantFulfilment=403 returns=403 customerRefunds=403 cashback=403 dealers=403 dealerClaims=403 dealerAccounts=403 dealerPrices=403 commissionRates=403 productCategories=403 payouts=403 merchantProducts=403 storefronts=403 brands=403 users=403 reviews=403 community=200 subscriptions=403 posCredits=403 waste=200 coupons=200 flashSales=200 engagement=403 faqs=200 contentKit=200 academy=200 quickReplies=403 notificationTemplates=200 staffRoster=403 shiftApproval=403 payroll=403 attendance=403 config=403 opsHealth=403 reports.revenue=403 reports.sources=200",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:49.102Z"
+    "at": "2026-10-22T11:51:52.683Z"
   },
   {
     "id": "U5-04",
@@ -41,7 +41,7 @@
     "actual": "Khớp. menu 9 mục: Việc cần xử lý, Đơn hàng, Đơn ngoài app, Tích điểm đơn sàn, Đổi / Trả, Người dùng, Cộng đồng, Đổi rác, CSKH mẫu tin nhanh",
     "evidence": "shots/U5-admin-noi-bo/matrix-cskh-1440.png · API: inbox=200 dashboard=403 analytics=403 orders=200 externalOrders=200 externalClaims=200 merchantFulfilment=403 returns=200 customerRefunds=403 cashback=403 dealers=403 dealerClaims=403 dealerAccounts=403 dealerPrices=403 commissionRates=403 productCategories=403 payouts=403 merchantProducts=403 storefronts=403 brands=403 users=200 reviews=403 community=200 subscriptions=403 posCredits=403 waste=200 coupons=403 flashSales=403 engagement=403 faqs=403 contentKit=403 academy=403 quickReplies=200 notificationTemplates=403 staffRoster=403 shiftApproval=403 payroll=403 attendance=403 config=403 opsHealth=403 reports.revenue=403 reports.sources=403",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:50.823Z"
+    "at": "2026-10-22T11:51:53.933Z"
   },
   {
     "id": "U5-05",
@@ -52,7 +52,7 @@
     "actual": "Khớp. menu 4 mục: Việc cần xử lý, Đơn hàng, Đổi / Trả, Đổi rác",
     "evidence": "shots/U5-admin-noi-bo/matrix-kho-1440.png · API: inbox=200 dashboard=403 analytics=403 orders=200 externalOrders=403 externalClaims=403 merchantFulfilment=403 returns=200 customerRefunds=403 cashback=403 dealers=403 dealerClaims=403 dealerAccounts=403 dealerPrices=403 commissionRates=403 productCategories=403 payouts=403 merchantProducts=403 storefronts=403 brands=403 users=403 reviews=403 community=403 subscriptions=403 posCredits=403 waste=200 coupons=403 flashSales=403 engagement=403 faqs=403 contentKit=403 academy=403 quickReplies=403 notificationTemplates=403 staffRoster=403 shiftApproval=403 payroll=403 attendance=403 config=403 opsHealth=403 reports.revenue=403 reports.sources=403",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:52.724Z"
+    "at": "2026-10-22T11:51:55.293Z"
   },
   {
     "id": "U5-06",
@@ -63,7 +63,7 @@
     "actual": "Khớp. menu 1 mục: Đổi rác",
     "evidence": "shots/U5-admin-noi-bo/matrix-staff-1440.png · API: inbox=403 dashboard=403 analytics=403 orders=403 externalOrders=403 externalClaims=403 merchantFulfilment=403 returns=403 customerRefunds=403 cashback=403 dealers=403 dealerClaims=403 dealerAccounts=403 dealerPrices=403 commissionRates=403 productCategories=403 payouts=403 merchantProducts=403 storefronts=403 brands=403 users=403 reviews=403 community=403 subscriptions=403 posCredits=403 waste=200 coupons=403 flashSales=403 engagement=403 faqs=403 contentKit=403 academy=403 quickReplies=403 notificationTemplates=403 staffRoster=403 shiftApproval=403 payroll=403 attendance=403 config=403 opsHealth=403 reports.revenue=403 reports.sources=403",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:54.574Z"
+    "at": "2026-10-22T11:51:56.494Z"
   },
   {
     "id": "U5-07",
@@ -74,7 +74,7 @@
     "actual": "Khớp. màn \"Bạn không có quyền truy cập trang quản trị.\"",
     "evidence": "shots/U5-admin-noi-bo/matrix-returning-1440.png · API: inbox=403 dashboard=403 analytics=403 orders=403 externalOrders=403 externalClaims=403 merchantFulfilment=403 returns=403 customerRefunds=403 cashback=403 dealers=403 dealerClaims=403 dealerAccounts=403 dealerPrices=403 commissionRates=403 productCategories=403 payouts=403 merchantProducts=403 storefronts=403 brands=403 users=403 reviews=403 community=403 subscriptions=403 posCredits=403 waste=403 coupons=403 flashSales=403 engagement=403 faqs=403 contentKit=403 academy=403 quickReplies=403 notificationTemplates=403 staffRoster=403 shiftApproval=403 payroll=403 attendance=403 config=403 opsHealth=403 reports.revenue=403 reports.sources=403",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:56.021Z"
+    "at": "2026-10-22T11:51:57.876Z"
   },
   {
     "id": "U5-08",
@@ -85,6 +85,6 @@
     "actual": "Cả 19 lời gọi 403",
     "evidence": "ketoan POST /admin/payouts/x/approve=403 · ketoan POST /admin/payouts/x/reject=403 · ketoan PUT /admin/orders/x/status=403 · ketoan PUT /admin/config=403 · ketoan GET /admin/users/export=403 · ketoan POST /admin/dealer-reward-claims/x/approve=403 · marketing PUT /admin/config=403 · marketing GET /admin/engagement/missions=403 · marketing POST /feed/events=403 · marketing GET /admin/brands=403 · marketing GET /admin/orders/export=403 · cskh POST /admin/users/x/block=403 · cskh POST /admin/users/role=403 · cskh POST /feed/events/x/winner=403 · cskh GET /admin/orders/export=403 · kho POST /admin/orders/x/confirm-payment=403 · staff GET /admin/orders=403 · staff POST /admin/staff/grant=403 · returning GET /admin/ops/inbox=403",
     "verdict": "PASS",
-    "at": "2026-10-19T15:58:56.115Z"
+    "at": "2026-10-22T11:51:58.006Z"
   }
 ]

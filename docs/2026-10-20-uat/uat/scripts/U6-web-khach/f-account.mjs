@@ -37,7 +37,9 @@ for (const w of WIDTHS) {
     c.ok(`"${coupons.length} mã" giảm giá khớp /me/coupons`, t.includes(`${coupons.length} mã`), coupons.map((x) => x.code));
     c.ok(`mã giới thiệu ${u.rc}`, t.includes(u.rc));
     c.ok(`tên "${u.fn}" và hạng "Lộc Biếc"`, t.includes(u.fn) && t.includes('Lộc Biếc'));
-    c.ok(`"Đơn hàng của tôi (${nOrders})"`, t.includes(`Đơn hàng của tôi (${nOrders})`), t.slice(t.indexOf('Đơn hàng của tôi'), t.indexOf('Đơn hàng của tôi') + 40));
+    // Khổ điện thoại (PR #24): hub giống Mini App, danh sách đơn nằm ở tab "Đơn hàng"; khối "Đơn hàng của tôi (N)" chỉ còn từ md.
+    if (w >= 768) c.ok(`"Đơn hàng của tôi (${nOrders})"`, t.includes(`Đơn hàng của tôi (${nOrders})`), t.slice(t.indexOf('Đơn hàng của tôi'), t.indexOf('Đơn hàng của tôi') + 40));
+    else c.ok('hub có đường vào "Đơn hàng" (thanh tab dưới)', (await s.page.locator('a[href="/tai-khoan/don-hang"]').count()) > 0, t.slice(-80));
     const links = await s.page.locator('main a[href^="/"]').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href')))].filter((h) => !h.startsWith('/tai-khoan/don-hang/')));
     c.ev('các liên kết trên hub', links);
     const bad = [];
@@ -74,7 +76,13 @@ await rec.run('U6-61', { role: 'Khách mới chưa có SĐT (uat_new_nophone)', 
   const s = await openWeb('new_nophone', { width: 390, path: '/' });
   await nav(s, '/tai-khoan/ho-so');
   let t = await bodyText(s.page);
-  c.ok('SĐT hiện "Chưa có số điện thoại"', /Chưa có số điện thoại/.test(t), t.slice(t.indexOf('Số điện thoại'), t.indexOf('Số điện thoại') + 80));
+  // Mini App không có khối số điện thoại ở màn sửa hồ sơ; web giữ khối này từ md (ho-so/page.tsx, max-md:hidden).
+  c.ok('khổ 390: không có khối SĐT, giống Mini App (web không xác minh SĐT, Q2)', !/Số điện thoại/.test(t), t.slice(0, 200));
+  const sw = await openWeb('new_nophone', { width: 1440, path: '/' });
+  await nav(sw, '/tai-khoan/ho-so');
+  const tw = await bodyText(sw.page);
+  c.ok('khổ 1440: SĐT hiện "Chưa có số điện thoại"', /Chưa có số điện thoại/.test(tw), tw.slice(tw.indexOf('Số điện thoại'), tw.indexOf('Số điện thoại') + 80));
+  await sw.close();
   const email = s.page.getByLabel('Email');
   await email.fill('khong-hop-le');
   await email.blur();
@@ -118,10 +126,11 @@ for (const w of WIDTHS) {
     const s = await openWeb(R, { width: w, path: '/' });
     const r = await nav(s, '/tai-khoan/diem-xanh');
     const t = await bodyText(s.page);
-    c.ok(`tổng điểm hiển thị ${num(loy.pointsTotal ?? loy.pointsBalance)}`, t.includes(`${num(loy.pointsTotal ?? loy.pointsBalance)} điểm`), t.slice(t.indexOf('Tích điểm'), t.indexOf('Tích điểm') + 120));
+    c.ok(`tổng điểm hiển thị ${num(loy.pointsTotal ?? loy.pointsBalance)}`, t.includes(`${num(loy.pointsTotal ?? loy.pointsBalance)} Điểm Xanh`), t.slice(t.indexOf('Tích điểm'), t.indexOf('Tích điểm') + 120));
     const lockDate = (loy.lockedPoints ?? 0) - (loy.lockedReturnPoints ?? 0);
-    if (lockDate > 0) c.ok(`"${num(lockDate)} điểm đang chờ, mở khoá ngày …" đúng lockedPoints − lockedReturnPoints`, t.includes(`${num(lockDate)} điểm đang chờ`), t.slice(t.indexOf('đang chờ') - 30, t.indexOf('đang chờ') + 60));
-    if ((loy.lockedReturnPoints ?? 0) > 0) c.ok(`"${num(loy.lockedReturnPoints)} điểm đang chờ xử lý đổi/trả" đúng lockedReturnPoints`, t.includes(`${num(loy.lockedReturnPoints)} điểm đang chờ xử lý đổi/trả`), t.slice(t.lastIndexOf('đang chờ') - 30, t.lastIndexOf('đang chờ') + 80));
+    // Chủ chốt U6-B06 (2026-10-20): bỏ dòng "điểm đang chờ, mở khoá ngày" ở mọi khổ (theo Mini App). Commit d0e4bee3 bỏ luôn dòng "điểm đang chờ xử lý đổi/trả" cùng hàm lockedPointsLines.
+    c.ok('không còn dòng "điểm đang chờ, mở khoá ngày" (U6-B06)', !/điểm đang chờ, mở khoá ngày|điểm đang chờ/.test(t), { lockedPoints: loy.lockedPoints, lockedReturnPoints: loy.lockedReturnPoints, lockedUntil: loy.lockedUntil });
+    if ((loy.lockedReturnPoints ?? 0) > 0) c.note(`Dòng "${num(loy.lockedReturnPoints)} điểm đang chờ xử lý đổi/trả" cũng không còn trên trang Điểm Xanh (cùng hàm bị xoá ở d0e4bee3); Mini App không có dòng này. Số điểm khoá vẫn nằm ở trang thanh toán.`);
     if (loy.expiringPoints) c.ok(`"${num(loy.expiringPoints.amount)} Điểm Xanh sẽ hết hạn" đúng lô sớm nhất`, t.includes(`${num(loy.expiringPoints.amount)} Điểm Xanh sẽ hết hạn`), t.slice(t.indexOf('sẽ hết hạn') - 30, t.indexOf('sẽ hết hạn') + 40));
     const exp = (await sql(`SELECT min("expiresAt") m FROM points_transactions WHERE "userId" = $1 AND delta > 0 AND "expiresAt" > now() AND lot = 'STANDARD'`, RID))[0].m;
     c.ev('lô điểm sớm hết hạn nhất (DB)', exp);
@@ -156,9 +165,8 @@ for (const w of WIDTHS) {
       const onlyWeb = [...webLines].filter((l) => !lines(mt).includes(l) && !/^(Tìm sản phẩm|N|Lại|← Tài khoản|Điều khoản|Bảo mật|Đổi trả|Vận chuyển|Facebook|TikTok|Hotline|Hỗ trợ|tubutree|Sống xanh)/.test(l));
       c.ev('dòng chỉ có ở Mini App', onlyMini.slice(0, 15));
       c.ev('dòng chỉ có ở web', onlyWeb.slice(0, 15));
-      c.ok('web và Mini App cùng hiện số điểm + mã giảm giá + điểm danh', mt.includes(`${num(loy.pointsTotal ?? loy.pointsBalance)} điểm`) && mt.includes('Điểm danh +1000'), mt.slice(0, 200));
-      // Web hiện thêm dòng "điểm đang chờ" mà Mini App không có: web nhiều thông tin hơn, không phải lỗi web; ghi nhận ở báo cáo (U6-B06).
-      if (lockDate > 0) c.note(`Mini App ${mt.includes(`${num(lockDate)} điểm đang chờ`) ? 'cũng' : 'KHÔNG'} hiện "${num(lockDate)} điểm đang chờ" (web có): ${JSON.stringify(onlyWeb.filter((l) => /đang chờ/.test(l)))}`);
+      c.ok('web và Mini App cùng hiện số điểm + mã giảm giá + điểm danh', mt.includes(num(loy.pointsTotal ?? loy.pointsBalance)) && mt.includes('Điểm danh +1000'), mt.slice(0, 200));
+      c.ok('Mini App cũng không có dòng "điểm đang chờ" (khớp web sau U6-B06)', !/điểm đang chờ/.test(mt), mt.slice(0, 120));
       await m.page.screenshot({ path: miniShot('U6-62-mini-loyalty.png') });
       await m.close();
     }
@@ -169,6 +177,11 @@ for (const w of WIDTHS) {
 // ───────────── U6-63 điểm danh Điểm Xanh (khách mới không SĐT) + bấm lần hai
 await rec.run('U6-63', { role: 'Khách mới chưa có SĐT (uat_new_nophone)', journey: 'Điểm danh Điểm Xanh', steps: 'Mở /tai-khoan/diem-xanh, bấm "Điểm danh +1000", bấm lại (390px)', expected: 'Lần đầu: +1.000 điểm (ngày 1 của chu kỳ), 1 dòng sổ + loyalty_check_ins (dayKey hôm nay, cycleDay 1, streak 1), pointsBalance tăng đúng 1.000 = SUM(sổ), nút chuyển "đã điểm danh"; bấm lần hai không cộng thêm (DB không đổi). Q2: web không bắt xác minh SĐT để điểm danh' }, async (c) => {
   const UID = 'uat_new_nophone';
+  // Đặt lại để chạy lại trong cùng ngày được: dòng sổ CHECKIN có unique riêng (userId, refId=dayKey), xoá loyalty_check_ins thôi thì POST vẫn bị P2002.
+  for (const r of await sql(`SELECT id, delta::int AS d FROM points_transactions WHERE "userId" = $1 AND "refType" = 'CHECKIN' AND lot = 'STANDARD'`, UID)) {
+    await sql(`DELETE FROM points_transactions WHERE id = $1`, r.id);
+    await sql(`UPDATE users SET "pointsBalance" = "pointsBalance" - $2::int WHERE id = $1`, UID, r.d);
+  }
   await sql(`DELETE FROM loyalty_check_ins WHERE "userId" = $1`, UID);
   const before = await ledger(UID);
   const s = await openWeb('new_nophone', { width: 390, path: '/' });
@@ -187,7 +200,7 @@ await rec.run('U6-63', { role: 'Khách mới chưa có SĐT (uat_new_nophone)', 
   const mid = await ledger(UID);
   c.ok('pointsBalance +1.000 và = SUM(sổ)', mid.balance === before.balance + 1000 && mid.balance === mid.ledgerSum, { before, mid });
   const t = await bodyText(s.page);
-  c.ok('trang hiện "Đã điểm danh" / chuỗi 1 ngày và số dư 1.000', /đã điểm danh|Chuỗi: 1 ngày/i.test(t) && t.includes('1.000 điểm'), t.slice(t.indexOf('Điểm danh nhận'), t.indexOf('Điểm danh nhận') + 200));
+  c.ok('trang hiện "Đã điểm danh" / chuỗi 1 ngày và số dư 1.000', /đã điểm danh|Chuỗi: 1 ngày/i.test(t) && /1\.000 (điểm|Điểm Xanh)/.test(t), t.slice(t.indexOf('Điểm danh nhận'), t.indexOf('Điểm danh nhận') + 200));
   await c.shot(s.page, 'diem-danh-xong');
   // lần hai: gọi thẳng API để chắc chắn BE chặn
   const again = await call('new_nophone', 'POST', '/me/loyalty/check-in');

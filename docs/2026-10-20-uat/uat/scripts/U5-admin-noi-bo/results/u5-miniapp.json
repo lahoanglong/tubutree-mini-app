@@ -5,10 +5,10 @@
     "journey": "Mini App \"Ca làm của tôi\" (/staff) và \"Lương của tôi\" (/my-payroll)",
     "steps": "Mở /staff và /my-payroll bằng uat_staff, uat_ketoan (STAFF có nhóm) và uat_returning (khách)",
     "expected": "STAFF (mọi nhóm) vào được hai trang, API /staff/* và lương của tôi trả 2xx; khách thấy \"Trang dành cho nhân viên…\" và không gọi API nhân viên (staff.tsx:62-73, my-payroll.tsx:44-55)",
-    "actual": "staff: chặn /staff=false, chặn /my-payroll=false, API GET /staff/attendance/status 200; GET /staff/shift-templates 200; GET /staff/shifts 200; GET /staff/attendance/history 200; GET /staff/payroll 200 | ketoan: chặn /staff=false, chặn /my-payroll=false, API GET /staff/attendance/status 200; GET /staff/shift-templates 200; GET /staff/shifts 200; GET /staff/attendance/history 200; GET /staff/payroll 200 | returning: chặn /staff=true, chặn /my-payroll=true, API (không gọi)",
+    "actual": "staff: chặn /staff=false, chặn /my-payroll=false, API GET /staff/shifts 200; GET /staff/shift-templates 200; GET /staff/attendance/status 200; GET /staff/attendance/history 200; GET /staff/payroll 200 | ketoan: chặn /staff=false, chặn /my-payroll=false, API GET /staff/attendance/status 200; GET /staff/shift-templates 200; GET /staff/shifts 200; GET /staff/attendance/history 200; GET /staff/payroll 200 | returning: chặn /staff=true, chặn /my-payroll=true, API (không gọi)",
     "evidence": "shots/U5-admin-noi-bo/mini-staff-staff-390.png, shots/U5-admin-noi-bo/mini-my-payroll-staff-390.png, shots/U5-admin-noi-bo/mini-staff-ketoan-390.png, shots/U5-admin-noi-bo/mini-my-payroll-ketoan-390.png, shots/U5-admin-noi-bo/mini-staff-returning-390.png, shots/U5-admin-noi-bo/mini-my-payroll-returning-390.png",
     "verdict": "PASS",
-    "at": "2026-10-19T16:36:24.244Z"
+    "at": "2026-10-22T11:57:50.708Z"
   },
   {
     "id": "U5-51",
@@ -19,7 +19,7 @@
     "actual": "ADMIN: chặn=false, API GET /admin/staff 200; GET /admin/shifts 200; GET /admin/payroll 200. KẾ TOÁN: chặn=true, API admin (không). NHÂN VIÊN: chặn=true, API admin (không)",
     "evidence": "shots/U5-admin-noi-bo/mini-admin-admin-staff-390.png, shots/U5-admin-noi-bo/mini-admin-admin-shifts-390.png, shots/U5-admin-noi-bo/mini-admin-admin-payroll-390.png, shots/U5-admin-noi-bo/mini-admin-ketoan-390.png, shots/U5-admin-noi-bo/mini-admin-staff-390.png",
     "verdict": "PASS",
-    "at": "2026-10-19T16:38:01.680Z"
+    "at": "2026-10-22T11:57:56.263Z"
   },
   {
     "id": "U5-52",
@@ -28,9 +28,9 @@
     "steps": "uat_staff POST /staff/shifts (ca thứ Tư tuần này 08:00–12:00 giờ VN, như nút \"Thêm ca\"); ADMIN mở Mini App /admin → \"Duyệt ca\" → bấm \"Duyệt ca <tên> <thứ>\"; NHÂN VIÊN mở /staff xem trạng thái; KẾ TOÁN gọi POST /admin/shifts/:id/approve",
     "expected": "Ca PENDING → APPROVED, approvedBy uat_admin; /staff hiện \"Đã duyệt\"; KẾ TOÁN 403",
     "actual": "Đăng ký ca 2026-10-21 08:00–12:00: 201 {\"created\":1}. KẾ TOÁN approve → 403. ADMIN bấm \"Duyệt ca Nhân Viên Quầy …\" → 201; DB {\"status\":\"APPROVED\",\"approvedBy\":\"uat_admin\"}. NHÂN VIÊN /staff thấy \"Đã duyệt\": true",
-    "evidence": "shots/U5-admin-noi-bo/mini-admin-shift-pending-390.png, shots/U5-admin-noi-bo/mini-admin-shift-approved-390.png, shots/U5-admin-noi-bo/mini-staff-shift-approved-390.png; SQL shifts WHERE id='cmvfha53m00mc12kzhyk4f9u8'",
+    "evidence": "shots/U5-admin-noi-bo/mini-admin-shift-pending-390.png, shots/U5-admin-noi-bo/mini-admin-shift-approved-390.png, shots/U5-admin-noi-bo/mini-staff-shift-approved-390.png; SQL shifts WHERE id='cmvjhlhvl01d6ljw9r065jpzf'",
     "verdict": "PASS",
-    "at": "2026-10-19T16:39:02.713Z"
+    "at": "2026-10-22T11:57:59.419Z"
   },
   {
     "id": "U5-53",
@@ -38,10 +38,10 @@
     "journey": "Mini App \"Kiểm duyệt cộng đồng\" (/admin/community)",
     "steps": "uat_new_nophone (chưa mua) đăng bài (PENDING); CSKH mở /admin/community trên Mini App; ADMIN mở /admin/community → bấm \"Duyệt\" trên bài",
     "expected": "CSKH thấy \"Chỉ quản trị viên mới truy cập được trang này.\" (community-moderation.tsx:68-76); ADMIN duyệt → feed_posts PUBLISHED, hộp việc communityPending giảm 1",
-    "actual": "Bài cmvfhddhn00nh12kzsa1dqcrb tạo ở PENDING. CSKH Mini App: chặn=true. ADMIN \"Duyệt\" → 201; DB PUBLISHED; communityPending 1→0",
+    "actual": "Bài cmvjhlkbr01dhljw9ei8arc63 tạo ở PENDING. CSKH Mini App: chặn=true. ADMIN \"Duyệt\" → 201; DB PUBLISHED; communityPending 1→0",
     "evidence": "shots/U5-admin-noi-bo/mini-community-cskh-390.png, shots/U5-admin-noi-bo/mini-community-admin-pending-390.png, shots/U5-admin-noi-bo/mini-community-admin-approved-390.png; SQL feed_posts.status; GET /admin/ops/inbox",
     "verdict": "PASS",
-    "at": "2026-10-19T16:40:36.679Z"
+    "at": "2026-10-22T11:58:02.622Z"
   },
   {
     "id": "U5-54",
@@ -49,11 +49,11 @@
     "journey": "Web admin tab Cộng đồng: CSKH duyệt bài rồi thử \"Ghim\"",
     "steps": "uat_new_nophone (chưa mua) đăng bài; CSKH mở /admin?tab=community → \"Chờ duyệt\" → \"Duyệt\"; sang \"Đã đăng\" → bấm \"Ghim\" trên bài vừa duyệt; gọi thẳng POST /feed/admin/:id/pin {pinned:true} bằng token MARKETING",
     "expected": "CSKH duyệt được (B8: CSKH/MARKETING kiểm duyệt); \"Ghim\" chỉ ADMIN (B8): CSKH không thấy nút hoặc bị 403, feed_posts.isPinned vẫn false; MARKETING 403",
-    "actual": "CSKH \"Duyệt\" → 201, DB PUBLISHED. Nút \"Ghim\" hiện cho CSKH: true; bấm → 201; DB isPinned=true. MARKETING gọi pin → 201. (Dọn: ADMIN bỏ ghim → 201, isPinned=false)",
+    "actual": "CSKH \"Duyệt\" → 201, DB PUBLISHED. Nút \"Ghim\" hiện cho CSKH: false; bấm → (không bấm); DB isPinned=false. MARKETING gọi pin → 403. (Dọn: ADMIN bỏ ghim → 201, isPinned=false)",
     "evidence": "shots/U5-admin-noi-bo/community-cskh-pin-1440.png; SQL feed_posts.isPinned; apps/api/src/modules/feed/community-feed.controller.ts:317-321",
-    "verdict": "FAIL",
-    "note": "Xác nhận D2-02 (chưa sửa)",
-    "at": "2026-10-19T16:41:54.053Z"
+    "verdict": "PASS",
+    "note": "",
+    "at": "2026-10-22T11:58:03.939Z"
   },
   {
     "id": "U5-55",
@@ -65,6 +65,6 @@
     "actual": "Không chạy được đầu-cuối: vị trí lấy bằng getLocation (token) rồi API đổi token qua https://graph.zalo.me/v2.0/me/info (apps/api/src/modules/staff/attendance/zalo-location.ts:21, attendance.controller.ts:65-67). Lời gọi này đi từ tiến trình API ra Zalo thật; bộ khung chỉ chặn/giả được request từ trình duyệt, nên không giả được toạ độ. Đường dự phòng (định vị trình duyệt gửi lat/lng, attendance-api.ts:55-67, attendance.controller.ts:70-72) cũng không chạy: DB lane chưa có attendance.office_lat/office_lng và office_ips rỗng, nên verifyPresence trả NOT_CONFIGURED (verify.ts:20-22); toạ độ công ty cố ý không seed, admin nhập khi go-live (docs/2026-10-18-launch-review/impl/refseed.md:87). Không gọi API checkin để API lane không gửi token giả ra Zalo thật.",
     "evidence": "zalo-location.ts:21; tools/uat-harness/miniapp-session.mjs:38 (getLocation chỉ trả token)",
     "verdict": "BLOCKED",
-    "at": "2026-10-19T16:46:47.206Z"
+    "at": "2026-10-22T11:58:03.939Z"
   }
 ]

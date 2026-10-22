@@ -5,7 +5,7 @@
   "journey": "Quá hạn chuyển khoản → đơn tự huỷ, trả mã + kho; tiền về muộn",
   "steps": "Đơn chuyển khoản 199k dùng voucher chào mừng → lùi createdAt 25 giờ → run-job orders.pending-payment-expiry (PendingPaymentExpiryCron.expireStale) → mở lại màn QR → chuyển 169.000đ muộn",
   "expected": "Đơn CANCELLED; lượt voucher chào mừng trả lại (usedCount 0, 0 redemption); tồn kho trả; màn QR (đang mở lẫn mở lại) thôi hiện STK/QR và nói rõ đơn đã huỷ vì quá hạn; tiền về muộn: đơn KHÔNG sống lại, ghi khoản hoàn LATE_PAYMENT 169.000đ và báo khách chọn nơi nhận",
-  "status": "FAIL",
+  "status": "PASS",
   "error": null,
   "checks": [
     {
@@ -16,11 +16,11 @@
       "name": "DB: voucher chào mừng trả lượt (usedCount 0, 0 redemption)",
       "ok": true,
       "detail": {
-        "code": "WELCOME-U1_D24_GSS4VBO",
+        "code": "WELCOME-U1_D24_GVCUOOB",
         "usedCount": 0,
         "usageLimit": 1,
         "perUserLimit": 1,
-        "endAt": "2026-11-18T16:24:34.766Z",
+        "endAt": "2026-11-21T11:37:37.782Z",
         "isActive": true,
         "redemptions": 0,
         "claims": 0
@@ -31,18 +31,18 @@
       "ok": true,
       "detail": {
         "stock0": {
-          "stock": 180,
-          "reservedStock": 20
+          "stock": 185,
+          "reservedStock": 15
         },
         "stock1": {
-          "stock": 181,
-          "reservedStock": 19
+          "stock": 186,
+          "reservedStock": 14
         }
       }
     },
     {
       "name": "màn QR đang mở thôi hiện STK/QR sau khi đơn huỷ",
-      "ok": false
+      "ok": true
     },
     {
       "name": "màn QR mở lại không còn hiện STK để chuyển",
@@ -50,11 +50,11 @@
     },
     {
       "name": "màn QR mở lại nói rõ đơn đã huỷ (không phải \"Không tải được… Thử lại\")",
-      "ok": false,
+      "ok": true,
       "detail": [
         "Thanh toán chuyển khoản",
-        "Không tải được thông tin thanh toán.",
-        "Thử lại",
+        "Đơn không còn chờ chuyển khoản",
+        "Đơn đã huỷ/trả, không thể thanh toán.",
         "Xem đơn hàng"
       ]
     },
@@ -88,14 +88,14 @@
       "label": "áp mã",
       "data": {
         "status": 201,
-        "couponCode": "WELCOME-U1_D24_GSS4VBO"
+        "couponCode": "WELCOME-U1_D24_GVCUOOB"
       }
     },
     {
       "label": "đặt đơn chuyển khoản",
       "data": {
         "status": 201,
-        "code": "TUBU2026101994494",
+        "code": "TUBU2026102295477",
         "button": "Đặt hàng · 169.000đ",
         "total": 169000
       }
@@ -104,10 +104,10 @@
       "label": "đơn lúc đặt",
       "data": {
         "total": 169000,
-        "couponCode": "WELCOME-U1_D24_GSS4VBO",
+        "couponCode": "WELCOME-U1_D24_GVCUOOB",
         "redemptions": [
           {
-            "code": "WELCOME-U1_D24_GSS4VBO",
+            "code": "WELCOME-U1_D24_GVCUOOB",
             "usedCount": 1,
             "usageLimit": 1
           }
@@ -128,22 +128,22 @@
         "status": "CANCELLED",
         "ps": "UNPAID",
         "coupon": {
-          "code": "WELCOME-U1_D24_GSS4VBO",
+          "code": "WELCOME-U1_D24_GVCUOOB",
           "usedCount": 0,
           "usageLimit": 1,
           "perUserLimit": 1,
-          "endAt": "2026-11-18T16:24:34.766Z",
+          "endAt": "2026-11-21T11:37:37.782Z",
           "isActive": true,
           "redemptions": 0,
           "claims": 0
         },
         "stock0": {
-          "stock": 180,
-          "reservedStock": 20
+          "stock": 185,
+          "reservedStock": 15
         },
         "stock1": {
-          "stock": 181,
-          "reservedStock": 19
+          "stock": 186,
+          "reservedStock": 14
         }
       }
     },
@@ -154,25 +154,10 @@
     {
       "label": "chữ màn QR đang mở sau huỷ",
       "data": [
-        "Quét QR để chuyển khoản",
-        "Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới",
-        "169.000đ",
-        "Ngân hàng",
-        "Ngân hàng TMCP Kỹ Thương Việt Nam",
-        "Số tài khoản",
-        "8386790906",
-        "Chủ tài khoản",
-        "CONG TY TNHH TUBU TREE",
-        "Số tiền",
-        "169.000đ",
-        "Nội dung CK",
-        "TUBU2026101994494",
-        "Giữ nguyên nội dung TUBU2026101994494 để hệ thống tự xác nhận.",
-        "Vui lòng chuyển khoản trước 23:24 20/10/2026. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó Tubu sẽ hoàn lại cho bạn.",
-        "Còn 23 giờ 59 phút để chuyển khoản",
-        "Đang chờ thanh toán… tự cập nhật khi nhận được tiền",
-        "Tôi đã chuyển khoản — Kiểm tra",
-        "Để sau / Xem đơn hàng"
+        "Thanh toán chuyển khoản",
+        "Đơn không còn chờ chuyển khoản",
+        "Đơn đã huỷ/trả, không thể thanh toán.",
+        "Xem đơn hàng"
       ]
     },
     {
@@ -183,8 +168,8 @@
       "label": "chữ màn QR mở lại sau huỷ",
       "data": [
         "Thanh toán chuyển khoản",
-        "Không tải được thông tin thanh toán.",
-        "Thử lại",
+        "Đơn không còn chờ chuyển khoản",
+        "Đơn đã huỷ/trả, không thể thanh toán.",
         "Xem đơn hàng"
       ]
     },
@@ -192,13 +177,13 @@
       "label": "tiền về muộn",
       "data": {
         "event": {
-          "id": "cmvfgtegn01cw14pjn37islb9",
+          "id": "cmvjgvtq500w1zw9cnhnfbi2a",
           "status": "PROCESSED",
           "error": null,
           "attempts": 1
         },
         "after": {
-          "code": "TUBU2026101994494",
+          "code": "TUBU2026102295477",
           "total": 169000,
           "status": "CANCELLED",
           "paymentStatus": "UNPAID",
@@ -227,15 +212,15 @@
       "data": [
         {
           "templateCode": "ORDER_PAYMENT_EXPIRED",
-          "text": "{\"body\":\"Đơn TUBU2026101994494 đã tự huỷ vì quá hạn thanh toán. Nếu bạn đã chuyển khoản, Tubu sẽ tạo yêu cầu hoàn tiền và báo bạn. Bạn có thể đặt lại trong mục Đơn hàng.\",\"data\":{\"order_code\":\"TUBU2026101994494\",\"refund_"
+          "text": "{\"body\":\"Đơn TUBU2026102295477 đã tự huỷ vì quá hạn thanh toán. Nếu bạn đã chuyển khoản, Tubu sẽ tạo yêu cầu hoàn tiền và báo bạn. Bạn có thể đặt lại trong mục Đơn hàng.\",\"data\":{\"order_code\":\"TUBU2026102295477\",\"refund_"
         },
         {
           "templateCode": "REFUND_LATE_PAYMENT",
-          "text": "{\"body\":\"Tubu đã nhận 169.000đ cho đơn TUBU2026101994494 nhưng đơn đã huỷ. Vào chi tiết đơn để chọn nhận tiền hoàn về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).\",\"data\":{\"amount\":\"169.000đ\",\"o"
+          "text": "{\"body\":\"Tubu đã nhận 169.000đ cho đơn TUBU2026102295477 nhưng đơn đã huỷ. Vào chi tiết đơn để chọn nhận tiền hoàn về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).\",\"data\":{\"amount\":\"169.000đ\",\"o"
         }
       ]
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:25:01.478Z"
+  "ranAt": "2026-10-22T11:37:59.140Z"
 }

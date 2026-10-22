@@ -3,8 +3,8 @@
   "title": "Tạo gói định kỳ 4 tuần trên Mini App (giao ngay, COD): đơn đầu giảm 12%, phí giao không tính điểm, điểm = 2% × 1,2 × tiền hàng sau giảm",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:31:04.597Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:42.537Z",
+  "lane": 2,
   "checks": [
     {
       "name": "201, gói ACTIVE 4 tuần, có đơn đầu",
@@ -17,8 +17,8 @@
       "name": "đơn đầu: subtotal 89000, giảm 12% = 10680, phí giao 19000, total = 97320",
       "ok": true,
       "detail": {
-        "id": "cmvfh159l00jf5ksf6hjxidhh",
-        "code": "TUBUSUB7462102476",
+        "id": "cmvjgy04900j0h9r1zr4uoglq",
+        "code": "TUBUSUB9180167227",
         "subtotal": 89000,
         "discount": 10680,
         "shippingFee": 19000,
@@ -46,7 +46,7 @@
       "name": "nextRunAt ≈ hôm nay + 28 ngày",
       "ok": true,
       "detail": {
-        "nextRunAt": "2026-11-16T16:31:02.107Z",
+        "nextRunAt": "2026-11-19T11:39:40.170Z",
         "days": 28
       }
     },
@@ -62,22 +62,22 @@
     "POST /me/subscriptions": {
       "status": 201,
       "sub": {
-        "id": "cmvfh159700jc5ksfc0r2b3au",
+        "id": "cmvjgy03v00ixh9r1n97na99c",
         "intervalWeeks": 4,
-        "nextRunAt": "2026-11-16T16:31:02.107Z",
+        "nextRunAt": "2026-11-19T11:39:40.170Z",
         "status": "ACTIVE"
       },
       "firstOrder": {
-        "id": "cmvfh159l00jf5ksf6hjxidhh",
-        "code": "TUBUSUB7462102476",
+        "id": "cmvjgy04900j0h9r1zr4uoglq",
+        "code": "TUBUSUB9180167227",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "total": 97320
       }
     },
     "đơn đầu": {
-      "id": "cmvfh159l00jf5ksf6hjxidhh",
-      "code": "TUBUSUB7462102476",
+      "id": "cmvjgy04900j0h9r1zr4uoglq",
+      "code": "TUBUSUB9180167227",
       "subtotal": 89000,
       "discount": 10680,
       "shippingFee": 19000,

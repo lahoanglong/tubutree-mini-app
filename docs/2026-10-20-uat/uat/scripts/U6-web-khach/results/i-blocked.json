@@ -1,6 +1,6 @@
 {
   "name": "i-blocked",
-  "at": "2026-10-19T17:31:41.188Z",
+  "at": "2026-10-22T12:18:10.769Z",
   "cases": [
     {
       "id": "U6-95",
@@ -74,7 +74,7 @@
       ],
       "shots": [],
       "notes": [],
-      "blockedReason": "Không có tài khoản Gomdon, OA và ZaloPay thật; đường thu gom tận nhà đang tắt trong cấu hình mặc định. Web phải chỉ nhận chuyển khoản và COD theo Q4; thực tế còn hiện Ví Tubu (xem U6-37).",
+      "blockedReason": "Không có tài khoản Gomdon, OA và ZaloPay thật; đường thu gom tận nhà đang tắt trong cấu hình mặc định. Web trả bằng COD, chuyển khoản và Ví Tubu (chủ giải thích lại Web Q4 ngày 2026-10-20), ZaloPay vẫn ẩn (xem U6-37).",
       "bugs": [],
       "verdict": "BLOCKED"
     }

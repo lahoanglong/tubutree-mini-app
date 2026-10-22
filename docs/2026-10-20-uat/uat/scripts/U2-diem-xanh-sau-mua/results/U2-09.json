@@ -3,8 +3,8 @@
   "title": "Khách Lộc Biếc quét mã vận đơn Shopee đã giao 3 ngày (250.000đ): claim chờ, 2.500 điểm (1%, KHÔNG ×1,2), cộng từ giao + 14 ngày",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:24:28.069Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:01.012Z",
+  "lane": 2,
   "checks": [
     {
       "name": "Mini App: Quét mã gọi scanQRCode, gửi mã → 201",
@@ -34,8 +34,8 @@
         "ratePct": "1.0000",
         "multiplier": "1.000",
         "countsForTier": false,
-        "releaseAt": "2026-10-30T16:22:11.000Z",
-        "expect": "2026-10-30T16:22:11.000Z"
+        "releaseAt": "2026-11-02T11:38:08.000Z",
+        "expect": "2026-11-02T11:38:08.000Z"
       }
     },
     {
@@ -44,9 +44,9 @@
       "detail": [
         "Đã ghi nhận đơn shopee SPX********001",
         "2.500 Điểm Xanh đang chờ cộng",
-        "Dự kiến cộng từ 30/10/2026",
+        "Dự kiến cộng từ 02/11/2026",
         "2.500 Điểm Xanh",
-        "Dự kiến 30/10/2026"
+        "Dự kiến 02/11/2026"
       ]
     },
     {
@@ -82,11 +82,11 @@
       "http": 201,
       "body": {
         "status": "CLAIMED",
-        "claimId": "cmvfgsk2s00di5ksfjcbp0ug6",
+        "claimId": "cmvjgx37f00dih9r1vimaylc0",
         "channel": "shopee",
         "maskedCode": "SPX********001",
         "points": 2500,
-        "expectedCreditAt": "2026-10-30T16:22:11.000Z",
+        "expectedCreditAt": "2026-11-02T11:38:08.000Z",
         "message": "Đã ghi nhận 2.500 Điểm Xanh chờ cộng. Điểm được cộng sau khi đơn giao thành công 14 ngày."
       },
       "zmp": [
@@ -98,26 +98,26 @@
       "text": [
         "Đã ghi nhận đơn shopee SPX********001",
         "2.500 Điểm Xanh đang chờ cộng",
-        "Dự kiến cộng từ 30/10/2026",
+        "Dự kiến cộng từ 02/11/2026",
         "2.500 Điểm Xanh",
-        "Dự kiến 30/10/2026"
+        "Dự kiến 02/11/2026"
       ]
     },
     "DB claim": {
-      "id": "cmvfgsk2s00di5ksfjcbp0ug6",
+      "id": "cmvjgx37f00dih9r1vimaylc0",
       "userId": "uat_returning",
       "state": "PENDING",
       "points": 2500,
       "ratePct": "1.0000",
       "multiplier": "1.000",
       "countsForTier": false,
-      "releaseAt": "2026-10-30T16:22:11.000Z",
+      "releaseAt": "2026-11-02T11:38:08.000Z",
       "reviewReason": null,
       "kind": "SCAN",
       "pancakeOrderId": "7700001",
       "orderStatus": "DELIVERED",
       "goodsValue": 250000,
-      "deliveredAt": "2026-10-16T16:22:11.000Z"
+      "deliveredAt": "2026-10-19T11:38:08.000Z"
     }
   }
 }

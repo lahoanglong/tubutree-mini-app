@@ -3,8 +3,8 @@
   "title": "reconcile-points.ts (DRY-RUN) trên DB lane: không user nào lệch lô STANDARD/CONVERTED; SQL tự đối chiếu cũng 0 lệch",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:42:12.858Z",
-  "lane": 7,
+  "at": "2026-10-22T11:40:30.171Z",
+  "lane": 2,
   "checks": [
     {
       "name": "thoát mã 0 và báo không lệch",
@@ -47,7 +47,7 @@
       },
       {
         "id": "uat_u2_mam",
-        "bal": 27680,
+        "bal": 28180,
         "tierId": "MAM_XANH"
       }
     ]

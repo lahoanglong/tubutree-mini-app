@@ -1,60 +1,106 @@
 {
   "id": "U2-19b",
-  "title": "Sửa kỳ (đổi chu kỳ giao 4 → 6 tuần) của gói đang chạy: màn sửa Mini App và PATCH /me/subscriptions/:id",
-  "verdict": "FAIL",
+  "title": "Sửa kỳ (Q22: đổi chu kỳ giao 4 → 6 tuần) trên màn Sửa gói Mini App: ngày giao kế tính lại từ đơn kỳ gần nhất (0h VN + chu kỳ, sớm nhất ngày mai); chu kỳ ngoài 4/6/8/10 bị từ chối",
+  "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:31:10.391Z",
-  "lane": 7,
+  "at": "2026-10-22T11:39:48.344Z",
+  "lane": 2,
   "checks": [
     {
-      "name": "màn sửa có chọn chu kỳ giao",
-      "ok": false,
+      "name": "màn sửa có đủ 4 lựa chọn chu kỳ 4/6/8/10 tuần",
+      "ok": true,
+      "detail": [
+        "4 tuần",
+        "6 tuần",
+        "8 tuần",
+        "10 tuần"
+      ]
+    },
+    {
+      "name": "UI: PATCH 200, DB intervalWeeks 6",
+      "ok": true,
       "detail": {
-        "sheet": [
-          "Mỗi 4 tuần · 156.640đ",
-          "Thanh toán: COD",
-          "Giao tới: 12 Lê Lợi, Phường Bến Thành",
-          "Sửa gói định kỳ",
-          "Số lượng mỗi kỳ",
-          "Thanh toán mỗi kỳ",
-          "Thanh toán khi nhận hàng (COD)",
-          "Giao tới"
-        ],
-        "hasInterval": 0
+        "status": 200,
+        "intervalWeeks": 6
       }
     },
     {
-      "name": "API đổi chu kỳ 4 → 6 tuần",
-      "ok": false,
+      "name": "nextRunAt tính lại từ đơn kỳ gần nhất: 0h VN ngày tạo đơn + 42 ngày, sớm nhất 0h VN ngày mai",
+      "ok": true,
+      "detail": {
+        "nextRunAt": "2026-12-02T17:00:00.000Z",
+        "expectNext": "2026-12-02T17:00:00.000Z",
+        "driftMs": 0
+      }
+    },
+    {
+      "name": "API trả nextRunAt khớp DB",
+      "ok": true,
+      "detail": "2026-12-02T17:00:00.000Z"
+    },
+    {
+      "name": "chu kỳ 5 tuần bị từ chối 400, DB giữ 6",
+      "ok": true,
       "detail": {
         "status": 400,
-        "message": [
-          "Không nhận trường «intervalWeeks»."
-        ],
-        "intervalWeeks": 4
+        "intervalWeeks": 6
       }
+    },
+    {
+      "name": "đổi chu kỳ không tạo đơn",
+      "ok": true,
+      "detail": 1
     }
   ],
   "evidence": {
-    "màn Sửa gói định kỳ": {
+    "trước": {
+      "intervalWeeks": 4,
+      "nextRunAt": "2026-11-19T11:39:40.170Z",
+      "lastOrder": {
+        "code": "TUBUSUB9180167227",
+        "createdAt": "2026-10-22T11:39:40.186Z"
+      },
+      "expectNext": "2026-12-02T17:00:00.000Z"
+    },
+    "màn Sửa gói định kỳ (bấm \"6 tuần\" rồi \"Lưu thay đổi\")": {
       "sheet": [
+        "Chờ thanh toán",
         "Mỗi 4 tuần · 156.640đ",
         "Thanh toán: COD",
         "Giao tới: 12 Lê Lợi, Phường Bến Thành",
         "Sửa gói định kỳ",
         "Số lượng mỗi kỳ",
+        "Chu kỳ giao",
+        "4 tuần",
+        "6 tuần",
+        "8 tuần",
+        "10 tuần",
         "Thanh toán mỗi kỳ",
         "Thanh toán khi nhận hàng (COD)",
         "Giao tới"
       ],
-      "hasInterval": 0
+      "options": [
+        "4 tuần",
+        "6 tuần",
+        "8 tuần",
+        "10 tuần"
+      ],
+      "hint": [
+        "Lần giao kế tiếp: 03/12/2026"
+      ],
+      "status": 200,
+      "reqBody": "{\"intervalWeeks\":6}",
+      "resp": {
+        "intervalWeeks": 6,
+        "nextRunAt": "2026-12-02T17:00:00.000Z"
+      }
     },
-    "PATCH intervalWeeks 6 (API)": {
+    "PATCH intervalWeeks 5 (API)": {
       "status": 400,
       "message": [
-        "Không nhận trường «intervalWeeks»."
+        "Chu kỳ giao chỉ nhận một trong: 4, 6, 8, 10."
       ],
-      "intervalWeeks": 4
+      "intervalWeeks": 6
     }
   }
 }

@@ -25,7 +25,7 @@ await rec.run('U6-97', { role: 'Khách quay lại', journey: 'Pancake thật', s
 
 await rec.run('U6-98', { role: 'Khách quay lại', journey: 'Gomdon, Zalo OA, ZaloPay', steps: 'Chọn thu gom rác tận nhà (Gomdon); nhận tin Zalo OA khi đơn đổi trạng thái; trả bằng ZaloPay', expected: 'Gomdon nhận yêu cầu; tin OA đến máy khách; ZaloPay không xuất hiện ở web (Q4: web chỉ nhận chuyển khoản và COD)' }, async (c) => {
   c.ev('cấu hình lane', [val('GOMDON_BASE_URL'), secretFree('ZALO_OA_ACCESS_TOKEN'), 'waste.lane_pickup_enabled=false']);
-  c.blocked('Không có tài khoản Gomdon, OA và ZaloPay thật; đường thu gom tận nhà đang tắt trong cấu hình mặc định. Web phải chỉ nhận chuyển khoản và COD theo Q4; thực tế còn hiện Ví Tubu (xem U6-37).');
+  c.blocked('Không có tài khoản Gomdon, OA và ZaloPay thật; đường thu gom tận nhà đang tắt trong cấu hình mặc định. Web trả bằng COD, chuyển khoản và Ví Tubu (chủ giải thích lại Web Q4 ngày 2026-10-20), ZaloPay vẫn ẩn (xem U6-37).');
 });
 
 await finish(rec);

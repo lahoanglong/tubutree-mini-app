@@ -118,8 +118,9 @@ for (const w of WIDTHS) {
 }
 
 // ───────────── U6-51 tìm đơn ở trang tài khoản
-await rec.run('U6-51', { role: 'Khách quay lại', journey: 'Tìm đơn', steps: 'Mở /tai-khoan, gõ mã đơn / tên sản phẩm / chuỗi lạ vào ô "Mã đơn hoặc tên sản phẩm" (390px)', expected: 'Mã đơn: đúng 1 đơn; tên sản phẩm: chỉ đơn có sản phẩm đó; chuỗi lạ: thông báo không có đơn; nút "Xóa tìm kiếm" quay về danh sách' }, async (c) => {
-  const s = await openWeb(U, { width: 390, path: '/' });
+await rec.run('U6-51', { role: 'Khách quay lại', journey: 'Tìm đơn', steps: 'Mở /tai-khoan, gõ mã đơn / tên sản phẩm / chuỗi lạ vào ô "Mã đơn hoặc tên sản phẩm" (1440px; ở 390px không còn ô tìm, giống Mini App)', expected: 'Mã đơn: đúng 1 đơn; tên sản phẩm: chỉ đơn có sản phẩm đó; chuỗi lạ: thông báo không có đơn; nút "Xóa tìm kiếm" quay về danh sách' }, async (c) => {
+  // Khổ điện thoại (PR #24): hub /tai-khoan giống Mini App, không còn khối "Đơn hàng của tôi" kèm ô tìm; ô tìm chỉ còn từ md (Mini App cũng không có ô tìm đơn).
+  const s = await openWeb(U, { width: 1440, path: '/' });
   await nav(s, '/tai-khoan');
   const input = s.page.getByPlaceholder('Mã đơn hoặc tên sản phẩm');
   const search = async (q) => {
@@ -155,10 +156,12 @@ for (const w of WIDTHS) {
       const t = await bodyText(s.page);
       const o = await orderRow(code);
       const items = await sql(`SELECT "productName", "variationName", "unitPrice"::int u, quantity::int q, oi.total::int t FROM order_items oi JOIN orders o ON o.id = oi."orderId" WHERE o.code = $1`, code);
-      c.ok(`${label}: tiêu đề "Đơn hàng #${code}"`, t.includes(`Đơn hàng #${code}`));
+      // Chi tiết đơn giống Mini App (PR #24): tiêu đề "Chi tiết đơn hàng" + mã đơn ở dòng riêng, không còn "Đơn hàng #mã".
+      c.ok(`${label}: tiêu đề "Chi tiết đơn hàng" và mã ${code}`, /Chi tiết đơn hàng/.test(t) && t.includes(code));
       c.ok(`${label}: tổng ${vnd(o.total)} và tạm tính ${vnd(o.subtotal)} khớp DB`, t.includes(vnd(o.total)) && t.includes(vnd(o.subtotal)), { o });
       c.ok(`${label}: ship ${o.fee === 0 ? 'Miễn phí' : vnd(o.fee)} khớp DB`, o.fee === 0 ? /Phí vận chuyển\s*\n?Miễn phí/.test(t) : t.includes(vnd(o.fee)), { fee: o.fee });
-      for (const it of items) c.ok(`${label}: dòng "${it.productName}" ${vnd(it.u)} × ${it.q} = ${vnd(it.t)}`, t.includes(`${vnd(it.u)} × ${it.q}`) && t.includes(vnd(it.t)), it);
+      // Khổ điện thoại: "Tên · biến thể ×SL" + thành tiền dòng, không có đơn giá; từ md vẫn có "đơn giá × SL".
+      for (const it of items) c.ok(`${label}: dòng "${it.productName}" ${w >= 768 ? `${vnd(it.u)} × ${it.q} = ` : `×${it.q} = `}${vnd(it.t)}`, t.includes(it.productName) && t.includes(vnd(it.t)) && (w >= 768 ? t.includes(`${vnd(it.u)} × ${it.q}`) : t.includes(`${it.variationName} ×${it.q}`)), it);
       if (extra) await extra(t, o);
       const ox = await overflowX(s.page);
       c.ok(`${label}: không tràn ngang`, ox.sw <= ox.iw + 1, ox);
@@ -167,12 +170,13 @@ for (const w of WIDTHS) {
     };
     await check('bank', 'chờ chuyển khoản', async (t, o) => {
       c.ok('hiện "Đang chờ" + khung QR (STK 8386790906)', /chờ bạn chuyển khoản/.test(t) && t.includes('8386790906'), t.slice(0, 200));
-      c.ok('phương thức "Chuyển khoản ngân hàng", tình trạng "Chưa thanh toán"', /Chuyển khoản ngân hàng/.test(t) && /Chưa thanh toán/.test(t));
+      // Dòng "Tình trạng" chỉ có từ md (Mini App không có dòng này ở điện thoại).
+      c.ok(w >= 768 ? 'phương thức "Chuyển khoản", tình trạng "Chưa thanh toán"' : 'phương thức "Chuyển khoản"', /Thanh toán\s*\n\s*Chuyển khoản/.test(t) && (w < 768 || /Chưa thanh toán/.test(t)), t.slice(t.indexOf('Tổng cộng')));
       c.ok('nút "Hủy đơn" có (đơn chưa trả)', (await s.page.getByRole('button', { name: 'Hủy đơn' }).count()) > 0);
     });
     await check('cod', 'COD đã xác nhận', async (t, o) => {
       c.ok('chip "Đã xác nhận" hoặc tương đương', /Đã xác nhận|Chờ xử lý|Đang xử lý/.test(t), t.slice(0, 160));
-      c.ok('phương thức COD, "Chưa thanh toán"', /Thanh toán khi nhận hàng/.test(t) && /Chưa thanh toán/.test(t));
+      c.ok(w >= 768 ? 'phương thức COD, "Chưa thanh toán"' : 'phương thức COD', /Khi nhận hàng \(COD\)/.test(t) && (w < 768 || /Chưa thanh toán/.test(t)), t.slice(t.indexOf('Tổng cộng')));
       c.ok('địa chỉ giao 12 Lê Lợi + SĐT người nhận', /12 Lê Lợi/.test(t) && /0901000003|0901 000 003/.test(t.replace(/\s/g, ' ')), t.slice(t.indexOf('Giao hàng'), t.indexOf('Giao hàng') + 200));
       c.ok('có nút "Hủy đơn"', (await s.page.getByRole('button', { name: 'Hủy đơn' }).count()) > 0);
       c.ok('ghi chú điểm: sẽ nhận điểm sau khi giao', new RegExp(String(o.pe).replace(/\B(?=(\d{3})+(?!\d))/g, '.?')).test(t) || /Điểm Xanh/.test(t), t.slice(t.indexOf('Phương thức')));
@@ -186,7 +190,7 @@ for (const w of WIDTHS) {
       c.ok('có câu giải thích "Đơn đã giao cho đơn vị vận chuyển nên không huỷ được"', /không huỷ được|không hủy được/.test(t), t.slice(0, 300));
     });
     await check('dlv', 'đã giao', async (t, o) => {
-      c.ok('chip "Đã giao"', /Đã giao/.test(t.slice(0, 300)), t.slice(0, 160));
+      c.ok('chip "Giao thành công" (nhãn trạng thái của Mini App)', /Giao thành công/.test(t.slice(0, 300)), t.slice(0, 160));
       c.ok('có "Viết đánh giá" cho từng sản phẩm', (await s.page.getByRole('link', { name: /Viết đánh giá/ }).count()) === 2, await s.page.getByRole('link', { name: /Viết đánh giá/ }).count());
       c.ok('có nút "Mua lại đơn này"', (await s.page.getByRole('button', { name: 'Mua lại đơn này' }).count()) === 1);
       c.ok('có nút "Yêu cầu đổi/trả" trong hạn 7 ngày', (await s.page.getByRole('button', { name: /Yêu cầu đổi\/trả/ }).count()) === 1);

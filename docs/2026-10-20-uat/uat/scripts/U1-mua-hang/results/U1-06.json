@@ -13,9 +13,9 @@
       "ok": true,
       "detail": {
         "Quà khách mới": 126,
-        "Danh mục": 453.859375,
-        "Ưu đãi giờ vàng": 767.359375,
-        "Bán chạy": 1031.921875
+        "Danh mục": 475.828125,
+        "Ưu đãi giờ vàng": 855.140625,
+        "Bán chạy": 1119.703125
       }
     },
     {
@@ -52,9 +52,9 @@
       "label": "khách mới: toạ độ y các vùng",
       "data": {
         "Quà khách mới": 126,
-        "Danh mục": 453.859375,
-        "Ưu đãi giờ vàng": 767.359375,
-        "Bán chạy": 1031.921875
+        "Danh mục": 475.828125,
+        "Ưu đãi giờ vàng": 855.140625,
+        "Bán chạy": 1119.703125
       }
     },
     {
@@ -63,7 +63,7 @@
     },
     {
       "label": "chữ vùng Quà khách mới",
-      "data": "Quà khách mới\nVoucher chào mừng 30.000đ\nCho đơn từ 199.000đ · Dùng đến 18/11/2026\n\nMua trực tiếp tại Tubu Tree\n\nMiễn phí giao cho đơn đầu tiên từ 199.000đ\nMỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1đ\nĐặt định kỳ giảm 12% mỗi đơn\nChọn sản phẩm"
+      "data": "Quà khách mới\nMã giảm giá chào mừng 30.000đ\nCho đơn từ 199.000đ · Dùng đến 21/11/2026\n\nMua trực tiếp tại Tubu Tree\n\nMiễn phí giao hàng cho đơn đầu tiên từ 199.000đ\nMỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1đ\nĐặt định kỳ giảm 12% mỗi đơn\nChọn sản phẩm"
     },
     {
       "label": "khách quay lại: toạ độ y các vùng",
@@ -80,5 +80,5 @@
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:04:24.490Z"
+  "ranAt": "2026-10-22T11:34:58.892Z"
 }

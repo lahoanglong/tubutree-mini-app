@@ -3,8 +3,8 @@
   "title": "reconcile-wallet.ts (DRY-RUN) trên DB lane: walletBalance = SUM(wallet_transactions) mọi user",
   "verdict": "PASS",
   "blocked": null,
-  "at": "2026-10-19T16:42:13.034Z",
-  "lane": 7,
+  "at": "2026-10-22T11:40:30.355Z",
+  "lane": 2,
   "checks": [
     {
       "name": "thoát mã 0",

@@ -51,8 +51,8 @@
     {
       "label": "tài khoản khách vừa tạo bởi /auth/guest thật",
       "data": {
-        "id": "cmvffx1rf001r14pj8jl0g69f",
-        "zaloId": "guest_d_11ed0271-33a0-484c-b112-4a4432b056f2",
+        "id": "cmvjgqx5h0006zw9cg2llmb1k",
+        "zaloId": "guest_d_5020c2ba-f8b2-4710-96a7-c8da986cb03e",
         "phone": null
       }
     },
@@ -60,7 +60,7 @@
       "label": "sheet sau đăng nhập",
       "data": {
         "title": "Bạn nhận được ưu đãi",
-        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-C55UYH7Y đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 18/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-7QKSXFLR đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 21/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
       }
     },
     {
@@ -71,8 +71,8 @@
       "label": "SQL coupon_claims của mã",
       "data": [
         {
-          "userId": "cmvffx1rf001r14pj8jl0g69f",
-          "code": "HOPSAN-C55UYH7Y"
+          "userId": "cmvjgqx5h0006zw9cg2llmb1k",
+          "code": "HOPSAN-7QKSXFLR"
         }
       ]
     }
@@ -80,5 +80,5 @@
   "notes": [
     "Phần Zalo phía server (getUserInfo/resolvePhoneNumber) do bộ khung giả; nhánh gộp vào tài khoản Zalo có sẵn không thử được (README giới hạn 1)."
   ],
-  "ranAt": "2026-10-19T15:59:55.788Z"
+  "ranAt": "2026-10-22T11:34:11.342Z"
 }

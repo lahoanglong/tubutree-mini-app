@@ -11,7 +11,7 @@
     {
       "name": "áp mã thẻ: snackbar \"Đã áp dụng mã …\"",
       "ok": true,
-      "detail": "zi_check_circle_solid\nĐã áp dụng mã HOPSAN-D644F7ZB"
+      "detail": "Đã áp dụng mã HOPSAN-9CF8ZG2J"
     },
     {
       "name": "báo giá: giảm 30.000đ, phí giao 0đ, tổng 169.000đ",
@@ -26,8 +26,8 @@
               "storefrontId": null
             },
             "itemIds": [
-              "cmvfgcbaz00b314pjnsfluv13",
-              "cmvfgcbbl00bb14pjs5hu0m1c"
+              "cmvjgs2nr0048zw9cqg525auu",
+              "cmvjgs2o3004gzw9chgrn8yj5"
             ],
             "subtotal": 199000,
             "discount": 30000,
@@ -49,7 +49,7 @@
         "pointsPartnerNote": null,
         "pointsNotice": null,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 169000,
         "pointsEarned": 3380,
         "pointsBalance": 0,
@@ -59,7 +59,7 @@
         "lockedPoints": 0,
         "items": [
           {
-            "id": "cmvfgcbaz00b314pjnsfluv13",
+            "id": "cmvjgs2nr0048zw9cqg525auu",
             "variationId": "cmqfuw9jt0005w1vfkndxukxy",
             "productId": "p-fuwa-dishwash",
             "productName": "Nước rửa chén sinh học Fuwa3e",
@@ -84,7 +84,7 @@
             "partnerOwned": false
           },
           {
-            "id": "cmvfgcbbl00bb14pjs5hu0m1c",
+            "id": "cmvjgs2o3004gzw9chgrn8yj5",
             "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
             "productId": "p-fuwa-glass",
             "productName": "Nước lau kính enzyme Fuwa3e",
@@ -129,7 +129,7 @@
     {
       "name": "màn thành công",
       "ok": true,
-      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026101996573\nTổng thanh toán\n169.000đ\nChuẩn bị tiền mặt khi nhận hàng\nĐiểm Xanh sẽ nhận\n+3.380 điểm\n3.380 Điểm Xanh sẽ về tay"
+      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026102209426\nTổng thanh toán\n169.000đ\nChuẩn bị tiền mặt khi nhận hàng\nĐiểm Xanh sẽ nhận\n+3.380 điểm\n3.380 Điểm Xanh sẽ về tay"
     },
     {
       "name": "DB: CONFIRMED/COD/UNPAID",
@@ -189,16 +189,16 @@
     {
       "label": "nhận thẻ",
       "data": {
-        "code": "HOPSAN-D644F7ZB",
+        "code": "HOPSAN-9CF8ZG2J",
         "alreadyClaimed": false
       }
     },
     {
-      "label": "áp mã HOPSAN-D644F7ZB",
+      "label": "áp mã HOPSAN-9CF8ZG2J",
       "data": {
         "status": 201,
-        "snackbar": "zi_check_circle_solid\nĐã áp dụng mã HOPSAN-D644F7ZB",
-        "couponCode": "HOPSAN-D644F7ZB",
+        "snackbar": "Đã áp dụng mã HOPSAN-9CF8ZG2J",
+        "couponCode": "HOPSAN-9CF8ZG2J",
         "discount": 30000,
         "message": null
       }
@@ -223,7 +223,7 @@
         "pointsUsed": 0,
         "pointsDiscount": 0,
         "shippingFee": 0,
-        "firstOrderShipWaived": 19000,
+        "firstOrderShipWaived": 0,
         "total": 169000,
         "pointsEarned": 3380
       }
@@ -236,7 +236,7 @@
       "label": "đặt đơn",
       "data": {
         "status": 201,
-        "code": "TUBU2026101996573",
+        "code": "TUBU2026102209426",
         "button": "Đặt hàng · 169.000đ"
       }
     },
@@ -247,9 +247,9 @@
     {
       "label": "SQL đơn",
       "data": {
-        "id": "cmvfgchdg00by14pjklw4hw03",
-        "code": "TUBU2026101996573",
-        "userId": "u1_c11_gc9vgbe",
+        "id": "cmvjgs9fb0053zw9cfjrvjovu",
+        "code": "TUBU2026102209426",
+        "userId": "u1_c11_gs28hpn",
         "status": "CONFIRMED",
         "paymentMethod": "COD",
         "paymentStatus": "UNPAID",
@@ -263,12 +263,12 @@
         "total": 169000,
         "pointsEarned": 3380,
         "pointsUsed": 0,
-        "couponCode": "HOPSAN-D644F7ZB",
+        "couponCode": "HOPSAN-9CF8ZG2J",
         "pancakeOrderId": "9200001",
         "paidAt": null,
         "pancakeAttention": null,
         "pancakePaidReported": null,
-        "createdAt": "2026-10-19T16:11:51.412Z",
+        "createdAt": "2026-10-22T11:35:12.311Z",
         "items": [
           {
             "sku": "FUWA-DW-1L",
@@ -291,7 +291,7 @@
         ],
         "redemptions": [
           {
-            "code": "HOPSAN-D644F7ZB",
+            "code": "HOPSAN-9CF8ZG2J",
             "usedCount": 1,
             "usageLimit": 1
           }
@@ -302,11 +302,11 @@
     {
       "label": "SQL mã thẻ",
       "data": {
-        "code": "HOPSAN-D644F7ZB",
+        "code": "HOPSAN-9CF8ZG2J",
         "usedCount": 1,
         "usageLimit": 1,
         "perUserLimit": 1,
-        "endAt": "2026-12-18T15:27:52.028Z",
+        "endAt": "2026-12-21T11:30:15.924Z",
         "isActive": true,
         "redemptions": 1,
         "claims": 1
@@ -344,10 +344,10 @@
         "cod": 169000,
         "total_discount": 30000,
         "shipping_fee": 0,
-        "custom_id": "TUBU2026101996573"
+        "custom_id": "TUBU2026102209426"
       }
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:11:53.221Z"
+  "ranAt": "2026-10-22T11:35:13.921Z"
 }

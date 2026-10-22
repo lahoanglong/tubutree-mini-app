@@ -7,12 +7,12 @@
     ],
     [
       "dashboard",
-      "Tổng quan KPI",
+      "Tổng quan chỉ số",
       "GET /admin/dashboard/stats"
     ],
     [
       "analytics",
-      "Retention & North-star",
+      "Giữ chân khách & chỉ số chính",
       "GET /admin/analytics/retention-daily"
     ],
     [
@@ -87,7 +87,7 @@
     ],
     [
       "payouts",
-      "Duyệt yêu cầu rút tiền",
+      "Yêu cầu rút tiền",
       "GET /admin/payouts"
     ],
     [
@@ -137,17 +137,17 @@
     ],
     [
       "coupons",
-      "Voucher",
+      "Mã giảm giá",
       "GET /admin/coupons"
     ],
     [
       "flashSales",
-      "Flash Sale",
+      "Giờ vàng",
       "GET /admin/flash-sales"
     ],
     [
       "engagement",
-      "Nhiệm vụ & quà đổi điểm",
+      "Nhiệm vụ",
       "GET /admin/engagement/missions"
     ],
     [
@@ -157,12 +157,12 @@
     ],
     [
       "contentKit",
-      "Content Kit CTV",
-      "GET /admin/content-kits/p-fuwa-floor"
+      "Bộ nội dung CTV",
+      "GET /admin/content-kits/p-bhnong-honey"
     ],
     [
       "academy",
-      "Academy",
+      "Học viện CTV",
       "GET /admin/academy/courses"
     ],
     [
@@ -256,8 +256,8 @@
       "ui": {
         "labels": [
           "Việc cần xử lý",
-          "Tổng quan KPI",
-          "Retention & North-star",
+          "Tổng quan chỉ số",
+          "Giữ chân khách & chỉ số chính",
           "Báo cáo",
           "Đơn hàng",
           "Đơn ngoài app",
@@ -272,7 +272,7 @@
           "Lịch sử giá đại lý",
           "Hoa hồng & giá sỉ",
           "Danh mục sản phẩm",
-          "Duyệt yêu cầu rút tiền",
+          "Yêu cầu rút tiền",
           "Duyệt SP đối tác",
           "Gian hàng",
           "Nhãn hàng",
@@ -282,12 +282,12 @@
           "Gói định kỳ",
           "Tích điểm tại quầy",
           "Đổi rác",
-          "Voucher",
-          "Flash Sale",
-          "Nhiệm vụ & quà đổi điểm",
+          "Mã giảm giá",
+          "Giờ vàng",
+          "Nhiệm vụ",
           "Câu hỏi thường gặp",
-          "Content Kit CTV",
-          "Academy",
+          "Bộ nội dung CTV",
+          "Học viện CTV",
           "CSKH mẫu tin nhanh",
           "Mẫu thông báo",
           "Nhân sự & quyền",
@@ -358,7 +358,7 @@
           "Hoàn tiền sàn ngoài",
           "Thưởng đại lý",
           "Đại lý & công nợ",
-          "Duyệt yêu cầu rút tiền",
+          "Yêu cầu rút tiền",
           "Đổi rác"
         ],
         "url": "http://localhost:3252/admin",
@@ -417,11 +417,11 @@
           "Báo cáo",
           "Cộng đồng",
           "Đổi rác",
-          "Voucher",
-          "Flash Sale",
+          "Mã giảm giá",
+          "Giờ vàng",
           "Câu hỏi thường gặp",
-          "Content Kit CTV",
-          "Academy",
+          "Bộ nội dung CTV",
+          "Học viện CTV",
           "Mẫu thông báo"
         ],
         "url": "http://localhost:3252/admin",

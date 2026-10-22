@@ -51,7 +51,7 @@
     {
       "name": "máy ghi chạm đầu source=shopee (gửi kèm đăng nhập)",
       "ok": true,
-      "detail": "{\"source\":\"shopee\",\"at\":\"2026-10-19T16:32:52.396Z\"}"
+      "detail": "{\"source\":\"shopee\",\"at\":\"2026-10-22T11:39:21.774Z\"}"
     },
     {
       "name": "mã chờ nhận đã xoá khỏi máy sau khi nhận",
@@ -68,7 +68,7 @@
       "label": "sheet",
       "data": {
         "title": "Bạn nhận được ưu đãi",
-        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-EKSS89WU đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 18/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-AWEK42AS đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 21/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
       }
     },
     {
@@ -79,15 +79,15 @@
       "label": "SQL coupon_claims của khách",
       "data": [
         {
-          "claimedAt": "2026-10-19T16:32:52.497Z",
-          "code": "HOPSAN-EKSS89WU",
-          "endAt": "2026-12-18T15:27:52.028Z"
+          "claimedAt": "2026-10-22T11:39:21.865Z",
+          "code": "HOPSAN-AWEK42AS",
+          "endAt": "2026-12-21T11:30:15.924Z"
         }
       ]
     },
     {
       "label": "localStorage tubu_first_touch",
-      "data": "{\"source\":\"shopee\",\"at\":\"2026-10-19T16:32:52.396Z\"}"
+      "data": "{\"source\":\"shopee\",\"at\":\"2026-10-22T11:39:21.774Z\"}"
     },
     {
       "label": "GET /me/coupons",
@@ -95,13 +95,12 @@
         "WELCOME30",
         "FREESHIP",
         "XANH10",
-        "HOPSAN-EKSS89WU",
-        "U1ONEE2BB",
-        "U1ONEFNSV",
-        "WELCOME-U1_A01_H3E0Y87"
+        "HOPSAN-AWEK42AS",
+        "U1ONETFZK",
+        "WELCOME-U1_A01_GXJM2HZ"
       ]
     }
   ],
   "notes": [],
-  "ranAt": "2026-10-19T16:32:53.495Z"
+  "ranAt": "2026-10-22T11:39:22.481Z"
 }

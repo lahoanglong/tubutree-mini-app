@@ -13,7 +13,7 @@ async function cancelOnMini(user, code, { wallet = false, shot } = {}) {
   const s = await open(L.n, user, { headless, path: `/order/${code}` });
   try {
     const p = s.page;
-    await p.getByRole('button', { name: 'Hủy đơn', exact: true }).first().click({ timeout: 25_000 });
+    await p.getByRole('button', { name: 'Huỷ đơn', exact: true }).first().click({ timeout: 25_000 });
     await sleep(600);
     if (wallet) {
       const w = p.getByRole('radio', { name: /Ví Tubu/ });
@@ -22,7 +22,7 @@ async function cancelOnMini(user, code, { wallet = false, shot } = {}) {
     const text = (await p.evaluate(() => document.body.innerText)).split('\n').filter((t) => /hoàn|Ví Tubu|hủy|huỷ/i.test(t)).slice(0, 8);
     if (shot) await p.screenshot({ path: path.join(SHOTS, `${shot}-confirm.png`) });
     const resp = p.waitForResponse((r) => r.url().endsWith(`/api/orders/${code}/cancel`) && r.request().method() === 'POST', { timeout: 30_000 });
-    await p.getByRole('button', { name: 'Hủy đơn', exact: true }).last().click();
+    await p.getByRole('button', { name: 'Huỷ đơn', exact: true }).last().click();
     const r = await resp;
     const body = await r.json().catch(() => null);
     await sleep(1500);
