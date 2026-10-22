@@ -63,6 +63,9 @@ export function formatRatePct(rate: number | string | null | undefined): string 
   return `${(v * 100).toFixed(1).replace(/\.0$/, '').replace('.', ',')}%`;
 }
 
+/** % bậc thưởng quý (đơn vị phần trăm, không phải tỉ lệ) ghi kiểu Việt, cùng đường với Mini App. */
+export const bonusPctText = (pct: number): string => formatRatePct(pct / 100);
+
 /** Chữ mời đăng ký: chỉ nêu con số khi cấu hình thật đã về, không hứa con số mặc định. */
 export const applyPitch = (maxDiscountPct: number | null | undefined): string =>
   maxDiscountPct ? `Giá sỉ đến ${formatRatePct(maxDiscountPct)} · công nợ · đặt hàng nhanh số lượng lớn.` : 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.';

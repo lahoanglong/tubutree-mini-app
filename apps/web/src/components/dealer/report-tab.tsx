@@ -10,7 +10,6 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText } from './dealer-shell';
 import { RewardsCard } from './rewards-card';
-import { bonusPctText } from '@/lib/bonus-pct';
 
 /** Báo cáo quý: doanh số đã chốt, thưởng theo bậc, tiến tới bậc kế, kèm phần thưởng mốc. */
 export function ReportTab() {
