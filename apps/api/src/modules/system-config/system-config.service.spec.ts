@@ -323,11 +323,16 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     ],
     // Vai trò hưởng hoa hồng CTV: rỗng là không ai hưởng, sai tên vai trò là âm thầm về mặc định — chặn ngay lúc ghi.
     ['affiliate.commission_eligible_roles', ['AFFILIATE', 'DEALER'], [[], 'AFFILIATE', ['CTV'], ['AFFILIATE', 1], { AFFILIATE: true }]],
-    // Bậc thưởng doanh số quý đại lý (DealerService.bonusTiers): ngưỡng tăng dần không trùng, % trong (0, 10], không rỗng.
+    // Bậc thưởng doanh số quý đại lý (DealerService.bonusTiers): ngưỡng tăng dần không trùng, % trong (0, 10], không giảm, tối đa 1 chữ số lẻ, không rỗng.
     [
       'dealer.quarterly_bonus_tiers',
       [{ min: 50_000_000, pct: 3 }, { min: 100_000_000, pct: 4.5 }],
       [
+        [{ min: 50_000_000, pct: 4 }, { min: 100_000_000, pct: 3 }],
+        [{ min: 50_000_000, pct: 2.5 }, { min: 100_000_000, pct: 3 }, { min: 200_000_000, pct: 2.9 }],
+        [{ min: 50_000_000, pct: 2.55 }],
+        [{ min: 50_000_000, pct: 3.333 }],
+        [{ min: 50_000_000, pct: 0.05 }],
         [],
         'x',
         { min: 50_000_000, pct: 3 },
@@ -366,6 +371,18 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     }
   });
 
+  it('dealer.quarterly_bonus_tiers: % bằng nhau giữa các bậc và 1 chữ số lẻ được nhận', async () => {
+    for (const v of [
+      [{ min: 50_000_000, pct: 3 }, { min: 100_000_000, pct: 3 }],
+      [{ min: 50_000_000, pct: 2.5 }, { min: 100_000_000, pct: 2.6 }, { min: 200_000_000, pct: 10 }],
+      [{ min: 50_000_000, pct: 0.7 }, { min: 100_000_000, pct: 1.1 }, { min: 200_000_000, pct: 2.3 }],
+    ]) {
+      const ok = mk(v);
+      await ok.svc.set('dealer.quarterly_bonus_tiers', v as never, 'admin1');
+      expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+  });
+
   it('dealer.quarterly_bonus_tiers: lỗi trả tiếng Việt nêu đúng chỗ sai', async () => {
     const msg = async (v: unknown) =>
       mk(null).svc.set('dealer.quarterly_bonus_tiers', v as never, 'admin1').then(
@@ -375,6 +392,8 @@ describe('SystemConfigService.set — biên cho khoá tiền/điểm/thanh toán
     expect(await msg([])).toMatch(/ít nhất một bậc/);
     expect(await msg([{ min: 50_000_000, pct: 3 }, { min: 50_000_000, pct: 4 }])).toMatch(/tăng dần, không trùng/);
     expect(await msg([{ min: 50_000_000, pct: 30 }])).toMatch(/lớn hơn 0 và không quá 10/);
+    expect(await msg([{ min: 50_000_000, pct: 4 }, { min: 100_000_000, pct: 3 }])).toMatch(/bậc thứ 2.*không được thấp hơn bậc thứ 1/);
+    expect(await msg([{ min: 50_000_000, pct: 2.55 }])).toMatch(/bậc thứ 1.*tối đa 1 chữ số/);
     expect(await msg([{ min: 50_000_000, pct: 3, note: 'x' }])).toMatch(/chỉ gồm "min"/);
   });
 

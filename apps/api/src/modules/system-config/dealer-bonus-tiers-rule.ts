@@ -4,6 +4,9 @@ export const DEALER_BONUS_TIERS_KEY = 'dealer.quarterly_bonus_tiers';
 const BONUS_PCT_MAX = 10;
 const BONUS_MIN_MAX = 100_000_000_000;
 const BONUS_TIERS_MAX_COUNT = 10;
+/** Số thực nhị phân làm 1.1 * 10 = 11.000000000000002, nên so với số nguyên gần nhất có dung sai thay vì so bằng. */
+const PCT_TENTH_EPSILON = 1e-9;
+const isAtMostOneDecimal = (pct: number) => Math.abs(pct * 10 - Math.round(pct * 10)) < PCT_TENTH_EPSILON;
 
 /**
  * DealerService.bonusTiers sắp xếp rồi đọc thẳng bảng này để trả thưởng bằng tiền: bậc sai hình dạng không bị phía đọc chặn
@@ -16,6 +19,7 @@ export function dealerBonusTiersProblem(value: unknown): string | null {
   }
   if (value.length > BONUS_TIERS_MAX_COUNT) return `tối đa ${BONUS_TIERS_MAX_COUNT} bậc`;
   let previous = 0;
+  let previousPct = 0;
   for (const [i, tier] of value.entries()) {
     const at = `bậc thứ ${i + 1}`;
     if (!tier || typeof tier !== 'object' || Array.isArray(tier)) return `${at} phải là {"min": ..., "pct": ...}`;
@@ -30,8 +34,13 @@ export function dealerBonusTiersProblem(value: unknown): string | null {
     if (typeof pct !== 'number' || !Number.isFinite(pct) || pct <= 0 || pct > BONUS_PCT_MAX) {
       return `${at}: "pct" phải là số lớn hơn 0 và không quá ${BONUS_PCT_MAX} (3 nghĩa là 3%)`;
     }
+    if (!isAtMostOneDecimal(pct)) return `${at}: "pct" chỉ được tối đa 1 chữ số thập phân (2,5 là được; 2,55 thì không)`;
     if (min <= previous) return `${at}: ngưỡng "min" phải tăng dần, không trùng với bậc trước`;
+    if (pct < previousPct) {
+      return `${at}: "pct" (${pct.toLocaleString('vi-VN')}%) không được thấp hơn bậc thứ ${i} (${previousPct.toLocaleString('vi-VN')}%), bậc sau phải bằng hoặc cao hơn`;
+    }
     previous = min;
+    previousPct = pct;
   }
   return null;
 }
