@@ -2202,6 +2202,32 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
       expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: GENERIC_REASON });
     });
 
+    it('phí giao dưới ngưỡng cấu hình bằng 0đ (chiến dịch freeship) mà đơn chưa đạt ngưỡng: không nói "đơn từ 199.000đ", dùng câu chung', async () => {
+      const { svc, coupons, loyalty } = setup({
+        config: config({ ...Q12, 'shipping.first_order_free_enabled': false, 'shipping.flat_fee_below_threshold': 0 }),
+        cartData: SMALL,
+      });
+      const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+      expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: GENERIC_REASON });
+    });
+
+    it('báo giá, giỏ có hàng giờ vàng đạt ngưỡng: câu lý do freeship không kèm ngoặc "hàng giờ vàng không được tính", giống câu ở giỏ', async () => {
+      const flashCart = {
+        items: [
+          { id: 'l1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 119000, quantity: 2, total: 238000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 10 },
+        ],
+        subtotal: 238000, discount: 0, freeship: false, couponCode: 'FREESHIP',
+      };
+      const { svc } = setup({
+        config: config({ ...Q12, 'shipping.first_order_free_enabled': false }),
+        cartData: flashCart,
+        validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+      });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.couponApplied).toBe(false);
+      expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${THRESHOLD_REASON}`);
+    });
+
     it('đơn chưa đạt ngưỡng: FREESHIP vẫn dùng được và miễn phí giao như cũ', async () => {
       const { svc, coupons, loyalty } = setup({ config: config({ ...Q12, 'shipping.first_order_free_enabled': false }), cartData: SMALL });
       const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', { addressId: 'addr1' } as never);

@@ -1183,7 +1183,8 @@ export class CheckoutService {
     const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved, alreadyFreeReason ?? undefined) : null;
     const couponApplied = couponValid && nothingReason === null;
     if (nothingReason !== null) {
-      couponNotice = couponNotAppliedNotice(nothingReason, flashSubtotal > 0, combo.total > 0);
+      // Hàng giờ vàng và phần giảm combo vẫn tính vào ngưỡng phí giao, nên câu lý do freeship không kèm ngoặc loại trừ của điều kiện mã.
+      couponNotice = freeship ? couponNotAppliedNotice(nothingReason, false, false) : couponNotAppliedNotice(nothingReason, flashSubtotal > 0, combo.total > 0);
     } else if (couponApplied && discount > 0 && flashSubtotal > 0) {
       couponNotice = couponFlashExcludedNotice(goodsAfterCombo);
     }
@@ -1266,8 +1267,12 @@ export class CheckoutService {
         const base = await this.pricing.calcShippingFee({ subtotal: subtotals[i]!, tierId });
         // Freeship đơn đầu miễn trước mã freeship: mã chỉ "miễn được" phần còn lại, nên không bị tiêu cho đơn đã miễn phí giao.
         const fee = firstOrderShippingFee(base, subtotals[i]!, firstOrderFrom);
-        // Ngưỡng chỉ cần khi phí đã 0 từ gốc: đó là lúc mã freeship phải nói "đã đạt ngưỡng".
-        const thresholdFree = base === 0 && this.config ? await freeShipThreshold(this.config, tierId) : null;
+        // Ngưỡng chỉ cần khi phí đã 0 từ gốc. Phí dưới ngưỡng cũng có thể cấu hình 0đ, nên chỉ nêu số ngưỡng khi đơn thật sự đạt nó; chưa đạt thì 0 (câu chung).
+        let thresholdFree: number | null = null;
+        if (base === 0 && this.config) {
+          const t = await freeShipThreshold(this.config, tierId);
+          thresholdFree = subtotals[i]! >= t ? t : 0;
+        }
         out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee, thresholdFree });
         continue;
       }
