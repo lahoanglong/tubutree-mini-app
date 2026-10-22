@@ -495,9 +495,7 @@ function Dashboard() {
                   <li key={l.id} className="flex items-center justify-between gap-2 border-b border-stone-200 py-2">
                     <div>
                       <div className="text-sm font-semibold text-stone-900">{l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}</div>
-                      <div className="text-xs text-stone-600">
-                        {l.clicks} lượt bấm · {l.conversions} đơn
-                      </div>
+                      <div className="text-xs text-stone-600">{l.clicks} lượt bấm</div>
                     </div>
                     <button
                       type="button"

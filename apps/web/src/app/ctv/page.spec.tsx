@@ -316,7 +316,8 @@ describe('/ctv — bảng điều khiển', () => {
     const full = mount();
     await flush();
     expect(full.container.textContent).toContain('Trang chủ');
-    expect(full.container.textContent).toContain('3 lượt bấm · 1 đơn');
+    expect(full.container.textContent).toContain('3 lượt bấm');
+    expect(full.container.textContent).not.toContain('3 lượt bấm ·');
     expect(full.container.textContent).toContain('Lượt bấm');
     click(byText(full.container, 'button', 'Sao chép'));
     await flush();
