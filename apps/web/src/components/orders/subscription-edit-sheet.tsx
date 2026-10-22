@@ -21,12 +21,13 @@ const MAX_QTY = 99;
 export function subscriptionPatch(
   sub: Pick<SubscriptionDTO, 'quantity' | 'addressId' | 'paymentMethod' | 'intervalWeeks'>,
   next: { quantity: number; addressId: string | undefined; paymentMethod: SubscriptionPaymentMethod; intervalWeeks: number },
+  canEditInterval = true,
 ) {
   const patch: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number } = {};
   if (next.quantity !== sub.quantity) patch.quantity = next.quantity;
   if (next.addressId && next.addressId !== sub.addressId) patch.addressId = next.addressId;
   if (next.paymentMethod !== (sub.paymentMethod ?? 'COD')) patch.paymentMethod = next.paymentMethod;
-  if (next.intervalWeeks !== sub.intervalWeeks) patch.intervalWeeks = next.intervalWeeks;
+  if (canEditInterval && next.intervalWeeks !== sub.intervalWeeks) patch.intervalWeeks = next.intervalWeeks;
   return patch;
 }
 
@@ -40,8 +41,10 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
   const addrQ = useQuery(addressesQuery(coreHttp));
   const walletQ = useQuery(walletQuery(coreHttp));
 
-  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks });
-  const nextRun = nextRunAfterIntervalChange(sub, weeks);
+  // API cũ chưa nhận intervalWeeks (400); chỉ API mới mới trả khoá lastOrderAt (kể cả null), dùng làm dấu hiệu hỗ trợ.
+  const canEditInterval = 'lastOrderAt' in sub;
+  const patch = subscriptionPatch(sub, { quantity, addressId, paymentMethod: payment, intervalWeeks: weeks }, canEditInterval);
+  const nextRun = canEditInterval ? nextRunAfterIntervalChange(sub, weeks) : null;
   const dirty = Object.keys(patch).length > 0;
 
   const save = useMutation({
@@ -78,17 +81,21 @@ export function SubscriptionEditSheet({ sub, onClose, onSaved }: { sub: Subscrip
         <QuantitySelector value={quantity} min={1} max={MAX_QTY} onChange={setQuantity} />
       </div>
 
-      <SectionLabel>Chu kỳ giao</SectionLabel>
-      <div role="group" aria-label="Chu kỳ giao" className="flex flex-wrap gap-2 py-1">
-        {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
-          <Chip key={w} selected={weeks === w} onPress={() => setWeeks(w)}>
-            {w} tuần
-          </Chip>
-        ))}
-      </div>
-      {nextRun && <p className="text-xs text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
-      {sub.status === 'PAUSED' && weeks !== sub.intervalWeeks && (
-        <p className="text-xs text-stone-600">Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.</p>
+      {canEditInterval && (
+        <>
+        <SectionLabel>Chu kỳ giao</SectionLabel>
+        <div role="group" aria-label="Chu kỳ giao" className="flex flex-wrap gap-2 py-1">
+          {SUBSCRIPTION_INTERVAL_WEEKS.map((w) => (
+            <Chip key={w} selected={weeks === w} onPress={() => setWeeks(w)}>
+              {w} tuần
+            </Chip>
+          ))}
+        </div>
+        {nextRun && <p className="text-xs text-stone-600">Lần giao kế tiếp: {formatVnDate(vnDateOf(nextRun))}</p>}
+        {sub.status === 'PAUSED' && weeks !== sub.intervalWeeks && (
+          <p className="text-xs text-stone-600">Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.</p>
+        )}
+        </>
       )}
 
       <SectionLabel>Thanh toán mỗi kỳ</SectionLabel>

@@ -203,16 +203,29 @@ describe('SubscriptionsPanel', () => {
       expect(document.body.textContent).toContain('Gói đang tạm dừng: nếu đến lúc bật lại mà ngày này đã qua, ngày giao kế tiếp sẽ tính từ ngày bật lại.');
     });
 
-    it('API cũ chưa trả lastOrderAt: vẫn đổi được chu kỳ, không hứa ngày', async () => {
+    it('API cũ không có khoá lastOrderAt: không hiện chọn chu kỳ, không bao giờ gửi intervalWeeks', async () => {
       subs = [SUB];
       const c = await mount();
       click(btn('Sửa', c));
       await flush(6);
-      click(btn('6 tuần'));
-      expect(document.body.textContent).not.toContain('Lần giao kế tiếp');
+      expect(document.body.querySelector('[role="group"][aria-label="Chu kỳ giao"]')).toBeNull();
+      expect(document.body.textContent).not.toContain('Chu kỳ giao');
+      click(btn('Giảm số lượng'));
       click(btn('Lưu thay đổi'));
       await flush(8);
-      expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 6 });
+      expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ quantity: 1 });
+    });
+
+    it('API mới trả lastOrderAt là null (chưa có đơn kỳ): vẫn hiện chọn chu kỳ', async () => {
+      subs = [{ ...SUB_Q22, lastOrderAt: null }];
+      const c = await mount();
+      click(btn('Sửa', c));
+      await flush(6);
+      expect(document.body.querySelector('[role="group"][aria-label="Chu kỳ giao"]')).not.toBeNull();
+      click(btn('8 tuần'));
+      click(btn('Lưu thay đổi'));
+      await flush(8);
+      expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ intervalWeeks: 8 });
     });
   });
 
