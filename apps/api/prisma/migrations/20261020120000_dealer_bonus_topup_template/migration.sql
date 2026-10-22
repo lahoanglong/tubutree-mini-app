@@ -4,5 +4,5 @@
 -- Dữ liệu vận hành cho PROD (prod KHÔNG chạy `prisma db seed`) — idempotent, DO NOTHING: không ghi đè
 -- nội dung admin đã chỉnh (seed.ts cũng createOnly cho mẫu này).
 INSERT INTO "notification_templates" ("id", "code", "channel", "bodyTemplate") VALUES
-  ('nt-dealer-bonus-topup', 'DEALER_BONUS_TOPUP', 'INAPP', 'Trả bù thưởng doanh số {{quarter}}: có đơn của quý chốt sau ngày chốt thưởng, bạn được cộng thêm {{amount}}đ vào công nợ đại lý (doanh số đã chốt {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿')
+  ('nt-dealer-bonus-topup', 'DEALER_BONUS_TOPUP', 'INAPP', 'Trả bù thưởng doanh số {{quarter}}: có đơn của quý chốt sau ngày chốt thưởng, công nợ đại lý của bạn được giảm {{amount}}đ (doanh số đã chốt {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿')
 ON CONFLICT DO NOTHING;

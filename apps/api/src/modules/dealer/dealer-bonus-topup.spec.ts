@@ -14,7 +14,7 @@ const TIERS = [
   { min: 200_000_000, pct: 4 },
 ];
 
-type TopUpResult = { toppedUp: number; quarters: string[] };
+type TopUpResult = { toppedUp: number; quarters: string[]; failed: number };
 type WithTopUp = { topUpQuarterlyBonuses(now: Date): Promise<TopUpResult> };
 
 const makeConfig = (values: Record<string, unknown> = {}): SystemConfigService =>
@@ -94,7 +94,7 @@ describe('DealerService.topUpQuarterlyBonuses — cửa sổ trả bù', () => {
   it('cửa sổ = 0 ngày → tắt hẳn, không đụng DB', async () => {
     const { prisma } = makePrisma([]);
     const r = await svc(prisma, { 'dealer.bonus_topup_window_days': 0 }).service.topUpQuarterlyBonuses(new Date('2026-05-01T03:00:00Z'));
-    expect(r).toEqual({ toppedUp: 0, quarters: [] });
+    expect(r).toEqual({ toppedUp: 0, quarters: [], failed: 0 });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -144,7 +144,7 @@ describe('DealerService.topUpQuarterlyBonuses — số tiền bù', () => {
     const { service, notify } = svc(prisma);
     const r = await service.topUpQuarterlyBonuses(NOW);
 
-    expect(r).toEqual({ toppedUp: 1, quarters: ['Q1/2026'] });
+    expect(r).toEqual({ toppedUp: 1, quarters: ['Q1/2026'], failed: 0 });
     const row = ledger.find((l) => l.refType === 'QUARTER_BONUS_TOPUP')!;
     expect(row).toMatchObject({ userId: 'd1', delta: -4_800_000, refId: 'Q1/2026:topup:1' });
     expect(row.note).toContain('Trả bù thưởng quý Q1/2026');
@@ -240,6 +240,23 @@ describe('DealerService.topUpQuarterlyBonuses — chỉ bù phần do đơn ch�
     expect(r.quarters).toEqual([]);
   });
 
+  it('cửa sổ 9 ngày lúc 05:00 ngày 10 (giờ cron trả thưởng) → không quét, không để payout chạy tay sau đó thấy "đã trả"', async () => {
+    const { prisma } = makePrisma([A]);
+    const r = await svc(prisma, { 'dealer.bonus_topup_window_days': 9 }).service.topUpQuarterlyBonuses(new Date('2026-04-09T22:00:00Z'));
+    expect(r.quarters).toEqual([]);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('nhánh trả muộn mà thưởng theo doanh số tại hạn bằng 0 → không ghi dòng QUARTER_BONUS delta 0', async () => {
+    // Đơn chốt 03:00 ngày 10 giờ VN: sau hạn cửa sổ (00:00 ngày 10) nhưng trước mốc "đã thấy" (05:00) → bonusNow 0, bonusSeen > 0.
+    const settled = order('a', 120_000_000, '2026-03-10T03:00:00Z', '2026-04-09T20:00:00Z');
+    const { prisma, ledger } = makePrisma([settled]);
+    const { service } = svc(prisma);
+    (service as unknown as { topUpWindowDays: () => Promise<number> }).topUpWindowDays = async () => 9;
+    await service.topUpQuarterlyBonuses(new Date('2026-04-09T22:00:00Z'));
+    expect(ledger).toHaveLength(0);
+  });
+
   it('lần trả ngày 10 chưa chạy được (đã đạt bậc từ trước ngày 10) → trả trọn với ghi chú trung tính và báo như thưởng thường', async () => {
     const { prisma, ledger } = makePrisma([A]);
     const { service, notify } = svc(prisma);
@@ -300,5 +317,40 @@ describe('DealerService.payoutQuarterlyBonuses khi quý đã có khoản trả b
     const r = await (service as unknown as DealerService).payoutQuarterlyBonuses(new Date('2026-04-12T03:00:00Z'));
     expect(r.paid).toBe(0);
     expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('một đại lý lỗi không chặn cả lượt', () => {
+  const paid: Ledger = { userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026', note: null, createdAt: new Date('2026-04-09T21:00:00Z') };
+
+  function twoDealers(orders: OrderRow[], ledger: Ledger[]) {
+    const m = makePrisma(orders, ledger);
+    m.prisma.user.findMany = jest.fn(async () => [{ id: 'd1' }, { id: 'd2' }]);
+    const real = m.prisma.$transaction;
+    m.prisma.$transaction = jest.fn(async (cb: Parameters<typeof real>[0]) => {
+      if (m.prisma.$transaction.mock.calls.length === 1) throw new Error('db đứt kết nối');
+      return real(cb);
+    }) as typeof real;
+    return m;
+  }
+
+  it('trả bù: đại lý 1 ném lỗi (không phải P2002) → đại lý 2 vẫn được bù, kết quả đếm 1 lỗi', async () => {
+    const A = order('a', 120_000_000, '2026-03-10T03:00:00Z');
+    const D = order('d', 90_000_000, '2026-03-28T03:00:00Z', '2026-04-12T03:00:00Z');
+    const { prisma, ledger } = twoDealers([A, D], [{ ...paid }]);
+    const { service } = svc(prisma);
+    const r = await service.topUpQuarterlyBonuses(new Date('2026-04-20T03:00:00Z'));
+    expect(r).toEqual({ toppedUp: 1, quarters: ['Q1/2026'], failed: 1 });
+    expect(ledger.find((l) => l.refType === 'QUARTER_BONUS_TOPUP')).toMatchObject({ userId: 'd2', delta: -4_800_000 });
+  });
+
+  it('trả thưởng quý: đại lý 1 ném lỗi → đại lý 2 vẫn được trả, kết quả đếm 1 lỗi', async () => {
+    const ledger: Ledger[] = [];
+    const { prisma, tx } = twoDealers([order('a', 120_000_000, '2026-03-10T03:00:00Z')], ledger);
+    (tx.dealerCreditLedger as unknown as { findFirst: unknown }).findFirst = jest.fn(async ({ where }: { where: Where }) => ledger.find((l) => matches(l, where)) ?? null);
+    const { service } = svc(prisma);
+    const r = await (service as unknown as DealerService).payoutQuarterlyBonuses(new Date('2026-04-12T03:00:00Z'));
+    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026', failed: 1 });
+    expect(ledger[0]).toMatchObject({ userId: 'd2', refType: 'QUARTER_BONUS', delta: -3_600_000 });
   });
 });

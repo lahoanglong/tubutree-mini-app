@@ -826,7 +826,7 @@ export const NOTIFICATION_TEMPLATES = [
   // cùng mã/nội dung với migration 20260927100000_dealer_bonus_adjusted_template. createOnly: admin sửa nội
   // dung rồi thì chạy lại seed KHÔNG ghi đè.
   { id: 'nt-dealer-bonus-adjusted', code: 'DEALER_BONUS_ADJUSTED', channel: 'INAPP', bodyTemplate: 'Thưởng doanh số {{quarter}} đã được điều chỉnh do đơn {{order_code}} bị huỷ/trả: thu hồi {{amount}}đ (cộng lại vào công nợ đại lý). Thưởng {{quarter}} còn lại: {{remaining}}đ. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
-  { id: 'nt-dealer-bonus-topup', code: 'DEALER_BONUS_TOPUP', channel: 'INAPP', bodyTemplate: 'Trả bù thưởng doanh số {{quarter}}: có đơn của quý chốt sau ngày chốt thưởng, bạn được cộng thêm {{amount}}đ vào công nợ đại lý (doanh số đã chốt {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿', createOnly: true },
+  { id: 'nt-dealer-bonus-topup', code: 'DEALER_BONUS_TOPUP', channel: 'INAPP', bodyTemplate: 'Trả bù thưởng doanh số {{quarter}}: có đơn của quý chốt sau ngày chốt thưởng, công nợ đại lý của bạn được giảm {{amount}}đ (doanh số đã chốt {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿', createOnly: true },
   // A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): đại lý "Báo đã CK" giờ CHỈ tạo thông báo cho
   // admin xác nhận, không tự trừ nợ (DealerService.reportCreditPayment/adminRecordCreditPayment).
   { id: 'nt-dealer-credit-reported', code: 'DEALER_CREDIT_PAYMENT_REPORTED', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.', createOnly: true },

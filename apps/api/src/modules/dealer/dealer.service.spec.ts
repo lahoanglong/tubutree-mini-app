@@ -177,7 +177,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     });
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
-    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026' });
+    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026', failed: 0 });
     const led = (prisma.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data;
     expect(led).toMatchObject({ userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026' }); // 120tr × 3%
     expect(notifications.notify).toHaveBeenCalledWith('d1', 'DEALER_BONUS_PAID', expect.objectContaining({ quarter: 'Q1/2026' }));
@@ -226,7 +226,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     });
     const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
     const r = await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS }), notifications as never).payoutQuarterlyBonuses(NOW);
-    expect(r).toEqual({ paid: 0, quarter: 'Q1/2026' });
+    expect(r).toEqual({ paid: 0, quarter: 'Q1/2026', failed: 0 });
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 });

@@ -1391,7 +1391,7 @@ export class DealerService {
    * Thưởng ghi vào DealerCreditLedger delta ÂM (giảm công nợ) — nhất quán với creditPayment.
    * Idempotent theo (userId, refType=QUARTER_BONUS, refId=quý) → cron chạy lại không cộng trùng.
    */
-  async payoutQuarterlyBonuses(now: Date = new Date()): Promise<{ paid: number; quarter: string }> {
+  async payoutQuarterlyBonuses(now: Date = new Date()): Promise<{ paid: number; quarter: string; failed: number }> {
     const cur = this.vnPeriodBounds(now);
     let q = cur.q - 1; // quý TRƯỚC (vừa kết thúc)
     let year = cur.year;
@@ -1407,6 +1407,7 @@ export class DealerService {
     const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
 
     let paid = 0;
+    let failed = 0;
     for (const d of dealers) {
       // Đọc doanh số + ghi thưởng trong CÙNG 1 transaction, dưới khoá advisory (đại lý, quý) dùng
       // chung với clawbackQuarterBonusForOrder: trước đây payout đọc doanh số (còn gồm đơn X) trong
@@ -1447,7 +1448,10 @@ export class DealerService {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           continue;
         }
-        throw err;
+        // Lỗi của một đại lý không được chặn các đại lý sau trong cùng lượt; đại lý lỗi chạy tay lại được vì chưa có dòng thưởng.
+        failed += 1;
+        this.logger.error(`Trả thưởng quý ${quarter} lỗi cho đại lý ${d.id}: ${(err as Error).message}`, (err as Error).stack);
+        continue;
       }
       if (!outcome) continue;
       const { bonusAmount, revenue } = outcome;
@@ -1463,13 +1467,17 @@ export class DealerService {
       paid += 1;
     }
     if (paid > 0) this.logger.log(`Đã trả thưởng quý ${quarter} cho ${paid} đại lý.`);
-    return { paid, quarter };
+    if (failed > 0) this.logger.error(`Trả thưởng quý ${quarter}: ${failed} đại lý lỗi, cần chạy lại.`);
+    return { paid, quarter, failed };
   }
 
-  /** Số ngày sau ngày cuối quý còn được trả bù thưởng (config, mặc định 60, kẹp 0..120; 0 = tắt). */
+  /** Số ngày sau ngày cuối quý còn được trả bù thưởng (config, mặc định 60, kẹp 0..120; 0 hoặc dưới 10 = tắt). */
   private async topUpWindowDays(): Promise<number> {
     const raw = Number(await this.config.get<number>(DEALER_BONUS_TOPUP_WINDOW_DAYS_KEY, DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT));
-    return Number.isFinite(raw) && raw >= 0 ? Math.min(Math.floor(raw), 120) : DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT;
+    if (!Number.isFinite(raw) || raw < 0) return DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT;
+    // Dưới 10 ngày thì cửa sổ kết thúc trước ngày chốt thưởng: lượt quét lúc 05:00 ngày 10 vẫn rơi vào (quét thêm một ngày sau hạn)
+    // và ghi dòng thưởng trước payout, khiến payout chạy tay sau đó bỏ qua. Coi là tắt, đúng như mô tả khoá cấu hình.
+    return raw < 10 ? 0 : Math.min(Math.floor(raw), 120);
   }
 
   /**
@@ -1536,15 +1544,16 @@ export class DealerService {
    * sau thấy phần chênh = 0; unique (userId, refType, refId = `quý:topup:số thứ tự`) + bắt P2002 là lưới cuối khi khoá
    * advisory không có tác dụng. createdAt của dòng bù là mốc "doanh số đã tính" cho lần thu hồi sau (xem clawback), nên lượt chạy sau hạn ghi createdAt = hạn.
    */
-  async topUpQuarterlyBonuses(now: Date = new Date()): Promise<{ toppedUp: number; quarters: string[] }> {
+  async topUpQuarterlyBonuses(now: Date = new Date()): Promise<{ toppedUp: number; quarters: string[]; failed: number }> {
     const windowDays = await this.topUpWindowDays();
-    if (windowDays <= 0) return { toppedUp: 0, quarters: [] };
+    if (windowDays <= 0) return { toppedUp: 0, quarters: [], failed: 0 };
     const periods = DealerService.topUpQuarters(now, windowDays);
-    if (periods.length === 0) return { toppedUp: 0, quarters: [] };
+    if (periods.length === 0) return { toppedUp: 0, quarters: [], failed: 0 };
 
     const currentTiers = await this.bonusTiers();
     const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
     let toppedUp = 0;
+    let failed = 0;
     for (const period of periods) {
       const tiers = await this.tiersForTopUp(period.key, currentTiers);
       // Doanh số cắt ở expiresAt; lượt quét thêm chạy SAU mốc đó nên createdAt của dòng ghi phải ép về expiresAt, nếu không
@@ -1578,7 +1587,7 @@ export class DealerService {
             const seenRevenue = (await this.dealerVolume(d.id, period.start, period.end, tx, undefined, seenAt)).settled;
             const bonusSeen = bonusForRevenue(seenRevenue, tiers).bonusAmount;
 
-            if (paidRows.length === 0 && bonusSeen > 0) {
+            if (paidRows.length === 0 && bonusSeen > 0 && bonusNow > 0) {
               // Đã đạt bậc ngay lúc trả ngày 10 mà không có dòng thưởng: lần trả đó không chạy được. Trả trọn như payout.
               await tx.dealerCreditLedger.create({
                 data: { userId: d.id, delta: -bonusNow, refType: 'QUARTER_BONUS', refId: period.key, note: `Thưởng doanh số ${period.key} (trả muộn)`, createdAt: stampedAt },
@@ -1603,7 +1612,10 @@ export class DealerService {
           });
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
-          throw err;
+          // Lỗi của một đại lý không được chặn các đại lý sau; lượt cron hôm sau tự thử lại vì chưa có dòng nào được ghi.
+          failed += 1;
+          this.logger.error(`Trả bù thưởng ${period.key} lỗi cho đại lý ${d.id}: ${(err as Error).message}`, (err as Error).stack);
+          continue;
         }
         if (!outcome) continue;
         toppedUp += 1;
@@ -1619,7 +1631,8 @@ export class DealerService {
         }
       }
     }
-    return { toppedUp, quarters: periods.map((p) => p.key) };
+    if (failed > 0) this.logger.error(`Trả bù thưởng: ${failed} lượt đại lý lỗi (quý ${periods.map((p) => p.key).join(', ')}), lượt cron sau sẽ thử lại.`);
+    return { toppedUp, quarters: periods.map((p) => p.key), failed };
   }
 
   /**
