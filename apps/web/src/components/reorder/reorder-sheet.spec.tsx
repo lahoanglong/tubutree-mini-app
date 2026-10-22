@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 import { ReorderSheet } from './reorder-sheet';
 import type { ReorderLine, ReorderTarget } from './reorder-types';
 
-const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 2 };
+const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 2 };
 const line = (key: string, name: string, over: Partial<ReorderLine> = {}): ReorderLine => ({
   key, variationId: `v-${key}`, productName: name, variationName: 'Chanh', thumbnail: null, unitPrice: 50000,
   defaultQuantity: 2, maxQuantity: 5, available: true, ...over,

@@ -344,7 +344,7 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     expect(btn(done.container, 'Mua lại đơn này')).toBeDefined();
   });
 
-  const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 2 };
+  const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 2 };
   const sheetCta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''))!;
 
   it('"Mua lại đơn này" mở sheet chọn dòng (như Mini App), chưa gọi API', async () => {

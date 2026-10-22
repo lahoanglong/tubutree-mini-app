@@ -4,7 +4,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems } from '@/test-utils/a11y';
 
 const api = vi.hoisted(() => ({
-  doc: { content: null, vars: { returnWindowDays: 7, freeshipThreshold: 200000 } } as { content: string | null; vars: { returnWindowDays: number; freeshipThreshold: number } },
+  doc: { content: null, vars: { returnWindowDays: 7, freeshipThreshold: 199000 } } as { content: string | null; vars: { returnWindowDays: number; freeshipThreshold: number } },
   fail: false,
 }));
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -33,7 +33,7 @@ async function mount(loai: string) {
 }
 
 beforeEach(() => {
-  api.doc = { content: null, vars: { returnWindowDays: 7, freeshipThreshold: 200000 } };
+  api.doc = { content: null, vars: { returnWindowDays: 7, freeshipThreshold: 199000 } };
   api.fail = false;
 });
 afterEach(() => {
