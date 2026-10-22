@@ -1,5 +1,6 @@
 @import '@tubutree/design-tokens/src/fonts.css';
 @import '@tubutree/design-tokens/src/tokens.css';
+@import '../components/mini/mini.css';
 
 @tailwind base;
 @tailwind components;
@@ -58,7 +59,35 @@ html[data-tenant-host] [data-site-search] {
   }
 }
 
+/* Mini App không có chân trang; ở điện thoại chỉ giữ chân trang gọn (hotline + chính sách) ở trang không có thanh hành động dính đáy,
+   vì chân trang gọn nằm giữa nội dung và thanh dính sẽ không giống Mini App. Thanh nào dính đáy tự gắn data-sticky-bar. */
+@media (max-width: 767.98px) {
+  body:has([data-sticky-bar]) footer[data-compact-footer] {
+    display: none;
+  }
+}
+
 /* Thanh đáy điện thoại nhường chỗ cho thanh hành động dính của trang (giá/tổng + nút mua). */
 body.has-sticky-bar [data-bottom-nav] {
   display: none;
+}
+
+/* Trang con ở điện thoại có nút lùi tròn nổi (top-left, như BackButton của Mini App): đệm đỉnh để nút không đè tiêu đề.
+   body.with-back-btn do BackButton gắn; Mini App làm cùng việc bằng `.page` (apps/miniapp/src/css/tokens.css). */
+@media (max-width: 767px) {
+  body {
+    padding-top: var(--safe-top);
+    overflow-x: clip;
+  }
+  body.with-back-btn {
+    padding-top: calc(var(--safe-top) + 48px);
+  }
+  /* Trang hero full-bleed (gallery/hero): nút lùi nằm trên hero nên không cần đệm, như .page.page-bleed của Mini App. */
+  body.with-back-btn:has([data-page-bleed]) {
+    padding-top: var(--safe-top);
+  }
+  /* Thanh tiêu đề dùng chung (PageHeader) là con trực tiếp của khung trang: kéo khung lên sát mép để dải trắng bắt đầu từ đỉnh màn hình như Mini App. */
+  main:has(> header[data-page-bleed]) {
+    padding-top: 0;
+  }
 }

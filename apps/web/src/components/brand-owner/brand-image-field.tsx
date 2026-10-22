@@ -5,6 +5,7 @@ import { Camera, Loader2, RefreshCw } from 'lucide-react';
 import { uploadToCloudinary } from '@/components/account/cloudinary-upload';
 import { MAX_IMAGE_BYTES, isUsableImageFile, readAndCompressImage } from '@/lib/image-compress';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 
 /**
  * Ô tải ảnh logo/ảnh bìa, cùng cách `ImageUpload` của Mini App: ưu tiên Cloudinary, chưa cấu hình hoặc lỗi thì nén thành
@@ -41,14 +42,14 @@ export function BrandImageField({ label, value, onChange }: { label: string; val
 
   return (
     <div>
-      <div className="mb-1 text-xs text-stone-600">{label}</div>
+      <div className="mb-1 text-xs text-stone-600 max-md:text-[length:var(--type-label-size)] max-md:font-semibold max-md:leading-[var(--type-label-lh)] max-md:text-[color:var(--color-text-primary)]">{label}</div>
       <input ref={inputRef} type="file" accept="image/*" hidden aria-label={`Chọn ảnh ${label.toLowerCase()}`} onChange={(e) => void onFile(e)} />
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={busy}
         aria-label={value ? `Đổi ảnh ${label.toLowerCase()}` : `Tải ảnh ${label.toLowerCase()} lên`}
-        className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 text-sm font-semibold text-forest-700 hover:bg-stone-100 disabled:opacity-60"
+        className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 max-md:border-[1.5px] max-md:border-[color:var(--color-border-default)] max-md:bg-[color:var(--color-bg-canvas)] text-sm font-semibold text-forest-700 hover:bg-stone-100 disabled:opacity-60"
       >
         {busy ? (
           <span className="inline-flex items-center gap-1 text-stone-600">

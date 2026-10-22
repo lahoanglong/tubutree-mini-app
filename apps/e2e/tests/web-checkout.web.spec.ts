@@ -67,14 +67,17 @@ test.describe('Web khách: thanh toán', () => {
   test('đặt đơn bằng Ví Tubu rồi số dư ở Tài khoản giảm ngay, không chờ làm mới trang', async ({ page, api }) => {
     const balances: Balances = { wallet: 500000, points: 0 };
     mockBuyer(api, balances);
+    const placedOrder = (total: number, paymentMethod: string) => ({
+      id: 'n1', code: 'TUBU2026101499999', status: 'CONFIRMED', subtotal: 250000, discount: 0, shippingFee: 30000,
+      total, paymentMethod, paymentStatus: 'PAID', createdAt: new Date().toISOString(), items: [],
+    });
     api.post('/checkout/place-order', ({ call }) => {
       const body = call.body as { paymentMethod: string; expectedTotal: number };
       if (body.paymentMethod === 'WALLET') balances.wallet -= body.expectedTotal;
-      return {
-        id: 'n1', code: 'TUBU2026101499999', status: 'CONFIRMED', subtotal: 250000, discount: 0, shippingFee: 30000,
-        total: body.expectedTotal, paymentMethod: body.paymentMethod, paymentStatus: 'PAID', createdAt: new Date().toISOString(), items: [],
-      };
+      return placedOrder(body.expectedTotal, body.paymentMethod);
     });
+    api.get('/orders/TUBU2026101499999', () => placedOrder(280000, 'WALLET'));
+    api.get('/orders/me/refunds', []);
 
     await page.goto('/thanh-toan');
     const wallet = page.getByRole('radio', { name: /Ví Tubu/ });
@@ -88,10 +91,18 @@ test.describe('Web khách: thanh toán', () => {
     expect(body.paymentMethod).toBe('WALLET');
     expect(body.expectedTotal).toBe(280000);
 
-    await expect(page.getByRole('heading', { name: 'Đặt hàng thành công!' })).toBeVisible();
-    await page.getByRole('link', { name: 'Đơn của tôi' }).click();
+    await expect(page.getByRole('heading', { name: 'Cảm ơn bạn đã chọn Tubu' })).toBeVisible();
+    const desktop = (page.viewportSize()?.width ?? 0) >= 768;
+    await expect(page.getByTestId('order-success-desktop')).toBeVisible({ visible: desktop });
+    await expect(page.getByTestId('order-success-mobile')).toBeVisible({ visible: !desktop });
+    // Đi bằng điều hướng phía client (không goto) để kiểm số dư mới mà không tải lại trang. Trang Tài khoản tự lấy lại /me khi mở nên ca này không bắt riêng việc thiếu invalidateBalances.
+    if (desktop) await page.getByRole('link', { name: 'Đơn của tôi' }).click();
+    else await page.getByRole('button', { name: 'Theo dõi đơn' }).click();
     await expect(page).toHaveURL(/\/tai-khoan\/don-hang/);
-    await page.locator('a[href="/tai-khoan"]:visible').first().click();
+    // Chi tiết đơn ở điện thoại không có thanh tab (như Mini App); nút lùi về /tai-khoan bằng router.replace vì trang mở thẳng nên chưa có lịch sử trong web.
+    if (desktop) await page.locator('a[href="/tai-khoan"]:visible').first().click();
+    else await page.getByRole('button', { name: 'Quay lại' }).click();
+    await expect(page).toHaveURL(/\/tai-khoan$/);
     await expect(page.getByText('220.000đ')).toBeVisible();
     await expect(page.getByText('500.000đ')).toHaveCount(0);
   });

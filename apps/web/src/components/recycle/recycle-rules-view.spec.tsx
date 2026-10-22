@@ -5,9 +5,11 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 // Chép ý recycle-rules.spec.tsx (Mini App, §14.2): thể lệ do admin soạn giữ xuống dòng, chưa có thì dòng chờ, lỗi có "Thử lại".
 // Khác Mini App: trang công khai, thể lệ có sẵn từ server (ISR) thì không gọi API từ trình duyệt.
 
-const state = vi.hoisted(() => ({ get: vi.fn() }));
+const state = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated' as string }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: state.get, post: vi.fn() } }));
 
+import { ApiError } from '@/lib/client-api';
 import { RecycleRulesView } from './recycle-rules-view';
 
 let mounted: Rendered[] = [];
@@ -18,7 +20,10 @@ const mount = async (initialText?: string | null) => {
   return r.container;
 };
 
-beforeEach(() => state.get.mockReset());
+beforeEach(() => {
+  state.get.mockReset();
+  state.phase = 'authenticated';
+});
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
@@ -52,5 +57,33 @@ describe('/doi-rac/quy-dinh (§14.2)', () => {
     click(byText(c, 'button', 'Thử lại'));
     await flush(6);
     expect(c.textContent).toContain('OK');
+  });
+
+  it.each([
+    [401, 'Unauthorized', 'Phiên đăng nhập đã hết hạn'],
+    [403, 'Forbidden', 'không có quyền'],
+  ])('lỗi %i: câu tiếng Việt, không in "%s" thô, không có Thử lại vô ích', async (status, raw, expected) => {
+    state.get.mockRejectedValueOnce(new ApiError(raw, status));
+    const c = await mount();
+    expect(c.textContent).toContain(expected);
+    expect(c.textContent).not.toContain(raw);
+    expect(byText(c, 'button', 'Thử lại')).toBeNull();
+  });
+});
+
+describe('/doi-rac/quy-dinh — khách chưa đăng nhập', () => {
+  it('API trả 401 mà khách chưa có phiên: mời đăng nhập, không nói phiên hết hạn', async () => {
+    state.phase = 'guest';
+    state.get.mockRejectedValueOnce(new ApiError('Unauthorized', 401));
+    const c = await mount();
+    expect(c.querySelector('a[href="/dang-nhap?returnTo=%2Fdoi-rac%2Fquy-dinh"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Phiên đăng nhập đã hết hạn');
+  });
+});
+
+describe('/doi-rac/quy-dinh — diện mạo Mini App ở điện thoại', () => {
+  it('đoạn thể lệ cỡ body-md như Mini App', async () => {
+    const c = await mount('Thể lệ.');
+    expect(byText(c, 'div', 'Thể lệ.')!.className).toContain('max-md:text-[length:var(--type-body-md-size)]');
   });
 });

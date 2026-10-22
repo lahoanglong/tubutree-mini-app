@@ -1,0 +1,64 @@
+# Khác biệt vỏ trang (web điện thoại so với Mini App, run2)
+
+Gom từ `lech-*.json` (Opus chấm 2026-10-19 22:00). Lane `mshell` sửa phần này; các lane theo nhóm màn chỉ kiểm lại.
+
+- (11 màn) Chân trang website ở web
+- (9 màn) Web có chân trang website
+- (6 màn) Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề + nút quay lại tròn
+- (2 màn) Đầu trang website + ô tìm kiếm ở web; Mini App thanh tiêu đề với nút quay lại tròn nổi
+- (2 màn) Thanh đáy: badge màu cam (Mini App) so với màu xanh (web); web không có bong bóng gợi ý Vườn Xanh
+- (2 màn) Mini App has a round floating back button on the cover; web has the website header and footer
+- (1 màn) Web có đầu trang website (logo Tubu Tree, giỏ, avatar, ô 'Tìm sản phẩm...'); Mini App có thanh tiêu đề trắng v
+- (1 màn) Web có dòng '← Tài khoản' và tiêu đề trang H1 trong thân; Mini App để tiêu đề trên thanh đầu
+- (1 màn) Web có chân trang website (Hỗ trợ khách hàng, Facebook/TikTok, Điều khoản...)
+- (1 màn) Thẻ chung: Mini App thẻ trắng không viền chỉ đổ bóng; web thẻ có viền stone-200 + shadow-card (ui.card)
+- (1 màn) Web có dòng '← Tài khoản' và H1 'Ví Tubu' trong thân
+- (1 màn) Thẻ chung: web có viền, Mini App không viền
+- (1 màn) Đầu trang website + ô tìm kiếm; dòng '← Tài khoản' + H1 'Kho quà' ở web, Mini App thanh tiêu đề + nút tròn
+- (1 màn) Thẻ quà: web có viền đậm hơn + shadow-card
+- (1 màn) Đầu trang website + ô tìm kiếm, '← Tài khoản' + H1 ở web; Mini App thanh tiêu đề + nút tròn
+- (1 màn) Thẻ: Mini App Card outline không bóng, web ui.card có shadow
+- (1 màn) Đầu trang website + ô tìm kiếm ở web; web dùng '<' + H1 'Hoàn tiền' trong thân, Mini App thanh tiêu đề + nút t
+- (1 màn) Thẻ sàn/giao dịch: web có viền
+- (1 màn) Web có đầu trang website + ô tìm kiếm; Mini App chỉ thanh tiêu đề 'Vườn Xanh' không nút quay lại
+- (1 màn) Cả hai có thanh đáy 5 tab; ở web full-page thanh đáy fixed bị chụp đè giữa trang
+- (1 màn) Web có đầu trang website + ô tìm kiếm, H1 + phụ đề trong thân; Mini App thanh tiêu đề có phụ đề + nút tròn
+- (1 màn) Web có đầu trang website + ô tìm sản phẩm; Mini App thanh tiêu đề + nút tròn, phụ đề xuống dòng
+- (1 màn) Web H1 + phụ đề trong thân
+- (1 màn) Đầu trang website + ô tìm kiếm ở web; web '<' + H1 trong thân, Mini App thanh tiêu đề + nút tròn
+- (1 màn) Hàng xếp hạng: web có viền, Mini App không viền
+- (1 màn) Đầu trang website + ô tìm kiếm ở web; web '<' + H1 'Sự kiện', Mini App thanh tiêu đề + nút tròn
+- (1 màn) Thẻ sự kiện: web có viền
+- (1 màn) Đầu trang website + ô tìm kiếm ở web; web '<' + H1 'Cộng đồng Vườn Tubu', Mini App thanh tiêu đề + nút tròn
+- (1 màn) Đầu trang website + ô tìm kiếm ở web; web H1 'CTV Academy' + phụ đề trong thân, Mini App thanh tiêu đề + nút t
+- (1 màn) Thẻ khoá học: web có viền
+- (1 màn) Đầu trang website + ô tìm kiếm ở web; web H1 'CTV Academy' trong thân, Mini App thanh tiêu đề + nút tròn
+- (1 màn) Thẻ bài học: web có viền
+- (1 màn) Web có đầu trang website (logo Tubu Tree, nút giỏ có số 2, nút tài khoản 'N An') và ô 'Tìm sản phẩm...'; Mini 
+- (1 màn) Web có dòng '← Tiếp tục mua sắm' và tiêu đề 'Giỏ hàng' to nằm trong thân trang; Mini App có nút quay lại tròn 
+- (1 màn) Web có chân trang website (Hỗ trợ khách hàng, Facebook/TikTok, Điều khoản...); trong ảnh full-page, thanh dính
+- (1 màn) Web có đầu trang website và ô tìm kiếm; Mini App không có
+- (1 màn) Web có dòng '← Về giỏ hàng' và tiêu đề 'Thanh toán' to trong thân trang; Mini App có nút tròn nổi và tiêu đề t
+- (1 màn) Web có chân trang website; trong ảnh full-page, thanh dính đáy đè lên nội dung
+- (1 màn) Web có đầu trang website, ô tìm kiếm và chân trang; Mini App có nút quay lại tròn nổi
+- (1 màn) Tiêu đề trang: web có h1 'Thanh toán chuyển khoản' kèm phụ đề 'Mở app ngân hàng / ví bất kỳ để quét mã VietQR 
+- (1 màn) Web có đầu trang website và ô tìm kiếm; web có nút '<' kèm tiêu đề 'Đơn hàng' to trong thân trang, còn Mini Ap
+- (1 màn) Thanh đáy: badge trên tab Đơn hàng màu cam ở Mini App, màu xanh đậm ở web. Web không có bong bóng gợi ý 'Trồng
+- (1 màn) Web có chân trang website và thanh đáy đè lên chân trang
+- (1 màn) Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Đơn hàng' trong thân trang và chân trang
+- (1 màn) Web có đầu trang website, ô tìm kiếm, dòng '← Đơn hàng của tôi' và chân trang; Mini App có nút tròn nổi
+- (1 màn) Tiêu đề: Mini App ghi 'Chi tiết đơn hàng' kèm phụ đề mã 'TUBU20261015001'; web ghi h1 'Đơn hàng #TUBU202610150
+- (1 màn) Web có đầu trang website, ô tìm kiếm, dòng '← Tài khoản' kèm tiêu đề 'Sổ địa chỉ' trong thân trang, và chân tr
+- (1 màn) Web có đầu trang website, ô tìm kiếm, h1 'Về Tubu Tree' trong thân trang và chân trang; Mini App có nút tròn n
+- (1 màn) Web có đầu trang website, ô tìm kiếm, dòng '← Trang chủ' kèm h1 'Tài khoản' trong thân trang; Mini App không c
+- (1 màn) Web có chân trang website; trong ảnh full-page, thanh đáy đè giữa trang
+- (1 màn) Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Sửa hồ sơ' trong thân trang và chân trang; Mini App có 
+- (1 màn) Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Cài đặt' trong thân trang và chân trang; Mini App có nú
+- (1 màn) Web có đầu trang website, ô tìm kiếm, '<' kèm tiêu đề 'Thông báo' trong thân trang và chân trang; Mini App có 
+- (1 màn) Web có đầu trang website (logo Tubu Tree, giỏ hàng badge 2, avatar An, ô 'Tìm sản phẩm...'); Mini App có thanh
+- (1 màn) Web có dòng '← Tài khoản' và tiêu đề 'Kênh đại lý' serif lớn trong thân trang; Mini App đặt tiêu đề trên thanh
+- (1 màn) Nền trang: Mini App xanh xám nhạt #f4f6f9 (--color-dealer-bg, dealer.tsx:73), web nền be chung
+- (1 màn) Web có chân trang website (Hotline, email, Facebook, TikTok, Điều khoản...)
+- (1 màn) Web có '← Tài khoản' và tiêu đề 'Ca làm của tôi' trong thân trang
+- (1 màn) Web có '← Tài khoản' và tiêu đề 'Lương của tôi' trong thân
+- (1 màn) Web có '← Tài khoản' và tiêu đề 'Quản lý nhãn hàng' trong thân

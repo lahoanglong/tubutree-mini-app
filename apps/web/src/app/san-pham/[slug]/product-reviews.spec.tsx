@@ -120,6 +120,13 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(c.querySelector<HTMLImageElement>('img[alt="Ảnh đánh giá"]')!.src).toMatch(/\/reviews\/c\/images\/0\?v=1$/);
   });
 
+  it('ngôi sao chưa tô dùng --stone-450 (đủ tương phản 3:1 với nền), không còn stone-200', async () => {
+    const c = await mount();
+    const cls = Array.from(c.querySelectorAll('svg')).map((s) => s.getAttribute('class') ?? '');
+    expect(cls.some((k) => k.includes('--stone-450'))).toBe(true);
+    expect(cls.some((k) => k.includes('stone-200'))).toBe(false);
+  });
+
   it('hơn 5 đánh giá: hiện 5 rồi "Xem thêm"', async () => {
     mocks.list = { ...LIST, count: 7, items: Array.from({ length: 7 }, (_, i) => review(`r${i}`, 5)) };
     const c = await mount();

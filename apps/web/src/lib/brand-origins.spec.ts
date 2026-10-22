@@ -47,3 +47,11 @@ describe('brandBrowseHref — danh sách sản phẩm của nhãn trên web', ()
     for (const o of BRAND_ORIGINS) expect(brandBrowseHref(o.catalogBrand)).toBe(`/san-pham?brand=${encodeURIComponent(o.catalogBrand)}`);
   });
 });
+
+describe('tỉnh ghi trên ô nhãn', () => {
+  it('viết "Đắk Lắk" (không phải "Đắc Lắk")', () => {
+    const provinces = BRAND_ORIGINS.map((o) => o.province);
+    expect(provinces).not.toContain('Đắc Lắk');
+    expect(provinces).toContain('Đắk Lắk');
+  });
+});

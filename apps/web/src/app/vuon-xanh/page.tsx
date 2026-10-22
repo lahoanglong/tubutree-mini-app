@@ -229,7 +229,7 @@ function GameBody() {
 export default function GamePage() {
   const phase = useAuthPhase();
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24">
+    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pt-0">
       <PageHeader title={TITLE} />
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}

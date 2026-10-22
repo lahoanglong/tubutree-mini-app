@@ -85,7 +85,7 @@ export function PdpPrice({ product }: { product: PricedProduct & { variations: P
       ) : (
         pricing.hasSale &&
         pricing.salePct > 0 && (
-          <span data-testid="pdp-sale-badge" className="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-bold text-danger-fg">
+          <span data-testid="pdp-sale-badge" className="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-bold text-danger-fg max-md:hidden">
             -{pricing.salePct}%
           </span>
         )

@@ -110,6 +110,11 @@ describe('/mua-chung — danh sách nhóm', () => {
   it('lưới nhóm có cột co được (minmax(0,1fr)) để tên dài cắt bằng dấu ba chấm thay vì đẩy trang tràn ngang ở 320px', async () => {
     mocks.list = [GROUP('g1', { product: { name: 'Một sản phẩm có tên rất dài '.repeat(4), slug: 'sp', thumbnail: null } })];
     const c = await mount();
+    // Mini App: thẻ không viền, chữ body-sm/caption (lớn hơn text-sm/xs cũ).
+    const article = c.querySelector('article')!;
+    expect(article.className).toContain('max-md:border-0');
+    expect(article.className).toContain('max-md:shadow-[var(--elevation-1)]');
+    expect(c.querySelector('article a.font-semibold')!.className).toContain('max-md:text-[length:var(--type-body-sm-size)]');
     const grid = c.querySelector('article')?.parentElement;
     expect(grid?.className).toContain('grid-cols-[minmax(0,1fr)]');
   });
@@ -119,9 +124,17 @@ describe('/mua-chung — danh sách nhóm', () => {
     expect(c.querySelector('a[href="/san-pham/sp-a"]')).not.toBeNull();
   });
 
-  it('nói rõ cơ chế: đủ người thì nhận mã giảm bằng chênh lệch giá nhóm', async () => {
+  it('nói rõ cơ chế: đủ người thì nhận mã giảm theo % của nhóm (mã giảm % trên biến thể khách mua, không phải số tiền cố định)', async () => {
     const c = await mount();
-    expect(c.textContent).toContain(`Đủ nhóm: nhận mã giảm ${formatVnd(20_000)}, dùng cho đơn từ ${formatVnd(80_000)}`);
+    expect(c.textContent).toContain(`Đủ nhóm: nhận mã giảm 20%, dùng cho đơn từ ${formatVnd(80_000)}`);
+    expect(c.textContent).not.toContain(`mã giảm ${formatVnd(20_000)}`);
+  });
+
+  it('% lấy từ discountPct của nhóm, không tính lại từ basePrice - unitPrice', async () => {
+    mocks.list = [GROUP('a', { discountPct: 15, basePrice: 100_000, unitPrice: 80_000 })];
+    const c = await mount();
+    expect(c.textContent).toContain('Đủ nhóm: nhận mã giảm 15%');
+    expect(c.textContent).not.toContain('mã giảm 20%');
   });
 
   it('thời hạn: dưới một giờ tính phút, quá hạn thì "đã hết hạn"', async () => {
@@ -320,7 +333,7 @@ describe('/mua-chung/[id] — nhóm được mời', () => {
     expect(Array.from(c.querySelectorAll('h2')).map((h) => h.textContent)).toContain('Nhóm đã đủ người của bạn');
     expect(c.textContent).toContain('GBUY-DONE-ME');
     expect(c.textContent).toContain('5/5 người · đã đủ nhóm');
-    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === `Mua ngay với mã giảm ${formatVnd(20_000)}`);
+    const buy = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mua ngay với mã giảm 20%');
     expect(buy?.getAttribute('href')).toBe('/san-pham/sp-done');
     expect(btn(c, 'Nhóm đã đủ người')).toBeUndefined();
   });

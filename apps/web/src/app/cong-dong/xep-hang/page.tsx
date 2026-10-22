@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { Medal } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { communityLeaderboardQuery } from '@tubutree/app-core/queries/feed';
 import type { LeaderboardEntry } from '@tubutree/app-core/api/feed';
@@ -9,19 +10,23 @@ import { levelEmoji } from '@/components/community/rank';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
+import { miniCard } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 
-// Huy chương là nội dung xếp hạng (không phải icon điều hướng) nên giữ emoji.
-const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const MEDAL: Record<number, { label: string; color: string }> = {
+  1: { label: 'Huy chương vàng', color: 'var(--honey-500)' },
+  2: { label: 'Huy chương bạc', color: 'var(--stone-450)' },
+  3: { label: 'Huy chương đồng', color: 'var(--clay-600)' },
+};
 
 const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
+    <main className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
       <PageHeader title="Bảng xếp hạng" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4">{children}</div>
     </main>
@@ -40,8 +45,10 @@ function BoardSkeleton() {
 
 function LeaderRow({ rank, entry }: { rank: number; entry: LeaderboardEntry }) {
   return (
-    <li className={`${ui.card} flex items-center gap-2.5 p-3`}>
-      <span className="w-7 text-center text-base font-semibold text-stone-900">{MEDAL[rank] ?? `#${rank}`}</span>
+    <li className={`${miniCard} flex items-center gap-2.5 p-3`}>
+      <span className="w-7 text-center text-base font-semibold text-stone-900">
+        {MEDAL[rank] ? <Medal size={22} strokeWidth={1.75} role="img" aria-label={MEDAL[rank].label} color={MEDAL[rank].color} /> : `#${rank}`}
+      </span>
       <Avatar src={entry.avatar} size={36} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-stone-900">{entry.author}</div>

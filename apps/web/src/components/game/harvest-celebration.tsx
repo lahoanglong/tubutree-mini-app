@@ -2,6 +2,7 @@ import { Lightbulb } from 'lucide-react';
 import type { HarvestSpecies } from '@tubutree/app-core/api/game';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { rarityBorder, rarityLabel, rarityText } from './game-utils';
 
 // Harvest celebration. 🌳 lớn, 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
@@ -30,7 +31,7 @@ export function HarvestCelebration({
       footer={
         <div className="flex flex-col gap-2">
           {coupon && (
-            <button type="button" onClick={onUseCoupon} className={`${ui.btnSecondary} w-full`}>
+            <button type="button" onClick={onUseCoupon} className={`${miniBtnSecondary} w-full`}>
               Dùng mã giảm giá ngay
             </button>
           )}

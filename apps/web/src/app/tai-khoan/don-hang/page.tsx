@@ -68,7 +68,7 @@ function OrdersPageBody() {
   else {
     body = (
       <>
-        <div className="mt-3">
+        <div className="mt-3 max-md:mt-2">
           <SegmentedTabs
             items={ORDERS_TABS.map((t) => ({ key: t.key, label: t.label }))}
             value={tab}
@@ -131,9 +131,9 @@ function OrdersPageBody() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6">
+    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
       <PageHeader title="Đơn hàng" backHref="/tai-khoan" backLabel="Tài khoản" />
-      {body}
+      <div className="max-md:px-3">{body}</div>
       <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
     </main>
   );

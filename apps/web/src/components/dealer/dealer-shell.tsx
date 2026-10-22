@@ -1,14 +1,18 @@
-import Link from 'next/link';
-import { ui } from '@/lib/guest-ui';
+import './dealer-theme.css';
+import BackLink from '@/components/back-link';
+import { PageHeader } from '@/components/ui/page-header';
 
 /** Khung chung của kênh đại lý: mỗi nhánh render có đúng một h1. */
 export function DealerShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
-      <Link href="/tai-khoan" className={ui.backLink}>
+    <main
+      className="mx-auto max-w-5xl px-4 py-6 max-md:min-h-dvh max-md:bg-[var(--color-dealer-bg)]"
+      data-dealer-theme
+    >
+      <BackLink href="/tai-khoan">
         ← Tài khoản
-      </Link>
-      <h1 className={`mt-1 ${ui.pageTitle}`}>{title}</h1>
+      </BackLink>
+      <PageHeader title={title} parentHref="/tai-khoan" className="md:mt-1" />
       <div className="mt-4">{children}</div>
     </main>
   );

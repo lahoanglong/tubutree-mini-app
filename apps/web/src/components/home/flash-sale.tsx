@@ -12,12 +12,13 @@ import { flashDisplay, soldPercent } from '@/lib/flash-display';
 import { formatVnd } from '@/lib/format-vnd';
 import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
+import { serverNow } from '@tubutree/app-core/server-clock';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
 
-const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44';
+const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 md:min-w-44 md:flex-1';
 const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
@@ -46,7 +47,7 @@ export function FlashSale() {
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 để đồng hồ chuyển sang suất kế tiếp thay vì biến mất.
   const [expiredTick, setExpiredTick] = useState(0);
   const soonestEndAt = useMemo(() => {
-    const now = Date.now();
+    const now = serverNow();
     const live = items.map((it) => new Date(it.endAt).getTime()).filter((ms) => ms > now);
     return live.length > 0 ? new Date(Math.min(...live)) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,15 +84,15 @@ export function FlashSale() {
           const { price, was, pct } = flashDisplay(item);
           const sold = soldPercent(item.soldCount, item.quota);
           return (
-            <li key={item.itemId}>
+            <li key={item.itemId} className="md:flex md:min-w-44 md:flex-1">
               <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className={CARD}>
                 <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
                 <div className="p-2">
-                  <p className="line-clamp-2 min-h-[2.5rem] text-xs text-stone-900">{item.productName}</p>
+                  <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
                   <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
                   {was > price && <p className="text-xs text-stone-500 line-through">{formatVnd(was)}</p>}
                   <div className="mt-1">
-                    <ProgressBar value={sold} max={100} tone="flash" />
+                    <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
                   </div>
                   <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
                 </div>
@@ -113,7 +114,7 @@ function UpcomingFlashCard({ item, pending, onToggleRemind }: { item: UpcomingFl
       <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className="block">
         <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
         <div className="px-2 pt-2">
-          <p className="line-clamp-2 min-h-[2.5rem] text-xs text-stone-900">{item.productName}</p>
+          <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{item.productName}</p>
           <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
           {/* Đã tới giờ mở bán mà danh sách chưa tải lại: không còn gì để nhắc, chạm thẻ là vào xem. */}
           <p className="mt-0.5 text-xs text-stone-600">{startsIn ? flashSaleText.startsIn(startsIn) : flashSaleText.live}</p>

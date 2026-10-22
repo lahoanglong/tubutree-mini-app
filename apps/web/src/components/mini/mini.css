@@ -1,0 +1,439 @@
+/* Kiểu dùng chung của bộ thành phần components/mini (bản web của apps/miniapp/src/components/ui).
+ * Nguồn: apps/miniapp/src/css/tokens.css (khối .tubu-*), zaui-bridge.css và CSS zmp-ui Button/Sheet.
+ * Chỉ là class và biến mới: không đổi phần tử nào của trang web hiện có (máy tính không bị ảnh hưởng). */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --shadow-card: var(--elevation-1);
+  --dur-fast: var(--p-dur-tap);
+  --dur-base: var(--p-dur-enter);
+  --dur-slow: var(--p-dur-emphasize);
+  --ease-out: var(--p-ease-out);
+  --font-body: var(--font-ui);
+
+  --color-skeleton-shimmer: rgba(255, 255, 255, 0.65);
+  --color-media-dot-idle: rgba(255, 255, 255, 0.85);
+  --color-pulse-ring: rgba(224, 140, 28, 0.35);
+  --color-pulse-ring-end: rgba(224, 140, 28, 0);
+
+  --color-brand-visante: #8b3a3a;
+  --color-brand-polang: #d4843e;
+  --color-brand-cobote: #c9b280;
+  --color-brand-fuwa3e: #e8b72c;
+  --color-brand-babycare: #7cc0db;
+  --color-brand-umikai: #6b8cae;
+  --color-brand-bhnong: #7a5c3a;
+  --color-brand-sokfram: #dca84a;
+  --color-brand-leplateau: #4a2c20;
+  --color-brand-moshav: #7a8b5c;
+  --color-brand-hector: #6b6b6b;
+
+  /* Cầu nối màu nút zmp-ui sang token DS (zaui-bridge.css); chỉ phần nút. */
+  --zaui-light-button-primary-background: var(--color-action-primary-bg);
+  --zaui-light-button-primary-background-pressed: var(--color-action-primary-bg-pressed);
+  --zaui-light-button-primary-text: var(--color-action-primary-fg);
+  --zaui-light-button-primary-danger-background: var(--color-action-danger-bg);
+  --zaui-light-button-primary-danger-background-pressed: var(--color-action-danger-bg-pressed);
+  --zaui-light-button-primary-danger-text: var(--color-action-danger-fg);
+  --zaui-light-button-secondary-background: var(--color-action-secondary-bg);
+  --zaui-light-button-secondary-background-pressed: var(--color-action-secondary-bg-pressed);
+  --zaui-light-button-secondary-text: var(--color-action-secondary-fg);
+  --zaui-light-button-tertiary-text: var(--color-action-ghost-fg);
+  --zaui-light-button-tertiary-background-pressed: var(--color-action-ghost-bg-pressed);
+  --zaui-light-button-background-disabled: var(--color-action-primary-bg-disabled);
+  --zaui-light-button-text-disabled: var(--color-action-primary-fg-disabled);
+  --zaui-light-sheet-container: var(--color-bg-surface);
+  --zaui-light-sheet-handler: var(--stone-100);
+  --zaui-mask-overlay-color: #000000b3;
+}
+
+.tubu-press {
+  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-press:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+
+.tubu-hit-44 {
+  position: relative;
+}
+.tubu-hit-44::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+.tubu-hit-44-square {
+  position: relative;
+}
+.tubu-hit-44-square::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.tubu-scroll-fade[data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+}
+.tubu-scroll-fade[data-fade-start] {
+  -webkit-mask-image: linear-gradient(to left, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, black calc(100% - 28px), transparent);
+}
+.tubu-scroll-fade[data-fade-start][data-fade-end] {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent);
+}
+
+.tubu-tile-link::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: var(--radius-card);
+}
+.tubu-tile-link[data-flat]::after {
+  border-radius: 0;
+}
+.tubu-tile-link:focus-visible {
+  outline: none;
+}
+.tubu-tile-link:focus-visible::after {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+
+/* Chỉ trong SearchField: ô tìm của thanh đầu và trang quản trị vẫn giữ nút xoá native. */
+.tubu-search-field input[type='search']::-webkit-search-cancel-button {
+  display: none;
+  -webkit-appearance: none;
+}
+.tubu-search-field:focus-within {
+  box-shadow: 0 0 0 2px var(--color-border-focus);
+}
+
+.tubu-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--stone-100);
+  border-radius: var(--radius-control);
+}
+.tubu-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--color-skeleton-shimmer), transparent);
+  animation: tubu-shimmer 1.4s infinite;
+}
+@keyframes tubu-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes tubu-rise {
+  0% {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.tubu-rise {
+  animation: tubu-rise var(--dur-slow) var(--ease-out) both;
+}
+
+@keyframes tubu-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--color-pulse-ring);
+  }
+  50% {
+    box-shadow: 0 0 0 6px var(--color-pulse-ring-end);
+  }
+}
+.tubu-pulse {
+  animation: tubu-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-skeleton::after,
+  .tubu-rise,
+  .tubu-pulse,
+  .mini-sheet-panel {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .tubu-press {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.scroll-x {
+  display: flex;
+  overflow-x: auto;
+  min-width: 0;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Nút: bản DOM của zmp-ui Button (lớp zaui-btn*) với đúng kích thước/màu bản Mini App. */
+@keyframes loadingCircle {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+.zaui-btn {
+  padding: 12px 24px;
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+  text-align: center;
+  background-image: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 48px;
+  user-select: none;
+  touch-action: manipulation;
+  -webkit-appearance: button;
+  appearance: button;
+  text-decoration: none;
+  box-shadow: none;
+  margin: 0;
+  background-color: var(--zaui-light-button-primary-background);
+  color: var(--zaui-light-button-primary-text);
+  min-width: 120px;
+  height: 48px;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  font-family: inherit;
+}
+.zaui-btn,
+.zaui-btn:active,
+.zaui-btn:focus,
+.zaui-btn:hover {
+  outline: 0;
+  box-shadow: none;
+}
+.zaui-btn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.zaui-btn[disabled] {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.zaui-btn[disabled] > * {
+  pointer-events: none;
+}
+.zaui-btn:active,
+.zaui-btn:focus-visible {
+  background-color: var(--zaui-light-button-primary-background-pressed);
+}
+.zaui-btn-disabled[disabled],
+.zaui-btn-primary.zaui-btn-disabled[disabled],
+.zaui-btn-secondary.zaui-btn-disabled[disabled] {
+  background-color: var(--zaui-light-button-background-disabled);
+  color: var(--zaui-light-button-text-disabled);
+}
+.zaui-btn .zaui-btn-container {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.zaui-btn-tertiary.zaui-btn-disabled[disabled] {
+  background-color: transparent;
+  color: var(--zaui-light-button-text-disabled);
+}
+.zaui-btn-small {
+  min-width: 72px;
+  height: 32px;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 500;
+  padding: 8px 16px;
+  min-height: 44px;
+}
+.zaui-btn-large {
+  min-width: 120px;
+  height: 48px;
+}
+.zaui-btn-medium {
+  min-width: 96px;
+  height: 40px;
+  padding: 8px 24px;
+}
+.zaui-btn-full-width {
+  width: 100%;
+  min-width: unset;
+}
+.zaui-btn-primary {
+  background-color: var(--zaui-light-button-primary-background);
+  color: var(--zaui-light-button-primary-text);
+}
+.zaui-btn-primary:active,
+.zaui-btn-primary:focus-visible {
+  background-color: var(--zaui-light-button-primary-background-pressed);
+}
+.zaui-btn-secondary {
+  background-color: var(--zaui-light-button-secondary-background);
+  color: var(--zaui-light-button-secondary-text);
+}
+.zaui-btn-secondary:active,
+.zaui-btn-secondary:focus-visible {
+  background-color: var(--zaui-light-button-secondary-background-pressed);
+}
+.zaui-btn-tertiary {
+  background-color: transparent;
+  color: var(--zaui-light-button-tertiary-text);
+}
+.zaui-btn-tertiary:active,
+.zaui-btn-tertiary:focus-visible {
+  background-color: var(--zaui-light-button-tertiary-background-pressed);
+}
+.zaui-btn-loading {
+  position: relative;
+  pointer-events: none;
+}
+.zaui-btn-loading > * {
+  visibility: hidden;
+}
+.zaui-btn-loading-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  visibility: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zaui-btn-loading .zaui-btn-loading-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-block;
+  animation: loadingCircle 1s infinite linear;
+}
+.zaui-btn-prefix-icon .zaui-btn-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+}
+.zaui-btn-prefix-icon .zaui-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tubu-btn {
+  max-width: 100%;
+}
+.tubu-btn .zaui-btn-container {
+  max-width: 100%;
+}
+.tubu-btn .zaui-btn-container > span:not(.zaui-btn-icon):not(.zaui-btn-loading-container) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-block: 3px;
+  margin-block: -3px;
+}
+.tubu-btn .zaui-btn-icon {
+  flex-shrink: 0;
+}
+.tubu-sticky-bar .tubu-btn {
+  min-width: 0;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+@media (max-width: 359px) {
+  .tubu-sticky-bar .tubu-btn {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+
+/* Sheet: bản DOM của zmp-ui Sheet (lớp zaui-sheet*): mặt đáy bo 16px, tay nắm, nền mờ. */
+@keyframes slideUp {
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+.mini-sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+.mini-sheet-mask {
+  position: absolute;
+  inset: 0;
+  background: var(--zaui-mask-overlay-color);
+}
+.mini-sheet-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  min-height: 50%;
+  max-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--zaui-light-sheet-container);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -2px 6px 0 #14141524;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 20px;
+  padding-bottom: var(--safe-bottom);
+  outline: none;
+  animation: slideUp 0.3s ease-in both;
+}
+.mini-sheet-panel[data-hug] {
+  min-height: unset;
+}
+.mini-sheet-handler {
+  height: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.mini-sheet-handler::before {
+  content: '';
+  display: inline-block;
+  width: 48px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--zaui-light-sheet-handler);
+}
+@media (min-width: 768px) {
+  .mini-sheet-panel {
+    left: 50%;
+    width: min(100%, 560px);
+    transform: translateX(-50%);
+    animation: none;
+  }
+}

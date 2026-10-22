@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   addToCart: vi.fn(),
   getProductStock: vi.fn(),
   getActiveFlashSales: vi.fn(),
+  getCart: vi.fn(),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }) }));
@@ -20,6 +21,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   addToCart: mocks.addToCart,
   getProductStock: mocks.getProductStock,
   getActiveFlashSales: mocks.getActiveFlashSales,
+  getCart: mocks.getCart,
 }));
 
 import AddToCart from './add-to-cart';
@@ -48,6 +50,7 @@ beforeEach(() => {
   mocks.getProductStock.mockReset().mockResolvedValue({ v1: 5, v2: 9 });
   resetFlashSales();
   mocks.getActiveFlashSales.mockReset().mockResolvedValue([]);
+  mocks.getCart.mockReset().mockResolvedValue({ items: [], itemCount: 3 });
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -379,6 +382,7 @@ describe('AddToCart — Mua ngay', () => {
     click(buyButtons(container)[0]!);
     await flush(2);
     expect(buyButtons(container)[0]!.textContent).toBe('Đang xử lý…');
+    expect(bar(container).querySelector('button[aria-label^="Đang xử lý… · "]')).not.toBeNull();
     expect(buyButtons(container)[0]!.disabled).toBe(true);
     expect(addButton(container).disabled).toBe(true);
     release(CART);
@@ -423,6 +427,19 @@ describe('AddToCart — Mua ngay', () => {
       expect(bar(container).textContent).toContain('300.000đ'); // đổi phân loại thì số lượng về 1
       expect(byText(bar(container), 'button', 'Thêm vào giỏ')).not.toBeNull();
       expect(byText(bar(container), 'button', 'Mua ngay')).not.toBeNull();
+    });
+
+    it('như Mini App: nút giỏ có huy hiệu số món, "Thêm vào giỏ" nền nhạt, "Mua ngay" hai dòng (nhãn + giá)', async () => {
+      login();
+      const { container } = mount();
+      await flush();
+      const cart = bar(container).querySelector<HTMLAnchorElement>('a[aria-label="Xem giỏ hàng"]')!;
+      expect(cart.getAttribute('href')).toBe('/gio-hang');
+      expect(cart.textContent).toBe('3');
+      expect(byText(bar(container), 'button', 'Thêm vào giỏ')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+      const buy = bar(container).querySelector<HTMLButtonElement>('button[aria-label="Mua ngay · 150.000đ"]')!;
+      expect([...buy.querySelectorAll('span')].map((x) => x.textContent)).toEqual(['Mua ngay', '150.000đ']);
+      expect(bar(container).textContent).not.toContain('Tạm tính');
     });
 
     it('nút "Mua ngay" trên thanh dính làm đúng việc của nút trong trang', async () => {

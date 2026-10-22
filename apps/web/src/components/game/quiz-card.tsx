@@ -1,6 +1,7 @@
 import { Brain, Lightbulb } from 'lucide-react';
 import type { AnswerResult, QuizItem } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
 import { GameCard } from './game-card';
 import { categoryLabel, difficultyLabel } from './game-utils';
@@ -91,7 +92,7 @@ function QuizBlock({
               disabled={pending || !!reveal}
               onClick={() => onAnswer(i)}
               // Đáp án dài phải xuống dòng thay vì bị cắt.
-              className={`${ui.btnSecondary} h-auto whitespace-normal py-2 ${tone}`}
+              className={`${miniBtnSecondary} h-auto whitespace-normal py-2 ${tone}`}
             >
               {opt}
             </button>

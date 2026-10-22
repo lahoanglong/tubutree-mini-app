@@ -46,6 +46,11 @@ const render = async (o: Record<string, string | string[] | undefined>) => rende
 const productCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/products');
 
 describe('BrowsePage — dữ liệu ban đầu', () => {
+  it('main không ghép max-md:pt với sm:py (sm: thắng ở 640-767px)', async () => {
+    const cls = /<main[^>]*class="([^"]*)"/.exec(await render({}))![1]!;
+    expect(cls).not.toMatch(/(^|\s)sm:py-/);
+  });
+
   it('không có tham số: gọi GET /products trang 1, 24 sản phẩm, và giao danh sách + nhãn + danh mục cho BrowseView', async () => {
     await render({});
     expect(productCalls()).toEqual([['/products', { query: { page: 1, limit: 24 } }]]);

@@ -1,6 +1,7 @@
 import { Check, Droplets, Flame, Snowflake } from 'lucide-react';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
 import { formatDrops } from './format';
 import { isSameVNDay } from './game-utils';
 
@@ -26,10 +27,10 @@ export function CheckInStreak({
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
   return (
-    <section className={`p-4 ${ui.card}`}>
+    <section className={`p-4 ${miniCard}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className={`flex items-center gap-1.5 ${ui.sectionTitle}`}>
+          <h2 className={`flex items-center gap-1.5 ${ui.sectionTitle} ${miniSectionTitle}`}>
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             Điểm danh chuỗi {streakDays} ngày
           </h2>
@@ -66,11 +67,11 @@ export function CheckInStreak({
             <Snowflake className="h-4 w-4 text-stone-500" aria-hidden="true" />
             Vé giữ lửa: <span className="font-bold text-stone-900">{profile?.streakFreezes ?? 0}</span>
           </span>
-          <button type="button" disabled={freezePending} onClick={onBuyFreeze} className={`${ui.btnSecondary} flex-none`}>
+          <button type="button" disabled={freezePending} onClick={onBuyFreeze} className={`${miniBtnSecondary} flex-none`}>
             Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
           </button>
         </div>
-        <button type="button" disabled={dewCollectedToday || dewPending} onClick={onCollectDew} className={`${ui.btnSecondary} mt-2 w-full gap-1.5`}>
+        <button type="button" disabled={dewCollectedToday || dewPending} onClick={onCollectDew} className={`${miniBtnSecondary} mt-2 w-full gap-1.5`}>
           <Droplets className="h-4 w-4" aria-hidden="true" />
           {dewCollectedToday ? 'Đã hứng sương' : 'Hứng giọt sương'}
         </button>

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import BrandPage, { generateMetadata } from './page';
+import BrandPage, { generateMetadata, revalidate } from './page';
 
 const mocks = vi.hoisted(() => ({ brand: null as unknown }));
 
@@ -91,7 +91,7 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     const cards = Array.from((await html()).querySelectorAll('section'))
       .find((s) => s.textContent?.includes('Khuyến mãi'))!
       .querySelectorAll<HTMLElement>('.space-y-2 > div');
-    expect(cards[0]!.getAttribute('style')).toContain('border-color');
+    expect(cards[0]!.getAttribute('style')).toContain('border-color:#123456');
     expect(cards[1]!.getAttribute('style')).toBeNull();
     expect(cards[1]!.className).toContain('bg-promo-bg');
   });
@@ -103,11 +103,55 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
     expect(buttons[0]!.getAttribute('aria-label')).toBe('Sao chép mã XANH10');
   });
 
-  it('thẻ sản phẩm trỏ đúng liên kết, giá là giá khuyến mãi và dùng token thẻ DS v2', async () => {
-    const link = (await html()).querySelector<HTMLAnchorElement>('a[href="/san-pham/nuoc-rua-chen"]')!;
-    expect(link.className).toContain('rounded-card');
-    expect(link.className).toContain('shadow-card');
+  it('thẻ sản phẩm là thẻ chung của web (ProductCard): đúng liên kết, giá khuyến mãi, tên nhãn là nhãn của trang, có tim yêu thích', async () => {
+    const box = await html();
+    const link = box.querySelector<HTMLAnchorElement>('a[href="/san-pham/nuoc-rua-chen"]')!;
     expect(link.textContent).toContain('80.000');
+    expect(link.textContent).toContain('Bồ Hòn Xanh');
+    expect(link.textContent).toContain('Đã bán 12');
+    const card = link.parentElement!;
+    expect(card.className).toContain('rounded-card');
+    expect(card.className).toContain('var(--elevation-1)');
+    expect(card.querySelector('button[aria-label="Thêm yêu thích"]')).not.toBeNull();
+  });
+
+  // D7-28: cùng bề rộng với các trang khác (max-w-5xl), không còn khung hẹp max-w-3xl.
+  it('khung trang rộng như các trang khác (D7-28); ở điện thoại không đệm vì ảnh bìa tràn mép', async () => {
+    const main = (await html()).querySelector('main')!;
+    expect(main.className).toContain('max-w-5xl');
+    expect(main.className).not.toContain('max-w-3xl');
+    expect(main.className).toContain('max-md:p-0');
+  });
+
+  it('không có ảnh bìa: dải xanh đậm 96px (điện thoại) và avatar lá đè lên; huy hiệu Chính hãng nằm dòng riêng dưới tên', async () => {
+    const box = await html();
+    expect(box.querySelector('[data-testid="brand-cover-band"]')!.className).toContain('max-md:block');
+    expect(box.querySelector('[data-testid="brand-avatar-fallback"]')!.className).toContain('max-md:grid');
+    expect(box.querySelector('h1')!.className).toContain('max-md:flex-col');
+  });
+
+  it('chứng nhận ở điện thoại: không biểu tượng ở tiêu đề, huy hiệu xanh nhạt không viền', async () => {
+    const box = await html();
+    const h2 = Array.from(box.querySelectorAll('h2')).find((h) => h.textContent === 'Chứng nhận')!;
+    expect(h2.querySelector('svg')!.getAttribute('class')).toContain('max-md:hidden');
+    const chip = box.querySelector('section .overflow-x-auto > span')!;
+    expect(chip.textContent).toBe('Hữu cơ');
+    expect(chip.className).toContain('max-md:border-0');
+  });
+
+  // D15-01: themeColor do chủ nhãn nhập; chỉ #RGB/#RRGGBB đi vào style.
+  it.each([
+    'red;background:url(https://evil.example/x)',
+    '#123456;background:url(x)',
+    '}body{display:none',
+    'url(javascript:alert(1))',
+    'red',
+  ])('khuyến mãi có themeColor độc %j: bỏ màu, không để chuỗi lọt vào style', async (bad) => {
+    mocks.brand = { ...BRAND, promotions: [{ id: 'pr1', title: 'Giảm 10%', subtitle: null, themeColor: bad }] };
+    const box = await html();
+    const card = Array.from(box.querySelectorAll('section')).find((s) => s.textContent?.includes('Khuyến mãi'))!.querySelector<HTMLElement>('.space-y-2 > div')!;
+    expect(card.getAttribute('style')).toBeNull();
+    expect(box.innerHTML).not.toContain('evil.example');
   });
 
   it('thẻ sản phẩm dùng next/link (điều hướng trong ứng dụng, không tải lại cả trang) — BUYERWEB-18', async () => {
@@ -127,7 +171,7 @@ describe('trang nhãn hàng — theo dõi và chia sẻ', () => {
   it('server dựng sẵn số người theo dõi, nút Theo dõi và Chia sẻ cho khách; chưa có dải kiếm tiền', async () => {
     const box = await html();
     const buttons = Array.from(box.querySelectorAll('button')).map((b) => b.textContent);
-    expect(buttons).toEqual(['Theo dõi', 'Chia sẻ', 'XANH10']);
+    expect(buttons).toEqual(['Theo dõi', 'Chia sẻ', 'XANH10', '']);
     expect(box.textContent).toContain('12 người theo dõi');
     expect(box.textContent).not.toContain('hoa hồng');
   });
@@ -163,5 +207,12 @@ describe('trang nhãn hàng — trạng thái rỗng (D5-05)', () => {
 
   it('nhãn có sản phẩm: không hiện thông báo rỗng', async () => {
     expect((await html()).textContent).not.toContain('Nhãn hàng chưa có sản phẩm đang bán');
+  });
+});
+
+describe('/brand/[slug] — hạn trang dựng sẵn', () => {
+  it('trang nhãn làm mới tối đa 60 giây để nhãn gỡ đăng không còn hiện lâu; vẫn dựng phía server cho SEO', () => {
+    expect(revalidate).toBeLessThanOrEqual(60);
+    expect(BrandPage.constructor.name).toBe('AsyncFunction');
   });
 });

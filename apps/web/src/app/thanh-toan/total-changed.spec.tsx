@@ -107,13 +107,49 @@ describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () 
     m.quote.mockRejectedValue(new ApiError('Địa chỉ giao hàng chưa theo địa giới mới. Vui lòng cập nhật lại địa chỉ.', 400, 'ADDRESS_OUTDATED'));
     const r = await mount();
     const text = r.container.textContent ?? '';
-    expect(text).toContain('Địa giới cũ (trước khi sắp xếp tỉnh/phường 2025)');
+    expect(text).toContain('Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được.');
     expect(text).toContain('Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.');
     expect(placeButton(r).disabled).toBe(true);
   });
 
   it('địa chỉ hệ mới: không gắn nhãn cảnh báo', async () => {
     const r = await mount();
-    expect(r.container.textContent).not.toContain('Địa giới cũ');
+    expect(r.container.textContent).not.toContain('địa giới cũ');
+  });
+
+  describe('cảnh báo địa giới cũ trong thẻ địa chỉ đang chọn (7edb9c02, 755fede9)', () => {
+    const LEGACY = { ...NEW_ADDR, id: 'old', provinceCode: '01', wardCode: '00004' };
+    const OTHER = { ...NEW_ADDR, id: 'a2', recipient: 'Bình', isDefault: false };
+    const alertOf = (r: Rendered) => Array.from(r.container.querySelectorAll('[role="alert"]')).find((e) => /địa giới cũ/.test(e.textContent ?? ''));
+    const editBtn = (r: Rendered, who: string) => r.container.querySelector<HTMLButtonElement>(`button[aria-label="Sửa địa chỉ của ${who}"]`)!;
+
+    it('hiện kèm nút "Cập nhật địa chỉ" mở form sửa đúng địa chỉ đó', async () => {
+      m.addresses = [LEGACY, OTHER];
+      const r = await mount();
+      const note = alertOf(r)!;
+      expect(note.textContent).toContain('Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.');
+      click([...note.querySelectorAll('button')].find((b) => b.textContent === 'Cập nhật địa chỉ')!);
+      await flush(2);
+      expect(r.container.textContent).toContain('Sửa địa chỉ');
+      expect(alertOf(r)).toBeUndefined();
+    });
+
+    it('đang sửa một địa chỉ (kể cả địa chỉ khác): ẩn; huỷ sửa thì hiện lại', async () => {
+      m.addresses = [LEGACY, OTHER];
+      const r = await mount();
+      expect(alertOf(r)).toBeDefined();
+      click(editBtn(r, 'Bình'));
+      await flush(2);
+      expect(alertOf(r)).toBeUndefined();
+      click([...r.container.querySelectorAll('button')].find((b) => /^Huỷ|^Hủy|^Đóng/.test(b.textContent ?? ''))!);
+      await flush(2);
+      expect(alertOf(r)).toBeDefined();
+    });
+
+    it('chỉ gắn ở địa chỉ đang chọn', async () => {
+      m.addresses = [{ ...OTHER, isDefault: true }, { ...LEGACY, isDefault: false }];
+      const r = await mount();
+      expect(alertOf(r)).toBeUndefined();
+    });
   });
 });

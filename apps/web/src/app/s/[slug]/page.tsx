@@ -1,11 +1,11 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import {
   CheckCircle2,
   Globe,
   MapPin,
   MessageSquare,
+  Sprout,
   PackageSearch,
   Phone,
   CreditCard,
@@ -13,13 +13,14 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { getStorefront, formatSold } from '@/lib/api';
+import { getStorefront, type ProductCard as ProductCardData } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
 import { StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
-import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
+import ProductCard from '@/components/product-card';
+import { safeHexColor } from '@/lib/safe-color';
 
 export const revalidate = 300;
 
@@ -55,7 +56,8 @@ export default async function StorefrontPage({
 
   // Màu chủ đề do chủ gian hàng chọn (dữ liệu, không phải token) — CHỈ dùng làm điểm nhấn không mang chữ
   // (ảnh bìa, avatar, thanh tiêu đề bộ sưu tập). Mọi chữ dùng token để luôn đủ tương phản bất kể màu họ chọn.
-  const themeColor = sf.themeColor || 'var(--color-action-primary-bg)';
+  // Chỉ nhận #RGB/#RRGGBB: màu do chủ gian hàng nhập đi thẳng vào style (D15-01).
+  const themeColor = safeHexColor(sf.themeColor) ?? 'var(--color-action-primary-bg)';
   // Chỉ gian hàng tự giao mới gửi hàng từ kho riêng; gian hàng CTV/nhãn hàng bán hàng kho Tubu, địa chỉ cũ còn lưu không được
   // hiện như "kho xuất hàng" (SELLER-8).
   const selfFulfils = isPartnerStore(sf);
@@ -73,35 +75,38 @@ export default async function StorefrontPage({
     .filter((c) => c.items.length > 0);
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
+    <main data-page-bleed className={`mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0 md:py-8 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
       {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
       <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
 
       {/* ── Storefront Banner Cover ── */}
-      <div className="relative mb-6 overflow-hidden rounded-sheet shadow-card">
+      <div className="relative mb-6 overflow-hidden rounded-sheet shadow-card max-md:mb-0 max-md:rounded-none max-md:shadow-none">
         {sf.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={sf.coverUrl}
             alt={sf.title}
-            className="h-48 w-full object-cover sm:h-64"
+            className="h-48 w-full object-cover max-md:h-[84px] md:h-64"
           />
         ) : (
+          // Điện thoại: dải xanh đậm phẳng như Mini App; máy tính giữ gradient theo màu chủ đề.
           <div
-            className="h-36 w-full sm:h-48"
-            style={{
-              background: `linear-gradient(135deg, ${themeColor} 0%, var(--color-bg-inverse) 100%)`,
-            }}
+            data-testid="storefront-cover"
+            className="h-36 w-full bg-[linear-gradient(135deg,var(--sf-theme)_0%,var(--sf-end)_100%)] [--sf-end:var(--color-bg-inverse)] [--sf-theme:var(--sf-owner)] max-md:h-[84px] max-md:[--sf-end:var(--forest-700)] max-md:[--sf-theme:var(--forest-700)] md:h-48"
+            style={{ '--sf-owner': themeColor } as React.CSSProperties}
           />
         )}
         {/* Soft gradient overlay at bottom of cover */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900/40 via-transparent to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-stone-900/40 via-transparent to-transparent max-md:hidden" />
       </div>
 
       {/* ── Brand Identity & Header Card ── */}
-      <div className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card sm:-mt-20 sm:p-7">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-4">
+      <div
+        data-testid="storefront-header"
+        className="relative -mt-16 mb-6 rounded-card border border-stone-200 bg-stone-0 p-5 shadow-card max-md:-mt-[29px] max-md:mb-0 max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-4 max-md:py-0 max-md:shadow-none md:-mt-20 md:p-7"
+      >
+        <div className="flex flex-col gap-4 max-md:gap-0 md:flex-row md:items-start md:justify-between">
+          <div className="flex items-start gap-4 max-md:flex-col max-md:gap-2">
             {/* Brand Avatar */}
             <div className="relative shrink-0">
               {sf.avatarUrl ? (
@@ -109,14 +114,17 @@ export default async function StorefrontPage({
                 <img
                   src={sf.avatarUrl}
                   alt={sf.title}
-                  className="h-16 w-16 rounded-card border-4 border-stone-0 object-cover shadow-raised sm:h-20 sm:w-20"
+                  data-testid="storefront-avatar"
+                  className="h-16 w-16 rounded-card border-4 border-stone-0 object-cover shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] max-md:shadow-none md:h-20 md:w-20"
                 />
               ) : (
                 <div
-                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised sm:h-20 sm:w-20 sm:text-3xl"
-                  style={{ backgroundColor: themeColor }}
+                  data-testid="storefront-avatar"
+                  className="flex h-16 w-16 items-center justify-center rounded-card border-4 border-stone-0 font-display text-2xl font-semibold text-stone-0 shadow-raised max-md:h-[58px] max-md:w-[58px] max-md:rounded-full max-md:border-[3px] max-md:border-[var(--color-bg-surface)] bg-[var(--sf-owner)] max-md:bg-[var(--color-action-primary-bg)] max-md:shadow-none md:h-20 md:w-20 sm:text-3xl"
+                  style={{ '--sf-owner': themeColor } as React.CSSProperties}
                 >
-                  {sf.title.slice(0, 1).toUpperCase()}
+                  <span className="max-md:hidden">{sf.title.slice(0, 1).toUpperCase()}</span>
+                  <Sprout className="hidden h-7 w-7 max-md:block" aria-hidden="true" />
                 </div>
               )}
               {/* Tick xanh chỉ cho gian hàng admin đã duyệt: không phải mọi CTV một chạm đều "tuyển chọn". */}
@@ -156,17 +164,15 @@ export default async function StorefrontPage({
               )}
             </div>
           </div>
-        </div>
-
-        {collections.length > 0 && (
-          <div className="mt-4 flex justify-end">
+          {/* Điện thoại luôn có thanh dính như Mini App; máy tính chỉ khi có sản phẩm (gian hàng rỗng đã có nút riêng). */}
+          <div className={collections.length > 0 ? 'md:shrink-0' : 'md:hidden'}>
             <StorefrontAction slug={sf.slug} title={sf.title} referralCode={sf.referralCode} />
           </div>
-        )}
+        </div>
 
         {/* Bio / Slogan */}
         {sf.headerNote && (
-          <p className="mt-4 border-t border-stone-200 pt-3.5 text-sm leading-relaxed text-stone-700">
+          <p className="mt-4 border-t border-stone-200 pt-3.5 text-sm leading-relaxed text-stone-700 max-md:mt-2 max-md:border-t-0 max-md:pt-0 max-md:text-[var(--color-text-secondary)]">
             {sf.headerNote}
           </p>
         )}
@@ -210,7 +216,7 @@ export default async function StorefrontPage({
       </div>
 
       {/* ── Trust Ribbon ── */}
-      <section aria-labelledby="cam-ket-gian-hang" className="mb-8">
+      <section aria-labelledby="cam-ket-gian-hang" className="mb-8 max-md:hidden">
         <h2 id="cam-ket-gian-hang" className="sr-only">
           Cam kết của gian hàng
         </h2>
@@ -237,78 +243,29 @@ export default async function StorefrontPage({
       {/* ── Product Collections ── */}
       {collections.length === 0 && <StorefrontEmpty referralCode={sf.referralCode} />}
       {collections.map((c) => (
-        <section key={c.id} className="mt-8">
-          <div className="mb-4 flex items-center gap-2.5">
+        <section key={c.id} className="mt-8 max-md:mt-4 max-md:px-4">
+          <div className="mb-4 flex items-center gap-2.5 max-md:mb-2">
             <span
               aria-hidden="true"
-              className="h-5 w-1.5 rounded-full"
+              className="h-5 w-1.5 rounded-full max-md:hidden"
               style={{ backgroundColor: themeColor }}
             />
-            <h2 className="font-display text-lg font-semibold text-stone-900 sm:text-xl">{c.title}</h2>
-            <span className="text-xs text-stone-600">({c.items?.length ?? 0} sản phẩm)</span>
+            <h2 className="font-display text-lg font-semibold text-stone-900 max-md:text-[length:var(--type-title-sm-size)] md:text-xl">{c.title}</h2>
+            <span className="text-xs text-stone-600 max-md:hidden">({c.items?.length ?? 0} sản phẩm)</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
-            {c.items.map((it) => {
-              return (
-                <Link
-                  key={it.id}
-                  href={`/san-pham/${it.product.slug}`}
-                  className="group flex flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-forest-600/40 hover:shadow-raised"
-                >
-                  <div className="relative aspect-square w-full overflow-hidden bg-stone-100">
-                    {it.product.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={it.product.thumbnail}
-                        alt={it.product.name}
-                        className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-                        width={400}
-                        height={400}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-forest-50 text-forest-600">
-                        <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-                          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="currentColor" fillOpacity="0.3" />
-                          <path d="M24 37c-1-8 4-15 14-16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      </div>
-                    )}
-
-                    <CardSaleBadge
-                      product={it.product}
-                      className="absolute left-2 top-2 rounded-full bg-promo-solid px-2 py-0.5 text-xs font-bold text-stone-900 shadow-card"
-                    />
-                  </div>
-
-                  <div className="flex flex-1 flex-col p-3.5">
-                    <p className="text-xs font-semibold text-forest-800">{it.product.brand}</p>
-                    <h3 className="line-clamp-2 min-h-[2.5rem] text-xs font-medium text-stone-900 group-hover:text-forest-700 sm:text-sm">
-                      {it.product.name}
-                    </h3>
-
-                    <ProductPriceRow
-                      product={it.product}
-                      className="mt-2 flex items-baseline gap-1.5"
-                      priceClassName="text-sm font-bold text-stone-900 sm:text-base"
-                      originalClassName="text-xs text-stone-500 line-through"
-                    />
-
-                    {formatSold(it.product.sold) && (
-                      <p className="mt-1 text-xs text-stone-600">{formatSold(it.product.sold)}</p>
-                    )}
-                    {it.note && (
-                      <p className="mt-2 flex items-start gap-1 rounded-control bg-success-bg px-2 py-1 text-xs text-success-fg">
-                        <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-                        <span>{it.note}</span>
-                      </p>
-                    )}
-                  </div>
-                </Link>
-              );
-            })}
+            {c.items.map((it) => (
+              <div key={it.id}>
+                <ProductCard product={it.product as ProductCardData} />
+                {it.note && (
+                  <p className="mt-1 flex items-start gap-1 rounded-control bg-success-bg px-2 py-1 text-xs text-success-fg">
+                    <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                    <span>{it.note}</span>
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </section>
       ))}

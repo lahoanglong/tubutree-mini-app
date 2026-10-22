@@ -109,7 +109,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     expect(c.textContent).toContain('Mầm Xanh');
     expect(c.textContent).toContain('Tích điểm ×1');
-    expect(c.textContent).toContain('1.800 điểm Xanh');
+    expect(c.textContent).toContain('1.800 Điểm Xanh');
     expect(c.textContent).toContain('trong đó 119 điểm không hết hạn');
     expect(c.textContent).toContain('Còn 2,5 triệu mua hàng để lên hạng Lộc Biếc');
     const bar = c.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]')!;
@@ -121,6 +121,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     expect(c.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]')).toBeNull();
     expect(c.textContent).toContain('Bạn đang ở hạng cao nhất');
+    expect(c.textContent).toContain('Tích điểm ×1,5');
   });
 
   it('thiếu mốc chi tiêu: nói theo điểm tích từ mua hàng kèm số tiền tương ứng', async () => {
@@ -139,7 +140,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     expect(old.textContent).toContain('từ 200 điểm tích luỹ');
   });
 
-  it('điểm sắp hết hạn, chính sách hạn điểm và điểm đang chờ mở khoá', async () => {
+  it('điểm sắp hết hạn, chính sách hạn điểm; điểm đang khoá không hiện dòng chờ như Mini App', async () => {
     state.loyalty = {
       ...state.loyalty!,
       expiringPoints: { amount: 70, expiresAt: new Date(Date.now() + 5 * 864e5).toISOString() },
@@ -151,8 +152,8 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     expect(c.textContent).toMatch(/70 Điểm Xanh sẽ hết hạn ngày \d{2}\/\d{2}\/\d{4} \(còn [45] ngày\)/);
     expect(c.textContent).toContain('Điểm Xanh thường có hạn 12 tháng');
-    expect(c.textContent).toContain('250 điểm đang chờ, mở khoá ngày 22/10');
-    expect(c.textContent).toContain('100 điểm đang chờ xử lý đổi/trả');
+    expect(c.textContent).not.toContain('đang chờ');
+    expect(c.textContent).not.toContain('mở khoá ngày');
   });
 
   it('không có điểm khoá, hết hạn hay lô quy đổi: các dòng phụ không hiện', async () => {
@@ -168,7 +169,7 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     const c = await mount();
     const section = c.querySelector('section[aria-label="Các hạng"]')!;
     expect(section.textContent).toContain('hạng khởi đầu · ×1');
-    expect(section.textContent).toContain('từ 4 triệu mua hàng trong 12 tháng · ×1.2');
+    expect(section.textContent).toContain('từ 4 triệu mua hàng trong 12 tháng · ×1,2');
     expect(section.querySelector('[aria-current="true"]')?.textContent).toContain('Mầm Xanh');
   });
 
@@ -193,7 +194,7 @@ describe('/tai-khoan/diem-xanh — mã giảm giá của tôi', () => {
     expect(heads.indexOf('Mã giảm giá của tôi')).toBeLessThan(heads.indexOf('Điểm danh nhận Điểm Xanh'));
     expect(heads.indexOf('Điểm danh nhận Điểm Xanh')).toBeLessThan(heads.indexOf('Các hạng'));
     expect(c.textContent).toContain('4 mã');
-    expect(c.textContent).toContain('Miễn phí vận chuyển');
+    expect(c.textContent).toContain('Miễn phí giao hàng');
     expect(c.textContent).toContain('đơn từ 199.000đ');
     expect(c.textContent).toContain('HSD 31/12/2026');
     expect(c.textContent).toContain('Giảm 10% (tối đa 50.000đ)');
@@ -225,6 +226,13 @@ describe('/tai-khoan/diem-xanh — mã giảm giá của tôi', () => {
 });
 
 describe('/tai-khoan/diem-xanh — điểm danh', () => {
+  it('câu giải thích điểm danh nhắc "Vườn Xanh" đúng một lần, không lặp', async () => {
+    const c = await mount();
+    const note = Array.from(c.querySelectorAll('p')).find((p) => (p.textContent ?? '').includes('Điểm danh không tính vào xét hạng'))!;
+    expect(note.textContent).toContain('giọt nước điểm danh riêng trong Vườn Xanh.');
+    expect(note.textContent?.match(/Vườn Xanh/g)).toHaveLength(1);
+  });
+
   it('chưa điểm danh: nút "Điểm danh +3"; bấm gửi đúng POST /me/loyalty/check-in một lần, báo kết quả và khoá nút', async () => {
     state.checkInPost = async () => {
       state.checkIn = { ...state.checkIn!, checkedInToday: true };
@@ -290,7 +298,7 @@ describe('/tai-khoan/diem-xanh — lối tắt', () => {
   it('route đã sẵn sàng: Vườn Xanh, Đổi rác lấy quà (theo waste.enabled), Kho quà', async () => {
     state.readyRoutes = new Set(['/vuon-xanh', '/doi-rac', '/kho-qua']);
     const c = await mount();
-    expect(c.querySelector('a[href="/vuon-xanh"]')?.textContent).toContain('Vườn Cây Tubu');
+    expect(c.querySelector('a[href="/vuon-xanh"]')?.textContent).toContain('Vườn Xanh');
     expect(c.querySelector('a[href="/doi-rac"]')?.textContent).toContain('Đổi rác lấy quà');
     expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
     state.config = { waste: { enabled: false } };
@@ -301,18 +309,26 @@ describe('/tai-khoan/diem-xanh — lối tắt', () => {
 });
 
 describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
-  it('từng dòng bằng tiếng Việt, có dấu cộng/trừ, ngày và hạn', async () => {
+  it('từng dòng bằng nhãn ngắn như Mini App, có dấu cộng/trừ và ngày; không in mã đơn hay hạn từng dòng', async () => {
     const c = await mount();
     const rows = Array.from(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).map((li) => li.textContent ?? '');
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toContain('Dùng điểm khi thanh toán · TB1');
+    expect(rows[0]).toContain('Dùng điểm khi thanh toán');
+    expect(rows[0]).not.toContain('TB1');
     expect(rows[0]).toContain('−1.681');
     expect(rows[0]).toContain('14/10/2026');
     expect(rows[1]).toContain('+250');
-    expect(rows[1]).toContain('Hết hạn 14/10/2027');
+    expect(rows[1]).not.toContain('Hết hạn');
     expect(rows[2]).toContain('Điểm không hết hạn');
     expect(c.textContent).toContain('Điều chỉnh Điểm Xanh');
     expect(c.textContent).not.toContain('WEIRD_INTERNAL_CODE');
+  });
+
+  it('chỉ hiện 20 giao dịch gần nhất và không có dòng chú thích cuối như Mini App', async () => {
+    state.txns = Array.from({ length: 25 }, (_, i) => ({ id: `n${i}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }));
+    const c = await mount();
+    expect(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).toHaveLength(20);
+    expect(c.textContent).not.toContain('Hiển thị tối đa');
   });
 
   it('chưa có giao dịch: câu báo trống; tải lỗi: báo lỗi và Thử lại', async () => {
@@ -338,7 +354,7 @@ describe('/tai-khoan/diem-xanh — thẻ thành viên số', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Thẻ Thành Viên Tubu');
     expect(dialog.textContent).toContain('TUBUAN123');
-    expect(dialog.textContent).toContain('Hạng Mầm Xanh · 1.800 điểm Xanh');
+    expect(dialog.textContent).toContain('Hạng Mầm Xanh · 1.800 Điểm Xanh');
     expect(dialog.textContent).toContain('Đưa mã QR này cho thu ngân');
     expect(dialog.querySelector('img[alt="QR"], [data-qr-placeholder]')).not.toBeNull();
     expect(state.calls.some((x) => x.path === '/me/loyalty/member-card')).toBe(true);
@@ -460,5 +476,62 @@ describe('/tai-khoan/diem-xanh — trạng thái trang', () => {
   it('nút mua sắm dẫn về danh mục sản phẩm', async () => {
     const c = await mount();
     expect(byText(c, 'a', 'Mua sắm để tích thêm Điểm Xanh')?.getAttribute('href')).toBe('/');
+  });
+});
+
+describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', () => {
+  it('thẻ hạng giữ màu nền theo hạng (không bị nền trắng của thẻ đè), không viền ở điện thoại', async () => {
+    const c = await mount();
+    const card = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(card.classList.contains('bg-sage-50')).toBe(true);
+    expect(card.classList.contains('bg-stone-0')).toBe(false);
+    expect(card.classList.contains('border')).toBe(false);
+  });
+
+  it('thanh tiến độ không in chữ nhãn (chỉ aria-label), thanh dày 10px', async () => {
+    const c = await mount();
+    const bar = c.querySelector('[role="progressbar"][aria-label="Tiến độ lên hạng kế"]') as HTMLElement;
+    expect(bar.getAttribute('aria-valuenow')).toBe('38');
+    expect(bar.className).toContain('h-2.5');
+    const card = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(card.textContent).not.toContain('Tiến độ lên hạng kế');
+  });
+
+  it('nút thẻ thành viên số và nút mua sắm là nút phụ kiểu ZaUI ở điện thoại', async () => {
+    const c = await mount();
+    expect(byText(c, 'button', 'Thẻ thành viên số')!.className).toContain('max-md:bg-forest-50');
+    expect(byText(c, 'a', 'Mua sắm để tích thêm Điểm Xanh')!.className).toContain('max-md:bg-forest-50');
+  });
+
+  it('các thẻ khối không viền ở điện thoại', async () => {
+    const c = await mount();
+    const bordered = Array.from(c.querySelectorAll('section')).filter((s) => s.classList.contains('border'));
+    expect(bordered).toEqual([]);
+  });
+
+  it('lối tắt dùng mũi tên chevron, không dùng ký tự ›', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh', '/kho-qua']);
+    const c = await mount();
+    const link = c.querySelector('a[href="/vuon-xanh"]')!;
+    expect(link.textContent).not.toContain('›');
+    expect(link.querySelectorAll('svg').length).toBe(2);
+  });
+
+  it('trang bỏ đệm 48px của body và có thanh tiêu đề trắng với h1 như Mini App', async () => {
+    const c = await mount();
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+});
+
+describe('/tai-khoan/diem-xanh — tiêu đề khối như Mini App', () => {
+  it('tiêu đề các khối cỡ title-sm ở điện thoại; thẻ hạng chữ lớn như medallion', async () => {
+    const c = await mount();
+    for (const name of ['Các hạng', 'Lịch sử Điểm Xanh', 'Mã giảm giá của tôi']) {
+      const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === name)!;
+      expect(h.className, name).toContain('max-md:text-[length:var(--type-title-sm-size)]');
+    }
+    const tier = c.querySelector('section[aria-label="Hạng thành viên"] h2')!;
+    expect(tier.className).toContain('max-md:text-[length:var(--type-title-lg-size)]');
   });
 });

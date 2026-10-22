@@ -42,7 +42,9 @@ vi.mock('./content-kit-sheet', () => ({
 }));
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
+import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
   { id: 'v1', stock: 0 },
@@ -81,13 +83,13 @@ describe('PdpFreeship', () => {
   it('khách đăng nhập: ngưỡng theo hạng lấy từ giỏ', async () => {
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí vận chuyển cho đơn từ 150.000đ');
+    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí giao hàng cho đơn từ 150.000đ');
   });
   it('khách vãng lai: ngưỡng chung từ config; config chưa về thì chưa hứa số nào', async () => {
     mocks.phase = 'guest';
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí vận chuyển cho đơn từ 200.000đ');
+    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí giao hàng cho đơn từ 200.000đ');
     expect(mocks.getCart).not.toHaveBeenCalled();
     mocks.config = { ...mocks.config, isLoaded: false };
     const again = mount(<PdpFreeship />);
@@ -99,7 +101,7 @@ describe('PdpFreeship', () => {
     mocks.config = { ...mocks.config, freeshipThreshold: 0 };
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.textContent).toBe('Miễn phí vận chuyển cho mọi đơn hàng');
+    expect(container.textContent).toBe('Miễn phí giao hàng cho mọi đơn hàng');
   });
 });
 
@@ -115,6 +117,14 @@ describe('PdpCoupons', () => {
     expect(container.textContent).toContain('Đơn từ 100.000đ');
     expect(unnamedControls(container)).toEqual([]);
     expect(smallTouchTargets(container)).toEqual([]);
+  });
+  it('ở điện thoại mã xếp dọc, nút rộng hết hàng như Mini App', async () => {
+    mocks.http.get.mockResolvedValue([coupon('ALL')]);
+    const { container } = mount(<PdpCoupons productId="p1" />);
+    await flush();
+    expect(container.querySelector('ul')!.className).toContain('max-md:flex-col');
+    expect(container.querySelector('button')!.className).toContain('max-md:w-full');
+    expect(container.querySelector('li')!.className).toContain('max-md:min-w-0');
   });
   it('chạm chép mã và báo mã đã có sẵn trong ví; không chép được thì cho khách tự ghi mã', async () => {
     mocks.http.get.mockResolvedValue([coupon('ALL')]);
@@ -284,5 +294,60 @@ describe('PdpChatButton', () => {
   it('OA chưa cấu hình thì không hiện nút', () => {
     mocks.oa.available = false;
     expect(mount(<PdpChatButton productName="Dầu gội" />).container.innerHTML).toBe('');
+  });
+});
+
+describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào lời hứa Điểm Xanh', () => {
+  const PRODUCT = { slug: 'dau-goi', basePrice: 289000, variations: [{ id: 'v2', retailPrice: 289000 }] };
+  function Qty({ n }: { n: number }) {
+    const sel = usePdpSelection()!;
+    return <button type="button" data-testid="qty" onClick={() => sel.setQuantity(n)} />;
+  }
+  const line = () => document.querySelector('[data-testid="pdp-points-earn"]')?.textContent;
+  async function mountEarn(opts: { multiplier?: number; qty?: number } = {}) {
+    const qc = new QueryClient();
+    if (opts.multiplier) qc.setQueryData(loyaltyQuery(mocks.http as never).queryKey, { earnMultiplier: opts.multiplier });
+    const r = render(
+      <QueryClientProvider client={qc}>
+        <PdpSelectionProvider initialId="v2">
+          <Qty n={opts.qty ?? 1} />
+          <PdpPointsEarn product={PRODUCT} />
+        </PdpSelectionProvider>
+      </QueryClientProvider>,
+    );
+    mounted.push(r);
+    if (opts.qty) click(document.querySelector('[data-testid="qty"]'));
+    await flush();
+  }
+  beforeEach(() => {
+    mocks.config = { ...mocks.config, loyalty: { earnPct: 0.02, vndPerPointRedeem: 100 } } as typeof mocks.config;
+  });
+
+  it('khách vãng lai (hệ số 1): 289.000đ x 2 ra 115 Điểm Xanh, quy 11.500đ', async () => {
+    mocks.phase = 'guest';
+    await mountEarn({ qty: 2 });
+    expect(line()).toBe('Nhận tối đa 115 Điểm Xanh (≈11.500đ) khi đơn giao thành công');
+  });
+
+  it('Giờ vàng rẻ hơn: tính theo giá flash, không theo giá lẻ', async () => {
+    mocks.phase = 'guest';
+    mocks.flash = [{ variationId: 'v2', flashPrice: 200000 }];
+    await mountEarn();
+    expect(line()).toBe('Nhận tối đa 40 Điểm Xanh (≈4.000đ) khi đơn giao thành công');
+  });
+
+  it('đã đăng nhập, cache có hệ số 1.5: nhân hệ số hạng', async () => {
+    await mountEarn({ multiplier: 1.5, qty: 2 });
+    expect(line()).toBe('Nhận tối đa 173 Điểm Xanh (≈17.300đ) khi đơn giao thành công');
+  });
+
+  it('đã đăng nhập nhưng chưa có tổng quan trong cache, hoặc đang khôi phục phiên: nói chung, không đoán số', async () => {
+    await mountEarn({ qty: 2 });
+    expect(line()).toBe('Nhận Điểm Xanh khi đơn giao thành công');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.phase = 'loading';
+    await mountEarn({ qty: 2 });
+    expect(line()).toBe('Nhận Điểm Xanh khi đơn giao thành công');
   });
 });

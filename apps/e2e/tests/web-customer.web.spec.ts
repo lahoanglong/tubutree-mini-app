@@ -18,14 +18,17 @@ function watchHealth(page: Page) {
   return { pageErrors, serverErrors };
 }
 
+const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768;
+
 async function expectHealthyPage(page: Page, path: string) {
   const health = watchHealth(page);
   const res = await page.goto(path);
   expect(res?.status()).toBe(200);
   await expect(page.locator('main')).toHaveCount(1);
   await expect(page.locator('h1')).toHaveCount(1);
-  await expect(page.locator('footer a[href^="tel:"]')).toBeVisible();
-  await expect(page.locator('footer a[href^="mailto:"]')).toBeVisible();
+  // Điện thoại có chân trang gọn riêng (hotline + chính sách), chân trang đầy đủ chỉ hiện từ md; mỗi khổ đúng một hotline nhìn thấy.
+  await expect(page.locator('footer a[href^="tel:"]:visible')).toHaveCount(1);
+  if (!isPhone(page)) await expect(page.locator('footer a[href^="mailto:"]:visible')).toHaveCount(1);
   expect(health.pageErrors).toEqual([]);
   expect(health.serverErrors).toEqual([]);
 }
@@ -76,7 +79,12 @@ test.describe('Web khách (smoke)', () => {
   test('ô tìm kiếm: gửi từ khoá điều hướng tới /san-pham?q=... và trang vẫn render', async ({ page }) => {
     const health = watchHealth(page);
     await page.goto('/');
-    const input = page.locator('#site-search-q');
+    // Điện thoại như Mini App: ô tìm dạng viên ở trang chủ mở trang danh mục có ô tìm; máy tính dùng ô tìm ở thanh đầu.
+    let input = page.locator('#site-search-q');
+    if (isPhone(page)) {
+      await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
+      input = page.locator('#browse-q');
+    }
     await input.fill('xanh');
     await input.press('Enter');
     await expect(page).toHaveURL(/\/san-pham\?q=xanh/);

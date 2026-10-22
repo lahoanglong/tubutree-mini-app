@@ -357,7 +357,7 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái đóng và kết quả (§4.6)', 
     expect(c.textContent).toContain('Bị từ chối');
     expect(c.textContent).toContain('Ướt: thùng ướt');
     expect(c.querySelector('ol[aria-label="Tiến độ yêu cầu"]')).toBeNull();
-    expect(c.textContent).toContain('Cần hỗ trợ? Nhắn Tubu Tree');
+    expect(c.textContent).not.toContain('Cần hỗ trợ');
     expect(c.querySelector('a[href^="tel:"]')?.getAttribute('href')).toBe('tel:0984606774');
     expect(c.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
   });
@@ -476,5 +476,13 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () =
     state.request = makeRequestDetail();
     c = await mount();
     expect(c.querySelector('h1')?.textContent).toContain('TR-8K2M9');
+  });
+});
+
+describe('/doi-rac/yeu-cau/[id] — diện mạo Mini App ở điện thoại', () => {
+  it('Sửa món và Huỷ yêu cầu là nút secondary xanh nhạt không viền', async () => {
+    const c = await mount();
+    expect(byText(c, 'a', 'Sửa món')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(button(c, 'Huỷ yêu cầu')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
   });
 });

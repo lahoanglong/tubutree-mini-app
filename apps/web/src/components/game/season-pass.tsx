@@ -2,6 +2,7 @@ import { Check, Lock, Star, Ticket } from 'lucide-react';
 import type { SeasonPassReward, SeasonPassState, SeasonPassTier } from '@tubutree/app-core/api/game';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { GameCard } from './game-card';
 
@@ -56,7 +57,11 @@ export function SeasonPass({
           const busy = (track: Track) => claimPending && claimVariables?.tier === t.tier && claimVariables?.track === track;
           const premiumLocked = !t.unlocked || !pass.premiumEligible;
           return (
-            <div key={t.tier} className={`rounded-control p-3 ${t.unlocked ? 'bg-stone-50' : 'bg-stone-100 opacity-70'}`}>
+            // Bậc khoá khác bậc mở bằng nền trắng + viền nét đứt, không làm mờ: chữ phải giữ ≥ 4,5:1.
+            <div
+              key={t.tier}
+              className={`rounded-control border p-3 ${t.unlocked ? 'border-transparent bg-stone-50' : 'border-dashed border-[color:var(--color-border-strong)] bg-stone-0'}`}
+            >
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="font-semibold text-stone-900">{`Bậc ${t.tier + 1}`}</span>
                 <span className="text-stone-600">{xpText(t.xpRequired)}</span>
@@ -92,7 +97,7 @@ export function SeasonPass({
                       type="button"
                       disabled={premiumLocked || busy('premium')}
                       onClick={() => onClaim(t.tier, 'premium')}
-                      className={`${ui.btnSecondary} mt-1 w-full gap-1`}
+                      className={`${miniBtnSecondary} mt-1 w-full gap-1`}
                     >
                       {premiumLocked && <Lock className="h-4 w-4" aria-hidden="true" />}
                       {premiumLocked ? 'Chưa mở' : 'Nhận'}

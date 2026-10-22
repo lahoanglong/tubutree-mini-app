@@ -37,7 +37,7 @@ describe('order-view — nhãn và đường dẫn đơn hàng (C-025)', () => {
 
   it('nhãn trạng thái đơn bằng tiếng Việt có dấu, lạ thì giữ nguyên', () => {
     expect(orderStatusLabel('PENDING_PAYMENT')).toBe('Chờ thanh toán');
-    expect(orderStatusLabel('DELIVERED')).toBe('Đã giao');
+    expect(orderStatusLabel('DELIVERED')).toBe('Giao thành công');
     expect(orderStatusLabel('CANCELLED')).toBe('Đã hủy');
     expect(orderStatusLabel('WHATEVER')).toBe('WHATEVER');
   });

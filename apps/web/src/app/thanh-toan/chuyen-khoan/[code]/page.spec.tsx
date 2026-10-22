@@ -57,6 +57,18 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(c.textContent).toContain('Giữ nguyên nội dung');
   });
 
+  it('tiêu đề cùng hàng với nút lùi như màn chuyển khoản của Mini App (bỏ đệm 48px của body)', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+  });
+
+  it('nút lùi vào thẳng link thanh toán đi tới chi tiết đơn đang chờ, không tới Checkout', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('header')!.getAttribute('data-back-href')).toBe('/tai-khoan/don-hang/TB-9');
+  });
+
   it('mỗi dòng cần chép có nút có tên: số tài khoản, số tiền, nội dung', async () => {
     const c = mount();
     await flush();
@@ -89,11 +101,36 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(links.find((a) => a.textContent === 'Về trang chủ')?.getAttribute('href')).toBe('/');
   });
 
+  it('h1 là "Quét QR để chuyển khoản" khi đang chờ trả, đổi thành tiêu đề trung tính khi đã PAID hoặc chưa đăng nhập', async () => {
+    const c = mount();
+    await flush();
+    expect(c.querySelector('h1')!.textContent).toContain('Quét QR để chuyển khoản');
+    mocks.qr.paymentStatus = 'PAID';
+    const paid = mount();
+    await flush();
+    expect(paid.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+    mocks.auth.status = 'idle';
+    mocks.auth.user = null;
+    const guest = mount();
+    await flush();
+    expect(guest.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+  });
+
+  it('đã PAID hoặc chưa có QR: không vẽ dải tiêu đề, vẫn đúng một h1 và còn trang cha cho nút lùi', async () => {
+    mocks.qr.paymentStatus = 'PAID';
+    const c = mount();
+    await flush();
+    expect(c.querySelector('header')).toBeNull();
+    expect(c.innerHTML).not.toContain('max-md:bg-[var(--color-bg-surface)]');
+    expect(c.querySelectorAll('h1')).toHaveLength(1);
+    expect(c.querySelector('[data-back-href]')!.getAttribute('data-back-href')).toBe('/tai-khoan/don-hang/TB-9');
+  });
+
   it('lỗi tải: báo lỗi, "Thử lại" và vẫn có lối xem đơn hàng', async () => {
     mocks.qr.fail = true;
     const c = mount();
     await flush();
-    expect(c.textContent).toContain('Không tải được thông tin thanh toán.');
+    expect(c.textContent).toContain('Chưa tải được thông tin thanh toán');
     expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(true);
     expect(Array.from(c.querySelectorAll('a')).some((a) => a.getAttribute('href') === '/tai-khoan/don-hang/TB-9')).toBe(true);
   });

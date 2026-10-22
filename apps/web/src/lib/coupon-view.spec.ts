@@ -11,9 +11,9 @@ describe('couponValueLabel — mã này cho khách lợi gì (R2-BUYERWEB-7)', (
     expect(couponValueLabel({ ...base, type: 'PERCENT', value: 30 })).toBe('Giảm 30%');
     expect(couponValueLabel({ ...base, type: 'PERCENT', value: 30, maxDiscount: 50000 })).toBe('Giảm 30% (tối đa 50.000đ)');
   });
-  it('miễn phí vận chuyển: value của mã không phải mức trần nên nhãn không ghi "tối đa"', () => {
-    expect(couponValueLabel({ ...base, type: 'FREESHIP', value: 0 })).toBe('Miễn phí vận chuyển');
-    expect(couponValueLabel({ ...base, type: 'FREESHIP', value: 30000 })).toBe('Miễn phí vận chuyển');
+  it('miễn phí giao hàng: value của mã không phải mức trần nên nhãn không ghi "tối đa"', () => {
+    expect(couponValueLabel({ ...base, type: 'FREESHIP', value: 0 })).toBe('Miễn phí giao hàng');
+    expect(couponValueLabel({ ...base, type: 'FREESHIP', value: 30000 })).toBe('Miễn phí giao hàng');
   });
 });
 

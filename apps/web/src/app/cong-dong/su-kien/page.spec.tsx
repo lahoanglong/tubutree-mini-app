@@ -249,3 +249,13 @@ describe('/cong-dong/su-kien — tiêu đề, vùng chạm, truy cập', () => {
     expect(smallTouchTargets(container)).toEqual([]);
   });
 });
+
+describe('/cong-dong/su-kien — giao diện điện thoại như Mini App', () => {
+  it('thẻ sự kiện không viền; tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {
+    const { container } = await mount();
+    const card = byText(container, 'button', EVENT('e1').title)!;
+    expect(card.classList.contains('border')).toBe(false);
+    expect(container.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(container.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+});

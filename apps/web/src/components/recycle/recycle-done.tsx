@@ -8,10 +8,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Droplet } from 'lucide-react';
 import { wasteMeQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { pointsSummary, formatCount } from '@/lib/checkout-points';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -19,8 +21,6 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
 import { formatPoints, impactLine, nextRewardProgress } from './recycle-labels';
-
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 function Shell({ id, subtitle, children }: { id: string; subtitle?: string; children: ReactNode }) {
   return (
@@ -89,7 +89,7 @@ export function RecycleDone({ id }: { id: string }) {
         </div>
       )}
       {impact && (
-        <div className={`p-4 ${ui.card}`}>
+        <div className={`p-4 ${skin.card}`}>
           <p className="text-sm text-stone-900">{impact}</p>
           <p className="text-xs text-stone-600">Ước tính theo khối lượng trung bình</p>
         </div>
@@ -98,7 +98,7 @@ export function RecycleDone({ id }: { id: string }) {
         <Link href="/kho-qua" className={`${ui.btnPrimary} w-full`}>
           Đổi quà ngay
         </Link>
-        <Link href="/doi-rac/tao" className={`${ui.btnSecondary} w-full`}>
+        <Link href="/doi-rac/tao" className={`${skin.btnSecondary} w-full`}>
           Đổi thêm rác
         </Link>
       </div>

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
 // Mini App checkout.tsx: BANK_TRANSFER → navigate(`/bank-payment/${code}`, { replace: true }) ngay sau khi đặt,
-// không qua màn "Đặt hàng thành công". Web đi tới /thanh-toan/chuyen-khoan/[code] theo cùng cách.
+// không qua màn "Cảm ơn bạn đã chọn Tubu". Web đi tới /thanh-toan/chuyen-khoan/[code] theo cùng cách.
 
 const ADDR = {
   id: 'a1', recipient: 'An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Ba Đình', street: '1 Phố Huế',
@@ -75,7 +75,7 @@ describe('/thanh-toan — chuyển khoản sang trang QR riêng', () => {
     await flush(8);
     expect(m.placeOrder.mock.calls[0]![0]).toMatchObject({ paymentMethod: 'BANK_TRANSFER' });
     expect(m.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
-    expect(r.container.textContent).not.toContain('Đặt hàng thành công');
+    expect(r.container.textContent).not.toContain('Cảm ơn bạn đã chọn Tubu');
   });
 
   it('mã đơn được mã hoá trong đường dẫn', async () => {
@@ -88,13 +88,13 @@ describe('/thanh-toan — chuyển khoản sang trang QR riêng', () => {
     expect(m.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB%2F1');
   });
 
-  it('đặt đơn COD → vẫn màn "Đặt hàng thành công", không chuyển trang', async () => {
+  it('đặt đơn COD → vẫn màn "Cảm ơn bạn đã chọn Tubu", không chuyển trang', async () => {
     m.placeOrder.mockResolvedValue(placed({ paymentMethod: 'COD' }));
     const r = await mount();
     click(byText(r.container, 'button', 'Đặt hàng'));
     await flush(8);
     expect(m.replace).not.toHaveBeenCalled();
-    expect(r.container.textContent).toContain('Đặt hàng thành công');
+    expect(r.container.textContent).toContain('Cảm ơn bạn đã chọn Tubu');
   });
 
   it('đơn 0đ bị ép COD dù khách đã chọn chuyển khoản → màn thành công, không sang trang QR', async () => {
@@ -117,7 +117,7 @@ describe('/thanh-toan — chuyển khoản sang trang QR riêng', () => {
     click(byText(r.container, 'button', 'Đặt hàng'));
     await flush(10);
     expect(m.replace).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TB-9');
-    expect(r.container.textContent).not.toContain('Đặt hàng thành công');
+    expect(r.container.textContent).not.toContain('Cảm ơn bạn đã chọn Tubu');
     expect(byText(r.container, 'button', 'Đặt hàng')).toBeFalsy();
     expect(r.container.querySelector('a[href="/thanh-toan/chuyen-khoan/TB-9"]')).not.toBeNull();
     expect(m.placeOrder).toHaveBeenCalledTimes(1);

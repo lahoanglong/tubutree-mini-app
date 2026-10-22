@@ -21,7 +21,7 @@ export function groupBuyPitch(cfg?: { discountPct: number; targetSize: number } 
 
 /** Nhãn ngắn cho mã giảm giá hiển thị ở trang sản phẩm. */
 export function couponLabel(c: Pick<CouponDTO, 'type' | 'value' | 'maxDiscount'>): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }
@@ -32,7 +32,7 @@ export function pdpCoupons(coupons: readonly CouponDTO[] | undefined, productId:
 }
 
 export function freeshipLine(from: number): string {
-  return from > 0 ? `Miễn phí vận chuyển cho đơn từ ${formatVnd(from)}` : 'Miễn phí vận chuyển cho mọi đơn hàng';
+  return from > 0 ? `Miễn phí giao hàng cho đơn từ ${formatVnd(from)}` : 'Miễn phí giao hàng cho mọi đơn hàng';
 }
 
 /**

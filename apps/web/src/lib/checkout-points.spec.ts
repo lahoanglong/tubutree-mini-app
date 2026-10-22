@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkoutPointsOffer, convertedPointsLine, lockedPointsLines, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
+import { checkoutPointsOffer, convertedPointsLine, pointsCapState, pointsSummary, zeroTotalNote } from './checkout-points';
 
 // Backend kẹp Điểm Xanh ở checkout theo số DÙNG ĐƯỢC (số dư − điểm đơn còn trong hạn đổi/trả hoặc đang
 // chờ xử lý đổi/trả) — ô "Dùng … Điểm Xanh" trên web phải đề nghị đúng số đó, không phải số dư.
@@ -170,24 +170,5 @@ describe('convertedPointsLine', () => {
 
   it('không có điểm quy đổi → không có dòng', () => {
     expect(convertedPointsLine(checkoutPointsOffer({ pointsBalance: 90 }), { capNote: 'x', partnerNote: null })).toBeNull();
-  });
-});
-
-describe('lockedPointsLines', () => {
-  it('phần theo hạn đổi/trả: số điểm và ngày dd/MM giờ Việt Nam', () => {
-    expect(lockedPointsLines({ lockedPoints: 1200, lockedReturnPoints: 0, lockedUntil: '2026-10-21T03:00:00.000Z' })).toEqual([
-      '1.200 điểm đang chờ, mở khoá ngày 21/10',
-    ]);
-  });
-  it('phần chờ xử lý đổi/trả tách riêng, không theo ngày', () => {
-    expect(lockedPointsLines({ lockedPoints: 300, lockedReturnPoints: 300, lockedUntil: null })).toEqual([
-      '300 điểm đang chờ xử lý đổi/trả, mở khoá khi yêu cầu được xử lý xong',
-    ]);
-  });
-  it('thiếu ngày mà vẫn có điểm khoá → không bịa ngày; không khoá/API cũ → rỗng', () => {
-    expect(lockedPointsLines({ lockedPoints: 5 })).toEqual(['5 điểm đang chờ mở khoá']);
-    expect(lockedPointsLines({ lockedPoints: 0 })).toEqual([]);
-    expect(lockedPointsLines({})).toEqual([]);
-    expect(lockedPointsLines(null)).toEqual([]);
   });
 });

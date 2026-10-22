@@ -171,14 +171,21 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page.getByRole('region', { name: 'Bán chạy' }).getByText('Bán chạy nhất')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Mới về vườn' }).getByText('Hàng mới nhất')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Dành cho bạn' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(0);
+    // Điện thoại: chuông hiện cả với khách như Mini App (trang Thông báo tự đòi đăng nhập); máy tính không có chuông cho khách.
+    const phone = (page.viewportSize()?.width ?? 1280) < 768;
+    await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(phone ? 1 : 0);
     expect(api.callsTo('GET', '/me/purchased-items')).toHaveLength(0);
 
     await page.getByRole('button', { name: 'Dầu gội' }).click();
     await expect(page).toHaveURL(/\/san-pham\?category=c-goi$/);
     await page.goBack();
-    await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
-    await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
+    if (phone) {
+      await page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' }).click();
+      await expect(page).toHaveURL(/\/san-pham(\?focus=search)?$/);
+    } else {
+      // Máy tính chỉ giữ ô tìm của thanh đầu website; ô vỏ ở trang chủ chỉ có ở điện thoại.
+      await expect(page.getByRole('link', { name: 'Bạn đang tìm gì hôm nay?' })).toHaveCount(0);
+    }
   });
 
   test('khách cũ đã đăng nhập: chuông có số chưa đọc, Mua lại gửi POST /cart/items addSource repurchase rồi sang giỏ', async ({ page, api }) => {
@@ -191,6 +198,7 @@ test.describe('Web khách: Trang chủ /', () => {
     });
     mockHome(api);
     mockCustomer(api);
+    api.get('/me/wishlist/ids', []);
     api.post('/cart/items', { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 1 });
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
 
@@ -250,7 +258,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     return detail.ok() ? ((await detail.json()) as { id: string; slug: string; variations: { id: string; stock: number }[] }) : null;
   }
 
-  function mockPdp(api: MockApi, p: { slug: string; variations: { id: string; stock: number }[] }, over: { affiliate?: boolean } = {}) {
+  function mockPdp(api: MockApi, p: { slug: string; variations: { id: string; stock: number }[] }, over: { affiliate?: boolean; coupons?: unknown[] } = {}) {
     api.get('/flash-sales/active', []);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
     api.get(`/products/${p.slug}/reviews/can-review`, { canReview: false });
@@ -259,7 +267,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     api.get(`/products/${p.slug}/bought-together`, []);
     api.get(`/products/${p.slug}/reviews`, { average: 0, count: 0, videoCount: 0, distribution: {}, items: [] });
     api.get('/me/wishlist/ids', []);
-    api.get('/me/coupons', [
+    api.get('/me/coupons', over.coupons ?? [
       { code: 'GIAM20', type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, endAt: '2027-01-01T00:00:00.000Z' },
     ]);
     api.get('/affiliate/me', { isAffiliate: over.affiliate === true });
@@ -344,6 +352,30 @@ test.describe('Web khách: trang sản phẩm', () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
+
+  test('điện thoại 390px, khách đăng nhập có nhiều mã giảm giá: không cuộn ngang, nút chia sẻ trong màn', async ({ page, api, request }) => {
+    const p = await firstProduct(request);
+    test.skip(!p, 'DB e2e chưa có sản phẩm nào');
+    await signIn(page);
+    mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123' }));
+    const endAt = '2027-01-01T00:00:00.000Z';
+    mockPdp(api, p!, {
+      coupons: [
+        { code: 'CHAOBANMOI15', type: 'PERCENT', value: 15, minOrder: 0, maxDiscount: 50000, endAt },
+        { code: 'FREESHIPTUBU', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt },
+        { code: 'GIAM20', type: 'AMOUNT', value: 20000, minOrder: 100000, maxDiscount: null, endAt },
+        { code: 'SINHNHATXANH', type: 'AMOUNT', value: 100000, minOrder: 1000000, maxDiscount: null, endAt },
+      ],
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/san-pham/${p!.slug}`);
+    await expect(page.getByRole('button', { name: 'Sao chép mã SINHNHATXANH' })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    const box = await page.getByRole('button', { name: 'Chia sẻ', exact: true }).boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  });
 });
 
 const signedIn = (page: import('@playwright/test').Page) =>
@@ -378,6 +410,7 @@ test.describe('Web: yêu thích', () => {
     mockSession(api, makeUser({ id: 'u1', fullName: 'Nguyễn Văn An' }));
     api.get('/flash-sales/active', []);
     api.get('/me/wishlist', [product(1), product(2)]);
+    api.get('/me/wishlist/ids', [product(1).id, product(2).id]);
     await page.goto('/tai-khoan/yeu-thich');
     await expect(page.getByRole('heading', { level: 1, name: 'Sản phẩm yêu thích' })).toBeVisible();
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
@@ -398,6 +431,8 @@ test.describe('Web: mua chung', () => {
   test('khách chưa đăng nhập: xem được danh sách, bấm Đăng nhập để tham gia sang đăng nhập kèm returnTo, không gửi tham gia', async ({ page, api }) => {
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
     api.get('/group-buy', [group('g1')]);
+    // /dang-nhap lấy hotline từ cấu hình công khai; lời gọi này đôi khi xong trước khi ca kết thúc.
+    api.get('/config/public', {});
     await page.goto('/mua-chung');
     await expect(page.getByRole('heading', { level: 1, name: 'Mua chung giá tốt' })).toBeVisible();
     await expect(page.getByText('2/5 người')).toBeVisible();
@@ -471,6 +506,7 @@ test.describe('Web: nhãn hàng', () => {
     const slug = await firstBrandSlug(request);
     test.skip(!slug, 'DB e2e chưa có nhãn công khai nào');
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    api.get('/config/public', {});
     await page.goto(`/brand/${slug}`);
     await page.getByRole('button', { name: 'Theo dõi' }).click();
     await page.waitForURL(/\/dang-nhap/);

@@ -16,6 +16,7 @@ import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, createWasteRequest, prev
 import { getProvinces } from '@tubutree/app-core/api/geo';
 import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { useDebounced } from '@/lib/use-debounced';
@@ -36,6 +37,7 @@ import {
   type WasteWizardDraft,
 } from '@/lib/recycle-wizard';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -68,8 +70,6 @@ const STEP1_CAP_BLOCKS: readonly string[] = ['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP
 const WIZARD_PATH = '/doi-rac/tao';
 const METHOD_STEP_PATH = `${WIZARD_PATH}?step=method`;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
-
 function isLocked(preview: WastePreviewDTO | undefined): boolean {
   return preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;
 }
@@ -86,9 +86,9 @@ function Check({ checked, onChange, label }: { checked: boolean; onChange: () =>
 /** Thanh hành động: dính đáy trên điện thoại, nằm cuối trang từ md; hai bản cùng nội dung nên bản máy tính gắn data-desktop-action. */
 function Actions({ label, summary, children }: { label: string; summary?: ReactNode; children: ReactNode }) {
   const body = (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 max-md:flex-col max-md:items-stretch max-md:gap-2">
       {summary && <div className="min-w-0 flex-1">{summary}</div>}
-      <div className={summary ? 'flex-none' : 'flex-1'}>{children}</div>
+      <div className={`${summary ? 'flex-none' : 'flex-1'} max-md:w-full`}>{children}</div>
     </div>
   );
   return (
@@ -409,7 +409,7 @@ export function RecycleNew() {
             <div className="flex flex-col gap-2">
               <p className="text-sm font-semibold text-warning-fg">Phí ship có thể cao hơn giá trị điểm bạn nhận được</p>
               {unlockedOthers(m).map((o) => (
-                <button key={o} type="button" className={ui.btnSecondary} onClick={() => selectMethod(o)}>
+                <button key={o} type="button" className={skin.btnSecondary} onClick={() => selectMethod(o)}>
                   {`Chọn ${METHOD_LABELS[o]}`}
                 </button>
               ))}
@@ -423,7 +423,7 @@ export function RecycleNew() {
                   <p className="text-xs text-stone-600">{pointAddress(draft.pickedPoint)}</p>
                 </div>
               )}
-              <button type="button" className={`${ui.btnSecondary} self-start`} onClick={pickPoint}>
+              <button type="button" className={`${skin.btnSecondary} self-start`} onClick={pickPoint}>
                 {draft.pickedPoint ? 'Đổi điểm nhận' : 'Chọn điểm nhận'}
               </button>
             </div>
@@ -436,12 +436,12 @@ export function RecycleNew() {
   return shell(
     <>
       {showShipLocked && (
-        <div className={`${ui.card} p-4`}>
+        <div className={`${skin.card} p-4`}>
           <p className="text-sm font-semibold text-stone-900">{blockMessage({ code: 'SHIP_LOCKED' }, ctxFor(undefined))}</p>
         </div>
       )}
       {order.length === 0 ? (
-        <div className={`${ui.card} p-4`}>
+        <div className={`${skin.card} p-4`}>
           <p className="text-sm font-semibold text-stone-900">Hiện chưa có cách giao nào đang mở, bạn quay lại sau nhé.</p>
         </div>
       ) : (

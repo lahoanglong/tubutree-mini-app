@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
@@ -260,6 +262,22 @@ describe('hub /tai-khoan — đại lý và chủ nhãn', () => {
     const c = await mount();
     expect(link(c, '/chu-thuong-hieu')).toBeNull();
     expect(c.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('quay lại hub trong cùng phiên không hỏi lại /brand/owner/me (khách không có nhãn không lặp lại 404)', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const open = async () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() => root.render(<QueryClientProvider client={client}><AccountPage /></QueryClientProvider>));
+      await flush(8);
+      act(() => root.unmount());
+      container.remove();
+    };
+    await open();
+    await open();
+    expect(mocks.calls.filter((p) => p === '/brand/owner/me')).toHaveLength(1);
   });
 
   it('chủ nhãn thật thấy "Quản lý nhãn hàng" kèm tên nhãn', async () => {

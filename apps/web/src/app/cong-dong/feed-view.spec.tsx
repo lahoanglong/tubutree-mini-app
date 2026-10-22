@@ -410,3 +410,65 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
     expect(mocks.get.mock.calls.filter((c) => c[0] === '/feed/public-preview')).toHaveLength(0);
   });
 });
+
+describe('/cong-dong — giao diện điện thoại như Mini App', () => {
+  it('hai nút Xếp hạng và Sự kiện có chữ nhìn thấy, không icon; tên truy cập nút xếp hạng vẫn là "Bảng xếp hạng" (D6-05)', async () => {
+    mocks.ready.add('/cong-dong/su-kien');
+    const { container } = await mount();
+    const rank = container.querySelector('a[aria-label="Bảng xếp hạng"]')!;
+    expect(rank.textContent?.trim()).toBe('Xếp hạng');
+    expect(rank.querySelector('svg')).toBeNull();
+    const events = container.querySelector('a[aria-label="Sự kiện"]')!;
+    expect(events.textContent?.trim()).toBe('Sự kiện');
+    expect(events.querySelector('svg')).toBeNull();
+    for (const a of [rank, events]) {
+      expect(a.className).toContain('border');
+      expect(a.className).not.toContain('rounded-full');
+    }
+  });
+
+  it('đã đăng nhập: không có câu phụ đề dưới tiêu đề để bài đầu lên sớm hơn (D6-05)', async () => {
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Hỏi đáp cách dùng');
+  });
+
+  it('vùng đầu (nút, ô tìm, chip) nằm trên dải trắng liền khối dưới md', async () => {
+    const { container } = await mount();
+    const band = searchInput(container).closest('form')!.parentElement!;
+    expect(band.className).toContain('max-md:bg-stone-0');
+    expect(band.contains(container.querySelector('[aria-label="Chọn danh mục"]'))).toBe(true);
+    expect(band.contains(container.querySelector('[aria-label="Sắp xếp"]'))).toBe(true);
+  });
+
+  it('hai hàng chip khớp lề 12px của dải trắng (không tràn ngang) và có đệm dọc 4px chứa vùng chạm', async () => {
+    const { container } = await mount();
+    for (const label of ['Chọn danh mục', 'Sắp xếp']) {
+      const row = container.querySelector(`[aria-label="${label}"]`)!;
+      expect(row.className).toContain('max-md:-mx-3');
+      expect(row.className).toContain('max-md:px-3');
+      expect(row.className).toContain('max-md:py-1');
+      expect(row.className).not.toMatch(/(^|\s)-mx-4(\s|$)/);
+    }
+  });
+
+  it('chip chưa chọn nền be không viền, ô tìm bo tròn như viên thuốc', async () => {
+    const { container } = await mount();
+    const chip = exact(container, 'button', 'Nhà bếp');
+    expect(chip.className).toContain('max-md:bg-stone-100');
+    expect(chip.className).toContain('max-md:border-transparent');
+    expect(searchInput(container).className).toContain('max-md:rounded-full');
+  });
+
+  it('danh sách bài cách nhau dải nền 8px', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="post-card"]')!.parentElement!.className).toContain('max-md:gap-2');
+  });
+});
+
+describe('/cong-dong — tiêu đề chừa chỗ nút lùi', () => {
+  it('thanh tiêu đề chừa 64px bên trái cho nút lùi nổi; ô tìm viền mảnh', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('h1')!.parentElement!.className).toContain('max-md:pl-12');
+    expect(searchInput(container).className).toContain('max-md:border-stone-200');
+  });
+});

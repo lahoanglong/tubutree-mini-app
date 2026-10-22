@@ -96,6 +96,15 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     expect(undoButton(container)).toBeUndefined();
   });
 
+  it('hộp hoàn tác ở điện thoại nằm trên thanh dính theo chiều cao đo được, không cố định 128px', async () => {
+    const { container } = await mount();
+    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    await flush();
+    const box = container.querySelector<HTMLElement>('[role="status"].fixed')!;
+    expect(box.className).not.toMatch(/\bbottom-32\b/);
+    expect(box.className).toContain('--sticky-bar-h');
+  });
+
   it('thanh hoàn tác tự tắt sau 3,5 giây', async () => {
     const { container } = await mount();
     vi.useFakeTimers();

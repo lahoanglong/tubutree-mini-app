@@ -369,3 +369,33 @@ describe('/kho-qua — trạng thái trang', () => {
     expect(c.querySelector('h1')?.textContent).toBe('Kho quà');
   });
 });
+
+describe('/kho-qua — giao diện điện thoại như Mini App', () => {
+  it('số điểm là chữ serif hiển thị (display-md) ở điện thoại, giữ cỡ máy tính từ md', async () => {
+    const c = await mount();
+    const num = Array.from(c.querySelectorAll('div')).find((d) => d.children.length === 0 && /điểm$/.test(d.textContent ?? '') && d.className.includes('tabular-nums'))!;
+    expect(num.className).toContain('max-md:font-display');
+    expect(num.className).toContain('max-md:text-[length:var(--type-display-md-size)]');
+    expect(num.className).toContain('md:text-3xl');
+  });
+
+  it('dòng "Quà của tôi" là hàng phẳng không thẻ, không viền ở điện thoại', async () => {
+    const c = await mount();
+    const row = c.querySelector('a[href="/kho-qua/cua-toi"]')!;
+    expect(row.className).toContain('max-md:border-0');
+    expect(row.className).toContain('max-md:bg-transparent');
+    expect(row.className).toContain('max-md:shadow-none');
+  });
+
+  it('thẻ quà viền mảnh không bóng như Card outline', async () => {
+    const c = await mount();
+    expect(card(c, 'Miễn phí vận chuyển').className).toContain('max-md:shadow-none');
+  });
+
+  it('trang bỏ đệm 48px của body và có thanh tiêu đề trắng', async () => {
+    const c = await mount();
+    expect(c.querySelector('h1')!.closest('header')!.hasAttribute('data-page-bleed')).toBe(true);
+    expect(c.querySelector('h1')!.closest('header')!.className).toContain('max-md:bg-[var(--color-bg-surface)]');
+  });
+});
+

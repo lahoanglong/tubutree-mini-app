@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import { syncServerClock } from '../server-clock';
 
 export interface FlashSaleActiveItem {
   itemId: string;
@@ -12,8 +13,14 @@ export interface FlashSaleActiveItem {
   soldCount: number;
   quota: number;
   endAt: string;
+  /** Giờ máy chủ lúc dựng danh sách; thiếu thì app dùng đồng hồ máy khách. */
+  serverNow?: string;
 }
-export const fetchActiveFlashSales = (http: HttpClient) => http.get<FlashSaleActiveItem[]>('/flash-sales/active');
+export const fetchActiveFlashSales = async (http: HttpClient) => {
+  const items = await http.get<FlashSaleActiveItem[]>('/flash-sales/active');
+  syncServerClock(items?.[0]?.serverNow);
+  return items;
+};
 
 export interface UpcomingFlashItem {
   itemId: string;

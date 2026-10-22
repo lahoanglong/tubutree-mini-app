@@ -2,17 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { addToCart, formatVnd, getProductStock } from '@/lib/shop-client';
+import { addToCart, formatVnd, getCart, getProductStock } from '@/lib/shop-client';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
+import { phoneSecondary } from '@/lib/phone-ui';
+import { CountBadge } from '@/components/mini/badge';
 import { variationPricing } from '@/lib/flash-price';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
-import { cartKey } from '@/lib/cart-key';
+import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 
 interface Variation {
@@ -65,6 +69,8 @@ export default function AddToCart({
   const [success, setSuccess] = useState(false);
   const userPicked = useRef(false);
 
+  // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
+  const cartCount = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data?.itemCount ?? 0;
   const flash = useActiveFlashSales();
   const selected = variations.find((v) => v.id === selectedId);
   const selectedPricing = selected ? variationPricing(selected, flash) : null;
@@ -280,18 +286,30 @@ export default function AddToCart({
 
       <StickyActionBar label="Mua hàng">
         {status && <div className="mb-2">{status}</div>}
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-none">
-            <div className="text-xs text-stone-600">Tạm tính</div>
-            <div className="text-lg font-bold leading-tight text-stone-900">{total}</div>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/gio-hang"
+            aria-label="Xem giỏ hàng"
+            className="relative flex h-12 w-12 flex-none items-center justify-center rounded-control border border-[var(--color-action-secondary-border)] text-[var(--color-text-primary)]"
+          >
+            <ShoppingCart className="h-[22px] w-[22px]" aria-hidden="true" />
+            <CountBadge count={cartCount} />
+          </Link>
           {available ? (
-            <div className="flex min-w-0 flex-1 gap-2">
-              <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${uiBar.secondary} min-w-0 flex-1`}>
+            <div className="flex min-w-0 flex-1 gap-2.5">
+              <button type="button" onClick={onAdd} disabled={cannotBuy} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
                 {busy && !buying ? 'Đang thêm…' : 'Thêm vào giỏ'}
               </button>
-              <button type="button" onClick={onBuyNow} disabled={cannotBuy} className={`${uiBar.primary} min-w-0 flex-1`}>
-                {buyLabel}
+              {/* Hai dòng (nhãn + giá) như Mini App: một dòng "Mua ngay · giá" tràn ở 320-390px. */}
+              <button
+                type="button"
+                onClick={onBuyNow}
+                disabled={cannotBuy}
+                aria-label={`${buyLabel} · ${total}`}
+                className={`${uiBar.primary} min-w-0 flex-1 flex-col !py-1.5 leading-[1.2]`}
+              >
+                <span className="block max-w-full truncate">{buyLabel}</span>
+                <span className="block max-w-full truncate text-xs font-medium">{total}</span>
               </button>
             </div>
           ) : (

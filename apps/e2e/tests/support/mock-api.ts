@@ -1,4 +1,5 @@
 import { test as base, expect, type Request, type Route } from '@playwright/test';
+import { captureByPathname, installVisualMode, recordTourUnmocked } from './visual';
 import type { AuthUser, LoginResponse, OrderDTO, WasteMeDTO } from '@tubutree/shared-types';
 import type { MeProfile, NewCustomerOffer } from '../../../miniapp/src/services/account-api';
 import type { CartSummary, PublicConfig } from '../../../miniapp/src/services/shop-api';
@@ -320,7 +321,32 @@ function corsHeaders(reqHeaders: Record<string, string>): Record<string, string>
  * `test` dùng cho MỌI spec miniapp. Fixture `api` là auto: kể cả test không nhận `api`, bộ chặn
  * /api/** và host ngoài vẫn được cài trước khi trang mở.
  */
-export const test = base.extend<{ api: MockApi }>({
+export const test = base.extend<{ api: MockApi; visualCapture: void }>({
+  visualCapture: [
+    async ({ page }, use, testInfo) => {
+      const dir = process.env.VISUAL_DIR;
+      if (!dir) {
+        await use();
+        return;
+      }
+      const app = testInfo.project.name.includes('Mini App') ? 'miniapp' : 'web';
+      await installVisualMode(page);
+      // Spec tham quan tự chụp theo khoá cặp; chụp theo pathname ở đó chỉ gây nhiễu và chậm.
+      if (testInfo.file.includes('visual-tour')) {
+        await use();
+        return;
+      }
+      let chain: Promise<void> = Promise.resolve();
+      page.on('framenavigated', (frame) => {
+        if (frame !== page.mainFrame()) return;
+        const url = frame.url();
+        chain = chain.then(() => captureByPathname(page, dir, app, url, testInfo.title));
+      });
+      await use();
+      await chain.catch(() => {});
+    },
+    { auto: true },
+  ],
   api: [
     async ({ page }, use, testInfo) => {
       const api = new MockApi();
@@ -345,6 +371,11 @@ export const test = base.extend<{ api: MockApi }>({
           body: [...new Set(api.unmocked)].join('\n'),
           contentType: 'text/plain',
         });
+      }
+      if (testInfo.file.includes('visual-tour')) {
+        // Tham quan chỉ chụp ảnh: lời gọi chưa mock được ghi lại để bổ sung mock, không làm đỏ test.
+        recordTourUnmocked(testInfo.title, api.unexpectedUnmocked());
+        return;
       }
       expect(
         api.unexpectedUnmocked(),

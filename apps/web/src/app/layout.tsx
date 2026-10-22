@@ -8,6 +8,7 @@ import PortalHeader from '@/components/admin/portal-header';
 import { ReferralCapture } from '@/components/storefront-tracker';
 import { AppGates } from '@/components/app-gates';
 import BottomNav from '@/components/bottom-nav';
+import BackButton from '@/components/mini/back-button';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { SITE_URL, tenantHostBootScript } from '@/lib/site';
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SiteFooter />
           </HideOnPortals>
           <HideOnPortals>
+            <BackButton className="md:!hidden" />
             <BottomNav />
           </HideOnPortals>
         </Providers>

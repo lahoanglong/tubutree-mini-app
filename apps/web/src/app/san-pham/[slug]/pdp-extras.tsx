@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Clock, MessageCircle, Megaphone, Repeat, Truck, Users } from 'lucide-react';
+import { ChevronRight, Clock, Leaf, MessageCircle, Megaphone, Repeat, Truck, Users } from 'lucide-react';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
-import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
+import type { LoyaltyOverview } from '@tubutree/app-core/api/loyalty';
+import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { Badge } from '@/components/ui/badge';
 import { usePdpSelection } from '@/components/pdp-selection';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -14,6 +15,8 @@ import { useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { soldPercent } from '@/lib/flash-display';
+import { cardPricing, variationPricing } from '@/lib/flash-price';
+import { pointsEarnPreview, pointsEarnText } from '@/lib/points-earn';
 import { loginHref } from '@/lib/return-to';
 import { couponLabel, freeshipLine, groupBuyPitch, pdpCoupons, resolveFreeshipFrom } from '@/lib/pdp-logic';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -24,6 +27,42 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { ContentKitSheet } from './content-kit-sheet';
 import { SubscribeSheet } from './subscribe-sheet';
+
+type PointsEarnProduct = {
+  slug: string;
+  basePrice: number;
+  salePrice?: number | null;
+  variations: { id: string; retailPrice: number; salePrice?: number | null }[];
+};
+
+/**
+ * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập thì server tính hệ số 1; tài khoản có hạng chỉ biết được từ
+ * tổng quan Điểm Xanh đã tải ở màn khác (không gọi thêm API ở trang đông khách nhất): chưa có thì nói chung thay vì đoán.
+ */
+function tierMultiplierOf(phase: string, overview: LoyaltyOverview | undefined): number | null {
+  if (phase === 'guest') return 1;
+  if (phase !== 'authenticated' || !overview) return null;
+  return overview.earnMultiplier ?? overview.tier?.multiplier ?? 1;
+}
+
+/** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
+export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
+  const flash = useActiveFlashSales();
+  const selection = usePdpSelection();
+  const phase = useAuthPhase();
+  const config = usePublicConfig();
+  const overview = useQueryClient().getQueryData<LoyaltyOverview>(loyaltyQuery(coreHttp).queryKey);
+  const selected = product.variations.find((v) => v.id === selection?.selectedId);
+  const unit = selected ? variationPricing(selected, flash).price : cardPricing(product, flash).price;
+  const preview = pointsEarnPreview(unit * (selection?.quantity ?? 1), config.loyalty, tierMultiplierOf(phase, overview));
+  if (preview === null) return null;
+  return (
+    <p data-testid="pdp-points-earn" className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-brand)]">
+      <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
+      <span>{preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points, preview.valueVnd)}</span>
+    </p>
+  );
+}
 
 /** Mở lại sheet Đặt định kỳ sau khi khách đăng nhập xong và quay về trang. */
 const RESUME_PARAM = 'tiep';
@@ -75,14 +114,14 @@ export function PdpCoupons({ productId }: { productId: string }) {
 
   return (
     <div className="mt-3">
-      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 overflow-x-auto pb-1">
+      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 overflow-x-auto pb-1 max-md:flex-col max-md:overflow-visible">
         {list.map((c) => (
-          <li key={c.code} className="shrink-0">
+          <li key={c.code} className="shrink-0 max-md:min-w-0 max-md:shrink">
             <button
               type="button"
               aria-label={`Sao chép mã ${c.code}`}
               onClick={() => void onCopy(c.code)}
-              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-promo-fg bg-promo-bg px-3 py-1.5 text-left"
+              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-promo-fg bg-promo-bg px-3 py-1.5 text-left max-md:w-full"
             >
               <span className="text-xs font-bold text-promo-fg">
                 {c.code} · {couponLabel(c)}

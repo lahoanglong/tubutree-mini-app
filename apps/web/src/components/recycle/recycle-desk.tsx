@@ -22,6 +22,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { skin } from '@/components/pro-shared/mini-skin';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -37,7 +38,7 @@ import { WasteDeskPerk, WasteDeskReport } from './recycle-desk-perk';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, formatPoints } from './recycle-labels';
 
 const PATH = '/doi-rac/quay';
-const CARD = `flex flex-col gap-3 p-4 ${ui.card}`;
+const CARD = `flex flex-col gap-3 p-4 max-md:gap-1 max-md:p-3 ${skin.card}`;
 const NO_PERMISSION = 'Tài khoản này không có quyền nhận hàng tại điểm';
 const DANGER_BTN =
   'inline-flex min-h-11 w-full items-center justify-center rounded-control border border-danger-fg bg-danger-bg px-5 text-sm font-semibold text-danger-fg transition active:scale-95 disabled:opacity-50 disabled:active:scale-100';
@@ -91,7 +92,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
   if (point.kind === 'WAREHOUSE') {
     return (
       <section aria-label="Hạn mức" className={CARD}>
-        <p className="text-base text-stone-900">{`Còn ${formatCount(point.staffDailyCapRemaining)} điểm được xác nhận hôm nay`}</p>
+        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Còn ${formatCount(point.staffDailyCapRemaining)} điểm được xác nhận hôm nay`}</p>
       </section>
     );
   }
@@ -100,12 +101,12 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
       <p className="text-sm text-stone-600">Hạn mức điểm tháng này</p>
       {point.quota ? (
         <>
-          <p className="text-base text-stone-900">{`Đã dùng ${formatCount(point.quota.used)} / ${formatCount(point.quota.limit)} điểm`}</p>
+          <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Đã dùng ${formatCount(point.quota.used)} / ${formatCount(point.quota.limit)} điểm`}</p>
           {point.quota.limit > 0 && <ProgressBar value={point.quota.used} max={point.quota.limit} />}
-          <p className="text-base font-semibold text-stone-900">{`Còn lại ${formatCount(point.quota.remaining)} điểm`}</p>
+          <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{`Còn lại ${formatCount(point.quota.remaining)} điểm`}</p>
         </>
       ) : (
-        <p className="text-base text-stone-900">Không giới hạn hạn mức tháng</p>
+        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Không giới hạn theo tháng</p>
       )}
     </section>
   );
@@ -345,11 +346,11 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             <section role="status" className={`${CARD} items-center text-center`}>
               <CheckCircle2 className="h-8 w-8 text-forest-600" aria-hidden="true" />
               <h2 className="font-display text-lg font-semibold text-stone-900">{`Đã ghi nhận. Tubu sẽ cộng ${formatPoints(done.pointsAwarded)} cho khách`}</h2>
-              <p className="text-base text-stone-900">{`Yêu cầu ${done.code} của ${done.customerName} đã xong`}</p>
+              <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Yêu cầu ${done.code} của ${done.customerName} đã xong`}</p>
               {done.remaining && <p className="text-sm text-stone-600">{`${done.remaining.label}: ${formatPoints(done.remaining.value)}`}</p>}
               <button
                 type="button"
-                className={`${ui.btnSecondary} w-full`}
+                className={`${skin.btnSecondary} w-full`}
                 onClick={() => {
                   setDone(null);
                   setCode('');
@@ -367,7 +368,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               <div className="flex flex-col gap-0.5">
                 <h2 className="font-display text-lg font-semibold text-stone-900">{request.code}</h2>
                 <p className="text-sm text-stone-600">{METHOD_LABELS[request.method]}</p>
-                <p className="text-base text-stone-900">{request.customerName}</p>
+                <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{request.customerName}</p>
                 {request.customerPhone && <p className="text-sm text-stone-600">{request.customerPhone}</p>}
               </div>
 
@@ -379,7 +380,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
 
               {request.lines.map((l) => (
                 <div key={l.itemId} data-line className="flex flex-col gap-1.5">
-                  <p className="text-base font-semibold text-stone-900">{l.itemName}</p>
+                  <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{l.itemName}</p>
                   {readOnly ? (
                     request.status === 'COMPLETED' && <p className="text-sm text-stone-600">{`Đã nhận ${l.receivedQty ?? 0} ${l.unitLabel}`}</p>
                   ) : (
@@ -434,7 +435,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   <ConfirmBar
                     summary={
                       <div className="flex flex-col gap-0.5">
-                        <p className="text-base font-semibold text-stone-900">{`Điểm Tubu sẽ cộng cho khách: ${formatPoints(preview)}`}</p>
+                        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{`Điểm Tubu sẽ cộng cho khách: ${formatPoints(preview)}`}</p>
                         {missingReason && <p className="text-sm text-stone-600">Chọn lý do cho món nhận thiếu để xác nhận</p>}
                       </div>
                     }
@@ -450,7 +451,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   </ConfirmBar>
                   <button
                     type="button"
-                    className={`${ui.btnSecondary} w-full`}
+                    className={`${skin.btnSecondary} w-full`}
                     onClick={() => {
                       reject.reset();
                       setRejectOpen(true);
@@ -467,13 +468,13 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             <section aria-label={gift.giftName} className={CARD}>
               <div className="flex flex-col gap-0.5">
                 <h2 className="font-display text-lg font-semibold text-stone-900">{gift.giftName}</h2>
-                <p className="text-base text-stone-900">{gift.customerName}</p>
+                <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{gift.customerName}</p>
                 {gift.claimExpiresAt && <p className="text-sm text-stone-600">{`Hạn nhận ${formatDate(gift.claimExpiresAt)}`}</p>}
               </div>
               {!point.giftHandoverEnabled ? (
-                <p className="text-base text-stone-900">Điểm này không trao quà</p>
+                <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">Điểm này không trao quà</p>
               ) : gift.status !== 'READY' ? (
-                <p className="text-base font-semibold text-stone-900">{GIFT_STATUS_TEXT[gift.status]}</p>
+                <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{GIFT_STATUS_TEXT[gift.status]}</p>
               ) : (
                 <button
                   type="button"
@@ -513,8 +514,8 @@ function DeskContent() {
   if (pointsQ.isError) {
     if (errorStatus(pointsQ.error) === 403) {
       return (
-        <div className={`flex flex-col items-center gap-3 p-8 text-center ${ui.card}`}>
-          <p className="text-base font-semibold text-stone-900">{NO_PERMISSION}</p>
+        <div className={`flex flex-col items-center gap-3 p-8 text-center ${skin.card}`}>
+          <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] font-semibold text-stone-900">{NO_PERMISSION}</p>
           <Link href="/doi-rac" className={ui.btnPrimary}>
             Về Đổi rác
           </Link>
@@ -527,7 +528,7 @@ function DeskContent() {
     // Máy chủ bỏ qua điểm của đại lý khi chương trình tắt, nên danh sách rỗng lúc đó không có nghĩa là mất quyền.
     if (!cfg.isLoaded) return <Skeleton height={120} rounded="rounded-card" />;
     const text = cfg.waste.enabled ? 'Tài khoản của bạn chưa được gắn với điểm nhận nào' : PAUSED_TEXT;
-    return <p className={`${ui.card} p-8 text-center text-base text-stone-900`}>{text}</p>;
+    return <p className={`${skin.card} p-8 text-center text-base text-stone-900`}>{text}</p>;
   }
   return <DeskBody points={pointsQ.data} />;
 }
