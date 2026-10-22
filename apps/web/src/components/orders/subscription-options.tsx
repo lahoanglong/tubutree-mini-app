@@ -14,7 +14,7 @@ export const PAY_SHORT: Record<SubscriptionPaymentMethod, string> = { COD: 'COD'
 const PAY_HINT: Record<SubscriptionPaymentMethod, string> = {
   COD: 'Trả tiền mặt cho shipper mỗi lần giao.',
   WALLET: 'Tự trừ Ví Tubu mỗi kỳ. Ví không đủ tiền thì gói tạm dừng và Tubu báo cho bạn.',
-  BANK_TRANSFER: 'Mỗi kỳ Tubu tạo đơn chờ chuyển khoản. Quá hạn chưa chuyển thì đơn tự hủy.',
+  BANK_TRANSFER: 'Mỗi kỳ Tubu tạo đơn chờ chuyển khoản. Quá hạn chưa chuyển thì đơn tự huỷ.',
 };
 
 export function addressText(a: Pick<AddressDTO, 'street' | 'ward' | 'district'>): string {

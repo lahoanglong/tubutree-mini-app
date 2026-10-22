@@ -168,7 +168,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh?tab=community');
     await expect(page.getByRole('heading', { name: 'Chuỗi điểm danh dài nhất' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Top góp nước mùa này' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Xếp hạng góp nước mùa này' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đã tặng hôm nay' })).toBeDisabled();
     await page.getByRole('button', { name: 'Tặng 💧' }).dblclick();
     await expect(page.getByText('Đã tặng 5💧 cho bạn 🎁')).toBeVisible();

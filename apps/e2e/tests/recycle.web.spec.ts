@@ -1,4 +1,5 @@
 import { expect, reply, test, type MockApi } from './support/mock-api';
+import { WASTE_RULES_TEXT } from './support/waste-db';
 
 /**
  * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh, /doi-rac/tao, /doi-rac/diem-nhan, /doi-rac/quay). Mọi lời gọi /api/** đi qua mock (fixture `api`).
@@ -57,6 +58,8 @@ const REWARDS = {
   ],
 };
 
+const RULES_TEXT = WASTE_RULES_TEXT;
+
 function mockRecycle(api: MockApi, meBody: Record<string, unknown> = me()) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
@@ -71,7 +74,7 @@ function mockRecycle(api: MockApi, meBody: Record<string, unknown> = me()) {
     summary({ id: 'req-3', code: 'TR-BBBBB', status: 'COMPLETED', pointsAwarded: 4000 }),
     summary({ id: 'req-4', code: 'TR-CCCCC', status: 'EXPIRED', closeReason: 'HOLD_EXPIRED' }),
   ]);
-  api.get('/waste/rules', { text: 'Điểm Xanh là ưu đãi cho khách.\nKhông đổi ra tiền.' });
+  api.get('/waste/rules', { text: RULES_TEXT });
 }
 
 test.describe('Web khách: Đổi rác lấy quà', () => {
@@ -123,6 +126,8 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await page.goto('/doi-rac/quy-dinh');
     await expect(page.getByRole('heading', { name: 'Thể lệ Đổi rác lấy quà', level: 1 })).toBeVisible();
     await expect(page.getByText(/Điểm Xanh là ưu đãi cho khách\./)).toBeVisible();
+    await expect(page.locator('main .whitespace-pre-line')).toHaveText(RULES_TEXT);
+    expect(await page.locator('main .whitespace-pre-line').evaluate((el) => (el as HTMLElement).innerText)).toBe(RULES_TEXT);
   });
 
   test('tạo yêu cầu: chọn món, chọn điểm nhận theo tỉnh, gửi đúng body và Idempotency-Key', async ({ page, api }) => {

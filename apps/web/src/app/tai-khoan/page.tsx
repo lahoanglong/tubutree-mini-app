@@ -7,7 +7,7 @@ import { ChevronRight, Copy, Leaf, Pencil, User } from 'lucide-react';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
-import { ownedBrandProfileQuery } from '@tubutree/app-core/queries/brand-owner';
+import { ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { useAuth } from '@/lib/auth-context';
@@ -79,9 +79,16 @@ export default function AccountPage() {
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
-  // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại. Chưa có cờ "là chủ nhãn" trên /me
-  // (Mini App cũng gọi rồi nuốt 404), nên giữ kết quả 5 phút để mỗi lần quay lại hub không lặp lại một request 404; sửa nhãn thì khoá 'owned-brand' bị làm mới.
-  const ownedBrandQ = useQuery({ ...ownedBrandProfileQuery(coreHttp), enabled: authed, retry: false, staleTime: 5 * 60_000 });
+  // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại. Giữ kết quả 5 phút để mỗi
+  // lần quay lại hub không lặp lại một request 404; sửa nhãn thì khoá 'owned-brand' bị làm mới.
+  // Cờ ownsBrand trên /auth/me (Mini App cũng hỏi riêng): false thì khỏi gọi /brand/owner/me. /auth/me lỗi hoặc API cũ thiếu cờ (null) thì giữ cách cũ.
+  const ownsBrandQ = useQuery({ ...ownsBrandQuery(coreHttp), enabled: authed, retry: false });
+  const ownedBrandQ = useQuery({
+    ...ownedBrandProfileQuery(coreHttp),
+    enabled: authed && !ownsBrandQ.isPending && ownsBrandQ.data !== false,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
   const dealerQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: authed, retry: false });
 
   if (phase === 'loading') {
@@ -126,7 +133,7 @@ export default function AccountPage() {
     claimEnabled: cfgQ.data?.loyalty?.marketplaceClaimEnabled === true,
     cashbackEnabled: CASHBACK_ENABLED,
     dealer: dealerQ.data,
-    ownedBrandName: ownedBrandQ.data?.name,
+    ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,
     isReady: isWebRouteReady,
   });
 

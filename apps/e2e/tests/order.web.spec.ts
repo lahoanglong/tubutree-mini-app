@@ -73,7 +73,7 @@ test.describe('Web khách: giỏ và thanh toán', () => {
   test('xoá dòng ở giỏ rồi Hoàn tác thêm lại đúng phân loại và số lượng', async ({ page, api }) => {
     mockBuyer(api);
     await page.goto('/gio-hang');
-    await page.getByRole('button', { name: 'Xóa Dầu gội bồ kết hữu cơ khỏi giỏ hàng' }).click();
+    await page.getByRole('button', { name: 'Xoá Dầu gội bồ kết hữu cơ khỏi giỏ hàng' }).click();
     await expect(page.getByText('Đã bỏ khỏi giỏ')).toBeVisible();
 
     const added = api.waitForCall('POST', '/cart/items');
@@ -257,16 +257,16 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     });
 
     await page.goto('/tai-khoan/don-hang/TUBU2026101900004');
-    await page.getByRole('button', { name: 'Hủy đơn' }).click();
+    await page.getByRole('button', { name: 'Huỷ đơn' }).click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.getByRole('radio', { name: /Ví Tubu/ }).check();
     const cancelled = api.waitForCall('POST', '/orders/:code/cancel');
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Hủy đơn' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Huỷ đơn' }).click();
     expect((await cancelled).body).toEqual({ refundMethod: 'WALLET' });
-    await expect(page.getByText(/Đã hủy đơn hàng/)).toBeVisible();
+    await expect(page.getByText(/Đã huỷ đơn hàng/)).toBeVisible();
   });
 
-  test('sổ địa chỉ: đặt mặc định gọi PATCH isDefault; xoá phải xác nhận rồi báo Đã xóa địa chỉ', async ({ page, api }) => {
+  test('sổ địa chỉ: đặt mặc định gọi PATCH isDefault; xoá phải xác nhận rồi báo Đã xoá địa chỉ', async ({ page, api }) => {
     mockBuyer(api);
     const second = { ...ADDR, id: 'a2', recipient: 'Trần Thị Bình', phone: '0987654321', isDefault: false };
     api.get('/me/addresses', [ADDR, second]);
@@ -279,13 +279,13 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.getByRole('button', { name: 'Đặt địa chỉ của Trần Thị Bình làm mặc định' }).click();
     expect((await patched).body).toEqual({ isDefault: true });
 
-    await page.getByRole('button', { name: 'Xóa địa chỉ của Trần Thị Bình' }).click();
+    await page.getByRole('button', { name: 'Xoá địa chỉ của Trần Thị Bình' }).click();
     await page.getByRole('button', { name: 'Giữ lại' }).click();
     expect(api.callsTo('DELETE', '/me/addresses/:id')).toHaveLength(0);
-    await page.getByRole('button', { name: 'Xóa địa chỉ của Trần Thị Bình' }).click();
+    await page.getByRole('button', { name: 'Xoá địa chỉ của Trần Thị Bình' }).click();
     const deleted = api.waitForCall('DELETE', '/me/addresses/:id');
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Xóa' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Xoá' }).click();
     await deleted;
-    await expect(page.getByText('Đã xóa địa chỉ.')).toBeVisible();
+    await expect(page.getByText('Đã xoá địa chỉ.')).toBeVisible();
   });
 });

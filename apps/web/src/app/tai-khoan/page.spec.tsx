@@ -98,7 +98,7 @@ describe('/tai-khoan — danh sách đơn nhiều hơn 20 (BUYERWEB-8)', () => {
   it('lọc theo trạng thái gửi đúng tham số cho API và đếm theo bộ lọc', async () => {
     state.orders = [...mk(30), ...mk(3, 'CANCELLED').map((o, i) => ({ ...o, code: `HX-${i}` }))];
     const { container } = await mount();
-    click(byText(container, 'button', 'Đã hủy/hoàn'));
+    click(byText(container, 'button', 'Đã huỷ/hoàn'));
     await flush(6);
     expect(state.calls.at(-1)).toEqual({ page: 1, filter: { group: 'closed' } });
     expect(codes(container)).toEqual(['#HX-0', '#HX-1', '#HX-2']);

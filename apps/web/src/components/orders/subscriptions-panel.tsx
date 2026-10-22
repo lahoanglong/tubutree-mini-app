@@ -24,7 +24,7 @@ import { PAY_SHORT, addressText } from './subscription-options';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
-const STATUS_LABEL: Record<SubStatus, string> = { ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng', CANCELLED: 'Đã hủy' };
+const STATUS_LABEL: Record<SubStatus, string> = { ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng', CANCELLED: 'Đã huỷ' };
 /** Chỉ để hiện lời giới thiệu khi chưa có lịch nào; máy chủ vẫn là nơi quyết định % giảm khi tính tiền. */
 const FALLBACK_DISCOUNT_PCT = 0.12;
 
@@ -77,7 +77,7 @@ export function SubscriptionsPanel() {
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
       <div>
-        <p className="text-sm text-stone-700">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, hủy bất kỳ lúc nào.`}</p>
+        <p className="text-sm text-stone-700">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`}</p>
         {subs[0] && <p className="mt-1 text-xs font-medium text-forest-700">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>}
       </div>
 
@@ -135,7 +135,7 @@ export function SubscriptionsPanel() {
         open={cancelTarget !== null}
         onClose={() => setCancelTarget(null)}
         title="Giữ lại lịch định kỳ?"
-        description="Tạm dừng hoặc bỏ qua kỳ này, thay vì hủy hẳn nhé."
+        description="Tạm dừng hoặc bỏ qua kỳ này, thay vì huỷ hẳn nhé."
       >
         <div className="flex flex-col gap-2.5">
           {actionError && (
@@ -167,7 +167,7 @@ export function SubscriptionsPanel() {
             disabled={statusMut.isPending}
             onClick={() => changeFromSheet('CANCELLED')}
           >
-            {pending === 'CANCELLED' ? 'Đang xử lý…' : 'Vẫn hủy'}
+            {pending === 'CANCELLED' ? 'Đang xử lý…' : 'Vẫn huỷ'}
           </button>
         </div>
       </Sheet>
@@ -230,7 +230,7 @@ function SubscriptionCard({
           {s.status === 'ACTIVE' ? 'Tạm dừng' : 'Tiếp tục'}
         </button>
         <button type="button" disabled={busy} onClick={onCancel} className={miniGhostDanger}>
-          Hủy
+          Huỷ
         </button>
       </div>
     </li>

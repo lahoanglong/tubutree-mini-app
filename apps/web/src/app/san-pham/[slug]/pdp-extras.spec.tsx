@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   getCart: vi.fn(),
   getProductStock: vi.fn(),
   flash: [] as unknown[],
-  config: { freeshipThreshold: 200000, subscribeDiscountPct: 0.12, groupBuy: { discountPct: 15, targetSize: 3 } as unknown, isLoaded: true },
+  config: { freeshipThreshold: 199000, subscribeDiscountPct: 0.12, groupBuy: { discountPct: 15, targetSize: 3 } as unknown, isLoaded: true },
   oa: { available: true, openChat: vi.fn() },
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
@@ -68,7 +68,7 @@ beforeEach(() => {
   mocks.getCart.mockReset().mockResolvedValue({ items: [], itemCount: 0, freeshipThreshold: 150000 });
   mocks.getProductStock.mockReset().mockResolvedValue({ v1: 0, v2: 4 });
   mocks.flash = [];
-  mocks.config = { freeshipThreshold: 200000, subscribeDiscountPct: 0.12, groupBuy: { discountPct: 15, targetSize: 3 }, isLoaded: true };
+  mocks.config = { freeshipThreshold: 199000, subscribeDiscountPct: 0.12, groupBuy: { discountPct: 15, targetSize: 3 }, isLoaded: true };
   mocks.oa = { available: true, openChat: vi.fn() };
   writeText.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
@@ -89,7 +89,7 @@ describe('PdpFreeship', () => {
     mocks.phase = 'guest';
     const { container } = mount(<PdpFreeship />);
     await flush();
-    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí giao hàng cho đơn từ 200.000đ');
+    expect(container.querySelector('[data-testid="pdp-freeship"]')!.textContent).toBe('Miễn phí giao hàng cho đơn từ 199.000đ');
     expect(mocks.getCart).not.toHaveBeenCalled();
     mocks.config = { ...mocks.config, isLoaded: false };
     const again = mount(<PdpFreeship />);

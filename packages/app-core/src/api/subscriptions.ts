@@ -17,6 +17,8 @@ export interface SubscriptionDTO {
   addressId?: string;
   paymentMethod?: SubscriptionPaymentMethod;
   lastOrderId?: string | null;
+  /** Ngày đơn kỳ gần nhất, để tính ngày giao kế khi đổi chu kỳ. Optional: API cũ chưa trả. */
+  lastOrderAt?: string | null;
   productName: string;
   variationName: string;
   thumbnail: string | null;
@@ -57,7 +59,7 @@ export const createSubscription = (
 export const updateSubscription = (
   http: HttpClient,
   id: string,
-  data: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod },
+  data: { quantity?: number; addressId?: string; paymentMethod?: SubscriptionPaymentMethod; intervalWeeks?: number },
 ) => http.patch<SubscriptionDTO>(`/me/subscriptions/${id}`, data);
 
 export const setSubscriptionStatus = (http: HttpClient, id: string, status: 'ACTIVE' | 'PAUSED' | 'CANCELLED') =>

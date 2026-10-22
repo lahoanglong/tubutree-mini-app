@@ -65,9 +65,9 @@ describe('/gio-hang — chữ và cách đếm như Mini App', () => {
     expect(bar(c).querySelector('a[href="/thanh-toan"]')!.textContent).toBe('Thanh toán (6)');
   });
 
-  it('nút xoá là icon thùng rác ở điện thoại, chữ "Xóa" chỉ từ md; thành tiền theo dòng chỉ từ md', async () => {
+  it('nút xoá là icon thùng rác ở điện thoại, chữ "Xoá" chỉ từ md; thành tiền theo dòng chỉ từ md', async () => {
     const c = await mount();
-    const del = c.querySelector<HTMLButtonElement>('button[aria-label="Xóa Serum dưỡng ẩm khỏi giỏ hàng"]')!;
+    const del = c.querySelector<HTMLButtonElement>('button[aria-label="Xoá Serum dưỡng ẩm khỏi giỏ hàng"]')!;
     expect(del.querySelector('svg')).not.toBeNull();
     expect(del.querySelector('span')!.className).toMatch(/\bmax-md:hidden\b/);
     const total = Array.from(c.querySelectorAll<HTMLElement>('div')).find((d) => d.textContent === '578.000đ' && /flex-none/.test(d.className))!;

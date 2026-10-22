@@ -40,16 +40,16 @@ describe('mã giảm giá ở trang sản phẩm', () => {
 
 describe('dòng freeship', () => {
   it('có ngưỡng thì nói số, ngưỡng 0 là mọi đơn', () => {
-    expect(freeshipLine(200000)).toBe('Miễn phí giao hàng cho đơn từ 200.000đ');
+    expect(freeshipLine(199000)).toBe('Miễn phí giao hàng cho đơn từ 199.000đ');
     expect(freeshipLine(0)).toBe('Miễn phí giao hàng cho mọi đơn hàng');
   });
   it('khách đăng nhập dùng ngưỡng theo hạng trong giỏ; giỏ chưa về thì chưa hứa số nào', () => {
-    expect(resolveFreeshipFrom({ phase: 'authenticated', cartThreshold: 150000, configThreshold: 200000, configLoaded: true })).toBe(150000);
-    expect(resolveFreeshipFrom({ phase: 'authenticated', cartThreshold: undefined, configThreshold: 200000, configLoaded: true })).toBeUndefined();
+    expect(resolveFreeshipFrom({ phase: 'authenticated', cartThreshold: 150000, configThreshold: 199000, configLoaded: true })).toBe(150000);
+    expect(resolveFreeshipFrom({ phase: 'authenticated', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBeUndefined();
   });
   it('khách vãng lai dùng ngưỡng chung khi config đã về; đang tải phiên hoặc config thì chưa hứa', () => {
-    expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 200000, configLoaded: true })).toBe(200000);
-    expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 200000, configLoaded: false })).toBeUndefined();
-    expect(resolveFreeshipFrom({ phase: 'loading', cartThreshold: undefined, configThreshold: 200000, configLoaded: true })).toBeUndefined();
+    expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBe(199000);
+    expect(resolveFreeshipFrom({ phase: 'guest', cartThreshold: undefined, configThreshold: 199000, configLoaded: false })).toBeUndefined();
+    expect(resolveFreeshipFrom({ phase: 'loading', cartThreshold: undefined, configThreshold: 199000, configLoaded: true })).toBeUndefined();
   });
 });

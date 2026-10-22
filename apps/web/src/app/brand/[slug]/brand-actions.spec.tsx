@@ -144,7 +144,7 @@ describe('/brand/[slug] — chia sẻ', () => {
     expect(dlg.textContent).toContain(`${window.location.origin}/brand/sachi`);
     expect(dlg.textContent).not.toContain('ref=');
     expect(dlg.querySelector('[data-qr-placeholder], img[alt="QR"]')).not.toBeNull();
-    expect(dlg.textContent).not.toContain('Caption gợi ý');
+    expect(dlg.textContent).not.toContain('Lời đăng gợi ý');
     expect(unnamedControls(dlg)).toEqual([]);
     expect(smallTouchTargets(dlg)).toEqual([]);
   });
@@ -195,12 +195,12 @@ describe('/brand/[slug] — dải chia sẻ kiếm tiền', () => {
     mocks.ste = eligible;
     const c = await mount(actions());
     const strip = btn(c, /nhận tới 15% hoa hồng/)!;
-    expect(strip.textContent).toContain('Bấm để lấy link + caption gắn mã giới thiệu của bạn.');
+    expect(strip.textContent).toContain('Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.');
     click(strip);
     const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
     const link = `${window.location.origin}/brand/sachi?ref=AFF1`;
     expect(dlg.textContent).toContain(link);
-    expect(dlg.textContent).toContain('Caption gợi ý (chạm để sao chép)');
+    expect(dlg.textContent).toContain('Lời đăng gợi ý (chạm để sao chép)');
     expect(dlg.textContent).toContain(`Mình tin dùng Sachi \u{1F33F} Ghé xem & ưu đãi nha ${link}`);
     expect(dlg.textContent).toContain(`Sachi — hàng chính hãng, sống xanh \u{1F49A} ${link}`);
     click(btn(dlg, /^Mình tin dùng Sachi/)!);

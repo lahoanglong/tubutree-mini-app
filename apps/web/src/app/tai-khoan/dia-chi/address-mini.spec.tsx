@@ -76,13 +76,13 @@ describe('sổ địa chỉ như Mini App', () => {
     expect(other!.className).not.toContain('max-md:border-[1.5px]');
   });
 
-  it('tên người nhận cỡ sm; Sửa xanh, Xóa đỏ, không gạch chân ở điện thoại', async () => {
+  it('tên người nhận cỡ sm; Sửa xanh, Xoá đỏ, không gạch chân ở điện thoại', async () => {
     const c = await mount();
     const name = c.querySelector('ul > li span')!;
     expect(name.className).toContain('max-md:text-sm');
     expect(btn(c, 'Sửa địa chỉ của Nguyễn An')!.className).toContain('max-md:no-underline');
     expect(btn(c, 'Sửa địa chỉ của Nguyễn An')!.className).toContain('max-md:text-[color:var(--color-text-brand)]');
-    expect(btn(c, 'Xóa địa chỉ của Nguyễn An')!.className).toContain('max-md:text-[color:var(--color-text-danger)]');
+    expect(btn(c, 'Xoá địa chỉ của Nguyễn An')!.className).toContain('max-md:text-[color:var(--color-text-danger)]');
   });
 
   it('nút đặt mặc định ghi "Đặt mặc định"; nút thêm không có dấu "+" và có biểu tượng', async () => {

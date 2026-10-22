@@ -218,7 +218,7 @@ function GroupCard({
         <ProgressBar value={g.currentSize} max={g.targetSize} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.unitPrice)}`}</p>
+        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`}</p>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>

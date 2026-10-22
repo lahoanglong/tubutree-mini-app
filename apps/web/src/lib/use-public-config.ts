@@ -10,7 +10,7 @@ import { coreHttp } from './core-http';
  * BE vẫn là nguồn sự thật khi tính tiền.
  */
 export const PUBLIC_CONFIG_FALLBACK: PublicConfig = {
-  freeshipThreshold: 200_000,
+  freeshipThreshold: 199_000,
   subscribeDiscountPct: 0.12,
   affiliateWalletMultiplier: 1.5,
   affiliateMinWithdrawBank: 50_000,

@@ -28,7 +28,7 @@ describe('/hoc-vien — trang công khai', () => {
     mounted.push(r);
     await flush();
     expect(r.container.querySelectorAll('h1')).toHaveLength(1);
-    expect(r.container.querySelector('h1')?.textContent).toBe('CTV Academy');
+    expect(r.container.querySelector('h1')?.textContent).toBe('Học viện CTV');
     expect(r.container.textContent).toContain('Học kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày');
     expect(headingProblems(r.container)).toEqual([]);
   });
@@ -38,7 +38,7 @@ describe('/hoc-vien — trang công khai', () => {
     mounted.push(r);
     await flush();
     expect(r.container.querySelectorAll('h1')).toHaveLength(1);
-    expect(r.container.querySelector('h1')?.textContent).toBe('CTV Academy');
+    expect(r.container.querySelector('h1')?.textContent).toBe('Học viện CTV');
   });
 });
 

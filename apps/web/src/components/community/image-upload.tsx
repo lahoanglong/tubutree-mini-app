@@ -63,7 +63,7 @@ export function ImageUpload({ value, onChange, max = 6, label = 'Ảnh đính k�
             <img src={src} alt={`Ảnh ${i + 1}`} className="h-full w-full object-cover" />
             <button
               type="button"
-              aria-label="Xóa ảnh"
+              aria-label="Xoá ảnh"
               onClick={() => onChange(value.filter((_, j) => j !== i))}
               className="absolute right-0 top-0 inline-flex h-11 min-h-11 w-11 items-start justify-end p-1"
             >

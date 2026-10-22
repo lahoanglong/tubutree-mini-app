@@ -75,7 +75,7 @@ export function ConfirmDeleteSheet({ open, onClose, onConfirm, deleting }: { ope
     <Sheet open={open} onClose={onClose} title="Xoá bài viết này?">
       <div className="mt-3 flex flex-col gap-2.5">
         <button type="button" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
-          Hủy
+          Huỷ
         </button>
         <button
           type="button"

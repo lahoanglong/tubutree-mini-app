@@ -38,7 +38,7 @@ export interface LegalVars {
   freeshipThreshold: number;
 }
 
-export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThreshold: 200000 };
+export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThreshold: 199000 };
 
 interface Support {
   hotline: string;

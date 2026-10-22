@@ -60,7 +60,7 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     mocks.auth.status = 'idle';
     mocks.auth.user = null;
     const { container } = await mount();
-    expect(container.textContent).toContain('Đăng nhập để vào CTV Academy');
+    expect(container.textContent).toContain('Đăng nhập để vào Học viện CTV');
     expect(container.querySelector('a[href="/dang-nhap?returnTo=%2Fhoc-vien%2Fc1"]')).not.toBeNull();
     expect(mocks.get).not.toHaveBeenCalled();
   });
@@ -147,10 +147,10 @@ describe('/hoc-vien/[courseId] — chi tiết khoá học', () => {
     expect(container.textContent).toContain('Khoá bán hàng');
   });
 
-  it('khoá không xem được (403): giải thích CTV Academy dành cho CTV, lối tới /ctv, không Thử lại', async () => {
+  it('khoá không xem được (403): giải thích Học viện CTV dành cho CTV, lối tới /ctv, không Thử lại', async () => {
     mocks.get.mockReset().mockRejectedValue(new ApiError('Forbidden', 403));
     const { container } = await mount();
-    expect(container.textContent).toContain('CTV Academy dành cho cộng tác viên');
+    expect(container.textContent).toContain('Học viện CTV dành cho cộng tác viên');
     expect(container.querySelector('a[href="/ctv"]')).not.toBeNull();
     expect(byText(container, 'button', 'Thử lại')).toBeNull();
   });

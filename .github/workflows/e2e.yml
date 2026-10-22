@@ -63,6 +63,15 @@ jobs:
         pnpm --filter @tubutree/api exec prisma generate
         pnpm --filter @tubutree/api exec prisma migrate deploy
 
+    # 7a. Thể lệ Đổi rác cho ca e2e /doi-rac/quy-dinh: trang dựng phía máy chủ web (ISR) khi API trả 200 nên mock trình duyệt không tới;
+    #     ghi đúng chữ spec dùng vào DB CI trước khi build. Hàm chỉ ghi khi GITHUB_ACTIONS=true và đúng DB CI, không ghi được thì bước này đỏ.
+    - name: Seed waste rules text for e2e
+      working-directory: apps/api
+      env:
+        DATABASE_URL: postgresql://tubu:tubu@localhost:5434/tubutree
+      run: |
+        pnpm exec tsx -e "const w = require('../e2e/tests/support/waste-db'); w.seedWasteRulesText(w.WASTE_RULES_TEXT).then((ok) => { if (!ok) { console.error('waste.rules_text chưa ghi vì DB không phải DB CI'); process.exit(1); } })"
+
     # 7b. Partial unique index (khoá chống cộng tiền/điểm/xu trùng) chỉ có trong migration SQL,
     #     Prisma schema không biểu diễn được — kiểm DB vừa migrate có đủ, thiếu thì fail CI.
     - name: Check partial unique indexes

@@ -55,4 +55,19 @@ describe('queries miền nội bộ — queryKey giống Mini App, queryFn gọi
     });
     await expect(brandOwner.ownedBrandProfileQuery(boom.http).queryFn()).rejects.toEqual({ status: 500 });
   });
+
+  it('ownsBrand: thiếu cờ -> null (API cũ), có cờ giữ nguyên, lỗi ném lại', async () => {
+    const old = fakeHttp(() => ({ id: 'u1' }));
+    expect(brandOwner.ownsBrandQuery(old.http).queryKey).toEqual(['auth-me', 'owns-brand']);
+    await expect(brandOwner.ownsBrandQuery(old.http).queryFn()).resolves.toBeNull();
+    expect(old.calls[0]).toMatchObject({ method: 'get', path: '/auth/me' });
+    const no = fakeHttp(() => ({ ownsBrand: false }));
+    await expect(brandOwner.ownsBrandQuery(no.http).queryFn()).resolves.toBe(false);
+    const yes = fakeHttp(() => ({ ownsBrand: true }));
+    await expect(brandOwner.ownsBrandQuery(yes.http).queryFn()).resolves.toBe(true);
+    const boom = fakeHttp(() => {
+      throw { status: 500 };
+    });
+    await expect(brandOwner.ownsBrandQuery(boom.http).queryFn()).rejects.toEqual({ status: 500 });
+  });
 });

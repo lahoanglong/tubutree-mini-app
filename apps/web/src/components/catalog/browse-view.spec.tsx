@@ -229,14 +229,14 @@ describe('BrowseView — gõ tìm kiếm', () => {
     expect(container.querySelector('section[aria-label="Gợi ý tìm kiếm"]')).toBeNull();
   });
 
-  it('nút Xoá từ khoá bỏ q khỏi URL; "Hủy" trả ô về q đang lọc', async () => {
+  it('nút Xoá từ khoá bỏ q khỏi URL; "Huỷ" trả ô về q đang lọc', async () => {
     nav.search = 'q=nuoc';
     const { container } = mount();
     await flush();
     const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
     act(() => input.focus());
     typeInto(input, 'dở dang');
-    click(buttonByName(container, 'Hủy'));
+    click(buttonByName(container, 'Huỷ'));
     expect(input.value).toBe('nuoc');
     click(buttonByName(container, 'Xoá từ khoá'));
     expect(nav.replaces.at(-1)).toBe('/san-pham');
@@ -483,7 +483,7 @@ describe('BrowseView — kiểu Mini App ở điện thoại', () => {
     expect(container.querySelector('h1')!.className).toContain('max-md:sr-only');
   });
 
-  it('ô tìm dạng viên ở điện thoại; nút giỏ cùng hàng chỉ ở điện thoại, đổi thành "Hủy" khi đang gõ', async () => {
+  it('ô tìm dạng viên ở điện thoại; nút giỏ cùng hàng chỉ ở điện thoại, đổi thành "Huỷ" khi đang gõ', async () => {
     const { container } = mount();
     await flush();
     expect(container.querySelector('#browse-q')!.className).toContain('max-md:rounded-full');
@@ -492,7 +492,7 @@ describe('BrowseView — kiểu Mini App ở điện thoại', () => {
     act(() => container.querySelector<HTMLInputElement>('#browse-q')!.focus());
     await flush();
     expect(container.querySelector('a[href="/gio-hang"]')).toBeNull();
-    expect(buttonByName(container, 'Hủy')).not.toBeNull();
+    expect(buttonByName(container, 'Huỷ')).not.toBeNull();
   });
 
   it('chip chưa chọn nền be không viền; nút Bộ lọc nền xanh nhạt chữ xanh không viền', async () => {

@@ -108,7 +108,7 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
             <BadgePercent className="h-[18px] w-[18px]" aria-hidden="true" />
             {ste.maxAffiliateRate > 0 ? `Chia sẻ nhãn này — nhận tới ${ste.maxAffiliateRate}% hoa hồng` : 'Chia sẻ nhãn này'}
           </span>
-          <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + caption gắn mã giới thiệu của bạn.</span>
+          <span className="mt-0.5 block text-xs text-forest-700">Bấm để lấy link + lời đăng gắn mã giới thiệu của bạn.</span>
         </button>
       )}
 
@@ -190,7 +190,7 @@ function BrandShareSheet({
       </div>
       {captions.length > 0 && (
         <>
-          <p className="mb-1.5 text-sm font-semibold text-stone-900">Caption gợi ý (chạm để sao chép)</p>
+          <p className="mb-1.5 text-sm font-semibold text-stone-900">Lời đăng gợi ý (chạm để sao chép)</p>
           <div className="flex flex-col gap-1.5">
             {captions.map((c) => (
               <button

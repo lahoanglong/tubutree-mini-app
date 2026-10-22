@@ -79,7 +79,7 @@ describe('danh sách đơn — tên và ảnh sản phẩm', () => {
 });
 
 describe('danh sách đơn — ô tìm kiếm', () => {
-  it('gửi từ khoá cho API cùng bộ lọc trạng thái đang chọn và có nút Xóa tìm kiếm', async () => {
+  it('gửi từ khoá cho API cùng bộ lọc trạng thái đang chọn và có nút Xoá tìm kiếm', async () => {
     state.orders = [order('TB-1', [item('Dầu gội bưởi')])];
     const c = await mount();
     click(byText(c, 'button', 'Đã giao'));
@@ -89,7 +89,7 @@ describe('danh sách đơn — ô tìm kiếm', () => {
     await flush(6);
     expect(state.calls.at(-1)).toEqual({ page: 1, filter: { status: 'DELIVERED', q: 'dau goi' } });
     expect(c.textContent).toContain('Kết quả cho “dau goi”');
-    click(byText(c, 'button', 'Xóa tìm kiếm'));
+    click(byText(c, 'button', 'Xoá tìm kiếm'));
     await flush(6);
     expect(state.calls.at(-1)).toEqual({ page: 1, filter: { status: 'DELIVERED' } });
     expect((c.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('');

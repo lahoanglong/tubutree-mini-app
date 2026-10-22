@@ -53,6 +53,7 @@ const defaults = (): Record<string, () => unknown> => ({
     throw new ApiError('Không tìm thấy', 404);
   },
   '/dealer/me': () => ({ status: 'NONE', isDealer: false }),
+  '/auth/me': () => ({ id: 'u1' }),
 });
 
 let mounted: Rendered[] = [];
@@ -278,6 +279,60 @@ describe('hub /tai-khoan — đại lý và chủ nhãn', () => {
     await open();
     await open();
     expect(mocks.calls.filter((p) => p === '/brand/owner/me')).toHaveLength(1);
+  });
+
+  describe('cờ ownsBrand trên /auth/me', () => {
+    const brandCalls = () => mocks.calls.filter((p) => p === '/brand/owner/me');
+    const ownerLink = '/chu-thuong-hieu';
+
+    it('cờ false: không gọi /brand/owner/me, không có mục chủ nhãn', async () => {
+      mocks.routes['/auth/me'] = () => ({ id: 'u1', ownsBrand: false });
+      mocks.routes['/brand/owner/me'] = () => ({ id: 'b1', name: 'Nhãn A' });
+      const c = await mount();
+      expect(brandCalls()).toHaveLength(0);
+      expect(link(c, ownerLink)).toBeNull();
+    });
+
+    it('cờ true: gọi /brand/owner/me và hiện mục chủ nhãn', async () => {
+      mocks.routes['/auth/me'] = () => ({ id: 'u1', ownsBrand: true });
+      mocks.routes['/brand/owner/me'] = () => ({ id: 'b1', name: 'Nhãn A' });
+      const c = await mount();
+      expect(brandCalls()).toHaveLength(1);
+      expect(link(c, ownerLink)!.textContent).toContain('Nhãn A');
+    });
+
+    it('thiếu cờ (API cũ): gọi như cũ', async () => {
+      mocks.routes['/auth/me'] = () => ({ id: 'u1' });
+      mocks.routes['/brand/owner/me'] = () => ({ id: 'b1', name: 'Nhãn A' });
+      const c = await mount();
+      expect(brandCalls()).toHaveLength(1);
+      expect(link(c, ownerLink)).not.toBeNull();
+    });
+
+    it('/auth/me lỗi: gọi như cũ', async () => {
+      mocks.routes['/auth/me'] = () => {
+        throw new ApiError('lỗi', 500);
+      };
+      mocks.routes['/brand/owner/me'] = () => ({ id: 'b1', name: 'Nhãn A' });
+      const c = await mount();
+      expect(brandCalls()).toHaveLength(1);
+      expect(link(c, ownerLink)).not.toBeNull();
+    });
+
+    it('cờ false nhưng cache còn nhãn cũ: không hiện', async () => {
+      mocks.routes['/auth/me'] = () => ({ id: 'u1', ownsBrand: false });
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      client.setQueryData(['owned-brand', 'profile'], { id: 'b1', name: 'Nhãn cũ' });
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() => root.render(<QueryClientProvider client={client}><AccountPage /></QueryClientProvider>));
+      await flush(8);
+      expect(link(container, ownerLink)).toBeNull();
+      expect(container.textContent).not.toContain('Nhãn cũ');
+      act(() => root.unmount());
+      container.remove();
+    });
   });
 
   it('chủ nhãn thật thấy "Quản lý nhãn hàng" kèm tên nhãn', async () => {

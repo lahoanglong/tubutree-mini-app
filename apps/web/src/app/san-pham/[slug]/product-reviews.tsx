@@ -476,7 +476,7 @@ function ReviewForm({
           {save.isPending ? 'Đang gửi…' : isEdit ? 'Lưu đánh giá' : 'Gửi đánh giá'}
         </button>
         <button type="button" className={ui.btnSecondary} onClick={onCancel} disabled={save.isPending}>
-          Hủy
+          Huỷ
         </button>
       </div>
     </form>

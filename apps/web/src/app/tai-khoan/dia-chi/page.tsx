@@ -114,7 +114,7 @@ export default function AddressBookPage() {
       )}
       {removedNotice && (
         <p role="status" className="mb-3 text-sm font-medium text-success-fg">
-          Đã xóa địa chỉ.
+          Đã xoá địa chỉ.
         </p>
       )}
       {actionError && (
@@ -181,7 +181,7 @@ export default function AddressBookPage() {
                       className="mt-3 rounded-control border border-danger-fg bg-danger-bg p-3"
                     >
                       <p id={`del-${a.id}`} className="font-semibold text-stone-900">
-                        Xóa địa chỉ này?
+                        Xoá địa chỉ này?
                       </p>
                       <p id={`del-note-${a.id}`} className="mt-1 text-sm text-stone-700">
                         Các đơn đã đặt trước đây vẫn giữ nguyên địa chỉ giao.
@@ -196,7 +196,7 @@ export default function AddressBookPage() {
                           disabled={remove.isPending}
                           className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}
                         >
-                          {remove.isPending ? 'Đang xóa…' : 'Xóa'}
+                          {remove.isPending ? 'Đang xoá…' : 'Xoá'}
                         </button>
                       </div>
                     </div>
@@ -234,10 +234,10 @@ export default function AddressBookPage() {
                           remove.reset();
                           setConfirmId(a.id);
                         }}
-                        aria-label={`Xóa địa chỉ của ${a.recipient}`}
+                        aria-label={`Xoá địa chỉ của ${a.recipient}`}
                         className={`${ui.btnText} text-danger-fg max-md:no-underline max-md:text-sm max-md:text-[color:var(--color-text-danger)]`}
                       >
-                        Xóa
+                        Xoá
                       </button>
                     </div>
                   )}

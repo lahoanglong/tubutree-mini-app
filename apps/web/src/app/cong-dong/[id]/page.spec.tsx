@@ -297,7 +297,7 @@ describe('/cong-dong/[id] — thao tác', () => {
     click(btn(container, 'Xoá'));
     await flush(2);
     expect(dlg().textContent).toContain('Xoá bài viết này?');
-    click(btn(dlg(), 'Hủy'));
+    click(btn(dlg(), 'Huỷ'));
     expect(mocks.del).not.toHaveBeenCalled();
   });
 

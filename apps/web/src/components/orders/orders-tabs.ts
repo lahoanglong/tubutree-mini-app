@@ -19,7 +19,7 @@ export const ORDERS_TABS: readonly OrdersTab[] = [
   { key: 'processing', label: 'Đang xử lý', filter: { group: 'processing' } },
   { key: 'shipping', label: 'Đang giao', filter: { status: 'SHIPPING' } },
   { key: 'delivered', label: 'Đã giao', filter: { status: 'DELIVERED' } },
-  { key: 'closed', label: 'Đã hủy/hoàn', filter: { group: 'closed' } },
+  { key: 'closed', label: 'Đã huỷ/hoàn', filter: { group: 'closed' } },
   { key: 'subscriptions', label: 'Định kỳ' },
 ];
 

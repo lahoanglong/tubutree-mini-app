@@ -106,7 +106,7 @@ export function EvidenceUpload({
               type="button"
               onClick={() => onChange(value.filter((_, j) => j !== i))}
               disabled={disabled || busy}
-              aria-label={`Xóa ${noun} ${i + 1}`}
+              aria-label={`Xoá ${noun} ${i + 1}`}
               className="absolute right-0 top-0 inline-flex h-11 w-11 items-start justify-end p-1 disabled:opacity-50"
             >
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900/70 text-stone-0">

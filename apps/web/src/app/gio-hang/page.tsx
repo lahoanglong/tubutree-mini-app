@@ -162,7 +162,7 @@ export default function CartPage() {
     selectedItems.length === 0
       ? 'Chọn ít nhất một sản phẩm để thanh toán.'
       : stockBlocked
-        ? 'Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xóa, giảm số lượng hoặc bỏ chọn rồi thanh toán.'
+        ? 'Có sản phẩm đã hết hàng hoặc vượt số lượng còn lại. Hãy xoá, giảm số lượng hoặc bỏ chọn rồi thanh toán.'
         : null;
   // Thanh tiến độ freeship theo phần đang chọn như StickySummary của Mini App; có hàng gian hàng tự giao thì chỉ hiện khi phần Tubu giao > 0.
   const barRemaining = cart ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
@@ -324,7 +324,7 @@ export default function CartPage() {
                           {it.flashLimitNotice && <p className="mt-1 text-xs font-medium text-warning-fg">{it.flashLimitNotice}</p>}
                           {soldOut && (
                             <p className="mt-1 text-xs font-semibold text-danger-fg">
-                              Hết hàng — hãy xóa khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
+                              Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
                             </p>
                           )}
                           {!soldOut && atMax && (
@@ -362,13 +362,13 @@ export default function CartPage() {
                               type="button"
                               onClick={() => removeWithUndo(it)}
                               disabled={busy}
-                              aria-label={`Xóa ${it.productName} khỏi giỏ hàng`}
+                              aria-label={`Xoá ${it.productName} khỏi giỏ hàng`}
                               className={`inline-flex min-h-11 items-center px-3 text-sm font-medium text-danger-fg disabled:opacity-40 max-md:ml-auto max-md:justify-center max-md:px-0 ${
                                 soldOut ? 'rounded-control border border-danger-fg font-semibold' : ''
                               }`}
                             >
                               <Trash2 className="h-5 w-5 text-[color:var(--color-text-primary)] md:hidden" strokeWidth={1.75} aria-hidden="true" />
-                              <span className="max-md:hidden">Xóa</span>
+                              <span className="max-md:hidden">Xoá</span>
                             </button>
                           </div>
                           {failedItemId === it.id && (

@@ -69,13 +69,13 @@ afterEach(() => {
 });
 
 describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10)', () => {
-  it('dòng hết hàng: không có nút +/− (không thể làm mất dòng), có nhãn Hết hàng và nút Xóa rõ ràng', async () => {
+  it('dòng hết hàng: không có nút +/− (không thể làm mất dòng), có nhãn Hết hàng và nút Xoá rõ ràng', async () => {
     state.cart = cartOf([line({ stock: 0 })]);
     const { container } = await mount();
     expect(container.textContent).toContain('Hết hàng');
     expect(button(container, 'Tăng số lượng Dầu gội bồ kết')).toBeNull();
     expect(button(container, 'Giảm số lượng Dầu gội bồ kết')).toBeNull();
-    click(button(container, 'Xóa Dầu gội bồ kết khỏi giỏ hàng'));
+    click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
     await flush();
     expect(state.removed).toEqual(['i1']);
     expect(state.updates).toEqual([]);
@@ -107,7 +107,7 @@ describe('/gio-hang — dòng hết hàng / chạm trần tồn kho (BUYERWEB-10
     expect(state.updates).toEqual([{ id: 'i1', q: 3 }]);
   });
 
-  it('có dòng hết hàng: nút Thanh toán bị khoá và giải thích phải xóa dòng đó', async () => {
+  it('có dòng hết hàng: nút Thanh toán bị khoá và giải thích phải xoá dòng đó', async () => {
     state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const { container } = await mount();
     expect(container.querySelector('a[href="/thanh-toan"]')).toBeNull();
