@@ -1,4 +1,4 @@
-import { MAX_START_DAYS_AHEAD } from '@tubutree/app-core/api/subscriptions';
+import { MAX_START_DAYS_AHEAD, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
 
 const VN_OFFSET_MS = 7 * 3600 * 1000;
 
@@ -19,6 +19,32 @@ export function isStartDateAllowed(date: string, now: Date = new Date()): boolea
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const { min, max } = startDateRange(now);
   return date >= min && date <= max;
+}
+
+/** Chu kỳ giao hợp lệ (tuần), khớp SUBSCRIPTION_INTERVAL_WEEKS của API. */
+export const SUBSCRIPTION_INTERVAL_WEEKS = [4, 6, 8, 10] as const;
+
+const startOfVnDayMs = (d: Date): number => Date.parse(`${vnDateOf(d)}T00:00:00+07:00`);
+
+/**
+ * Ngày giao kế tiếp sau khi đổi chu kỳ, cùng luật với API (intervalPatch): 0h VN của ngày đơn kỳ gần nhất + chu kỳ mới,
+ * không sớm hơn 0h ngày mai giờ VN. Gói tạm dừng tính như gói đang chạy vì API ghi sẵn ngày đó để bật lại giữ đúng.
+ * null = không tính được hoặc không có gì đổi (cùng chu kỳ, API cũ chưa trả lastOrderAt, gói chưa ra đơn mà ngày bắt đầu
+ * đã qua). Gói chưa ra đơn nào giữ ngày bắt đầu đã hẹn.
+ */
+export function nextRunAfterIntervalChange(
+  sub: Pick<SubscriptionDTO, 'intervalWeeks' | 'nextRunAt' | 'lastOrderAt'>,
+  weeks: number,
+  now: Date = new Date(),
+): Date | null {
+  if (weeks === sub.intervalWeeks || sub.lastOrderAt === undefined) return null;
+  if (sub.lastOrderAt === null) {
+    const kept = new Date(sub.nextRunAt);
+    return kept >= now ? kept : null;
+  }
+  const due = new Date(startOfVnDayMs(new Date(sub.lastOrderAt)) + weeks * 7 * 864e5);
+  const earliest = new Date(startOfVnDayMs(new Date(now.getTime() + 864e5)));
+  return due < earliest ? earliest : due;
 }
 
 /** "2026-10-20" thành "20/10/2026" (không qua Date để khỏi lệch ngày theo múi giờ máy). */
