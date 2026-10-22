@@ -98,6 +98,9 @@ export const SUBSCRIPTION_DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
 /** Trạng thái nằm trong partial unique index subscriptions_user_variation_address_open_key. */
 const OPEN_STATUSES = ['ACTIVE', 'PAUSED'];
 
+// Gói ACTIVE chưa ra đơn nào chỉ tính vào bậc giảm khi kỳ kế tiếp nằm trong khoảng này.
+const TIER_WINDOW_DAYS = 35;
+
 function subscriptionDuplicateError(open: { id: string; status: string }, productName: string): ConflictException {
   const message =
     open.status === 'PAUSED'
@@ -156,7 +159,7 @@ interface PlacedCycleOrder {
 /**
  * Subscribe & Save (Build Spec §6.14.4): đặt định kỳ 4/6/8/10 tuần.
  * Chiết khấu theo THANG BẬC (subscribe.discount_tiers, kiểu Amazon): càng nhiều
- * subscription ACTIVE, % giảm càng cao (chọn bậc minActive cao nhất user đạt được),
+ * gói ACTIVE thật (đã ra đơn hoặc kỳ kế trong 35 ngày), % giảm càng cao (chọn bậc minActive cao nhất đạt được),
  * cap 15%. subscribe.discount_pct giữ lại làm fallback cho bậc cơ bản (minActive:1).
  * Đơn đầu giao ngay hoặc từ ngày khách chọn; cron tạo các đơn kỳ sau khi đến hạn, trả bằng
  * COD / Ví Tubu / chuyển khoản (Q-13) → user skip/pause/cancel/sửa bất kỳ lúc nào.
@@ -410,7 +413,9 @@ export class SubscriptionsService {
         where: { id: { in: subs.map((s) => s.variationId) } },
         include: { product: { select: { name: true, thumbnail: true, slug: true } } },
       }),
-      this.effectiveDiscountPct(userId),
+      this.effectiveDiscountPct(userId, this.prisma, {
+        floorCount: subs.some((s) => s.status === 'ACTIVE') ? 1 : 0,
+      }),
     ]);
     const vmap = new Map(variations.map((v) => [v.id, v]));
     return subs.map((s) => {
@@ -437,16 +442,35 @@ export class SubscriptionsService {
 
   /**
    * % giảm hiệu lực cho đơn Subscribe & Save của userId, theo THANG BẬC
-   * subscribe.discount_tiers dựa trên số subscription đang ACTIVE — chọn bậc
-   * minActive cao nhất mà user đạt được. Subscription đang tạo đơn (đang ACTIVE)
-   * được TÍNH VÀO activeCount — user có 1 sub thì vẫn đạt bậc cơ bản.
+   * subscribe.discount_tiers: chọn bậc minActive cao nhất mà số gói "thật" của user đạt được.
+   * Gói thật = ACTIVE và (đã ra ít nhất một đơn HOẶC kỳ kế tiếp trong 35 ngày tới, kể cả quá hạn),
+   * để khách không nâng bậc bằng cách tạo nhiều gói hẹn ngày rất xa.
+   * - selfId: gói đang tạo đơn, luôn tự đếm (đơn đầu giao ngay chưa có lastOrderId, kỳ cron đã dời nextRunAt).
+   * - floorCount: sàn số gói khi người gọi biết user có gói ACTIVE sắp ra đơn (danh sách hiện bậc thấp nhất
+   *   thay vì 0%, đúng với bậc mà đơn kỳ đầu tiên của gói đó sẽ được áp).
    */
-  async effectiveDiscountPct(userId: string, db: Pick<Prisma.TransactionClient, 'subscription'> = this.prisma): Promise<number> {
+  async effectiveDiscountPct(
+    userId: string,
+    db: Pick<Prisma.TransactionClient, 'subscription'> = this.prisma,
+    opts: { selfId?: string; floorCount?: number } = {},
+  ): Promise<number> {
     const basePct = await this.config.get<number>('subscribe.discount_pct', 0.12);
     const tiers = await this.config.get<{ minActive: number; pct: number }[]>('subscribe.discount_tiers', [
       { minActive: 1, pct: basePct },
     ]);
-    const activeCount = await db.subscription.count({ where: { userId, status: 'ACTIVE' } });
+    const horizon = new Date(Date.now() + TIER_WINDOW_DAYS * 86_400_000);
+    const counted = await db.subscription.count({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        OR: [
+          { lastOrderId: { not: null } },
+          { nextRunAt: { lte: horizon } },
+          ...(opts.selfId ? [{ id: opts.selfId }] : []),
+        ],
+      },
+    });
+    const activeCount = Math.max(counted, opts.floorCount ?? 0);
     const applicable = tiers.filter((t) => activeCount >= t.minActive).sort((a, b) => b.pct - a.pct);
     return applicable[0]?.pct ?? 0;
   }
@@ -697,7 +721,7 @@ export class SubscriptionsService {
     const user = await tx.user.findUniqueOrThrow({ where: { id: sub.userId } });
 
     const unitPrice = variation.salePrice ?? variation.retailPrice;
-    const discountPct = await this.effectiveDiscountPct(sub.userId, tx);
+    const discountPct = await this.effectiveDiscountPct(sub.userId, tx, { selfId: sub.id });
     const { subtotal, discount, goods } = subscriptionCycleAmounts(unitPrice, sub.quantity, discountPct);
     const shippingFee = await this.pricing.calcShippingFee({ subtotal, tierId: user.tierId });
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
