@@ -1,16 +1,16 @@
 # Báo cáo UAT trước khi mở khách
 
-Bản cuối, viết 2026-10-22, cập nhật lần cuối khoảng 20:30. Thay bản sáng 2026-10-20. Mọi số dưới đây có lệnh và log ở `PROGRESS.md`.
+Bản cuối, viết 2026-10-22, cập nhật lần cuối khoảng 21:50. Thay bản sáng 2026-10-20. Mọi số dưới đây có lệnh và log ở `PROGRESS.md`.
 
 ## 1. Kết luận
 
 **Mã đã sẵn sàng. Chưa mở cho khách được** vì ba việc chưa làm:
 
 1. **Việc của chủ** (mục 5): khoá Pancake thật, DNS, thử chuyển khoản QR thật, FAQ, nội dung pháp lý, khoá Zalo OA/ZNS.
-2. **Mã UAT chưa vào main.** Mọi bản sửa nằm trên nhánh cục bộ `uat/2026-10-20`. Nhánh này đã gộp sẵn main mới nhất (d85f1b65, gồm PR #24 và PR #25 của web). Chưa push, chưa mở PR. Cần lệnh của chủ (mục 6).
+2. **Mã UAT chưa vào main.** Mọi bản sửa nằm ở PR #27 (nhánh `uat/2026-10-20`). Nhánh này đã gộp sẵn main mới nhất (c8db230c, gồm PR #24, #25 và #26 của web). Chờ CI xanh và lệnh gộp của chủ (mục 6).
 3. **Chưa deploy.** Có 11 migration mới, nên phải backup DB trước (mục 6).
 
-Bản sẽ phát hành là nhánh `uat/2026-10-20` ở commit fb9bd099, tức nhánh UAT đã gộp main d85f1b65. Trên bản này:
+Bản sẽ phát hành là nhánh `uat/2026-10-20` (PR #27). Các kiểm dưới đây chạy ở commit fb9bd099, tức nhánh UAT đã gộp main d85f1b65. Commit 9ee10eab gộp thêm main c8db230c (PR #26, chỉ đổi web); sau đó đã chạy lại tsc web và vitest web VN, UTC: 406 file / 6939 test passed. Playwright web trên commit gộp do CI chạy.
 
 | Kiểm | Kết quả |
 |---|---|
@@ -136,9 +136,9 @@ Phiên web nhận 7 lô lỗi và đổi giao diện (ghi ở `PROGRESS.md` mụ
 - PR #24 (web giống Mini App) đã vào main.
 - PR #25 đã vào main (d85f1b65), CI xanh. PR này theo các quyết định đợt 6 (chữ Q13/Q14/Q16, freeship dự phòng 199.000đ, Q22), sửa test thể lệ đổi rác cho hợp với API mới, và thêm bước CI ghi thể lệ vào DB của CI.
 
-Phiên web đang làm một lô nhỏ nữa:
-- màn đại lý web ghi % bậc thưởng kiểu "2,5%" như Mini App;
-- ô mã giảm giá ở giỏ hiện lý do khi mã không áp được.
+- PR #26 (lô 8) đã vào main (c8db230c), CI xanh:
+  - màn đại lý web ghi % bậc thưởng kiểu "2,5%" như Mini App;
+  - ô mã giảm giá ở giỏ hiện lý do khi mã không áp được.
 
 ## 5. Việc chủ cần làm
 
@@ -167,15 +167,15 @@ Việc hoãn có chủ đích, ít gặp: R3-1 đến R3-3. Khi gộp tài kho�
 
 ## 6. Kế hoạch gộp vào main và deploy
 
-Nhánh `uat/2026-10-20` đã gộp main d85f1b65 trên máy, không xung đột. Nếu main không đổi thêm trước khi mở PR, PR vào main sẽ không có xung đột. Mọi kiểm ở mục 1 chạy trên chính nhánh này.
+Nhánh `uat/2026-10-20` đã gộp main c8db230c, không xung đột. Mọi kiểm ở mục 1 chạy trên chính nhánh này.
 
-Thứ tự đề xuất, chờ lệnh chủ:
+Thứ tự đề xuất:
 
-1. Push `uat/2026-10-20` và mở PR vào main. Chờ CI xanh rồi gộp. PR #25 đã vào main trước, đúng thứ tự cần.
+1. Đã push `uat/2026-10-20` và mở PR #27 vào main theo lệnh chủ. Chờ CI xanh rồi chủ quyết gộp. PR #25 và #26 đã vào main trước, đúng thứ tự cần.
 2. Deploy theo `docs/launch/deploy-rollback-runbook.md`, với bốn lưu ý:
    - Backup DB trước khi migrate. 11 migration mới nằm ngoài danh sách tương thích image.
    - Chạy `seed-reference --with-business-defaults` như runbook bước 7b. Lần này seed thêm khoá bậc thưởng quý đại lý (`system_configs` +131 trên DB trống). Seed không ghi đè giá trị admin đã đổi.
    - Deploy API cùng lúc hoặc trước web. Lý do: web mới gửi `expectedAmount` khi duyệt hay chi lệnh rút, mà API cũ trả 400 khi gặp trường này.
    - Sau deploy, báo admin và kế toán tải lại mọi tab Quản trị.
 
-Phiên này không push, không mở PR, không deploy.
+Phiên này đã push nhánh và mở PR #27 theo lệnh chủ. Không gộp, không deploy.
