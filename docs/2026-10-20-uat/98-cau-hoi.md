@@ -66,3 +66,18 @@ Mỗi câu có 2–4 phương án, phương án (1) là phương án agent khuy�
 | Q2c | Phần thuế hoàn cho lệnh đã chi làm giảm "thuế đã khấu trừ" ở tháng của ngày chi lệnh đó. Lệnh gửi cuối tháng, chi đầu tháng sau, rồi lệnh khác bị từ chối muộn: báo cáo tháng đã kê khai có thể đổi | Ghi trong sổ tay kế toán: điều chỉnh ở kỳ kê khai sau. Câu hỏi: có chốt sổ tháng (không hoàn vào lệnh đã kê khai) không |
 | Q2d | CTV được hoàn thuế vào Ví chỉ thấy dòng sổ ví "Hoàn thuế TNCN giữ dư…", không có thông báo riêng | Không gửi thông báo (tránh thêm mẫu tin). Câu hỏi: có muốn báo qua thông báo trong app không |
 | Q2e | Admin tắt khấu trừ (pct 0) rồi có lệnh bị từ chối: thuế đã giữ lúc còn bật được hoàn hết | Giữ theo công thức (tháng không còn phải khấu trừ) |
+
+### Câu mở sau lần chạy lại UAT 2026-10-22
+
+| Câu | Hiện trạng | Đề xuất |
+|---|---|---|
+| U6-B11 | Chủ chọn bỏ dòng "điểm đang chờ, mở khoá ngày" ở web (U6-B06). Bản sửa d0e4bee3 bỏ luôn dòng "điểm đang chờ xử lý đổi/trả" ở trang Điểm Xanh web. Mini App cũng không có dòng nào. Trang thanh toán vẫn báo khi có điểm bị khoá (lockNote) | Giữ như hiện tại (web giống Mini App) |
+
+### Chủ trả lời 2026-10-22 tối (sau lần chạy lại UAT)
+
+| Câu | Chủ chọn | Việc tiếp |
+|---|---|---|
+| U6-B11 (dòng điểm chờ đổi/trả ở web) | Giữ như hiện tại: web giống Mini App, không hiện dòng điểm chờ nào; trang thanh toán vẫn báo khi điểm bị khoá | Không sửa |
+| Bậc thưởng quý: % giữa các bậc | Chặn: bậc sau phải có % bằng hoặc cao hơn bậc trước | Gói q8-bac-admin (W18) |
+| Bậc thưởng quý: số lẻ | Cho tối đa 1 chữ số lẻ (ví dụ 2,5%); màn đại lý ghi kiểu Việt "2,5%" | Gói q8-bac-admin (W18) sửa luật và Mini App; nhờ phiên web sửa màn đại lý web (report-tab.tsx) |
+
