@@ -15,6 +15,14 @@ export const ownedBrandProfileQuery = (http: HttpClient) => ({
       throw e;
     }),
 });
+// Cờ ownsBrand trên /auth/me: null = API cũ chưa có cờ (react-query cấm trả undefined), người gọi giữ cách cũ.
+export const ownsBrandQuery = (http: HttpClient) => ({
+  queryKey: ['auth-me', 'owns-brand'] as const,
+  queryFn: async (): Promise<boolean | null> => {
+    const me = await http.get<{ ownsBrand?: boolean }>('/auth/me');
+    return me.ownsBrand ?? null;
+  },
+});
 export const ownedBrandSalesQuery = (http: HttpClient, period: BrandSalesPeriod) => ({
   queryKey: ['owned-brand-sales', period] as const,
   queryFn: () => getOwnedBrandSales(http, period),
