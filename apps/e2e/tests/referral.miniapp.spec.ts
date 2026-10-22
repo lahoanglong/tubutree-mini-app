@@ -103,6 +103,7 @@ test.describe('Giới thiệu bạn bè', () => {
     mockSession(api, makeUser({ id: 'user-ref', referralCode: 'BANBE77' }));
     api.get('/me/loyalty', LOYALTY);
     api.get('/me/wallet', WALLET);
+    api.get('/auth/me', { ownsBrand: false });
     api.allowUnmocked('GET /me/coupons', 'GET /me/notifications', 'GET /notifications', 'GET /brand/owner/me', 'GET /dealer/me');
     await page.addInitScript(() => {
       (window as unknown as { __copyOk: boolean }).__copyOk = true;

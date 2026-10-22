@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HttpError } from '../services/http';
 import type { ReactNode } from 'react';
@@ -112,5 +112,17 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
     expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
+  });
+
+  it('cờ ownsBrand đổi true → false thì mục quản lý nhãn biến mất dù ownedBrand còn data cũ', async () => {
+    mocks.getOwnsBrand.mockResolvedValue(true);
+    mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
+    const qc = renderPage();
+    expect(await screen.findByText('Quản lý nhãn hàng')).toBeInTheDocument();
+    mocks.getOwnsBrand.mockResolvedValue(false);
+    await act(async () => {
+      await qc.invalidateQueries({ queryKey: ['auth-me'] });
+    });
+    await waitFor(() => expect(screen.queryByText('Quản lý nhãn hàng')).toBeNull());
   });
 });
