@@ -61,3 +61,9 @@ Lượt 2: không có phát hiện. Ghi chú, không phải lỗi:
 ## 5. Câu hỏi cho chủ dự án
 
 - Không có câu hỏi mở. Mặc định đã dùng: web đi theo đúng chữ và luật của Mini App ở 3362c0a0; gửi `intervalWeeks` chỉ khi chu kỳ đổi, cùng endpoint và body như Mini App (không Idempotency-Key, như trước).
+
+## 6. Đợt b (lane mv-uat7b, Mini App/API nguồn uat/int 35a716c6)
+
+- Chọn chu kỳ 4/6/8/10 tuần ở `subscription-edit-sheet.tsx` chỉ hiện khi GET /me/subscriptions trả khoá `lastOrderAt` trong DTO (có khoá, kể cả null). Thiếu khoá: sheet như trước Q22, và `subscriptionPatch` không bao giờ gửi `intervalWeeks`. Lý do: API main chưa nhận `intervalWeeks` (400) mà web có thể vào main trước API. Mini App không cần vì deploy cùng API.
+- Dòng link CTV `app/ctv/page.tsx` chỉ ghi "{clicks} lượt bấm", bỏ "· N đơn" vì cột conversions của link không được cập nhật (Mini App f71cc8ec; chữ giống Mini App 35a716c6). Không đụng WithdrawSheet/PayoutRow.
+- Test đỏ trước rồi xanh: `subscriptions-panel.spec.tsx` (không khoá, khoá null), `ctv/page.spec.tsx`. Chưa chạy Playwright.
