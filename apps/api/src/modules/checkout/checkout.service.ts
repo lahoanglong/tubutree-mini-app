@@ -17,6 +17,7 @@ import {
   FIRST_ORDER_FREESHIP_TAKEN_MSG,
   firstOrderFreeShipFrom,
   firstOrderShippingFee,
+  freeShipThreshold,
   PricingService,
   tierDiscountPctOf,
 } from '../pricing/pricing.service';
@@ -52,10 +53,12 @@ import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import {
+  COUPON_FREESHIP_ALREADY_FREE_REASON,
   COUPON_FREESHIP_FIRST_ORDER_REASON,
   COUPON_FREESHIP_NOTHING_REASON,
   COUPON_ZERO_DISCOUNT_REASON,
   couponFlashExcludedNotice,
+  couponFreeshipThresholdReason,
   couponNotAppliedNotice,
   couponRejectReason,
 } from '../coupons/coupon-notice';
@@ -166,10 +169,29 @@ function groupSubtotal(lines: { total: number }[]): number {
  * Mã hợp lệ mà không đem lại đồng nào cho lần đặt (giảm 0đ, freeship không miễn được phí nào) thì coi như chưa áp: placeOrder không
  * redeem. Trả lý do báo khách, null = mã có áp.
  */
-function couponNothingReason(discount: number, freeship: boolean, freeshipSaved: number, firstOrderWaived = 0): string | null {
+function couponNothingReason(discount: number, freeship: boolean, freeshipSaved: number, freeshipNothing = COUPON_FREESHIP_NOTHING_REASON): string | null {
   if (discount > 0 || freeshipSaved > 0) return null;
-  if (!freeship) return COUPON_ZERO_DISCOUNT_REASON;
-  return firstOrderWaived > 0 ? COUPON_FREESHIP_FIRST_ORDER_REASON : COUPON_FREESHIP_NOTHING_REASON;
+  return freeship ? freeshipNothing : COUPON_ZERO_DISCOUNT_REASON;
+}
+
+type ShipmentTerm = {
+  shippingFee: number;
+  commissionPct: number | null;
+  freeshipWaived: number;
+  firstOrderWaived: number;
+  /** Kiện Tubu có phí giao bằng 0 vì tiền hàng đạt ngưỡng miễn phí giao thường của hạng; giá trị là ngưỡng đó. */
+  thresholdFree: number | null;
+};
+
+/**
+ * Lý do mã freeship không miễn thêm được gì khi kiện Tubu đã hết phí giao từ trước, theo thứ tự freeship đơn đầu rồi ngưỡng
+ * thường. null = không kiện Tubu nào hết phí giao sẵn (đơn chỉ có hàng gian hàng tự giao): giữ câu chung COUPON_FREESHIP_NOTHING_REASON.
+ */
+function shipAlreadyFreeReason(terms: ShipmentTerm[]): string | null {
+  if (terms.some((t) => t.firstOrderWaived > 0)) return COUPON_FREESHIP_FIRST_ORDER_REASON;
+  const threshold = terms.find((t) => t.thresholdFree != null)?.thresholdFree;
+  if (threshold == null) return null;
+  return threshold > 0 ? couponFreeshipThresholdReason(threshold) : COUPON_FREESHIP_ALREADY_FREE_REASON;
 }
 
 /**
@@ -940,14 +962,14 @@ export class CheckoutService {
     // Báo giá ném lỗi này cho cả lần đặt; xem trước cũng vậy để không hứa số tiền của một lần đặt không đặt được.
     if (withShipping) assertNoUnavailableLine(cart.items);
     let freeshipSaved = 0;
-    let firstOrderWaived = 0;
-    // Phí giao không phụ thuộc địa chỉ nên trang giỏ cũng biết được đơn đầu đã miễn phí giao (mã freeship không giúp thêm gì).
+    let alreadyFreeReason: string | null = null;
+    // Phí giao không phụ thuộc địa chỉ nên trang giỏ cũng biết được phí giao đã bằng 0 từ trước (đơn đầu, đạt ngưỡng, hạng): mã freeship không giúp thêm gì.
     if ([...results.values()].some((r) => !(r instanceof BadRequestException) && r.freeship)) {
       const groups = groupByFulfiller(cart.items);
       const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
       const terms = await this.shipmentTerms(groups, groups.map((g) => groupSubtotal(g.lines)), user.tierId, true, firstOrderFrom);
       freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
-      firstOrderWaived = terms.reduce((s, t) => s + t.firstOrderWaived, 0);
+      alreadyFreeReason = shipAlreadyFreeReason(terms);
     }
 
     const coupons: CouponPreviewItem[] = [];
@@ -958,11 +980,11 @@ export class CheckoutService {
       }
       const discount = Math.min(r.discount, base.goodsAfterCombo);
       // Trang giỏ chưa có phí giao: mã freeship hợp lệ là dùng được (như getCart), số tiền miễn phí giao chỉ biết ở thanh toán.
-      const firstOrderTookShip = r.freeship && discount === 0 && firstOrderWaived > 0 && freeshipSaved === 0;
+      const alreadyFree = r.freeship && discount === 0 && freeshipSaved === 0 ? alreadyFreeReason : null;
       const nothing = withShipping
-        ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0, r.freeship ? firstOrderWaived : 0)
-        : firstOrderTookShip
-          ? COUPON_FREESHIP_FIRST_ORDER_REASON
+        ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0, alreadyFreeReason ?? undefined)
+        : alreadyFree
+          ? alreadyFree
           : discount > 0 || r.freeship
             ? null
             : COUPON_ZERO_DISCOUNT_REASON;
@@ -1152,12 +1174,13 @@ export class CheckoutService {
     const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
     const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship, firstOrderFrom);
     const firstOrderShipWaived = terms.reduce((s, t) => s + t.firstOrderWaived, 0);
+    const alreadyFreeReason = shipAlreadyFreeReason(terms);
     // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ hết) → giảm 0đ; mã
     // freeship chỉ miễn phí giao kiện Tubu, nên giỏ toàn hàng gian hàng tự giao hoặc kiện Tubu đã miễn phí giao thì không
     // được gì. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
     const freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
     // couponApplied: coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true.
-    const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved, firstOrderShipWaived) : null;
+    const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved, alreadyFreeReason ?? undefined) : null;
     const couponApplied = couponValid && nothingReason === null;
     if (nothingReason !== null) {
       couponNotice = couponNotAppliedNotice(nothingReason, flashSubtotal > 0, combo.total > 0);
@@ -1224,7 +1247,7 @@ export class CheckoutService {
     freeship: boolean,
     /** Ngưỡng freeship đơn đầu của khách (firstOrderFreeShipFrom), null = không áp. */
     firstOrderFrom: number | null = null,
-  ): Promise<{ shippingFee: number; commissionPct: number | null; freeshipWaived: number; firstOrderWaived: number }[]> {
+  ): Promise<ShipmentTerm[]> {
     const merchantIds = groups.flatMap((g) => (g.fulfiller.kind === 'MERCHANT' ? [g.fulfiller.storefrontId] : []));
     const [stores, defaultFee, defaultPct] = merchantIds.length
       ? await Promise.all([
@@ -1237,13 +1260,15 @@ export class CheckoutService {
         ])
       : [[], DEFAULT_MERCHANT_SHIPPING_FEE, DEFAULT_MERCHANT_COMMISSION_PCT];
     const byId = new Map(stores.map((sf) => [sf.id, sf]));
-    const out: { shippingFee: number; commissionPct: number | null; freeshipWaived: number; firstOrderWaived: number }[] = [];
+    const out: ShipmentTerm[] = [];
     for (const [i, g] of groups.entries()) {
       if (g.fulfiller.kind !== 'MERCHANT') {
         const base = await this.pricing.calcShippingFee({ subtotal: subtotals[i]!, tierId });
         // Freeship đơn đầu miễn trước mã freeship: mã chỉ "miễn được" phần còn lại, nên không bị tiêu cho đơn đã miễn phí giao.
         const fee = firstOrderShippingFee(base, subtotals[i]!, firstOrderFrom);
-        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee });
+        // Ngưỡng chỉ cần khi phí đã 0 từ gốc: đó là lúc mã freeship phải nói "đã đạt ngưỡng".
+        const thresholdFree = base === 0 && this.config ? await freeShipThreshold(this.config, tierId) : null;
+        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee, thresholdFree });
         continue;
       }
       const sf = byId.get(g.fulfiller.storefrontId);
@@ -1254,6 +1279,7 @@ export class CheckoutService {
         commissionPct: sf?.commissionPct != null ? Number(sf.commissionPct) : defaultPct,
         freeshipWaived: 0,
         firstOrderWaived: 0,
+        thresholdFree: null,
       });
     }
     return out;
