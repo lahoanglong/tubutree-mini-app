@@ -2027,6 +2027,32 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
       expect(payoutUpdateMany.mock.calls[0]![0].where).toEqual({ id: 'p1', status: 'REQUESTED' });
     });
 
+    it('approvePayout: expectedAmount null (class-validator @IsOptional cho null lọt qua) → như không gửi, không đưa amount: null vào where', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED' });
+      await svcOf(prisma).approvePayout('admin1', 'p1', 'ok', null as unknown as undefined);
+      expect(payoutUpdateMany.mock.calls[0]![0].where).toEqual({ id: 'p1', status: 'REQUESTED' });
+    });
+
+    it('approvePayout: expectedAmount null và count=0 → báo "tải lại" như cũ, không dò số tiền', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'REQUESTED', amount: 1_000_000 });
+      payoutUpdateMany.mockResolvedValue({ count: 0 });
+      const err = await svcOf(prisma).approvePayout('admin1', 'p1', undefined, null as unknown as undefined).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+    });
+
+    it('markPayoutPaid: expectedAmount null → như không gửi, không đưa amount: null vào where', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'PAID' });
+      await svcOf(prisma).markPayoutPaid('admin1', 'p1', { expectedAmount: null as unknown as undefined });
+      expect(payoutUpdateMany.mock.calls[0]![0].where).toEqual({ id: 'p1', status: 'APPROVED' });
+    });
+
+    it('markPayoutPaid: expectedAmount null và count=0 → báo "tải lại" như cũ, không dò số tiền', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED', amount: 1_000_000 });
+      payoutUpdateMany.mockResolvedValue({ count: 0 });
+      const err = await svcOf(prisma).markPayoutPaid('admin1', 'p1', { expectedAmount: null as unknown as undefined }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+    });
+
     it('markPayoutPaid: expectedAmount khớp → đưa số vào điều kiện updateMany cùng status-guard và chi', async () => {
       const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'PAID', amount: 750_000 });
       await svcOf(prisma).markPayoutPaid('admin1', 'p1', { expectedAmount: 750_000 });

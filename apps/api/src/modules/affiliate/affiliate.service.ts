@@ -1769,11 +1769,11 @@ export class AffiliateService {
 
   /**
    * Duyệt lệnh rút NH: REQUESTED → APPROVED. Chưa chuyển tiền — chỉ xác nhận sẽ xử lý thủ công. `expectedAmount` (số đang hiện
-   * trên màn admin) nằm trong cùng điều kiện updateMany nên khớp-rồi-ghi là một bước nguyên tử; lệch thì 409.
+   * trên màn admin) nằm trong cùng điều kiện updateMany nên khớp-rồi-ghi là một bước nguyên tử; lệch thì 409. `null` coi như không gửi (@IsOptional cho null lọt qua, `amount: null` trong where làm Prisma lỗi).
    */
   async approvePayout(adminId: string, id: string, note?: string, expectedAmount?: number) {
     const res = await this.prisma.payout.updateMany({
-      where: { id, status: 'REQUESTED', ...(expectedAmount !== undefined ? { amount: expectedAmount } : {}) },
+      where: { id, status: 'REQUESTED', ...(expectedAmount != null ? { amount: expectedAmount } : {}) },
       data: {
         status: 'APPROVED',
         reviewedBy: adminId,
@@ -1782,7 +1782,7 @@ export class AffiliateService {
       },
     });
     if (res.count === 0) {
-      const stale = expectedAmount !== undefined ? await this.staleAmountError(id, 'REQUESTED', expectedAmount, 'duyệt') : null;
+      const stale = expectedAmount != null ? await this.staleAmountError(id, 'REQUESTED', expectedAmount, 'duyệt') : null;
       if (stale) throw stale;
       throw new BadRequestException(
         'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
@@ -1869,7 +1869,7 @@ export class AffiliateService {
     const paidAt = new Date();
     const res = await this.prisma.$transaction(async (tx) => {
       const flipped = await tx.payout.updateMany({
-        where: { id, status: 'APPROVED', ...(opts.expectedAmount !== undefined ? { amount: opts.expectedAmount } : {}) },
+        where: { id, status: 'APPROVED', ...(opts.expectedAmount != null ? { amount: opts.expectedAmount } : {}) },
         data: {
           status: 'PAID',
           paidBy: adminId,
@@ -1885,7 +1885,7 @@ export class AffiliateService {
       return flipped;
     });
     if (res.count === 0) {
-      const stale = opts.expectedAmount !== undefined ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
+      const stale = opts.expectedAmount != null ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
       if (stale) throw stale;
       throw new BadRequestException(
         'Lệnh rút không ở trạng thái "Đã duyệt" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
