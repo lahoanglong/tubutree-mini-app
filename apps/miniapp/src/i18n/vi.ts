@@ -927,6 +927,9 @@ export const vi = {
     markDone: 'Đánh dấu đã học',
     markDoneOk: 'Đã đánh dấu hoàn thành bài học! 🎉',
     alreadyDone: 'Đã học xong',
+    ctvOnlyTitle: 'Học viện CTV dành cho cộng tác viên',
+    ctvOnlyBody: 'Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.',
+    ctvOnlyCta: 'Tìm hiểu về CTV',
   },
 } as const;
 

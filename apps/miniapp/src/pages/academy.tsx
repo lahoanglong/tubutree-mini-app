@@ -20,6 +20,25 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { isHttpError } from '../services/http';
+
+/** API chỉ mở cho CTV/đại lý/nhân viên: khách thường vào thẳng link thì được chỉ đường, Thử lại không đổi được kết quả. */
+function isForbidden(e: unknown): boolean {
+  return isHttpError(e) && e.response?.status === 403;
+}
+
+function CtvOnlyNotice() {
+  const navigate = useNavigate();
+  return (
+    <EmptyState
+      art="leaf"
+      heading={vi.academy.ctvOnlyTitle}
+      body={vi.academy.ctvOnlyBody}
+      ctaLabel={vi.academy.ctvOnlyCta}
+      onCta={() => navigate('/affiliate')}
+    />
+  );
+}
 
 export default function AcademyPage() {
   // Khoá đang mở nằm trên URL, KHÔNG phải state cục bộ: trước đây back của Zalo thoát thẳng
@@ -49,6 +68,8 @@ function CourseList({ onOpen }: { onOpen: (id: string) => void }) {
           <Skeleton height={92} radius="var(--radius-card)" />
           <Skeleton height={92} radius="var(--radius-card)" />
         </div>
+      ) : q.isError && isForbidden(q.error) ? (
+        <CtvOnlyNotice />
       ) : q.isError ? (
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data && q.data.length > 0 ? (
@@ -142,6 +163,8 @@ function CourseDetail({ courseId, onBack }: { courseId: string; onBack: () => vo
 
       {q.isLoading ? (
         <Skeleton height={200} radius="var(--radius-card)" />
+      ) : q.isError && isForbidden(q.error) ? (
+        <CtvOnlyNotice />
       ) : q.isError ? (
         <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data ? (
