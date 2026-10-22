@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PUBLIC_CONFIG_FALLBACK, resolvePublicConfig } from './use-public-config';
+import { vi } from '../i18n/vi';
+import { formatVnd } from '../utils/format';
 
 /**
  * Giá trị mặc định khi /config/public chưa về hoặc lỗi mạng. Tính năng "Gửi lại vật liệu tái chế"
@@ -36,5 +38,12 @@ describe('PublicConfig.waste (§11.5, §16.1)', () => {
   });
   it('mini app giữ cấu hình công khai 5 phút (staleTime, §11.5)', () => {
     expect(readFileSync(join(process.cwd(), 'src/hooks/use-public-config.ts'), 'utf8')).toMatch(/staleTime: 5 \* 60_000/);
+  });
+});
+
+describe('ngưỡng freeship dự phòng (Q12: khớp ngưỡng đơn đầu 199.000đ)', () => {
+  it('fallback 199.000đ và câu hiện cho khách ghi "Miễn phí giao hàng cho đơn từ 199.000đ"', () => {
+    expect(PUBLIC_CONFIG_FALLBACK.freeshipThreshold).toBe(199_000);
+    expect(vi.product.freeshipFrom(formatVnd(PUBLIC_CONFIG_FALLBACK.freeshipThreshold))).toBe('Miễn phí giao hàng cho đơn từ 199.000đ');
   });
 });

@@ -123,7 +123,7 @@ describe('HomeService — số liệu cho khối Quà khách mới', () => {
     const { svc, config } = setup();
     const r = await svc.getPublic(1000);
     expect(r.publicConfig).toMatchObject({
-      freeshipThreshold: 200000,
+      freeshipThreshold: 199000,
       newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 }, firstOrderFreeShip: { enabled: true, minSubtotal: 199000 } },
       homeNewCustomerLayout: true,
     });

@@ -56,7 +56,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
 export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'loyalty.external_since': 'mặc định null (chỉ áp tuổi đơn tối đa) mà EXTRA_CONFIGS không nạp được null; migration 20261019130000_external_claims đã tạo dòng với giá trị null (ON CONFLICT DO NOTHING) nên nạp lại ở seed-reference là thừa',
   'loyalty.chat_order_earn_pct': 'mặc định null (dùng loyalty.earn_pct của đơn app) mà EXTRA_CONFIGS không nạp được null; migration 20261019160000_chat_order_points đã tạo dòng với giá trị null (ON CONFLICT DO NOTHING) nên nạp lại ở seed-reference là thừa',
-  'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 200k sẽ làm WARN biến mất mà chưa ai xác nhận',
+  'shipping.free_threshold': 'phí ship là quyết định của chủ shop: để trống thì go-live:check WARN (db.shipping_rates) buộc xác nhận, nạp 199k sẽ làm WARN biến mất mà chưa ai xác nhận',
   'shipping.flat_fee_below_threshold': 'như shipping.free_threshold',
   'shipping.first_order_free_enabled': 'migration 20261018150010_claim_freeship_config đã tạo dòng với giá trị bằng mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
   'shipping.first_order_free_min_subtotal': 'như shipping.first_order_free_enabled',

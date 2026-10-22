@@ -13,7 +13,7 @@ describe('SystemConfigController.publicConfig', () => {
     const config = makeConfig({ 'shipping.free_threshold': 150000 });
     const out = await new SystemConfigController(config).publicConfig();
     expect(out.freeshipThreshold).toBe(150000);
-    expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('shipping.free_threshold', 200000);
+    expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('shipping.free_threshold', 199000);
   });
 
   // FE đang hardcode các con số này ở nhiều màn (tiết kiệm 12% đặt định kỳ, rút tối thiểu 50k).
@@ -74,9 +74,9 @@ describe('SystemConfigController.publicConfig', () => {
     expect(out.returnWindowDays).toBe(7);
   });
 
-  it('dùng default 200000 khi config chưa set', async () => {
+  it('dùng default 199000 khi config chưa set', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
-    expect(out.freeshipThreshold).toBe(200000);
+    expect(out.freeshipThreshold).toBe(199000);
   });
 
   it('không còn recyclingEnabled (§11.5, §13.2): cờ thu kèm rác là waste.pickup', async () => {
@@ -345,6 +345,6 @@ describe('SystemConfigController.publicConfig — waste (spec 11.5)', () => {
     } as unknown as SystemConfigService;
     const out = await new SystemConfigController(config).publicConfig();
     expect(out.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
-    expect(out.freeshipThreshold).toBe(200000);
+    expect(out.freeshipThreshold).toBe(199000);
   });
 });

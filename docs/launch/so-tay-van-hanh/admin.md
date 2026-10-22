@@ -35,7 +35,7 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 
 | Muốn đổi | Tìm khoá |
 |---|---|
-| Phí ship, ngưỡng miễn phí (mặc định 19.000đ dưới 200.000đ) | `shipping.flat_fee_below_threshold`, `shipping.free_threshold` |
+| Phí ship, ngưỡng miễn phí (mặc định 19.000đ dưới 199.000đ) | `shipping.flat_fee_below_threshold`, `shipping.free_threshold` |
 | Số ngày khách được đổi/trả (mặc định 7) | `returns.window_days` |
 | Giờ chờ thanh toán chuyển khoản trước khi tự huỷ (mặc định 24) | `orders.pending_payment_ttl_hours` |
 | Số ngày giữ hoa hồng CTV (mặc định 10), mức rút tối thiểu (50.000đ) | `affiliate.hold_days`, `affiliate.min_withdraw_bank` |

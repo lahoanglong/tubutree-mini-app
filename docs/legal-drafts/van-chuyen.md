@@ -3,7 +3,7 @@ Hiệu lực từ ngày [NGÀY HIỆU LỰC].
 ## 1. Tóm tắt nhanh
 
 - Đơn đầu tiên của tài khoản từ 199.000đ được miễn phí vận chuyển.
-- Các đơn còn lại từ 200.000đ được miễn phí vận chuyển. Dưới 200.000đ, phí hiện là 19.000đ cho hàng do Tubu Tree giao.
+- Các đơn còn lại từ 199.000đ được miễn phí vận chuyển. Dưới 199.000đ, phí hiện là 19.000đ cho hàng do Tubu Tree giao.
 - Phí vận chuyển luôn được hiển thị trước khi bạn bấm đặt hàng.
 - Bạn xem trạng thái và mã vận đơn trong mục Đơn hàng.
 
@@ -25,8 +25,8 @@ Nếu giỏ hàng có cả hai loại, đơn được tách thành nhiều kiệ
 Phí được tính cho từng kiện hàng và hiển thị ở giỏ hàng, bước thanh toán trước khi bạn đặt.
 
 **Kiện do Tubu Tree giao**
-- Phí cố định hiện là 19.000đ cho kiện có giá trị hàng dưới 200.000đ.
-- Kiện có giá trị hàng từ 200.000đ được miễn phí vận chuyển.
+- Phí cố định hiện là 19.000đ cho kiện có giá trị hàng dưới 199.000đ.
+- Kiện có giá trị hàng từ 199.000đ được miễn phí vận chuyển.
 - Ưu đãi đơn đầu: đơn đầu tiên của tài khoản (không tính đơn đã huỷ) được miễn phí vận chuyển khi giá trị hàng của kiện từ 199.000đ. Ưu đãi chỉ dùng một lần cho mỗi tài khoản.
 - Một số hạng thành viên được miễn phí vận chuyển ở mức giá trị hàng thấp hơn. Mức áp dụng cho bạn hiển thị ở giỏ hàng.
 - Mã miễn phí vận chuyển chỉ áp dụng cho kiện do Tubu Tree giao, theo điều kiện của từng mã.
