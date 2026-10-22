@@ -238,6 +238,17 @@ describe('SystemConfigService.set — biên cho khoá hạn ngày (đúng tên k
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
   });
 
+  it('dealer.bonus_topup_window_days là số ngày nguyên 0–120 (0 = tắt trả bù thưởng quý)', async () => {
+    for (const bad of [-1, 121, 30.5]) {
+      await expect(mk().svc.set('dealer.bonus_topup_window_days', bad, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    }
+    for (const v of [0, 60, 120]) {
+      const ok = mk();
+      await ok.svc.set('dealer.bonus_topup_window_days', v, 'admin1');
+      expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+  });
+
   // Cron cấp mã giảm giá đọc thẳng các khoá voucher.* — gõ nhầm đơn vị/số âm sẽ cấp mã hàng loạt sai giá trị.
   it.each([
     ['voucher.welcome_amount', 30_000, [0, -1, 999, 1_000_001]],

@@ -204,6 +204,7 @@ function buildPrisma(opts: {
     },
     dealerApplication: { findMany: jest.fn().mockResolvedValue([{ userId: 'd1', businessName: 'Cty Đại lý A' }]) },
     dealerRewardClaim: claims,
+    dealerQuarterBonusTier: { findUnique: jest.fn().mockResolvedValue(null), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
   prisma.$transaction = jest.fn(async (arg: unknown) =>
@@ -263,7 +264,7 @@ describe('Doanh số đại lý "đã chốt" (nền thưởng quý + mốc thư
     });
     (prisma.user.findMany as jest.Mock).mockResolvedValue([{ id: 'd1' }]);
     const r = await new DealerService(prisma, makeConfig()).payoutQuarterlyBonuses(new Date('2026-04-15T00:00:00Z'));
-    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026' });
+    expect(r).toEqual({ paid: 1, quarter: 'Q1/2026', failed: 0 });
     const led = (prisma.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data;
     expect(led).toMatchObject({ userId: 'd1', delta: -3_600_000, refType: 'QUARTER_BONUS', refId: 'Q1/2026' });
   });

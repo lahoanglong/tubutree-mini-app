@@ -1968,6 +1968,16 @@ model DealerCreditLedger {
   @@map("dealer_credit_ledgers")
 }
 
+/// Bản chụp bảng bậc thưởng quý lúc tính thưởng quý đó lần đầu (khoá "Q3/2026", cùng refId của QUARTER_BONUS). Trả bù và thu hồi
+/// của quý dùng bản này để admin đổi bậc cho quý mới không làm lệch quý cũ. Tạo một lần, không sửa.
+model DealerQuarterBonusTier {
+  quarter   String   @id
+  tiers     Json
+  createdAt DateTime @default(now())
+
+  @@map("dealer_quarter_bonus_tiers")
+}
+
 // Lịch sử đổi giá đại lý theo bậc (back-office "admin Excel giá") — truy vết old→new, ai đổi.
 model DealerPriceHistory {
   id          String    @id @default(cuid())

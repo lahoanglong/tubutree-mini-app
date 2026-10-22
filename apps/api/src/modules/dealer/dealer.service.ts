@@ -20,6 +20,8 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { resolveDealerRecipient } from './dealer-recipient';
 import {
   DEALER_BLOCK_CREDIT_WHEN_OVERDUE_KEY,
+  DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT,
+  DEALER_BONUS_TOPUP_WINDOW_DAYS_KEY,
   DEALER_FREE_SHIP_THRESHOLD_DEFAULT,
   DEALER_FREE_SHIP_THRESHOLD_KEY,
   DEALER_MAX_DISCOUNT_PCT_DEFAULT,
@@ -46,6 +48,8 @@ interface BonusTier {
 export const DEALER_SETTLED_STATUSES: readonly string[] = ['PACKED', 'SHIPPING', 'DELIVERED'];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Giờ cron trả thưởng quý (dealer.cron.ts, 04:00 ngày 10 giờ VN) tính từ 00:00 ngày đó. */
+const PAYOUT_HOUR_MS = 4 * 60 * 60 * 1000;
 
 /** Nhãn tiếng Việt cho trạng thái yêu cầu nhận thưởng (message trả về đại lý/admin). */
 const CLAIM_STATUS_LABEL: Record<DealerRewardClaimStatus, string> = {
@@ -1360,6 +1364,26 @@ export class DealerService {
     return [...tiers].sort((a, b) => a.min - b.min);
   }
 
+  /** Bản chụp bảng bậc của quý (null = quý chưa có: chưa tính thưởng hoặc đã trả trước khi có bản chụp). */
+  private async quarterTiersSnapshot(db: Pick<Prisma.TransactionClient, 'dealerQuarterBonusTier'>, quarter: string): Promise<BonusTier[] | null> {
+    const row = await db.dealerQuarterBonusTier.findUnique({ where: { quarter } });
+    if (!row) return null;
+    return [...(row.tiers as unknown as BonusTier[])].sort((a, b) => a.min - b.min);
+  }
+
+  /**
+   * Chụp bảng bậc hiện hành cho quý ở lần tính thưởng đầu tiên, rồi trả bản đang lưu. Ghi kiểu tạo-một-lần (ON CONFLICT DO
+   * NOTHING) và đọc lại, nên hai lượt chạy chồng nhau cùng thấy MỘT bản chụp dù mỗi lượt đọc cấu hình ở một thời điểm.
+   * Chạy ngoài transaction của từng đại lý để bản chụp không bị rollback theo một đại lý lỗi.
+   */
+  private async freezeQuarterTiers(quarter: string, current: BonusTier[]): Promise<BonusTier[]> {
+    await this.prisma.dealerQuarterBonusTier.createMany({
+      data: [{ quarter, tiers: current as unknown as Prisma.InputJsonValue }],
+      skipDuplicates: true,
+    });
+    return (await this.quarterTiersSnapshot(this.prisma, quarter)) ?? current;
+  }
+
   /**
    * Cron (ngày 10 tháng đầu mỗi quý — xem DealerCron): trả thưởng doanh số cho quý VỪA KẾT THÚC
    * cho mọi đại lý, CHỈ trên doanh số đã chốt (dealerVolume). Chạy trễ vài ngày để đơn đặt cuối
@@ -1367,7 +1391,7 @@ export class DealerService {
    * Thưởng ghi vào DealerCreditLedger delta ÂM (giảm công nợ) — nhất quán với creditPayment.
    * Idempotent theo (userId, refType=QUARTER_BONUS, refId=quý) → cron chạy lại không cộng trùng.
    */
-  async payoutQuarterlyBonuses(now: Date = new Date()): Promise<{ paid: number; quarter: string }> {
+  async payoutQuarterlyBonuses(now: Date = new Date()): Promise<{ paid: number; quarter: string; failed: number }> {
     const cur = this.vnPeriodBounds(now);
     let q = cur.q - 1; // quý TRƯỚC (vừa kết thúc)
     let year = cur.year;
@@ -1378,10 +1402,12 @@ export class DealerService {
     const { start, end } = DealerService.vnQuarterRange(year, q);
     const quarter = `Q${q + 1}/${year}`;
 
-    const sorted = await this.bonusTiers();
+    // Lần tính thưởng đầu của quý chụp bảng bậc; chạy lại (cron lỗi giữa chừng, chạy tay) dùng lại bản đã chụp.
+    const sorted = await this.freezeQuarterTiers(quarter, await this.bonusTiers());
     const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
 
     let paid = 0;
+    let failed = 0;
     for (const d of dealers) {
       // Đọc doanh số + ghi thưởng trong CÙNG 1 transaction, dưới khoá advisory (đại lý, quý) dùng
       // chung với clawbackQuarterBonusForOrder: trước đây payout đọc doanh số (còn gồm đơn X) trong
@@ -1394,8 +1420,15 @@ export class DealerService {
           await DealerService.lockDealerQuarter(tx, d.id, quarter);
           // Idempotent: đã trả thưởng quý này cho đại lý này thì bỏ qua (dưới khoá → không race giữa
           // 2 lượt cron/manual chồng nhau). Unique (userId,refType,refId) + catch P2002 là lưới cuối.
+          // Đã có khoản trả bù của quý (lần trả đầu thất bại, chạy tay sau khi bước bù đã trả trọn) cũng tính là đã trả.
           const existed = await tx.dealerCreditLedger.findFirst({
-            where: { userId: d.id, refType: 'QUARTER_BONUS', refId: quarter },
+            where: {
+              userId: d.id,
+              OR: [
+                { refType: 'QUARTER_BONUS', refId: quarter },
+                { refType: 'QUARTER_BONUS_TOPUP', refId: { startsWith: `${quarter}:topup:` } },
+              ],
+            },
             select: { id: true },
           });
           if (existed) return null;
@@ -1415,7 +1448,10 @@ export class DealerService {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
           continue;
         }
-        throw err;
+        // Lỗi của một đại lý không được chặn các đại lý sau trong cùng lượt; đại lý lỗi chạy tay lại được vì chưa có dòng thưởng.
+        failed += 1;
+        this.logger.error(`Trả thưởng quý ${quarter} lỗi cho đại lý ${d.id}: ${(err as Error).message}`, (err as Error).stack);
+        continue;
       }
       if (!outcome) continue;
       const { bonusAmount, revenue } = outcome;
@@ -1431,7 +1467,178 @@ export class DealerService {
       paid += 1;
     }
     if (paid > 0) this.logger.log(`Đã trả thưởng quý ${quarter} cho ${paid} đại lý.`);
-    return { paid, quarter };
+    if (failed > 0) {
+      this.logger.error(
+        `Trả thưởng quý ${quarter}: ${failed} đại lý lỗi. Cửa sổ trả bù bật (từ 10 ngày) thì bước trả bù hằng ngày trả muộn cho các đại lý này; tắt thì cần chạy tay.`,
+      );
+    }
+    return { paid, quarter, failed };
+  }
+
+  /** Số ngày sau ngày cuối quý còn được trả bù thưởng (config, mặc định 60, kẹp 0..120; 0 hoặc dưới 10 = tắt). */
+  private async topUpWindowDays(): Promise<number> {
+    const raw = Number(await this.config.get<number>(DEALER_BONUS_TOPUP_WINDOW_DAYS_KEY, DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT));
+    if (!Number.isFinite(raw) || raw < 0) return DEALER_BONUS_TOPUP_WINDOW_DAYS_DEFAULT;
+    // Dưới 10 ngày thì cửa sổ kết thúc trước ngày chốt thưởng: lượt quét lúc 05:00 ngày 10 vẫn rơi vào (quét thêm một ngày sau hạn)
+    // và ghi dòng thưởng trước payout, khiến payout chạy tay sau đó bỏ qua. Coi là tắt, đúng như mô tả khoá cấu hình.
+    return raw < 10 ? 0 : Math.min(Math.floor(raw), 120);
+  }
+
+  /**
+   * Các quý cần quét trả bù tại `now`: đã qua ngày chốt 10 (lần trả đầu đã chạy hoặc đáng lẽ đã chạy) và chưa quá
+   * `windowDays` ngày kể từ hết ngày cuối quý. Còn quét thêm MỘT ngày sau mốc hết hạn (`expiresAt`): cron chạy 05:00 nên
+   * đơn chốt sau 05:00 ngày cuối cửa sổ chỉ được lượt này thấy; doanh số của lượt đó vẫn cắt đúng ở `expiresAt`.
+   */
+  private static topUpQuarters(now: Date, windowDays: number): (RewardPeriod & { closesAt: Date; expiresAt: Date })[] {
+    const DAY = 24 * 60 * 60 * 1000;
+    const vnNow = new Date(now.getTime() + DealerService.VN_OFFSET);
+    let q = Math.floor(vnNow.getUTCMonth() / 3);
+    let year = vnNow.getUTCFullYear();
+    const out: (RewardPeriod & { closesAt: Date; expiresAt: Date })[] = [];
+    // Cửa sổ tối đa 120 ngày không với quá 3 quý lùi lại; chừa dư để không phụ thuộc vào mức kẹp.
+    for (let i = 0; i < 6; i++) {
+      const period = DealerService.quarterPeriod(year, q);
+      const closesAt = period.end.getTime() + 9 * DAY; // 00:00 ngày 10 giờ VN
+      const expiresAt = period.end.getTime() + windowDays * DAY;
+      if (now.getTime() >= closesAt && now.getTime() < expiresAt + DAY) {
+        out.push({ ...period, closesAt: new Date(closesAt), expiresAt: new Date(expiresAt) });
+      }
+      q -= 1;
+      if (q < 0) {
+        q = 3;
+        year -= 1;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Bảng bậc cho bước trả bù của quý. Có bản chụp (lần trả ngày 10 đã chạy) thì dùng bản đó. Chưa có bản chụp mà đã có dòng
+   * thưởng là quý trả trước khi có bản chụp: giữ bảng hiện hành. Chưa ai được trả (ngày 10 không chạy) thì đây là lần tính
+   * đầu của quý: chụp bảng hiện hành.
+   */
+  private async tiersForTopUp(quarter: string, current: BonusTier[]): Promise<BonusTier[]> {
+    const snapshot = await this.quarterTiersSnapshot(this.prisma, quarter);
+    if (snapshot) return snapshot;
+    const anyPaid = await this.prisma.dealerCreditLedger.findFirst({
+      where: {
+        OR: [
+          { refType: 'QUARTER_BONUS', refId: quarter },
+          { refType: 'QUARTER_BONUS_TOPUP', refId: { startsWith: `${quarter}:topup:` } },
+        ],
+      },
+      select: { id: true },
+    });
+    // Có dòng thưởng nghĩa là payout vừa chụp xen vào giữa hai lần đọc: đọc lại bản chụp, chỉ khi vẫn null mới là quý trả trước khi có bản chụp.
+    return anyPaid ? ((await this.quarterTiersSnapshot(this.prisma, quarter)) ?? current) : this.freezeQuarterTiers(quarter, current);
+  }
+
+  /**
+   * Cron hằng ngày: trả bù thưởng quý cho đơn chốt (đóng gói + có tiền/ghi nợ) SAU lần trả ngày 10, trong cửa sổ
+   * `dealer.bonus_topup_window_days` ngày sau ngày cuối quý. Chỉ trả phần do đơn chốt muộn sinh ra: nếu doanh số đã chốt
+   * (cắt ở cuối cửa sổ) không lớn hơn doanh số lần trả muộn nhất đã thấy thì không trả gì (đổi bậc thưởng sau ngày 10
+   * KHÔNG sinh khoản bù); nếu lớn hơn thì ghi một dòng QUARTER_BONUS_TOPUP = min(thưởng mới − phần đang giữ, thưởng mới(V) −
+   * thưởng mới(V lúc trả muộn nhất)), cả hai theo bản chụp bảng bậc của quý (xem freezeQuarterTiers; quý trả trước khi có bản chụp
+   * dùng bảng hiện hành), nên chênh do đổi bậc của đơn cũ không lọt vào.
+   * Phần đang giữ = QUARTER_BONUS + các khoản bù + điều chỉnh thu hồi. Không bao giờ thu bớt: thu hồi vẫn chỉ qua
+   * clawbackQuarterBonusForOrder. Quý chưa có dòng thưởng nào mà doanh số đã đạt bậc từ trước giờ trả ngày 10 (lần trả
+   * ngày 10 không chạy được) thì ghi QUARTER_BONUS "trả muộn" và báo như thưởng thường, không gọi là đơn chốt muộn.
+   *
+   * Idempotent: dưới khoá advisory (đại lý, quý) dùng chung với payout và thu hồi, nên 2 lượt chồng nhau tuần tự và lượt
+   * sau thấy phần chênh = 0; unique (userId, refType, refId = `quý:topup:số thứ tự`) + bắt P2002 là lưới cuối khi khoá
+   * advisory không có tác dụng. createdAt của dòng bù là mốc "doanh số đã tính" cho lần thu hồi sau (xem clawback), nên lượt chạy sau hạn ghi createdAt = hạn.
+   */
+  async topUpQuarterlyBonuses(now: Date = new Date()): Promise<{ toppedUp: number; quarters: string[]; failed: number }> {
+    const windowDays = await this.topUpWindowDays();
+    if (windowDays <= 0) return { toppedUp: 0, quarters: [], failed: 0 };
+    const periods = DealerService.topUpQuarters(now, windowDays);
+    if (periods.length === 0) return { toppedUp: 0, quarters: [], failed: 0 };
+
+    const currentTiers = await this.bonusTiers();
+    const dealers = await this.prisma.user.findMany({ where: { role: 'DEALER' }, select: { id: true } });
+    let toppedUp = 0;
+    let failed = 0;
+    for (const period of periods) {
+      const tiers = await this.tiersForTopUp(period.key, currentTiers);
+      // Doanh số cắt ở expiresAt; lượt quét thêm chạy SAU mốc đó nên createdAt của dòng ghi phải ép về expiresAt, nếu không
+      // thu hồi coi đơn chốt trong khoảng expiresAt..giờ chạy là đã được tính. Trong cửa sổ thì để giờ DB mặc định.
+      const stampedAt = now.getTime() > period.expiresAt.getTime() ? period.expiresAt : undefined;
+      for (const d of dealers) {
+        let outcome: { amount: number; revenue: number; latePayout: boolean } | null;
+        try {
+          outcome = await this.prisma.$transaction(async (tx) => {
+            await DealerService.lockDealerQuarter(tx, d.id, period.key);
+            const rows = await tx.dealerCreditLedger.findMany({
+              where: {
+                userId: d.id,
+                OR: [
+                  { refType: 'QUARTER_BONUS', refId: period.key },
+                  { refType: 'QUARTER_BONUS_TOPUP', refId: { startsWith: `${period.key}:topup:` } },
+                  { refType: 'QUARTER_BONUS_ADJ', refId: { startsWith: `${period.key}:` } },
+                ],
+              },
+              select: { delta: true, refType: true, createdAt: true },
+            });
+            const held = Math.max(-rows.reduce((sum, r) => sum + r.delta, 0), 0);
+            const paidRows = rows.filter((r) => r.refType !== 'QUARTER_BONUS_ADJ');
+            const revenue = (await this.dealerVolume(d.id, period.start, period.end, tx, undefined, period.expiresAt)).settled;
+            const bonusNow = bonusForRevenue(revenue, tiers).bonusAmount;
+            // Mốc "đã thấy": lần trả muộn nhất; chưa có lần trả nào thì mốc là giờ cron trả ngày 10.
+            const seenAt =
+              paidRows.length > 0
+                ? new Date(Math.max(...paidRows.map((r) => r.createdAt.getTime())))
+                : new Date(period.closesAt.getTime() + PAYOUT_HOUR_MS);
+            const seenRevenue = (await this.dealerVolume(d.id, period.start, period.end, tx, undefined, seenAt)).settled;
+            const bonusSeen = bonusForRevenue(seenRevenue, tiers).bonusAmount;
+
+            if (paidRows.length === 0 && bonusSeen > 0 && bonusNow > 0) {
+              // Đã đạt bậc ngay lúc trả ngày 10 mà không có dòng thưởng: lần trả đó không chạy được. Trả trọn như payout.
+              await tx.dealerCreditLedger.create({
+                data: { userId: d.id, delta: -bonusNow, refType: 'QUARTER_BONUS', refId: period.key, note: `Thưởng doanh số ${period.key} (trả muộn)`, createdAt: stampedAt },
+              });
+              return { amount: bonusNow, revenue, latePayout: true };
+            }
+            if (revenue <= seenRevenue) return null;
+            const amount = Math.min(bonusNow - held, bonusNow - bonusSeen);
+            if (amount <= 0) return null;
+            const seq = rows.filter((r) => r.refType === 'QUARTER_BONUS_TOPUP').length + 1;
+            await tx.dealerCreditLedger.create({
+              data: {
+                userId: d.id,
+                delta: -amount,
+                refType: 'QUARTER_BONUS_TOPUP',
+                refId: `${period.key}:topup:${seq}`,
+                createdAt: stampedAt,
+                note: `Trả bù thưởng quý ${period.key}: đơn chốt sau ngày chốt thưởng, doanh số đã chốt ${vnd(revenue)}`,
+              },
+            });
+            return { amount, revenue, latePayout: false };
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
+          // Lỗi của một đại lý không được chặn các đại lý sau. Chưa có dòng nào được ghi nên lượt cron hôm sau thử lại, trừ lượt quét
+          // sau hạn (stampedAt): quý đó không còn được quét nữa nên phải chạy tay hoặc đối soát.
+          failed += 1;
+          const after = stampedAt ? ' Đã hết cửa sổ trả bù: cần chạy tay hoặc đối soát.' : '';
+          this.logger.error(`Trả bù thưởng ${period.key} lỗi cho đại lý ${d.id}: ${(err as Error).message}.${after}`, (err as Error).stack);
+          continue;
+        }
+        if (!outcome) continue;
+        toppedUp += 1;
+        this.logger.log(`Trả bù thưởng ${period.key} ${vnd(outcome.amount)} cho đại lý ${d.id} (doanh số đã chốt ${vnd(outcome.revenue)}).`);
+        if (this.notifications) {
+          await this.notifications
+            .notify(d.id, outcome.latePayout ? 'DEALER_BONUS_PAID' : 'DEALER_BONUS_TOPUP', {
+              quarter: period.key,
+              amount: outcome.amount.toLocaleString('vi-VN'),
+              revenue: outcome.revenue.toLocaleString('vi-VN'),
+            })
+            .catch((e) => this.logger.warn(`notify trả bù thưởng lỗi (${d.id}): ${(e as Error).message}`));
+        }
+      }
+    }
+    if (failed > 0) this.logger.error(`Trả bù thưởng: ${failed} lượt đại lý lỗi (quý ${periods.map((p) => p.key).join(', ')}), quý còn trong cửa sổ thì lượt cron sau thử lại, quý đã hết cửa sổ cần chạy tay (xem log từng đại lý).`);
+    return { toppedUp, quarters: periods.map((p) => p.key), failed };
   }
 
   /**
@@ -1457,10 +1664,11 @@ export class DealerService {
    * 2 quy tắc. CHỈ thu khi đơn ĐANG được tính vào doanh số đã chốt ngay trước lần huỷ: trạng thái cũ
    * (ảnh chụp `order.status` trước lần lật) ∈ PACKED/SHIPPING/DELIVERED và (đã PAID — theo
    * `opts.paidBeforeReversal` của guard hoàn tiền, mặc định ảnh chụp paymentStatus — hoặc là đơn ghi
-   * công nợ có dòng ledger ORDER). Cùng bậc/công thức với payout (bonusTiers + bonusForRevenue).
+   * công nợ có dòng ledger ORDER). Cùng bậc/công thức với payout: bản chụp bảng bậc của quý (quý chưa có bản chụp thì bonusTiers).
    * "Doanh số đã chốt" ở đây là doanh số MÀ LẦN TRẢ THƯỞNG ĐÃ THẤY: đơn (kể cả "các đơn khác") chỉ tính khi đã chốt
    * (lên PACKED + có tiền/ghi nợ) không muộn hơn createdAt của dòng QUARTER_BONUS — xem wasCountedByPayout/settledAtByOrder.
-   * Thưởng còn giữ = dòng QUARTER_BONUS + mọi dòng QUARTER_BONUS_ADJ của quý; thu hồi ghi 1 dòng
+   * Thưởng còn giữ = dòng QUARTER_BONUS + mọi dòng QUARTER_BONUS_TOPUP (trả bù, xem topUpQuarterlyBonuses) + mọi dòng
+   * QUARTER_BONUS_ADJ của quý; mốc "đã chốt" là lần trả muộn nhất (thưởng gốc hoặc khoản bù mới nhất); thu hồi ghi 1 dòng
    * QUARTER_BONUS_ADJ delta DƯƠNG (tăng lại công nợ). Không bao giờ điều chỉnh tăng.
    *
    * BẮT BUỘC gọi trong transaction của lần lật trạng thái (OrderReversalService.reverseFinancials):
@@ -1492,35 +1700,37 @@ export class DealerService {
     const quarter = `Q${q + 1}/${year}`;
 
     await DealerService.lockDealerQuarter(tx, order.userId, quarter);
-    const bonusRows = await tx.$queryRaw<{ id: string; delta: number; createdAt: Date }[]>`
+    // Mọi dòng đã trả của quý: thưởng gốc + các khoản trả bù. Mốc doanh số đã tính là lần trả MUỘN NHẤT.
+    const payRows = await tx.$queryRaw<{ id: string; delta: number; createdAt: Date }[]>`
       SELECT "id", "delta", "createdAt" FROM "dealer_credit_ledgers"
-      WHERE "userId" = ${order.userId} AND "refType" = 'QUARTER_BONUS' AND "refId" = ${quarter}
+      WHERE "userId" = ${order.userId}
+        AND (("refType" = 'QUARTER_BONUS' AND "refId" = ${quarter})
+          OR ("refType" = 'QUARTER_BONUS_TOPUP' AND "refId" LIKE ${`${quarter}:topup:%`}))
       FOR UPDATE`;
-    const bonusRow = bonusRows[0];
-    if (!bonusRow) return { quarter, clawedBack: 0 }; // quý chưa trả thưởng → payout sau tự tính đúng
+    if (payRows.length === 0) return { quarter, clawedBack: 0 }; // quý chưa trả thưởng → payout sau tự tính đúng
 
     const adjustments = await tx.dealerCreditLedger.findMany({
       where: { userId: order.userId, refType: 'QUARTER_BONUS_ADJ', refId: { startsWith: `${quarter}:` } },
       select: { delta: true },
     });
     // Thưởng ghi delta âm, thu hồi ghi delta dương → thưởng còn giữ = -(tổng delta).
-    const heldBonus = -(Number(bonusRow.delta) + adjustments.reduce((s, a) => s + a.delta, 0));
+    const heldBonus = -(payRows.reduce((s, r) => s + Number(r.delta), 0) + adjustments.reduce((s, a) => s + a.delta, 0));
     if (heldBonus <= 0) return { quarter, clawedBack: 0 };
 
     if (!(await this.wasCountedBeforeReversal(tx, order, opts.paidBeforeReversal))) {
       return { quarter, clawedBack: 0 }; // đơn không nằm trong doanh số đã chốt → thưởng không tính trên nó
     }
-    // Dòng QUARTER_BONUS ghi trong cùng transaction với lúc payout đọc doanh số nên createdAt của nó là mốc "doanh
+    // Dòng thưởng/trả bù ghi trong cùng transaction với lúc đọc doanh số nên createdAt của dòng muộn nhất là mốc "doanh
     // số đã tính". Đơn (và các đơn khác) chốt sau mốc đó chưa từng góp vào thưởng đã trả: không được thu hồi vì
     // chúng, và không được làm "doanh số các đơn khác" phình ra khiến phần biên của đơn đã tính bị thu quá tay.
-    const payoutAt = new Date(bonusRow.createdAt);
+    const payoutAt = new Date(Math.max(...payRows.map((r) => new Date(r.createdAt).getTime())));
     if (!(await this.wasCountedByPayout(tx, order, payoutAt, opts.paidBeforeReversal))) {
       return { quarter, clawedBack: 0 };
     }
 
     const others = (await this.dealerVolume(order.userId, qStart, qEnd, tx, order.id, payoutAt)).settled;
     const before = others + order.total;
-    const tiers = await this.bonusTiers();
+    const tiers = (await this.quarterTiersSnapshot(tx, quarter)) ?? (await this.bonusTiers());
     const marginal = bonusForRevenue(before, tiers).bonusAmount - bonusForRevenue(others, tiers).bonusAmount;
     const clawback = Math.min(heldBonus, marginal);
     if (clawback <= 0) return { quarter, clawedBack: 0 };

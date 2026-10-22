@@ -163,6 +163,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'dealer.free_ship_threshold_vnd', value: 5_000_000, category: 'dealer', description: 'Đơn đại lý từ mức tiền hàng này (đ) thì miễn phí giao; dưới mức này thu phí giao', createOnly: true },
   { key: 'dealer.shipping_fee_below_threshold_vnd', value: 19_000, category: 'dealer', description: 'Phí giao (đ) của đơn đại lý dưới ngưỡng miễn phí giao. Mặc định bằng phí giao phẳng của đơn lẻ (shipping.flat_fee_below_threshold)', createOnly: true },
   { key: 'dealer.block_credit_when_overdue', value: true, category: 'dealer', description: 'true = đại lý còn nợ đơn quá hạn theo điều kiện thanh toán của bậc (NET n ngày) không đặt được đơn ghi công nợ, vẫn đặt được đơn trả trước. false = không khoá', createOnly: true },
+  { key: 'dealer.bonus_topup_window_days', value: 60, category: 'dealer', description: 'Số ngày sau ngày cuối quý mà đơn của quý chốt muộn hơn ngày chốt thưởng 10 vẫn được trả bù thưởng quý (ghi vào công nợ đại lý). 0 hoặc dưới 10 = không trả bù (ngày chốt thưởng là ngày 10)', createOnly: true },
 
   // Game
   { key: 'game.streak_7_bonus', value: { seeds: 10, free_spins: 1 }, category: 'game', description: 'Bonus chuỗi 7 ngày' },
@@ -825,6 +826,7 @@ export const NOTIFICATION_TEMPLATES = [
   // cùng mã/nội dung với migration 20260927100000_dealer_bonus_adjusted_template. createOnly: admin sửa nội
   // dung rồi thì chạy lại seed KHÔNG ghi đè.
   { id: 'nt-dealer-bonus-adjusted', code: 'DEALER_BONUS_ADJUSTED', channel: 'INAPP', bodyTemplate: 'Thưởng doanh số {{quarter}} đã được điều chỉnh do đơn {{order_code}} bị huỷ/trả: thu hồi {{amount}}đ (cộng lại vào công nợ đại lý). Thưởng {{quarter}} còn lại: {{remaining}}đ. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
+  { id: 'nt-dealer-bonus-topup', code: 'DEALER_BONUS_TOPUP', channel: 'INAPP', bodyTemplate: 'Trả bù thưởng doanh số {{quarter}}: có đơn của quý chốt sau ngày chốt thưởng, công nợ đại lý của bạn được giảm {{amount}}đ (doanh số đã chốt {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿', createOnly: true },
   // A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): đại lý "Báo đã CK" giờ CHỈ tạo thông báo cho
   // admin xác nhận, không tự trừ nợ (DealerService.reportCreditPayment/adminRecordCreditPayment).
   { id: 'nt-dealer-credit-reported', code: 'DEALER_CREDIT_PAYMENT_REPORTED', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.', createOnly: true },

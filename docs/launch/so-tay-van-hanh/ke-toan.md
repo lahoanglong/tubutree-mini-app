@@ -85,6 +85,8 @@ Thời gian từ lúc đơn giao đến lúc CTV có tiền ngân hàng thườn
 
 **Hãng vận chuyển trả COD thiếu.** Đối soát trên Pancake, không ở Tubu. Ghi chênh lệch theo mã vận đơn, báo kho và chủ shop. Không sửa số trong Tubu.
 
+**Đối soát thưởng quý đại lý khi có trả bù.** Thưởng quý chốt ngày 10 sau quý; đơn chốt muộn hơn được trả bù thành dòng riêng trong "Công nợ đại lý" (mặc định trong 60 ngày sau ngày cuối quý). Mốc "doanh số đã tính" của đại lý lấy từ giờ ghi dòng thưởng; hiếm khi một đơn commit đúng khoảng mili giây sau lúc hệ thống đọc doanh số mà giờ tiền về lại sớm hơn giờ ghi dòng bù, thì đơn đó không được bù và bị tính nhầm là đã tính. Xác suất rất thấp, chấp nhận: cuối cửa sổ, đối chiếu tay doanh số đã chốt của quý với thưởng đã ghi, thiếu thì báo kỹ thuật.
+
 **Đơn Pancake sửa tổng tiền, Tubu giữ số cũ.** Tubu và sao kê lệch. Hoàn tiền, hoa hồng, đối soát vẫn tính theo số cũ. Hỏi kho. Nên huỷ và đặt lại theo quy tắc vàng (xem README).
 
 **Khách hỏi hoá đơn đã xuất chưa.** **Đơn hàng**, tìm mã đơn, xem khối "Hoá đơn VAT": đã xuất sẽ có link, chưa xuất còn nút "Đã xuất hoá đơn".
