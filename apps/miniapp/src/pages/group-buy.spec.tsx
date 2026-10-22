@@ -305,6 +305,12 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     expect(screen.queryByText(new RegExp(`mã giảm ${formatVnd(20_000)}`))).toBeNull();
   });
 
+  it('Q18: đơn từ ghi đúng đơn tối thiểu của mã (biến thể rẻ nhất), không phải giá nhóm của sản phẩm', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 365_500, basePrice: 430_000, minOrder: 102_000, discountPct: 15 })]);
+    renderPage();
+    expect((await screen.findAllByText(`Đủ nhóm: nhận mã giảm 15%, dùng cho đơn từ ${formatVnd(102_000)}`)).length).toBeGreaterThan(0);
+  });
+
   it('R2-BUYERMINI-4: người mở nhóm vào nhóm của chính mình không thấy banner "Bạn được mời"', async () => {
     mocks.params = { id: 'mine' };
     mocks.getGroupBuy.mockResolvedValue(GROUP('mine', { joined: true, isOwner: true }));
