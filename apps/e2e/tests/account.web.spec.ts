@@ -56,7 +56,9 @@ test.describe('Web khách: tài khoản', () => {
     else await expect(orders).toBeVisible();
     // Khách thường không thấy nhóm công việc nội bộ.
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toHaveCount(0);
-    // Cờ ownsBrand=false trên /auth/me: khỏi hỏi /brand/owner/me.
+    // Cờ ownsBrand=false trên /auth/me: khỏi hỏi /brand/owner/me (chờ /auth/me trả lời rồi mới đếm).
+    await expect.poll(() => api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
+    await page.waitForLoadState('networkidle');
     expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
   });
 
