@@ -29,6 +29,12 @@ export interface AuthUser {
   walletBalance: number;
 }
 
+/** Thân GET /api/auth/me: hồ sơ + cờ chủ nhãn (đăng nhập/refresh không trả cờ này). */
+export interface AuthMeResponse extends AuthUser {
+  /** true khi user là chủ ít nhất một nhãn: client biết có nên gọi /brand/owner/me, khỏi chịu 404 của người không phải chủ. */
+  ownsBrand: boolean;
+}
+
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;

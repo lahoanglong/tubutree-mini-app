@@ -30,7 +30,7 @@ vi.mock('../services/account-api', () => ({
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 50000 }),
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
 }));
-vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null) }));
+vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null), getOwnsBrand: vi.fn().mockResolvedValue(null) }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));

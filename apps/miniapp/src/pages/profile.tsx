@@ -18,7 +18,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
-import { getOwnedBrand } from '../services/brand-owner-api';
+import { getOwnedBrand, getOwnsBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
@@ -104,6 +104,14 @@ export default function ProfilePage() {
   // /me nên vẫn phải hỏi API, mà API trả 404 cho mọi người không sở hữu nhãn: đó là trạng thái bình thường
   // (null), không phải lỗi. Khoá riêng (không dùng chung với brand-owner.tsx, nơi 404 là màn "chưa có nhãn")
   // nhưng vẫn nằm dưới ['owned-brand'] để chủ nhãn sửa thông tin thì menu hint cập nhật theo.
+  // Cờ ownsBrand trên /auth/me cho người không phải chủ nhãn khỏi gọi /brand/owner/me (404 báo đỏ trong console).
+  // /auth/me lỗi hoặc API cũ chưa có cờ (undefined) → giữ cách cũ: hỏi và nuốt 404.
+  const ownsBrandQ = useQuery({
+    queryKey: ['auth-me', 'owns-brand'],
+    queryFn: getOwnsBrand,
+    enabled: status === 'authenticated',
+    retry: false,
+  });
   const ownedBrandQ = useQuery({
     queryKey: ['owned-brand', 'profile'],
     queryFn: () =>
@@ -111,7 +119,7 @@ export default function ProfilePage() {
         if (isNotFoundError(e)) return null;
         throw e;
       }),
-    enabled: status === 'authenticated',
+    enabled: status === 'authenticated' && !ownsBrandQ.isPending && ownsBrandQ.data !== false,
     retry: false,
   });
   // Đại lý đã duyệt mà menu vẫn mời "Đăng ký đại lý" thì đọc như chưa được duyệt. Dùng chung
