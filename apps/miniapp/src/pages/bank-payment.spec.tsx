@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AxiosError } from 'axios';
+import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -330,8 +330,8 @@ describe('Thanh toán chuyển khoản: đếm ngược hạn thanh toán (D5-02
 describe('Thanh toán chuyển khoản: đơn bị huỷ hoặc quá hạn khi đang xem QR (D14-02)', () => {
   const CANCELLED = 'Đơn đã hủy/trả, không thể thanh toán.';
   const apiError = (status: number, message = CANCELLED) =>
-    new AxiosError('Request failed', 'ERR_BAD_REQUEST', undefined, undefined, {
-      status, statusText: '', headers: {}, config: {} as never, data: { message },
+    new HttpError('Request failed', 'ERR_BAD_REQUEST', {
+      status, data: { message },
     });
 
   beforeEach(() => {
@@ -460,7 +460,7 @@ describe('Thanh toán chuyển khoản: lỗi tải có hướng dẫn và hotli
   afterEach(() => vi.unstubAllGlobals());
 
   it('máy chủ lỗi: tiêu đề, câu hướng dẫn, nút Thử lại, Xem đơn hàng và hotline, không còn một dòng chữ trơn', async () => {
-    mocks.getBankQr.mockRejectedValue(new AxiosError('x', 'ERR_BAD_RESPONSE', undefined, undefined, { status: 503, statusText: '', headers: {}, config: {} as never, data: {} }));
+    mocks.getBankQr.mockRejectedValue(new HttpError('x', 'ERR_BAD_RESPONSE', { status: 503, data: {} }));
     renderPage();
     expect(await screen.findByText('Chưa tải được thông tin thanh toán')).toBeInTheDocument();
     expect(screen.getByText('Máy chủ đang bận, thử lại nhé.')).toBeInTheDocument();
@@ -472,7 +472,7 @@ describe('Thanh toán chuyển khoản: lỗi tải có hướng dẫn và hotli
 
   it('mất mạng: nói thẳng "mất mạng" thay vì cùng câu với lỗi máy chủ', async () => {
     vi.stubGlobal('navigator', { ...navigator, onLine: false });
-    mocks.getBankQr.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+    mocks.getBankQr.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
     renderPage();
     expect(await screen.findByText(/Có vẻ mất mạng/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
@@ -491,7 +491,7 @@ describe('Thanh toán chuyển khoản: lỗi tải có hướng dẫn và hotli
 
 describe('Thanh toán chuyển khoản: nút Kiểm tra khi phiên hết hạn (P3 miniapp-logic)', () => {
   const status = (s: number) =>
-    new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, { status: s, statusText: '', headers: {}, config: {} as never, data: { message: 'Unauthorized' } });
+    new HttpError('x', 'ERR_BAD_REQUEST', { status: s, data: { message: 'Unauthorized' } });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -512,8 +512,8 @@ describe('Thanh toán chuyển khoản: nút Kiểm tra khi phiên hết hạn (
   });
 
   it('401 kèm lý do cụ thể của máy chủ (tài khoản bị khoá): hiện đúng lý do, không nói chung chung là hết phiên', async () => {
-    const blocked = new AxiosError('x', 'ERR_BAD_REQUEST', undefined, undefined, {
-      status: 401, statusText: '', headers: {}, config: {} as never, data: { message: 'Tài khoản đã bị khoá.' },
+    const blocked = new HttpError('x', 'ERR_BAD_REQUEST', {
+      status: 401, data: { message: 'Tài khoản đã bị khoá.' },
     });
     mocks.getBankQr.mockResolvedValueOnce(QR).mockRejectedValue(blocked);
     renderPage();

@@ -271,7 +271,7 @@ describe('HomePage (DS v2, spec 5b.1)', () => {
     expect(screen.queryByRole('button', { name: 'Thử lại Mua lại' })).toBeNull();
     unmount();
 
-    const notFound = Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404, data: {} } });
+    const notFound = Object.assign(new Error('404'), { isHttpError: true, response: { status: 404, data: {} } });
     mocks.fetchPurchasedItems.mockReset().mockRejectedValue(notFound);
     const second = renderHome();
     await waitFor(() => expect(second.qc.getQueryState(['purchased-items', 10])?.status).toBe('error'));

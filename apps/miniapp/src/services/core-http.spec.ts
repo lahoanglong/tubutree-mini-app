@@ -5,9 +5,9 @@ import { coreHttp } from './core-http';
 
 beforeEach(() => { for (const f of Object.values(http)) f.mockReset().mockResolvedValue({ data: 'DATA' }); });
 
-// Mảng đối số phải trùng từng ký tự với cách service Mini App gọi axios (xem waste-api.spec.ts, shop-api.spec.ts),
+// Mảng đối số phải trùng từng ký tự với cách service Mini App gọi api (xem waste-api.spec.ts, shop-api.spec.ts),
 // để service chuyển sang app-core không làm spec cũ đỏ.
-describe('core-http (Mini App) — chỉ chuyển tham số được truyền cho axios', () => {
+describe('core-http (Mini App) — chỉ chuyển tham số được truyền cho api', () => {
   it.each([
     ['get(path) → api.get(path) một đối số', () => coreHttp.get('/waste/me'), 'get', ['/waste/me']],
     ['get(path, {}) vẫn một đối số', () => coreHttp.get('/waste/me', {}), 'get', ['/waste/me']],
@@ -31,7 +31,7 @@ describe('core-http (Mini App) — chỉ chuyển tham số được truyền ch
     expect(http[verb].mock.calls[0]).toHaveLength(args.length);
   });
 
-  it('lỗi axios đi thẳng ra ngoài, không bọc', async () => {
+  it('lỗi HttpError đi thẳng ra ngoài, không bọc', async () => {
     const err = new Error('boom');
     http.get.mockRejectedValueOnce(err);
     await expect(coreHttp.get('/x')).rejects.toBe(err);

@@ -56,7 +56,7 @@ describe('PurchasedRail', () => {
   });
 
   it('API cũ trả 404 → ẩn im lặng, không ErrorState / "Thử lại"', async () => {
-    mocks.fetchPurchasedItems.mockRejectedValue(Object.assign(new Error('404'), { isAxiosError: true, response: { status: 404 } }));
+    mocks.fetchPurchasedItems.mockRejectedValue(Object.assign(new Error('404'), { isHttpError: true, response: { status: 404 } }));
     const { container } = renderRail();
     await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
     await waitFor(() => expect(container).toBeEmptyDOMElement());

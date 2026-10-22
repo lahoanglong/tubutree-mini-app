@@ -3,8 +3,8 @@ import type {
   MyExternalClaimsResponse,
   SubmitExternalClaimResponse,
 } from '@tubutree/shared-types';
-import { isAxiosError } from 'axios';
 import { api } from './api';
+import { isHttpError } from './http';
 
 export type {
   ExternalClaimRejectCode,
@@ -27,7 +27,7 @@ const REJECT_CODES: readonly ExternalClaimRejectCode[] = [
 
 /** `code` ổn định mà API gắn vào lỗi từ chối; undefined khi lỗi không phải từ chối nghiệp vụ (mạng, 5xx, API cũ). */
 export function externalClaimRejectCode(error: unknown): ExternalClaimRejectCode | undefined {
-  if (!isAxiosError(error)) return undefined;
+  if (!isHttpError(error)) return undefined;
   const code = (error.response?.data as { code?: unknown } | undefined)?.code;
   return REJECT_CODES.find((c) => c === code);
 }

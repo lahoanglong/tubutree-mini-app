@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
@@ -9,6 +8,7 @@ import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { isHttpError } from '../services/http';
 import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
@@ -313,7 +313,7 @@ export default function CheckoutPage() {
         return;
       }
       // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
-      const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+      const status = isHttpError(e) ? e.response?.status : undefined;
       const rejectedBeforeService = status !== undefined && [401, 408, 429].includes(status);
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
       else if (!rejectedBeforeService) unknownAttempt.current = null;

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { AxiosError, type AxiosResponse } from 'axios';
+import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -144,7 +144,7 @@ describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
   });
 
   it('404 → "Không tìm thấy" kèm "Về trang chủ", không có "Thử lại"', async () => {
-    mocks.fetchOrder.mockRejectedValue(new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse));
+    mocks.fetchOrder.mockRejectedValue(new HttpError('nf', '404', { status: 404, data: {} }));
     renderPage();
     expect(await screen.findByText('Không tìm thấy đơn hàng này.')).toBeInTheDocument();
     expect(screen.queryByText('Thử lại')).toBeNull();
@@ -153,7 +153,7 @@ describe('OrderDetailPage — đơn không có (R6-BUYER-6)', () => {
   });
 
   it('lỗi máy chủ 5xx → vẫn "Thử lại"', async () => {
-    mocks.fetchOrder.mockRejectedValue(new AxiosError('boom', '500', undefined, undefined, { status: 500, data: {} } as AxiosResponse));
+    mocks.fetchOrder.mockRejectedValue(new HttpError('boom', '500', { status: 500, data: {} }));
     renderPage();
     expect(await screen.findByText('Thử lại')).toBeInTheDocument();
     expect(screen.queryByText('Về trang chủ')).toBeNull();
@@ -635,7 +635,7 @@ describe('OrderDetailPage — dòng yêu cầu thu rác (§12.2)', () => {
   });
   it('404 (đơn cũ trước đổi rác) → không có dòng, không báo lỗi', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, hasRecyclingPickup: true });
-    mocks.getWasteRequestByOrder.mockRejectedValue(new AxiosError('nf', 'ERR_BAD_REQUEST', undefined, undefined, { status: 404 } as AxiosResponse));
+    mocks.getWasteRequestByOrder.mockRejectedValue(new HttpError('nf', 'ERR_BAD_REQUEST', { status: 404 }));
     renderPage();
     await screen.findByText('TT001');
     await waitFor(() => expect(mocks.getWasteRequestByOrder).toHaveBeenCalled());

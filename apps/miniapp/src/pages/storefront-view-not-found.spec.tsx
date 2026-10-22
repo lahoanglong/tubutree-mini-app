@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AxiosError, type AxiosResponse } from 'axios';
+import { HttpError } from '../services/http';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -19,7 +19,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import StorefrontViewPage from './storefront-view';
 
-const notFound = () => new AxiosError('nf', '404', undefined, undefined, { status: 404, data: {} } as AxiosResponse);
+const notFound = () => new HttpError('nf', '404', { status: 404, data: {} });
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

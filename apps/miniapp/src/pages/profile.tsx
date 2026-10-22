@@ -155,7 +155,7 @@ export default function ProfilePage() {
   const menu = workItems.length > 0 ? [...baseMenu, { group: 'Công việc', items: workItems }] : baseMenu;
 
   // Đang đăng nhập ngầm → khung chờ. Mất kết nối lúc khôi phục phiên (status error) → nói đúng vậy + Thử lại, không in message
-  // thô của axios và không mời đăng nhập lại; khách thật sự (idle) → mời đăng nhập. KHÔNG để khung chờ quay vô hạn.
+  // thô của lỗi mạng và không mời đăng nhập lại; khách thật sự (idle) → mời đăng nhập. KHÔNG để khung chờ quay vô hạn.
   if (phase !== 'authenticated' || !user) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>

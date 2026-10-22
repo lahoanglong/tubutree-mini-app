@@ -87,7 +87,7 @@ describe('shop-api — buy-flow 4a', () => {
 describe('shop-api — buy-flow 4b', () => {
   beforeEach(() => vi.clearAllMocks());
   const PAGE = { data: [], meta: { page: 1, limit: 30, total: 0 } };
-  const badRequest = () => Object.assign(new Error('400'), { isAxiosError: true, response: { status: 400 } });
+  const badRequest = () => Object.assign(new Error('400'), { isHttpError: true, response: { status: 400 } });
 
   it('catalogParams: chỉ gửi tham số có giá trị; q được trim; inStock=true; không gửi inStock=false', () => {
     expect(catalogParams({ page: 1, limit: 30 })).toEqual({ page: 1, limit: 30 });
@@ -117,7 +117,7 @@ describe('shop-api — buy-flow 4b', () => {
   });
 
   it('fetchCatalog: 500 khi có tham số mới → ném lỗi (chỉ 400 mới lùi)', async () => {
-    get.mockRejectedValueOnce(Object.assign(new Error('500'), { isAxiosError: true, response: { status: 500 } }));
+    get.mockRejectedValueOnce(Object.assign(new Error('500'), { isHttpError: true, response: { status: 500 } }));
     await expect(fetchCatalog({ page: 1, limit: 30, inStock: true })).rejects.toThrow('500');
   });
 
