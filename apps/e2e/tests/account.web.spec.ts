@@ -22,7 +22,7 @@ function mockAccount(api: MockApi, profile: Profile, role = 'CUSTOMER') {
   api.get('/me/coupons', [{ id: 'c1', code: 'A' }, { id: 'c2', code: 'B' }]);
   api.get('/me/notifications', [{ id: 'n1', templateCode: 'x', payload: {}, status: 'SENT', sentAt: new Date().toISOString() }]);
   api.get('/config/public', { aiAdvisorEnabled: false });
-  api.get('/brand/owner/me', () => reply(404, { message: 'Không tìm thấy' }));
+  api.get('/auth/me', () => ({ ...me(), ownsBrand: false }));
   api.get('/dealer/me', { status: 'NONE', isDealer: false });
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
 }
@@ -56,6 +56,8 @@ test.describe('Web khách: tài khoản', () => {
     else await expect(orders).toBeVisible();
     // Khách thường không thấy nhóm công việc nội bộ.
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toHaveCount(0);
+    // Cờ ownsBrand=false trên /auth/me: khỏi hỏi /brand/owner/me.
+    expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
   });
 
   test('hub: quản trị viên thấy nhóm Công việc', async ({ page, api }) => {

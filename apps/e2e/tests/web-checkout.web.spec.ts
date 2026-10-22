@@ -47,7 +47,7 @@ function mockBuyer(api: MockApi, balances: Balances) {
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
   api.get('/me/loyalty', { tier: { name: 'Hạt Giống' }, pointsBalance: balances.points, pointsConvertedBalance: 0 });
   api.get('/me/notifications', []);
-  api.get('/brand/owner/me', () => reply(404, { message: 'Không tìm thấy' }));
+  api.get('/auth/me', () => ({ ...user(), ownsBrand: false }));
   api.get('/dealer/me', { status: 'NONE', isDealer: false });
   api.get('/me/purchased-items', { items: [], nextCursor: null });
   api.get('/me/new-customer-offer', { isNewCustomer: false, welcomeVoucher: null });
