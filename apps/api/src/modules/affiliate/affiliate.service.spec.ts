@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { AffiliateService } from './affiliate.service';
 import { FlashQuotaLineError } from '../flash-sale/flash-sale.service';
 import { LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
@@ -1994,6 +1994,64 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     ).rejects.toThrow('tải lại');
   });
 
+  describe('expectedAmount: chặn duyệt/chi theo số thực nhận cũ khi thuế giữ dư vừa được hoàn vào lệnh', () => {
+    const svcOf = (prisma: PrismaService) => new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics);
+
+    it('approvePayout: expectedAmount khớp → đưa số vào điều kiện updateMany cùng status-guard và duyệt', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED', amount: 750_000 });
+      await svcOf(prisma).approvePayout('admin1', 'p1', undefined, 750_000);
+      expect(payoutUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'p1', status: 'REQUESTED', amount: 750_000 },
+        data: expect.objectContaining({ status: 'APPROVED' }),
+      });
+    });
+
+    it('approvePayout: lệnh vừa tăng số thực nhận (count=0, vẫn REQUESTED) → 409 nêu số cũ và số mới, không duyệt', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'REQUESTED', amount: 1_000_000 });
+      payoutUpdateMany.mockResolvedValue({ count: 0 });
+      const err = await svcOf(prisma).approvePayout('admin1', 'p1', undefined, 750_000).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toMatch(/đã đổi từ 750\.000.* thành 1\.000\.000.*tải lại trước khi duyệt/);
+    });
+
+    it('approvePayout: có expectedAmount nhưng lệnh đã bị xử lý (không còn REQUESTED) → vẫn báo "tải lại" như cũ, không phải 409 số tiền', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED', amount: 1_000_000 });
+      payoutUpdateMany.mockResolvedValue({ count: 0 });
+      const err = await svcOf(prisma).approvePayout('admin1', 'p1', undefined, 750_000).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+    });
+
+    it('approvePayout: không gửi expectedAmount → điều kiện updateMany như cũ (tương thích)', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED' });
+      await svcOf(prisma).approvePayout('admin1', 'p1', 'ok');
+      expect(payoutUpdateMany.mock.calls[0]![0].where).toEqual({ id: 'p1', status: 'REQUESTED' });
+    });
+
+    it('markPayoutPaid: expectedAmount khớp → đưa số vào điều kiện updateMany cùng status-guard và chi', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'PAID', amount: 750_000 });
+      await svcOf(prisma).markPayoutPaid('admin1', 'p1', { expectedAmount: 750_000 });
+      expect(payoutUpdateMany).toHaveBeenCalledWith({
+        where: { id: 'p1', status: 'APPROVED', amount: 750_000 },
+        data: expect.objectContaining({ status: 'PAID' }),
+      });
+    });
+
+    it('markPayoutPaid: số thực nhận của lệnh đã đổi (count=0, vẫn APPROVED) → 409, không chi, không đổi hoa hồng', async () => {
+      const { prisma, payoutUpdateMany, commissionUpdateMany } = makePrisma({ id: 'p1', status: 'APPROVED', amount: 1_000_000 });
+      payoutUpdateMany.mockResolvedValue({ count: 0 });
+      const err = await svcOf(prisma).markPayoutPaid('admin1', 'p1', { expectedAmount: 750_000 }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as Error).message).toMatch(/đã đổi từ 750\.000.* thành 1\.000\.000.*tải lại trước khi chi/);
+      expect(commissionUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('markPayoutPaid: không gửi expectedAmount → điều kiện updateMany như cũ (tương thích)', async () => {
+      const { prisma, payoutUpdateMany } = makePrisma({ id: 'p1', status: 'PAID' });
+      await svcOf(prisma).markPayoutPaid('admin1', 'p1', {});
+      expect(payoutUpdateMany.mock.calls[0]![0].where).toEqual({ id: 'p1', status: 'APPROVED' });
+    });
+  });
+
   it('rejectPayout: thiếu lý do → BadRequest, KHÔNG đổi trạng thái/hoàn tiền', async () => {
     const { prisma, payoutUpdateMany, userUpdate } = makePrisma({ id: 'p1' });
     await expect(
@@ -2271,6 +2329,25 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
       expect(pitRefunds()).toHaveLength(0);
       expect(f.find('B').taxRefunded).toBe(0);
       expect(f.order).not.toContain('lock');
+    });
+
+    it('ví không ghi hoàn (applied=false): throw và KHÔNG tăng taxRefunded, tránh lệnh báo đã hoàn mà Ví không nhận', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) })]);
+      ledger.mockImplementationOnce(async () => ({ applied: false, balanceAfter: 0, entryId: 'dup' }));
+      await expect(f.svc.rejectPayout('admin1', 'A', 'Sai STK')).rejects.toThrow();
+      expect(f.find('B').taxRefunded).toBe(0);
+    });
+
+    it('ghi sổ Ví trước, tăng taxRefunded sau', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) })]);
+      let refundedAtLedgerTime: number | undefined;
+      ledger.mockImplementationOnce(async () => {
+        refundedAtLedgerTime = f.find('B').taxRefunded;
+        return { applied: true, balanceAfter: 0, entryId: 'wtx' };
+      });
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(refundedAtLedgerTime).toBe(0);
+      expect(f.find('B').taxRefunded).toBe(250_000);
     });
 
     it('khoá tháng (CTV, tháng VN) lấy sau khi đọc userId/requestedAt và TRƯỚC khi đổi trạng thái, cùng thứ tự với requestPayout', async () => {

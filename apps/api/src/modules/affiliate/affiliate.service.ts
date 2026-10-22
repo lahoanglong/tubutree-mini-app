@@ -634,8 +634,7 @@ export class AffiliateService {
           continue;
         }
       }
-      await tx.payout.update({ where: { id: r.id }, data: { taxRefunded: { increment: share } } });
-      await applyWalletDelta(tx, {
+      const credited = await applyWalletDelta(tx, {
         userId: rejected.userId,
         delta: share,
         type: 'PIT_REFUND',
@@ -644,6 +643,12 @@ export class AffiliateService {
         refId: `${r.id}:${rejected.id}`,
         reason: `Hoàn thuế TNCN giữ dư tháng ${month} (lệnh rút ngày ${day} bị từ chối)`,
       });
+      // Sổ đã có dòng hoàn cho cặp này (applied=false) nghĩa là Ví không nhận thêm: tăng taxRefunded lúc này thì báo cáo thuế ghi
+      // đã hoàn mà CTV không có tiền, nên dừng cả giao dịch từ chối để người vận hành xem lại.
+      if (!credited.applied) {
+        throw new ConflictException('Sổ Ví đã có dòng hoàn thuế TNCN cho lệnh này, không ghi thêm được. Vui lòng báo kỹ thuật.');
+      }
+      await tx.payout.update({ where: { id: r.id }, data: { taxRefunded: { increment: share } } });
       over -= share;
     }
   }
@@ -1750,10 +1755,25 @@ export class AffiliateService {
     );
   }
 
-  /** Duyệt lệnh rút NH: REQUESTED → APPROVED. Chưa chuyển tiền — chỉ xác nhận sẽ xử lý thủ công. */
-  async approvePayout(adminId: string, id: string, note?: string) {
+  /**
+   * Báo số thực nhận của lệnh đã đổi so với số admin đang thấy trên màn: lệnh REQUESTED tăng amount khi một lệnh khác cùng tháng
+   * bị từ chối và thuế giữ dư được hoàn ngay trên lệnh. Duyệt/chi theo số cũ thì CTV nhận thiếu tiền thật.
+   */
+  private async staleAmountError(id: string, status: 'REQUESTED' | 'APPROVED', expected: number, verb: 'duyệt' | 'chi') {
+    const now = await this.prisma.payout.findUnique({ where: { id }, select: { status: true, amount: true } });
+    if (!now || now.status !== status || now.amount === expected) return null;
+    return new ConflictException(
+      `Số thực nhận của lệnh đã đổi từ ${vnd(expected)} thành ${vnd(now.amount)} (thuế giữ dư vừa được hoàn), vui lòng tải lại trước khi ${verb}.`,
+    );
+  }
+
+  /**
+   * Duyệt lệnh rút NH: REQUESTED → APPROVED. Chưa chuyển tiền — chỉ xác nhận sẽ xử lý thủ công. `expectedAmount` (số đang hiện
+   * trên màn admin) nằm trong cùng điều kiện updateMany nên khớp-rồi-ghi là một bước nguyên tử; lệch thì 409.
+   */
+  async approvePayout(adminId: string, id: string, note?: string, expectedAmount?: number) {
     const res = await this.prisma.payout.updateMany({
-      where: { id, status: 'REQUESTED' },
+      where: { id, status: 'REQUESTED', ...(expectedAmount !== undefined ? { amount: expectedAmount } : {}) },
       data: {
         status: 'APPROVED',
         reviewedBy: adminId,
@@ -1762,6 +1782,8 @@ export class AffiliateService {
       },
     });
     if (res.count === 0) {
+      const stale = expectedAmount !== undefined ? await this.staleAmountError(id, 'REQUESTED', expectedAmount, 'duyệt') : null;
+      if (stale) throw stale;
       throw new BadRequestException(
         'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
       );
@@ -1834,7 +1856,11 @@ export class AffiliateService {
   }
 
   /** Xác nhận đã chuyển khoản: APPROVED → PAID (ghi mã giao dịch NH / ghi chú). */
-  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string; byStaff?: boolean } = {}) {
+  async markPayoutPaid(
+    adminId: string,
+    id: string,
+    opts: { bankRef?: string; note?: string; byStaff?: boolean; expectedAmount?: number } = {},
+  ) {
     if (opts.byStaff) {
       const own = await this.prisma.payout.findUnique({ where: { id }, select: { userId: true } });
       if (!own) throw new NotFoundException('Không tìm thấy lệnh rút.');
@@ -1843,7 +1869,7 @@ export class AffiliateService {
     const paidAt = new Date();
     const res = await this.prisma.$transaction(async (tx) => {
       const flipped = await tx.payout.updateMany({
-        where: { id, status: 'APPROVED' },
+        where: { id, status: 'APPROVED', ...(opts.expectedAmount !== undefined ? { amount: opts.expectedAmount } : {}) },
         data: {
           status: 'PAID',
           paidBy: adminId,
@@ -1859,6 +1885,8 @@ export class AffiliateService {
       return flipped;
     });
     if (res.count === 0) {
+      const stale = opts.expectedAmount !== undefined ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
+      if (stale) throw stale;
       throw new BadRequestException(
         'Lệnh rút không ở trạng thái "Đã duyệt" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
       );

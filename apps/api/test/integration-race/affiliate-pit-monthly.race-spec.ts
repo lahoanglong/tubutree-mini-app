@@ -292,6 +292,49 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
       expect(w.ledger.every((t) => t.balanceAfter >= 0)).toBe(true);
     });
 
+    it('lệnh B "Yêu cầu" đã tăng số thực nhận sau khi từ chối A: duyệt theo số cũ (750.000đ) bị 409 và B vẫn "Yêu cầu"; duyệt theo số mới qua', async () => {
+      const u = await ctv();
+      const a = await payoutVia(u.id, 1_500_000, 'BANK');
+      await approvedCommission(u.id, 1_000_000);
+      await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+      const b = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a.id } } });
+      expect(b.amount).toBe(750_000);
+      await affiliate.rejectPayout('admin-it', a.id, 'Sai STK');
+
+      await expect(affiliate.approvePayout('admin-it', b.id, undefined, 750_000)).rejects.toThrow(/đã đổi từ 750\.000.* thành 1\.000\.000/);
+      expect(await prisma.payout.findUniqueOrThrow({ where: { id: b.id } })).toMatchObject({ status: 'REQUESTED', amount: 1_000_000 });
+
+      await affiliate.approvePayout('admin-it', b.id, undefined, 1_000_000);
+      expect(await prisma.payout.findUniqueOrThrow({ where: { id: b.id } })).toMatchObject({ status: 'APPROVED', amount: 1_000_000 });
+    });
+
+    it.each([0, 5, 15, 40])(
+      'duyệt B theo số cũ song song với từ chối A (duyệt chạy sau %dms): duyệt xong thì số thực nhận vẫn 750.000đ và phần hoàn vào Ví; bị 409 thì B còn "Yêu cầu" 1.000.000đ, Ví không đổi',
+      async (delayMs) => {
+        const u = await ctv();
+        const a = await payoutVia(u.id, 1_500_000, 'BANK');
+        await approvedCommission(u.id, 1_000_000);
+        await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+        const b = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a.id } } });
+
+        const [, approved] = await Promise.all([
+          affiliate.rejectPayout('admin-1', a.id, 'Sai STK'),
+          sleep(delayMs).then(() => affiliate.approvePayout('admin-2', b.id, undefined, 750_000).then(() => true, () => false)),
+        ]);
+
+        const b2 = await prisma.payout.findUniqueOrThrow({ where: { id: b.id } });
+        const w = await walletOf(u.id);
+        if (approved) {
+          expect(b2).toMatchObject({ status: 'APPROVED', amount: 750_000, taxRefunded: 250_000 });
+          expect(w.balance).toBe(250_000);
+        } else {
+          expect(b2).toMatchObject({ status: 'REQUESTED', amount: 1_000_000, taxRefunded: 0 });
+          expect(w.balance).toBe(0);
+        }
+        expect(w.balance).toBe(w.ledgerSum);
+      },
+    );
+
     it.each([0, 25, 60, 120])(
       'từ chối A song song với requestPayout C cùng tháng (C chạy sau %dms) → thuế thực giữ của các lệnh không bị từ chối đúng bằng thuế của cả tháng, Ví khớp sổ',
       async (delayMs) => {
