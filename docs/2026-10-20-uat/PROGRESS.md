@@ -101,9 +101,11 @@ Journal workflow: `~/.claude/projects/-Users-longla-coding-tubutree-mini-app/290
 
 ## Tiến trình nền của phiên (dọn cuối đêm)
 
-- Postgres chạy thẳng: cụm 25432 (`~/.cache/tubu-uat/data-25432`), dừng bằng `tools/pg-native.sh stop 25432`. Cụm race 25541/25542 đã dừng 22:02.
-- Redis: container `tubu-uat-redis` (26379), xoá bằng `docker rm -f -v tubu-uat-redis`.
-- API UAT 3221 (PID trong `~/.cache/tubu-uat/api-3221.pid`), dừng bằng `tools/api-up.sh stop 3221`.
+22/10 ~20:35 đã dọn:
+- Postgres 25432 đã dừng (`tools/pg-native.sh stop 25432`); dữ liệu, gồm DB mẫu `tubutree_uat_tpl` dựng 20:20, vẫn ở `~/.cache/tubu-uat/data-25432`. Muốn chạy UAT tiếp: `pg-native.sh start 25432`, `docker run -d --rm --name tubu-uat-redis --tmpfs /data -p 127.0.0.1:26379:6379 redis:7-alpine`, rồi `lane-up.sh N --fresh`.
+- Redis `tubu-uat-redis` đã xoá (`docker rm -f -v`). Không còn cụm Postgres nào của phiên chạy; cổng 25432, 26379, 3221–3223, lane 32x1–32x8 đều đóng.
+- Gỡ 41 worktree gói đã gộp (kể cả `uat-int`, `uat-rc`, `uat-rc2`) bằng `git worktree remove` (không --force); nhánh giữ nguyên. Giữ worktree `uat` và 9 worktree còn file chưa commit (công cụ chụp `tools/uiux/**` và ảnh `screens/` của các gói giao diện): `uat-q22-chu-ky`, `uat-uat-admin-chu`, `uat-uat-gio-mini`, `uat-ui-admin-1..3`, `uat-ui-miniapp-1..3`.
+- Container `tubu-gate-*-90936` (15432/16379) là của phiên web, không đụng.
 
 ## Gộp nhánh
 
