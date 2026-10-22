@@ -56,13 +56,13 @@ export async function* pitCsvChunks(prisma: PrismaService, range: Range): AsyncG
            COALESCE((array_agg(p."taxId" ORDER BY p."paidAt" DESC) FILTER (WHERE p."taxId" IS NOT NULL))[1], u."personalTaxId") AS tax_id,
            COUNT(*)::int AS payout_count,
            SUM(p."grossAmount")::bigint AS gross,
-           SUM(p."taxWithheld")::bigint AS tax_withheld,
-           SUM(p.amount)::bigint AS net
+           SUM(p."taxWithheld" - p."taxRefunded")::bigint AS tax_withheld,
+           SUM(p.amount + p."taxRefunded")::bigint AS net
     FROM payouts p
     JOIN users u ON u.id = p."userId"
     WHERE p.status = 'PAID' AND p."grossAmount" IS NOT NULL AND p."paidAt" >= ${range.start} AND p."paidAt" < ${range.end}
     GROUP BY p."userId", u."fullName", u.phone, u."personalTaxId"
-    ORDER BY SUM(p."taxWithheld") DESC, SUM(p."grossAmount") DESC, p."userId"`);
+    ORDER BY SUM(p."taxWithheld" - p."taxRefunded") DESC, SUM(p."grossAmount") DESC, p."userId"`);
   if (rows.length === 0) return;
   yield rows
     .map((r) =>
@@ -98,6 +98,7 @@ export const PAYOUT_CSV_HEADERS = [
   'SĐT',
   'Thu nhập gộp (VNĐ)',
   'Thuế TNCN (VNĐ)',
+  'Thuế đã hoàn về Ví (VNĐ)',
   'Phí chuyển khoản (VNĐ)',
   'Thực nhận (VNĐ)',
   'MST/CCCD',
@@ -123,6 +124,7 @@ const PAYOUT_SELECT = {
   fee: true,
   grossAmount: true,
   taxWithheld: true,
+  taxRefunded: true,
   taxId: true,
   bankInfo: true,
   status: true,
@@ -165,7 +167,8 @@ export async function* payoutCsvChunks(prisma: PrismaService, where: Prisma.Payo
           p.user.fullName ?? '',
           text(p.user.phone),
           p.grossAmount ?? '',
-          p.taxWithheld,
+          p.taxWithheld - p.taxRefunded,
+          p.taxRefunded,
           p.fee,
           p.amount,
           text(p.taxId),

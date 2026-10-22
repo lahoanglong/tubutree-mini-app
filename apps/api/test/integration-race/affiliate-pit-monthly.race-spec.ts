@@ -222,4 +222,109 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
     expect(tax).toBe(280_000);
     expect(rows.every((r) => r.taxWithheld >= 0 && r.taxWithheld <= r.grossAmount!)).toBe(true);
   });
+
+  describe('từ chối lệnh rút tự hoàn thuế giữ dư (Q2b)', () => {
+    async function walletOf(userId: string) {
+      const [user, ledger] = await Promise.all([
+        prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { walletBalance: true } }),
+        prisma.walletTransaction.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+      ]);
+      return { balance: user.walletBalance, ledgerSum: ledger.reduce((sum, t) => sum + t.delta, 0), ledger };
+    }
+
+    async function payoutVia(userId: string, amount: number, method: 'BANK' | 'WALLET_BALANCE') {
+      await approvedCommission(userId, amount);
+      await affiliate.requestPayout(userId, amount, method, method === 'BANK' ? bank : undefined, undefined, MST);
+      return prisma.payout.findFirstOrThrow({ where: { userId, method }, orderBy: { requestedAt: 'desc' } });
+    }
+
+    it('ví dụ của chủ: A rút 1.500.000đ (thuế 0), B rút Ví 1.000.000đ bị giữ 250.000đ; từ chối A → Ví +250.000đ, B.taxRefunded 250.000đ, hoa hồng của A rút lại được', async () => {
+      const u = await ctv();
+      const a = await payoutVia(u.id, 1_500_000, 'BANK');
+      const b = await payoutVia(u.id, 1_000_000, 'WALLET_BALANCE');
+      expect(b).toMatchObject({ taxWithheld: 250_000, amount: 750_000, taxRefunded: 0 });
+
+      await affiliate.rejectPayout('admin-it', a.id, 'Sai STK');
+
+      const b2 = await prisma.payout.findUniqueOrThrow({ where: { id: b.id } });
+      expect(b2).toMatchObject({ taxWithheld: 250_000, taxRefunded: 250_000, amount: 750_000 });
+      const w = await walletOf(u.id);
+      expect(w.balance).toBe(1_000_000);
+      expect(w.balance).toBe(w.ledgerSum);
+      expect(w.ledger.filter((t) => t.type === 'PIT_REFUND').map((t) => t.delta)).toEqual([250_000]);
+      const back = await prisma.commission.aggregate({ where: { affiliateUserId: u.id, status: 'APPROVED', payoutBatchId: null }, _sum: { amount: true } });
+      expect(back._sum.amount).toBe(1_500_000);
+    });
+
+    it('B là lệnh ngân hàng còn "Yêu cầu": thuế giảm về 0 và số thực nhận tăng ngay trên lệnh, Ví không đổi', async () => {
+      const u = await ctv();
+      const a = await payoutVia(u.id, 1_500_000, 'BANK');
+      await approvedCommission(u.id, 1_000_000);
+      await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+      const b = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a.id } } });
+      expect(b).toMatchObject({ taxWithheld: 250_000, amount: 750_000 });
+
+      await affiliate.rejectPayout('admin-it', a.id, 'Sai STK');
+
+      expect(await prisma.payout.findUniqueOrThrow({ where: { id: b.id } })).toMatchObject({ taxWithheld: 0, amount: 1_000_000, taxRefunded: 0 });
+      const w = await walletOf(u.id);
+      expect(w.balance).toBe(0);
+      expect(w.ledger).toHaveLength(0);
+    });
+
+    it('hai admin từ chối hai lệnh KHÁC NHAU cùng tháng cùng lúc → thuế giữ dư hoàn đúng một lần, Ví khớp sổ, không âm', async () => {
+      const u = await ctv();
+      const a1 = await payoutVia(u.id, 1_000_000, 'BANK');
+      await approvedCommission(u.id, 1_000_000);
+      await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+      const a2 = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a1.id } } });
+      expect(a2.taxWithheld).toBe(200_000);
+      const p = await payoutVia(u.id, 1_000_000, 'WALLET_BALANCE');
+      expect(p).toMatchObject({ taxWithheld: 100_000, amount: 900_000 });
+
+      await Promise.all([affiliate.rejectPayout('admin-1', a1.id, 'Sai STK'), affiliate.rejectPayout('admin-2', a2.id, 'Sai STK')]);
+
+      expect(await prisma.payout.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ taxWithheld: 100_000, taxRefunded: 100_000 });
+      const w = await walletOf(u.id);
+      expect(w.ledger.filter((t) => t.type === 'PIT_REFUND').reduce((sum, t) => sum + t.delta, 0)).toBe(100_000);
+      expect(w.balance).toBe(900_000 + 100_000);
+      expect(w.balance).toBe(w.ledgerSum);
+      expect(w.ledger.every((t) => t.balanceAfter >= 0)).toBe(true);
+    });
+
+    it.each([0, 25, 60, 120])(
+      'từ chối A song song với requestPayout C cùng tháng (C chạy sau %dms) → thuế thực giữ của các lệnh không bị từ chối đúng bằng thuế của cả tháng, Ví khớp sổ',
+      async (delayMs) => {
+        const u = await ctv();
+        const a = await payoutVia(u.id, 1_500_000, 'BANK');
+        await payoutVia(u.id, 1_000_000, 'WALLET_BALANCE');
+        await approvedCommission(u.id, 1_500_000);
+
+        // Hoa hồng của A quay lại "có thể rút" ngay khi bị từ chối nên số khả dụng của C đổi theo thứ tự (1,5 hoặc 3 triệu): đọc lại và thử lại.
+        const withdrawAll = async () => {
+          for (let attempt = 0; ; attempt++) {
+            const { withdrawableCommission } = await affiliate.dashboard(u.id);
+            try {
+              return await affiliate.requestPayout(u.id, withdrawableCommission, 'WALLET_BALANCE', undefined, undefined, MST);
+            } catch (e) {
+              if (attempt >= 5) throw e;
+              await sleep(20);
+            }
+          }
+        };
+        await Promise.all([affiliate.rejectPayout('admin-it', a.id, 'Sai STK'), sleep(delayMs).then(withdrawAll)]);
+
+        const live = await prisma.payout.findMany({ where: { userId: u.id, grossAmount: { not: null }, status: { not: 'REJECTED' } } });
+        const gross = live.reduce((sum, r) => sum + (r.grossAmount ?? 0), 0);
+        const held = live.reduce((sum, r) => sum + r.taxWithheld - r.taxRefunded, 0);
+        expect(gross).toBeGreaterThanOrEqual(2_500_000);
+        expect(held).toBe(Math.round(gross * 0.1));
+        expect(live.every((r) => r.taxWithheld >= 0 && r.taxRefunded >= 0 && r.taxRefunded <= r.taxWithheld)).toBe(true);
+        const w = await walletOf(u.id);
+        // Mọi lệnh còn lại là rút về Ví: CTV nhận tổng hoa hồng trừ đúng thuế của tháng, bất kể thứ tự hai thao tác.
+        expect(w.balance).toBe(gross - held);
+        expect(w.balance).toBe(w.ledgerSum);
+      },
+    );
+  });
 });

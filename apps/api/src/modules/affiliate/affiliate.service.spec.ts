@@ -1185,9 +1185,11 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     /** Các lệnh rút hoa hồng đã có trong tháng (chưa kể lệnh đang tạo). */
     priorGross?: number;
     priorTax?: number;
+    /** Phần thuế giữ dư đã hoàn về Ví của các lệnh đó (Q2b). */
+    priorRefunded?: number;
   }) {
     const rows = opts.rows ?? [{ id: 'c1', amount: 100_000 }];
-    const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: opts.priorGross ?? null, taxWithheld: opts.priorTax ?? null } });
+    const payoutAggregate = jest.fn().mockResolvedValue({ _sum: { grossAmount: opts.priorGross ?? null, taxWithheld: opts.priorTax ?? null, taxRefunded: opts.priorRefunded ?? null } });
     const executeRaw = jest.fn().mockResolvedValue(1);
     const userUpdate = jest.fn().mockResolvedValue({});
     const userFindUnique = jest.fn().mockResolvedValue({ personalTaxId: opts.taxId ?? null });
@@ -1447,7 +1449,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
   describe('thuế TNCN cộng dồn theo tháng VN (Q2)', () => {
     const MST = '079201001234';
     const bank = { bankName: 'VCB', accountNumber: '0123456789', accountName: 'NGUYEN A' };
-    const run = (method: 'BANK' | 'WALLET_BALANCE', total: number, prior: { priorGross?: number; priorTax?: number }, cfg: SystemConfigService = config) => {
+    const run = (method: 'BANK' | 'WALLET_BALANCE', total: number, prior: { priorGross?: number; priorTax?: number; priorRefunded?: number }, cfg: SystemConfigService = config) => {
       const m = makePrisma({ available: total, rows: [{ id: 'c1', amount: total }], taxId: MST, ...prior });
       return new AffiliateService(m.prisma, cfg, pricing, pancakeOrder, coins, analytics)
         .requestPayout('u1', total, method, method === 'BANK' ? bank : undefined)
@@ -1464,6 +1466,12 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     it.each(['WALLET_BALANCE', 'BANK'] as const)('%s: đã trừ 300.000đ trên 3.000.000đ, lần này 1.000.000đ → chỉ trừ phần chênh 100.000đ (10% × 4.000.000đ − 300.000đ)', async (method) => {
       const { payoutCreate } = await run(method, 1_000_000, { priorGross: 3_000_000, priorTax: 300_000 });
       expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 100_000, amount: 900_000 }));
+    });
+
+    it.each(['WALLET_BALANCE', 'BANK'] as const)('%s: thuế đã hoàn về Ví không còn là thuế đã giữ → lần rút sau truy thu đúng (tháng 2.500.000đ cần 250.000đ, đang giữ thực 0đ)', async (method) => {
+      // Ví dụ chủ: A 1,5 triệu bị từ chối; B 1 triệu giữ 250k đã hoàn 250k; lần này C 1,5 triệu → tổng 2,5 triệu cần 250k.
+      const { payoutCreate } = await run(method, 1_500_000, { priorGross: 1_000_000, priorTax: 250_000, priorRefunded: 250_000 });
+      expect(payoutCreate.mock.calls[0][0].data).toEqual(expect.objectContaining({ taxWithheld: 250_000, amount: 1_250_000 }));
     });
 
     it('khoản truy thu lớn hơn số tiền lần này → chỉ trừ tối đa bằng lần này, phần còn lại dồn sang lần sau', async () => {
@@ -1945,12 +1953,14 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     const prisma = {
       payout: {
         updateMany: payoutUpdateMany,
+        findUnique: jest.fn().mockResolvedValue(payout),
         findUniqueOrThrow: payoutFindUniqueOrThrow,
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
       },
       commission: { findMany: commissionFindMany, updateMany: commissionUpdateMany },
       user: { update: userUpdate },
+      $executeRaw: jest.fn().mockResolvedValue(1),
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
@@ -1995,7 +2005,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
 
   it('rejectPayout: Payout từ wallet.service.ts:withdraw() (KHÔNG có commission gắn payoutBatchId) → hoàn GROSS (amount+fee, KHÔNG phải net) vào walletBalance, KHÔNG đụng commission', async () => {
     const { prisma, userUpdate, commissionUpdateMany } = makePrisma(
-      { id: 'p1', userId: 'u1', amount: 97_000, fee: 3_000, method: 'BANK' },
+      { id: 'p1', userId: 'u1', amount: 97_000, fee: 3_000, method: 'BANK', grossAmount: null },
       { linkedCommissions: [] },
     );
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
@@ -2010,7 +2020,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
 
   it('rejectPayout: Payout từ affiliate.service.ts:requestPayout() nhánh BANK (CÓ commission gắn payoutBatchId) → trả commission về APPROVED (rút lại được), KHÔNG đụng walletBalance', async () => {
     const { prisma, userUpdate, commissionUpdateMany } = makePrisma(
-      { id: 'p1', userId: 'u1', amount: 100_000, fee: 0, method: 'BANK' },
+      { id: 'p1', userId: 'u1', amount: 100_000, fee: 0, method: 'BANK', grossAmount: 100_000, requestedAt: new Date('2026-10-05T03:00:00Z') },
       { linkedCommissions: [{ id: 'c1' }, { id: 'c2' }] },
     );
     await new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).rejectPayout('admin1', 'p1', 'Sai STK');
@@ -2032,7 +2042,7 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
   });
 
   it('2 lệnh reject đồng thời cho CÙNG payout (nguồn wallet.withdraw, không commission gắn batch) → chỉ hoàn ví ĐÚNG 1 LẦN', async () => {
-    let payoutRow: Record<string, unknown> = { id: 'p1', userId: 'u1', amount: 97_000, fee: 3_000, method: 'BANK', status: 'REQUESTED' };
+    let payoutRow: Record<string, unknown> = { id: 'p1', userId: 'u1', amount: 97_000, fee: 3_000, method: 'BANK', status: 'REQUESTED', grossAmount: null };
     let wallet = 0;
     const prisma = {
       payout: {
@@ -2043,8 +2053,10 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
           }
           return { count: 0 };
         }),
+        findUnique: jest.fn(async () => payoutRow),
         findUniqueOrThrow: jest.fn(async () => payoutRow),
       },
+      $executeRaw: jest.fn().mockResolvedValue(1),
       commission: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
       user: {
         update: jest.fn(async ({ data }: { data: { walletBalance: { increment: number } } }) => {
@@ -2064,6 +2076,228 @@ describe('AffiliateService admin payout queue (P0 A5-08=A6-05)', () => {
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
     expect(wallet).toBe(100_000); // hoàn ĐÚNG 1 lần (100k), không phải 200k
+  });
+
+  describe('rejectPayout: tự hoàn thuế TNCN giữ dư của các lệnh còn lại trong tháng (Q2b)', () => {
+    type Row = {
+      id: string;
+      userId: string;
+      method: string;
+      status: 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
+      grossAmount: number | null;
+      taxWithheld: number;
+      taxRefunded: number;
+      amount: number;
+      fee: number;
+      requestedAt: Date;
+    };
+    const at = (day: number) => new Date(`2026-10-${String(day).padStart(2, '0')}T03:00:00Z`);
+    const row = (id: string, o: Partial<Row>): Row => ({
+      id,
+      userId: 'u1',
+      method: 'BANK',
+      status: 'REQUESTED',
+      grossAmount: 0,
+      taxWithheld: 0,
+      taxRefunded: 0,
+      amount: 0,
+      fee: 0,
+      requestedAt: at(5),
+      ...o,
+    });
+    const bank = (id: string, gross: number, tax: number, o: Partial<Row> = {}) =>
+      row(id, { grossAmount: gross, taxWithheld: tax, amount: gross - tax, ...o });
+
+    function fixture(rows: Row[], cfg: SystemConfigService = config, linked: { id: string }[] = [{ id: 'c1' }]) {
+      const order: string[] = [];
+      let wallet = 0;
+      const num = (cur: number, v: unknown) =>
+        typeof v === 'number' ? v : (v as { increment?: number; decrement?: number }).increment !== undefined ? cur + (v as { increment: number }).increment : cur - (v as { decrement: number }).decrement;
+      const apply = (r: Row, data: Record<string, unknown>) => {
+        for (const [k, v] of Object.entries(data)) {
+          (r as unknown as Record<string, unknown>)[k] = ['taxWithheld', 'taxRefunded', 'amount'].includes(k) ? num((r as unknown as Record<string, number>)[k]!, v) : v;
+        }
+      };
+      const prisma = {
+        payout: {
+          findUnique: jest.fn(async ({ where }: { where: { id: string } }) => {
+            order.push('findUnique');
+            return rows.find((r) => r.id === where.id) ?? null;
+          }),
+          findUniqueOrThrow: jest.fn(async ({ where }: { where: { id: string } }) => rows.find((r) => r.id === where.id)),
+          updateMany: jest.fn(async ({ where, data }: { where: { id: string; status?: string }; data: Record<string, unknown> }) => {
+            order.push('updateMany');
+            const r = rows.find((x) => x.id === where.id && (where.status === undefined || x.status === where.status));
+            if (!r) return { count: 0 };
+            apply(r, data);
+            return { count: 1 };
+          }),
+          update: jest.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+            const r = rows.find((x) => x.id === where.id)!;
+            apply(r, data);
+            return r;
+          }),
+          findMany: jest.fn(async ({ where }: { where: { userId: string; requestedAt: { gte: Date; lt: Date } } }) =>
+            rows
+              .filter((r) => r.userId === where.userId && r.grossAmount !== null && r.status !== 'REJECTED' && r.requestedAt >= where.requestedAt.gte && r.requestedAt < where.requestedAt.lt)
+              .sort((a, b) => b.requestedAt.getTime() - a.requestedAt.getTime()),
+          ),
+        },
+        commission: { findMany: jest.fn().mockResolvedValue(linked), updateMany: jest.fn().mockResolvedValue({ count: linked.length }) },
+        user: {
+          update: jest.fn(async ({ data }: { data: { walletBalance: { increment: number } } }) => {
+            wallet += data.walletBalance.increment;
+            return {};
+          }),
+        },
+        $executeRaw: jest.fn(async () => {
+          order.push('lock');
+          return 1;
+        }),
+      } as unknown as PrismaService;
+      (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
+      const svc = new AffiliateService(prisma, cfg, pricing, pancakeOrder, coins, analytics);
+      const find = (id: string) => rows.find((r) => r.id === id)!;
+      return { svc, rows, find, order, wallet: () => wallet };
+    }
+    const pitRefunds = () => ledger.mock.calls.filter((c) => c[1].type === 'PIT_REFUND').map((c) => c[1]);
+    beforeEach(() => ledger.mockClear());
+
+    // Ví dụ của chủ: A rút 1.500.000đ (thuế 0), B rút 1.000.000đ cùng tháng bị giữ 250.000đ (10% × 2,5 triệu). Từ chối A: tháng còn 1 triệu.
+    const A = () => bank('A', 1_500_000, 0, { requestedAt: at(5) });
+
+    it('lệnh B đã chi / rút về Ví (PAID): từ chối A hoàn 250.000đ vào Ví, ghi taxRefunded, không đổi taxWithheld', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', method: 'WALLET_BALANCE', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.find('A').status).toBe('REJECTED');
+      expect(f.wallet()).toBe(250_000);
+      expect(f.find('B')).toEqual(expect.objectContaining({ taxRefunded: 250_000, taxWithheld: 250_000, amount: 750_000 }));
+      expect(pitRefunds()).toEqual([
+        expect.objectContaining({
+          userId: 'u1',
+          delta: 250_000,
+          type: 'PIT_REFUND',
+          refType: 'PAYOUT',
+          refId: expect.stringContaining('B'),
+          reason: expect.stringMatching(/Hoàn thuế TNCN giữ dư tháng 10\/2026 \(lệnh rút ngày 05\/10 bị từ chối\)/),
+        }),
+      ]);
+    });
+
+    it('lệnh B còn "Yêu cầu": giảm taxWithheld về 0 và tăng số thực nhận lên 1.000.000đ ngay trên lệnh, KHÔNG cộng Ví (B còn có thể bị từ chối)', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'REQUESTED', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.find('B')).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 1_000_000, taxRefunded: 0 }));
+      expect(f.wallet()).toBe(0);
+      expect(pitRefunds()).toHaveLength(0);
+    });
+
+    it('lệnh B đã duyệt (APPROVED) cũng hoàn qua Ví vì không thể bị từ chối nữa', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'APPROVED', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(250_000);
+      expect(f.find('B')).toEqual(expect.objectContaining({ taxRefunded: 250_000, taxWithheld: 250_000, amount: 750_000 }));
+    });
+
+    it('phần dư chia cho lệnh mới nhất trước, mỗi lệnh tối đa số thuế thực giữ của nó; lệnh "Yêu cầu" chỉnh tại chỗ, lệnh đã chi hoàn Ví', async () => {
+      // A 1.5M (0) · B 1.0M (thuế 250k, đã chi) · C 1.2M (thuế 120k, còn Yêu cầu). Bỏ A: 2,2 triệu cần 220k, đang giữ 370k → dư 150k.
+      const f = fixture([
+        A(),
+        bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) }),
+        bank('C', 1_200_000, 120_000, { status: 'REQUESTED', requestedAt: at(12) }),
+      ]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.find('C')).toEqual(expect.objectContaining({ taxWithheld: 0, amount: 1_200_000 }));
+      expect(f.find('B')).toEqual(expect.objectContaining({ taxRefunded: 30_000, taxWithheld: 250_000 }));
+      expect(f.wallet()).toBe(30_000);
+      expect(pitRefunds().map((r) => r.delta)).toEqual([30_000]);
+    });
+
+    it('tổng tháng vẫn đủ ngưỡng: chỉ hoàn phần chênh so với luật cộng dồn, không hoàn hết', async () => {
+      // A 500k (0) · B 2.0M (thuế 250k, đã chi). Bỏ A: 2,0 triệu cần 200k, đang giữ 250k → hoàn 50k.
+      const f = fixture([bank('A', 500_000, 0), bank('B', 2_000_000, 250_000, { status: 'PAID', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(50_000);
+      expect(f.find('B').taxRefunded).toBe(50_000);
+    });
+
+    it('không có thuế giữ dư (không lệnh nào bị giữ thuế) → không hoàn gì, không ghi sổ ví', async () => {
+      const f = fixture([bank('A', 500_000, 0), bank('B', 500_000, 0, { status: 'PAID', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(0);
+      expect(pitRefunds()).toHaveLength(0);
+    });
+
+    it('thuế đã được hoàn một phần trước đó thì chỉ hoàn phần còn lại (taxWithheld − taxRefunded)', async () => {
+      // B giữ 250k, đã hoàn 200k từ lần từ chối trước; bỏ A thì tháng còn 1,0 triệu (cần 0), thực giữ 50k → hoàn đúng 50k.
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', taxRefunded: 200_000, requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(50_000);
+      expect(f.find('B').taxRefunded).toBe(250_000);
+    });
+
+    it('lệnh bị từ chối trước đó (REJECTED) và lệnh tháng khác không tham gia tính lại', async () => {
+      const f = fixture([
+        A(),
+        bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) }),
+        bank('OLD', 3_000_000, 300_000, { status: 'PAID', requestedAt: new Date('2026-09-20T03:00:00Z') }),
+        bank('X', 4_000_000, 400_000, { status: 'REJECTED', requestedAt: at(7) }),
+      ]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(250_000);
+      expect(f.find('OLD').taxRefunded).toBe(0);
+      expect(f.find('X').taxRefunded).toBe(0);
+    });
+
+    it('cấu hình thuế 0% (tắt khấu trừ): yêu cầu của tháng là 0 nên thuế đã giữ lúc còn bật được hoàn hết', async () => {
+      const off = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'affiliate.pit_withhold_pct' ? 0 : fb) as T } as unknown as SystemConfigService;
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) })], off);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(250_000);
+    });
+
+    it('từ chối lệnh rút Ví về ngân hàng (grossAmount null) giữ nguyên đường cũ: hoàn gross, không đụng thuế, không lấy khoá tháng', async () => {
+      const f = fixture(
+        [
+          row('W', { grossAmount: null, amount: 97_000, fee: 3_000, requestedAt: at(5) }),
+          bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) }),
+        ],
+        config,
+        [],
+      );
+      await f.svc.rejectPayout('admin1', 'W', 'Sai STK');
+      expect(f.wallet()).toBe(100_000);
+      expect(ledger).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ type: 'WITHDRAW_REFUND', delta: 100_000 }));
+      expect(pitRefunds()).toHaveLength(0);
+      expect(f.find('B').taxRefunded).toBe(0);
+      expect(f.order).not.toContain('lock');
+    });
+
+    it('khoá tháng (CTV, tháng VN) lấy sau khi đọc userId/requestedAt và TRƯỚC khi đổi trạng thái, cùng thứ tự với requestPayout', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.order.slice(0, 3)).toEqual(['findUnique', 'lock', 'updateMany']);
+    });
+
+    it('hoàn đúng một lần: từ chối lại lệnh đã từ chối không hoàn thêm', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'PAID', requestedAt: at(9) })]);
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      await expect(f.svc.rejectPayout('admin2', 'A', 'Sai STK')).rejects.toThrow('tải lại');
+      expect(f.wallet()).toBe(250_000);
+    });
+
+    it('lệnh "Yêu cầu" vừa được duyệt xen giữa lúc đọc và lúc ghi (updateMany count 0) → chuyển sang hoàn Ví, không mất phần hoàn', async () => {
+      const f = fixture([A(), bank('B', 1_000_000, 250_000, { status: 'REQUESTED', requestedAt: at(9) })]);
+      const real = (f.svc as unknown as { prisma: { payout: { findMany: jest.Mock } } }).prisma.payout.findMany;
+      real.mockImplementationOnce(async () => {
+        const snapshot = [{ ...f.find('B') }];
+        f.find('B').status = 'APPROVED';
+        return snapshot;
+      });
+      await f.svc.rejectPayout('admin1', 'A', 'Sai STK');
+      expect(f.wallet()).toBe(250_000);
+      expect(f.find('B')).toEqual(expect.objectContaining({ taxRefunded: 250_000, taxWithheld: 250_000 }));
+    });
   });
 
   it('markPayoutPaid: APPROVED → PAID, ghi bankRef + paidBy (atomic updateMany theo status-guard)', async () => {
@@ -2145,6 +2379,7 @@ describe('AffiliateService — báo cáo khấu trừ thuế TNCN (SELLER-11)', 
     method: 'BANK',
     grossAmount: 2_500_000,
     taxWithheld: 250_000,
+    taxRefunded: 0,
     amount: 2_250_000,
     taxId: '079201001234',
     paidAt: new Date('2026-10-10T03:00:00Z'),
@@ -2187,6 +2422,35 @@ describe('AffiliateService — báo cáo khấu trừ thuế TNCN (SELLER-11)', 
       expect.objectContaining({ userId: 'u2', taxId: null, payoutCount: 1, grossAmount: 800_000, taxWithheld: 0, netAmount: 800_000 }),
     ]);
     expect(r.totals).toEqual({ recipients: 2, withheldRecipients: 1, grossAmount: 6_300_000, taxWithheld: 550_000, netAmount: 5_750_000 });
+  });
+
+  it('thuế đã hoàn về Ví (lệnh khác cùng tháng bị từ chối) trừ khỏi thuế đã khấu trừ; thu nhập = thuế thực giữ + thực nhận', async () => {
+    const { svc } = svcWith([
+      paid({ id: 'p1', grossAmount: 1_000_000, taxWithheld: 250_000, taxRefunded: 250_000, amount: 750_000 }),
+      paid({ id: 'p2', grossAmount: 1_000_000, taxWithheld: 100_000, taxRefunded: 30_000, amount: 900_000 }),
+    ]);
+    const r = await svc.pitReport('2026-10');
+    expect(r.rows[0]).toEqual(expect.objectContaining({ grossAmount: 2_000_000, taxWithheld: 70_000, netAmount: 1_930_000 }));
+    expect(r.totals).toEqual(expect.objectContaining({ taxWithheld: 70_000, netAmount: 1_930_000, withheldRecipients: 1 }));
+  });
+
+  it('bảng kê năm: cùng quy tắc thuế thực giữ = taxWithheld − taxRefunded', async () => {
+    const { svc } = svcWith([paid({ id: 'p1', grossAmount: 1_000_000, taxWithheld: 250_000, taxRefunded: 250_000, amount: 750_000 })]);
+    const r = await svc.taxStatement('u1', 2026);
+    expect(r.items[0]).toEqual(expect.objectContaining({ grossAmount: 1_000_000, taxWithheld: 0, amount: 1_000_000 }));
+    expect(r.totals).toEqual({ grossAmount: 1_000_000, taxWithheld: 0, netAmount: 1_000_000 });
+  });
+
+  it('listMyPayouts: taxWithheld là thuế thực giữ (đã trừ phần hoàn), kèm taxRefunded để màn hiện "đã hoàn"', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 250_000, taxRefunded: 250_000, fee: 0, method: 'BANK', status: 'PAID' },
+      { id: 'p2', amount: 1_000_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 0, fee: 0, method: 'BANK', status: 'REQUESTED' },
+    ]);
+    const svc = new AffiliateService({ payout: { findMany } } as unknown as PrismaService, config, pricing, pancakeOrder, coins, analytics);
+    const rows = await svc.listMyPayouts('u1');
+    expect(findMany.mock.calls[0][0].select).toEqual(expect.objectContaining({ taxRefunded: true }));
+    expect(rows[0]).toEqual(expect.objectContaining({ id: 'p1', taxWithheld: 0, taxRefunded: 250_000 }));
+    expect(rows[1]).toEqual(expect.objectContaining({ id: 'p2', taxWithheld: 0, taxRefunded: 0 }));
   });
 
   it('tháng sai định dạng → 400', async () => {
