@@ -1467,7 +1467,11 @@ export class DealerService {
       paid += 1;
     }
     if (paid > 0) this.logger.log(`Đã trả thưởng quý ${quarter} cho ${paid} đại lý.`);
-    if (failed > 0) this.logger.error(`Trả thưởng quý ${quarter}: ${failed} đại lý lỗi, cần chạy lại.`);
+    if (failed > 0) {
+      this.logger.error(
+        `Trả thưởng quý ${quarter}: ${failed} đại lý lỗi. Cửa sổ trả bù bật (từ 10 ngày) thì bước trả bù hằng ngày trả muộn cho các đại lý này; tắt thì cần chạy tay.`,
+      );
+    }
     return { paid, quarter, failed };
   }
 
@@ -1612,9 +1616,11 @@ export class DealerService {
           });
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
-          // Lỗi của một đại lý không được chặn các đại lý sau; lượt cron hôm sau tự thử lại vì chưa có dòng nào được ghi.
+          // Lỗi của một đại lý không được chặn các đại lý sau. Chưa có dòng nào được ghi nên lượt cron hôm sau thử lại, trừ lượt quét
+          // sau hạn (stampedAt): quý đó không còn được quét nữa nên phải chạy tay hoặc đối soát.
           failed += 1;
-          this.logger.error(`Trả bù thưởng ${period.key} lỗi cho đại lý ${d.id}: ${(err as Error).message}`, (err as Error).stack);
+          const after = stampedAt ? ' Đã hết cửa sổ trả bù: cần chạy tay hoặc đối soát.' : '';
+          this.logger.error(`Trả bù thưởng ${period.key} lỗi cho đại lý ${d.id}: ${(err as Error).message}.${after}`, (err as Error).stack);
           continue;
         }
         if (!outcome) continue;
@@ -1631,7 +1637,7 @@ export class DealerService {
         }
       }
     }
-    if (failed > 0) this.logger.error(`Trả bù thưởng: ${failed} lượt đại lý lỗi (quý ${periods.map((p) => p.key).join(', ')}), lượt cron sau sẽ thử lại.`);
+    if (failed > 0) this.logger.error(`Trả bù thưởng: ${failed} lượt đại lý lỗi (quý ${periods.map((p) => p.key).join(', ')}), quý còn trong cửa sổ thì lượt cron sau thử lại, quý đã hết cửa sổ cần chạy tay (xem log từng đại lý).`);
     return { toppedUp, quarters: periods.map((p) => p.key), failed };
   }
 
