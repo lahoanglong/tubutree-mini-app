@@ -31,8 +31,7 @@ export class EchoFilter {
     this.prune();
     if (this.sentIds.has(e.msgId)) return true;
     if (!e.isSelf || e.text === null) return false;
-    const matches = [...this.sending, ...this.sent].filter((r) => r.text === e.text);
-    return matches.length === 1;
+    return [...this.sending, ...this.sent].some((r) => r.text === e.text);
   }
 
   private prune(): void {

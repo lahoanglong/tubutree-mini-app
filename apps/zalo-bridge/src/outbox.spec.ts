@@ -99,4 +99,50 @@ describe('Outbox', () => {
       ob.stop();
     }
   });
+
+  it('một lần ghi đĩa lỗi không làm hỏng các lần sau và không gây unhandled rejection', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ob-'));
+    let calls = 0;
+    const write = vi.fn(async (path: string, data: string) => {
+      if (++calls === 1) throw new Error('đĩa đầy');
+      await writeFile(path, data);
+    });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const post = vi.fn(async () => 'retry' as const);
+      const ob = new Outbox(dir, post, () => 0, write);
+      await expect(ob.push(ev('1'))).rejects.toThrow('đĩa đầy');
+      await ob.push(ev('2'));
+      expect(await readFile(file(dir), 'utf8')).toContain('"msgId":"2"');
+      await ob.flushOnce();
+      expect(post).toHaveBeenCalledTimes(2);
+      await new Promise((r) => setImmediate(r));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+      err.mockRestore();
+    }
+  });
+
+  it('flushOnce không ném khi ghi đĩa lỗi', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ob-'));
+    let fail = false;
+    const write = vi.fn(async (path: string, data: string) => {
+      if (fail) throw new Error('đĩa đầy');
+      await writeFile(path, data);
+    });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const ob = new Outbox(dir, async () => 'ok', () => 0, write);
+      await ob.push(ev('1'));
+      fail = true;
+      await expect(ob.flushOnce()).resolves.toBeUndefined();
+      expect(ob.size()).toBe(0);
+      expect(err).toHaveBeenCalled();
+    } finally {
+      err.mockRestore();
+    }
+  });
 });

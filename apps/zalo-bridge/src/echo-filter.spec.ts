@@ -47,10 +47,11 @@ describe('EchoFilter', () => {
     expect(f.isEcho({ msgId: 'm2', isSelf: true, text: 'A' })).toBe(false);
   });
 
-  it('hai tin đang gửi cùng nội dung thì không coi là đúng một tin', () => {
+  it('hai tin đang gửi cùng nội dung: echo nào cũng bị lọc', () => {
     const { f } = make();
     f.noteSending('A');
     f.noteSending('A');
-    expect(f.isEcho({ msgId: 'x', isSelf: true, text: 'A' })).toBe(false);
+    expect(f.isEcho({ msgId: 'x', isSelf: true, text: 'A' })).toBe(true);
+    expect(f.isEcho({ msgId: 'y', isSelf: true, text: 'A' })).toBe(true);
   });
 });

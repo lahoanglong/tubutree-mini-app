@@ -30,6 +30,7 @@ export class Outbox {
     dir: string,
     private readonly post: (e: ZaloBridgeEvent) => Promise<PostResult>,
     private readonly now: () => number,
+    private readonly write: (path: string, data: string) => Promise<void> = writeFileAtomic,
   ) {
     mkdirSync(dir, { recursive: true });
     this.path = join(dir, 'outbox.jsonl');
@@ -85,7 +86,7 @@ export class Outbox {
         }
         changed = true;
       }
-      if (changed) await this.persist();
+      if (changed) await this.persist().catch(() => this.logPersistFailure());
     } finally {
       this.flushing = false;
     }
@@ -96,11 +97,18 @@ export class Outbox {
   }
 
   private persist(): Promise<void> {
-    this.writeChain = this.writeChain.then(() => {
+    // Chuỗi phải tự hồi phục sau một lần ghi lỗi, nếu không mọi lần ghi sau đều bị bỏ qua.
+    const p = this.writeChain.then(() => {
       const body = this.entries.map((e) => JSON.stringify({ at: e.at, event: e.event })).join('\n');
-      return writeFileAtomic(this.path, body ? `${body}\n` : '');
+      return this.write(this.path, body ? `${body}\n` : '');
     });
-    return this.writeChain;
+    this.writeChain = p.catch(() => undefined);
+    return p;
+  }
+
+  // Không log nội dung tin, chỉ số lượng.
+  private logPersistFailure(): void {
+    console.error(`[outbox] ghi outbox.jsonl lỗi, còn ${this.entries.length} sự kiện trong bộ nhớ`);
   }
 
   private readFile(): Entry[] {
