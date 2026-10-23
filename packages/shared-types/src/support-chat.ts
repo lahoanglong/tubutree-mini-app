@@ -9,7 +9,10 @@ export interface SupportChatThreadDTO {
   messages: SupportChatMessageDTO[]; hasMore: boolean;
 }
 export interface SupportChatPageDTO { messages: SupportChatMessageDTO[]; hasMore: boolean }
-export interface SupportChatSendInput { clientMsgId: string; body?: string; imageUrl?: string; context?: SupportChatContext }
+export interface SupportChatSendInput {
+  clientMsgId: string; body?: string; imageUrl?: string; context?: SupportChatContext;
+  source?: 'MINIAPP' | 'WEB';
+}
 export type ZaloBridgeState = 'CONNECTED' | 'CONNECTING' | 'NEED_QR' | 'KICKED' | 'ERROR' | 'UNREACHABLE';
 export type ZaloBridgeEvent =
   | { type: 'message'; groupId: string; msgId: string; cliMsgId: string; uidFrom: string; dName: string;

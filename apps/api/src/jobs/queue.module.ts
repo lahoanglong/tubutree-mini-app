@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.validation';
-import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS, QUEUE_PANCAKE_PUSH, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS } from './queues';
+import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS, QUEUE_PANCAKE_PUSH, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD } from './queues';
 import { NotificationsProcessor } from '../modules/notifications/notifications.processor';
 
 /**
@@ -34,6 +34,7 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
       { name: QUEUE_PANCAKE_PUSH },
       { name: QUEUE_GOMDON_PUSH },
       { name: QUEUE_GOMDON_EVENTS },
+      { name: QUEUE_SUPPORT_CHAT_FORWARD },
     ),
   ],
   // NotificationsProcessor xử lý QUEUE_NOTIFICATIONS (gửi ZNS + thử lại lỗi tạm thời — xem

@@ -13,3 +13,5 @@ export const QUEUE_PANCAKE_PUSH = 'pancake-push';
 export const QUEUE_GOMDON_PUSH = 'gomdon-push';
 /** Webhook Gomdon (inbound) — event đã lưu DB (gomdon_webhook_events) xử lý async có retry. */
 export const QUEUE_GOMDON_EVENTS = 'gomdon-events';
+/** Chuyển tin khách sang nhóm Zalo (gộp 15 giây theo hội thoại) — xem modules/support-chat. */
+export const QUEUE_SUPPORT_CHAT_FORWARD = 'support-chat-forward';
