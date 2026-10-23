@@ -9,11 +9,23 @@ const mocks = vi.hoisted(() => ({
   fetchSupportContact: vi.fn(),
   copyText: vi.fn(),
   openSnackbar: vi.fn(),
+  navigate: vi.fn(),
+  login: vi.fn(),
+  authStatus: 'authenticated' as string,
+  chatEnabled: false,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+  useNavigate: () => mocks.navigate,
 }));
+vi.mock('../hooks/use-public-config', () => ({
+  usePublicConfig: () => ({ chat: { enabled: mocks.chatEnabled, hours: { start: '08:00', end: '21:00' } }, isLoaded: true }),
+}));
+vi.mock('../store/auth', () => {
+  const state = () => ({ status: mocks.authStatus, login: mocks.login, restore: vi.fn() });
+  return { useAuthStore: Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), { getState: state }) };
+});
 vi.mock('../services/zmp-bridge', () => ({
   get hasOA() {
     return mocks.hasOA;
@@ -44,6 +56,8 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasOA = false;
+    mocks.chatEnabled = false;
+    mocks.authStatus = 'authenticated';
     mocks.fetchSupportContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null });
     mocks.copyText.mockResolvedValue(true);
   });
@@ -93,5 +107,37 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
     mocks.fetchSupportContact.mockRejectedValue(new Error('mạng'));
     renderBlock();
     expect(await screen.findByRole('button', { name: /Gọi hotline 0984 606 774/ })).toBeInTheDocument();
+  });
+
+  describe('chat với Tubu Tree', () => {
+    it('chat bật và đã đăng nhập: nút "Chat với Tubu Tree" mở /chat?order=<mã đơn>, không còn nút OA', async () => {
+      mocks.chatEnabled = true;
+      mocks.hasOA = true;
+      renderBlock();
+      fireEvent.click(await screen.findByRole('button', { name: /Chat với Tubu Tree/ }));
+      expect(mocks.navigate).toHaveBeenCalledWith('/chat?order=TT001');
+      expect(screen.queryByRole('button', { name: /Zalo OA/ })).toBeNull();
+      expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();
+    });
+
+    it('chat tắt: giữ nút OA và hotline như cũ, không có nút chat', async () => {
+      mocks.hasOA = true;
+      renderBlock();
+      expect(await screen.findByRole('button', { name: /Nhắn Zalo OA/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Chat với Tubu Tree/ })).toBeNull();
+    });
+
+    it('chat bật nhưng chưa đăng nhập: giữ OA và hotline, thêm lời mời đăng nhập', async () => {
+      mocks.chatEnabled = true;
+      mocks.hasOA = true;
+      mocks.authStatus = 'idle';
+      renderBlock();
+      expect(await screen.findByRole('button', { name: /Nhắn Zalo OA/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /Gọi hotline/ })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' }));
+      expect(mocks.login).toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+    });
   });
 });

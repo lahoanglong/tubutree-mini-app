@@ -76,6 +76,7 @@ const CashbackPage = lazy(() => import('../pages/cashback'));
 const DealerPage = lazy(() => import('../pages/dealer'));
 const AboutPage = lazy(() => import('../pages/about'));
 const WishlistPage = lazy(() => import('../pages/wishlist'));
+const SupportChatPage = lazy(() => import('../pages/support-chat'));
 const EditProfilePage = lazy(() => import('../pages/edit-profile'));
 const SettingsPage = lazy(() => import('../pages/settings'));
 const BrandStoryPage = lazy(() => import('../pages/brand-story'));
@@ -228,6 +229,7 @@ export default function MyApp() {
                     <Route path="/dealer" element={<DealerPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/wishlist" element={<WishlistPage />} />
+                    <Route path="/chat" element={<SupportChatPage />} />
                     <Route path="/edit-profile" element={<EditProfilePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/brand-story" element={<BrandStoryPage />} />

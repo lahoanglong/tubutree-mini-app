@@ -756,13 +756,14 @@ export default function ProductDetailPage() {
           ))}
         </Box>
         {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
-        {hasOA && (
+        {(hasOA || config.chat?.enabled === true) && (
           <Button
             variant="secondary"
             icon={MessageCircle}
             onPress={() => {
               haptic('light');
-              void openOAChat(vi.product.chatAbout(p.name));
+              if (config.chat?.enabled === true) navigate(`/chat?product=${encodeURIComponent(p.slug)}`);
+              else void openOAChat(vi.product.chatAbout(p.name));
             }}
             style={{ marginTop: 12, minWidth: 0 }}
           >

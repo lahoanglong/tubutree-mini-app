@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   authStatus: 'authenticated' as 'authenticated' | 'idle' | 'error' | 'loading',
   notifications: [] as { status: string }[],
   getPublicConfig: vi.fn(async () => ({})),
+  chatSummary: vi.fn(),
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -23,6 +24,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Avatar: () => <span />,
   useNavigate: () => mocks.navigate,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
+}));
+vi.mock('../services/support-chat-api', () => ({
+  supportChatSummaryQueryOptions: () => ({ queryKey: ['support-chat-summary'], queryFn: mocks.chatSummary }),
 }));
 vi.mock('../services/account-api', () => ({
   getLoyalty: vi.fn().mockResolvedValue({ pointsBalance: 120, pointsConvertedBalance: 30, tier: { name: 'Mầm Xanh' } }),
@@ -196,5 +200,40 @@ describe('Lối vào Tích điểm đơn sàn (nhóm Tài sản)', () => {
     renderPage();
     fireEvent.click(await screen.findByText('Tích điểm đơn sàn'));
     expect(mocks.navigate).toHaveBeenCalledWith('/points/scan', undefined);
+  });
+});
+
+describe('Lối vào "Chat với Tubu Tree" ở hub Cá nhân', () => {
+  const chatCfg = (enabled: boolean) => ({ chat: { enabled, hours: { start: '08:00', end: '21:00' } } });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.notifications = [];
+    mocks.chatSummary.mockResolvedValue({ unreadCount: 0 });
+  });
+
+  it('chat tắt: không có dòng menu và không hỏi số chưa đọc', async () => {
+    mocks.getPublicConfig.mockResolvedValue(chatCfg(false));
+    renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(screen.queryByText('Chat với Tubu Tree')).toBeNull();
+    expect(mocks.chatSummary).not.toHaveBeenCalled();
+  });
+
+  it('chat bật: có dòng menu mở /chat; chấm đỏ chỉ hiện khi có tin chưa đọc', async () => {
+    mocks.getPublicConfig.mockResolvedValue(chatCfg(true));
+    renderPage();
+    fireEvent.click(await screen.findByText('Chat với Tubu Tree'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat', undefined);
+    await waitFor(() => expect(mocks.chatSummary).toHaveBeenCalled());
+    expect(screen.queryByTestId('chat-unread-dot')).toBeNull();
+  });
+
+  it('có tin chưa đọc → hiện chấm đỏ', async () => {
+    mocks.getPublicConfig.mockResolvedValue(chatCfg(true));
+    mocks.chatSummary.mockResolvedValue({ unreadCount: 3 });
+    renderPage();
+    expect(await screen.findByTestId('chat-unread-dot')).toBeInTheDocument();
   });
 });
