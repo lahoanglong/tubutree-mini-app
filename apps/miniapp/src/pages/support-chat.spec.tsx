@@ -354,7 +354,7 @@ describe('Màn chat với Tubu Tree', () => {
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
     });
 
-    it('poll làm cửa sổ trượt đi: tin đã tải vẫn còn đủ, đúng thứ tự, không trùng; tin cập nhật thì lấy bản mới', async () => {
+    it('poll làm cửa sổ trượt đi: tin đã tải vẫn còn đủ, đúng thứ tự, không trùng; tin cập nhật thì lấy bản mới (ghi đè theo id)', async () => {
       const m = (n: number, over: Record<string, unknown> = {}) =>
         msg({ id: `m${String(n).padStart(2, '0')}`, body: `tin ${n}`, createdAt: `2026-10-23T03:${String(n).padStart(2, '0')}:00.000Z`, ...over });
       const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => m(a + i));
@@ -373,6 +373,32 @@ describe('Màn chat với Tubu Tree', () => {
       expect(ids).toEqual(range(1, 61).map((x) => `msg-${x.id}`));
       expect(within(screen.getByTestId('msg-m12')).getByText('tin 12 đã sửa')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
+    });
+
+    it('tin bị thu hồi (không còn trong cửa sổ poll) biến mất; tin chỉ có ở trang cũ thì giữ', async () => {
+      const m = (n: number) => msg({ id: `m${n}`, body: `tin ${n}`, createdAt: `2026-10-23T03:0${n}:00.000Z` });
+      mocks.getThread.mockResolvedValueOnce(thread({ hasMore: true, messages: [m(3), m(4), m(5), m(6)] }));
+      mocks.getPage.mockResolvedValue({ hasMore: false, messages: [m(1), m(2)] });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem tin cũ hơn' }));
+      await screen.findByTestId('msg-m1');
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [m(3), m(5), m(6)] }));
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['support-chat'] });
+      });
+      await waitFor(() => expect(screen.queryByTestId('msg-m4')).toBeNull());
+      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m1', 'msg-m2', 'msg-m3', 'msg-m5', 'msg-m6']);
+    });
+
+    it('cửa sổ rỗng và hết tin: xoá hết tin đã thấy', async () => {
+      mocks.getThread.mockResolvedValueOnce(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
+      renderPage();
+      await screen.findByTestId('msg-m1');
+      mocks.getThread.mockResolvedValue(thread({ messages: [] }));
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['support-chat'] });
+      });
+      await waitFor(() => expect(screen.queryByTestId('msg-m1')).toBeNull());
     });
 
     it('hasMore=false: không có nút', async () => {

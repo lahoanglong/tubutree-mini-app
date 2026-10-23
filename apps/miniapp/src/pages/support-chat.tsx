@@ -35,6 +35,25 @@ interface Pending {
   createdAt: string;
 }
 
+const byTime = (a: SupportChatMessageDTO, b: SupportChatMessageDTO) =>
+  a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+
+/**
+ * API không gửi tin nhân viên đã thu hồi, nên tin nào nằm từ đầu cửa sổ poll trở đi mà không còn trong cửa sổ là đã bị thu hồi.
+ * Tin chỉ có ở trang cũ thì giữ nguyên (thu hồi ở đó sẽ hiện sau khi mở lại màn).
+ */
+function mergeWindow(prev: Map<string, SupportChatMessageDTO>, windowMsgs: SupportChatMessageDTO[], hasMore: boolean) {
+  const next = new Map(prev);
+  const first = [...windowMsgs].sort(byTime)[0];
+  if (first) {
+    for (const m of prev.values()) if (byTime(m, first) >= 0) next.delete(m.id);
+  } else if (!hasMore) {
+    next.clear();
+  }
+  for (const m of windowMsgs) next.set(m.id, m);
+  return next;
+}
+
 function toItem(m: SupportChatMessageDTO): ChatItem {
   return { key: m.id, sender: m.sender, body: m.body, imageUrl: m.imageUrl, createdAt: m.createdAt, status: 'sent' };
 }
@@ -123,18 +142,13 @@ function ChatBody() {
 
   useEffect(() => {
     if (!thread) return;
-    setSeen((prev) => {
-      const next = new Map(prev);
-      for (const m of thread.messages) next.set(m.id, m);
-      return next;
-    });
+    setSeen((prev) => mergeWindow(prev, thread.messages, thread.hasMore));
   }, [thread]);
 
   // Một kho theo id cho mọi tin đã thấy (poll và trang cũ cùng ghi đè vào đây): cửa sổ poll trượt đi cũng không làm rơi tin.
   const server = useMemo(() => {
-    const all = new Map(seen);
-    for (const m of thread?.messages ?? []) all.set(m.id, m);
-    return [...all.values()].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const all = thread ? mergeWindow(seen, thread.messages, thread.hasMore) : seen;
+    return [...all.values()].sort(byTime);
   }, [seen, thread]);
 
   const items = useMemo<ChatItem[]>(() => {
