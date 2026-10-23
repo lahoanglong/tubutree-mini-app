@@ -354,6 +354,27 @@ describe('Màn chat với Tubu Tree', () => {
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
     });
 
+    it('poll làm cửa sổ trượt đi: tin đã tải vẫn còn đủ, đúng thứ tự, không trùng; tin cập nhật thì lấy bản mới', async () => {
+      const m = (n: number, over: Record<string, unknown> = {}) =>
+        msg({ id: `m${String(n).padStart(2, '0')}`, body: `tin ${n}`, createdAt: `2026-10-23T03:${String(n).padStart(2, '0')}:00.000Z`, ...over });
+      const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => m(a + i));
+      mocks.getThread.mockResolvedValueOnce(thread({ hasMore: true, messages: range(11, 60) }));
+      mocks.getPage.mockResolvedValue({ hasMore: false, messages: range(1, 10) });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem tin cũ hơn' }));
+      await screen.findByTestId('msg-m01');
+      expect(mocks.getPage).toHaveBeenCalledWith({ before: 'm11' });
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [...range(12, 60).map((x) => (x.id === 'm12' ? m(12, { body: 'tin 12 đã sửa' }) : x)), m(61)] }));
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['support-chat'] });
+      });
+      await screen.findByTestId('msg-m61');
+      const ids = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+      expect(ids).toEqual(range(1, 61).map((x) => `msg-${x.id}`));
+      expect(within(screen.getByTestId('msg-m12')).getByText('tin 12 đã sửa')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
+    });
+
     it('hasMore=false: không có nút', async () => {
       mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1' })] }));
       renderPage();

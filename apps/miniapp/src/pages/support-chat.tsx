@@ -53,7 +53,7 @@ function ChatBody() {
   const [contextUsed, setContextUsed] = useState(false);
   const contextUsedRef = useRef(false);
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
-  const [older, setOlder] = useState<SupportChatMessageDTO[]>([]);
+  const [seen, setSeen] = useState<Map<string, SupportChatMessageDTO>>(() => new Map());
   const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
@@ -121,8 +121,23 @@ function ChatBody() {
     void deliver(p);
   };
 
+  useEffect(() => {
+    if (!thread) return;
+    setSeen((prev) => {
+      const next = new Map(prev);
+      for (const m of thread.messages) next.set(m.id, m);
+      return next;
+    });
+  }, [thread]);
+
+  // Một kho theo id cho mọi tin đã thấy (poll và trang cũ cùng ghi đè vào đây): cửa sổ poll trượt đi cũng không làm rơi tin.
+  const server = useMemo(() => {
+    const all = new Map(seen);
+    for (const m of thread?.messages ?? []) all.set(m.id, m);
+    return [...all.values()].sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  }, [seen, thread]);
+
   const items = useMemo<ChatItem[]>(() => {
-    const server = thread?.messages ?? [];
     const known = new Set(server.map((m) => m.clientMsgId).filter(Boolean));
     const local = pending
       .filter((p) => !known.has(p.clientMsgId))
@@ -136,18 +151,20 @@ function ChatBody() {
         error: p.error,
         onRetry: p.status === 'failed' ? () => void deliver(p) : undefined,
       }));
-    const serverIds = new Set(server.map((m) => m.id));
-    const prior = older.filter((m) => !serverIds.has(m.id));
-    return [...prior.map(toItem), ...server.map(toItem), ...local];
-  }, [thread, older, pending, deliver]);
+    return [...server.map(toItem), ...local];
+  }, [server, pending, deliver]);
 
   const loadOlder = async () => {
-    const oldest = older[0]?.id ?? thread?.messages[0]?.id;
+    const oldest = server[0]?.id;
     if (!oldest || loadingOlder) return;
     setLoadingOlder(true);
     try {
       const page = await getSupportChatPage({ before: oldest });
-      setOlder((list) => [...page.messages, ...list]);
+      setSeen((prev) => {
+        const next = new Map(prev);
+        for (const m of page.messages) next.set(m.id, m);
+        return next;
+      });
       setOlderHasMore(page.hasMore);
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
