@@ -34,6 +34,8 @@ export class VouchersService {
   private static readonly BATCH_PAGE = 500;
   /** Kích thước trang keyset của milestone: quét hết khách đạt mốc trong tháng, không có trần số trang. */
   private static readonly MILESTONE_PAGE = 1000;
+  /** Số tháng trước tháng hiện tại mà milestoneVouchers còn quét (đơn giao muộn + hạn đổi/trả có thể đủ điều kiện sau 1 tháng). */
+  private static readonly MILESTONE_LOOKBACK_MONTHS = 3;
   /**
    * Số grant() chạy cùng lúc trong mỗi lô của mọi cron dùng grantInChunks (welcome, birthday, winback, milestone, second-order);
    * mỗi grant giữ 1 kết nối Prisma ngắn hạn. Welcome chạy mỗi giờ nên trùng giờ với second-order lúc 10:00: tối đa 20 grant
@@ -342,14 +344,17 @@ export class VouchersService {
       ]);
       // Mỗi kỳ là một tháng dương lịch GIỜ VN theo THÁNG TẠO ĐƠN, khớp khoá idempotency `...-yyyy-mm` (container chạy UTC nên
       // không dùng getMonth() trần). Gom theo 30 ngày trượt mà khoá theo tháng từng cấp voucher lần 2 cho cùng một lần chi
-      // tiêu (P2, docs/2026-09-08-review-progress.md). Đơn chỉ được tính sau khi hết hạn đổi/trả, nên đơn tạo cuối tháng
-      // thường hết hạn sang tháng sau: cron xét cả kỳ tháng trước để khách không mất mã, khoá chống trùng ngăn cấp hai lần.
+      // tiêu (P2, docs/2026-09-08-review-progress.md). Đơn chỉ được tính sau khi giao + hết hạn đổi/trả và không còn yêu cầu
+      // đổi/trả mở, nên đơn tạo 28/9 giao 28/10 chỉ đủ điều kiện từ 4/11: cron xét tháng hiện tại cùng MILESTONE_LOOKBACK_MONTHS
+      // tháng trước để kỳ cũ vẫn thấy đơn đó; khoá chống trùng ngăn cấp hai lần.
       const now = Date.now();
       const currentStart = startOfVnMonth(new Date(now));
-      const periods = [
-        { start: startOfVnMonth(new Date(currentStart.getTime() - 1)), end: currentStart },
-        { start: currentStart, end: startOfNextVnMonth(new Date(now)) },
-      ];
+      const periods = [{ start: currentStart, end: startOfNextVnMonth(new Date(now)) }];
+      for (let i = 0, end = currentStart; i < VouchersService.MILESTONE_LOOKBACK_MONTHS; i++) {
+        const start = startOfVnMonth(new Date(end.getTime() - 1));
+        periods.unshift({ start, end });
+        end = start;
+      }
       const windowDays = await this.returnWindowDays();
       const deliveredBefore = new Date(now - windowDays * 864e5);
       // Cấp voucher cho mốc CAO NHẤT đạt được (tránh chồng nhiều voucher 1 đợt).
