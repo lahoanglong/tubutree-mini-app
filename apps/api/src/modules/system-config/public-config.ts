@@ -13,6 +13,9 @@ import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim
 import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem } from '../support-chat/support-chat.config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 
+/** Chỉ hai trường công khai, để khoá phụ lưu thêm trong cấu hình không lọt ra endpoint công khai. */
+const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end: v.end });
+
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
 
@@ -153,7 +156,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     // Chỉ cờ bật và giờ làm việc; mã nhóm Zalo và lời nhắn ngoài giờ không ra công khai. Giờ hỏng rơi về mặc định như phía gửi tin.
     chat: {
       enabled: chatEnabled === true,
-      hours: chatHoursProblem(chatHours) === null ? (chatHours as { start: string; end: string }) : { ...DEFAULT_CHAT_HOURS },
+      hours: chatHoursProblem(chatHours) === null ? pickHours(chatHours as { start: string; end: string }) : { ...DEFAULT_CHAT_HOURS },
     },
   };
 }

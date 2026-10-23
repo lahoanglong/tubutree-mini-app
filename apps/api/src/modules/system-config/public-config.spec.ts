@@ -22,8 +22,14 @@ describe('buildPublicConfig — chat', () => {
     expect((await build({ 'chat.hours': 'sáng' })).chat.hours).toEqual(DEFAULT_CHAT_HOURS);
   });
 
+  it('giờ hợp lệ có khoá thừa thì chỉ trả start và end', async () => {
+    const cfg = await build({ 'chat.hours': { start: '09:00', end: '18:00', note: 'internal' } });
+    expect(cfg.chat.hours).toEqual({ start: '09:00', end: '18:00' });
+  });
+
   it('không lộ mã nhóm Zalo và lời nhắn ngoài giờ', async () => {
     const cfg = await build({ 'chat.enabled': true, 'chat.zalo_group_id': 'g1', 'chat.off_hours_text': 'x' });
-    expect(JSON.stringify(cfg.chat)).not.toMatch(/g1|"x"/);
+    expect(Object.keys(cfg.chat).sort()).toEqual(['enabled', 'hours']);
+    expect(Object.keys(cfg.chat.hours).sort()).toEqual(['end', 'start']);
   });
 });
