@@ -123,6 +123,29 @@ services:
       start_period: 30s
     networks: [tubu]
 
+  zalo-bridge:
+    build:
+      context: .
+      dockerfile: apps/zalo-bridge/Dockerfile
+    restart: unless-stopped
+    logging: *default-logging
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3110
+      ZALO_BRIDGE_DATA_DIR: /data
+      API_EVENTS_URL: http://api:3001/api/internal/zalo-bridge/events
+    volumes:
+      - zalo_bridge_data:/data
+    # Không có ports: chỉ api trong mạng tubu gọi tới (Bearer ZALO_BRIDGE_SECRET). /health vẫn 200 khi chờ quét QR.
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://localhost:3110/health\",{headers:{authorization:\"Bearer \"+process.env.ZALO_BRIDGE_SECRET}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [tubu]
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -147,6 +170,7 @@ services:
 volumes:
   pg_data:
   redis_data:
+  zalo_bridge_data:
   caddy_data:
   caddy_config:
 

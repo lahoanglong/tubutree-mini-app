@@ -1,6 +1,6 @@
 name: Docker build
 
-# Dựng đúng hai image mà VPS sẽ dựng (apps/api/Dockerfile, apps/web/Dockerfile) để lỗi chỉ lộ khi build thật bắt được
+# Dựng đúng các image mà VPS sẽ dựng (apps/api/Dockerfile, apps/web/Dockerfile, apps/zalo-bridge/Dockerfile) để lỗi chỉ lộ khi build thật bắt được
 # ở PR, không phải ngày deploy (vd `express` thiếu dependency: pnpm build xanh nhưng container crash-loop). KHÔNG đẩy image đi
 # đâu: không login registry, không push. Chạy tay được qua workflow_dispatch.
 on:
@@ -10,6 +10,7 @@ on:
     paths:
       - 'apps/api/**'
       - 'apps/web/**'
+      - 'apps/zalo-bridge/**'
       - 'packages/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -33,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [api, web]
+        app: [api, web, zalo-bridge]
     steps:
       - uses: actions/checkout@v4
 
@@ -67,3 +68,15 @@ jobs:
           set -euo pipefail
           test "$(docker run --rm --entrypoint id tubutree-web:ci -un)" = node
           docker run --rm --entrypoint sh tubutree-web:ci -c 'touch apps/web/.next/cache/.write-test apps/web/.next/server/app/.write-test && echo "cache và ISR ghi được"'
+
+      - name: Build image zalo-bridge
+        if: matrix.app == 'zalo-bridge'
+        run: docker build -f apps/zalo-bridge/Dockerfile -t tubutree-zalo-bridge:ci .
+
+      - name: Kiểm zca-js nạp được từ image zalo-bridge (bắt phantom dependency)
+        # Không chạy `node dist/main.js` vì cần ZALO_BRIDGE_SECRET và khoá mã hoá; require thẳng gói bên thứ ba. WORKDIR của image
+        # là /app/apps/zalo-bridge nên resolve y như lúc chạy thật.
+        if: matrix.app == 'zalo-bridge'
+        run: >-
+          docker run --rm --entrypoint node tubutree-zalo-bridge:ci
+          -e "require('zca-js'); require('./dist/server.js'); console.log('zalo-bridge modules ok')"

@@ -26,6 +26,15 @@ describe.each(COMPOSE_FILES)('%s', (file) => {
     expect(Object.keys(svc)).toEqual(expect.arrayContaining(['postgres', 'redis', 'api', 'web']));
   });
 
+  it('zalo-bridge không mở cổng ra ngoài, giữ phiên Zalo trong volume riêng và đọc .env', () => {
+    const block = svc['zalo-bridge'] ?? '';
+    expect(block).not.toMatch(/\n {4}ports:/);
+    expect(block).toMatch(/\n {6}- zalo_bridge_data:\/data\n/);
+    expect(block).toMatch(/\n {4}env_file: \.env\n/);
+    expect(block).toMatch(/\n {4}networks: \[tubu\]\n/);
+    expect(compose).toMatch(/\nvolumes:\n(?:  \w+:\n)*  zalo_bridge_data:\n/);
+  });
+
   it('Redis chạy maxmemory-policy noeviction (BullMQ mất job âm thầm nếu Redis tự xoá key)', () => {
     const command = /\n {4}command: (.*)\n/.exec(svc.redis ?? '')?.[1] ?? '';
     expect(command).toMatch(/'--maxmemory-policy',\s*'noeviction'/);

@@ -26,3 +26,31 @@ describe('SendDedupe', () => {
     expect(d.get('c')).toBe('3');
   });
 });
+
+describe('SendDedupe lưu đĩa', () => {
+  it('nạp lại sau khi khởi động lại, bỏ mục hết hạn', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const path = join(mkdtempSync(join(tmpdir(), 'sd-')), 'sent.json');
+    let t = 0;
+    const a = new SendDedupe(1000, 10, () => t, path);
+    a.set('old', 'm0');
+    t = 600;
+    a.set('k', 'm1');
+    await a.persist();
+    t = 1100;
+    const b = new SendDedupe(1000, 10, () => t, path);
+    expect(b.get('k')).toBe('m1');
+    expect(b.get('old')).toBeUndefined();
+  });
+
+  it('tệp hỏng thì bắt đầu rỗng', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const path = join(mkdtempSync(join(tmpdir(), 'sd-')), 'sent.json');
+    writeFileSync(path, '{hỏng');
+    expect(new SendDedupe(1000, 10, () => 0, path).get('k')).toBeUndefined();
+  });
+});
