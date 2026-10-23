@@ -271,12 +271,95 @@ describe('unreadCount / markRead', () => {
 });
 
 describe('scheduleForward', () => {
-  it('gỡ job đã xong cùng jobId rồi add', async () => {
+  const jobs = (states: Record<string, string>) => {
+    const removes: Record<string, jest.Mock> = {};
+    const getJob = jest.fn().mockImplementation(async (id: string) => {
+      if (!(id in states)) return undefined;
+      removes[id] = removes[id] ?? jest.fn();
+      return { getState: async () => states[id], remove: removes[id] };
+    });
+    return { getJob, removes };
+  };
+  const added = (queue: any) => queue.add.mock.calls.map((c: any) => [c[2].jobId, c[2].delay]);
+
+  it('chưa có job → add conv-<id> trễ 15s', async () => {
     const { svc, queue } = setup();
-    const remove = jest.fn();
-    queue.getJob.mockResolvedValue({ getState: async () => 'completed', remove });
     await svc.scheduleForward('c9');
-    expect(remove).toHaveBeenCalled();
-    expect(queue.add).toHaveBeenCalledWith('forward', { conversationId: 'c9' }, expect.objectContaining({ jobId: 'conv-c9', delay: 15_000 }));
+    expect(added(queue)).toEqual([['conv-c9', 15_000]]);
+  });
+  it('job đã completed/failed → gỡ rồi add lại', async () => {
+    for (const st of ['completed', 'failed']) {
+      const { svc, queue } = setup();
+      const j = jobs({ 'conv-c9': st });
+      queue.getJob = j.getJob;
+      await svc.scheduleForward('c9');
+      expect(j.removes['conv-c9']).toHaveBeenCalled();
+      expect(added(queue)).toEqual([['conv-c9', 15_000]]);
+    }
+  });
+  it('job waiting/delayed → không làm gì', async () => {
+    for (const st of ['waiting', 'delayed']) {
+      const { svc, queue } = setup();
+      queue.getJob = jobs({ 'conv-c9': st }).getJob;
+      await svc.scheduleForward('c9');
+      expect(queue.add).not.toHaveBeenCalled();
+    }
+  });
+  it('job active → add conv-<id>-next trễ 15s', async () => {
+    const { svc, queue } = setup();
+    queue.getJob = jobs({ 'conv-c9': 'active' }).getJob;
+    await svc.scheduleForward('c9');
+    expect(added(queue)).toEqual([['conv-c9-next', 15_000]]);
+  });
+  it('active + -next đã completed → gỡ -next rồi add lại', async () => {
+    const { svc, queue } = setup();
+    const j = jobs({ 'conv-c9': 'active', 'conv-c9-next': 'completed' });
+    queue.getJob = j.getJob;
+    await svc.scheduleForward('c9');
+    expect(j.removes['conv-c9-next']).toHaveBeenCalled();
+    expect(added(queue)).toEqual([['conv-c9-next', 15_000]]);
+  });
+  it('active + -next đang waiting/delayed → không làm gì', async () => {
+    for (const st of ['waiting', 'delayed']) {
+      const { svc, queue } = setup();
+      queue.getJob = jobs({ 'conv-c9': 'active', 'conv-c9-next': st }).getJob;
+      await svc.scheduleForward('c9');
+      expect(queue.add).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('send: độ bền và thứ tự kiểm tra', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NIGHT }));
+  afterEach(() => jest.useRealTimers());
+
+  it('tạo tin SYSTEM ngoài giờ lỗi vẫn trả tin khách và đã đặt lịch', async () => {
+    const { svc, prisma, queue } = setup();
+    prisma.supportMessage.create
+      .mockImplementationOnce(({ data }: any) => Promise.resolve({ id: 'm1', createdAt: new Date(), context: null, imageUrl: null, ...data }))
+      .mockRejectedValueOnce(new Error('db'));
+    const dto = await svc.send('u1', { ...input, body: 'a' }, 'MINIAPP');
+    expect(dto.id).toBe('m1');
+    expect(queue.add).toHaveBeenCalledTimes(1);
+  });
+
+  it('thử lại tin đã lưu sau khi bị chặn hoặc chat tắt vẫn trả tin cũ', async () => {
+    const saved = { id: 'old', sender: 'CUSTOMER', body: 'a', imageUrl: null, context: null, clientMsgId: input.clientMsgId, createdAt: new Date() };
+    for (const o of [{ conv: { blockedAt: new Date() } }, { enabled: false }]) {
+      const { svc, prisma, queue } = setup({ ...o, existing: saved });
+      const dto = await svc.send('u1', { ...input, body: 'a' }, 'MINIAPP');
+      expect(dto.id).toBe('old');
+      expect(prisma.supportMessage.create).not.toHaveBeenCalled();
+      expect(queue.add).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('page: tham số rỗng', () => {
+  it('after rỗng + before=m5 → trang trước m5', async () => {
+    const { svc, prisma } = setup();
+    prisma.supportMessage.findFirst.mockResolvedValue({ id: 'm5', createdAt: new Date(5) });
+    await svc.page('u1', { after: '', before: 'm5' });
+    expect(prisma.supportMessage.findMany.mock.calls[0][0].orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
   });
 });

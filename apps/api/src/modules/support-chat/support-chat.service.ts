@@ -13,7 +13,7 @@ import type {
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
-import { addGomdonJob } from '../integrations/gomdon/gomdon-queue';
+import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isWithinHours } from './chat-hours';
 import { newConversationCode } from './conversation-code';
@@ -84,7 +84,8 @@ export class SupportChatService {
 
   async page(userId: string, q: { after?: string; before?: string }): Promise<SupportChatPageDTO> {
     const conv = await this.getOrCreate(userId);
-    const cursorId = q.after ?? q.before;
+    const forward = !!q.after;
+    const cursorId = q.after || q.before;
     if (!cursorId) {
       const t = await this.getThread(userId);
       return { messages: t.messages, hasMore: t.hasMore };
@@ -95,7 +96,6 @@ export class SupportChatService {
     });
     if (!cursor) return { messages: [], hasMore: false };
 
-    const forward = q.after !== undefined;
     const tuple: Prisma.SupportMessageWhereInput = {
       OR: forward
         ? [{ createdAt: { gt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { gt: cursor.id } }]
@@ -113,16 +113,17 @@ export class SupportChatService {
   }
 
   async send(userId: string, input: SupportChatSendInput, source: 'MINIAPP' | 'WEB'): Promise<SupportChatMessageDTO> {
+    const conv = await this.getOrCreate(userId);
+    // Thử lại tin đã lưu phải trả tin cũ dù khách vừa bị chặn hay chat vừa tắt, kẻo khách thấy tin đã lưu là lỗi.
+    const existing = await this.findByClientMsgId(conv.id, input.clientMsgId);
+    if (existing) return toCustomerDTO(existing);
+
     const body = (input.body ?? '').trim();
     if (!body && !input.imageUrl) throw new BadRequestException('Cần nhập nội dung hoặc gửi ảnh.');
 
     const enabled = await this.config.get<boolean>(CHAT_ENABLED_KEY, false);
     if (!enabled) throw new ConflictException({ statusCode: 409, error: 'Conflict', code: 'CHAT_DISABLED', message: CHAT_DISABLED_MESSAGE });
-    const conv = await this.getOrCreate(userId);
     if (conv.blockedAt) throw new ForbiddenException({ statusCode: 403, error: 'Forbidden', code: 'CHAT_BLOCKED', message: CHAT_BLOCKED_MESSAGE });
-
-    const existing = await this.findByClientMsgId(conv.id, input.clientMsgId);
-    if (existing) return toCustomerDTO(existing);
 
     const now = new Date();
     const sentToday = await this.prisma.supportMessage.count({
@@ -153,13 +154,18 @@ export class SupportChatService {
       return toCustomerDTO(winner);
     }
 
-    await this.prisma.supportConversation.update({ where: { id: conv.id }, data: { lastMessageAt: created.createdAt } });
-    await this.maybeOffHoursNotice(conv, now);
     try {
       await this.scheduleForward(conv.id);
     } catch (e) {
-      // Tin đã lưu; chỉ mất lịch chuyển. Bộ xử lý quét tin chưa chuyển sẽ nhặt lại.
+      // Tin đã lưu; chỉ mất lịch chuyển. Bộ quét tin chưa chuyển sẽ nhặt lại.
       this.logger.warn(`Không đặt được lịch chuyển hội thoại ${conv.id}: ${(e as Error).message}`);
+    }
+    try {
+      await this.prisma.supportConversation.update({ where: { id: conv.id }, data: { lastMessageAt: created.createdAt } });
+      await this.maybeOffHoursNotice(conv, now);
+    } catch (e) {
+      // Lời nhắn ngoài giờ chỉ là phụ: lỗi ở đây không được làm hỏng tin đã lưu.
+      this.logger.warn(`Bước phụ sau khi lưu tin hội thoại ${conv.id} lỗi: ${(e as Error).message}`);
     }
     return toCustomerDTO(created);
   }
@@ -183,7 +189,40 @@ export class SupportChatService {
   }
 
   scheduleForward(conversationId: string): Promise<void> {
-    return addGomdonJob(this.forwardQueue, SUPPORT_FORWARD_JOB, { conversationId }, `conv-${conversationId}`, { delay: FORWARD_DELAY_MS });
+    return withQueueTimeout(this.scheduleForwardUnbounded(conversationId), `${QUEUE_SUPPORT_CHAT_FORWARD} conv-${conversationId}`);
+  }
+
+  /**
+   * BullMQ coi job cùng jobId đang chạy là trùng nên tin gửi lúc job đang chạy sẽ không được đặt lịch.
+   * Vì vậy khi job chính đang ACTIVE ta đặt thêm job `-next`; bộ xử lý nhận tin nguyên tử nên hai job chồng nhau vẫn an toàn.
+   */
+  private async scheduleForwardUnbounded(conversationId: string): Promise<void> {
+    const mainId = `conv-${conversationId}`;
+    const mainState = await this.jobState(mainId);
+    if (mainState === 'waiting' || mainState === 'delayed') return;
+    if (mainState === 'active') {
+      const nextId = `${mainId}-next`;
+      const nextState = await this.jobState(nextId);
+      if (nextState === 'waiting' || nextState === 'delayed') return;
+      await this.addForwardJob(conversationId, nextId);
+      return;
+    }
+    await this.addForwardJob(conversationId, mainId);
+  }
+
+  private async jobState(jobId: string): Promise<string | null> {
+    const job = await this.forwardQueue.getJob(jobId);
+    return job ? job.getState() : null;
+  }
+
+  private async addForwardJob(conversationId: string, jobId: string): Promise<void> {
+    // Job đã xong vẫn giữ hash nên phải gỡ, nếu không add bị bỏ qua như trùng.
+    const old = await this.forwardQueue.getJob(jobId);
+    if (old) {
+      const state = await old.getState();
+      if (state === 'completed' || state === 'failed') await old.remove();
+    }
+    await this.forwardQueue.add(SUPPORT_FORWARD_JOB, { conversationId }, { jobId, delay: FORWARD_DELAY_MS });
   }
 
   private findByClientMsgId(conversationId: string, clientMsgId: string) {

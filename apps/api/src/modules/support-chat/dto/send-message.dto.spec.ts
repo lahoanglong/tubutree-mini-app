@@ -23,6 +23,9 @@ describe('SendMessageDto', () => {
     expect(errs({ ...base, body: 'x', context: { orderCode: 'a'.repeat(41) } })).not.toHaveLength(0);
     expect(errs({ ...base, body: 'x', context: { orderCode: 'a'.repeat(40) } })).toHaveLength(0);
   });
+  it('context dạng mảng bị từ chối', () => {
+    expect(errs({ ...base, body: 'x', context: [{ orderCode: 'a' }] })).not.toHaveLength(0);
+  });
   it('clientMsgId bắt buộc, source chỉ MINIAPP|WEB', () => {
     expect(errs({ body: 'x' })).not.toHaveLength(0);
     expect(errs({ ...base, body: 'x', source: 'ZALO' })).not.toHaveLength(0);

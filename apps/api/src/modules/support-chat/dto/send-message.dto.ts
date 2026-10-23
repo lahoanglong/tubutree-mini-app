@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsOptional, IsString, Matches, MaxLength, ValidateNested } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, Matches, MaxLength, ValidateNested } from 'class-validator';
 import { IsUploadedMediaUrl } from '../../../common/uploaded-image';
 
 export class SendMessageContextDto {
@@ -16,7 +16,7 @@ export class SendMessageDto {
   // Chỉ URL Cloudinary: base64 sẽ làm phình bảng tin và tin chuyển sang Zalo.
   @IsOptional() @IsUploadedMediaUrl() imageUrl?: string;
 
-  @IsOptional() @ValidateNested() @Type(() => SendMessageContextDto) context?: SendMessageContextDto;
+  @IsOptional() @IsObject() @ValidateNested() @Type(() => SendMessageContextDto) context?: SendMessageContextDto;
 
   @IsOptional() @IsIn(['MINIAPP', 'WEB']) source?: 'MINIAPP' | 'WEB';
 }
