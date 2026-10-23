@@ -252,6 +252,68 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     expect(container.textContent).toContain('Chưa tải được thông tin thanh toán');
     expect(byText(container, 'button', 'Thử lại')).not.toBeNull();
   });
+  it('đã nhận một phần: nói rõ đã nhận bao nhiêu, còn thiếu bao nhiêu, QR đã trừ phần đó', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, amount: 150000, paidSoFar: 100000 } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    const note = container.querySelector('[data-testid="paid-so-far"]');
+    expect(note?.textContent).toBe('Đã nhận 100.000đ, còn thiếu 150.000đ. Mã QR đã trừ phần này.');
+  });
+
+  it('chưa nhận đồng nào hoặc API bản cũ không trả paidSoFar: không hiện dòng "đã nhận"', async () => {
+    for (const body of [{ ...QR_BODY, paidSoFar: 0 }, QR_BODY]) {
+      const api = mockFetch({ '/payments/bank-qr/': { body } });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      await flush();
+      expect(container.textContent).toContain('Techcombank');
+      expect(container.querySelector('[data-testid="paid-so-far"]')).toBeNull();
+    }
+  });
+
+  it('503 ngay lần tải đầu (chưa cấu hình tài khoản nhận tiền): hiện lý do của máy chủ + Thử lại, và tự có QR khi cấu hình xong', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    try {
+      let n = 0;
+      const api = mockFetch({
+        '/payments/bank-qr/': () => (n++ < 2 ? { status: 503, body: { message: 'Chưa cấu hình tài khoản nhận tiền.' } } : { body: QR_BODY }),
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      for (let i = 0; i < 6; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(container.textContent).toContain('Chưa cấu hình tài khoản nhận tiền.');
+      expect(container.textContent).not.toContain('Đơn không còn chờ chuyển khoản');
+      expect(byText(container, 'button', 'Thử lại')).not.toBeNull();
+      await act(async () => { await vi.advanceTimersByTimeAsync(4100); });
+      for (let i = 0; i < 6; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(api.calls.length).toBeGreaterThanOrEqual(2);
+      await act(async () => { await vi.advanceTimersByTimeAsync(4100); });
+      for (let i = 0; i < 6; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(container.textContent).toContain('Techcombank');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('503 khi dò nền: vẫn giữ QR và tiếp tục dò', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    try {
+      let n = 0;
+      const api = mockFetch({ '/payments/bank-qr/': () => (n++ === 0 ? { body: QR_BODY } : { status: 503, body: { message: 'Chưa cấu hình tài khoản nhận tiền.' } }) });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<BankTransferPanel order={order()} />);
+      for (let i = 0; i < 6; i++) await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(4100); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(4100); });
+      expect(api.calls.length).toBeGreaterThanOrEqual(3);
+      expect(container.textContent).toContain('Techcombank');
+      expect(container.textContent).not.toContain('Đơn không còn chờ chuyển khoản');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('mỗi dòng cần chép có nút riêng: số tài khoản, số tiền (chữ số thuần), nội dung chuyển khoản', async () => {
     const writeText = vi.fn(async () => undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });

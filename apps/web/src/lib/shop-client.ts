@@ -522,7 +522,10 @@ export const chooseRefundDestination = (refundId: string, body: RefundDestinatio
 // (GET /payments/bank-qr/:code — xem bank-transfer.service.ts).
 export interface BankQrDTO {
   orderCode: string;
+  /** Số còn phải chuyển (đã trừ phần đã nhận); QR mã hoá đúng số này. */
   amount: number;
+  /** Đã nhận bao nhiêu từ các lần chuyển trước; thiếu/0 khi chưa nhận đồng nào hoặc API bản cũ. */
+  paidSoFar?: number;
   paymentStatus: 'UNPAID' | 'PAID' | 'REFUNDED' | 'FAILED';
   bank: { bin: string; name: string; accountNo: string; accountName: string };
   memo: string;
