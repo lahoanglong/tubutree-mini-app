@@ -14,7 +14,7 @@ import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
-import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, CHAT_RETENTION_KEY, chatHoursProblem } from '../support-chat/support-chat.config';
+import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
   EXTERNAL_LOOKUP_ENABLED_KEY,
@@ -300,6 +300,8 @@ export class SystemConfigService {
     // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để chat không bật nhầm khi cầu nối chưa sẵn sàng.
     [CHAT_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [CHAT_HOURS_KEY]: chatHoursProblem,
+    [CHAT_OFF_HOURS_TEXT_KEY]: offHoursTextProblem,
+    [CHAT_GROUP_KEY]: chatGroupIdProblem,
     // Hai cờ chat: chuỗi "false" là truthy ở chỗ đọc lỏng nên chỉ nhận đúng boolean (tắt yêu cầu vận đơn là mở cửa cho đơn giả).
     [CHAT_ORDER_POINTS_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [CHAT_ORDER_REQUIRE_CARRIER_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),

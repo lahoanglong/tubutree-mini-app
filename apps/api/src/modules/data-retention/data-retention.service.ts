@@ -192,7 +192,7 @@ export class DataRetentionService {
           },
         ];
       case 'support_chat':
-        // Tin trước, lần chuyển sau; hội thoại giữ lại (mã của khách không đổi).
+        // Hội thoại giữ lại để mã của khách không đổi.
         return [
           { table: 'support_messages', where: Prisma.sql`"createdAt" < ${cutoff}` },
           { table: 'support_forwards', where: Prisma.sql`"createdAt" < ${cutoff}` },

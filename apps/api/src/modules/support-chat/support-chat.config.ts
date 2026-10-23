@@ -20,3 +20,16 @@ export function chatHoursProblem(value: unknown): string | null {
   // So chuỗi HH:MM theo từ điển đúng bằng so giờ vì cùng độ dài, đệm số 0.
   return start < end ? null : 'start phải nhỏ hơn end';
 }
+
+/** Lời nhắn ngoài giờ rỗng thì khách nhận tin trống; quá dài thì vượt giới hạn tin của chat. */
+export function offHoursTextProblem(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return 'phải là chuỗi không rỗng';
+  return value.length <= 1000 ? null : 'tối đa 1000 ký tự';
+}
+
+/** Mã nhóm được gửi nguyên cho cầu nối: khoảng trắng lọt vào là gửi sai nhóm. Rỗng = chưa chọn nhóm. */
+export function chatGroupIdProblem(value: unknown): string | null {
+  if (typeof value !== 'string') return 'phải là chuỗi';
+  if (value.length > 64) return 'tối đa 64 ký tự';
+  return /\s/.test(value) ? 'không được chứa khoảng trắng' : null;
+}

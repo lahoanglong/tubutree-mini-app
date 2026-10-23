@@ -83,10 +83,13 @@ CREATE UNIQUE INDEX "support_conversations_userId_key" ON "support_conversations
 CREATE UNIQUE INDEX "support_conversations_code_key" ON "support_conversations"("code");
 
 -- CreateIndex
+CREATE INDEX "support_conversations_lastMessageAt_idx" ON "support_conversations"("lastMessageAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "support_messages_zaloMsgId_key" ON "support_messages"("zaloMsgId");
 
 -- CreateIndex
-CREATE INDEX "support_messages_conversationId_createdAt_idx" ON "support_messages"("conversationId", "createdAt");
+CREATE INDEX "support_messages_conversationId_createdAt_id_idx" ON "support_messages"("conversationId", "createdAt", "id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "support_messages_conversationId_clientMsgId_key" ON "support_messages"("conversationId", "clientMsgId");
@@ -99,6 +102,9 @@ CREATE INDEX "support_forwards_status_createdAt_idx" ON "support_forwards"("stat
 
 -- CreateIndex
 CREATE INDEX "support_forwards_conversationId_idx" ON "support_forwards"("conversationId");
+
+-- AddForeignKey
+ALTER TABLE "support_conversations" ADD CONSTRAINT "support_conversations_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "support_messages" ADD CONSTRAINT "support_messages_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "support_conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
