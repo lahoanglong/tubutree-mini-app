@@ -17,14 +17,14 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; bridge?: { state: string; since: Date } } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; bridge?: { state: string; since: Date }; bridgeUrl?: string } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
   const postCount = jest.fn().mockResolvedValue(over.communityPending ?? 0);
   // returnsToReceive dùng template literal (đối số đầu là mảng chuỗi); câu hỏi chưa trả lời dùng Prisma.sql.
   const queryRaw = jest.fn((q: unknown) => Promise.resolve([{ n: !Array.isArray(q) && String((q as { sql: string }).sql).includes('feed_posts') ? (over.unanswered ?? 0) : 0 }]));
-  const config = { get: jest.fn(async (key: string, fallback?: unknown) => (over.config && key in over.config ? over.config[key] : fallback)) };
+  const config = { get: jest.fn(async (key: string, fallback?: unknown) => (over.config && key in over.config ? over.config[key] : key === 'chat.enabled' ? true : fallback)) };
   const productCount = jest.fn().mockResolvedValue(over.products ?? 0);
   const linkCount = jest.fn().mockResolvedValue(over.links ?? 0);
   const payoutCount = jest.fn().mockResolvedValue(over.slips ?? 0);
@@ -68,7 +68,7 @@ const build = (
     countOverdue: jest.fn().mockResolvedValue(0),
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
-  const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService));
+  const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService), { get: () => over.bridgeUrl ?? 'http://bridge:3110' } as never);
   return { svc, config, dealerClaimCount, productCount, linkCount, payoutCount, withdrawalCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount, supportConvCount, bridgeFind };
 };
 
@@ -418,5 +418,18 @@ describe('OpsInboxService — chat CSKH', () => {
     expect(count(await build({ bridge: { state: 'CONNECTED', since: since(600) } }).svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(0);
     expect(count(await build().svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(0);
     expect((await build().svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] }, now)).items.map((i) => i.key)).not.toContain('zaloBridgeDown');
+  });
+
+  it('zaloBridgeDown về 0 khi chưa cấu hình cầu nối hoặc chat đang tắt; supportChatUnforwarded không đổi', async () => {
+    const bridge = { state: 'ERROR', since: new Date(now.getTime() - 60 * 60_000) };
+    const noUrl = build({ bridge, bridgeUrl: '', supportUnforwarded: 2 });
+    const res = await noUrl.svc.counts({ role: 'ADMIN' }, now);
+    expect(count(res, 'zaloBridgeDown')).toBe(0);
+    expect(count(res, 'supportChatUnforwarded')).toBe(2);
+    const off = build({ bridge, config: { 'chat.enabled': false }, supportUnforwarded: 2 });
+    const res2 = await off.svc.counts({ role: 'ADMIN' }, now);
+    expect(count(res2, 'zaloBridgeDown')).toBe(0);
+    expect(count(res2, 'supportChatUnforwarded')).toBe(2);
+    expect(count(await build({ bridge }).svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(1);
   });
 });

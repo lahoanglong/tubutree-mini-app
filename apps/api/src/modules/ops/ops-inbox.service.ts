@@ -1,4 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Env } from '../../config/env.validation';
 import { PrismaService } from '../../prisma/prisma.service';
 import { COMMUNITY_MODERATORS, type StaffPermission } from '../../common/staff-permissions';
 import { MerchantFulfilmentService } from '../merchant/merchant-fulfilment.service';
@@ -10,6 +12,7 @@ import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_AL
 import { SystemConfigService } from '../system-config/system-config.service';
 import { externalPointsAttentionCount } from '../external-points/external-points-attention';
 import { bridgeIsDown, unforwardedWhere } from '../support-chat/support-chat-health';
+import { CHAT_ENABLED_KEY } from '../support-chat/support-chat.config';
 import {
   WASTE_PERKS_PENDING_WHERE,
   WASTE_POINTS_PENDING_WHERE,
@@ -72,6 +75,8 @@ export class OpsInboxService {
     private readonly merchant: MerchantFulfilmentService,
     // Optional: chỉ để đọc `community.unanswered_alert_hours` và `waste.in_transit_review_days`; thiếu thì dùng mặc định trong mã.
     @Optional() private readonly config?: SystemConfigService,
+    // Optional: chỉ để biết cầu nối Zalo đã cấu hình chưa (zaloBridgeDown); thiếu thì coi như chưa.
+    @Optional() private readonly env?: ConfigService<Env, true>,
   ) {}
 
   private defs(now: Date): { key: InboxKey; audience: Audience; count: () => Promise<number> }[] {
@@ -123,7 +128,7 @@ export class OpsInboxService {
       { key: 'externalPoints', audience: ['CSKH'], count: () => externalPointsAttentionCount(p, now) },
       // Chat CSKH: hội thoại có tin chưa vào được nhóm Zalo (cùng điều kiện với bộ lọc "Chưa chuyển" ở tab Chat CSKH); cầu nối mất kết nối là việc của ADMIN (đăng nhập QR chỉ ADMIN).
       { key: 'supportChatUnforwarded', audience: ['CSKH'], count: () => p.supportConversation.count({ where: unforwardedWhere(now) }) },
-      { key: 'zaloBridgeDown', audience: 'ADMIN', count: async () => (bridgeIsDown(await p.supportBridgeStatus.findUnique({ where: { id: 'main' } }), now) ? 1 : 0) },
+      { key: 'zaloBridgeDown', audience: 'ADMIN', count: async () => ((await this.bridgeAlertable()) && bridgeIsDown(await p.supportBridgeStatus.findUnique({ where: { id: 'main' } }), now) ? 1 : 0) },
       // Đổi rác: mỗi khoá đếm đúng một hàng đợi bằng cùng `where` với bộ lọc ở màn nhân viên/admin. Cảnh báo bất thường không vào hộp việc.
       { key: 'wasteToCount', audience: 'STAFF', count: () => p.wasteRequest.count({ where: WASTE_TO_COUNT_WHERE }) },
       { key: 'wasteUnmatched', audience: 'STAFF', count: () => p.wasteUnmatchedParcel.count({ where: WASTE_UNMATCHED_OPEN_WHERE }) },
@@ -134,6 +139,12 @@ export class OpsInboxService {
       { key: 'wasteGiftOverdue', audience: 'ADMIN', count: () => p.wasteGiftRedemption.count({ where: wasteGiftOverdueWhere(now) }) },
       { key: 'wasteOrderMismatch', audience: 'ADMIN', count: () => p.wasteRequest.count({ where: wasteOrderMismatchWhere() }) },
     ];
+  }
+
+  /** Cùng luật với cảnh báo của cron cầu nối: chưa cấu hình cầu nối hoặc chat đang tắt thì không coi mất kết nối là việc cần xử lý. */
+  private async bridgeAlertable(): Promise<boolean> {
+    if (!this.env?.get('ZALO_BRIDGE_URL', { infer: true })) return false;
+    return (await this.config?.get<boolean>(CHAT_ENABLED_KEY, false)) ?? false;
   }
 
   // SystemConfigService thay vì WasteConfigService: OpsModule không nhập WasteCoreModule, chỉ để đọc một con số.

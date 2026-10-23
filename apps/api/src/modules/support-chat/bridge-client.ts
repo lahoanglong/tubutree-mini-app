@@ -36,6 +36,10 @@ export class BridgeClient {
 
   constructor(private readonly config: ConfigService<Env, true>) {}
 
+  isConfigured(): boolean {
+    return !!this.config.get('ZALO_BRIDGE_URL', { infer: true });
+  }
+
   async health(): Promise<ZaloBridgeHealth | null> {
     const r = await this.call<ZaloBridgeHealth>('GET', '/health');
     return r.ok ? r.data : null;

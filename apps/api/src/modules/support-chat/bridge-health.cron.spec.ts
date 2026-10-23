@@ -4,14 +4,14 @@ const NOW = new Date('2026-10-23T05:00:00Z');
 const min = (n: number) => new Date(NOW.getTime() - n * 60_000);
 const health = (o: Record<string, unknown> = {}) => ({ state: 'CONNECTED', zaloUid: 'z', displayName: 'CSKH', avatar: null, since: min(30).toISOString(), lastError: null, queueSize: 0, outboxSize: 0, groupId: 'G1', ...o });
 
-function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; schedule?: jest.Mock; count?: number } = {}) {
+function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; schedule?: jest.Mock; count?: number; configured?: boolean; enabled?: boolean } = {}) {
   const prisma: any = {
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(o.prev ?? null), upsert: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
     supportConversation: { findMany: jest.fn().mockResolvedValue(o.convs ?? []), count: jest.fn().mockResolvedValue(o.count ?? 0) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'adm1' }]) },
   };
-  const bridge: any = { health: jest.fn().mockResolvedValue('health' in o ? o.health : health()), setGroup: jest.fn().mockResolvedValue({ ok: true, data: {} }) };
-  const config: any = { get: jest.fn().mockResolvedValue(o.groupCfg ?? 'G1') };
+  const bridge: any = { isConfigured: jest.fn().mockReturnValue(o.configured ?? true), health: jest.fn().mockResolvedValue('health' in o ? o.health : health()), setGroup: jest.fn().mockResolvedValue({ ok: true, data: {} }) };
+  const config: any = { get: jest.fn().mockImplementation((k: string) => Promise.resolve(k === 'chat.enabled' ? (o.enabled ?? true) : (o.groupCfg ?? 'G1'))) };
   const chat: any = { scheduleForward: o.schedule ?? jest.fn().mockResolvedValue(undefined) };
   const notifications: any = { notify: jest.fn().mockResolvedValue(undefined) };
   const cron = new BridgeHealthCron(prisma, bridge, config, chat, notifications);
@@ -133,5 +133,35 @@ describe('BridgeHealthCron', () => {
     expect(bridge.health).toHaveBeenCalledTimes(1);
     release();
     await first;
+  });
+
+  describe('theo cấu hình cầu nối và cờ chat.enabled', () => {
+    const down = { health: health({ state: 'NEED_QR', groupId: 'OLD', since: min(30).toISOString() }), prev: { state: 'NEED_QR', since: min(30), downAlertedAt: null }, convs: [{ id: 'c1' }] };
+
+    it('chưa cấu hình cầu nối: không làm gì cả', async () => {
+      const { cron, bridge, prisma, chat, notifications } = setup({ ...down, configured: false });
+      await cron.everyMinute();
+      expect(bridge.health).not.toHaveBeenCalled();
+      expect(bridge.setGroup).not.toHaveBeenCalled();
+      expect(prisma.supportBridgeStatus.upsert).not.toHaveBeenCalled();
+      expect(prisma.supportConversation.findMany).not.toHaveBeenCalled();
+      expect(chat.scheduleForward).not.toHaveBeenCalled();
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('đã cấu hình, chat tắt: vẫn kiểm, ghi trạng thái, đồng bộ nhóm và quét, nhưng không báo admin', async () => {
+      const { cron, bridge, prisma, chat, notifications } = setup({ ...down, enabled: false });
+      await cron.everyMinute();
+      expect(prisma.supportBridgeStatus.upsert).toHaveBeenCalled();
+      expect(bridge.setGroup).toHaveBeenCalledWith('G1');
+      expect(chat.scheduleForward).toHaveBeenCalledWith('c1');
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('đã cấu hình, chat bật: báo admin', async () => {
+      const { cron, notifications } = setup({ ...down, enabled: true });
+      await cron.everyMinute();
+      expect(notifications.notify).toHaveBeenCalledTimes(1);
+    });
   });
 });

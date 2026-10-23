@@ -9,7 +9,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { BridgeClient } from './bridge-client';
 import { STALE_AFTER_MS } from './support-chat-health';
 import { SupportChatService } from './support-chat.service';
-import { CHAT_GROUP_KEY } from './support-chat.config';
+import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
 const ALERT_EVERY_MS = 60 * 60_000;
 /** Tin khách chưa chuyển quá ngần này mới quét: tin mới còn trong cửa sổ gộp 15 giây của job thường. */
@@ -35,7 +35,8 @@ export class BridgeHealthCron {
 
   @Cron('0 * * * * *', { timeZone: CRON_TZ })
   async everyMinute(): Promise<void> {
-    if (this.running) return;
+    // Chưa cấu hình cầu nối (môi trường chưa dùng chat): không có gì để kiểm, báo hay quét.
+    if (this.running || !this.bridge.isConfigured()) return;
     this.running = true;
     try {
       await this.step('kiểm tra sức khoẻ cầu nối', () => this.checkHealth());
@@ -74,7 +75,8 @@ export class BridgeHealthCron {
     await this.prisma.supportBridgeStatus.upsert({ where: { id: 'main' }, create: { id: 'main', ...fields }, update: fields });
 
     if (h) await this.healGroup(h.groupId);
-    if (state !== 'CONNECTED') await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
+    // Chat đang tắt thì vẫn kiểm, đồng bộ nhóm và quét (tin nhận lúc chat bật vẫn phải đi), chỉ không làm phiền admin.
+    if (state !== 'CONNECTED' && (await this.config.get<boolean>(CHAT_ENABLED_KEY, false))) await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
   }
 
   /** Admin sửa `chat.zalo_group_id` ở tab Cấu hình chung thì cầu nối không biết; cron kéo nó về đúng giá trị cấu hình. */
