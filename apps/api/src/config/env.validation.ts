@@ -44,6 +44,9 @@ export const envSchema = z.object({
   // chối MỌI request bằng 401 khi NODE_ENV=production (không silently no-op) — xem
   // zalo-oa-webhook.controller.ts. Chỉ để trống khi CHƯA đăng ký webhook này trên Zalo OA dashboard.
   ZALO_OA_WEBHOOK_SECRET: z.string().default(''),
+  // Cầu nối Zalo cá nhân (apps/zalo-bridge) cho chat CSKH. URL trống = chưa nối, mọi lệnh trả BRIDGE_NOT_CONFIGURED.
+  ZALO_BRIDGE_URL: z.union([z.literal(''), z.string().url()]).default(''),
+  ZALO_BRIDGE_SECRET: z.string().default(''),
 
   // Pancake POS
   PANCAKE_BASE_URL: z.string().default('https://pos.pages.fm/api/v1'),
