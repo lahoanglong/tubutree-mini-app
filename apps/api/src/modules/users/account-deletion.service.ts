@@ -354,5 +354,14 @@ export class AccountDeletionService {
         warehousePhone: null,
       },
     });
+    // Chat CSKH chứa tin nhắn tự do (SĐT, địa chỉ khách tự gõ) nên xoá hẳn thay vì ẩn danh. Khoá cùng khoá advisory với lượt chuyển tin
+    // để một lượt đang nhận tin xong rồi mới xoá; khoá này không đòi dòng users nên không tạo vòng chờ với khoá users ở trên.
+    const conv = await tx.supportConversation.findUnique({ where: { userId }, select: { id: true } });
+    if (conv) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`support-chat-forward:${conv.id}`}))`;
+      await tx.supportMessage.deleteMany({ where: { conversationId: conv.id } });
+      await tx.supportForward.deleteMany({ where: { conversationId: conv.id } });
+      await tx.supportConversation.delete({ where: { id: conv.id } });
+    }
   }
 }

@@ -1,13 +1,13 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import type { SupportChatContext } from '@tubutree/shared-types';
-import type { Prisma, SupportForward, SupportMessage } from '@prisma/client';
+import type { SupportForward, SupportMessage } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
 import { BridgeClient } from './bridge-client';
-import { formatForward, forwardItemLength } from './forward-format';
+import { forwardItemLength } from './forward-format';
+import { buildForwardText, sendAndSettle } from './forward-delivery';
 import { SupportChatService } from './support-chat.service';
 import { CHAT_GROUP_KEY } from './support-chat.config';
 
@@ -94,40 +94,8 @@ export class SupportChatForwardProcessor extends WorkerHost {
     messages: SupportMessage[],
     final: boolean,
   ): Promise<string | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: conv.userId }, select: { fullName: true, phone: true, tier: { select: { name: true } } } });
-    const context = [...messages].reverse().find((m) => m.context)?.context as SupportChatContext | null | undefined;
-    const text = formatForward({
-      code: conv.code,
-      name: user?.fullName || 'Khách',
-      phone: user?.phone ?? null,
-      tier: user?.tier ? `Hạng ${user.tier.name}` : null,
-      context: context ?? null,
-      items: messages.map((m) => ({ body: m.body, imageUrl: m.imageUrl })),
-    });
-
-    await this.prisma.supportForward.update({ where: { id: forward.id }, data: { attempts: { increment: 1 } } });
-    const r = await this.bridge.send(forward.id, text);
-    if (r.ok) {
-      await this.settle(forward.id, { status: 'SENT', zaloMsgId: r.msgId, sentAt: new Date(), lastError: null });
-      return null;
-    }
-    const lastError = `${r.code}: ${r.message}`.slice(0, 500);
-    if (r.unknown) {
-      // Không tự gửi lại để khỏi đăng đôi; admin bấm "Gửi lại" với cùng khoá.
-      await this.settle(forward.id, { status: 'UNKNOWN', lastError });
-      return null;
-    }
-    if (r.retry && !final) {
-      await this.prisma.supportForward.update({ where: { id: forward.id }, data: { lastError } });
-      return lastError;
-    }
-    await this.settle(forward.id, { status: 'FAILED', lastError });
-    return null;
-  }
-
-  /** Chỉ chốt khi còn PENDING: kết quả muộn của một lượt gửi chồng nhau không được ghi đè trạng thái đã chốt (SENT, hoặc admin gửi lại). */
-  private settle(id: string, data: Prisma.SupportForwardUpdateManyMutationInput) {
-    return this.prisma.supportForward.updateMany({ where: { id, status: 'PENDING' }, data });
+    const text = await buildForwardText(this.prisma, conv, messages);
+    return sendAndSettle(this.prisma, this.bridge, forward, text, !final);
   }
 
   private async rescheduleIfLeft(conversationId: string): Promise<void> {

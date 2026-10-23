@@ -61,6 +61,27 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     return { user, request };
   }
 
+  it('xoá hẳn hội thoại chat CSKH của khách (tin, lần chuyển, hội thoại) trong cùng lần xử lý; chat của người khác còn nguyên', async () => {
+    const { user, request } = await customerWithRequest();
+    const other = await createUser(prisma, {});
+    const mk = async (userId: string) => {
+      const conv = await prisma.supportConversation.create({ data: { userId, code: randCode(4).toUpperCase() } });
+      const fwd = await prisma.supportForward.create({ data: { conversationId: conv.id, groupId: 'G1' } });
+      await prisma.supportMessage.create({ data: { conversationId: conv.id, sender: 'CUSTOMER', source: 'MINIAPP', body: 'SĐT 0901234567', forwardId: fwd.id } });
+      return conv;
+    };
+    const mine = await mk(user.id);
+    const theirs = await mk(other.id);
+
+    await svc.process(request.id, admin.id);
+
+    expect(await prisma.supportConversation.count({ where: { id: mine.id } })).toBe(0);
+    expect(await prisma.supportMessage.count({ where: { conversationId: mine.id } })).toBe(0);
+    expect(await prisma.supportForward.count({ where: { conversationId: mine.id } })).toBe(0);
+    expect(await prisma.supportMessage.count({ where: { conversationId: theirs.id } })).toBe(1);
+    expect(await prisma.supportForward.count({ where: { conversationId: theirs.id } })).toBe(1);
+  });
+
   it('ẩn danh dữ liệu cá nhân, giữ nguyên đơn/hoa hồng/sổ tiền, thu hồi token, đánh dấu RESOLVED', async () => {
     const { user, request } = await customerWithRequest({ role: 'AFFILIATE' });
     const address = await prisma.address.create({

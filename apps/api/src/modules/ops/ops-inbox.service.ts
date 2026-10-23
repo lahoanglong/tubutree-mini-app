@@ -9,6 +9,7 @@ import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { countUnansweredQuestions, DEFAULT_UNANSWERED_ALERT_HOURS, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from '../feed/community-unanswered';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { externalPointsAttentionCount } from '../external-points/external-points-attention';
+import { bridgeIsDown, unforwardedWhere } from '../support-chat/support-chat-health';
 import {
   WASTE_PERKS_PENDING_WHERE,
   WASTE_POINTS_PENDING_WHERE,
@@ -41,6 +42,8 @@ export type InboxKey =
   | 'communityUnanswered'
   | 'invoicePending'
   | 'externalPoints'
+  | 'supportChatUnforwarded'
+  | 'zaloBridgeDown'
   | 'wasteToCount'
   | 'wasteUnmatched'
   | 'wasteBlockedPending'
@@ -118,6 +121,9 @@ export class OpsInboxService {
       { key: 'invoicePending', audience: ['KE_TOAN'], count: () => p.order.count({ where: buildAdminOrderWhere({ invoice: 'pending' }) }) },
       // Điểm đơn ngoài app cần người: claim chờ duyệt, lần gửi mã quá 3 ngày chưa thấy đơn (hoặc thấy đơn nguồn lạ), đơn hoàn một phần sau khi đã cộng.
       { key: 'externalPoints', audience: ['CSKH'], count: () => externalPointsAttentionCount(p, now) },
+      // Chat CSKH: hội thoại có tin chưa vào được nhóm Zalo (cùng điều kiện với bộ lọc "Chưa chuyển" ở tab Chat CSKH); cầu nối mất kết nối là việc của ADMIN (đăng nhập QR chỉ ADMIN).
+      { key: 'supportChatUnforwarded', audience: ['CSKH'], count: () => p.supportConversation.count({ where: unforwardedWhere(now) }) },
+      { key: 'zaloBridgeDown', audience: 'ADMIN', count: async () => (bridgeIsDown(await p.supportBridgeStatus.findUnique({ where: { id: 'main' } }), now) ? 1 : 0) },
       // Đổi rác: mỗi khoá đếm đúng một hàng đợi bằng cùng `where` với bộ lọc ở màn nhân viên/admin. Cảnh báo bất thường không vào hộp việc.
       { key: 'wasteToCount', audience: 'STAFF', count: () => p.wasteRequest.count({ where: WASTE_TO_COUNT_WHERE }) },
       { key: 'wasteUnmatched', audience: 'STAFF', count: () => p.wasteUnmatchedParcel.count({ where: WASTE_UNMATCHED_OPEN_WHERE }) },

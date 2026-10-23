@@ -3813,3 +3813,14 @@ model SupportBridgeStatus {
 
   @@map("support_bridge_status")
 }
+
+/// Sổ việc admin làm trên cầu nối Zalo (đăng nhập QR, đăng xuất, kết nối lại). Không dùng UserAdminEvent vì sổ đó khoá theo người bị tác động.
+model SupportBridgeAction {
+  id          String   @id @default(cuid())
+  action      String
+  adminUserId String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("support_bridge_actions")
+}

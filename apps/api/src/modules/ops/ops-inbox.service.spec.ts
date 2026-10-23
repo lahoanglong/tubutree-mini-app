@@ -17,7 +17,7 @@ import {
 } from '../waste-exchange/core/waste-queue-filters';
 
 const build = (
-  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean } = {},
+  over: { products?: number; links?: number; slips?: number; settle?: number; refunds?: number; communityPending?: number; unanswered?: number; invoices?: number; toPay?: number; dealerPending?: number; dealerToPay?: number; extReview?: number; extAttempts?: number; extPartial?: number; extClosed?: number; extStuck?: number; config?: Record<string, unknown>; noConfig?: boolean; supportUnforwarded?: number; bridge?: { state: string; since: Date } } = {},
 ) => {
   const zero = { count: jest.fn().mockResolvedValue(0) };
   const orderCount = jest.fn().mockResolvedValue(over.invoices ?? 0);
@@ -41,6 +41,8 @@ const build = (
   const unmatchedCount = jest.fn().mockResolvedValue(0);
   const pointCount = jest.fn().mockResolvedValue(0);
   const giftCount = jest.fn().mockResolvedValue(0);
+  const supportConvCount = jest.fn().mockResolvedValue(over.supportUnforwarded ?? 0);
+  const bridgeFind = jest.fn().mockResolvedValue(over.bridge ?? null);
   const prisma = {
     product: { count: productCount },
     order: { count: orderCount },
@@ -58,6 +60,8 @@ const build = (
     merchantPayout: { count: payoutCount },
     externalPointsClaim: { count: extClaimCount },
     externalClaimAttempt: { count: extAttemptCount },
+    supportConversation: { count: supportConvCount },
+    supportBridgeStatus: { findUnique: bridgeFind },
     $queryRaw: queryRaw,
   } as unknown as PrismaService;
   const merchant = {
@@ -65,7 +69,7 @@ const build = (
     countStoresToSettle: jest.fn().mockResolvedValue(over.settle ?? 0),
   } as unknown as MerchantFulfilmentService;
   const svc = new OpsInboxService(prisma, merchant, over.noConfig ? undefined : (config as unknown as SystemConfigService));
-  return { svc, config, dealerClaimCount, productCount, linkCount, payoutCount, withdrawalCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount };
+  return { svc, config, dealerClaimCount, productCount, linkCount, payoutCount, withdrawalCount, refundCount, merchant, orderCount, postCount, queryRaw, extClaimCount, extAttemptCount, wasteReqCount, unmatchedCount, pointCount, giftCount, supportConvCount, bridgeFind };
 };
 
 describe('OpsInboxService — merchantProducts', () => {
@@ -296,7 +300,7 @@ describe('OpsInboxService — mỗi nhóm việc chỉ thấy hàng đợi mình
   });
 
   it('CSKH, KHO và nhân viên chưa có nhóm giữ nguyên hàng đợi như trước', async () => {
-    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'returnsPending', 'wasteToCount', 'wasteUnmatched']);
+    expect(await keysFor(['CSKH'])).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'returnsPending', 'supportChatUnforwarded', 'wasteToCount', 'wasteUnmatched']);
     expect(await keysFor(['KHO'])).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched']);
     expect(await keysFor([])).toEqual(['wasteToCount', 'wasteUnmatched']);
   });
@@ -314,7 +318,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     expect(keys(res)).toEqual([
       'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'customerRefunds', 'returnsPending', 'returnsToReceive', 'merchantOverdue', 'merchantProducts',
       'consignmentPending', 'merchantToSettle', 'merchantPayoutsPending', 'dealerApplications', 'dealerClaims', 'dealerClaimsToPay', 'payouts', 'payoutsToPay', 'communityPending',
-      'communityUnanswered', 'invoicePending', 'externalPoints', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
+      'communityUnanswered', 'invoicePending', 'externalPoints', 'supportChatUnforwarded', 'zaloBridgeDown', 'wasteToCount', 'wasteUnmatched', 'wasteBlockedPending', 'wastePointsPending', 'wastePerksPending',
       'wasteTransitOverdue', 'wasteGiftOverdue', 'wasteOrderMismatch',
     ]);
   });
@@ -333,7 +337,7 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     const { svc } = build();
 
     expect(keys(await svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] }, now))).toEqual([
-      'returnsPending', 'communityPending', 'communityUnanswered', 'externalPoints', 'wasteToCount', 'wasteUnmatched',
+      'returnsPending', 'communityPending', 'communityUnanswered', 'externalPoints', 'supportChatUnforwarded', 'wasteToCount', 'wasteUnmatched',
     ]);
     expect(keys(await svc.counts({ role: 'STAFF', staffPermissions: ['KHO'] }, now))).toEqual([
       'pancakeAttention', 'pancakeUnsynced', 'gomdonAttention', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched',
@@ -386,5 +390,33 @@ describe('OpsInboxService — đổi rác (spec 13.2)', () => {
     await svc.counts({ role: 'ADMIN' }, now);
 
     expect(wasteReqCount).toHaveBeenCalledWith({ where: wasteTransitOverdueWhere(now, 30) });
+  });
+});
+
+describe('OpsInboxService — chat CSKH', () => {
+  const now = new Date('2026-10-23T03:00:00Z');
+  const count = (res: { items: { key: string; count: number }[] }, k: string) => res.items.find((i) => i.key === k)?.count;
+
+  it('supportChatUnforwarded đếm hội thoại theo bộ lọc dùng chung; CSKH thấy, KHO không', async () => {
+    const { svc, supportConvCount } = build({ supportUnforwarded: 4 });
+    expect(count(await svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] }, now), 'supportChatUnforwarded')).toBe(4);
+    expect((await svc.counts({ role: 'STAFF', staffPermissions: ['KHO'] }, now)).items.map((i) => i.key)).not.toContain('supportChatUnforwarded');
+    expect(supportConvCount).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { forwards: { some: { status: { in: ['FAILED', 'UNKNOWN'] } } } },
+          { messages: { some: { sender: 'CUSTOMER', forwardId: null, createdAt: { lt: new Date('2026-10-23T02:50:00Z') } } } },
+        ],
+      },
+    });
+  });
+
+  it('zaloBridgeDown: 1 khi không CONNECTED quá 10 phút, 0 khi mới mất hoặc đang nối; nhân viên không thấy', async () => {
+    const since = (min: number) => new Date(now.getTime() - min * 60_000);
+    expect(count(await build({ bridge: { state: 'NEED_QR', since: since(11) } }).svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(1);
+    expect(count(await build({ bridge: { state: 'NEED_QR', since: since(9) } }).svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(0);
+    expect(count(await build({ bridge: { state: 'CONNECTED', since: since(600) } }).svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(0);
+    expect(count(await build().svc.counts({ role: 'ADMIN' }, now), 'zaloBridgeDown')).toBe(0);
+    expect((await build().svc.counts({ role: 'STAFF', staffPermissions: ['CSKH'] }, now)).items.map((i) => i.key)).not.toContain('zaloBridgeDown');
   });
 });

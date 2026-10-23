@@ -13,7 +13,7 @@ export type BridgeEventResult =
 const OK: BridgeEventResult = { status: 200, body: { ok: true } };
 /** Quá ngần này mà forward vẫn chưa có zaloMsgId thì coi là hỏng, không giữ tin nhân viên chờ mãi. */
 const PENDING_FORWARD_WINDOW_MS = 5 * 60_000;
-const NOTIFY_DEDUPE_MS = 10 * 60_000;
+export const NOTIFY_DEDUPE_MS = 10 * 60_000;
 const PREVIEW_MAX = 60;
 const IMAGE_PREVIEW = 'Ảnh từ Tubu Tree';
 

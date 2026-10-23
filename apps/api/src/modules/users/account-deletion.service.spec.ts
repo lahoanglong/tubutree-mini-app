@@ -123,3 +123,46 @@ describe('waste blockers (spec 11.1, 14.4)', () => {
     expect(blockers).toEqual([]);
   });
 });
+
+describe('AccountDeletionService.anonymize — chat CSKH', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('xoá tin, lần chuyển và hội thoại của người đó, tin và lần chuyển đi trước hội thoại', async () => {
+    const order: string[] = [];
+    const del = (name: string) => jest.fn().mockImplementation(() => { order.push(name); return Promise.resolve({ count: 1 }); });
+    const noop = jest.fn().mockResolvedValue({ count: 0 });
+    const tx: any = {
+      user: { update: jest.fn() },
+      referralTouch: { updateMany: noop },
+      address: { updateMany: noop },
+      order: { updateMany: noop },
+      refreshToken: { updateMany: noop },
+      dealerApplication: { updateMany: noop },
+      storefront: { updateMany: noop },
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      supportConversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }), delete: del('conversation') },
+      supportMessage: { deleteMany: del('messages') },
+      supportForward: { deleteMany: del('forwards') },
+    };
+    const svc = new AccountDeletionService({} as unknown as PrismaService);
+    await (svc as any).anonymize(tx, 'u1', 'req-1', new Date());
+    expect(tx.supportMessage.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'c1' } });
+    expect(tx.supportForward.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'c1' } });
+    expect(tx.supportConversation.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
+    expect(order.indexOf('conversation')).toBe(2);
+  });
+
+  it('khách chưa từng chat: không có gì để xoá, không lỗi', async () => {
+    const noop = jest.fn().mockResolvedValue({ count: 0 });
+    const tx: any = {
+      user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop },
+      refreshToken: { updateMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      supportConversation: { findUnique: jest.fn().mockResolvedValue(null), delete: jest.fn() },
+      supportMessage: { deleteMany: jest.fn() }, supportForward: { deleteMany: jest.fn() },
+    };
+    const svc = new AccountDeletionService({} as unknown as PrismaService);
+    await expect((svc as any).anonymize(tx, 'u1', 'req-1', new Date())).resolves.toBeUndefined();
+    expect(tx.supportConversation.delete).not.toHaveBeenCalled();
+  });
+});
