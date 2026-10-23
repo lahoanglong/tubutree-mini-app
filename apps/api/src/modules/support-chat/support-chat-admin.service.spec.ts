@@ -26,8 +26,9 @@ function setup(o: { forwards?: any[]; messages?: any[]; conv?: any | null; send?
       findMany: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(forwards.filter((f) => where.id.in.includes(f.id)))),
       updateMany: jest.fn().mockImplementation(({ where, data }: any) => {
         const f = forwards.find((x) => x.id === where.id);
-        const allowed: string[] = typeof where.status === 'string' ? [where.status] : where.status.in;
-        if (!f || !allowed.includes(f.status)) return Promise.resolve({ count: 0 });
+        const fresh = (x: any) => x.status === 'PENDING' && x.zaloMsgId == null && x.updatedAt < where.OR?.[1]?.updatedAt?.lt;
+        const ok = !f ? false : where.OR ? where.OR[0].status.in.includes(f.status) || fresh(f) : typeof where.status === 'string' ? f.status === where.status : where.status.in.includes(f.status);
+        if (!ok) return Promise.resolve({ count: 0 });
         Object.assign(f, data);
         return Promise.resolve({ count: 1 });
       }),
@@ -53,7 +54,7 @@ function setup(o: { forwards?: any[]; messages?: any[]; conv?: any | null; send?
   return { svc, prisma, config, bridge, notifications, created, forwards };
 }
 
-const fwd = (o: Record<string, unknown> = {}) => ({ id: 'f1', conversationId: 'c1', status: 'FAILED', zaloMsgId: null, attempts: 1, lastError: 'x', createdAt: new Date(), ...o });
+const fwd = (o: Record<string, unknown> = {}) => ({ id: 'f1', conversationId: 'c1', status: 'FAILED', zaloMsgId: null, attempts: 1, lastError: 'x', createdAt: new Date(), updatedAt: new Date(), ...o });
 const custMsg = (o: Record<string, unknown> = {}) => ({ id: 'm1', conversationId: 'c1', sender: 'CUSTOMER', source: 'MINIAPP', body: 'xin chào', imageUrl: null, context: null, forwardId: 'f1', createdAt: new Date('2026-10-23T09:00:00Z'), ...o });
 
 describe('SupportChatAdminService', () => {
@@ -119,7 +120,10 @@ describe('SupportChatAdminService', () => {
     it('chuyển FAILED/UNKNOWN → PENDING bằng một updateMany có điều kiện trạng thái', async () => {
       const { svc, prisma } = setup({ forwards: [fwd()], messages: [custMsg()] });
       await svc.resend('f1');
-      expect(prisma.supportForward.updateMany).toHaveBeenNthCalledWith(1, { where: { id: 'f1', status: { in: ['FAILED', 'UNKNOWN'] } }, data: { status: 'PENDING' } });
+      expect(prisma.supportForward.updateMany).toHaveBeenNthCalledWith(1, {
+        where: { id: 'f1', OR: [{ status: { in: ['FAILED', 'UNKNOWN'] } }, { status: 'PENDING', zaloMsgId: null, updatedAt: { lt: expect.any(Date) } }] },
+        data: { status: 'PENDING' },
+      });
     });
 
     it('không rõ kết quả → UNKNOWN; lỗi thử-lại-được cũng chốt FAILED (đường admin không có BullMQ)', async () => {
@@ -127,6 +131,28 @@ describe('SupportChatAdminService', () => {
       expect(await u.svc.resend('f1')).toMatchObject({ status: 'UNKNOWN' });
       const f = setup({ forwards: [fwd()], messages: [custMsg()], send: { ok: false, retry: true, unknown: false, code: 'NETWORK', message: 'mạng' } });
       expect(await f.svc.resend('f1')).toMatchObject({ status: 'FAILED', lastError: 'NETWORK: mạng' });
+    });
+
+    it('PENDING bỏ dở quá 10 phút gửi lại được; PENDING mới thì 409', async () => {
+      const stale = setup({ forwards: [fwd({ status: 'PENDING', updatedAt: new Date(Date.now() - 11 * 60_000) })], messages: [custMsg()] });
+      expect(await stale.svc.resend('f1')).toMatchObject({ status: 'SENT' });
+      const fresh = setup({ forwards: [fwd({ status: 'PENDING', updatedAt: new Date(Date.now() - 2 * 60_000) })], messages: [custMsg()] });
+      await expect(fresh.svc.resend('f1')).rejects.toBeInstanceOf(ConflictException);
+      expect(fresh.bridge.send).not.toHaveBeenCalled();
+    });
+
+    it('đường admin ném lỗi sau khi nhận: chốt FAILED kèm lastError rồi ném tiếp', async () => {
+      const { svc, bridge, forwards } = setup({ forwards: [fwd()], messages: [custMsg()] });
+      bridge.send.mockRejectedValue(new Error('db sập'));
+      await expect(svc.resend('f1')).rejects.toThrow('db sập');
+      expect(forwards[0]).toMatchObject({ status: 'FAILED', lastError: 'ADMIN_RESEND: db sập' });
+    });
+
+    it('forward bị xoá giữa chừng (P2025): 404', async () => {
+      const { svc, prisma, forwards } = setup({ forwards: [fwd()], messages: [custMsg()] });
+      prisma.supportForward.update.mockRejectedValue(Object.assign(new Error('gone'), { code: 'P2025' }));
+      await expect(svc.resend('f1')).rejects.toBeInstanceOf(NotFoundException);
+      expect(forwards[0]!.status).toBe('FAILED');
     });
 
     it('forward không còn: 404', async () => {
@@ -177,11 +203,15 @@ describe('SupportChatAdminService', () => {
     it('trả nextCursor khi còn trang sau và đủ thông tin dòng, có SĐT đầy đủ', async () => {
       const { svc, prisma } = setup();
       const rows = Array.from({ length: 31 }, (_, i) => ({ id: `c${i}`, code: 'AAAA', blockedAt: null, lastMessageAt: new Date(), user: { id: 'u', fullName: 'Lan', phone: '0901234234' }, messages: [{ body: 'hi', sender: 'CUSTOMER', imageUrl: null }], forwards: [] }));
-      prisma.supportConversation.findMany.mockResolvedValue(rows);
+      prisma.supportConversation.findMany.mockResolvedValueOnce(rows).mockResolvedValueOnce([{ id: 'c1' }]);
       const r = await svc.list({});
+      const flagQuery = prisma.supportConversation.findMany.mock.calls[1][0];
+      expect(flagQuery.where.AND[1].blockedAt).toBeNull();
+      expect(JSON.stringify(flagQuery.where.AND[1])).toContain('"status":"PENDING"');
       expect(r.items).toHaveLength(30);
       expect(r.nextCursor).toBe('c29');
       expect(r.items[0]).toMatchObject({ id: 'c0', code: 'AAAA', blocked: false, user: { phone: '0901234234' }, lastMessage: { body: 'hi' }, needsAttention: false });
+      expect(r.items[1]).toMatchObject({ id: 'c1', needsAttention: true });
     });
   });
 

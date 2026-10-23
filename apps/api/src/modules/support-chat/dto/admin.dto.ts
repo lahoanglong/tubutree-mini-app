@@ -2,7 +2,7 @@ import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength, V
 import { Transform } from 'class-transformer';
 
 export class AdminReplyDto {
-  @IsString() @MinLength(1) @MaxLength(1000) body!: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value)) @IsString() @MinLength(1) @MaxLength(1000) body!: string;
 }
 
 export class AdminSettingsDto {

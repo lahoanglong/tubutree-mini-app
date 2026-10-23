@@ -7,7 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { BridgeClient } from './bridge-client';
-import { STALE_AFTER_MS } from './support-chat-health';
+import { STALE_AFTER_MS, resumablePendingForwardWhere } from './support-chat-health';
 import { SupportChatService } from './support-chat.service';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
@@ -98,8 +98,16 @@ export class BridgeHealthCron {
   }
 
   private async sweep(): Promise<void> {
-    const cutoff = new Date(Date.now() - SWEEP_AFTER_MS);
-    const where = { blockedAt: null, messages: { some: { sender: 'CUSTOMER' as const, forwardId: null, createdAt: { lt: cutoff } } } };
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - SWEEP_AFTER_MS);
+    const where = {
+      blockedAt: null,
+      OR: [
+        { messages: { some: { sender: 'CUSTOMER' as const, forwardId: null, createdAt: { lt: cutoff } } } },
+        // Forward bỏ dở: bộ xử lý nhận lại forward PENDING trước, cầu nối chống đăng đôi theo forward.id.
+        { forwards: { some: resumablePendingForwardWhere(now) } },
+      ],
+    };
     const convs = await this.prisma.supportConversation.findMany({ where, select: { id: true }, orderBy: { lastMessageAt: 'asc' }, take: SWEEP_BATCH });
     for (const c of convs) {
       try {

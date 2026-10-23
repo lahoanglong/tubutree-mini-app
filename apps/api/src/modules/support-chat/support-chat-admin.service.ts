@@ -8,14 +8,13 @@ import { searchPhone, userPhoneClauses } from '../admin/admin-order-filter';
 import { BridgeClient, type BridgeFailure } from './bridge-client';
 import { NOTIFY_DEDUPE_MS, replyPreview } from './bridge-events.service';
 import { buildForwardText, sendAndSettle } from './forward-delivery';
-import { unforwardedWhere } from './support-chat-health';
+import { stalePendingForwardWhere, unforwardedWhere } from './support-chat-health';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
 const PAGE = 30;
 const THREAD_MAX = 500;
 const LAST_MESSAGE_CHARS = 80;
 const CODE_QUERY = /^[A-HJ-NP-Z2-9]{4}$/;
-const RETRYABLE: Prisma.SupportForwardWhereInput['status'] = { in: ['FAILED', 'UNKNOWN'] };
 
 type BridgeAction = 'QR_START' | 'LOGOUT' | 'RECONNECT';
 
@@ -114,10 +113,12 @@ export class SupportChatAdminService {
       include: {
         user: { select: { id: true, fullName: true, phone: true } },
         messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1, select: { body: true, sender: true, imageUrl: true } },
-        forwards: { where: { status: RETRYABLE }, select: { id: true }, take: 1 },
       },
     });
     const page = rows.slice(0, PAGE);
+    const attention = new Set(
+      (await this.prisma.supportConversation.findMany({ where: { AND: [{ id: { in: page.map((c) => c.id) } }, unforwardedWhere(new Date())] }, select: { id: true } })).map((c) => c.id),
+    );
     return {
       items: page.map((c) => {
         const last = c.messages[0];
@@ -128,7 +129,7 @@ export class SupportChatAdminService {
           lastMessageAt: c.lastMessageAt,
           user: c.user,
           lastMessage: last ? { sender: last.sender, body: Array.from(last.body).slice(0, LAST_MESSAGE_CHARS).join(''), hasImage: !!last.imageUrl } : null,
-          needsAttention: c.forwards.length > 0,
+          needsAttention: attention.has(c.id),
         };
       }),
       nextCursor: rows.length > PAGE ? (page[page.length - 1]?.id ?? null) : null,
@@ -205,13 +206,28 @@ export class SupportChatAdminService {
     if (!conv) throw new NotFoundException('Không tìm thấy hội thoại.');
 
     // Chuyển trạng thái nguyên tử: hai admin bấm cùng lúc thì chỉ một bên gửi, bên kia nhận 409.
-    const claimed = await this.prisma.supportForward.updateMany({ where: { id: forwardId, status: RETRYABLE }, data: { status: 'PENDING' } });
-    if (claimed.count === 0) throw new ConflictException('Chỉ gửi lại được lần chuyển đang FAILED hoặc UNKNOWN.');
+    // PENDING chỉ gửi lại được khi đã bỏ dở quá hạn; PENDING mới là một lượt gửi đang chạy.
+    const claimed = await this.prisma.supportForward.updateMany({
+      where: { id: forwardId, OR: [{ status: { in: ['FAILED', 'UNKNOWN'] } }, stalePendingForwardWhere(new Date())] },
+      data: { status: 'PENDING' },
+    });
+    if (claimed.count === 0) throw new ConflictException('Chỉ gửi lại được lần chuyển đang FAILED, UNKNOWN hoặc PENDING bị bỏ dở.');
 
-    const text = await buildForwardText(this.prisma, conv, messages);
-    await sendAndSettle(this.prisma, this.bridge, forward, text, false);
+    try {
+      const text = await buildForwardText(this.prisma, conv, messages);
+      await sendAndSettle(this.prisma, this.bridge, forward, text, false);
+    } catch (err) {
+      // Không để lần chuyển kẹt PENDING vì đường admin: chốt FAILED (nếu còn PENDING) rồi ném tiếp.
+      const lastError = `ADMIN_RESEND: ${(err as Error).message}`.slice(0, 500);
+      await this.prisma.supportForward
+        .updateMany({ where: { id: forwardId, status: 'PENDING' }, data: { status: 'FAILED', lastError } })
+        .catch((e: unknown) => this.logger.warn(`Không chốt được FAILED cho lần chuyển ${forwardId}: ${(e as Error).message}`));
+      if ((err as { code?: string }).code === 'P2025') throw new NotFoundException('Lần chuyển đã bị xoá.');
+      throw err;
+    }
     const after = await this.prisma.supportForward.findUnique({ where: { id: forwardId } });
-    return { id: forwardId, status: after?.status ?? 'PENDING', lastError: after?.lastError ?? null, attempts: after?.attempts ?? forward.attempts };
+    if (!after) throw new NotFoundException('Lần chuyển đã bị xoá.');
+    return { id: forwardId, status: after.status, lastError: after.lastError, attempts: after.attempts };
   }
 
   private async setBlocked(id: string, data: { blockedAt: Date | null; blockedByUserId: string | null }) {

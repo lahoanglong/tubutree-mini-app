@@ -23,10 +23,15 @@ export async function buildForwardText(
 }
 
 /**
- * Chỉ chốt khi còn PENDING: kết quả muộn của một lượt gửi chồng nhau không được ghi đè trạng thái đã chốt (SENT, hoặc admin gửi lại).
+ * Kết quả UNKNOWN/FAILED chỉ chốt khi còn PENDING: kết quả muộn của một lượt gửi chồng nhau không được ghi đè trạng thái đã chốt (SENT, hoặc admin gửi lại).
  */
 function settle(prisma: PrismaService, id: string, data: Prisma.SupportForwardUpdateManyMutationInput) {
   return prisma.supportForward.updateMany({ where: { id, status: 'PENDING' }, data });
+}
+
+/** Có msgId thật là sự thật: áp cả khi lần gửi trước đã chốt UNKNOWN/FAILED, nhưng không đè SENT. */
+function settleSent(prisma: PrismaService, id: string, data: Prisma.SupportForwardUpdateManyMutationInput) {
+  return prisma.supportForward.updateMany({ where: { id, status: { in: ['PENDING', 'UNKNOWN', 'FAILED'] } }, data });
 }
 
 /**
@@ -44,7 +49,7 @@ export async function sendAndSettle(
   await prisma.supportForward.update({ where: { id: forward.id }, data: { attempts: { increment: 1 } } });
   const r = await bridge.send(forward.id, text);
   if (r.ok) {
-    await settle(prisma, forward.id, { status: 'SENT', zaloMsgId: r.msgId, sentAt: new Date(), lastError: null });
+    await settleSent(prisma, forward.id, { status: 'SENT', zaloMsgId: r.msgId, sentAt: new Date(), lastError: null });
     return null;
   }
   const lastError = `${r.code}: ${r.message}`.slice(0, 500);

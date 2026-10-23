@@ -93,11 +93,25 @@ describe('BridgeHealthCron', () => {
       await cron.everyMinute();
       expect(prisma.supportConversation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { blockedAt: null, messages: { some: { sender: 'CUSTOMER', forwardId: null, createdAt: { lt: min(2) } } } },
+          where: {
+            blockedAt: null,
+            OR: [
+              { messages: { some: { sender: 'CUSTOMER', forwardId: null, createdAt: { lt: min(2) } } } },
+              { forwards: { some: { status: 'PENDING', zaloMsgId: null, updatedAt: { lt: min(10), gte: new Date(NOW.getTime() - 20 * 3_600_000) } } } },
+            ],
+          },
           take: 100,
         }),
       );
       expect(schedule.mock.calls).toEqual([['c1'], ['c2']]);
+    });
+
+    it('forward PENDING bỏ dở: chỉ nhặt khi quá 10 phút và chưa quá 20 giờ (điều kiện where, quá 20 giờ để admin gửi lại tay)', async () => {
+      const { cron, prisma } = setup({ convs: [{ id: 'c1' }] });
+      await cron.everyMinute();
+      const w = prisma.supportConversation.findMany.mock.calls[0][0].where.OR[1].forwards.some.updatedAt;
+      expect(w.lt).toEqual(min(10));
+      expect(w.gte).toEqual(new Date(NOW.getTime() - 20 * 3_600_000));
     });
 
     it('một hội thoại lỗi không chặn các hội thoại sau', async () => {

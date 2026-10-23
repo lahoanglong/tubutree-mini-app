@@ -9,6 +9,7 @@ import { BridgeClient } from './bridge-client';
 import { forwardItemLength } from './forward-format';
 import { buildForwardText, sendAndSettle } from './forward-delivery';
 import { SupportChatService } from './support-chat.service';
+import { STALE_PENDING_AUTO_MAX_MS } from './support-chat-health';
 import { CHAT_GROUP_KEY } from './support-chat.config';
 
 /** Một tin nhóm Zalo chứa tối đa chừng này ký tự nội dung khách; phần dư để job sau. */
@@ -43,8 +44,9 @@ export class SupportChatForwardProcessor extends WorkerHost {
 
     const final = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
     // Forward còn dang dở (lượt trước hỏng giữa chừng) phải xong trước, nếu không tin sẽ bị gửi hai lần dưới hai forward.
+    // Quá hạn chống đăng đôi của cầu nối (20 giờ) thì để admin quyết định, không tự gửi lại.
     const pending = await this.prisma.supportForward.findFirst({
-      where: { conversationId, status: 'PENDING', zaloMsgId: null },
+      where: { conversationId, status: 'PENDING', zaloMsgId: null, updatedAt: { gte: new Date(Date.now() - STALE_PENDING_AUTO_MAX_MS) } },
       orderBy: { createdAt: 'asc' },
     });
     const claimed = pending ? { forward: pending, messages: await this.messagesOf(pending.id, conversationId) } : await this.claim(conversationId);

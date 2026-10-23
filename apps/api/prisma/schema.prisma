@@ -3791,6 +3791,8 @@ model SupportForward {
   groupId        String
   sentAt         DateTime?
   createdAt      DateTime             @default(now())
+  /// Mốc lần đổi trạng thái gần nhất: PENDING cũ quá hạn là lần chuyển bị bỏ dở (admin gửi lại giữa chừng, job BullMQ mất).
+  updatedAt      DateTime             @updatedAt
 
   conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

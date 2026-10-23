@@ -16,7 +16,7 @@ function setup(opts: {
     id: `m${i + 1}`, conversationId: 'c1', sender: 'CUSTOMER', body: 'x', imageUrl: null, context: null, forwardId: null,
     createdAt: new Date(2026, 9, 23, 10, 0, t++), ...m,
   }));
-  const forwards: any[] = (opts.forwards ?? []).map((f) => ({ conversationId: 'c1', attempts: 0, zaloMsgId: null, lastError: null, sentAt: null, createdAt: new Date(2026, 9, 23, 9), ...f }));
+  const forwards: any[] = (opts.forwards ?? []).map((f) => ({ conversationId: 'c1', attempts: 0, zaloMsgId: null, lastError: null, sentAt: null, createdAt: new Date(2026, 9, 23, 9), updatedAt: new Date(), ...f }));
   const conv = { id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: opts.blocked ? new Date() : null };
   const prisma: any = {
     $executeRaw: jest.fn().mockResolvedValue(1),
@@ -34,14 +34,14 @@ function setup(opts: {
         Promise.resolve(messages.filter((m) => m.sender === 'CUSTOMER' && m.forwardId === where.forwardId).length)),
     },
     supportForward: {
-      findFirst: jest.fn().mockImplementation(() => Promise.resolve(forwards.find((f) => f.status === 'PENDING' && f.zaloMsgId === null) ?? null)),
+      findFirst: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(forwards.find((f) => f.status === 'PENDING' && f.zaloMsgId === null && (!where.updatedAt || f.updatedAt >= where.updatedAt.gte)) ?? null)),
       create: jest.fn().mockImplementation(({ data }: any) => {
         const f = { id: `f${forwards.length + 1}`, attempts: 0, zaloMsgId: null, lastError: null, sentAt: null, createdAt: new Date(), status: 'PENDING', ...data };
         forwards.push(f);
         return Promise.resolve(f);
       }),
       updateMany: jest.fn().mockImplementation(({ where, data }: any) => {
-        const f = forwards.find((x) => x.id === where.id && (!where.status || x.status === where.status));
+        const f = forwards.find((x) => x.id === where.id && (!where.status || (where.status.in ? where.status.in.includes(x.status) : x.status === where.status)));
         if (f) Object.assign(f, data);
         return Promise.resolve({ count: f ? 1 : 0 });
       }),
@@ -142,6 +142,28 @@ describe('SupportChatForwardProcessor', () => {
     expect(bridge.send).not.toHaveBeenCalled();
     expect(forwards).toHaveLength(0);
     expect(messages[0]!.forwardId).toBeNull();
+  });
+
+  it('forward PENDING bỏ dở quá 20 giờ: không tự gửi lại, nhận tin mới bằng forward mới', async () => {
+    const { proc, bridge, forwards, job } = setup({
+      msgs: [{ body: 'cũ', forwardId: 'f0' }, { body: 'mới' }],
+      forwards: [{ id: 'f0', status: 'PENDING', groupId: 'g1', attempts: 1, updatedAt: new Date(Date.now() - 21 * 3_600_000) }],
+    });
+    await proc.process(job());
+    expect(bridge.send).toHaveBeenCalledTimes(1);
+    expect(bridge.send.mock.calls[0][0]).not.toBe('f0');
+    expect(forwards[0]).toMatchObject({ id: 'f0', status: 'PENDING' });
+  });
+
+  it('một lần gửi muộn có msgId thật chốt SENT cả khi forward đang UNKNOWN', async () => {
+    const { proc, forwards, job } = setup({ forwards: [{ id: 'f0', status: 'PENDING', groupId: 'g1', attempts: 1 }], msgs: [{ body: 'a', forwardId: 'f0' }] });
+    const sendOk = jest.fn().mockImplementation(async () => {
+      forwards[0].status = 'UNKNOWN';
+      return { ok: true, msgId: 'zlate' };
+    });
+    (proc as any).bridge.send = sendOk;
+    await proc.process(job());
+    expect(forwards[0]).toMatchObject({ status: 'SENT', zaloMsgId: 'zlate' });
   });
 
   it('có forward PENDING chưa zaloMsgId thì gửi lại chính nó, không lấy tin mới', async () => {

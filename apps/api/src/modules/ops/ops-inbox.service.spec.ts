@@ -403,8 +403,10 @@ describe('OpsInboxService — chat CSKH', () => {
     expect((await svc.counts({ role: 'STAFF', staffPermissions: ['KHO'] }, now)).items.map((i) => i.key)).not.toContain('supportChatUnforwarded');
     expect(supportConvCount).toHaveBeenCalledWith({
       where: {
+        blockedAt: null,
         OR: [
           { forwards: { some: { status: { in: ['FAILED', 'UNKNOWN'] } } } },
+          { forwards: { some: { status: 'PENDING', zaloMsgId: null, updatedAt: { lt: new Date('2026-10-23T02:50:00Z') } } } },
           { messages: { some: { sender: 'CUSTOMER', forwardId: null, createdAt: { lt: new Date('2026-10-23T02:50:00Z') } } } },
         ],
       },
