@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from './vietqr';
@@ -11,6 +11,8 @@ import { pendingPaymentDeadline } from '../../orders/pending-payment-ttl';
  */
 @Injectable()
 export class BankTransferService {
+  private readonly logger = new Logger(BankTransferService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
@@ -53,8 +55,14 @@ export class BankTransferService {
       this.config.get<string>('payment.bank_account_name', ''),
       this.config.get<string>('payment.bank_name', ''),
     ]);
-    if (!bin || !accountNo) {
-      throw new BadRequestException('Chưa cấu hình tài khoản ngân hàng nhận chuyển khoản.');
+    const configured = !!bin && !!accountNo;
+    // Đơn đã PAID không cần QR: vẫn trả paymentStatus để màn QR đang dò chuyển sang "Đã nhận thanh toán" dù cấu hình trống.
+    if (!configured && order.paymentStatus !== 'PAID') {
+      // 503 chứ không 400: app/web coi 400 là "đơn không còn chờ chuyển khoản" và ngừng hỏi lại, trong khi đơn vẫn UNPAID
+      // và chỉ cần ops cấu hình xong là có QR.
+      const missing = [!bin && 'payment.bank_bin', !accountNo && 'payment.bank_account_no'].filter(Boolean).join(', ');
+      this.logger.error(`Không tạo được QR chuyển khoản cho đơn ${order.code}: thiếu cấu hình ${missing}.`);
+      throw new ServiceUnavailableException('Chưa tạo được mã chuyển khoản lúc này. Bạn thử lại sau ít phút nhé.');
     }
 
     const memo = order.code; // nội dung CK = mã đơn (để đối soát)
@@ -62,11 +70,12 @@ export class BankTransferService {
     // `pancakePaidReported` chỉ được ghi khi đơn còn UNPAID; đơn đã PAID giữ nguyên giá trị cũ nên không được trừ.
     const paidSoFar = order.paymentStatus === 'UNPAID' ? (order.pancakePaidReported ?? 0) : 0;
     const amount = Math.max(0, order.total - paidSoFar);
-    const qrString = buildVietQrPayload({ bin, accountNo, amount, addInfo: memo });
+    const qrString = configured ? buildVietQrPayload({ bin, accountNo, amount, addInfo: memo }) : '';
     // Ảnh QR tiện hiển thị (FE có thể render qrString bằng lib QR nếu muốn tự chủ hoàn toàn).
-    const qrImageUrl =
-      `https://img.vietqr.io/image/${bin}-${accountNo}-compact2.png` +
-      `?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`;
+    const qrImageUrl = configured
+      ? `https://img.vietqr.io/image/${bin}-${accountNo}-compact2.png` +
+        `?amount=${amount}&addInfo=${encodeURIComponent(memo)}&accountName=${encodeURIComponent(accountName)}`
+      : '';
 
     // Hạn trùng với cron tự huỷ: trang QR nói rõ "chuyển trước HH:mm" để khách không chuyển sau khi đơn đã huỷ.
     const paymentDeadline = await pendingPaymentDeadline(order, this.config);

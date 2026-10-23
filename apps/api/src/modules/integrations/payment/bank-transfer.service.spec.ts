@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { BankTransferService } from './bank-transfer.service';
 import { crc16ccitt } from './vietqr';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -32,9 +32,27 @@ describe('BankTransferService.getBankQr', () => {
     await expect(new BankTransferService(prisma, makeConfig()).getBankQr('TUBU250625001', 'u1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('chưa cấu hình TK ngân hàng → BadRequest', async () => {
+  it('chưa cấu hình TK ngân hàng → 503 (thử lại được), không phải 400', async () => {
     const prisma = makePrisma(ORDER);
-    await expect(new BankTransferService(prisma, makeConfig({ 'payment.bank_account_no': '' })).getBankQr('TUBU250625001', 'u1')).rejects.toBeInstanceOf(BadRequestException);
+    const svc = new BankTransferService(prisma, makeConfig({ 'payment.bank_account_no': '' }));
+    const err = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    try {
+      const rejected = await svc.getBankQr('TUBU250625001', 'u1').catch((e: unknown) => e);
+      expect(rejected).toBeInstanceOf(ServiceUnavailableException);
+      expect((rejected as Error).message).toBe('Chưa tạo được mã chuyển khoản lúc này. Bạn thử lại sau ít phút nhé.');
+      expect(err).toHaveBeenCalledWith(expect.stringContaining('payment.bank_account_no'));
+      expect(err).toHaveBeenCalledWith(expect.not.stringContaining('payment.bank_bin'));
+    } finally {
+      err.mockRestore();
+    }
+  });
+
+  it('chưa cấu hình TK ngân hàng mà đơn đã PAID → vẫn trả paymentStatus=PAID, không QR, để màn đang dò thấy tiền về', async () => {
+    const svc = new BankTransferService(makePrisma({ ...ORDER, paymentStatus: 'PAID' }), makeConfig({ 'payment.bank_account_no': '' }));
+    const r = await svc.getBankQr('TUBU250625001', 'u1');
+    expect(r.paymentStatus).toBe('PAID');
+    expect(r.qrString).toBe('');
+    expect(r.qrImageUrl).toBe('');
   });
 
   it('hợp lệ → trả VietQR hợp lệ, memo = mã đơn, amount = total', async () => {
