@@ -3,7 +3,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins,
-  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, type LucideIcon,
+  ShoppingBag, Gift, Leaf, Zap, Bell, ChevronLeft, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle, type LucideIcon,
 } from 'lucide-react';
 import {
   getNotifications,
@@ -62,6 +62,7 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   // DEALER_BONUS_PAID / DEALER_REWARD_CLAIM_* — thưởng doanh số & yêu cầu nhận thưởng đại lý.
   if (code.startsWith('DEALER')) return { Icon: Store, title: 'Đại lý' };
   if (code.startsWith('WASTE')) return { Icon: Recycle, title: 'Đổi rác lấy quà' };
+  if (code === 'SUPPORT_CHAT_REPLY') return { Icon: MessageCircle, title: 'Tubu Tree trả lời bạn' };
   // OPS_* (vd OPS_GOMDON_ALERT) gửi tới tài khoản ADMIN; admin đăng nhập mini app vẫn thấy trong
   // danh sách (listForUser không lọc theo mã) nên cần nhãn riêng thay vì "Thông báo" chung chung.
   if (code.startsWith('OPS_')) return { Icon: TriangleAlert, title: 'Cảnh báo vận hành' };
@@ -113,6 +114,7 @@ export function notificationAction(templateCode: string, data: Record<string, st
   if (notificationOrderLink(templateCode, orderCode)) {
     return { kind: 'link', label: 'Xem chi tiết đơn hàng', to: orderCode ? `/order/${enc(orderCode)}` : '/orders' };
   }
+  if (templateCode === 'SUPPORT_CHAT_REPLY') return { kind: 'link', label: 'Mở chat với Tubu Tree', to: '/chat' };
   if (route) return { kind: 'link', label: 'Xem chi tiết', to: route };
   if (templateCode.startsWith('FLASH')) {
     // Không có slug thì về Trang chủ, nơi dải "Ưu đãi giờ vàng" đang hiển thị.

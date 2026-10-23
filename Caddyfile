@@ -12,5 +12,8 @@ app.{$WEB_DOMAIN} {
 # Webhook Pancake: https://api.{$WEB_DOMAIN}/api/webhooks/pancake
 api.{$WEB_DOMAIN} {
 	encode gzip zstd
+	# Cổng nội bộ của cầu nối Zalo: cầu nối gọi api:3001 trong mạng Docker, từ ngoài không được chạm tới.
+	@internal path /api/internal/*
+	respond @internal 404
 	reverse_proxy api:3001
 }

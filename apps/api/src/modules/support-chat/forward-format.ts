@@ -33,3 +33,10 @@ export function formatForward(input: ForwardInput): string {
   lines.push(`(Trả lời tin này, hoặc gõ #${input.code} ở đầu câu, để gửi cho khách)`);
   return lines.join('\n');
 }
+
+/** Đầu tin chuyển do cầu nối gửi; tin `isSelf` mở đầu thế này là echo, không phải nhân viên gõ. */
+const FORWARD_HEADER = /^#[A-HJ-NP-Z2-9]{4} · /;
+
+export function isForwardHeader(text: string): boolean {
+  return FORWARD_HEADER.test(text);
+}

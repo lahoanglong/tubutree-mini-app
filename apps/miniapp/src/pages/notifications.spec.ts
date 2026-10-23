@@ -197,3 +197,10 @@ describe('notificationMeta — Đổi rác lấy quà', () => {
     expect(notificationMeta('WASTE_GIFT_CANCELLED').title).toBe('Đổi rác lấy quà');
   });
 });
+
+describe('SUPPORT_CHAT_REPLY (Tubu Tree trả lời trong chat)', () => {
+  it('có nhãn riêng và nút mở /chat', () => {
+    expect(notificationMeta('SUPPORT_CHAT_REPLY').title).toBe('Tubu Tree trả lời bạn');
+    expect(notificationAction('SUPPORT_CHAT_REPLY', { preview: 'Dạ vâng', route: '/chat' })).toMatchObject({ kind: 'link', to: '/chat' });
+  });
+});
