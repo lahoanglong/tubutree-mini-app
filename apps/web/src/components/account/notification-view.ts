@@ -155,8 +155,6 @@ export function notificationAction(
 ): NotificationAction | null {
   const a = miniappAction(templateCode, data);
   if (!a) return null;
-  // Trang chat web chưa có dòng trong route map (dòng /chat cần màn Mini App tương ứng nên thêm cùng lúc), nên đích web đặt thẳng.
-  if (templateCode === 'SUPPORT_CHAT_REPLY') return { ...a, to: '/ho-tro/chat' };
   const to = resolve(a.to);
   return to ? { ...a, to } : null;
 }

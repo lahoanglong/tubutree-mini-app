@@ -10,6 +10,7 @@ import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLACE_EARN_PCT_KEY, MAX_MARKETPLACE_EARN_PCT } from '../loyalty/earn-rates';
 import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim.config';
+import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem } from '../support-chat/support-chat.config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
@@ -62,6 +63,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     communityFacebookUrl,
     communityTiktokUrl,
     waste,
+    chatEnabled,
+    chatHours,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -97,6 +100,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>('community.facebook_url', 'https://www.facebook.com/tubutree'),
     config.get<unknown>('community.tiktok_url', 'https://www.tiktok.com/@tubutree.com'),
     computeWastePublicFlags(config).catch(() => ({ enabled: false, dropoff: false, mailin: false, pickup: false })),
+    config.get<unknown>(CHAT_ENABLED_KEY, false),
+    config.get<unknown>(CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS),
   ]);
   return {
     freeshipThreshold,
@@ -144,6 +149,11 @@ export async function buildPublicConfig(config: SystemConfigService) {
       zaloGroupUrl: publicCommunityUrl(communityZaloGroupUrl),
       facebookUrl: publicCommunityUrl(communityFacebookUrl),
       tiktokUrl: publicCommunityUrl(communityTiktokUrl),
+    },
+    // Chỉ cờ bật và giờ làm việc; mã nhóm Zalo và lời nhắn ngoài giờ không ra công khai. Giờ hỏng rơi về mặc định như phía gửi tin.
+    chat: {
+      enabled: chatEnabled === true,
+      hours: chatHoursProblem(chatHours) === null ? (chatHours as { start: string; end: string }) : { ...DEFAULT_CHAT_HOURS },
     },
   };
 }
