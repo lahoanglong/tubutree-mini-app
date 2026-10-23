@@ -12,7 +12,7 @@ export const isCloudinaryConfigured = (): boolean => CONFIGURED;
 
 /** Chặn ảnh gốc quá lớn TRƯỚC khi đưa vào canvas nén — ảnh vài chục MB (panorama, RAW export...)
  * có thể treo/crash webview khi drawImage/toDataURL. VideoUpload đã có guard tương tự (50MB). */
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 /** Nút văn bản có vùng chạm 44px (chữ nhỏ vẫn phải bấm dễ). */
 const LINK_BUTTON: CSSProperties = {

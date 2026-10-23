@@ -139,5 +139,14 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
       expect(mocks.login).toHaveBeenCalled();
       expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
     });
+
+    it('đang khôi phục phiên: không hiện lời mời đăng nhập hay nút chat, chỉ OA và hotline', async () => {
+      mocks.chatEnabled = true;
+      mocks.hasOA = true;
+      mocks.authStatus = 'loading';
+      renderBlock();
+      expect(await screen.findByRole('button', { name: /Nhắn Zalo OA/ })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /chat với Tubu Tree/i })).toBeNull();
+    });
   });
 });

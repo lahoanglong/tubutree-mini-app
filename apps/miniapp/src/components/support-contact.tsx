@@ -9,6 +9,7 @@ import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import { useAuthStore } from '../store/auth';
+import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 
@@ -21,7 +22,8 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const chatOn = usePublicConfig().chat?.enabled === true;
-  const loggedIn = useAuthStore((s) => s.status === 'authenticated');
+  const phase = useAuthPhase();
+  const loggedIn = phase === 'authenticated';
   const login = useAuthStore((s) => s.login);
   const chatReady = chatOn && loggedIn;
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
@@ -62,7 +64,7 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
           Nhắn Zalo OA
         </Button>
       )}
-      {chatOn && !loggedIn && (
+      {chatOn && phase === 'guest' && (
         <Button variant="ghost" icon={MessageCircle} onPress={() => void login()}>
           Đăng nhập để chat với Tubu Tree
         </Button>

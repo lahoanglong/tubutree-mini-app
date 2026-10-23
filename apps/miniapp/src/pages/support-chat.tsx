@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared-types';
@@ -6,11 +6,12 @@ import { AuthGate } from '../components/ui/auth-gate';
 import { PageHeader } from '../components/ui/page-header';
 import { ErrorState } from '../components/ui/empty-state';
 import { LineItemSkeleton } from '../components/ui/skeleton';
+import { Button } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { MessageList, type ChatItem } from '../components/support-chat/message-list';
 import { Composer } from '../components/support-chat/composer';
 import { ContextChip } from '../components/support-chat/context-chip';
-import { markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from '../services/support-chat-api';
+import { getSupportChatPage, markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { getErrorMessage } from '../services/api';
 import { isHttpError } from '../services/http';
 import { newIdempotencyKey } from '../utils/idempotency';
@@ -22,8 +23,6 @@ const POLL_MS = 5000;
 const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 
-/** Màn ẩn thì dừng hỏi: tránh gọi API ngầm mỗi 5 giây khi khách đã rời app. */
-export const chatRefetchInterval = (): number | false => (document.visibilityState === 'visible' ? POLL_MS : false);
 
 type PendingStatus = 'sending' | 'sent' | 'failed' | 'rejected';
 interface Pending {
@@ -52,19 +51,32 @@ function ChatBody() {
     [orderCode, productSlug],
   );
   const [contextUsed, setContextUsed] = useState(false);
+  const contextUsedRef = useRef(false);
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
+  const [older, setOlder] = useState<SupportChatMessageDTO[]>([]);
+  const [olderHasMore, setOlderHasMore] = useState<boolean | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
 
-  const threadQ = useQuery({ ...supportChatQueryOptions(), refetchInterval: chatRefetchInterval });
+  // refetchInterval hằng số: TanStack tự bỏ nhịp khi cửa sổ không focus, và hàm hỏi lại không bị "tắt hẳn" nếu một lượt hỏi kết thúc lúc đang ẩn.
+  const threadQ = useQuery({ ...supportChatQueryOptions(), refetchInterval: POLL_MS, refetchOnWindowFocus: true });
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
   const hotline = (supportQ.isError ? DEFAULT_SUPPORT : supportQ.data)?.hotline ?? null;
   const thread = threadQ.data;
   const lastId = thread?.messages[thread.messages.length - 1]?.id;
 
   useEffect(() => {
+    const onVisibility = () => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !lastId) return;
     void markSupportChatRead()
       .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQueryOptions().queryKey }))
       .catch(() => undefined);
-  }, [lastId, qc]);
+  }, [lastId, visible, qc]);
 
   const patch = useCallback((id: string, next: Partial<Pending>) => {
     setPending((list) => list.map((p) => (p.clientMsgId === id ? { ...p, ...next } : p)));
@@ -83,7 +95,8 @@ function ChatBody() {
         patch(p.clientMsgId, { status: 'sent' });
       } catch (e) {
         const status = isHttpError(e) ? e.response?.status : undefined;
-        if (status === 409 || status === 403) patch(p.clientMsgId, { status: 'rejected', error: getErrorMessage(e) });
+        if (status === 429) patch(p.clientMsgId, { status: 'failed', error: getErrorMessage(e) });
+        else if (status !== undefined && status >= 400 && status < 500) patch(p.clientMsgId, { status: 'rejected', error: getErrorMessage(e) });
         else patch(p.clientMsgId, { status: 'failed' });
       } finally {
         void qc.invalidateQueries({ queryKey: supportChatQueryOptions().queryKey });
@@ -98,10 +111,11 @@ function ChatBody() {
       clientMsgId: newIdempotencyKey(),
       body,
       imageUrl,
-      ...(context && !contextUsed ? { context } : {}),
+      ...(context && !contextUsedRef.current ? { context } : {}),
       status: 'sending',
       createdAt: new Date().toISOString(),
     };
+    contextUsedRef.current = true;
     setContextUsed(true);
     setPending((list) => [...list, p]);
     void deliver(p);
@@ -122,8 +136,25 @@ function ChatBody() {
         error: p.error,
         onRetry: p.status === 'failed' ? () => void deliver(p) : undefined,
       }));
-    return [...server.map(toItem), ...local];
-  }, [thread, pending, deliver]);
+    const serverIds = new Set(server.map((m) => m.id));
+    const prior = older.filter((m) => !serverIds.has(m.id));
+    return [...prior.map(toItem), ...server.map(toItem), ...local];
+  }, [thread, older, pending, deliver]);
+
+  const loadOlder = async () => {
+    const oldest = older[0]?.id ?? thread?.messages[0]?.id;
+    if (!oldest || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const page = await getSupportChatPage({ before: oldest });
+      setOlder((list) => [...page.messages, ...list]);
+      setOlderHasMore(page.hasMore);
+    } catch (e) {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   if (threadQ.isLoading) {
     return (
@@ -149,6 +180,11 @@ function ChatBody() {
         </div>
       )}
       <div style={{ flex: 1 }}>
+        {(olderHasMore ?? thread.hasMore) && (
+          <div style={{ textAlign: 'center', paddingTop: 8 }}>
+            <Button variant="ghost" loading={loadingOlder} onPress={() => void loadOlder()}>Xem tin cũ hơn</Button>
+          </div>
+        )}
         <MessageList items={items} />
       </div>
       <div style={{ position: 'sticky', bottom: 0, borderTop: '1px solid var(--color-border-subtle)', background: 'var(--color-bg-surface)', paddingBottom: 'var(--safe-bottom)' }}>
@@ -162,7 +198,7 @@ function ChatBody() {
             <Composer
               onSend={(body) => enqueue(body, null)}
               onSendImage={(url) => enqueue('', url)}
-              onImageError={() => openSnackbar({ text: 'Tải ảnh thất bại. Hãy chọn lại ảnh khác.', type: 'error' })}
+              onImageError={(text) => openSnackbar({ text, type: 'error' })}
             />
           </>
         )}

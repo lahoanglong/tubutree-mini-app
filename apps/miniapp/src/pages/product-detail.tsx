@@ -99,6 +99,8 @@ export default function ProductDetailPage() {
   });
   // Ngưỡng freeship (public config) cho badge "Miễn phí giao hàng" — tín hiệu tin cậy ở PDP.
   const config = usePublicConfig();
+  const chatOn = config.chat?.enabled === true;
+  const chatReady = chatOn && status === 'authenticated';
 
   // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
   // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
@@ -756,18 +758,31 @@ export default function ProductDetailPage() {
           ))}
         </Box>
         {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
-        {(hasOA || config.chat?.enabled === true) && (
+        {(hasOA || chatReady) && (
           <Button
             variant="secondary"
             icon={MessageCircle}
             onPress={() => {
               haptic('light');
-              if (config.chat?.enabled === true) navigate(`/chat?product=${encodeURIComponent(p.slug)}`);
+              if (chatReady) navigate(`/chat?product=${encodeURIComponent(p.slug)}`);
               else void openOAChat(vi.product.chatAbout(p.name));
             }}
             style={{ marginTop: 12, minWidth: 0 }}
           >
             {vi.product.chatWithShop}
+          </Button>
+        )}
+        {chatOn && !chatReady && status !== 'loading' && status !== 'error' && (
+          <Button
+            variant="secondary"
+            icon={MessageCircle}
+            onPress={() => {
+              haptic('light');
+              void login();
+            }}
+            style={{ marginTop: 12, minWidth: 0 }}
+          >
+            Đăng nhập để chat với Tubu Tree
           </Button>
         )}
       </Box>

@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   login: vi.fn(),
   openSnackbar: vi.fn(),
   fetchContact: vi.fn(),
+  upload: vi.fn(),
+  getPage: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -27,6 +29,7 @@ vi.mock('../services/support-chat-api', () => ({
   supportChatQueryOptions: () => ({ queryKey: ['support-chat'], queryFn: mocks.getThread }),
   supportChatSummaryQueryOptions: () => ({ queryKey: ['support-chat-summary'], queryFn: mocks.summary }),
   sendSupportChat: mocks.send,
+  getSupportChatPage: mocks.getPage,
   markSupportChatRead: mocks.markRead,
 }));
 vi.mock('../store/auth', () => {
@@ -35,7 +38,8 @@ vi.mock('../store/auth', () => {
 });
 vi.mock('../components/image-upload', () => ({
   isCloudinaryConfigured: () => mocks.cloudinary,
-  uploadToCloudinary: vi.fn(),
+  uploadToCloudinary: mocks.upload,
+  MAX_IMAGE_BYTES: 20 * 1024 * 1024,
 }));
 vi.mock('./about-data', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -43,7 +47,7 @@ vi.mock('./about-data', async (importOriginal) => ({
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import SupportChatPage, { chatRefetchInterval } from './support-chat';
+import SupportChatPage from './support-chat';
 
 const msg = (over: Record<string, unknown>) => ({
   id: 'm', sender: 'CUSTOMER', body: 'x', imageUrl: null, context: null, clientMsgId: null, createdAt: '2026-10-23T03:04:00.000Z', ...over,
@@ -61,6 +65,7 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
+const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 const typeAndSend = (text: string) => {
   fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: 'Gửi' }));
@@ -213,21 +218,147 @@ describe('Màn chat với Tubu Tree', () => {
   });
 
   it('mở màn thì đánh dấu đã đọc rồi làm mới số chưa đọc', async () => {
+    mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
     renderPage();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
     await waitFor(() => expect(mocks.markRead).toHaveBeenCalled());
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['support-chat-summary'] }));
   });
 
-  it('hỏi tin mới mỗi 5 giây khi màn đang hiện, dừng khi ẩn', async () => {
+  it('hỏi tin mới mỗi 5 giây, ngừng khi mất focus và hỏi lại ngay khi quay lại', async () => {
+    vi.useFakeTimers();
+    try {
+      renderPage();
+      await advance(10);
+      expect(mocks.getThread).toHaveBeenCalledTimes(1);
+      await advance(5000);
+      expect(mocks.getThread).toHaveBeenCalledTimes(2);
+      act(() => focusManager.setFocused(false));
+      await advance(15000);
+      expect(mocks.getThread).toHaveBeenCalledTimes(2);
+      act(() => focusManager.setFocused(true));
+      await advance(10);
+      expect(mocks.getThread).toHaveBeenCalledTimes(3);
+      await advance(5000);
+      expect(mocks.getThread).toHaveBeenCalledTimes(4);
+    } finally {
+      focusManager.setFocused(undefined);
+      vi.useRealTimers();
+    }
+  });
+
+  it('vẫn hỏi tin mới khi chat tắt hoặc bị chặn (nhân viên có thể trả lời tin cũ)', async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.getThread.mockResolvedValue(thread({ blocked: true }));
+      renderPage();
+      await advance(10);
+      await advance(5000);
+      expect(mocks.getThread).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('chọn ảnh (đang tải lên) rồi gửi chữ: chỉ tin đầu tiên được gửi mang context', async () => {
+    mocks.search = '?order=TT12345';
+    mocks.cloudinary = true;
+    let finishUpload!: (url: string) => void;
+    mocks.upload.mockReturnValue(new Promise((r) => (finishUpload = r)));
+    mocks.send.mockImplementation(async (input: { clientMsgId: string }) => msg({ id: `s-${input.clientMsgId}`, clientMsgId: input.clientMsgId }));
+    const { container } = renderPage();
+    await screen.findByRole('textbox');
+    const file = new File(['x'], 'a.jpg', { type: 'image/jpeg' });
+    fireEvent.change(container.querySelector('input[type=file]')!, { target: { files: [file] } });
+    typeAndSend('Chữ gửi lúc đang tải ảnh');
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    finishUpload('https://img.example/a.jpg');
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(2));
+    expect(mocks.send.mock.calls[0]![0].context).toEqual({ orderCode: 'TT12345' });
+    expect(mocks.send.mock.calls[1]![0].imageUrl).toBe('https://img.example/a.jpg');
+    expect(mocks.send.mock.calls[1]![0].context).toBeUndefined();
+  });
+
+  it('ảnh quá 20MB: báo lỗi, không tải lên', async () => {
+    mocks.cloudinary = true;
+    const { container } = renderPage();
+    await screen.findByRole('textbox');
+    const big = new File(['x'], 'big.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(big, 'size', { value: 21 * 1024 * 1024 });
+    fireEvent.change(container.querySelector('input[type=file]')!, { target: { files: [big] } });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.', type: 'error' }));
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('429: hiện câu "thao tác hơi nhanh" và vẫn cho "Gửi lại"', async () => {
+    mocks.send.mockRejectedValue(httpError(429, 'ThrottlerException: Too Many Requests'));
     renderPage();
     await screen.findByRole('textbox');
-    const interval = (qc.getQueryCache().find({ queryKey: ['support-chat'] })!.options as { refetchInterval?: unknown }).refetchInterval;
-    expect(interval).toBe(chatRefetchInterval);
-    const vis = vi.spyOn(document, 'visibilityState', 'get');
-    vis.mockReturnValue('visible');
-    expect(chatRefetchInterval()).toBe(5000);
-    vis.mockReturnValue('hidden');
-    expect(chatRefetchInterval()).toBe(false);
+    typeAndSend('Xin chào');
+    expect(await screen.findByText('Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gửi lại' })).toBeInTheDocument();
+  });
+
+  it('400: báo lỗi của máy chủ, không có "Gửi lại"', async () => {
+    mocks.send.mockRejectedValue(httpError(400, 'Tin nhắn trống'));
+    renderPage();
+    await screen.findByRole('textbox');
+    typeAndSend('Xin chào');
+    expect(await screen.findByText('Tin nhắn trống')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Gửi lại' })).toBeNull();
+  });
+
+  it('lỗi 5xx: "Gửi lại"', async () => {
+    mocks.send.mockRejectedValue(httpError(503, 'down'));
+    renderPage();
+    await screen.findByRole('textbox');
+    typeAndSend('Xin chào');
+    expect(await screen.findByRole('button', { name: 'Gửi lại' })).toBeInTheDocument();
+  });
+
+  describe('đánh dấu đã đọc', () => {
+    const setVisibility = (v: 'visible' | 'hidden') => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => v });
+      act(() => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+    };
+    afterEach(() => setVisibility('visible'));
+
+    it('chưa có tin nào thì chưa gọi', async () => {
+      renderPage();
+      await screen.findByRole('textbox');
+      expect(mocks.markRead).not.toHaveBeenCalled();
+    });
+
+    it('đang ẩn thì không gọi; hiện lại thì gọi', async () => {
+      setVisibility('hidden');
+      mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
+      renderPage();
+      await screen.findByTestId('msg-m1');
+      expect(mocks.markRead).not.toHaveBeenCalled();
+      setVisibility('visible');
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
+    });
+  });
+
+  describe('tin cũ hơn', () => {
+    it('hasMore: có nút "Xem tin cũ hơn", bấm thì tin cũ chèn lên đầu theo id cũ nhất', async () => {
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'm5', body: 'mới' })] }));
+      mocks.getPage.mockResolvedValue({ hasMore: false, messages: [msg({ id: 'm3', body: 'cũ' })] });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem tin cũ hơn' }));
+      await screen.findByTestId('msg-m3');
+      expect(mocks.getPage).toHaveBeenCalledWith({ before: 'm5' });
+      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m3', 'msg-m5']);
+      expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
+    });
+
+    it('hasMore=false: không có nút', async () => {
+      mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1' })] }));
+      renderPage();
+      await screen.findByTestId('msg-m1');
+      expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
+    });
   });
 });

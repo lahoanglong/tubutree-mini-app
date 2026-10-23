@@ -2,14 +2,14 @@ import { useRef, useState } from 'react';
 import { ImagePlus, Loader2 } from 'lucide-react';
 import { IconButton } from '../ui/icon-button';
 import { Button } from '../ui/button';
-import { isCloudinaryConfigured, uploadToCloudinary } from '../image-upload';
+import { isCloudinaryConfigured, MAX_IMAGE_BYTES, uploadToCloudinary } from '../image-upload';
 
 export const CHAT_MAX_LENGTH = 1000;
 
 interface Props {
   onSend: (body: string) => void;
   onSendImage: (imageUrl: string) => void;
-  onImageError: () => void;
+  onImageError: (message: string) => void;
 }
 
 export function Composer({ onSend, onSendImage, onImageError }: Props) {
@@ -29,11 +29,15 @@ export function Composer({ onSend, onSendImage, onImageError }: Props) {
     const file = e.target.files?.[0];
     if (fileRef.current) fileRef.current.value = '';
     if (!file) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      onImageError('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
+      return;
+    }
     setUploading(true);
     const url = await uploadToCloudinary(file);
     setUploading(false);
     if (url) onSendImage(url);
-    else onImageError();
+    else onImageError('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
   };
 
   return (

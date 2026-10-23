@@ -77,7 +77,7 @@ export function MessageList({ items }: { items: ChatItem[] }) {
   const last = items[items.length - 1];
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: 'end' });
-  }, [items.length, last?.status]);
+  }, [last?.key, last?.status]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
       {items.map((it) => (
