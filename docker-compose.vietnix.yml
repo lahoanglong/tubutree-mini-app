@@ -154,10 +154,13 @@ services:
     restart: unless-stopped
     logging: *default-logging
     mem_limit: 256m
-    env_file: .env
+    # Không env_file: client Zalo không chính thức không được thấy các khoá khác trong .env. Dùng :- (không :?) để thiếu khoá chỉ làm riêng bridge thoát lỗi, không chặn compose của api/web.
     environment:
       NODE_ENV: production
       PORT: 3110
+      HOST: 0.0.0.0
+      ZALO_BRIDGE_SECRET: ${ZALO_BRIDGE_SECRET:-}
+      ZALO_BRIDGE_CREDENTIALS_KEY: ${ZALO_BRIDGE_CREDENTIALS_KEY:-}
       ZALO_BRIDGE_DATA_DIR: /data
       API_EVENTS_URL: http://api:3001/api/internal/zalo-bridge/events
     volumes:

@@ -29,8 +29,8 @@ export function createEventPoster(deps: EventPosterDeps): (e: ZaloBridgeEvent) =
     if (res.status < 200 || res.status >= 300) return 'drop';
     const body = (await res.json().catch(() => null)) as { unknownCode?: unknown } | null;
     if (event.type === 'message' && typeof body?.unknownCode === 'string') {
-      // Báo lỗi lên nhóm cho nhân viên biết tin chưa tới khách; lỗi ở đây không được làm sự kiện gốc bị gửi lại.
-      await deps
+      // Báo lên nhóm không được await: nó đi qua hàng đợi gửi giãn cách (có thể chờ hàng giờ) và sẽ chặn cả hộp thư đi; lỗi cũng không được làm sự kiện gốc bị gửi lại.
+      void deps
         .notify({
           idempotencyKey: `unknown-${event.msgId}`,
           text: `Không tìm thấy mã #${body.unknownCode}, tin chưa tới khách.`,

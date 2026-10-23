@@ -2,6 +2,7 @@ import type { ConfigStore } from './config-store';
 import type { CredentialStore } from './credentials';
 import type { EchoFilter } from './echo-filter';
 import type { Outbox } from './outbox';
+import { classifyLoginError } from './login-error';
 import { applyQrEvent, idleQr, type QrEventLike, type QrState } from './qr-session';
 import { Reconnector } from './reconnect';
 import type { SendDedupe } from './send-dedupe';
@@ -20,6 +21,7 @@ export interface ZcaMessageLike {
   threadId: string;
   isSelf: boolean;
   data: {
+    msgType?: string;
     msgId: string;
     cliMsgId: string;
     uidFrom: string;
@@ -85,7 +87,8 @@ export class BridgeError extends Error {
 }
 
 const GROUP_THREAD = 1;
-const KICKED_CODE = 3000;
+// DuplicateConnection và KickConnection (node_modules/zca-js/dist/apis/listen.d.ts:23-27): có người khác mở phiên, không giành lại.
+const KICKED_CODES = new Set([3000, 3003]);
 const LOGIN_TIMEOUT_MS = 60_000;
 const QR_FIRST_IMAGE_TIMEOUT_MS = 20_000;
 const GROUP_INFO_CHUNK = 50;
@@ -150,8 +153,12 @@ export function createZaloClient(deps: ZaloClientDeps) {
     let text: string | null = null;
     let imageUrl: string | null = null;
     if (typeof c === 'string') text = c;
-    else if (typeof c?.href === 'string') imageUrl = c.href;
-    else return null;
+    // Cùng TAttachmentContent cho ảnh, tệp, thoại, video, link: chỉ msgType chat.photo mới là ảnh, còn lại bỏ (spec 4.3).
+    else if (m.data.msgType === 'chat.photo' && typeof c?.href === 'string') {
+      imageUrl = c.href;
+      const caption = [c.title, c.description].find((x) => typeof x === 'string' && x.trim() !== '');
+      text = typeof caption === 'string' ? caption : null;
+    } else return null;
     const q = m.data.quote;
     return {
       type: 'message',
@@ -206,18 +213,21 @@ export function createZaloClient(deps: ZaloClientDeps) {
 
     const dropped = live((code?: number) => {
       detach();
-      if (code === KICKED_CODE) {
+      if (code !== undefined && KICKED_CODES.has(code)) {
         reconnector.cancel();
-        setState('KICKED', 'Tài khoản đang đăng nhập ở nơi khác (mã 3000)');
+        setState('KICKED', `Tài khoản đang đăng nhập ở nơi khác (mã ${code})`);
         return;
       }
-      setState('CONNECTING', code === undefined ? 'Lỗi kết nối Zalo' : `Mất kết nối Zalo (mã ${code})`);
+      setState('CONNECTING', `Mất kết nối Zalo (mã ${code})`);
       reconnector.schedule();
     });
-    // closed và disconnected cùng mang (code, reason); error chỉ mang lỗi.
     next.listener.on('closed', dropped);
     next.listener.on('disconnected', dropped);
-    next.listener.on('error', live(() => dropped()));
+    // zca-js cũng phát error cho một khung không giải mã được trên socket vẫn khoẻ (listen.js:357-360); chỉ ghi nhận,
+    // việc nối lại do closed/disconnected quyết định.
+    next.listener.on('error', live(() => {
+      if (state === 'CONNECTED') setState('CONNECTED', 'Lỗi từ listener Zalo');
+    }));
 
     setState('CONNECTING');
     next.listener.start({ retryOnClose: false });
@@ -245,7 +255,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
       await attach(next);
     } catch (e) {
       if (gen !== generation) return;
-      if (initial) {
+      if (classifyLoginError(e) === 'need-qr') {
         setState('NEED_QR', errMsg(e));
       } else {
         setState('CONNECTING', errMsg(e));

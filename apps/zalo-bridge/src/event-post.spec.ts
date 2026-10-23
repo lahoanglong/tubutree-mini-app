@@ -32,6 +32,12 @@ describe('createEventPoster', () => {
     expect(p.notify).toHaveBeenCalledWith({ idempotencyKey: 'unknown-M9', text: 'Không tìm thấy mã #K7Q3, tin chưa tới khách.' });
   });
 
+  it('notify treo mãi vẫn trả ok ngay, không chặn hộp thư đi', async () => {
+    const p = poster(() => json(200, { unknownCode: 'K7Q3' }));
+    p.notify.mockImplementationOnce(() => new Promise(() => undefined));
+    expect(await p.post(msg)).toBe('ok');
+  });
+
   it('thân không phải JSON vẫn là ok', async () => {
     expect(await poster(() => new Response('ok', { status: 200 })).post(msg)).toBe('ok');
   });

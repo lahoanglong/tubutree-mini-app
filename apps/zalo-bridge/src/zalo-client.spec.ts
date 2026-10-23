@@ -6,6 +6,8 @@ import { SendQueue } from './send-queue';
 import type { ZaloBridgeEvent } from './types';
 import { createZaloClient, type ZcaApiLike, type ZaloClientDeps } from './zalo-client';
 
+class ZaloApiError extends Error {}
+
 class FakeListener extends EventEmitter {
   start = vi.fn();
   stop = vi.fn();
@@ -112,11 +114,22 @@ describe('zalo-client: nhận tin', () => {
     expect(s.messages()[0].quote).toEqual({ globalMsgId: '123', cliMsgId: '7' });
   });
 
-  it('tin ảnh lấy content.href, text null', async () => {
+  it('chat.photo lấy href làm imageUrl, chú thích làm text, không có thì null', async () => {
     const s = await connected();
-    s.api.listener.emit('message', groupMsg({}, { content: { href: 'https://img/x.jpg', title: 't' } }));
-    await vi.waitFor(() => expect(s.messages()).toHaveLength(1));
-    expect(s.messages()[0]).toMatchObject({ imageUrl: 'https://img/x.jpg', text: null });
+    s.api.listener.emit('message', groupMsg({}, { msgType: 'chat.photo', content: { href: 'https://img/x.jpg', title: 'Hàng lỗi' } }));
+    s.api.listener.emit('message', groupMsg({}, { msgId: '901', msgType: 'chat.photo', content: { href: 'https://img/y.jpg', title: '', description: ' ' } }));
+    await vi.waitFor(() => expect(s.messages()).toHaveLength(2));
+    expect(s.messages()[0]).toMatchObject({ imageUrl: 'https://img/x.jpg', text: 'Hàng lỗi' });
+    expect(s.messages()[1]).toMatchObject({ imageUrl: 'https://img/y.jpg', text: null });
+  });
+
+  it('tệp, link, thoại, video có href nhưng không phải chat.photo thì bỏ', async () => {
+    const s = await connected();
+    for (const msgType of ['share.file', 'chat.recommended', 'chat.voice', 'chat.video.msg', 'chat.sticker']) {
+      s.api.listener.emit('message', groupMsg({}, { msgType, content: { href: 'https://x/f', title: 't' } }));
+    }
+    await new Promise((r) => setTimeout(r, 10));
+    expect(s.messages()).toHaveLength(0);
   });
 
   it('nội dung không phải chữ cũng không phải ảnh thì bỏ', async () => {
@@ -242,13 +255,40 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     expect(s.login).toHaveBeenCalledTimes(1);
   });
 
-  it('error của listener thành CONNECTING và hẹn nối lại', async () => {
+  it('error của listener (một khung hỏng) giữ CONNECTED, không dừng listener, không nối lại', async () => {
     const s = await connected();
-    s.login.mockRejectedValue(new Error('net'));
-    s.api.listener.emit('error', new Error('ws'));
+    s.api.listener.emit('error', new Error('bad frame'));
+    expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: 'Lỗi từ listener Zalo' });
+    expect(s.api.listener.stop).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(s.login).not.toHaveBeenCalled();
+    expect(s.pushed.filter((e) => e.type === 'state').map((e) => (e as { state: string }).state)).toEqual(['CONNECTING', 'CONNECTED', 'CONNECTED']);
+  });
+
+  it('đóng mã 3003 như 3000: KICKED, không nối lại', async () => {
+    const s = await connected();
+    s.api.listener.emit('closed', 3003, 'kick');
+    expect(s.client.state().state).toBe('KICKED');
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(s.login).not.toHaveBeenCalled();
+  });
+
+  it('nối lại: Zalo từ chối phiên thì NEED_QR và không tự thử lại', async () => {
+    const s = await connected();
+    s.login.mockRejectedValue(new ZaloApiError('phiên hết hạn'));
+    s.api.listener.emit('closed', 1006, '');
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: 'phiên hết hạn' });
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(s.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('khởi động: lỗi mạng thì CONNECTING và thử lại sau 5s', async () => {
+    const s = setup({ api: null, login: async () => { throw new TypeError('fetch failed'); } });
+    await s.client.start();
     expect(s.client.state().state).toBe('CONNECTING');
     await vi.advanceTimersByTimeAsync(5_000);
-    expect(s.login).toHaveBeenCalledTimes(1);
+    expect(s.login).toHaveBeenCalledTimes(2);
   });
 
   it('nối lại thành công thì CONNECTED và lần rớt sau lại đợi 5s', async () => {
@@ -265,8 +305,8 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     expect(s.login).toHaveBeenCalledTimes(2);
   });
 
-  it('có phiên nhưng login lỗi lúc khởi động thì NEED_QR', async () => {
-    const s = setup({ api: null, login: async () => { throw new Error('bad cookie'); } });
+  it('có phiên nhưng Zalo từ chối lúc khởi động thì NEED_QR', async () => {
+    const s = setup({ api: null, login: async () => { throw new ZaloApiError('bad cookie'); } });
     await s.client.start();
     expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: 'bad cookie' });
   });
