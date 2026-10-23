@@ -47,7 +47,7 @@ import {
 } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
-import { receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
+import { receivedRefundNote, recordedPancakeUnderpayment, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
@@ -554,9 +554,13 @@ export class OrderStatusService {
     const { standardPointsBack, failure: reverseFailure } = await this.reverseClosedOrderEffects(order);
     let failure: unknown = reverseFailure;
     let receivedBack = 0;
+    const since = closure?.createdAt ?? order.updatedAt;
     if (cancelled) {
+      // Tin huỷ đã đi (lần đầu ghi khoản hoàn lỗi nên tin thiếu dòng "đã nhận…") thì tin huỷ bù ở dưới không còn gửi: khoản hoàn tự báo
+      // khách, nếu không khách không bao giờ biết có tiền chờ chọn nơi nhận. Chưa có tin thì tin huỷ bù mang dòng đó, không báo riêng.
+      const noticeAlreadySent = await this.closureNoticeSent(order.userId, order.code, since);
       receivedBack = await refundReportedUnderpayment({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, order.id, {
-        notifyCustomer: false,
+        notifyCustomer: noticeAlreadySent,
       }).catch((err: unknown) => {
         failure ??= err;
         this.logger.error(`Chưa ghi được khoản hoàn số tiền khách chuyển thiếu của đơn ${order.code}: ${err instanceof Error ? err.message : err}`);
@@ -575,8 +579,11 @@ export class OrderStatusService {
       return { outcome: 'INCOMPLETE', error };
     }
 
-    const since = closure?.createdAt ?? order.updatedAt;
     if (!(await this.closureNoticeSent(order.userId, order.code, since))) {
+      // Lần chạy trước có thể đã ghi khoản hoàn rồi hỏng ở bước sau (lần này ghi được 0): lấy tổng đã ghi để tin huỷ vẫn có dòng đó.
+      if (cancelled) {
+        receivedBack = Math.max(receivedBack, await recordedPancakeUnderpayment(this.prisma, order.id).catch(() => 0));
+      }
       await this.notifications
         .notify(order.userId, `ORDER_${order.status}`, {
           order_code: order.code,
