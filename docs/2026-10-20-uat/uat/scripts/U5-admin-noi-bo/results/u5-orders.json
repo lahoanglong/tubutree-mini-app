@@ -1,0 +1,72 @@
+[
+  {
+    "id": "U5-10",
+    "role": "ADMIN",
+    "journey": "Lọc/tìm đơn (tab Đơn hàng)",
+    "steps": "Đặt 2 đơn (COD + chuyển khoản) cho uat_new; web admin: tìm theo mã đơn, theo SĐT 0901000001, lọc \"Chờ thanh toán\"",
+    "expected": "Tìm mã → đúng 1 dòng; tìm SĐT → mọi đơn của SĐT đó (khớp SQL); lọc trạng thái → chỉ đơn PENDING_PAYMENT (khớp SQL)",
+    "actual": "Tìm mã TUBU2026102249042: 1 dòng. Tìm SĐT: UI TUBU2026102263695,TUBU2026102249042,TUBU2026102278831,TUBU2026102254279,TUBU2026102279818,TUBU2026102281098,TUBU2026102219675,TUBU2026102293100 (API total 8) vs SQL TUBU2026102219675,TUBU2026102249042,TUBU2026102254279,TUBU2026102263695,TUBU2026102278831,TUBU2026102279818,TUBU2026102281098,TUBU2026102293100. Lọc Chờ thanh toán: UI TUBU2026102263695,TUBU2026102254279,TUBU2026102285509,TUBU2026102258629,TUBU2026102272353,TUBU2026102291091,TUBU2026102219675 (API total 7) vs SQL TUBU2026102219675,TUBU2026102254279,TUBU2026102258629,TUBU2026102263695,TUBU2026102272353,TUBU2026102285509,TUBU2026102291091",
+    "evidence": "shots/U5-admin-noi-bo/orders-search-phone-1440.png, shots/U5-admin-noi-bo/orders-filter-pending-1440.png; SQL: SELECT code FROM orders … phone='0901000001' / status='PENDING_PAYMENT'",
+    "verdict": "PASS",
+    "data": {
+      "cod": "TUBU2026102249042",
+      "bank": "TUBU2026102263695"
+    },
+    "at": "2026-10-22T11:54:03.308Z"
+  },
+  {
+    "id": "U5-11",
+    "role": "ADMIN",
+    "journey": "\"Đã nhận tiền\" đơn chuyển khoản lẻ (khách chuyển sai nội dung)",
+    "steps": "uat_returning đặt đơn chuyển khoản; khoản CK nội dung \"chuyen tien hang\" (giả ngân hàng: Pancake không ghép được); ADMIN mở đơn → \"Đã nhận tiền\" + mã GD → xác nhận; gọi lại API lần 2",
+    "expected": "Đơn PENDING_PAYMENT/UNPAID → CONFIRMED/PAID, paidAt ghi, lịch sử đơn ghi người bấm; lần 2 không đổi gì (idempotent); không điểm nào được cộng trước khi giao",
+    "actual": "Giả NH: matched=false. UI confirm-payment → 201. DB: CONFIRMED/PAID paidAt=2026-10-22T11:52:01.532Z. Gọi lại → 201 {\"ok\":true,\"alreadyPaid\":true,\"latePayment\":false,\"message\":\"Đơn TUBU20261022738…, paidAt giữ nguyên=true. Điểm 63576→63576. Lịch sử: PENDING_PAYMENT→CONFIRMED by uat_admin",
+    "evidence": "shots/U5-admin-noi-bo/orders-confirm-payment-admin-1440.png; đơn TUBU2026102273817 tổng 243000đ; SQL orders.status/paymentStatus/paidAt + order_status_history",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:52:01.622Z"
+  },
+  {
+    "id": "U5-12",
+    "role": "KẾ TOÁN",
+    "journey": "\"Đã nhận tiền\" đơn chuyển khoản lẻ (khách chuyển sai nội dung)",
+    "steps": "uat_returning đặt đơn chuyển khoản; khoản CK nội dung \"chuyen tien hang\" (giả ngân hàng: Pancake không ghép được); KẾ TOÁN mở đơn → \"Đã nhận tiền\" + mã GD → xác nhận; gọi lại API lần 2",
+    "expected": "Đơn PENDING_PAYMENT/UNPAID → CONFIRMED/PAID, paidAt ghi, lịch sử đơn ghi người bấm; lần 2 không đổi gì (idempotent); không điểm nào được cộng trước khi giao",
+    "actual": "Giả NH: matched=false. UI confirm-payment → 201. DB: CONFIRMED/PAID paidAt=2026-10-22T11:52:02.936Z. Gọi lại → 201 {\"ok\":true,\"alreadyPaid\":true,\"latePayment\":false,\"message\":\"Đơn TUBU20261022660…, paidAt giữ nguyên=true. Điểm 63576→63576. Lịch sử: PENDING_PAYMENT→CONFIRMED by uat_ketoan. KẾ TOÁN: nút trạng thái=0, SĐT API {\"user\":\"*******003\",\"ship\":\"*******003\"}, trang có SĐT đầy đủ=false",
+    "evidence": "shots/U5-admin-noi-bo/orders-confirm-payment-ketoan-1440.png; đơn TUBU2026102266006 tổng 243000đ; SQL orders.status/paymentStatus/paidAt + order_status_history",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:52:03.022Z"
+  },
+  {
+    "id": "U5-13",
+    "role": "ADMIN",
+    "journey": "Huỷ đơn COD đã xác nhận",
+    "steps": "uat_returning đặt COD 3×FUWA-HW-500 (đã lên giả Pancake); admin mở đơn → \"Huỷ đơn\" → lý do → \"Huỷ đơn\"",
+    "expected": "Đơn CANCELLED, tồn kho trả lại đủ 3, giả Pancake nhận lệnh huỷ, không phát sinh hoàn tiền/ví (khách chưa trả), lịch sử đơn ghi lý do",
+    "actual": "PUT status → 200; DB CANCELLED/UNPAID. Tồn kho 239→236 (đặt)→239 (huỷ). Ví 249500→249500, refund rows 0. Giả Pancake PUT đơn 9600023: 1 lời gọi {\"status\":6}. Hộp thoại: \"Huỷ đơn hàng /  / Xác nhận huỷ đơn TUBU2026102299131? / Khách chưa trả tiền — không có khoản hoàn tiền. / Hệ thống sẽ huỷ cả đơn trên kho Pancake. /  / Lý do huỷ (tuỳ chọn) — khách sẽ đọc trong thông …\"",
+    "evidence": "shots/U5-admin-noi-bo/orders-cancel-cod-1440.png; SQL variations.stock, order_customer_refunds, order_status_history (note), /__uat/requests",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:52:06.356Z"
+  },
+  {
+    "id": "U5-14",
+    "role": "ADMIN",
+    "journey": "Hoàn tiền toàn phần: huỷ đơn chuyển khoản đã PAID (dùng điểm)",
+    "steps": "uat_returning đặt chuyển khoản, dùng 5.000 điểm; giả NH chuyển đủ đúng nội dung (Pancake ghép → PAID); admin mở đơn → \"Huỷ đơn\" → xác nhận",
+    "expected": "D2: hoàn đủ tổng đơn vào Ví Tubu ngay; trả lại 5.000 điểm đã dùng; walletBalance = SUM(wallet_transactions.delta); pointsBalance = SUM(sổ STANDARD); đơn CANCELLED/REFUNDED",
+    "actual": "Sau CK: CONFIRMED/PAID (bank matched=true). Huỷ → 200; DB CANCELLED/REFUNDED. Ví 249500→481500 (+232000, tổng đơn 232000), SUM(sổ ví)=481500. Điểm 63576→58576 (đặt)→63576 (huỷ), SUM(sổ)=63576. Sổ ví mới nhất: {\"delta\":232000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026102287839\",\"refId\":\"cmvjhdzx600y5ljw9y3mnw9hd\"}; sổ điểm: [{\"delta\":5000,\"reason\":\"ORDER_REFUND_POINTS:TUBU2026102287839\"},{\"delta\":-5000,\"reason\":\"ORDER_REDEEM:TUBU2026102287839\"}]. Hộp thoại: \"Huỷ đơn hàng /  / Xác nhận huỷ đơn TUBU2026102287839? / Hoàn 232.000đ vào Ví Tubu của khách ngay khi huỷ. / Trả lại 5000 Điểm Xanh khách đã dùng. / Hệ thống sẽ huỷ cả đơn trên kho Pancake. /  / Lý do huỷ (tuỳ chọn) — khá…\"",
+    "evidence": "shots/U5-admin-noi-bo/orders-cancel-paid-refund-1440.png; SQL users.walletBalance vs SUM(wallet_transactions.delta), pointsBalance vs SUM(points_transactions STANDARD)",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:52:09.802Z"
+  },
+  {
+    "id": "U5-15",
+    "role": "CSKH + KHO + KẾ TOÁN",
+    "journey": "Hoàn tiền một phần: trả 1 trong 2 dòng của đơn đã giao, hoàn về ngân hàng",
+    "steps": "uat_new đặt COD 2 dòng (2×COBOTE-PW-100 + 1×BHN-PP-200), Pancake giao xong; khách xin trả 1×BHN-PP-200 về TK ngân hàng; CSKH duyệt (API); KHO \"Đã nhận hàng về\"; KẾ TOÁN tab \"Hoàn tiền khách\" → \"Bắt đầu chuyển khoản\" → \"Đã chuyển\" + mã GD",
+    "expected": "Tiền hoàn = giá dòng trả (95.000đ, không hoàn ship vì lỗi khách); điểm đơn bị thu lại đúng phần dòng trả; khoản hoàn PENDING → PROCESSING → COMPLETED có bankRef; đơn vẫn DELIVERED (trả một phần)",
+    "actual": "Giao: DELIVERED. Ước tính 201 {\"isFull\":false,\"goods\":95000,\"shipping\":0,\"refund\":95000,\"moneyRefundable\":true,\"pointsUsedBack\":0,…. Yêu cầu 201; CSKH duyệt 201; KHO nhận 201. return_requests: {\"status\":\"APPROVED\",\"refundAmount\":95000,\"shippingRefund\":0,\"pointsReversed\":1900,\"refundMethod\":\"BANK\",\"fullReturn\":false}. Khoản hoàn trước chi: {\"id\":\"cmvjhe3ew010bljw9r9yvbwk8\",\"kind\":\"RETURN\",\"status\":\"PENDING\",\"amount\":95000,\"bankAccountNo\":\"0071000123456\"}. KẾ TOÁN claim 201, mark-paid 201 → {\"kind\":\"RETURN\",\"status\":\"COMPLETED\",\"amount\":95000,\"bankRef\":\"FT26UATREFUND15\",\"completedBy\":\"uat_ketoan\"}. Đơn DELIVERED. Điểm: cộng 5060, thu lại 1900 (phần dòng ≈ 1900); điểm 8220→6320, SUM(sổ)=6320",
+    "evidence": "shots/U5-admin-noi-bo/refunds-ketoan-queue-1440.png, shots/U5-admin-noi-bo/refunds-ketoan-paid-1440.png; SQL return_requests, order_customer_refunds, points_transactions theo đơn TUBU2026102278831",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:52:12.257Z"
+  }
+]

@@ -106,8 +106,9 @@ export class CronLeaderService implements OnApplicationShutdown {
     if (!this.leader) return;
     this.leader = false;
     try {
+      // Lùi 1 giây: cột timestamp(3) làm tròn now() lên tới 0,5ms, instance khác giành ngay sau đó vẫn thấy lease còn hạn.
       await this.prisma.$executeRaw`
-        UPDATE cron_leases SET "expiresAt" = (now() AT TIME ZONE 'UTC')
+        UPDATE cron_leases SET "expiresAt" = (now() AT TIME ZONE 'UTC') - interval '1 second'
         WHERE name = ${this.opts.leaseName} AND holder = ${this.instanceId}`;
     } catch {
       /* lease tự hết hạn sau ttlMs */

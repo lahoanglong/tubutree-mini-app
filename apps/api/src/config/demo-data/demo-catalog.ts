@@ -217,6 +217,12 @@ export function classifyDemoCoupon(row: CouponTermsRow): DemoCouponKind | null {
   return demoCouponTermsMatch(row) ? 'seed' : 'name-only';
 }
 
+/**
+ * Chủ dự án chốt giữ ba mã này cho đợt ra mắt (A4). Go-live coi là đã duyệt, bản xem trước cleanup-demo không cảnh báo
+ * "chưa duyệt"; cùng một danh sách để hai nơi không lệch nhau.
+ */
+export const OWNER_KEPT_DEMO_COUPONS: readonly string[] = ['WELCOME30', 'FREESHIP', 'XANH10'];
+
 export const isDemoCouponKind = (k: DemoCouponKind | null): k is 'migration' | 'seed' => k === 'migration' || k === 'seed';
 
 /**

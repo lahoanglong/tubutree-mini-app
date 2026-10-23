@@ -19,7 +19,7 @@ import {
 import { ApiError } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
 
 /**
  * "Duyệt SP đối tác" — P0 A6-07 (docs/audit-2026-09/06-web.md): API `/admin/merchant-products/pending`
@@ -74,7 +74,7 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
       )}
       <div className="mt-4 space-y-4">
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
-        {q.isError && <p className="text-sm text-danger-fg">Không tải được danh sách sản phẩm đối tác.</p>}
+        {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách sản phẩm đối tác.</LoadError>}
         {q.data && view.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có sản phẩm đối tác nào đang chờ duyệt.
@@ -192,7 +192,7 @@ function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsig
           Chờ xác nhận ký gửi ({pendingCount})
         </button>
       </div>
-      {q.isError && <p className="mt-2 text-sm text-danger-fg">Không tải được danh sách đang liên kết.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách đang liên kết.</LoadError>}
       {q.data && rows.length === 0 && (
         <p className="mt-2 text-sm text-stone-500">
           {filter === 'PENDING' ? 'Không còn liên kết nào chờ xác nhận hàng ký gửi.' : 'Chưa có sản phẩm đối tác nào liên kết mã Pancake.'}
@@ -240,13 +240,16 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
           </button>
         ) : (
           <div className="flex w-full flex-col gap-1.5 sm:w-auto">
-            <input
-              type="text"
-              placeholder="Lý do gỡ (gửi đối tác)..."
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              className={`${FIELD_XS} w-full sm:w-56`}
-            />
+            <Field label="Lý do gỡ (gửi đối tác)" className="w-full sm:w-56">
+              <input
+                type="text"
+                aria-label="Lý do gỡ liên kết (gửi đối tác)"
+                placeholder="Lý do gỡ (gửi đối tác)..."
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className={`${FIELD_XS} w-full`}
+              />
+            </Field>
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -532,13 +535,16 @@ export function MerchantProductRow({
             </button>
           ) : (
             <div className="flex flex-col gap-1.5 pt-1">
-              <input
-                type="text"
-                placeholder="Lý do từ chối..."
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                className={`${FIELD_XS} w-full sm:w-48`}
-              />
+              <Field label="Lý do từ chối" className="w-full sm:w-48">
+                <input
+                  type="text"
+                  aria-label="Lý do từ chối"
+                  placeholder="Lý do từ chối..."
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  className={`${FIELD_XS} w-full`}
+                />
+              </Field>
               <div className="flex gap-1.5">
                 <button
                   onClick={() => reviewMut.mutate({ approve: false, reason: rejectReason.trim() || undefined })}

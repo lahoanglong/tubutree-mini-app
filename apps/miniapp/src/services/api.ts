@@ -1,16 +1,15 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import type { LoginResponse } from '@tubutree/shared-types';
 import { vi } from '../i18n/vi';
 import type { FirstTouch } from './first-touch';
+import { createTransport, HttpError, isHttpError, type HttpResponse, type RequestConfig } from './http';
+
+export { HttpError, isHttpError };
+export type { HttpResponse, RequestConfig };
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001/api';
 const TIMEOUT_MS = 15_000;
 
-/**
- * Axios instance dùng chung. Access token giữ trong memory (an toàn hơn storage),
- * refresh token lưu qua ZMP storage (xem store/auth.ts).
- */
-export const api = axios.create({ baseURL: BASE_URL, timeout: TIMEOUT_MS });
+const send = createTransport(BASE_URL, TIMEOUT_MS);
 
 /**
  * Ảnh do chính API phục vụ (vd ảnh đánh giá base64 → "/reviews/:id/images/0?v=…") được trả dạng đường dẫn tương đối API
@@ -33,13 +32,13 @@ let onUnauthorized: (() => Promise<string | null>) | null = null;
  */
 let authReady: Promise<unknown> | null = null;
 /**
- * Trần chờ, để phiên treo không giữ mọi request tới lúc timeout 15s của axios.
+ * Trần chờ, để phiên treo không giữ mọi request tới lúc timeout 15s.
  *
  * Hết trần mà authReady vẫn chưa xong thì request bên dưới VẪN được gửi đi — nhưng KHÔNG kèm
  * Authorization (accessToken lúc đó còn null) → 401 chắc chắn. Fix triệt để (đánh dấu các request
  * này rồi gọi queryClient.invalidateQueries() sau khi restore() xong) cần truy cập queryClient,
  * nhưng nó được khởi tạo cục bộ (không export) ở components/app.tsx — ngoài phạm vi sửa của file
- * này. Nới trần lên 15s là giảm thiểu TẠM THỜI (khớp timeout tổng của axios ở trên): giảm mạnh xác
+ * này. Nới trần lên 15s là giảm thiểu TẠM THỜI (khớp timeout tổng của request ở trên): giảm mạnh xác
  * suất rơi vào trường hợp này (restore() thực tế thường xong trong <1-2s), KHÔNG loại bỏ hẳn.
  */
 const AUTH_READY_TIMEOUT_MS = 15_000;
@@ -55,17 +54,16 @@ let refreshInFlight: Promise<string | null> | null = null;
  */
 const RATE_LIMIT_DEFAULT_WAIT_MS = 1_500;
 const RATE_LIMIT_MAX_WAIT_MS = 5_000;
-const RATE_LIMIT_RETRY_METHODS = new Set(['get', 'head']);
+const RATE_LIMIT_RETRY_METHODS = new Set(['GET', 'HEAD']);
 export const RATE_LIMITED_MESSAGE = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
 
 /** Retry-After dạng số giây hoặc HTTP-date; không đọc được thì null. */
-function retryAfterMs(headers: unknown): number | null {
-  const h = headers as { get?: (name: string) => unknown; [key: string]: unknown } | undefined;
-  const raw = typeof h?.get === 'function' ? h.get('retry-after') : h?.['retry-after'];
+function retryAfterMs(headers: Record<string, string> | undefined): number | null {
+  const raw = headers?.['retry-after'];
   if (raw == null || raw === '') return null;
   const secs = Number(raw);
   if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
-  const at = Date.parse(String(raw));
+  const at = Date.parse(raw);
   return Number.isNaN(at) ? null : Math.max(0, at - Date.now());
 }
 
@@ -87,9 +85,26 @@ export function setUnauthorizedHandler(handler: (() => Promise<string | null>) |
   onUnauthorized = handler;
 }
 
-api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+interface PendingRequest {
+  method: string;
+  url: string;
+  params?: Record<string, unknown>;
+  data?: unknown;
+  headers: Headers;
+  timeout?: number;
+  retried?: boolean;
+  retried429?: boolean;
+}
+
+// store/auth import api.ts nên chỉ nạp được lúc chạy; dùng chung một lần nạp cho các request đồng thời.
+const loadAuthModule = () => import('../store/auth');
+let authModulePromise: ReturnType<typeof loadAuthModule> | null = null;
+const authModule = () => (authModulePromise ??= loadAuthModule());
+
+/** Gắn phiên vào request ngay trước khi gửi (chạy lại ở mỗi lần gửi lại). */
+async function prepare(req: PendingRequest): Promise<void> {
   // Chính các lệnh /auth/* KHÔNG được chờ authReady — chúng là thứ tạo ra nó (deadlock).
-  if (authReady && !config.url?.includes('/auth/')) {
+  if (authReady && !req.url.includes('/auth/')) {
     const pending = authReady;
     await Promise.race([
       pending.catch(() => undefined),
@@ -98,59 +113,72 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   }
   // Đọc token SAU khi chờ — đây mới là lúc nó đã có.
   if (accessToken) {
-    config.headers.set('Authorization', `Bearer ${accessToken}`);
+    req.headers.set('Authorization', `Bearer ${accessToken}`);
   }
-  const { getDeviceId } = await import('../store/auth');
+  const { getDeviceId } = await authModule();
   const deviceId = await getDeviceId().catch(() => undefined);
-  if (deviceId) config.headers.set('X-Device-Id', deviceId);
-  config.headers.set('X-Client-Platform', 'miniapp');
-  return config;
-});
+  if (deviceId) req.headers.set('X-Device-Id', deviceId);
+  req.headers.set('X-Client-Platform', 'miniapp');
+}
 
-api.interceptors.response.use(
-  (res) => res,
-  async (error: AxiosError) => {
-    const original = error.config as
-      | (InternalAxiosRequestConfig & { _retried?: boolean; _retried429?: boolean })
-      | undefined;
-    if (
-      error.response?.status === 429 &&
-      original &&
-      !original._retried429 &&
-      RATE_LIMIT_RETRY_METHODS.has((original.method ?? 'get').toLowerCase())
-    ) {
-      const wait = retryAfterMs(error.response.headers) ?? RATE_LIMIT_DEFAULT_WAIT_MS;
+async function execute<T>(req: PendingRequest): Promise<HttpResponse<T>> {
+  await prepare(req);
+  try {
+    return await send<T>(req);
+  } catch (error) {
+    if (!isHttpError(error)) throw error;
+    const status = error.response?.status;
+    if (status === 429 && !req.retried429 && RATE_LIMIT_RETRY_METHODS.has(req.method)) {
+      const wait = retryAfterMs(error.response?.headers) ?? RATE_LIMIT_DEFAULT_WAIT_MS;
       if (wait <= RATE_LIMIT_MAX_WAIT_MS) {
-        original._retried429 = true;
+        req.retried429 = true;
         await new Promise((resolve) => setTimeout(resolve, wait));
-        return api.request(original);
+        return execute<T>(req);
       }
     }
     // KHÔNG refresh cho chính endpoint /auth/* — nếu /auth/refresh trả 401, gọi lại
     // refresh sẽ await chính promise đang chờ nó → deadlock tới khi timeout 15s.
-    const isAuthCall = original?.url?.includes('/auth/');
-    if (error.response?.status === 401 && original && !original._retried && onUnauthorized && !isAuthCall) {
-      original._retried = true;
+    const isAuthCall = req.url.includes('/auth/');
+    if (status === 401 && !req.retried && onUnauthorized && !isAuthCall) {
+      req.retried = true;
       refreshInFlight ??= onUnauthorized().finally(() => {
         refreshInFlight = null;
       });
       const newToken = await refreshInFlight;
       if (newToken) {
-        original.headers.set('Authorization', `Bearer ${newToken}`);
-        return api.request(original);
+        req.headers.set('Authorization', `Bearer ${newToken}`);
+        return execute<T>(req);
       }
     }
-    return Promise.reject(error);
-  },
-);
+    throw error;
+  }
+}
+
+function request<T, R>(method: string, url: string, data: unknown, config: RequestConfig | undefined): Promise<R> {
+  const headers = new Headers({ Accept: 'application/json, text/plain, */*' });
+  for (const [name, value] of Object.entries(config?.headers ?? {})) headers.set(name, value);
+  return execute<T>({ method, url, data, headers, params: config?.params, timeout: config?.timeout }) as Promise<R>;
+}
+
+/**
+ * Client dùng chung (dáng giống axios để mọi service giữ nguyên chữ ký gọi). Access token giữ trong
+ * memory (an toàn hơn storage), refresh token lưu qua ZMP storage (xem store/auth.ts).
+ */
+export const api = {
+  get: <T = unknown, R = HttpResponse<T>>(url: string, config?: RequestConfig) => request<T, R>('GET', url, undefined, config),
+  delete: <T = unknown, R = HttpResponse<T>>(url: string, config?: RequestConfig) => request<T, R>('DELETE', url, undefined, config),
+  post: <T = unknown, R = HttpResponse<T>>(url: string, data?: unknown, config?: RequestConfig) => request<T, R>('POST', url, data, config),
+  put: <T = unknown, R = HttpResponse<T>>(url: string, data?: unknown, config?: RequestConfig) => request<T, R>('PUT', url, data, config),
+  patch: <T = unknown, R = HttpResponse<T>>(url: string, data?: unknown, config?: RequestConfig) => request<T, R>('PATCH', url, data, config),
+};
 
 /**
  * Chuẩn hóa mọi lỗi API thành message Việt thân thiện (Voice & Tone §7.5).
  * Ưu tiên message backend (NestJS trả tiếng Việt sẵn, vd "Giỏ hàng trống."),
- * fallback theo loại lỗi. Component KHÔNG tự diễn dịch AxiosError.
+ * fallback theo loại lỗi. Component KHÔNG tự diễn dịch HttpError.
  */
 export function getErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
+  if (isHttpError(error)) {
     // Message của throttler là tiếng Anh kỹ thuật ("ThrottlerException: ...") — không hiển thị.
     if (error.response?.status === 429) return RATE_LIMITED_MESSAGE;
     const data = error.response?.data as { message?: string | string[] } | undefined;
@@ -171,7 +199,7 @@ export function getErrorMessage(error: unknown): string {
 
 /** Máy chủ trả 404: trang đang xem không còn (sản phẩm/đơn không có), thử lại cũng không ra khác. */
 export function isNotFoundError(error: unknown): boolean {
-  return axios.isAxiosError(error) && error.response?.status === 404;
+  return isHttpError(error) && error.response?.status === 404;
 }
 
 /**
@@ -179,14 +207,14 @@ export function isNotFoundError(error: unknown): boolean {
  * Lệnh tạo đơn/tiền gặp lỗi này phải gửi lại đúng Idempotency-Key cũ; 4xx là máy chủ đã từ chối, không có gì được ghi.
  */
 export function isOutcomeUnknown(error: unknown): boolean {
-  if (!axios.isAxiosError(error)) return false;
+  if (!isHttpError(error)) return false;
   const status = error.response?.status;
   return status === undefined || status >= 500;
 }
 
 /** Mã lỗi nghiệp vụ ổn định của API (`code` trong body 4xx, vd TOTAL_CHANGED, ADDRESS_OUTDATED). */
 export function getErrorCode(error: unknown): string | null {
-  if (!axios.isAxiosError(error)) return null;
+  if (!isHttpError(error)) return null;
   const code = (error.response?.data as { code?: unknown } | undefined)?.code;
   return typeof code === 'string' ? code : null;
 }

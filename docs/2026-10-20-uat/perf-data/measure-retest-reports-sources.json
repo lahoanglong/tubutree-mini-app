@@ -1,0 +1,39 @@
+{
+ "label": "retest",
+ "at": "2026-10-19T15:11:25.996Z",
+ "base": "http://127.0.0.1:3229/api",
+ "slug": "arabica-cau-dat-le-plateau",
+ "out": [
+  {
+   "name": "admin-reports-sources",
+   "method": "GET",
+   "path": "/admin/reports/sources",
+   "role": "admin",
+   "status": 200,
+   "bytes": 881,
+   "rows": 3,
+   "sqlCold": null,
+   "sqlWarm": 1,
+   "sqlWarmAll": [
+    1,
+    1,
+    1
+   ],
+   "distinct": 1,
+   "timedNon2xx": 0,
+   "p50": 136.7,
+   "p95": 447.9,
+   "min": 95.1,
+   "max": 615.3,
+   "firstMs": 610.7,
+   "sql": [
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 540.762,
+     "q": "WITH cohort AS ( SELECT u.id, u.\"createdAt\" AS created_at, COALESCE(u.\"firstTouchSource\", $1) AS source, to_char(date_trunc('week', u.\"createdAt\" + interval '7 hours'), 'YYYY-MM-DD') AS week FROM users u WHERE u.\"createdAt\" >= $2 AND u.\"createdAt\" < $3 AND u.role NOT IN ('ADMIN', 'STAFF') AND u.\"mergedIntoId\" IS NULL AND (u.\"firstTouchAt\" IS NULL OR u.\"firstTouchAt\" <= u.\"createdAt\" + interval '1 "
+    }
+   ]
+  }
+ ]
+}

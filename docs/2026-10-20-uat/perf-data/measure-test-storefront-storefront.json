@@ -1,0 +1,206 @@
+{
+ "label": "test-storefront",
+ "at": "2026-10-19T15:07:29.731Z",
+ "base": "http://127.0.0.1:3229/api",
+ "slug": "arabica-cau-dat-le-plateau",
+ "out": [
+  {
+   "name": "storefront-public-list",
+   "method": "GET",
+   "path": "/storefront/public-list",
+   "role": "pub",
+   "status": 200,
+   "bytes": 60,
+   "rows": 1,
+   "sqlCold": null,
+   "sqlWarm": 1,
+   "sqlWarmAll": [
+    1,
+    1,
+    1
+   ],
+   "distinct": 1,
+   "p50": 1,
+   "p95": 2.4,
+   "min": 0.7,
+   "max": 2.5,
+   "firstMs": 17,
+   "sql": [
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.017,
+     "q": "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"updatedAt\" FROM \"public\".\"storefronts\" LEFT JOIN \"public\".\"users\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"storefronts\".\"ownerUserId\") LEFT JOIN \"public\".\"users\" AS \"j2\" ON (\"j2\".\"id\") = (\"public\".\"storefronts\".\"ownerUserId\") WHERE (\"public\".\"storefronts\".\"isPublished\" = $1 AND \"public\".\"storefronts\".\"takenDownAt"
+    }
+   ]
+  },
+  {
+   "name": "storefront-public",
+   "method": "GET",
+   "path": "/storefront/public/devtest1",
+   "role": "pub",
+   "status": 200,
+   "bytes": 2414,
+   "rows": null,
+   "sqlCold": null,
+   "sqlWarm": 7,
+   "sqlWarmAll": [
+    7,
+    7,
+    7
+   ],
+   "distinct": 7,
+   "p50": 2.1,
+   "p95": 2.7,
+   "min": 1.6,
+   "max": 2.9,
+   "firstMs": 4.5,
+   "sql": [
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.003,
+     "q": "SELECT SUM(\"commissionableTotal\") FROM (SELECT \"public\".\"commissions\".\"commissionableTotal\" FROM \"public\".\"commissions\" WHERE (\"public\".\"commissions\".\"affiliateUserId\" = $1 AND \"public\".\"commissions\".\"status\" IN (CAST($2::text AS \"public\".\"CommissionStatus\"),CAST($3::text AS \"public\".\"CommissionStatus\")) AND \"public\".\"commissions\".\"approvedAt\" >= $4 AND \"public\".\"commissions\".\"approvedAt\" < $5) OF"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"referralCode\" FROM \"public\".\"users\" WHERE \"public\".\"users\".\"id\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 6,
+     "ms": 0.004,
+     "q": "SELECT \"public\".\"storefront_items\".\"id\", \"public\".\"storefront_items\".\"collectionId\", \"public\".\"storefront_items\".\"productId\", \"public\".\"storefront_items\".\"variationId\", \"public\".\"storefront_items\".\"note\", \"public\".\"storefront_items\".\"sortOrder\", \"public\".\"storefront_items\".\"isPinned\", \"public\".\"storefront_items\".\"isHidden\" FROM \"public\".\"storefront_items\" WHERE \"public\".\"storefront_items\".\"collect"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.008,
+     "q": "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"isPartner\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"subdomain\", \"public\".\"storefronts\".\"customDomain\", \"public\".\"storefronts\".\"ownerUserId\", \"public\".\"storefronts\".\"brandId\", \"public\".\"storefronts\".\"title\", \"public\".\"storefronts\".\"headerNote\", \"public\".\"storefronts\".\"avatarUrl\", \"public\""
+    },
+    {
+     "calls": 1,
+     "rows": 2,
+     "ms": 0.006,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"stock\", \"public\".\"variations\".\"productId\" FROM \"public\".\"variations\" WHERE (\"public\".\"variations\".\"isActive\" = $1 AND \"public\".\"variations\".\"productId\" IN ($2,$3)) OFFSET $4"
+    },
+    {
+     "calls": 1,
+     "rows": 2,
+     "ms": 0.007,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"name\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"basePrice\", \"public\".\"products\".\"salePrice\", \"public\".\"products\".\"ratingAvg\", \"public\".\"products\".\"reviewCount\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"affiliateBlocked\", \"public\".\"products\".\"soldExternal\", \"public"
+    },
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 0.004,
+     "q": "SELECT \"public\".\"storefront_collections\".\"id\", \"public\".\"storefront_collections\".\"storefrontId\", \"public\".\"storefront_collections\".\"title\", \"public\".\"storefront_collections\".\"kind\"::text, \"public\".\"storefront_collections\".\"layout\"::text, \"public\".\"storefront_collections\".\"sortOrder\", \"public\".\"storefront_collections\".\"comboDiscountPct\" FROM \"public\".\"storefront_collections\" WHERE \"public\".\"storefr"
+    }
+   ]
+  },
+  {
+   "name": "storefront-me",
+   "method": "GET",
+   "path": "/storefront/me",
+   "role": "cust",
+   "status": 200,
+   "bytes": 4199,
+   "rows": null,
+   "sqlCold": null,
+   "sqlWarm": 5,
+   "sqlWarmAll": [
+    5,
+    5,
+    5
+   ],
+   "distinct": 5,
+   "p50": 1.5,
+   "p95": 2.1,
+   "min": 1.3,
+   "max": 2.1,
+   "firstMs": 2.3,
+   "sql": [
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"isPartner\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"subdomain\", \"public\".\"storefronts\".\"customDomain\", \"public\".\"storefronts\".\"ownerUserId\", \"public\".\"storefronts\".\"brandId\", \"public\".\"storefronts\".\"title\", \"public\".\"storefronts\".\"headerNote\", \"public\".\"storefronts\".\"avatarUrl\", \"public\""
+    },
+    {
+     "calls": 1,
+     "rows": 6,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"storefront_items\".\"id\", \"public\".\"storefront_items\".\"collectionId\", \"public\".\"storefront_items\".\"productId\", \"public\".\"storefront_items\".\"variationId\", \"public\".\"storefront_items\".\"note\", \"public\".\"storefront_items\".\"sortOrder\", \"public\".\"storefront_items\".\"isPinned\", \"public\".\"storefront_items\".\"isHidden\" FROM \"public\".\"storefront_items\" WHERE \"public\".\"storefront_items\".\"collect"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.006,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"role\"::text, \"public\".\"users\".\"isBlocked\", \"public\".\"users\".\"referralCode\" FROM \"public\".\"users\" WHERE \"public\".\"users\".\"id\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 2,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"name\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"thumbnail\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"basePrice\", \"public\".\"products\".\"salePrice\", \"public\".\"products\".\"ratingAvg\", \"public\".\"products\".\"reviewCount\", \"public\".\"products\".\"isActive\", \"public\".\"products\".\"affiliateBlocked\", \"public\".\"products\".\"approvalStatus\"::text "
+    },
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"storefront_collections\".\"id\", \"public\".\"storefront_collections\".\"storefrontId\", \"public\".\"storefront_collections\".\"title\", \"public\".\"storefront_collections\".\"kind\"::text, \"public\".\"storefront_collections\".\"layout\"::text, \"public\".\"storefront_collections\".\"sortOrder\", \"public\".\"storefront_collections\".\"comboDiscountPct\" FROM \"public\".\"storefront_collections\" WHERE \"public\".\"storefr"
+    }
+   ]
+  },
+  {
+   "name": "storefront-me-stats",
+   "method": "GET",
+   "path": "/storefront/me/stats",
+   "role": "cust",
+   "status": 200,
+   "bytes": 108,
+   "rows": null,
+   "sqlCold": null,
+   "sqlWarm": 5,
+   "sqlWarmAll": [
+    5,
+    5,
+    5
+   ],
+   "distinct": 4,
+   "p50": 1.5,
+   "p95": 2.8,
+   "min": 1.2,
+   "max": 2.8,
+   "firstMs": 3.3,
+   "sql": [
+    {
+     "calls": 2,
+     "rows": 0,
+     "ms": 0.003,
+     "q": "SELECT o.\"storefrontSlug\" AS slug, COUNT(*) AS orders, SUM(o.\"total\" - COALESCE(r.refunded, $8)) AS revenue FROM \"orders\" o LEFT JOIN LATERAL ( SELECT SUM(COALESCE(rr.\"refundAmount\", $9) + rr.\"shippingRefund\") AS refunded FROM \"return_requests\" rr WHERE rr.\"orderId\" = o.\"id\" AND rr.\"status\" = $10 AND rr.\"fullReturn\" = $11 ) r ON $12 WHERE o.\"storefrontSlug\" = ANY($1::text[]) AND (o.\"referrerUserId"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.021,
+     "q": "SELECT \"public\".\"storefronts\".\"id\", \"public\".\"storefronts\".\"type\"::text, \"public\".\"storefronts\".\"isPartner\", \"public\".\"storefronts\".\"slug\", \"public\".\"storefronts\".\"subdomain\", \"public\".\"storefronts\".\"customDomain\", \"public\".\"storefronts\".\"ownerUserId\", \"public\".\"storefronts\".\"brandId\", \"public\".\"storefronts\".\"title\", \"public\".\"storefronts\".\"headerNote\", \"public\".\"storefronts\".\"avatarUrl\", \"public\""
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.017,
+     "q": "SELECT SUM(\"amount\") FROM (SELECT \"public\".\"commissions\".\"amount\" FROM \"public\".\"commissions\" LEFT JOIN \"public\".\"orders\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"commissions\".\"orderId\") WHERE (\"public\".\"commissions\".\"affiliateUserId\" = $1 AND (\"j1\".\"storefrontSlug\" = $2 AND (\"j1\".\"id\" IS NOT NULL)) AND \"public\".\"commissions\".\"createdAt\" >= $3 AND \"public\".\"commissions\".\"status\" <> CAST($4::text AS \"pu"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.011,
+     "q": "SELECT COALESCE(oi.\"productSlug\", $8) AS \"productSlug\", MIN(oi.\"productName\") AS \"productName\", SUM(oi.\"quantity\" - LEAST(ret.q, oi.\"quantity\")) AS qty, SUM(CASE WHEN ret.q >= oi.\"quantity\" THEN $9 ELSE oi.\"total\" - ROUND(oi.\"total\"::numeric * ret.q / oi.\"quantity\") END) AS revenue FROM \"orders\" o JOIN \"order_items\" oi ON oi.\"orderId\" = o.\"id\" LEFT JOIN LATERAL ( SELECT COALESCE(SUM(ri.\"quantity\")"
+    }
+   ]
+  }
+ ]
+}

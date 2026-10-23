@@ -9,7 +9,7 @@ import type { AdminDealerTier, DealerApp, Page } from '../../web/src/lib/admin-c
  * thật ở :3001 (trước đây chỉ mock 2 route, các lời gọi còn lại của trang rò ra mạng thật).
  *
  * Mở thẳng `/admin?tab=dealers` (trang đọc `?tab=` từ URL — readUrlState trong app/admin/page.tsx): tab
- * mặc định là "Tổng quan KPI", assert nội dung tab Đại lý mà không mở tab thì không bao giờ thấy.
+ * mặc định là "Tổng quan chỉ số", assert nội dung tab Đại lý mà không mở tab thì không bao giờ thấy.
  *
  * Mock trả ĐÚNG dạng API thật: GET /admin/dealer-applications trả `paginated()` = `{ data, meta }`
  * (admin.service.ts listDealerApplications), không phải mảng trần.

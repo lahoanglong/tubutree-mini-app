@@ -5,7 +5,7 @@ import { SystemConfigService } from '../../src/modules/system-config/system-conf
 import { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import { LoyaltyService } from '../../src/modules/loyalty/loyalty.service';
 import { GameService } from '../../src/modules/game/game.service';
-import { createUser, randCode, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
  * R2-ENGAGE-7: nhiệm vụ REVIEW_3 hứa "Viết 3 đánh giá có ảnh" nên đánh giá không ảnh không được tính tiến độ. Mỗi lần mua
@@ -49,15 +49,17 @@ describe('Nhiệm vụ REVIEW_3 đếm sản phẩm khác nhau đã đánh giá 
   const review3 = async (userId: string) => (await game.getMissions(userId)).find((m) => m.code === 'REVIEW_3')!;
   const progress = async (userId: string) => (await review3(userId)).progress;
   const PHOTO = ['https://img.example/p.jpg'];
+  /** Đơn đã giao từ 30 ngày trước: qua hạn đổi/trả nên đánh giá của đơn được tính vào nhiệm vụ. */
+  const settledOrderId = async (userId: string) => (await createOrder(prisma, { userId, status: 'DELIVERED', deliveredAt: new Date(Date.now() - 30 * 864e5) })).id;
   /** Một lần mua nữa của sản phẩm, đánh giá có ảnh (mỗi đơn một dòng đánh giá). */
-  const photoReview = (userId: string, productId: string) =>
-    prisma.review.create({ data: { userId, productId, orderId: `it-order-${randCode(8)}`, rating: 5, images: PHOTO } });
+  const photoReview = async (userId: string, productId: string) =>
+    prisma.review.create({ data: { userId, productId, orderId: await settledOrderId(userId), rating: 5, images: PHOTO } });
 
   it('ba đánh giá không ảnh → tiến độ 0; thêm ảnh từng cái → tăng đúng số đánh giá có ảnh', async () => {
     const user = await createUser(prisma);
     const reviews = await Promise.all(
       productIds.slice(0, 3).map((productId) =>
-        prisma.review.create({ data: { userId: user.id, productId, orderId: `it-order-${randCode(6)}`, rating: 5, images: [] } }),
+        settledOrderId(user.id).then((orderId) => prisma.review.create({ data: { userId: user.id, productId, orderId, rating: 5, images: [] } })),
       ),
     );
     expect(await progress(user.id)).toBe(0);

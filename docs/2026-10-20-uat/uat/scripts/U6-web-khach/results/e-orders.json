@@ -1,0 +1,1019 @@
+{
+  "name": "e-orders",
+  "at": "2026-10-22T12:15:32.471Z",
+  "cases": [
+    {
+      "id": "U6-50-390",
+      "role": "Khách quay lại",
+      "journey": "Danh sách đơn",
+      "steps": "Mở /tai-khoan/don-hang, bấm lần lượt từng tab trạng thái (390px)",
+      "expected": "Mỗi tab chỉ hiện đúng các đơn thuộc nhóm đó (DB là chuẩn): Chờ thanh toán=PENDING_PAYMENT, Đang xử lý=CONFIRMED/PACKED, Đang giao=SHIPPING, Đã giao=DELIVERED, Đã hủy/hoàn=CANCELLED/RETURNED; thẻ đơn có mã, chip trạng thái, số món, tổng tiền khớp DB; không tràn ngang",
+      "checks": [
+        {
+          "name": "tab \"Tất cả\": 12 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102252965\",\"TUBU2026102223432\",\"TUBU2026102213485\",\"TUBU2026102241766\",\"TUBU2026102207895\",\"TUBU2026102207437\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\",\"TUBU2026102215832\",\"TUBU2026102203254\",\"TUBU2026102246913\"],\"expect\":[\"TUBU2026102252965\",\"TUBU2026102223432\",\"TUBU2026102213485\",\"TUBU2026102241766\",\"TUBU2026102207895\",\"TUBU2026102207437\",\"TUBU2026102254496\"…"
+        },
+        {
+          "name": "tab \"Chờ thanh toán\": 1 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102207895\"],\"expect\":[\"TUBU2026102207895\"]}"
+        },
+        {
+          "name": "tab \"Đang xử lý\": 2 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102241766\",\"TUBU2026102215832\"],\"expect\":[\"TUBU2026102241766\",\"TUBU2026102215832\"]}"
+        },
+        {
+          "name": "tab \"Đang giao\": 1 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102213485\"],\"expect\":[\"TUBU2026102213485\"]}"
+        },
+        {
+          "name": "tab \"Đã giao\": 4 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102223432\",\"TUBU2026102207437\",\"TUBU2026102203254\",\"TUBU2026102246913\"],\"expect\":[\"TUBU2026102223432\",\"TUBU2026102207437\",\"TUBU2026102203254\",\"TUBU2026102246913\"]}"
+        },
+        {
+          "name": "tab \"Đã hủy/hoàn\": 4 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\"],\"expect\":[\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\"]}"
+        },
+        {
+          "name": "thẻ đơn COD hiện tổng 247.000đ và \"3 món\"",
+          "ok": true,
+          "detail": "TUBU2026102241766 | Đã xác nhận | Dầu tràm cho bé Cobote +1 | 3 món · 22/10/2026 | 247.000đ"
+        },
+        {
+          "name": "thẻ đơn COD hiện chip \"Đã xác nhận\"",
+          "ok": true,
+          "detail": "TUBU2026102241766 | Đã xác nhận | Dầu tràm cho bé Cobote +1 | 3 món · 22/10/2026 | 247.000đ"
+        },
+        {
+          "name": "đơn chuyển khoản chưa trả có nút \"Thanh toán ngay\"",
+          "ok": true,
+          "detail": "TUBU2026102207895 | Chờ thanh toán | Tinh dầu sả chanh Pơ Lang | 1 món · 22/10/2026 | 110.000đ | Hạn 18:46 23/10/2026 | Thanh toán ngay"
+        },
+        {
+          "name": "đơn đã giao có nút \"Mua lại\"",
+          "ok": true,
+          "detail": "TUBU2026102223432 | Giao thành công | Nước rửa tay sinh học Fuwa3e +1 | 2 món · 22/10/2026 | 199.000đ | Mua lại"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "đơn trong DB",
+          "value": "[\"TUBU2026102252965:CANCELLED\",\"TUBU2026102223432:DELIVERED\",\"TUBU2026102213485:SHIPPING\",\"TUBU2026102241766:CONFIRMED\",\"TUBU2026102207895:PENDING_PAYMENT\",\"TUBU2026102207437:DELIVERED\",\"TUBU2026102254496:CANCELLED\",\"TUBU2026102259868:CANCELLED\",\"TUBU2026102220239:CANCELLED\",\"TUBU2026102215832:CONFIRMED\",\"TUBU2026102203254:DELIVERED\",\"TUBU2026102246913:DELIVERED\"]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-50-390-danh-sach-tat-ca.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-50-1440",
+      "role": "Khách quay lại",
+      "journey": "Danh sách đơn",
+      "steps": "Mở /tai-khoan/don-hang, bấm lần lượt từng tab trạng thái (1440px)",
+      "expected": "Mỗi tab chỉ hiện đúng các đơn thuộc nhóm đó (DB là chuẩn): Chờ thanh toán=PENDING_PAYMENT, Đang xử lý=CONFIRMED/PACKED, Đang giao=SHIPPING, Đã giao=DELIVERED, Đã hủy/hoàn=CANCELLED/RETURNED; thẻ đơn có mã, chip trạng thái, số món, tổng tiền khớp DB; không tràn ngang",
+      "checks": [
+        {
+          "name": "tab \"Tất cả\": 12 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102252965\",\"TUBU2026102223432\",\"TUBU2026102213485\",\"TUBU2026102241766\",\"TUBU2026102207895\",\"TUBU2026102207437\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\",\"TUBU2026102215832\",\"TUBU2026102203254\",\"TUBU2026102246913\"],\"expect\":[\"TUBU2026102252965\",\"TUBU2026102223432\",\"TUBU2026102213485\",\"TUBU2026102241766\",\"TUBU2026102207895\",\"TUBU2026102207437\",\"TUBU2026102254496\"…"
+        },
+        {
+          "name": "tab \"Chờ thanh toán\": 1 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102207895\"],\"expect\":[\"TUBU2026102207895\"]}"
+        },
+        {
+          "name": "tab \"Đang xử lý\": 2 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102241766\",\"TUBU2026102215832\"],\"expect\":[\"TUBU2026102241766\",\"TUBU2026102215832\"]}"
+        },
+        {
+          "name": "tab \"Đang giao\": 1 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102213485\"],\"expect\":[\"TUBU2026102213485\"]}"
+        },
+        {
+          "name": "tab \"Đã giao\": 4 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102223432\",\"TUBU2026102207437\",\"TUBU2026102203254\",\"TUBU2026102246913\"],\"expect\":[\"TUBU2026102223432\",\"TUBU2026102207437\",\"TUBU2026102203254\",\"TUBU2026102246913\"]}"
+        },
+        {
+          "name": "tab \"Đã hủy/hoàn\": 4 đơn đúng như DB",
+          "ok": true,
+          "detail": "{\"shown\":[\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\"],\"expect\":[\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\"]}"
+        },
+        {
+          "name": "thẻ đơn COD hiện tổng 247.000đ và \"3 món\"",
+          "ok": true,
+          "detail": "TUBU2026102241766 | Đã xác nhận | Dầu tràm cho bé Cobote +1 | 3 món · 22/10/2026 | 247.000đ"
+        },
+        {
+          "name": "thẻ đơn COD hiện chip \"Đã xác nhận\"",
+          "ok": true,
+          "detail": "TUBU2026102241766 | Đã xác nhận | Dầu tràm cho bé Cobote +1 | 3 món · 22/10/2026 | 247.000đ"
+        },
+        {
+          "name": "đơn chuyển khoản chưa trả có nút \"Thanh toán ngay\"",
+          "ok": true,
+          "detail": "TUBU2026102207895 | Chờ thanh toán | Tinh dầu sả chanh Pơ Lang | 1 món · 22/10/2026 | 110.000đ | Hạn 18:46 23/10/2026 | Thanh toán ngay"
+        },
+        {
+          "name": "đơn đã giao có nút \"Mua lại\"",
+          "ok": true,
+          "detail": "TUBU2026102223432 | Giao thành công | Nước rửa tay sinh học Fuwa3e +1 | 2 món · 22/10/2026 | 199.000đ | Mua lại"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "đơn trong DB",
+          "value": "[\"TUBU2026102252965:CANCELLED\",\"TUBU2026102223432:DELIVERED\",\"TUBU2026102213485:SHIPPING\",\"TUBU2026102241766:CONFIRMED\",\"TUBU2026102207895:PENDING_PAYMENT\",\"TUBU2026102207437:DELIVERED\",\"TUBU2026102254496:CANCELLED\",\"TUBU2026102259868:CANCELLED\",\"TUBU2026102220239:CANCELLED\",\"TUBU2026102215832:CONFIRMED\",\"TUBU2026102203254:DELIVERED\",\"TUBU2026102246913:DELIVERED\"]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-50-1440-danh-sach-tat-ca.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-53",
+      "role": "Khách quay lại",
+      "journey": "Huỷ đơn",
+      "steps": "Huỷ đơn COD (bấm \"Giữ đơn\" trước, rồi Hủy); huỷ đơn chuyển khoản chưa trả; gọi API huỷ đơn đang giao/đã giao/đơn của người khác (390px)",
+      "expected": "Giữ đơn thì đơn giữ nguyên; huỷ xong đơn CANCELLED, tồn kho trả lại, đơn trên giả Pancake cũng huỷ, mục \"Đã hủy/hoàn\" hiện đơn; chuyển khoản chưa trả có cảnh báo \"vừa chuyển khoản…\"; API từ chối huỷ đơn đang giao và đã giao; đơn người khác trả 404 (IDOR)",
+      "checks": [
+        {
+          "name": "hộp xác nhận hiện \"Bạn muốn hủy đơn này?\" + \"Đơn đã hủy không thể khôi phục lại.\"",
+          "ok": true
+        },
+        {
+          "name": "bấm \"Giữ đơn\" → đơn vẫn CONFIRMED",
+          "ok": true
+        },
+        {
+          "name": "POST /orders/:code/cancel → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "trang báo \"Đã hủy đơn hàng\" và chip \"Đã hủy\"",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102241766\nĐã hủy\nĐặt lúc 18:46 22/10/2026\n\nĐã hủy đơn hàng. Hàng, điểm và tiền đã dùng cho đơn này được hoàn lại theo quy định.\n\nMua lại đơn này\nSản phẩm\nDầu tràm cho bé Cobote · 50ml ×1\n89.000đ\nPhấn rôm thảo dược Cobote · 1"
+        },
+        {
+          "name": "hết nút \"Hủy đơn\"",
+          "ok": true
+        },
+        {
+          "name": "DB: CANCELLED",
+          "ok": true
+        },
+        {
+          "name": "tồn COBOTE-PW-100: huỷ trả đúng 2 (stock +2, reserved −2)",
+          "ok": true,
+          "detail": "{\"beforeCancel\":{\"stock\":158,\"reserved\":2},\"after\":{\"stock\":160,\"reserved\":0}}"
+        },
+        {
+          "name": "tồn COBOTE-TR-50: huỷ trả đúng 1 (stock +1, reserved −1)",
+          "ok": true,
+          "detail": "{\"beforeCancel\":{\"stock\":298,\"reserved\":2},\"after\":{\"stock\":299,\"reserved\":1}}"
+        },
+        {
+          "name": "giả Pancake: đơn đã huỷ (status 6)",
+          "ok": true,
+          "detail": "{\"id\":\"9700009\",\"status\":6,\"status_name\":\"Đã hủy\"}"
+        },
+        {
+          "name": "tab \"Đã hủy/hoàn\" có đơn vừa huỷ",
+          "ok": true,
+          "detail": "[\"TUBU2026102252965\",\"TUBU2026102241766\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102220239\"]"
+        },
+        {
+          "name": "đơn chuyển khoản chưa trả: cảnh báo \"Nếu bạn vừa chuyển khoản…\"",
+          "ok": true,
+          "detail": "Bạn muốn hủy đơn này?\n\nĐơn đã hủy không thể khôi phục lại.\n\nNếu bạn vừa chuyển khoản, Tubu có thể cần vài phút để ghi nhận — hãy chờ thêm thay vì huỷ. Tiền về sau khi huỷ vẫn được hoàn: bạn chọn nhận về Ví Tubu hoặc tài khoản ngân hàng ở chi tiết đơn.\n\nGiữ đơn\nHủy đơn\nSản phẩm\nTinh dầu sả chanh Pơ Lang · 10ml ×1\n110.000đ\nThanh toán\nTạm tính\n110.000đ\nPhí vận chuyển\nMiễn phí\nTổng cộng\n110.000đ\nThanh"
+        },
+        {
+          "name": "đơn chuyển khoản chưa trả → CANCELLED",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026102207895\",\"status\":\"CANCELLED\",\"pm\":\"BANK_TRANSFER\",\"ps\":\"UNPAID\",\"subtotal\":110000,\"discount\":0,\"fee\":0,\"total\":110000,\"pe\":2640,\"shippingCode\":null,\"shippingPartner\":null}"
+        },
+        {
+          "name": "API từ chối huỷ đơn đang giao (4xx)",
+          "ok": true,
+          "detail": "{\"status\":400,\"ok\":false,\"body\":{\"message\":\"Đơn đã vào quy trình giao, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        },
+        {
+          "name": "đơn đang giao vẫn SHIPPING",
+          "ok": true
+        },
+        {
+          "name": "API từ chối huỷ đơn đã giao (4xx)",
+          "ok": true,
+          "detail": "{\"status\":400,\"body\":{\"message\":\"Đơn đã vào quy trình giao, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        },
+        {
+          "name": "IDOR: khách khác xem đơn của returning → 404",
+          "ok": true,
+          "detail": "{\"status\":404,\"body\":{\"message\":\"Không tìm thấy đơn hàng.\",\"error\":\"Not Found\",\"statusCode\":404}}"
+        },
+        {
+          "name": "IDOR: khách khác huỷ đơn của returning → 404",
+          "ok": true,
+          "detail": "{\"status\":404}"
+        },
+        {
+          "name": "web: khách khác mở đơn đó → \"không thuộc tài khoản của bạn\" (không lộ nội dung)",
+          "ok": true,
+          "detail": "Không tìm thấy đơn hàng\n\nĐơn hàng này không tồn tại hoặc không thuộc tài khoản của bạn.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "đơn trên giả Pancake sau huỷ",
+          "value": "{\"id\":\"9700009\",\"status\":6,\"status_name\":\"Đã hủy\"}"
+        },
+        {
+          "label": "huỷ đơn đang giao qua API",
+          "value": "{\"status\":400,\"body\":{\"message\":\"Đơn đã vào quy trình giao, vui lòng liên hệ hotline hoặc Zalo OA của Tubu để được hỗ trợ.\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-53-hop-xac-nhan-huy.png",
+        "uat/shots/U6-web-khach/U6-53-da-huy-cod.png",
+        "uat/shots/U6-web-khach/U6-53-huy-chuyen-khoan-chua-tra.png",
+        "uat/shots/U6-web-khach/U6-53-idor-khach-khac.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-54",
+      "role": "Khách quay lại",
+      "journey": "Huỷ đơn đã trả + hoàn ví",
+      "steps": "Đặt đơn chuyển khoản 110.000đ, giả ngân hàng chuyển đủ (PAID), vào chi tiết huỷ đơn, chọn hoàn về Ví Tubu (390px)",
+      "expected": "Hộp huỷ cho chọn nơi nhận tiền (Ví Tubu / ngân hàng); chọn Ví → đơn CANCELLED, paymentStatus REFUNDED, ví cộng đúng tổng đơn, có dòng wallet_transactions, walletBalance = SUM(sổ ví); tồn kho trả lại",
+      "checks": [
+        {
+          "name": "giả ngân hàng chuyển đủ: webhook xử lý xong",
+          "ok": true,
+          "detail": "{\"id\":\"cmvjh976k01cr11mml503aejn\",\"status\":\"PROCESSED\",\"error\":null,\"attempts\":1}"
+        },
+        {
+          "name": "đơn PAID + CONFIRMED",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026102260591\",\"status\":\"CONFIRMED\",\"pm\":\"BANK_TRANSFER\",\"ps\":\"PAID\",\"subtotal\":110000,\"discount\":0,\"fee\":0,\"total\":110000,\"pe\":2640,\"shippingCode\":null,\"shippingPartner\":null}"
+        },
+        {
+          "name": "hộp huỷ cho chọn nơi nhận tiền hoàn (Ví Tubu / tài khoản ngân hàng)",
+          "ok": true,
+          "detail": "Bạn muốn hủy đơn này?\n\nĐơn đã hủy không thể khôi phục lại.\n\nNhận lại 110.000đ về\n\nVí Tubu\nCộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng.\nTài khoản ngân hàng\nTubu chuyển khoản trong 1-3 ngày làm việc, miễn phí, không giới hạn số tiền.\nGiữ đơn\nHủy đơn\nSản phẩm\nTinh dầu sả chanh Pơ Lang · 10ml ×1\n110.000đ\nThanh toán\nTạm tính\n110.000đ\nPhí vận chuyển\nMiễn phí\nTổng cộng\n110.000đ\nThanh toán\nChu…"
+        },
+        {
+          "name": "đơn CANCELLED",
+          "ok": true,
+          "detail": "{\"code\":\"TUBU2026102260591\",\"status\":\"CANCELLED\",\"pm\":\"BANK_TRANSFER\",\"ps\":\"REFUNDED\",\"subtotal\":110000,\"discount\":0,\"fee\":0,\"total\":110000,\"pe\":2640,\"shippingCode\":null,\"shippingPartner\":null}"
+        },
+        {
+          "name": "ví cộng đúng 110.000đ (trước 0, sau 110000)",
+          "ok": true,
+          "detail": "{\"w0\":0,\"w1\":110000,\"total\":110000}"
+        },
+        {
+          "name": "walletBalance = SUM(wallet_transactions)",
+          "ok": true,
+          "detail": "{\"w1\":110000,\"wsum\":110000}"
+        },
+        {
+          "name": "có dòng hoàn tiền +tổng đơn trong sổ ví",
+          "ok": true,
+          "detail": "[{\"delta\":110000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026102260591\",\"balanceAfter\":110000},{\"delta\":-200000,\"type\":\"ADJUST\",\"reason\":\"UAT: đặt số dư ví thử\",\"balanceAfter\":0},{\"delta\":108000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026102254496\",\"balanceAfter\":200000}]"
+        },
+        {
+          "name": "paymentStatus REFUNDED",
+          "ok": true,
+          "detail": "REFUNDED"
+        },
+        {
+          "name": "tồn kho trả lại",
+          "ok": true,
+          "detail": "{\"stock0\":{\"stock\":217,\"reserved\":3},\"st\":{\"stock\":218,\"reserved\":2}}"
+        },
+        {
+          "name": "trang Ví Tubu hiện số dư 110.000đ",
+          "ok": true,
+          "detail": "Ví Tubu\nVí Tubu (số dư khả dụng)\n110.000đ\nRút ngân hàng\n\nSố dư dùng để thanh toán đơn\n\nĐiểm Xanh (đổi giảm giá)\n47.408 điểm\nLộc Biếc\n\nTích từ mỗi đơn đã giao — đổi giảm giá cho đơn sau & lên hạng thành viên.\n\nMẹo: dùng Ví Tubu để trả đơn hàng — miễn "
+        }
+      ],
+      "evidence": [
+        {
+          "label": "orders sau huỷ",
+          "value": "{\"code\":\"TUBU2026102260591\",\"status\":\"CANCELLED\",\"pm\":\"BANK_TRANSFER\",\"ps\":\"REFUNDED\",\"subtotal\":110000,\"discount\":0,\"fee\":0,\"total\":110000,\"pe\":2640,\"shippingCode\":null,\"shippingPartner\":null}"
+        },
+        {
+          "label": "wallet_transactions mới nhất",
+          "value": "[{\"delta\":110000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026102260591\",\"balanceAfter\":110000},{\"delta\":-200000,\"type\":\"ADJUST\",\"reason\":\"UAT: đặt số dư ví thử\",\"balanceAfter\":0},{\"delta\":108000,\"type\":\"ORDER_REFUND\",\"reason\":\"Hoàn tiền đơn TUBU2026102254496\",\"balanceAfter\":200000}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-54-huy-da-tra-chon-noi-hoan.png",
+        "uat/shots/U6-web-khach/U6-54-vi-tubu-sau-hoan.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-55",
+      "role": "Khách quay lại",
+      "journey": "Sau giao hàng",
+      "steps": "Từ đơn đã giao: bấm \"Mua lại đơn này\" → giỏ; \"Viết đánh giá\"; \"Yêu cầu đổi/trả\" (gửi trống để thấy lỗi, rồi chọn dòng + lý do) (390px)",
+      "expected": "Mua lại đưa đúng sản phẩm/số lượng vào giỏ (DB cart_items); Viết đánh giá mở trang sản phẩm đúng; gửi trống báo lỗi; gửi đủ tạo return_requests REQUESTED đúng đơn + dòng + số lượng, thẻ trạng thái \"đang chờ\" hiện, nút gửi lại biến mất",
+      "checks": [
+        {
+          "name": "giỏ có FUWA-HW-500 ×1 và POLANG-LG-10 ×1 như đơn cũ",
+          "ok": true,
+          "detail": "[{\"sku\":\"FUWA-HW-500\",\"qty\":1,\"retail\":89000,\"sale\":null},{\"sku\":\"POLANG-LG-10\",\"qty\":1,\"retail\":110000,\"sale\":null}]"
+        },
+        {
+          "name": "tự chuyển sang /gio-hang",
+          "ok": true,
+          "detail": "http://localhost:3262/gio-hang"
+        },
+        {
+          "name": "liên kết \"Viết đánh giá\" trỏ tới trang sản phẩm có tham số đơn",
+          "ok": true,
+          "detail": "/san-pham/nuoc-rua-tay-fuwa3e?danh-gia=cmvjh6zcl017g11mmgk2pgre2#danh-gia"
+        },
+        {
+          "name": "trang đánh giá mở được, có chỗ chọn sao / ô nhận xét",
+          "ok": true,
+          "detail": "http://localhost:3262/san-pham/nuoc-rua-tay-fuwa3e#danh-gia Fuwa3e\nChia sẻ\nNước rửa tay sinh học Fuwa3e\n89.000đ\n\nNhận Điểm Xanh khi đơn giao thành công\n\nSạch khuẩn dịu nhẹ, dưỡng ẩm da tay.\n\nTubu Tree giao hàng\n\nMiễn phí giao hàng cho đơn từ 99.000đ\n\nEco\nWELCO"
+        },
+        {
+          "name": "gửi trống: báo lỗi chọn sản phẩm/lý do",
+          "ok": true,
+          "detail": "[\"Chọn ít nhất một sản phẩm muốn trả.\",\"\"]"
+        },
+        {
+          "name": "hiện \"Dự kiến hoàn …đ\" sau khi chọn dòng + lý do",
+          "ok": true,
+          "detail": "Dự kiến hoàn 89.000đ\n\nTubu xác nhận số cuối cùng khi duyệt\n\nSố tiền hoàn = giá trị sản phẩm trả sau khi trừ phần giảm giá và điểm đã dùng tương ứng. P"
+        },
+        {
+          "name": "POST đổi/trả → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "DB: 1 yêu cầu REQUESTED, lý do DEFECTIVE",
+          "ok": true,
+          "detail": "[{\"status\":\"REQUESTED\",\"reasonCode\":\"DEFECTIVE\",\"fullReturn\":false,\"refund\":null}]"
+        },
+        {
+          "name": "trang báo \"Đã gửi yêu cầu đổi/trả\"",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102223432\nGiao thành công\nGiao lúc 18:46 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— đã qua\nĐang đóng gói\n— đã qua\nĐang giao\n— đã qua\nGiao thành công\n— hiện tại\nMua lại đơn "
+        },
+        {
+          "name": "sau tải lại: có thẻ trạng thái yêu cầu, hết nút \"Yêu cầu đổi/trả\" (đang chờ duyệt)",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "evidence": [
+        {
+          "label": "bảng Mua lại",
+          "value": "Chi tiết đơn hàng\nTUBU2026102223432\nGiao thành công\nGiao lúc 18:46 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— đã qua\nĐang đóng gói\n— đã qua\nĐang giao\n— đã qua\nGiao thành công\n— hiện tại\nMua lại đơn này\nYêu cầu đổi/trả\nSản phẩm\nNước rửa tay sinh học Fuwa3e · 500ml ×1\nViết đánh giá\n89.000đ\nTinh dầu sả chanh Pơ Lang · 10ml ×1\nViết đánh giá\n110.000đ\nThanh toán\nTạm tính\n199.000đ\nPhí vận chuyển\nMiễn phí\nTổng cộng\n199.000đ\nThanh toán\nKhi nhận hàng (COD)\n\nĐã cộng +4.776 Điểm Xanh vào tài khoản\n\nGiao h"
+        },
+        {
+          "label": "giỏ sau Mua lại",
+          "value": "[{\"sku\":\"FUWA-HW-500\",\"qty\":1,\"retail\":89000,\"sale\":null},{\"sku\":\"POLANG-LG-10\",\"qty\":1,\"retail\":110000,\"sale\":null}]"
+        },
+        {
+          "label": "liên kết đánh giá",
+          "value": "/san-pham/nuoc-rua-tay-fuwa3e?danh-gia=cmvjh6zcl017g11mmgk2pgre2#danh-gia"
+        },
+        {
+          "label": "lỗi gửi trống",
+          "value": "Yêu cầu đổi/trả\n\nChọn đúng sản phẩm và số lượng muốn trả, Tubu phản hồi trong 24 giờ. Hàng lỗi, vỡ hay giao sai: đính kèm ảnh bên dưới để Tubu duyệt nhanh hơn.\n\nSản phẩm muốn trả\nNước rửa tay sinh học Fuwa3e\n500ml · còn trả được 1\nTinh dầu sả chanh Pơ Lang\n10ml · còn trả được 1\nLý do\nSản phẩm lỗi, hỏng\nGiao sai sản phẩm\nBể vỡ, móp méo khi vận chuyển\nHết hạn hoặc sai hạn sử dụng\nLý do khác\nMô tả thêm\nẢnh minh chứng (khuyến khích, tối đa 3) 0/3\nThêm ảnh\n\nNhận tiền hoàn về\n\nVí Tubu\nCộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng.\nTài khoản ngân hàng\nTubu chuyển khoản trong 1-3 ngày làm việc, miễn phí, không giới hạn số tiền.\n\nSố tiền hoàn = giá trị sản phẩm trả sau khi trừ phần giảm giá"
+        },
+        {
+          "label": "POST đổi/trả",
+          "value": "{\"status\":201,\"url\":\"http://localhost:3261/api/orders/TUBU2026102223432/return-request\"}"
+        },
+        {
+          "label": "return_requests",
+          "value": "[{\"status\":\"REQUESTED\",\"reasonCode\":\"DEFECTIVE\",\"fullReturn\":false,\"refund\":null}]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-55-mua-lai-sheet.png",
+        "uat/shots/U6-web-khach/U6-55-danh-gia.png",
+        "uat/shots/U6-web-khach/U6-55-doi-tra-loi-trong.png",
+        "uat/shots/U6-web-khach/U6-55-doi-tra-da-gui.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-56",
+      "role": "Khách quay lại",
+      "journey": "So sánh web ↔ Mini App",
+      "steps": "Mở /orders và /order/:code trên Mini App (cùng dữ liệu) rồi đối chiếu với web (390px)",
+      "expected": "Cùng danh sách mã đơn, cùng tổng tiền và cùng trạng thái ở danh sách; chi tiết cùng tổng, ship, phương thức, mã vận đơn",
+      "checks": [
+        {
+          "name": "cùng bộ mã đơn (Mini App chỉ cần thấy mọi mã đơn web)",
+          "ok": true,
+          "detail": "{\"webOnly\":[],\"miniOnly\":[]}"
+        },
+        {
+          "name": "chi tiết đơn đang giao: web và Mini App cùng hiện tổng (158.000đ)",
+          "ok": true,
+          "detail": "{\"web\":true,\"mini\":true}"
+        },
+        {
+          "name": "chi tiết đơn đang giao: web và Mini App cùng hiện mã vận đơn (UATGHN7000106)",
+          "ok": true,
+          "detail": "{\"web\":true,\"mini\":true}"
+        },
+        {
+          "name": "chi tiết đơn đang giao: web và Mini App cùng hiện mã đơn (TUBU2026102213485)",
+          "ok": true,
+          "detail": "{\"web\":true,\"mini\":true}"
+        },
+        {
+          "name": "cả hai cùng KHÔNG có nút Hủy khi đang giao",
+          "ok": true,
+          "detail": "{\"miniHasCancel\":false}"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "mã đơn web",
+          "value": "[\"TUBU2026102203254\",\"TUBU2026102207437\",\"TUBU2026102207895\",\"TUBU2026102213485\",\"TUBU2026102215832\",\"TUBU2026102220239\",\"TUBU2026102223432\",\"TUBU2026102241766\",\"TUBU2026102246913\",\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102260591\"]"
+        },
+        {
+          "label": "mã đơn Mini App",
+          "value": "[\"TUBU2026102203254\",\"TUBU2026102207437\",\"TUBU2026102207895\",\"TUBU2026102213485\",\"TUBU2026102215832\",\"TUBU2026102220239\",\"TUBU2026102223432\",\"TUBU2026102241766\",\"TUBU2026102246913\",\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102260591\"]"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-56-web-chi-tiet-dang-giao.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-51",
+      "role": "Khách quay lại",
+      "journey": "Tìm đơn",
+      "steps": "Mở /tai-khoan, gõ mã đơn / tên sản phẩm / chuỗi lạ vào ô \"Mã đơn hoặc tên sản phẩm\" (1440px; ở 390px không còn ô tìm, giống Mini App)",
+      "expected": "Mã đơn: đúng 1 đơn; tên sản phẩm: chỉ đơn có sản phẩm đó; chuỗi lạ: thông báo không có đơn; nút \"Xóa tìm kiếm\" quay về danh sách",
+      "checks": [
+        {
+          "name": "tìm theo mã đơn → đúng 1 đơn",
+          "ok": true,
+          "detail": "[\"TUBU2026102226620\"]"
+        },
+        {
+          "name": "tìm theo tên sản phẩm \"Cobote\" → đúng các đơn có sản phẩm Cobote",
+          "ok": true,
+          "detail": "{\"got\":[\"TUBU2026102251701\",\"TUBU2026102226620\",\"TUBU2026102234039\",\"TUBU2026102293962\",\"TUBU2026102252965\",\"TUBU2026102241766\",\"TUBU2026102254496\",\"TUBU2026102259868\"],\"expect\":[\"TUBU2026102226620\",\"TUBU2026102234039\",\"TUBU2026102241766\",\"TUBU2026102251701\",\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102293962\"]}"
+        },
+        {
+          "name": "chuỗi lạ → không có đơn nào + câu báo",
+          "ok": true,
+          "detail": "{\"got\":[],\"text\":\"Kết quả cho “zzzkhongco”\\nXóa tìm kiếm\\nTất cả\\nChờ thanh toán\\nĐang xử lý\\nĐang giao\\nĐã giao\\nĐã hủy/hoàn\\n\\nKhông tìm thấy đơn nào khớp “zzzkhongco”.\\n\\nĐăng xuất\\n\\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng \"}"
+        },
+        {
+          "name": "Xóa tìm kiếm → danh sách trở lại",
+          "ok": true,
+          "detail": "20"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "tìm \"Cobote\"",
+          "value": "{\"got\":[\"TUBU2026102251701\",\"TUBU2026102226620\",\"TUBU2026102234039\",\"TUBU2026102293962\",\"TUBU2026102252965\",\"TUBU2026102241766\",\"TUBU2026102254496\",\"TUBU2026102259868\"],\"expect\":[\"TUBU2026102226620\",\"TUBU2026102234039\",\"TUBU2026102241766\",\"TUBU2026102251701\",\"TUBU2026102252965\",\"TUBU2026102254496\",\"TUBU2026102259868\",\"TUBU2026102293962\"]}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-51-tim-cobote.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-52-390",
+      "role": "Khách quay lại",
+      "journey": "Chi tiết đơn",
+      "steps": "Mở chi tiết 4 đơn: chờ chuyển khoản, COD đã xác nhận, đang giao (có mã vận đơn), đã giao (390px)",
+      "expected": "Chip trạng thái đúng; tạm tính/ship/tổng khớp DB; phương thức + tình trạng thanh toán đúng; sản phẩm × số lượng × đơn giá khớp; đơn chờ chuyển khoản hiện khung QR; đơn đang giao hiện đơn vị vận chuyển + mã vận đơn; đơn đã giao hiện \"Viết đánh giá\" + \"Mua lại đơn này\"; không tràn ngang",
+      "checks": [
+        {
+          "name": "chờ chuyển khoản: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102269779",
+          "ok": true
+        },
+        {
+          "name": "chờ chuyển khoản: tổng 110.000đ và tạm tính 110.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102269779\",\"status\":\"PENDING_PAYMENT\",\"pm\":\"BANK_TRANSFER\",\"ps\":\"UNPAID\",\"subtotal\":110000,\"discount\":0,\"fee\":0,\"total\":110000,\"pe\":2640,\"shippingCode\":null,\"shippingPartner\":null}}"
+        },
+        {
+          "name": "chờ chuyển khoản: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "chờ chuyển khoản: dòng \"Tinh dầu sả chanh Pơ Lang\" ×1 = 110.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Tinh dầu sả chanh Pơ Lang\",\"variationName\":\"10ml\",\"u\":110000,\"q\":1,\"t\":110000}"
+        },
+        {
+          "name": "hiện \"Đang chờ\" + khung QR (STK 8386790906)",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102269779\nChờ thanh toán\nĐặt lúc 19:15 22/10/2026\n\nĐơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh toán, hệ thống tự xác nhận khi nhận được tiền.\n\nQuét QR để chuyển "
+        },
+        {
+          "name": "phương thức \"Chuyển khoản\"",
+          "ok": true,
+          "detail": "Tổng cộng\n110.000đ\nThanh toán\nChuyển khoản\n\nNhận +2.640 Điểm Xanh khi giao thành công\n\nGiao hàng\n\nNguyễn Thị Quay Lại · 0901000003\n\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nCần hủy hoặc đổi đơn? Gọi hotline 0984 606 774 hoặc email tubutree@gmail.com để được hỗ trợ."
+        },
+        {
+          "name": "nút \"Hủy đơn\" có (đơn chưa trả)",
+          "ok": true
+        },
+        {
+          "name": "chờ chuyển khoản: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "chờ chuyển khoản: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "COD đã xác nhận: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102226620",
+          "ok": true
+        },
+        {
+          "name": "COD đã xác nhận: tổng 247.000đ và tạm tính 247.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102226620\",\"status\":\"CONFIRMED\",\"pm\":\"COD\",\"ps\":\"UNPAID\",\"subtotal\":247000,\"discount\":0,\"fee\":0,\"total\":247000,\"pe\":5928,\"shippingCode\":null,\"shippingPartner\":null}}"
+        },
+        {
+          "name": "COD đã xác nhận: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "COD đã xác nhận: dòng \"Dầu tràm cho bé Cobote\" ×1 = 89.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Dầu tràm cho bé Cobote\",\"variationName\":\"50ml\",\"u\":89000,\"q\":1,\"t\":89000}"
+        },
+        {
+          "name": "COD đã xác nhận: dòng \"Phấn rôm thảo dược Cobote\" ×2 = 158.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Phấn rôm thảo dược Cobote\",\"variationName\":\"100g\",\"u\":79000,\"q\":2,\"t\":158000}"
+        },
+        {
+          "name": "chip \"Đã xác nhận\" hoặc tương đương",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102226620\nĐã xác nhận\nĐặt lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— hiện tại\nĐang đóng gói\nĐang giao\nGiao thành công\nHủy "
+        },
+        {
+          "name": "phương thức COD",
+          "ok": true,
+          "detail": "Tổng cộng\n247.000đ\nThanh toán\nKhi nhận hàng (COD)\n\nNhận +5.928 Điểm Xanh khi giao thành công\n\nGiao hàng\n\nNguyễn Thị Quay Lại · 0901000003\n\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nCần hủy hoặc đổi đơn? Gọi hotline 0984 606 774 hoặc email tubutree@gmail.com để được hỗ trợ."
+        },
+        {
+          "name": "địa chỉ giao 12 Lê Lợi + SĐT người nhận",
+          "ok": true,
+          "detail": "Giao hàng\n\nNguyễn Thị Quay Lại · 0901000003\n\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nCần hủy hoặc đổi đơn? Gọi hotline 0984 606 774 hoặc email tubutree@gmail.com để được hỗ trợ."
+        },
+        {
+          "name": "có nút \"Hủy đơn\"",
+          "ok": true
+        },
+        {
+          "name": "ghi chú điểm: sẽ nhận điểm sau khi giao",
+          "ok": true,
+          "detail": "."
+        },
+        {
+          "name": "COD đã xác nhận: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "COD đã xác nhận: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "đang giao: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102203449",
+          "ok": true
+        },
+        {
+          "name": "đang giao: tổng 158.000đ và tạm tính 158.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102203449\",\"status\":\"SHIPPING\",\"pm\":\"COD\",\"ps\":\"UNPAID\",\"subtotal\":158000,\"discount\":0,\"fee\":0,\"total\":158000,\"pe\":3792,\"shippingCode\":\"UATGHN7000246\",\"shippingPartner\":\"GHN\"}}"
+        },
+        {
+          "name": "đang giao: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "đang giao: dòng \"Nước lau kính enzyme Fuwa3e\" ×2 = 158.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Nước lau kính enzyme Fuwa3e\",\"variationName\":\"500ml\",\"u\":79000,\"q\":2,\"t\":158000}"
+        },
+        {
+          "name": "chip \"Đang giao\"",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102203449\nĐang giao\nĐặt lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— đã qua\nĐang đóng gói\n— đã qua\nĐang giao\n— hiện tại\nGiao"
+        },
+        {
+          "name": "hiện Mã vận đơn của DB",
+          "ok": true,
+          "detail": "{\"code\":\"UATGHN7000246\",\"partner\":\"GHN\"}"
+        },
+        {
+          "name": "hiện Đơn vị vận chuyển",
+          "ok": true,
+          "detail": "GHN"
+        },
+        {
+          "name": "KHÔNG có nút \"Hủy đơn\" (đã giao cho vận chuyển)",
+          "ok": true
+        },
+        {
+          "name": "có câu giải thích \"Đơn đã giao cho đơn vị vận chuyển nên không huỷ được\"",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102203449\nĐang giao\nĐặt lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— đã qua\nĐang đóng gói\n— đã qua\nĐang giao\n— hiện tại\nGiao thành công\n\nĐơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận hàng, bạn có thể gửi yêu cầu đổi/trả.\n\nSản phẩm\nNước lau kính en"
+        },
+        {
+          "name": "đang giao: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "đang giao: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "đã giao: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102255484",
+          "ok": true
+        },
+        {
+          "name": "đã giao: tổng 199.000đ và tạm tính 199.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102255484\",\"status\":\"DELIVERED\",\"pm\":\"COD\",\"ps\":\"UNPAID\",\"subtotal\":199000,\"discount\":0,\"fee\":0,\"total\":199000,\"pe\":4776,\"shippingCode\":\"UATGHN7000256\",\"shippingPartner\":\"GHN\"}}"
+        },
+        {
+          "name": "đã giao: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "đã giao: dòng \"Nước rửa tay sinh học Fuwa3e\" ×1 = 89.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Nước rửa tay sinh học Fuwa3e\",\"variationName\":\"500ml\",\"u\":89000,\"q\":1,\"t\":89000}"
+        },
+        {
+          "name": "đã giao: dòng \"Tinh dầu sả chanh Pơ Lang\" ×1 = 110.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Tinh dầu sả chanh Pơ Lang\",\"variationName\":\"10ml\",\"u\":110000,\"q\":1,\"t\":110000}"
+        },
+        {
+          "name": "chip \"Giao thành công\" (nhãn trạng thái của Mini App)",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\nTUBU2026102255484\nGiao thành công\nGiao lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— đã qua\nĐang đóng gói\n— đã qua\nĐang giao\n— đã qua"
+        },
+        {
+          "name": "có \"Viết đánh giá\" cho từng sản phẩm",
+          "ok": true,
+          "detail": "2"
+        },
+        {
+          "name": "có nút \"Mua lại đơn này\"",
+          "ok": true
+        },
+        {
+          "name": "có nút \"Yêu cầu đổi/trả\" trong hạn 7 ngày",
+          "ok": true
+        },
+        {
+          "name": "KHÔNG có nút \"Hủy đơn\"",
+          "ok": true
+        },
+        {
+          "name": "ghi chú điểm \"Đã cộng\" (sau giao)",
+          "ok": true,
+          "detail": "."
+        },
+        {
+          "name": "đã giao: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "đã giao: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-52-390-chi-tiet-bank.png",
+        "uat/shots/U6-web-khach/U6-52-390-chi-tiet-cod.png",
+        "uat/shots/U6-web-khach/U6-52-390-chi-tiet-ship.png",
+        "uat/shots/U6-web-khach/U6-52-390-chi-tiet-dlv.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-52-1440",
+      "role": "Khách quay lại",
+      "journey": "Chi tiết đơn",
+      "steps": "Mở chi tiết 4 đơn: chờ chuyển khoản, COD đã xác nhận, đang giao (có mã vận đơn), đã giao (1440px)",
+      "expected": "Chip trạng thái đúng; tạm tính/ship/tổng khớp DB; phương thức + tình trạng thanh toán đúng; sản phẩm × số lượng × đơn giá khớp; đơn chờ chuyển khoản hiện khung QR; đơn đang giao hiện đơn vị vận chuyển + mã vận đơn; đơn đã giao hiện \"Viết đánh giá\" + \"Mua lại đơn này\"; không tràn ngang",
+      "checks": [
+        {
+          "name": "chờ chuyển khoản: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102269779",
+          "ok": true
+        },
+        {
+          "name": "chờ chuyển khoản: tổng 110.000đ và tạm tính 110.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102269779\",\"status\":\"PENDING_PAYMENT\",\"pm\":\"BANK_TRANSFER\",\"ps\":\"UNPAID\",\"subtotal\":110000,\"discount\":0,\"fee\":0,\"total\":110000,\"pe\":2640,\"shippingCode\":null,\"shippingPartner\":null}}"
+        },
+        {
+          "name": "chờ chuyển khoản: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "chờ chuyển khoản: dòng \"Tinh dầu sả chanh Pơ Lang\" 110.000đ × 1 = 110.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Tinh dầu sả chanh Pơ Lang\",\"variationName\":\"10ml\",\"u\":110000,\"q\":1,\"t\":110000}"
+        },
+        {
+          "name": "hiện \"Đang chờ\" + khung QR (STK 8386790906)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nChi tiết đơn hàng\nTUBU2026102269779\nChờ thanh toán\nĐặt lúc 19:15 22/10/2026\n\nĐơn đang chờ bạn chuyển khoản. Quét mã bên dưới để thanh t"
+        },
+        {
+          "name": "phương thức \"Chuyển khoản\", tình trạng \"Chưa thanh toán\"",
+          "ok": true,
+          "detail": "Tổng cộng\n110.000đ\nThanh toán\nChuyển khoản\nTình trạng\nChưa thanh toán\n\nNhận +2.640 Điểm Xanh khi giao thành công\n\nGiao hàng\n\nNguyễn Thị Quay Lại · 0901000003\n\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nCần hủy hoặc đổi đơn? Gọi hotline 0984 606 774 hoặc email tubutree@gmail.com để được hỗ trợ.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.\n\nHỗ…"
+        },
+        {
+          "name": "nút \"Hủy đơn\" có (đơn chưa trả)",
+          "ok": true
+        },
+        {
+          "name": "chờ chuyển khoản: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "chờ chuyển khoản: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "COD đã xác nhận: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102226620",
+          "ok": true
+        },
+        {
+          "name": "COD đã xác nhận: tổng 247.000đ và tạm tính 247.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102226620\",\"status\":\"CONFIRMED\",\"pm\":\"COD\",\"ps\":\"UNPAID\",\"subtotal\":247000,\"discount\":0,\"fee\":0,\"total\":247000,\"pe\":5928,\"shippingCode\":null,\"shippingPartner\":null}}"
+        },
+        {
+          "name": "COD đã xác nhận: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "COD đã xác nhận: dòng \"Dầu tràm cho bé Cobote\" 89.000đ × 1 = 89.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Dầu tràm cho bé Cobote\",\"variationName\":\"50ml\",\"u\":89000,\"q\":1,\"t\":89000}"
+        },
+        {
+          "name": "COD đã xác nhận: dòng \"Phấn rôm thảo dược Cobote\" 79.000đ × 2 = 158.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Phấn rôm thảo dược Cobote\",\"variationName\":\"100g\",\"u\":79000,\"q\":2,\"t\":158000}"
+        },
+        {
+          "name": "chip \"Đã xác nhận\" hoặc tương đương",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nChi tiết đơn hàng\nTUBU2026102226620\nĐã xác nhận\nĐặt lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã"
+        },
+        {
+          "name": "phương thức COD, \"Chưa thanh toán\"",
+          "ok": true,
+          "detail": "Tổng cộng\n247.000đ\nThanh toán\nKhi nhận hàng (COD)\nTình trạng\nChưa thanh toán\n\nNhận +5.928 Điểm Xanh khi giao thành công\n\nGiao hàng\n\nNguyễn Thị Quay Lại · 0901000003\n\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nCần hủy hoặc đổi đơn? Gọi hotline 0984 606 774 hoặc email tubutree@gmail.com để được hỗ trợ.\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Vi…"
+        },
+        {
+          "name": "địa chỉ giao 12 Lê Lợi + SĐT người nhận",
+          "ok": true,
+          "detail": "Giao hàng\n\nNguyễn Thị Quay Lại · 0901000003\n\n12 Lê Lợi, Phường Bến Thành, Thành phố Hồ Chí Minh\n\nCần hủy hoặc đổi đơn? Gọi hotline 0984 606 774 hoặc email tubutree@gmail.com để được hỗ trợ.\n\nSống xanh"
+        },
+        {
+          "name": "có nút \"Hủy đơn\"",
+          "ok": true
+        },
+        {
+          "name": "ghi chú điểm: sẽ nhận điểm sau khi giao",
+          "ok": true,
+          "detail": "n"
+        },
+        {
+          "name": "COD đã xác nhận: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "COD đã xác nhận: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "đang giao: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102203449",
+          "ok": true
+        },
+        {
+          "name": "đang giao: tổng 158.000đ và tạm tính 158.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102203449\",\"status\":\"SHIPPING\",\"pm\":\"COD\",\"ps\":\"UNPAID\",\"subtotal\":158000,\"discount\":0,\"fee\":0,\"total\":158000,\"pe\":3792,\"shippingCode\":\"UATGHN7000246\",\"shippingPartner\":\"GHN\"}}"
+        },
+        {
+          "name": "đang giao: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "đang giao: dòng \"Nước lau kính enzyme Fuwa3e\" 79.000đ × 2 = 158.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Nước lau kính enzyme Fuwa3e\",\"variationName\":\"500ml\",\"u\":79000,\"q\":2,\"t\":158000}"
+        },
+        {
+          "name": "chip \"Đang giao\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nChi tiết đơn hàng\nTUBU2026102203449\nĐang giao\nĐặt lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã x"
+        },
+        {
+          "name": "hiện Mã vận đơn của DB",
+          "ok": true,
+          "detail": "{\"code\":\"UATGHN7000246\",\"partner\":\"GHN\"}"
+        },
+        {
+          "name": "hiện Đơn vị vận chuyển",
+          "ok": true,
+          "detail": "GHN"
+        },
+        {
+          "name": "KHÔNG có nút \"Hủy đơn\" (đã giao cho vận chuyển)",
+          "ok": true
+        },
+        {
+          "name": "có câu giải thích \"Đơn đã giao cho đơn vị vận chuyển nên không huỷ được\"",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nChi tiết đơn hàng\nTUBU2026102203449\nĐang giao\nĐặt lúc 19:15 22/10/2026\nHành trình đơn hàng\nĐã xác nhận\n— đã qua\nĐang đóng gói\n— đã qua\nĐang giao\n— hiện tại\nGiao thành công\n\nĐơn đã giao cho đơn vị vận chuyển nên không huỷ được. Khi nhận"
+        },
+        {
+          "name": "đang giao: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "đang giao: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "đã giao: tiêu đề \"Chi tiết đơn hàng\" và mã TUBU2026102255484",
+          "ok": true
+        },
+        {
+          "name": "đã giao: tổng 199.000đ và tạm tính 199.000đ khớp DB",
+          "ok": true,
+          "detail": "{\"o\":{\"code\":\"TUBU2026102255484\",\"status\":\"DELIVERED\",\"pm\":\"COD\",\"ps\":\"UNPAID\",\"subtotal\":199000,\"discount\":0,\"fee\":0,\"total\":199000,\"pe\":4776,\"shippingCode\":\"UATGHN7000256\",\"shippingPartner\":\"GHN\"}}"
+        },
+        {
+          "name": "đã giao: ship Miễn phí khớp DB",
+          "ok": true,
+          "detail": "{\"fee\":0}"
+        },
+        {
+          "name": "đã giao: dòng \"Nước rửa tay sinh học Fuwa3e\" 89.000đ × 1 = 89.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Nước rửa tay sinh học Fuwa3e\",\"variationName\":\"500ml\",\"u\":89000,\"q\":1,\"t\":89000}"
+        },
+        {
+          "name": "đã giao: dòng \"Tinh dầu sả chanh Pơ Lang\" 110.000đ × 1 = 110.000đ",
+          "ok": true,
+          "detail": "{\"productName\":\"Tinh dầu sả chanh Pơ Lang\",\"variationName\":\"10ml\",\"u\":110000,\"q\":1,\"t\":110000}"
+        },
+        {
+          "name": "chip \"Giao thành công\" (nhãn trạng thái của Mini App)",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nChi tiết đơn hàng\nTUBU2026102255484\nGiao thành công\nGiao lúc 19:15 22/10/2026\nHành trình đơn hà"
+        },
+        {
+          "name": "có \"Viết đánh giá\" cho từng sản phẩm",
+          "ok": true,
+          "detail": "2"
+        },
+        {
+          "name": "có nút \"Mua lại đơn này\"",
+          "ok": true
+        },
+        {
+          "name": "có nút \"Yêu cầu đổi/trả\" trong hạn 7 ngày",
+          "ok": true
+        },
+        {
+          "name": "KHÔNG có nút \"Hủy đơn\"",
+          "ok": true
+        },
+        {
+          "name": "ghi chú điểm \"Đã cộng\" (sau giao)",
+          "ok": true,
+          "detail": "n"
+        },
+        {
+          "name": "đã giao: không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}"
+        },
+        {
+          "name": "đã giao: không request API lỗi",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-52-1440-chi-tiet-bank.png",
+        "uat/shots/U6-web-khach/U6-52-1440-chi-tiet-cod.png",
+        "uat/shots/U6-web-khach/U6-52-1440-chi-tiet-ship.png",
+        "uat/shots/U6-web-khach/U6-52-1440-chi-tiet-dlv.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    }
+  ]
+}

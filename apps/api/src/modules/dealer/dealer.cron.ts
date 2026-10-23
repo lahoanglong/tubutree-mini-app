@@ -15,10 +15,23 @@ export class DealerCron {
   @Cron('0 0 4 10 1,4,7,10 *', { timeZone: CRON_TZ })
   async payoutQuarterly() {
     try {
-      const { paid, quarter } = await this.dealer.payoutQuarterlyBonuses();
-      this.logger.log(`Cron thưởng quý ${quarter}: đã trả ${paid} đại lý.`);
+      const { paid, quarter, failed } = await this.dealer.payoutQuarterlyBonuses();
+      this.logger.log(`Cron thưởng quý ${quarter}: đã trả ${paid} đại lý${failed > 0 ? `, ${failed} đại lý lỗi` : ''}.`);
     } catch (err) {
       this.logger.error(`Cron trả thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
+    }
+  }
+
+  // 05:00 hằng ngày, sau giờ trả thưởng 04:00 ngày 10: đơn của quý chốt muộn hơn ngày 10 được trả bù trong cửa sổ cấu hình.
+  @Cron('0 0 5 * * *', { timeZone: CRON_TZ })
+  async topUpQuarterly() {
+    try {
+      const { toppedUp, quarters, failed } = await this.dealer.topUpQuarterlyBonuses();
+      if (toppedUp > 0 || failed > 0) {
+        this.logger.log(`Cron trả bù thưởng quý ${quarters.join(', ')}: đã bù ${toppedUp} khoản${failed > 0 ? `, ${failed} lượt đại lý lỗi` : ''}.`);
+      }
+    } catch (err) {
+      this.logger.error(`Cron trả bù thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
     }
   }
 }

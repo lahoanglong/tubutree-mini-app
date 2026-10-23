@@ -1,0 +1,84 @@
+{
+  "id": "U1-06",
+  "browser": "chromium",
+  "role": "Khách mới (vừa nhận voucher chào mừng) / Khách quay lại",
+  "journey": "Trang chủ bố cục khách mới (home.new_customer_layout bật)",
+  "steps": "Khách mới mở / → đọc thứ tự vùng; khách quay lại uat_returning mở / → đọc thứ tự vùng",
+  "expected": "Khách mới: \"Quà khách mới\" (có voucher chào mừng 30.000đ, freeship đơn đầu từ 199.000đ, 2% Điểm Xanh) đứng trước \"Danh mục\", \"Danh mục\" trước \"Ưu đãi giờ vàng\". Khách quay lại: không có \"Quà khách mới\", có vùng \"Mua lại\"",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "khách mới: Quà khách mới < Danh mục < Ưu đãi giờ vàng",
+      "ok": true,
+      "detail": {
+        "Quà khách mới": 126,
+        "Danh mục": 475.828125,
+        "Ưu đãi giờ vàng": 855.140625,
+        "Bán chạy": 1119.703125
+      }
+    },
+    {
+      "name": "Quà khách mới nêu voucher chào mừng 30.000đ đơn từ 199.000đ",
+      "ok": true
+    },
+    {
+      "name": "Quà khách mới nêu freeship đơn đầu từ 199.000đ",
+      "ok": true
+    },
+    {
+      "name": "Quà khách mới nêu 2% Điểm Xanh, 1 điểm = 1đ",
+      "ok": true
+    },
+    {
+      "name": "khách quay lại: không có Quà khách mới, có Mua lại",
+      "ok": true,
+      "detail": {
+        "Quà khách mới": null,
+        "Mua lại": 126,
+        "Danh mục": 2875.265625,
+        "Ưu đãi giờ vàng": 616.96875
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "SQL home.new_customer_layout",
+      "data": {
+        "value": true
+      }
+    },
+    {
+      "label": "khách mới: toạ độ y các vùng",
+      "data": {
+        "Quà khách mới": 126,
+        "Danh mục": 475.828125,
+        "Ưu đãi giờ vàng": 855.140625,
+        "Bán chạy": 1119.703125
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-06-home-new.png"
+    },
+    {
+      "label": "chữ vùng Quà khách mới",
+      "data": "Quà khách mới\nMã giảm giá chào mừng 30.000đ\nCho đơn từ 199.000đ · Dùng đến 21/11/2026\n\nMua trực tiếp tại Tubu Tree\n\nMiễn phí giao hàng cho đơn đầu tiên từ 199.000đ\nMỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1đ\nĐặt định kỳ giảm 12% mỗi đơn\nChọn sản phẩm"
+    },
+    {
+      "label": "khách quay lại: toạ độ y các vùng",
+      "data": {
+        "Quà khách mới": null,
+        "Mua lại": 126,
+        "Danh mục": 2875.265625,
+        "Ưu đãi giờ vàng": 616.96875
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-06-home-returning.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:34:58.892Z"
+}

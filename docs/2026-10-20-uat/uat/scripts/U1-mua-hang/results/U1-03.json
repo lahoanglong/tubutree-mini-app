@@ -1,0 +1,58 @@
+{
+  "id": "U1-03",
+  "browser": "chromium",
+  "role": "Khách quay lại (đã có đơn giao xong)",
+  "journey": "Khách cũ quét thẻ hộp hàng \"chỉ khách mới\"",
+  "steps": "Mở /?claim=<HOPSAN chưa ai nhận>&src=shopee bằng uat_returning",
+  "expected": "Sheet \"Chưa nhận được ưu đãi\" + \"Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.\"; không có dòng coupon_claims; mã vẫn còn cho khách mới khác",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "tiêu đề \"Chưa nhận được ưu đãi\"",
+      "ok": true,
+      "detail": "Chưa nhận được ưu đãi"
+    },
+    {
+      "name": "chữ đúng luật chỉ khách mới",
+      "ok": true,
+      "detail": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree."
+    },
+    {
+      "name": "DB: 0 dòng claim, mã còn nguyên",
+      "ok": true
+    },
+    {
+      "name": "nút \"Đã hiểu\" (không có \"Thử lại\" vì lỗi nghiệp vụ)",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "sheet",
+      "data": {
+        "title": "Chưa nhận được ưu đãi",
+        "text": "Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree."
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-03-claim-returning.png"
+    },
+    {
+      "label": "SQL coupons",
+      "data": {
+        "code": "HOPSAN-7XBDCA7D",
+        "usedCount": 0,
+        "usageLimit": 1,
+        "perUserLimit": 1,
+        "endAt": "2026-12-21T11:30:15.924Z",
+        "isActive": true,
+        "redemptions": 0,
+        "claims": 0
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:34:12.322Z"
+}

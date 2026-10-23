@@ -14,6 +14,12 @@ import type { AdminDealerRewardClaim, AdminOrder } from '@/lib/admin-client';
 
 // C-097 (Q-25/Q-29): các khối admin còn lại chuyển sang token DS v2 và nút chạm được ở 390px. Chỉ kiểm phần trình
 // bày; hành vi nghiệp vụ của từng khối đã có spec riêng.
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -132,7 +138,7 @@ describe('RecyclingPanel — DS v2', () => {
     for (const label of ['Tạo lại vận đơn Gomdon', 'Đã xử lý tay']) {
       expect(byText(container, 'button', label)?.className).toContain('min-h-[44px]');
     }
-    expect(container.querySelector('input[aria-label="Ghi chú đã xử lý tay"]')?.className).toContain('min-h-[44px]');
+    expect(field(container, 'Ghi chú xử lý tay (tuỳ chọn)')?.className).toContain('min-h-[44px]');
     expect(container.querySelector('label')?.className).toContain('min-h-[44px]');
     expect(container.querySelector('input[type="checkbox"]')?.className).toContain('accent-forest-600');
     expect(byText(container, 'button', 'Tạo lại vận đơn Gomdon')?.className).toContain('bg-forest-600');
@@ -188,7 +194,7 @@ describe('PosCreditsTab — DS v2', () => {
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<PosCreditsTab />);
     await flush();
-    expect(container.querySelector('p.text-danger-fg')?.textContent).toContain('Lỗi máy chủ');
+    expect(container.querySelector('[role="alert"].text-danger-fg')?.textContent).toContain('Lỗi máy chủ');
   });
 });
 
@@ -337,7 +343,7 @@ describe('ReviewsTab / SubscriptionsTab / CashbackTab — DS v2', () => {
     expect(approve.className).toContain('min-h-[44px]');
     expect(reject.className).toContain('border-danger-fg');
     expect(reject.className).toContain('min-h-[44px]');
-    const pending = byText(container, 'button', 'PENDING')!;
+    const pending = byText(container, 'button', 'Chờ duyệt')!;
     expect(pending.className).toContain('bg-forest-600');
     expect(pending.className).toContain('min-h-[44px]');
   });

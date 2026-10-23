@@ -24,6 +24,7 @@ import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
 import { notifyMerchantOwner } from './merchant-order-notify';
+import { markReversalEffectsDone } from './reversal-effects';
 import { isPartnerStore, storeHasPayouts } from '../merchant/partner-store';
 import { MAX_RETURN_IMAGES, matchesReturnImageVersion, returnImageRef } from './return-images';
 import { decodeServedImage } from '../../common/served-image';
@@ -385,7 +386,7 @@ export class OrderReturnsService {
       await tx.$queryRaw`SELECT "id" FROM "orders" WHERE "id" = ${req.orderId} FOR UPDATE`;
       const order = await tx.order.findUniqueOrThrow({ where: { id: req.orderId }, include: { items: true } });
       if (order.status !== 'DELIVERED') {
-        throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+        throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã huỷ/đã trả).');
       }
       const prior = await partialReturnTotals(tx, order.id, id);
       const lines = this.linesOf(req, order, prior.approvedQty);
@@ -406,11 +407,11 @@ export class OrderReturnsService {
       let referralNotices: ReferralNotice[];
       if (shares.isFull) {
         const flipped = await tx.order.updateMany({ where: { id: order.id, status: 'DELIVERED' }, data: { status: 'RETURNED' } });
-        if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã hủy/đã trả).');
+        if (flipped.count === 0) throw new BadRequestException('Đơn không ở trạng thái có thể trả (đã huỷ/đã trả).');
         await tx.orderStatusHistory.create({
           data: { orderId: order.id, fromStatus: 'DELIVERED', toStatus: 'RETURNED', actorType: 'ADMIN', actorId: adminId, note: note ?? null },
         });
-        const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id });
+        const reversed = await this.reversal.reverseFinancials(tx, order, { destination, restock: false, returnRequestId: id, standardPointsExpiresAt });
         money = reversed.refund;
         referralNotices = reversed.referralNotices ?? [];
       } else {
@@ -450,10 +451,23 @@ export class OrderReturnsService {
 
     const { order, shares, money } = outcome;
     await sendReferralNotices({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, outcome.referralNotices);
+    // Yêu cầu đã APPROVED và đơn đã RETURNED từ lúc commit nên duyệt lại báo "đã xử lý": lỗi đảo ở đây không được làm bỏ các bước sau,
+    // chúng chạy hết rồi mới ném lỗi đầu tiên.
+    let reversalFailure: unknown = null;
     if (shares.isFull) {
       // Điểm thường/điểm tích và hoa hồng của phần còn lại — idempotent, chạy sau commit như mọi lần đảo cả đơn.
-      await this.loyalty.reverseOrderPoints(order.id);
-      await this.affiliate.reverseCommissionsForOrder(order.id);
+      try {
+        await this.loyalty.reverseOrderPoints(order.id);
+      } catch (err) {
+        reversalFailure ??= err;
+        this.logger.error(`Đảo điểm của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
+      }
+      try {
+        await this.affiliate.reverseCommissionsForOrder(order.id);
+      } catch (err) {
+        reversalFailure ??= err;
+        this.logger.error(`Thu hồi hoa hồng của đơn ${order.code} sau khi duyệt trả cả đơn lỗi: ${err instanceof Error ? err.message : err}`);
+      }
     }
     if (money?.to === 'BANK') {
       await announceBankRefund(
@@ -474,6 +488,10 @@ export class OrderReturnsService {
         refund_note: refundNote(money, req, outcome.pointsBack),
       })
       .catch(() => undefined);
+    // Đảo điểm/hoa hồng lỗi đã ném ở dòng trên nên tới đây là đảo xong: lỗi thì đơn không có mốc và cron chạy lại. Trả một phần không
+    // đổi trạng thái đơn nên cron không quét, không cần mốc.
+    if (reversalFailure !== null) throw reversalFailure;
+    if (shares.isFull) await markReversalEffectsDone(this.prisma, order.id, this.logger);
     return this.withContext(await this.prisma.returnRequest.findUniqueOrThrow({ where: { id }, include: { items: true } }));
   }
 

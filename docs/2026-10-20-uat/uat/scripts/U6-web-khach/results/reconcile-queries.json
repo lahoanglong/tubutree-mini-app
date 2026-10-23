@@ -1,0 +1,455 @@
+[
+  {
+    "title": "Số dư điểm = tổng sổ điểm (lô STANDARD)",
+    "query": "SELECT u.id, u.\"pointsBalance\"::int AS balance, COALESCE(SUM(p.delta) FILTER (WHERE p.lot = 'STANDARD'), 0)::int AS ledger_sum, COUNT(p.id)::int AS rows FROM users u LEFT JOIN points_transactions p ON p.\"userId\" = u.id WHERE u.id = ANY($1) GROUP BY u.id ORDER BY u.id",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": [
+      {
+        "id": "uat_new",
+        "balance": 3380,
+        "ledger_sum": 3380,
+        "rows": 1
+      },
+      {
+        "id": "uat_new_nophone",
+        "balance": 1000,
+        "ledger_sum": 1000,
+        "rows": 1
+      },
+      {
+        "id": "uat_returning",
+        "balance": 57456,
+        "ledger_sum": 57456,
+        "rows": 9
+      }
+    ]
+  },
+  {
+    "title": "Số dư ví = tổng sổ ví",
+    "query": "SELECT u.id, u.\"walletBalance\"::int AS balance, COALESCE(SUM(w.delta), 0)::int AS ledger_sum, COUNT(w.id)::int AS rows FROM users u LEFT JOIN wallet_transactions w ON w.\"userId\" = u.id WHERE u.id = ANY($1) GROUP BY u.id ORDER BY u.id",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": [
+      {
+        "id": "uat_new",
+        "balance": 0,
+        "ledger_sum": 0,
+        "rows": 0
+      },
+      {
+        "id": "uat_new_nophone",
+        "balance": 0,
+        "ledger_sum": 0,
+        "rows": 0
+      },
+      {
+        "id": "uat_returning",
+        "balance": 0,
+        "ledger_sum": 0,
+        "rows": 6
+      }
+    ]
+  },
+  {
+    "title": "Đơn có tổng ≠ tạm tính − giảm + phí ship (bỏ đơn mẫu cũ)",
+    "query": "SELECT code, status, subtotal::int, discount::int, \"shippingFee\"::int AS fee, total::int, (subtotal - discount + \"shippingFee\")::int AS expected FROM orders WHERE \"userId\" = ANY($1) AND total <> subtotal - discount + \"shippingFee\" ORDER BY \"createdAt\"",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": []
+  },
+  {
+    "title": "Đơn có giảm ≠ mã + combo + hạng + Điểm Xanh",
+    "query": "SELECT code, discount::int, (\"couponDiscount\" + \"comboDiscount\" + \"tierDiscount\" + \"pointsDiscount\")::int AS parts FROM orders WHERE \"userId\" = ANY($1) AND discount <> \"couponDiscount\" + \"comboDiscount\" + \"tierDiscount\" + \"pointsDiscount\"",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": []
+  },
+  {
+    "title": "Đơn có tổng dòng hàng ≠ tạm tính",
+    "query": "SELECT o.code, o.subtotal::int, SUM(oi.total)::int AS items_sum FROM orders o JOIN order_items oi ON oi.\"orderId\" = o.id WHERE o.\"userId\" = ANY($1) GROUP BY o.id HAVING SUM(oi.total) <> o.subtotal",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": []
+  },
+  {
+    "title": "Điểm tích của đơn đã giao trong đợt UAT (từ 2026-10-19): so với công thức 2% × tiền hàng sau giảm × hệ số hạng. Bỏ các đơn mẫu có sẵn trong DB mẫu (tạo 2026-10-09), phát hành điểm lúc khách còn hạng khác",
+    "query": "SELECT o.code, u.\"tierId\", o.subtotal::int, o.\"couponDiscount\"::int AS coupon, o.\"pointsDiscount\"::int AS pts_disc, o.\"pointsEarned\"::int AS earned, COALESCE((SELECT SUM(p.delta) FROM points_transactions p WHERE p.\"userId\" = o.\"userId\" AND p.reason LIKE 'ORDER_DELIVERED:' || o.code || '%'), 0)::int AS ledger, FLOOR((o.subtotal - o.\"couponDiscount\" - o.\"comboDiscount\" - o.\"tierDiscount\") * 0.02 * CASE u.\"tierId\" WHEN 'LOC_BIEC' THEN 1.2 WHEN 'DAI_THU' THEN 1.5 WHEN 'CO_THU' THEN 2 ELSE 1 END)::int AS expect_before_points, FLOOR((o.subtotal - o.\"couponDiscount\" - o.\"comboDiscount\" - o.\"tierDiscount\" - o.\"pointsDiscount\") * 0.02 * CASE u.\"tierId\" WHEN 'LOC_BIEC' THEN 1.2 WHEN 'DAI_THU' THEN 1.5 WHEN 'CO_THU' THEN 2 ELSE 1 END)::int AS expect_after_points FROM orders o JOIN users u ON u.id = o.\"userId\" WHERE o.\"userId\" = ANY($1) AND o.status = 'DELIVERED' AND o.\"createdAt\" >= '2026-10-19T00:00:00+07:00' ORDER BY o.\"createdAt\"",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": [
+      {
+        "code": "TUBU2026102203254",
+        "tierId": "LOC_BIEC",
+        "subtotal": 178000,
+        "coupon": 0,
+        "pts_disc": 0,
+        "earned": 4272,
+        "ledger": 4272,
+        "expect_before_points": 4272,
+        "expect_after_points": 4272
+      },
+      {
+        "code": "TUBU2026102289039",
+        "tierId": "MAM_XANH",
+        "subtotal": 199000,
+        "coupon": 30000,
+        "pts_disc": 0,
+        "earned": 3380,
+        "ledger": 3380,
+        "expect_before_points": 3380,
+        "expect_after_points": 3380
+      },
+      {
+        "code": "TUBU2026102207437",
+        "tierId": "LOC_BIEC",
+        "subtotal": 165000,
+        "coupon": 0,
+        "pts_disc": 0,
+        "earned": 3960,
+        "ledger": 3960,
+        "expect_before_points": 3960,
+        "expect_after_points": 3960
+      },
+      {
+        "code": "TUBU2026102223432",
+        "tierId": "LOC_BIEC",
+        "subtotal": 199000,
+        "coupon": 0,
+        "pts_disc": 0,
+        "earned": 4776,
+        "ledger": 4776,
+        "expect_before_points": 4776,
+        "expect_after_points": 4776
+      },
+      {
+        "code": "TUBU2026102217213",
+        "tierId": "LOC_BIEC",
+        "subtotal": 178000,
+        "coupon": 0,
+        "pts_disc": 0,
+        "earned": 4272,
+        "ledger": 4272,
+        "expect_before_points": 4272,
+        "expect_after_points": 4272
+      },
+      {
+        "code": "TUBU2026102255484",
+        "tierId": "LOC_BIEC",
+        "subtotal": 199000,
+        "coupon": 0,
+        "pts_disc": 0,
+        "earned": 4776,
+        "ledger": 4776,
+        "expect_before_points": 4776,
+        "expect_after_points": 4776
+      }
+    ]
+  },
+  {
+    "title": "Đơn có mã giảm giá còn hiệu lực phải có đúng 1 dòng coupon_redemptions; đơn huỷ không còn dòng",
+    "query": "SELECT o.code, o.status, o.\"couponCode\", (SELECT count(*) FROM coupon_redemptions r WHERE r.\"orderId\" = o.id)::int AS redemptions FROM orders o WHERE o.\"userId\" = ANY($1) AND o.\"couponCode\" IS NOT NULL ORDER BY o.\"createdAt\"",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": [
+      {
+        "code": "TUBU2026102289039",
+        "status": "DELIVERED",
+        "couponCode": "HOPSAN-38X362LH",
+        "redemptions": 1
+      },
+      {
+        "code": "TUBU2026102264535",
+        "status": "CANCELLED",
+        "couponCode": "XANH10",
+        "redemptions": 0
+      }
+    ]
+  },
+  {
+    "title": "Hoa hồng CTV: 8% tiền hàng tính hoa hồng, giữ 10 ngày sau giao",
+    "query": "SELECT o.code, c.status, c.\"commissionableTotal\"::int AS base, c.rate::float AS rate, c.amount::int AS amount, ROUND(c.\"commissionableTotal\" * 0.08)::int AS expect_8pct, o.\"deliveredAt\", c.\"lockedAt\", c.\"approvedAt\" FROM commissions c JOIN orders o ON o.id = c.\"orderId\" WHERE o.\"userId\" = ANY($1)",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": [
+      {
+        "code": "TUBU2026102207437",
+        "status": "LOCKED",
+        "base": 165000,
+        "rate": 8,
+        "amount": 13200,
+        "expect_8pct": 13200,
+        "deliveredAt": "2026-10-22T11:46:36.632Z",
+        "lockedAt": "2026-10-22T11:46:36.639Z",
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102213485",
+        "status": "PENDING",
+        "base": 158000,
+        "rate": 8,
+        "amount": 12640,
+        "expect_8pct": 12640,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102223432",
+        "status": "LOCKED",
+        "base": 199000,
+        "rate": 8,
+        "amount": 15920,
+        "expect_8pct": 15920,
+        "deliveredAt": "2026-10-22T11:46:40.178Z",
+        "lockedAt": "2026-10-22T11:46:40.189Z",
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102252965",
+        "status": "REJECTED",
+        "base": 109000,
+        "rate": 8,
+        "amount": 8720,
+        "expect_8pct": 8720,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102241766",
+        "status": "REJECTED",
+        "base": 247000,
+        "rate": 8,
+        "amount": 19760,
+        "expect_8pct": 19760,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102207895",
+        "status": "REJECTED",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102260591",
+        "status": "REJECTED",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102293962",
+        "status": "REJECTED",
+        "base": 89000,
+        "rate": 8,
+        "amount": 7120,
+        "expect_8pct": 7120,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102233082",
+        "status": "REJECTED",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102207521",
+        "status": "REJECTED",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102270639",
+        "status": "PENDING",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102217213",
+        "status": "LOCKED",
+        "base": 178000,
+        "rate": 8,
+        "amount": 14240,
+        "expect_8pct": 14240,
+        "deliveredAt": "2026-10-22T12:13:56.135Z",
+        "lockedAt": "2026-10-22T12:13:56.149Z",
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102299956",
+        "status": "PENDING",
+        "base": 178000,
+        "rate": 8,
+        "amount": 14240,
+        "expect_8pct": 14240,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102264535",
+        "status": "REJECTED",
+        "base": 296100,
+        "rate": 8,
+        "amount": 23688,
+        "expect_8pct": 23688,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102234039",
+        "status": "REJECTED",
+        "base": 79000,
+        "rate": 8,
+        "amount": 6320,
+        "expect_8pct": 6320,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102269779",
+        "status": "PENDING",
+        "base": 110000,
+        "rate": 8,
+        "amount": 8800,
+        "expect_8pct": 8800,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102226620",
+        "status": "PENDING",
+        "base": 247000,
+        "rate": 8,
+        "amount": 19760,
+        "expect_8pct": 19760,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102203449",
+        "status": "PENDING",
+        "base": 158000,
+        "rate": 8,
+        "amount": 12640,
+        "expect_8pct": 12640,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102255484",
+        "status": "LOCKED",
+        "base": 199000,
+        "rate": 8,
+        "amount": 15920,
+        "expect_8pct": 15920,
+        "deliveredAt": "2026-10-22T12:15:02.845Z",
+        "lockedAt": "2026-10-22T12:15:02.855Z",
+        "approvedAt": null
+      },
+      {
+        "code": "TUBU2026102251701",
+        "status": "REJECTED",
+        "base": 109000,
+        "rate": 8,
+        "amount": 8720,
+        "expect_8pct": 8720,
+        "deliveredAt": null,
+        "lockedAt": null,
+        "approvedAt": null
+      }
+    ]
+  },
+  {
+    "title": "Tồn kho không âm",
+    "query": "SELECT sku, stock::int, \"reservedStock\"::int AS reserved FROM variations WHERE stock < 0 OR \"reservedStock\" < 0",
+    "params": [],
+    "rows": []
+  },
+  {
+    "title": "Đơn trùng (cùng khách, cùng tổng, cách nhau dưới 1 giây): dấu hiệu bấm đặt hàng hai lần mà không được chặn",
+    "query": "SELECT a.code AS a, b.code AS b FROM orders a JOIN orders b ON a.\"userId\" = b.\"userId\" AND a.id < b.id AND a.total = b.total AND ABS(EXTRACT(EPOCH FROM (a.\"createdAt\" - b.\"createdAt\"))) < 1 WHERE a.\"userId\" = ANY($1)",
+    "params": [
+      [
+        "uat_returning",
+        "uat_new",
+        "uat_new_nophone"
+      ]
+    ],
+    "rows": []
+  }
+]

@@ -20,7 +20,7 @@ export function CommunityChannels() {
     <div
       role="group"
       aria-label={vi.community.channelsLabel}
-      style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '8px 16px 12px', background: 'var(--color-bg-surface)' }}
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 16px 8px', background: 'var(--color-bg-surface)' }}
     >
       {channels.map((c) => (
         <button

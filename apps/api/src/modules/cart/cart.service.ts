@@ -26,6 +26,22 @@ import {
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
 
+const ADD_ITEM_INCLUDE = {
+  product: {
+    select: {
+      isActive: true,
+      approvalStatus: true,
+      name: true,
+      fulfilment: true,
+      storefront: {
+        select: { title: true, type: true, ordersPausedAt: true, isPartner: true, owner: { select: { role: true, isBlocked: true } } },
+      },
+    },
+  },
+} satisfies Prisma.VariationInclude;
+type AddableVariation = Prisma.VariationGetPayload<{ include: typeof ADD_ITEM_INCLUDE }>;
+export type AddItemsOutcome = { ok: true; toppedUp?: number } | { ok: false; error: 'UNAVAILABLE' | 'STOCK' };
+
 @Injectable()
 export class CartService {
   constructor(
@@ -78,13 +94,23 @@ export class CartService {
     return this.priceCart(userId, await this.attributedSlug(userId, storefrontSlug), itemIds);
   }
 
-  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[]) {
+  /**
+   * Giá giỏ cho checkout (báo giá, xem trước mã, đặt đơn): cùng dòng, subtotal, mã và combo như getCart, nhưng bỏ phần chỉ để
+   * hiển thị giỏ (giảm hạng, ngưỡng freeship). Checkout tự tính lại hai thứ đó từ khách nó đã đọc, nên không đọc hạng, khách và
+   * đơn cũ thêm một lần nữa.
+   */
+  async getCartForCheckout(userId: string): Promise<Omit<Awaited<ReturnType<CartService['getCart']>>, 'tierDiscount' | 'freeshipThreshold'>> {
+    const { tierDiscount: _tier, freeshipThreshold: _threshold, ...priced } = await this.priceCart(userId, undefined, undefined, true);
+    return priced;
+  }
+
+  private async priceCart(userId: string, storefrontSlug: string | undefined, itemIds?: string[], forCheckout = false) {
     const selection = itemIds && itemIds.length > 0 ? new Set(itemIds) : null;
     const cartId = await this.ensureCart(userId);
     const cart = await this.prisma.cart.findUniqueOrThrow({
       where: { id: cartId },
       include: {
-        user: { select: { tierId: true } },
+        user: forCheckout ? false : { select: { tierId: true } },
         items: {
           include: {
             variation: {
@@ -239,16 +265,19 @@ export class CartService {
       }
     }
 
-    // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
-    const tierDiscount = calcTierDiscount(
-      Math.max(0, couponBase - discount),
-      await tierDiscountPctOf(this.prisma, cart.user?.tierId),
-    );
+    // Checkout không dùng hai số này (nó tính lại từ khách đã đọc), nên bỏ đọc hạng và đơn cũ; không ai đọc hai giá trị 0 ở đường này.
+    let tierDiscount = 0;
+    let freeshipThreshold = 0;
+    if (!forCheckout) {
+      // Giảm theo hạng đặt SAU combo và mã, trên phần còn lại, đúng thứ tự và cách làm tròn của checkout (combo → mã → hạng).
+      const tierId = (cart as { user?: { tierId: string | null } | null }).user?.tierId;
+      tierDiscount = calcTierDiscount(Math.max(0, couponBase - discount), await tierDiscountPctOf(this.prisma, tierId));
 
-    // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
-    const tierThreshold = await freeShipThreshold(this.config, cart.user?.tierId);
-    const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
-    const freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
+      // Ngưỡng freeship theo hạng của khách — cùng ngưỡng checkout tính phí giao kho Tubu — để FE hiển thị tiến độ.
+      const tierThreshold = await freeShipThreshold(this.config, tierId);
+      const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
+      freeshipThreshold = firstOrderFrom != null ? Math.min(tierThreshold, firstOrderFrom) : tierThreshold;
+    }
 
     return {
       items: lines,
@@ -284,24 +313,7 @@ export class CartService {
     return { combo, ...goodsAfterComboOf(nonFlash, combo) };
   }
 
-  async addItem(userId: string, dto: AddItemDto, storefrontSlug?: string) {
-    const cartId = await this.ensureCart(userId);
-    const variation = await this.prisma.variation.findUnique({
-      where: { id: dto.variationId },
-      include: {
-        product: {
-          select: {
-            isActive: true,
-            approvalStatus: true,
-            name: true,
-            fulfilment: true,
-            storefront: {
-              select: { title: true, type: true, ordersPausedAt: true, isPartner: true, owner: { select: { role: true, isBlocked: true } } },
-            },
-          },
-        },
-      },
-    });
+  private assertSellable(variation: AddableVariation | null | undefined): AddableVariation {
     // P0 A2-03=A5-06=A6-04 (phần còn sót ngoài catalog, xem CatalogService): SP đối tác chưa
     // duyệt/bị từ chối không còn tìm thấy qua catalog/search/related/for-you, nhưng ai đã có sẵn
     // variationId (link cũ lưu trước khi bị từ chối, đơn "lên đơn hộ"...) vẫn thêm được vào giỏ
@@ -315,14 +327,27 @@ export class CartService {
     if (store && storeReason) {
       throw new BadRequestException(storeUnavailableOnAddMessage(variation.product.name, store.title, storeReason));
     }
+    return variation;
+  }
 
+  /** Vượt tồn kho khi cộng thêm `addQty` vào `currentQty` đang có trong giỏ. */
+  private assertStock(variation: AddableVariation, currentQty: number, addQty: number): void {
+    if (currentQty + addQty > variation.stock) {
+      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
+    }
+  }
+
+  async addItem(userId: string, dto: AddItemDto, storefrontSlug?: string) {
+    const cartId = await this.ensureCart(userId);
+    const variation = await this.prisma.variation.findUnique({
+      where: { id: dto.variationId },
+      include: ADD_ITEM_INCLUDE,
+    });
+    const sellable = this.assertSellable(variation);
     const existing = await this.prisma.cartItem.findUnique({
       where: { cartId_variationId: { cartId, variationId: dto.variationId } },
     });
-    const newQty = (existing?.quantity ?? 0) + dto.quantity;
-    if (newQty > variation.stock) {
-      throw new BadRequestException(`Chỉ còn ${variation.stock} sản phẩm trong kho.`);
-    }
+    this.assertStock(sellable, existing?.quantity ?? 0, dto.quantity);
 
     // Tăng ATOMIC bằng increment (không set giá trị tuyệt đối newQty) — 2 request add-to-cart
     // đồng thời (double-tap/2 tab) cho cùng variation đều đọc `existing` trước khi request kia
@@ -349,6 +374,84 @@ export class CartService {
       });
     });
     return this.getCart(userId, storefrontSlug);
+  }
+
+  /**
+   * Thêm nhiều dòng một lượt (mua lại đơn): cùng kiểm tra với addItem cho TỪNG dòng, nhưng đọc giỏ/hàng một lần, ghi các dòng đạt
+   * trong MỘT transaction và KHÔNG dựng lại giỏ (người gọi tự getCart một lần). Dòng không đạt được báo lại để người gọi bỏ qua riêng
+   * dòng đó; lỗi hạ tầng ném ra và cả loạt không ghi gì.
+   *
+   * `topUp` nhận kết quả vòng kiểm tra và trả phần bù thêm cho các dòng đã đạt (vd chỗ tồn mà dòng bị từ chối đã giữ): phần bù được kiểm
+   * tồn cộng dồn rồi gộp vào dòng gốc, nên vẫn một transaction và một sự kiện add_to_cart cho mỗi dòng, không có lần ghi thứ hai để hỏng nửa chừng.
+   */
+  async addItems(
+    userId: string,
+    lines: { variationId: string; quantity: number; addSource?: string }[],
+    opts: { topUp?: (outcomes: AddItemsOutcome[]) => { index: number; quantity: number }[] } = {},
+  ): Promise<AddItemsOutcome[]> {
+    if (lines.length === 0) return [];
+    const cartId = await this.ensureCart(userId);
+    const variationIds = [...new Set(lines.map((l) => l.variationId))];
+    const [variations, existing] = await Promise.all([
+      this.prisma.variation.findMany({ where: { id: { in: variationIds } }, include: ADD_ITEM_INCLUDE }),
+      this.prisma.cartItem.findMany({ where: { cartId, variationId: { in: variationIds } }, select: { variationId: true, quantity: true } }),
+    ]);
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    const qtyInCart = new Map(existing.map((e) => [e.variationId, e.quantity]));
+    const outcomes: AddItemsOutcome[] = [];
+    const accepted: { line: (typeof lines)[number]; index: number; quantity: number }[] = [];
+    for (const [index, line] of lines.entries()) {
+      const current = qtyInCart.get(line.variationId) ?? 0;
+      try {
+        this.assertStock(this.assertSellable(byId.get(line.variationId)), current, line.quantity);
+      } catch (err) {
+        if (err instanceof NotFoundException) { outcomes.push({ ok: false, error: 'UNAVAILABLE' }); continue; }
+        if (err instanceof BadRequestException) { outcomes.push({ ok: false, error: 'STOCK' }); continue; }
+        throw err;
+      }
+      qtyInCart.set(line.variationId, current + line.quantity);
+      accepted.push({ line, index, quantity: line.quantity });
+      outcomes.push({ ok: true });
+    }
+    if (accepted.length === 0) return outcomes;
+    if (opts.topUp) {
+      for (const extra of opts.topUp([...outcomes])) {
+        const base = accepted.find((a) => a.index === extra.index);
+        if (!base || extra.quantity <= 0) continue;
+        const current = qtyInCart.get(base.line.variationId) ?? 0;
+        try {
+          this.assertStock(this.assertSellable(byId.get(base.line.variationId)), current, extra.quantity);
+        } catch (err) {
+          if (err instanceof NotFoundException || err instanceof BadRequestException) continue;
+          throw err;
+        }
+        qtyInCart.set(base.line.variationId, current + extra.quantity);
+        base.quantity += extra.quantity;
+        const prev = outcomes[base.index];
+        outcomes[base.index] = { ok: true, toppedUp: (prev?.ok ? (prev.toppedUp ?? 0) : 0) + extra.quantity };
+      }
+    }
+    // Hai lượt mua lại song song của cùng khách khoá các dòng giỏ theo thứ tự upsert: cùng thứ tự variationId thì chỉ chờ nhau, không khoá chéo (deadlock).
+    const byVariation = [...accepted].sort((a, b) => (a.line.variationId < b.line.variationId ? -1 : a.line.variationId > b.line.variationId ? 1 : 0));
+    await this.prisma.$transaction(async (tx) => {
+      for (const { line, quantity } of byVariation) {
+        await tx.cartItem.upsert({
+          where: { cartId_variationId: { cartId, variationId: line.variationId } },
+          update: { quantity: { increment: quantity } },
+          create: { cartId, variationId: line.variationId, quantity },
+        });
+      }
+      await this.analytics.recordMany(
+        tx,
+        accepted.map(({ line, quantity }) => ({
+          eventName: 'add_to_cart',
+          userId,
+          platform: 'miniapp' as const,
+          props: { variationId: line.variationId, quantity, addSource: line.addSource ?? 'pdp' },
+        })),
+      );
+    });
+    return outcomes;
   }
 
   async updateItem(userId: string, itemId: string, quantity: number, storefrontSlug?: string) {

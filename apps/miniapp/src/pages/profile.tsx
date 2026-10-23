@@ -18,7 +18,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { Heading, Text } from '../components/ui/text';
-import { getOwnedBrand } from '../services/brand-owner-api';
+import { getOwnedBrand, getOwnsBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
@@ -100,10 +100,17 @@ export default function ProfilePage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: status === 'authenticated' });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: status === 'authenticated' });
 
-  // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn. Chưa có cờ "là chủ nhãn" trên
-  // /me nên vẫn phải hỏi API, mà API trả 404 cho mọi người không sở hữu nhãn: đó là trạng thái bình thường
-  // (null), không phải lỗi. Khoá riêng (không dùng chung với brand-owner.tsx, nơi 404 là màn "chưa có nhãn")
+  // Brand-owner (lộ trình B): chỉ hiện mục "Quản lý nhãn" khi user sở hữu 1 nhãn. API trả 404 cho mọi người
+  // không sở hữu nhãn: đó là trạng thái bình thường (null), không phải lỗi. Khoá riêng (không dùng chung với brand-owner.tsx, nơi 404 là màn "chưa có nhãn")
   // nhưng vẫn nằm dưới ['owned-brand'] để chủ nhãn sửa thông tin thì menu hint cập nhật theo.
+  // Cờ ownsBrand trên /auth/me cho người không phải chủ nhãn khỏi gọi /brand/owner/me (404 báo đỏ trong console).
+  // /auth/me lỗi hoặc API cũ chưa có cờ (null) → giữ cách cũ: hỏi và nuốt 404.
+  const ownsBrandQ = useQuery({
+    queryKey: ['auth-me', 'owns-brand'],
+    queryFn: getOwnsBrand,
+    enabled: status === 'authenticated',
+    retry: false,
+  });
   const ownedBrandQ = useQuery({
     queryKey: ['owned-brand', 'profile'],
     queryFn: () =>
@@ -111,7 +118,7 @@ export default function ProfilePage() {
         if (isNotFoundError(e)) return null;
         throw e;
       }),
-    enabled: status === 'authenticated',
+    enabled: status === 'authenticated' && !ownsBrandQ.isPending && ownsBrandQ.data !== false,
     retry: false,
   });
   // Đại lý đã duyệt mà menu vẫn mời "Đăng ký đại lý" thì đọc như chưa được duyệt. Dùng chung
@@ -135,10 +142,12 @@ export default function ProfilePage() {
       ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
       : s,
   );
-  const baseMenu = ownedBrandQ.data
+  // Query bị disable khi cờ chuyển sang false vẫn giữ data cũ → bỏ data đó để mục không còn hiện.
+  const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
+  const baseMenu = ownedBrand
     ? withDealer.map((s) =>
         s.group === 'Hợp tác'
-          ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrandQ.data!.name }] }
+          ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrand.name }] }
           : s,
       )
     : withDealer;
@@ -155,7 +164,7 @@ export default function ProfilePage() {
   const menu = workItems.length > 0 ? [...baseMenu, { group: 'Công việc', items: workItems }] : baseMenu;
 
   // Đang đăng nhập ngầm → khung chờ. Mất kết nối lúc khôi phục phiên (status error) → nói đúng vậy + Thử lại, không in message
-  // thô của axios và không mời đăng nhập lại; khách thật sự (idle) → mời đăng nhập. KHÔNG để khung chờ quay vô hạn.
+  // thô của lỗi mạng và không mời đăng nhập lại; khách thật sự (idle) → mời đăng nhập. KHÔNG để khung chờ quay vô hạn.
   if (phase !== 'authenticated' || !user) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
@@ -421,9 +430,9 @@ function Stat({ label, value, onClick, wide }: { label: string; value: string; o
         gridColumn: wide ? '1 / -1' : undefined,
       }}
     >
-      <Heading variant="title-sm" as="div" tone="brand">
+      <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
         {value}
-      </Heading>
+      </Text>
       <Text variant="caption" tone="tertiary" as="div">
         {label}
       </Text>

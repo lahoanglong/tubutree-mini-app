@@ -19,7 +19,7 @@ import { ApiError } from '@/lib/client-api';
 import { formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, chipClass, Notice, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, LoadError, chipClass, Notice, ToneBadge } from './ui';
 
 export type CommunityView = 'pending' | 'published' | 'unanswered';
 
@@ -53,9 +53,9 @@ const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.statu
 /**
  * Kiểm duyệt cộng đồng trên web admin cho ADMIN và nhân viên nhóm CSKH (trước đây chỉ ADMIN duyệt được, và chỉ trong mini app):
  * duyệt/từ chối bài chờ duyệt, ẩn/ghim bài đã đăng, và xem câu hỏi chờ quá lâu chưa ai trả lời. Tác giả được báo khi bài bị từ
- * chối hoặc ẩn, kèm lý do người kiểm duyệt nhập.
+ * chối hoặc ẩn, kèm lý do người kiểm duyệt nhập. Ghim bài chỉ ADMIN (API từ chối nhân viên), nên nút ghim chỉ hiện khi `isAdmin`.
  */
-export function CommunityModerationTab({ initialView = 'pending' }: { initialView?: CommunityView }) {
+export function CommunityModerationTab({ initialView = 'pending', isAdmin = false }: { initialView?: CommunityView; isAdmin?: boolean }) {
   const [view, setView] = useState<CommunityView>(initialView);
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
   return (
@@ -84,21 +84,10 @@ export function CommunityModerationTab({ initialView = 'pending' }: { initialVie
           </Notice>
         )}
         {view === 'pending' && <PendingList />}
-        {view === 'published' && <PublishedList />}
+        {view === 'published' && <PublishedList canPin={isAdmin} />}
         {view === 'unanswered' && <UnansweredList />}
       </div>
     </StaleNoticeContext.Provider>
-  );
-}
-
-function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
-  return (
-    <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger-fg">
-      <span>Không tải được {what}.</span>
-      <button type="button" onClick={onRetry} className={BTN_SECONDARY}>
-        Thử lại
-      </button>
-    </div>
   );
 }
 
@@ -176,7 +165,7 @@ function PendingList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError what="danh sách bài chờ duyệt" onRetry={() => void q.refetch()} />}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài chờ duyệt.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">{q.data.length === 0 ? 'Không có bài nào đang chờ duyệt.' : `${q.data.length} bài chờ duyệt · cũ nhất trước`}</p>
@@ -227,7 +216,7 @@ function PendingRow({ post: p }: { post: CommunityPendingPost }) {
   );
 }
 
-function PublishedList() {
+function PublishedList({ canPin }: { canPin: boolean }) {
   const q = useInfiniteQuery({
     queryKey: QUERY_KEYS.published,
     queryFn: ({ pageParam }) => listCommunityPublished(pageParam),
@@ -238,11 +227,11 @@ function PublishedList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError what="danh sách bài đã đăng" onRetry={() => void q.refetch()} />}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài đã đăng.</LoadError>}
       {q.data && items.length === 0 && <p className="text-xs text-stone-500">Chưa có bài nào được đăng.</p>}
       <ul className="space-y-2">
         {items.map((p) => (
-          <PublishedRow key={p.id} post={p} />
+          <PublishedRow key={p.id} post={p} canPin={canPin} />
         ))}
       </ul>
       {q.hasNextPage && (
@@ -254,7 +243,7 @@ function PublishedList() {
   );
 }
 
-function PublishedRow({ post: p }: { post: CommunityPublishedPost }) {
+function PublishedRow({ post: p, canPin }: { post: CommunityPublishedPost; canPin: boolean }) {
   const { ask, dialog } = useConfirm();
   const keys = [QUERY_KEYS.published, QUERY_KEYS.unanswered];
   const pin = usePostAction((pinned: boolean) => pinCommunityPost(p.id, pinned), keys, 'Không đổi được trạng thái ghim.');
@@ -285,9 +274,11 @@ function PublishedRow({ post: p }: { post: CommunityPublishedPost }) {
         {p.likeCount} lượt thích · {p.commentCount} bình luận
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={busy} onClick={() => pin.mutate(!p.isPinned)} className={BTN_SECONDARY}>
-          {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
-        </button>
+        {canPin && (
+          <button type="button" disabled={busy} onClick={() => pin.mutate(!p.isPinned)} className={BTN_SECONDARY}>
+            {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
+          </button>
+        )}
         <button type="button" disabled={busy} onClick={() => void askHide()} className={BTN_DANGER_OUTLINE}>
           Ẩn
         </button>
@@ -302,7 +293,7 @@ function UnansweredList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError what="danh sách câu hỏi chưa trả lời" onRetry={() => void q.refetch()} />}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách câu hỏi chưa trả lời.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">

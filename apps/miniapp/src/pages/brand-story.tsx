@@ -12,6 +12,13 @@ import { Icon } from '../components/ui/icon';
 import { Text, Heading } from '../components/ui/text';
 import '../css/brand-theme.css';
 
+/** Nền tối nhẹ ngay sau chữ trắng trên gradient nhãn (D8-1): màu nhãn giữ nguyên, chỉ vùng chữ đủ 4,5:1. */
+const TEXT_SCRIM = {
+  background: 'var(--color-brand-tile-scrim)',
+  borderRadius: 'var(--radius-control)',
+  padding: '6px 10px',
+} as const;
+
 export default function BrandStoryPage() {
   const [selected, setSelected] = useState<BrandOrigin | null>(null);
   const pick = (loc: BrandOrigin) => {
@@ -24,7 +31,7 @@ export default function BrandStoryPage() {
       <PageHeader title={vi.home.brandStoryTitle} />
       <div style={{ padding: '16px 16px 8px' }}>
         <Text tone="secondary" as="p" style={{ lineHeight: 1.5 }}>
-          Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ 🌿
+          Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ.
         </Text>
       </div>
 
@@ -61,9 +68,9 @@ export default function BrandStoryPage() {
             }}
           >
             <span aria-hidden style={{ fontSize: 34, lineHeight: 1.2 }}>{loc.emoji}</span>
-            <span style={{ display: 'block' }}>
+            <span data-testid="brand-tile-scrim" style={{ display: 'block', alignSelf: 'flex-start', maxWidth: '100%', ...TEXT_SCRIM }}>
               <Text tone="inverse" style={{ display: 'block', fontWeight: 700 }}>{loc.brand}</Text>
-              <Text variant="caption" tone="inverse" style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: 0.92 }}>
+              <Text variant="caption" tone="inverse" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <Icon icon={MapPin} size="sm" tone="inverse" />
                 {loc.province}
               </Text>
@@ -80,7 +87,7 @@ export default function BrandStoryPage() {
               <Text
                 variant="body-sm"
                 tone="inverse"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4, opacity: 0.92 }}
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4, ...TEXT_SCRIM }}
               >
                 <Icon icon={MapPin} size="sm" tone="inverse" />
                 {selected.province} · {selected.ingredient}

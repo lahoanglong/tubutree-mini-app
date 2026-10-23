@@ -1,0 +1,55 @@
+{
+  "id": "U2-27",
+  "title": "reconcile-points.ts (DRY-RUN) trên DB lane: không user nào lệch lô STANDARD/CONVERTED; SQL tự đối chiếu cũng 0 lệch",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:40:30.171Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "thoát mã 0 và báo không lệch",
+      "ok": true,
+      "detail": {
+        "code": 0
+      }
+    },
+    {
+      "name": "SQL: 0 user có pointsBalance ≠ SUM(delta) theo lô",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "evidence": {
+    "output": [
+      "=== ĐỐI SOÁT Điểm Xanh theo lô (DRY-RUN — chỉ xem) ===",
+      "Lô STANDARD : 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm",
+      "Lô CONVERTED: 0 user lệch, chênh ròng 0 điểm, tuyệt đối 0 điểm",
+      "(chênh âm = đang cộng dư cần thu hồi)",
+      "",
+      "✅ Không có user nào lệch — không cần đối soát."
+    ],
+    "SQL lệch": [],
+    "số dư cuối các khách có điểm": [
+      {
+        "id": "uat_returning",
+        "bal": 12249,
+        "tierId": "LOC_BIEC"
+      },
+      {
+        "id": "uat_u2_chatnew",
+        "bal": 3600,
+        "tierId": "MAM_XANH"
+      },
+      {
+        "id": "uat_u2_daithu",
+        "bal": 415970,
+        "tierId": "DAI_THU"
+      },
+      {
+        "id": "uat_u2_mam",
+        "bal": 28180,
+        "tierId": "MAM_XANH"
+      }
+    ]
+  }
+}

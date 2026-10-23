@@ -35,6 +35,7 @@ import {
   deleteTemplate,
   type DealerApplyInput,
   type PricelistRow,
+  type DealerOrderRules,
 } from '../services/dealer-api';
 import { getErrorMessage } from '../services/api';
 import { formatDate, formatRatePct, formatVnd } from '../utils/format';
@@ -63,6 +64,9 @@ import { DEALER_MAX_QTY, preorderQty, realDiscountPct } from './dealer-pricing';
 import '../css/dealer-theme.css';
 
 const INK = 'var(--color-dealer-ink)';
+
+/** Bậc thưởng quý admin đặt được 1 chữ số lẻ (2,5%), nên in kiểu Việt thay vì để JS ghi "2.5". API trả đơn vị %, formatRatePct nhận phân số. */
+const bonusPctText = (pct: number) => formatRatePct(pct / 100);
 
 /** Nút chính mang màu ink B2B; khi vô hiệu để ZaUI bridge tự vẽ trạng thái disabled, đừng đè nền ink lên. */
 const inkButton = (disabled?: boolean): CSSProperties | undefined => (disabled ? undefined : { background: INK });
@@ -270,7 +274,7 @@ function DealerHub() {
         <SegmentedTabs items={TABS} value={tab} onChange={(key) => setTab(key as Tab)} />
       </div>
 
-      {tab === 'price' && <PriceAndOrder creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} />}
+      {tab === 'price' && <PriceAndOrder creditLimit={me?.tier?.creditLimit ?? 0} debt={me?.currentDebt ?? 0} rules={me?.orderRules} />}
       {tab === 'orders' && <DealerOrders />}
       {tab === 'credit' && <DealerCredit />}
       {tab === 'report' && <DealerReport />}
@@ -290,7 +294,7 @@ const TEMPLATE_PILL_BUTTON: CSSProperties = {
 };
 
 /* Bảng giá + đặt nhanh */
-function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: number }) {
+function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt: number; rules?: DealerOrderRules }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const priceQ = useQuery({ queryKey: ['dealer-pricelist'], queryFn: getPricelist });
@@ -418,7 +422,10 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const overLimit = debt + total > creditLimit;
+  const belowMin = !!rules && rules.minOrderValue > 0 && total < rules.minOrderValue;
+  const shippingFee = rules && !belowMin && total < rules.freeShipThreshold ? rules.shippingFee : 0;
+  const grandTotal = total + shippingFee;
+  const overLimit = debt + grandTotal > creditLimit;
   const placing = place.isPending;
 
   return (
@@ -573,9 +580,24 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
                   Lưu mẫu
                 </Button>
                 <Text variant="price-lg" style={{ color: INK }}>
-                  {formatVnd(total)}
+                  {formatVnd(grandTotal)}
                 </Text>
               </div>
+              {belowMin && rules && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Icon icon={AlertTriangle} size="sm" tone="danger" style={{ flexShrink: 0 }} />
+                  <Text variant="caption" tone="danger">
+                    Đơn tối thiểu {formatVnd(rules.minOrderValue)} tiền hàng — thêm {formatVnd(rules.minOrderValue - total)} nữa để đặt.
+                  </Text>
+                </div>
+              )}
+              {rules && !belowMin && (
+                <Text variant="caption" tone="secondary" as="div">
+                  {shippingFee > 0
+                    ? `Tiền hàng ${formatVnd(total)} + Phí giao ${formatVnd(shippingFee)} (miễn phí từ ${formatVnd(rules.freeShipThreshold)})`
+                    : `Miễn phí giao (đơn từ ${formatVnd(rules.freeShipThreshold)})`}
+                </Text>
+              )}
               {preorderLines > 0 && (
                 <Text variant="caption" tone="warning" as="div">
                   {vi.dealerOrder.preorderNote(preorderLines)}
@@ -595,7 +617,7 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
             <Button
               variant="secondary"
               loading={placing}
-              disabled={placing}
+              disabled={placing || belowMin}
               onPress={() => place.mutate('PREPAID')}
               style={{ flex: 1 }}
             >
@@ -606,9 +628,9 @@ function PriceAndOrder({ creditLimit, debt }: { creditLimit: number; debt: numbe
             <Button
               fullWidth
               loading={placing}
-              disabled={overLimit || placing}
+              disabled={overLimit || placing || belowMin}
               onPress={() => place.mutate('CREDIT')}
-              style={inkButton(overLimit || placing)}
+              style={inkButton(overLimit || placing || belowMin)}
             >
               Ghi công nợ
             </Button>
@@ -927,7 +949,7 @@ function DealerReport() {
           {formatVnd(d.revenue)}
         </Text>
         <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 2, opacity: 0.7 }}>
-          {d.orderCount} đơn đã chốt · Thưởng hiện tại {d.bonusPct}% = <b style={{ color: 'var(--color-dealer-accent)' }}>{formatVnd(d.bonusAmount)}</b>
+          {d.orderCount} đơn đã chốt · Thưởng hiện tại {bonusPctText(d.bonusPct)} = <b style={{ color: 'var(--color-dealer-accent)' }}>{formatVnd(d.bonusAmount)}</b>
         </Text>
         {d.pendingRevenue > 0 && (
           <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 2, opacity: 0.7 }}>
@@ -960,7 +982,7 @@ function DealerReport() {
               />
             </div>
             <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 6, opacity: 0.85 }}>
-              Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {d.nextTier.pct}%
+              Còn {formatVnd(d.nextTier.toNext)} để đạt thưởng {bonusPctText(d.nextTier.pct)}
             </Text>
           </div>
         )}
@@ -991,7 +1013,7 @@ function DealerReport() {
                 </Text>
               </span>
               <Text variant="body-sm" tone={tone} style={{ fontWeight: 600 }}>
-                thưởng {t.pct}%
+                thưởng {bonusPctText(t.pct)}
               </Text>
             </div>
           );

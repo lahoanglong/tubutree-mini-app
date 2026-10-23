@@ -26,6 +26,8 @@ function positiveInt(v: unknown, fallback: number): number {
   return Number.isFinite(n) && n >= 1 ? n : fallback;
 }
 
+type Db = PrismaService | Prisma.TransactionClient;
+
 @Injectable()
 export class AttendanceService {
   private readonly logger = new Logger(AttendanceService.name);
@@ -89,8 +91,9 @@ export class AttendanceService {
     return { shifts, openSession };
   }
 
-  async checkin(staffId: string, ip: string, body: { shiftId: string } & Coords) {
-    const shift = await this.prisma.shift.findFirst({
+  /** `db`: controller chạy check-in trong khoá tháng lương (PayrollService.writeInMonth) nên truyền tx vào đây. */
+  async checkin(staffId: string, ip: string, body: { shiftId: string } & Coords, db: Db = this.prisma) {
+    const shift = await db.shift.findFirst({
       where: { id: body.shiftId, staffId, status: 'APPROVED' },
     });
     if (!shift) throw new NotFoundException('Không tìm thấy ca đã duyệt.');
@@ -120,18 +123,18 @@ export class AttendanceService {
     // song song đều có thể đọc "chưa có phiên mở" trước khi phiên đầu commit. Guard thật là
     // unique index partial `attendance_sessions_open_staff_key` (staffId WHERE checkoutAt
     // IS NULL) bắt bằng P2002 bên dưới — chống double-checkin khai khống giờ công payroll.
-    const open = await this.prisma.attendanceSession.findFirst({
+    const open = await db.attendanceSession.findFirst({
       where: { staffId, checkoutAt: null },
       select: { id: true },
     });
     if (open) throw new BadRequestException('Bạn đang trong ca, hãy checkout trước.');
 
-    const priorCount = await this.prisma.attendanceSession.count({ where: { shiftId: shift.id } });
+    const priorCount = await db.attendanceSession.count({ where: { shiftId: shift.id } });
     const isLate = priorCount === 0 && now > effStart.getTime() + cfg.graceMin * 60000;
 
     let session: { id: string };
     try {
-      session = await this.prisma.attendanceSession.create({
+      session = await db.attendanceSession.create({
         data: {
           shiftId: shift.id,
           staffId,
@@ -260,14 +263,14 @@ export class AttendanceService {
     });
   }
 
-  async manualCheckout(sessionId: string) {
+  async manualCheckout(sessionId: string, db: Db = this.prisma) {
     // Chỉ đóng phiên còn mở: nhân viên tự ra ca cùng lúc thì giữ giờ ra ca của họ, không ghi đè bằng giờ bấm nút.
-    const { count } = await this.prisma.attendanceSession.updateMany({
+    const { count } = await db.attendanceSession.updateMany({
       where: { id: sessionId, checkoutAt: null },
       data: { checkoutAt: new Date(), closeReason: 'ADMIN' },
     });
     if (count === 0) {
-      const s = await this.prisma.attendanceSession.findUnique({ where: { id: sessionId }, select: { id: true } });
+      const s = await db.attendanceSession.findUnique({ where: { id: sessionId }, select: { id: true } });
       if (!s) throw new NotFoundException('Không tìm thấy phiên.');
       throw new BadRequestException('Phiên đã đóng.');
     }
@@ -304,8 +307,9 @@ export class AttendanceService {
     checkinAt: Date,
     checkoutAt: Date | null,
     excludeSessionId?: string,
+    db: Db = this.prisma,
   ): Promise<void> {
-    const siblings = await this.prisma.attendanceSession.findMany({
+    const siblings = await db.attendanceSession.findMany({
       where: { shiftId, ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}) },
       select: { checkinAt: true, checkoutAt: true },
     });
@@ -331,7 +335,7 @@ export class AttendanceService {
     }
   }
 
-  /** Tra nhanh {staffId, workDate} của một phiên — để controller kiểm khoá tháng TRƯỚC khi ghi. */
+  /** Tra nhanh {staffId, workDate} của một phiên — khoá tháng lương lấy theo đây, kiểm tháng và ghi nằm trong khoá. */
   async sessionOwner(sessionId: string): Promise<{ staffId: string; workDate: Date }> {
     const s = await this.prisma.attendanceSession.findUnique({
       where: { id: sessionId },
@@ -341,7 +345,7 @@ export class AttendanceService {
     return { staffId: s.staffId, workDate: s.shift.workDate };
   }
 
-  /** Tra nhanh {staffId, workDate} của một ca — để controller kiểm khoá tháng TRƯỚC khi ghi. */
+  /** Tra nhanh {staffId, workDate} của một ca — khoá tháng lương lấy theo đây, kiểm tháng và ghi nằm trong khoá. */
   async shiftOwner(shiftId: string): Promise<{ staffId: string; workDate: Date }> {
     const sh = await this.prisma.shift.findUnique({
       where: { id: shiftId },
@@ -351,9 +355,9 @@ export class AttendanceService {
     return { staffId: sh.staffId, workDate: sh.workDate };
   }
 
-  /** QL sửa giờ phiên (điều chỉnh giờ làm). Trả {staffId, workDate} để controller recompute lương. */
-  async adminEditSession(sessionId: string, patch: { checkinAt?: Date; checkoutAt?: Date | null }) {
-    const s = await this.prisma.attendanceSession.findUnique({
+  /** QL sửa giờ phiên (điều chỉnh giờ làm). Chạy trong PayrollService.writeInMonth: tính lại lương ngày do writeInMonth làm. */
+  async adminEditSession(sessionId: string, patch: { checkinAt?: Date; checkoutAt?: Date | null }, db: Db = this.prisma) {
+    const s = await db.attendanceSession.findUnique({
       where: { id: sessionId },
       include: { shift: { select: { workDate: true } } },
     });
@@ -364,27 +368,27 @@ export class AttendanceService {
       throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
     // closeReason chỉ đổi khi CALL NÀY thực sự thay đổi checkoutAt — sửa riêng checkinAt không
     // được ghi đè lý do đóng phiên gốc (MANUAL/SHIFT_END/OUT_OF_RANGE), phá mất audit trail.
-    await this.assertNoOverlap(s.shiftId, checkinAt, checkoutAt, sessionId);
+    await this.assertNoOverlap(s.shiftId, checkinAt, checkoutAt, sessionId, db);
     const closeReason =
       patch.checkoutAt === undefined ? s.closeReason : checkoutAt ? 'ADMIN' : null;
-    await this.prisma.attendanceSession.update({
+    await db.attendanceSession.update({
       where: { id: sessionId },
       data: { checkinAt, checkoutAt, closeReason },
     });
     return { staffId: s.staffId, workDate: s.shift.workDate };
   }
 
-  /** QL thêm phiên thủ công cho ca (NV quên chấm hẳn). Trả {staffId, workDate} để recompute. */
-  async adminAddSession(shiftId: string, checkinAt: Date, checkoutAt: Date) {
+  /** QL thêm phiên thủ công cho ca (NV quên chấm hẳn). Chạy trong PayrollService.writeInMonth: tính lại lương ngày do writeInMonth làm. */
+  async adminAddSession(shiftId: string, checkinAt: Date, checkoutAt: Date, db: Db = this.prisma) {
     if (checkoutAt.getTime() <= checkinAt.getTime())
       throw new BadRequestException('Giờ checkout phải sau giờ checkin.');
-    const shift = await this.prisma.shift.findUnique({
+    const shift = await db.shift.findUnique({
       where: { id: shiftId },
       select: { id: true, staffId: true, workDate: true },
     });
     if (!shift) throw new NotFoundException('Không tìm thấy ca.');
-    await this.assertNoOverlap(shiftId, checkinAt, checkoutAt);
-    await this.prisma.attendanceSession.create({
+    await this.assertNoOverlap(shiftId, checkinAt, checkoutAt, undefined, db);
+    await db.attendanceSession.create({
       data: {
         shiftId,
         staffId: shift.staffId,

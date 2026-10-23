@@ -17,10 +17,10 @@ describe('MultiImageUpload — ô thêm ảnh (R5-BUYER-5)', () => {
   });
 });
 
-describe('MultiImageUpload — nút "Xóa ảnh"', () => {
+describe('MultiImageUpload — nút "Xoá ảnh"', () => {
   it('vùng chạm >= 44x44 nhưng nằm gọn trong ô ảnh 72px, không lấn sang ô kế tiếp', () => {
     render(<MultiImageUpload value={['https://i/1.jpg', 'https://i/2.jpg']} onChange={() => {}} />);
-    const buttons = screen.getAllByRole('button', { name: 'Xóa ảnh' });
+    const buttons = screen.getAllByRole('button', { name: 'Xoá ảnh' });
     expect(buttons).toHaveLength(2);
     for (const btn of buttons) {
       expect(px(btn.style.width)).toBeGreaterThanOrEqual(44);
@@ -36,7 +36,7 @@ describe('MultiImageUpload — nút "Xóa ảnh"', () => {
   it('chạm xoá đúng ảnh được chọn', () => {
     const onChange = vi.fn();
     render(<MultiImageUpload value={['https://i/1.jpg', 'https://i/2.jpg']} onChange={onChange} />);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Xóa ảnh' })[1]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Xoá ảnh' })[1]!);
     expect(onChange).toHaveBeenCalledWith(['https://i/1.jpg']);
   });
 });

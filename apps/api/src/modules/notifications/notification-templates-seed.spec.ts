@@ -262,6 +262,20 @@ describe('seed mẫu thông báo', () => {
       expect(bodyOf()).not.toMatch(/tubu ?xu/i);
     });
 
+    it('COMMUNITY_BEST_ANSWER: không nhắc Điểm Xanh khi reward_note rỗng (chạm trần ngày / thưởng 0 / lỗi cấp)', async () => {
+      const { svc, bodyOf } = makeSvc('COMMUNITY_BEST_ANSWER');
+      await svc.notify('u1', 'COMMUNITY_BEST_ANSWER', { post_id: 'p1', reward_note: '' });
+      expect(bodyOf()).toBe('Câu trả lời của bạn được chọn là hay nhất! 🌿');
+      expect(bodyOf()).not.toContain('Điểm Xanh');
+      expect(bodyOf()).not.toContain('{{');
+    });
+
+    it('COMMUNITY_BEST_ANSWER: đã cộng điểm → nêu đúng số điểm do reward_note mang vào', async () => {
+      const { svc, bodyOf } = makeSvc('COMMUNITY_BEST_ANSWER');
+      await svc.notify('u1', 'COMMUNITY_BEST_ANSWER', { post_id: 'p1', reward_note: ' Bạn nhận thêm 1.000 Điểm Xanh thưởng.' });
+      expect(bodyOf()).toBe('Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm 1.000 Điểm Xanh thưởng.');
+    });
+
     it('WELCOME_VOUCHER: nói rõ đơn tối thiểu và dùng thuật ngữ "mã giảm giá" (Q-26)', async () => {
       const { svc, bodyOf } = makeSvc('WELCOME_VOUCHER');
       await svc.notify('u1', 'WELCOME_VOUCHER', {

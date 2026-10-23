@@ -1,0 +1,181 @@
+{
+  "id": "U1-18",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Đặt đơn chuyển khoản → màn QR: đúng tài khoản, số tiền, nội dung, hạn",
+  "steps": "Giỏ 199.000đ → \"Thanh toán\" → chọn \"Chuyển khoản ngân hàng\" → \"Đặt hàng · 199.000đ\" → màn /bank-payment/<mã>; đọc GET /payments/bank-qr/<mã> và giải mã VietQR",
+  "expected": "Màn ghi Ngân hàng TMCP Kỹ Thương Việt Nam, STK 8386790906, chủ TK CONG TY TNHH TUBU TREE, số tiền 199.000đ, nội dung CK = mã đơn, hạn chuyển 24 giờ; VietQR: BIN 970407 (Techcombank) + STK 8386790906, trường 54 = 199000, 62-08 = mã đơn, CRC đúng; DB PENDING_PAYMENT/UNPAID, tồn kho đã giữ",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "màn có Ngân hàng: Ngân hàng TMCP Kỹ Thương Việt Nam",
+      "ok": true
+    },
+    {
+      "name": "màn có Số tài khoản: 8386790906",
+      "ok": true
+    },
+    {
+      "name": "màn có Chủ tài khoản: CONG TY TNHH TUBU TREE",
+      "ok": true
+    },
+    {
+      "name": "màn có Số tiền: 199.000đ",
+      "ok": true
+    },
+    {
+      "name": "màn có Nội dung CK: TUBU2026102284257",
+      "ok": true
+    },
+    {
+      "name": "ảnh QR trỏ 970407-8386790906, amount=199000, addInfo=mã đơn",
+      "ok": true,
+      "detail": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=199000&addInfo=TUBU2026102284257&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
+    },
+    {
+      "name": "VietQR: BIN 970407 + STK 8386790906 + NAPAS QRIBFTTA",
+      "ok": true
+    },
+    {
+      "name": "VietQR: số tiền 199000, nội dung = mã đơn, CRC đúng",
+      "ok": true
+    },
+    {
+      "name": "hạn chuyển khoản = 24 giờ sau lúc đặt",
+      "ok": true,
+      "detail": 24
+    },
+    {
+      "name": "màn nêu \"Vui lòng chuyển khoản trước\"",
+      "ok": true
+    },
+    {
+      "name": "DB: PENDING_PAYMENT/UNPAID/BANK_TRANSFER, total 199000",
+      "ok": true
+    },
+    {
+      "name": "DB: tồn kho đã giữ (reservedStock > 0)",
+      "ok": true,
+      "detail": {
+        "stock": 193,
+        "reservedStock": 7
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102284257",
+        "button": "Đặt hàng · 199.000đ",
+        "total": 199000
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-18-bank-qr.png"
+    },
+    {
+      "label": "chữ màn QR",
+      "data": [
+        "Quét QR để chuyển khoản",
+        "Mở app ngân hàng / ví bất kỳ → quét mã VietQR bên dưới",
+        "199.000đ",
+        "Ngân hàng",
+        "Ngân hàng TMCP Kỹ Thương Việt Nam",
+        "Số tài khoản",
+        "8386790906",
+        "Chủ tài khoản",
+        "CONG TY TNHH TUBU TREE",
+        "Số tiền",
+        "199.000đ",
+        "Nội dung CK",
+        "TUBU2026102284257",
+        "Giữ nguyên nội dung TUBU2026102284257 để hệ thống tự xác nhận.",
+        "Vui lòng chuyển khoản trước 18:36 23/10/2026. Quá hạn đơn sẽ tự huỷ; tiền chuyển sau đó Tubu sẽ hoàn lại cho bạn.",
+        "Còn 23 giờ 59 phút để chuyển khoản",
+        "Đang chờ thanh toán… tự cập nhật khi nhận được tiền",
+        "Tôi đã chuyển khoản — Kiểm tra",
+        "Để sau / Xem đơn hàng"
+      ]
+    },
+    {
+      "label": "ảnh QR src",
+      "data": "https://img.vietqr.io/image/970407-8386790906-compact2.png?amount=199000&addInfo=TUBU2026102284257&accountName=CONG%20TY%20TNHH%20TUBU%20TREE"
+    },
+    {
+      "label": "GET /payments/bank-qr",
+      "data": {
+        "amount": 199000,
+        "bank": {
+          "bin": "970407",
+          "name": "Ngân hàng TMCP Kỹ Thương Việt Nam",
+          "accountNo": "8386790906",
+          "accountName": "CONG TY TNHH TUBU TREE"
+        },
+        "memo": "TUBU2026102284257",
+        "paymentDeadline": "2026-10-23T11:36:37.794Z",
+        "emv": {
+          "bin": "970407",
+          "acc": "8386790906",
+          "amount": "199000",
+          "addInfo": "TUBU2026102284257",
+          "crc": "3A2E"
+        }
+      }
+    },
+    {
+      "label": "SQL đơn",
+      "data": {
+        "id": "cmvjgu3du00kozw9c5sd9dm9q",
+        "code": "TUBU2026102284257",
+        "userId": "u1_d18_gu0m8iu",
+        "status": "PENDING_PAYMENT",
+        "paymentMethod": "BANK_TRANSFER",
+        "paymentStatus": "UNPAID",
+        "subtotal": 199000,
+        "discount": 0,
+        "couponDiscount": 0,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 199000,
+        "pointsEarned": 3980,
+        "pointsUsed": 0,
+        "couponCode": null,
+        "pancakeOrderId": "9200011",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-22T11:36:37.794Z",
+        "items": [
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 120000,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 79000,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [],
+        "ledger": []
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:36:39.473Z"
+}

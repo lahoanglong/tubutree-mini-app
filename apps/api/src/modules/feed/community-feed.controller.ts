@@ -12,7 +12,6 @@ import { AllowStaff, COMMUNITY_MODERATORS } from '../../common/staff-permissions
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { IsUploadedImage, PUBLIC_CONTENT_IMAGE } from '../../common/uploaded-image';
 import { FeedQuery } from './feed-query.dto';
-import { EVENT_REWARD_MAX_POINTS } from './community-limits';
 import { CommunityFeedService, type CreateEventInput, type CreatePostInput } from './community-feed.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 
@@ -57,9 +56,9 @@ export class CreateEventDto {
   @OptionalNotNull() @IsString() coverUrl?: string;
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
-  // Điểm Xanh (1 điểm = 1đ). Trần 1.000.000 điểm = 1.000.000đ như trần xu cũ; gửi rewardXu sẽ bị
-  // ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm đơn vị.
-  @OptionalNotNull() @IsInt() @Min(0) @Max(EVENT_REWARD_MAX_POINTS) rewardPoints?: number;
+  // Điểm Xanh (1 điểm = 1đ). Khoảng nghiệp vụ (20.000-50.000) kiểm ở service để báo lỗi tiếng Việt; @Max 1.000.000 chỉ là
+  // lưới chặn nhầm đơn vị. Gửi rewardXu sẽ bị ValidationPipe (forbidNonWhitelisted) từ chối thay vì âm thầm hiểu nhầm.
+  @OptionalNotNull() @IsInt() @Min(0) @Max(1_000_000) rewardPoints?: number;
 }
 class PickWinnerDto {
   @IsString() userId!: string;
@@ -102,8 +101,8 @@ export class CommunityFeedController {
   }
 
   // Admin (literal paths) phải khai TRƯỚC @Get(':id') để không bị :id nuốt mất.
-  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn/ghim, báo cáo) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop;
-  // sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
+  // Kiểm duyệt hằng ngày (hàng chờ, duyệt/từ chối/ẩn, báo cáo) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop;
+  // ghim bài, sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
   @Roles('ADMIN')
   @AllowStaff(...COMMUNITY_MODERATORS)
   @Get('admin/pending')
@@ -314,8 +313,8 @@ export class CommunityFeedController {
     return this.feed.resolveReport(id);
   }
 
+  /** Ghim đặt bài lên đầu bảng tin nên chỉ ADMIN; nhân viên kiểm duyệt chỉ duyệt, từ chối và ẩn. */
   @Roles('ADMIN')
-  @AllowStaff(...COMMUNITY_MODERATORS)
   @Post('admin/:id/pin')
   pin(@Param('id') id: string, @Body() body: PinDto) {
     return this.feed.pinPost(id, body?.pinned !== false);

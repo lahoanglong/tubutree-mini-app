@@ -1,0 +1,5 @@
+# Ảnh chụp, log và dữ liệu chạy của harness nặng và sinh lại được; chỉ commit báo cáo, script và kết quả chữ.
+screens/
+logs/
+tools/uat-harness/state/
+uat/shots/

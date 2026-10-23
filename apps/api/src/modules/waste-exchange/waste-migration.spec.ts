@@ -88,3 +88,13 @@ describe('KNOWN_PARTIAL_UNIQUE_INDEXES', () => {
     }
   });
 });
+
+describe('waste migration, warehouse-only items', () => {
+  const NEW_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261020010000_waste_item_warehouse_only/migration.sql'), 'utf-8');
+  const text = squash(withoutComments(NEW_SQL));
+
+  it('adds the flag with a safe default and flags exactly the milk carton and the Tubu bottle', () => {
+    expect(text).toContain('ALTER TABLE "waste_items" ADD COLUMN "warehouseOnly" BOOLEAN NOT NULL DEFAULT false;');
+    expect(text).toContain(`UPDATE "waste_items" SET "warehouseOnly" = true WHERE "code" IN ('MILK_CARTON', 'TUBU_BOTTLE');`);
+  });
+});

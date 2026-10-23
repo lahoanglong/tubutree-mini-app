@@ -108,7 +108,7 @@ describe('HomeSection', () => {
   });
 
   it('thông báo lỗi theo loại lỗi (mất mạng / máy chủ) giống getErrorMessage', () => {
-    const server = Object.assign(new Error('x'), { isAxiosError: true, response: { status: 503, data: {} } });
+    const server = Object.assign(new Error('x'), { isHttpError: true, response: { status: 503, data: {} } });
     wrap(<HomeSection title="Bán chạy" limit={6} query={q({ isError: true, error: server })} listSource="home" />);
     expect(screen.getByText('Máy chủ đang bận, thử lại nhé.')).toBeInTheDocument();
   });

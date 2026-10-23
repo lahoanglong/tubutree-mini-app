@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelAdminMerchantPayout,
@@ -17,7 +17,7 @@ import { formatVnd } from '@/lib/shop-client';
 import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
-import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass, LoadError } from './ui';
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
 import { useNarrowScreen } from './side-drawer';
 import { useConfirm } from './confirm-dialog';
@@ -130,7 +130,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
         </Notice>
       )}
       {overviewQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {overviewQ.isError && <p className="text-sm text-danger-fg">Không tải được tổng quan đơn đối tác.</p>}
+      {overviewQ.isError && <LoadError onRetry={() => void overviewQ.refetch()} retrying={overviewQ.isFetching}>Không tải được tổng quan đơn đối tác.</LoadError>}
 
       {o && (
         <section className="space-y-2">
@@ -246,7 +246,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
             Tất cả
           </button>
         </div>
-        {payoutsQ.isError && <p className="text-sm text-danger-fg">Không tải được phiếu đối soát.</p>}
+        {payoutsQ.isError && <LoadError onRetry={() => void payoutsQ.refetch()} retrying={payoutsQ.isFetching}>Không tải được phiếu đối soát.</LoadError>}
         {payoutsQ.data && slips.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-center text-xs text-stone-500">
             {slipFilter === 'PENDING' ? 'Không có phiếu nào đang chờ chuyển hoặc chờ thu.' : 'Chưa có phiếu nào.'}
@@ -381,7 +381,7 @@ function StatementLines({
 }) {
   const q = useQuery({ queryKey: ['admin-merchant-statement', storefrontId], queryFn: () => getAdminMerchantStatement(storefrontId) });
   if (q.isLoading) return <p className="text-stone-500">Đang tải bảng kê…</p>;
-  if (q.isError || !q.data) return <p className="text-danger-fg">Không tải được bảng kê.</p>;
+  if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được bảng kê.</LoadError>;
   return (
     <div className="space-y-3">
       {q.data.lines.length === 0 ? (
@@ -506,9 +506,11 @@ function PayoutRow({
   canConfirmToTubu: boolean;
 }) {
   const [bankRef, setBankRef] = useState('');
+  const [refMissing, setRefMissing] = useState(false);
+  const refErrorId = useId();
   const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError });
   const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError });
-  const { ask, dialog } = useConfirm();
+  const { confirm, ask, dialog } = useConfirm();
   const busy = paidMut.isPending || cancelMut.isPending;
   const bank = p.bankInfo;
   const toTubu = payoutToTubu(p);
@@ -523,6 +525,36 @@ function PayoutRow({
       input: { label: 'Lý do huỷ (gian hàng sẽ đọc được)', placeholder: 'Vd: sai tài khoản nhận, lập nhầm kỳ', maxLength: 300, required: true },
     });
     if (reason) cancelMut.mutate(reason);
+  };
+  // Ghi sổ đối soát là không rút lại được; Enter trong ô mã giao dịch cũng gửi form nên bước hỏi phải nằm ở đây, không ở nút.
+  const askPaid = async () => {
+    const ref = bankRef.trim();
+    // `required` của trình duyệt cho qua ô toàn dấu cách, còn API từ chối mã rỗng.
+    if (!ref) {
+      setRefMissing(true);
+      return;
+    }
+    const store = p.storefront?.title ?? 'gian hàng';
+    const amount = formatVnd(Math.abs(p.amount));
+    const target = !toTubu
+      ? bank?.accountNo
+        ? `Tài khoản nhận: ${bank.bankName ?? ''} ${bank.accountNo} (${bank.accountName ?? ''})`
+        : 'Gian hàng chưa khai tài khoản nhận đối soát.'
+      : '';
+    const ok = await confirm({
+      title: toTubu ? 'Xác nhận đã thu của đối tác?' : 'Xác nhận đã chuyển cho đối tác?',
+      message: [
+        toTubu ? `Đối tác ${store} đã nộp ${amount} cho Tubu.` : `Tubu đã chuyển ${amount} cho đối tác ${store}.`,
+        target,
+        `Mã giao dịch: ${ref}`,
+        'Phiếu sẽ chuyển sang đã xong và không sửa lại được.',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      confirmLabel: toTubu ? 'Đã thu' : 'Đã chuyển',
+      tone: 'danger',
+    });
+    if (ok) paidMut.mutate();
   };
   return (
     <li className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-xs shadow-card">
@@ -572,15 +604,33 @@ function PayoutRow({
             className="flex flex-wrap items-end gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              paidMut.mutate();
+              void askPaid();
             }}
           >
             {(!toTubu || canConfirmToTubu) && (
               <>
-                <label className="text-stone-700">
-                  {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
-                  <input value={bankRef} onChange={(e) => setBankRef(e.target.value)} required maxLength={100} className={`mt-1 block w-48 ${FIELD_XS}`} />
-                </label>
+                <div>
+                  <label className="text-stone-700">
+                    {toTubu ? 'Mã giao dịch đối tác nộp' : 'Mã giao dịch ngân hàng'}
+                    <input
+                      value={bankRef}
+                      onChange={(e) => {
+                        setBankRef(e.target.value);
+                        setRefMissing(false);
+                      }}
+                      required
+                      maxLength={100}
+                      aria-invalid={refMissing ? true : undefined}
+                      aria-describedby={refMissing ? refErrorId : undefined}
+                      className={`mt-1 block w-48 ${FIELD_XS}`}
+                    />
+                  </label>
+                  {refMissing && (
+                    <p id={refErrorId} role="alert" className="mt-1 text-danger-fg">
+                      Nhập mã giao dịch trước khi ghi sổ.
+                    </p>
+                  )}
+                </div>
                 <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
                   {toTubu ? 'Đã thu' : 'Đã chuyển'}
                 </button>

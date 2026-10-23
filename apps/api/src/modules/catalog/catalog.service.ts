@@ -97,6 +97,13 @@ export class CatalogService {
   private categoriesCache: { value: CategoryWithCount[]; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
 
+  // "Thường mua kèm" quét order_items 90 ngày; chi phí tăng theo doanh số của sản phẩm nên cache phần co-occurrence (id sản phẩm),
+  // còn thẻ sản phẩm vẫn đọc tươi để giá/tồn/ẩn hiện luôn đúng. Cùng hạn chế per-instance như brandsCache; có trần số khoá vì
+  // slug do khách gửi.
+  private readonly boughtTogetherCache = new Map<string, { ids: string[]; expiresAt: number }>();
+  private readonly BOUGHT_TOGETHER_TTL_MS = 10 * 60_000;
+  private readonly BOUGHT_TOGETHER_MAX_KEYS = 500;
+
   // Mapper public-safe cho getBySlug() — endpoint /products/:slug là @Public() (không cần đăng
   // nhập). KHÔNG được `include` trần cho variations/reviews: `include` kéo TOÀN BỘ cột của
   // Prisma, gồm dealerPrices/affiliateRate (giá sỉ đại lý + % hoa hồng CTV) và reservedStock/
@@ -132,6 +139,7 @@ export class CatalogService {
     const { page, limit, sort } = query;
     const where = await this.listWhere(query);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit);
+    if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc');
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
@@ -148,17 +156,46 @@ export class CatalogService {
 
   /**
    * "Bán chạy" = soldApp + soldExternal giảm dần, hoà thì id tăng dần (spec 5b.2, plan 4b Ruling 2).
-   * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy 3 cột nhỏ của MỌI SP khớp, sắp,
+   * Prisma không orderBy được theo biểu thức → xếp hạng ở đây: lấy vài cột nhỏ của MỌI SP khớp, sắp,
    * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
    * Đủ nhanh với catalog hiện tại (vài trăm SP). Vượt ~5k SP → chuyển sang cột soldTotal có index.
    */
-  private async listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
-    const ranked = await this.prisma.product.findMany({
+  private listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
+    return this.listRanked<{ id: string; soldApp: number; soldExternal: number }>(
       where,
-      select: { id: true, soldApp: true, soldExternal: true },
-    });
+      page,
+      limit,
+      { id: true, soldApp: true, soldExternal: true },
+      (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+    );
+  }
+
+  /**
+   * "Giá tăng/giảm" theo giá ĐANG BÁN (salePrice ?? basePrice), cùng giá với bộ lọc giá và thẻ SP: sắp theo
+   * basePrice thì SP đang giảm giá đứng sai chỗ so với giá khách nhìn thấy (U1-B01). Cũng là biểu thức nên xếp hạng ở TS.
+   */
+  private listByStandingPrice(where: Prisma.ProductWhereInput, page: number, limit: number, dir: 'asc' | 'desc') {
+    type Row = { id: string; basePrice: number; salePrice: number | null };
+    const standing = (p: Row) => p.salePrice ?? p.basePrice;
+    return this.listRanked<Row>(
+      where,
+      page,
+      limit,
+      { id: true, basePrice: true, salePrice: true },
+      (x, y) => (dir === 'asc' ? standing(x) - standing(y) : standing(y) - standing(x)),
+    );
+  }
+
+  private async listRanked<T extends { id: string }>(
+    where: Prisma.ProductWhereInput,
+    page: number,
+    limit: number,
+    select: Prisma.ProductSelect,
+    compare: (x: T, y: T) => number,
+  ) {
+    const ranked = (await this.prisma.product.findMany({ where, select })) as unknown as T[];
     ranked.sort((x, y) => {
-      const diff = y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal);
+      const diff = compare(x, y);
       if (diff !== 0) return diff;
       return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
     });
@@ -314,25 +351,34 @@ export class CatalogService {
   async boughtTogether(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    const since = new Date(Date.now() - 90 * 864e5);
-    const rows = await this.prisma.$queryRaw<{ productId: string }[]>`
-      WITH target_orders AS (
-        SELECT DISTINCT oi."orderId"
-        FROM order_items oi
-        JOIN variations v ON v.id = oi."variationId"
-        JOIN orders o ON o.id = oi."orderId"
-        WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since}
-      )
-      SELECT v2."productId" AS "productId", COUNT(*) AS cnt
-      FROM order_items oi2
-      JOIN variations v2 ON v2.id = oi2."variationId"
-      WHERE oi2."orderId" IN (SELECT "orderId" FROM target_orders)
-        AND v2."productId" <> ${product.id}
-      GROUP BY v2."productId"
-      ORDER BY cnt DESC
-      LIMIT 6`;
-    if (rows.length === 0) return [];
-    const ids = rows.map((r) => r.productId);
+    const hit = this.boughtTogetherCache.get(product.id);
+    let ids = hit && hit.expiresAt > Date.now() ? hit.ids : null;
+    if (!ids) {
+      const since = new Date(Date.now() - 90 * 864e5);
+      const rows = await this.prisma.$queryRaw<{ productId: string }[]>`
+        WITH target_orders AS (
+          SELECT DISTINCT oi."orderId"
+          FROM order_items oi
+          JOIN variations v ON v.id = oi."variationId"
+          JOIN orders o ON o.id = oi."orderId"
+          WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since}
+        )
+        SELECT v2."productId" AS "productId", COUNT(*) AS cnt
+        FROM order_items oi2
+        JOIN variations v2 ON v2.id = oi2."variationId"
+        WHERE oi2."orderId" IN (SELECT "orderId" FROM target_orders)
+          AND v2."productId" <> ${product.id}
+        GROUP BY v2."productId"
+        ORDER BY cnt DESC
+        LIMIT 6`;
+      ids = rows.map((r) => r.productId);
+      // Làm mới đúng khoá đang có (hết hạn) thì không thêm khoá mới, nên không có lý do bỏ khoá của sản phẩm khác.
+      if (!this.boughtTogetherCache.has(product.id) && this.boughtTogetherCache.size >= this.BOUGHT_TOGETHER_MAX_KEYS) {
+        this.boughtTogetherCache.delete(this.boughtTogetherCache.keys().next().value as string);
+      }
+      this.boughtTogetherCache.set(product.id, { ids, expiresAt: Date.now() + this.BOUGHT_TOGETHER_TTL_MS });
+    }
+    if (ids.length === 0) return [];
     const products = await this.prisma.product.findMany({
       where: { id: { in: ids }, ...PUBLIC_PRODUCT_WHERE },
       include: { variations: { where: { isActive: true }, orderBy: VARIATION_ORDER_BY } },
@@ -474,10 +520,6 @@ export class CatalogService {
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {
     switch (sort) {
-      case 'price_asc':
-        return { basePrice: 'asc' };
-      case 'price_desc':
-        return { basePrice: 'desc' };
       case 'newest':
         return { createdAt: 'desc' };
       case 'rating':

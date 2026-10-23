@@ -150,6 +150,8 @@ describe('Hồi quy người mua: đơn không có hàng đối tác ra đúng s
       ['groupbuy.max_open_per_user', 3],
       ['subscribe.discount_pct', 0.05],
       ['dealer.max_discount_pct', 0.45],
+      ['dealer.min_order_value_vnd', 0],
+      ['dealer.shipping_fee_below_threshold_vnd', 0],
       ['flashsale.min_discount_pct', 0],
       ['flashsale.default_per_user_limit', 5],
     ];

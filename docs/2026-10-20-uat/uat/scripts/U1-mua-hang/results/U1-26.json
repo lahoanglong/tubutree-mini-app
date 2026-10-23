@@ -1,0 +1,607 @@
+{
+  "id": "U1-26",
+  "browser": "chromium",
+  "role": "Khách có Điểm Xanh",
+  "journey": "Dùng Điểm Xanh lúc thanh toán: điểm đang khoá, trần 20%, 1 điểm = 1đ, số dư nhỏ hơn trần",
+  "steps": "Khách mới đặt 4 can FUWA-DW-5L (1.720.000đ) COD → giả Pancake giao xong → (a) checkout 1 chai 120k: ô Điểm Xanh; (b) lùi deliveredAt của đơn 8 ngày (hết hạn đổi/trả 7 ngày) → tick Điểm Xanh → COD; (c) giỏ 1 can 430k → tick Điểm Xanh → COD",
+  "expected": "Giao xong +34.400 điểm (2% × 1.720.000), ORDER_DELIVERED; (a) điểm còn trong hạn đổi/trả nên chưa dùng được: ô bị khoá, báo giá pointsUsed 0; (b) trần 20% × 120.000 = 24.000 điểm → giảm 24.000đ, tổng 96.000đ + phí giao; sổ ORDER_REDEEM −24.000; (c) trần 86.000 > số dư 10.400 → dùng 10.400, giảm 10.400đ; số dư 0; mọi lúc tổng sổ điểm = users.pointsBalance; điểm tích = 2% × hệ số hạng × tiền hàng sau điểm",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "giao xong: +34.400 điểm, sổ = số dư",
+      "ok": true,
+      "detail": {
+        "balance": 34400,
+        "converted": 0,
+        "ledgerStd": 34400,
+        "ledgerConv": 0,
+        "rows": 1
+      }
+    },
+    {
+      "name": "(a) điểm đang khoá: ô Điểm Xanh bị khoá",
+      "ok": true,
+      "detail": {
+        "disabled": "true",
+        "text": "Điểm Xanh 34.400 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được"
+      }
+    },
+    {
+      "name": "(a) API cũng không cho dùng điểm đang khoá (pointsUsed 0)",
+      "ok": true
+    },
+    {
+      "name": "(b) trần 20%: dùng 24.000 điểm = giảm 24.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgwcff010azw9c3fvagx2c"
+            ],
+            "subtotal": 120000,
+            "discount": 24000,
+            "shippingFee": 0,
+            "total": 96000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 24000,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 24000,
+        "pointsMax": 24000,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 96000,
+        "pointsEarned": 2304,
+        "pointsBalance": 34400,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 34400,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgwcff010azw9c3fvagx2c",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 186,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(b) tổng = 120.000 − 24.000 + phí giao",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgwcff010azw9c3fvagx2c"
+            ],
+            "subtotal": 120000,
+            "discount": 24000,
+            "shippingFee": 0,
+            "total": 96000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 120000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 24000,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 24000,
+        "pointsMax": 24000,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 96000,
+        "pointsEarned": 2304,
+        "pointsBalance": 34400,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 34400,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgwcff010azw9c3fvagx2c",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 186,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(b) điểm tích = 2% × 1.2 × 96.000",
+      "ok": true,
+      "detail": {
+        "pointsEarned": 2304,
+        "want": 2304
+      }
+    },
+    {
+      "name": "(b) ô Điểm Xanh ghi \"24.000\"",
+      "ok": true,
+      "detail": "Điểm Xanh Dùng 24.000 điểm — giảm 24.000đ Đơn này dùng tối đa 24.000 Điểm Xanh, tính theo giá trị hàng của đơn"
+    },
+    {
+      "name": "(b) DB: pointsUsed 24000, pointsDiscount 24000, total khớp báo giá",
+      "ok": true
+    },
+    {
+      "name": "(b) DB: sổ ORDER_REDEEM −24.000, số dư 10.400 = tổng sổ",
+      "ok": true,
+      "detail": {
+        "balance": 10400,
+        "converted": 0,
+        "ledgerStd": 10400,
+        "ledgerConv": 0,
+        "rows": 2
+      }
+    },
+    {
+      "name": "(c) trần 86.000 > số dư → dùng hết 10.400 điểm",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgwj4n011fzw9csz88e5fh"
+            ],
+            "subtotal": 430000,
+            "discount": 10400,
+            "shippingFee": 0,
+            "total": 419600
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 430000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 10400,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 10400,
+        "pointsMax": 10400,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 419600,
+        "pointsEarned": 10070,
+        "pointsBalance": 10400,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 10400,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgwj4n011fzw9csz88e5fh",
+            "variationId": "cmqfuw9jv0007w1vfb1njbw7k",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "Can 5L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 430000,
+            "quantity": 1,
+            "stock": 32,
+            "weight": 5200,
+            "total": 430000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(c) tổng = 430.000 − 10.400 + phí giao",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgwj4n011fzw9csz88e5fh"
+            ],
+            "subtotal": 430000,
+            "discount": 10400,
+            "shippingFee": 0,
+            "total": 419600
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 430000,
+        "discount": 0,
+        "couponApplied": false,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 10400,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 10400,
+        "pointsMax": 10400,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 419600,
+        "pointsEarned": 10070,
+        "pointsBalance": 10400,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 10400,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgwj4n011fzw9csz88e5fh",
+            "variationId": "cmqfuw9jv0007w1vfb1njbw7k",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "Can 5L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 430000,
+            "quantity": 1,
+            "stock": 32,
+            "weight": 5200,
+            "total": 430000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "(c) điểm tích = 2% × 1.2 × 419.600",
+      "ok": true,
+      "detail": {
+        "pointsEarned": 10070,
+        "want": 10070
+      }
+    },
+    {
+      "name": "(c) DB: sổ ORDER_REDEEM −10.400, số dư 0 = tổng sổ",
+      "ok": true,
+      "detail": {
+        "balance": 0,
+        "converted": 0,
+        "ledgerStd": 0,
+        "ledgerConv": 0,
+        "rows": 3
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "đơn 1 + giao xong (webhook Pancake)",
+      "data": {
+        "code": "TUBU2026102202185",
+        "total": 1720000,
+        "deliveredEvent": {
+          "id": "cmvjgwc0t00zvzw9c2c6p8zl9",
+          "status": "PROCESSED",
+          "error": null,
+          "attempts": 1
+        }
+      }
+    },
+    {
+      "label": "SQL điểm sau giao",
+      "data": {
+        "points": {
+          "balance": 34400,
+          "converted": 0,
+          "ledgerStd": 34400,
+          "ledgerConv": 0,
+          "rows": 1
+        },
+        "ledger": [
+          {
+            "delta": 34400,
+            "reason": "ORDER_DELIVERED:TUBU2026102202185",
+            "lot": "STANDARD"
+          }
+        ],
+        "tier": {
+          "tierId": "LOC_BIEC"
+        }
+      }
+    },
+    {
+      "label": "(a) GET /me/loyalty",
+      "data": {
+        "balance": 34400,
+        "locked": 34400
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvjgwb6h00z3zw9c5bpb3ojk",
+          "pointsToUse": 0
+        },
+        "subtotal": 120000,
+        "discount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 120000,
+        "pointsEarned": 2880
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "true",
+        "text": "Điểm Xanh 34.400 điểm từ đơn còn trong hạn hoặc đang chờ xử lý đổi/trả chưa dùng được"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-26a-locked-checkout.png"
+    },
+    {
+      "label": "(a) POST /checkout/quote pointsToUse 34400 (gọi thẳng API)",
+      "data": {
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "total": 120000
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvjgwb6h00z3zw9c5bpb3ojk",
+          "pointsToUse": 34400
+        },
+        "subtotal": 120000,
+        "discount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 24000,
+        "pointsDiscount": 24000,
+        "pointsMax": 24000,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 96000,
+        "pointsEarned": 2304
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "false",
+        "text": "Điểm Xanh Bạn đang có 34.400 điểm Đơn này dùng tối đa 24.000 Điểm Xanh, tính theo giá trị hàng của đơn",
+        "afterTick": "Điểm Xanh Dùng 24.000 điểm — giảm 24.000đ Đơn này dùng tối đa 24.000 Điểm Xanh, tính theo giá trị hàng của đơn",
+        "checked": "true"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-26b-cap-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102287026",
+        "button": "Đặt hàng · 96.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-26b-cap-placed.png"
+    },
+    {
+      "label": "(b) SQL đơn + điểm",
+      "data": {
+        "order": {
+          "subtotal": 120000,
+          "pointsUsed": 24000,
+          "pointsDiscount": 24000,
+          "shippingFee": 0,
+          "total": 96000,
+          "pointsEarned": 2304,
+          "items": [
+            {
+              "sku": "FUWA-DW-1L",
+              "quantity": 1,
+              "unitPrice": 120000,
+              "total": 120000,
+              "paidTotal": 96000,
+              "pointsDiscount": 24000,
+              "flash": false
+            }
+          ]
+        },
+        "ledger": [
+          {
+            "delta": -24000,
+            "reason": "ORDER_REDEEM:TUBU2026102287026",
+            "lot": "STANDARD"
+          }
+        ],
+        "points": {
+          "balance": 10400,
+          "converted": 0,
+          "ledgerStd": 10400,
+          "ledgerConv": 0,
+          "rows": 2
+        }
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvjgwb6h00z3zw9c5bpb3ojk",
+          "pointsToUse": 10400
+        },
+        "subtotal": 430000,
+        "discount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 10400,
+        "pointsDiscount": 10400,
+        "pointsMax": 10400,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 419600,
+        "pointsEarned": 10070
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "false",
+        "text": "Điểm Xanh Bạn đang có 10.400 điểm",
+        "afterTick": "Điểm Xanh Dùng 10.400 điểm — giảm 10.400đ",
+        "checked": "true"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-26c-balance-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102203010",
+        "button": "Đặt hàng · 419.600đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-26c-balance-placed.png"
+    },
+    {
+      "label": "(c) SQL đơn + điểm",
+      "data": {
+        "order": {
+          "subtotal": 430000,
+          "pointsUsed": 10400,
+          "pointsDiscount": 10400,
+          "shippingFee": 0,
+          "total": 419600,
+          "pointsEarned": 10070
+        },
+        "ledger": [
+          {
+            "delta": -10400,
+            "reason": "ORDER_REDEEM:TUBU2026102203010",
+            "lot": "STANDARD"
+          }
+        ],
+        "points": {
+          "balance": 0,
+          "converted": 0,
+          "ledgerStd": 0,
+          "ledgerConv": 0,
+          "rows": 3
+        }
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:38:38.119Z"
+}

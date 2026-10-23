@@ -59,7 +59,7 @@ gh workflow run ops.yml -f action=set-env   # ghi vào VM .env
 ## 2) Zalo Official Account (OA) + ZNS (thông báo)
 
 **Mục tiêu:** lấy `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN`.
-Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và **đăng nhập web bằng Zalo** (cần thêm Bước E: đăng ký Callback URL).
+Dùng cho: gửi **ZNS** (mời đánh giá, mua chung thành công/thất bại; voucher khi admin bật) và **đăng nhập web bằng Zalo** (cần thêm Bước E: đăng ký Callback URL).
 
 ### Bước A — Tạo OA
 1. Tạo **Official Account** tại https://oa.zalo.me → loại **Doanh nghiệp** (cần GPKD).
@@ -80,10 +80,35 @@ Dùng cho: gửi **ZNS** (xác nhận đơn, giao hàng, voucher) và **đăng n
 
 ### Bước D — Đăng ký template ZNS (LEAD TIME LÂU NHẤT ~7–14 ngày)
 6. Trong Zalo OA → **ZNS → Tạo mẫu thông báo**. Mỗi loại thông báo là 1 template được Zalo **duyệt nội dung** riêng.
-   Nội dung mẫu lấy từ `apps/api/prisma/seed.ts` (mảng `NOTIFICATION_TEMPLATES`). Ưu tiên đăng ký các mã đang để `channel: 'ZNS'`:
-   - `ORDER_CONFIRMED` — "Đơn {{order_code}} đã được xác nhận…"
-   - `ORDER_SHIPPING` — "Đơn {{order_code}} đang được giao…"
-   - (tuỳ nhu cầu: voucher welcome/birthday, nhắc mua lại…)
+   Nội dung mẫu lấy từ `apps/api/prisma/seed.ts` (mảng `NOTIFICATION_TEMPLATES`). Theo quyết định đã chốt (`docs/2026-10-18-launch-review/03-cau-hoi-sang.md`, nhóm C) **nộp ngay 3 mẫu giao dịch**:
+   - `REVIEW_REQUEST` — mời đánh giá sau khi đơn giao (tin giao dịch, gửi một lần mỗi đơn).
+   - `GROUP_BUY_SUCCESS` — mua chung thành công (kèm mã giảm).
+   - `GROUP_BUY_FAILED` — mua chung thất bại (nhóm hết hạn chưa đủ người).
+
+   `ORDER_CONFIRMED` và `ORDER_SHIPPING` **không nộp ở đợt này**: trong seed chúng đã đặt `channel: 'ZNS'` nhưng chưa có mã mẫu nên chỉ gửi trong app. Muốn gửi ZNS cho hai tin đó thì chủ phải quyết riêng (mỗi tin tính phí).
+   Các tin khuyến mãi/hậu mãi (voucher, nhắc mua lại, giỏ bỏ quên…) chỉ gửi ZNS khi admin chuyển kênh và nhập mã mẫu, và luôn bị trần 2 tin ZNS/khách/tháng cùng giờ yên tĩnh (xem "Giờ gửi và trần tin ZNS" bên dưới).
+
+   **Tên tham số trong mẫu Zalo duyệt phải GIỐNG HỆT khoá Tubu gửi** (phân biệt hoa/thường). Tham số đặt tên khác thì Zalo từ chối và tin lỗi cho tới khi sửa mẫu hoặc sửa mã. Bảng khoá (nguồn: `review-invite.service.ts`, `groupbuy.service.ts`):
+
+   | Mẫu | Khoá | Ý nghĩa | Ví dụ |
+   |---|---|---|---|
+   | `REVIEW_REQUEST` | `order_code` | Mã đơn đã giao | `TUBU48213` |
+   | | `product` | Tên sản phẩm chưa đánh giá; đơn nhiều sản phẩm thì "<tên SP đầu> và N sản phẩm khác" | `Nước rửa chén bồ hòn và 2 sản phẩm khác` |
+   | | `product_slug` | Đường dẫn sản phẩm, chỉ có khi sản phẩm có slug; để dựng link trong app, mẫu ZNS không cần dùng | `nuoc-rua-chen-bo-hon` |
+   | `GROUP_BUY_SUCCESS` | `discount` | Mức giảm theo %, đã kèm dấu %, mẫu không thêm "đ" (mã là % có trần, không phải số tiền cố định) | `15%` |
+   | | `product` | Tên sản phẩm của nhóm; mã giảm chỉ dùng cho đúng sản phẩm này | `Nước rửa chén bồ hòn` |
+   | | `code` | Mã giảm giá của chính người nhận (mỗi người một mã) | `GBUY-K3F9X2AB-7QZ41MNP` |
+   | | `expires` | Hạn dùng mã, ngày/tháng/năm giờ VN (30 ngày kể từ lúc nhóm đủ người) | `16/11/2026` |
+   | `GROUP_BUY_FAILED` | `product` | Tên sản phẩm của nhóm đã đóng | `Nước rửa chén bồ hòn` |
+   | | `product_slug` | Đường dẫn sản phẩm, để dựng link trong app, mẫu ZNS không cần dùng | `nuoc-rua-chen-bo-hon` |
+
+   `discount` gửi dạng chữ "15%" (trước đây là số tiền "15.000"). Mẫu nào đã nộp hoặc đã duyệt có chữ "đ" sau `<discount>` (kiểu "mã giảm 15.000đ") thì phải nộp lại: khách sẽ nhận "15%đ", và nếu khai tham số kiểu số/tiền tệ thì Zalo có thể từ chối giá trị "15%". Khai `discount` là tham số văn bản.
+
+   Mẫu ZNS chỉ nên khai các khoá có trong bảng. Chưa kiểm chứng với Zalo thật: Zalo có nhận `template_data` thừa khoá (ví dụ `product_slug` khi mẫu không khai) hay không. Nếu thử mà Zalo báo lỗi tham số, báo lại để bỏ `product_slug` khỏi dữ liệu gửi ZNS thay vì khai thêm tham số vô nghĩa.
+
+   **Giờ gửi và trần tin ZNS** (đọc từ Cấu hình, đổi được ở Quản trị):
+   - `notifications.zns_quiet_start_hour` = 21 và `notifications.zns_quiet_end_hour` = 8 (giờ VN): tin ZNS phát sinh từ 21:00 tới 08:00 được hoãn tới 08:00, không bỏ. Tin trong app vẫn lưu ngay. Hai giá trị bằng nhau là tắt giờ yên tĩnh.
+   - `notifications.zns_promo_monthly_cap` = 2: mỗi khách tối đa 2 tin ZNS khuyến mãi/hậu mãi mỗi tháng (theo tháng giờ VN, đếm tin chờ gửi, đang thử lại và đã gửi). Đủ thì bỏ kênh ZNS, tin trong app vẫn gửi. 0 = không giới hạn. Nhóm tính trần là các mẫu Marketing được sửa (`MARKETING_TEMPLATE_CODES`, gồm cả `REVIEW_REQUEST`); `GROUP_BUY_SUCCESS` và `GROUP_BUY_FAILED` không bị trần.
 7. Mỗi template Zalo duyệt sẽ cấp **Template ID**. Báo lại các Template ID này để map vào hệ thống (cấu hình `system_configs` hoặc `notification_templates`).
 
 ### Bước E — Đăng nhập web bằng Zalo (BẮT BUỘC để khách mua được trên web)
@@ -96,7 +121,7 @@ Web khách (`https://app.tubutree.com`) chỉ có **một** cách đăng nhập 
 9. Kiểm **trạng thái ứng dụng**: nếu ứng dụng còn ở chế độ phát triển thì thường chỉ tài khoản Zalo đã thêm làm người phát triển/thử nghiệm mới đăng nhập được. Chuyển sang trạng thái công khai trước khi mở cho khách.
 10. `ZALO_APP_ID` phải có **trước khi build web**: web nhúng `NEXT_PUBLIC_ZALO_APP_ID` vào bản dựng (không đọc lúc chạy). Docker build của web **dừng với lỗi** nếu giá trị này rỗng (chỉ bản thử không dùng Zalo mới đặt `ALLOW_EMPTY_ZALO_APP_ID=1` trong `.env` để bỏ qua; khi đó trang đăng nhập hiện thông báo "chưa cấu hình" thay cho nút). Đổi App ID thì phải **build lại web**:
    ```bash
-   cd ~/tubutree && docker compose -f docker-compose.prod.yml up -d --build web
+   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps --build web
    ```
 11. Kiểm sau deploy: mở `https://app.tubutree.com/dang-nhap`, bấm **Đăng nhập với Zalo**, trình duyệt phải sang `oauth.zaloapp.com` với đúng `app_id`, đăng nhập xong quay lại `app.tubutree.com`. Checklist đầy đủ: `docs/2026-10-review/UAT-ZALO.md` mục 12.
 
@@ -158,7 +183,7 @@ Key đi qua **2 lớp**, không bao giờ nằm trong git:
    ```bash
    # cách 1: đẩy 1 commit bất kỳ lên main → CI xanh → tự deploy (rebuild container, nạp .env)
    # cách 2 (không cần commit): SSH vào VPS Vietnix, tạo lại container api để nạp .env
-   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d api
+   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps api
    ```
 4. **Kiểm tra đã nhận key (không lộ giá trị):**
    ```bash

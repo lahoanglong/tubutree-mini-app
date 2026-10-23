@@ -1,0 +1,24 @@
+{
+  "id": "U2-19",
+  "title": "Sửa gói trên Mini App: số lượng 1 → 2 → PATCH 200, DB quantity 2",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:44.968Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "UI sửa số lượng: 200, DB quantity 2",
+      "ok": true,
+      "detail": {
+        "status": 200,
+        "quantity": 2
+      }
+    }
+  ],
+  "evidence": {
+    "PATCH (UI)": {
+      "status": 200,
+      "quantity": 2
+    }
+  }
+}

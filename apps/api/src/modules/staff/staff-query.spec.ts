@@ -68,8 +68,8 @@ describe('controller nhân sự/lương không chuyển ngày/kỳ cực đoan x
   it.each(BAD_DATES)('from=%s → BadRequest ở 3 endpoint lịch ca/chấm công', (bad) => {
     const q = { from: bad, to: '2026-01-01' };
     expect(() => new StaffController(shifts as never).listShifts('s', q)).toThrow(BadRequestException);
-    expect(() => new AdminShiftsController(shifts as never).listAll(q)).toThrow(BadRequestException);
-    expect(() => new AttendanceController(attendance as never, {} as never).history('s', q)).toThrow(BadRequestException);
+    expect(() => new AdminShiftsController(shifts as never, {} as never).listAll(q)).toThrow(BadRequestException);
+    expect(() => new AttendanceController(attendance as never, {} as never, {} as never).history('s', q)).toThrow(BadRequestException);
     expect(shifts.listShifts).not.toHaveBeenCalled();
     expect(shifts.listAll).not.toHaveBeenCalled();
     expect(attendance.history).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe('controller nhân sự/lương không chuyển ngày/kỳ cực đoan x
   it('endpoint lịch ca vẫn gọi service với ngày hợp lệ', () => {
     new StaffController(shifts as never).listShifts('s', { from: '2026-01-01', to: '2026-01-08' });
     expect(shifts.listShifts).toHaveBeenCalledTimes(1);
-    new AdminShiftsController(shifts as never).listAll({ from: '2026-01-01', to: '2026-01-08', staffId: 'st1' });
+    new AdminShiftsController(shifts as never, {} as never).listAll({ from: '2026-01-01', to: '2026-01-08', staffId: 'st1' });
     expect(shifts.listAll).toHaveBeenCalledWith(new Date('2026-01-01'), new Date('2026-01-08'), 'st1');
   });
 

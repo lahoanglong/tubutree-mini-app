@@ -138,3 +138,75 @@ describe('BullMQ giữ job đã xong/thất bại có giới hạn', () => {
     expect(Number(m![1])).toBeLessThanOrEqual(1000);
   });
 });
+
+describe('docker-compose.prod.yml và docker-compose.vietnix.yml không lệch nhau ngoài chỗ có chủ ý', () => {
+  const prod = repoFile('docker-compose.prod.yml');
+  const vietnix = repoFile('docker-compose.vietnix.yml');
+  const prodSvc = services(prod);
+  const vietnixSvc = services(vietnix);
+  const dockerfile = repoFile('apps/web/Dockerfile');
+
+  const buildArgs = (compose: string) => [...compose.matchAll(/^ {8}(NEXT_PUBLIC_[A-Z_]+):/gm)].map((m) => m[1]);
+  const envLine = (block: string, key: string) => new RegExp(`\\n {6}${key}: (.*)\\n`).exec(block)?.[1];
+  const redisCommand = (block: string) => /\n {4}command: (.*)\n/.exec(block)?.[1];
+
+  it.each(['docker-compose.prod.yml', 'docker-compose.vietnix.yml'])('%s: mọi NEXT_PUBLIC_* trong build.args có ARG trong apps/web/Dockerfile (build-arg không có ARG bị bỏ phí, cảnh báo "not consumed")', (file) => {
+    const args = buildArgs(repoFile(file));
+    expect(args.length).toBeGreaterThan(0);
+    for (const name of args) expect({ name, hasArg: new RegExp(`^ARG ${name}$`, 'm').test(dockerfile) }).toEqual({ name, hasArg: true });
+  });
+
+  it('NEXT_PUBLIC_APP_URL không còn ở compose nào: web không đọc biến này', () => {
+    expect(prod).not.toContain('NEXT_PUBLIC_APP_URL');
+    expect(vietnix).not.toContain('NEXT_PUBLIC_APP_URL');
+  });
+
+  it('cùng tập NEXT_PUBLIC_* ở hai compose (canonical, sitemap, gốc gian hàng CTV đúng theo WEB_DOMAIN khi dựng bằng compose prod)', () => {
+    expect([...buildArgs(prod)].sort()).toEqual([...buildArgs(vietnix)].sort());
+  });
+
+  it('DATABASE_URL của api cùng giới hạn pool ở hai compose', () => {
+    expect(envLine(prodSvc.api ?? '', 'DATABASE_URL')).toBe(envLine(vietnixSvc.api ?? '', 'DATABASE_URL'));
+    expect(envLine(vietnixSvc.api ?? '', 'DATABASE_URL')).toContain('connection_limit=20&pool_timeout=30');
+  });
+
+  it('Redis cùng lệnh khởi động ở hai compose (maxmemory đặt thì go-live:check không WARN redis.maxmemory)', () => {
+    expect(redisCommand(prodSvc.redis ?? '')).toBe(redisCommand(vietnixSvc.redis ?? ''));
+    expect(redisCommand(prodSvc.redis ?? '')).toMatch(/'--maxmemory',\s*'150mb'/);
+  });
+});
+
+describe('mật khẩu Postgres đi thẳng vào DATABASE_URL nên mẫu phải sinh chuỗi an toàn cho URL (D10-03)', () => {
+  const example = repoFile('.env.production.example');
+  const postgresBlock = example.slice(example.indexOf('POSTGRES_USER='), example.indexOf('POSTGRES_DB='));
+
+  it('.env.production.example hướng dẫn openssl rand -hex, không dùng base64 (có / và + làm DATABASE_URL hỏng, Prisma P1013)', () => {
+    expect(postgresBlock).toContain('POSTGRES_PASSWORD=');
+    expect(postgresBlock).not.toMatch(/openssl rand -base64/);
+    expect(postgresBlock).toMatch(/openssl rand -hex \d+/);
+  });
+
+  it('.env.production.example nói rõ ký tự cấm trong mật khẩu', () => {
+    expect(postgresBlock).toMatch(/KHÔNG dùng[^\n]*[/@:#?%]/);
+  });
+
+  it('docs/DEPLOY-GCP.md không còn gợi ý base64 cho mật khẩu Postgres và nói đây là tài liệu cũ', () => {
+    const doc = repoFile('docs/DEPLOY-GCP.md');
+    expect(doc).not.toMatch(/openssl rand -base64 24/);
+    expect(doc).toMatch(/openssl rand -hex 24/);
+    expect(doc.slice(0, 700)).toContain('docker-compose.vietnix.yml');
+  });
+});
+
+describe('tài liệu chủ làm theo dùng đúng file compose của VPS thật (D10-02)', () => {
+  it.each(['docs/GO-LIVE-KEYS.md', 'docs/ZALOPAY-SETUP.md'])('%s không bảo chạy docker-compose.prod.yml', (file) => {
+    expect(repoFile(file)).not.toContain('docker-compose.prod.yml');
+  });
+
+  it('lệnh khởi động lại một service trong hai tài liệu có --no-deps (không tạo lại postgres, redis giữa giờ bán)', () => {
+    for (const file of ['docs/GO-LIVE-KEYS.md', 'docs/ZALOPAY-SETUP.md']) {
+      const cmds = repoFile(file).match(/docker compose -f docker-compose\.vietnix\.yml up -d[^\n`]*/g) ?? [];
+      for (const c of cmds) expect({ file, c, noDeps: /--no-deps/.test(c) }).toEqual({ file, c, noDeps: true });
+    }
+  });
+});

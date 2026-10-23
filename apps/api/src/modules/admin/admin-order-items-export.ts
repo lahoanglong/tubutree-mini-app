@@ -10,7 +10,7 @@ const ORDER_STATUS: Record<string, string> = {
   PACKED: 'Đã đóng gói',
   SHIPPING: 'Đang vận chuyển',
   DELIVERED: 'Đã giao hàng',
-  CANCELLED: 'Đã hủy',
+  CANCELLED: 'Đã huỷ',
   RETURNED: 'Đã trả hàng',
 };
 

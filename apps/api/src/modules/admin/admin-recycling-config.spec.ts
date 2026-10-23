@@ -401,6 +401,18 @@ describe('AdminService.getConfig / setConfig — che bí mật khi đọc, khôn
     expect(set).toHaveBeenCalledTimes(2);
   });
 
+  // U3-B03: khoá có bảng bậc mặc định cứng trong mã, DB cũ chưa có dòng: admin vẫn phải ghi được, không bị chặn như khoá gõ sai.
+  it('U3-B03: bậc thưởng quý đại lý chưa có dòng trong DB → vẫn ghi được (không bị coi là khoá gõ sai)', async () => {
+    const set = jest.fn().mockResolvedValue(undefined);
+    const prisma = { systemConfig: { findUnique: jest.fn().mockResolvedValue(null) } };
+    const tiers = [
+      { min: 50_000_000, pct: 3 },
+      { min: 100_000_000, pct: 5 },
+    ];
+    await mkAdmin(prisma, { config: { set } }).setConfig('admin-1', 'dealer.quarterly_bonus_tiers', tiers);
+    expect(set).toHaveBeenCalledWith('dealer.quarterly_bonus_tiers', tiers, 'admin-1');
+  });
+
   it('PUT sai luật khoá có form riêng (checkin_points 6 số) → 400, KHÔNG ghi', async () => {
     const set = jest.fn();
     const prisma = { systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: [1, 1, 1, 1, 1, 1, 2] }) } };

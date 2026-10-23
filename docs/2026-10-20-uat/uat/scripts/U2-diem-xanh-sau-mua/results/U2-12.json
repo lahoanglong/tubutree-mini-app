@@ -1,0 +1,80 @@
+{
+  "id": "U2-12",
+  "title": "Mã của người khác (SĐT trên đơn ≠ SĐT thành viên): claim vào REVIEW, không tự cộng; CSKH huỷ và mở lại mã → chủ đơn nhận được",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:14.718Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "claim REVIEW, lý do 3 số cuối SĐT khác",
+      "ok": true,
+      "detail": {
+        "state": "REVIEW",
+        "reviewReason": "3 số cuối SĐT trên đơn khác SĐT thành viên"
+      }
+    },
+    {
+      "name": "job release: claim REVIEW không tự cộng (đơn đã giao 20 ngày)",
+      "ok": true,
+      "detail": "REVIEW"
+    },
+    {
+      "name": "sau mở lại: chủ đơn tạo được claim (REVIEW vì mã mở lại cần người khác duyệt, hoặc PENDING)",
+      "ok": true,
+      "detail": [
+        [
+          "uat_new",
+          "REVIEW",
+          "Mã được nhân viên mở lại, cần người khác duyệt"
+        ]
+      ]
+    }
+  ],
+  "evidence": {
+    "uat_u2_mam gửi mã của uat_new": {
+      "http": 201,
+      "body": {
+        "status": "REVIEW",
+        "claimId": "cmvjgxaxw00e6h9r14ks9bind",
+        "channel": "shopee",
+        "maskedCode": "SPX********002",
+        "points": 1990,
+        "expectedCreditAt": "2026-10-16T11:38:08.000Z",
+        "message": "Đơn của bạn đang được nhân viên Tubu Tree kiểm tra. Điểm sẽ được cộng sau khi duyệt và đơn giao xong."
+      },
+      "text": [
+        "Đã ghi nhận đơn shopee SPX********002",
+        "1.990 Điểm Xanh đang chờ cộng",
+        "Tubu đang kiểm tra đơn này, có kết quả bạn sẽ nhận thông báo.",
+        "Đang kiểm tra",
+        "1.990 Điểm Xanh"
+      ]
+    },
+    "chủ đơn uat_new gửi khi mã đang bị người khác giữ": {
+      "status": 409,
+      "body": {
+        "statusCode": 409,
+        "error": "ALREADY_CLAIMED",
+        "code": "ALREADY_CLAIMED",
+        "message": "Mã này đã được tích điểm."
+      }
+    },
+    "admin void-and-reopen": {
+      "status": 201,
+      "body": "VOIDED"
+    },
+    "uat_new gửi lại sau khi mở mã": {
+      "http": 201,
+      "body": {
+        "status": "REVIEW",
+        "claimId": "cmvjgxaxw00e6h9r14ks9bind",
+        "channel": "shopee",
+        "maskedCode": "SPX********002",
+        "points": 1990,
+        "expectedCreditAt": "2026-10-16T11:38:08.000Z",
+        "message": "Đơn của bạn đang được nhân viên Tubu Tree kiểm tra. Điểm sẽ được cộng sau khi duyệt và đơn giao xong."
+      }
+    }
+  }
+}

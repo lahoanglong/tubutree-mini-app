@@ -24,7 +24,7 @@ describe('seed-reference: dòng lệnh', () => {
     ]);
     expect(lines).toEqual([
       '[seed-reference] system_configs: +3 mới, 115 đã có',
-      `[seed-reference] chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt): membership_tiers, missions. Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG} sau khi duyệt.`,
+      `[seed-reference] chưa nạp: membership_tiers, missions (thiếu ${WITH_BUSINESS_DEFAULTS_FLAG}; A8 yêu cầu chạy có cờ ở lần deploy đầu). Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG}.`,
     ]);
   });
 

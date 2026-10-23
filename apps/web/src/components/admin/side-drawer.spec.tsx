@@ -38,9 +38,9 @@ function Host({ onClose, onReason }: { onClose: () => void; onReason: (r: string
           <button
             id="cancel"
             type="button"
-            onClick={async () => onReason(await ask({ title: 'Hủy đơn', message: 'Nhập lý do', input: { label: 'Lý do', required: true } }))}
+            onClick={async () => onReason(await ask({ title: 'Huỷ đơn', message: 'Nhập lý do', input: { label: 'Lý do', required: true } }))}
           >
-            Hủy đơn
+            Huỷ đơn
           </button>
           <button id="other" type="button">
             Khác

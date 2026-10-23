@@ -5,8 +5,48 @@ import { useMutation } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
 
-/** Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp. */
-const MONEY_PREFIXES = ['payment.', 'loyalty.', 'shipping.', 'wallet.', 'waste.'];
+/**
+ * Nhóm khoá đi thẳng vào tiền khách trả, điểm, ví, hoa hồng, mã giảm, tài khoản nhận tiền và đổi rác: sửa nhầm là sai tiền hoặc sai điểm ngay ở đơn kế tiếp.
+ * game.* và seasonpass.* cũng vào đây trọn nhóm: giọt nước/hạt giống/XP là "giá" của coupon thu hoạch 30.000đ và bậc premium 5.000-30.000 điểm (game.service.ts),
+ * nên cả khoá không mang chữ "điểm" vẫn đổi được số tiền phát ra.
+ */
+const MONEY_PREFIXES = [
+  'payment.',
+  'loyalty.',
+  'shipping.',
+  'wallet.',
+  'waste.',
+  'affiliate.',
+  'coupon.',
+  'cashback.',
+  'dealer.',
+  'flashsale.',
+  'merchant.',
+  'voucher.',
+  'referral.',
+  'groupbuy.',
+  'subscribe.',
+  'coins.',
+  'game.',
+  'seasonpass.',
+];
+
+/** Nhóm trộn khoá thưởng điểm với khoá không đụng tiền (đường dẫn mạng xã hội, bật/tắt tính năng): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần. */
+const MIXED_PREFIXES = ['community.'];
+const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|cap|prizes?|tiers?|min_order|limit)([._]|$)/;
+
+/** Khoá tiền nằm ngoài các nhóm trên: phạt đi trễ trừ thẳng vào lương nhân viên. */
+const MONEY_KEYS = new Set(['attendance.late_fine']);
+
+/** Bảng bậc thưởng quý được chụp lại lúc trả thưởng nên đổi bảng chỉ chạm quý chưa trả, câu "mọi đơn" ở hộp xác nhận chung sẽ làm admin hiểu sai. */
+const BONUS_TIERS_KEY = 'dealer.quarterly_bonus_tiers';
+const APPLY_NOTE_DEFAULT = 'Áp dụng ngay cho mọi đơn, ví và điểm của khách.';
+const APPLY_NOTE_BONUS_TIERS = 'Có hiệu lực cho quý chưa trả thưởng; quý đã trả giữ bảng bậc đã chụp.';
+
+const isMoneyKey = (key: string) =>
+  MONEY_KEYS.has(key) ||
+  MONEY_PREFIXES.some((p) => key.startsWith(p)) ||
+  (MIXED_PREFIXES.some((p) => key.startsWith(p)) && MIXED_MONEY_KEY.test(key));
 
 /** Một dòng trong "Tất cả tham số (JSON)" của tab Cấu hình. */
 export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => void }) {
@@ -28,10 +68,10 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
           throw new Error('JSON không hợp lệ');
         }
       }
-      if (MONEY_PREFIXES.some((p) => row.key.startsWith(p))) {
+      if (isMoneyKey(row.key)) {
         const ok = await confirm({
           title: 'Xác nhận đổi cấu hình tiền/điểm',
-          message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\nÁp dụng ngay cho mọi đơn, ví và điểm của khách.`,
+          message: `${row.key}\n${JSON.stringify(row.value)} → ${JSON.stringify(parsed)}\n\n${row.key === BONUS_TIERS_KEY ? APPLY_NOTE_BONUS_TIERS : APPLY_NOTE_DEFAULT}`,
           confirmLabel: 'Lưu thay đổi',
         });
         if (!ok) return null;
@@ -46,7 +86,7 @@ export function ConfigItem({ row, onSaved }: { row: ConfigRow; onSaved: () => vo
     onError: (e) => setErr(e instanceof Error ? e.message : 'Lỗi'),
   });
   return (
-    <div className={`rounded-card border border-stone-200 p-3 ${dead ? 'bg-stone-50 opacity-70' : 'bg-stone-0'}`}>
+    <div className={`rounded-card border border-stone-200 p-3 ${dead ? 'border-dashed bg-stone-50' : 'bg-stone-0'}`}>
       <div className="flex items-center gap-2 text-sm font-medium">
         <span className="min-w-0 break-all">{row.key}</span>
         {dead && <span className="rounded bg-stone-200 px-1.5 py-0.5 text-[11px] font-medium text-stone-600">Không dùng</span>}

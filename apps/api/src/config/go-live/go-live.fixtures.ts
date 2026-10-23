@@ -90,7 +90,7 @@ export const GOOD_DB: DbSnapshot = {
     'ops.alert_queue_failed_1h': 5,
     'ops.alert_repeat_hours': 6,
     'ops.alert_gomdon_backlog_minutes': 15,
-    'shipping.free_threshold': 200000,
+    'shipping.free_threshold': 199000,
     'shipping.flat_fee_below_threshold': 19000,
     'shipping.gomdon.recycling_enabled': true,
     'shipping.gomdon.config': {
@@ -105,6 +105,8 @@ export const GOOD_DB: DbSnapshot = {
     'payment.bank_account_no': '0123456789012',
     'payment.bank_account_name': 'CONG TY TUBU TREE',
   },
+  membershipTiers: [1, 1.2, 1.5, 2],
+  dealerTierCount: 4,
   adminCount: 1,
   pendingAdminGrants: 0,
   znsTemplates: [

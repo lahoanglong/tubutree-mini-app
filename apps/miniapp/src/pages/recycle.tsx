@@ -301,15 +301,16 @@ export default function RecyclePage() {
             key={item.id}
             data-item
             data-status={item.status}
-            style={{ opacity: item.status === 'COMING_SOON' ? 0.55 : 1, display: 'flex', flexDirection: 'column', gap: 2 }}
+            aria-disabled={item.status === 'COMING_SOON' || undefined}
+            style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Text variant="body-sm" as="span" style={{ fontWeight: 600 }}>
+              <Text variant="body-sm" as="span" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'primary'} style={{ fontWeight: 600 }}>
                 {item.name}
               </Text>
               {item.status === 'COMING_SOON' && <Badge>Sắp nhận</Badge>}
             </div>
-            <Text variant="caption" tone="secondary" as="div">
+            <Text variant="caption" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'secondary'} as="div">
               {ruleText(item)}
             </Text>
             {item.prepInstructions && (

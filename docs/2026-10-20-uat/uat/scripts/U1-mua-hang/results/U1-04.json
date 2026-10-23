@@ -1,0 +1,49 @@
+{
+  "id": "U1-04",
+  "browser": "chromium",
+  "role": "Khách mới thứ hai",
+  "journey": "Quét lại thẻ đã có người khác nhận (thẻ chuyền tay)",
+  "steps": "Khách mới khác mở /?claim=<mã đã được U1-01 nhận>",
+  "expected": "Sheet \"Chưa nhận được ưu đãi\" + \"Mã giảm giá này đã được tài khoản khác nhận.\"; số dòng claim của mã vẫn = 1",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "chữ \"Mã giảm giá này đã được tài khoản khác nhận.\"",
+      "ok": true,
+      "detail": "Mã giảm giá này đã được tài khoản khác nhận."
+    },
+    {
+      "name": "DB: mã vẫn chỉ 1 dòng claim",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "sheet",
+      "data": {
+        "title": "Chưa nhận được ưu đãi",
+        "text": "Mã giảm giá này đã được tài khoản khác nhận."
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-04-claim-taken.png"
+    },
+    {
+      "label": "SQL coupons",
+      "data": {
+        "code": "HOPSAN-38X362LH",
+        "usedCount": 0,
+        "usageLimit": 1,
+        "perUserLimit": 1,
+        "endAt": "2026-12-21T11:30:15.924Z",
+        "isActive": true,
+        "redemptions": 0,
+        "claims": 1
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:34:13.363Z"
+}

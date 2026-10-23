@@ -93,6 +93,7 @@ function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_T
 export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
 export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 2_000_000;
 export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
+const PIT_MONTH_LOCK = 'affiliate.pit_month';
 /** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
@@ -299,7 +300,7 @@ export class AffiliateService {
     const startOfMonth = month.start;
     const startOfDay = vnDayStart(now);
 
-    const [today, monthCommission, pending, approved, links, monthRevenue, withdrawing] = await Promise.all([
+    const [today, monthCommission, pending, approved, links, conversions, monthRevenue, withdrawing] = await Promise.all([
       this.sumCommission(userId, startOfDay),
       this.sumCommission(userId, startOfMonth),
       this.prisma.commission.aggregate({
@@ -312,8 +313,11 @@ export class AffiliateService {
       }),
       this.prisma.affiliateLink.aggregate({
         where: { userId },
-        _sum: { clicks: true, conversions: true },
+        _sum: { clicks: true },
       }),
+      // Đơn và lượt chạm không lưu mã link nên cột affiliate_links.conversions không có chỗ tăng; "chuyển đổi" = số đơn đã ghi công.
+      // Mỗi (đơn, CTV) tối đa một dòng hoa hồng (unique) nên webhook lặp không đếm đôi; đơn huỷ/trả (REJECTED) không tính.
+      this.prisma.commission.count({ where: { affiliateUserId: userId, status: { not: 'REJECTED' } } }),
       // Doanh số tháng = doanh số ĐÃ CHỐT (cùng định nghĩa với bậc/mốc — xem ctv-milestones.ts).
       // Trước đây: orderTotal mọi commission khác REJECTED tạo trong tháng → gồm cả đơn còn huỷ
       // được, hàng bị chặn affiliate và phí ship.
@@ -324,14 +328,17 @@ export class AffiliateService {
       }),
     ]);
 
+    const withdrawable = approved._sum.amount ?? 0;
     return {
+      // Thuế sẽ bị khấu trừ nếu rút hết số khả dụng ngay bây giờ (cộng dồn tháng VN); chỉ để hiển thị, lệnh rút tính lại dưới khoá.
+      withdrawTaxPreview: withdrawable > 0 ? await this.personalIncomeTax(this.prisma, userId, withdrawable, now) : 0,
       withdrawingCommission: withdrawing._sum.amount ?? 0,
       todayCommission: today,
       monthCommission,
       pendingCommission: pending._sum.amount ?? 0,
-      withdrawableCommission: approved._sum.amount ?? 0,
+      withdrawableCommission: withdrawable,
       totalClicks: links._sum.clicks ?? 0,
-      totalConversions: links._sum.conversions ?? 0,
+      totalConversions: conversions,
       monthRevenue,
       // bonusPct: 0 CHỈ để tương thích bản miniapp cũ còn trên Zalo (render "Bonus +{bonusPct}%" —
       // thiếu field sẽ hiện "+undefined%"). Luôn 0 vì không có luồng nào trả khoản này; bản mới không đọc.
@@ -393,9 +400,12 @@ export class AffiliateService {
     }));
   }
 
-  /** Lịch sử lệnh rút của CTV: trạng thái, lý do từ chối, mã giao dịch, thuế TNCN đã khấu trừ (SELLER-10, SELLER-11). */
-  listMyPayouts(userId: string) {
-    return this.prisma.payout.findMany({
+  /**
+   * Lịch sử lệnh rút của CTV: trạng thái, lý do từ chối, mã giao dịch, thuế TNCN đã khấu trừ (SELLER-10, SELLER-11).
+   * `taxWithheld` là thuế thực giữ (đã trừ phần hoàn về Ví, `taxRefunded`) để các màn cũ hiện đúng mà không phải sửa.
+   */
+  async listMyPayouts(userId: string) {
+    const rows = await this.prisma.payout.findMany({
       where: { userId },
       orderBy: { requestedAt: 'desc' },
       take: 50,
@@ -404,6 +414,7 @@ export class AffiliateService {
         amount: true,
         grossAmount: true,
         taxWithheld: true,
+        taxRefunded: true,
         fee: true,
         method: true,
         status: true,
@@ -414,9 +425,13 @@ export class AffiliateService {
         paidAt: true,
       },
     });
+    return rows.map((p) => ({ ...p, taxWithheld: p.taxWithheld - p.taxRefunded }));
   }
 
-  /** Lệnh rút hoa hồng (có grossAmount, khác rút Ví) đã chi trong [start, end). */
+  /**
+   * Lệnh rút hoa hồng (có grossAmount, khác rút Ví) đã chi trong [start, end). Báo cáo dùng thuế thực giữ (taxWithheld −
+   * taxRefunded) và thực nhận gồm cả phần thuế đã hoàn về Ví, để thu nhập = thuế thực giữ + thực nhận.
+   */
   private paidCommissionPayouts(where: Prisma.PayoutWhereInput, start: Date, end: Date) {
     return this.prisma.payout.findMany({
       where: { ...where, status: 'PAID', grossAmount: { not: null }, paidAt: { gte: start, lt: end } },
@@ -427,6 +442,7 @@ export class AffiliateService {
         method: true,
         grossAmount: true,
         taxWithheld: true,
+        taxRefunded: true,
         amount: true,
         taxId: true,
         paidAt: true,
@@ -465,8 +481,8 @@ export class AffiliateService {
       row.taxId = p.taxId ?? row.taxId ?? p.user.personalTaxId;
       row.payoutCount += 1;
       row.grossAmount += p.grossAmount ?? 0;
-      row.taxWithheld += p.taxWithheld;
-      row.netAmount += p.amount;
+      row.taxWithheld += p.taxWithheld - p.taxRefunded;
+      row.netAmount += p.amount + p.taxRefunded;
       byUser.set(p.userId, row);
     }
     const rows = [...byUser.values()].sort((a, b) => b.taxWithheld - a.taxWithheld || b.grossAmount - a.grossAmount);
@@ -498,8 +514,8 @@ export class AffiliateService {
       paidAt: p.paidAt,
       method: p.method,
       grossAmount: p.grossAmount ?? 0,
-      taxWithheld: p.taxWithheld,
-      amount: p.amount,
+      taxWithheld: p.taxWithheld - p.taxRefunded,
+      amount: p.amount + p.taxRefunded,
       taxId: p.taxId,
     }));
     const sum = (k: 'grossAmount' | 'taxWithheld' | 'amount') => items.reduce((s, i) => s + i[k], 0);
@@ -540,16 +556,104 @@ export class AffiliateService {
   }
 
   /**
-   * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động: lần trả từ ngưỡng trở lên thì giữ lại
-   * `affiliate.pit_withhold_pct` (mặc định 10% từ 2.000.000đ, theo Thông tư 111/2013/TT-BTC). 0% = tắt.
+   * Khoá theo (CTV, tháng VN) trong transaction rút tiền: hai lệnh rút cùng lúc của một CTV phải đọc tổng tháng nối tiếp nhau, nếu
+   * không cả hai cùng thấy "chưa rút gì" và cùng thoát khấu trừ. Lấy TRƯỚC khi đọc hoa hồng khả dụng để lệnh đến sau đọc số mới.
    */
-  async personalIncomeTax(gross: number): Promise<number> {
+  async lockPitMonth(tx: Prisma.TransactionClient, userId: string, now: Date): Promise<void> {
+    const month = vnMonthBounds(now).key;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${PIT_MONTH_LOCK}), hashtext(${`${userId}:${month}`}))`;
+  }
+
+  private async pitConfig(): Promise<{ pct: number; threshold: number }> {
     const [pct, threshold] = await Promise.all([
       this.config.get<number>('affiliate.pit_withhold_pct', DEFAULT_PIT_WITHHOLD_PCT),
       this.config.get<number>('affiliate.pit_withhold_threshold', DEFAULT_PIT_WITHHOLD_THRESHOLD),
     ]);
-    if (!(pct > 0) || gross < threshold) return 0;
-    return Math.round(gross * Math.min(pct, 1));
+    return { pct, threshold };
+  }
+
+  /** Thuế phải giữ cho cả tháng: pct × tổng thu nhập hoa hồng của tháng khi tổng từ ngưỡng trở lên, ngược lại 0. */
+  private pitRequired(monthGross: number, cfg: { pct: number; threshold: number }): number {
+    return cfg.pct > 0 && monthGross >= cfg.threshold ? Math.round(monthGross * Math.min(cfg.pct, 1)) : 0;
+  }
+
+  /**
+   * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động (`affiliate.pit_withhold_pct`, mặc định 10% từ
+   * 2.000.000đ, theo Thông tư 111/2013/TT-BTC; 0% = tắt). Ngưỡng xét trên TỔNG các lệnh rút hoa hồng trong tháng VN, kể cả lần này:
+   * từ ngưỡng trở lên thì khấu trừ pct × tổng tháng trừ phần thuế thực giữ ở các lệnh trước (taxWithheld − taxRefunded; truy thu
+   * các lần nhỏ trước đó). Phần truy thu vượt số tiền lần này thì chỉ trừ tối đa bằng lần này, phần còn thiếu dồn sang lần sau.
+   * Lệnh bị từ chối và lệnh rút Ví về ngân hàng (không có grossAmount) không tính. Phải gọi sau `lockPitMonth` trong cùng transaction.
+   */
+  async personalIncomeTax(tx: Prisma.TransactionClient, userId: string, gross: number, now: Date = new Date()): Promise<number> {
+    const cfg = await this.pitConfig();
+    if (!(cfg.pct > 0)) return 0;
+    const { start, end } = vnMonthBounds(now);
+    const prior = await tx.payout.aggregate({
+      where: { userId, grossAmount: { not: null }, status: { not: 'REJECTED' }, requestedAt: { gte: start, lt: end } },
+      _sum: { grossAmount: true, taxWithheld: true, taxRefunded: true },
+    });
+    const monthGross = (prior._sum.grossAmount ?? 0) + gross;
+    const heldBefore = (prior._sum.taxWithheld ?? 0) - (prior._sum.taxRefunded ?? 0);
+    const owed = this.pitRequired(monthGross, cfg) - heldBefore;
+    return Math.min(Math.max(owed, 0), gross);
+  }
+
+  /**
+   * Sau khi một lệnh rút hoa hồng bị từ chối: tính lại thuế của tháng VN chứa lệnh đó và trả phần thuế đã giữ dư (đã cộng dồn
+   * theo tổng tháng cũ). Chia cho lệnh mới nhất trước, mỗi lệnh tối đa số thuế thực giữ của nó. Lệnh còn "Yêu cầu" giảm thuế và
+   * tăng số thực nhận ngay trên lệnh (chưa chi, còn có thể bị từ chối: cộng Ví lúc này thì lệnh đó bị từ chối sẽ trả CTV hai lần);
+   * lệnh đã duyệt/đã chi (kể cả rút về Ví) không bị từ chối nữa nên cộng Ví Tubu và ghi vào taxRefunded. Thiếu thì để lần rút sau
+   * trong tháng truy thu. Phải gọi sau `lockPitMonth` trong cùng transaction.
+   */
+  private async refundOverheldPit(tx: Prisma.TransactionClient, rejected: { id: string; userId: string; requestedAt: Date }) {
+    const cfg = await this.pitConfig();
+    const { start, end, key } = vnMonthBounds(rejected.requestedAt);
+    const rows = await tx.payout.findMany({
+      where: { userId: rejected.userId, grossAmount: { not: null }, status: { not: 'REJECTED' }, requestedAt: { gte: start, lt: end } },
+      orderBy: [{ requestedAt: 'desc' }, { id: 'desc' }],
+      select: { id: true, status: true, grossAmount: true, taxWithheld: true, taxRefunded: true },
+    });
+    const monthGross = rows.reduce((sum, r) => sum + (r.grossAmount ?? 0), 0);
+    const held = rows.reduce((sum, r) => sum + r.taxWithheld - r.taxRefunded, 0);
+    let over = held - this.pitRequired(monthGross, cfg);
+    if (over <= 0) return;
+
+    const vn = new Date(rejected.requestedAt.getTime() + VN_OFFSET_MS);
+    const day = `${String(vn.getUTCDate()).padStart(2, '0')}/${String(vn.getUTCMonth() + 1).padStart(2, '0')}`;
+    const month = `${key.slice(5)}/${key.slice(0, 4)}`;
+    for (const r of rows) {
+      if (over <= 0) break;
+      const share = Math.min(r.taxWithheld - r.taxRefunded, over);
+      if (share <= 0) continue;
+      if (r.status === 'REQUESTED') {
+        // Admin khác có thể vừa duyệt lệnh này giữa lúc đọc và lúc ghi (approvePayout không lấy khoá tháng): count 0 thì đã thành
+        // lệnh không từ chối được, đi đường cộng Ví.
+        const adjusted = await tx.payout.updateMany({
+          where: { id: r.id, status: 'REQUESTED' },
+          data: { taxWithheld: { decrement: share }, amount: { increment: share } },
+        });
+        if (adjusted.count > 0) {
+          over -= share;
+          continue;
+        }
+      }
+      const credited = await applyWalletDelta(tx, {
+        userId: rejected.userId,
+        delta: share,
+        type: 'PIT_REFUND',
+        refType: 'PAYOUT',
+        // Một lệnh có thể nhận hoàn từ nhiều lần từ chối khác nhau: khoá theo cặp (lệnh nhận, lệnh bị từ chối).
+        refId: `${r.id}:${rejected.id}`,
+        reason: `Hoàn thuế TNCN giữ dư tháng ${month} (lệnh rút ngày ${day} bị từ chối)`,
+      });
+      // Sổ đã có dòng hoàn cho cặp này (applied=false) nghĩa là Ví không nhận thêm: tăng taxRefunded lúc này thì báo cáo thuế ghi
+      // đã hoàn mà CTV không có tiền, nên dừng cả giao dịch từ chối để người vận hành xem lại.
+      if (!credited.applied) {
+        throw new ConflictException('Sổ Ví đã có dòng hoàn thuế TNCN cho lệnh này, không ghi thêm được. Vui lòng báo kỹ thuật.');
+      }
+      await tx.payout.update({ where: { id: r.id }, data: { taxRefunded: { increment: share } } });
+      over -= share;
+    }
   }
 
   /** Chống tự-giao-dịch: chỉ CTV (AFFILIATE) hoặc ADMIN mới được lên đơn hộ hưởng hoa hồng (canPlaceOrderForCustomer). */
@@ -1079,13 +1183,16 @@ export class AffiliateService {
       let result: { credited: number };
       try {
         result = await this.prisma.$transaction(async (tx) => {
+          // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
+          const now = new Date();
+          await this.lockPitMonth(tx, userId, now);
           const rows = await tx.commission.findMany({
             where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
             select: { id: true, amount: true },
           });
           const total = rows.reduce((s, c) => s + c.amount, 0);
           // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
-          const taxWithheld = await this.personalIncomeTax(total);
+          const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
           const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
           const marked = await tx.commission.updateMany({
             where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
@@ -1110,20 +1217,24 @@ export class AffiliateService {
               taxId,
               method,
               status: 'PAID',
+              requestedAt: now,
               paidAt: new Date(),
               idempotencyKey: key,
             },
           });
-          await applyWalletDelta(tx, {
-            userId,
-            delta: credited,
-            type: 'COMMISSION_PAYOUT',
-            refType: 'PAYOUT',
-            refId: payout.id,
-            reason: taxWithheld
-              ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
-              : `Rút ${rows.length} khoản hoa hồng về Ví`,
-          });
+          // Phần truy thu có thể ăn hết số tiền lần này (net 0): sổ ví không nhận dòng 0đ.
+          if (credited > 0) {
+            await applyWalletDelta(tx, {
+              userId,
+              delta: credited,
+              type: 'COMMISSION_PAYOUT',
+              refType: 'PAYOUT',
+              refId: payout.id,
+              reason: taxWithheld
+                ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
+                : `Rút ${rows.length} khoản hoa hồng về Ví`,
+            });
+          }
           return { credited };
         });
       } catch (err) {
@@ -1147,7 +1258,10 @@ export class AffiliateService {
         ok: true,
         method,
         credited: result.credited,
-        note: `Đã cộng ${result.credited}đ vào Ví Tubu.`,
+        note:
+          result.credited > 0
+            ? `Đã cộng ${result.credited}đ vào Ví Tubu.`
+            : 'Toàn bộ số rút lần này được khấu trừ thuế TNCN (truy thu các lần rút trước trong tháng), chưa có tiền cộng vào Ví.',
       };
     }
 
@@ -1158,13 +1272,15 @@ export class AffiliateService {
     let payout: { id: string; status: string };
     try {
       payout = await this.prisma.$transaction(async (tx) => {
+        const now = new Date();
+        await this.lockPitMonth(tx, userId, now);
         const rows = await tx.commission.findMany({
           where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
           select: { id: true, amount: true },
         });
         const total = rows.reduce((s, c) => s + c.amount, 0);
         if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
-        const taxWithheld = await this.personalIncomeTax(total);
+        const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
         const p = await tx.payout.create({
           data: {
@@ -1176,6 +1292,7 @@ export class AffiliateService {
             method: 'BANK',
             bankInfo: bankInfo ?? {},
             status: 'REQUESTED',
+            requestedAt: now,
             idempotencyKey: key,
           },
         });
@@ -1641,10 +1758,25 @@ export class AffiliateService {
     );
   }
 
-  /** Duyệt lệnh rút NH: REQUESTED → APPROVED. Chưa chuyển tiền — chỉ xác nhận sẽ xử lý thủ công. */
-  async approvePayout(adminId: string, id: string, note?: string) {
+  /**
+   * Báo số thực nhận của lệnh đã đổi so với số admin đang thấy trên màn: lệnh REQUESTED tăng amount khi một lệnh khác cùng tháng
+   * bị từ chối và thuế giữ dư được hoàn ngay trên lệnh. Duyệt/chi theo số cũ thì CTV nhận thiếu tiền thật.
+   */
+  private async staleAmountError(id: string, status: 'REQUESTED' | 'APPROVED', expected: number, verb: 'duyệt' | 'chi') {
+    const now = await this.prisma.payout.findUnique({ where: { id }, select: { status: true, amount: true } });
+    if (!now || now.status !== status || now.amount === expected) return null;
+    return new ConflictException(
+      `Số thực nhận của lệnh đã đổi từ ${vnd(expected)} thành ${vnd(now.amount)} (thuế giữ dư vừa được hoàn), vui lòng tải lại trước khi ${verb}.`,
+    );
+  }
+
+  /**
+   * Duyệt lệnh rút NH: REQUESTED → APPROVED. Chưa chuyển tiền — chỉ xác nhận sẽ xử lý thủ công. `expectedAmount` (số đang hiện
+   * trên màn admin) nằm trong cùng điều kiện updateMany nên khớp-rồi-ghi là một bước nguyên tử; lệch thì 409. `null` coi như không gửi (@IsOptional cho null lọt qua, `amount: null` trong where làm Prisma lỗi).
+   */
+  async approvePayout(adminId: string, id: string, note?: string, expectedAmount?: number) {
     const res = await this.prisma.payout.updateMany({
-      where: { id, status: 'REQUESTED' },
+      where: { id, status: 'REQUESTED', ...(expectedAmount != null ? { amount: expectedAmount } : {}) },
       data: {
         status: 'APPROVED',
         reviewedBy: adminId,
@@ -1653,6 +1785,8 @@ export class AffiliateService {
       },
     });
     if (res.count === 0) {
+      const stale = expectedAmount != null ? await this.staleAmountError(id, 'REQUESTED', expectedAmount, 'duyệt') : null;
+      if (stale) throw stale;
       throw new BadRequestException(
         'Lệnh rút không ở trạng thái "Yêu cầu" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
       );
@@ -1675,6 +1809,11 @@ export class AffiliateService {
     if (!why) throw new BadRequestException('Vui lòng nhập lý do từ chối.');
 
     const rejected = await this.prisma.$transaction(async (tx) => {
+      // userId/requestedAt không đổi sau khi tạo lệnh nên đọc trước được. Lệnh rút hoa hồng lấy khoá (CTV, tháng) TRƯỚC khi ghi
+      // gì, cùng thứ tự với requestPayout, để từ chối và rút mới cùng tháng không giành khoá ngược nhau.
+      const head = await tx.payout.findUnique({ where: { id }, select: { userId: true, requestedAt: true, grossAmount: true } });
+      const commissionPayout = head !== null && head.grossAmount !== null;
+      if (head && commissionPayout) await this.lockPitMonth(tx, head.userId, head.requestedAt);
       const marked = await tx.payout.updateMany({
         where: { id, status: 'REQUESTED' },
         data: { status: 'REJECTED', reviewedBy: adminId, reviewedAt: new Date(), rejectionReason: why },
@@ -1709,6 +1848,7 @@ export class AffiliateService {
           reason: `Hoàn lệnh rút bị từ chối: ${why}`,
         });
       }
+      if (commissionPayout) await this.refundOverheldPit(tx, payout);
       this.logger.log(`Admin ${adminId} từ chối lệnh rút ${id}: ${why}`);
       return tx.payout.findUniqueOrThrow({ where: { id } });
     });
@@ -1719,7 +1859,11 @@ export class AffiliateService {
   }
 
   /** Xác nhận đã chuyển khoản: APPROVED → PAID (ghi mã giao dịch NH / ghi chú). */
-  async markPayoutPaid(adminId: string, id: string, opts: { bankRef?: string; note?: string; byStaff?: boolean } = {}) {
+  async markPayoutPaid(
+    adminId: string,
+    id: string,
+    opts: { bankRef?: string; note?: string; byStaff?: boolean; expectedAmount?: number } = {},
+  ) {
     if (opts.byStaff) {
       const own = await this.prisma.payout.findUnique({ where: { id }, select: { userId: true } });
       if (!own) throw new NotFoundException('Không tìm thấy lệnh rút.');
@@ -1728,7 +1872,7 @@ export class AffiliateService {
     const paidAt = new Date();
     const res = await this.prisma.$transaction(async (tx) => {
       const flipped = await tx.payout.updateMany({
-        where: { id, status: 'APPROVED' },
+        where: { id, status: 'APPROVED', ...(opts.expectedAmount != null ? { amount: opts.expectedAmount } : {}) },
         data: {
           status: 'PAID',
           paidBy: adminId,
@@ -1744,6 +1888,8 @@ export class AffiliateService {
       return flipped;
     });
     if (res.count === 0) {
+      const stale = opts.expectedAmount != null ? await this.staleAmountError(id, 'APPROVED', opts.expectedAmount, 'chi') : null;
+      if (stale) throw stale;
       throw new BadRequestException(
         'Lệnh rút không ở trạng thái "Đã duyệt" hoặc vừa được xử lý bởi người khác — vui lòng tải lại.',
       );

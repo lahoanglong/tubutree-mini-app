@@ -41,7 +41,7 @@
   --zaui-light-button-icon-disabled: var(--color-action-primary-fg-disabled);
 
   --zaui-light-input-background-color: var(--color-bg-surface);
-  --zaui-light-input-border-color: var(--color-border-default);
+  --zaui-light-input-border-color: var(--color-border-strong);
   --zaui-light-input-hover-border-color: var(--color-border-focus);
   --zaui-light-input-text-color: var(--color-text-primary);
   --zaui-light-input-placeholder-color: var(--color-text-tertiary);
@@ -56,7 +56,7 @@
   --zaui-light-input-status-success-icon-color: var(--color-status-success-fg);
   --zaui-light-input-status-success-icon-focus-visible-color: var(--color-status-success-fg);
 
-  --zaui-light-checkbox-border-color: var(--color-border-default);
+  --zaui-light-checkbox-border-color: var(--color-border-strong);
   --zaui-light-checkbox-uncheck-background: var(--color-bg-surface);
   --zaui-light-checkbox-checked-background: var(--color-action-primary-bg);
   --zaui-light-checkbox-checked-mark-color: var(--color-action-primary-fg);
@@ -65,7 +65,7 @@
   --zaui-light-checkbox-disabled-checked-mark-color: var(--stone-0);
   --zaui-light-checkbox-disabled-label: var(--color-text-disabled);
 
-  --zaui-light-radio-border-color: var(--color-border-default);
+  --zaui-light-radio-border-color: var(--color-border-strong);
   --zaui-light-radio-uncheck-background: var(--color-bg-surface);
   --zaui-light-radio-checked-background: var(--color-action-primary-bg);
   --zaui-light-radio-checked-mark-color: var(--color-action-primary-fg);
@@ -75,7 +75,7 @@
   --zaui-light-radio-disabled-label: var(--color-text-disabled);
 
   --zaui-light-switch-bg-color: var(--color-action-primary-bg);
-  --zaui-light-switch-off-bg-color: var(--stone-200);
+  --zaui-light-switch-off-bg-color: var(--stone-450);
   --zaui-light-switch-handler-bg-color: var(--stone-0);
   --zaui-light-switch-disabled-bg-color: var(--stone-100);
   --zaui-light-switch-off-disabled-bg-color: var(--stone-100);

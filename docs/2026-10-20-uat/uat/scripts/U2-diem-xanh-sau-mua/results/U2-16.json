@@ -1,0 +1,146 @@
+{
+  "id": "U2-16",
+  "title": "Đơn CSKH (chat) 210.000đ của SĐT khách Lộc Biếc: webhook giao → claim PHONE tự tạo, 5.040 điểm (2% × 1,2); giao + 14 ngày → job cộng, tính vào hạng",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:30.526Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "claim PHONE của uat_returning, PENDING, 5040 điểm, ratePct 2, multiplier 1,2, countsForTier",
+      "ok": true,
+      "detail": {
+        "kind": "PHONE",
+        "userId": "uat_returning",
+        "state": "PENDING",
+        "points": 5040,
+        "ratePct": "2.0000",
+        "multiplier": "1.200",
+        "countsForTier": true
+      }
+    },
+    {
+      "name": "releaseAt = giao + 14 ngày",
+      "ok": true,
+      "detail": {
+        "releaseAt": "2026-11-03T11:38:08.000Z",
+        "deliveredAt": "2026-10-20T11:38:08.000Z"
+      }
+    },
+    {
+      "name": "job trước hạn: chưa cộng",
+      "ok": true
+    },
+    {
+      "name": "CREDITED, 1 dòng PANCAKE_CHAT_ORDER:7700005 +5040, số dư + 5040 = SUM sổ",
+      "ok": true,
+      "detail": {
+        "state": "CREDITED",
+        "rows": [
+          5040
+        ],
+        "before": 6242,
+        "after": 11282,
+        "sum": 11282
+      }
+    },
+    {
+      "name": "tính hạng: spent12m +210.000, tierPoints +điểm",
+      "ok": true,
+      "detail": {
+        "spent12m": [
+          1980100,
+          2190100
+        ],
+        "tierPoints": [
+          40642,
+          45682
+        ]
+      }
+    },
+    {
+      "name": "có bản ghi thông báo cộng điểm đơn chat (OA tắt trên lane, INAPP vẫn phải có)",
+      "ok": true,
+      "detail": [
+        [
+          "CHAT_ORDER_POINTS_CREDITED",
+          "INAPP",
+          "SENT"
+        ]
+      ]
+    },
+    {
+      "name": "webhook lặp + job lặp: vẫn đúng 1 dòng sổ",
+      "ok": true,
+      "detail": 1
+    }
+  ],
+  "evidence": {
+    "webhook đơn chat 7700005": {
+      "http": 200,
+      "event": "PROCESSED",
+      "ext": {
+        "source": "CHAT",
+        "status": "DELIVERED",
+        "phone": "0901000003",
+        "goodsValue": 210000
+      }
+    },
+    "claim sau webhook": {
+      "id": "cmvjgxqto00h0h9r1y5eixb3h",
+      "userId": "uat_returning",
+      "kind": "PHONE",
+      "state": "PENDING",
+      "points": 5040,
+      "ratePct": "2.0000",
+      "multiplier": "1.200",
+      "countsForTier": true,
+      "releaseAt": "2026-11-03T11:38:08.000Z",
+      "holdUntil": null,
+      "reviewReason": null,
+      "orderPhone": "0901000003",
+      "orderStatus": "DELIVERED",
+      "goodsValue": 210000,
+      "deliveredAt": "2026-10-20T11:38:08.000Z"
+    },
+    "GET /me/external-points/claims?kind=PHONE": {
+      "status": 200
+    },
+    "job release": {
+      "lane": 2,
+      "job": "ExternalClaimCron.everyThirtyMinutes",
+      "ms": 174,
+      "result": null
+    },
+    "sau cộng": {
+      "state": "CREDITED",
+      "rows": [
+        {
+          "delta": 5040,
+          "reason": "PANCAKE_CHAT_ORDER:7700005",
+          "lot": "STANDARD"
+        }
+      ],
+      "bal": [
+        6242,
+        11282
+      ],
+      "spent12m": [
+        1980100,
+        2190100
+      ],
+      "tierPoints": [
+        40642,
+        45682
+      ]
+    },
+    "notification_logs CHAT_ORDER_POINTS_*": [
+      {
+        "templateCode": "CHAT_ORDER_POINTS_CREDITED",
+        "channel": "INAPP",
+        "status": "SENT",
+        "sentAt": "2026-10-22T11:39:29.911Z"
+      }
+    ]
+  }
+}

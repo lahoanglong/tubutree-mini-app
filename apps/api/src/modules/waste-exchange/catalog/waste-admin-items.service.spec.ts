@@ -15,7 +15,7 @@ const p2002 = (target: string) =>
 
 const carton = {
   id: 'i1', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 2, pointsPerGroup: 1000, dropsPerUnit: 1, dailyCapQty: null,
-  monthlyCapQty: 40, status: 'ACTIVE', prepInstructions: null, imageUrl: null, sortOrder: 10, gramsPerUnit: 300, hazardous: false,
+  monthlyCapQty: 40, status: 'ACTIVE', prepInstructions: null, imageUrl: null, sortOrder: 10, gramsPerUnit: 300, hazardous: false, warehouseOnly: false,
   createdAt: new Date('2026-10-01T00:00:00Z'), updatedAt: new Date('2026-10-02T00:00:00Z'),
 };
 const battery = { ...carton, id: 'i9', code: 'PIN', status: 'COMING_SOON', hazardous: true };
@@ -54,6 +54,15 @@ describe('WasteAdminItemsService', () => {
     expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({ id: 'i1', code: 'CARTON', unitsPerPoint: 2, hazardous: false, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z' });
     expect(out[1]).toMatchObject({ id: 'i9', hazardous: true, status: 'COMING_SOON' });
+  });
+
+  it('list tells the admin which items only the warehouse takes, so the point form can lock them', async () => {
+    const { svc, wasteItem } = setup();
+    wasteItem.findMany.mockResolvedValue([carton, { ...carton, id: 'i3', code: 'MILK_CARTON', warehouseOnly: true }]);
+
+    const out = await svc.list('a1');
+
+    expect(out.map((i) => [i.code, i.warehouseOnly])).toEqual([['CARTON', false], ['MILK_CARTON', true]]);
   });
 
   it('create applies defaults and logs ITEM_CREATED with before null', async () => {

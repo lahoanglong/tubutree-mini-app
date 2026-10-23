@@ -32,7 +32,7 @@ function mockAdminSession(api: MockApi) {
   api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
 }
 
-test.describe('Admin — tab Retention & North-star', () => {
+test.describe('Admin — tab Giữ chân khách & chỉ số chính', () => {
   test.beforeEach(async ({ page: p, api }) => {
     mockAdminSession(api);
     await p.addInitScript(() => {
@@ -58,7 +58,7 @@ test.describe('Admin — tab Retention & North-star', () => {
 
     await p.goto('/admin?tab=analytics');
 
-    await expect(p.getByRole('button', { name: 'Retention & North-star' })).toHaveAttribute('aria-current', 'page');
+    await expect(p.getByRole('button', { name: 'Giữ chân khách & chỉ số chính' })).toHaveAttribute('aria-current', 'page');
     await expect(p.getByText('Khách mới hôm qua')).toBeVisible();
     // "5" (newBuyers) xuất hiện CẢ ở StatCard lẫn ở dòng bảng bên dưới (cùng snapshot mới nhất) →
     // getByText('5', {exact:true}) trần vi phạm strict mode (khớp 2 phần tử). Thu hẹp về đúng
@@ -72,7 +72,7 @@ test.describe('Admin — tab Retention & North-star', () => {
 
     await p.goto('/admin?tab=analytics');
 
-    await expect(p.getByRole('button', { name: 'Retention & North-star' })).toHaveAttribute('aria-current', 'page');
-    await expect(p.getByText('Chưa có snapshot nào')).toBeVisible();
+    await expect(p.getByRole('button', { name: 'Giữ chân khách & chỉ số chính' })).toHaveAttribute('aria-current', 'page');
+    await expect(p.getByText('Chưa có bản chụp số liệu nào')).toBeVisible();
   });
 });

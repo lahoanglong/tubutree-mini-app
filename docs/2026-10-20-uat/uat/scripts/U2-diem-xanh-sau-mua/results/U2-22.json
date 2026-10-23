@@ -1,0 +1,27 @@
+{
+  "id": "U2-22",
+  "title": "Huỷ gói trên Mini App (\"Huỷ\" → \"Vẫn huỷ\"): CANCELLED; tới hạn chạy job không tạo đơn",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:56.477Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "POST status CANCELLED → DB CANCELLED",
+      "ok": true,
+      "detail": {
+        "http": 201,
+        "status": "CANCELLED"
+      }
+    },
+    {
+      "name": "gói đã huỷ: job không tạo đơn",
+      "ok": true,
+      "detail": {
+        "before": 2,
+        "after": 2
+      }
+    }
+  ],
+  "evidence": {}
+}

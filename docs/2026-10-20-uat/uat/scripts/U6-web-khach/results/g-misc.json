@@ -1,0 +1,553 @@
+{
+  "name": "g-misc",
+  "at": "2026-10-22T11:58:09.749Z",
+  "cases": [
+    {
+      "id": "U6-70",
+      "role": "Khách quay lại + khách chưa đăng nhập",
+      "journey": "Cộng đồng",
+      "steps": "Khách ghé mở /cong-dong rồi bấm \"Đăng bài\"; khách đăng nhập: đăng bài Hỏi đáp, mở bài, thích, bình luận, xoá bài (390px)",
+      "expected": "Khách ghé xem được feed nhưng \"Đăng bài\" đưa tới đăng nhập; đăng bài tạo feed_posts (userId, kind, body, status hiển thị); thích tăng likeCount + feed_reactions đúng 1 dòng, bỏ thích về 0; bình luận tạo feed_comments; xoá bài làm bài biến mất khỏi feed",
+      "checks": [
+        {
+          "name": "khách ghé /cong-dong thấy lời mời đăng nhập (feed chỉ dành cho người đã đăng nhập, giống Mini App luôn đăng nhập)",
+          "ok": true,
+          "detail": "Cộng đồng Vườn Tubu\nFacebook\nTikTok\n\nĐăng nhập để xem cộng đồng\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "API feed không trả bài cho khách chưa đăng nhập (401/403)",
+          "ok": true,
+          "detail": "401"
+        },
+        {
+          "name": "POST /feed → 2xx",
+          "ok": true,
+          "detail": "201"
+        },
+        {
+          "name": "DB: có bài QUESTION của uat_returning",
+          "ok": true,
+          "detail": "{\"id\":\"cmvjhh0yn01od11mmgzbppmok\",\"kind\":\"QUESTION\",\"status\":\"PUBLISHED\",\"body\":\"UAT web: bé nhà mình 4 tháng tuổi dùng dầu tràm được chưa ạ?\",\"lc\":0}"
+        },
+        {
+          "name": "trang bài hiện nội dung vừa đăng",
+          "ok": true,
+          "detail": "Cộng đồng Vườn Tubu\nNguyễn Thị Quay Lại\nvừa xong\nHỏi đáp\nUAT web: dầu tràm dùng cho bé mấy tháng?\n\nUAT web: bé nhà mình 4 tháng tuổi dùng dầu tràm được chưa ạ?\n\nLượt thích:\n0\nBình luận:\n0\nTrả lời (0)\n\nHãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!\n\nGửi"
+        },
+        {
+          "name": "thích → 1 dòng feed_reactions và likeCount = 1",
+          "ok": true,
+          "detail": "{\"status\":201,\"reacts\":1,\"lc\":1}"
+        },
+        {
+          "name": "bỏ thích → likeCount về 0",
+          "ok": true,
+          "detail": "0"
+        },
+        {
+          "name": "bình luận → 1 dòng feed_comments đúng nội dung",
+          "ok": true,
+          "detail": "{\"status\":201,\"cm\":[{\"body\":\"UAT web: bình luận thử\"}]}"
+        },
+        {
+          "name": "bình luận hiện ngay trên trang",
+          "ok": true
+        },
+        {
+          "name": "xoá bài: bài không còn hiển thị (bị xoá hoặc ẩn)",
+          "ok": true,
+          "detail": "{\"status\":\"REMOVED\"}"
+        },
+        {
+          "name": "feed không còn bài đã xoá",
+          "ok": true,
+          "detail": "Cộng đồng Vườn Tubu\nFacebook\nTikTok\nXếp hạng\nSự kiện\nĐăng bài\nTất cả\n🧴 Mỹ phẩm & cá nhân\n🧼 Tẩy rửa & nhà cửa\n👶 Mẹ & bé\n☕ Cà phê & thực phẩm\n🌿 Review & trải nghiệm\n🛒 Hỏi mua gì\n💡 Mẹo hay\nMới nhất"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "GET /feed không token",
+          "value": "401"
+        },
+        {
+          "label": "POST đăng bài",
+          "value": "{\"status\":201,\"body\":\"{\\\"id\\\":\\\"cmvjhh0yn01od11mmgzbppmok\\\",\\\"status\\\":\\\"PUBLISHED\\\"}\"}"
+        },
+        {
+          "label": "feed_posts",
+          "value": "{\"id\":\"cmvjhh0yn01od11mmgzbppmok\",\"kind\":\"QUESTION\",\"status\":\"PUBLISHED\",\"body\":\"UAT web: bé nhà mình 4 tháng tuổi dùng dầu tràm được chưa ạ?\",\"lc\":0}"
+        },
+        {
+          "label": "trạng thái bài mới (hiển thị ngay hay chờ duyệt)",
+          "value": "PUBLISHED"
+        },
+        {
+          "label": "bài sau xoá",
+          "value": "{\"status\":\"REMOVED\"}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-70-khach-bam-dang-bai.png",
+        "uat/shots/U6-web-khach/U6-70-soan-bai.png",
+        "uat/shots/U6-web-khach/U6-70-bai-viet.png",
+        "uat/shots/U6-web-khach/U6-70-bai-viet-binh-luan.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-71",
+      "role": "Khách quay lại",
+      "journey": "Xếp hạng + sự kiện",
+      "steps": "Mở /cong-dong/xep-hang và /cong-dong/su-kien ở 390 và 1440px",
+      "expected": "Hai trang mở được, không lỗi API, không tràn ngang, trạng thái trống có câu hướng dẫn",
+      "checks": [
+        {
+          "name": "390 /cong-dong/xep-hang: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":390,\"iw\":390,\"layoutVw\":390}}"
+        },
+        {
+          "name": "390 /cong-dong/xep-hang: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Bảng xếp hạng\nChưa có bài viết nào\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "390 /cong-dong/su-kien: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":390,\"iw\":390,\"layoutVw\":390}}"
+        },
+        {
+          "name": "390 /cong-dong/su-kien: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Sự kiện\nChưa có sự kiện nào\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "1440 /cong-dong/xep-hang: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}}"
+        },
+        {
+          "name": "1440 /cong-dong/xep-hang: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nBảng xếp hạng\nChưa có bài viết nào\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuy"
+        },
+        {
+          "name": "1440 /cong-dong/su-kien: mở được, không lỗi API, không tràn ngang",
+          "ok": true,
+          "detail": "{\"status\":200,\"bad\":[],\"ox\":{\"sw\":1440,\"iw\":1440,\"layoutVw\":1440}}"
+        },
+        {
+          "name": "1440 /cong-dong/su-kien: có nội dung hoặc câu trạng thái trống",
+          "ok": true,
+          "detail": "Tìm sản phẩm\nTrang chủ\nDanh mục\nVườn Xanh\nĐơn hàng\nCá nhân\nN\nLại\nSự kiện\nChưa có sự kiện nào\n\nSống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn"
+        }
+      ],
+      "evidence": [],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-71-xep-hang-390.png",
+        "uat/shots/U6-web-khach/U6-71-su-kien-390.png",
+        "uat/shots/U6-web-khach/U6-71-xep-hang-1440.png",
+        "uat/shots/U6-web-khach/U6-71-su-kien-1440.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-72",
+      "role": "Khách mới chưa có SĐT (uat_new_nophone)",
+      "journey": "Vườn Xanh",
+      "steps": "Mở /vuon-xanh; điểm danh; điểm danh lần hai; tưới cây khi chưa đủ giọt nước; góp quỹ khi chưa đủ điểm; trả lời quiz (390px)",
+      "expected": "Điểm danh lần đầu cộng giọt nước + game_profiles.streakDays=1; lần hai bị chặn (DB không đổi); tưới cây thiếu giọt báo rõ không trừ; góp quỹ thiếu điểm báo rõ không trừ điểm; quiz ghi đúng 1 lượt/ngày (game_quiz_attempts)",
+      "checks": [
+        {
+          "name": "trang mở được, có cây + \"Điểm danh\"",
+          "ok": true,
+          "detail": "Vườn Xanh\n🌱\nCây Dứa Fuwa3e\n\n0/600💧 · 💧 0 · 🔥 0 ngày · 🌳 góp quỹ: 0\n\nHôm nay\nVườn\nCộng đồng\nTưới cây (20💧)\nGóp quỹ trồng cây (50.000 điểm)\n\nGóp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới "
+        },
+        {
+          "name": "không request API lỗi (ngoài /brand/owner/me)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không tràn ngang",
+          "ok": true,
+          "detail": "{\"sw\":390,\"iw\":390,\"layoutVw\":390}"
+        },
+        {
+          "name": "DB: streakDays = 1 sau điểm danh",
+          "ok": true,
+          "detail": "{\"sd\":1}"
+        },
+        {
+          "name": "giọt nước tăng sau điểm danh",
+          "ok": true,
+          "detail": "{\"user0\":{\"coins\":0},\"user1\":{\"coins\":10}}"
+        },
+        {
+          "name": "điểm danh lần 2 không cộng thêm (DB không đổi)",
+          "ok": true,
+          "detail": "{\"gp1\":{\"sd\":1},\"gp2\":{\"sd\":1},\"user1\":{\"coins\":10},\"user2\":{\"coins\":10}}"
+        },
+        {
+          "name": "tưới cây thiếu giọt: số giọt không âm và có câu báo (đủ/không đủ)",
+          "ok": true,
+          "detail": "{\"coinsAfterWater\":0}"
+        },
+        {
+          "name": "góp quỹ khi 0 điểm: không trừ điểm và có câu báo",
+          "ok": true,
+          "detail": "{\"pts0\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"pts1\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1},\"text\":\"Vườn Xanh\\n🌱\\nCây Dứa Fuwa3e\\n\\n0/600💧 · 💧 0 · 🔥 1 ngày · 🌳 góp quỹ: 0\\n\\nHôm nay\\nVườn\\nCộng đồng\\nTưới cây (20💧)\\nGóp quỹ trồng cây (50.000 điểm)\\n\\nGóp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới \"}"
+        },
+        {
+          "name": "góp quỹ thiếu điểm hiện câu báo rõ ràng",
+          "ok": true,
+          "detail": "Góp quỹ trồng cây (50.000 điểm)\n\nGóp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.\n\nĐiểm danh chuỗi 1 ngày\n\nNhận giọt nước tưới cây mỗi ngày\n\nĐã điểm danh\n💧\nN1\n2\nN2\n🎁\nN"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "trước",
+          "value": "{\"gp0\":{\"sd\":0},\"user0\":{\"coins\":0},\"pts0\":{\"balance\":1000,\"ledgerSum\":1000,\"rows\":1}}"
+        },
+        {
+          "label": "POST điểm danh Vườn Xanh",
+          "value": "{\"status\":201,\"body\":\"{\\\"seedsEarned\\\":10,\\\"pointsEarned\\\":0,\\\"streakDays\\\":1,\\\"totalSeeds\\\":10,\\\"streakFrozeUsed\\\":false,\\\"bonusNote\\\":\\\"\\\"}\"}"
+        },
+        {
+          "label": "sau điểm danh",
+          "value": "{\"gp1\":{\"sd\":1},\"user1\":{\"coins\":10}}"
+        },
+        {
+          "label": "điểm danh Vườn Xanh lần 2 (API)",
+          "value": "{\"status\":400,\"body\":{\"message\":\"Hôm nay bạn đã điểm danh rồi 🌿\",\"error\":\"Bad Request\",\"statusCode\":400}}"
+        },
+        {
+          "label": "sau khi tưới thiếu giọt",
+          "value": "Vườn Xanh\n🌱\nCây Dứa Fuwa3e\n\n0/600💧 · 💧 0 · 🔥 1 ngày · 🌳 góp quỹ: 0\n\nHôm nay\nVườn\nCộng đồng\nTưới cây (20💧)\nGóp quỹ trồng cây (50.000 điểm)\n\nGóp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.\n\nĐiểm danh chuỗi 1 ngày\n\nNhận giọt nước tưới cây mỗi ngày\n\nĐã điểm danh\n💧\nN1\n2\nN2\n🎁\nN3\n4\nN4\n5\nN5\n6\nN6\n🎁\nN7\nVé giữ lửa:\n0\nMua (80💧)\nHứng giọt sương\n\nVé giữ lửa giúp chuỗi k"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-72-vuon-xanh-dau.png",
+        "uat/shots/U6-web-khach/U6-72-tuoi-cay-thieu-giot.png",
+        "uat/shots/U6-web-khach/U6-72-gop-quy-thieu-diem.png"
+      ],
+      "notes": [
+        "không tìm thấy nút đáp án quiz theo tên (quiz đổi theo ngày)"
+      ],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-73",
+      "role": "Khách quay lại + khách ghé",
+      "journey": "Đổi rác",
+      "steps": "waste.enabled=false: mở /doi-rac và /doi-rac/tao; bật waste.enabled + đặt thể lệ có \"khoảng ngày\": mở /doi-rac, /doi-rac/quy-dinh (đăng nhập và chưa đăng nhập), so với Mini App (390px)",
+      "expected": "Tắt: \"Chương trình đang tạm dừng\" và không vào được trang tạo; bật: điểm hiển thị khớp /me/loyalty, bảng món + quy đổi khớp cấu hình (carton 1.000 điểm, vỏ chai Tubu 2.000 điểm…); thể lệ hiện cho CẢ khách ghé (trang công khai) với chữ \"khoảng ngày\"; cùng nội dung với Mini App /recycle",
+      "checks": [
+        {
+          "name": "tắt chương trình: /doi-rac báo \"Chương trình đang tạm dừng\"",
+          "ok": true,
+          "detail": "Đổi rác lấy quà\n\nChương trình đang tạm dừng\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "tắt chương trình: /doi-rac/tao không cho tạo yêu cầu",
+          "ok": true,
+          "detail": "Đổi rác lấy quà\n\nChương trình đang tạm dừng\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "bật: hiện điểm Điểm Xanh 48.408",
+          "ok": true,
+          "detail": "Đổi rác lấy quà\n\nĐiểm Xanh của bạn\n\n48.408 điểm\n\nDùng như 48.408đ khi mua sắm\n\nCòn 14.600 điểm tới mã giảm 50.000đ\n\ntương đương khoảng 15 thùng carton cũ\n\nĐổi rác ngay\nCách đổi\n\nMang tới điểm nhận\n\nMiễn phí, nhận điểm khi người ở điểm xác nhận\n\nGửi về kho Tubu HCM\n\nTự gửi qua hãng bất kỳ và tự trả p"
+        },
+        {
+          "name": "bật: có nút \"Đổi rác ngay\" + 2 cách (mang tới điểm nhận / gửi về kho Tubu HCM)",
+          "ok": true,
+          "detail": "Đổi rác lấy quà\n\nĐiểm Xanh của bạn\n\n48.408 điểm\n\nDùng như 48.408đ khi mua sắm\n\nCòn 14.600 điểm tới mã giảm 50.000đ\n\ntương đương khoảng 15 thùng carton cũ\n\nĐổi rác ngay\nCách đổi\n\nMang tới điểm nhận\n\nMiễn phí, nhận điểm khi người ở điểm xác nhận\n\nGửi về kho Tubu HCM\n\nTự gửi qua hãng bất kỳ và tự trả phí ship\n\nTubu nhận những món này\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n…"
+        },
+        {
+          "name": "bảng quy đổi: carton 1.000 điểm, nilon 1.000 điểm, 5 vỏ hộp sữa = 1.000 điểm, vỏ chai Tubu 2.000 điểm",
+          "ok": true,
+          "detail": "Tubu nhận những món này\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n\nNilon chống sốc\n\n1 túi lớn = 1.000 điểm\n\nTúi còn nguyên, khô, không dính băng keo hay nhãn.\n\nVỏ hộp sữa sạch\n\n5 vỏ = 1.000 điểm\n\nRửa sạch, để ráo, ép dẹt.\n\nVỏ chai, hộp Tubu Tree\n\n1 vỏ = 2.000 điểm\n\nVỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.\n\nPin đã dùng\nSắp nhận\n\n1 viên = 1.000 điểm\n\nKho quà…"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"1 thùng = 1.000 điểm\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"5 vỏ = 1.000 điểm\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"1 vỏ = 2.000 điểm\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"Gửi về kho Tubu HCM\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "Mini App /recycle cũng hiện \"48.408\"",
+          "ok": true,
+          "detail": "{\"mini\":true,\"web\":true}"
+        },
+        {
+          "name": "thể lệ công khai: khách ghé đọc được nội dung có \"khoảng ngày\"",
+          "ok": true,
+          "detail": "Thể lệ Đổi rác lấy quà\nThể lệ UAT: chương trình nhận hàng từ khoảng ngày 01 đến khoảng ngày 30 hàng tháng. 1 thùng carton = 1.000 điểm.\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "thể lệ khi đã đăng nhập hiện nội dung có \"khoảng ngày\"",
+          "ok": true,
+          "detail": "Thể lệ Đổi rác lấy quà\nThể lệ UAT: chương trình nhận hàng từ khoảng ngày 01 đến khoảng ngày 30 hàng tháng. 1 thùng carton = 1.000 điểm.\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "trang thể lệ không phát sinh request lỗi 401/403",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "thể lệ cho khách ghé",
+          "value": "{\"text\":\"Thể lệ Đổi rác lấy quà\\nThể lệ UAT: chương trình nhận hàng từ khoảng ngày 01 đến khoảng ngày 30 hàng tháng. 1 thùng carton = 1.000 điểm.\\nHotline: 0984 606 774\\nĐiều khoản\\nBảo mật\\nĐổi trả\\nVận chuyển\",\"bad\":[]}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-73-doi-rac-tam-dung.png",
+        "uat/shots/U6-web-khach/U6-73-doi-rac-bat.png",
+        "uat/shots/U6-web-khach/U6-73-quy-dinh-khach.png",
+        "uat/shots/U6-web-khach/U6-73-quy-dinh-dang-nhap.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-74",
+      "role": "Khách chưa có SĐT (uat_new_nophone) so với khách đã xác minh",
+      "journey": "Thông báo mở Mini App (Q2)",
+      "steps": "Khi chương trình đổi rác bật: mở /doi-rac, /doi-rac/tao, /doi-rac/diem-nhan, /doi-rac/yeu-cau bằng khách không SĐT và khách có SĐT (390px)",
+      "expected": "Khách không SĐT thấy câu \"Tính năng này cần mở Tubu Tree trên Zalo.\" thay vì chức năng; khách có SĐT dùng được; khách không SĐT vẫn mua hàng và điểm danh được trên web (Q2: web không bắt xác minh)",
+      "checks": [
+        {
+          "name": "/doi-rac: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Đổi rác lấy quà\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/doi-rac: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Đổi rác lấy quà\n\nĐiểm Xanh của bạn\n\n48.408 điểm\n\nDùng như 48.408đ khi mua sắm\n\nCòn 14.600 điểm tới mã giảm 50.000đ\n\ntương đương khoảng 15 thùng carton cũ\n\nĐổi rác ngay\nCách đổi\n\nMang tới điểm nhận\n\nMiễn phí, nhận điểm khi người ở điểm xác nhận\n\nGửi v"
+        },
+        {
+          "name": "/doi-rac/tao: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Đổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/doi-rac/tao: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Đổi rác\nBước 1/3: Chọn món\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n\nTối đa 60 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày\n\n0\nNilon chống sốc\n\n1 túi lớn = 1.000 điểm\n\nTúi còn nguyên, khô, không dính băng ke"
+        },
+        {
+          "name": "/doi-rac/diem-nhan: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Đổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/doi-rac/diem-nhan: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Đổi rác\nBước 1/3: Chọn món\nThùng carton cũ\n\n1 thùng = 1.000 điểm\n\nGấp phẳng, giữ khô và sạch.\n\nTối đa 60 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày\n\n0\nNilon chống sốc\n\n1 túi lớn = 1.000 điểm\n\nTúi còn nguyên, khô, không dính băng ke"
+        },
+        {
+          "name": "/doi-rac/yeu-cau: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\"",
+          "ok": true,
+          "detail": "Yêu cầu của tôi\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/doi-rac/yeu-cau: khách CÓ SĐT không bị chặn bởi thông báo đó",
+          "ok": true,
+          "detail": "Yêu cầu của tôi\n\nChưa có yêu cầu nào\n\nĐổi rác ngay\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "/doi-rac khách không SĐT",
+          "value": "Đổi rác lấy quà\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "label": "/doi-rac/tao khách không SĐT",
+          "value": "Đổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "label": "/doi-rac/diem-nhan khách không SĐT",
+          "value": "Đổi rác\nBước 1/3: Chọn món\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "label": "/doi-rac/yeu-cau khách không SĐT",
+          "value": "Yêu cầu của tôi\n\nTính năng này cần mở Tubu Tree trên Zalo.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-74-q2-doi-rac-tao.png",
+        "uat/shots/U6-web-khach/U6-74-q2-doi-rac-yeu-cau.png",
+        "uat/shots/U6-web-khach/U6-74-q2-doi-rac.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-75",
+      "role": "Khách quay lại (CUSTOMER)",
+      "journey": "Phân quyền",
+      "steps": "Mở /admin, /nhan-vien, /nhan-vien/bang-luong, /hoc-vien, /chu-thuong-hieu trên web; gọi API quản trị/nhân viên/CTV bằng token khách (390px)",
+      "expected": "Web: câu từ chối dễ hiểu, không lộ dữ liệu, không trang trắng; API: /admin/*, /staff/* trả 403, không trả dữ liệu người khác",
+      "checks": [
+        {
+          "name": "/admin: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Tubu Tree\nQuản trị\nVề cửa hàng\nĐăng xuất\nBạn không có quyền truy cập trang quản trị."
+        },
+        {
+          "name": "/nhan-vien: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Ca làm của tôi\n\nTrang dành cho nhân viên. Liên hệ quản trị để được cấp quyền.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/nhan-vien/bang-luong: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Lương của tôi\n\nTrang dành cho nhân viên.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/chu-thuong-hieu: câu từ chối rõ ràng, không lộ dữ liệu",
+          "ok": true,
+          "detail": "Quản lý nhãn hàng\nQuản lý nhãn hàng\n\nBạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "/hoc-vien (CTV Academy): khách thường thấy lời mời/giải thích, không phải lỗi thô \"Bạn không có quyền truy cập tài nguyên này\" kèm nút Thử lại",
+          "ok": true,
+          "detail": "CTV Academy\nHọc kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày\nCTV Academy dành cho cộng tác viên\n\nTài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.\n\nTìm hiểu về CTV\nHotline: 0984 606 774\nĐiều khoản\nBảo m"
+        },
+        {
+          "name": "API GET /admin/users với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":403,\"body\":\"{\\\"message\\\":\\\"Bạn không có quyền truy cập tài nguyên này.\\\",\\\"error\\\":\\\"Forbidden\\\",\\\"statusCode\\\":403}\"}"
+        },
+        {
+          "name": "API GET /admin/orders với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":403,\"body\":\"{\\\"message\\\":\\\"Bạn không có quyền truy cập tài nguyên này.\\\",\\\"error\\\":\\\"Forbidden\\\",\\\"statusCode\\\":403}\"}"
+        },
+        {
+          "name": "API GET /admin/config với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":403,\"body\":\"{\\\"message\\\":\\\"Bạn không có quyền truy cập tài nguyên này.\\\",\\\"error\\\":\\\"Forbidden\\\",\\\"statusCode\\\":403}\"}"
+        },
+        {
+          "name": "API GET /staff/today với token khách → 401/403/404 (không 200)",
+          "ok": true,
+          "detail": "{\"status\":404,\"body\":\"{\\\"message\\\":\\\"Cannot GET /api/staff/today\\\",\\\"error\\\":\\\"Not Found\\\",\\\"statusCode\\\":404}\"}"
+        },
+        {
+          "name": "API GET /affiliate/dashboard với token khách: 401/403/404, hoặc 200 chỉ gồm số 0/danh sách rỗng của chính họ",
+          "ok": true,
+          "detail": "{\"status\":200,\"body\":\"{\\\"withdrawTaxPreview\\\":0,\\\"withdrawingCommission\\\":0,\\\"todayCommission\\\":0,\\\"monthCommission\\\":0,\\\"pendingCommission\\\":0,\\\"withdrawableCommission\\\":0,\\\"totalClicks\\\":0,\\\"tota\"}"
+        },
+        {
+          "name": "API GET /dealer/orders với token khách: 401/403/404, hoặc 200 chỉ gồm số 0/danh sách rỗng của chính họ",
+          "ok": true,
+          "detail": "{\"status\":200,\"body\":\"[]\"}"
+        },
+        {
+          "name": "API PUT /admin/config với token khách → 401/403/404",
+          "ok": true,
+          "detail": "403"
+        },
+        {
+          "name": "cấu hình waste.gift_claim_days không bị khách đổi (vẫn 60)",
+          "ok": true
+        }
+      ],
+      "evidence": [
+        {
+          "label": "/hoc-vien với khách thường",
+          "value": "{\"text\":\"CTV Academy\\nHọc kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày\\nCTV Academy dành cho cộng tác viên\\n\\nTài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.\\n\\nTìm hiểu về CTV\\nHotline: 0984 606 774\\nĐiều khoản\\nBảo m\",\"bad\":[\"GET /academy/courses 403\",\"GET /academy/courses 403\"]}"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-75-hoc-vien-khach-thuong.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    },
+    {
+      "id": "U6-76",
+      "role": "Khách quay lại, khách mới, khách ghé",
+      "journey": "Trang lỗi và IDOR",
+      "steps": "Mở sản phẩm/gian hàng/đơn không tồn tại; khách khác mở trang QR chuyển khoản của đơn người khác; khách ghé mở QR (390px)",
+      "expected": "Trang 404 thân thiện có đường quay về; trang QR của đơn người khác trả 404 và KHÔNG lộ STK/số tiền/mã đơn; khách ghé bị mời đăng nhập",
+      "checks": [
+        {
+          "name": "sản phẩm không tồn tại: 404 + câu thân thiện + đường quay về",
+          "ok": true,
+          "detail": "{\"status\":404,\"text\":\"Không tìm thấy trang\\n\\nTrang bạn tìm không tồn tại hoặc đã được chuyển đi.\\n\\nVề trang chủ\\nHotline: 0984 606 774\\nĐiều khoản\\nBảo mật\\nĐổi trả\\nVận chuyển\"}"
+        },
+        {
+          "name": "gian hàng không tồn tại: 404 + câu thân thiện",
+          "ok": true,
+          "detail": "{\"status\":404,\"text\":\"Không tìm thấy trang\\n\\nTrang bạn tìm không tồn tại hoặc đã được chuyển đi.\\n\\nVề trang chủ\\nHotline: 0984 606 774\\nĐiều khoản\\nBảo mật\\nĐổi trả\\nVận chuyển\"}"
+        },
+        {
+          "name": "khách ghé mở đơn: mời đăng nhập, không lộ gì",
+          "ok": true,
+          "detail": "Chi tiết đơn hàng\n\nĐăng nhập để xem đơn hàng của bạn.\n\nĐăng nhập với Zalo\n\nĐăng nhập xong bạn sẽ quay lại đúng trang này.\n\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        },
+        {
+          "name": "dựng đơn chuyển khoản của returning",
+          "ok": true,
+          "detail": "{\"status\":201,\"ok\":true,\"body\":{\"id\":\"cmvjhlovm01th11mmnl7s53ec\",\"code\":\"TUBU2026102293962\",\"userId\":\"uat_returning\",\"type\":\"RETAIL\",\"status\":\"PENDING_PAYMENT\",\"subtotal\":89000,\"discount\":0,\"couponDiscount\":0,\"comboDiscount\":0,\"tierDiscount\":0,\"pointsDiscount\":0,\"shippingFee\":19000,\"total\":108000,\"pointsEarned\":2136,\"pointsUsed\":0,\"pointsUsedConverted\":0,\"paymentMethod\":\"BANK_TRANSFER\",\"paymentSta…"
+        },
+        {
+          "name": "API: khách khác lấy QR đơn của returning → 404",
+          "ok": true,
+          "detail": "{\"status\":404,\"body\":\"{\\\"message\\\":\\\"Không tìm thấy đơn hàng.\\\",\\\"error\\\":\\\"Not Found\\\",\\\"statusCode\\\":404}\"}"
+        },
+        {
+          "name": "web: khách khác mở trang QR đơn người khác → không lộ STK/số tiền/mã đơn",
+          "ok": true,
+          "detail": "Thanh toán chuyển khoản\n\nĐơn không còn chờ chuyển khoản\n\nKhông tìm thấy đơn hàng.\n\nXem đơn hàng\nHotline: 0984 606 774\nĐiều khoản\nBảo mật\nĐổi trả\nVận chuyển"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "khách ghé gọi QR",
+          "value": "0"
+        }
+      ],
+      "shots": [
+        "uat/shots/U6-web-khach/U6-76-404-san-pham.png",
+        "uat/shots/U6-web-khach/U6-76-idor-qr.png"
+      ],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    }
+  ]
+}

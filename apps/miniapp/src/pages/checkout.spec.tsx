@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
-import { AxiosError, type AxiosResponse } from 'axios';
+import { HttpError } from '../services/http';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -699,8 +699,8 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
 
   it('BE trả TOTAL_CHANGED → hiện sheet báo tổng mới (không snackbar), tải lại báo giá', async () => {
     const message = 'Tổng tiền đơn vừa thay đổi từ 70.000đ thành 75.000đ do giá hoặc phí giao vừa cập nhật. Vui lòng xem lại trước khi đặt.';
-    const response = { status: 400, data: { statusCode: 400, code: 'TOTAL_CHANGED', message } } as AxiosResponse;
-    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    const response = { status: 400, data: { statusCode: 400, code: 'TOTAL_CHANGED', message } };
+    mocks.placeOrder.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', response));
     renderPage();
     await placeOrderClick();
     expect(await screen.findByText('Tổng tiền đơn vừa thay đổi')).toBeInTheDocument();
@@ -727,7 +727,7 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
 });
 
 const badRequest = (message: string) =>
-  Object.assign(new Error(message), { isAxiosError: true, response: { status: 400, data: { message } } });
+  Object.assign(new Error(message), { isHttpError: true, response: { status: 400, data: { message } } });
 
 describe('CheckoutPage — hết hàng / vượt suất lúc đặt (BUYERMINI-18)', () => {
   beforeEach(() => {
@@ -856,8 +856,8 @@ describe('CheckoutPage — tách đơn theo nơi giao (D4)', () => {
     let changed = false;
     mocks.getCart.mockImplementation(async () => (changed ? { ...SPLIT_CART, items: [SPLIT_CART.items[1]!], subtotal: 200_000 } : CART));
     mocks.checkoutQuote.mockImplementation(async () => (changed ? SHOP_QUOTE : TUBU_QUOTE));
-    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: BLOCK_REASON } } as AxiosResponse;
-    mocks.placeOrder.mockRejectedValueOnce(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: BLOCK_REASON } };
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('Bad Request', 'ERR_BAD_REQUEST', response));
     renderPage();
     const bank = await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ });
     await waitFor(() => expect(bank).not.toHaveAttribute('aria-disabled', 'true'));
@@ -931,9 +931,9 @@ describe('CheckoutPage — COD theo từng đơn, báo giá quyết định phư
   it('máy chủ từ chối cách đang chọn lúc đặt (PAYMENT_METHOD_NOT_ALLOWED) → báo lỗi, tải lại báo giá, khoá COD và tự chọn chuyển khoản; đặt lại gửi BANK_TRANSFER (R7 review #4)', async () => {
     let blocked = false;
     mocks.checkoutQuote.mockImplementation(async () => (blocked ? { ...QUOTE, blockedPaymentMethods: { COD: COD_OVER } } : QUOTE));
-    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: COD_OVER } } as AxiosResponse;
+    const response = { status: 400, data: { statusCode: 400, code: 'PAYMENT_METHOD_NOT_ALLOWED', message: COD_OVER } };
     mocks.placeOrder
-      .mockRejectedValueOnce(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response))
+      .mockRejectedValueOnce(new HttpError('Bad Request', 'ERR_BAD_REQUEST', response))
       .mockResolvedValue({ id: 'o1', code: 'TT001' });
     renderPage();
     const cod = await screen.findByRole('radio', { name: /^Thanh toán khi nhận hàng/ });
@@ -1009,7 +1009,7 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
 
   it('quá thời gian chờ rồi bấm lại cùng nội dung → gửi lại đúng Idempotency-Key cũ', async () => {
     mocks.placeOrder
-      .mockRejectedValueOnce(new AxiosError('timeout of 15000ms exceeded', 'ECONNABORTED'))
+      .mockRejectedValueOnce(new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED'))
       .mockResolvedValueOnce({ id: 'o1', code: 'TT001' });
     renderPage();
     await clickPlace(1);
@@ -1020,8 +1020,8 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
   });
 
   it('lỗi 5xx rồi bấm lại → cùng key; đổi cách thanh toán rồi bấm → key mới', async () => {
-    const response = { status: 502, data: { message: 'Bad Gateway' } } as AxiosResponse;
-    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Gateway', 'ERR_BAD_RESPONSE', undefined, undefined, response));
+    const response = { status: 502, data: { message: 'Bad Gateway' } };
+    mocks.placeOrder.mockRejectedValue(new HttpError('Bad Gateway', 'ERR_BAD_RESPONSE', response));
     renderPage();
     await clickPlace(1);
     await clickPlace(2);
@@ -1038,8 +1038,8 @@ describe('CheckoutPage — bấm lại sau lỗi mạng không đặt đơn th�
 
   it('BE báo CART_CHANGED → báo khách và tải lại giỏ', async () => {
     const message = 'Giỏ hàng vừa thay đổi trong lúc đặt đơn. Vui lòng xem lại giỏ hàng và mục Đơn hàng trước khi đặt lại.';
-    const response = { status: 400, data: { statusCode: 400, code: 'CART_CHANGED', message } } as AxiosResponse;
-    mocks.placeOrder.mockRejectedValue(new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, response));
+    const response = { status: 400, data: { statusCode: 400, code: 'CART_CHANGED', message } };
+    mocks.placeOrder.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', response));
     renderPage();
     await clickPlace(1);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
@@ -1146,7 +1146,7 @@ describe('CheckoutPage — mất mạng khi bấm Đặt hàng (R4-BUYER-1)', ()
   it('offline: yêu cầu đặt đơn vẫn được gửi, lỗi mạng hiện câu "mất mạng", nút bấm lại được và bật mạng lại không tự đặt thêm', async () => {
     const qc = createQueryClient();
     qc.setDefaultOptions({ ...qc.getDefaultOptions(), queries: { retry: false } });
-    mocks.placeOrder.mockRejectedValue(new AxiosError('Network Error', 'ERR_NETWORK'));
+    mocks.placeOrder.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
     render(
       <QueryClientProvider client={qc}>
         <CheckoutPage />
@@ -1298,7 +1298,7 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     'Yêu cầu thu rác đã hết hạn hoặc đã huỷ',
     'Thu kèm rác đang tạm dừng với tài khoản của bạn, hãy tắt công tắc để đặt đơn',
   ])('409 "%s" hiện nguyên văn và tải lại /waste/me', async (msg) => {
-    mocks.placeOrder.mockRejectedValue(Object.assign(new Error(msg), { isAxiosError: true, response: { status: 409, data: { message: msg } } }));
+    mocks.placeOrder.mockRejectedValue(Object.assign(new Error(msg), { isHttpError: true, response: { status: 409, data: { message: msg } } }));
     renderPage();
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Thu kèm rác' }));
     await placeOrderClick();
@@ -1306,7 +1306,7 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     await waitFor(() => expect(mocks.getWasteMe).toHaveBeenCalledTimes(2));
   });
   it('quá thời gian chờ khi đã bật công tắc → không tải lại /waste/me, để bấm lại gửi cùng body và cùng khoá', async () => {
-    mocks.placeOrder.mockRejectedValueOnce(new AxiosError('timeout of 15000ms exceeded', 'ECONNABORTED'));
+    mocks.placeOrder.mockRejectedValueOnce(new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED'));
     renderPage();
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Thu kèm rác' }));
     await placeOrderClick();
@@ -1354,9 +1354,9 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
         <CheckoutPage />
       </QueryClientProvider>,
     );
-  const networkError = () => new AxiosError('Network Error', 'ERR_NETWORK');
+  const networkError = () => new HttpError('Network Error', 'ERR_NETWORK');
   const apiError = (status: number, code: string, message: string) =>
-    new AxiosError('Bad Request', 'ERR_BAD_REQUEST', undefined, undefined, { status, data: { statusCode: status, code, message } } as AxiosResponse);
+    new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status, data: { statusCode: status, code, message } });
   async function click(times: number) {
     const btn = await screen.findByText(/Đặt hàng · /);
     await waitFor(() => expect(btn.closest('button')).not.toBeDisabled());
@@ -1475,5 +1475,43 @@ describe('CheckoutPage — đóng băng yêu cầu sau lần đặt chưa rõ k�
     expect(mocks.placeOrder.mock.calls[1]![0]).toEqual(mocks.placeOrder.mock.calls[0]![0]);
     expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
     expect(await screen.findByTestId('order-success')).toBeInTheDocument();
+  });
+});
+
+describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20)', () => {
+  const cfg = mocks.publicConfig as Record<string, unknown>;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+  });
+  afterEach(() => {
+    delete cfg.shippingEta;
+  });
+
+  it('cấu hình có shippingEta → dưới phí vận chuyển có dòng "Giao dự kiến" kèm khoảng ngày', async () => {
+    cfg.shippingEta = { minDays: 2, maxDays: 4 };
+    renderPage();
+    const label = await screen.findByText(viCopy.success.etaLabel);
+    const row = label.parentElement as HTMLElement;
+    expect(row.textContent).toMatch(/\d{2}\/\d{2} – \d{2}\/\d{2}/);
+    const shipRow = screen.getByText(viCopy.checkout.shippingFee).parentElement as HTMLElement;
+    expect(shipRow.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shippingEta null hoặc thiếu → không có dòng giao dự kiến', async () => {
+    cfg.shippingEta = null;
+    renderPage();
+    await screen.findByText(viCopy.checkout.shippingFee);
+    expect(screen.queryByText(viCopy.success.etaLabel)).toBeNull();
+    delete cfg.shippingEta;
   });
 });

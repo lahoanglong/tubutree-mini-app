@@ -61,7 +61,7 @@ describe('OrdersPage (tab gốc)', () => {
     expect(screen.getByRole('heading', { name: 'Đơn hàng' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Quay lại' })).toBeNull();
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-      'Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã hủy/hoàn', 'Định kỳ',
+      'Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn', 'Định kỳ',
     ]);
     expect(await screen.findByRole('button', { name: 'Đơn TUBU-777' })).toBeInTheDocument();
     expect(mocks.fetchOrders).toHaveBeenCalledWith({}, 1, 20);

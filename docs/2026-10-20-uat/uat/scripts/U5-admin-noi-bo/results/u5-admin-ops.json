@@ -1,0 +1,102 @@
+[
+  {
+    "id": "U5-40",
+    "role": "ADMIN",
+    "journey": "Cấu hình: đổi một khoá điểm rồi đổi lại",
+    "steps": "Tab Cấu hình, khoá loyalty.max_redeem_pct (trần dùng điểm 20%): gõ \"abc\" → Lưu; gõ 0.25 → Lưu → hộp \"Xác nhận đổi cấu hình tiền/điểm\" → \"Lưu thay đổi\"; GET /admin/config đọc lại; đổi lại 0.2 như cũ",
+    "expected": "JSON sai: báo \"JSON không hợp lệ\", không gọi API; đổi 0.25 có hộp xác nhận (config-item.tsx:9,31-37), DB = 0.25, system_config_history ghi uat_admin; đổi lại: DB = 0.2, thêm một dòng lịch sử",
+    "actual": "JSON sai: 0 lời gọi PUT, lỗi \"JSON không hợp lệ\". Đổi 0.25: hộp \"Xác nhận đổi cấu hình tiền/điểm / loyalty.max_redeem_pct / 0.2 → 0.25 / Áp dụng ngay cho mọi đơn, ví và điểm của khách. / Huỷ / Lưu thay đổi\" → PUT 200; DB 0.25; GET /admin/config đọc 0.25. Đổi lại: hộp có → PUT 200; DB 0.2 (trước 0.2). Lịch sử 2 dòng mới nhất: [{\"oldValue\":0.25,\"newValue\":0.2,\"changedBy\":\"uat_admin\"},{\"oldValue\":0.2,\"newValue\":0.25,\"changedBy\":\"uat_admin\"}]",
+    "evidence": "shots/U5-admin-noi-bo/config-badjson-admin-1440.png, shots/U5-admin-noi-bo/config-changed-admin-1440.png; SQL system_configs + system_config_history WHERE key='loyalty.max_redeem_pct'",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:16.862Z"
+  },
+  {
+    "id": "U5-41",
+    "role": "ADMIN (CSKH chỉ xem)",
+    "journey": "Khoá rồi mở khoá tài khoản (tab Người dùng)",
+    "steps": "CSKH mở tab Người dùng tìm 0901000005 (không có nút Khoá); ADMIN tìm 0901000005 → \"Khoá\" → lý do → \"Khoá tài khoản\"; user dùng token cũ gọi /me, đổi refresh token; ADMIN \"Mở khoá\"; user gọi lại",
+    "expected": "CSKH không có nút Khoá; khoá: users.isBlocked=true, blockedById=uat_admin, có dòng user_admin_events; token cũ và refresh đều bị từ chối; mở khoá: isBlocked=false, user gọi /me 200",
+    "actual": "CSKH: 0 nút Khoá/Mở khoá. Khoá → 200; DB {\"isBlocked\":true,\"blockedById\":\"uat_admin\",\"blockedReason\":\"UAT: thử khoá tài khoản nghi farm voucher\"}; token cũ /me → 401; refresh → 401. Mở khoá → 200; DB isBlocked=false; /me sau 5,5 giây → 200. user_admin_events: [{\"kind\":\"UNBLOCK\",\"actorId\":\"uat_admin\",\"reason\":null},{\"kind\":\"BLOCK\",\"actorId\":\"uat_admin\",\"reason\":\"UAT: thử khoá tài khoản nghi farm voucher\"}]",
+    "evidence": "shots/U5-admin-noi-bo/users-cskh-view-1440.png, shots/U5-admin-noi-bo/users-admin-blocked-1440.png; SQL users.isBlocked/blockedById + user_admin_events WHERE userId='uat_ctv_pending'",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:25.780Z"
+  },
+  {
+    "id": "U5-42",
+    "role": "ADMIN",
+    "journey": "Đổi vai trò theo SĐT (CUSTOMER → CTV → CUSTOMER)",
+    "steps": "Tab Người dùng, khối \"Cấp / đổi vai trò theo SĐT\": 0901000011 + \"CTV\" → Cấp quyền; rồi \"Khách hàng\" → Cấp quyền",
+    "expected": "users.role AFFILIATE rồi CUSTOMER; mỗi lần một dòng user_admin_events (from → to, actor uat_admin); thông báo hiện vai trò cũ → mới",
+    "actual": "CTV: 201, DB AFFILIATE, \"Đã đổi 0901000011: Khách hàng → CTV\". Khách hàng: 201, DB CUSTOMER, \"Đã đổi 0901000011: CTV → Khách hàng\". user_admin_events: [{\"kind\":\"ROLE\",\"fromValue\":\"AFFILIATE\",\"toValue\":\"CUSTOMER\",\"actorId\":\"uat_admin\"},{\"kind\":\"ROLE\",\"fromValue\":\"CUSTOMER\",\"toValue\":\"AFFILIATE\",\"actorId\":\"uat_admin\"}]. Hộp xác nhận hạ về khách: \"Đổi vai trò Đổi vai trò của SĐT 0901000011 sang \"Khách hàng\"? Hiện là CTV → đổi sang Khách hàng. Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV. Hạ vai trò chỉ tạm ngừng: người này có thể tự đăng ký CTV lại. Huỷ Đổi vai trò\"",
+    "evidence": "shots/U5-admin-noi-bo/users-role-admin-1440.png; SQL users.role + user_admin_events WHERE userId='uat_brand'",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:27.796Z"
+  },
+  {
+    "id": "U5-43",
+    "role": "KẾ TOÁN (so với ADMIN)",
+    "journey": "Xuất CSV đơn hàng (tab Đơn hàng → \"Xuất CSV (Excel)\")",
+    "steps": "KẾ TOÁN và ADMIN mỗi người bấm \"Xuất CSV (Excel)\" không lọc; đếm dòng, đọc 3 cột SĐT (khách, người nhận, CTV) và cột Ghi chú",
+    "expected": "Số dòng = số đơn trong DB; file của kế toán chỉ còn 3 số cuối mọi SĐT (B19, admin.controller.ts:496-498), file của ADMIN đầy đủ; tổng cột \"Tổng tiền (VNĐ)\" = SUM(total)",
+    "actual": "Cột SĐT: SĐT khách, SĐT người nhận, SĐT CTV. KẾ TOÁN: 31 dòng, SĐT đầy đủ 0, SĐT che 65 (vd *******001 | *******001 | ), tổng tiền 18337500. ADMIN: 31 dòng, đầy đủ 65, che 0 (vd 0901000001 | 0901000001 | ), tổng tiền 18337500. DB: 31 đơn, SUM(total) 18337500",
+    "evidence": "shots/U5-admin-noi-bo/orders-export-ketoan.csv, shots/U5-admin-noi-bo/orders-export-admin.csv; SQL SELECT COUNT(*), SUM(total) FROM orders",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:29.710Z"
+  },
+  {
+    "id": "U5-44",
+    "role": "KẾ TOÁN",
+    "journey": "Báo cáo doanh thu hôm nay (tab Báo cáo)",
+    "steps": "KẾ TOÁN mở tab Báo cáo; GET /admin/reports/revenue cho hôm nay; tự tính bằng SQL: đơn theo ngày đặt giờ VN, doanh thu = tổng đơn đã thu tiền (PAID, hoặc COD đã giao) trừ hoàn một phần đã duyệt",
+    "expected": "Số đơn, đơn huỷ/trả, doanh thu, GMV của API = SQL (luật \"Doanh thu tính theo ngày đặt đơn\")",
+    "actual": "API: {\"orders\":30,\"cancelled\":4,\"paidOrders\":10,\"gross\":3846000,\"partialRefund\":190000,\"revenue\":3656000,\"gmv\":14359500}. SQL: {\"orders\":30,\"cancelled\":4,\"paidOrders\":10,\"gross\":3846000,\"partialRefund\":190000,\"gmv\":14359500,\"revenue\":3656000} · khớp",
+    "evidence": "shots/U5-admin-noi-bo/reports-ketoan-1440.png; GET /admin/reports/revenue?from=2026-10-22&to=2026-10-22; SQL tự tính (điều kiện REVENUE_ORDER_SQL, apps/api/src/modules/admin/admin-revenue.ts:16-20)",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:30.633Z"
+  },
+  {
+    "id": "U5-45",
+    "role": "ADMIN + KHO",
+    "journey": "\"Cần xử lý Pancake\": khách chuyển thiếu → xử lý → rời hàng đợi",
+    "steps": "uat_returning đặt 3×SOK-RC-1KG chuyển khoản; giả NH + Pancake ghi nhận 50.000đ đúng nội dung (thiếu); ADMIN mở trang chủ \"Việc cần xử lý\" → bấm mục \"Cần xử lý Pancake\"; KHO mở đơn → ghi chú → \"Đã xử lý\" → xác nhận",
+    "expected": "Đơn vẫn PENDING_PAYMENT/UNPAID, pancakeAttention bắt đầu \"Khách chuyển thiếu\"; số mục +1 (ADMIN và KHO); bấm mục mở tab Đơn hàng lọc đúng đơn; \"Đã xử lý\": pancakeAttention null, số mục −1, ghi chú + người xử lý vào log API (admin.service.ts:1249-1266, DTO admin.controller.ts:398-401 ghi \"chỉ vào log vết\")",
+    "actual": "Đơn TUBU2026102287612 tổng 225000đ; giả NH 50.000đ ({\"matched\":true,\"txn\":{\"at\":\"2026-10-22T11:54:30.800Z\",\"account\":\"8386790906 Tec…); đơn PENDING_PAYMENT/UNPAID, pancakePaidReported 50000, \"Khách chuyển thiếu: Pancake ghi nhận 50.000đ/225.000đ, còn thiếu 175.000đ — chưa xác nhận thanh toán. Liên hệ khách chuy…\". Hộp việc ADMIN 3→4, KHO 3→4; bấm mục → tab Đơn hàng lọc \"Cần xử lý Pancake\" có đơn: true. KHO \"Đã xử lý\" → 201; pancakeAttention=null; hộp việc ADMIN → 3. Log API: \"\u001b[33m[Nest] 98223 - \u001b[39m10/22/2026, 6:54:33 PM \u001b[33m WARN\u001b[39m \u001b[38;5;3m[AdminService] \u001b[39m\u001b[33mAdmin uat_kho đánh dấu đã xử lý việc Pancake của đơn TUBU2026102287612: \"Khách chuyển thiếu: Pancake g…\"",
+    "evidence": "shots/U5-admin-noi-bo/inbox-admin-pancake-1440.png, shots/U5-admin-noi-bo/orders-pancake-attention-admin-1440.png, shots/U5-admin-noi-bo/orders-pancake-confirm-kho-1440.png, shots/U5-admin-noi-bo/orders-pancake-resolved-kho-1440.png; SQL orders.pancakeAttention/pancakePaidReported; GET /admin/ops/inbox (admin, kho); state/lane-5/logs/api.log",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:33.537Z"
+  },
+  {
+    "id": "U5-46",
+    "role": "ADMIN / KẾ TOÁN / MARKETING / CSKH / KHO / NHÂN VIÊN",
+    "journey": "\"Việc cần xử lý\": số mục từng vai trò so với DB",
+    "steps": "GET /admin/ops/inbox bằng token từng vai trò; đếm bằng SQL các hàng đợi (cùng điều kiện ops-inbox.service.ts:75-121); mở trang chủ /admin từng vai trò, chụp",
+    "expected": "Mỗi vai trò chỉ thấy mục của nhóm mình (audience ở ops-inbox.service.ts); số khớp SQL; KẾ TOÁN thấy hoàn tiền khách, và theo B18 cả hoá đơn VAT chờ xuất + rút tiền đã duyệt chờ chi (kế toán là người bấm \"Đã xuất hoá đơn\"/\"Đã chuyển khoản\")",
+    "actual": "SQL {\"pancakeAttention\":3,\"customerRefunds\":0,\"payouts\":0,\"invoicePending\":0,\"returnsPending\":0,\"communityPending\":0}; payout APPROVED chờ chi 0, số KẾ TOÁN khớp SQL. ADMIN 28 mục, các mục đối chiếu khớp SQL. KẾ TOÁN: {\"customerRefunds\":0,\"merchantToSettle\":0,\"merchantPayoutsPending\":0,\"dealerClaimsToPay\":0,\"payoutsToPay\":0,\"invoicePending\":0,\"wasteToCount\":0,\"wasteUnmatched\"…. MARKETING: communityPending,communityUnanswered,wasteToCount,wasteUnmatched. CSKH: returnsPending,communityPending,communityUnanswered,externalPoints,wasteToCount,wasteUnmatched. KHO: pancakeAttention,pancakeUnsynced,gomdonAttention,returnsToReceive,wasteToCount,wasteUnmatched. NHÂN VIÊN (không nhóm): GET 403 (đúng @AllowStaff ở ops.controller.ts:31-33, tab duy nhất là Thu gom). Không vai trò nào thấy mục ngoài nhóm",
+    "evidence": "shots/U5-admin-noi-bo/inbox-admin-1440.png, shots/U5-admin-noi-bo/inbox-ketoan-1440.png, shots/U5-admin-noi-bo/inbox-marketing-1440.png, shots/U5-admin-noi-bo/inbox-cskh-1440.png, shots/U5-admin-noi-bo/inbox-kho-1440.png, shots/U5-admin-noi-bo/inbox-staff-1440.png; GET /admin/ops/inbox theo vai trò; SQL đếm hàng đợi; ops-inbox.service.ts:100,111-112",
+    "verdict": "PASS",
+    "note": "",
+    "at": "2026-10-22T11:56:08.990Z"
+  },
+  {
+    "id": "U5-47",
+    "role": "ADMIN",
+    "journey": "Bảng điều khiển \"Tổng quan\" so với DB",
+    "steps": "Mở /admin?tab=dashboard; GET /admin/dashboard/stats; đếm SQL: tổng đơn, chờ xử lý (PENDING_PAYMENT+CONFIRMED), đang giao (PACKED+SHIPPING), đã giao, huỷ, trả, đổi/trả chờ, COD chưa thu, dư nợ đại lý, doanh thu (REVENUE_ORDER_SQL − hoàn một phần), GMV",
+    "expected": "Mọi số API = SQL; trang hiện cùng số",
+    "actual": "API {\"totalOrders\":32,\"pendingOrders\":22,\"shippingOrders\":0,\"deliveredOrders\":6,\"cancelledOrders\":4,\"returnedOrders\":0,\"pendingReturns\":0,\"codPendingValue\":1101000,\"dealerDebtOutstanding\":7412500,\"totalRevenue\":5376000,\"gmv\":16079500} · SQL khớp mọi khoá · số SQL có trên trang: totalOrders:true, totalRevenue:true, dealerDebtOutstanding:true, codPendingValue:true",
+    "evidence": "shots/U5-admin-noi-bo/dashboard-admin-1440.png; GET /admin/dashboard/stats; SQL đếm (điều kiện admin.service.ts:734-820, admin-revenue.ts:16-20)",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:57:40.744Z"
+  },
+  {
+    "id": "U5-48",
+    "role": "ADMIN",
+    "journey": "Cấu hình: khoá tiền affiliate.* / coupon.* có hỏi lại như khoá tiền khác không",
+    "steps": "Tab Cấu hình, affiliate.min_withdraw_bank (mức rút tối thiểu CTV, luật 50.000đ): gõ 60000 → Lưu; rồi coupon.staff_max_percent (trần 30%): gõ 30 → Lưu (giữ nguyên giá trị); cuối cùng trả affiliate.min_withdraw_bank về 50000",
+    "expected": "Khoá tiền/điểm nào cũng hiện hộp \"Xác nhận đổi cấu hình tiền/điểm\" trước khi ghi (cùng lý do như payment./loyalty./wallet.: \"Áp dụng ngay cho mọi đơn, ví và điểm\"); giá trị cuối = 50000 và 30",
+    "actual": "affiliate.min_withdraw_bank 60000: hộp xác nhận CÓ, PUT 200, DB ngay sau 60000. coupon.staff_max_percent: hộp CÓ, PUT 200. Trả về 50000: hộp CÓ, PUT 200. Cuối: {\"aff\":50000,\"coupon\":30}; lịch sử [{\"oldValue\":60000,\"newValue\":50000,\"changedBy\":\"uat_admin\"},{\"oldValue\":50000,\"newValue\":60000,\"changedBy\":\"uat_admin\"}]",
+    "evidence": "shots/U5-admin-noi-bo/config-affiliate-noconfirm-admin-1440.png; SQL system_configs, system_config_history; apps/web/src/components/admin/config-item.tsx:9 (MONEY_PREFIXES chỉ có payment., loyalty., shipping., wallet., waste.)",
+    "verdict": "PASS",
+    "at": "2026-10-22T11:54:18.075Z"
+  }
+]

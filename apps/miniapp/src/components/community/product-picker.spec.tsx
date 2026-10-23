@@ -63,10 +63,10 @@ describe('ProductPicker — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('nút Hủy trên chip gỡ đúng sản phẩm khỏi danh sách đã chọn', () => {
+  it('nút Huỷ trên chip gỡ đúng sản phẩm khỏi danh sách đã chọn', () => {
     const { onChange } = renderPicker({ value: [A, B] });
     const chip = screen.getByText('Xịt phòng tinh dầu').parentElement as HTMLElement;
-    fireEvent.click(within(chip).getByRole('button', { name: 'Hủy' }));
+    fireEvent.click(within(chip).getByRole('button', { name: 'Huỷ' }));
     expect(onChange).toHaveBeenCalledWith([A]);
   });
 
@@ -124,9 +124,9 @@ describe('ProductPicker — chỉ gợi ý từ 2 ký tự', () => {
 });
 
 describe('ProductPicker — vùng chạm, bàn phím (C-076)', () => {
-  it('nút Hủy trên chip có vùng chạm tối thiểu 44x44', () => {
+  it('nút Huỷ trên chip có vùng chạm tối thiểu 44x44', () => {
     renderPicker({ value: [A] });
-    const btn = screen.getByRole('button', { name: 'Hủy' });
+    const btn = screen.getByRole('button', { name: 'Huỷ' });
     expect(Number.parseFloat(btn.style.minWidth)).toBeGreaterThanOrEqual(44);
     expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
   });

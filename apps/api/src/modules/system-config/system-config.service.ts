@@ -12,6 +12,7 @@ import { PANCAKE_CATEGORY_MAP_KEY, categoryMapProblem } from '../integrations/pa
 import { AFFILIATE_DEFAULT_RATE_KEY, DEFAULT_AFFILIATE_DEFAULT_RATE_PCT, sanitizeDefaultRate } from '../affiliate/commission-rate';
 import { AFFILIATE_MAX_RATE_KEY, DEFAULT_AFFILIATE_MAX_RATE_PCT, sanitizeMaxRate } from '../affiliate/commission-rate-csv';
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
+import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { EXTERNAL_CAPTURE_ENABLED_KEY, ORDER_SOURCE_MAP_KEY, orderSourceMapProblem } from '../external-points/external-order.config';
 import {
@@ -101,7 +102,7 @@ export class SystemConfigService {
     'subscribe.discount_pct': { min: 0, max: 1, note: 'phân số (0.12 = 12%)' },
     'wishlist.price_drop_min_pct': { min: 0, max: 1, note: 'phân số (0.05 = 5%)' },
     'wishlist.price_drop_cooldown_days': { min: 0, max: 90, note: 'số ngày (0 = tắt cooldown)', integer: true },
-    'community.author_notify_interval_minutes': { min: 0, max: 1440, note: 'số phút gộp tin "bài của bạn có người thích/bình luận" (0 = tắt tin)', integer: true },
+    'community.author_notify_interval_minutes': { min: 0, max: 1440, note: 'số phút gộp tin "bài của bạn có người thích/bình luận" và "câu hỏi của bạn có câu trả lời mới" (0 = tắt tin thích/bình luận; tin câu trả lời mới vẫn gửi nhưng không gộp)', integer: true },
     'community.unanswered_alert_hours': { min: 1, max: 720, note: 'số giờ câu hỏi chưa ai trả lời thì lên "Việc cần xử lý"', integer: true },
     'subscribe.stock_retry_days': { min: 0, max: 7, note: 'số đêm thử lại kỳ định kỳ khi hết hàng (0 = không thử lại)', integer: true },
     'flashsale.min_discount_pct': { min: 0, max: 1, note: 'phân số (0.1 = 10%)' },
@@ -117,6 +118,7 @@ export class SystemConfigService {
     // ghi 'return.window_days' (không ai đọc) nên giới hạn này chưa bao giờ áp vào khoá thật.
     'returns.window_days': { min: 0, max: 365, note: 'số ngày', integer: true },
     'dealer.reward_claim_grace_days': { min: 0, max: 366, note: 'số ngày', integer: true },
+    'dealer.bonus_topup_window_days': { min: 0, max: 120, note: 'số ngày nguyên sau ngày cuối quý còn trả bù thưởng quý cho đơn chốt muộn (0 hoặc dưới 10 = tắt: ngày chốt thưởng là ngày 10 sau quý)', integer: true },
     // ETA giao hàng trên trang đặt hàng thành công (buy-flow 4a): số nguyên ngày, gõ nhầm (vd 300) sẽ
     // bị từ chối lúc ghi thay vì âm thầm ẩn dòng ETA (toShippingEta bỏ giá trị ngoài 0–60).
     'shipping.eta_min_days': { min: 0, max: 60, note: 'số ngày' },
@@ -189,6 +191,9 @@ export class SystemConfigService {
     'merchant.deliver_sla_days': { min: 1, max: 60, note: 'số ngày', integer: true },
     'storefront.identifier_cooldown_days': { min: 0, max: 365, note: 'số ngày', integer: true },
     'orders.dealer_pending_payment_ttl_hours': { min: 1, max: 720, note: 'số giờ', integer: true },
+    'dealer.min_order_value_vnd': { min: 0, max: 100_000_000, note: 'đồng tiền hàng tối thiểu của một đơn đại lý (0 = không chặn)', integer: true },
+    'dealer.free_ship_threshold_vnd': { min: 0, max: 500_000_000, note: 'đồng tiền hàng từ mức này đơn đại lý miễn phí giao', integer: true },
+    'dealer.shipping_fee_below_threshold_vnd': { min: 0, max: 1_000_000, note: 'đồng phí giao đơn đại lý dưới ngưỡng miễn phí', integer: true },
     'affiliate.pit_withhold_pct': { min: 0, max: 0.35, note: 'phân số (0.1 = 10%)' },
     'affiliate.pit_withhold_threshold': { min: 0, max: 100000000, note: 'đồng', integer: true },
     // ADMINOPS-3 (vòng 2): tiền phạt đi trễ đi thẳng vào bảng lương (âm = cộng tiền), giá/thưởng 💧 âm đảo chiều ví game.
@@ -227,6 +232,9 @@ export class SystemConfigService {
     'game.plot_target': { min: 1, max: 100_000, note: '💧 cần để thu hoạch cây ở lô phụ', integer: true },
     'seasonpass.checkin_xp': { min: 0, max: 1000, note: 'XP mỗi lần điểm danh', integer: true },
     'groupbuy.window_hours': { min: 1, max: 720, note: 'số giờ nhóm mua chung mở', integer: true },
+    'notifications.zns_quiet_start_hour': { min: 0, max: 23, note: 'giờ VN bắt đầu giờ yên tĩnh của ZNS', integer: true },
+    'notifications.zns_quiet_end_hour': { min: 0, max: 23, note: 'giờ VN kết thúc giờ yên tĩnh của ZNS', integer: true },
+    'notifications.zns_promo_monthly_cap': { min: 0, max: 100, note: 'số tin ZNS khuyến mãi mỗi khách mỗi tháng (0 = không giới hạn)', integer: true },
     'remarketing.cart_abandon_min_hours': { min: 1, max: 720, note: 'số giờ giỏ bỏ quên trước khi nhắc', integer: true },
     'remarketing.cart_abandon_max_hours': { min: 1, max: 720, note: 'số giờ tối đa còn nhắc giỏ bỏ quên', integer: true },
     'remarketing.voucher_expiry_days': { min: 1, max: 60, note: 'số ngày báo trước voucher sắp hết hạn', integer: true },
@@ -266,6 +274,9 @@ export class SystemConfigService {
       typeof value === 'string' && /^\d{6,20}$/.test(value) ? null : 'phải là chuỗi 6–20 chữ số, không khoảng trắng',
     // Vai trò được ghi công đơn và hưởng hoa hồng CTV (affiliate.service createCommissionForOrder / findEligibleReferrer).
     [COMMISSION_ELIGIBLE_ROLES_KEY]: eligibleRolesProblem,
+    // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để khoá mua chịu quá hạn không bị tắt/bật nhầm.
+    'dealer.block_credit_when_overdue': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [DEALER_BONUS_TIERS_KEY]: dealerBonusTiersProblem,
     // Cờ gian hàng: chuỗi "false" là truthy ở chỗ đọc lỏng, nên chỉ nhận đúng boolean.
     [STOREFRONT_REQUIRE_APPROVAL_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     [STOREFRONT_SUBDOMAIN_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),

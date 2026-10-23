@@ -184,6 +184,17 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Cảm ơn đánh giá của bạn! Đã cộng 5 Điểm Xanh', type: 'success' }));
   });
 
+  it('form viết đánh giá: sao chưa chọn không dùng stone-200 và ô nhận xét có tên truy cập (D8-7, D8-9)', async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    const group = await screen.findByRole('radiogroup', { name: 'Số sao' });
+    fireEvent.click(within(group).getByRole('radio', { name: '2 sao' }));
+    const colors = within(group).getAllByRole('radio').map((r) => r.style.color);
+    expect(colors.filter((c) => c.includes('--stone-200'))).toEqual([]);
+    expect(colors.filter((c) => c.includes('--stone-450'))).toHaveLength(3);
+    expect(screen.getByLabelText('Nội dung đánh giá')).toBe(screen.getByPlaceholderText(/Chia sẻ cảm nhận/));
+  });
+
   it('đóng form giữa chừng (chạm nút Đóng) rồi mở lại: sao, nhận xét và ảnh đã up vẫn còn', async () => {
     renderSection();
     fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
@@ -748,3 +759,13 @@ describe('Stars', () => {
     expect(container.querySelectorAll('svg')).toHaveLength(5);
   });
 });
+
+describe('Sao rỗng đủ tương phản (D8-7)', () => {
+  it('Stars: sao rỗng không dùng stone-200 (1,39:1 trên nền trắng)', () => {
+    const { container } = render(<Stars value={2} />);
+    const colors = Array.from(container.querySelectorAll('svg')).map((s) => (s as unknown as HTMLElement).style.color);
+    expect(colors.filter((c) => c.includes('--stone-200'))).toEqual([]);
+    expect(colors.filter((c) => c.includes('--stone-450'))).toHaveLength(3);
+  });
+});
+

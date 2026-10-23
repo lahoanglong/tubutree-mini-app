@@ -82,7 +82,7 @@ const PAYOUT_METHOD: Record<AffiliatePayout['method'], string> = {
   ZALOPAY: 'Về ZaloPay',
 };
 
-/** Thuế TNCN giữ lại cho một lần rút — cùng công thức affiliate.service.personalIncomeTax. */
+/** Dự phòng khi API cũ chưa trả `withdrawTaxPreview`: chỉ xét riêng lần rút này, không biết các lần rút trước trong tháng. */
 function payoutTax(gross: number, pit: { pct: number; threshold: number } | undefined): number {
   if (!pit || !(pit.pct > 0) || gross < pit.threshold) return 0;
   return Math.round(gross * Math.min(pit.pct, 1));
@@ -156,14 +156,14 @@ function RegisterGate() {
   const cfg = usePublicConfig();
   const benefits = [
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
-    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi click & chuyển đổi' },
+    { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
     {
       Icon: Landmark,
       // P0 FIX (A5-07, 2026-09-27): bỏ quảng cáo "×hệ số" — rút về Ví Tubu giờ luôn là quy đổi 1:1
       // (Ví là tiền VND rút được ra ngân hàng thật, không phải phần thưởng nội bộ).
       text: `Rút về ngân hàng (tối thiểu ${formatVndShort(cfg.affiliateMinWithdrawBank)}) hoặc quy đổi 1:1 vào Ví Tubu`,
     },
-    { Icon: TrendingUp, text: 'Dashboard hoa hồng realtime, minh bạch' },
+    { Icon: TrendingUp, text: 'Bảng hoa hồng cập nhật liên tục, minh bạch' },
   ];
 
   return (
@@ -340,7 +340,7 @@ function Dashboard() {
             </Text>
             <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
               <MiniStat label="Hôm nay" value={formatVnd(d?.todayCommission ?? 0)} />
-              <MiniStat label="Click" value={String(d?.totalClicks ?? 0)} />
+              <MiniStat label="Lượt bấm" value={String(d?.totalClicks ?? 0)} />
               <MiniStat label="Chuyển đổi" value={String(d?.totalConversions ?? 0)} />
             </div>
           </div>
@@ -548,7 +548,7 @@ function Dashboard() {
 
         {/* Caption gợi ý (§6.8.4) — chạm để copy */}
         <Text variant="caption" as="div" style={{ ...BOLD, marginTop: 12, marginBottom: 6 }}>
-          Caption gợi ý (chạm để sao chép)
+          Lời đăng gợi ý (chạm để sao chép)
         </Text>
         {[
           `Mình đang dùng sản phẩm sống xanh của Tubu Tree, ưng lắm! Mua qua mã ${referral} nhé 🌿`,
@@ -563,7 +563,7 @@ function Dashboard() {
               void copyText(cap).then((ok) =>
                 openSnackbar(
                   ok
-                    ? { text: 'Đã sao chép caption', type: 'success' }
+                    ? { text: 'Đã sao chép lời đăng', type: 'success' }
                     : { text: 'Không sao chép được — hãy chọn và chép thủ công.', type: 'error' },
                 ),
               );
@@ -623,7 +623,7 @@ function Dashboard() {
                     {l.targetType === 'HOMEPAGE' ? 'Trang chủ' : l.targetType}
                   </Text>
                   <Text variant="caption" tone="tertiary" as="div">
-                    {l.clicks} click · {l.conversions} đơn
+                    {l.clicks} lượt bấm
                   </Text>
                 </div>
                 <Button
@@ -831,6 +831,7 @@ function Dashboard() {
         {withdrawing && (
           <WithdrawForm
             max={d?.withdrawableCommission ?? 0}
+            taxPreview={d?.withdrawTaxPreview}
             taxIdOnFile={meQ.data?.personalTaxId ?? null}
             // dashQ lỗi → max tạm =0 (không phải số dư thật) — đừng chặn theo max chưa xác thực,
             // để BE tự validate số dư (đồng bộ với nút "Rút hoa hồng" phía trên vẫn cho mở sheet).
@@ -860,11 +861,14 @@ function Dashboard() {
 
 function WithdrawForm({
   max,
+  taxPreview,
   knownMax,
   taxIdOnFile,
   onDone,
 }: {
   max: number;
+  /** Thuế máy chủ sẽ khấu trừ nếu rút hết ngay (đã cộng dồn các lần rút trong tháng); thiếu khi API cũ. */
+  taxPreview?: number;
   knownMax: boolean;
   taxIdOnFile: string | null;
   onDone: () => void;
@@ -896,7 +900,7 @@ function WithdrawForm({
 
   // BE chỉ nhận rút toàn bộ hoa hồng có thể rút (affiliate.service.requestPayout), nên số tiền không cho sửa.
   const amountNum = max;
-  const tax = payoutTax(amountNum, pit);
+  const tax = taxPreview ?? payoutTax(amountNum, pit);
   // Lần rút bị khấu trừ thuế TNCN cần MST/CCCD để Tubu Tree kê khai và cấp chứng từ (BE trả PIT_TAX_ID_REQUIRED nếu thiếu).
   const askTaxId = tax > 0 && !taxIdOnFile;
   const taxIdValid = !askTaxId || PERSONAL_TAX_ID_PATTERN.test(taxId.trim());
@@ -945,6 +949,12 @@ function WithdrawForm({
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
             Mỗi lần rút là toàn bộ hoa hồng có thể rút.
           </Text>
+          {pit && pit.pct > 0 && (
+            <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
+              Thuế TNCN {Math.round(Math.min(pit.pct, 1) * 100)}% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi
+              tổng từ {formatVnd(pit.threshold)} trở lên, thuế của các lần rút trước trong tháng chưa bị trừ sẽ được trừ bù vào lần rút này (tối đa bằng số tiền lần này).
+            </Text>
+          )}
           {tax > 0 && (
             <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
               Khấu trừ thuế TNCN {formatVnd(tax)} · thực nhận {formatVnd(amountNum - tax)}
@@ -1035,9 +1045,11 @@ function PayoutRow({ p }: { p: AffiliatePayout }) {
         </div>
         <Badge tone={m.tone}>{m.label}</Badge>
       </div>
-      {p.taxWithheld > 0 && (
+      {(p.taxWithheld > 0 || (p.taxRefunded ?? 0) > 0) && (
         <Text variant="caption" tone="tertiary" as="div">
-          Hoa hồng {formatVnd(p.grossAmount ?? p.amount + p.taxWithheld)} · đã khấu trừ thuế TNCN {formatVnd(p.taxWithheld)}
+          Hoa hồng {formatVnd(p.grossAmount ?? p.amount + p.taxWithheld)}
+          {p.taxWithheld > 0 ? ` · đã khấu trừ thuế TNCN ${formatVnd(p.taxWithheld)}` : ''}
+          {(p.taxRefunded ?? 0) > 0 ? ` · đã hoàn ${formatVnd(p.taxRefunded ?? 0)} thuế giữ dư vào Ví` : ''}
         </Text>
       )}
       {p.status === 'REJECTED' && (

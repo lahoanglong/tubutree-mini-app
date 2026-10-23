@@ -8,8 +8,9 @@
  *  - Không đụng sản phẩm, người dùng, mã giảm giá, đối tác cashback, tài khoản ngân hàng nhận tiền.
  *
  * Dữ liệu lấy từ các hằng số của seed.ts / seed-game-quiz.ts / reference-data, không chép lại.
- * Chạy: `npm run prisma:seed:reference` (trong apps/api). Thêm `--with-business-defaults` để nạp luôn hạng thành viên, bậc
- * đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh; chỉ dùng sau khi chủ dự án đã duyệt bảng giá trị (impl/refseed.md).
+ * Chạy: `npm run prisma:seed:reference -- --with-business-defaults` (trong apps/api). Cờ nạp thêm hạng thành viên, bậc
+ * đại lý, nhiệm vụ và 6 khoá có giá trị kinh doanh; chủ dự án đã duyệt bảng giá trị (quyết định A8) nên deploy luôn chạy có
+ * cờ. Không cờ chỉ còn dùng khi DB đã có sẵn các bảng đó, vì thiếu hạng thì mọi khách bị hệ số điểm x1.
  */
 import { PrismaClient } from '@prisma/client';
 import {
@@ -138,7 +139,7 @@ export function formatResults(results: GroupResult[]): string[] {
     });
   const skipped = results.filter((r) => r.skipped).map((r) => r.group);
   if (skipped.length > 0) {
-    lines.push(`[seed-reference] chưa nạp (giá trị kinh doanh chờ chủ dự án duyệt): ${skipped.join(', ')}. Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG} sau khi duyệt.`);
+    lines.push(`[seed-reference] chưa nạp: ${skipped.join(', ')} (thiếu ${WITH_BUSINESS_DEFAULTS_FLAG}; A8 yêu cầu chạy có cờ ở lần deploy đầu). Chạy lại với ${WITH_BUSINESS_DEFAULTS_FLAG}.`);
   }
   return lines;
 }

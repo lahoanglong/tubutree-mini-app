@@ -15,7 +15,7 @@ import {
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge } from './ui';
+import { BTN_SECONDARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 
 const SOURCE_LABEL: Record<ExternalOrderSource, string> = {
   MARKETPLACE: 'Đơn sàn',
@@ -101,7 +101,7 @@ export function ExternalOrdersTab({ isAdmin }: { isAdmin: boolean }) {
         </select>
       </div>
       {orders.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {orders.isError && <p className="text-sm text-danger-fg">Không tải được đơn ngoài app.</p>}
+      {orders.isError && <LoadError onRetry={() => void orders.refetch()} retrying={orders.isFetching}>Không tải được đơn ngoài app.</LoadError>}
       {orders.isSuccess && rows.length === 0 && (
         <p className="text-sm text-stone-500">{filtered ? 'Không có đơn nào khớp bộ lọc.' : 'Chưa nhận được đơn ngoài app nào từ Pancake.'}</p>
       )}
@@ -125,7 +125,7 @@ function SourcesTable() {
   return (
     <section aria-label="Nguồn đã thấy" className="space-y-2">
       <h3 className="text-sm font-semibold text-stone-900">Nguồn đã thấy</h3>
-      {sources.isError && <p className="text-sm text-danger-fg">Không tải được bảng nguồn đã thấy.</p>}
+      {sources.isError && <LoadError onRetry={() => void sources.refetch()} retrying={sources.isFetching}>Không tải được bảng nguồn đã thấy.</LoadError>}
       {sources.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Chưa thấy nguồn nào.</p>}
       {rows.length > 0 && (
         <ScrollRegion label="Bảng nguồn đã thấy">
@@ -173,13 +173,13 @@ function OrderRow({ order: o, isAdmin }: { order: ExternalOrder; isAdmin: boolea
         </span>
       </div>
       <dl className="mt-1 grid grid-cols-1 gap-x-4 gap-y-0.5 text-xs text-stone-600 sm:grid-cols-2">
-        <div>Đơn Pancake: <span className="font-mono">#{o.pancakeOrderId}</span></div>
-        {o.marketplaceOrderSn && <div>Mã đơn sàn: <span className="font-mono">{o.marketplaceOrderSn}</span></div>}
-        <div>SĐT: {o.phone ?? 'không có hoặc bị che'}</div>
-        <div>Tiền hàng: {o.goodsValue === null ? 'chưa tính được' : formatVnd(o.goodsValue)}</div>
-        <div>Giao lúc: {o.deliveredAt ? formatDateTime(o.deliveredAt) : '—'}</div>
-        <div>Pancake cập nhật: {o.pancakeUpdatedAt ? formatDateTime(o.pancakeUpdatedAt) : '—'}</div>
-        <div className="break-all sm:col-span-2">Khoá nguồn: <span className="font-mono">{o.sourceKey}</span></div>
+        <DlRow label="Đơn Pancake"><span className="font-mono">#{o.pancakeOrderId}</span></DlRow>
+        {o.marketplaceOrderSn && <DlRow label="Mã đơn sàn"><span className="font-mono">{o.marketplaceOrderSn}</span></DlRow>}
+        <DlRow label="SĐT">{o.phone ?? 'không có hoặc bị che'}</DlRow>
+        <DlRow label="Tiền hàng">{o.goodsValue === null ? 'chưa tính được' : formatVnd(o.goodsValue)}</DlRow>
+        <DlRow label="Giao lúc">{o.deliveredAt ? formatDateTime(o.deliveredAt) : '—'}</DlRow>
+        <DlRow label="Pancake cập nhật">{o.pancakeUpdatedAt ? formatDateTime(o.pancakeUpdatedAt) : '—'}</DlRow>
+        <DlRow label="Khoá nguồn" className="break-all sm:col-span-2"><span className="font-mono">{o.sourceKey}</span></DlRow>
       </dl>
       {isAdmin && (
         <div className="mt-2">
@@ -187,7 +187,11 @@ function OrderRow({ order: o, isAdmin }: { order: ExternalOrder; isAdmin: boolea
             {showRaw ? 'Ẩn payload Pancake' : 'Xem payload Pancake'}
           </button>
           {showRaw && detail.isLoading && <p className="mt-1 text-xs text-stone-500">Đang tải…</p>}
-          {showRaw && detail.isError && <p className="mt-1 text-xs text-danger-fg">Không tải được payload.</p>}
+          {showRaw && detail.isError && (
+            <LoadError onRetry={() => void detail.refetch()} retrying={detail.isFetching}>
+              Không tải được payload.
+            </LoadError>
+          )}
           {showRaw && detail.data && (
             <pre data-raw-payload className="mt-1 max-h-80 overflow-auto rounded-control bg-stone-100 p-2 text-xs text-stone-800">
               {JSON.stringify(detail.data.lastPayload ?? null, null, 2)}

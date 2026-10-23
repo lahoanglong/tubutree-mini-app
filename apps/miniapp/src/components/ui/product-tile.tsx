@@ -32,7 +32,8 @@ export interface ProductTileProps {
   product: ProductTileProduct;
   variant?: 'grid' | 'rail' | 'list' | 'line' | 'compact';
   mode?: 'b2c' | 'ctv' | 'dealer';
-  priceOverride?: { price: number } | null;
+  /** compareAt: giá gạch do caller chọn (null = không gạch); bỏ trống thì gạch giá niêm yết khi giá hiển thị thấp hơn. */
+  priceOverride?: { price: number; compareAt?: number | null } | null;
   showWishlist?: boolean;
   action?: 'add' | 'rebuy' | 'subscribe' | 'none';
   onAction?: () => void;
@@ -71,6 +72,7 @@ export function ProductTile({
   const standing = p.salePrice ?? p.basePrice;
   const price = priceOverride ? priceOverride.price : standing;
   const hasSale = price < p.basePrice;
+  const compareAt = priceOverride?.compareAt !== undefined ? priceOverride.compareAt : hasSale ? p.basePrice : undefined;
   const isLine = variant === 'line' || variant === 'list';
   // Tên truy cập = tên sản phẩm; giá (và giá gốc gạch) là mô tả truy cập của thẻ.
   const priceId = useId();
@@ -202,7 +204,7 @@ export function ProductTile({
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
           {/* display:flex: span thường tạo line box (strut 24px) → cao hơn PriceTag 20px, thẻ phình 4px so với skeleton. */}
           <span id={priceId} style={{ display: 'flex' }}>
-            <PriceTag value={price} compareAt={hasSale ? p.basePrice : undefined} size="sm" />
+            <PriceTag value={price} compareAt={compareAt} size="sm" />
           </span>
           {action === 'rebuy' && isLine && <RebuyButton onAction={onAction} />}
         </div>

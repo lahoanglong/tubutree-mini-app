@@ -1,0 +1,728 @@
+[
+  {
+    "id": "U4-31",
+    "role": "KHÁCH (uat_new)",
+    "journey": "Điểm danh mỗi ngày nhận Điểm Xanh",
+    "steps": "/loyalty → thẻ \"Điểm danh nhận Điểm Xanh\" → bấm \"Điểm danh +…\"; gọi POST /me/loyalty/check-in lần hai",
+    "expected": "Ngày 1 được 1.000 điểm (bảng 1.000×6, 2.000 ngày 7): sổ DAILY_CHECKIN:DAY_1 +1.000 refType CHECKIN hạn 12 tháng; số dư = trước + 1.000 = SUM; nút thành \"Đã điểm danh\"; lần hai → 400, không cộng",
+    "actual": "Nhãn nút \"Điểm danh +1000\"; +1000 (DAILY_CHECKIN:DAY_1); sổ 1000 → 2000 (SUM 2000); lần hai → 400 \"Hôm nay bạn đã điểm danh nhận điểm rồi 🌿\".",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-31-loyalty-before.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-31-loyalty-after.png",
+      "SQL DAILY_CHECKIN → [{\"reason\":\"DAILY_CHECKIN:DAY_1\",\"delta\":1000,\"refType\":\"CHECKIN\",\"expiresAt\":\"2027-10-22T11:41:03.387Z\"}]"
+    ],
+    "checks": [
+      {
+        "name": "POST /me/loyalty/check-in → 2xx",
+        "ok": true,
+        "detail": 201
+      },
+      {
+        "name": "Nút thành \"Đã điểm danh\" và bị khoá",
+        "ok": true
+      },
+      {
+        "name": "SQL: 1 dòng DAILY_CHECKIN:DAY_1 +1.000 refType CHECKIN",
+        "ok": true,
+        "detail": [
+          {
+            "delta": 1000,
+            "reason": "DAILY_CHECKIN:DAY_1",
+            "refType": "CHECKIN",
+            "refId": "2026-10-22",
+            "lot": "STANDARD",
+            "expiresAt": "2027-10-22T11:41:03.387Z"
+          }
+        ]
+      },
+      {
+        "name": "SQL: hạn ≈ 12 tháng",
+        "ok": true,
+        "detail": "2027-10-22T11:41:03.387Z"
+      },
+      {
+        "name": "SQL: số dư = trước + 1.000 = SUM(delta)",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 1000,
+            "ledgerSum": 1000,
+            "rows": 1
+          },
+          "mid": {
+            "balance": 2000,
+            "ledgerSum": 2000,
+            "rows": 2
+          }
+        }
+      },
+      {
+        "name": "Lần hai → 400 \"Hôm nay bạn đã điểm danh nhận điểm rồi\"",
+        "ok": true,
+        "detail": {
+          "message": "Hôm nay bạn đã điểm danh nhận điểm rồi 🌿",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      },
+      {
+        "name": "SQL: lần hai không cộng, số dư = SUM",
+        "ok": true,
+        "detail": {
+          "mid": {
+            "balance": 2000,
+            "ledgerSum": 2000,
+            "rows": 2
+          },
+          "after": {
+            "balance": 2000,
+            "ledgerSum": 2000,
+            "rows": 2
+          }
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-32",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Điểm danh Vườn Xanh nhận giọt nước",
+    "steps": "/game tab \"Hôm nay\" → thẻ \"Điểm danh chuỗi … ngày\" → \"Điểm danh\"; gọi POST /game/check-in lần hai",
+    "expected": "Chuỗi mới: +10 giọt (game.daily_login_seeds), streakDays = 1; KHÔNG đổi Điểm Xanh (sổ không thêm dòng); nút thành \"Đã điểm danh\"; lần hai → 400",
+    "actual": "Giọt 4 → 14, chuỗi 1; Điểm Xanh 90400 → 90400; lần hai → 400.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-32-game-checkin.png",
+      "SQL game_profiles {\"seeds\":4,\"streak\":0,\"lastCheckInAt\":null} → {\"seeds\":14,\"streak\":1,\"lastCheckInAt\":\"2026-10-22T11:41:04.342Z\"}"
+    ],
+    "checks": [
+      {
+        "name": "POST /game/check-in → 2xx",
+        "ok": true
+      },
+      {
+        "name": "Nút thành \"Đã điểm danh\" và bị khoá",
+        "ok": true
+      },
+      {
+        "name": "game_profiles: +10 giọt, streakDays 1",
+        "ok": true,
+        "detail": {
+          "pBefore": {
+            "seeds": 4,
+            "streak": 0,
+            "lastCheckInAt": null
+          },
+          "pAfter": {
+            "seeds": 14,
+            "streak": 1,
+            "lastCheckInAt": "2026-10-22T11:41:04.342Z"
+          }
+        }
+      },
+      {
+        "name": "SQL: Điểm Xanh không đổi, số dư = SUM",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 6
+          },
+          "after": {
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 6
+          }
+        }
+      },
+      {
+        "name": "Lần hai → 400 \"Hôm nay bạn đã điểm danh rồi\"",
+        "ok": true,
+        "detail": {
+          "message": "Hôm nay bạn đã điểm danh rồi 🌿",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-33",
+    "role": "KHÁCH đã có đơn giao (uat_returning), KHÁCH mới (uat_new)",
+    "journey": "Nhận thưởng nhiệm vụ Vườn Xanh",
+    "steps": "/game → thẻ nhiệm vụ \"Đơn hàng đầu tiên\" → \"Nhận thưởng\"; nhận lần hai qua API; uat_new nhận FIRST_ORDER qua API",
+    "expected": "+20.000 Điểm Xanh (sổ MISSION:FIRST_ORDER:0, hạn 12 tháng), số dư = trước + 20.000 = SUM; lần hai → 400 \"đã nhận\"; khách chưa có đơn → 400 \"Chưa đủ điều kiện\"",
+    "actual": "+20000 (MISSION:FIRST_ORDER:0); sổ 90400 → 110400 (SUM 110400); lần hai → 400; uat_new → 400.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-33-mission-claimed.png",
+      "SQL MISSION:% → [{\"reason\":\"MISSION:FIRST_ORDER:0\",\"delta\":20000,\"expiresAt\":\"2027-10-22T11:41:05.297Z\"}]"
+    ],
+    "checks": [
+      {
+        "name": "Thẻ \"Đơn hàng đầu tiên\" có nút \"Nhận thưởng\"",
+        "ok": true
+      },
+      {
+        "name": "POST /game/missions/FIRST_ORDER/claim → 2xx",
+        "ok": true
+      },
+      {
+        "name": "Snackbar \"Đã nhận +20.000 Điểm Xanh! 🌿\"",
+        "ok": true
+      },
+      {
+        "name": "SQL: 1 dòng MISSION:FIRST_ORDER:0 +20.000",
+        "ok": true,
+        "detail": [
+          {
+            "delta": 20000,
+            "reason": "MISSION:FIRST_ORDER:0",
+            "refType": "GAME",
+            "refId": null,
+            "lot": "STANDARD",
+            "expiresAt": "2027-10-22T11:41:05.297Z"
+          }
+        ]
+      },
+      {
+        "name": "SQL: hạn ≈ 12 tháng",
+        "ok": true,
+        "detail": "2027-10-22T11:41:05.297Z"
+      },
+      {
+        "name": "SQL: số dư = trước + 20.000 = SUM(delta)",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 6
+          },
+          "after": {
+            "balance": 110400,
+            "ledgerSum": 110400,
+            "rows": 7
+          }
+        }
+      },
+      {
+        "name": "Lần hai → 400 \"đã nhận\"",
+        "ok": true,
+        "detail": {
+          "message": "Bạn đã nhận thưởng nhiệm vụ này rồi.",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      },
+      {
+        "name": "uat_new → 400 \"Chưa đủ điều kiện\"",
+        "ok": true,
+        "detail": {
+          "message": "Chưa đủ điều kiện để nhận thưởng nhiệm vụ này.",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      },
+      {
+        "name": "SQL: sau hai lần gọi lỗi số dư không đổi",
+        "ok": true,
+        "detail": {
+          "balance": 110400,
+          "ledgerSum": 110400,
+          "rows": 7
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-34",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Vòng quay may mắn bằng Điểm Xanh",
+    "steps": "/game → \"Quay ngay (10.000 Điểm Xanh)\"",
+    "expected": "Trừ 10.000 (sổ GAME_SPIN_COST −10.000); trúng điểm thì cộng GAME_SPIN_WIN:<giải> có hạn 12 tháng; trúng mã thì mã thuộc khách 1 lượt; số dư = SUM; game_spins +1",
+    "actual": "Giải Voucher 20k (COUPON 20000); sổ 110400 → 100400 (SUM 100400).",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-34-spin-result.png",
+      "SQL pointsBalance 110400 → 100400, SUM 100400; game_spins hôm nay 0 → 1"
+    ],
+    "checks": [
+      {
+        "name": "POST /game/spin → 2xx, có giải",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "prize": {
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-7898",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:06.210Z"
+            }
+          }
+        }
+      },
+      {
+        "name": "Lượt UI: số dư đổi -10000 (phí −10.000) = SUM",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-7898",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:06.210Z"
+            }
+          },
+          "before": {
+            "balance": 110400,
+            "ledgerSum": 110400,
+            "rows": 7
+          },
+          "after": {
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 8
+          }
+        }
+      },
+      {
+        "name": "Lượt UI: mã giảm giá GAME20000-RNING-7898 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
+        "ok": true,
+        "detail": {
+          "code": "GAME20000-RNING-7898",
+          "usageLimit": null,
+          "perUserLimit": 1,
+          "scope": "USER_GROUP",
+          "owner": "uat_returning"
+        }
+      },
+      {
+        "name": "SQL: 1 dòng GAME_SPIN_COST −10.000",
+        "ok": true
+      },
+      {
+        "name": "game_spins hôm nay +1",
+        "ok": true,
+        "detail": {
+          "n0": 0,
+          "n1": 1
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-35",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Trần lượt quay mỗi ngày",
+    "steps": "POST /game/spin thêm tới đủ 5 lượt trong ngày, rồi lượt thứ 6",
+    "expected": "game.spin_buy_daily_limit = 5: lượt 2–5 thành công, mỗi lượt số dư = SUM; lượt 6 → 400 \"Bạn đã quay đủ 5 lượt hôm nay\", không trừ phí (giao dịch huỷ cả)",
+    "actual": "Lượt 2–5: 2:201/COUPON 20000, 3:201/POINTS 20000, 4:201/POINTS 5000, 5:201/COUPON 20000; lượt 6 → 400 \"Bạn đã quay đủ 5 lượt hôm nay. Hẹn bạn ngày mai nhé!\"; sổ 85400 → 85400.",
+    "evidence": [
+      "SQL users.pointsBalance = SUM(delta) = 85400; game_spins hôm nay = 5"
+    ],
+    "checks": [
+      {
+        "name": "Lượt 2 → 2xx",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-9167",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.099Z"
+            }
+          }
+        }
+      },
+      {
+        "name": "Lượt 2: số dư đổi -10000 (phí −10.000) = SUM",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-9167",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.099Z"
+            }
+          },
+          "before": {
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 8
+          },
+          "after": {
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 9
+          }
+        }
+      },
+      {
+        "name": "Lượt 2: mã giảm giá GAME20000-RNING-9167 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
+        "ok": true,
+        "detail": {
+          "code": "GAME20000-RNING-9167",
+          "usageLimit": null,
+          "perUserLimit": 1,
+          "scope": "USER_GROUP",
+          "owner": "uat_returning"
+        }
+      },
+      {
+        "name": "Lượt 3 → 2xx",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p3",
+            "name": "20.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 20000
+          }
+        }
+      },
+      {
+        "name": "Lượt 3: số dư đổi 10000 (phí −10.000 + giải 20000) = SUM",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p3",
+            "name": "20.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 20000
+          },
+          "before": {
+            "balance": 90400,
+            "ledgerSum": 90400,
+            "rows": 9
+          },
+          "after": {
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 11
+          }
+        }
+      },
+      {
+        "name": "Lượt 4 → 2xx",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p1",
+            "name": "5.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 5000
+          }
+        }
+      },
+      {
+        "name": "Lượt 4: số dư đổi -5000 (phí −10.000 + giải 5000) = SUM",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p1",
+            "name": "5.000 điểm Xanh",
+            "rewardType": "POINTS",
+            "value": 5000
+          },
+          "before": {
+            "balance": 100400,
+            "ledgerSum": 100400,
+            "rows": 11
+          },
+          "after": {
+            "balance": 95400,
+            "ledgerSum": 95400,
+            "rows": 13
+          }
+        }
+      },
+      {
+        "name": "Lượt 5 → 2xx",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-1558",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.113Z"
+            }
+          }
+        }
+      },
+      {
+        "name": "Lượt 5: số dư đổi -10000 (phí −10.000) = SUM",
+        "ok": true,
+        "detail": {
+          "prize": {
+            "id": "p4",
+            "name": "Voucher 20k",
+            "rewardType": "COUPON",
+            "value": 20000,
+            "coupon": {
+              "code": "GAME20000-RNING-1558",
+              "minOrder": 120000,
+              "expiresAt": "2026-11-21T11:41:16.113Z"
+            }
+          },
+          "before": {
+            "balance": 95400,
+            "ledgerSum": 95400,
+            "rows": 13
+          },
+          "after": {
+            "balance": 85400,
+            "ledgerSum": 85400,
+            "rows": 14
+          }
+        }
+      },
+      {
+        "name": "Lượt 5: mã giảm giá GAME20000-RNING-1558 chỉ khách dùng được (USER_GROUP userId), 1 lượt mỗi người",
+        "ok": true,
+        "detail": {
+          "code": "GAME20000-RNING-1558",
+          "usageLimit": null,
+          "perUserLimit": 1,
+          "scope": "USER_GROUP",
+          "owner": "uat_returning"
+        }
+      },
+      {
+        "name": "Lượt 6 → 400 \"Bạn đã quay đủ 5 lượt hôm nay\"",
+        "ok": true,
+        "detail": {
+          "message": "Bạn đã quay đủ 5 lượt hôm nay. Hẹn bạn ngày mai nhé!",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      },
+      {
+        "name": "SQL: lượt 6 không trừ phí, số dư = SUM",
+        "ok": true,
+        "detail": {
+          "b6": {
+            "balance": 85400,
+            "ledgerSum": 85400,
+            "rows": 14
+          },
+          "a6": {
+            "balance": 85400,
+            "ledgerSum": 85400,
+            "rows": 14
+          }
+        }
+      },
+      {
+        "name": "game_spins hôm nay = 5",
+        "ok": true,
+        "detail": 5
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-36",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Đổi quà \"Miễn phí vận chuyển\" bằng 20.000 Điểm Xanh",
+    "steps": "/rewards → thẻ \"Miễn phí vận chuyển\" → \"Đổi\" → \"Xác nhận đổi\"; rồi đổi qua API hai lần cùng Idempotency-Key",
+    "expected": "Trừ 20.000 (sổ LOYALTY_REDEEM_VOUCHER:reward-freeship), số dư = trước − 20.000 = SUM; mã FREESHIP thuộc khách 1 lượt; waste_gift_redemptions FULFILLED; gọi lại cùng khoá không trừ lần hai",
+    "actual": "UI đổi: mã REWARD-FRESHIP-EHC7K7P3; sổ 85400 → 65400; API cùng khoá ×2 → 201/201, sổ → 45400 (SUM 45400), 2 dòng trừ.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-36-redeem-done.png",
+      "SQL coupons {\"code\":\"REWARD-FRESHIP-EHC7K7P3\",\"type\":\"FREESHIP\",\"usageLimit\":1,\"perUserLimit\":1,\"owner\":\"uat_returning\"}; waste_gift_redemptions {\"status\":\"FULFILLED\",\"pointsCost\":20000}"
+    ],
+    "checks": [
+      {
+        "name": "POST redeem → 2xx, pointsSpent 20.000",
+        "ok": true,
+        "detail": {
+          "status": 201,
+          "body": "{\"success\":true,\"message\":\"Đổi thành công Miễn phí vận chuyển!\",\"pointsSpent\":20000,\"remainingPoints\":65400,\"redemption\":{\"id\":\"cmvjh03620096vxsorg6ucp7b\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHE…"
+        }
+      },
+      {
+        "name": "Sheet \"Đổi quà thành công\"",
+        "ok": true
+      },
+      {
+        "name": "SQL: 1 dòng LOYALTY_REDEEM_VOUCHER −20.000 refType REWARD",
+        "ok": true,
+        "detail": [
+          {
+            "delta": -20000,
+            "reason": "LOYALTY_REDEEM_VOUCHER:reward-freeship",
+            "refType": "REWARD",
+            "refId": "cmvjh03610094vxso0sgtwsr3",
+            "lot": "STANDARD",
+            "expiresAt": null
+          }
+        ]
+      },
+      {
+        "name": "SQL: số dư = trước − 20.000 = SUM(delta)",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 85400,
+            "ledgerSum": 85400,
+            "rows": 14
+          },
+          "mid": {
+            "balance": 65400,
+            "ledgerSum": 65400,
+            "rows": 15
+          }
+        }
+      },
+      {
+        "name": "Mã FREESHIP thuộc uat_returning, 1 lượt",
+        "ok": true,
+        "detail": {
+          "code": "REWARD-FRESHIP-EHC7K7P3",
+          "type": "FREESHIP",
+          "usageLimit": 1,
+          "perUserLimit": 1,
+          "owner": "uat_returning"
+        }
+      },
+      {
+        "name": "waste_gift_redemptions FULFILLED 20.000",
+        "ok": true,
+        "detail": {
+          "status": "FULFILLED",
+          "pointsCost": 20000
+        }
+      },
+      {
+        "name": "API cùng khoá hai lần: 2xx cả hai, cùng mã",
+        "ok": true,
+        "detail": {
+          "r1": "{\"id\":\"cmvjh0395009cvxsozau3772a\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHER\",\"giftName\":\"Miễn phí vận chuyển\",\"poin…",
+          "r2": "{\"id\":\"cmvjh0395009cvxsozau3772a\",\"giftId\":\"reward-freeship\",\"giftKind\":\"VOUCHER\",\"giftName\":\"Miễn phí vận chuyển\",\"poin…"
+        }
+      },
+      {
+        "name": "SQL: chỉ thêm 1 dòng trừ (tổng 2), số dư = mid − 20.000 = SUM",
+        "ok": true,
+        "detail": {
+          "mid": {
+            "balance": 65400,
+            "ledgerSum": 65400,
+            "rows": 15
+          },
+          "after": {
+            "balance": 45400,
+            "ledgerSum": 45400,
+            "rows": 16
+          },
+          "n": 2
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-37",
+    "role": "KHÁCH ít điểm (uat_new)",
+    "journey": "Đổi quà và quay khi không đủ Điểm Xanh",
+    "steps": "/rewards xem thẻ \"Miễn phí vận chuyển\"; POST redeem; POST /game/spin",
+    "expected": "Thẻ hiện \"Cần thêm … điểm\" thay nút \"Đổi\"; redeem → 400 \"Bạn cần 20.000 Điểm Xanh…\"; quay → 400 \"Cần 10.000 Điểm Xanh để quay.\"; không có dòng sổ mới, số dư = SUM",
+    "actual": "Số dư 2000; redeem → 400 \"Bạn cần 20.000 Điểm Xanh để đổi ưu đãi này (hiện có 2.000 điểm).\"; quay → 400 \"Cần 10.000 Điểm Xanh để quay.\".",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-37-need-points.png"
+    ],
+    "checks": [
+      {
+        "name": "Thẻ ghi \"Cần thêm 18.000 điểm\", không có nút \"Đổi\"",
+        "ok": true,
+        "detail": "Miễn phí vận chuyển Phổ biến Miễn phí vận chuyển cho 1 đơn từ 99.000đ — hữu ích khi đơn chưa đạt mức freeship của shop. 20.000 điểm Cần thêm 18.000 điểm"
+      },
+      {
+        "name": "Redeem → 400 \"Bạn cần 20.000 Điểm Xanh\"",
+        "ok": true,
+        "detail": {
+          "message": "Bạn cần 20.000 Điểm Xanh để đổi ưu đãi này (hiện có 2.000 điểm).",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      },
+      {
+        "name": "Quay → 400 \"Cần 10.000 Điểm Xanh để quay.\"",
+        "ok": true,
+        "detail": {
+          "message": "Cần 10.000 Điểm Xanh để quay.",
+          "error": "Bad Request",
+          "statusCode": 400
+        }
+      },
+      {
+        "name": "SQL: số dư và số dòng không đổi, = SUM; không có lượt đổi",
+        "ok": true,
+        "detail": {
+          "before": {
+            "balance": 2000,
+            "ledgerSum": 2000,
+            "rows": 2
+          },
+          "after": {
+            "balance": 2000,
+            "ledgerSum": 2000,
+            "rows": 2
+          },
+          "redemptions": 0
+        }
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-38",
+    "role": "KHÁCH (uat_new) trên máy mới",
+    "journey": "Gợi ý lần đầu cho tab Vườn Xanh",
+    "steps": "Mở / trên trình duyệt mới (bộ nhớ trống) → màn \"Chào mừng đến Tubu Tree!\" hiện thì bấm \"Để sau\" → thấy bóng gợi ý trên tab Vườn Xanh → tải lại trang",
+    "expected": "Lần đầu hiện bóng \"Trồng cây mỗi ngày, nhận quà thật\" trỏ tab Vườn Xanh và ghi tubu_garden_hint_seen; tải lại không hiện nữa",
+    "actual": "Bóng gợi ý hiện ở lần mở đầu, cờ lưu \"1\", tải lại không hiện.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-38-garden-hint.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-38-garden-hint-reload.png"
+    ],
+    "checks": [
+      {
+        "name": "Sau khi đóng màn chào mừng (\"Để sau\"), bóng gợi ý vẫn hiện",
+        "ok": true
+      },
+      {
+        "name": "localStorage tubu_garden_hint_seen = \"1\"",
+        "ok": true,
+        "detail": "1"
+      },
+      {
+        "name": "Tải lại: không hiện nữa",
+        "ok": true
+      }
+    ],
+    "status": "PASS"
+  }
+]

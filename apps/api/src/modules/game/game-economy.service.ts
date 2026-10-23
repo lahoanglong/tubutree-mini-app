@@ -28,7 +28,45 @@ export class GameEconomyService {
     return ensureGameProfile(this.prisma, this.config, userId);
   }
 
+  /** Số lần đọc lại hồ sơ khi thao tác song song (mua vé, hồi sinh) đổi chuỗi giữa lúc đọc và lúc ghi. */
+  private static readonly STREAK_CAS_ATTEMPTS = 4;
+
   async checkIn(userId: string) {
+    for (let attempt = 0; attempt < GameEconomyService.STREAK_CAS_ATTEMPTS; attempt++) {
+      const done = await this.tryCheckIn(userId);
+      if (done) {
+        const { p, seeds, streakDays, streakFrozeUsed, bonusNote } = done;
+        // Task 9: sự kiện engagement — best-effort (không transaction bao quanh checkIn).
+        await this.analytics.recordBestEffort({
+          eventName: 'engagement_action',
+          userId,
+          platform: 'miniapp',
+          props: { action: 'garden_checkin', streakDays },
+        });
+        const tankCap = await this.config.get<number>('game.tank_capacity', 500);
+        await this.prisma.gameProfile.updateMany({
+          where: { userId, totalSeeds: { gt: tankCap } },
+          data: { totalSeeds: tankCap },
+        });
+
+        // Hook Season Pass: cộng XP chặng mùa (side-effect an toàn, không ảnh hưởng streak math).
+        await this.seasonPass
+          .addXp(userId, await this.config.get<number>('seasonpass.checkin_xp', 10))
+          .catch(() => undefined);
+
+        const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
+        const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + seeds);
+        return { seedsEarned: seeds, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
+      }
+    }
+    throw new BadRequestException('Điểm danh chưa xong, bạn thử lại nhé 🌿');
+  }
+
+  /**
+   * Một lượt đọc-tính-ghi. Trả null khi ghi hụt vì hồ sơ vừa đổi (streakDays/streakFreezes/brokenStreakAt) — người gọi
+   * đọc lại và tính lại; đã điểm danh hôm nay thì ném lỗi ngay ở lần đọc sau.
+   */
+  private async tryCheckIn(userId: string) {
     const p = await this.ensure(userId);
     const today = vnDateKey();
     if (p.lastCheckInAt && vnDateKey(p.lastCheckInAt) === today) {
@@ -76,7 +114,6 @@ export class GameEconomyService {
     }
 
     const loginSeeds = await this.config.get<number>('game.daily_login_seeds', 10);
-    const tankCap = await this.config.get<number>('game.tank_capacity', 500);
     let seeds = loginSeeds;
     let bonusNote = '';
     if (streakDays % 7 === 0) {
@@ -90,12 +127,17 @@ export class GameEconomyService {
     // Idempotent write: only one concurrent call wins (race-safe backstop).
     // totalSeeds ghi ATOMIC bằng increment (không phải absolute value đọc-ngoài-tx) — chống
     // lost-update khi checkIn đụng độ với spin/buySeeds/quiz/gift khác đang đổi totalSeeds cùng
-    // lúc; clamp cap bằng updateMany guard riêng bên dưới (không unconditional-overwrite giá trị
+    // lúc; clamp cap bằng updateMany guard riêng ở checkIn (không unconditional-overwrite giá trị
     // vừa được thao tác khác cộng thêm).
+    // streakDays/streakFreezes/brokenStreakAt là giá trị tuyệt đối suy ra từ lần đọc, nên điều kiện WHERE phải khớp
+    // đúng lần đọc đó: mua vé giữ lửa hoặc hồi sinh chuỗi chen vào giữa thì không ghi đè mất kết quả của chúng.
     const res = await this.prisma.gameProfile.updateMany({
       where: {
         userId,
         OR: [{ lastCheckInAt: null }, { lastCheckInAt: { lt: this.startOfDay(new Date()) } }],
+        streakDays: p.streakDays,
+        streakFreezes: p.streakFreezes,
+        brokenStreakAt: p.brokenStreakAt,
       },
       data: {
         totalSeeds: { increment: seeds },
@@ -107,27 +149,8 @@ export class GameEconomyService {
         brokenStreakAt,
       },
     });
-    if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã điểm danh rồi 🌿');
-    // Task 9: sự kiện engagement — best-effort (không transaction bao quanh checkIn).
-    await this.analytics.recordBestEffort({
-      eventName: 'engagement_action',
-      userId,
-      platform: 'miniapp',
-      props: { action: 'garden_checkin', streakDays },
-    });
-    await this.prisma.gameProfile.updateMany({
-      where: { userId, totalSeeds: { gt: tankCap } },
-      data: { totalSeeds: tankCap },
-    });
-
-    // Hook Season Pass: cộng XP chặng mùa (side-effect an toàn, không ảnh hưởng streak math).
-    await this.seasonPass
-      .addXp(userId, await this.config.get<number>('seasonpass.checkin_xp', 10))
-      .catch(() => undefined);
-
-    const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
-    const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + seeds);
-    return { seedsEarned: seeds, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
+    if (res.count === 0) return null;
+    return { p, seeds, streakDays, streakFrozeUsed, bonusNote };
   }
 
   async collectDew(userId: string) {
@@ -161,34 +184,54 @@ export class GameEconomyService {
 
   /** §streak-repair: hồi sinh chuỗi vừa mất bằng 💧, trong cửa sổ 48h, tối đa 1 lần/30 ngày. */
   async repairStreak(userId: string) {
-    const p = await this.ensure(userId);
-    if (!p.brokenStreakAt || p.brokenStreakDays <= 0) {
-      throw new BadRequestException('Không có chuỗi nào để hồi sinh.');
-    }
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
-    if (Date.now() - p.brokenStreakAt.getTime() > windowH * 3600 * 1000) {
-      throw new BadRequestException('Đã quá hạn hồi sinh chuỗi 🔥');
-    }
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
-    if (p.lastStreakRepairAt && Date.now() - p.lastStreakRepairAt.getTime() < cooldownD * 86400 * 1000) {
-      throw new BadRequestException('Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿');
-    }
     const cost = await this.config.get<number>('game.streak_repair_cost', 150);
-    const newStreak = p.brokenStreakDays + 1;
-    const res = await this.prisma.gameProfile.updateMany({
-      where: { userId, totalSeeds: { gte: cost }, brokenStreakAt: { not: null } },
-      data: {
-        totalSeeds: { decrement: cost },
-        streakDays: newStreak,
-        longestStreak: Math.max(p.longestStreak, newStreak),
-        brokenStreakDays: 0,
-        brokenStreakAt: null,
-        lastStreakRepairAt: new Date(),
-      },
-    });
-    if (res.count === 0) throw new BadRequestException(`Cần ${cost} 💧 để hồi sinh chuỗi.`);
-    const after = await this.prisma.gameProfile.findUnique({ where: { userId } });
-    return { repaired: true, streakDays: newStreak, totalSeeds: after?.totalSeeds ?? 0 };
+    for (let attempt = 0; attempt < GameEconomyService.STREAK_CAS_ATTEMPTS; attempt++) {
+      const p = await this.ensure(userId);
+      if (!p.brokenStreakAt || p.brokenStreakDays <= 0) {
+        throw new BadRequestException('Không có chuỗi nào để hồi sinh.');
+      }
+      if (Date.now() - p.brokenStreakAt.getTime() > windowH * 3600 * 1000) {
+        throw new BadRequestException('Đã quá hạn hồi sinh chuỗi 🔥');
+      }
+      if (p.lastStreakRepairAt && Date.now() - p.lastStreakRepairAt.getTime() < cooldownD * 86400 * 1000) {
+        throw new BadRequestException('Bạn đã hồi sinh chuỗi gần đây, hãy thử lại sau 🌿');
+      }
+      const newStreak = p.brokenStreakDays + 1;
+      // newStreak và longestStreak suy ra từ lần đọc: điểm danh chen vào (đổi streakDays/brokenStreakAt) thì ghi hụt
+      // và đọc lại, không ghi đè chuỗi mới bằng số tính từ hồ sơ cũ.
+      const res = await this.prisma.gameProfile.updateMany({
+        where: {
+          userId,
+          totalSeeds: { gte: cost },
+          streakDays: p.streakDays,
+          brokenStreakAt: p.brokenStreakAt,
+          brokenStreakDays: p.brokenStreakDays,
+        },
+        data: {
+          totalSeeds: { decrement: cost },
+          streakDays: newStreak,
+          longestStreak: Math.max(p.longestStreak, newStreak),
+          brokenStreakDays: 0,
+          brokenStreakAt: null,
+          lastStreakRepairAt: new Date(),
+        },
+      });
+      if (res.count === 1) {
+        const after = await this.prisma.gameProfile.findUnique({ where: { userId } });
+        return { repaired: true, streakDays: newStreak, totalSeeds: after?.totalSeeds ?? 0 };
+      }
+      // Hồ sơ không đổi chuỗi mà vẫn hụt → thiếu 💧; còn đổi thì đọc lại.
+      const fresh = await this.prisma.gameProfile.findUnique({ where: { userId } });
+      const unchanged =
+        fresh &&
+        fresh.streakDays === p.streakDays &&
+        fresh.brokenStreakDays === p.brokenStreakDays &&
+        fresh.brokenStreakAt?.getTime() === p.brokenStreakAt.getTime();
+      if (unchanged) break;
+    }
+    throw new BadRequestException(`Cần ${cost} 💧 để hồi sinh chuỗi.`);
   }
 
   async buyStreakFreeze(userId: string) {

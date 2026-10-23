@@ -1,0 +1,62 @@
+{
+  "id": "U1-23",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Chuyển khoản sai nội dung",
+  "steps": "Đơn 199.000đ → chuyển 199.000đ nội dung \"chuyen tien hang\" (không có mã đơn)",
+  "expected": "Pancake không ghép được: không webhook, đơn vẫn PENDING_PAYMENT/UNPAID, màn QR vẫn \"Đang chờ thanh toán…\" (kế toán phải bấm \"Đã nhận tiền\" — lane admin)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "không ghép được (matched=false)",
+      "ok": true
+    },
+    {
+      "name": "DB: vẫn PENDING_PAYMENT/UNPAID",
+      "ok": true
+    },
+    {
+      "name": "màn vẫn \"Đang chờ thanh toán\"",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102207760",
+        "button": "Đặt hàng · 199.000đ",
+        "total": 199000
+      }
+    },
+    {
+      "label": "giả chuyển khoản sai nội dung",
+      "data": {
+        "matched": false,
+        "reason": "nội dung CK không chứa mã đơn — Pancake không ghép được",
+        "txn": {
+          "at": "2026-10-22T11:37:31.610Z",
+          "account": "8386790906 Techcombank",
+          "amount": 199000,
+          "content": "chuyen tien hang"
+        },
+        "order": {
+          "code": "TUBU2026102207760",
+          "total": 199000,
+          "status": "PENDING_PAYMENT",
+          "paymentMethod": "BANK_TRANSFER",
+          "paymentStatus": "UNPAID",
+          "pancakeOrderId": "9200018"
+        }
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-23-bank-wrong-memo.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:37:36.720Z"
+}

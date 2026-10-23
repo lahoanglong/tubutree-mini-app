@@ -29,10 +29,10 @@ const staffNoGroup = { role: 'STAFF', staffPermissions: [] } as Partial<JwtPaylo
 const admin = { role: 'ADMIN' } as Partial<JwtPayload>;
 const customer = { role: 'CUSTOMER' } as Partial<JwtPayload>;
 
-// Kiểm duyệt hằng ngày (duyệt/từ chối/ẩn/ghim + hàng chờ) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop.
-const MODERATION: Handler[] = ['adminPending', 'adminPublished', 'adminUnanswered', 'adminReports', 'resolveReport', 'approve', 'reject', 'hide', 'pin'];
-// Sự kiện và chọn người thắng (có thưởng Điểm Xanh) vẫn chỉ ADMIN.
-const ADMIN_ONLY: Handler[] = ['createEvent', 'adminEvents', 'adminEventParticipants', 'closeEvent', 'pickWinner'];
+// Kiểm duyệt hằng ngày (duyệt/từ chối/ẩn + hàng chờ) mở cho nhóm CSKH và MARKETING để bài của khách không nằm chờ chủ shop.
+const MODERATION: Handler[] = ['adminPending', 'adminPublished', 'adminUnanswered', 'adminReports', 'resolveReport', 'approve', 'reject', 'hide'];
+// Ghim bài, sự kiện và chọn người thắng (có thưởng Điểm Xanh) chỉ ADMIN.
+const ADMIN_ONLY: Handler[] = ['pin', 'createEvent', 'adminEvents', 'adminEventParticipants', 'closeEvent', 'pickWinner'];
 
 describe('CommunityFeedController — quyền kiểm duyệt', () => {
   it.each(MODERATION)('%s: ADMIN và STAFF nhóm CSKH hoặc MARKETING được', (h) => {

@@ -25,12 +25,15 @@ import {
 } from '../orders/pending-payment-expiry.cron';
 import { CRON_TZ } from '../../common/cron-tz';
 import { generateUniqueOrderCode } from '../../common/order-code';
-import { formatVnDate, vnDateKey } from '../../common/vn-time';
+import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from '../cart/partner-goods';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
 export type SubscriptionPaymentMethod = (typeof SUBSCRIPTION_PAYMENT_METHODS)[number];
+
+/** Chu kỳ giao hợp lệ (tuần), dùng chung cho tạo gói, sửa gói và DTO. */
+export const SUBSCRIPTION_INTERVAL_WEEKS = [4, 6, 8, 10] as const;
 
 /** Khách chỉ được hẹn ngày bắt đầu trong khoảng này (tính theo ngày giờ Việt Nam). */
 export const MAX_START_DAYS_AHEAD = 60;
@@ -65,6 +68,7 @@ interface CreateSubInput {
 
 interface UpdateSubInput {
   quantity?: number;
+  intervalWeeks?: number;
   addressId?: string;
   paymentMethod?: SubscriptionPaymentMethod;
 }
@@ -98,6 +102,9 @@ export const SUBSCRIPTION_DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
 /** Trạng thái nằm trong partial unique index subscriptions_user_variation_address_open_key. */
 const OPEN_STATUSES = ['ACTIVE', 'PAUSED'];
 
+// Gói ACTIVE chưa ra đơn nào chỉ tính vào bậc giảm khi kỳ kế tiếp nằm trong khoảng này.
+const TIER_WINDOW_DAYS = 35;
+
 function subscriptionDuplicateError(open: { id: string; status: string }, productName: string): ConflictException {
   const message =
     open.status === 'PAUSED'
@@ -130,6 +137,9 @@ interface LockedSubRow {
   addressId: string;
   status: string;
   paymentMethod: SubscriptionPaymentMethod;
+  intervalWeeks: number;
+  nextRunAt: Date;
+  lastOrderId: string | null;
 }
 
 /**
@@ -156,7 +166,7 @@ interface PlacedCycleOrder {
 /**
  * Subscribe & Save (Build Spec §6.14.4): đặt định kỳ 4/6/8/10 tuần.
  * Chiết khấu theo THANG BẬC (subscribe.discount_tiers, kiểu Amazon): càng nhiều
- * subscription ACTIVE, % giảm càng cao (chọn bậc minActive cao nhất user đạt được),
+ * gói ACTIVE thật (đã ra đơn hoặc kỳ kế trong 35 ngày), % giảm càng cao (chọn bậc minActive cao nhất đạt được),
  * cap 15%. subscribe.discount_pct giữ lại làm fallback cho bậc cơ bản (minActive:1).
  * Đơn đầu giao ngay hoặc từ ngày khách chọn; cron tạo các đơn kỳ sau khi đến hạn, trả bằng
  * COD / Ví Tubu / chuyển khoản (Q-13) → user skip/pause/cancel/sửa bất kỳ lúc nào.
@@ -177,9 +187,7 @@ export class SubscriptionsService {
   ) {}
 
   async create(userId: string, dto: CreateSubInput) {
-    if (![4, 6, 8, 10].includes(dto.intervalWeeks)) {
-      throw new BadRequestException('Chu kỳ chỉ nhận 4/6/8/10 tuần.');
-    }
+    this.assertIntervalWeeks(dto.intervalWeeks);
     const paymentMethod = this.parsePaymentMethod(dto.paymentMethod);
     this.assertQuantity(dto.quantity);
     const firstRunAt = this.parseStartDate(dto.startDate);
@@ -322,12 +330,13 @@ export class SubscriptionsService {
   }
 
   /**
-   * Sửa số lượng / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng (Q-13). Khoá dòng gói như tx
+   * Sửa số lượng / địa chỉ / cách trả / chu kỳ của gói đang chạy hoặc tạm dừng (Q-13, Q22). Khoá dòng gói như tx
    * sinh đơn kỳ: cron đang ghi đơn thì chờ, nên đơn kỳ luôn theo trọn bản cũ hoặc trọn bản mới.
    */
   async update(userId: string, id: string, dto: UpdateSubInput) {
     const paymentMethod = dto.paymentMethod === undefined ? undefined : this.parsePaymentMethod(dto.paymentMethod);
     if (dto.quantity !== undefined) this.assertQuantity(dto.quantity);
+    if (dto.intervalWeeks !== undefined) this.assertIntervalWeeks(dto.intervalWeeks);
     let productName = 'Sản phẩm';
     let variationId: string | null = null;
     try {
@@ -358,10 +367,12 @@ export class SubscriptionsService {
           });
           if (open) throw subscriptionDuplicateError(open, productName);
         }
+        const intervalPatch = await this.intervalPatch(tx, sub, dto.intervalWeeks);
         const updated = await tx.subscription
           .update({
             where: { id },
             data: {
+              ...intervalPatch,
               ...(dto.quantity !== undefined ? { quantity: dto.quantity } : {}),
               ...(dto.addressId !== undefined ? { addressId: dto.addressId } : {}),
               ...(paymentMethod !== undefined ? { paymentMethod } : {}),
@@ -379,6 +390,8 @@ export class SubscriptionsService {
             subscriptionId: id,
             action: 'updated',
             quantity: updated.quantity,
+            intervalWeeks: updated.intervalWeeks,
+            nextRunAt: updated.nextRunAt,
             addressChanged: updated.addressId !== sub.addressId,
             paymentMethod: updated.paymentMethod,
           },
@@ -396,6 +409,25 @@ export class SubscriptionsService {
     }
   }
 
+  /**
+   * Đổi chu kỳ: ngày giao kế = 0h VN của ngày đơn kỳ gần nhất + chu kỳ mới, không sớm hơn 0h ngày mai giờ VN (cùng mức
+   * báo trước tối thiểu của ngày bắt đầu lúc tạo gói, để cron 3h sáng không giao ngay trong ngày khách bấm lưu).
+   * Neo 0h chứ không neo giờ tạo đơn: createdAt của đơn cron luôn muộn hơn `now` lúc cron bắt đầu, neo thẳng thì đến
+   * ngày hẹn cron 3h chạy sớm hơn nextRunAt và lỡ nhịp một ngày so với ngày đã báo khách.
+   * Gói chưa ra đơn nào giữ nguyên ngày bắt đầu khách đã chọn: chu kỳ chỉ có nghĩa từ đơn thứ hai. Gói tạm dừng cũng
+   * tính như gói đang chạy để bật lại giữ đúng ngày; setStatus chỉ dời khi ngày đó đã qua. Bậc giảm tính theo số gói
+   * ACTIVE nên không bị đụng tới.
+   */
+  private async intervalPatch(tx: Prisma.TransactionClient, sub: LockedSubRow, intervalWeeks: number | undefined) {
+    if (intervalWeeks === undefined || intervalWeeks === sub.intervalWeeks) return {};
+    if (!sub.lastOrderId) return { intervalWeeks };
+    const last = await tx.order.findUnique({ where: { id: sub.lastOrderId }, select: { createdAt: true } });
+    if (!last) return { intervalWeeks };
+    const earliest = new Date(startOfVnDay().getTime() + 864e5);
+    const due = this.addWeeks(startOfVnDay(last.createdAt), intervalWeeks);
+    return { intervalWeeks, nextRunAt: due < earliest ? earliest : due, retryCount: 0 };
+  }
+
   /** Mặc định 100 gói mới nhất (tối đa 200); cursor = id gói cuối của trang trước. */
   async list(userId: string, opts: { take?: number; cursor?: string } = {}) {
     const subs = await this.prisma.subscription.findMany({
@@ -405,14 +437,21 @@ export class SubscriptionsService {
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
     if (subs.length === 0) return [];
-    const [variations, effectiveDiscountPct] = await Promise.all([
+    const lastOrderIds = subs.flatMap((s) => (s.lastOrderId ? [s.lastOrderId] : []));
+    const [variations, effectiveDiscountPct, lastOrders] = await Promise.all([
       this.prisma.variation.findMany({
         where: { id: { in: subs.map((s) => s.variationId) } },
         include: { product: { select: { name: true, thumbnail: true, slug: true } } },
       }),
-      this.effectiveDiscountPct(userId),
+      this.effectiveDiscountPct(userId, this.prisma, {
+        floorCount: subs.some((s) => s.status === 'ACTIVE') ? 1 : 0,
+      }),
+      lastOrderIds.length > 0
+        ? this.prisma.order.findMany({ where: { id: { in: lastOrderIds } }, select: { id: true, createdAt: true } })
+        : Promise.resolve([]),
     ]);
     const vmap = new Map(variations.map((v) => [v.id, v]));
+    const lastOrderAt = new Map(lastOrders.map((o) => [o.id, o.createdAt]));
     return subs.map((s) => {
       const v = vmap.get(s.variationId);
       return {
@@ -424,6 +463,8 @@ export class SubscriptionsService {
         addressId: s.addressId,
         paymentMethod: s.paymentMethod ?? 'COD',
         lastOrderId: s.lastOrderId ?? null,
+        // Mini App tính trước ngày giao kế khi khách chọn chu kỳ khác, cùng luật với intervalPatch.
+        lastOrderAt: (s.lastOrderId && lastOrderAt.get(s.lastOrderId)) || null,
         productName: v?.product.name ?? 'Sản phẩm',
         variationName: v?.name ?? '',
         thumbnail: v?.product.thumbnail ?? null,
@@ -437,16 +478,35 @@ export class SubscriptionsService {
 
   /**
    * % giảm hiệu lực cho đơn Subscribe & Save của userId, theo THANG BẬC
-   * subscribe.discount_tiers dựa trên số subscription đang ACTIVE — chọn bậc
-   * minActive cao nhất mà user đạt được. Subscription đang tạo đơn (đang ACTIVE)
-   * được TÍNH VÀO activeCount — user có 1 sub thì vẫn đạt bậc cơ bản.
+   * subscribe.discount_tiers: chọn bậc minActive cao nhất mà số gói "thật" của user đạt được.
+   * Gói thật = ACTIVE và (đã ra ít nhất một đơn HOẶC kỳ kế tiếp trong 35 ngày tới, kể cả quá hạn),
+   * để khách không nâng bậc bằng cách tạo nhiều gói hẹn ngày rất xa.
+   * - selfId: gói đang tạo đơn, luôn tự đếm (đơn đầu giao ngay chưa có lastOrderId, kỳ cron đã dời nextRunAt).
+   * - floorCount: sàn số gói khi người gọi biết user có gói ACTIVE sắp ra đơn (danh sách hiện bậc thấp nhất
+   *   thay vì 0%, đúng với bậc mà đơn kỳ đầu tiên của gói đó sẽ được áp).
    */
-  async effectiveDiscountPct(userId: string, db: Pick<Prisma.TransactionClient, 'subscription'> = this.prisma): Promise<number> {
+  async effectiveDiscountPct(
+    userId: string,
+    db: Pick<Prisma.TransactionClient, 'subscription'> = this.prisma,
+    opts: { selfId?: string; floorCount?: number } = {},
+  ): Promise<number> {
     const basePct = await this.config.get<number>('subscribe.discount_pct', 0.12);
     const tiers = await this.config.get<{ minActive: number; pct: number }[]>('subscribe.discount_tiers', [
       { minActive: 1, pct: basePct },
     ]);
-    const activeCount = await db.subscription.count({ where: { userId, status: 'ACTIVE' } });
+    const horizon = new Date(Date.now() + TIER_WINDOW_DAYS * 86_400_000);
+    const counted = await db.subscription.count({
+      where: {
+        userId,
+        status: 'ACTIVE',
+        OR: [
+          { lastOrderId: { not: null } },
+          { nextRunAt: { lte: horizon } },
+          ...(opts.selfId ? [{ id: opts.selfId }] : []),
+        ],
+      },
+    });
+    const activeCount = Math.max(counted, opts.floorCount ?? 0);
     const applicable = tiers.filter((t) => activeCount >= t.minActive).sort((a, b) => b.pct - a.pct);
     return applicable[0]?.pct ?? 0;
   }
@@ -561,7 +621,7 @@ export class SubscriptionsService {
    * claim đã ghi; bật lại lịch giữ nguyên ngày đó nên tin tạm dừng nói rõ kỳ này không giao và ngày kỳ kế tiếp.
    */
   private async runCycle(
-    sub: { id: string; userId: string; retryCount?: number },
+    sub: { id: string; userId: string; retryCount?: number; intervalWeeks?: number },
     cycleAt: Date,
     nextRunAt: Date,
   ): Promise<boolean> {
@@ -569,7 +629,7 @@ export class SubscriptionsService {
     let placed: PlacedCycleOrder | null;
     const missed = ` (kỳ này không giao, kỳ kế tiếp ngày ${formatVnDate(nextRunAt)})`;
     try {
-      placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code));
+      placed = await this.prisma.$transaction((tx) => this.placeCycleOrder(tx, sub.id, cycleAt, code, sub.intervalWeeks));
     } catch (err) {
       if (isProductDiscontinuedError(err)) {
         await this.pauseSubscription(sub, 'Sản phẩm đã ngừng bán', 'inactive_product');
@@ -670,6 +730,7 @@ export class SubscriptionsService {
     subId: string,
     cycleAt: Date,
     code: string,
+    scannedIntervalWeeks?: number,
   ): Promise<(PlacedCycleOrder & { nextRunAt: Date }) | null> {
     const sub = await this.lockSubscription(tx, subId);
     if (!sub || sub.status !== 'ACTIVE') return null;
@@ -697,7 +758,7 @@ export class SubscriptionsService {
     const user = await tx.user.findUniqueOrThrow({ where: { id: sub.userId } });
 
     const unitPrice = variation.salePrice ?? variation.retailPrice;
-    const discountPct = await this.effectiveDiscountPct(sub.userId, tx);
+    const discountPct = await this.effectiveDiscountPct(sub.userId, tx, { selfId: sub.id });
     const { subtotal, discount, goods } = subscriptionCycleAmounts(unitPrice, sub.quantity, discountPct);
     const shippingFee = await this.pricing.calcShippingFee({ subtotal, tierId: user.tierId });
     const multiplier = await this.loyalty.getTierMultiplier(user.tierId);
@@ -799,6 +860,11 @@ export class SubscriptionsService {
     if (nextRunAt.getTime() <= cycleAt.getTime()) {
       nextRunAt = this.addWeeks(cycleAt, after.intervalWeeks);
       await tx.subscription.update({ where: { id: sub.id }, data: { nextRunAt } });
+    } else if (scannedIntervalWeeks !== undefined && after.intervalWeeks !== scannedIntervalWeeks) {
+      // Khách đổi chu kỳ chen giữa bước claim và khoá dòng: PATCH tính từ đơn kỳ trước nên ngày kế có thể sát hôm nay.
+      // Đơn vừa ghi mới là đơn kỳ gần nhất, tính lại từ nó để không ra hai đơn hai ngày liền.
+      nextRunAt = this.addWeeks(startOfVnDay(order.createdAt), after.intervalWeeks);
+      await tx.subscription.update({ where: { id: sub.id }, data: { nextRunAt } });
     }
     return { order, userId: sub.userId, nextRunAt };
   }
@@ -843,9 +909,16 @@ export class SubscriptionsService {
 
   private async lockSubscription(tx: Prisma.TransactionClient, id: string): Promise<LockedSubRow | null> {
     const rows = await tx.$queryRaw<LockedSubRow[]>`
-      SELECT "id", "userId", "variationId", "quantity", "addressId", "status", "paymentMethod"::text AS "paymentMethod"
+      SELECT "id", "userId", "variationId", "quantity", "addressId", "status", "paymentMethod"::text AS "paymentMethod",
+             "intervalWeeks", "nextRunAt", "lastOrderId"
       FROM "subscriptions" WHERE "id" = ${id} FOR UPDATE`;
     return rows[0] ?? null;
+  }
+
+  private assertIntervalWeeks(weeks: number): void {
+    if (!(SUBSCRIPTION_INTERVAL_WEEKS as readonly number[]).includes(weeks)) {
+      throw new BadRequestException('Chu kỳ chỉ nhận 4/6/8/10 tuần.');
+    }
   }
 
   private assertQuantity(quantity: number): void {

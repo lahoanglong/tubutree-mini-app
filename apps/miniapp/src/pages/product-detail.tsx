@@ -25,6 +25,7 @@ import { ReviewsSection, Stars } from '../components/reviews-section';
 import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
 import { fetchReviews } from '../services/shop-api';
+import { tilePricing } from '../components/catalog/catalog-pricing';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -68,14 +69,14 @@ const PDP_TITLE = 'Chi tiết sản phẩm';
 
 /** Phí giao của gian hàng tự giao, như lúc thanh toán tính cho kiện của gian hàng. */
 function merchantShippingLine(fee: number, freeShipFrom: number | null): string {
-  if (fee <= 0) return 'Gian hàng miễn phí giao';
+  if (fee <= 0) return 'Gian hàng miễn phí giao hàng';
   const base = `Phí giao ${formatVnd(fee)}`;
   return freeShipFrom != null ? `${base}, miễn phí cho đơn của gian hàng từ ${formatVnd(freeShipFrom)}` : base;
 }
 
 /** Nhãn ngắn cho voucher hiển thị ở PDP. */
 function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }
@@ -96,7 +97,7 @@ export default function ProductDetailPage() {
     queryFn: getCoupons,
     enabled: status === 'authenticated',
   });
-  // Ngưỡng freeship (public config) cho badge "Miễn phí vận chuyển" — tín hiệu tin cậy ở PDP.
+  // Ngưỡng freeship (public config) cho badge "Miễn phí giao hàng" — tín hiệu tin cậy ở PDP.
   const config = usePublicConfig();
 
   // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
@@ -279,7 +280,8 @@ export default function ProductDetailPage() {
   // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
   const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
   const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
-  const originalPrice = selected ? selected.retailPrice : p.basePrice;
+  // Giờ vàng gạch giá đang bán trước giờ vàng (khớp dải trang chủ và thẻ SP); flash không rẻ hơn thì như không có flash.
+  const originalPrice = flashItem && price < baseSelectedPrice ? baseSelectedPrice : selected ? selected.retailPrice : p.basePrice;
   // % badge tính từ giá THỰC hiển thị (price/originalPrice) — không dùng flashItem.retailPrice (snapshot cũ).
   const flashPct = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0;
   const inStock = (selected?.stock ?? 0) > 0;
@@ -365,6 +367,7 @@ export default function ProductDetailPage() {
           </Box>
           <Box
             role="button"
+            {...rowKeyboardProps()}
             aria-label={vi.product.share}
             className="tubu-press"
             onClick={handleShare}
@@ -484,7 +487,7 @@ export default function ProductDetailPage() {
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 10 }}>
             <Truck size={15} color="var(--color-text-brand)" strokeWidth={2} aria-hidden />
             <Text size="xSmall" style={{ color: 'var(--color-text-brand)', fontWeight: 600 }}>
-              {freeshipFrom > 0 ? `Miễn phí vận chuyển cho đơn từ ${formatVnd(freeshipFrom)}` : 'Miễn phí vận chuyển cho mọi đơn hàng'}
+              {freeshipFrom > 0 ? vi.product.freeshipFrom(formatVnd(freeshipFrom)) : vi.product.freeshipAll}
             </Text>
           </Box>
         )}
@@ -565,6 +568,7 @@ export default function ProductDetailPage() {
         {selected && inStock && !retailOnly && (
           <Box
             role="button"
+            {...rowKeyboardProps()}
             className="tubu-press"
             onClick={async () => {
               haptic('light');
@@ -635,6 +639,8 @@ export default function ProductDetailPage() {
       {!retailOnly && (
         <Box
           className="tubu-press"
+          role="button"
+          {...rowKeyboardProps()}
           p={4}
           mt={2}
           // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
@@ -678,6 +684,7 @@ export default function ProductDetailPage() {
           p={4}
           mt={2}
           role="button"
+          {...rowKeyboardProps()}
           aria-label={vi.contentKit.sheetTitle}
           onClick={() => {
             haptic('light');
@@ -693,7 +700,7 @@ export default function ProductDetailPage() {
               {vi.contentKit.sheetTitle}
             </Text>
             <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              Bài mẫu đã gắn sẵn link giới thiệu của bạn — copy là đăng được
+              Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được
             </Text>
           </Box>
           <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
@@ -846,6 +853,7 @@ export default function ProductDetailPage() {
         secondary={
           <Box
             role="button"
+            {...rowKeyboardProps()}
             aria-label={vi.product.viewCart}
             className="tubu-press"
             onClick={() => navigate('/cart')}
@@ -1035,22 +1043,17 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
 function RelatedTile({ product, flashSales }: { product: ProductCardData; flashSales: FlashSaleActiveItem[] }) {
   const navigate = useNavigate();
   const flash = flashSales.find((f) => f.productSlug === product.slug);
-  const standing = product.salePrice ?? product.basePrice;
-  // Giá flash chỉ thắng khi thực sự rẻ hơn giá đang bán (đúng quy tắc BE dùng ở giỏ hàng).
-  const price = flash && flash.flashPrice < standing ? flash.flashPrice : standing;
-  const isFlash = price !== standing;
-  const hasSale = price < product.basePrice;
-  const salePct = hasSale ? Math.round((1 - price / product.basePrice) * 100) : 0;
+  const { price, compareAt, isFlash, salePct } = tilePricing(product, flashSales);
   return (
     <ProductTile
       product={product}
       variant="rail"
-      priceOverride={{ price }}
+      priceOverride={{ price, compareAt }}
       badge={
         // Y hệt ProductCard cũ: KHÔNG hiện badge giảm giá khi đã hết hàng — overlay "tạm hết
         // hàng" của ProductTile là lớp phủ TRONG SUỐT (72% opacity), badge % có thể lộ ra dưới
         // lớp phủ nếu không chặn ở đây (review fix, Task 24).
-        hasSale && product.inStock ? (
+        salePct > 0 && product.inStock ? (
           <Badge
             tone="promo"
             size="sm"
@@ -1085,6 +1088,7 @@ function VariationChip({
       role="button"
       aria-pressed={active}
       aria-disabled={out}
+      {...(out ? null : rowKeyboardProps())}
       // Hết hàng → KHÔNG cho chọn (trước đây vẫn select được → CTA disable, gây khó hiểu).
       className={out ? undefined : 'tubu-press'}
       onClick={out ? undefined : onClick}
@@ -1143,6 +1147,7 @@ function CollapsibleDescription({ text }: { text: string }) {
       {isLong && (
         <Text
           role="button"
+          {...rowKeyboardProps()}
           size="small"
           bold
           onClick={() => setExpanded((e) => !e)}

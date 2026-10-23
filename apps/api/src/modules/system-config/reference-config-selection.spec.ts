@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SYSTEM_CONFIGS, TIERS } from '../../../prisma/seed';
 import { SystemConfigService } from './system-config.service';
+import { DealerService } from '../dealer/dealer.service';
 import { adminConfigRuleKeys } from '../admin/admin-config-rules';
 import type { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -64,9 +65,15 @@ const APPROVED_LOADED_KEYS = [
     'coupon.staff_max_amount_vnd',
     'coupon.staff_max_percent',
     'coupon.staff_max_usage',
+    'dealer.block_credit_when_overdue',
+    'dealer.bonus_topup_window_days',
+    'dealer.free_ship_threshold_vnd',
     'dealer.max_discount_pct',
+    'dealer.min_order_value_vnd',
+    'dealer.quarterly_bonus_tiers',
     'dealer.review_hours',
     'dealer.reward_claim_grace_days',
+    'dealer.shipping_fee_below_threshold_vnd',
     'flashsale.default_per_user_limit',
     'flashsale.max_discount_pct',
     'flashsale.max_duration_days',
@@ -131,6 +138,9 @@ const APPROVED_LOADED_KEYS = [
     'merchant.negative_payout_due_days',
     'merchant.settlement_hold_days',
     'merchant.ship_sla_hours',
+    'notifications.zns_promo_monthly_cap',
+    'notifications.zns_quiet_end_hour',
+    'notifications.zns_quiet_start_hour',
     'ops.alert_gomdon_backlog_minutes',
     'ops.alert_queue_failed_1h',
     'ops.alert_repeat_hours',
@@ -305,5 +315,32 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     const rows = [...selectBusinessConfigs(SYSTEM_CONFIGS), ...selectReferenceConfigs(SYSTEM_CONFIGS).filter((r) => EXTRA_CONFIGS.some((e) => e.key === r.key))];
     expect(rows.map((r) => r.key).filter((k) => !SystemConfigService.hasWriteRule(k))).toEqual([]);
     for (const row of rows) await expect(service.set(row.key, row.value as object, 'admin-it')).resolves.toBeUndefined();
+  });
+
+  // U3-B03: admin đổi bậc thưởng quý qua tab Cấu hình, nên dòng phải có sẵn với đúng bảng mặc định đang cứng trong DealerService.
+  describe('dealer.quarterly_bonus_tiers (U3-B03)', () => {
+    const KEY = 'dealer.quarterly_bonus_tiers';
+    const row = () => SYSTEM_CONFIGS.find((c) => c.key === KEY)!;
+
+    it('được nạp mặc định, không ghi đè giá trị admin đã đổi (createOnly), mô tả nói rõ phạm vi hiệu lực', () => {
+      expect(classifyConfigKey(KEY)).toBe('reference');
+      expect(keysOf(selectReferenceConfigs(SYSTEM_CONFIGS))).toContain(KEY);
+      expect(row().createOnly).toBe(true);
+      expect(row().description).toMatch(/CHƯA trả thưởng/);
+      expect(row().description).toMatch(/dealer_quarter_bonus_tiers/);
+    });
+
+    it('giá trị nạp bằng bảng mặc định DealerService dùng khi DB chưa có dòng, và qua luật ghi', async () => {
+      const prisma = {} as PrismaService;
+      const dealer = new DealerService(prisma, { get: async <T>(_k: string, fb?: T) => fb as T } as unknown as SystemConfigService);
+      const fallback = await (dealer as unknown as { bonusTiers(): Promise<unknown> }).bonusTiers();
+      expect(row().value).toEqual(fallback);
+      const tx = {
+        systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+        systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+      };
+      const service = new SystemConfigService({ $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService);
+      await expect(service.set(KEY, row().value as object, 'admin-it')).resolves.toBeUndefined();
+    });
   });
 });

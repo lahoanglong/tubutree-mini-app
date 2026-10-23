@@ -4,6 +4,16 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { NotificationsService } from '../notifications/notifications.service';
 import { REAL_USER_WHERE } from '../../common/real-user';
 import { priorOrderWhere } from '../../common/first-order';
+import { startOfVnMonth } from '../../common/vn-time';
+
+/**
+ * milestoneVouchers quét hai kỳ (tháng trước, tháng này), mỗi kỳ một vòng keyset. Mock SQL chỉ trả dòng cho kỳ THÁNG NÀY và
+ * rỗng cho kỳ trước để các ca đếm số coupon/cursor không nhân đôi; kỳ trước có test riêng. Tham số Date đầu tiên là đầu kỳ.
+ */
+function isCurrentPeriodCall(a: unknown[]): boolean {
+  const start = a.find((x): x is Date => x instanceof Date);
+  return start?.getTime() === startOfVnMonth().getTime();
+}
 
 function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
   return {
@@ -383,7 +393,8 @@ describe('VouchersService.milestoneVouchers — xử lý từng lô song song c�
 
   function setup(rows: { userId: string; spent: bigint }[], opts: { failOn?: string[]; failAll?: boolean } = {}) {
     const k = makeCouponStore(opts);
-    const prisma = { $queryRaw: jest.fn().mockResolvedValue(rows), coupon: k.coupon } as unknown as PrismaService;
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => (isCurrentPeriodCall(a) ? rows : []));
+    const prisma = { $queryRaw: queryRaw, coupon: k.coupon } as unknown as PrismaService;
     const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
     const svc = new VouchersService(prisma, makeConfig(), notify);
     return { svc, ...k, ...spyLoggers(svc) };
@@ -512,8 +523,9 @@ describe('VouchersService.secondOrderVouchers — xử lý từng lô song song 
 describe('VouchersService.milestoneVouchers (§6.6)', () => {
   function setup(rows: { userId: string; spent: bigint }[]) {
     const create = jest.fn().mockResolvedValue({});
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => (isCurrentPeriodCall(a) ? rows : []));
     const prisma = {
-      $queryRaw: jest.fn().mockResolvedValue(rows),
+      $queryRaw: queryRaw,
       coupon: { findUnique: jest.fn().mockResolvedValue(null), create },
     } as unknown as PrismaService;
     const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
@@ -543,7 +555,7 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
   // idempotency lại theo THÁNG DƯƠNG LỊCH (`MILESTONE<spend>-yyyy-mm`). Cùng một lần chi tiêu
   // nằm trong 30 ngày trượt sẽ sinh khoá khác khi sang tháng mới → cấp voucher LẦN 2 cho đúng
   // số tiền đó. Phải cho 2 thứ dùng CHUNG một mốc thời gian: gom theo tháng dương lịch.
-  it('gom chi tiêu theo THÁNG DƯƠNG LỊCH (giờ VN), không phải 30 ngày trượt', async () => {
+  it('gom chi tiêu theo THÁNG DƯƠNG LỊCH (giờ VN), không phải 30 ngày trượt: kỳ tháng trước rồi kỳ tháng này', async () => {
     const { svc, prisma } = setup([{ userId: 'u1', spent: BigInt(3_500_000) }]);
     jest.useFakeTimers().setSystemTime(new Date('2026-10-05T03:00:00Z')); // 10:00 ngày 5/10 giờ VN
     try {
@@ -551,9 +563,41 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
     } finally {
       jest.useRealTimers();
     }
-    // Tham số truyền vào $queryRaw là mốc đầu tháng 10 theo giờ VN = 2026-09-30T17:00:00Z.
-    const since = ($queryRawArg(prisma) as Date);
-    expect(since.toISOString()).toBe('2026-09-30T17:00:00.000Z');
+    // Mốc đầu tháng theo giờ VN: 1/9 = 2026-08-31T17:00:00Z, 1/10 = 2026-09-30T17:00:00Z, 1/11 = 2026-10-31T17:00:00Z.
+    const dates = queryDates(prisma);
+    expect(dates.map((d) => d.slice(0, 2).map((x) => x.toISOString()))).toEqual([
+      ['2026-08-31T17:00:00.000Z', '2026-09-30T17:00:00.000Z'],
+      ['2026-09-30T17:00:00.000Z', '2026-10-31T17:00:00.000Z'],
+    ]);
+  });
+
+  it('chỉ tính đơn đã giao quá hạn đổi/trả: mốc deliveredBefore = now - returns.window_days (mặc định 7)', async () => {
+    const { svc, prisma } = setup([]);
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-20T03:00:00Z'));
+    try {
+      await svc.milestoneVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(queryDates(prisma)[1]![2]!.toISOString()).toBe('2026-10-13T03:00:00.000Z');
+  });
+
+  it('đơn của kỳ tháng trước cấp mã mang khoá tháng trước (không dán nhãn tháng này)', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      const start = a.find((x): x is Date => x instanceof Date)!;
+      return start.toISOString() === '2026-09-30T17:00:00.000Z' ? [] : [{ userId: 'u1', spent: BigInt(5_500_000) }];
+    });
+    const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-08T03:00:00Z'));
+    try {
+      await new VouchersService(prisma, makeConfig(), notify).milestoneVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(String(create.mock.calls[0][0].data.code)).toContain('MILESTONE5000000-2026-09-');
   });
 
   it('khoá idempotency vẫn theo tháng → cùng tháng chỉ cấp 1 lần (grant trả false lần 2)', async () => {
@@ -582,6 +626,7 @@ describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ 
     const create = createImpl ?? jest.fn().mockResolvedValue({});
     const args: unknown[][] = [];
     const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      if (!isCurrentPeriodCall(a)) return [];
       args.push(a);
       const cursor = a.find((x): x is string => typeof x === 'string') ?? '';
       return userIds.filter((id) => id > cursor).slice(0, statics.MILESTONE_PAGE).map((userId) => ({ userId, spent: BigInt(3_500_000) }));
@@ -634,10 +679,11 @@ describe('VouchersService.milestoneVouchers — phân trang keyset, không bỏ 
   });
 });
 
-/** Lấy tham số Date đầu tiên truyền vào $queryRaw (template tag → args nằm sau mảng strings). */
-function $queryRawArg(prisma: PrismaService): unknown {
-  const call = ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls[0];
-  return call.slice(1).find((a: unknown) => a instanceof Date);
+/** Các tham số Date của từng lần gọi $queryRaw (template tag → args nằm sau mảng strings), theo thứ tự gọi. */
+function queryDates(prisma: PrismaService): Date[][] {
+  return ((prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw).mock.calls.map((call: unknown[]) =>
+    call.slice(1).filter((a): a is Date => a instanceof Date),
+  );
 }
 
 /**

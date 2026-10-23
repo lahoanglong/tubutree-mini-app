@@ -1,0 +1,48 @@
+{
+  "id": "U2-10",
+  "title": "Nhập lại đúng mã của mình: trả trạng thái claim cũ, không tạo claim mới, không tính lần thử",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:04.592Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "HTTP 2xx, cùng claimId, vẫn 1 claim",
+      "ok": true,
+      "detail": {
+        "http": 201,
+        "claims": 1,
+        "claimId": "cmvjgx37f00dih9r1vimaylc0"
+      }
+    },
+    {
+      "name": "không ghi thêm lần thử",
+      "ok": true,
+      "detail": {
+        "before": 1,
+        "after": 1
+      }
+    }
+  ],
+  "evidence": {
+    "lần 2": {
+      "http": 201,
+      "body": {
+        "status": "CLAIMED",
+        "claimId": "cmvjgx37f00dih9r1vimaylc0",
+        "channel": "shopee",
+        "maskedCode": "SPX********001",
+        "points": 2500,
+        "expectedCreditAt": "2026-11-02T11:38:08.000Z",
+        "message": "Mã này bạn đã gửi rồi, điểm đang chờ cộng."
+      },
+      "text": [
+        "Đã ghi nhận đơn shopee SPX********001",
+        "2.500 Điểm Xanh đang chờ cộng",
+        "Dự kiến cộng từ 02/11/2026",
+        "2.500 Điểm Xanh",
+        "Dự kiến 02/11/2026"
+      ]
+    }
+  }
+}

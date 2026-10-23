@@ -1,6 +1,6 @@
 import { Page } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Sprout } from 'lucide-react';
+import { Medal, Sprout } from 'lucide-react';
 import { getLeaderboard, type LeaderboardEntry } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -15,8 +15,11 @@ import { Text } from '../components/ui/text';
 import { levelEmoji } from '../components/community/rank-badge';
 import { vi } from '../i18n/vi';
 
-// Huy chương là nội dung xếp hạng (không phải icon điều hướng) nên giữ emoji.
-const MEDAL: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+const MEDAL: Record<number, { label: string; color: string }> = {
+  1: { label: 'Huy chương vàng', color: 'var(--honey-500)' },
+  2: { label: 'Huy chương bạc', color: 'var(--stone-450)' },
+  3: { label: 'Huy chương đồng', color: 'var(--clay-600)' },
+};
 
 const PAGE_BG = { background: 'var(--color-bg-canvas)' } as const;
 
@@ -114,7 +117,11 @@ function LeaderRow({ rank, entry }: { rank: number; entry: LeaderboardEntry }) {
     <Card padding={12}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Text variant="body-md" style={{ width: 28, textAlign: 'center', fontWeight: 600 }}>
-          {MEDAL[rank] ?? `#${rank}`}
+          {MEDAL[rank] ? (
+            <Medal size={22} strokeWidth={1.75} role="img" aria-label={MEDAL[rank].label} color={MEDAL[rank].color} />
+          ) : (
+            `#${rank}`
+          )}
         </Text>
         {entry.avatar ? (
           <img src={entry.avatar} alt="" width={36} height={36} style={{ borderRadius: '50%', objectFit: 'cover' }} />

@@ -64,6 +64,7 @@ import AffiliatePage from './affiliate';
 import {
   claimCtvMilestone,
   getAffiliateDashboard,
+  getAffiliateLinks,
   getCommissions,
   getCtvMilestones,
   getMyPayouts,
@@ -296,6 +297,16 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     expect(screen.getByText(/Lý do: Thiếu số tài khoản/)).toBeInTheDocument();
   });
 
+  it('Q2b: lệnh đã được hoàn thuế giữ dư vào Ví → ghi rõ số đã hoàn, không ghi thuế đã khấu trừ 0đ', async () => {
+    vi.mocked(getMyPayouts).mockResolvedValue([
+      { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 250_000, fee: 0, method: 'WALLET_BALANCE', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-09T03:00:00.000Z', reviewedAt: null, paidAt: '2026-10-09T03:00:00.000Z' },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Đã chuyển')).toBeInTheDocument();
+    expect(screen.getByText(/đã hoàn 250\.000đ thuế giữ dư vào Ví/)).toBeInTheDocument();
+    expect(screen.queryByText(/đã khấu trừ thuế TNCN 0đ/)).toBeNull();
+  });
+
   it('SELLER-11: có khấu trừ trong năm → tổng thu nhập và thuế đã khấu trừ năm nay, cách nhận chứng từ khấu trừ', async () => {
     vi.mocked(getTaxStatement).mockResolvedValue({
       year: 2026, fullName: 'Nguyễn An', taxId: '079201001234', items: [],
@@ -383,6 +394,46 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     await openWithdraw();
     expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 2.700.000đ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nhận 2.700.000đ vào Ví' })).toBeInTheDocument();
+  });
+
+  it('Q2: thuế tính cộng dồn trong tháng — rút 1.500.000đ dưới ngưỡng nhưng tháng này đã rút trước đó → hiện số khấu trừ máy chủ báo, bắt khai MST', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 1_500_000, withdrawTaxPreview: 300_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 1.200.000đ')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận 1.200.000đ vào Ví' })).toBeDisabled();
+    expect(inputNear('Mã số thuế cá nhân hoặc số CCCD')).toBeInTheDocument();
+  });
+
+  it('Q2: máy chủ báo chưa khấu trừ (tổng tháng chưa tới ngưỡng) → không hiện số khấu trừ dù số rút lần này lớn', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 1_900_000, withdrawTaxPreview: 0,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(await screen.findByRole('button', { name: 'Nhận 1.900.000đ vào Ví' })).toBeEnabled();
+    expect(screen.queryByText(/Khấu trừ thuế TNCN/)).toBeNull();
+  });
+
+  it('Q2: màn rút giải thích đúng cách tính thuế: cộng dồn các lần rút trong tháng, từ ngưỡng thì khấu trừ', async () => {
+    vi.mocked(getAffiliateDashboard).mockResolvedValue({
+      todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 500_000,
+      totalClicks: 0, totalConversions: 0, monthRevenue: 0,
+      tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
+    } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
+    renderPage();
+    await openWithdraw();
+    expect(
+      await screen.findByText(
+        'Thuế TNCN 10% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi tổng từ 2.000.000đ trở lên, thuế của các lần rút trước trong tháng chưa bị trừ sẽ được trừ bù vào lần rút này (tối đa bằng số tiền lần này).',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('SELLER-11: lần rút bị khấu trừ mà chưa khai MST/CCCD → bắt nhập (10 hoặc 12 số) rồi gửi kèm', async () => {
@@ -646,5 +697,14 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     fireEvent.click(retry);
     expect(await screen.findByText('Mốc 3 triệu')).toBeInTheDocument();
     expect(getCtvMilestones).toHaveBeenCalledTimes(2);
+  });
+
+  it('dòng link chỉ ghi số lượt bấm, không ghi "0 đơn" (cột conversions của link không được cập nhật)', async () => {
+    vi.mocked(getAffiliateLinks).mockResolvedValueOnce([
+      { id: 'L1', shortCode: 'abc123', targetType: 'HOMEPAGE', targetId: null, clicks: 1, conversions: 0, revenue: 0, createdAt: '2026-10-20T00:00:00Z' },
+    ]);
+    renderPage();
+    expect(await screen.findByText('1 lượt bấm')).toBeInTheDocument();
+    expect(screen.queryByText(/\d+ đơn/)).toBeNull();
   });
 });

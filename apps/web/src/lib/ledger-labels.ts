@@ -144,6 +144,7 @@ const WALLET_TX_LABELS: Record<string, string> = {
   CASHBACK: 'Hoàn tiền sàn ngoài',
   WITHDRAW: 'Rút về ngân hàng',
   WITHDRAW_REFUND: 'Hoàn lệnh rút bị từ chối',
+  PIT_REFUND: 'Hoàn thuế TNCN giữ dư',
   XU_CONVERT: 'Đổi sang xu cũ (nay là Điểm Xanh)',
   MERGE_IN: 'Chuyển từ phiên mua khách',
   MERGE_OUT: 'Chuyển sang tài khoản chính',

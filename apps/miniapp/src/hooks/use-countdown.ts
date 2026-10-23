@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { serverNow } from '../utils/server-clock';
 
 /** "Xh YYm" cho `ms` còn lại, làm tròn LÊN theo phút (phút cuối không hiện "0h 00m" khi chưa hết giờ). Hết giờ → ''. */
 export function formatCountdown(ms: number): string {
@@ -13,7 +14,7 @@ export function useCountdown(target: Date | string | null): string {
     if (!target) return '';
     const targetMs = new Date(target).getTime();
     if (Number.isNaN(targetMs)) return ''; // target không parse được (Invalid Date) → tránh "NaNh NaNm"
-    return formatCountdown(targetMs - Date.now());
+    return formatCountdown(targetMs - serverNow());
   };
   const [label, setLabel] = useState(compute);
   useEffect(() => {

@@ -52,6 +52,16 @@ export function endCustomerPayee(order: Pick<Order, 'endCustomerKey' | 'shipping
   };
 }
 
+/**
+ * refKey của khoản hoàn COD trả hàng chờ kế toán đối soát (UNVERIFIED): một đơn chỉ có một khoản như vậy (Pancake "Đã hoàn" trên
+ * đơn COD đã giao khi Tubu chưa có bằng chứng hãng thu COD). Loại RETURN nhưng không có yêu cầu trả hàng đứng sau.
+ */
+export const COD_RETURN_UNVERIFIED_REF = 'cod-return-unverified';
+
+/** Khoản chờ đối soát do Pancake báo (tiền khách trả dư) hoặc do hệ thống giữ lại (hoàn COD chưa rõ đã thu) — cùng đường xác nhận/bỏ qua. */
+export const isUnverifiedRefundRow = (row: { kind: CustomerRefundKind; status: CustomerRefundStatus; refKey: string }): boolean =>
+  row.status === 'UNVERIFIED' && (row.kind === 'OVERPAYMENT' || (row.kind === 'RETURN' && row.refKey === COD_RETURN_UNVERIFIED_REF));
+
 type RefundOwnerFacts = Pick<Order, 'userId' | 'placedForCustomer' | 'endCustomerKey' | 'shippingAddress'>;
 
 /**
@@ -61,6 +71,34 @@ type RefundOwnerFacts = Pick<Order, 'userId' | 'placedForCustomer' | 'endCustome
  */
 function refundOwner(order: RefundOwnerFacts): { userId: string | null; phone?: string | null; recipientName?: string | null } {
   return order.placedForCustomer ? { userId: null, ...endCustomerPayee(order) } : { userId: order.userId };
+}
+
+/**
+ * Đơn COD đã giao bị Pancake báo "Đã hoàn" mà chưa có bằng chứng hãng thu COD: ghi số tiền có thể phải hoàn thành khoản chờ đối
+ * soát (UNVERIFIED) trong tx lật trạng thái. Khách không thấy, không được báo; Kế toán xác nhận (→ PENDING, khách chọn nơi nhận)
+ * hoặc bỏ qua kèm lý do. Gọi lại cùng đơn không tạo khoản thứ hai (unique orderId+kind+refKey).
+ */
+export async function recordCodReturnUnverified(
+  tx: Prisma.TransactionClient,
+  order: Pick<Order, 'id' | 'code'> & RefundOwnerFacts,
+  amount: number,
+): Promise<void> {
+  await tx.orderCustomerRefund.createMany({
+    data: [
+      {
+        orderId: order.id,
+        orderCode: order.code,
+        kind: 'RETURN',
+        refKey: COD_RETURN_UNVERIFIED_REF,
+        ...refundOwner(order),
+        amount,
+        method: 'MANUAL_TRANSFER',
+        status: 'UNVERIFIED',
+        reason: 'RETURNED',
+      },
+    ],
+    skipDuplicates: true,
+  });
 }
 
 /**

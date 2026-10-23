@@ -33,6 +33,8 @@ type MockTx = {
   pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
   orderCustomerRefund: { create: jest.Mock; createMany: jest.Mock };
   returnRequest: { findMany: jest.Mock };
+  /** Đánh giá có thưởng của đơn (thu hồi khi trả hàng); mặc định không có. */
+  review: { findMany: jest.Mock };
   /** Hoàn kho đi bằng SQL thô (catalog/variation-stock.ts) để sửa 3 cột nguyên tử. */
   $executeRaw: jest.Mock;
   dealerCreditLedger: { findFirst: jest.Mock; create: jest.Mock };
@@ -71,6 +73,7 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
     orderCustomerRefund: { create: jest.fn().mockResolvedValue({ id: 'cr1' }), createMany: jest.fn().mockResolvedValue({ count: 1 }) },
     // D3: đơn đã giao chưa có lần trả một phần nào.
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
+    review: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
     orderItem: { update: jest.fn().mockResolvedValue({}) },
@@ -270,6 +273,64 @@ describe('OrderReversalService', () => {
       await service.reverseFinancials(tx as never, order);
       expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledTimes(1);
       expect(tx.pointsTransaction.createManyAndReturn.mock.calls[0]![0].data[0].reason).toBe('ORDER_REFUND_XU:TUBU1');
+    });
+  });
+
+  // D12-02: Điểm Xanh thường đã dùng cũng hoàn trong tx huỷ khi caller đưa hạn điểm (đọc cấu hình ngoài tx).
+  describe('hoàn lô STANDARD trong tx huỷ (D12-02)', () => {
+    const expiresAt = new Date('2027-10-20T00:00:00Z');
+    const standardRow = (delta: number) => ({
+      data: [{ userId: 'u1', delta, lot: 'STANDARD', reason: 'ORDER_REFUND_POINTS:TUBU1', refType: 'ORDER', refId: 'o1', expiresAt }],
+      skipDuplicates: true,
+      select: { id: true },
+    });
+
+    it('đơn WALLET dùng 40 điểm thường + có hạn điểm → +40 STANDARD (có hạn) trong cùng tx, báo pointsRefunded 40', async () => {
+      const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalledWith(standardRow(40));
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsBalance: { increment: 40 } } });
+      expect(result.pointsRefunded).toBe(40);
+    });
+
+    it('đơn dùng 150 điểm (120 quy đổi) → CONVERTED 120 và STANDARD 30, pointsRefunded 150', async () => {
+      const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', pointsUsed: 150, pointsUsedConverted: 120 });
+      const tx = makeTx(order);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      const reasons = tx.pointsTransaction.createManyAndReturn.mock.calls.map((c) => c[0].data[0].reason);
+      expect(reasons).toEqual(['ORDER_REFUND_CONVERTED:TUBU1', 'ORDER_REFUND_POINTS:TUBU1']);
+      expect(tx.user.update).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { pointsBalance: { increment: 30 } } });
+      expect(result.pointsRefunded).toBe(150);
+    });
+
+    it('dòng ORDER_REFUND_POINTS đã có (unique reason + refId) → không cộng lần 2, pointsRefunded 0', async () => {
+      const order = makeOrder({ pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      tx.pointsTransaction.createManyAndReturn.mockResolvedValue([]);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      expect(tx.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { pointsBalance: expect.anything() } }));
+      expect(result.pointsRefunded).toBe(0);
+    });
+
+    it('caller không đưa hạn điểm (đường cũ: LoyaltyService.reverseOrderPoints hoàn sau commit) → không ghi STANDARD', async () => {
+      const order = makeOrder({ pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      await service.reverseFinancials(tx as never, order);
+      expect(tx.pointsTransaction.createManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it('đơn đã trả một phần trước đó chỉ hoàn phần điểm thường còn lại (remainingPointsBack)', async () => {
+      const order = makeOrder({ status: 'DELIVERED', paymentMethod: 'COD', paymentStatus: 'UNPAID', pointsUsed: 40, pointsUsedConverted: 0 });
+      const tx = makeTx(order);
+      tx.returnRequest.findMany.mockResolvedValue([
+        { id: 'r1', status: 'APPROVED', refundAmount: 10000, shippingRefund: 0, pointsRefunded: 15, convertedPointsRefunded: 0, pointsReversed: 0, commissionReversed: 0, items: [] },
+      ]);
+      const result = await service.reverseFinancials(tx as never, order, { standardPointsExpiresAt: expiresAt });
+      const rows = tx.pointsTransaction.createManyAndReturn.mock.calls.map((c) => c[0].data[0]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ lot: 'STANDARD', delta: 25 });
+      expect(result.pointsRefunded).toBe(25);
     });
   });
 
@@ -1287,5 +1348,115 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
       ['fsA', 1],
       ['fsB', 1],
     ]);
+  });
+});
+
+describe('OrderReversalService — thưởng đánh giá khi trả hàng', () => {
+  let service: OrderReversalService;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        OrderReversalService,
+        { provide: FlashSaleService, useValue: { restore: jest.fn().mockResolvedValue(undefined) } },
+        { provide: CouponsService, useValue: { release: jest.fn().mockResolvedValue(undefined) } },
+      ],
+    }).compile();
+    service = module.get(OrderReversalService);
+    jest.mocked(applyWalletDelta).mockClear();
+  });
+
+  const REVIEW = { id: 'r1', userId: 'u1', productId: 'p1', pointsEarned: 10_000 };
+  const advisoryLocks = (tx: MockTx) =>
+    tx.$executeRaw.mock.calls.flatMap((c, i) =>
+      (c[0] as string[]).join('').includes('pg_advisory_xact_lock') ? [tx.$executeRaw.mock.invocationCallOrder[i]!] : [],
+    );
+
+  it('trả cả đơn bán lẻ đã giao: khoá thưởng đánh giá TRƯỚC mọi ghi lên Ví/users, lọc theo đơn và đánh giá có thưởng', async () => {
+    const order = makeOrder({ type: 'RETAIL', placedForCustomer: false });
+    const tx = makeTx(order);
+    tx.review.findMany.mockResolvedValue([REVIEW]);
+    Object.assign(tx.pointsTransaction, { findFirst: jest.fn().mockResolvedValue(null) });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.review.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { orderId: 'o1', pointsEarned: { gt: 0 } } }));
+    const locks = advisoryLocks(tx);
+    expect(locks).toHaveLength(1);
+    expect(locks[0]!).toBeLessThan(jest.mocked(applyWalletDelta).mock.invocationCallOrder[0]!);
+    expect(locks[0]!).toBeLessThan(tx.$executeRaw.mock.invocationCallOrder.filter((n) => n !== locks[0])[0]!);
+  });
+
+  it.each([
+    ['đơn đại lý', { type: 'DEALER', placedForCustomer: false }],
+    ['đơn CTV lên hộ', { type: 'RETAIL', placedForCustomer: true }],
+    ['đơn chưa giao (huỷ)', { type: 'RETAIL', placedForCustomer: false, status: 'CONFIRMED' }],
+  ])('%s: không có đánh giá được thưởng nên không đọc, không khoá', async (_name, over) => {
+    const order = makeOrder(over);
+    const tx = makeTx(order);
+    await service.reverseFinancials(tx as never, order);
+    expect(tx.review.findMany).not.toHaveBeenCalled();
+    expect(advisoryLocks(tx)).toEqual([]);
+  });
+
+  it('trả một phần: chỉ khoá và thu hồi thưởng của sản phẩm thuộc dòng bị trả (dòng i2 → sản phẩm p2, không phải p1)', async () => {
+    const order = makeOrder({ type: 'RETAIL', placedForCustomer: false, shippingFee: 0 });
+    const tx = Object.assign(makeTx(order), {
+      commission: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ productId: 'p2' }]) },
+    });
+    tx.review.findMany.mockResolvedValue([{ ...REVIEW, id: 'r2', productId: 'p2' }]);
+    Object.assign(tx.pointsTransaction, { findFirst: jest.fn().mockResolvedValue(null) });
+    const shares = {
+      isFull: false,
+      goods: 0,
+      shipping: 0,
+      pointsUsedBack: 0,
+      convertedBack: 0,
+      pointsEarnedBack: 0,
+      lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 0 }],
+    };
+
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'rq1',
+      shares: shares as never,
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+
+    expect(tx.variation.findMany).toHaveBeenCalledWith({ where: { id: { in: ['v2'] } }, select: { productId: true } });
+    expect(tx.review.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { orderId: 'o1', pointsEarned: { gt: 0 }, productId: { in: ['p2'] } } }),
+    );
+    expect(advisoryLocks(tx)).toHaveLength(1);
+  });
+
+  it('trả một phần khi sản phẩm chưa có đánh giá nào: vẫn khoá cặp (khách, sản phẩm) để đánh giá đang tạo song song thấy dòng trả đã duyệt', async () => {
+    const order = makeOrder({ type: 'RETAIL', placedForCustomer: false, shippingFee: 0 });
+    const tx = Object.assign(makeTx(order), {
+      commission: { findMany: jest.fn().mockResolvedValue([]) },
+      variation: { findMany: jest.fn().mockResolvedValue([{ productId: 'p2' }, { productId: 'p1' }]) },
+    });
+    const shares = {
+      isFull: false,
+      goods: 0,
+      shipping: 0,
+      pointsUsedBack: 0,
+      convertedBack: 0,
+      pointsEarnedBack: 0,
+      lines: [{ orderItemId: 'i2', quantity: 1, refundAmount: 0 }],
+    };
+
+    await service.reversePartialReturn(tx as never, order, {
+      requestId: 'rq1',
+      shares: shares as never,
+      destination: WALLET_DESTINATION,
+      prior: NO_PARTIAL_RETURNS,
+      standardPointsExpiresAt: null,
+    });
+
+    const keys = tx.$executeRaw.mock.calls.flatMap((c) => ((c[0] as string[]).join('').includes('pg_advisory_xact_lock') ? [c[1] as string] : []));
+    expect(keys).toEqual(['review-reward:u1:p1', 'review-reward:u1:p2']);
   });
 });

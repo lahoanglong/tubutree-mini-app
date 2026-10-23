@@ -1,0 +1,62 @@
+{
+  "id": "U2-14",
+  "title": "Đơn đã hoàn trên sàn (Lazada) → 400 CLOSED; mã vận đơn của đơn app → 409 APP_ORDER; đơn chat nhập mã → 409 CHAT_ORDER; khách chưa có SĐT → 403",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:20.653Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "đơn Lazada đã hoàn: 400 CLOSED",
+      "ok": true,
+      "detail": {
+        "http": 400,
+        "code": "CLOSED"
+      }
+    },
+    {
+      "name": "mã vận đơn đơn Mini App: 409 APP_ORDER",
+      "ok": true,
+      "detail": {
+        "status": 409,
+        "code": "APP_ORDER"
+      }
+    },
+    {
+      "name": "mã đơn chat CSKH: 409 CHAT_ORDER",
+      "ok": true,
+      "detail": {
+        "status": 409,
+        "code": "CHAT_ORDER"
+      }
+    },
+    {
+      "name": "khách chưa có SĐT gửi mã: 403 NOT_ELIGIBLE_USER",
+      "ok": true,
+      "detail": {
+        "status": 403,
+        "code": "NOT_ELIGIBLE_USER"
+      }
+    }
+  ],
+  "evidence": {
+    "LZDUAT00000004": {
+      "http": 400,
+      "body": {
+        "statusCode": 400,
+        "error": "CLOSED",
+        "code": "CLOSED",
+        "message": "Đơn này đã bị huỷ hoặc hoàn nên không được tích điểm."
+      },
+      "alert": "Đơn này đã huỷ hoặc hoàn nên không tích điểm được."
+    },
+    "mã vận đơn đơn app": {
+      "order": {
+        "code": "TUBU2026102246913",
+        "shippingCode": "UATGHN0000019"
+      },
+      "status": 409,
+      "code": "APP_ORDER"
+    }
+  }
+}

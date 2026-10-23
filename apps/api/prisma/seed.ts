@@ -105,7 +105,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'community.tiktok_url', value: 'https://www.tiktok.com/@tubutree.com', category: 'community', description: 'Link kênh TikTok (tiktok.com), để trống = ẩn nút', createOnly: true },
   { key: 'community.banned_keywords', value: ['lua dao', 'lua tien', 'casino', 'vay nong', 'vay lai', 'tin dung den', 'da cap', 'rua tien', 'hang nhai', 'khieu dam', 'sex', 'ma tuy', 'vu khi', 'lam bang gia', 'chiem doat tai san', 'ca do bong da', 'ca cuoc bong da', 'cá độ', 'cá cược', 'hàng giả', 'cờ bạc'], category: 'community', description: 'Từ/cụm từ cấm trong bài cộng đồng (khớp → bài chờ duyệt). Cụm không dấu khớp cả có dấu; cụm có dấu chỉ khớp khi gõ đúng dấu', createOnly: true },
   { key: 'community.daily_best_answer_cap', value: 3, category: 'community', description: 'Số lần được thưởng câu trả lời hay nhất tối đa mỗi ngày/người', createOnly: true },
-  { key: 'community.author_notify_interval_minutes', value: 60, category: 'community', description: 'Gộp tin "bài của bạn có người thích/bình luận": tối đa 1 tin mỗi bài trong chừng này phút (0 = tắt tin)', createOnly: true },
+  { key: 'community.author_notify_interval_minutes', value: 60, category: 'community', description: 'Gộp tin "bài của bạn có người thích/bình luận" và "câu hỏi của bạn có câu trả lời mới": tối đa 1 tin mỗi bài trong chừng này phút. 0 = tắt tin thích/bình luận; tin câu trả lời mới vẫn gửi nhưng không gộp', createOnly: true },
   { key: 'community.unanswered_alert_hours', value: 24, category: 'community', description: 'Câu hỏi cộng đồng chưa ai trả lời quá chừng này giờ thì hiện ở "Việc cần xử lý" của CSKH', createOnly: true },
   // createOnly: migration 20261012120000_pd3_points_config_keys đã chép CEIL(game.tree_xu_price/1000) nếu DB có giá cũ.
   { key: 'game.tree_points_price', value: 50_000, category: 'game', description: 'Điểm Xanh cho 1 lượt góp quỹ trồng cây', createOnly: true },
@@ -152,12 +152,20 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'storefront.identifier_cooldown_days', value: 90, category: 'storefront', description: 'Subdomain/tên miền gian hàng vừa đổi hoặc gỡ chỉ gian hàng khác dùng lại sau chừng này ngày', createOnly: true },
   { key: 'orders.dealer_pending_payment_ttl_hours', value: 72, category: 'orders', description: 'Đơn đại lý trả trước chờ chuyển khoản quá số giờ này thì tự huỷ (hoàn kho). Tối thiểu 1, tối đa 720', createOnly: true },
   { key: 'affiliate.pit_withhold_pct', value: 0.1, category: 'affiliate', description: 'Thuế TNCN khấu trừ khi trả hoa hồng CTV (phân số, 0.1 = 10%; 0 = tắt)', createOnly: true },
-  { key: 'affiliate.pit_withhold_threshold', value: 2000000, category: 'affiliate', description: 'Lần rút hoa hồng từ số tiền này trở lên thì khấu trừ thuế TNCN (đồng)', createOnly: true },
+  { key: 'affiliate.pit_withhold_threshold', value: 2000000, category: 'affiliate', description: 'Tổng hoa hồng rút trong tháng (giờ VN) từ số tiền này trở lên thì khấu trừ thuế TNCN (đồng)', createOnly: true },
 
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
   // Hạn gửi yêu cầu nhận thưởng mốc sau khi kỳ kết thúc (dealer.service). createOnly: không ghi đè giá trị admin.
   { key: 'dealer.reward_claim_grace_days', value: 30, category: 'dealer', description: 'Số ngày sau khi kỳ (quý/năm) kết thúc mà đại lý vẫn được gửi yêu cầu nhận thưởng mốc đã đạt trong kỳ đó', createOnly: true },
+  // Luật đơn sỉ đã chốt (nhóm C): tối thiểu 3 triệu, miễn phí giao từ 5 triệu, khoá mua chịu khi quá hạn (dealer.service placeOrder).
+  { key: 'dealer.min_order_value_vnd', value: 3_000_000, category: 'dealer', description: 'Đơn đại lý tối thiểu (đ, tính trên tiền hàng, chưa gồm phí giao). 0 = không chặn', createOnly: true },
+  { key: 'dealer.free_ship_threshold_vnd', value: 5_000_000, category: 'dealer', description: 'Đơn đại lý từ mức tiền hàng này (đ) thì miễn phí giao; dưới mức này thu phí giao', createOnly: true },
+  { key: 'dealer.shipping_fee_below_threshold_vnd', value: 19_000, category: 'dealer', description: 'Phí giao (đ) của đơn đại lý dưới ngưỡng miễn phí giao. Mặc định bằng phí giao phẳng của đơn lẻ (shipping.flat_fee_below_threshold)', createOnly: true },
+  { key: 'dealer.block_credit_when_overdue', value: true, category: 'dealer', description: 'true = đại lý còn nợ đơn quá hạn theo điều kiện thanh toán của bậc (NET n ngày) không đặt được đơn ghi công nợ, vẫn đặt được đơn trả trước. false = không khoá', createOnly: true },
+  { key: 'dealer.bonus_topup_window_days', value: 60, category: 'dealer', description: 'Số ngày sau ngày cuối quý mà đơn của quý chốt muộn hơn ngày chốt thưởng 10 vẫn được trả bù thưởng quý (ghi vào công nợ đại lý). 0 hoặc dưới 10 = không trả bù (ngày chốt thưởng là ngày 10)', createOnly: true },
+  // Bảng bậc thưởng doanh số quý, bằng mặc định cứng trong DealerService.bonusTiers. createOnly: giá trị admin đã đổi không bị seed chạy lại ghi đè.
+  { key: 'dealer.quarterly_bonus_tiers', value: [{ min: 50_000_000, pct: 2 }, { min: 100_000_000, pct: 3 }, { min: 200_000_000, pct: 4 }], category: 'dealer', description: 'Bậc thưởng doanh số quý cho đại lý: danh sách {min: doanh số đã chốt của quý (đồng), pct: phần trăm thưởng}, ít nhất một bậc (tối đa 10 bậc), ngưỡng min tăng dần, pct lớn hơn 0 và tối đa 10 (3 nghĩa là 3%), pct của bậc sau bằng hoặc cao hơn bậc trước (không giảm), pct tối đa 1 chữ số thập phân (2,5 được; 2,55 không). Đổi bậc có hiệu lực cho quý CHƯA trả thưởng (từ lần trả ngày 10 kế tiếp); quý đã trả thưởng giữ bảng bậc đã chụp lúc trả (bảng dealer_quarter_bonus_tiers) cho trả bù và thu hồi, không đổi theo', createOnly: true },
 
   // Game
   { key: 'game.streak_7_bonus', value: { seeds: 10, free_spins: 1 }, category: 'game', description: 'Bonus chuỗi 7 ngày' },
@@ -195,6 +203,9 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'groupbuy.target_size', value: 3, category: 'groupbuy', description: 'Số người cần để nhóm mua chung thành công' },
   { key: 'groupbuy.window_hours', value: 48, category: 'groupbuy', description: 'Số giờ nhóm mua chung mở trước khi hết hạn' },
   { key: 'groupbuy.max_open_per_user', value: 3, category: 'groupbuy', description: 'Trần số nhóm mua chung OPEN cùng lúc/user — chống spam mở nhóm (P0-2)' },
+  { key: 'notifications.zns_quiet_start_hour', value: 21, category: 'notifications', description: 'Giờ VN (0-23) bắt đầu giờ yên tĩnh của ZNS: tin ZNS tới trong khung này được hoãn tới giờ kết thúc, không bỏ. Bằng giờ kết thúc = tắt giờ yên tĩnh' },
+  { key: 'notifications.zns_quiet_end_hour', value: 8, category: 'notifications', description: 'Giờ VN (0-23) kết thúc giờ yên tĩnh của ZNS (21 → 8: không gửi ZNS từ 21:00 tới 08:00)' },
+  { key: 'notifications.zns_promo_monthly_cap', value: 2, category: 'notifications', description: 'Số tin ZNS khuyến mãi/hậu mãi tối đa mỗi khách mỗi tháng (giờ VN); đủ thì bỏ kênh ZNS, tin trong app vẫn gửi. 0 = không giới hạn' },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
   { key: 'payment.bank_account_no', value: '8386790906', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
   { key: 'payment.bank_account_name', value: 'CONG TY TNHH TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
@@ -216,8 +227,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   },
 
   // Shipping
-  { key: 'shipping.free_threshold', value: 200000, category: 'shipping', description: 'Đơn ≥ 200k được freeship' },
-  { key: 'shipping.flat_fee_below_threshold', value: 19000, category: 'shipping', description: 'Phí cố định khi đơn < 200k' },
+  { key: 'shipping.free_threshold', value: 199000, category: 'shipping', description: 'Đơn ≥ 199k được freeship' },
+  { key: 'shipping.flat_fee_below_threshold', value: 19000, category: 'shipping', description: 'Phí cố định khi đơn < 199k' },
   // null = chưa đặt: app ẩn dòng "Giao dự kiến" thay vì hứa số ngày chủ shop chưa chốt. Khoá phải CÓ dòng để admin
   // bật được từ tab Cấu hình (tab chỉ liệt kê dòng đã tồn tại). createOnly: deploy lại không xoá số admin đã đặt.
   { key: 'shipping.eta_min_days', value: Prisma.JsonNull, category: 'shipping', description: 'Giao dự kiến: số ngày tối thiểu (0-60). Để null thì app ẩn dòng "Giao dự kiến"', createOnly: true },
@@ -735,8 +746,8 @@ export const NOTIFICATION_TEMPLATES = [
   // {{points_note}} do OrderStatusService điền khi đơn thật sự có tích điểm (đơn không tích điểm thì rỗng).
   { id: 'nt-delivered', code: 'ORDER_DELIVERED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã giao thành công.{{points_note}} Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿' },
   // {{refund_note}}: tiền hoàn bao nhiêu, về đâu (Ví Tubu / tài khoản ngân hàng) — rỗng khi đơn chưa thanh toán.
-  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị hủy.{{refund_note}}' },
-  { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hóa đơn VAT cho đơn {{order_code}} đã được phát hành.' },
+  { id: 'nt-cancelled', code: 'ORDER_CANCELLED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã bị huỷ.{{refund_note}}' },
+  { id: 'nt-invoice', code: 'INVOICE_ISSUED', channel: 'INAPP', bodyTemplate: 'Hoá đơn VAT cho đơn {{order_code}} đã được phát hành.' },
   { id: 'nt-packed', code: 'ORDER_PACKED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được đóng gói, chuẩn bị giao.' },
   // {{refund_note}}: tiền hoàn bao nhiêu, về đâu — rỗng khi đơn không có tiền để hoàn.
   { id: 'nt-returned', code: 'ORDER_RETURNED', channel: 'INAPP', bodyTemplate: 'Đơn {{order_code}} đã được hoàn trả.{{refund_note}}' },
@@ -804,7 +815,7 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-game-checkin', code: 'GAME_CHECKIN_REMINDER', channel: 'INAPP', bodyTemplate: '🔥 Chuỗi {{streak}} ngày của bạn sắp lỡ! Điểm danh Vườn Xanh hôm nay để giữ lửa nhé 🌿' },
   { id: 'nt-game-thirsty', code: 'GAME_TREE_THIRSTY', channel: 'INAPP', bodyTemplate: '🥀 Cây của bạn đang khát! Tưới nước hôm nay để cây không héo và mất tiến trình nhé 💧' },
   { id: 'nt-game-gift', code: 'GAME_WATER_GIFT', channel: 'INAPP', bodyTemplate: '🎁 Một người bạn vừa tặng bạn {{amount}}💧 cho Vườn Xanh! Vào tưới cây ngay nhé 🌿' },
-  { id: 'nt-groupbuy-ok', code: 'GROUP_BUY_SUCCESS', channel: 'INAPP', bodyTemplate: '🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}}đ để mua với giá nhóm. Đặt hàng ngay nhé 🛒' },
+  { id: 'nt-groupbuy-ok', code: 'GROUP_BUY_SUCCESS', channel: 'INAPP', bodyTemplate: '🎉 Nhóm mua chung đã đủ người! Bạn nhận mã giảm {{discount}} để mua với giá nhóm. Đặt hàng ngay nhé 🛒' },
   { id: 'nt-groupbuy-failed', code: 'GROUP_BUY_FAILED', channel: 'INAPP', bodyTemplate: 'Nhóm mua chung "{{product}}" chưa đủ người trước hạn nên đã đóng. Bạn vẫn mua được với giá thường hoặc mở nhóm mới để rủ thêm bạn bè nhé 🌿', createOnly: true },
   { id: 'nt-comm-event-winner', code: 'COMMUNITY_EVENT_WINNER', channel: 'INAPP', bodyTemplate: '🏆 Chúc mừng! Bạn là người thắng sự kiện "{{title}}" của cộng đồng Tubu.{{reward}}', createOnly: true },
   { id: 'nt-dealer-bonus', code: 'DEALER_BONUS_PAID', channel: 'INAPP', bodyTemplate: '🎁 Thưởng doanh số {{quarter}}: bạn được cộng {{amount}}đ vào công nợ đại lý (doanh số {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿' },
@@ -817,6 +828,7 @@ export const NOTIFICATION_TEMPLATES = [
   // cùng mã/nội dung với migration 20260927100000_dealer_bonus_adjusted_template. createOnly: admin sửa nội
   // dung rồi thì chạy lại seed KHÔNG ghi đè.
   { id: 'nt-dealer-bonus-adjusted', code: 'DEALER_BONUS_ADJUSTED', channel: 'INAPP', bodyTemplate: 'Thưởng doanh số {{quarter}} đã được điều chỉnh do đơn {{order_code}} bị huỷ/trả: thu hồi {{amount}}đ (cộng lại vào công nợ đại lý). Thưởng {{quarter}} còn lại: {{remaining}}đ. Cần hỗ trợ, bạn nhắn Zalo OA Tubu Tree nhé.', createOnly: true },
+  { id: 'nt-dealer-bonus-topup', code: 'DEALER_BONUS_TOPUP', channel: 'INAPP', bodyTemplate: 'Trả bù thưởng doanh số {{quarter}}: có đơn của quý chốt sau ngày chốt thưởng, công nợ đại lý của bạn được giảm {{amount}}đ (doanh số đã chốt {{revenue}}đ). Cảm ơn bạn đã đồng hành cùng Tubu Tree 🌿', createOnly: true },
   // A5-09 (docs/audit-2026-09/05-ctv-dealer-staff.md): đại lý "Báo đã CK" giờ CHỈ tạo thông báo cho
   // admin xác nhận, không tự trừ nợ (DealerService.reportCreditPayment/adminRecordCreditPayment).
   { id: 'nt-dealer-credit-reported', code: 'DEALER_CREDIT_PAYMENT_REPORTED', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.', createOnly: true },
@@ -826,7 +838,7 @@ export const NOTIFICATION_TEMPLATES = [
   // PD-3 OQ-10: báo khách có xu đã quy sang Điểm Xanh (1.000 xu = 1 điểm, làm tròn lên). Cùng mã/nội dung với migration
   // 20261012160000_pd3_xu_converted_notice, nơi tạo luôn thông báo cho từng user đã quy đổi.
   { id: 'nt-xu-converted', code: 'XU_CONVERTED', channel: 'INAPP', bodyTemplate: '{{xu}} xu cũ của bạn đã thành {{points}} Điểm Xanh không hết hạn, dùng trả tới 100% giá trị hàng.', createOnly: true },
-  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿 Bạn nhận thêm Điểm Xanh thưởng.' },
+  { id: 'nt-comm-best', code: 'COMMUNITY_BEST_ANSWER', channel: 'INAPP', bodyTemplate: 'Câu trả lời của bạn được chọn là hay nhất! 🌿{{reward_note}}' },
   { id: 'nt-comm-approved', code: 'COMMUNITY_POST_APPROVED', channel: 'INAPP', bodyTemplate: '🌱 Bài viết của bạn đã được duyệt và hiển thị trong cộng đồng.' },
   { id: 'nt-comm-rejected', code: 'COMMUNITY_POST_REJECTED', channel: 'INAPP', bodyTemplate: '🌿 Bài viết "{{title}}" của bạn chưa được đăng vì {{reason}}. Bạn có thể chỉnh lại nội dung rồi đăng bài mới nhé.' },
   { id: 'nt-comm-post-liked', code: 'COMMUNITY_POST_LIKED', channel: 'INAPP', bodyTemplate: '💚 Bài viết "{{title}}" của bạn vừa được thả tim.', createOnly: true },
@@ -899,7 +911,7 @@ export const MISSIONS = [
   { id: 'm1', code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: 'Nhận thành công đơn hàng đầu tiên', rewardPoints: 20_000, goal: 1, isRepeatable: false },
   { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30_000, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15_000, goal: 3, isRepeatable: false },
-  { id: 'm4', code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
+  { id: 'm4', code: 'INVITE_3', title: 'Lan toả sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
 ];
 
 const CASHBACK_MERCHANTS = [

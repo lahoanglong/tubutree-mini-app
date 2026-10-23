@@ -1,0 +1,196 @@
+{
+  "id": "U1-29",
+  "browser": "chromium",
+  "role": "Khách lâu không quay lại (đơn cuối 61 ngày trước)",
+  "journey": "Voucher win-back → dùng ở giỏ",
+  "steps": "Khách có 1 đơn đã giao, lùi createdAt đơn 61 ngày → cron VouchersService.winbackVouchers (2 giờ sáng) → giỏ 2 chai 240k → nhập mã win-back → COD; đối chứng: uat_returning (đơn cuối 40 ngày) không được cấp",
+  "expected": "Mã WINBACK-<tháng> 50.000đ, hạn 21 ngày, thông báo WINBACK_VOUCHER; đơn 240k giảm 50.000đ; khách đơn cuối < 60 ngày không có mã",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "mã WINBACK 50.000đ, ~21 ngày",
+      "ok": true
+    },
+    {
+      "name": "đối chứng: uat_returning (đơn cuối 40 ngày) không được cấp",
+      "ok": true
+    },
+    {
+      "name": "có thông báo WINBACK_VOUCHER",
+      "ok": true
+    },
+    {
+      "name": "báo giá: giảm 50.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgx3mm015wzw9c03a1xdms"
+            ],
+            "subtotal": 240000,
+            "discount": 50000,
+            "shippingFee": 0,
+            "total": 190000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 240000,
+        "discount": 50000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 1580,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 190000,
+        "pointsEarned": 3800,
+        "pointsBalance": 1580,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 1580,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgx3mm015wzw9c03a1xdms",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 2,
+            "stock": 184,
+            "weight": 1050,
+            "total": 240000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "DB: couponDiscount 50000, 1 redemption",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "SQL mã win-back",
+      "data": {
+        "coupon": {
+          "code": "WINBACK-2026-10-U1_E29_GX1TPV9",
+          "type": "AMOUNT",
+          "value": 50000,
+          "minOrder": null,
+          "endAt": "2026-11-12T11:38:58.033Z",
+          "scope": "USER_GROUP"
+        },
+        "returningBefore": [],
+        "returningAfter": []
+      }
+    },
+    {
+      "label": "thông báo",
+      "data": [
+        {
+          "templateCode": "WINBACK_VOUCHER",
+          "text": "{\"body\":\"Tubu nhớ bạn! Quay lại với voucher WINBACK-2026-10-U1_E29_GX1TPV9 giảm 50.000đ, dùng trước 12/11/2026 💚\",\"data\":{\"code\":\"WINBACK-2026-10-U1_E29_GX1TPV9\",\"value\":\"50.000\",\"expires\":\"12/11/2026\",\"min_order_note\":\"\"}}"
+        }
+      ]
+    },
+    {
+      "label": "áp mã WINBACK-2026-10-U1_E29_GX1TPV9",
+      "data": {
+        "status": 201,
+        "snackbar": "Đã áp dụng mã WINBACK-2026-10-U1_E29_GX1TPV9",
+        "couponCode": "WINBACK-2026-10-U1_E29_GX1TPV9",
+        "discount": 50000,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "req": {
+          "addressId": "cmvjgx1u5014pzw9c5e8f17ha",
+          "pointsToUse": 0
+        },
+        "subtotal": 240000,
+        "discount": 50000,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 1580,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 190000,
+        "pointsEarned": 3800
+      }
+    },
+    {
+      "label": "ô Điểm Xanh",
+      "data": {
+        "disabled": "false",
+        "text": "Điểm Xanh Bạn đang có 1.580 điểm"
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-29-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102209310",
+        "button": "Đặt hàng · 190.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-29-placed.png"
+    },
+    {
+      "label": "SQL đơn",
+      "data": {
+        "couponCode": "WINBACK-2026-10-U1_E29_GX1TPV9",
+        "couponDiscount": 50000,
+        "shippingFee": 0,
+        "total": 190000,
+        "redemptions": [
+          {
+            "code": "WINBACK-2026-10-U1_E29_GX1TPV9",
+            "usedCount": 1,
+            "usageLimit": 1
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:39:06.138Z"
+}

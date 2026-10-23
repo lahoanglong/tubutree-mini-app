@@ -2,8 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleCheck } from 'lucide-react';
-import { getOpsInbox, type InboxKey } from '@/lib/admin-client';
+import { getOpsInbox, type AdminPayoutStatus, type DealerRewardClaimStatus, type InboxKey } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
+import { seedDealerClaimFilter } from './dealer-claims-tab';
+import { seedPayoutFilter } from './payout-admin-tab';
+import { LoadError } from './ui';
 
 export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   pancakeAttention: { title: 'Cần xử lý Pancake', hint: 'Pancake báo việc hệ thống không tự làm được' },
@@ -19,7 +22,9 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   merchantPayoutsPending: { title: 'Phiếu đối soát chờ chuyển / thu', hint: 'Chờ chuyển cho đối tác hoặc chờ đối tác nộp lại' },
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
+  dealerClaimsToPay: { title: 'Thưởng đại lý chờ chi', hint: 'Admin đã duyệt, chờ kế toán trao thưởng và bấm "Đã chi"' },
   payouts: { title: 'Lệnh rút tiền chờ duyệt', hint: 'Hoa hồng CTV / Ví' },
+  payoutsToPay: { title: 'Lệnh rút tiền chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
   wasteToCount: { title: 'Kiện đổi rác chờ đếm', hint: 'Kiện gửi kho hoặc thu kèm đơn đã nhận, chưa đếm' },
   wasteUnmatched: { title: 'Kiện không rõ chủ', hint: 'Kiện về kho chưa khớp yêu cầu nào' },
   wasteBlockedPending: { title: 'Yêu cầu đổi rác của khách bị khoá', hint: 'Yêu cầu đang mở, đang gửi hoặc kho đã nhận của khách bị khoá' },
@@ -34,11 +39,21 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 
+/** Hai thẻ rút tiền cùng mở tab "Yêu cầu rút tiền": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
+const PAYOUT_FILTER: Partial<Record<InboxKey, AdminPayoutStatus>> = { payouts: 'REQUESTED', payoutsToPay: 'APPROVED' };
+/** Cùng lý do với hai thẻ thưởng đại lý: thẻ chờ chi phải mở hàng đã duyệt, không phải hàng chờ duyệt. */
+const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { dealerClaims: 'PENDING', dealerClaimsToPay: 'APPROVED' };
+
 /** Trang chủ quản trị: mỗi hàng đợi một thẻ có số việc đang chờ, bấm vào mở đúng tab/bộ lọc. */
-export function OpsInboxTab({ onOpen }: { onOpen: (key: InboxKey) => void }) {
+export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => void }) {
+  const onOpen = (key: InboxKey) => {
+    seedPayoutFilter(PAYOUT_FILTER[key] ?? null);
+    seedDealerClaimFilter(CLAIM_FILTER[key] ?? null);
+    openTab(key);
+  };
   const q = useQuery({ queryKey: ['admin-ops-inbox'], queryFn: getOpsInbox, refetchInterval: 60_000 });
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang đếm việc cần xử lý…</p>;
-  if (q.isError || !q.data) return <p className="text-sm text-danger-fg">Không tải được danh sách việc cần xử lý.</p>;
+  if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách việc cần xử lý.</LoadError>;
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
   const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
   const open = items.filter((i) => i.count > 0);

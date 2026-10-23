@@ -11,12 +11,15 @@ export interface ShippingInput {
   tierId?: string | null;
 }
 
+/** Bằng ngưỡng freeship đơn đầu (FIRST_ORDER_FREESHIP_MIN_DEFAULT) để khách không thấy hai mốc lệch 1.000đ. */
+export const FREE_SHIP_THRESHOLD_DEFAULT = 199_000;
+
 /**
  * Ngưỡng tiền hàng được miễn phí giao kho Tubu cho một hạng: ngưỡng toàn cục, hoặc ngưỡng riêng của hạng nếu thấp hơn
  * (id tier viết hoa: LOC_BIEC / DAI_THU / CO_THU). Giỏ hàng (thanh tiến độ freeship) và checkout cùng dùng hàm này.
  */
 export async function freeShipThreshold(config: Pick<SystemConfigService, 'get'>, tierId: string | null | undefined): Promise<number> {
-  const global = await config.get<number>('shipping.free_threshold', 200000);
+  const global = await config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT);
   if (!tierId) return global;
   // `?? {}`: get() chỉ áp fallback khi CHƯA có row; admin lỡ lưu value=null thì get() trả null.
   const overrides = await config.get<Record<string, number> | null>('shipping.tier_freeship_overrides', {});
@@ -74,7 +77,7 @@ export function calcTierDiscount(goodsValue: number, discountPct: number): numbe
 /**
  * Tính phí ship, điểm tích, điểm tối đa được trừ — TẤT CẢ đọc tham số từ SystemConfig.
  * Quy tắc (Build Spec §0.7, §6.6, §15):
- *  - Đơn ≥ shipping.free_threshold (200k) → freeship; ngược lại flat_fee (19k).
+ *  - Đơn ≥ shipping.free_threshold (199k) → freeship; ngược lại flat_fee (19k).
  *  - Hạng có override (Lộc Biếc freeship ≥99k, Đại Thụ/Cổ Thụ freeship toàn shop).
  *  - Tích loyalty.earn_pct (2%) tiền hàng sau giảm giá, không gồm ship, × multiplier theo hạng.
  *  - 1 điểm = 1đ khi trừ, tối đa 20% giá trị đơn.

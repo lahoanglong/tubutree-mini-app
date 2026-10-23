@@ -30,6 +30,7 @@ function toAdminItemDTO(row: WasteItem): AdminWasteItemDTO {
     imageUrl: row.imageUrl,
     gramsPerUnit: row.gramsPerUnit,
     hazardous: row.hazardous,
+    warehouseOnly: row.warehouseOnly,
     sortOrder: row.sortOrder,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

@@ -31,3 +31,11 @@ describe('ghim bản đồ /brand-story không chồng nhau', () => {
     expect(out).toEqual([]);
   });
 });
+
+describe('tên tỉnh hiển thị (D8-13)', () => {
+  it('viết "Đắk Lắk" đúng chính tả, không còn "Đắc Lắk"', () => {
+    const provinces = BRAND_ORIGINS.map((o) => o.province);
+    expect(provinces.join('|')).not.toMatch(/Đắc/);
+    expect(provinces).toContain('Đắk Lắk');
+  });
+});

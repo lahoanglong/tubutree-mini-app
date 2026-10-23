@@ -70,6 +70,22 @@ describe('WasteItemsSection', () => {
     expect(cells.filter((t) => t === '—').length).toBeGreaterThanOrEqual(2);
   });
 
+  // D7-26: 11 cột dồn chật ở 1440, chữ xuống dòng khó so hàng.
+  it('D7-26: bảng gọn (tối đa 8 cột): mã món chung ô với tên, giọt nước và gram chung ô, cột thao tác không xuống dòng', async () => {
+    const { c } = await mount();
+    const ths = Array.from(c.querySelectorAll('th')).map((t) => t.textContent);
+    expect(ths.length).toBeLessThanOrEqual(8);
+    expect(ths).not.toContain('Mã');
+    expect(ths).not.toContain('Đơn vị');
+    const cells = Array.from(row(c, 'i2').querySelectorAll('td'));
+    expect(cells).toHaveLength(ths.length);
+    const name = cells.find((td) => td.textContent?.includes('Vỏ hộp sữa'))!;
+    expect(name.textContent).toContain('MILK');
+    const nowrap = (td: Element | undefined) => td?.className.includes('whitespace-nowrap');
+    expect(nowrap(cells.at(-1))).toBe(true);
+    expect(nowrap(cells.at(-2))).toBe(true);
+  });
+
   it('chân bảng ghi đúng câu của spec 9', async () => {
     const { c } = await mount();
     expect(c.textContent).toContain('Thay đổi áp cho yêu cầu mới và cho yêu cầu khách sửa lại sau đó; yêu cầu chưa sửa giữ mức cũ.');

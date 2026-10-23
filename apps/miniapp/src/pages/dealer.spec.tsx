@@ -439,6 +439,25 @@ describe('DealerPage — đơn hàng, công nợ, báo cáo', () => {
     expect(screen.getByRole('button', { name: 'Yêu cầu nhận thưởng' })).toBeInTheDocument();
   });
 
+  it('báo cáo quý: % bậc thưởng ghi kiểu Việt, 4,5% và 4% (không "4.5%")', async () => {
+    mockReport();
+    mocks.getQuarterlyReport.mockResolvedValue({
+      quarter: 'Q3/2026', periodStart: '', periodEnd: '', revenue: 120_000_000, orderCount: 14,
+      pendingRevenue: 0, pendingOrderCount: 0, bonusPct: 2.5, bonusAmount: 3_000_000,
+      nextTier: { min: 200_000_000, pct: 4.5, toNext: 80_000_000 },
+      tiers: [{ min: 100_000_000, pct: 2.5 }, { min: 200_000_000, pct: 4.5 }, { min: 300_000_000, pct: 4 + 0 }],
+    });
+    renderPage();
+    await screen.findByText('Bạc');
+    openTab('Báo cáo');
+    expect(await screen.findByText('Còn 80.000.000đ để đạt thưởng 4,5%')).toBeInTheDocument();
+    expect(screen.getByText(/Thưởng hiện tại 2,5% =/)).toBeInTheDocument();
+    expect(screen.getByText('thưởng 2,5%')).toBeInTheDocument();
+    expect(screen.getByText('thưởng 4,5%')).toBeInTheDocument();
+    expect(screen.getByText('thưởng 4%')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\d\.\d%/);
+  });
+
   it('báo cáo quý: mốc đã đạt báo bằng icon, không dùng ký tự ✓ trong chữ', async () => {
     mockReport();
     renderPage();
@@ -488,5 +507,63 @@ describe('DealerPage — số trong chữ theo cấu hình (D5-10)', () => {
     mocks.config = { isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: null } };
     renderPage();
     expect(await screen.findByText('Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.')).toBeInTheDocument();
+  });
+});
+
+describe('DealerPage — báo trước phí giao và mức tối thiểu của đơn sỉ', () => {
+  const RULES = { minOrderValue: 3_000_000, freeShipThreshold: 5_000_000, shippingFee: 19_000 };
+  const meWith = (over: Record<string, unknown> = {}) => ({ ...APPROVED_ME, currentDebt: 0, orderRules: RULES, ...over });
+  const priced = (dealerPrice: number) => mocks.getPricelist.mockResolvedValue([row({ dealerPrice, stock: 9 })]);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getTemplates.mockResolvedValue([]);
+    mocks.getDealerOrders.mockResolvedValue([]);
+    mocks.getDealerMe.mockResolvedValue(meWith());
+  });
+
+  it('giỏ 4.000.000đ: hiện phí giao 19.000đ, tổng 4.019.000đ và nút đặt bật', async () => {
+    priced(4_000_000);
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    expect(await screen.findByText('4.019.000đ')).toBeInTheDocument();
+    expect(screen.getByText(/Phí giao 19\.000đ/)).toBeInTheDocument();
+    expect(screen.getByText(/miễn phí từ 5\.000\.000đ/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ghi công nợ' })).not.toBeDisabled();
+  });
+
+  it('giỏ 5.000.000đ: miễn phí giao, tổng bằng tiền hàng', async () => {
+    priced(5_000_000);
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    expect(await screen.findByText(/Miễn phí giao/)).toBeInTheDocument();
+    // Một lần ở đơn giá dòng hàng, một lần ở thanh tổng.
+    expect(screen.getAllByText('5.000.000đ')).toHaveLength(2);
+    expect(screen.queryByText(/Phí giao 19\.000đ/)).toBeNull();
+  });
+
+  it('giỏ 2.999.999đ: tắt cả hai nút đặt và ghi mức tối thiểu', async () => {
+    priced(2_999_999);
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    expect(await screen.findByText(/Đơn tối thiểu 3\.000\.000đ/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ghi công nợ' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Trả trước' })).toBeDisabled();
+  });
+
+  it('hạn mức tính cả phí giao: nợ + tiền hàng vừa trong hạn mức nhưng cộng phí thì vượt', async () => {
+    mocks.getDealerMe.mockResolvedValue(
+      meWith({ tier: { id: 't1', name: 'Bạc', creditLimit: 10_000_000 }, currentDebt: 6_000_000 }),
+    );
+    priced(4_000_000);
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    expect(await screen.findByText(/Vượt hạn mức công nợ/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ghi công nợ' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Trả trước' })).not.toBeDisabled();
   });
 });

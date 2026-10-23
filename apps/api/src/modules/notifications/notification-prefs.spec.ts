@@ -20,7 +20,7 @@ function setup(user: Record<string, unknown> | null) {
       findUniqueOrThrow: jest.fn().mockResolvedValue(user),
       update,
     },
-    notificationLog: { create },
+    notificationLog: { create, count: jest.fn().mockResolvedValue(0) },
   } as unknown as PrismaService;
   const sendTemplate = jest.fn().mockResolvedValue({ ok: true });
   const analytics = { recordBestEffort: jest.fn() } as unknown as AnalyticsEventsService;
@@ -45,12 +45,12 @@ describe('Phân loại tin (C-022)', () => {
     expect(notificationCategory(code)).toBe('PROMO');
   });
 
-  it.each(['GAME_CHECKIN_REMINDER', 'GAME_TREE_THIRSTY'])('%s là nhắc Vườn Xanh', (code) => {
+  it.each(['GAME_CHECKIN_REMINDER', 'GAME_TREE_THIRSTY', 'GAME_WATER_GIFT'])('%s là nhắc Vườn Xanh', (code) => {
     expect(notificationCategory(code)).toBe('GARDEN');
   });
 
   // Tin kéo khách quay lại khi bài có thích/bình luận: không phải tin giao dịch nên khách phải tắt được (cùng công tắc với nhắc Vườn).
-  it.each(['COMMUNITY_POST_LIKED', 'COMMUNITY_POST_COMMENTED'])('%s khách tắt được cùng công tắc Vườn Xanh', (code) => {
+  it.each(['COMMUNITY_POST_LIKED', 'COMMUNITY_POST_COMMENTED', 'COMMUNITY_NEW_ANSWER'])('%s khách tắt được cùng công tắc Vườn Xanh', (code) => {
     expect(notificationCategory(code)).toBe('GARDEN');
   });
 
@@ -60,7 +60,6 @@ describe('Phân loại tin (C-022)', () => {
     'RETURN_APPROVED',
     'POINTS_EXPIRING',
     'SUBSCRIPTION_ORDER_FAILED',
-    'GAME_WATER_GIFT',
     'COMMUNITY_BEST_ANSWER',
     'ACCOUNT_DELETION_REQUESTED',
     // Khách tự bấm "Nhắc tôi" → đây là tin khách yêu cầu, không phải tiếp thị.

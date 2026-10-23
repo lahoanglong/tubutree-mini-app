@@ -1,0 +1,940 @@
+{
+ "at": "2026-10-19T15:03:21.611Z",
+ "findings": [
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/affiliate/ctv-order-sheet.tsx",
+   "line": 610,
+   "tag": "Input.Search",
+   "type": null
+  },
+  {
+   "kind": "field-no-label",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/avatar-crop-modal.tsx",
+   "line": 185,
+   "tag": "input",
+   "type": "range"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/community/product-picker.tsx",
+   "line": 93,
+   "tag": "Input.Search",
+   "type": null
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/flash-sale.tsx",
+   "line": 127,
+   "tag": "div",
+   "insideInteractive": false
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/flash-sale.tsx",
+   "line": 197,
+   "tag": "div",
+   "insideInteractive": false
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/flash-sale.tsx",
+   "line": 225,
+   "tag": "div",
+   "role": "button"
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/orders/return-request-sheet.tsx",
+   "line": 192,
+   "tag": "div",
+   "insideInteractive": false
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 297,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/reviews-section.tsx",
+   "line": 518,
+   "tag": "Input.TextArea",
+   "type": null,
+   "placeholder": "Chia sẻ cảm nhận của bạn về sản phẩm (không bắt buộc)..."
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/components/ui/product-tile.tsx",
+   "line": 227,
+   "tag": "div",
+   "insideInteractive": false
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/cart.tsx",
+   "line": 300,
+   "tag": "Text",
+   "role": "button"
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/cart.tsx",
+   "line": 432,
+   "tag": "Box",
+   "role": "button"
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/cart.tsx",
+   "line": 464,
+   "tag": "Text",
+   "insideInteractive": false
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/cart.tsx",
+   "line": 541,
+   "tag": "Box",
+   "insideInteractive": false
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/cashback.tsx",
+   "line": 139,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/cashback.tsx",
+   "line": 227,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/checkout.tsx",
+   "line": 585,
+   "tag": "Box",
+   "insideInteractive": false
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/checkout.tsx",
+   "line": 789,
+   "tag": "Input",
+   "type": null
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/checkout.tsx",
+   "line": 935,
+   "tag": "Box",
+   "insideInteractive": false
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/checkout.tsx",
+   "line": 971,
+   "tag": "Text",
+   "role": "button"
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/community-moderation.tsx",
+   "line": 447,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/community-moderation.tsx",
+   "line": 538,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 490,
+   "tag": "Input",
+   "type": null,
+   "placeholder": "Tên mẫu (vd Đơn tháng)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 508,
+   "tag": "Input.TextArea",
+   "type": null,
+   "placeholder": "POLANG-SP-500\t10\nFUWA-DW-1L, 24"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/dealer.tsx",
+   "line": 825,
+   "tag": "Input",
+   "type": "number",
+   "placeholder": "Số tiền đã chuyển"
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/edit-profile.tsx",
+   "line": 160,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/order-detail.tsx",
+   "line": 366,
+   "tag": "Text",
+   "insideInteractive": false
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 366,
+   "tag": "Box",
+   "role": "button"
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 566,
+   "tag": "Box",
+   "role": "button"
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 636,
+   "tag": "Box",
+   "insideInteractive": false
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 676,
+   "tag": "Box",
+   "role": "button"
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 847,
+   "tag": "Box",
+   "role": "button"
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 1084,
+   "tag": "Box",
+   "role": "button"
+  },
+  {
+   "kind": "role-no-keyboard",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/product-detail.tsx",
+   "line": 1144,
+   "tag": "Text",
+   "role": "button"
+  },
+  {
+   "kind": "img-no-alt",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/profile.tsx",
+   "line": 223,
+   "tag": "Avatar"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/storefront-builder.tsx",
+   "line": 461,
+   "tag": "Input",
+   "type": null
+  },
+  {
+   "kind": "field-no-label",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/storefront-builder.tsx",
+   "line": 540,
+   "tag": "Input",
+   "type": null
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/storefront-builder.tsx",
+   "line": 591,
+   "tag": "Input.TextArea",
+   "type": null
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/storefront-builder.tsx",
+   "line": 782,
+   "tag": "Input",
+   "type": null
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "miniapp",
+   "file": "apps/miniapp/src/pages/storefront-builder.tsx",
+   "line": 863,
+   "tag": "Input.TextArea",
+   "type": null
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1322,
+   "tag": "tr",
+   "insideInteractive": false
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1851,
+   "tag": "input",
+   "type": null,
+   "placeholder": "SĐT (user đã mở Mini App)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1975,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Giá trị"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1978,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Đơn tối thiểu (đ)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1979,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Giảm tối đa (đ)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1982,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Tổng lượt dùng"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 1983,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Lượt / khách"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2018,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tên nhãn (vd Dừa Bến Tre)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2019,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tagline"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2153,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tiêu đề (MUA 2 TẶNG 1)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2154,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Mô tả"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2199,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Logo URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2200,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Cover URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2201,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tagline"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2202,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Nguồn gốc (vd Bến Tre)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2204,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Câu chuyện thương hiệu"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2212,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Mã (ORG)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2213,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Nhãn (Hữu cơ USDA)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2214,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Proof URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2275,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tiêu đề (Tour Phú Quốc)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2276,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Mốc doanh số"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2577,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Nhóm (vd Vận chuyển, Đổi trả)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2583,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Thứ tự hiển thị"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2591,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Câu hỏi"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2597,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Câu trả lời"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2678,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Nhóm"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2679,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Thứ tự"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2681,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Câu hỏi"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2682,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Câu trả lời"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2734,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Nhóm (vd Vận chuyển, Đổi trả)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2740,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tên nội bộ"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2747,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Từ khoá kích hoạt, cách nhau bằng dấu phẩy (vd ship, phí vận chuyển)"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2754,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Nội dung tin trả lời"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2854,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Nhóm"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2855,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tên nội bộ"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2857,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Từ khoá, cách nhau bằng dấu phẩy"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2864,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Nội dung"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2965,
+   "tag": "textarea",
+   "type": null
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2974,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Nguyên liệu tự nhiên"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2983,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "https://..."
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 2995,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Câu hỏi"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3001,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Câu trả lời"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3063,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tiêu đề khoá học"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3069,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Thứ tự"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3077,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Cover URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3083,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Mô tả"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3195,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tiêu đề"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3196,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Thứ tự"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3197,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Cover URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3199,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Mô tả"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3216,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tiêu đề bài học"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3231,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Thứ tự"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3240,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Video URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3247,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Nội dung bài viết"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3314,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Tiêu đề"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3324,
+   "tag": "input",
+   "type": "number",
+   "placeholder": "Thứ tự"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3327,
+   "tag": "input",
+   "type": null,
+   "placeholder": "Video URL"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-app",
+   "file": "apps/web/src/app/admin/page.tsx",
+   "line": 3329,
+   "tag": "textarea",
+   "type": null,
+   "placeholder": "Nội dung bài viết"
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/confirm-dialog.tsx",
+   "line": 119,
+   "tag": "div",
+   "insideInteractive": false
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/confirm-dialog.tsx",
+   "line": 145,
+   "tag": "textarea",
+   "type": null
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/customer-refund-paid-dialog.tsx",
+   "line": 170,
+   "tag": "div",
+   "insideInteractive": false
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/customer-refund-paid-dialog.tsx",
+   "line": 275,
+   "tag": "input",
+   "type": "text"
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/customer-refund-paid-dialog.tsx",
+   "line": 294,
+   "tag": "textarea",
+   "type": null
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/customer-refund-paid-dialog.tsx",
+   "line": 311,
+   "tag": "textarea",
+   "type": null
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/merchant-fulfilment-tab.tsx",
+   "line": 441,
+   "tag": "input",
+   "type": "number"
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/merchant-fulfilment-tab.tsx",
+   "line": 456,
+   "tag": "input",
+   "type": "number"
+  },
+  {
+   "kind": "field-id-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/merchant-fulfilment-tab.tsx",
+   "line": 471,
+   "tag": "input",
+   "type": "number"
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/merchant-products-tab.tsx",
+   "line": 243,
+   "tag": "input",
+   "type": "text",
+   "placeholder": "Lý do gỡ (gửi đối tác)..."
+  },
+  {
+   "kind": "field-placeholder-only",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/merchant-products-tab.tsx",
+   "line": 535,
+   "tag": "input",
+   "type": "text",
+   "placeholder": "Lý do từ chối..."
+  },
+  {
+   "kind": "click-nonsemantic",
+   "zone": "web-admin-components",
+   "file": "apps/web/src/components/admin/side-drawer.tsx",
+   "line": 29,
+   "tag": "div",
+   "insideInteractive": false
+  }
+ ]
+}

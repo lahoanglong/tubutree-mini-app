@@ -1,0 +1,105 @@
+{
+  "id": "U1-01",
+  "browser": "chromium",
+  "role": "Khách mới (Zalo đăng nhập được, máy chưa từng mở app)",
+  "journey": "Quét QR thẻ hộp hàng Shopee → mở Mini App → tự đăng nhập Zalo → nhận mã",
+  "steps": "Tạo tài khoản Zalo mới (voucher chào mừng cấp lúc tạo) → mở /?claim=<HOPSAN chưa ai nhận>&src=shopee → chờ sheet",
+  "expected": "Sheet \"Bạn nhận được ưu đãi\": \"Giảm 30.000đ cho đơn từ 199.000đ\", mã vào ví, hạn 60 ngày, \"Dành cho đơn đầu tiên…\"; 1 dòng coupon_claims; chạm đầu (first touch) = shopee; mã hiện trong ví /me/coupons",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "tiêu đề \"Bạn nhận được ưu đãi\"",
+      "ok": true,
+      "detail": "Bạn nhận được ưu đãi"
+    },
+    {
+      "name": "dòng ưu đãi \"Giảm 30.000đ cho đơn từ 199.000đ\"",
+      "ok": true
+    },
+    {
+      "name": "nêu mã + \"chọn ở bước thanh toán\"",
+      "ok": true
+    },
+    {
+      "name": "nêu \"Dành cho đơn đầu tiên\"",
+      "ok": true
+    },
+    {
+      "name": "POST /coupons/claim một lần, 201",
+      "ok": true,
+      "detail": [
+        {
+          "method": "POST",
+          "path": "/coupons/claim",
+          "status": 201,
+          "mocked": false
+        }
+      ]
+    },
+    {
+      "name": "DB: đúng 1 dòng coupon_claims của khách với mã thẻ",
+      "ok": true
+    },
+    {
+      "name": "hạn mã còn ~60 ngày kể từ lúc dựng lô (≤60, >50)",
+      "ok": true,
+      "detail": {
+        "days": "60.0"
+      }
+    },
+    {
+      "name": "máy ghi chạm đầu source=shopee (gửi kèm đăng nhập)",
+      "ok": true,
+      "detail": "{\"source\":\"shopee\",\"at\":\"2026-10-22T11:34:08.699Z\"}"
+    },
+    {
+      "name": "mã chờ nhận đã xoá khỏi máy sau khi nhận",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "ví có mã thẻ và voucher chào mừng WELCOME-…",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "sheet",
+      "data": {
+        "title": "Bạn nhận được ưu đãi",
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-38X362LH đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 21/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-01-claim-ok.png"
+    },
+    {
+      "label": "SQL coupon_claims của khách",
+      "data": [
+        {
+          "claimedAt": "2026-10-22T11:34:08.815Z",
+          "code": "HOPSAN-38X362LH",
+          "endAt": "2026-12-21T11:30:15.924Z"
+        }
+      ]
+    },
+    {
+      "label": "localStorage tubu_first_touch",
+      "data": "{\"source\":\"shopee\",\"at\":\"2026-10-22T11:34:08.699Z\"}"
+    },
+    {
+      "label": "GET /me/coupons",
+      "data": [
+        "WELCOME30",
+        "FREESHIP",
+        "XANH10",
+        "HOPSAN-38X362LH",
+        "WELCOME-U1_A01_GQTRAE2"
+      ]
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:34:09.460Z"
+}

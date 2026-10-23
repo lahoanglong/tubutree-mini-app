@@ -1,5 +1,7 @@
 # Deploy Tubu Tree lên GCP (Compute Engine + Docker + Caddy)
 
+> **Tài liệu cũ, chỉ dùng khi dựng máy riêng.** Máy ảo GCP đã đóng. PROD hiện chạy trên VPS Vietnix, thư mục `/opt/tubutree`, file `docker-compose.vietnix.yml`: làm theo [runbook deploy](launch/deploy-rollback-runbook.md) (mục 0.3), không chạy lệnh `docker-compose.prod.yml` dưới đây trên VPS đó (hai file khác cổng, giới hạn RAM/CPU và Redis).
+
 Triển khai toàn bộ stack (Postgres + Redis + API + Web + Caddy auto‑HTTPS) trên **một VM** GCP.
 Lý do chọn VM thay vì Cloud Run/Cloud SQL: stack có Redis (BullMQ) + nhiều service, gom 1 VM
 rẻ và tự chủ hơn, lại có **IP/domain ổn định** cho webhook Pancake/ZaloPay.
@@ -49,7 +51,7 @@ git clone https://github.com/lahoanglong/tubutree-mini-app.git tubutree && cd tu
 cp .env.production.example .env
 nano .env        # điền WEB_DOMAIN, POSTGRES_PASSWORD, JWT secrets, các key
 ```
-Sinh secret nhanh: `openssl rand -base64 48` (JWT), `openssl rand -base64 24` (Postgres).
+Sinh secret nhanh: `openssl rand -base64 48` (JWT), `openssl rand -hex 24` (Postgres). Mật khẩu Postgres đi nguyên văn vào `DATABASE_URL` nên phải an toàn cho URL: `-hex` chỉ ra chữ số và a-f. Không dùng `-base64` cho mật khẩu Postgres: base64 có thể sinh `/` hoặc `+`, và `/` làm hỏng URL (Prisma P1013, API không khởi động); tự đặt thì tránh `/ @ : # ? %`.
 
 ## 5. Khởi chạy
 ```bash

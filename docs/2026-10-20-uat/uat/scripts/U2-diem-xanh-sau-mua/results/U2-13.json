@@ -1,0 +1,77 @@
+{
+  "id": "U2-13",
+  "title": "Mã không có trên Pancake: báo \"chưa thấy\", ghi lần thử; 5 mã không thấy trong 24h → khoá 24h (429 LOCKED)",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:18.463Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "mã không có: HTTP 2xx trạng thái tìm lại (SEARCHING), màn báo \"Chưa thấy đơn này\"",
+      "ok": true,
+      "detail": {
+        "code": "SPXVN05NOTFOUND1",
+        "http": 201,
+        "state": "SEARCHING",
+        "text": [
+          "Chưa thấy đơn này. Tubu sẽ tìm lại trong vài ngày tới và báo cho bạn khi có.",
+          "Đang tìm đơn"
+        ]
+      }
+    },
+    {
+      "name": "lần thứ 6 sau 5 mã không thấy: 429 LOCKED",
+      "ok": true,
+      "detail": {
+        "code": "SPXVN05UAT0001 (lần 6)",
+        "http": 429,
+        "state": "LOCKED",
+        "message": "Bạn đã nhập mã chưa tìm thấy quá nhiều lần. Vui lòng thử lại sau 24 giờ hoặc liên hệ Tubu Tree."
+      }
+    }
+  ],
+  "evidence": {
+    "chuỗi gửi": [
+      {
+        "code": "SPXVN05NOTFOUND1",
+        "http": 201,
+        "state": "SEARCHING",
+        "text": [
+          "Chưa thấy đơn này. Tubu sẽ tìm lại trong vài ngày tới và báo cho bạn khi có.",
+          "Đang tìm đơn"
+        ]
+      },
+      {
+        "code": "SPXVN05NOTFOUND2",
+        "http": 201,
+        "state": "SEARCHING"
+      },
+      {
+        "code": "SPXVN05NOTFOUND3",
+        "http": 201,
+        "state": "SEARCHING"
+      },
+      {
+        "code": "SPXVN05NOTFOUND4",
+        "http": 201,
+        "state": "SEARCHING"
+      },
+      {
+        "code": "SPXVN05NOTFOUND5",
+        "http": 201,
+        "state": "SEARCHING"
+      },
+      {
+        "code": "SPXVN05UAT0001 (lần 6)",
+        "http": 429,
+        "state": "LOCKED",
+        "message": "Bạn đã nhập mã chưa tìm thấy quá nhiều lần. Vui lòng thử lại sau 24 giờ hoặc liên hệ Tubu Tree."
+      }
+    ],
+    "external_claim_attempts": [
+      {
+        "n": 5
+      }
+    ]
+  }
+}

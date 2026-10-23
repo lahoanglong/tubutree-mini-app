@@ -80,4 +80,18 @@ describe('ProductDetailPage — giờ vàng ở chỗ biên (D7 #12)', () => {
     expect(await screen.findByText('Đã bán 100%')).toBeInTheDocument();
     expect(screen.queryByText(/Còn \d+h/)).toBeNull();
   });
+
+  it('giờ vàng: giá gạch và % theo giá đang bán trước giờ vàng, khớp dải trang chủ (U1-B05)', async () => {
+    mocks.fetchProduct.mockResolvedValue({
+      ...product,
+      basePrice: 180_000,
+      salePrice: 159_000,
+      variations: [{ id: 'v1', sku: 'S1', name: 'Mặc định', attributes: {}, retailPrice: 180_000, salePrice: 159_000, stock: 5 }],
+    });
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash({ retailPrice: 180_000, salePrice: 159_000, flashPrice: 119_000 })]);
+    renderPdp();
+    expect(await screen.findByText('-25%')).toBeInTheDocument();
+    expect(screen.getByText('159.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    expect(screen.queryByText('180.000đ')).toBeNull();
+  });
 });

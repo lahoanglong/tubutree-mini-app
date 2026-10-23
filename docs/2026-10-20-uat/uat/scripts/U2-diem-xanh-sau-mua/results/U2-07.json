@@ -1,0 +1,81 @@
+{
+  "id": "U2-07",
+  "title": "Tin nhắc điểm sắp hết hạn: lô hết hạn sau 10 ngày không nhắc; sau 5 ngày nhắc 1 lần; chạy lại không nhắc lặp",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:38:52.662Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "lô hết hạn sau 10 ngày (ngoài cửa sổ 7 ngày): job không tạo tin nhắc",
+      "ok": true,
+      "detail": {
+        "before": 0,
+        "after": 0,
+        "job": null
+      }
+    },
+    {
+      "name": "/me/loyalty báo expiringPoints đúng lô (amount, ngày)",
+      "ok": true,
+      "detail": {
+        "amount": 500,
+        "expiresAt": "2026-10-27T11:38:48.193Z"
+      }
+    },
+    {
+      "name": "lô hết hạn sau 5 ngày: job tạo đúng 1 dòng notification_logs POINTS_EXPIRING",
+      "ok": true,
+      "detail": {
+        "count": 1
+      }
+    },
+    {
+      "name": "chạy job lần 2 trong kỳ: không nhắc lặp",
+      "ok": true,
+      "detail": {
+        "count": 1
+      }
+    },
+    {
+      "name": "màn /loyalty Mini App hiện dòng điểm sắp hết hạn",
+      "ok": true,
+      "detail": [
+        "500 Điểm Xanh sẽ hết hạn ngày 27/10/2026 (còn 5 ngày)"
+      ]
+    }
+  ],
+  "evidence": {
+    "lô thử": {
+      "reason": "ORDER_DELIVERED:TUBU2026102209258",
+      "delta": 500
+    },
+    "/me/loyalty expiringPoints": {
+      "amount": 500,
+      "expiresAt": "2026-10-27T11:38:48.193Z"
+    },
+    "notification_logs POINTS_EXPIRING": [
+      {
+        "id": "cmvjgwwmy0000frkj2vgp6dpy",
+        "templateCode": "POINTS_EXPIRING",
+        "channel": "INAPP",
+        "status": "SENT",
+        "sentAt": "2026-10-22T11:38:49.018Z",
+        "payload": {
+          "body": "⏳ Bạn có 500 Điểm Xanh sắp hết hạn vào 27/10/2026. Dùng để đổi ưu đãi trước khi lỡ nhé! 🌿",
+          "data": {
+            "date": "27/10/2026",
+            "points": "500"
+          }
+        }
+      }
+    ],
+    "màn /loyalty": {
+      "shot": "shots/U2-diem-xanh-sau-mua/U2-07-loyalty-expiring.png",
+      "lines": [
+        "500 Điểm Xanh sẽ hết hạn ngày 27/10/2026 (còn 5 ngày)"
+      ]
+    },
+    "thông báo trong app (bảng notifications, nếu có)": "bảng notifications: Raw query failed. Code: `42P01`. Message: `relation \"notifications\" does not exist`"
+  }
+}

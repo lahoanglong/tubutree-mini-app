@@ -1,0 +1,157 @@
+[
+  {
+    "id": "U4-39",
+    "role": "KHÁCH (uat_returning)",
+    "journey": "Xem và đánh dấu đã đọc thông báo",
+    "steps": "/notifications → thấy tin \"đã đếm xong\" (đổi rác) có chấm \"chưa đọc\" → chạm mở → quay lại → \"Đọc tất cả\"",
+    "expected": "Danh sách khớp GET /me/notifications (tin INAPP của chính khách: đổi rác, cộng đồng, sự kiện); chạm một tin → tin đó READ trong DB; \"Đọc tất cả\" → không còn tin chưa đọc (DB 0, UI hết chấm)",
+    "actual": "11 tin, mã COMMUNITY_EVENT_WINNER,COMMUNITY_POST_COMMENTED,COMMUNITY_POST_HIDDEN,COMMUNITY_POST_LIKED,COMMUNITY_POST_REJECTED,ORDER_CONFIRMED,ORDER_DELIVERED,ORDER_SHIPPING,WASTE_POINTS_CREDITED; chưa đọc 11 → chạm một tin còn 10 → \"Đọc tất cả\" còn 0.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-39-notifications-unread.png",
+      "shots/U4-doi-rac-cong-dong-game/U4-39-notifications-read.png",
+      "SQL count(status<>'READ') INAPP uat_returning: 11 → 0"
+    ],
+    "checks": [
+      {
+        "name": "GET /me/notifications 200, có WASTE_POINTS_CREDITED, COMMUNITY_EVENT_WINNER",
+        "ok": true,
+        "detail": [
+          "COMMUNITY_EVENT_WINNER",
+          "COMMUNITY_POST_COMMENTED",
+          "COMMUNITY_POST_HIDDEN",
+          "COMMUNITY_POST_LIKED",
+          "COMMUNITY_POST_REJECTED",
+          "ORDER_CONFIRMED",
+          "ORDER_DELIVERED",
+          "ORDER_SHIPPING",
+          "WASTE_POINTS_CREDITED"
+        ]
+      },
+      {
+        "name": "DB có tin chưa đọc",
+        "ok": true,
+        "detail": 11
+      },
+      {
+        "name": "UI có chấm \"chưa đọc\" bằng số tin chưa đọc trong 50 tin mới nhất",
+        "ok": true,
+        "detail": {
+          "dots": 11,
+          "u0": 11
+        }
+      },
+      {
+        "name": "POST /me/notifications/:id/read → 2xx",
+        "ok": true
+      },
+      {
+        "name": "Mở chi tiết tin, có nội dung đổi rác",
+        "ok": true
+      },
+      {
+        "name": "DB tin vừa chạm = READ",
+        "ok": true,
+        "detail": {
+          "status": "READ"
+        }
+      },
+      {
+        "name": "DB chưa đọc giảm 1",
+        "ok": true,
+        "detail": {
+          "u0": 11,
+          "u1": 10
+        }
+      },
+      {
+        "name": "POST /me/notifications/read-all → 2xx",
+        "ok": true
+      },
+      {
+        "name": "UI hết chấm \"chưa đọc\"",
+        "ok": true
+      },
+      {
+        "name": "DB không còn tin INAPP chưa đọc",
+        "ok": true,
+        "detail": 0
+      }
+    ],
+    "status": "PASS"
+  },
+  {
+    "id": "U4-40",
+    "role": "KHÁCH (uat_returning), NHÂN VIÊN (uat_staff), KIỂM DUYỆT (uat_cskh)",
+    "journey": "Tắt nhận tin theo nhóm ở Cài đặt",
+    "steps": "/settings → tắt \"Nhắc nhở Vườn Xanh & tương tác bài viết\" và \"Khuyến mãi & mã giảm giá\" → tải lại; uat_staff thích + bình luận bài dự thi của khách (và bài của uat_new để đối chứng); khách đăng bài có từ cấm, CSKH từ chối",
+    "expected": "users.notifyGarden = false, notifyPromo = false (giữ sau tải lại); không ghi COMMUNITY_POST_LIKED/COMMENTED cho khách đã tắt (uat_new còn bật vẫn nhận); tin giao dịch COMMUNITY_POST_REJECTED vẫn tới",
+    "actual": "notifyGarden=false, notifyPromo=false; LIKED 1→1, COMMENTED 1→1 (đối chứng uat_new LIKED 0→1); REJECTED 1→2. Tin nhóm khuyến mãi do cron sinh, chưa chạy ở ca này: chặn PROMO chưa kiểm chứng.",
+    "evidence": [
+      "shots/U4-doi-rac-cong-dong-game/U4-40-settings-off.png",
+      "SQL users uat_returning {\"notifyGarden\":false,\"notifyPromo\":false}; notification_logs INAPP LIKED 1→1, COMMENTED 1→1, REJECTED 1→2; uat_new LIKED 0→1"
+    ],
+    "checks": [
+      {
+        "name": "PATCH prefs (Nhắc nhở Vườn Xanh & tương tác bài viết) → 2xx",
+        "ok": true
+      },
+      {
+        "name": "PATCH prefs (Khuyến mãi & mã giảm giá) → 2xx",
+        "ok": true
+      },
+      {
+        "name": "Sau tải lại hai công tắc vẫn tắt",
+        "ok": true
+      },
+      {
+        "name": "DB users.notifyGarden = false, notifyPromo = false",
+        "ok": true,
+        "detail": {
+          "notifyGarden": false,
+          "notifyPromo": false
+        }
+      },
+      {
+        "name": "uat_staff thích + bình luận → 2xx",
+        "ok": true,
+        "detail": [
+          201,
+          201,
+          201
+        ]
+      },
+      {
+        "name": "Khách đã tắt: không thêm COMMUNITY_POST_LIKED / COMMENTED",
+        "ok": true,
+        "detail": {
+          "liked0": 1,
+          "liked1": 1,
+          "comm0": 1,
+          "comm1": 1
+        }
+      },
+      {
+        "name": "Đối chứng uat_new còn bật: có thêm COMMUNITY_POST_LIKED",
+        "ok": true,
+        "detail": {
+          "ctl0": 0,
+          "ctl1": 1
+        }
+      },
+      {
+        "name": "Tin giao dịch COMMUNITY_POST_REJECTED vẫn tới",
+        "ok": true,
+        "detail": {
+          "post": {
+            "id": "cmvjh0dg200ajvxsorwjeh714",
+            "status": "PENDING"
+          },
+          "reject": 201,
+          "rej0": 1,
+          "rej1": 2
+        }
+      }
+    ],
+    "status": "PASS"
+  }
+]

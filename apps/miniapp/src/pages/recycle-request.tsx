@@ -366,7 +366,6 @@ export default function RecycleRequestPage() {
         <Button fullWidth onPress={() => navigate(`/recycle/done/${id}`)}>Xem kết quả cộng điểm</Button>
       )}
       <section style={{ ...COLUMN, gap: 8 }}>
-        <Text variant="body-sm" tone="secondary">Cần hỗ trợ? Nhắn Tubu Tree</Text>
         <SupportContact />
       </section>
 

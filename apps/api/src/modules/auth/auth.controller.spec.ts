@@ -35,8 +35,9 @@ describe('AuthController — giao refresh token theo client', () => {
     refresh: jest.fn(),
     logout: jest.fn(),
     ensurePhoneForCurrentUser: jest.fn(),
+    toAuthUser: jest.fn((u: { id: string }) => ({ id: u.id })),
   };
-  const prisma = { user: { findUniqueOrThrow: jest.fn() } };
+  const prisma = { user: { findUniqueOrThrow: jest.fn() }, brand: { findFirst: jest.fn() } };
   const config = { get: jest.fn().mockReturnValue(30) };
   let c: AuthController;
 
@@ -47,6 +48,23 @@ describe('AuthController — giao refresh token theo client', () => {
       prisma as never,
       config as never,
     );
+  });
+
+  describe('GET /auth/me — ownsBrand', () => {
+    it('true khi người dùng sở hữu ít nhất một nhãn, giữ nguyên các trường cũ', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'u1' });
+      prisma.brand.findFirst.mockResolvedValue({ id: 'b1' });
+      const out = await c.me({ sub: 'u1' } as never);
+      expect(prisma.brand.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { ownerUserId: 'u1' } }));
+      expect(out).toEqual({ id: 'u1', ownsBrand: true });
+    });
+
+    it('false khi không sở hữu nhãn nào', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'u2' });
+      prisma.brand.findFirst.mockResolvedValue(null);
+      const out = await c.me({ sub: 'u2' } as never);
+      expect(out).toEqual({ id: 'u2', ownsBrand: false });
+    });
   });
 
   describe('Mini App (không có x-client: web) — hành vi cũ giữ nguyên', () => {

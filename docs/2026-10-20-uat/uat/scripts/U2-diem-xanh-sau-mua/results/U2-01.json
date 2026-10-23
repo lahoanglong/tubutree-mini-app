@@ -1,0 +1,152 @@
+{
+  "id": "U2-01",
+  "title": "Mầm Xanh: đơn app 199.000đ (Q12: ngưỡng miễn phí giao 199.000đ nên ship 0) → 3.980 điểm (×1). Phần \"ship không tính điểm\" kiểm ở U2-18 (đơn có ship 19.000đ)",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:38:18.624Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "khách đang hạng Mầm Xanh (MAM_XANH)",
+      "ok": true,
+      "detail": {
+        "tierId": "MAM_XANH"
+      }
+    },
+    {
+      "name": "Mini App: đặt đơn 201, không request lỗi/ra ngoài",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "code": "TUBU2026102298126",
+        "bad": [],
+        "blocked": []
+      }
+    },
+    {
+      "name": "báo giá: tiền hàng sau giảm 199000đ, phí giao 0đ",
+      "ok": true,
+      "detail": {
+        "goods": 199000,
+        "shippingFee": 0
+      }
+    },
+    {
+      "name": "báo giá: pointsEarned = floor(199000 × 2% × 1) = 3980 (không tính ship)",
+      "ok": true,
+      "detail": {
+        "pointsEarned": 3980
+      }
+    },
+    {
+      "name": "DB: orders.pointsEarned = báo giá",
+      "ok": true,
+      "detail": {
+        "id": "cmvjgw7p9001vh9r15nnmo5oi",
+        "total": 199000,
+        "shippingFee": 0,
+        "pointsEarned": 3980,
+        "status": "CONFIRMED",
+        "discount": 0
+      }
+    },
+    {
+      "name": "webhook delivered lặp + job resync: vẫn 1 dòng",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "name": "SQL: đúng 1 dòng ORDER_DELIVERED:<mã> = pointsEarned",
+      "ok": true,
+      "detail": [
+        3980
+      ]
+    },
+    {
+      "name": "SQL: số dư = trước + điểm đơn = SUM(delta STANDARD)",
+      "ok": true,
+      "detail": {
+        "before": 500,
+        "after": 4480,
+        "stdSum": 4480
+      }
+    },
+    {
+      "name": "SQL: hạn dòng điểm = ngày cộng + 12 tháng (365/366 ± 1 ngày)",
+      "ok": true,
+      "detail": {
+        "days": 365,
+        "expiresAt": "2027-10-22T11:38:17.362Z"
+      }
+    },
+    {
+      "name": "đúng ví dụ luật: 199.000đ Mầm Xanh = 3.980 điểm",
+      "ok": true,
+      "detail": 3980
+    }
+  ],
+  "evidence": {
+    "trước": {
+      "balance": 500,
+      "stdSum": 500,
+      "rows": 1,
+      "converted": 0,
+      "convSum": 0,
+      "wallet": 0,
+      "walletSum": 0,
+      "walletRows": 0,
+      "tierId": "MAM_XANH",
+      "lots": [
+        {
+          "lot": "STANDARD",
+          "sum": 500,
+          "n": 1
+        }
+      ]
+    },
+    "báo giá màn checkout": {
+      "subtotal": 199000,
+      "discount": 0,
+      "tierDiscount": 0,
+      "shippingFee": 0,
+      "total": 199000,
+      "pointsEarned": 3980
+    },
+    "nút đặt": "Đặt hàng · 199.000đ",
+    "giao": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    },
+    "sổ sau giao": {
+      "rows": [
+        {
+          "delta": 3980,
+          "reason": "ORDER_DELIVERED:TUBU2026102298126",
+          "lot": "STANDARD",
+          "refId": "cmvjgw7p9001vh9r15nnmo5oi",
+          "createdAt": "2026-10-22T11:38:17.365Z",
+          "expiresAt": "2027-10-22T11:38:17.362Z"
+        }
+      ],
+      "after": {
+        "balance": 4480,
+        "stdSum": 4480,
+        "rows": 2,
+        "converted": 0,
+        "convSum": 0,
+        "wallet": 0,
+        "walletSum": 0,
+        "walletRows": 0,
+        "tierId": "MAM_XANH",
+        "lots": [
+          {
+            "lot": "STANDARD",
+            "sum": 4480,
+            "n": 2
+          }
+        ]
+      }
+    },
+    "mã đơn": "TUBU2026102298126"
+  }
+}

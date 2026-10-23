@@ -28,7 +28,7 @@ export function QuizCard({
   onNext: () => void;
 }) {
   return (
-    <GameCard title="Quiz Sống Xanh hôm nay" icon={Brain}>
+    <GameCard title="Câu đố Sống Xanh hôm nay" icon={Brain}>
       {currentQuiz ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
@@ -73,7 +73,7 @@ export function QuizCard({
         </>
       ) : (
         <Text variant="body-sm" tone="tertiary" as="div">
-          Bạn đã hoàn thành quiz hôm nay 🎉
+          Bạn đã hoàn thành câu đố hôm nay 🎉
         </Text>
       )}
     </GameCard>

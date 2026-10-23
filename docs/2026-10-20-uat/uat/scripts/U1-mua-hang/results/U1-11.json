@@ -1,0 +1,353 @@
+{
+  "id": "U1-11",
+  "browser": "chromium",
+  "role": "Khách mới (đã nhận thẻ HOPSAN, có voucher chào mừng)",
+  "journey": "Mã thẻ 30k (đơn từ 199k, chỉ khách mới) + freeship đơn đầu từ 199k → thêm địa chỉ → COD → đơn thành công",
+  "steps": "Nhận thẻ (POST /coupons/claim) → giỏ FUWA-DW-1L 120k + FUWA-GL-500 79k = 199.000đ → \"Chọn mã\" gõ mã thẻ \"Áp dụng\" → \"Thanh toán (2)\" → \"Thêm địa chỉ mới\" (form tỉnh/phường) → COD → \"Đặt hàng · 169.000đ\"",
+  "expected": "Giảm 30.000đ; phí giao 0đ nhờ freeship đơn đầu (tiền hàng 199.000đ ≥ 199.000đ) dù sau mã còn 169.000đ < ngưỡng chung 200.000đ; tổng 169.000đ; điểm dự kiến 2% × 169.000 = 3.380; DB: CONFIRMED/COD, couponDiscount 30000, shippingFee 0, total 169000, 1 coupon_redemptions, usedCount 1; tồn kho mỗi SKU −1; giỏ trống; giả Pancake nhận đơn cod 169.000",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "áp mã thẻ: snackbar \"Đã áp dụng mã …\"",
+      "ok": true,
+      "detail": "Đã áp dụng mã HOPSAN-9CF8ZG2J"
+    },
+    {
+      "name": "báo giá: giảm 30.000đ, phí giao 0đ, tổng 169.000đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgs2nr0048zw9cqg525auu",
+              "cmvjgs2o3004gzw9chgrn8yj5"
+            ],
+            "subtotal": 199000,
+            "discount": 30000,
+            "shippingFee": 0,
+            "total": 169000
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 199000,
+        "discount": 30000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 169000,
+        "pointsEarned": 3380,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgs2nr0048zw9cqg525auu",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 200,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          },
+          {
+            "id": "cmvjgs2o3004gzw9chgrn8yj5",
+            "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
+            "productId": "p-fuwa-glass",
+            "productName": "Nước lau kính enzyme Fuwa3e",
+            "variationName": "500ml",
+            "slug": "nuoc-lau-kinh-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 79000,
+            "quantity": 1,
+            "stock": 170,
+            "weight": 540,
+            "total": 79000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "báo giá: điểm dự kiến 3.380 (2% × 169.000)",
+      "ok": true,
+      "detail": 3380
+    },
+    {
+      "name": "nút \"Đặt hàng · 169.000đ\"",
+      "ok": true,
+      "detail": "Đặt hàng · 169.000đ"
+    },
+    {
+      "name": "POST /checkout/place-order 201",
+      "ok": true,
+      "detail": 201
+    },
+    {
+      "name": "màn thành công",
+      "ok": true,
+      "detail": "Cảm ơn bạn đã chọn Tubu\nĐơn hàng của bạn đã được ghi nhận\nMã đơn hàng\nTUBU2026102209426\nTổng thanh toán\n169.000đ\nChuẩn bị tiền mặt khi nhận hàng\nĐiểm Xanh sẽ nhận\n+3.380 điểm\n3.380 Điểm Xanh sẽ về tay"
+    },
+    {
+      "name": "DB: CONFIRMED/COD/UNPAID",
+      "ok": true
+    },
+    {
+      "name": "DB: subtotal 199000, couponDiscount 30000, discount 30000, shippingFee 0, total 169000",
+      "ok": true
+    },
+    {
+      "name": "DB: couponCode = mã thẻ, pointsEarned 3380",
+      "ok": true
+    },
+    {
+      "name": "DB: tổng paidTotal các dòng = total - ship",
+      "ok": true,
+      "detail": [
+        {
+          "sku": "FUWA-DW-1L",
+          "quantity": 1,
+          "unitPrice": 120000,
+          "total": 120000,
+          "paidTotal": 101910,
+          "pointsDiscount": 0,
+          "flash": false
+        },
+        {
+          "sku": "FUWA-GL-500",
+          "quantity": 1,
+          "unitPrice": 79000,
+          "total": 79000,
+          "paidTotal": 67090,
+          "pointsDiscount": 0,
+          "flash": false
+        }
+      ]
+    },
+    {
+      "name": "DB: 1 lượt dùng, usedCount 1/1",
+      "ok": true
+    },
+    {
+      "name": "DB: tồn kho mỗi SKU giảm 1",
+      "ok": true
+    },
+    {
+      "name": "giỏ trống sau đặt",
+      "ok": true
+    },
+    {
+      "name": "giả Pancake nhận đơn, cod 169.000",
+      "ok": true,
+      "detail": 169000
+    }
+  ],
+  "evidence": [
+    {
+      "label": "nhận thẻ",
+      "data": {
+        "code": "HOPSAN-9CF8ZG2J",
+        "alreadyClaimed": false
+      }
+    },
+    {
+      "label": "áp mã HOPSAN-9CF8ZG2J",
+      "data": {
+        "status": 201,
+        "snackbar": "Đã áp dụng mã HOPSAN-9CF8ZG2J",
+        "couponCode": "HOPSAN-9CF8ZG2J",
+        "discount": 30000,
+        "message": null
+      }
+    },
+    {
+      "label": "thêm địa chỉ qua form",
+      "data": {
+        "status": 201,
+        "ward": "Phường Bến Thành",
+        "provinceCode": "84_VN79",
+        "wardCode": "84_VN7926743"
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 199000,
+        "discount": 30000,
+        "couponApplied": true,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 169000,
+        "pointsEarned": 3380
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-11-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102209426",
+        "button": "Đặt hàng · 169.000đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-11-placed.png"
+    },
+    {
+      "label": "SQL đơn",
+      "data": {
+        "id": "cmvjgs9fb0053zw9cfjrvjovu",
+        "code": "TUBU2026102209426",
+        "userId": "u1_c11_gs28hpn",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 199000,
+        "discount": 30000,
+        "couponDiscount": 30000,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 169000,
+        "pointsEarned": 3380,
+        "pointsUsed": 0,
+        "couponCode": "HOPSAN-9CF8ZG2J",
+        "pancakeOrderId": "9200001",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-22T11:35:12.311Z",
+        "items": [
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 101910,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 67090,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [
+          {
+            "code": "HOPSAN-9CF8ZG2J",
+            "usedCount": 1,
+            "usageLimit": 1
+          }
+        ],
+        "ledger": []
+      }
+    },
+    {
+      "label": "SQL mã thẻ",
+      "data": {
+        "code": "HOPSAN-9CF8ZG2J",
+        "usedCount": 1,
+        "usageLimit": 1,
+        "perUserLimit": 1,
+        "endAt": "2026-12-21T11:30:15.924Z",
+        "isActive": true,
+        "redemptions": 1,
+        "claims": 1
+      }
+    },
+    {
+      "label": "tồn kho trước/sau",
+      "data": {
+        "stock0": {
+          "dw": {
+            "stock": 200,
+            "reservedStock": 0
+          },
+          "gl": {
+            "stock": 170,
+            "reservedStock": 0
+          }
+        },
+        "stock1": {
+          "dw": {
+            "stock": 199,
+            "reservedStock": 1
+          },
+          "gl": {
+            "stock": 169,
+            "reservedStock": 1
+          }
+        }
+      }
+    },
+    {
+      "label": "giả Pancake",
+      "data": {
+        "id": "9200001",
+        "cod": 169000,
+        "total_discount": 30000,
+        "shipping_fee": 0,
+        "custom_id": "TUBU2026102209426"
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:35:13.921Z"
+}

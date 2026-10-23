@@ -13,6 +13,7 @@ import {
   DEMO_VARIATIONS,
   DEMO_VARIATION_PANCAKE_IDS,
   DEMO_VARIATION_WHERE,
+  OWNER_KEPT_DEMO_COUPONS,
   classifyDemoCoupon,
   demoCouponTermsMatch,
   isDemoCouponKind,
@@ -417,7 +418,11 @@ export function formatPlan(plan: DemoCleanupPlan, args: CleanupArgs): string {
     let action: string;
     if (c.kind === 'name-only') action = 'KHÔNG ĐỤNG: trùng tên mã demo nhưng điều kiện khác (mã thật hoặc đã sửa), kiểm ở Quản trị, Mã giảm giá';
     else if (args.coupons === 'expire' && args.keepCoupons.includes(c.code)) action = `GIỮ theo --keep-coupon${c.live ? ': khách dùng được, xác nhận điều kiện đúng như chủ dự án duyệt' : ''}`;
-    else if (args.coupons === 'expire') action = c.willExpire ? 'sẽ TẮT (isActive=false, endAt=lúc chạy)' : 'không cần đổi';
+    else if (args.coupons === 'expire') {
+      action = c.willExpire ? 'sẽ TẮT (isActive=false, endAt=lúc chạy)' : 'không cần đổi';
+      if (c.willExpire && OWNER_KEPT_DEMO_COUPONS.includes(c.code)) action += `. CHÚ Ý: chủ dự án đã chốt GIỮ mã này (A4); muốn giữ thì thêm --keep-coupon=${c.code}`;
+    }
+    else if (c.live && OWNER_KEPT_DEMO_COUPONS.includes(c.code)) action = 'GIỮ NGUYÊN (chủ dự án đã chốt giữ, A4)';
     else action = c.live ? 'GIỮ NGUYÊN. CẢNH BÁO: khách dùng được mã chủ dự án chưa duyệt' : 'GIỮ NGUYÊN';
     L.push(`   - ${c.code}${origin}: ${state}; ${refs} → ${action}`);
   }

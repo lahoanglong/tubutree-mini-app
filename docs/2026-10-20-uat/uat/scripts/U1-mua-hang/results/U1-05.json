@@ -1,0 +1,74 @@
+{
+  "id": "U1-05",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Mã thẻ sai / hết hạn / quét lại thẻ của chính mình",
+  "steps": "(a) /?claim=HOPSAN-KHONGCO99; (b) lùi endAt một mã thẻ về hôm qua rồi mở link; (c) khách U1-01 mở lại link thẻ của chính mình",
+  "expected": "(a) \"Mã giảm giá không tồn tại. Vui lòng kiểm tra lại mã trên thẻ.\" (b) \"Mã giảm giá đã hết hạn.\" (c) \"Ưu đãi đã có trong ví của bạn\", không ghi thêm dòng claim",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "(a) mã không tồn tại báo đúng chữ",
+      "ok": true,
+      "detail": "Mã giảm giá không tồn tại. Vui lòng kiểm tra lại mã trên thẻ."
+    },
+    {
+      "name": "(b) mã hết hạn báo \"Mã giảm giá đã hết hạn.\"",
+      "ok": true,
+      "detail": "Mã giảm giá đã hết hạn."
+    },
+    {
+      "name": "(c) quét lại thẻ của mình: \"Ưu đãi đã có trong ví của bạn\"",
+      "ok": true,
+      "detail": "Ưu đãi đã có trong ví của bạn"
+    },
+    {
+      "name": "(c) DB: vẫn 1 dòng claim",
+      "ok": true,
+      "detail": {
+        "code": "HOPSAN-38X362LH",
+        "usedCount": 0,
+        "usageLimit": 1,
+        "perUserLimit": 1,
+        "endAt": "2026-12-21T11:30:15.924Z",
+        "isActive": true,
+        "redemptions": 0,
+        "claims": 1
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "label": "(a) sheet",
+      "data": {
+        "title": "Chưa nhận được ưu đãi",
+        "text": "Mã giảm giá không tồn tại. Vui lòng kiểm tra lại mã trên thẻ."
+      }
+    },
+    {
+      "label": "(b) sheet",
+      "data": {
+        "title": "Chưa nhận được ưu đãi",
+        "text": "Mã giảm giá đã hết hạn."
+      }
+    },
+    {
+      "label": "(b) ảnh",
+      "data": "shots/U1-mua-hang/U1-05-claim-expired.png"
+    },
+    {
+      "label": "(b) mã đã lùi hạn (để nguyên, không dùng lại)",
+      "data": "HOPSAN-7XBDCA7D"
+    },
+    {
+      "label": "(c) sheet",
+      "data": {
+        "title": "Ưu đãi đã có trong ví của bạn",
+        "text": "Giảm 30.000đ cho đơn từ 199.000đ\n\nMã HOPSAN-38X362LH đã vào mục Mã giảm giá của tôi, chọn ở bước thanh toán. Hạn dùng đến 21/12/2026.\n\nDành cho đơn đầu tiên của bạn tại Tubu Tree."
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:34:16.138Z"
+}

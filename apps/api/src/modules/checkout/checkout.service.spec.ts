@@ -150,13 +150,15 @@ function build(
     .mockImplementation(async (cb: (tx: unknown) => unknown) => cb(prisma));
 
   const cartData = (opts.cartData ?? CART) as { items: Array<Record<string, unknown>> };
+  const priced = async () => ({
+    unavailableItems: [],
+    ...cartData,
+    items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
+  });
   const cart = {
     // Đọc lúc gọi (không chụp lúc build): vài test sửa CART tại chỗ sau khi dựng service.
-    getCart: jest.fn().mockImplementation(async () => ({
-      unavailableItems: [],
-      ...cartData,
-      items: cartData.items.map((it) => ({ fulfiller: TUBU_LINE, ...it })),
-    })),
+    getCart: jest.fn().mockImplementation(priced),
+    getCartForCheckout: jest.fn().mockImplementation(priced),
     // Khoá giỏ trong tx đọc lại đúng các dòng giỏ hiện tại (không ai đổi giỏ giữa chừng).
     lockForCheckout: jest.fn().mockImplementation(async () =>
       cartData.items.map((it) => ({ id: it.id, variationId: it.variationId, quantity: it.quantity })),
@@ -2011,10 +2013,18 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
   const OFF = { 'shipping.first_order_free_enabled': false };
 
   function setup(
-    opts: { config?: { get: jest.Mock }; user?: unknown; priorOrders?: Array<unknown>; cartData?: unknown; validateAndCompute?: jest.Mock } = {},
+    opts: {
+      config?: { get: jest.Mock };
+      user?: unknown;
+      priorOrders?: Array<unknown>;
+      cartData?: unknown;
+      validateAndCompute?: jest.Mock;
+      merchantStores?: Array<{ id: string; shippingFee: number | null; freeShipFrom: number | null; commissionPct: number | null }>;
+    } = {},
   ) {
     const systemConfig = opts.config ?? config();
     const b = build({
+      merchantStores: opts.merchantStores,
       cartData: opts.cartData ?? SMALL,
       pricing: new PricingService(systemConfig as never),
       systemConfig,
@@ -2091,6 +2101,221 @@ describe('CheckoutService — freeship đơn đầu (D2-08)', () => {
     expect(q.couponApplied).toBe(false);
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
     expect(coupons.redeem).not.toHaveBeenCalled();
+  });
+
+  const FIRST_ORDER_FREESHIP_REASON = 'Đơn đầu đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+
+  it('mã freeship trên đơn đầu đã miễn phí giao → lời báo nói đúng lý do là đơn đầu, không nói "không có phí giao" (U1-B03)', async () => {
+    const { svc } = setup({
+      config: config(ON),
+      cartData: { ...SMALL, couponCode: 'FREESHIP' },
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.couponApplied).toBe(false);
+    expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${FIRST_ORDER_FREESHIP_REASON}`);
+  });
+
+  it('xem trước mã ở trang giỏ (chưa có địa chỉ): FREESHIP trên đơn đầu đã miễn phí giao → không dùng được, kèm lý do đơn đầu; mã giảm tiền vẫn dùng được', async () => {
+    const { svc, coupons, loyalty } = setup({ config: config(ON) });
+    (loyalty as unknown as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest.fn().mockResolvedValue([{ code: 'FREESHIP' }, { code: 'GIAM10' }]);
+    (coupons as unknown as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(
+      new Map([
+        ['FREESHIP', { discount: 0, freeship: true }],
+        ['GIAM10', { discount: 10000, freeship: false }],
+      ]),
+    );
+    const res = await svc.couponPreviews('u1', {} as never);
+    expect(res.coupons).toEqual([
+      { code: 'FREESHIP', eligible: false, reason: FIRST_ORDER_FREESHIP_REASON, discount: 0 },
+      { code: 'GIAM10', eligible: true, discount: 10000 },
+    ]);
+  });
+
+  it('xem trước mã ở trang giỏ: khách không còn freeship đơn đầu → FREESHIP vẫn dùng được như cũ', async () => {
+    const { svc, coupons, loyalty } = setup({ config: config(OFF) });
+    (loyalty as unknown as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest.fn().mockResolvedValue([{ code: 'FREESHIP' }]);
+    (coupons as unknown as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(new Map([['FREESHIP', { discount: 0, freeship: true }]]));
+    const res = await svc.couponPreviews('u1', {} as never);
+    expect(res.coupons).toEqual([{ code: 'FREESHIP', eligible: true, discount: 0 }]);
+  });
+
+  describe('mã freeship trên đơn có phí giao đã bằng 0 vì đạt ngưỡng miễn phí giao thường (U1-B03 sau Q12)', () => {
+    const BIG = {
+      items: [{ id: 'l1', variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 250000, quantity: 1, total: 250000 }],
+      subtotal: 250000, discount: 0, freeship: false, couponCode: null,
+    };
+    const THRESHOLD_REASON = 'Đơn từ 199.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+    const GENERIC_REASON = 'Đơn này đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.';
+    // Cấu hình sau Q12: ngưỡng miễn phí giao thường và ngưỡng đơn đầu cùng 199.000đ, nên đơn đầu 250k được miễn vì ĐẠT NGƯỠNG.
+    const Q12 = { 'shipping.free_threshold': 199000, 'shipping.first_order_free_enabled': true, 'shipping.first_order_free_min_subtotal': 199000 };
+    const previewOf = (svc: CheckoutService, coupons: unknown, loyalty: unknown) => {
+      (loyalty as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest.fn().mockResolvedValue([{ code: 'FREESHIP' }, { code: 'GIAM10' }]);
+      (coupons as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(
+        new Map([
+          ['FREESHIP', { discount: 0, freeship: true }],
+          ['GIAM10', { discount: 10000, freeship: false }],
+        ]),
+      );
+      return svc;
+    };
+
+    it.each([
+      ['đơn đầu đạt ngưỡng (cấu hình Q12)', Q12],
+      ['khách đã có đơn, chỉ đạt ngưỡng thường', { ...Q12, 'shipping.first_order_free_enabled': false }],
+    ])('báo giá: %s → lời báo nói đạt ngưỡng, không nói "không có phí giao"', async (_n, extra) => {
+      const { svc, coupons } = setup({
+        config: config(extra),
+        cartData: { ...BIG, couponCode: 'FREESHIP' },
+        validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+      });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.shippingFee).toBe(0);
+      expect(q.couponApplied).toBe(false);
+      expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${THRESHOLD_REASON}`);
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+      expect(coupons.redeem).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['chưa có địa chỉ (trang giỏ)', {}],
+      ['đã có địa chỉ', { addressId: 'addr1' }],
+    ])('xem trước mã, %s: FREESHIP không dùng được, kèm lý do đạt ngưỡng, cùng câu với báo giá; mã giảm tiền vẫn dùng được', async (_n, dto) => {
+      const { svc, coupons, loyalty } = setup({ config: config(Q12), cartData: BIG });
+      const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', dto as never);
+      expect(res.coupons).toEqual([
+        { code: 'FREESHIP', eligible: false, reason: THRESHOLD_REASON, discount: 0, ...('addressId' in dto ? { freeshipSaving: 0 } : {}) },
+        { code: 'GIAM10', eligible: true, discount: 10000 },
+      ]);
+    });
+
+    it('số ngưỡng lấy từ cấu hình đang dùng, không cứng 199.000đ', async () => {
+      const { svc, coupons, loyalty } = setup({
+        config: config({ ...Q12, 'shipping.free_threshold': 150000, 'shipping.first_order_free_enabled': false }),
+        cartData: BIG,
+      });
+      const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+      expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: 'Đơn từ 150.000đ đã được miễn phí giao, mã FREESHIP được giữ cho đơn sau.' });
+    });
+
+    it('hạng được freeship toàn shop (ngưỡng 0đ): câu chung "đơn đã được miễn phí giao", không in "từ 0đ"', async () => {
+      const { svc, coupons, loyalty, prisma } = setup({
+        config: config({ ...Q12, 'shipping.first_order_free_enabled': false, 'shipping.tier_freeship_overrides': { DAI_THU: 0 } }),
+        cartData: SMALL,
+      });
+      (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+        id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: 'DAI_THU',
+      });
+      const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+      expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: GENERIC_REASON });
+    });
+
+    it('phí giao dưới ngưỡng cấu hình bằng 0đ (chiến dịch freeship) mà đơn chưa đạt ngưỡng: không nói "đơn từ 199.000đ", dùng câu chung', async () => {
+      const { svc, coupons, loyalty } = setup({
+        config: config({ ...Q12, 'shipping.first_order_free_enabled': false, 'shipping.flat_fee_below_threshold': 0 }),
+        cartData: SMALL,
+      });
+      const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+      expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: GENERIC_REASON });
+    });
+
+    it('báo giá, giỏ có hàng giờ vàng đạt ngưỡng: câu lý do freeship không kèm ngoặc "hàng giờ vàng không được tính", giống câu ở giỏ', async () => {
+      const flashCart = {
+        items: [
+          { id: 'l1', variationId: 'v1', productId: 'p1', productName: 'F', variationName: 'VF', unitPrice: 119000, quantity: 2, total: 238000, isFlash: true, flashSaleItemId: 'fi1', flashEndAt: new Date(), soldPct: 10 },
+        ],
+        subtotal: 238000, discount: 0, freeship: false, couponCode: 'FREESHIP',
+      };
+      const { svc } = setup({
+        config: config({ ...Q12, 'shipping.first_order_free_enabled': false }),
+        cartData: flashCart,
+        validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+      });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.couponApplied).toBe(false);
+      expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${THRESHOLD_REASON}`);
+    });
+
+    describe('đơn hỗn hợp: kiện Tubu đã miễn phí giao nhưng còn kiện gian hàng đối tác có phí giao', () => {
+      const SHOP_A = { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u-a' };
+      const MIXED = {
+        items: [
+          ...BIG.items,
+          { id: 'l2', variationId: 'vm', productId: 'pm', productName: 'Xà phòng', variationName: '100g', unitPrice: 80000, quantity: 1, total: 80000, fulfiller: SHOP_A },
+        ],
+        subtotal: 330000, discount: 0, freeship: false, couponCode: null,
+      };
+      const SHOP_FEE = [{ id: 'sf-a', shippingFee: 25000, freeShipFrom: null, commissionPct: null }];
+      const SHOP_FREE = [{ id: 'sf-a', shippingFee: 25000, freeShipFrom: 80000, commissionPct: null }];
+      const TAIL = 'mã FREESHIP chỉ miễn phí giao hàng Tubu Tree nên được giữ cho đơn sau.';
+      const MIXED_THRESHOLD = `Phần hàng Tubu Tree giao đã được miễn phí giao (đơn từ 199.000đ), ${TAIL}`;
+      const MIXED_FIRST_ORDER = `Phần hàng Tubu Tree giao đã được miễn phí giao (đơn đầu), ${TAIL}`;
+      const MIXED_GENERIC = `Phần hàng Tubu Tree giao đã được miễn phí giao, ${TAIL}`;
+      const NOT_FIRST_ORDER = { ...Q12, 'shipping.first_order_free_enabled': false };
+      // Ngưỡng thường cao hơn giỏ Tubu nên kiện Tubu chỉ được miễn nhờ đơn đầu.
+      const FIRST_ORDER_ONLY = { ...Q12, 'shipping.free_threshold': 500000 };
+
+      it.each([
+        ['đạt ngưỡng thường', NOT_FIRST_ORDER, MIXED_THRESHOLD],
+        ['đơn đầu', FIRST_ORDER_ONLY, MIXED_FIRST_ORDER],
+      ])('báo giá, %s: nói rõ chỉ phần hàng Tubu Tree được miễn, mã được giữ, không tiêu lượt', async (_n, extra, reason) => {
+        const { svc, coupons } = setup({
+          config: config(extra),
+          cartData: { ...MIXED, couponCode: 'FREESHIP' },
+          merchantStores: SHOP_FEE,
+          validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+        });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        expect(q.couponApplied).toBe(false);
+        expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${reason}`);
+        await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+        expect(coupons.redeem).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['đạt ngưỡng thường', NOT_FIRST_ORDER, MIXED_THRESHOLD],
+        ['đơn đầu', FIRST_ORDER_ONLY, MIXED_FIRST_ORDER],
+      ])('xem trước, %s: giỏ và thanh toán cùng một câu', async (_n, extra, reason) => {
+        const { svc, coupons, loyalty } = setup({ config: config(extra), cartData: MIXED, merchantStores: SHOP_FEE });
+        const view = previewOf(svc, coupons, loyalty);
+        const cart = await view.couponPreviews('u1', {} as never);
+        const checkout = await view.couponPreviews('u1', { addressId: 'addr1' } as never);
+        expect(cart.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason });
+        expect(checkout.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason, freeshipSaving: 0 });
+      });
+
+      it('hạng được freeship toàn shop (ngưỡng 0đ) mà còn kiện đối tác có phí: câu hỗn hợp không kèm số ngưỡng', async () => {
+        const { svc, coupons, loyalty, prisma } = setup({
+          config: config({ ...NOT_FIRST_ORDER, 'shipping.tier_freeship_overrides': { DAI_THU: 0 } }),
+          cartData: MIXED,
+          merchantStores: SHOP_FEE,
+        });
+        (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+          id: 'u1', walletBalance: 1000, pointsBalance: 1000, pointsConvertedBalance: 0, tierId: 'DAI_THU',
+        });
+        const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+        expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: MIXED_GENERIC });
+      });
+
+      it('kiện đối tác cũng hết phí giao (đạt ngưỡng của shop): cả đơn không còn phí giao nên giữ câu của đơn chỉ có hàng Tubu', async () => {
+        const { svc, coupons, loyalty } = setup({ config: config(NOT_FIRST_ORDER), cartData: MIXED, merchantStores: SHOP_FREE });
+        const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', {} as never);
+        expect(res.coupons[0]).toMatchObject({ code: 'FREESHIP', eligible: false, reason: THRESHOLD_REASON });
+      });
+
+      it('kiện Tubu chưa đạt ngưỡng + kiện đối tác: mã vẫn miễn phí giao Tubu như cũ', async () => {
+        const small = { ...MIXED, items: [{ ...BIG.items[0]!, unitPrice: 60000, total: 60000 }, MIXED.items[1]!] };
+        const { svc, coupons, loyalty } = setup({ config: config(NOT_FIRST_ORDER), cartData: small, merchantStores: SHOP_FEE });
+        const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', { addressId: 'addr1' } as never);
+        expect(res.coupons[0]).toEqual({ code: 'FREESHIP', eligible: true, discount: 0, freeshipSaving: 19000 });
+      });
+    });
+
+    it('đơn chưa đạt ngưỡng: FREESHIP vẫn dùng được và miễn phí giao như cũ', async () => {
+      const { svc, coupons, loyalty } = setup({ config: config({ ...Q12, 'shipping.first_order_free_enabled': false }), cartData: SMALL });
+      const res = await previewOf(svc, coupons, loyalty).couponPreviews('u1', { addressId: 'addr1' } as never);
+      expect(res.coupons[0]).toEqual({ code: 'FREESHIP', eligible: true, discount: 0, freeshipSaving: 19000 });
+    });
   });
 
   it('đơn khác của khách vừa ghi xong giữa lúc tính giá và lúc ghi đơn → kiểm trong tx từ chối, không ghi lượt mã', async () => {

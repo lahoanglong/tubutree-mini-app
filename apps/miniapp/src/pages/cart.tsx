@@ -38,6 +38,7 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { PriceTag } from '../components/ui/price-tag';
 import { Heading } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
@@ -118,7 +119,7 @@ export default function CartPage() {
   const update = useOptimisticCart(
     ({ id, qty }: { id: string; qty: number }) => updateCartItem(id, qty),
     (prev, { id, qty }) =>
-      recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l))),
+      recompute(prev, prev.items.map((l) => (l.id === id ? { ...l, quantity: qty } : l)), id),
   );
   const remove = useOptimisticCart(
     ({ id }: { id: string; line: CartLine }) => removeCartItem(id),
@@ -186,7 +187,10 @@ export default function CartPage() {
   // Món đang chọn (không nằm trong deselected). Toàn-chọn → checkout gửi itemIds=undefined (toàn giỏ).
   const selectedItems = summary.items.filter((l) => !deselected.has(l.id));
   const allSelected = selectedItems.length === summary.items.length;
-  const selectedSubtotal = selectedItems.reduce((s, l) => s + l.total, 0);
+  // Dòng hết hàng (tồn 0) không mua được: không cộng vào tạm tính hay tiến độ miễn phí giao, để khách không thấy số mà đặt không nổi.
+  const buyableSelected = selectedItems.filter((l) => l.stock > 0);
+  const outOfStockSelected = selectedItems.filter((l) => l.stock <= 0);
+  const selectedSubtotal = buyableSelected.reduce((s, l) => s + l.total, 0);
   const selectedCount = selectedItems.reduce((s, l) => s + l.quantity, 0);
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
@@ -256,6 +260,7 @@ export default function CartPage() {
                     onQty={(qty) => update.mutate({ id: line.id, qty })}
                     onRemove={() => handleRemove(line)}
                     onOpen={() => navigate(`/product/${line.slug}`)}
+                    pending={update.isPending && update.variables?.id === line.id}
                   />
                 ))}
               </Box>
@@ -276,7 +281,7 @@ export default function CartPage() {
         </>
       )}
 
-      {/* Undo bar — hiện 3.5s sau khi xóa (DI #3) */}
+      {/* Undo bar — hiện 3.5s sau khi xoá (DI #3) */}
       {removed && (
         <Box
           className="tubu-rise"
@@ -299,6 +304,7 @@ export default function CartPage() {
           </Text>
           <Text
             role="button"
+            {...rowKeyboardProps()}
             size="small"
             bold
             onClick={handleUndo}
@@ -318,8 +324,9 @@ export default function CartPage() {
           allSelected={allSelected}
           priced={priced}
           overStock={overStockSelected}
+          outOfStockNames={outOfStockSelected.map((l) => l.productName)}
           tubuOnlyFreeship={hasMerchant}
-          tubuSelectedSubtotal={tubuSubtotal(selectedItems)}
+          tubuSelectedSubtotal={tubuSubtotal(buyableSelected)}
           onCheckout={goCheckout}
         />
       )}
@@ -391,6 +398,7 @@ function CartLineRow({
   onQty,
   onRemove,
   onOpen,
+  pending,
 }: {
   line: CartLine;
   selected: boolean;
@@ -398,6 +406,8 @@ function CartLineRow({
   onQty: (qty: number) => void;
   onRemove: () => void;
   onOpen: () => void;
+  /** PATCH số lượng của chính dòng này đang bay: line.total lúc đó là số client tự nhân (optimistic), chưa phải số server. */
+  pending: boolean;
 }) {
   const overStock = line.quantity > line.stock;
   // Bấm +/- nhanh 5 lần trước đây gọi 5 PATCH song song → debounce qty cuối cùng
@@ -430,8 +440,10 @@ function CartLineRow({
         <span style={SR_ONLY}>{`Chọn ${line.productName}`}</span>
       </Checkbox>
       <Box
-        role="button"
-        aria-label={line.productName}
+        // Ảnh chỉ là đường tắt cho chuột/chạm; tên sản phẩm ngay bên cạnh là nút cho bàn phím và trình đọc màn hình,
+        // để một dòng không có hai nút trùng tên.
+        aria-hidden
+        data-testid="cart-line-thumb"
         onClick={onOpen}
         style={{
           width: 64,
@@ -461,7 +473,7 @@ function CartLineRow({
 
       <Box style={{ flex: 1, minWidth: 0 }}>
         {/* Tên 1-2 dòng chỉ cao 18-36px: tubu-hit-44 nới vùng chạm lên 44px mà không đổi bố cục dòng. */}
-        <Text size="small" bold onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
+        <Text size="small" bold role="button" {...rowKeyboardProps()} onClick={onOpen} className="tubu-hit-44" style={{ cursor: 'pointer', display: 'block' }}>
           {line.productName}
         </Text>
         {line.variationName && (
@@ -474,6 +486,12 @@ function CartLineRow({
         <Box style={{ marginTop: 4 }}>
           <PriceTag value={line.unitPrice} size="sm" />
         </Box>
+        {/* Số của server (line.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi SL chưa khớp server (chờ debounce) và khi PATCH còn bay (số lúc đó do client tự nhân). */}
+        {line.quantity > 1 && localQty === line.quantity && !pending && (
+          <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', display: 'block', fontVariantNumeric: 'tabular-nums' }}>
+            Thành tiền {formatVnd(line.total)}
+          </Text>
+        )}
         {line.isFlash && (
           <Box flex alignItems="center" style={{ gap: 6, marginTop: 4 }}>
             <Badge tone="promo" size="sm" icon={Zap}>
@@ -542,6 +560,8 @@ function CouponBlock({
         p={3}
         mx={3}
         className="tubu-press"
+        role="button"
+        {...rowKeyboardProps()}
         onClick={() => {
           haptic('light');
           setSheetOpen(true);
@@ -635,6 +655,7 @@ function StickySummary({
   allSelected,
   priced,
   overStock,
+  outOfStockNames,
   tubuOnlyFreeship,
   tubuSelectedSubtotal,
   onCheckout,
@@ -646,6 +667,8 @@ function StickySummary({
   /** Giá của phần chọn từ máy chủ (chỉ khi chọn một phần và đã có số đúng); null = chưa có, không hiện giảm giá. */
   priced: CartSummary | null;
   overStock: boolean;
+  /** Tên các dòng đang chọn mà tồn bằng 0: nói rõ dòng nào cần bỏ chọn hoặc xoá. */
+  outOfStockNames: string[];
   /** Giỏ có hàng gian hàng tự giao: miễn phí vận chuyển chỉ áp cho phần Tubu Tree giao. */
   tubuOnlyFreeship: boolean;
   tubuSelectedSubtotal: number;
@@ -656,7 +679,8 @@ function StickySummary({
   // thì chỉ tính phần Tubu Tree giao (checkout tính phí kho Tubu trên tiền hàng của kiện Tubu).
   const base = tubuOnlyFreeship ? tubuSelectedSubtotal : selectedSubtotal;
   const showFreeship = !tubuOnlyFreeship || base > 0;
-  const reached = (!tubuOnlyFreeship && allSelected && summary.freeship) || base >= threshold;
+  // `summary.freeship` do máy chủ tính trên cả giỏ kể cả dòng hết hàng, nên không tin khi còn dòng hết hàng đang chọn.
+  const reached = (!tubuOnlyFreeship && allSelected && summary.freeship && outOfStockNames.length === 0) || base >= threshold;
   const progressPct = Math.min(100, Math.round((base / threshold) * 100));
   const remaining = Math.max(0, threshold - base);
   // Cả giỏ lấy số giảm từ giỏ; một phần giỏ lấy từ giá phần chọn của máy chủ (combo cần đủ bộ trong phần chọn); chưa có thì không
@@ -678,7 +702,7 @@ function StickySummary({
               <Text size="xSmall" style={{ color: reached ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}>
                 {reached
                   ? tubuOnlyFreeship
-                    ? 'Phần hàng Tubu Tree giao được miễn phí ship'
+                    ? vi.cart.freeshipReachedTubuOnly
                     : vi.cart.freeshipReached
                   : vi.cart.freeshipProgress(formatVnd(remaining)) + (tubuOnlyFreeship ? ' cho phần hàng Tubu Tree giao' : '')}
               </Text>
@@ -727,7 +751,15 @@ function StickySummary({
             value={formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
             emphasis
           />
-          {overStock && (
+          {outOfStockNames.length > 0 && (
+            <Box flex alignItems="flex-start" role="status" style={{ gap: 4, marginTop: 4 }}>
+              <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+              <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>
+                {vi.cart.outOfStockBlocked(outOfStockNames)}
+              </Text>
+            </Box>
+          )}
+          {overStock && outOfStockNames.length === 0 && (
             <Box flex alignItems="center" role="status" style={{ gap: 4, marginTop: 4 }}>
               <AlertTriangle size={13} color="var(--color-text-warning)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-warning)' }}>

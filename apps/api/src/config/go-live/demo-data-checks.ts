@@ -5,6 +5,7 @@ import {
   DEMO_MIGRATION,
   DEMO_PRODUCT_WHERE,
   DEMO_VARIATION_WHERE,
+  OWNER_KEPT_DEMO_COUPONS,
   classifyDemoCoupon,
   isDemoCouponKind,
   type DemoCouponKind,
@@ -43,12 +44,8 @@ export async function collectDemoData(db: DemoReader, now: Date = new Date()): P
   };
 }
 
-/**
- * Chủ dự án giữ ba mã này cho đợt ra mắt (chạy `--keep-coupon=` cho cả ba ở bước dọn). Luôn được coi là đã duyệt nên không
- * làm check đỏ; vẫn WARN để mở Quản trị xác nhận điều kiện. Mã demo nào ngoài danh sách vẫn FAIL.
- */
-const OWNER_KEPT_DEMO_COUPONS: readonly string[] = ['WELCOME30', 'FREESHIP', 'XANH10'];
-
+// OWNER_KEPT_DEMO_COUPONS luôn được coi là đã duyệt nên không làm check đỏ; vẫn WARN để mở Quản trị xác nhận điều kiện.
+// Mã demo nào ngoài danh sách vẫn FAIL.
 function acceptedCoupons(env: Env): Set<string> {
   return new Set([
     ...OWNER_KEPT_DEMO_COUPONS,

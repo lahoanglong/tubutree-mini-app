@@ -13,7 +13,19 @@ import { formatCount } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
 import { WASTE_GIFT_KIND_LABELS, WASTE_GIFT_REDEMPTION_STATUS_LABELS, WASTE_GIFT_STATUS_LABELS } from '@/lib/waste-labels';
 import {
-  BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, chipClass, FIELD_CLASS, FIELD_XS, Field, INPUT_CLASS, Notice, ScrollRegion, ToneBadge,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  BTN_XS_PRIMARY,
+  BTN_XS_SECONDARY,
+  chipClass,
+  FIELD_CLASS,
+  FIELD_XS,
+  Field,
+  INPUT_CLASS,
+  Notice,
+  ScrollRegion,
+  ToneBadge,
+  LoadError,
 } from './ui';
 import type { WasteSeed } from './waste-tab';
 
@@ -191,7 +203,7 @@ function GiftQueue({ isAdmin, seed }: { isAdmin: boolean; seed?: WasteSeed | nul
           ))}
         </div>
       )}
-      {queue.isError && <Notice tone="danger" role="alert">Không tải được danh sách quà chờ nhận.</Notice>}
+      {queue.isError && <LoadError onRetry={() => void queue.refetch()} retrying={queue.isFetching}>Không tải được danh sách quà chờ nhận.</LoadError>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       {msg && <p role="status" className="text-sm text-success-fg">{msg}</p>}
       {queue.isSuccess && rows.length === 0 && <p className="text-sm text-stone-600">Không có quà nào trong hàng đợi này.</p>}
@@ -317,7 +329,7 @@ function GiftCatalogue() {
         <h3 className="font-display text-base font-semibold text-stone-900">Danh mục quà</h3>
         <button type="button" className={BTN_PRIMARY} onClick={() => setPanel({ id: null, form: { ...EMPTY_FORM } })}>Thêm quà</button>
       </div>
-      {gifts.isError && <Notice tone="danger" role="alert">Không tải được danh mục quà.</Notice>}
+      {gifts.isError && <LoadError onRetry={() => void gifts.refetch()} retrying={gifts.isFetching}>Không tải được danh mục quà.</LoadError>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng danh mục quà">
         <table className="w-full min-w-[880px] border-collapse">

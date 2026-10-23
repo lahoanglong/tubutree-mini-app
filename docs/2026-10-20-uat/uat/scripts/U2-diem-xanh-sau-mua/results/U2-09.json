@@ -1,0 +1,123 @@
+{
+  "id": "U2-09",
+  "title": "Khách Lộc Biếc quét mã vận đơn Shopee đã giao 3 ngày (250.000đ): claim chờ, 2.500 điểm (1%, KHÔNG ×1,2), cộng từ giao + 14 ngày",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:01.012Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "Mini App: Quét mã gọi scanQRCode, gửi mã → 201",
+      "ok": true,
+      "detail": {
+        "http": 201,
+        "zmp": [
+          "login",
+          "getAccessToken",
+          "scanQRCode",
+          "vibrate"
+        ]
+      }
+    },
+    {
+      "name": "kết quả: CLAIMED 2.500 điểm (1% × 250.000, không nhân hệ số Lộc Biếc)",
+      "ok": true,
+      "detail": {
+        "status": "CLAIMED",
+        "points": 2500
+      }
+    },
+    {
+      "name": "DB: claim PENDING, ratePct 1, multiplier 1, countsForTier false, releaseAt = giao + 14 ngày",
+      "ok": true,
+      "detail": {
+        "ratePct": "1.0000",
+        "multiplier": "1.000",
+        "countsForTier": false,
+        "releaseAt": "2026-11-02T11:38:08.000Z",
+        "expect": "2026-11-02T11:38:08.000Z"
+      }
+    },
+    {
+      "name": "màn kết quả hiện \"2.500 Điểm Xanh đang chờ cộng\" + ngày dự kiến",
+      "ok": true,
+      "detail": [
+        "Đã ghi nhận đơn shopee SPX********001",
+        "2.500 Điểm Xanh đang chờ cộng",
+        "Dự kiến cộng từ 02/11/2026",
+        "2.500 Điểm Xanh",
+        "Dự kiến 02/11/2026"
+      ]
+    },
+    {
+      "name": "SQL: chưa ghi sổ điểm, số dư không đổi khi claim còn chờ",
+      "ok": true,
+      "detail": {
+        "before": 6242,
+        "after": 6242
+      }
+    },
+    {
+      "name": "job external-claims.release trước hạn 14 ngày: vẫn PENDING",
+      "ok": true,
+      "detail": "PENDING"
+    },
+    {
+      "name": "hạng/chi tiêu không đổi",
+      "ok": true,
+      "detail": {
+        "spent": [
+          1980100,
+          1980100
+        ],
+        "tierPoints": [
+          40642,
+          40642
+        ]
+      }
+    }
+  ],
+  "evidence": {
+    "POST /me/external-points/claims": {
+      "http": 201,
+      "body": {
+        "status": "CLAIMED",
+        "claimId": "cmvjgx37f00dih9r1vimaylc0",
+        "channel": "shopee",
+        "maskedCode": "SPX********001",
+        "points": 2500,
+        "expectedCreditAt": "2026-11-02T11:38:08.000Z",
+        "message": "Đã ghi nhận 2.500 Điểm Xanh chờ cộng. Điểm được cộng sau khi đơn giao thành công 14 ngày."
+      },
+      "zmp": [
+        "login",
+        "getAccessToken",
+        "scanQRCode",
+        "vibrate"
+      ],
+      "text": [
+        "Đã ghi nhận đơn shopee SPX********001",
+        "2.500 Điểm Xanh đang chờ cộng",
+        "Dự kiến cộng từ 02/11/2026",
+        "2.500 Điểm Xanh",
+        "Dự kiến 02/11/2026"
+      ]
+    },
+    "DB claim": {
+      "id": "cmvjgx37f00dih9r1vimaylc0",
+      "userId": "uat_returning",
+      "state": "PENDING",
+      "points": 2500,
+      "ratePct": "1.0000",
+      "multiplier": "1.000",
+      "countsForTier": false,
+      "releaseAt": "2026-11-02T11:38:08.000Z",
+      "reviewReason": null,
+      "kind": "SCAN",
+      "pancakeOrderId": "7700001",
+      "orderStatus": "DELIVERED",
+      "goodsValue": 250000,
+      "deliveredAt": "2026-10-19T11:38:08.000Z"
+    }
+  }
+}

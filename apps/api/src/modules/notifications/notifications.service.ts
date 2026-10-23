@@ -1,13 +1,17 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ZnsClient } from '../integrations/zns/zns.client';
 import { znsFailureText, type ZnsSendResult } from '../integrations/zns/zns-result';
 import { QUEUE_NOTIFICATIONS } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { startOfNextVnMonth, startOfVnMonth, VN_OFFSET_MS } from '../../common/vn-time';
 import { isAllowedByPrefs, type NotificationPrefs } from './notification-categories';
+import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -30,6 +34,36 @@ export const ZNS_SEND_JOB_OPTIONS = {
   backoff: { type: 'exponential' as const, delay: 30_000 },
 };
 
+const QUIET_START_KEY = 'notifications.zns_quiet_start_hour';
+const QUIET_END_KEY = 'notifications.zns_quiet_end_hour';
+const PROMO_CAP_KEY = 'notifications.zns_promo_monthly_cap';
+const DEFAULT_QUIET_START_HOUR = 21;
+const DEFAULT_QUIET_END_HOUR = 8;
+const DEFAULT_PROMO_MONTHLY_CAP = 2;
+const HOUR_MS = 3_600_000;
+
+/**
+ * Số mili giây phải chờ để ZNS rời khỏi giờ yên tĩnh (giờ VN, từ `startHour` tới trước `endHour`, qua nửa đêm được);
+ * 0 khi đang trong giờ gửi hoặc khi hai mốc bằng nhau (tắt giờ yên tĩnh).
+ */
+export function znsQuietDelayMs(now: Date, startHour: number, endHour: number): number {
+  if (startHour === endHour) return 0;
+  const vnNow = now.getTime() + VN_OFFSET_MS;
+  const hour = new Date(vnNow).getUTCHours();
+  const quiet = startHour < endHour ? hour >= startHour && hour < endHour : hour >= startHour || hour < endHour;
+  if (!quiet) return 0;
+  const day = new Date(vnNow);
+  const endToday = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), endHour);
+  return (endToday > vnNow ? endToday : endToday + 24 * HOUR_MS) - vnNow;
+}
+
+interface PromoCap {
+  userId: string;
+  limit: number;
+  from: Date;
+  to: Date;
+}
+
 /** Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch. */
 export type ZnsDeliveryOutcome = 'SENT' | 'RETRY' | 'FAILED';
 
@@ -49,6 +83,8 @@ export class NotificationsService {
     // Optional: giữ tương thích test/call site cũ khởi tạo trực tiếp `new NotificationsService(prisma, zns, analytics)`
     // (không qua DI, không truyền queue) — notify() vẫn chạy đúng, chỉ bỏ qua bước enqueue retry.
     @InjectQueue(QUEUE_NOTIFICATIONS) private readonly notificationsQueue?: Queue,
+    // Optional như queue: khởi tạo trực tiếp không có cấu hình thì dùng mặc định trong mã.
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
 
   /**
@@ -140,19 +176,36 @@ export class NotificationsService {
     data: Record<string, string>,
   ): Promise<void> {
     const queue = this.notificationsQueue;
+    // Đọc cấu hình giờ yên tĩnh TRƯỚC khi ghi log: lỗi DB ở đây không để lại log PENDING không có job (kẹt mãi, và tin
+    // khuyến mãi vẫn bị đếm vào trần). Không có queue thì gửi ngay, không trễ.
+    const delay = queue ? await this.quietDelayMs() : 0;
+    const deliverAt = new Date(Date.now() + delay);
+    // Trần chỉ áp cho tin khuyến mãi/hậu mãi (cùng danh sách mẫu Marketing được sửa); bỏ ZNS thì tin trong app vẫn đã lưu.
+    // Tin tạo trong giờ yên tĩnh tới tay khách sau nửa đêm: tính vào tháng của lúc tới, nếu không khách nhận 3 tin trong một
+    // tháng dương lịch khi tin tạo ngày cuối tháng.
+    const cap = MARKETING_TEMPLATE_CODES.has(templateCode) ? await this.promoCap(userId, deliverAt) : null;
+    if (cap && (await this.promoZnsCount(this.prisma, cap)) >= cap.limit) {
+      this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap.limit} tin khuyến mãi ZNS trong tháng.`);
+      return;
+    }
     let result: ZnsSendResult | null = null;
     if (!queue) result = await this.zns.sendTemplate(phone, templateId, data);
 
-    const log = await this.prisma.notificationLog.create({
-      data: {
-        userId,
-        templateCode,
-        channel: 'ZNS',
-        payload: { data },
-        status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
-        error: result && !result.ok ? znsFailureText(result) : null,
-      },
-    });
+    const logData = {
+      userId,
+      templateCode,
+      channel: 'ZNS',
+      payload: { data },
+      status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
+      error: result && !result.ok ? znsFailureText(result) : null,
+      // Trần đếm theo sentAt: tin khuyến mãi bị trễ ghi mốc tới tay khách để rơi đúng tháng.
+      ...(cap && delay > 0 ? { sentAt: deliverAt } : {}),
+    };
+    const log = cap && queue ? await this.createCappedZnsLog(logData, cap) : await this.prisma.notificationLog.create({ data: logData });
+    if (!log) {
+      this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap?.limit} tin khuyến mãi ZNS trong tháng.`);
+      return;
+    }
     await this.analytics.recordBestEffort({
       eventName: 'notification_sent',
       userId,
@@ -165,7 +218,7 @@ export class NotificationsService {
     const job: ZnsSendJobData = { notificationLogId: log.id, phone, templateId, templateData: data };
     try {
       await withQueueTimeout(
-        queue.add('zns-send', job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}` }),
+        queue.add('zns-send', job, { ...ZNS_SEND_JOB_OPTIONS, jobId: `zns-${log.id}`, ...(delay > 0 ? { delay } : {}) }),
         `${QUEUE_NOTIFICATIONS} ${log.id}`,
       );
     } catch (err) {
@@ -173,6 +226,48 @@ export class NotificationsService {
       this.logger.error(`${reason} (log ${log.id})`);
       await this.prisma.notificationLog.update({ where: { id: log.id }, data: { status: 'FAILED', error: reason } });
     }
+  }
+
+  private async configHour(key: string, fallback: number): Promise<number> {
+    const raw = this.config ? await this.config.get<unknown>(key, fallback) : fallback;
+    return typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw <= 23 ? raw : fallback;
+  }
+
+  private async quietDelayMs(): Promise<number> {
+    const [start, end] = await Promise.all([
+      this.configHour(QUIET_START_KEY, DEFAULT_QUIET_START_HOUR),
+      this.configHour(QUIET_END_KEY, DEFAULT_QUIET_END_HOUR),
+    ]);
+    return znsQuietDelayMs(new Date(), start, end);
+  }
+
+  /** null khi trần tắt (0) hoặc giá trị không hợp lệ thì dùng mặc định. */
+  private async promoCap(userId: string, at: Date): Promise<PromoCap | null> {
+    const raw = this.config ? await this.config.get<unknown>(PROMO_CAP_KEY, DEFAULT_PROMO_MONTHLY_CAP) : DEFAULT_PROMO_MONTHLY_CAP;
+    const limit = typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 ? raw : DEFAULT_PROMO_MONTHLY_CAP;
+    if (limit === 0) return null;
+    return { userId, limit, from: startOfVnMonth(at), to: startOfNextVnMonth(at) };
+  }
+
+  private promoZnsCount(db: Pick<PrismaService, 'notificationLog'>, cap: PromoCap): Promise<number> {
+    return db.notificationLog.count({
+      where: {
+        userId: cap.userId,
+        channel: 'ZNS',
+        templateCode: { in: [...MARKETING_TEMPLATE_CODES] },
+        status: { in: ['PENDING', 'RETRYING', 'SENT'] },
+        sentAt: { gte: cap.from, lt: cap.to },
+      },
+    });
+  }
+
+  /** Đếm lại và ghi log dưới khoá advisory theo khách: hai tin khuyến mãi song song không cùng thấy "còn chỗ". */
+  private createCappedZnsLog(data: Prisma.NotificationLogUncheckedCreateInput, cap: PromoCap) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zns-cap:${cap.userId}`}))`;
+      if ((await this.promoZnsCount(tx, cap)) >= cap.limit) return null;
+      return tx.notificationLog.create({ data });
+    });
   }
 
   /**

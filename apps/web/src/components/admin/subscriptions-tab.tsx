@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listAdminSubscriptions, type AdminSubscription, type SubscriptionStatus } from '@/lib/admin-client';
 import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
-import { Notice, ToneBadge, chipClass } from './ui';
+import { Notice, ToneBadge, chipClass, LoadError } from './ui';
 import { formatDate } from '@/lib/format-date';
 
 const PAGE_SIZE = 20;
@@ -28,6 +28,7 @@ export function SubscriptionsTab() {
 
   return (
     <div className="space-y-3">
+      <h2 className="font-display text-lg font-semibold text-stone-900">Gói định kỳ</h2>
       <Notice>Chỉ xem. Khách tự tạm dừng hoặc huỷ gói trong Mini App; hệ thống tự tạo đơn vào ngày giao kế tiếp của gói đang chạy.</Notice>
       <div role="tablist" aria-label="Lọc gói định kỳ theo trạng thái" className="flex flex-wrap gap-2">
         {STATUS_CHIPS.map((c) => (
@@ -48,9 +49,9 @@ export function SubscriptionsTab() {
       </div>
 
       {q.isError && (
-        <p role="alert" className="text-sm text-danger-fg">
+        <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>
           {(q.error as Error).message || 'Không tải được danh sách gói định kỳ.'}
-        </p>
+        </LoadError>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải gói định kỳ…</p>}
       {q.data && q.data.data.length === 0 && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Chưa có gói định kỳ nào khớp bộ lọc.</p>}

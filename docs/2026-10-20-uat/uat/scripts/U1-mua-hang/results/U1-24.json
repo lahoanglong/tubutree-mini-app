@@ -1,0 +1,226 @@
+{
+  "id": "U1-24",
+  "browser": "chromium",
+  "role": "Khách mới (dùng voucher chào mừng)",
+  "journey": "Quá hạn chuyển khoản → đơn tự huỷ, trả mã + kho; tiền về muộn",
+  "steps": "Đơn chuyển khoản 199k dùng voucher chào mừng → lùi createdAt 25 giờ → run-job orders.pending-payment-expiry (PendingPaymentExpiryCron.expireStale) → mở lại màn QR → chuyển 169.000đ muộn",
+  "expected": "Đơn CANCELLED; lượt voucher chào mừng trả lại (usedCount 0, 0 redemption); tồn kho trả; màn QR (đang mở lẫn mở lại) thôi hiện STK/QR và nói rõ đơn đã huỷ vì quá hạn; tiền về muộn: đơn KHÔNG sống lại, ghi khoản hoàn LATE_PAYMENT 169.000đ và báo khách chọn nơi nhận",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "DB: đơn CANCELLED",
+      "ok": true
+    },
+    {
+      "name": "DB: voucher chào mừng trả lượt (usedCount 0, 0 redemption)",
+      "ok": true,
+      "detail": {
+        "code": "WELCOME-U1_D24_GVCUOOB",
+        "usedCount": 0,
+        "usageLimit": 1,
+        "perUserLimit": 1,
+        "endAt": "2026-11-21T11:37:37.782Z",
+        "isActive": true,
+        "redemptions": 0,
+        "claims": 0
+      }
+    },
+    {
+      "name": "DB: tồn kho FUWA-DW-1L trả lại 1",
+      "ok": true,
+      "detail": {
+        "stock0": {
+          "stock": 185,
+          "reservedStock": 15
+        },
+        "stock1": {
+          "stock": 186,
+          "reservedStock": 14
+        }
+      }
+    },
+    {
+      "name": "màn QR đang mở thôi hiện STK/QR sau khi đơn huỷ",
+      "ok": true
+    },
+    {
+      "name": "màn QR mở lại không còn hiện STK để chuyển",
+      "ok": true
+    },
+    {
+      "name": "màn QR mở lại nói rõ đơn đã huỷ (không phải \"Không tải được… Thử lại\")",
+      "ok": true,
+      "detail": [
+        "Thanh toán chuyển khoản",
+        "Đơn không còn chờ chuyển khoản",
+        "Đơn đã huỷ/trả, không thể thanh toán.",
+        "Xem đơn hàng"
+      ]
+    },
+    {
+      "name": "đơn không sống lại (vẫn CANCELLED)",
+      "ok": true
+    },
+    {
+      "name": "ghi khoản LATE_PAYMENT 169.000đ",
+      "ok": true,
+      "detail": [
+        {
+          "kind": "LATE_PAYMENT",
+          "amount": 169000,
+          "status": "PENDING",
+          "refKey": "PANCAKE:paid:169000"
+        }
+      ]
+    },
+    {
+      "name": "khách nhận ORDER_PAYMENT_EXPIRED + REFUND_LATE_PAYMENT",
+      "ok": true,
+      "detail": [
+        "ORDER_PAYMENT_EXPIRED",
+        "REFUND_LATE_PAYMENT"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "label": "áp mã",
+      "data": {
+        "status": 201,
+        "couponCode": "WELCOME-U1_D24_GVCUOOB"
+      }
+    },
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102295477",
+        "button": "Đặt hàng · 169.000đ",
+        "total": 169000
+      }
+    },
+    {
+      "label": "đơn lúc đặt",
+      "data": {
+        "total": 169000,
+        "couponCode": "WELCOME-U1_D24_GVCUOOB",
+        "redemptions": [
+          {
+            "code": "WELCOME-U1_D24_GVCUOOB",
+            "usedCount": 1,
+            "usageLimit": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": "run-job expireStale",
+      "data": {
+        "scanned": 1,
+        "cancelled": 1,
+        "failed": 0
+      }
+    },
+    {
+      "label": "SQL sau huỷ",
+      "data": {
+        "status": "CANCELLED",
+        "ps": "UNPAID",
+        "coupon": {
+          "code": "WELCOME-U1_D24_GVCUOOB",
+          "usedCount": 0,
+          "usageLimit": 1,
+          "perUserLimit": 1,
+          "endAt": "2026-11-21T11:37:37.782Z",
+          "isActive": true,
+          "redemptions": 0,
+          "claims": 0
+        },
+        "stock0": {
+          "stock": 185,
+          "reservedStock": 15
+        },
+        "stock1": {
+          "stock": 186,
+          "reservedStock": 14
+        }
+      }
+    },
+    {
+      "label": "ảnh màn QR đang mở lúc đơn bị huỷ",
+      "data": "shots/U1-mua-hang/U1-24-bank-expired-open.png"
+    },
+    {
+      "label": "chữ màn QR đang mở sau huỷ",
+      "data": [
+        "Thanh toán chuyển khoản",
+        "Đơn không còn chờ chuyển khoản",
+        "Đơn đã huỷ/trả, không thể thanh toán.",
+        "Xem đơn hàng"
+      ]
+    },
+    {
+      "label": "ảnh màn QR mở lại sau huỷ",
+      "data": "shots/U1-mua-hang/U1-24-bank-expired.png"
+    },
+    {
+      "label": "chữ màn QR mở lại sau huỷ",
+      "data": [
+        "Thanh toán chuyển khoản",
+        "Đơn không còn chờ chuyển khoản",
+        "Đơn đã huỷ/trả, không thể thanh toán.",
+        "Xem đơn hàng"
+      ]
+    },
+    {
+      "label": "tiền về muộn",
+      "data": {
+        "event": {
+          "id": "cmvjgvtq500w1zw9cnhnfbi2a",
+          "status": "PROCESSED",
+          "error": null,
+          "attempts": 1
+        },
+        "after": {
+          "code": "TUBU2026102295477",
+          "total": 169000,
+          "status": "CANCELLED",
+          "paymentStatus": "UNPAID",
+          "paidAt": null,
+          "pancakeAttention": null
+        }
+      }
+    },
+    {
+      "label": "SQL sau tiền muộn",
+      "data": {
+        "status": "CANCELLED",
+        "ps": "UNPAID",
+        "refunds": [
+          {
+            "kind": "LATE_PAYMENT",
+            "amount": 169000,
+            "status": "PENDING",
+            "refKey": "PANCAKE:paid:169000"
+          }
+        ]
+      }
+    },
+    {
+      "label": "thông báo cho khách",
+      "data": [
+        {
+          "templateCode": "ORDER_PAYMENT_EXPIRED",
+          "text": "{\"body\":\"Đơn TUBU2026102295477 đã tự huỷ vì quá hạn thanh toán. Nếu bạn đã chuyển khoản, Tubu sẽ tạo yêu cầu hoàn tiền và báo bạn. Bạn có thể đặt lại trong mục Đơn hàng.\",\"data\":{\"order_code\":\"TUBU2026102295477\",\"refund_"
+        },
+        {
+          "templateCode": "REFUND_LATE_PAYMENT",
+          "text": "{\"body\":\"Tubu đã nhận 169.000đ cho đơn TUBU2026102295477 nhưng đơn đã huỷ. Vào chi tiết đơn để chọn nhận tiền hoàn về Ví Tubu (ngay) hoặc tài khoản ngân hàng (1-3 ngày làm việc, miễn phí).\",\"data\":{\"amount\":\"169.000đ\",\"o"
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:37:59.140Z"
+}

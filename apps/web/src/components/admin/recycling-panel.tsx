@@ -18,7 +18,7 @@ import {
   gomdonStatusLabel,
   needsRecyclingAttention,
 } from '@/lib/recycling';
-import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, Field } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 
@@ -255,17 +255,18 @@ export function RecyclingPanel({ order }: { order: AdminOrder }) {
             )}
           </div>
           {actions.canMarkHandled && (
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="text"
-                aria-label="Ghi chú đã xử lý tay"
-                placeholder="Ghi chú (tuỳ chọn), vd: đã tạo vận đơn GHN tay"
-                maxLength={GOMDON_HANDLED_NOTE_MAX}
-                value={handledNote}
-                onChange={(e) => setHandledNote(e.target.value)}
-                disabled={busy}
-                className={`${FIELD_XS} grow basis-40`}
-              />
+            <div className="flex flex-wrap items-end gap-2">
+              <Field label="Ghi chú xử lý tay (tuỳ chọn)" className="grow basis-40">
+                <input
+                  type="text"
+                  placeholder="vd: đã tạo vận đơn GHN tay"
+                  maxLength={GOMDON_HANDLED_NOTE_MAX}
+                  value={handledNote}
+                  onChange={(e) => setHandledNote(e.target.value)}
+                  disabled={busy}
+                  className={`${FIELD_XS} w-full`}
+                />
+              </Field>
               <button
                 type="button"
                 onClick={onMarkHandled}

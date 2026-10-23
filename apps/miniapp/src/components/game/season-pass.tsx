@@ -66,9 +66,10 @@ export function SeasonPass({
               key={t.tier}
               style={{
                 padding: 12,
-                background: t.unlocked ? 'var(--color-bg-subtle)' : 'var(--stone-100)',
+                // Bậc khoá khác bậc mở bằng nền trắng + viền nét đứt, không làm mờ: chữ vàng/xám phải giữ ≥ 4,5:1.
+                background: t.unlocked ? 'var(--color-bg-subtle)' : 'var(--color-bg-surface)',
+                border: t.unlocked ? '1px solid transparent' : '1px dashed var(--color-border-strong)',
                 borderRadius: 'var(--radius-control)',
-                opacity: t.unlocked ? 1 : 0.7,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>

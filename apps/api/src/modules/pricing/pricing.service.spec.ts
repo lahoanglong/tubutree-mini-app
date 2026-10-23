@@ -1,5 +1,5 @@
 import { pointsForGoods } from './points-earn';
-import { firstOrderFreeShipFrom, firstOrderShippingFee, freeShipThreshold, PricingService } from './pricing.service';
+import { FIRST_ORDER_FREESHIP_MIN_DEFAULT, firstOrderFreeShipFrom, firstOrderShippingFee, freeShipThreshold, PricingService } from './pricing.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -164,6 +164,18 @@ describe('PricingService', () => {
     it('discountPct âm (misconfig) → không giảm (không cộng ngược tiền vào đơn)', () => {
       expect(svc.calcTierDiscount(300000, -0.05)).toBe(0);
     });
+  });
+});
+
+describe('ngưỡng freeship mặc định khi chưa có dòng cấu hình (Q12: khớp ngưỡng đơn đầu 199.000đ)', () => {
+  const svc = new PricingService(makeConfig({}));
+  it('199.000đ → 0đ, 198.999đ → còn phí 19.000đ', async () => {
+    expect(await svc.calcShippingFee({ subtotal: 199000 })).toBe(0);
+    expect(await svc.calcShippingFee({ subtotal: 198999 })).toBe(19000);
+  });
+  it('giỏ và checkout cùng đọc 199.000đ; ngưỡng thường bằng ngưỡng đơn đầu mặc định', async () => {
+    expect(await freeShipThreshold(makeConfig({}), null)).toBe(199000);
+    expect(await freeShipThreshold(makeConfig({}), null)).toBe(FIRST_ORDER_FREESHIP_MIN_DEFAULT);
   });
 });
 

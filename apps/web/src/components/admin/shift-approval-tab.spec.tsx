@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { focusManager } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ShiftApprovalTab } from './shift-approval-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
@@ -51,7 +53,7 @@ function stub(shifts: unknown[], templates: unknown[] = []) {
       return json(shifts);
     }),
   );
-  return { to: (p: string, m = 'POST') => calls.filter((c) => c.url.includes(p) && c.init?.method === m) };
+  return { calls, to: (p: string, m = 'POST') => calls.filter((c) => c.url.includes(p) && c.init?.method === m) };
 }
 
 describe('ShiftApprovalTab (Duyệt ca)', () => {
@@ -101,10 +103,42 @@ describe('ShiftApprovalTab (Duyệt ca)', () => {
     const api = stub([shift('a', 'PENDING'), shift('b', 'PENDING'), shift('c', 'REJECTED')]);
     const { container } = mount(<ShiftApprovalTab />);
     await flush();
+    // D7-15: bấm nhầm là duyệt cả các ca đáng ra phải từ chối, nên hỏi lại kèm số ca.
     click(byText(container, 'button', 'Duyệt tất cả (2)'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('2 ca');
+    answerConfirm(false);
+    await flush();
+    expect(api.to('/bulk-approve')).toHaveLength(0);
+    click(byText(container, 'button', 'Duyệt tất cả (2)'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(JSON.parse(api.to('/bulk-approve')[0]!.init!.body as string)).toEqual({ ids: ['a', 'b'] });
     expect(container.textContent).toContain('Đã duyệt 2 ca.');
+  });
+
+  // Hộp hỏi nêu "2 ca"; ca chờ mới về trong lúc hộp mở (làm mới khi quay lại tab) không được lọt vào lượt duyệt.
+  it('duyệt hàng loạt chỉ gửi đúng danh sách ca đã nêu trong hộp xác nhận, dù danh sách đổi khi hộp đang mở', async () => {
+    const list = [shift('a', 'PENDING'), shift('b', 'PENDING')];
+    const api = stub(list);
+    const { container } = mount(<ShiftApprovalTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt tất cả (2)'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('2 ca');
+    const listCalls = () => api.calls.filter((c) => c.init?.method !== 'POST' && c.url.includes('/admin/shifts')).length;
+    const before = listCalls();
+    list.push(shift('c', 'PENDING'));
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await flush();
+    expect(listCalls()).toBeGreaterThan(before);
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(api.to('/bulk-approve')[0]!.init!.body as string)).toEqual({ ids: ['a', 'b'] });
   });
 
   it('chỉnh giờ rồi duyệt gửi approvedStart/approvedEnd theo giờ VN', async () => {

@@ -1,0 +1,91 @@
+{
+  "id": "U2-06b",
+  "title": "Lên hạng theo ngưỡng chi tiêu 12 tháng: đơn 20.250.000đ giao xong → Đại Thụ (ngưỡng 20.000.000đ)",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:38:24.685Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "DB: tierId = DAI_THU sau đơn giao đầu (spent12m ≥ 20.000.000)",
+      "ok": true,
+      "detail": {
+        "tierId": "DAI_THU",
+        "spent12m": 20250000
+      }
+    },
+    {
+      "name": "/me/loyalty: earnMultiplier 1,5",
+      "ok": true,
+      "detail": 1.5
+    }
+  ],
+  "evidence": {
+    "đơn lớn": {
+      "code": "TUBU2026102269802",
+      "subtotal": 20250000,
+      "total": 20250000,
+      "pointsEarned": 405000
+    },
+    "chuyển khoản": {
+      "matched": true,
+      "txn": {
+        "at": "2026-10-22T11:38:23.095Z",
+        "account": "8386790906 Techcombank",
+        "amount": 20250000,
+        "content": "TUBU2026102269802"
+      },
+      "bankPaymentTotal": 20250000,
+      "orderTotal": 20250000,
+      "http": 200,
+      "reply": {
+        "received": true
+      },
+      "event": {
+        "id": "cmvjgwcnj0056h9r1tblkz9wv",
+        "status": "PROCESSED",
+        "error": null,
+        "attempts": 1
+      },
+      "orderBefore": {
+        "code": "TUBU2026102269802",
+        "total": 20250000,
+        "status": "PENDING_PAYMENT",
+        "paymentMethod": "BANK_TRANSFER",
+        "paymentStatus": "UNPAID",
+        "pancakeOrderId": "9300004"
+      },
+      "orderAfter": {
+        "code": "TUBU2026102269802",
+        "total": 20250000,
+        "status": "CONFIRMED",
+        "paymentStatus": "PAID",
+        "paidAt": "2026-10-22T11:38:23.132Z",
+        "pancakeAttention": null
+      }
+    },
+    "giao": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    },
+    "/me/loyalty": {
+      "tier": "DAI_THU",
+      "spent12m": 20250000,
+      "earnMultiplier": 1.5,
+      "nextTier": {
+        "id": "CO_THU",
+        "name": "Cổ Thụ",
+        "minPoints": 1000000,
+        "minSpending": 50000000,
+        "pointsToGo": 595000,
+        "spendingToGo": 29750000
+      }
+    },
+    "điểm đơn lớn": [
+      {
+        "delta": 405000,
+        "reason": "ORDER_DELIVERED:TUBU2026102269802"
+      }
+    ]
+  }
+}

@@ -93,7 +93,7 @@ describe('gomdon-status', () => {
   it('bảng mã trạng thái đúng tài liệu Gomdon (1–12, không thiếu không thừa)', () => {
     expect(GOMDON_STATUS_TEXT).toEqual({
       1: 'Tạo đơn thành công',
-      2: 'Đơn hủy',
+      2: 'Đơn huỷ',
       3: 'Đã lấy hàng',
       4: 'Đang vận chuyển đến bưu cục nhận',
       5: 'Đang đi giao hàng',

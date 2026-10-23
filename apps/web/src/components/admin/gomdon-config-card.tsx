@@ -20,7 +20,7 @@ import {
   type WarehouseForm,
 } from '@/lib/admin-config-forms';
 import { formatDateTime } from '@/lib/format-date';
-import { BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
+import { BTN_XS_SECONDARY, Field, INPUT_CLASS, LoadError, Notice } from './ui';
 
 /** Hằng (không phải `{}` mới mỗi render) — useEffect bên dưới so sánh theo tham chiếu. */
 const NO_CONFIG: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;
@@ -151,7 +151,11 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-        {statusQ.isError && <span className="text-xs text-danger-fg">Không tải được tình trạng tích hợp.</span>}
+        {statusQ.isError && (
+          <LoadError onRetry={() => void statusQ.refetch()} retrying={statusQ.isFetching}>
+            Không tải được tình trạng tích hợp.
+          </LoadError>
+        )}
         {st && (
           <>
             <StatusDot ok={st.baseUrlSet} label="Base URL" />

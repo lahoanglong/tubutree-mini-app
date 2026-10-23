@@ -22,7 +22,7 @@ import { getErrorMessage } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { formatVnd, formatPoints, formatNumber, formatDate } from '../utils/format';
+import { formatVnd, formatNumber, formatDate, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
@@ -56,7 +56,7 @@ const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> =
 const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 
 function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí vận chuyển';
+  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
   return `Giảm ${formatVnd(c.value)}`;
 }
@@ -214,7 +214,7 @@ export default function LoyaltyPage() {
                 {tierName}
               </Heading>
               <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 2 }}>
-                Tích điểm ×{data.tier?.multiplier ?? 1} · {formatPoints(lots?.total ?? 0)} Xanh
+                Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatNumber(lots?.total ?? 0)} Điểm Xanh
               </Text>
               {convertedNote && (
                 <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
@@ -440,7 +440,7 @@ export default function LoyaltyPage() {
               </div>
               <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
                 Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính
-                vào xét hạng; giọt nước Vườn Xanh điểm danh riêng trong Vườn Cây.
+                vào xét hạng; giọt nước điểm danh riêng trong Vườn Xanh.
               </Text>
             </Card>
           ) : null}
@@ -453,7 +453,7 @@ export default function LoyaltyPage() {
                   <Icon icon={Sprout} tone="brand" />
                 </IconTile>
               }
-              title="Vườn Cây Tubu"
+              title="Vườn Xanh"
               subtitle="Chăm cây nhận quà"
               trailing="chevron"
               onPress={() => navigate('/game')}
@@ -527,7 +527,7 @@ export default function LoyaltyPage() {
                       </Text>
                     </div>
                     <Text variant="caption" tone="secondary" style={{ textAlign: 'right' }}>
-                      {tierThresholdLabel(t, rates)} · ×{t.multiplier}
+                      {tierThresholdLabel(t, rates)} · ×{formatMultiplier(t.multiplier)}
                     </Text>
                   </div>
                 );
@@ -593,7 +593,7 @@ export default function LoyaltyPage() {
       >
         <div style={{ textAlign: 'center' }}>
           <Badge size="md" style={{ background: tierStyle.bg, color: tierStyle.color }}>
-            <span aria-hidden>{tierStyle.emoji}</span> Hạng {tierName} · {formatPoints(lots?.total ?? 0)} Xanh
+            <span aria-hidden>{tierStyle.emoji}</span> Hạng {tierName} · {formatNumber(lots?.total ?? 0)} Điểm Xanh
           </Badge>
         </div>
 

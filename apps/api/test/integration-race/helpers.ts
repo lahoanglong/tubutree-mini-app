@@ -77,6 +77,21 @@ export async function pinConfig(prisma: PrismaService, key: string, value: Prism
 }
 
 /**
+ * Tắt luật đơn sỉ (tối thiểu 3 triệu, phí giao dưới 5 triệu, khoá mua chịu quá hạn) cho spec không kiểm luật đó nhưng đặt
+ * đơn đại lý vài trăm nghìn để thử kho, hạn mức, khoá. Trả hàm khôi phục như pinConfig.
+ */
+export async function pinDealerOrderRulesOff(prisma: PrismaService): Promise<() => Promise<void>> {
+  const restores = [
+    await pinConfig(prisma, 'dealer.min_order_value_vnd', 0),
+    await pinConfig(prisma, 'dealer.shipping_fee_below_threshold_vnd', 0),
+    await pinConfig(prisma, 'dealer.block_credit_when_overdue', false),
+  ];
+  return async () => {
+    for (const restore of restores.reverse()) await restore();
+  };
+}
+
+/**
  * Đơn dựng thẳng ở DELIVERED mặc định đã xong việc sau giao (có mốc deliveredEffectsAt), như đơn đi qua setStatus thật: nếu không,
  * DB dùng chung đầy đơn "giao mà chưa xong việc" và cron chạy lại / Sức khoẻ hệ thống của spec khác thấy chúng. Ca cần đơn chưa
  * xong thì truyền `deliveredEffectsAt: null`.
@@ -88,6 +103,10 @@ export async function createOrder(
   const total = data.total ?? 100_000;
   const effectsDone =
     data.status === 'DELIVERED' && data.deliveredEffectsAt === undefined ? { deliveredEffectsAt: data.deliveredAt ?? new Date() } : {};
+  // Đơn dựng thẳng ở CANCELLED/RETURNED cũng đã xong phần đảo sau commit (như đơn qua setStatus thật); ca cần đơn chưa xong truyền
+  // `reversalEffectsAt: null`.
+  const reversalDone =
+    (data.status === 'CANCELLED' || data.status === 'RETURNED') && data.reversalEffectsAt === undefined ? { reversalEffectsAt: new Date() } : {};
   return prisma.order.create({
     data: {
       code: `IT${Date.now()}${randCode(5)}`,
@@ -109,6 +128,7 @@ export async function createOrder(
         wardCode: '00001',
       },
       ...effectsDone,
+      ...reversalDone,
       ...data,
     },
   });
@@ -122,6 +142,13 @@ export async function markDeliveredEffectsDone(prisma: PrismaService) {
   await prisma.$executeRaw`
     UPDATE "orders" SET "deliveredEffectsAt" = COALESCE("deliveredAt", now())
      WHERE "status" = 'DELIVERED' AND "deliveredEffectsAt" IS NULL`;
+}
+
+/** Như markDeliveredEffectsDone cho đơn CANCELLED/RETURNED còn thiếu mốc reversalEffectsAt (cron chạy lại phần đảo của spec khác). */
+export async function markReversalEffectsDone(prisma: PrismaService) {
+  await prisma.$executeRaw`
+    UPDATE "orders" SET "reversalEffectsAt" = now()
+     WHERE "status" IN ('CANCELLED', 'RETURNED') AND "reversalEffectsAt" IS NULL`;
 }
 
 /** Tóm tắt Promise.allSettled: số fulfilled/rejected + message các lỗi (để in khi assert fail). */

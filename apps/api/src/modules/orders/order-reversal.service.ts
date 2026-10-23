@@ -18,6 +18,7 @@ import { maskPhone } from '../../common/mask-pii';
 import { formatPoints } from '../../common/format-points';
 import { paidLineTotals } from '../affiliate/commission-base';
 import { hasDealerCreditDebit } from './dealer-credit-debit';
+import { lockRewardedReviewsOfOrder, lockReviewRewardsOfProducts, revokeReviewRewardsForReturn } from '../reviews/review-reward-reversal';
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
@@ -28,6 +29,13 @@ export interface ReversalOptions {
   restock?: boolean;
   /** Yêu cầu trả hàng đang duyệt (lần trả nốt cả đơn) — khoá chống trùng của khoản hoàn ngân hàng. */
   returnRequestId?: string;
+  /** Đơn COD đã giao nhưng chưa có bằng chứng tiền COD về tay Tubu (Pancake báo hàng hoàn về kho): không tự hoàn Ví, admin hoàn tay sau khi kiểm. */
+  withholdCodRefund?: boolean;
+  /**
+   * Hạn của Điểm Xanh thường hoàn lại (caller đọc cấu hình NGOÀI tx). Có giá trị thì phần điểm thường đã dùng cũng hoàn trong tx
+   * này, cùng commit với lần lật trạng thái; bỏ trống thì phần đó do LoyaltyService.reverseOrderPoints hoàn sau commit (đường cũ).
+   */
+  standardPointsExpiresAt?: Date;
 }
 
 /** Tiền lần đảo này trả khách và trả về đâu (để báo khách đúng số tiền, đúng nơi nhận). */
@@ -69,6 +77,10 @@ export function isMoneyBackable(order: Pick<Order, 'paymentMethod' | 'paymentSta
   return order.paymentStatus === 'PAID';
 }
 
+/** Chỉ đơn bán lẻ tự mua đã giao mới có đánh giá được thưởng (REVIEWABLE_ORDER); đơn khác không có gì để thu hồi. */
+const canHaveReviewReward = (order: Pick<Order, 'status' | 'type' | 'placedForCustomer'>): boolean =>
+  order.status === 'DELIVERED' && order.type === 'RETAIL' && !order.placedForCustomer;
+
 /**
  * Đảo ngược tác động tài chính + tồn kho của một đơn hàng khi CANCELLED/RETURNED.
  *
@@ -104,6 +116,10 @@ export class OrderReversalService {
     order: OrderWithItems,
     opts: ReversalOptions = {},
   ): Promise<ReversalResult> {
+    // Khoá thưởng đánh giá TRƯỚC mọi ghi lên dòng users: xoá/tạo đánh giá lấy khoá này rồi mới tới dòng user.
+    const reviewable = canHaveReviewReward(order);
+    if (reviewable) await lockRewardedReviewsOfOrder(tx, order.id, null);
+
     // Đơn đã giao có thể đã được trả một phần (D3): lần đảo cả đơn chỉ hoàn phần còn lại — tiền, điểm lô quy đổi,
     // quota flash sale, kho đã nhận về. Đơn chưa giao thì không thể có lần trả nào.
     const prior = order.status === 'DELIVERED' ? await partialReturnTotals(tx, order.id, opts.returnRequestId) : NO_PARTIAL_RETURNS;
@@ -149,8 +165,9 @@ export class OrderReversalService {
     // Theo bảng chuyển trạng thái (order-transition.ts), DELIVERED chỉ có 1 đường tiếp là RETURNED —
     // nên order.status==='DELIVERED' ở đây tương đương "tài xế đã thu tiền COD". Huỷ đơn COD từ bất
     // kỳ mốc nào TRƯỚC DELIVERED (PENDING_PAYMENT..SHIPPING) thì tiền chưa từng thu — đúng là không
-    // có gì để hoàn.
-    const isCodCollected = order.paymentMethod === 'COD' && order.status === 'DELIVERED';
+    // có gì để hoàn. Ngoại lệ: caller có thể tắt bằng `withholdCodRefund` khi DELIVERED chưa phải bằng chứng đã thu (Pancake
+    // báo "Đã hoàn" cho đơn COD mà kho có thể đã bấm "Đã nhận" nhầm) — khi đó tiền hoàn chờ Kế toán đối soát.
+    const isCodCollected = order.paymentMethod === 'COD' && order.status === 'DELIVERED' && !opts.withholdCodRefund;
     const isRefundableChannel = isPrepaidRefundable || isCodCollected;
 
     // Đơn có THỰC SỰ đang PAID ngay trước lần đảo không — guard thắng (count=1) là bằng chứng
@@ -163,8 +180,8 @@ export class OrderReversalService {
     // để quyết định có được báo khách "đã hoàn tiền vào Ví" hay không (A6-06 phần thông báo): không được
     // báo nếu guard dưới đây thua, hay đơn 0đ (guard vẫn thắng nhưng refundToWallet không có gì để cộng).
     let moneyRefunded = false;
-    // Điểm Xanh lần đảo NÀY hoàn trong tx (lô CONVERTED + đơn XU cũ) để caller báo "đã hoàn N Điểm Xanh".
-    // Phần STANDARD hoàn ở LoyaltyService.reverseOrderPoints (ngoài tx) nên không tính ở đây.
+    // Điểm Xanh lần đảo NÀY hoàn trong tx (lô CONVERTED, đơn XU cũ, và lô STANDARD khi caller đưa hạn điểm) để caller báo
+    // "đã hoàn N Điểm Xanh". Caller không đưa hạn điểm thì phần STANDARD hoàn ở LoyaltyService.reverseOrderPoints (ngoài tx).
     let pointsRefunded = 0;
     if (isRefundableChannel) {
       // Đơn đại lý ghi công nợ: khách không trả đồng nào qua Ví/chuyển khoản — "hoàn" chính là dòng đảo công nợ ở
@@ -229,6 +246,9 @@ export class OrderReversalService {
     // thái, như xu/Ví trước PD-3. Để ở LoyaltyService.reverseOrderPoints (chạy sau commit) thì nó ném lỗi
     // (đứt DB, SIGTERM lúc deploy) là đơn đã CANCELLED mà khách mất điểm vĩnh viễn: không có đường thử lại.
     pointsRefunded += await this.refundConvertedPoints(tx, order, prior);
+    // Điểm thường khách đã tiêu cũng là của khách: hoàn sau commit mà lỗi (đứt DB, SIGTERM) thì lần gọi lại thấy đơn đã ở trạng
+    // thái cuối và không làm gì, khách mất điểm vĩnh viễn.
+    if (opts.standardPointsExpiresAt) pointsRefunded += await this.refundStandardPoints(tx, order, prior, opts.standardPointsExpiresAt);
 
     // Hoàn coupon — trước đây thiếu bước này: voucher usageLimit=1 (birthday/welcome/referral)
     // bị đốt vĩnh viễn cho một đơn đã hủy/trả (P1, docs/2026-09-08-review-progress.md).
@@ -268,6 +288,9 @@ export class OrderReversalService {
       }
       referralNotices = revoked?.notices ?? [];
     }
+    // Thưởng đánh giá cấp ngay khi giao: đơn trả cả đơn thì thu hồi thưởng của mọi đánh giá trên đơn (đánh giá của dòng đã
+    // trả một phần trước đó đã thu hồi, bị bỏ qua).
+    if (reviewable) await revokeReviewRewardsForReturn(tx, order.id, null);
     return { moneyRefunded, pointsRefunded, refund, referralNotices };
   }
 
@@ -360,6 +383,11 @@ export class OrderReversalService {
   ): Promise<PartialReversalResult> {
     const { shares, requestId } = input;
     const result: PartialReversalResult = { refund: null, pointsBack: 0, pointsTaken: 0, commissionCut: 0 };
+
+    // Thưởng đánh giá của các sản phẩm bị trả: khoá trước mọi ghi lên dòng users (xem reverseFinancials).
+    const reviewable = canHaveReviewReward(order);
+    const returnedProductIds = reviewable ? await this.productIdsOfLines(tx, order, shares.lines) : [];
+    if (returnedProductIds.length > 0) await lockReviewRewardsOfProducts(tx, order.userId, returnedProductIds);
 
     // Suất flash trước mọi ghi lên dòng users, cùng thứ tự với đường tạo đơn (xem reverseFinancials).
     const byId = new Map(order.items.map((i) => [i.id, i]));
@@ -517,7 +545,26 @@ export class OrderReversalService {
       }
       result.referralNotices = revoked?.notices ?? [];
     }
+    // Đánh giá của sản phẩm bị trả (dù trả một phần số lượng) mất thưởng; sản phẩm khác giữ nguyên.
+    if (returnedProductIds.length > 0) await revokeReviewRewardsForReturn(tx, order.id, returnedProductIds);
     return result;
+  }
+
+  /** Sản phẩm của các dòng bị trả (mỗi sản phẩm một đánh giá nên hai biến thể cùng sản phẩm chung một đánh giá). */
+  private async productIdsOfLines(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    lines: { orderItemId: string; quantity: number }[],
+  ): Promise<string[]> {
+    const variationIds = new Set(
+      lines.flatMap((l) => {
+        const item = order.items.find((i) => i.id === l.orderItemId);
+        return item && l.quantity > 0 ? [item.variationId] : [];
+      }),
+    );
+    if (variationIds.size === 0) return [];
+    const variations = await tx.variation.findMany({ where: { id: { in: [...variationIds] } }, select: { productId: true } });
+    return [...new Set(variations.map((v) => v.productId))];
   }
 
   /**
@@ -676,6 +723,36 @@ export class OrderReversalService {
     });
     if (!res.applied) {
       this.logger.warn(`Đơn ${order.code} đã có dòng ORDER_REFUND_CONVERTED, bỏ qua hoàn lô quy đổi lần 2.`);
+      return 0;
+    }
+    return points;
+  }
+
+  /**
+   * Hoàn phần Điểm Xanh lô STANDARD đã dùng (có hạn như mọi điểm thưởng, OQ-15). Cùng dòng sổ ORDER_REFUND_POINTS mà
+   * LoyaltyService.reverseOrderPoints ghi ở đường cũ, nên khoá unique (reason, refId) chặn hoàn hai lần giữa hai đường, và
+   * reverseOrderPoints thấy dòng này thì chỉ còn thu hồi điểm tích.
+   */
+  private async refundStandardPoints(
+    tx: Prisma.TransactionClient,
+    order: OrderWithItems,
+    prior: PartialReturnTotals,
+    expiresAt: Date,
+  ): Promise<number> {
+    const points = remainingPointsBack(order, prior).standard;
+    if (!(points > 0)) return 0;
+    const res = await applyPointsDelta(tx, {
+      userId: order.userId,
+      delta: points,
+      lot: 'STANDARD',
+      reason: `ORDER_REFUND_POINTS:${order.code}`,
+      refType: 'ORDER',
+      refId: order.id,
+      expiresAt,
+      skipDuplicates: true,
+    });
+    if (!res.applied) {
+      this.logger.warn(`Đơn ${order.code} đã có dòng ORDER_REFUND_POINTS, bỏ qua hoàn điểm thường lần 2.`);
       return 0;
     }
     return points;

@@ -69,8 +69,10 @@ export class AdminReportsController {
   /** CSV theo dòng hàng của đúng tập đơn mà `GET /admin/orders/export` xuất với cùng bộ lọc. */
   @AllowStaff('KE_TOAN')
   @Get('order-items/export')
-  async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response) {
-    await streamCsv(res, `dong-hang-${vnDateKey()}.csv`, orderItemCsvChunks(this.prisma, await this.admin.adminOrderWhere(q)));
+  async exportOrderItems(@Query() q: ExportOrdersQuery, @Res() res: Response, @CurrentUser('role') role?: string) {
+    // Cùng quy ước với GET /admin/orders/export: không phải ADMIN thì tìm SĐT phải gõ đủ số.
+    const where = await this.admin.adminOrderWhere(q, { exactPhoneOnly: role !== 'ADMIN' });
+    await streamCsv(res, `dong-hang-${vnDateKey()}.csv`, orderItemCsvChunks(this.prisma, where));
   }
 
   /** Khấu trừ TNCN của CTV theo người nhận, lệnh đã chi trong khoảng ngày chi (tối đa 366 ngày). */

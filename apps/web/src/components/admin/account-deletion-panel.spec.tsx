@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AccountDeletionPanel, type AdminDeletionRequest } from './account-deletion-panel';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -84,16 +90,25 @@ describe('AccountDeletionPanel (C-016)', () => {
       '/admin/account-deletion-requests': { body: [req()] },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<AccountDeletionPanel />);
     await flush();
-    typeInto(container.querySelector('input[aria-label="Ghi chú xử lý"]'), 'đã gọi xác nhận');
+    typeInto(field(container, 'Ghi chú xử lý (tuỳ chọn)'), 'đã gọi xác nhận');
     click(byText(container, 'button', 'Xử lý'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d).not.toBeNull();
+    expect(d.textContent).toContain('Nguyễn Văn A');
+    expect(d.textContent).toMatch(/Không hoàn tác được/);
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    answerConfirm(false);
     await flush();
     expect(api.calls.some((c) => c.url.includes('/process'))).toBe(false);
     click(byText(container, 'button', 'Xử lý'));
     await flush();
-    expect(confirm).toHaveBeenCalledTimes(2);
+    answerConfirm(true);
+    await flush();
+    expect(native).not.toHaveBeenCalled();
     const call = api.calls.find((c) => c.url.includes('/process'));
     expect(call?.url).toContain('/admin/account-deletion-requests/r1/process');
     expect(call?.init?.method).toBe('POST');
@@ -106,10 +121,11 @@ describe('AccountDeletionPanel (C-016)', () => {
       '/admin/account-deletion-requests': { body: [req()] },
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const { container } = mount(<AccountDeletionPanel />);
     await flush();
     click(byText(container, 'button', 'Xử lý'));
+    await flush();
+    answerConfirm(true);
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('còn 1 đơn hàng chưa hoàn tất');
   });
@@ -128,5 +144,16 @@ describe('AccountDeletionPanel (C-016)', () => {
     expect(api.calls.some((c) => c.url.includes('status=RESOLVED'))).toBe(true);
     expect(byText(container, 'button', /^Xử lý/)).toBeNull();
     expect(container.textContent).toContain('xong');
+  });
+
+  // D7-11: vai trò hiện nhãn tiếng Việt, không lộ mã enum.
+  it('huy hiệu vai trò của người xin xoá: "CTV", không phải AFFILIATE', async () => {
+    const base = req();
+    const api = mockFetch({ '/admin/account-deletion-requests': { body: [req({ user: { ...base.user!, role: 'AFFILIATE' } })] } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AccountDeletionPanel />);
+    await flush();
+    expect(container.textContent).toContain('CTV');
+    expect(container.textContent).not.toContain('AFFILIATE');
   });
 });

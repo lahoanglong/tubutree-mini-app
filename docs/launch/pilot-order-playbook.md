@@ -66,7 +66,7 @@ Mọi thao tác "Quản trị" trên Quản trị cần tài khoản có quyền
 
 Chọn một sản phẩm Tubu giao (không phải hàng đối tác) thoả đủ:
 
-- [ ] giá rẻ nhất trong danh mục đang bán (đơn dưới 200.000đ còn cộng phí giao 19.000đ theo `shipping.flat_fee_below_threshold`)
+- [ ] giá rẻ nhất trong danh mục đang bán (đơn dưới 199.000đ còn cộng phí giao 19.000đ theo `shipping.flat_fee_below_threshold`)
 - [ ] có đúng một biến thể, không phải combo, không đang Flash Sale, không áp mã giảm giá tự động
 - [ ] tồn kho Tubu đủ cho cả hai mức, lấy mức lớn hơn: từ 10 trở lên (khoảng 8 đơn vị cho T1 đến T12 cùng lúc), và từ 2 + (99.000đ chia giá, làm tròn lên) trở lên (lúc làm 7.4, T2 và T3 giao thật đã lấy 2 đơn vị, các đơn huỷ đã trả lại tồn, và đơn T13 cần số đơn vị để giỏ đạt 99.000đ)
 - [ ] có khai báo cân nặng (Gomdon tính theo gram, thiếu thì lấy 500 g)
@@ -116,7 +116,7 @@ Ghi lại: tên ______ giá ______ tồn Tubu ______ tồn Pancake ______
 | T10 | Hàng đối tác tự giao x1 | Ví Tubu | Đơn đối tác, đối soát | Giao | |
 | T11 | Hàng đối tác "Tubu giao hộ" x1 | COD | Ký gửi, kho Tubu giao, đối soát | Giao | |
 | T12 (tuỳ chọn) | Nhiều hàng, sát 5.000.000đ | COD | Trần COD | Huỷ ngay | |
-| T13 | SP-MIN, số lượng để giỏ nằm từ 99.000đ đến dưới 200.000đ (bước 7.4) | COD | Dùng voucher "Miễn phí vận chuyển" đã đổi bằng Điểm Xanh | Huỷ hoặc Giao | |
+| T13 | SP-MIN, số lượng để giỏ nằm từ 99.000đ đến dưới 199.000đ (bước 7.4) | COD | Dùng voucher "Miễn phí vận chuyển" đã đổi bằng Điểm Xanh | Huỷ hoặc Giao | |
 
 **Gói rác của các yêu cầu Đổi rác thử.** Thu kèm đơn cần ít nhất 10.000 điểm ước tính (`waste.pickup_min_points` = 10.000) và Gửi về kho cần ít nhất 15.000 (`waste.mailin_min_points` = 15.000); dưới mức đó máy chủ từ chối ngay khi tạo yêu cầu. Điểm ước tính của một món = phần nguyên của (số lượng chia số đơn vị mỗi nhóm) nhân điểm mỗi nhóm.
 
@@ -186,6 +186,10 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 
 ### 1.3 Kiểm tra mẫu ZNS đã được Zalo duyệt
 
+> **Lưu ý theo quyết định đã chốt:** chủ chỉ nộp 3 mẫu `REVIEW_REQUEST`, `GROUP_BUY_SUCCESS`, `GROUP_BUY_FAILED` (bảng khoá tham số ở [GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 2, Bước D). `ORDER_CONFIRMED` và `ORDER_SHIPPING` chưa nộp nên các bước 1.3 đến 1.6 và 2.2, 2.5 dưới đây, viết cho hai mẫu đó, chỉ chạy được khi chủ đã quyết nộp thêm; nếu chưa, bỏ qua 1.5 và 1.6 và thử ZNS bằng một trong 3 mẫu đã nộp.
+>
+> **Mẫu `GROUP_BUY_SUCCESS`:** tham số `discount` là mức giảm theo % kèm dấu % (ví dụ `15%`), không phải số tiền. Mẫu nào đã nộp hoặc đã duyệt có chữ "đ" sau `<discount>` thì phải nộp lại, nếu không khách nhận "mã giảm 15%đ" (chi tiết ở bảng khoá GO-LIVE-KEYS.md mục 2, Bước D).
+
 - **Ai**: Quản trị. **Ở đâu**: Zalo OA, mục ZNS, danh sách mẫu của OA Tubu Tree.
 - **Làm**: mở hai mẫu `ORDER_CONFIRMED` ("Đơn {{order_code}} đã được xác nhận…") và `ORDER_SHIPPING` ("Đơn {{order_code}} đang được giao…"). Kiểm tra trạng thái, ghi lại Template ID (một dãy số).
 - **Đúng là**: trạng thái **đã duyệt**; mẫu có đúng một tham số tên `order_code`. Nếu mẫu đang chờ duyệt thì chưa làm tiếp bước 1.4; Template ID chỉ có sau khi duyệt ([GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 2, Bước D, lead time 7 đến 14 ngày).
@@ -210,11 +214,11 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 
 - **Ai**: Người thử. **Ở đâu**: Zalo trên điện thoại.
 - **Làm**: đặt đơn T1 theo bước 2.2.
-- **Đúng là**: trong khoảng 1 đến 2 phút, tin ZNS "Đơn TUBU… đã được xác nhận" tới Zalo của Người thử (COD thì tin tới ngay lúc đặt, vì COD vào thẳng "Đã xác nhận").
-- **Bằng chứng**: Mẫu thông báo, dòng `ORDER_CONFIRMED`: số "lượt / 30 ngày" của dòng đó tăng 1 (nếu lỗi, dòng báo "<N> lượt ZNS lỗi trong 30 ngày, khách chưa nhận tin Zalo"); Phụ lục P4: dòng mới `channel = ZNS`, `status = SENT`. Lỗi thì `status = FAILED` hoặc `RETRYING`, cột `error` ghi "ZNS lỗi <mã>: <lời của Zalo>".
+- **Đúng là**: đặt đơn trong khung 08:00 đến 21:00 giờ VN thì trong khoảng 1 đến 2 phút, tin ZNS "Đơn TUBU… đã được xác nhận" tới Zalo của Người thử (COD thì tin tới ngay lúc đặt, vì COD vào thẳng "Đã xác nhận"). Đặt đơn từ 21:00 tới 08:00 thì tin ZNS được hoãn tới 08:00 sáng hôm sau, không bỏ: đó là giờ yên tĩnh, KHÔNG phải lỗi. Khung giờ đọc từ hai khoá Cấu hình `notifications.zns_quiet_start_hour` (mặc định 21) và `notifications.zns_quiet_end_hour` (mặc định 8); hai giá trị bằng nhau là tắt giờ yên tĩnh. Muốn thử ban đêm thì đặt hai khoá bằng nhau (vd cùng 8), chờ tối đa 1 phút cho chắc cấu hình đã có hiệu lực rồi mới đặt đơn, và trả về 21 và 8 sau khi thử. Tin trong app vẫn lưu ngay.
+- **Bằng chứng**: Mẫu thông báo, dòng `ORDER_CONFIRMED`: số "lượt / 30 ngày" của dòng đó tăng 1 (nếu lỗi, dòng báo "<N> lượt ZNS lỗi trong 30 ngày, khách chưa nhận tin Zalo"); Phụ lục P4: dòng mới `channel = ZNS`, `status = SENT`. Lỗi thì `status = FAILED` hoặc `RETRYING`, cột `error` ghi "ZNS lỗi <mã>: <lời của Zalo>". Đặt đơn trong giờ yên tĩnh (21:00 tới 08:00) thì dòng ở `status = PENDING` tới 08:00 là đúng, không phải lỗi; lúc đó chưa có `SENT`.
 - **Hoàn tác**: không có (tin đã gửi).
 
-> **Giả định cần xác nhận:** (1) **Định dạng số điện thoại.** Tubu lưu SĐT dạng `0xxxxxxxxx` và gửi nguyên cho Zalo, không đổi sang `84xxxxxxxxx`. Chưa ai xác nhận Zalo chấp nhận dạng đầu 0. Nếu lỗi ghi về số điện thoại không hợp lệ thì đây là việc phải sửa mã, không phải lỗi mẫu. (2) `error = 0` từ Zalo nghĩa là Zalo nhận lệnh gửi, chưa chắc khách đã nhận được tin (khách không dùng Zalo hoặc tắt nhận thông báo vẫn có thể báo thành công). Đối chiếu bằng mắt trên điện thoại.
+> **Giả định cần xác nhận:** (1) **Định dạng số điện thoại.** Tubu lưu SĐT dạng `0xxxxxxxxx` và đổi sang `84xxxxxxxxx` (0 + 9 số thành 84 + 9 số) ngay trước khi gửi Zalo, theo ví dụ của Zalo; log và bản lưu vẫn giữ số gốc. Chưa kiểm chứng với Zalo thật. Nếu lỗi ghi về số điện thoại không hợp lệ thì đây là việc phải sửa mã (`zns.client.ts`), không phải lỗi mẫu. (2) `error = 0` từ Zalo nghĩa là Zalo nhận lệnh gửi, chưa chắc khách đã nhận được tin (khách không dùng Zalo hoặc tắt nhận thông báo vẫn có thể báo thành công). Đối chiếu bằng mắt trên điện thoại.
 
 `[ ] Đạt  [ ] Không đạt  Mã đơn: ______`
 
@@ -706,7 +710,7 @@ Quy tắc: khách khai món rác trong Mini App (Đổi rác), chọn cách đư
 
 - **Ai**: Người thử. **Ở đâu**: Mini App, Quà (`/rewards`), Quà của tôi (`/rewards/mine`).
 - **Trước khi làm**: kiểm số Điểm Xanh của Người thử (bảng B.5, Mini App, Điểm Xanh). Điểm chỉ có sau khi kho đếm và xác nhận: 7.1 cộng 3.000 ngay trong ngày; 7.2 cộng 20.000 khi kiện về tới kho (vài ngày sau); 7.3 cộng thêm 10.000 khi kiện thu kèm về kho. Voucher rẻ nhất trong danh mục gieo sẵn là "Miễn phí vận chuyển", giá 20.000 điểm: đủ sau khi kho đã đếm 7.1 và 7.2 (23.000 điểm), nên làm 7.4 sau khi kiện của 7.2 đã về kho; chưa đủ điểm thì để 7.4 sang lúc đó, đừng bỏ qua. Quà TREE có giá `game.tree_points_price` (mặc định 50.000 điểm, sửa ở Quản trị, Cấu hình; ở Quản trị, Khách hàng, Đổi rác, Quà chỉ xem được), nên tối đa 33.000 điểm của 7.1 đến 7.3 chưa đủ: chỉ đổi TREE khi số dư đủ giá, nếu không thì ghi "không thử TREE: thiếu điểm" ở bảng kết quả. Giá của các quà khác do admin đặt ở Quản trị, Khách hàng, Đổi rác, Quà: xem lại trước khi làm.
-- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 200.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 200.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7. Khi T13 còn mở, thử dùng lại đúng mã voucher đó ở màn thanh toán của một giỏ khác từ 99.000đ (không cần đặt đơn): phải bị từ chối với câu "Bạn đã dùng hết lượt cho mã này." Sau đó mới đưa T13 tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
+- **Làm**: đổi một voucher bằng Điểm Xanh và dùng ở thanh toán. Voucher "Miễn phí vận chuyển" chỉ dùng cho giỏ từ 99.000đ (giỏ dưới mức đó bị từ chối), còn đơn từ 199.000đ vốn đã miễn phí giao: tăng số lượng SP-MIN cho đơn này để giỏ nằm từ 99.000đ đến dưới 199.000đ thì mới thấy mã có tác dụng. Ghi mã đơn vào dòng T13 của B.7. Khi T13 còn mở, thử dùng lại đúng mã voucher đó ở màn thanh toán của một giỏ khác từ 99.000đ (không cần đặt đơn): phải bị từ chối với câu "Bạn đã dùng hết lượt cho mã này." Sau đó mới đưa T13 tới trạng thái cuối (Đã giao hoặc Đã huỷ). Đổi quà TREE: cây được trồng trong Vườn Xanh.
 - **Đúng là**: điểm bị trừ đúng giá quà; voucher dùng được một lần (kiểm khi T13 còn mở); quà TREE xuất hiện ở Vườn Xanh.
 - **Bằng chứng**: Phụ lục P7 (`points_transactions` của người thử: dòng điểm trừ cho từng quà).
 - **Hoàn tác**: không hoàn tác được voucher và quà TREE: voucher thành coupon ngay, quà TREE đi qua Vườn Xanh, nên không bao giờ ở trạng thái chờ nhận. Điểm đã trừ là chi phí thử, ghi vào cột "Sau" của bảng B.5. Huỷ T13 thì hệ thống trả lượt dùng, mã quay lại tài khoản Người thử và dùng lại được: tắt mã đó ở Quản trị, Khuyến mãi, Voucher, nút "Tắt mã". Muốn thử huỷ có hoàn điểm thì đổi thêm một quà loại "Gói hạt giống" hoặc "Quà tặng" (hiện ở trạng thái "Chờ nhận"), rồi huỷ ở Quản trị, Khách hàng, Đổi rác, Quà với `refundPoints` (checklist mục 7).

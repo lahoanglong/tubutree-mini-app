@@ -1,0 +1,276 @@
+{
+  "builtAt": "2026-10-22T13:20:00.103Z",
+  "lane": 9,
+  "db": "tubutree_uat_tpl",
+  "personas": [
+    {
+      "alias": "new",
+      "id": "uat_new",
+      "zaloId": "uat-zalo-new",
+      "phone": "0901000001",
+      "role": "CUSTOMER",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "Khách mới: chưa đơn, SĐT đã xác minh, chưa làm onboarding"
+    },
+    {
+      "alias": "new_nophone",
+      "id": "uat_new_nophone",
+      "zaloId": "uat-zalo-new-nophone",
+      "phone": null,
+      "role": "CUSTOMER",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "Khách mới: chưa đơn, KHÔNG có SĐT"
+    },
+    {
+      "alias": "returning",
+      "id": "uat_returning",
+      "zaloId": "uat-zalo-returning",
+      "phone": "0901000003",
+      "role": "CUSTOMER",
+      "staffPermissions": [],
+      "tierId": "LOC_BIEC",
+      "pointsBalance": 34400,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "Khách quay lại: hạng Lộc Biếc, có điểm, đơn cũ đã giao, có địa chỉ mặc định"
+    },
+    {
+      "alias": "ctv",
+      "id": "uat_ctv",
+      "zaloId": "uat-zalo-ctv",
+      "phone": "0901000004",
+      "role": "AFFILIATE",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": {
+        "slug": "uatctv",
+        "published": true,
+        "approved": true
+      },
+      "note": "CTV (AFFILIATE), gian hàng ĐÃ DUYỆT, đã đăng"
+    },
+    {
+      "alias": "ctv_pending",
+      "id": "uat_ctv_pending",
+      "zaloId": "uat-zalo-ctv-pending",
+      "phone": "0901000005",
+      "role": "AFFILIATE",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": {
+        "slug": "uatctvpending",
+        "published": true,
+        "approved": false
+      },
+      "note": "CTV (AFFILIATE), gian hàng đã đăng, CHỜ DUYỆT"
+    },
+    {
+      "alias": "dealer",
+      "id": "uat_dealer",
+      "zaloId": "uat-zalo-dealer",
+      "phone": "0901000006",
+      "role": "DEALER",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": "DEALER_2",
+      "storefront": null,
+      "note": "Đại lý (DEALER) duyệt qua hồ sơ, bậc DEALER_2"
+    },
+    {
+      "alias": "staff",
+      "id": "uat_staff",
+      "zaloId": "uat-zalo-staff",
+      "phone": "0901000007",
+      "role": "STAFF",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "STAFF không nhóm việc (quầy, đổi vỏ, chấm công)"
+    },
+    {
+      "alias": "kho",
+      "id": "uat_kho",
+      "zaloId": "uat-zalo-kho",
+      "phone": "0901000014",
+      "role": "STAFF",
+      "staffPermissions": [
+        "KHO"
+      ],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "STAFF nhóm KHO"
+    },
+    {
+      "alias": "ketoan",
+      "id": "uat_ketoan",
+      "zaloId": "uat-zalo-ketoan",
+      "phone": "0901000008",
+      "role": "STAFF",
+      "staffPermissions": [
+        "KE_TOAN"
+      ],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "STAFF nhóm KE_TOAN"
+    },
+    {
+      "alias": "marketing",
+      "id": "uat_marketing",
+      "zaloId": "uat-zalo-marketing",
+      "phone": "0901000009",
+      "role": "STAFF",
+      "staffPermissions": [
+        "MARKETING"
+      ],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "STAFF nhóm MARKETING"
+    },
+    {
+      "alias": "cskh",
+      "id": "uat_cskh",
+      "zaloId": "uat-zalo-cskh",
+      "phone": "0901000010",
+      "role": "STAFF",
+      "staffPermissions": [
+        "CSKH"
+      ],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "STAFF nhóm CSKH (kiểm duyệt cộng đồng)"
+    },
+    {
+      "alias": "brand",
+      "id": "uat_brand",
+      "zaloId": "uat-zalo-brand",
+      "phone": "0901000011",
+      "role": "CUSTOMER",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "CUSTOMER, chủ nhãn hàng Fuwa3e (Brand.ownerUserId)"
+    },
+    {
+      "alias": "admin",
+      "id": "uat_admin",
+      "zaloId": "uat-zalo-admin",
+      "phone": "0901000012",
+      "role": "ADMIN",
+      "staffPermissions": [],
+      "tierId": null,
+      "pointsBalance": 0,
+      "dealerTierId": null,
+      "storefront": null,
+      "note": "ADMIN (dòng gốc, như grant-admin.js)"
+    }
+  ],
+  "storefronts": {
+    "uat_ctv": {
+      "slug": "uatctv",
+      "isPublished": true,
+      "approvedAt": "2026-10-22T13:20:00.237Z"
+    },
+    "uat_ctv_pending": {
+      "slug": "uatctvpending",
+      "isPublished": true,
+      "approvedAt": null
+    }
+  },
+  "brandId": "75ae0443eea88aa90f3c2bec9bc3ece1",
+  "couponBatch": {
+    "prefix": "HOPSAN",
+    "codes": [
+      "HOPSAN-24WAGD5K",
+      "HOPSAN-2U5A3RB2",
+      "HOPSAN-5ZENQGH4",
+      "HOPSAN-6T9GW2K5",
+      "HOPSAN-7QGA3T2M",
+      "HOPSAN-ADC9QXB6",
+      "HOPSAN-CF7UGQNL",
+      "HOPSAN-D8VXD4QX",
+      "HOPSAN-DFGZD9AB",
+      "HOPSAN-E3ECH2VA",
+      "HOPSAN-EGNN4BWD",
+      "HOPSAN-FUSUBB9L",
+      "HOPSAN-G64DZDW8",
+      "HOPSAN-JCA9J6S4",
+      "HOPSAN-JKP6CLG7",
+      "HOPSAN-K9HF2XBA",
+      "HOPSAN-LWPEL7HX",
+      "HOPSAN-N38G8ME5",
+      "HOPSAN-PD6JPXAP",
+      "HOPSAN-QNTURUMD",
+      "HOPSAN-QRCANUP6",
+      "HOPSAN-UCMR7CNN",
+      "HOPSAN-USGQK9LE",
+      "HOPSAN-UTLQ92V6",
+      "HOPSAN-Y7WNXHJG",
+      "HOPSAN-Z4QSEY6G",
+      "HOPSAN-ZMXX5QE7",
+      "HOPSAN-ZQLA3B9C",
+      "HOPSAN-ZSECLRJF",
+      "HOPSAN-ZWZW8M67"
+    ]
+  },
+  "flashSale": {
+    "id": "cmvjkj5il002nqafunmkrfa8m",
+    "startAt": "2026-10-22T13:10:00.103Z",
+    "endAt": "2026-10-28T13:20:00.103Z",
+    "items": [
+      {
+        "sku": "BHN-CGL-100",
+        "product": "Cao cà gai leo BH.Nong",
+        "base": 220000,
+        "flashPrice": 165000
+      },
+      {
+        "sku": "BHN-CW-500",
+        "product": "Hạt điều rang mộc BH.Nong",
+        "base": 159000,
+        "flashPrice": 119000
+      },
+      {
+        "sku": "BHN-HN-500",
+        "product": "Mật ong rừng nguyên chất BH.Nong",
+        "base": 260000,
+        "flashPrice": 195000
+      }
+    ],
+    "skus": [
+      "BHN-CGL-100",
+      "BHN-CW-500",
+      "BHN-HN-500"
+    ]
+  },
+  "returning": {
+    "orderCode": "TUBU2026102264181",
+    "addressId": "cmvjkj5j9002zqafur34xfkpk",
+    "tierId": "LOC_BIEC",
+    "pointsBalance": 34400
+  }
+}

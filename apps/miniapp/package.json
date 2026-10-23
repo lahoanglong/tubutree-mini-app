@@ -18,7 +18,6 @@
     "@tubutree/app-core": "workspace:*",
     "@tubutree/design-tokens": "workspace:*",
     "@tubutree/shared-types": "workspace:*",
-    "axios": "^1.7.9",
     "lucide-react": "^1.18.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

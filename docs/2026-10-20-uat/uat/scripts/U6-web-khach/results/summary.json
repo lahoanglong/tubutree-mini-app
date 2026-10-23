@@ -1,0 +1,57 @@
+{
+  "PASS": 49,
+  "FAIL": 8,
+  "BLOCKED": 4,
+  "fail": [
+    {
+      "id": "U6-02",
+      "why": "390: Giá tăng sắp đúng thứ tự (20 thẻ đầu); 390: Giá giảm — thẻ đầu đắt nhất"
+    },
+    {
+      "id": "U6-09",
+      "why": "/chinh-sach/dieu-khoan không còn chỗ trống [..] (đã biết D8-5, chủ tự điền); /chinh-sach/bao-mat không còn chỗ trống [..] (đã biết D8-5, chủ tự điền)"
+    },
+    {
+      "id": "U6-37",
+      "why": "390: chỉ 2 phương thức theo Q4 (không có Ví Tubu/ZaloPay); 1440: chỉ 2 phương thức theo Q4 (không có Ví Tubu/ZaloPay)"
+    },
+    {
+      "id": "U6-68",
+      "why": "địa chỉ còn lại tự thành mặc định (không để khách mất mặc định)"
+    },
+    {
+      "id": "U6-73",
+      "why": "thể lệ công khai: khách ghé đọc được nội dung có \"khoảng ngày\"; trang thể lệ không phát sinh request lỗi 401/403"
+    },
+    {
+      "id": "U6-74",
+      "why": "/doi-rac/yeu-cau: khách KHÔNG SĐT thấy \"cần mở Tubu Tree trên Zalo\""
+    },
+    {
+      "id": "U6-75",
+      "why": "/hoc-vien (CTV Academy): khách thường thấy lời mời/giải thích, không phải lỗi thô \"Bạn không có quyền truy cập tài nguyên này\" kèm nút Thử lại"
+    },
+    {
+      "id": "U6-80",
+      "why": "không trang nào tràn ngang (28 trang); không trang nào tràn ngang (22 trang)"
+    }
+  ],
+  "blocked": [
+    {
+      "id": "U6-95",
+      "why": "Cần ứng dụng Zalo thật, tài khoản Zalo thật và địa chỉ gọi lại đã đăng ký với Zalo. Lane chỉ có Zalo giả (nhóm B đã kiểm vòng đăng nhập, làm mới phiên, đăng xuất và các đường lỗi trên Zalo giả). Việc tạo khách mới qua OAuth thật cần người thật thử trên máy chủ chạy thật."
+    },
+    {
+      "id": "U6-96",
+      "why": "Không có tiền thật chạy qua tài khoản và không có nhà cung cấp đối soát thật trong lane. Phần xử lý của API đã được kiểm bằng webhook giả (U6-33: sai nội dung, chuyển thiếu, chuyển đủ). Cần thử một khoản chuyển khoản nhỏ thật trước khi mở khách."
+    },
+    {
+      "id": "U6-97",
+      "why": "Khoá Pancake thật chưa có (đã ghi nhận: khoá điền khi deploy). Lane dùng Pancake giả ở cổng 3268; đơn sang Pancake giả và các trạng thái vận chuyển được kiểm ở nhóm D, E."
+    },
+    {
+      "id": "U6-98",
+      "why": "Không có tài khoản Gomdon, OA và ZaloPay thật; đường thu gom tận nhà đang tắt trong cấu hình mặc định. Web phải chỉ nhận chuyển khoản và COD theo Q4; thực tế còn hiện Ví Tubu (xem U6-37)."
+    }
+  ]
+}

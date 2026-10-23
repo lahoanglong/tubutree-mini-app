@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PayoutAdminTab, PayoutRow } from './payout-admin-tab';
+import { OpsInboxTab } from './ops-inbox-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminPayout } from '@/lib/admin-client';
+
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -56,7 +63,7 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
     expect(confirmDialog()).toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/lý do/i);
 
-    typeInto(container.querySelector('input[aria-label="Ghi chú / lý do"]'), 'Sai số tài khoản');
+    typeInto(field(container, 'Ghi chú / lý do (bắt buộc khi từ chối)'), 'Sai số tài khoản');
     click(byText(container, 'button', 'Từ chối'));
     await flush();
     const d = confirmDialog()!;
@@ -90,6 +97,104 @@ describe('PayoutRow — hộp thoại xác nhận', () => {
   });
 });
 
+// D7-01, D7-16: duyệt rút tiền không còn đường từ chối trên giao diện, nên "Duyệt" và "Đã chuyển khoản" phải hỏi lại, nêu rõ
+// ai nhận, số tiền, ngân hàng, STK và dùng tông danger.
+describe('PayoutRow — hỏi lại khi duyệt và khi chi (D7-01, D7-16)', () => {
+  it('"Duyệt": hộp thoại danger nêu CTV, số tiền, ngân hàng, STK; Huỷ thì không gọi API; đồng ý gọi đúng một lần', async () => {
+    const api = mockFetch({ '/approve': { body: payout({ status: 'APPROVED' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout()} />);
+
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    const d = confirmDialog()!;
+    expect(d).not.toBeNull();
+    const text = d.textContent ?? '';
+    expect(text).toContain('Nguyễn A');
+    expect(text).toContain('1.500.000');
+    expect(text).toContain('VCB');
+    expect(text).toContain('0123456789');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    expect(api.calls).toHaveLength(0);
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(api.calls.filter((c) => c.url.includes('/admin/payouts/p1/approve'))).toHaveLength(1);
+  });
+
+  it('"Đã chuyển khoản": hộp thoại danger nêu CTV, ngân hàng, STK và mã giao dịch đã gõ', async () => {
+    const api = mockFetch({ '/mark-paid': { body: payout({ status: 'PAID' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
+    typeInto(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)'), 'FT26100001');
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    const d = confirmDialog()!;
+    const text = d.textContent ?? '';
+    expect(text).toContain('Nguyễn A');
+    expect(text).toContain('VCB');
+    expect(text).toContain('0123456789');
+    expect(text).toContain('FT26100001');
+    expect(d.querySelector('[data-confirm="accept"]')?.className).toContain('bg-danger-fg');
+    answerConfirm(false);
+    await flush();
+    expect(api.calls).toHaveLength(0);
+  });
+});
+
+// Lệnh REQUESTED tăng số thực nhận khi lệnh khác bị từ chối (hoàn thuế giữ dư ngay trên lệnh): màn gửi kèm số đang hiện để
+// máy chủ chặn duyệt/chi theo số cũ.
+describe('PayoutRow — gửi expectedAmount là số đang hiện trên dòng', () => {
+  it('"Duyệt" gửi expectedAmount = amount của dòng', async () => {
+    const api = mockFetch({ '/approve': { body: payout({ status: 'APPROVED' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ amount: 750_000 })} />);
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/admin/payouts/p1/approve'))!;
+    expect(JSON.parse(String(call.init?.body))).toEqual({ expectedAmount: 750_000 });
+  });
+
+  it('"Đã chuyển khoản" gửi expectedAmount = amount của dòng', async () => {
+    const api = mockFetch({ '/mark-paid': { body: payout({ status: 'PAID' }) }, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED', amount: 750_000 })} />);
+    click(byText(container, 'button', 'Đã chuyển khoản'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const call = api.calls.find((c) => c.url.includes('/admin/payouts/p1/mark-paid'))!;
+    expect(JSON.parse(String(call.init?.body))).toEqual({ expectedAmount: 750_000 });
+  });
+
+  it('409 số thực nhận đã đổi: hiện lỗi của máy chủ và tải lại danh sách', async () => {
+    const msg = 'Số thực nhận của lệnh đã đổi từ 750.000đ thành 1.000.000đ (thuế giữ dư vừa được hoàn), vui lòng tải lại trước khi duyệt.';
+    const api = mockFetch({
+      '/approve': { status: 409, body: { statusCode: 409, message: msg } },
+      '/pit-report': { body: EMPTY_PIT },
+      '/admin/payouts': { body: { data: [payout({ amount: 750_000 })], meta: { page: 1, limit: 20, total: 1 } } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab />);
+    await flush();
+    const listCalls = () => api.calls.filter((c) => c.url.includes('/admin/payouts?')).length;
+    const before = listCalls();
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã đổi từ 750.000đ thành 1.000.000đ');
+    expect(listCalls()).toBeGreaterThan(before);
+  });
+});
+
 // C-097 (Q-29): màn duyệt/chi tiền chỉ đổi giao diện sang DS v2; nút thao tác tiền chạm được ở 390px.
 describe('PayoutRow / PayoutAdminTab — DS v2', () => {
   it('lệnh REQUESTED: "Duyệt" là nút chính forest, "Từ chối (hoàn tiền)" viền danger, cả hai cao 44px', () => {
@@ -105,7 +210,7 @@ describe('PayoutRow / PayoutAdminTab — DS v2', () => {
   it('lệnh APPROVED: "Đã chuyển khoản" cao 44px, ô ghi chú/mã giao dịch chịu xuống dòng', () => {
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} />);
     expect(byText(container, 'button', 'Đã chuyển khoản')?.className).toContain('min-h-[44px]');
-    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')?.className).toContain('flex-1');
+    expect(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)')?.closest('label')?.className).toContain('flex-1');
   });
 
   it('huy hiệu trạng thái và lý do từ chối theo token danger', () => {
@@ -140,6 +245,14 @@ describe('Thuế TNCN trên lệnh rút và báo cáo tháng (SELLER-11)', () =>
     expect(container.textContent).toContain('Hoa hồng 2.500.000');
     expect(container.textContent).toContain('khấu trừ thuế TNCN 250.000');
     expect(container.textContent).toContain('MST/CCCD 079201001234');
+  });
+
+  it('lệnh đã được hoàn thuế giữ dư (Q2b): hiện số đã khấu trừ và số đã hoàn vào Ví', () => {
+    const { container } = mount(
+      <PayoutRow payout={payout({ status: 'PAID', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 250_000, taxRefunded: 250_000, taxId: '079201001234' })} />,
+    );
+    expect(container.textContent).toContain('khấu trừ thuế TNCN 250.000');
+    expect(container.textContent).toContain('đã hoàn 250.000');
   });
 
   it('báo cáo tháng: gọi đúng tháng, bảng theo người nhận cuộn ngang, tổng tháng, người bị khấu trừ thiếu MST được tô cảnh báo', async () => {
@@ -177,14 +290,14 @@ describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
     const { container } = mount(<PayoutRow payout={payout()} canReview={false} />);
     expect(byText(container, 'button', 'Duyệt')).toBeNull();
     expect(byText(container, 'button', 'Từ chối')).toBeNull();
-    expect(container.querySelector('input[aria-label="Ghi chú / lý do"]')).toBeNull();
+    expect(field(container, 'Ghi chú / lý do (bắt buộc khi từ chối)')).toBeNull();
     expect(container.textContent).toContain('Chờ quản trị viên duyệt');
   });
 
   it('lệnh APPROVED: vẫn bấm được "Đã chuyển khoản" kèm mã giao dịch', () => {
     const { container } = mount(<PayoutRow payout={payout({ status: 'APPROVED' })} canReview={false} />);
     expect(byText(container, 'button', 'Đã chuyển khoản')).not.toBeNull();
-    expect(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]')).not.toBeNull();
+    expect(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)')).not.toBeNull();
   });
 
   it('mặc định lọc lệnh đã duyệt chờ chuyển khoản (APPROVED), không phải hàng chờ duyệt', async () => {
@@ -193,5 +306,51 @@ describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
     mount(<PayoutAdminTab canReview={false} />);
     await flush();
     expect(api.calls.find((c) => !c.url.includes('/pit-report'))!.url).toContain('status=APPROVED');
+  });
+});
+
+// Q20: hàng đợi gồm cả lệnh rút Ví Tubu của khách thường, nên tiêu đề phải khớp tên mục "Yêu cầu rút tiền" trên thanh bên.
+describe('PayoutAdminTab — tiêu đề khớp tên tab', () => {
+  it('tiêu đề là "Yêu cầu rút tiền"', async () => {
+    const api = mockFetch(LIST);
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<PayoutAdminTab canReview />);
+    await flush();
+    expect(container.querySelector('h2')?.textContent).toBe('Yêu cầu rút tiền');
+  });
+});
+
+// Số trên thẻ trang chủ phải khớp số dòng khi bấm vào (quy ước ops-inbox.service). ADMIN thấy cả hai thẻ rút tiền nhưng tab
+// mở mặc định ở hàng chờ duyệt, nên bấm thẻ "chờ chi" (đếm APPROVED) từng ra danh sách khác với số trên thẻ.
+describe('PayoutAdminTab — mở từ thẻ ở Việc cần xử lý (ADMIN)', () => {
+  const inbox = { '/admin/ops/inbox': { body: { generatedAt: '2026-10-14T03:00:00.000Z', items: [{ key: 'payouts', count: 2 }, { key: 'payoutsToPay', count: 5 }] } } };
+  const listUrl = (api: ReturnType<typeof mockFetch>) => api.calls.filter((c) => c.url.includes('/admin/payouts?')).at(-1)!.url;
+
+  async function openFromCard(key: string) {
+    const api = mockFetch({ ...inbox, ...LIST });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const inboxView = mount(<OpsInboxTab onOpen={() => undefined} />);
+    await flush();
+    click(inboxView.container.querySelector<HTMLButtonElement>(`[data-inbox="${key}"]`));
+    mount(<PayoutAdminTab canReview />);
+    await flush();
+    return api;
+  }
+
+  it('thẻ "Lệnh rút tiền chờ chi" mở danh sách lọc APPROVED', async () => {
+    expect(listUrl(await openFromCard('payoutsToPay'))).toContain('status=APPROVED');
+  });
+
+  it('thẻ "Lệnh rút tiền chờ duyệt" vẫn mở danh sách lọc REQUESTED', async () => {
+    expect(listUrl(await openFromCard('payouts'))).toContain('status=REQUESTED');
+  });
+
+  it('mở tab từ thanh menu (không qua thẻ) sau đó vẫn mặc định REQUESTED, không dính lần bấm thẻ trước', async () => {
+    await openFromCard('payoutsToPay');
+    const api = mockFetch(LIST);
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mount(<PayoutAdminTab canReview />);
+    await flush();
+    expect(listUrl(api)).toContain('status=REQUESTED');
   });
 });

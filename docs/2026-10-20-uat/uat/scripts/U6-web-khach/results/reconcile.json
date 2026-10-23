@@ -1,0 +1,80 @@
+{
+  "name": "reconcile",
+  "at": "2026-10-22T12:18:11.045Z",
+  "cases": [
+    {
+      "id": "U6-90",
+      "role": "Toàn bộ khách UAT (uat_returning, uat_new, uat_new_nophone)",
+      "journey": "Đối chiếu sổ điểm / ví / tổng đơn",
+      "steps": "Chạy truy vấn đối chiếu trên DB lane 6 sau khi mọi nhóm ca đã chạy",
+      "expected": "users.pointsBalance = SUM(points_transactions lô STANDARD); users.walletBalance = SUM(wallet_transactions) (khi có dòng sổ ví); mỗi đơn: tổng = tạm tính − giảm + phí ship, giảm = mã + combo + hạng + Điểm Xanh, tổng dòng hàng = tạm tính; đơn đã giao: điểm = làm tròn xuống (2% × tiền hàng sau giảm × hệ số hạng); mỗi đơn có mã còn hiệu lực có đúng 1 dòng coupon_redemptions; hoa hồng = 8% tiền hàng tính hoa hồng",
+      "checks": [
+        {
+          "name": "pointsBalance = SUM(sổ STANDARD) cho cả 3 khách",
+          "ok": true,
+          "detail": "[{\"id\":\"uat_new\",\"balance\":3380,\"ledger_sum\":3380,\"rows\":1},{\"id\":\"uat_new_nophone\",\"balance\":1000,\"ledger_sum\":1000,\"rows\":1},{\"id\":\"uat_returning\",\"balance\":57456,\"ledger_sum\":57456,\"rows\":9}]"
+        },
+        {
+          "name": "walletBalance = SUM(sổ ví) cho cả 3 khách",
+          "ok": true,
+          "detail": "[{\"id\":\"uat_new\",\"balance\":0,\"ledger_sum\":0,\"rows\":0},{\"id\":\"uat_new_nophone\",\"balance\":0,\"ledger_sum\":0,\"rows\":0},{\"id\":\"uat_returning\",\"balance\":0,\"ledger_sum\":0,\"rows\":6}]"
+        },
+        {
+          "name": "mọi đơn: total = subtotal − discount + shippingFee",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "mọi đơn: discount = couponDiscount + comboDiscount + tierDiscount + pointsDiscount",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "mọi đơn: SUM(order_items.total) = subtotal",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "mọi đơn đã giao: dòng sổ = pointsEarned và = công thức (2% × tiền hàng sau giảm × hệ số hạng)",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "đơn có mã chưa huỷ: 1 redemption; đơn huỷ: 0",
+          "ok": true,
+          "detail": "[{\"code\":\"TUBU2026102289039\",\"status\":\"DELIVERED\",\"couponCode\":\"HOPSAN-38X362LH\",\"redemptions\":1},{\"code\":\"TUBU2026102264535\",\"status\":\"CANCELLED\",\"couponCode\":\"XANH10\",\"redemptions\":0}]"
+        },
+        {
+          "name": "hoa hồng = 8% × tiền hàng tính hoa hồng",
+          "ok": true,
+          "detail": "[{\"code\":\"TUBU2026102207437\",\"status\":\"LOCKED\",\"base\":165000,\"rate\":8,\"amount\":13200,\"expect_8pct\":13200,\"deliveredAt\":\"2026-10-22T11:46:36.632Z\",\"lockedAt\":\"2026-10-22T11:46:36.639Z\",\"approvedAt\":null},{\"code\":\"TUBU2026102213485\",\"status\":\"PENDING\",\"base\":158000,\"rate\":8,\"amount\":12640,\"expect_8pct\":12640,\"deliveredAt\":null,\"lockedAt\":null,\"approvedAt\":null},{\"code\":\"TUBU2026102223432\",\"status\":\"…"
+        },
+        {
+          "name": "không SKU nào có tồn hoặc tồn giữ chỗ âm",
+          "ok": true,
+          "detail": "[]"
+        },
+        {
+          "name": "không có cặp đơn trùng trong 1 giây",
+          "ok": true,
+          "detail": "[]"
+        }
+      ],
+      "evidence": [
+        {
+          "label": "khoảng cách giao → khoá/duyệt hoa hồng (ngày)",
+          "value": "{\"lockedAt\":\"2026-10-22T11:46:36.639Z\",\"approvedAt\":null,\"days\":8.101851851851852e-8,\"status\":\"LOCKED\"}"
+        },
+        {
+          "label": "số truy vấn đối chiếu",
+          "value": "10"
+        }
+      ],
+      "shots": [],
+      "notes": [],
+      "blockedReason": null,
+      "bugs": [],
+      "verdict": "PASS"
+    }
+  ]
+}

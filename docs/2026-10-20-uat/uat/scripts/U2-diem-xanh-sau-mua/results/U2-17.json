@@ -1,0 +1,135 @@
+{
+  "id": "U2-17",
+  "title": "Đơn CSKH của SĐT chưa vào Mini App (0901000013): giữ 30 ngày (HELD_NO_MEMBER); khách mới vào Mini App, chia sẻ SĐT đó lúc đặt đơn → nhận điểm",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:37.685Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "claim PHONE chưa có chủ (userId null), PENDING, orderPhone 0901000013",
+      "ok": true,
+      "detail": {
+        "userId": null,
+        "state": "PENDING",
+        "orderPhone": "0901000013",
+        "points": 3600
+      }
+    },
+    {
+      "name": "tới hạn mà chưa có thành viên: HELD_NO_MEMBER, holdUntil = mốc cộng + 30 ngày",
+      "ok": true,
+      "detail": {
+        "state": "HELD_NO_MEMBER",
+        "holdDays": 30
+      }
+    },
+    {
+      "name": "Mini App xin SĐT (getPhoneNumber → /auth/ensure-phone), tài khoản có SĐT 0901000013",
+      "ok": true,
+      "detail": {
+        "phone": "0901000013",
+        "phoneVerifiedAt": "2026-10-22T11:39:33.502Z",
+        "pointsBalance": 0
+      }
+    },
+    {
+      "name": "claim gắn vào khách mới và CREDITED 3.600 điểm (2% × 180.000, khách chưa có hạng ×1), số dư = SUM sổ",
+      "ok": true,
+      "detail": {
+        "userId": "uat_u2_chatnew",
+        "state": "CREDITED",
+        "rows": [
+          3600
+        ],
+        "balance": 3600
+      }
+    },
+    {
+      "name": "quá hạn giữ 30 ngày: LAPSED, không ghi sổ",
+      "ok": true,
+      "detail": {
+        "state": "LAPSED",
+        "rows": 0
+      }
+    }
+  ],
+  "evidence": {
+    "webhook 7700006": {
+      "http": 200,
+      "event": "PROCESSED"
+    },
+    "sau job": {
+      "state": "HELD_NO_MEMBER",
+      "releaseAt": "2026-10-19T11:38:08.000Z",
+      "holdUntil": "2026-11-18T11:38:08.000Z",
+      "holdDays": 30
+    },
+    "Mini App": {
+      "placeOrder": 201,
+      "zmp": [
+        "login",
+        "getAccessToken",
+        "getPhoneNumber",
+        "login",
+        "getAccessToken",
+        "vibrate"
+      ],
+      "auth": [
+        "POST /auth/zalo-mini-app 200 [giả]",
+        "POST /auth/ensure-phone 200 [giả]",
+        "POST /auth/refresh 200"
+      ]
+    },
+    "claim sau khi khách vào app": {
+      "id": "cmvjgxso900h7h9r1c1kbo1r9",
+      "userId": "uat_u2_chatnew",
+      "kind": "PHONE",
+      "state": "PENDING",
+      "points": 3600,
+      "ratePct": "2.0000",
+      "multiplier": "1.000",
+      "countsForTier": true,
+      "releaseAt": "2026-10-19T11:38:08.000Z",
+      "holdUntil": null,
+      "reviewReason": null,
+      "orderPhone": "0901000013",
+      "orderStatus": "DELIVERED",
+      "goodsValue": 180000,
+      "deliveredAt": "2026-10-05T11:38:08.000Z"
+    },
+    "sau liên kết": {
+      "claim": {
+        "userId": "uat_u2_chatnew",
+        "state": "CREDITED",
+        "points": 3600
+      },
+      "rows": [
+        {
+          "delta": 3600,
+          "reason": "PANCAKE_CHAT_ORDER:7700006"
+        }
+      ],
+      "balance": 3600,
+      "stdSum": 3600
+    },
+    "notification_logs": [
+      {
+        "templateCode": "CHAT_ORDER_POINTS_LINKED",
+        "channel": "INAPP",
+        "status": "SENT",
+        "sentAt": "2026-10-22T11:39:33.519Z"
+      },
+      {
+        "templateCode": "CHAT_ORDER_POINTS_CREDITED",
+        "channel": "INAPP",
+        "status": "SENT",
+        "sentAt": "2026-10-22T11:39:35.819Z"
+      }
+    ],
+    "đơn chat 7700008 không ai nhận": {
+      "state": "LAPSED",
+      "ledgerRows": 0
+    }
+  }
+}

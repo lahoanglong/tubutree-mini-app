@@ -39,7 +39,7 @@ const DAY_MS = 86_400_000;
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const POINT_INCLUDE = {
-  items: { select: { itemId: true } },
+  items: { select: { itemId: true, item: { select: { warehouseOnly: true } } } },
   staff: {
     include: { user: { select: { id: true, fullName: true, phone: true } } },
     orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
@@ -58,6 +58,16 @@ const canon = (v: unknown): string =>
       : x,
   );
 const same = (a: unknown, b: unknown): boolean => canon(a) === canon(b);
+
+/** Only the Tubu warehouse takes items flagged warehouseOnly; the flag lives on the item so the rule is data, not a list of codes. */
+async function assertItemsFitKind(tx: Prisma.TransactionClient, kind: WastePoint['kind'], itemIds: string[]): Promise<void> {
+  if (kind !== 'PARTNER' || itemIds.length === 0) return;
+  const blocked = await tx.wasteItem.findMany({ where: { id: { in: itemIds }, warehouseOnly: true }, select: { name: true } });
+  if (blocked.length > 0) {
+    // Item names can hold a comma ('Vỏ chai, hộp Tubu Tree'), so the list is joined with ';'.
+    throw new BadRequestException(`Điểm đại lý không nhận: ${blocked.map((i) => i.name).join('; ')}. ${blocked.length > 1 ? 'Các món này' : 'Món này'} chỉ kho Tubu HCMC nhận.`);
+  }
+}
 const jsonSafe = (o: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v instanceof Date ? v.toISOString() : v]));
 // Prisma reports a raw partial index either by its name or by its field list.
@@ -117,7 +127,8 @@ export function toAdminPointDTO(row: PointRow, usage: WastePointUsage | undefine
     lng: row.lng,
     phone: row.phone,
     openingHours: row.openingHours as unknown as WasteOpeningHours,
-    acceptedItemIds: row.items.map((i) => i.itemId).sort(),
+    // A link left from before the warehouse-only rule is not shown as accepted by a partner point (same as the customer list).
+    acceptedItemIds: row.items.filter((i) => row.kind === 'WAREHOUSE' || !i.item.warehouseOnly).map((i) => i.itemId).sort(),
     perkText: row.perkText,
     distanceKm: null,
     status: row.status,
@@ -176,6 +187,7 @@ export class WasteAdminPointsService {
         if ((await tx.wastePoint.count()) >= WASTE_POINTS_MAX_PER_SITE) throw new ConflictException('Đã đủ 200 điểm nhận, không tạo thêm được.');
         if (kind === 'WAREHOUSE' && (await tx.wastePoint.count({ where: { kind: 'WAREHOUSE' } })) > 0) throw new ConflictException(ONE_WAREHOUSE);
         if ((await tx.wasteItem.count({ where: { id: { in: ids } } })) !== ids.length) throw new BadRequestException('Có món không tồn tại.');
+        await assertItemsFitKind(tx, kind, ids);
 
         const created = await tx.wastePoint.create({
           data: {
@@ -249,6 +261,7 @@ export class WasteAdminPointsService {
       if (body.itemIds !== undefined) {
         const ids = [...new Set(body.itemIds)];
         if ((await tx.wasteItem.count({ where: { id: { in: ids } } })) !== ids.length) throw new BadRequestException('Có món không tồn tại.');
+        await assertItemsFitKind(tx, cur.kind, ids);
         itemsBefore = (await tx.wastePointItem.findMany({ where: { pointId: id }, select: { itemId: true } })).map((r) => r.itemId).sort();
         itemsAfter = [...ids].sort();
         itemsChanged = !same(itemsAfter, itemsBefore);

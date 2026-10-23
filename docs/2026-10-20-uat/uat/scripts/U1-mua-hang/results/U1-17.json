@@ -1,0 +1,266 @@
+{
+  "id": "U1-17",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Chồng mã: mỗi đơn 1 mã (mã sau thay mã trước), mã + freeship đơn đầu cùng áp",
+  "steps": "Giỏ 278.000đ (FUWA-DW-1L 120k + FUWA-GL-500 79k + COBOTE-PW-100 79k) → áp WELCOME30 → áp XANH10 → thanh toán → đặt COD",
+  "expected": "Sau mã thứ hai giỏ chỉ còn XANH10 (carts.couponCode), sheet ghi \"Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá\"; báo giá giảm 27.800đ (10%) và ship 0, tổng 250.200đ; đơn ghi 1 mã, 0 lượt WELCOME30",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "áp WELCOME30",
+      "ok": true
+    },
+    {
+      "name": "sheet có câu \"Mỗi đơn hàng chỉ áp dụng 1 mã giảm giá\"",
+      "ok": true
+    },
+    {
+      "name": "mã sau thay mã trước: giỏ = XANH10",
+      "ok": true
+    },
+    {
+      "name": "báo giá: giảm 27.800đ, ship 0, tổng 250.200đ",
+      "ok": true,
+      "detail": {
+        "shipments": [
+          {
+            "key": "TUBU",
+            "fulfiller": {
+              "kind": "TUBU",
+              "name": "Tubu Tree",
+              "storefrontId": null
+            },
+            "itemIds": [
+              "cmvjgtpcz00iezw9c6vuuc3x8",
+              "cmvjgtpd500imzw9c4rfnx02v",
+              "cmvjgtpdc00iuzw9czb2m9s8e"
+            ],
+            "subtotal": 278000,
+            "discount": 27800,
+            "shippingFee": 0,
+            "total": 250200
+          }
+        ],
+        "blockedPaymentMethods": {},
+        "subtotal": 278000,
+        "discount": 27800,
+        "couponApplied": true,
+        "couponNotice": null,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsUsedConverted": 0,
+        "pointsDiscount": 0,
+        "pointsMax": 0,
+        "pointsPartnerNote": null,
+        "pointsNotice": null,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 250200,
+        "pointsEarned": 5004,
+        "pointsBalance": 0,
+        "pointsConvertedBalance": 0,
+        "redeemablePoints": 0,
+        "redeemableConvertedPoints": 0,
+        "lockedPoints": 0,
+        "items": [
+          {
+            "id": "cmvjgtpcz00iezw9c6vuuc3x8",
+            "variationId": "cmqfuw9jt0005w1vfkndxukxy",
+            "productId": "p-fuwa-dishwash",
+            "productName": "Nước rửa chén sinh học Fuwa3e",
+            "variationName": "1L",
+            "slug": "nuoc-rua-chen-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 120000,
+            "quantity": 1,
+            "stock": 195,
+            "weight": 1050,
+            "total": 120000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          },
+          {
+            "id": "cmvjgtpd500imzw9c4rfnx02v",
+            "variationId": "cmqfv3q67002fcgcoxpqsxpb4",
+            "productId": "p-fuwa-glass",
+            "productName": "Nước lau kính enzyme Fuwa3e",
+            "variationName": "500ml",
+            "slug": "nuoc-lau-kinh-fuwa3e",
+            "thumbnail": null,
+            "unitPrice": 79000,
+            "quantity": 1,
+            "stock": 167,
+            "weight": 540,
+            "total": 79000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          },
+          {
+            "id": "cmvjgtpdc00iuzw9czb2m9s8e",
+            "variationId": "cmqfv2cn10017zxpl3ga9aqov",
+            "productId": "p-cobote-powder",
+            "productName": "Phấn rôm thảo dược Cobote",
+            "variationName": "100g",
+            "slug": "phan-rom-thao-duoc-cobote",
+            "thumbnail": null,
+            "unitPrice": 79000,
+            "quantity": 1,
+            "stock": 160,
+            "weight": 130,
+            "total": 79000,
+            "isFlash": false,
+            "flashSaleItemId": null,
+            "flashEndAt": null,
+            "soldPct": null,
+            "flashLimitNotice": null,
+            "fulfiller": {
+              "kind": "TUBU",
+              "storefrontId": null,
+              "name": "Tubu Tree"
+            },
+            "partnerOwned": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "DB: đơn 1 mã XANH10, 1 lượt, couponDiscount 27800, total 250200",
+      "ok": true
+    },
+    {
+      "name": "DB: 0 lượt WELCOME30",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "áp mã XANH10",
+      "data": {
+        "status": 201,
+        "snackbar": "Đã áp dụng mã XANH10",
+        "couponCode": "XANH10",
+        "discount": 27800,
+        "message": null
+      }
+    },
+    {
+      "label": "báo giá cuối (POST /checkout/quote)",
+      "data": {
+        "subtotal": 278000,
+        "discount": 27800,
+        "couponApplied": true,
+        "couponNotice": null,
+        "tierDiscount": 0,
+        "pointsUsed": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "firstOrderShipWaived": 0,
+        "total": 250200,
+        "pointsEarned": 5004
+      }
+    },
+    {
+      "label": "ảnh thanh toán",
+      "data": "shots/U1-mua-hang/U1-17-checkout.png"
+    },
+    {
+      "label": "đặt đơn",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102285609",
+        "button": "Đặt hàng · 250.200đ"
+      }
+    },
+    {
+      "label": "ảnh sau đặt",
+      "data": "shots/U1-mua-hang/U1-17-placed.png"
+    },
+    {
+      "label": "SQL đơn",
+      "data": {
+        "id": "cmvjgtw8100jizw9cf4s6edv0",
+        "code": "TUBU2026102285609",
+        "userId": "u1_c17_gtpcf0q",
+        "status": "CONFIRMED",
+        "paymentMethod": "COD",
+        "paymentStatus": "UNPAID",
+        "subtotal": 278000,
+        "discount": 27800,
+        "couponDiscount": 27800,
+        "comboDiscount": 0,
+        "tierDiscount": 0,
+        "pointsDiscount": 0,
+        "shippingFee": 0,
+        "total": 250200,
+        "pointsEarned": 5004,
+        "pointsUsed": 0,
+        "couponCode": "XANH10",
+        "pancakeOrderId": "9200010",
+        "paidAt": null,
+        "pancakeAttention": null,
+        "pancakePaidReported": null,
+        "createdAt": "2026-10-22T11:36:28.513Z",
+        "items": [
+          {
+            "sku": "COBOTE-PW-100",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 71100,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-DW-1L",
+            "quantity": 1,
+            "unitPrice": 120000,
+            "total": 120000,
+            "paidTotal": 108000,
+            "pointsDiscount": 0,
+            "flash": false
+          },
+          {
+            "sku": "FUWA-GL-500",
+            "quantity": 1,
+            "unitPrice": 79000,
+            "total": 79000,
+            "paidTotal": 71100,
+            "pointsDiscount": 0,
+            "flash": false
+          }
+        ],
+        "redemptions": [
+          {
+            "code": "XANH10",
+            "usedCount": 0,
+            "usageLimit": null
+          }
+        ],
+        "ledger": []
+      }
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:36:30.102Z"
+}

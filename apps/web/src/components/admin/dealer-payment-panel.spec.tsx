@@ -5,6 +5,12 @@ import { DealerPaymentPanel, canConfirmDealerPayment } from './dealer-payment-pa
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminOrder } from '@/lib/admin-client';
 
+/** Ô nhập theo chữ nhãn hiện của Field (tên truy cập lấy từ nhãn, không còn aria-label riêng). */
+const field = (root: ParentNode, label: string) =>
+  Array.from(root.querySelectorAll('label'))
+    .find((l) => l.querySelector('span')?.textContent === label)
+    ?.querySelector('input') ?? null;
+
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
   const r = render(ui);
@@ -69,8 +75,8 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const native = vi.spyOn(window, 'confirm');
     const { container } = mount(<DealerPaymentPanel order={dealerOrder()} />);
-    typeInto(container.querySelector('input[aria-label="Mã giao dịch ngân hàng"]'), ' FT26270123 ');
-    typeInto(container.querySelector('input[aria-label="Ghi chú xác nhận thanh toán"]'), 'đã đối soát sao kê');
+    typeInto(field(container, 'Mã giao dịch ngân hàng (tuỳ chọn)'), ' FT26270123 ');
+    typeInto(field(container, 'Ghi chú thanh toán (tuỳ chọn)'), 'đã đối soát sao kê');
     const btn = byText(container, 'button', 'Xác nhận đã nhận chuyển khoản') as HTMLButtonElement;
 
     click(btn);
@@ -172,7 +178,7 @@ describe('DealerPaymentPanel — DS v2', () => {
     expect(inputs).toHaveLength(2);
     for (const input of inputs) {
       expect(input.className).toContain('min-h-[44px]');
-      expect(input.className).toContain('basis-40');
+      expect(input.closest('label')?.className).toContain('basis-40');
     }
     const btn = byText(container, 'button', 'Xác nhận đã nhận chuyển khoản');
     expect(btn?.className).toContain('min-h-[44px]');

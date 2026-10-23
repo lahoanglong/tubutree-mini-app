@@ -35,7 +35,7 @@ export function normalizeSubdomain(raw: string): string {
     );
   }
   if (RESERVED_STOREFRONT_IDENTIFIERS.has(clean)) {
-    throw new BadRequestException(`"${clean}" thuộc từ khóa hệ thống, vui lòng chọn tên khác.`);
+    throw new BadRequestException(`"${clean}" thuộc từ khoá hệ thống, vui lòng chọn tên khác.`);
   }
   return clean;
 }

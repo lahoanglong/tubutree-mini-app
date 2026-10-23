@@ -98,11 +98,11 @@ describe('Checkout tách đơn theo nơi giao dưới tải song song (real Post
   });
 
   function barrierOnGetCart(n: number) {
-    const original = cart.getCart.bind(cart);
+    const original = cart.getCartForCheckout.bind(cart);
     let arrived = 0;
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));
-    return jest.spyOn(cart, 'getCart').mockImplementation(async (userId: string) => {
+    return jest.spyOn(cart, 'getCartForCheckout').mockImplementation(async (userId: string) => {
       const res = await original(userId);
       if (++arrived === n) release();
       await gate;
@@ -175,6 +175,7 @@ describe('Checkout tách đơn theo nơi giao dưới tải song song (real Post
     const key = `itsc-${randCode(12)}`;
 
     const spy = barrierOnGetCart(4);
+    let barrierCalls = 0;
     let results: PromiseSettledResult<unknown>[];
     try {
       results = await Promise.allSettled(
@@ -183,8 +184,10 @@ describe('Checkout tách đơn theo nơi giao dưới tải song song (real Post
         ),
       );
     } finally {
+      barrierCalls = spy.mock.calls.length;
       spy.mockRestore();
     }
+    expect(barrierCalls).toBe(4);
     const s = summarize(results);
     const orders = await prisma.order.findMany({
       where: { userId: u.id },

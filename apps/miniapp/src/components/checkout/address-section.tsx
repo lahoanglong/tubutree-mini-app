@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plus } from 'lucide-react';
 import type { AddressDTO } from '../../services/shop-api';
@@ -22,7 +22,6 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const selected = addresses.find((a) => a.id === selectedId) ?? null;
   const editing = addresses.find((a) => a.id === editingId) ?? null;
 
   return (
@@ -37,41 +36,22 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
         </Text>
       )}
 
-      {addresses.map((a) => (
-        <AddressCard key={a.id} address={a} active={selectedId === a.id} onClick={() => onSelect(a.id)} />
-      ))}
-
-      {selected && isLegacyGeo(selected) && !editing && (
-        <div
-          role="alert"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            padding: 12,
-            marginBottom: 8,
-            borderRadius: 'var(--radius-control)',
-            background: 'var(--color-status-warning-bg)',
-          }}
-        >
-          <span style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-            <AlertTriangle size={16} color="var(--color-status-warning-fg)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
-            <Text variant="body-sm" as="span" style={{ color: 'var(--color-status-warning-fg)' }}>
-              {vi.checkout.addressLegacy}
-            </Text>
-          </span>
-          <Button
-            variant="secondary"
-            onPress={() => {
-              haptic('light');
-              setAdding(false);
-              setEditingId(selected.id);
-            }}
-          >
-            {vi.checkout.addressLegacyCta}
-          </Button>
-        </div>
-      )}
+      {addresses.map((a) => {
+        const active = selectedId === a.id;
+        return (
+          <AddressCard key={a.id} address={a} active={active} onClick={() => onSelect(a.id)}>
+            {active && isLegacyGeo(a) && editing === null && (
+              <LegacyGeoNotice
+                onFix={() => {
+                  haptic('light');
+                  setAdding(false);
+                  setEditingId(a.id);
+                }}
+              />
+            )}
+          </AddressCard>
+        );
+      })}
 
       {editing && (
         <div style={{ marginTop: 8 }}>
@@ -149,50 +129,89 @@ export function AddressSection({ addresses, selectedId, onSelect }: AddressSecti
   );
 }
 
+/** Cảnh báo nằm trong chính thẻ địa chỉ đang chọn để khách biết địa chỉ nào cần chọn lại tỉnh/phường. */
+function LegacyGeoNotice({ onFix }: { onFix: () => void }) {
+  return (
+    <div
+      role="alert"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        padding: 12,
+        margin: '0 12px 12px',
+        borderRadius: 'var(--radius-control)',
+        background: 'var(--color-status-warning-bg)',
+      }}
+    >
+      <span style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+        <AlertTriangle size={16} color="var(--color-status-warning-fg)" aria-hidden style={{ flexShrink: 0, marginTop: 2 }} />
+        <Text variant="body-sm" as="span" style={{ color: 'var(--color-status-warning-fg)' }}>
+          {vi.checkout.addressLegacy}
+        </Text>
+      </span>
+      <Button variant="secondary" onPress={onFix}>
+        {vi.checkout.addressLegacyCta}
+      </Button>
+    </div>
+  );
+}
+
 function AddressCard({
   address,
   active,
   onClick,
+  children,
 }: {
   address: AddressDTO;
   active: boolean;
   onClick: () => void;
+  children?: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      className="tubu-press"
-      onClick={() => {
-        haptic('light');
-        onClick();
-      }}
+    <div
       style={{
-        display: 'block',
-        width: '100%',
-        padding: 12,
         marginBottom: 8,
-        minHeight: 44,
-        boxSizing: 'border-box',
         border: `1.5px solid ${active ? 'var(--color-border-selected)' : 'var(--color-border-subtle)'}`,
         background: active ? 'var(--color-bg-subtle)' : 'var(--color-bg-surface)',
         borderRadius: 'var(--radius-control)',
-        font: 'inherit',
-        color: 'inherit',
-        textAlign: 'left',
-        cursor: 'pointer',
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Text variant="body-sm" style={{ fontWeight: 600 }}>
-          {address.recipient} · {address.phone}
+      <button
+        type="button"
+        role="radio"
+        aria-checked={active}
+        className="tubu-press"
+        onClick={() => {
+          haptic('light');
+          onClick();
+        }}
+        style={{
+          display: 'block',
+          width: '100%',
+          padding: 12,
+          minHeight: 44,
+          boxSizing: 'border-box',
+          border: 'none',
+          background: 'transparent',
+          borderRadius: 'var(--radius-control)',
+          font: 'inherit',
+          color: 'inherit',
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Text variant="body-sm" style={{ fontWeight: 600 }}>
+            {address.recipient} · {address.phone}
+          </Text>
+          {address.isDefault && <Badge tone="brand">{vi.checkout.addressDefault}</Badge>}
+        </span>
+        <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', marginTop: 2 }}>
+          {addressLine(address)}
         </Text>
-        {address.isDefault && <Badge tone="brand">{vi.checkout.addressDefault}</Badge>}
-      </span>
-      <Text variant="caption" tone="secondary" as="span" style={{ display: 'block', marginTop: 2 }}>
-        {addressLine(address)}
-      </Text>
-    </button>
+      </button>
+      {children}
+    </div>
   );
 }

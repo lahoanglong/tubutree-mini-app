@@ -1,0 +1,147 @@
+{
+  "id": "U2-02",
+  "title": "Lộc Biếc: 289.000đ, mã XANH10 giảm 28.900đ → 2% × 1,2 trên 260.100đ = 6.242 điểm",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:38:22.430Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "áp mã XANH10 vào giỏ",
+      "ok": true,
+      "detail": {
+        "status": 201
+      }
+    },
+    {
+      "name": "Mini App: đặt đơn 201, không request lỗi/ra ngoài",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "code": "TUBU2026102271966",
+        "bad": [],
+        "blocked": []
+      }
+    },
+    {
+      "name": "báo giá: tiền hàng sau giảm 260100đ, phí giao 0đ",
+      "ok": true,
+      "detail": {
+        "goods": 260100,
+        "shippingFee": 0
+      }
+    },
+    {
+      "name": "báo giá: pointsEarned = floor(260100 × 2% × 1.2) = 6242 (không tính ship)",
+      "ok": true,
+      "detail": {
+        "pointsEarned": 6242
+      }
+    },
+    {
+      "name": "DB: orders.pointsEarned = báo giá",
+      "ok": true,
+      "detail": {
+        "id": "cmvjgwaoe003hh9r1q072zj6e",
+        "total": 260100,
+        "shippingFee": 0,
+        "pointsEarned": 6242,
+        "status": "CONFIRMED",
+        "discount": 28900
+      }
+    },
+    {
+      "name": "webhook delivered lặp + job resync: vẫn 1 dòng",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "name": "SQL: đúng 1 dòng ORDER_DELIVERED:<mã> = pointsEarned",
+      "ok": true,
+      "detail": [
+        6242
+      ]
+    },
+    {
+      "name": "SQL: số dư = trước + điểm đơn = SUM(delta STANDARD)",
+      "ok": true,
+      "detail": {
+        "before": 34400,
+        "after": 40642,
+        "stdSum": 40642
+      }
+    },
+    {
+      "name": "SQL: hạn dòng điểm = ngày cộng + 12 tháng (365/366 ± 1 ngày)",
+      "ok": true,
+      "detail": {
+        "days": 365,
+        "expiresAt": "2027-10-22T11:38:21.201Z"
+      }
+    }
+  ],
+  "evidence": {
+    "trước": {
+      "balance": 34400,
+      "stdSum": 34400,
+      "rows": 1,
+      "converted": 0,
+      "convSum": 0,
+      "wallet": 0,
+      "walletSum": 0,
+      "walletRows": 0,
+      "tierId": "LOC_BIEC",
+      "lots": [
+        {
+          "lot": "STANDARD",
+          "sum": 34400,
+          "n": 1
+        }
+      ]
+    },
+    "báo giá màn checkout": {
+      "subtotal": 289000,
+      "discount": 28900,
+      "tierDiscount": 0,
+      "shippingFee": 0,
+      "total": 260100,
+      "pointsEarned": 6242
+    },
+    "nút đặt": "Đặt hàng · 260.100đ",
+    "giao": {
+      "shipped": "PROCESSED/SHIPPING",
+      "delivered": "PROCESSED/DELIVERED"
+    },
+    "sổ sau giao": {
+      "rows": [
+        {
+          "delta": 6242,
+          "reason": "ORDER_DELIVERED:TUBU2026102271966",
+          "lot": "STANDARD",
+          "refId": "cmvjgwaoe003hh9r1q072zj6e",
+          "createdAt": "2026-10-22T11:38:21.203Z",
+          "expiresAt": "2027-10-22T11:38:21.201Z"
+        }
+      ],
+      "after": {
+        "balance": 40642,
+        "stdSum": 40642,
+        "rows": 2,
+        "converted": 0,
+        "convSum": 0,
+        "wallet": 0,
+        "walletSum": 0,
+        "walletRows": 0,
+        "tierId": "LOC_BIEC",
+        "lots": [
+          {
+            "lot": "STANDARD",
+            "sum": 40642,
+            "n": 2
+          }
+        ]
+      }
+    },
+    "mã đơn": "TUBU2026102271966"
+  }
+}

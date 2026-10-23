@@ -367,6 +367,8 @@ export default function OrderDetailPage() {
                 size="xSmall"
                 bold
                 className="tubu-press tubu-hit-44"
+                role="button"
+                {...rowKeyboardProps()}
                 style={{ color: 'var(--color-text-brand)', marginTop: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 onClick={() => {
                   haptic('light');
@@ -760,7 +762,7 @@ export default function OrderDetailPage() {
         }
       />
 
-      {/* ── Confirm hủy (DI #10): giữ đơn là primary. Đơn đã trả tiền: khách chọn nơi nhận tiền hoàn (D2). ── */}
+      {/* ── Confirm huỷ (DI #10): giữ đơn là primary. Đơn đã trả tiền: khách chọn nơi nhận tiền hoàn (D2). ── */}
       <Sheet visible={confirmCancel} onClose={() => setConfirmCancel(false)} autoHeight>
         <Box p={5}>
           <Box style={{ textAlign: 'center' }}>

@@ -1,0 +1,107 @@
+{
+  "id": "U2-06c",
+  "title": "Rớt hạng có ân hạn: trả cả đơn vừa đưa khách lên Lộc Biếc → chi tiêu < 1.500.000; cron tiers.recalc giữ Lộc Biếc + ân hạn 30 ngày; hết ân hạn, cron hạ về Mầm Xanh",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:38:47.153Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "đơn RETURNED, thu hồi đủ điểm đơn, số dư = SUM sổ, ví + tiền hàng",
+      "ok": true,
+      "detail": {
+        "status": "RETURNED",
+        "reversed": [
+          -4200
+        ],
+        "earned": 4200,
+        "wallet": [
+          0,
+          210000
+        ]
+      }
+    },
+    {
+      "name": "ngay sau trả: chi tiêu < 1.500.000 nhưng chưa rớt hạng (vẫn LOC_BIEC)",
+      "ok": true,
+      "detail": {
+        "spent12m": 1453000,
+        "tierId": "LOC_BIEC"
+      }
+    },
+    {
+      "name": "cron đêm đầu tiên: giữ LOC_BIEC, đặt ân hạn ≈ 30 ngày",
+      "ok": true,
+      "detail": {
+        "tierId": "LOC_BIEC",
+        "graceDays": 30
+      }
+    },
+    {
+      "name": "cron đêm sau (còn ân hạn): giữ LOC_BIEC, không gia hạn ân hạn",
+      "ok": true,
+      "detail": {
+        "tierId": "LOC_BIEC",
+        "grace": [
+          "2026-11-21T11:38:45.064Z",
+          "2026-11-21T11:38:45.064Z"
+        ]
+      }
+    },
+    {
+      "name": "hết ân hạn: job hạ về MAM_XANH, hệ số 1",
+      "ok": true,
+      "detail": {
+        "tierId": "MAM_XANH",
+        "grace": null,
+        "mult": 1
+      }
+    }
+  ],
+  "evidence": {
+    "khách trả cả đơn": {
+      "code": "TUBU2026102287604",
+      "status": 201,
+      "id": "cmvjgwszu00cjh9r14882vsms"
+    },
+    "sau trả": {
+      "review": 201,
+      "order": "RETURNED",
+      "tier": {
+        "tierId": "LOC_BIEC",
+        "tierGraceUntil": null
+      },
+      "spent12m": 1453000,
+      "reversed": [
+        -4200
+      ],
+      "balance": [
+        32880,
+        28680
+      ],
+      "wallet": [
+        0,
+        210000
+      ]
+    },
+    "ngay sau trả (luồng trả hàng không gọi recalcTier; rớt hạng chỉ áp ở cron đêm, loyalty.service.ts:390)": {
+      "tierId": "LOC_BIEC",
+      "tierGraceUntil": null
+    },
+    "cron tiers.recalc lần 1": {
+      "job": null,
+      "tier": {
+        "tierId": "LOC_BIEC",
+        "tierGraceUntil": "2026-11-21T11:38:45.064Z"
+      }
+    },
+    "sau hết ân hạn + tiers.recalc": {
+      "job": null,
+      "tier": {
+        "tierId": "MAM_XANH",
+        "tierGraceUntil": null
+      },
+      "earnMultiplier": 1
+    }
+  }
+}

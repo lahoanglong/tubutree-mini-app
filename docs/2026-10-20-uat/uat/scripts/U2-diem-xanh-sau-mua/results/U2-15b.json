@@ -1,0 +1,42 @@
+{
+  "id": "U2-15b",
+  "title": "Trần điểm đơn sàn theo tháng (loyalty.marketplace_claim_monthly_points_cap): vượt trần → 429 MONTHLY_CAP, không tạo claim",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:39:26.814Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "429 MONTHLY_CAP",
+      "ok": true,
+      "detail": {
+        "status": 429,
+        "code": "MONTHLY_CAP"
+      }
+    },
+    {
+      "name": "không tạo claim",
+      "ok": true
+    },
+    {
+      "name": "trả trần 200.000: gửi lại được (CLAIMED 5.000 điểm, không ×1,5 dù Đại Thụ)",
+      "ok": true,
+      "detail": {
+        "status": 201,
+        "claim": "CLAIMED",
+        "points": 5000
+      }
+    }
+  ],
+  "evidence": {
+    "gửi đơn 500.000đ (5.000 điểm) khi trần 3.000": {
+      "status": 429,
+      "body": {
+        "statusCode": 429,
+        "error": "MONTHLY_CAP",
+        "code": "MONTHLY_CAP",
+        "message": "Bạn đã đạt mức điểm tối đa từ đơn mua ngoài app trong tháng này."
+      }
+    }
+  }
+}

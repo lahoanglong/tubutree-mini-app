@@ -15,12 +15,15 @@ import { downloadCsvFile, generateClaimCodesCsv } from '@/lib/export-csv';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
-import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass } from './ui';
+import { BTN_PRIMARY, BTN_XS_SECONDARY, FIELD_CLASS, Field, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 
 const MINIAPP_BASE_URL_KEY = 'app.miniapp_base_url';
 const BATCH_MAX = 2000;
 type CouponType = 'PERCENT' | 'AMOUNT' | 'FREESHIP';
 type Mode = 'batch' | 'shared';
+
+/** Hạn thẻ hộp hàng sàn khi để trống ngày: luật đã chốt 60 ngày, vì thẻ còn nằm trong kho và trong hộp trước khi tới tay khách. */
+const CLAIM_CARD_DEFAULT_DAYS = 60;
 
 /** Ngày của `<input type="date">` là ngày giờ VN: ghép giờ địa phương để "đến hết 31/12" không hết hạn lúc 7h sáng. */
 function localDayIso(dayKey: string, endOfDay: boolean, fallbackMs: number): string {
@@ -77,7 +80,7 @@ export function ClaimCampaignPanel() {
     minOrder: num(f.minOrder),
     maxDiscount: num(f.maxDiscount),
     startAt: localDayIso(f.startAt, false, Date.now()),
-    endAt: localDayIso(f.endAt, true, Date.now() + 30 * 864e5),
+    endAt: localDayIso(f.endAt, true, Date.now() + CLAIM_CARD_DEFAULT_DAYS * 864e5),
     newCustomerOnly: f.newCustomerOnly,
   });
 
@@ -225,7 +228,7 @@ export function ClaimCampaignPanel() {
         <Field label="Bắt đầu từ ngày" hint="Bỏ trống = từ hôm nay.">
           <input type="date" aria-label="Thẻ bắt đầu từ ngày" value={f.startAt} onChange={(e) => setF({ ...f, startAt: e.target.value })} className={field} />
         </Field>
-        <Field label="Hết hạn ngày" hint="Bỏ trống = 30 ngày. Nên tính cả thời gian thẻ nằm trong kho.">
+        <Field label="Hết hạn ngày" hint={`Bỏ trống = ${CLAIM_CARD_DEFAULT_DAYS} ngày. Nên tính cả thời gian thẻ nằm trong kho.`}>
           <input type="date" aria-label="Thẻ hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
         </Field>
       </div>
@@ -252,7 +255,7 @@ export function ClaimCampaignPanel() {
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Các lô đã tạo</h3>
         {batchesQ.isLoading && <p className="text-sm text-stone-500">Đang tải các lô...</p>}
-        {batchesQ.isError && <p className="text-sm text-danger-fg">Không tải được các lô mã.</p>}
+        {batchesQ.isError && <LoadError onRetry={() => void batchesQ.refetch()} retrying={batchesQ.isFetching}>Không tải được các lô mã.</LoadError>}
         {batchesQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có lô nào.</p>}
         <ul className="space-y-2">
           {batchesQ.data?.map((b) => (

@@ -1,0 +1,39 @@
+=== jest api 21:54:10
+jest-api exit 0
+Test Suites: 426 passed, 426 total
+Tests:       9308 passed, 9308 total
+=== vitest miniapp VN 21:55:00
+vitest-miniapp exit 0
+ Test Files  283 passed (283)
+      Tests  4313 passed (4313)
+=== vitest miniapp UTC 21:56:11
+vitest-miniapp-utc exit 0
+ Test Files  283 passed (283)
+      Tests  4313 passed (4313)
+=== vitest web VN 21:57:18
+vitest-web exit 0
+ Test Files  358 passed (358)
+      Tests  6178 passed (6178)
+=== vitest web UTC 21:58:08
+vitest-web-utc exit 0
+ Test Files  358 passed (358)
+      Tests  6178 passed (6178)
+=== vitest app-core 21:58:54
+vitest-app-core exit 0
+ Test Files  41 passed (41)
+      Tests  489 passed (489)
+=== vitest eslint-config 21:58:56
+vitest-eslint-config exit 0
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+=== playwright list 21:58:57
+pw-list-miniapp exit 0
+Total: 170 tests in 24 files
+pw-list-web exit 0
+Total: 292 tests in 17 files
+=== race 2 luồng 21:58:59
+SHARD 1 lần 1 exit 0: Tests:       1007 passed, 1007 total
+SHARD 1 DONE
+SHARD 2 lần 1 exit 0: Tests:       957 passed, 957 total
+SHARD 2 DONE
+=== DONE 22:01:24

@@ -1,0 +1,104 @@
+{
+  "id": "U2-26",
+  "title": "Trả nốt phần còn lại của đơn đã trả một phần: đơn RETURNED, thu hồi phần điểm còn lại (tổng thu hồi = điểm đã cộng), hoàn 120.000đ vào Ví",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:40:29.643Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "đơn RETURNED",
+      "ok": true,
+      "detail": "RETURNED"
+    },
+    {
+      "name": "tổng điểm thu hồi = điểm đã cộng 5970",
+      "ok": true,
+      "detail": {
+        "taken": 5970,
+        "earned": 5970,
+        "rows": [
+          {
+            "delta": 5970,
+            "reason": "ORDER_DELIVERED:TUBU2026102288023",
+            "refType": "ORDER"
+          },
+          {
+            "delta": -2370,
+            "reason": "RETURN_REVERSED:TUBU2026102288023",
+            "refType": "RETURN_REQUEST"
+          },
+          {
+            "delta": -3600,
+            "reason": "ORDER_REVERSED:TUBU2026102288023",
+            "refType": "ORDER"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ví + 120.000; số dư điểm và ví = SUM sổ",
+      "ok": true,
+      "detail": {
+        "wallet": [
+          79000,
+          199000
+        ],
+        "wsum": 199000,
+        "bal": 415970,
+        "sum": 415970
+      }
+    }
+  ],
+  "evidence": {
+    "khách gửi trả nốt (API)": {
+      "status": 201,
+      "id": "cmvjgz29200tlh9r13orazrx0"
+    },
+    "duyệt": {
+      "status": 201
+    },
+    "sau": {
+      "order": "RETURNED",
+      "requests": [
+        {
+          "status": "APPROVED",
+          "refundAmount": 79000,
+          "pointsReversed": 2370,
+          "fullReturn": false
+        },
+        {
+          "status": "APPROVED",
+          "refundAmount": 120000,
+          "pointsReversed": 3600,
+          "fullReturn": true
+        }
+      ],
+      "points": [
+        {
+          "delta": 5970,
+          "reason": "ORDER_DELIVERED:TUBU2026102288023",
+          "refType": "ORDER"
+        },
+        {
+          "delta": -2370,
+          "reason": "RETURN_REVERSED:TUBU2026102288023",
+          "refType": "RETURN_REQUEST"
+        },
+        {
+          "delta": -3600,
+          "reason": "ORDER_REVERSED:TUBU2026102288023",
+          "refType": "ORDER"
+        }
+      ],
+      "wallet": [
+        79000,
+        199000
+      ],
+      "balance": [
+        419570,
+        415970
+      ]
+    }
+  }
+}

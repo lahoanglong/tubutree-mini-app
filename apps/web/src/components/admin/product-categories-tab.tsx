@@ -45,6 +45,9 @@ export function ProductCategoriesTab() {
   const picked = products.filter((p) => selected.has(p.id));
   const allShown = products.length > 0 && picked.length === products.length;
   const chosen = cats.data?.find((c) => c.id === categoryId);
+  // Cùng một sự cố máy chủ làm hỏng cả hai truy vấn thì chỉ nói một lần.
+  const catsErrorText = errText(cats.error, 'Không tải được danh sách danh mục.');
+  const listErrorText = errText(list.error, 'Không tải được danh sách sản phẩm.');
 
   const mut = useMutation({
     mutationFn: (v: { mode: 'ADD' | 'REMOVE' }) => assignCategory(picked.map((p) => p.id), categoryId, v.mode),
@@ -136,14 +139,21 @@ export function ProductCategoriesTab() {
           Gỡ danh mục
         </button>
       </div>
-      {cats.isError && <Notice tone="danger" role="alert">{errText(cats.error, 'Không tải được danh sách danh mục.')}</Notice>}
+      {cats.isError && !(list.isError && catsErrorText === listErrorText) && <Notice tone="danger" role="alert">{catsErrorText}</Notice>}
       {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
 
       {list.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {list.isError && (
         <p role="alert" className="text-sm text-danger-fg">
-          {errText(list.error, 'Không tải được danh sách sản phẩm.')}{' '}
-          <button type="button" onClick={() => void list.refetch()} className="min-h-[44px] font-medium underline sm:min-h-0">
+          {listErrorText}{' '}
+          <button
+            type="button"
+            onClick={() => {
+              void list.refetch();
+              if (cats.isError) void cats.refetch();
+            }}
+            className="min-h-[44px] font-medium underline sm:min-h-0"
+          >
             Thử lại
           </button>
         </p>

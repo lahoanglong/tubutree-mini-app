@@ -1,0 +1,657 @@
+{
+  "tabs": [
+    [
+      "inbox",
+      "Việc cần xử lý",
+      "GET /admin/ops/inbox"
+    ],
+    [
+      "dashboard",
+      "Tổng quan chỉ số",
+      "GET /admin/dashboard/stats"
+    ],
+    [
+      "analytics",
+      "Giữ chân khách & chỉ số chính",
+      "GET /admin/analytics/retention-daily"
+    ],
+    [
+      "reports",
+      "Báo cáo",
+      null
+    ],
+    [
+      "orders",
+      "Đơn hàng",
+      "GET /admin/orders"
+    ],
+    [
+      "externalOrders",
+      "Đơn ngoài app",
+      "GET /admin/external-orders"
+    ],
+    [
+      "externalClaims",
+      "Tích điểm đơn sàn",
+      "GET /admin/external-claims"
+    ],
+    [
+      "merchantFulfilment",
+      "Đơn đối tác & đối soát",
+      "GET /admin/merchant-fulfilment/overview"
+    ],
+    [
+      "returns",
+      "Đổi / Trả",
+      "GET /admin/return-requests"
+    ],
+    [
+      "customerRefunds",
+      "Hoàn tiền khách",
+      "GET /admin/customer-refunds"
+    ],
+    [
+      "cashback",
+      "Hoàn tiền sàn ngoài",
+      "GET /admin/cashback/transactions"
+    ],
+    [
+      "dealers",
+      "Đại lý",
+      "GET /admin/dealer-applications"
+    ],
+    [
+      "dealerClaims",
+      "Thưởng đại lý",
+      "GET /admin/dealer-reward-claims"
+    ],
+    [
+      "dealerAccounts",
+      "Đại lý & công nợ",
+      "GET /admin/dealers/accounts"
+    ],
+    [
+      "dealerPrices",
+      "Lịch sử giá đại lý",
+      "GET /admin/dealer-prices/history"
+    ],
+    [
+      "commissionRates",
+      "Hoa hồng & giá sỉ",
+      "GET /admin/commission-rates"
+    ],
+    [
+      "productCategories",
+      "Danh mục sản phẩm",
+      "GET /admin/product-categories/products"
+    ],
+    [
+      "payouts",
+      "Yêu cầu rút tiền",
+      "GET /admin/payouts"
+    ],
+    [
+      "merchantProducts",
+      "Duyệt SP đối tác",
+      "GET /admin/merchant-products/pending"
+    ],
+    [
+      "storefronts",
+      "Gian hàng",
+      "GET /admin/storefronts"
+    ],
+    [
+      "brands",
+      "Nhãn hàng",
+      "GET /admin/brands"
+    ],
+    [
+      "users",
+      "Người dùng",
+      "GET /admin/users"
+    ],
+    [
+      "reviews",
+      "Đánh giá",
+      "GET /admin/reviews"
+    ],
+    [
+      "community",
+      "Cộng đồng",
+      "GET /feed/admin/pending"
+    ],
+    [
+      "subscriptions",
+      "Gói định kỳ",
+      "GET /admin/subscriptions"
+    ],
+    [
+      "posCredits",
+      "Tích điểm tại quầy",
+      "GET /admin/loyalty/pos-credits"
+    ],
+    [
+      "waste",
+      "Đổi rác",
+      "GET /admin/waste/requests"
+    ],
+    [
+      "coupons",
+      "Mã giảm giá",
+      "GET /admin/coupons"
+    ],
+    [
+      "flashSales",
+      "Giờ vàng",
+      "GET /admin/flash-sales"
+    ],
+    [
+      "engagement",
+      "Nhiệm vụ",
+      "GET /admin/engagement/missions"
+    ],
+    [
+      "faqs",
+      "Câu hỏi thường gặp",
+      "GET /admin/faqs"
+    ],
+    [
+      "contentKit",
+      "Bộ nội dung CTV",
+      "GET /admin/content-kits/p-bhnong-honey"
+    ],
+    [
+      "academy",
+      "Học viện CTV",
+      "GET /admin/academy/courses"
+    ],
+    [
+      "quickReplies",
+      "CSKH mẫu tin nhanh",
+      "GET /admin/quick-replies"
+    ],
+    [
+      "notificationTemplates",
+      "Mẫu thông báo",
+      "GET /admin/notification-templates"
+    ],
+    [
+      "staffRoster",
+      "Nhân sự & quyền",
+      "GET /admin/staff"
+    ],
+    [
+      "shiftApproval",
+      "Duyệt ca",
+      "GET /admin/shifts"
+    ],
+    [
+      "payroll",
+      "Lương",
+      "GET /admin/payroll"
+    ],
+    [
+      "attendance",
+      "Chấm công",
+      "GET /admin/attendance/live"
+    ],
+    [
+      "config",
+      "Cấu hình",
+      "GET /admin/config"
+    ],
+    [
+      "opsHealth",
+      "Sức khoẻ hệ thống",
+      "GET /admin/ops/health"
+    ]
+  ],
+  "matrix": {
+    "admin": {
+      "role": "admin",
+      "api": {
+        "inbox": 200,
+        "dashboard": 200,
+        "analytics": 200,
+        "orders": 200,
+        "externalOrders": 200,
+        "externalClaims": 200,
+        "merchantFulfilment": 200,
+        "returns": 200,
+        "customerRefunds": 200,
+        "cashback": 200,
+        "dealers": 200,
+        "dealerClaims": 200,
+        "dealerAccounts": 200,
+        "dealerPrices": 200,
+        "commissionRates": 200,
+        "productCategories": 200,
+        "payouts": 200,
+        "merchantProducts": 200,
+        "storefronts": 200,
+        "brands": 200,
+        "users": 200,
+        "reviews": 200,
+        "community": 200,
+        "subscriptions": 200,
+        "posCredits": 200,
+        "waste": 200,
+        "coupons": 200,
+        "flashSales": 200,
+        "engagement": 200,
+        "faqs": 200,
+        "contentKit": 200,
+        "academy": 200,
+        "quickReplies": 200,
+        "notificationTemplates": 200,
+        "staffRoster": 200,
+        "shiftApproval": 400,
+        "payroll": 400,
+        "attendance": 200,
+        "config": 200,
+        "opsHealth": 200,
+        "reports.revenue": 200,
+        "reports.sources": 200
+      },
+      "ui": {
+        "labels": [
+          "Việc cần xử lý",
+          "Tổng quan chỉ số",
+          "Giữ chân khách & chỉ số chính",
+          "Báo cáo",
+          "Đơn hàng",
+          "Đơn ngoài app",
+          "Tích điểm đơn sàn",
+          "Đơn đối tác & đối soát",
+          "Đổi / Trả",
+          "Hoàn tiền khách",
+          "Hoàn tiền sàn ngoài",
+          "Đại lý",
+          "Thưởng đại lý",
+          "Đại lý & công nợ",
+          "Lịch sử giá đại lý",
+          "Hoa hồng & giá sỉ",
+          "Danh mục sản phẩm",
+          "Yêu cầu rút tiền",
+          "Duyệt SP đối tác",
+          "Gian hàng",
+          "Nhãn hàng",
+          "Người dùng",
+          "Đánh giá",
+          "Cộng đồng",
+          "Gói định kỳ",
+          "Tích điểm tại quầy",
+          "Đổi rác",
+          "Mã giảm giá",
+          "Giờ vàng",
+          "Nhiệm vụ",
+          "Câu hỏi thường gặp",
+          "Bộ nội dung CTV",
+          "Học viện CTV",
+          "CSKH mẫu tin nhanh",
+          "Mẫu thông báo",
+          "Nhân sự & quyền",
+          "Duyệt ca",
+          "Lương",
+          "Chấm công",
+          "Cấu hình",
+          "Sức khoẻ hệ thống"
+        ],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    },
+    "ketoan": {
+      "role": "ketoan",
+      "api": {
+        "inbox": 200,
+        "dashboard": 403,
+        "analytics": 403,
+        "orders": 200,
+        "externalOrders": 403,
+        "externalClaims": 200,
+        "merchantFulfilment": 200,
+        "returns": 403,
+        "customerRefunds": 200,
+        "cashback": 200,
+        "dealers": 403,
+        "dealerClaims": 200,
+        "dealerAccounts": 200,
+        "dealerPrices": 403,
+        "commissionRates": 403,
+        "productCategories": 403,
+        "payouts": 200,
+        "merchantProducts": 403,
+        "storefronts": 403,
+        "brands": 403,
+        "users": 403,
+        "reviews": 403,
+        "community": 403,
+        "subscriptions": 403,
+        "posCredits": 403,
+        "waste": 200,
+        "coupons": 403,
+        "flashSales": 403,
+        "engagement": 403,
+        "faqs": 403,
+        "contentKit": 403,
+        "academy": 403,
+        "quickReplies": 403,
+        "notificationTemplates": 403,
+        "staffRoster": 403,
+        "shiftApproval": 403,
+        "payroll": 403,
+        "attendance": 403,
+        "config": 403,
+        "opsHealth": 403,
+        "reports.revenue": 200,
+        "reports.sources": 403
+      },
+      "ui": {
+        "labels": [
+          "Việc cần xử lý",
+          "Báo cáo",
+          "Đơn hàng",
+          "Tích điểm đơn sàn",
+          "Đơn đối tác & đối soát",
+          "Hoàn tiền khách",
+          "Hoàn tiền sàn ngoài",
+          "Thưởng đại lý",
+          "Đại lý & công nợ",
+          "Yêu cầu rút tiền",
+          "Đổi rác"
+        ],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    },
+    "marketing": {
+      "role": "marketing",
+      "api": {
+        "inbox": 200,
+        "dashboard": 403,
+        "analytics": 403,
+        "orders": 403,
+        "externalOrders": 403,
+        "externalClaims": 403,
+        "merchantFulfilment": 403,
+        "returns": 403,
+        "customerRefunds": 403,
+        "cashback": 403,
+        "dealers": 403,
+        "dealerClaims": 403,
+        "dealerAccounts": 403,
+        "dealerPrices": 403,
+        "commissionRates": 403,
+        "productCategories": 403,
+        "payouts": 403,
+        "merchantProducts": 403,
+        "storefronts": 403,
+        "brands": 403,
+        "users": 403,
+        "reviews": 403,
+        "community": 200,
+        "subscriptions": 403,
+        "posCredits": 403,
+        "waste": 200,
+        "coupons": 200,
+        "flashSales": 200,
+        "engagement": 403,
+        "faqs": 200,
+        "contentKit": 200,
+        "academy": 200,
+        "quickReplies": 403,
+        "notificationTemplates": 200,
+        "staffRoster": 403,
+        "shiftApproval": 403,
+        "payroll": 403,
+        "attendance": 403,
+        "config": 403,
+        "opsHealth": 403,
+        "reports.revenue": 403,
+        "reports.sources": 200
+      },
+      "ui": {
+        "labels": [
+          "Việc cần xử lý",
+          "Báo cáo",
+          "Cộng đồng",
+          "Đổi rác",
+          "Mã giảm giá",
+          "Giờ vàng",
+          "Câu hỏi thường gặp",
+          "Bộ nội dung CTV",
+          "Học viện CTV",
+          "Mẫu thông báo"
+        ],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    },
+    "cskh": {
+      "role": "cskh",
+      "api": {
+        "inbox": 200,
+        "dashboard": 403,
+        "analytics": 403,
+        "orders": 200,
+        "externalOrders": 200,
+        "externalClaims": 200,
+        "merchantFulfilment": 403,
+        "returns": 200,
+        "customerRefunds": 403,
+        "cashback": 403,
+        "dealers": 403,
+        "dealerClaims": 403,
+        "dealerAccounts": 403,
+        "dealerPrices": 403,
+        "commissionRates": 403,
+        "productCategories": 403,
+        "payouts": 403,
+        "merchantProducts": 403,
+        "storefronts": 403,
+        "brands": 403,
+        "users": 200,
+        "reviews": 403,
+        "community": 200,
+        "subscriptions": 403,
+        "posCredits": 403,
+        "waste": 200,
+        "coupons": 403,
+        "flashSales": 403,
+        "engagement": 403,
+        "faqs": 403,
+        "contentKit": 403,
+        "academy": 403,
+        "quickReplies": 200,
+        "notificationTemplates": 403,
+        "staffRoster": 403,
+        "shiftApproval": 403,
+        "payroll": 403,
+        "attendance": 403,
+        "config": 403,
+        "opsHealth": 403,
+        "reports.revenue": 403,
+        "reports.sources": 403
+      },
+      "ui": {
+        "labels": [
+          "Việc cần xử lý",
+          "Đơn hàng",
+          "Đơn ngoài app",
+          "Tích điểm đơn sàn",
+          "Đổi / Trả",
+          "Người dùng",
+          "Cộng đồng",
+          "Đổi rác",
+          "CSKH mẫu tin nhanh"
+        ],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    },
+    "kho": {
+      "role": "kho",
+      "api": {
+        "inbox": 200,
+        "dashboard": 403,
+        "analytics": 403,
+        "orders": 200,
+        "externalOrders": 403,
+        "externalClaims": 403,
+        "merchantFulfilment": 403,
+        "returns": 200,
+        "customerRefunds": 403,
+        "cashback": 403,
+        "dealers": 403,
+        "dealerClaims": 403,
+        "dealerAccounts": 403,
+        "dealerPrices": 403,
+        "commissionRates": 403,
+        "productCategories": 403,
+        "payouts": 403,
+        "merchantProducts": 403,
+        "storefronts": 403,
+        "brands": 403,
+        "users": 403,
+        "reviews": 403,
+        "community": 403,
+        "subscriptions": 403,
+        "posCredits": 403,
+        "waste": 200,
+        "coupons": 403,
+        "flashSales": 403,
+        "engagement": 403,
+        "faqs": 403,
+        "contentKit": 403,
+        "academy": 403,
+        "quickReplies": 403,
+        "notificationTemplates": 403,
+        "staffRoster": 403,
+        "shiftApproval": 403,
+        "payroll": 403,
+        "attendance": 403,
+        "config": 403,
+        "opsHealth": 403,
+        "reports.revenue": 403,
+        "reports.sources": 403
+      },
+      "ui": {
+        "labels": [
+          "Việc cần xử lý",
+          "Đơn hàng",
+          "Đổi / Trả",
+          "Đổi rác"
+        ],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    },
+    "staff": {
+      "role": "staff",
+      "api": {
+        "inbox": 403,
+        "dashboard": 403,
+        "analytics": 403,
+        "orders": 403,
+        "externalOrders": 403,
+        "externalClaims": 403,
+        "merchantFulfilment": 403,
+        "returns": 403,
+        "customerRefunds": 403,
+        "cashback": 403,
+        "dealers": 403,
+        "dealerClaims": 403,
+        "dealerAccounts": 403,
+        "dealerPrices": 403,
+        "commissionRates": 403,
+        "productCategories": 403,
+        "payouts": 403,
+        "merchantProducts": 403,
+        "storefronts": 403,
+        "brands": 403,
+        "users": 403,
+        "reviews": 403,
+        "community": 403,
+        "subscriptions": 403,
+        "posCredits": 403,
+        "waste": 200,
+        "coupons": 403,
+        "flashSales": 403,
+        "engagement": 403,
+        "faqs": 403,
+        "contentKit": 403,
+        "academy": 403,
+        "quickReplies": 403,
+        "notificationTemplates": 403,
+        "staffRoster": 403,
+        "shiftApproval": 403,
+        "payroll": 403,
+        "attendance": 403,
+        "config": 403,
+        "opsHealth": 403,
+        "reports.revenue": 403,
+        "reports.sources": 403
+      },
+      "ui": {
+        "labels": [
+          "Đổi rác"
+        ],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    },
+    "returning": {
+      "role": "returning",
+      "api": {
+        "inbox": 403,
+        "dashboard": 403,
+        "analytics": 403,
+        "orders": 403,
+        "externalOrders": 403,
+        "externalClaims": 403,
+        "merchantFulfilment": 403,
+        "returns": 403,
+        "customerRefunds": 403,
+        "cashback": 403,
+        "dealers": 403,
+        "dealerClaims": 403,
+        "dealerAccounts": 403,
+        "dealerPrices": 403,
+        "commissionRates": 403,
+        "productCategories": 403,
+        "payouts": 403,
+        "merchantProducts": 403,
+        "storefronts": 403,
+        "brands": 403,
+        "users": 403,
+        "reviews": 403,
+        "community": 403,
+        "subscriptions": 403,
+        "posCredits": 403,
+        "waste": 403,
+        "coupons": 403,
+        "flashSales": 403,
+        "engagement": 403,
+        "faqs": 403,
+        "contentKit": 403,
+        "academy": 403,
+        "quickReplies": 403,
+        "notificationTemplates": 403,
+        "staffRoster": 403,
+        "shiftApproval": 403,
+        "payroll": 403,
+        "attendance": 403,
+        "config": 403,
+        "opsHealth": 403,
+        "reports.revenue": 403,
+        "reports.sources": 403
+      },
+      "ui": {
+        "labels": [],
+        "url": "http://localhost:3252/admin",
+        "requests": []
+      }
+    }
+  }
+}

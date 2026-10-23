@@ -34,6 +34,8 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
+  /** Thuế TNCN bị khấu trừ nếu rút hết số khả dụng ngay bây giờ (cộng dồn tháng VN); thiếu khi API cũ. */
+  withdrawTaxPreview?: number;
   /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền; thiếu khi API cũ. */
   withdrawingCommission?: number;
   totalClicks: number;
@@ -107,7 +109,10 @@ export interface AffiliatePayout {
   /** Số thực nhận (sau thuế TNCN và phí). */
   amount: number;
   grossAmount: number | null;
+  /** Thuế TNCN thực giữ (đã trừ phần hoàn về Ví). */
   taxWithheld: number;
+  /** Phần thuế giữ dư đã hoàn về Ví khi lệnh khác cùng tháng bị từ chối; thiếu khi API cũ. */
+  taxRefunded?: number;
   fee: number;
   method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY';
   status: PayoutStatus;

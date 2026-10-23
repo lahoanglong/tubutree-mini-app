@@ -1,0 +1,23 @@
+# Ghi đè chỉ cho lần thử cục bộ (nhánh D10): đặt tên image, đổi context về gốc repo (compose bản sao nằm ở thư mục khác),
+# bỏ cổng host cố định, đưa volume vào tmpfs để không để lại gì. KHÔNG dùng trên máy chủ thật.
+services:
+  postgres:
+    volumes: !override
+      - type: tmpfs
+        target: /var/lib/postgresql/data
+  redis:
+    volumes: !override
+      - type: tmpfs
+        target: /data
+  api:
+    image: tubu-uat-api:local
+    build:
+      context: ${D10_REPO_ROOT}
+    ports: !override
+      - '127.0.0.1:${D10_API_PORT:-3297}:3001'
+  web:
+    image: tubu-uat-web:local
+    build:
+      context: ${D10_REPO_ROOT}
+    ports: !override
+      - '127.0.0.1:${D10_WEB_PORT:-3298}:3000'

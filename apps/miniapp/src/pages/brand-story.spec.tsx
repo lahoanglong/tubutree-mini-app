@@ -109,6 +109,22 @@ describe('BrandStoryPage — cấu trúc và vùng chạm (C-076, C-114)', () =>
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?brand=Hector');
   });
 
+  it('mỗi ô nhãn có lớp phủ tối dưới chữ trắng để đạt 4,5:1 (D8-1)', () => {
+    render(<BrandStoryPage />);
+    for (const o of BRAND_ORIGINS) {
+      const scrim = within(gridTile(o.brand)).getByTestId('brand-tile-scrim');
+      expect(scrim.style.background).toContain('--color-brand-tile-scrim');
+      expect(scrim.textContent).toContain(o.brand);
+      expect(scrim.textContent).toContain(o.province);
+    }
+  });
+
+  it('câu dẫn đầu trang không kết bằng emoji 🌿 (D6-19)', () => {
+    render(<BrandStoryPage />);
+    const intro = screen.getByText(/Mỗi thương hiệu Tubu Tree đều gắn liền/);
+    expect(intro.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
   it('bản đồ có nhãn cho trình đọc màn hình', () => {
     render(<BrandStoryPage />);
     expect(screen.getByRole('img', { name: /Bản đồ Gỗ 3D Việt Nam/ })).toBeTruthy();

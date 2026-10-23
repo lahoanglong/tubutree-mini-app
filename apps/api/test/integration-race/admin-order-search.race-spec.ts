@@ -111,6 +111,36 @@ describe('Admin order search + query indexes (real Postgres)', () => {
     expect(await ids(`+847${num}`)).toEqual([o3.id]);
   });
 
+  it('D2-04: người xem bị che SĐT (KE_TOAN) chỉ tìm ra đơn bằng SĐT đầy đủ, một phần SĐT không ra; ADMIN và CSKH tìm theo một phần như cũ', async () => {
+    const num = String(randomInt(10_000_000, 99_999_999));
+    const phone = `09${num}`;
+    const buyer = await createUser(prisma, { phone, fullName: `Khách ${randCode(6)}` });
+    const o1 = await createOrder(prisma, { userId: buyer.id, code: `ITK${randCode(8)}` });
+    const keToan = { role: 'STAFF', staffPermissions: ['KE_TOAN'] };
+    const cskh = { role: 'STAFF', staffPermissions: ['CSKH'] };
+
+    const ids = async (search: string, viewer?: { role: string; staffPermissions?: string[] }) => {
+      const res = (await admin.listOrders(1, 50, undefined, search, undefined, undefined, undefined, undefined, undefined, viewer as never)) as unknown as {
+        data: { id: string }[];
+      };
+      return res.data.map((o) => o.id);
+    };
+
+    for (const partial of [phone.slice(0, 4), phone.slice(2, 8), phone.slice(0, 9)]) {
+      expect(await ids(partial, keToan)).not.toContain(o1.id);
+      expect(await ids(partial, cskh)).toContain(o1.id);
+      expect(await ids(partial)).toContain(o1.id);
+    }
+    for (const full of [phone, `+84${phone.slice(1)}`, `9${num}`]) expect(await ids(full, keToan)).toEqual([o1.id]);
+
+    let csv = '';
+    for await (const c of await admin.orderCsv({ search: phone.slice(0, 6) }, { maskPhones: true })) csv += c;
+    expect(csv).not.toContain(o1.code);
+    csv = '';
+    for await (const c of await admin.orderCsv({ search: phone }, { maskPhones: true })) csv += c;
+    expect(csv).toContain(o1.code);
+  });
+
   it('ADMINOPS-9: cột tên không dấu của users theo trigger, có index trigram', async () => {
     const u = await createUser(prisma, { fullName: `Đặng Thị ${'Hoà'.normalize('NFD')}` });
     const read = async () =>

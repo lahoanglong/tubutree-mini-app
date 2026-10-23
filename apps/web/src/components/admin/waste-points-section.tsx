@@ -6,7 +6,7 @@ import type { AdminWastePointDTO } from '@tubutree/shared-types';
 import { getWasteOverview, listWasteItems, listWastePoints, updateWastePoint } from '@/lib/admin-client';
 import { formatCount } from '@/lib/checkout-points';
 import { summarizeOpeningHours, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
-import { BTN_PRIMARY, BTN_XS_SECONDARY, chipClass, Notice, ScrollRegion, ToneBadge } from './ui';
+import { BTN_PRIMARY, BTN_XS_SECONDARY, chipClass, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
 import type { WasteSeed } from './waste-tab';
 import { WastePointDetail } from './waste-point-detail';
 import { WastePointForm } from './waste-point-form';
@@ -73,7 +73,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
           </button>
         ))}
       </div>
-      {list.isError && <Notice tone="danger" role="alert">Không tải được danh sách điểm nhận.</Notice>}
+      {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách điểm nhận.</LoadError>}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       <ScrollRegion label="Bảng điểm nhận">
         <table className="w-full min-w-[900px] border-collapse">

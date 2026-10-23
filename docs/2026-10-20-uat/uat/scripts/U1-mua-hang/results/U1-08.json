@@ -1,0 +1,79 @@
+{
+  "id": "U1-08",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Chi tiết SP (giá, giá giờ vàng, điểm dự kiến) → thêm vào giỏ số lượng 2",
+  "steps": "Mở /product/hat-dieu-rang-moc-bhnong (giờ vàng) và /product/nuoc-rua-chen-fuwa3e → tăng số lượng lên 2 → \"Thêm vào giỏ\"",
+  "expected": "Giờ vàng hiện 119.000đ và giá gạch nhất quán với dải giờ vàng trang chủ; SP thường hiện 120.000đ, \"Nhận tối đa 2.400 Điểm Xanh\" (2% × hạng Mầm Xanh ×1); sau thêm: cart_items quantity 2, badge giỏ cập nhật",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "giá giờ vàng 119.000đ hiện ở chi tiết",
+      "ok": true
+    },
+    {
+      "name": "SP thường 120.000đ + \"Nhận tối đa 2.400 Điểm Xanh\"",
+      "ok": true,
+      "detail": [
+        "Fuwa3e",
+        "Nước rửa chén sinh học Fuwa3e",
+        "120.000đ",
+        "Nhận tối đa 2.400 Điểm Xanh (≈2.400đ) khi đơn giao thành công",
+        "Lên men enzyme dứa, an toàn cho da tay.",
+        "Tubu Tree giao hàng",
+        "Miễn phí giao hàng cho đơn từ 199.000đ",
+        "Eco"
+      ]
+    },
+    {
+      "name": "POST /cart/items 201",
+      "ok": true,
+      "detail": 201
+    },
+    {
+      "name": "DB: giỏ có FUWA-DW-1L × 2",
+      "ok": true
+    },
+    {
+      "name": "badge \"Xem giỏ hàng\" = 2",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-08-pd-flash.png"
+    },
+    {
+      "label": "chữ đầu trang SP giờ vàng",
+      "data": "BH.Nong | Hạt điều rang mộc BH.Nong | 119.000đ | 159.000đ | Nhận tối đa 2.380 Điểm Xanh (≈2.380đ) khi đơn giao thành công | -25% | Còn 143h 56m | Đã bán 0% | Điều Bình Phước rang mộc, giòn bùi. | Tubu Tree giao hàng | Miễn phí giao hàng cho đơn từ 199.000đ | OCOP"
+    },
+    {
+      "label": "DB variation BHN-CW-500",
+      "data": {
+        "retailPrice": 180000,
+        "salePrice": 159000
+      }
+    },
+    {
+      "label": "giá gạch ở chi tiết",
+      "data": "159.000đ"
+    },
+    {
+      "label": "SQL cart_items",
+      "data": [
+        {
+          "sku": "FUWA-DW-1L",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-08-pd-added.png"
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:34:37.263Z"
+}

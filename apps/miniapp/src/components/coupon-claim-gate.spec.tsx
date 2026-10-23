@@ -55,8 +55,8 @@ const CLAIMED = {
   newCustomerOnly: true,
   alreadyClaimed: false,
 };
-const axiosError = (status: number | undefined, message?: string) => ({
-  isAxiosError: true,
+const httpError = (status: number | undefined, message?: string) => ({
+  isHttpError: true,
   ...(status ? { response: { status, data: { message } } } : {}),
 });
 
@@ -156,7 +156,7 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
 
   it('thẻ đã có người khác nhận: báo đúng lý do của máy chủ, bỏ mã chờ, chỉ còn nút Đã hiểu', async () => {
     window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
-    mocks.post.mockRejectedValue(axiosError(400, 'Mã giảm giá này đã được tài khoản khác nhận.'));
+    mocks.post.mockRejectedValue(httpError(400, 'Mã giảm giá này đã được tài khoản khác nhận.'));
     setAuth(REAL);
     renderGate();
     expect(await screen.findByText('Mã giảm giá này đã được tài khoản khác nhận.')).toBeInTheDocument();
@@ -168,7 +168,7 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
 
   it('mất mạng: giữ mã chờ, cho thử lại; thử lại thành công thì hiện ưu đãi', async () => {
     window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
-    mocks.post.mockRejectedValueOnce(axiosError(undefined)).mockResolvedValueOnce({ data: CLAIMED });
+    mocks.post.mockRejectedValueOnce(httpError(undefined)).mockResolvedValueOnce({ data: CLAIMED });
     setAuth(REAL);
     renderGate();
     fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));

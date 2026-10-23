@@ -1,0 +1,151 @@
+{
+  "id": "U2-23",
+  "title": "Huỷ đơn COD trước giao trên Mini App: đơn dùng WELCOME30 + Điểm Xanh → hoàn điểm đã tiêu, trả lượt mã, cộng lại tồn kho, không cộng điểm tích",
+  "verdict": "PASS",
+  "blocked": null,
+  "at": "2026-10-22T11:40:03.561Z",
+  "lane": 2,
+  "checks": [
+    {
+      "name": "áp WELCOME30 vào giỏ",
+      "ok": true,
+      "detail": {
+        "status": 201
+      }
+    },
+    {
+      "name": "đặt: mã giảm 30.000, dùng điểm > 0, số dư −điểm, tồn kho −1, +1 dòng coupon_redemptions (WELCOME30 không có usageLimit nên usedCount không đếm)",
+      "ok": true,
+      "detail": {
+        "discount": 46920,
+        "couponDiscount": 30000,
+        "pointsUsed": 16920,
+        "bal": [
+          16920,
+          0
+        ],
+        "stock": [
+          149,
+          148
+        ],
+        "redemptions": [
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "name": "đơn CANCELLED",
+      "ok": true,
+      "detail": {
+        "http": 201,
+        "status": "CANCELLED"
+      }
+    },
+    {
+      "name": "SQL: ORDER_REFUND_POINTS +pointsUsed, số dư về như trước = SUM sổ, không có ORDER_DELIVERED",
+      "ok": true,
+      "detail": {
+        "refund": [
+          16920
+        ],
+        "bal": [
+          16920,
+          16920
+        ],
+        "sum": 16920
+      }
+    },
+    {
+      "name": "tồn kho cộng lại",
+      "ok": true,
+      "detail": {
+        "before": 149,
+        "after": 149
+      }
+    },
+    {
+      "name": "lượt dùng WELCOME30 được trả (dòng coupon_redemptions của đơn bị xoá, usedCount không đổi)",
+      "ok": true,
+      "detail": {
+        "usedCount": [
+          0,
+          0,
+          0
+        ],
+        "redemptions": [
+          0,
+          1,
+          0
+        ]
+      }
+    },
+    {
+      "name": "áp lại WELCOME30 sau huỷ được (perUserLimit 1)",
+      "ok": true,
+      "detail": {
+        "status": 201
+      }
+    }
+  ],
+  "evidence": {
+    "đặt": {
+      "code": "TUBU2026102223141",
+      "status": 201,
+      "quote": {
+        "subtotal": 210000,
+        "discount": 30000,
+        "pointsUsed": 16920,
+        "total": 163080,
+        "pointsEarned": 3913
+      }
+    },
+    "sau đặt": {
+      "order": {
+        "id": "cmvjgyf7k00lch9r1afzbt37p",
+        "status": "CONFIRMED",
+        "pointsUsed": 16920,
+        "couponDiscount": 30000,
+        "discount": 46920,
+        "total": 163080
+      },
+      "balance": 0,
+      "coupon": {
+        "usedCount": 0,
+        "redemptions": [
+          {
+            "orderId": "cmvjgyf7k00lch9r1afzbt37p",
+            "redeemedAt": "2026-10-22T11:39:59.751Z"
+          }
+        ]
+      },
+      "stock": 148
+    },
+    "huỷ trên Mini App": {
+      "http": 201,
+      "body": {
+        "status": "CANCELLED",
+        "code": "TUBU2026102223141"
+      },
+      "sheetText": [
+        "Huỷ đơn",
+        "Bạn muốn huỷ đơn này?",
+        "Đơn đã huỷ không thể khôi phục lại",
+        "Huỷ đơn"
+      ]
+    },
+    "sau huỷ": {
+      "status": "CANCELLED",
+      "refund": [
+        16920
+      ],
+      "balance": 16920,
+      "stdSum": 16920,
+      "coupon": {
+        "usedCount": 0,
+        "redemptions": []
+      },
+      "stock": 149
+    }
+  }
+}

@@ -1,0 +1,410 @@
+{
+ "label": "test-checkout",
+ "at": "2026-10-19T15:07:29.478Z",
+ "base": "http://127.0.0.1:3229/api",
+ "slug": "arabica-cau-dat-le-plateau",
+ "out": [
+  {
+   "name": "checkout-quote",
+   "method": "POST",
+   "path": "/checkout/quote",
+   "role": "cust",
+   "status": 201,
+   "bytes": 1115,
+   "rows": 1,
+   "sqlCold": null,
+   "sqlWarm": 19,
+   "sqlWarmAll": [
+    19,
+    19,
+    19
+   ],
+   "distinct": 17,
+   "p50": 4.7,
+   "p95": 6.4,
+   "min": 3.7,
+   "max": 7.1,
+   "firstMs": 24.5,
+   "sql": [
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.015,
+     "q": "SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" <> CAST($2::text AS \"public\".\"OrderStatus\")) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.011,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"brandId\", \"public\".\"products\".\"affiliateBlocked\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"nameSearch\", \"public\".\"products\".\"description\", \"public\".\"products\".\"shortDesc"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"id\" = $1 AND (\"public\".\"carts\".\"userId\" = $2 AND 1=1)) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FROM \"public\".\"cart_items\" WHERE \"public\".\"cart_items\".\"cartId\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.008,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"dealerPrices\", \"public\".\"variations\".\"affiliateRate\", \"public\".\"variations\".\"stock\", \"public\".\"variations"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.008,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".\"zaloRefreshToken\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"phoneVerifiedAt\", \"public\".\"users\".\"email\", \"public\".\"users\".\"fullName\", \"public\".\"users\".\"fullNameSearch\", \"public\".\"users\".\"personalTaxId\", \"public\".\"users\".\"dob\", \"public\".\"users\".\"avatarUrl\", \"public\".\"users\".\"role\"::text,"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.009,
+     "q": "SELECT GREATEST(pt.\"delta\" - COALESCE(( SELECT SUM(rr.\"pointsReversed\") FROM \"return_requests\" rr WHERE rr.\"orderId\" = o.\"id\" AND rr.\"status\" = 'APPROVED' AND rr.\"fullReturn\" = false ), 0), 0) AS \"delta\", COALESCE(o.\"deliveredAt\", pt.\"createdAt\") AS \"deliveredAt\", (o.\"status\" <> 'DELIVERED' OR EXISTS ( SELECT 1 FROM \"return_requests\" rr WHERE rr.\"orderId\" = o.\"id\" AND rr.\"status\" = 'REQUESTED' )) "
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"carts\".\"id\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"userId\" = $1 AND 1=1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE \"public\".\"carts\".\"id\" = $1 LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0,
+     "q": "COMMIT"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"referral_touches\".\"id\", \"public\".\"referral_touches\".\"userId\", \"public\".\"referral_touches\".\"referrerUserId\", \"public\".\"referral_touches\".\"storefrontSlug\", \"public\".\"referral_touches\".\"kind\", \"public\".\"referral_touches\".\"expiresAt\", \"public\".\"referral_touches\".\"createdAt\", \"public\".\"referral_touches\".\"updatedAt\" FROM \"public\".\"referral_touches\" WHERE (\"public\".\"referral_touches\".\"us"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.004,
+     "q": "SELECT \"public\".\"addresses\".\"id\", \"public\".\"addresses\".\"userId\", \"public\".\"addresses\".\"recipient\", \"public\".\"addresses\".\"phone\", \"public\".\"addresses\".\"province\", \"public\".\"addresses\".\"district\", \"public\".\"addresses\".\"ward\", \"public\".\"addresses\".\"street\", \"public\".\"addresses\".\"isDefault\", \"public\".\"addresses\".\"provinceCode\", \"public\".\"addresses\".\"districtCode\", \"public\".\"addresses\".\"wardCode\" FROM "
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\" FROM \"public\".\"users\" WHERE \"public\".\"users\".\"id\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0,
+     "q": "BEGIN"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flashPrice\", \"public\".\"flash_sale_items\".\"quota\", \"public\".\"flash_sale_items\".\"soldCount\", \"public\".\"flash_sale_items\".\"perUserLimit\" FROM \"public\".\"flash_sale_items\" LEFT JOIN \"public\".\"variations\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"flash_sal"
+    }
+   ]
+  },
+  {
+   "name": "checkout-quote-selected",
+   "method": "POST",
+   "path": "/checkout/quote",
+   "role": "cust",
+   "status": 201,
+   "bytes": 1115,
+   "rows": 1,
+   "sqlCold": null,
+   "sqlWarm": 19,
+   "sqlWarmAll": [
+    19,
+    19,
+    19
+   ],
+   "distinct": 17,
+   "p50": 4.9,
+   "p95": 5.7,
+   "min": 3.7,
+   "max": 8.5,
+   "firstMs": 4.5,
+   "sql": [
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.006,
+     "q": "SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" <> CAST($2::text AS \"public\".\"OrderStatus\")) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.006,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"brandId\", \"public\".\"products\".\"affiliateBlocked\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"nameSearch\", \"public\".\"products\".\"description\", \"public\".\"products\".\"shortDesc"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"id\" = $1 AND (\"public\".\"carts\".\"userId\" = $2 AND 1=1)) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FROM \"public\".\"cart_items\" WHERE \"public\".\"cart_items\".\"cartId\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"dealerPrices\", \"public\".\"variations\".\"affiliateRate\", \"public\".\"variations\".\"stock\", \"public\".\"variations"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".\"zaloRefreshToken\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"phoneVerifiedAt\", \"public\".\"users\".\"email\", \"public\".\"users\".\"fullName\", \"public\".\"users\".\"fullNameSearch\", \"public\".\"users\".\"personalTaxId\", \"public\".\"users\".\"dob\", \"public\".\"users\".\"avatarUrl\", \"public\".\"users\".\"role\"::text,"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.002,
+     "q": "SELECT GREATEST(pt.\"delta\" - COALESCE(( SELECT SUM(rr.\"pointsReversed\") FROM \"return_requests\" rr WHERE rr.\"orderId\" = o.\"id\" AND rr.\"status\" = 'APPROVED' AND rr.\"fullReturn\" = false ), 0), 0) AS \"delta\", COALESCE(o.\"deliveredAt\", pt.\"createdAt\") AS \"deliveredAt\", (o.\"status\" <> 'DELIVERED' OR EXISTS ( SELECT 1 FROM \"return_requests\" rr WHERE rr.\"orderId\" = o.\"id\" AND rr.\"status\" = 'REQUESTED' )) "
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"carts\".\"id\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"userId\" = $1 AND 1=1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE \"public\".\"carts\".\"id\" = $1 LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0,
+     "q": "COMMIT"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"referral_touches\".\"id\", \"public\".\"referral_touches\".\"userId\", \"public\".\"referral_touches\".\"referrerUserId\", \"public\".\"referral_touches\".\"storefrontSlug\", \"public\".\"referral_touches\".\"kind\", \"public\".\"referral_touches\".\"expiresAt\", \"public\".\"referral_touches\".\"createdAt\", \"public\".\"referral_touches\".\"updatedAt\" FROM \"public\".\"referral_touches\" WHERE (\"public\".\"referral_touches\".\"us"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.004,
+     "q": "SELECT \"public\".\"addresses\".\"id\", \"public\".\"addresses\".\"userId\", \"public\".\"addresses\".\"recipient\", \"public\".\"addresses\".\"phone\", \"public\".\"addresses\".\"province\", \"public\".\"addresses\".\"district\", \"public\".\"addresses\".\"ward\", \"public\".\"addresses\".\"street\", \"public\".\"addresses\".\"isDefault\", \"public\".\"addresses\".\"provinceCode\", \"public\".\"addresses\".\"districtCode\", \"public\".\"addresses\".\"wardCode\" FROM "
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\" FROM \"public\".\"users\" WHERE \"public\".\"users\".\"id\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0,
+     "q": "BEGIN"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flashPrice\", \"public\".\"flash_sale_items\".\"quota\", \"public\".\"flash_sale_items\".\"soldCount\", \"public\".\"flash_sale_items\".\"perUserLimit\" FROM \"public\".\"flash_sale_items\" LEFT JOIN \"public\".\"variations\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"flash_sal"
+    }
+   ]
+  },
+  {
+   "name": "checkout-coupon-previews",
+   "method": "POST",
+   "path": "/checkout/coupon-previews",
+   "role": "cust",
+   "status": 200,
+   "bytes": 310,
+   "rows": null,
+   "sqlCold": null,
+   "sqlWarm": 25,
+   "sqlWarmAll": [
+    25,
+    25,
+    25
+   ],
+   "distinct": 21,
+   "p50": 0.6,
+   "p95": 7.9,
+   "min": 0.5,
+   "max": 8.8,
+   "firstMs": 8.8,
+   "sql": [
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.004,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\" FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.014,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"zaloAccessToken\", \"public\".\"users\".\"zaloRefreshToken\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"phoneVerifiedAt\", \"public\".\"users\".\"email\", \"public\".\"users\".\"fullName\", \"public\".\"users\".\"fullNameSearch\", \"public\".\"users\".\"personalTaxId\", \"public\".\"users\".\"dob\", \"public\".\"users\".\"avatarUrl\", \"public\".\"users\".\"role\"::text,"
+    },
+    {
+     "calls": 2,
+     "rows": 2,
+     "ms": 0.01,
+     "q": "SELECT \"public\".\"orders\".\"id\" FROM \"public\".\"orders\" WHERE (\"public\".\"orders\".\"userId\" = $1 AND \"public\".\"orders\".\"status\" <> CAST($2::text AS \"public\".\"OrderStatus\")) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 2,
+     "rows": 0,
+     "ms": 0.004,
+     "q": "SELECT COUNT(*), \"public\".\"coupon_redemptions\".\"couponId\" FROM \"public\".\"coupon_redemptions\" WHERE (\"public\".\"coupon_redemptions\".\"userId\" = $1 AND \"public\".\"coupon_redemptions\".\"couponId\" IN ($2,$3,$4)) GROUP BY \"public\".\"coupon_redemptions\".\"couponId\" OFFSET $5"
+    },
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"coupons\".\"id\", \"public\".\"coupons\".\"code\", \"public\".\"coupons\".\"type\"::text, \"public\".\"coupons\".\"value\", \"public\".\"coupons\".\"minOrder\", \"public\".\"coupons\".\"maxDiscount\", \"public\".\"coupons\".\"startAt\", \"public\".\"coupons\".\"endAt\", \"public\".\"coupons\".\"usageLimit\", \"public\".\"coupons\".\"usedCount\", \"public\".\"coupons\".\"perUserLimit\", \"public\".\"coupons\".\"applyTo\", \"public\".\"coupons\".\"isStack"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"id\" = $1 AND (\"public\".\"carts\".\"userId\" = $2 AND 1=1)) LIMIT $3 OFFSET $4"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"cart_items\".\"id\", \"public\".\"cart_items\".\"cartId\", \"public\".\"cart_items\".\"variationId\", \"public\".\"cart_items\".\"quantity\" FROM \"public\".\"cart_items\" WHERE \"public\".\"cart_items\".\"cartId\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.006,
+     "q": "SELECT \"public\".\"variations\".\"id\", \"public\".\"variations\".\"pancakeId\", \"public\".\"variations\".\"productId\", \"public\".\"variations\".\"sku\", \"public\".\"variations\".\"name\", \"public\".\"variations\".\"attributes\", \"public\".\"variations\".\"retailPrice\", \"public\".\"variations\".\"salePrice\", \"public\".\"variations\".\"dealerPrices\", \"public\".\"variations\".\"affiliateRate\", \"public\".\"variations\".\"stock\", \"public\".\"variations"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"carts\".\"id\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"userId\" = $1 AND 1=1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE (\"public\".\"carts\".\"id\" = $1 AND 1=1) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.003,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\", \"public\".\"users\".\"phone\", \"public\".\"users\".\"zaloId\", \"public\".\"users\".\"role\"::text FROM \"public\".\"users\" WHERE (\"public\".\"users\".\"id\" = $1 AND $4=$5) LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"carts\".\"id\", \"public\".\"carts\".\"userId\", \"public\".\"carts\".\"couponCode\", \"public\".\"carts\".\"updatedAt\", \"public\".\"carts\".\"abandonRemindedAt\" FROM \"public\".\"carts\" WHERE \"public\".\"carts\".\"id\" = $1 LIMIT $2 OFFSET $3"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0,
+     "q": "COMMIT"
+    },
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 0.007,
+     "q": "SELECT id FROM coupons WHERE scope IN ($11, $12) AND \"startAt\" <= $1 AND \"endAt\" >= $2 AND (scope = $13 OR ($3::text IS NOT NULL AND \"scopeMeta\" ->> $14 = $4::text)) UNION ALL SELECT id FROM coupons WHERE scope = $15 AND \"scopeMeta\" ->> $16 = $5 AND \"startAt\" <= $6 AND \"endAt\" >= $7 UNION ALL SELECT c.id FROM coupon_claims cc JOIN coupons c ON c.id = cc.\"couponId\" WHERE cc.\"userId\" = $8 AND c.scop"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"referral_touches\".\"id\", \"public\".\"referral_touches\".\"userId\", \"public\".\"referral_touches\".\"referrerUserId\", \"public\".\"referral_touches\".\"storefrontSlug\", \"public\".\"referral_touches\".\"kind\", \"public\".\"referral_touches\".\"expiresAt\", \"public\".\"referral_touches\".\"createdAt\", \"public\".\"referral_touches\".\"updatedAt\" FROM \"public\".\"referral_touches\" WHERE (\"public\".\"referral_touches\".\"us"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.005,
+     "q": "SELECT \"public\".\"addresses\".\"id\", \"public\".\"addresses\".\"userId\", \"public\".\"addresses\".\"recipient\", \"public\".\"addresses\".\"phone\", \"public\".\"addresses\".\"province\", \"public\".\"addresses\".\"district\", \"public\".\"addresses\".\"ward\", \"public\".\"addresses\".\"street\", \"public\".\"addresses\".\"isDefault\", \"public\".\"addresses\".\"provinceCode\", \"public\".\"addresses\".\"districtCode\", \"public\".\"addresses\".\"wardCode\" FROM "
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "BEGIN"
+    },
+    {
+     "calls": 1,
+     "rows": 3,
+     "ms": 0.01,
+     "q": "SELECT \"public\".\"coupons\".\"id\", \"public\".\"coupons\".\"code\", \"public\".\"coupons\".\"type\"::text, \"public\".\"coupons\".\"value\", \"public\".\"coupons\".\"minOrder\", \"public\".\"coupons\".\"maxDiscount\", \"public\".\"coupons\".\"startAt\", \"public\".\"coupons\".\"endAt\", \"public\".\"coupons\".\"usageLimit\", \"public\".\"coupons\".\"usedCount\", \"public\".\"coupons\".\"perUserLimit\", \"public\".\"coupons\".\"applyTo\", \"public\".\"coupons\".\"isStack"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.002,
+     "q": "SELECT \"public\".\"users\".\"id\", \"public\".\"users\".\"tierId\" FROM \"public\".\"users\" WHERE \"public\".\"users\".\"id\" IN ($1) OFFSET $2"
+    },
+    {
+     "calls": 1,
+     "rows": 0,
+     "ms": 0.001,
+     "q": "SELECT \"public\".\"flash_sale_items\".\"id\", \"public\".\"flash_sale_items\".\"flashSaleId\", \"public\".\"flash_sale_items\".\"variationId\", \"public\".\"flash_sale_items\".\"flashPrice\", \"public\".\"flash_sale_items\".\"quota\", \"public\".\"flash_sale_items\".\"soldCount\", \"public\".\"flash_sale_items\".\"perUserLimit\" FROM \"public\".\"flash_sale_items\" LEFT JOIN \"public\".\"variations\" AS \"j1\" ON (\"j1\".\"id\") = (\"public\".\"flash_sal"
+    },
+    {
+     "calls": 1,
+     "rows": 1,
+     "ms": 0.008,
+     "q": "SELECT \"public\".\"products\".\"id\", \"public\".\"products\".\"pancakeId\", \"public\".\"products\".\"fulfilment\"::text, \"public\".\"products\".\"pancakeLinkCode\", \"public\".\"products\".\"brand\", \"public\".\"products\".\"brandId\", \"public\".\"products\".\"affiliateBlocked\", \"public\".\"products\".\"slug\", \"public\".\"products\".\"name\", \"public\".\"products\".\"nameSearch\", \"public\".\"products\".\"description\", \"public\".\"products\".\"shortDesc"
+    }
+   ]
+  }
+ ]
+}

@@ -207,7 +207,7 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     expect(today.getByRole('button', { name: 'Tưới cây (20💧)' })).toBeInTheDocument();
     expect(today.getByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
     expect(today.getByRole('heading', { name: 'Nhiệm vụ' })).toBeInTheDocument();
-    expect(today.getByRole('heading', { name: 'Quiz Sống Xanh hôm nay' })).toBeInTheDocument();
+    expect(today.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' })).toBeInTheDocument();
     expect(today.getByTestId('wheel')).toBeInTheDocument();
     // Khối ở tab đang ẩn không vào cây accessibility nên kiểm theo chữ + thẻ h2.
     expect(within(tabPanel('Vườn')).getByText(/Lô đất của bạn/).tagName).toBe('H2');
@@ -235,7 +235,7 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     const water = screen.getByRole('button', { name: 'Tưới cây (20💧)' });
     const checkIn = screen.getByRole('button', { name: 'Điểm danh' });
     const missions = screen.getByRole('heading', { name: 'Nhiệm vụ' });
-    const quiz = screen.getByRole('heading', { name: 'Quiz Sống Xanh hôm nay' });
+    const quiz = screen.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' });
     const order = [hero, tabList, water, checkIn, missions, quiz];
     for (let i = 0; i + 1 < order.length; i += 1) expect(follows(order[i]!, order[i + 1]!)).toBe(true);
     // 3 hành động chính đứng trước mọi khối phụ của tab (vòng quay, đổi vỏ chai).
@@ -255,7 +255,7 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     await screen.findByText('Lô 2 · Mận');
     const h2 = [...container.querySelectorAll('h2')].map((h) => h.textContent);
     expect(h2).toEqual(
-      expect.arrayContaining(['Nhiệm vụ', 'Quiz Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn', 'Chuỗi điểm danh dài nhất']),
+      expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn', 'Chuỗi điểm danh dài nhất']),
     );
   });
 });

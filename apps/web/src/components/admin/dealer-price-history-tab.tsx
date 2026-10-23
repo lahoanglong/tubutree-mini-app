@@ -6,7 +6,7 @@ import { listDealerPriceHistory, nextPageParam, type DealerPriceChange } from '@
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, FIELD_XS } from './ui';
+import { BTN_SECONDARY, FIELD_XS, LoadError } from './ui';
 
 /** Sổ đổi giá đại lý theo bậc (mới nhất trước): giá cũ → mới, ai đổi, lúc nào. Ghi ở mỗi lần nhập bảng giá đại lý. */
 export function DealerPriceHistoryTab() {
@@ -37,7 +37,7 @@ export function DealerPriceHistoryTab() {
         className={`${FIELD_XS} w-full sm:w-72`}
       />
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <p className="text-sm text-danger-fg">Không tải được lịch sử giá.</p>}
+      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được lịch sử giá.</LoadError>}
       {q.isSuccess && rows.length === 0 && (
         <p className="text-sm text-stone-500">{sku ? `Không có lần đổi giá nào cho SKU "${sku}".` : 'Chưa có lần đổi giá đại lý nào.'}</p>
       )}

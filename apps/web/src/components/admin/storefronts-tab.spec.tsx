@@ -119,6 +119,13 @@ describe('StorefrontsTab (D3-02)', () => {
       expect(byText(drawer as HTMLElement, 'a', 'Xem trang công khai')?.getAttribute('href')).toBe('/s/linh123');
     });
 
+    it('D7-11: dòng "Chủ" trong hồ sơ ghi vai trò tiếng Việt (CTV), không lộ AFFILIATE', async () => {
+      await open([row()], detail());
+      const drawer = document.body.querySelector('[role="dialog"]')!;
+      expect(drawer.textContent).toContain('Linh · 0900000001 · CTV');
+      expect(drawer.textContent).not.toContain('AFFILIATE');
+    });
+
     it('Gỡ đăng cần lý do: ô trống thì nút xác nhận bị khoá; có lý do thì gửi POST take-down và làm mới', async () => {
       const { api } = await open([row()], detail());
       const drawer = document.body.querySelector('[role="dialog"]') as HTMLElement;

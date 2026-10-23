@@ -1,0 +1,118 @@
+{
+  "id": "U1-21",
+  "browser": "chromium",
+  "role": "Khách mới",
+  "journey": "Chuyển thừa tiền",
+  "steps": "Đơn 199.000đ → chuyển 249.000đ một lần (đúng nội dung)",
+  "expected": "Đơn PAID; ghi khoản OVERPAYMENT 50.000đ trạng thái UNVERIFIED; admin nhận OPS_REFUND_ALERT \"tiền trả dư chờ đối soát\"; khách CHƯA được báo hoàn cho tới khi admin \"Xác nhận tiền dư\" (luật đã chốt, apps/api/src/modules/orders/refund-queue.ts:319-322)",
+  "status": "PASS",
+  "error": null,
+  "checks": [
+    {
+      "name": "DB: CONFIRMED/PAID",
+      "ok": true
+    },
+    {
+      "name": "DB: 1 khoản OVERPAYMENT 50.000đ",
+      "ok": true,
+      "detail": [
+        {
+          "kind": "OVERPAYMENT",
+          "amount": 50000,
+          "status": "UNVERIFIED",
+          "refKey": "PANCAKE:paid:249000"
+        }
+      ]
+    },
+    {
+      "name": "khách chưa nhận thông báo hoàn tiền dư (chờ admin đối soát)",
+      "ok": true,
+      "detail": [
+        "ORDER_CONFIRMED"
+      ]
+    },
+    {
+      "name": "admin có OPS_REFUND_ALERT về tiền dư của đơn",
+      "ok": true
+    }
+  ],
+  "evidence": [
+    {
+      "label": "đặt đơn chuyển khoản",
+      "data": {
+        "status": 201,
+        "code": "TUBU2026102287637",
+        "button": "Đặt hàng · 199.000đ",
+        "total": 199000
+      }
+    },
+    {
+      "label": "chuyển 249k",
+      "data": {
+        "event": {
+          "id": "cmvjgutrm00qfzw9csf5toavh",
+          "status": "PROCESSED",
+          "error": null,
+          "attempts": 1
+        },
+        "after": {
+          "code": "TUBU2026102287637",
+          "total": 199000,
+          "status": "CONFIRMED",
+          "paymentStatus": "PAID",
+          "paidAt": "2026-10-22T11:37:12.001Z",
+          "pancakeAttention": null
+        }
+      }
+    },
+    {
+      "label": "ảnh",
+      "data": "shots/U1-mua-hang/U1-21-bank-over.png"
+    },
+    {
+      "label": "SQL đơn + hoàn tiền",
+      "data": {
+        "status": "CONFIRMED",
+        "ps": "PAID",
+        "refunds": [
+          {
+            "kind": "OVERPAYMENT",
+            "amount": 50000,
+            "status": "UNVERIFIED",
+            "refKey": "PANCAKE:paid:249000"
+          }
+        ]
+      }
+    },
+    {
+      "label": "thông báo cho khách",
+      "data": [
+        {
+          "templateCode": "ORDER_CONFIRMED",
+          "channel": "INAPP",
+          "status": "SENT",
+          "payload": {
+            "body": "Đơn TUBU2026102287637 đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿",
+            "data": {
+              "order_code": "TUBU2026102287637"
+            }
+          },
+          "text": "{\"body\":\"Đơn TUBU2026102287637 đã được xác nhận. Cảm ơn bạn đã mua sắm tại Tubu Tree 🌿\",\"data\":{\"order_code\":\"TUBU2026102287637\"}}"
+        }
+      ]
+    },
+    {
+      "label": "SQL thông báo admin OPS_REFUND_ALERT",
+      "data": [
+        {
+          "userId": "uat_admin",
+          "channel": "INAPP",
+          "status": "SENT",
+          "text": "{\"body\":\"💸 Hoàn tiền đơn TUBU2026102287637: Pancake báo đã nhận 249.000đ cho đơn đã nhận đủ 199.000đ — có thể khách chuyển dư 50.000đ. Khách CHƯA được báo. Đối chiếu sao kê: đúng là khách chuyển dư thì ở mục Hoàn tiền k"
+        }
+      ]
+    }
+  ],
+  "notes": [],
+  "ranAt": "2026-10-22T11:37:14.888Z"
+}

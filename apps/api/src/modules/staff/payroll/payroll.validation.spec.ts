@@ -92,7 +92,6 @@ describe('PayrollService — chỉ áp cho nhân viên', () => {
     const prisma = prismaWith({ role: 'CUSTOMER', staffProfile: { active: true } });
     prisma.$transaction.mockResolvedValue(null);
     const svc = new PayrollService(prisma as unknown as PrismaService, config);
-    jest.spyOn(svc, 'recomputeDay').mockResolvedValue({ workedMinutes: 0, hourlyRate: 0, gross: 0, fines: 1, net: -1 });
     await expect(svc.adjust('u_old', new Date('2026-02-10T00:00:00Z'), 1, 'x', 'a1')).resolves.toMatchObject({ adjusted: true });
   });
 });

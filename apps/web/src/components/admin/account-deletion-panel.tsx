@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
-import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_LINK, INPUT_CLASS, Notice, ToneBadge, chipClass, Field } from './ui';
+import { useConfirm } from './confirm-dialog';
+import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
 
 export type DeletionStatusFilter = 'PENDING' | 'RESOLVED' | 'ALL';
@@ -106,6 +108,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   const [err, setErr] = useState<string | null>(null);
   const pending = r.status === 'PENDING';
   const blocked = r.blockers.length > 0;
+  const { confirm, dialog } = useConfirm();
 
   const mut = useMutation({
     mutationFn: () => processDeletionRequest(r.id, note),
@@ -120,16 +123,16 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
     },
   });
 
-  const run = () => {
+  const run = async () => {
     setErr(null);
     const who = r.user?.fullName || r.user?.phone || r.userId;
-    if (
-      !window.confirm(
-        `Ẩn danh tài khoản "${who}"? Tên, SĐT, địa chỉ, Zalo sẽ bị xoá vĩnh viễn và khách bị đăng xuất. Đơn hàng và sổ tiền vẫn được giữ. Không hoàn tác được.`,
-      )
-    )
-      return;
-    mut.mutate();
+    const ok = await confirm({
+      title: 'Ẩn danh tài khoản?',
+      message: `Ẩn danh tài khoản "${who}"? Tên, SĐT, địa chỉ, Zalo sẽ bị xoá vĩnh viễn và khách bị đăng xuất. Đơn hàng và sổ tiền vẫn được giữ. Không hoàn tác được.`,
+      confirmLabel: 'Ẩn danh tài khoản',
+      tone: 'danger',
+    });
+    if (ok) mut.mutate();
   };
 
   return (
@@ -140,7 +143,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
             <span className="font-semibold text-stone-900">{r.user?.fullName || 'Không rõ tên'}</span>
             {r.user?.phone && <span className="text-sm text-stone-600">{r.user.phone}</span>}
             <ToneBadge tone={pending ? 'warning' : 'success'}>{pending ? 'Chờ xử lý' : 'Đã xử lý'}</ToneBadge>
-            {r.user && r.user.role !== 'CUSTOMER' && <ToneBadge tone="info">{r.user.role}</ToneBadge>}
+            {r.user && r.user.role !== 'CUSTOMER' && <ToneBadge tone="info">{USER_ROLE_LABELS[r.user.role] ?? r.user.role}</ToneBadge>}
           </div>
           {r.user && pending && (
             <div className="mt-0.5 text-xs text-stone-600">
@@ -179,19 +182,20 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
       )}
 
       {pending && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-stone-200 pt-3">
-          <input
-            aria-label="Ghi chú xử lý"
-            placeholder="Ghi chú (tuỳ chọn), vd đã gọi xác nhận với khách"
-            value={note}
-            maxLength={500}
-            onChange={(e) => setNote(e.target.value)}
-            className={`${INPUT_CLASS} min-w-[200px] flex-1`}
-            disabled={mut.isPending}
-          />
+        <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-stone-200 pt-3">
+          <Field label="Ghi chú xử lý (tuỳ chọn)" className="min-w-[200px] flex-1">
+            <input
+              placeholder="vd đã gọi xác nhận với khách"
+              value={note}
+              maxLength={500}
+              onChange={(e) => setNote(e.target.value)}
+              className={INPUT_CLASS}
+              disabled={mut.isPending}
+            />
+          </Field>
           <button
             type="button"
-            onClick={run}
+            onClick={() => void run()}
             disabled={mut.isPending || blocked}
             className="min-h-11 rounded-control bg-danger-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500"
           >
@@ -205,6 +209,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           {err}
         </p>
       )}
+      {dialog}
     </div>
   );
 }

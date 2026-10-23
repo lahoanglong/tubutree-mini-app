@@ -1,0 +1,292 @@
+[
+ {
+  "name": "home",
+  "seq": []
+ },
+ {
+  "name": "home-me",
+  "seq": []
+ },
+ {
+  "name": "products-l20",
+  "seq": []
+ },
+ {
+  "name": "products-l1",
+  "seq": []
+ },
+ {
+  "name": "products-sort-best",
+  "seq": []
+ },
+ {
+  "name": "products-search",
+  "seq": []
+ },
+ {
+  "name": "products-for-you",
+  "seq": []
+ },
+ {
+  "name": "product-detail",
+  "seq": []
+ },
+ {
+  "name": "product-related",
+  "seq": []
+ },
+ {
+  "name": "product-bought-together",
+  "seq": [
+   [
+    "order_items",
+    3,
+    196970
+   ]
+  ]
+ },
+ {
+  "name": "product-reviews",
+  "seq": []
+ },
+ {
+  "name": "categories",
+  "seq": []
+ },
+ {
+  "name": "brands",
+  "seq": []
+ },
+ {
+  "name": "search-suggest",
+  "seq": []
+ },
+ {
+  "name": "flash-active",
+  "seq": []
+ },
+ {
+  "name": "flash-upcoming",
+  "seq": []
+ },
+ {
+  "name": "cart",
+  "seq": []
+ },
+ {
+  "name": "checkout-quote",
+  "seq": []
+ },
+ {
+  "name": "checkout-quote-selected",
+  "seq": []
+ },
+ {
+  "name": "checkout-coupon-previews",
+  "seq": []
+ },
+ {
+  "name": "orders-l20",
+  "seq": []
+ },
+ {
+  "name": "orders-l1",
+  "seq": []
+ },
+ {
+  "name": "orders-group-processing",
+  "seq": []
+ },
+ {
+  "name": "orders-active-count",
+  "seq": []
+ },
+ {
+  "name": "order-detail",
+  "seq": []
+ },
+ {
+  "name": "order-detail-big",
+  "seq": []
+ },
+ {
+  "name": "purchased-items",
+  "seq": []
+ },
+ {
+  "name": "me",
+  "seq": []
+ },
+ {
+  "name": "me-loyalty",
+  "seq": []
+ },
+ {
+  "name": "me-points-tx",
+  "seq": []
+ },
+ {
+  "name": "me-coupons",
+  "seq": []
+ },
+ {
+  "name": "me-new-customer-offer",
+  "seq": []
+ },
+ {
+  "name": "me-wallet",
+  "seq": []
+ },
+ {
+  "name": "me-notifications",
+  "seq": []
+ },
+ {
+  "name": "me-wishlist",
+  "seq": []
+ },
+ {
+  "name": "me-wishlist-ids",
+  "seq": []
+ },
+ {
+  "name": "me-subscriptions",
+  "seq": []
+ },
+ {
+  "name": "me-addresses",
+  "seq": []
+ },
+ {
+  "name": "feed",
+  "seq": []
+ },
+ {
+  "name": "feed-popular",
+  "seq": []
+ },
+ {
+  "name": "feed-leaderboard",
+  "seq": []
+ },
+ {
+  "name": "feed-events",
+  "seq": []
+ },
+ {
+  "name": "feed-post",
+  "seq": []
+ },
+ {
+  "name": "feed-comments",
+  "seq": []
+ },
+ {
+  "name": "storefront-public-list",
+  "seq": []
+ },
+ {
+  "name": "storefront-public",
+  "seq": []
+ },
+ {
+  "name": "storefront-me",
+  "seq": []
+ },
+ {
+  "name": "storefront-me-stats",
+  "seq": []
+ },
+ {
+  "name": "affiliate-me",
+  "seq": []
+ },
+ {
+  "name": "affiliate-dashboard",
+  "seq": []
+ },
+ {
+  "name": "affiliate-commissions",
+  "seq": []
+ },
+ {
+  "name": "affiliate-links",
+  "seq": []
+ },
+ {
+  "name": "admin-dashboard",
+  "seq": [
+   [
+    "orders",
+    2,
+    101258
+   ],
+   [
+    "users",
+    1,
+    5202
+   ]
+  ]
+ },
+ {
+  "name": "admin-orders-l20",
+  "seq": []
+ },
+ {
+  "name": "admin-orders-l1",
+  "seq": []
+ },
+ {
+  "name": "admin-orders-status",
+  "seq": []
+ },
+ {
+  "name": "admin-orders-search",
+  "seq": []
+ },
+ {
+  "name": "admin-users",
+  "seq": []
+ },
+ {
+  "name": "admin-coupons",
+  "seq": [
+   [
+    "coupons",
+    4,
+    80012
+   ]
+  ]
+ },
+ {
+  "name": "admin-reviews",
+  "seq": []
+ },
+ {
+  "name": "admin-subscriptions",
+  "seq": []
+ },
+ {
+  "name": "admin-payouts",
+  "seq": []
+ },
+ {
+  "name": "admin-reports-revenue",
+  "seq": [
+   [
+    "orders",
+    1,
+    50629
+   ],
+   [
+    "users",
+    1,
+    5202
+   ]
+  ]
+ },
+ {
+  "name": "admin-reports-sources",
+  "seq": []
+ }
+]
