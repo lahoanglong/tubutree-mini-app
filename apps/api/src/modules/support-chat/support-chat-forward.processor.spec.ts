@@ -40,6 +40,11 @@ function setup(opts: {
         forwards.push(f);
         return Promise.resolve(f);
       }),
+      updateMany: jest.fn().mockImplementation(({ where, data }: any) => {
+        const f = forwards.find((x) => x.id === where.id && (!where.status || x.status === where.status));
+        if (f) Object.assign(f, data);
+        return Promise.resolve({ count: f ? 1 : 0 });
+      }),
       update: jest.fn().mockImplementation(({ where, data }: any) => {
         const f = forwards.find((x) => x.id === where.id)!;
         for (const [k, v] of Object.entries(data)) f[k] = (v as any)?.increment ? f[k] + (v as any).increment : v;
@@ -177,5 +182,25 @@ describe('SupportChatForwardProcessor', () => {
     const { proc, forwards, job } = setup({ msgs: [{ body: 'x'.repeat(1000) }, { body: 'x'.repeat(1000) }, { body: 'x'.repeat(1000) }, { body: 'x' }], scheduleReject: true });
     await expect(proc.process(job())).resolves.toBeUndefined();
     expect(forwards[0].status).toBe('SENT');
+  });
+
+  it('kết quả muộn không ghi đè forward đã SENT', async () => {
+    const { proc, forwards, prisma, job } = setup({
+      send: jest.fn().mockImplementation(async () => {
+        prisma.supportForward.updateMany.mockClear();
+        forwards[0]!.status = 'SENT';
+        return { ok: false, retry: false, unknown: true, code: 'TIMEOUT', message: 'hết giờ' };
+      }),
+    });
+    await proc.process(job());
+    expect(forwards[0]!.status).toBe('SENT');
+  });
+
+  it('ghi DB lỗi vẫn đặt lịch lại và lỗi vẫn ném ra', async () => {
+    const { proc, prisma, service, job } = setup();
+    prisma.supportForward.update.mockRejectedValue(new Error('db'));
+    await expect(proc.process(job())).rejects.toThrow('db');
+    expect(prisma.supportMessage.count).toHaveBeenCalled();
+    expect(service.scheduleForward).not.toHaveBeenCalled();
   });
 });

@@ -87,8 +87,8 @@ export class BridgeClient {
       if (res.ok) return { ok: true, data: json as T };
       const code = typeof json.code === 'string' ? json.code : `HTTP_${res.status}`;
       const message = typeof json.message === 'string' ? json.message : `Cầu nối trả ${res.status}`;
-      // 409 NO_GROUP và 502 SEND_FAILED thử lại không giúp; mất kết nối tạm và 5xx khác thì có.
-      const retry = res.status === 409 ? code === 'NOT_CONNECTED' : res.status >= 500 && res.status !== 502;
+      // 409 NO_GROUP và 502 SEND_FAILED thử lại không giúp; 502 không phải của cầu nối (proxy) và 5xx khác thì có.
+      const retry = res.status === 409 ? code === 'NOT_CONNECTED' : res.status >= 500 && code !== 'SEND_FAILED';
       return { ok: false, retry, unknown: false, code, message };
     } catch (e) {
       const aborted = (e as Error).name === 'AbortError' || (e as Error).name === 'TimeoutError';

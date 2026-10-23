@@ -29,20 +29,27 @@ describe('BridgeClient', () => {
     global.fetch = jest.fn().mockImplementation((_u: string, init: any) =>
       new Promise((_res, rej) => init.signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' })))),
     ) as any;
-    const p = client().send('k1', 'x');
-    await jest.advanceTimersByTimeAsync(15_000);
+    let settled = false;
+    const p = client().send('k1', 'x').then((v) => {
+      settled = true;
+      return v;
+    });
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(5_000);
     const r = await p;
     expect(r).toMatchObject({ ok: false, unknown: true, retry: false });
   });
 
   it('409 NOT_CONNECTED thì retry:true, NO_GROUP và 502 thì retry:false', async () => {
     global.fetch = jest.fn().mockReturnValueOnce(json(409, { code: 'NOT_CONNECTED' })).mockReturnValueOnce(json(409, { code: 'NO_GROUP' }))
-      .mockReturnValueOnce(json(502, { code: 'SEND_FAILED', message: 'boom' })).mockReturnValueOnce(json(500, {})) as any;
+      .mockReturnValueOnce(json(502, { code: 'SEND_FAILED', message: 'boom' })).mockReturnValueOnce(json(500, {})).mockReturnValueOnce(Promise.resolve({ status: 502, ok: false, json: () => Promise.reject(new Error('no body')) } as Response)) as any;
     const c = client();
     expect(await c.send('k', 'x')).toMatchObject({ ok: false, retry: true, unknown: false, code: 'NOT_CONNECTED' });
     expect(await c.send('k', 'x')).toMatchObject({ ok: false, retry: false, code: 'NO_GROUP' });
     expect(await c.send('k', 'x')).toMatchObject({ ok: false, retry: false, code: 'SEND_FAILED', message: 'boom' });
     expect(await c.send('k', 'x')).toMatchObject({ ok: false, retry: true });
+    expect(await c.send('k', 'x')).toMatchObject({ ok: false, retry: true, code: 'HTTP_502' });
   });
 
   it('lỗi mạng thì retry:true', async () => {

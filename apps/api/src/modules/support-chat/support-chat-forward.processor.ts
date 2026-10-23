@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
 import type { SupportChatContext } from '@tubutree/shared-types';
-import type { SupportForward, SupportMessage } from '@prisma/client';
+import type { Prisma, SupportForward, SupportMessage } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
@@ -50,8 +50,12 @@ export class SupportChatForwardProcessor extends WorkerHost {
     const claimed = pending ? { forward: pending, messages: await this.messagesOf(pending.id, conversationId) } : await this.claim(conversationId);
     if (!claimed) return;
 
-    const retryError = await this.sendForward(conv, claimed.forward, claimed.messages, final);
-    await this.rescheduleIfLeft(conversationId);
+    let retryError: string | null;
+    try {
+      retryError = await this.sendForward(conv, claimed.forward, claimed.messages, final);
+    } finally {
+      await this.rescheduleIfLeft(conversationId);
+    }
     if (retryError) throw new Error(retryError);
   }
 
@@ -104,21 +108,26 @@ export class SupportChatForwardProcessor extends WorkerHost {
     await this.prisma.supportForward.update({ where: { id: forward.id }, data: { attempts: { increment: 1 } } });
     const r = await this.bridge.send(forward.id, text);
     if (r.ok) {
-      await this.prisma.supportForward.update({ where: { id: forward.id }, data: { status: 'SENT', zaloMsgId: r.msgId, sentAt: new Date(), lastError: null } });
+      await this.settle(forward.id, { status: 'SENT', zaloMsgId: r.msgId, sentAt: new Date(), lastError: null });
       return null;
     }
     const lastError = `${r.code}: ${r.message}`.slice(0, 500);
     if (r.unknown) {
       // Không tự gửi lại để khỏi đăng đôi; admin bấm "Gửi lại" với cùng khoá.
-      await this.prisma.supportForward.update({ where: { id: forward.id }, data: { status: 'UNKNOWN', lastError } });
+      await this.settle(forward.id, { status: 'UNKNOWN', lastError });
       return null;
     }
     if (r.retry && !final) {
       await this.prisma.supportForward.update({ where: { id: forward.id }, data: { lastError } });
       return lastError;
     }
-    await this.prisma.supportForward.update({ where: { id: forward.id }, data: { status: 'FAILED', lastError } });
+    await this.settle(forward.id, { status: 'FAILED', lastError });
     return null;
+  }
+
+  /** Chỉ chốt khi còn PENDING: kết quả muộn của một lượt gửi chồng nhau không được ghi đè trạng thái đã chốt (SENT, hoặc admin gửi lại). */
+  private settle(id: string, data: Prisma.SupportForwardUpdateManyMutationInput) {
+    return this.prisma.supportForward.updateMany({ where: { id, status: 'PENDING' }, data });
   }
 
   private async rescheduleIfLeft(conversationId: string): Promise<void> {
