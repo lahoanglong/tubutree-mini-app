@@ -214,7 +214,8 @@ export class DealerAccountsAdminService {
    * Đại lý đã duyệt (role DEALER) kèm bậc, dư nợ, hạn mức, doanh số tháng này (giờ VN), nợ nhiều nhất trước.
    * Dư nợ = SUM(delta) cả sổ (dương = đang nợ, như DealerService.adminRecordCreditPayment); không dùng creditLedger() vì nó chỉ
    * cộng 200 dòng gần nhất. Doanh số "đã chốt" cùng luật DealerService.dealerVolume: đơn PACKED/SHIPPING/DELIVERED đã thanh toán
-   * hoặc ghi công nợ, bỏ đơn hoàn tiền/lỗi; đơn còn lại của tháng là "chờ chốt".
+   * hoặc ghi công nợ, bỏ đơn hoàn tiền/lỗi; đơn còn lại của tháng là "chờ chốt". Cũng như dealerVolume, doanh số chỉ là tiền hàng
+   * (total − shippingFee), không gồm phí ship.
    */
   async listAccounts(q: AccountsQuery, now = new Date()) {
     const search = q.search?.trim();
@@ -240,8 +241,8 @@ export class DealerAccountsAdminService {
           FROM "dealer_credit_ledgers" l WHERE l."userId" IN (SELECT "id" FROM d) GROUP BY l."userId"
       ), s AS (
         SELECT o."userId",
-               COALESCE(SUM(o."total") FILTER (WHERE ${settled}), 0)::bigint AS "settled",
-               COALESCE(SUM(o."total") FILTER (WHERE NOT ${settled}), 0)::bigint AS "pending",
+               COALESCE(SUM(o."total" - o."shippingFee") FILTER (WHERE ${settled}), 0)::bigint AS "settled",
+               COALESCE(SUM(o."total" - o."shippingFee") FILTER (WHERE NOT ${settled}), 0)::bigint AS "pending",
                count(*)::int AS "orders"
           FROM "orders" o
          WHERE o."type" = 'DEALER' AND o."userId" IN (SELECT "id" FROM d)

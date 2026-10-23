@@ -26,6 +26,7 @@ function makeConfig(values: Record<string, unknown> = {}): SystemConfigService {
 type FakeOrder = {
   id: string;
   total: number;
+  shippingFee?: number;
   status: string;
   paymentStatus: string;
   createdAt: Date;
@@ -197,6 +198,7 @@ function buildPrisma(opts: {
       findMany: jest.fn(async ({ where }: { where?: RewardWhere }) => rewards.filter((r) => matchReward(r, where ?? {}))),
     },
     order: { findMany: fakeOrderFindMany(opts.orders ?? []) },
+    orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
     dealerCreditLedger: {
       findMany: fakeLedgerFindMany(opts.creditOrderIds ?? []),
       findFirst: jest.fn().mockResolvedValue(null),
@@ -216,6 +218,7 @@ function buildPrisma(opts: {
 const settled = (id: string, total: number, extra: Partial<FakeOrder> = {}): FakeOrder => ({
   id,
   total,
+  shippingFee: 0,
   status: 'DELIVERED',
   paymentStatus: 'PAID',
   createdAt: IN_Q3,
@@ -291,6 +294,14 @@ describe('DealerService.claimReward (lưu yêu cầu thật, idempotent)', () =>
         settled('o2', 200_000_000, { status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' }),
       ],
     });
+    await expect(new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', {}, NOW_Q3)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(claims.create).not.toHaveBeenCalled();
+  });
+
+  it('mốc thưởng chỉ tính tiền hàng: hàng thiếu 10.000đ tới mốc 50tr, cộng phí ship 19.000đ vẫn chưa đạt', async () => {
+    const { prisma, claims } = buildPrisma({ orders: [settled('o1', 50_009_000, { shippingFee: 19_000 })] });
     await expect(new DealerService(prisma, makeConfig()).claimReward('d1', 'r1', {}, NOW_Q3)).rejects.toBeInstanceOf(
       BadRequestException,
     );

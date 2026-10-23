@@ -1,4 +1,4 @@
-import { DealerService } from './dealer.service';
+import { DealerService, SETTLE_VISIBILITY_MARGIN_MS } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import { SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
@@ -87,12 +87,12 @@ describe('DealerService.pricelist', () => {
 describe('DealerService.quarterlyReport (thưởng doanh số quý)', () => {
   // Doanh số quý = đơn ĐÃ CHỐT (đã thanh toán + đã giao) — xem dealer-reward-claim.spec.ts cho
   // các ca đơn chưa thanh toán / còn tự huỷ được.
-  function prismaForReport(revenue: number) {
+  function prismaForReport(revenue: number, shippingFee = 0) {
     return {
       user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'd1', role: 'DEALER', metadata: null }) },
       dealerTier: { findUnique: jest.fn().mockResolvedValue(null) },
       order: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'o1', total: revenue, status: 'DELIVERED', paymentStatus: 'PAID' }]),
+        findMany: jest.fn().mockResolvedValue([{ id: 'o1', total: revenue + shippingFee, shippingFee, status: 'DELIVERED', paymentStatus: 'PAID' }]),
       },
       dealerCreditLedger: { findMany: jest.fn().mockResolvedValue([]) },
     } as unknown as PrismaService;
@@ -117,6 +117,13 @@ describe('DealerService.quarterlyReport (thưởng doanh số quý)', () => {
     expect(r.bonusPct).toBe(4);
     expect(r.nextTier).toBeNull();
   });
+
+  it('doanh số chỉ tính tiền hàng: hàng thiếu 10.000đ tới bậc 100tr, cộng phí ship 19.000đ vẫn ở bậc 2%', async () => {
+    const r = await new DealerService(prismaForReport(99_990_000, 19_000), makeConfig()).quarterlyReport('d1');
+    expect(r.revenue).toBe(99_990_000);
+    expect(r.bonusPct).toBe(2);
+    expect(r.nextTier?.min).toBe(100_000_000);
+  });
 });
 
 describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () => {
@@ -132,6 +139,7 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     const base: Record<string, unknown> = {
       user: { findMany: jest.fn().mockResolvedValue([]) },
       order: { findMany: jest.fn().mockResolvedValue([]) },
+      orderStatusHistory: { findMany: jest.fn().mockResolvedValue([]) },
       dealerCreditLedger: {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
@@ -165,9 +173,51 @@ describe('DealerService.payoutQuarterlyBonuses (cron trả thưởng quý)', () 
     expect(exec.mock.invocationCallOrder[0]).toBeLessThan(volumeRead);
     expect(volumeRead).toBeLessThan(insert);
   });
-  /** Đơn quý trước đã chốt (đã thanh toán + đã giao) tổng `total`. */
-  const settledOrders = (total: number) => ({
-    findMany: jest.fn().mockResolvedValue([{ id: 'o1', total, status: 'DELIVERED', paymentStatus: 'PAID' }]),
+  /** Đơn quý trước đã chốt (đã thanh toán + đã giao) tiền hàng `goods`, chốt ở `settledAt` (mặc định giữa quý). */
+  const settledOrders = (goods: number, shippingFee = 0, settledAt = new Date('2026-02-10T03:00:00Z')) => ({
+    findMany: jest.fn().mockResolvedValue([
+      { id: 'o1', total: goods + shippingFee, shippingFee, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: settledAt, paidAt: settledAt },
+    ]),
+  });
+
+  it('thưởng tính trên tiền hàng: hàng 99,99tr + phí ship 19.000đ → bậc 2%, không lên 3%', async () => {
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: settledOrders(99_990_000, 19_000),
+    });
+    await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
+    const led = (prisma.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data;
+    expect(led.delta).toBe(-1_999_800); // 99,99tr × 2%
+  });
+
+  it('ghi createdAt = giờ chạy − biên; đơn chốt trong biên (có thể chưa commit lúc đọc) để trả bù trả', async () => {
+    const seenBy = new Date(NOW.getTime() - SETTLE_VISIBILITY_MARGIN_MS);
+    const within = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: settledOrders(120_000_000, 0, seenBy),
+    });
+    await new DealerService(within, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
+    expect((within.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ delta: -3_600_000, createdAt: seenBy });
+
+    const late = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: settledOrders(120_000_000, 0, new Date(seenBy.getTime() + 1)),
+    });
+    const r = await new DealerService(late, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(NOW);
+    expect(r.paid).toBe(0);
+    expect(late.dealerCreditLedger.create).not.toHaveBeenCalled();
+  });
+
+  it('`now` ở tương lai không đẩy mốc qua giờ thật', async () => {
+    const prisma = prismaForPayout({
+      user: { findMany: jest.fn().mockResolvedValue([{ id: 'd1' }]) },
+      order: settledOrders(120_000_000, 0, new Date('2026-02-10T03:00:00Z')),
+    });
+    const before = Date.now();
+    await new DealerService(prisma, makeConfig({ 'dealer.quarterly_bonus_tiers': TIERS })).payoutQuarterlyBonuses(new Date('2099-04-15T00:00:00Z'));
+    const stamped = (prisma.dealerCreditLedger.create as jest.Mock).mock.calls[0][0].data.createdAt as Date;
+    expect(stamped.getTime()).toBeGreaterThanOrEqual(before - SETTLE_VISIBILITY_MARGIN_MS);
+    expect(stamped.getTime()).toBeLessThanOrEqual(Date.now() - SETTLE_VISIBILITY_MARGIN_MS);
   });
 
   it('đại lý đạt mốc → cộng thưởng (delta âm = giảm công nợ) + thông báo', async () => {
@@ -463,8 +513,8 @@ describe('DealerService.rewardsProgress (hiển thị điều kiện + tiến tr
   it('map period: QUARTER dùng doanh số quý, YEAR dùng năm; achieved/toGo đúng', async () => {
     // 30tr trong Q3 + 90tr trong Q1 → quý (Q3) = 30tr, năm = 120tr. Lọc theo khung createdAt như DB.
     const rows = [
-      { id: 'o-q3', total: 30_000_000, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-08-01T03:00:00Z') },
-      { id: 'o-q1', total: 90_000_000, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-02-01T03:00:00Z') },
+      { id: 'o-q3', total: 30_000_000, shippingFee: 0, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-08-01T03:00:00Z') },
+      { id: 'o-q1', total: 90_000_000, shippingFee: 0, status: 'DELIVERED', paymentStatus: 'PAID', createdAt: new Date('2026-02-01T03:00:00Z') },
     ];
     const findMany = jest.fn(async ({ where }: { where: { createdAt: { gte: Date; lt: Date } } }) =>
       rows.filter((o) => o.createdAt >= where.createdAt.gte && o.createdAt < where.createdAt.lt),

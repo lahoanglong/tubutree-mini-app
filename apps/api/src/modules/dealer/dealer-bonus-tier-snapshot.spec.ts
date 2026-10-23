@@ -20,7 +20,7 @@ const NEW_TIERS = [
 ];
 
 type Ledger = { userId: string; delta: number; refType: string; refId: string | null; note?: string | null; createdAt: Date };
-type OrderRow = { id: string; total: number; status: string; paymentStatus: string; createdAt: Date; paidAt: Date | null };
+type OrderRow = { id: string; total: number; shippingFee: number; status: string; paymentStatus: string; createdAt: Date; paidAt: Date | null };
 type Where = { userId?: string; refType?: string | { in: string[] }; refId?: string | { startsWith?: string; in?: string[] }; OR?: Where[] };
 
 function matches(l: Ledger, w: Where): boolean {
@@ -39,6 +39,7 @@ function matches(l: Ledger, w: Where): boolean {
 const order = (id: string, total: number, createdAt: string, settledAt: string = createdAt): OrderRow => ({
   id,
   total,
+  shippingFee: 0,
   status: 'DELIVERED',
   paymentStatus: 'PAID',
   createdAt: new Date(createdAt),
@@ -179,6 +180,7 @@ describe('Bản chụp bảng bậc thưởng theo quý', () => {
       type: 'DEALER',
       createdAt: x.createdAt,
       total: x.total,
+      shippingFee: 0,
       status: 'DELIVERED',
       paymentStatus: 'PAID',
     });
@@ -216,6 +218,7 @@ describe('Bản chụp bảng bậc thưởng theo quý', () => {
       type: 'DEALER',
       createdAt: d.createdAt,
       total: d.total,
+      shippingFee: 0,
       status: 'DELIVERED',
       paymentStatus: 'PAID',
     });

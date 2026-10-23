@@ -80,8 +80,9 @@ describe('Dealer quarterly bonus clawback / payout race (real Postgres)', () => 
       deliveredAt: createdAt,
     });
     if (credit) {
+      // Dòng nợ ghi cùng lúc đặt đơn (DealerService.placeOrder), nên mang giờ tạo đơn trong quý mô phỏng.
       await prisma.dealerCreditLedger.create({
-        data: { userId, delta: total, refType: 'ORDER', refId: o.id, note: `Đơn ${o.code}` },
+        data: { userId, delta: total, refType: 'ORDER', refId: o.id, note: `Đơn ${o.code}`, createdAt },
       });
     }
     return o;
@@ -219,12 +220,12 @@ describe('Dealer quarterly bonus clawback / payout race (real Postgres)', () => 
     // đi tiếp tới thu hồi, rồi đợi 200ms trước khi payout ghi. dealerVolume là private: spy qua instance;
     // lượt của clawback có tham số excludeOrderId (thứ 5) nên phân biệt được với payout.
     const d0 = dealer as unknown as {
-      dealerVolume: (userId: string, start: Date, end: Date, db?: unknown, excludeOrderId?: string) => Promise<unknown>;
+      dealerVolume: (userId: string, start: Date, end: Date, db?: unknown, excludeOrderId?: string, countedBy?: Date) => Promise<unknown>;
     };
     const originalVolume = d0.dealerVolume.bind(dealer);
     let payoutLocks = 0;
-    const volumeSpy = jest.spyOn(d0, 'dealerVolume').mockImplementation(async (userId, start, end, db, excludeOrderId) => {
-      const v = await originalVolume(userId, start, end, db, excludeOrderId);
+    const volumeSpy = jest.spyOn(d0, 'dealerVolume').mockImplementation(async (userId, start, end, db, excludeOrderId, countedBy) => {
+      const v = await originalVolume(userId, start, end, db, excludeOrderId, countedBy);
       if (forced.has(userId) && !excludeOrderId) {
         payoutLocks += 1;
         gates.get(userId)!.open();
