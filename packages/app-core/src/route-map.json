@@ -25,7 +25,7 @@
       { "miniapp": "/edit-profile", "web": "/tai-khoan/ho-so", "private": true },
       { "miniapp": "/settings", "web": "/tai-khoan/cai-dat", "private": true },
       { "miniapp": "/notifications", "web": "/tai-khoan/thong-bao", "private": true },
-      { "miniapp": "/chat", "web": "/ho-tro/chat", "private": true, "pending": true }
+      { "miniapp": "/chat", "web": "/ho-tro/chat", "private": true }
     ]},
     { "lane": "loyalty", "items": [
       { "miniapp": "/loyalty", "web": "/tai-khoan/diem-xanh", "private": true },

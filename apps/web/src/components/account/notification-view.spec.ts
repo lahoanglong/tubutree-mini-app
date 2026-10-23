@@ -63,6 +63,11 @@ describe('SUPPORT_CHAT_REPLY (Tubu Tree trả lời trong chat)', () => {
     expect(notificationMeta('SUPPORT_CHAT_REPLY').title).toBe('Tubu Tree trả lời bạn');
     expect(notificationAction('SUPPORT_CHAT_REPLY', { preview: 'Dạ vâng', route: '/chat' }, prefix)).toMatchObject({ kind: 'link', to: '/w/chat' });
   });
+
+  it('route map thật: /chat đã xong nên nút "Mở chat với Tubu Tree" hiện và dẫn tới /ho-tro/chat', () => {
+    expect(resolveWebRoute('/chat')).toBe('/ho-tro/chat');
+    expect(notificationAction('SUPPORT_CHAT_REPLY', { preview: 'Dạ vâng', route: '/chat' }, resolveWebRoute)).toMatchObject({ kind: 'link', to: '/ho-tro/chat' });
+  });
 });
 
 describe('notificationAction: nút theo loại tin, không dò nội dung', () => {

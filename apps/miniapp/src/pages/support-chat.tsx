@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared-types';
+import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support-chat-view';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { AuthGate } from '../components/ui/auth-gate';
 import { PageHeader } from '../components/ui/page-header';
 import { ErrorState } from '../components/ui/empty-state';
@@ -13,7 +15,6 @@ import { Composer } from '../components/support-chat/composer';
 import { ContextChip } from '../components/support-chat/context-chip';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { getErrorMessage } from '../services/api';
-import { isHttpError } from '../services/http';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPhoneDisplay } from '../utils/phone';
 import { haptic } from '../utils/haptic';
@@ -22,7 +23,6 @@ import { DEFAULT_SUPPORT, fetchSupportContact } from './about-data';
 const POLL_MS = 5000;
 const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
-
 
 type PendingStatus = 'sending' | 'sent' | 'failed' | 'rejected';
 interface Pending {
@@ -33,25 +33,6 @@ interface Pending {
   status: PendingStatus;
   error?: string;
   createdAt: string;
-}
-
-const byTime = (a: SupportChatMessageDTO, b: SupportChatMessageDTO) =>
-  a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-
-/**
- * API không gửi tin nhân viên đã thu hồi, nên tin nào nằm từ đầu cửa sổ poll trở đi mà không còn trong cửa sổ là đã bị thu hồi.
- * Tin chỉ có ở trang cũ thì giữ nguyên (thu hồi ở đó sẽ hiện sau khi mở lại màn).
- */
-function mergeWindow(prev: Map<string, SupportChatMessageDTO>, windowMsgs: SupportChatMessageDTO[], hasMore: boolean) {
-  const next = new Map(prev);
-  const first = [...windowMsgs].sort(byTime)[0];
-  if (first) {
-    for (const m of prev.values()) if (byTime(m, first) >= 0) next.delete(m.id);
-  } else if (!hasMore) {
-    next.clear();
-  }
-  for (const m of windowMsgs) next.set(m.id, m);
-  return next;
 }
 
 function toItem(m: SupportChatMessageDTO): ChatItem {
@@ -113,9 +94,9 @@ function ChatBody() {
         });
         patch(p.clientMsgId, { status: 'sent' });
       } catch (e) {
-        const status = isHttpError(e) ? e.response?.status : undefined;
-        if (status === 429) patch(p.clientMsgId, { status: 'failed', error: getErrorMessage(e) });
-        else if (status !== undefined && status >= 400 && status < 500) patch(p.clientMsgId, { status: 'rejected', error: getErrorMessage(e) });
+        const kind = sendFailureKind(errorStatus(e));
+        if (kind === 'rate-limited') patch(p.clientMsgId, { status: 'failed', error: getErrorMessage(e) });
+        else if (kind === 'rejected') patch(p.clientMsgId, { status: 'rejected', error: getErrorMessage(e) });
         else patch(p.clientMsgId, { status: 'failed' });
       } finally {
         void qc.invalidateQueries({ queryKey: supportChatQueryOptions().queryKey });

@@ -33,6 +33,7 @@ describe('lối vào đổi rác trên route map thật', () => {
       role: 'CUSTOMER',
       aiEnabled: false,
       claimEnabled: false,
+      chatEnabled: false,
       cashbackEnabled: false,
       dealer: undefined,
       ownedBrandName: undefined,
