@@ -148,7 +148,7 @@ Mini App / web ──HTTPS──> API (NestJS) ──HTTP nội bộ──> zalo
   3. Lưu `SupportMessage` người gửi STAFF, `zaloMsgId` unique (trùng thì bỏ êm), bỏ mã ở đầu câu, `staffName = dName`.
   4. Tạo thông báo trong chuông (gộp 10 phút, `dedupeKey`).
   - Với `undo`: đặt `recalledAt` cho tin STAFF có `zaloMsgId` đó.
-  - Với `state`: lưu trạng thái vào `system_configs` khoá `chat.bridge_state` (chỉ hệ thống ghi), dùng cho dòng cảnh báo phía khách và ops inbox.
+  - Với `state`: lưu vào bảng `SupportBridgeStatus` (một dòng), dùng cho dòng cảnh báo phía khách và ops inbox. Không dùng `system_configs` vì cron ghi mỗi phút sẽ làm đầy `SystemConfigHistory`.
 - Cron (qua `cron-leader`): mỗi phút gọi `GET /health`, đồng bộ `PUT /config` nếu cầu nối chưa có nhóm; mất kết nối quá 10 phút thì `notify-admins` (tối đa một lần mỗi giờ).
 - Admin: `GET/POST` dưới `admin/support-chat/*` cho bridge status, QR, logout, reconnect, groups, test message, danh sách hội thoại, chi tiết, gửi lại, trả lời. Đăng ký vào `common/staff-permissions.matrix.spec.ts` và `endpoint-inventory.spec.ts`. Thao tác đổi cấu hình ghi `SystemConfigHistory` như các khoá khác; đăng nhập, đăng xuất ghi một dòng sự kiện (bảng riêng hoặc dạng `UserAdminEvent`, người làm chọn).
 - Chặn `/api/internal/*` ở `Caddyfile` để chỉ gọi được trong mạng nội bộ, ngoài lớp kiểm Bearer **(quyết định của agent)**.
@@ -158,7 +158,8 @@ Mini App / web ──HTTPS──> API (NestJS) ──HTTP nội bộ──> zalo
 - Đầu tin chuyển: tên hiển thị của khách, số điện thoại che giữa nếu có (không có thì bỏ phần này), hạng nếu có.
 - `SupportMessage`: `id`, `conversationId`, `sender` (`CUSTOMER | STAFF | SYSTEM`), `source` (`MINIAPP | WEB | ZALO | ADMIN | SYSTEM`), `body` (≤2.000 ký tự), `imageUrl?`, `context?` (JSON `{orderCode?, productSlug?}`), `clientMsgId?` (unique cùng `conversationId`), `zaloMsgId?` unique, `staffName?`, `adminUserId?`, `forwardId?`, `recalledAt?`, `createdAt`. Chỉ mục `(conversationId, createdAt)`.
 - `SupportForward`: `id`, `conversationId`, `status` (`PENDING | SENT | FAILED | UNKNOWN`), `zaloMsgId?` unique, `attempts`, `lastError?`, `groupId`, `sentAt?`, `createdAt`.
-- Khoá cấu hình (seed `createOnly`): `chat.enabled` (`false`), `chat.zalo_group_id` (`""`), `chat.hours` (JSON `{"start":"08:00","end":"21:00"}`, có luật kiểm trong `JSON_RULES`), `chat.off_hours_text` (chuỗi), `chat.bridge_state` (hệ thống ghi). Public config thêm `chat.enabled`, `chat.hours`, cờ "cầu nối đang chậm".
+- Khoá cấu hình (seed `createOnly`): `chat.enabled` (`false`), `chat.zalo_group_id` (`""`), `chat.hours` (JSON `{"start":"08:00","end":"21:00"}`, có luật kiểm trong `JSON_RULES`), `chat.off_hours_text` (chuỗi). Public config thêm `chat.enabled`, `chat.hours`. Cờ "cầu nối đang chậm" trả trong `GET /me/support-chat` (không qua public config vì public config được cache lâu).
+- `SupportBridgeStatus`: `id` (`'main'`), `state`, `since`, `lastError?`, `zaloUid?`, `displayName?`, `avatar?`, `checkedAt`, `downAlertedAt?`.
 - Mẫu thông báo mới `SUPPORT_CHAT_REPLY` kênh INAPP (migration thêm dòng `notification_templates` như các migration mẫu trước).
 - Giữ dữ liệu: thêm lớp `support_chat` vào `data-retention.service.ts`, mặc định 365 ngày **(quyết định của agent)**; xoá tài khoản (`account-deletion.service.ts`) xoá hội thoại và tin.
 
