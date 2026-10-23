@@ -623,3 +623,52 @@ describe('SystemConfigService.set — mặc định hoa hồng không vượt tr
     await expect(svc({}).set('affiliate.max_rate_pct', 8, 'a')).resolves.toBeUndefined();
   });
 });
+
+describe('SystemConfigService.set — khoá chat CSKH (chat.*)', () => {
+  function mk(existing: unknown) {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: existing }), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+  const hours = { start: '08:00', end: '21:00' };
+
+  it('chat.hours nhận {start, end} hợp lệ', async () => {
+    const { svc, tx } = mk(hours);
+    await svc.set('chat.hours', { start: '07:30', end: '22:00' }, 'admin1');
+    expect(tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['giờ sai dạng', { start: '8h', end: '21:00' }],
+    ['start >= end', { start: '21:00', end: '08:00' }],
+    ['start == end', { start: '08:00', end: '08:00' }],
+    ['thiếu end', { start: '08:00' }],
+    ['giờ 24:00', { start: '08:00', end: '24:00' }],
+  ])('chat.hours từ chối: %s', async (_name, value) => {
+    const { svc, tx } = mk(hours);
+    await expect(svc.set('chat.hours', value, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.systemConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('chat.enabled chỉ nhận boolean', async () => {
+    const ok = mk(false);
+    await ok.svc.set('chat.enabled', true, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    const bad = mk(false);
+    await expect(bad.svc.set('chat.enabled', 'true', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('retention.support_chat_days: số nguyên 90–3650', async () => {
+    const ok = mk(365);
+    await ok.svc.set('retention.support_chat_days', 90, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    await expect(mk(365).svc.set('retention.support_chat_days', 89, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mk(365).svc.set('retention.support_chat_days', 3651, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(mk(365).svc.set('retention.support_chat_days', 100.5, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  });
+});

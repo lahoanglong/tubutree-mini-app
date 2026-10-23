@@ -311,6 +311,12 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'retention.notification_logs_days', value: 180, category: 'retention', description: 'Giữ notification_logs bao nhiêu ngày (sàn 30)', createOnly: true },
   { key: 'retention.webhook_events_days', value: 90, category: 'retention', description: 'Giữ log webhook Pancake/Gomdon/tin nhắn OA bao nhiêu ngày (sàn 14)', createOnly: true },
   { key: 'retention.refresh_sessions_days', value: 30, category: 'retention', description: 'Xoá refresh token đã thu hồi/hết hạn quá bao nhiêu ngày (sàn 7)', createOnly: true },
+  // Chat CSKH qua nhóm Zalo. createOnly: admin chỉnh rồi thì seed không reset; migration 20261023100000_support_chat tạo cùng các dòng cho PROD.
+  { key: 'chat.enabled', value: false, category: 'chat', description: 'Bật chat CSKH trong Mini App và web. Tắt thì khách không gửi được tin mới, lịch sử vẫn xem được.', createOnly: true },
+  { key: 'chat.zalo_group_id', value: '', category: 'chat', description: 'Mã nhóm Zalo nhận tin chuyển từ khách (chọn ở tab Chat CSKH, không gõ tay).', createOnly: true },
+  { key: 'chat.hours', value: { start: '08:00', end: '21:00' }, category: 'chat', description: 'Giờ nhân viên trả lời chat (giờ VN, dạng HH:MM). Ngoài giờ khách nhận lời nhắn tự động một lần mỗi ngày.', createOnly: true },
+  { key: 'chat.off_hours_text', value: 'Tubu Tree trả lời từ 8:00 đến 21:00 mỗi ngày. Tin của bạn đã được ghi lại, nhân viên sẽ trả lời khi vào giờ.', category: 'chat', description: 'Lời nhắn tự động gửi khách khi nhắn ngoài giờ.', createOnly: true },
+  { key: 'retention.support_chat_days', value: 365, category: 'retention', description: 'Giữ tin chat CSKH và lần chuyển sang Zalo bao nhiêu ngày (sàn 90)', createOnly: true },
   { key: 'waste.enabled', value: false, category: 'waste', description: 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.', createOnly: true },
   { key: 'waste.lane_dropoff_enabled', value: true, category: 'waste', description: 'Bật cách giao Mang tới điểm nhận cho yêu cầu mới.', createOnly: true },
   { key: 'waste.lane_mailin_enabled', value: true, category: 'waste', description: 'Bật cách giao Gửi về kho cho yêu cầu mới.', createOnly: true },
@@ -833,6 +839,9 @@ export const NOTIFICATION_TEMPLATES = [
   // admin xác nhận, không tự trừ nợ (DealerService.reportCreditPayment/adminRecordCreditPayment).
   { id: 'nt-dealer-credit-reported', code: 'DEALER_CREDIT_PAYMENT_REPORTED', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.', createOnly: true },
   { id: 'nt-dealer-credit-confirmed', code: 'DEALER_CREDIT_PAYMENT_CONFIRMED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã xác nhận nhận {{amount}}đ trả nợ của bạn — công nợ đã được cập nhật. Cảm ơn bạn 🌿', createOnly: true },
+  // Chat CSKH: cùng mã/nội dung với migration 20261023100000_support_chat. createOnly: admin sửa nội dung rồi thì seed không ghi đè.
+  { id: 'nt-support-chat-reply', code: 'SUPPORT_CHAT_REPLY', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã trả lời bạn: {{preview}}', createOnly: true },
+  { id: 'nt-ops-zalo-bridge-down', code: 'OPS_ZALO_BRIDGE_DOWN', channel: 'INAPP', bodyTemplate: 'Cầu nối Zalo của chat CSKH mất kết nối từ {{since}} ({{state}}). Vào tab Chat CSKH để kết nối lại.', createOnly: true },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   // PD-3 OQ-10: báo khách có xu đã quy sang Điểm Xanh (1.000 xu = 1 điểm, làm tròn lên). Cùng mã/nội dung với migration

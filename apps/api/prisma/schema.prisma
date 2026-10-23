@@ -3712,3 +3712,101 @@ model WasteGiftRedemption {
   @@index([userId, createdAt])
   @@map("waste_gift_redemptions")
 }
+
+enum SupportSender {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+enum SupportSource {
+  MINIAPP
+  WEB
+  ZALO
+  ADMIN
+  SYSTEM
+}
+
+enum SupportForwardStatus {
+  PENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
+/// Chat CSKH: mỗi khách một hội thoại, mã 4 ký tự để nhân viên trả lời trong nhóm Zalo.
+model SupportConversation {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  code                 String    @unique
+  lastMessageAt        DateTime  @default(now())
+  customerReadAt       DateTime?
+  /// Ngày VN (YYYY-MM-DD) đã gửi lời nhắn ngoài giờ gần nhất, để mỗi ngày chỉ nhắn một lần.
+  lastOffHoursNoticeOn String?
+  blockedAt            DateTime?
+  blockedByUserId      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  messages SupportMessage[]
+  forwards SupportForward[]
+
+  @@map("support_conversations")
+}
+
+model SupportMessage {
+  id             String        @id @default(cuid())
+  conversationId String
+  sender         SupportSender
+  source         SupportSource
+  body           String        @default("")
+  imageUrl       String?
+  context        Json?
+  /// Do app khách tự sinh; cùng cặp (conversationId, clientMsgId) gửi lại thì trả tin cũ.
+  clientMsgId    String?
+  zaloMsgId      String?       @unique
+  staffName      String?
+  adminUserId    String?
+  forwardId      String?
+  recalledAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, clientMsgId])
+  @@index([conversationId, createdAt])
+  @@map("support_messages")
+}
+
+model SupportForward {
+  id             String               @id @default(cuid())
+  conversationId String
+  status         SupportForwardStatus @default(PENDING)
+  zaloMsgId      String?              @unique
+  attempts       Int                  @default(0)
+  lastError      String?
+  groupId        String
+  sentAt         DateTime?
+  createdAt      DateTime             @default(now())
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([conversationId])
+  @@map("support_forwards")
+}
+
+/// Một dòng duy nhất (id 'main'): cron ghi mỗi phút nên không để ở system_configs (sẽ đầy SystemConfigHistory).
+model SupportBridgeStatus {
+  id            String    @id @default("main")
+  state         String
+  since         DateTime
+  lastError     String?
+  zaloUid       String?
+  displayName   String?
+  avatar        String?
+  checkedAt     DateTime
+  downAlertedAt DateTime?
+
+  @@map("support_bridge_status")
+}
