@@ -5,7 +5,7 @@ type Ev = Parameters<BridgeEventsService['handle']>[0];
 const msg = (o: Record<string, unknown> = {}): Ev =>
   ({ type: 'message', groupId: 'g1', msgId: 'z100', cliMsgId: 'c100', uidFrom: 'u9', dName: 'Hoa CSKH', isSelf: false, ts: 1, text: 'Dạ vâng', imageUrl: null, quote: null, ...o }) as Ev;
 
-function setup(opts: { forwards?: any[]; convs?: any[]; createError?: unknown; blocked?: boolean; bridge?: any } = {}) {
+function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; createError?: unknown; blocked?: boolean; bridge?: any } = {}) {
   const convs = opts.convs ?? [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: opts.blocked ? new Date() : null }];
   const forwards = opts.forwards ?? [];
   const created: any[] = [];
@@ -25,6 +25,7 @@ function setup(opts: { forwards?: any[]; convs?: any[]; createError?: unknown; b
         created.push(data);
         return Promise.resolve({ id: `m${created.length}`, createdAt: new Date(), ...data });
       }),
+      findUnique: jest.fn().mockImplementation(({ where }: any) => Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId) ?? null)),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null), upsert: jest.fn().mockResolvedValue({}) },
@@ -35,7 +36,7 @@ function setup(opts: { forwards?: any[]; convs?: any[]; createError?: unknown; b
 }
 
 const fwd = (o: Record<string, unknown> = {}) => ({ id: 'f1', conversationId: 'c1', status: 'SENT', zaloMsgId: 'zf1', createdAt: new Date(), ...o });
-const quoteF1 = { globalMsgId: 'zf1', cliMsgId: '1' };
+const quoteF1 = { globalMsgId: 'zf1', cliMsgId: '1', text: null };
 
 describe('BridgeEventsService.handle message', () => {
   it('msgId trùng zaloMsgId của forward thì bỏ', async () => {
@@ -57,12 +58,46 @@ describe('BridgeEventsService.handle message', () => {
     expect(created[0]).toMatchObject({ conversationId: 'c1', sender: 'STAFF', source: 'ZALO', body: 'Dạ em kiểm tra ạ', zaloMsgId: 'z100', staffName: 'Hoa CSKH' });
   });
 
+  const HEADER = '#K7Q2 · Lan · 09••••234\n—\nxin chào';
+
+  it('trích forward UNKNOWN (chưa có zaloMsgId) mà tin trích có đầu tin chuyển: STAFF đúng hội thoại, không 503', async () => {
+    const { svc, created } = setup({ forwards: [fwd({ status: 'UNKNOWN', zaloMsgId: null })] });
+    const r = await svc.handle(msg({ text: 'Dạ em kiểm tra', quote: { globalMsgId: 'moi-ve', cliMsgId: '1', text: HEADER } }));
+    expect(r).toEqual({ status: 200, body: { ok: true } });
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ conversationId: 'c1', body: 'Dạ em kiểm tra' });
+  });
+
+  it('trích câu trả lời STAFF cũ: cùng hội thoại', async () => {
+    const { svc, created } = setup({ staffMsgs: [{ zaloMsgId: 'zstaff', conversationId: 'c1' }] });
+    await svc.handle(msg({ text: 'Thêm nữa ạ', quote: { globalMsgId: 'zstaff', cliMsgId: '1', text: 'Dạ vâng' } }));
+    expect(created[0]).toMatchObject({ conversationId: 'c1', body: 'Thêm nữa ạ' });
+  });
+
+  it('tin trích không phải đầu tin chuyển và không có mã: giữ hành vi cũ (bỏ, hoặc 503 khi còn PENDING)', async () => {
+    const quote = { globalMsgId: 'chua-co', cliMsgId: '1', text: 'một câu bình thường' };
+    const a = setup();
+    expect(await a.svc.handle(msg({ quote }))).toEqual({ status: 200, body: { ok: true } });
+    expect(a.created).toHaveLength(0);
+    const b = setup({ forwards: [fwd({ status: 'PENDING', zaloMsgId: null })] });
+    expect((await b.svc.handle(msg({ quote }))).status).toBe(503);
+  });
+
+  it('forward khớp nhưng hội thoại đã xoá: 200 bỏ, không 503 dù còn forward PENDING khác', async () => {
+    const { svc, created } = setup({
+      convs: [],
+      forwards: [fwd({ conversationId: 'gone' }), fwd({ id: 'f2', status: 'PENDING', zaloMsgId: null })],
+    });
+    expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true } });
+    expect(created).toHaveLength(0);
+  });
+
   it('trích tin chuyển hôm trước khớp đúng hội thoại', async () => {
     const { svc, created } = setup({
       convs: [{ id: 'c1', userId: 'u1', code: 'AAAA', blockedAt: null }, { id: 'c2', userId: 'u2', code: 'BBBB', blockedAt: null }],
       forwards: [fwd({ conversationId: 'c2', zaloMsgId: 'zold', createdAt: new Date(Date.now() - 86_400_000) })],
     });
-    await svc.handle(msg({ quote: { globalMsgId: 'zold', cliMsgId: '1' } }));
+    await svc.handle(msg({ quote: { globalMsgId: 'zold', cliMsgId: '1', text: null } }));
     expect(created[0].conversationId).toBe('c2');
   });
 
@@ -86,13 +121,13 @@ describe('BridgeEventsService.handle message', () => {
 
   it('trích chưa khớp mà còn forward PENDING chưa có zaloMsgId trong 5 phút: 503', async () => {
     const { svc, created } = setup({ forwards: [fwd({ status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 60_000) })] });
-    expect(await svc.handle(msg({ quote: { globalMsgId: 'chua-co', cliMsgId: '1' } }))).toEqual({ status: 503, body: { retry: true } });
+    expect(await svc.handle(msg({ quote: { globalMsgId: 'chua-co', cliMsgId: '1', text: null } }))).toEqual({ status: 503, body: { retry: true } });
     expect(created).toHaveLength(0);
   });
 
   it('forward PENDING quá 5 phút: bỏ, 200', async () => {
     const { svc } = setup({ forwards: [fwd({ status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 6 * 60_000) })] });
-    expect(await svc.handle(msg({ quote: { globalMsgId: 'chua-co', cliMsgId: '1' } }))).toEqual({ status: 200, body: { ok: true } });
+    expect(await svc.handle(msg({ quote: { globalMsgId: 'chua-co', cliMsgId: '1', text: null } }))).toEqual({ status: 200, body: { ok: true } });
   });
 
   it('không có trích thì không 503 dù còn forward PENDING', async () => {
@@ -161,6 +196,12 @@ describe('BridgeEventsService.handle message', () => {
 describe('replyPreview', () => {
   it('ảnh không chữ: câu trung tính', () => {
     expect(replyPreview('', 'https://x/y.jpg')).toBe('Ảnh từ Tubu Tree');
+  });
+  it('cắt theo ký tự: emoji ở ranh giới không bị chẻ đôi', () => {
+    const p = replyPreview(`${'a'.repeat(58)}😀😀😀`, null);
+    expect(Array.from(p)).toHaveLength(60);
+    expect(p).toBe(`${'a'.repeat(58)}😀…`);
+    expect(p).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
   });
   it('không lộ số điện thoại, gộp khoảng trắng, cắt 60', () => {
     expect(replyPreview('Gọi 0901 234 567 nhé', null)).not.toMatch(/\d{4}/);

@@ -28,7 +28,7 @@ export interface ZcaMessageLike {
     dName: string;
     ts: string;
     content: string | Record<string, unknown>;
-    quote?: { globalMsgId: number; cliMsgId: number };
+    quote?: { globalMsgId: number; cliMsgId: number; msg?: unknown };
   };
 }
 
@@ -171,7 +171,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
       ts: Number(m.data.ts),
       text,
       imageUrl,
-      quote: q ? { globalMsgId: String(q.globalMsgId), cliMsgId: String(q.cliMsgId) } : null,
+      quote: q ? { globalMsgId: String(q.globalMsgId), cliMsgId: String(q.cliMsgId), text: typeof q.msg === 'string' ? q.msg : null } : null,
     };
   }
 

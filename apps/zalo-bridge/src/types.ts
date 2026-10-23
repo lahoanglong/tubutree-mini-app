@@ -12,7 +12,7 @@ export type ZaloBridgeEvent =
       ts: number;
       text: string | null;
       imageUrl: string | null;
-      quote: { globalMsgId: string; cliMsgId: string } | null;
+      quote: { globalMsgId: string; cliMsgId: string; text: string | null } | null;
     }
   | { type: 'undo'; groupId: string; msgId: string }
   | {

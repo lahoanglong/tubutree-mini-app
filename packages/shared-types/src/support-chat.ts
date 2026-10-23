@@ -17,7 +17,7 @@ export type ZaloBridgeState = 'CONNECTED' | 'CONNECTING' | 'NEED_QR' | 'KICKED' 
 export type ZaloBridgeEvent =
   | { type: 'message'; groupId: string; msgId: string; cliMsgId: string; uidFrom: string; dName: string;
       isSelf: boolean; ts: number; text: string | null; imageUrl: string | null;
-      quote: { globalMsgId: string; cliMsgId: string } | null }
+      quote: { globalMsgId: string; cliMsgId: string; text: string | null } | null }
   | { type: 'undo'; groupId: string; msgId: string }
   | { type: 'state'; state: Exclude<ZaloBridgeState, 'UNREACHABLE'>; since: string; lastError: string | null;
       zaloUid: string | null; displayName: string | null };

@@ -123,7 +123,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
   it('trả lời tới khi forward còn PENDING: 503, sau khi ghi zaloMsgId gửi lại thì đúng một tin STAFF', async () => {
     const { conv, f } = await convWithForward();
     const zaloMsgId = `zf-${randCode(10)}`;
-    const e = reply({ quote: { globalMsgId: zaloMsgId, cliMsgId: '1' } });
+    const e = reply({ quote: { globalMsgId: zaloMsgId, cliMsgId: '1', text: null } });
 
     expect(await events.handle(e)).toEqual({ status: 503, body: { retry: true } });
     expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'STAFF' } })).toBe(0);

@@ -62,7 +62,7 @@
 
     # Cổng nội bộ của cầu nối Zalo (/api/internal/*): cầu nối gọi thẳng container trong mạng Docker, không qua vhost,
     # nên từ ngoài luôn từ chối. Chỉ khớp đúng tiền tố này, các đường /api/* khác không đổi.
-    <LocationMatch "^/api/internal(/|$)">
+    <LocationMatch "(?i)^/api/internal(/|$)">
         Require all denied
     </LocationMatch>
 

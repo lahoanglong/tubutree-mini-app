@@ -111,7 +111,16 @@ describe('zalo-client: nhận tin', () => {
     const s = await connected();
     s.api.listener.emit('message', groupMsg({}, { quote: { globalMsgId: 123, cliMsgId: 7 } }));
     await vi.waitFor(() => expect(s.messages()).toHaveLength(1));
-    expect(s.messages()[0].quote).toEqual({ globalMsgId: '123', cliMsgId: '7' });
+    expect(s.messages()[0].quote).toEqual({ globalMsgId: '123', cliMsgId: '7', text: null });
+  });
+
+  it('quote.msg chuỗi thành quote.text, không phải chuỗi thì null', async () => {
+    const s = await connected();
+    s.api.listener.emit('message', groupMsg({}, { quote: { globalMsgId: 1, cliMsgId: 2, msg: '#K7Q2 · Lan\n—\nhi' } }));
+    s.api.listener.emit('message', groupMsg({}, { msgId: '901', quote: { globalMsgId: 3, cliMsgId: 4, msg: { a: 1 } } }));
+    await vi.waitFor(() => expect(s.messages()).toHaveLength(2));
+    expect(s.messages()[0].quote?.text).toBe('#K7Q2 · Lan\n—\nhi');
+    expect(s.messages()[1].quote?.text).toBeNull();
   });
 
   it('chat.photo lấy href làm imageUrl, chú thích làm text, không có thì null', async () => {

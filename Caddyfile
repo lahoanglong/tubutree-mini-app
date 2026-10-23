@@ -13,7 +13,7 @@ app.{$WEB_DOMAIN} {
 api.{$WEB_DOMAIN} {
 	encode gzip zstd
 	# Cổng nội bộ của cầu nối Zalo: cầu nối gọi api:3001 trong mạng Docker, từ ngoài không được chạm tới.
-	@internal path /api/internal/*
+	@internal path_regexp (?i)^/api/internal(/|$)
 	respond @internal 404
 	reverse_proxy api:3001
 }

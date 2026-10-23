@@ -23,7 +23,9 @@ const isP2002 = (e: unknown) => typeof e === 'object' && e !== null && (e as { c
 export function replyPreview(body: string, imageUrl: string | null): string {
   const text = body.replace(/\d[\d .-]{6,}\d/g, '…').replace(/\s+/g, ' ').trim();
   if (!text) return imageUrl ? IMAGE_PREVIEW : '';
-  return text.length <= PREVIEW_MAX ? text : `${text.slice(0, PREVIEW_MAX - 1)}…`;
+  // Cắt theo ký tự (code point), không theo đơn vị UTF-16: cắt giữa cặp thay thế của emoji sinh ký tự hỏng.
+  const chars = Array.from(text);
+  return chars.length <= PREVIEW_MAX ? text : `${chars.slice(0, PREVIEW_MAX - 1).join('')}…`;
 }
 
 @Injectable()
@@ -106,10 +108,15 @@ export class BridgeEventsService {
   ): Promise<{ id: string; userId: string } | 'retry' | 'unknown' | null> {
     if (e.quote) {
       const forward = await this.prisma.supportForward.findUnique({ where: { zaloMsgId: e.quote.globalMsgId } });
-      if (forward) {
-        const conv = await this.prisma.supportConversation.findUnique({ where: { id: forward.conversationId } });
-        if (conv) return conv;
-      }
+      // Forward khớp mà khách đã xoá: bỏ hẳn, không để rơi xuống nhánh 503 chờ mãi một tin không bao giờ khớp.
+      if (forward) return this.prisma.supportConversation.findUnique({ where: { id: forward.conversationId } });
+      // Nhân viên trích lại chính câu trả lời trước đó của mình.
+      const staffMsg = await this.prisma.supportMessage.findUnique({ where: { zaloMsgId: e.quote.globalMsgId }, select: { conversationId: true } });
+      if (staffMsg) return this.prisma.supportConversation.findUnique({ where: { id: staffMsg.conversationId } });
+      // Forward kết thúc UNKNOWN thì chưa có zaloMsgId, nhưng đầu tin được trích vẫn mang mã hội thoại.
+      const quotedCode = e.quote.text && isForwardHeader(e.quote.text) ? parseStaffReply(e.quote.text).code : null;
+      const byQuotedCode = quotedCode ? await this.prisma.supportConversation.findUnique({ where: { code: quotedCode } }) : null;
+      if (byQuotedCode) return byQuotedCode;
     }
     const byCode = code ? await this.prisma.supportConversation.findUnique({ where: { code } }) : null;
     if (byCode) return byCode;
