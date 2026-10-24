@@ -68,7 +68,7 @@ export interface ZaloClientDeps {
   zalo: ZaloLike;
   credentials: Pick<CredentialStore, 'load' | 'save' | 'clear'>;
   configStore: Pick<ConfigStore, 'get' | 'set'>;
-  outbox: Pick<Outbox, 'push' | 'size'>;
+  outbox: Pick<Outbox, 'push' | 'size' | 'dropped'>;
   echo: EchoFilter;
   queue: SendQueue;
   dedupe: SendDedupe;
@@ -159,6 +159,10 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let profile: { uid: string; displayName: string | null; avatar: string | null } | null = null;
   const ownProfile = () => (profile !== null && profile.uid === zaloUid ? profile : null);
   let lastPushedKey: string | null = null;
+  // Dấu hiệu listener còn nghe được hay không (health). selfListen bật nên mỗi tin cầu nối gửi đi đều dội lại thành một sự kiện.
+  let lastEventAt: number | null = null;
+  let lastSentAt: number | null = null;
+  let listenerErrors = 0;
   let qr: QrState = idleQr();
   let qrAttempt: QrAttempt | null = null;
   let sessionSaveError: string | null = null;
@@ -305,13 +309,23 @@ export function createZaloClient(deps: ZaloClientDeps) {
     const c = m.data.content;
     let text: string | null = null;
     let imageUrl: string | null = null;
+    let unsupportedType: string | undefined;
     if (typeof c === 'string') text = c;
     // Cùng TAttachmentContent cho ảnh, tệp, thoại, video, link: chỉ msgType chat.photo mới là ảnh, còn lại bỏ (spec 4.3).
     else if (m.data.msgType === 'chat.photo' && typeof c?.href === 'string') {
       imageUrl = c.href;
       const caption = [c.title, c.description].find((x) => typeof x === 'string' && x.trim() !== '');
       text = typeof caption === 'string' ? caption : null;
-    } else return null;
+    } else if (m.data.msgType === 'chat.recommended') {
+      // Tin dán link: không có chuỗi thuần, ghép title (nơi mã #MÃ có thể nằm) với href để nhân viên vẫn trả lời khách bằng link được.
+      const parts = [c?.title, c?.href].filter((x): x is string => typeof x === 'string' && x.trim() !== '');
+      if (parts.length === 0) return null;
+      text = parts.join(' ');
+    } else {
+      // Chỉ trả lời có trích tin mới đáng báo "chưa tới khách"; tin tự gửi (isSelf) không phải của nhân viên đang chờ phản hồi.
+      if (!m.data.quote || m.isSelf) return null;
+      unsupportedType = typeof m.data.msgType === 'string' && m.data.msgType ? m.data.msgType : 'unknown';
+    }
     const q = m.data.quote;
     return {
       type: 'message',
@@ -325,6 +339,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
       text,
       imageUrl,
       quote: q ? { globalMsgId: String(q.globalMsgId), cliMsgId: String(q.cliMsgId), text: typeof q.msg === 'string' ? q.msg : null } : null,
+      ...(unsupportedType ? { unsupportedType } : {}),
     };
   }
 
@@ -332,6 +347,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
     const gen = ++generation;
     detach();
     api = next;
+    lastSentAt = null;
+    listenerErrors = 0;
     const uid = next.getOwnId();
     zaloUid = uid;
     let fetched: { displayName: string; avatar: string } | null = null;
@@ -358,6 +375,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
     }));
 
     next.listener.on('message', live((m: ZcaMessageLike) => {
+      lastEventAt = now();
+      listenerErrors = 0;
       const groupId = configStore.get().groupId;
       if (!groupId || m.type !== GROUP_THREAD || m.threadId !== groupId) return;
       const ev = toMessageEvent(m, groupId);
@@ -386,6 +405,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     // zca-js cũng phát error cho một khung không giải mã được trên socket vẫn khoẻ (dist/apis/listen.js:358-360 trong bộ xử lý onmessage, và :141-144 cho ws.onerror); chỉ ghi nhận,
     // việc nối lại do closed/disconnected quyết định.
     next.listener.on('error', live(() => {
+      listenerErrors++;
       console.error('[zalo] listener báo lỗi (socket vẫn mở)');
     }));
 
@@ -608,6 +628,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
       if (api !== current || state !== 'CONNECTED') throw new BridgeError('NOT_CONNECTED');
       // Phải ghi nhận trước khi gọi: Zalo có thể phát lại tin (isSelf) trước khi sendMessage trả về.
       echo.noteSending(text);
+      // Lấy mốc trước khi gọi: echo có thể tới trước lúc sendMessage trả về, và lastSentAt muộn hơn lastEventAt sẽ bị API đọc nhầm là điếc.
+      const startedAt = now();
       let res: Awaited<ReturnType<ZcaApiLike['sendMessage']>>;
       try {
         res = await current.sendMessage({ msg: text }, groupId, GROUP_THREAD);
@@ -620,6 +642,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
       // sendMessage.d.ts:2). Hai giá trị cùng một mã tin nhưng số dài có thể mất chính xác khi qua number, nên
       // khớp theo nội dung (60 giây) là lưới an toàn khi mã không trùng.
       echo.noteSent(id, text);
+      lastSentAt = startedAt;
       return id;
     });
     dedupe.set(idempotencyKey, msgId);
@@ -660,6 +683,10 @@ export function createZaloClient(deps: ZaloClientDeps) {
         queueSize: queue.size(),
         outboxSize: outbox.size(),
         groupId: configStore.get().groupId,
+        lastEventAt: lastEventAt === null ? null : new Date(lastEventAt).toISOString(),
+        lastSentAt: lastSentAt === null ? null : new Date(lastSentAt).toISOString(),
+        listenerErrors,
+        outboxDropped: outbox.dropped(),
       };
     },
   };

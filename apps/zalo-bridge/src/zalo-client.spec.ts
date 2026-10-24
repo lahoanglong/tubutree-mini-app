@@ -33,7 +33,7 @@ const CREDS = { cookie: [], imei: 'i', userAgent: 'ua', savedAt: 'x' };
 
 function setup(opts: { groupId?: string | null; creds?: boolean; login?: () => Promise<ZcaApiLike>; api?: ZcaApiLike | null } = {}) {
   const pushed: ZaloBridgeEvent[] = [];
-  const outbox = { push: vi.fn(async (e: ZaloBridgeEvent) => void pushed.push(e)), size: () => 0 };
+  const outbox = { push: vi.fn(async (e: ZaloBridgeEvent) => void pushed.push(e)), size: () => 0, dropped: () => 0 };
   let groupId = opts.groupId === undefined ? 'G1' : opts.groupId;
   const configStore = {
     get: () => ({ groupId }),
@@ -132,13 +132,35 @@ describe('zalo-client: nhận tin', () => {
     expect(s.messages()[1]).toMatchObject({ imageUrl: 'https://img/y.jpg', text: null });
   });
 
-  it('tệp, link, thoại, video có href nhưng không phải chat.photo thì bỏ', async () => {
+  it('tệp, thoại, video, sticker có href mà không trích tin thì bỏ, có trích thì đẩy kèm unsupportedType', async () => {
     const s = await connected();
-    for (const msgType of ['share.file', 'chat.recommended', 'chat.voice', 'chat.video.msg', 'chat.sticker']) {
-      s.api.listener.emit('message', groupMsg({}, { msgType, content: { href: 'https://x/f', title: 't' } }));
-    }
+    const types = ['share.file', 'chat.voice', 'chat.video.msg', 'chat.sticker'];
+    for (const msgType of types) s.api.listener.emit('message', groupMsg({}, { msgType, content: { href: 'https://x/f', title: 't' } }));
     await new Promise((r) => setTimeout(r, 10));
     expect(s.messages()).toHaveLength(0);
+    types.forEach((msgType, i) =>
+      s.api.listener.emit('message', groupMsg({}, { msgId: `8${i}`, msgType, content: { href: 'https://x/f' }, quote: { globalMsgId: 5, cliMsgId: 6, msg: '#K7Q2 · Lan' } })),
+    );
+    await vi.waitFor(() => expect(s.messages()).toHaveLength(4));
+    expect(s.messages().map((m) => m.unsupportedType)).toEqual(types);
+    expect(s.messages()[0]).toMatchObject({ text: null, imageUrl: null });
+  });
+
+  it('tệp không phải chữ do chính tài khoản cầu nối gửi thì không đẩy', async () => {
+    const s = await connected();
+    s.api.listener.emit('message', groupMsg({ isSelf: true }, { msgType: 'chat.sticker', content: { href: 'x' }, quote: { globalMsgId: 5, cliMsgId: 6 } }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(s.messages()).toHaveLength(0);
+  });
+
+  it('chat.recommended (link) lấy title và href làm text để #MÃ vẫn chạy', async () => {
+    const s = await connected();
+    s.api.listener.emit('message', groupMsg({}, { msgType: 'chat.recommended', content: { title: '#K7Q2 xem https://a.vn/x', href: 'https://a.vn/x', description: 'mô tả trang' } }));
+    s.api.listener.emit('message', groupMsg({}, { msgId: '901', msgType: 'chat.recommended', content: { title: '', href: 'https://b.vn' } }));
+    await vi.waitFor(() => expect(s.messages()).toHaveLength(2));
+    expect(s.messages()[0]).toMatchObject({ text: '#K7Q2 xem https://a.vn/x https://a.vn/x', imageUrl: null });
+    expect(s.messages()[1]).toMatchObject({ text: 'https://b.vn' });
+    expect(s.messages()[0].unsupportedType).toBeUndefined();
   });
 
   it('nội dung không phải chữ cũng không phải ảnh thì bỏ', async () => {
@@ -186,6 +208,67 @@ describe('zalo-client: echo', () => {
     await s.client.send({ idempotencyKey: 'k2', text: 'Sớm' });
     await new Promise((r) => setTimeout(r, 10));
     expect(s.messages()).toHaveLength(0);
+  });
+});
+
+describe('zalo-client: dấu hiệu nghe tin (health)', () => {
+  const iso = (t: number) => new Date(t).toISOString();
+  afterEach(() => vi.restoreAllMocks());
+
+  it('lúc mới nối chưa có tin: lastEventAt, lastSentAt null, listenerErrors 0, outboxDropped theo outbox', async () => {
+    const s = await connected();
+    expect(s.client.state()).toMatchObject({ lastEventAt: null, lastSentAt: null, listenerErrors: 0, outboxDropped: 0 });
+  });
+
+  it('mọi tin giải mã được đều ghi lastEventAt, kể cả echo bị lọc và tin nhóm khác', async () => {
+    let t = 1_700_000_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => t);
+    const s = await connected();
+    await s.client.send({ idempotencyKey: 'k', text: 'Chào' });
+    t += 2_000;
+    s.api.listener.emit('message', groupMsg({ isSelf: true }, { msgId: '555', content: 'Chào' }));
+    expect(s.messages()).toHaveLength(0);
+    expect(s.client.state().lastEventAt).toBe(iso(t));
+    t += 1_000;
+    s.api.listener.emit('message', groupMsg({ threadId: 'G2' }));
+    expect(s.client.state().lastEventAt).toBe(iso(t));
+  });
+
+  it('lastSentAt là lúc bắt đầu gửi thành công; echo tới trước khi sendMessage trả vẫn không muộn hơn lastSentAt', async () => {
+    let t = 1_700_000_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => t);
+    const api = fakeApi();
+    const s = await connected({ api });
+    api.sendMessage.mockImplementationOnce(async () => {
+      t += 50;
+      api.listener.emit('message', groupMsg({ isSelf: true }, { msgId: '777', content: 'Sớm' }));
+      t += 50;
+      return { message: { msgId: 777 }, attachment: [] };
+    });
+    const start = t;
+    await s.client.send({ idempotencyKey: 'k', text: 'Sớm' });
+    const h = s.client.state();
+    expect(h.lastSentAt).toBe(iso(start));
+    expect(Date.parse(h.lastEventAt!)).toBeGreaterThanOrEqual(Date.parse(h.lastSentAt!));
+  });
+
+  it('gửi lỗi không đổi lastSentAt', async () => {
+    const api = fakeApi();
+    const s = await connected({ api });
+    api.sendMessage.mockRejectedValueOnce(new Error('boom'));
+    await expect(s.client.send({ idempotencyKey: 'k', text: 'a' })).rejects.toThrow();
+    expect(s.client.state().lastSentAt).toBeNull();
+  });
+
+  it('listenerErrors đếm lỗi listener và về 0 khi có tin giải mã được', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const s = await connected();
+    s.api.listener.emit('error', new Error('x'));
+    s.api.listener.emit('error', new Error('y'));
+    expect(s.client.state().listenerErrors).toBe(2);
+    s.api.listener.emit('message', groupMsg());
+    expect(s.client.state().listenerErrors).toBe(0);
+    err.mockRestore();
   });
 });
 

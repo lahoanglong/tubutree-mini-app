@@ -13,6 +13,8 @@ export type ZaloBridgeEvent =
       text: string | null;
       imageUrl: string | null;
       quote: { globalMsgId: string; cliMsgId: string; text: string | null } | null;
+      // msgType của tin trả lời trích tin mà cầu nối không chuyển được (sticker, tệp, thoại...); thiếu = tin chữ/ảnh bình thường
+      unsupportedType?: string;
     }
   | { type: 'undo'; groupId: string; msgId: string }
   | {
@@ -34,6 +36,10 @@ export interface ZaloBridgeHealth {
   queueSize: number;
   outboxSize: number;
   groupId: string | null;
+  lastEventAt: string | null;
+  lastSentAt: string | null;
+  listenerErrors: number;
+  outboxDropped: number;
 }
 
 export interface ZaloCredentials {
