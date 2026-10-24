@@ -400,6 +400,8 @@ describe('OpsHealthTab — tác vụ nền (cron_runs)', () => {
     expect(rows[0]!.textContent).toContain(`Bắt đầu ${formatDateTime(JOBS[1]!.lastStartedAt)}`);
     expect(rows[0]!.textContent).toContain(`Xong ${formatDateTime(JOBS[1]!.lastFinishedAt)}`);
     expect(rows[3]!.textContent).toContain('Bỏ qua');
+    expect(rows[3]!.textContent).toContain(`Bỏ qua lúc ${formatDateTime(JOBS[3]!.lastFinishedAt)}`);
+    expect(rows[3]!.textContent).not.toContain('Bắt đầu');
     expect(rows[3]!.querySelector('.text-danger-fg')).toBeNull();
     expect(scrollRegionProblems(c)).toEqual([]);
   });

@@ -1,5 +1,7 @@
 import { ConflictException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CronAwareLogger } from '../../../common/cron-run/cron-aware-logger';
+import { setCronRunSink, type CronRunReport } from '../../../common/cron-run/track-cron';
 import { CATALOG_SYNC_LEASE, CATALOG_SYNC_RUNNING, CatalogSyncBusyError, PancakeSyncService } from './pancake-sync.service';
 import { PancakeClient as RealPancakeClient } from './pancake.client';
 import type { PrismaService } from '../../../prisma/prisma.service';
@@ -690,21 +692,56 @@ describe('PancakeSyncService — một lượt đồng bộ một lúc trên c�
     expect((prisma.variation.upsert as jest.Mock).mock.calls.map((c) => c[0].where.pancakeId)).toEqual(['v-a']);
   });
 
-  it('cron 15 phút / quét đêm gặp lượt đang chạy → chỉ cảnh báo, không log lỗi', async () => {
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
-    try {
+  describe('lượt cron gặp lượt khác đang chạy', () => {
+    const reports: CronRunReport[] = [];
+    beforeEach(() => setCronRunSink({ record: (r) => void reports.push(r) }));
+    afterEach(() => {
+      setCronRunSink(undefined);
+      reports.length = 0;
+    });
+    const quiet = () => ({
+      warn: jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined),
+      error: jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined),
+    });
+
+    it('cron 15 phút gặp khoá của replica khác: chỉ cảnh báo, BUSY (bỏ qua)', async () => {
+      const { warn, error } = quiet();
       const prisma = makePrisma({ $queryRaw: jest.fn().mockResolvedValue([]) });
-      const svc = new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle);
-      await svc.scheduledSync();
-      await svc.nightlyFullSync();
+      await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).scheduledSync();
       expect(error).not.toHaveBeenCalled();
-      expect(warn).toHaveBeenCalledTimes(2);
       expect(warn.mock.calls[0]![0]).toContain('đang chạy');
-    } finally {
+      expect(reports[0]).toMatchObject({ outcome: 'SKIPPED', skipReason: 'BUSY' });
       warn.mockRestore();
       error.mockRestore();
-    }
+    });
+
+    it('cờ chạy cục bộ kẹt: cron 15 phút báo RUNNING để phát hiện treo áp dụng', async () => {
+      const { warn, error } = quiet();
+      const svc = new PancakeSyncService(makePrisma(), makeClient([[prod('a')]]), lifecycle);
+      (svc as unknown as { running: boolean }).running = true;
+      await svc.scheduledSync();
+      expect(reports[0]).toMatchObject({ outcome: 'SKIPPED', skipReason: 'RUNNING' });
+      warn.mockRestore();
+      error.mockRestore();
+    });
+
+    it('quét đêm gặp lượt đang chạy: là lỗi (ERRORS), không phải bỏ qua, để lần bỏ lỡ có báo động', async () => {
+      const write = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      Logger.overrideLogger(new CronAwareLogger());
+      try {
+        const prisma = makePrisma({ $queryRaw: jest.fn().mockResolvedValue([]) });
+        await new PancakeSyncService(prisma, makeClient([[prod('a')]]), lifecycle).nightlyFullSync();
+        expect(reports[0]).toMatchObject({ outcome: 'ERRORS', errorLine: expect.stringContaining('Quét đêm') });
+      } finally {
+        Logger.overrideLogger(['error']);
+        write.mockRestore();
+      }
+    });
+
+    it('quét đêm không trùng mốc lưới 15 phút của cron thường', () => {
+      const meta = Reflect.getMetadata('SCHEDULE_CRON_OPTIONS', PancakeSyncService.prototype.nightlyFullSync) as { cronTime: string };
+      expect(meta.cronTime).toBe('0 37 3 * * *');
+    });
   });
 });
 
