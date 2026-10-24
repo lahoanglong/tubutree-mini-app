@@ -83,10 +83,17 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 3. Bốn migration đều chỉ thêm (additive; bản `support_message_seen` chỉ điền cột mới), nên quay API/web về bản cũ không cần gỡ migration; bảng và cột mới nằm im không ai đọc. Không chạy `migrate down` trên PROD.
 4. Nếu tài khoản cầu nối bị khoá: chat tự rơi về chế độ chờ (mục 0.1); thay SIM/tài khoản mới và quét QR lại ở bước 4.
 
-## 7. Đăng xuất báo không xoá được tệp phiên
+## 7. Cầu nối báo không xoá được hoặc không lưu được tệp phiên
 
-Tab admin báo `LOGOUT_CLEAR_FAILED`, hoặc trạng thái cầu nối ghi "Không xoá được tệp phiên đăng nhập cũ (…)": đĩa của cầu nối từ chối xoá tệp phiên. Cầu nối đang chạy đã an toàn: nó không đăng nhập lại bằng tệp đó. Nhưng nếu khởi động lại container lúc tệp còn đó, nó sẽ đăng nhập lại tài khoản vừa đăng xuất.
+Thẻ **Cầu nối Zalo** ghi "Không xoá được tệp phiên đăng nhập cũ (…)", hoặc bấm **Đăng xuất** thì báo `LOGOUT_CLEAR_FAILED`: đĩa của cầu nối từ chối xoá tệp phiên của tài khoản đã đăng xuất. Cầu nối đang chạy vẫn an toàn, nó không đăng nhập lại bằng tệp đó. Nhưng nếu container khởi động lại lúc tệp còn đó, nó sẽ đăng nhập lại tài khoản vừa đăng xuất. Dòng này hiện ở mọi trạng thái, kể cả khi đã quét QR tài khoản khác, cho tới khi tệp được xoá hoặc ghi đè.
 
-1. Bấm **Đăng xuất** lại một lần. Lỗi do đĩa chậm thường tự hết.
-2. Vẫn báo lỗi: xoá tay tệp trong volume `zalo_bridge_data`: `docker compose -f <file compose của máy> exec zalo-bridge sh -c 'rm -f /data/credentials.enc /data/credentials.enc.*.tmp'`. Rồi kiểm tra quyền và dung lượng đĩa của máy chủ.
-3. Không vào được container: đổi `ZALO_BRIDGE_CREDENTIALS_KEY` trong `.env` (`openssl rand -base64 32`) rồi `up -d zalo-bridge`. Tệp cũ không giải mã được nữa, nên cầu nối về "Cần quét QR".
+Thẻ chỉ ghi "Không lưu được phiên đăng nhập: …" (không kèm dòng trên): phiên mới không ghi được nên khởi động lại sẽ phải quét QR lại. Xem quyền và dung lượng đĩa.
+
+1. Lời báo là `ETIMEDOUT` (đĩa chậm): đợi khoảng một phút rồi xem lại thẻ. Không còn dòng "Không xoá được…" là xong.
+2. Còn dòng đó: bấm **Đăng xuất** lại một lần.
+3. Vẫn còn: xoá tay bằng quyền root (cầu nối chạy bằng user `node`, chính user vừa bị từ chối):
+   - container đang chạy: `docker compose -f <file compose của máy> exec -u root zalo-bridge sh -c 'rm -f /data/credentials.enc /data/credentials.enc.*.tmp'`
+   - container không chạy: `docker compose -f <file compose của máy> run --rm -u root --entrypoint sh zalo-bridge -c 'rm -f /data/credentials.enc /data/credentials.enc.*.tmp'`
+
+   Rồi bấm **Đăng xuất** lại để thẻ hết báo lỗi, và kiểm tra quyền thư mục, dung lượng đĩa của máy chủ.
+4. Không xoá tay được: đổi `ZALO_BRIDGE_CREDENTIALS_KEY` trong `.env` (`openssl rand -base64 32`) rồi `docker compose -f <file compose của máy> up -d zalo-bridge`. Tệp cũ không giải mã được nữa nên cầu nối về "Cần quét QR". Tệp cũ vẫn nằm trên volume: đừng khôi phục khoá cũ từ bản sao `.env`, và xoá tệp khi vào lại được máy.
