@@ -28,6 +28,7 @@ test.describe('Chat với Tubu Tree — Mini App', () => {
     expect(state.sent[0]?.clientMsgId).toBeTruthy();
 
     const reply = page.locator('[data-sender="STAFF"]').filter({ hasText: STAFF_REPLY_TEXT });
+    await expect(reply).toHaveCount(0);
     await expect(reply).toBeVisible({ timeout: 20_000 });
     await expect(reply).toContainText('Tubu Tree');
 

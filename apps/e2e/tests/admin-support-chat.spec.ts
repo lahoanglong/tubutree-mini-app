@@ -1,5 +1,13 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type {
+  SupportAdminMessage,
+  SupportBridgeStatus,
+  SupportConversationDetail,
+  SupportConversationPage,
+  SupportConversationRow,
+  SupportZaloGroup,
+} from '../../web/src/lib/admin-client';
 import { test, expect, type MockApi } from './support/mock-api';
 
 /** Admin — tab "Chat CSKH": trạng thái cầu nối, mở hội thoại, trả lời. Mở thẳng `/admin?tab=supportChat`. */
@@ -27,8 +35,8 @@ const BRIDGE = {
   checkedAt: '2026-10-23T03:06:00.000Z',
   groupId: 'G1',
   enabled: true,
-};
-const GROUPS = { groups: [{ id: 'G1', name: 'Nhóm CSKH', memberCount: 5 }] };
+} satisfies SupportBridgeStatus;
+const GROUPS = { groups: [{ id: 'G1', name: 'Nhóm CSKH', memberCount: 5 }] satisfies SupportZaloGroup[] };
 const ROW = {
   id: 'c1',
   code: 'K7Q2',
@@ -37,18 +45,19 @@ const ROW = {
   user: { id: 'u1', fullName: 'Lan', phone: '0901234234' },
   lastMessage: { sender: 'CUSTOMER', body: 'cho mình hỏi đơn', hasImage: false },
   needsAttention: false,
-};
-const message = (over: Record<string, unknown>) => ({
+} satisfies SupportConversationRow;
+const LIST = { items: [ROW], nextCursor: null } satisfies SupportConversationPage;
+const message = (over: Partial<SupportAdminMessage>): SupportAdminMessage => ({
   id: 'm1', sender: 'CUSTOMER', source: 'MINIAPP', body: 'cho mình hỏi đơn', imageUrl: null, context: null, staffName: null,
   adminUserId: null, recalledAt: null, createdAt: '2026-10-23T09:00:00.000Z',
   forward: { id: 'f1', status: 'SENT', lastError: null, attempts: 1, resendable: false },
   ...over,
 });
-const DETAIL = {
+const detailOf = (messages: SupportAdminMessage[]): SupportConversationDetail => ({
   id: 'c1', code: 'K7Q2', blocked: false, blockedAt: null, blockedByUserId: null,
   user: { id: 'u1', fullName: 'Lan', phone: '0901234234' }, truncated: false,
-  messages: [message({})],
-};
+  messages,
+});
 
 test.describe('Admin — Chat CSKH', () => {
   test.beforeEach(async ({ page, api }) => {
@@ -61,15 +70,19 @@ test.describe('Admin — Chat CSKH', () => {
     api.get('/admin/config', []);
     api.get('/admin/support-chat/bridge', BRIDGE);
     api.get('/admin/support-chat/bridge/groups', GROUPS);
-    api.get('/admin/support-chat/conversations', { items: [ROW], nextCursor: null });
-    api.get('/admin/support-chat/conversations/c1', DETAIL);
+    api.get('/admin/support-chat/conversations', LIST);
   });
 
   test('thấy trạng thái cầu nối, mở hội thoại và trả lời', async ({ page, api }) => {
+    // Chi tiết hội thoại có trạng thái: tin vừa trả lời phải nằm trong lần tải lại, như máy chủ thật.
+    const thread: SupportAdminMessage[] = [message({})];
+    api.get('/admin/support-chat/conversations/c1', () => detailOf([...thread]));
     const replied = api.waitForCall('POST', '/admin/support-chat/conversations/c1/reply');
-    api.post('/admin/support-chat/conversations/c1/reply', ({ call }) =>
-      message({ id: 'm2', sender: 'STAFF', source: 'ADMIN', adminUserId: 'admin-1', body: (call.body as { body: string }).body, forward: null }),
-    );
+    api.post('/admin/support-chat/conversations/c1/reply', ({ call }) => {
+      const m = message({ id: 'm2', sender: 'STAFF', source: 'ADMIN', adminUserId: 'admin-1', body: (call.body as { body: string }).body, forward: null, createdAt: '2026-10-23T09:05:00.000Z' });
+      thread.push(m);
+      return m;
+    });
 
     await page.goto('/admin?tab=supportChat');
 
@@ -88,6 +101,7 @@ test.describe('Admin — Chat CSKH', () => {
     await page.getByRole('button', { name: 'Gửi trả lời' }).click();
     const call = await replied;
     expect(call.body).toEqual({ body: 'Dạ đơn mai giao ạ' });
+    await expect(page.locator('[data-msg="m2"]')).toContainText('Dạ đơn mai giao ạ');
 
     if (process.env.Q5_SCREENS === '1') {
       mkdirSync(SCREENS, { recursive: true });

@@ -27,7 +27,7 @@ test.describe('Chat với Tubu Tree — web', () => {
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 0 });
   });
 
-  test('gửi tin, lần hỏi sau có tin Tubu Tree hiện bên trái', async ({ page, api }) => {
+  test('gửi tin, lần hỏi sau có tin Tubu Tree hiện bên trái', async ({ page, api }, testInfo) => {
     const state = mockSupportChat(api);
     await page.goto('/ho-tro/chat');
 
@@ -44,6 +44,7 @@ test.describe('Chat với Tubu Tree — web', () => {
     expect(state.sent[0]?.clientMsgId).toBeTruthy();
 
     const reply = page.locator('[data-sender="STAFF"]').filter({ hasText: STAFF_REPLY_TEXT });
+    await expect(reply).toHaveCount(0);
     await expect(reply).toBeVisible({ timeout: 20_000 });
     await expect(reply).toContainText('Tubu Tree');
 
@@ -52,7 +53,8 @@ test.describe('Chat với Tubu Tree — web', () => {
     expect(box.x).toBeLessThan(myBox.x);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
-    if (process.env.Q5_SCREENS === '1') {
+    // Cả hai project web chạy spec này ở 390 px; chỉ một project ghi ảnh để hai lượt không ghi đè nhau.
+    if (process.env.Q5_SCREENS === '1' && testInfo.project.name === 'Web Customer Mobile') {
       mkdirSync(SCREENS, { recursive: true });
       await page.screenshot({ path: resolve(SCREENS, 'chat-web-390.png'), scale: 'css' });
     }

@@ -8,8 +8,10 @@ Thiết kế đầy đủ: `docs/superpowers/specs/2026-10-23-q5-chat-zalo-ca-nh
 
 1. **Zalo có thể khoá tài khoản cầu nối bất cứ lúc nào.** Điều khoản Zalo hiệu lực 05/09/2026, điều 4.7, cấm đăng nhập bằng phần mềm bên thứ ba, và `zca-js` tự cảnh báo có thể bị khoá. Vì vậy:
    - dùng **một SIM và một tài khoản Zalo riêng chỉ để làm cầu nối**, không dùng số của chủ hay nhân viên;
-   - không kết bạn, không gửi hàng loạt, chỉ chuyển tin CSKH.
-   - Khi bị khoá: khách vẫn gửi được và tin nằm chờ; admin nhận cảnh báo; nhân viên trả lời từ tab Chat CSKH; khách thấy hotline.
+   - không kết bạn, không gửi hàng loạt, chỉ chuyển tin CSKH;
+   - giãn cách gửi: cầu nối tự xếp hàng, mỗi tin cách nhau khoảng 1,5 đến 2,5 giây và tối đa 300 tin mỗi giờ, nên không bao giờ bắn dồn dập (không chỉnh các số này lên).
+
+   Khi bị khoá: khách vẫn gửi được và tin nằm chờ; admin nhận cảnh báo; nhân viên trả lời từ tab Chat CSKH; khách thấy hotline.
 2. **KHÔNG BAO GIỜ mở Zalo PC hoặc Zalo Web bằng tài khoản cầu nối.** Một tài khoản chỉ giữ một phiên web: mở Zalo PC/Web là cầu nối bị đá ra (mã 3000) và tab admin hiện "Đăng nhập nơi khác". Điện thoại thì được.
 3. **Trích tin chưa được thử trên Zalo thật.** Cách nhân viên trả lời bằng cách trích một tin trong nhóm chưa kiểm chứng với Zalo thật. Một tin bắt đầu bằng `#MÃ` (mã hội thoại, ví dụ `#K7Q2 đơn mai giao ạ`) thì luôn khớp. Hướng dẫn nhân viên dùng `#MÃ` cho chắc, và thử trích tin ở bước thử tay dưới đây.
 4. **`zca-js` có thể hỏng khi Zalo đổi giao thức.** Đã ghim đúng bản 2.1.2.
@@ -53,6 +55,7 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 3. Áp hai migration mới (chỉ thêm bảng/cột, không sửa dữ liệu cũ):
    - `20261023100000_support_chat`
    - `20261023110000_support_bridge_actions`
+   Lưu ý: trước khi hai khoá `ZALO_BRIDGE_SECRET` và `ZALO_BRIDGE_CREDENTIALS_KEY` có trong `.env`, service `zalo-bridge` từ chối khởi động và `restart: unless-stopped` làm nó khởi động lại liên tục (ồn log, không hại gì). Hoặc điền hai khoá trước, hoặc dựng các service khác theo tên (`docker compose up -d api web ...`) và để `zalo-bridge` cho sau.
 4. Dựng service mới: `docker compose -f <file compose của máy> up -d --build zalo-bridge`, rồi deploy API và web theo `docs/launch/deploy-rollback-runbook.md`. Service không có cổng ra ngoài; `/health` trả 200 cả khi đang chờ quét QR.
 
 ## 4. Bật trong tab Chat CSKH (admin)
