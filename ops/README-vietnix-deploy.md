@@ -2,7 +2,13 @@
 
 Bối cảnh đầy đủ: `docs/2026-09-12-deploy-runbook.md` mục 4.3 và memory `deploy_infra_status_2026_09.md`.
 
-## Đã làm, đã verify
+> **Bản ghi lần chạy thử 2026-09-12, không phải quy trình deploy thật.** Lần đó seed bằng `prisma:seed` (44 sản phẩm demo).
+> `prisma:seed` nay bị chặn khi `NODE_ENV=production` trừ khi đặt `ALLOW_PROD_SEED=1`
+> (`apps/api/src/modules/system-config/seed-guard.ts:8`, gọi ở `apps/api/prisma/seed.ts:929`); KHÔNG đặt biến này trên VPS.
+> Deploy thật nạp dữ liệu bằng `prisma:seed:reference --with-business-defaults` rồi `prisma:cleanup-demo`, theo
+> [runbook](../docs/launch/deploy-rollback-runbook.md) bước 7b và 7c. Nâng cấp từ bản thử `cb92dc8` sẽ có mục riêng trong runbook.
+
+## Đã làm, đã verify (lần chạy thử 2026-09)
 
 - Clone repo vào `/opt/tubutree` trên VPS (`chodeli-vps` = 14.225.207.177, SSH sẵn trong
   `~/.ssh/config` cục bộ), build + chạy bằng `docker-compose.vietnix.yml` (bản KHÔNG có Caddy —
@@ -11,7 +17,7 @@ Bối cảnh đầy đủ: `docs/2026-09-12-deploy-runbook.md` mục 4.3 và mem
 - Sửa 1 bug hạ tầng thật phát hiện khi build lần đầu: `express` là phantom dependency (chỉ resolve
   được nhờ hoist khi cài full monorepo) → container crash-loop `Cannot find module 'express'`.
   Đã thêm `express` làm dependency trực tiếp của `@tubutree/api` (commit `d80ecf2`).
-- Seed xong (44 sản phẩm mẫu, categories, coupon, quiz...). `GET /config/public` và
+- Seed bằng `prisma:seed` xong (44 sản phẩm mẫu, categories, coupon, quiz...). `GET /config/public` và
   `POST /auth/guest` (cả 2 chế độ header `x-client: web` / không có) đã test qua `curl` trên
   chính VPS — đúng như mong đợi (cookie `Secure; HttpOnly; SameSite=Lax`, `refreshToken` rỗng
   trong thân khi có header).

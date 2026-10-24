@@ -800,7 +800,15 @@ Lý do: dòng không có mã Pancake, web mới gửi `''` (chuỗi rỗng), cò
 
 ### Bước 13. Theo dõi 30 đến 60 phút rồi mới phát hành Zalo Mini App
 
-Ràng buộc 1: chỉ phát hành Mini App mới SAU khi API mới đã ổn. Trong 30 đến 60 phút: màn Sức khoẻ hệ thống không đỏ, không email báo động lạ, `$DC logs --since 30m api | grep -ci error` thấp. Chỉ khi đó mới phát hành Mini App mới: lên kênh test (`zmp deploy -t -e` ở `apps/miniapp`), quét QR kiểm trên Zalo thật, rồi mới nộp bản production. Cách làm nằm ở [DEPLOY_ZALO.md](../../DEPLOY_ZALO.md) và mục 7 của [docs/2026-10-review/99-release-readiness.md](../2026-10-review/99-release-readiness.md).
+Ràng buộc 1: chỉ phát hành Mini App mới SAU khi API mới đã ổn. Trong 30 đến 60 phút: màn Sức khoẻ hệ thống không đỏ, không email báo động lạ, `$DC logs --since 30m api | grep -ci error` thấp. Chỉ khi đó mới phát hành Mini App mới: lên kênh test (`zmp deploy -t -e` ở `apps/miniapp`), quét QR kiểm trên Zalo thật, rồi mới gửi duyệt bản production (xem ba lệnh dưới). Cách làm nằm ở [DEPLOY_ZALO.md](../../DEPLOY_ZALO.md) và mục 7 của [docs/2026-10-review/99-release-readiness.md](../2026-10-review/99-release-readiness.md).
+
+Ý nghĩa các cờ `zmp deploy`, đọc từ mã nguồn zmp-cli 4.0.5 (bản mới nhất trên npm; `apps/miniapp/package.json` không ghim zmp-cli nên máy chủ có thể cài bản khác, chạy `zmp -v` để đối chiếu):
+
+| Lệnh | Việc nó làm |
+|---|---|
+| `zmp deploy -t -e -m "<mô tả>"` | `-t` = `--testing`: tạo phiên bản **Testing**, có số phiên bản, lưu ở mục Quản lý phiên bản của Mini App. `-e` = `--existing`: bỏ các câu hỏi tương tác. `-m` = mô tả phiên bản. Đây là lệnh đưa lên **kênh test**. Chưa kiểm: `-e` có tự build lại hay chỉ đẩy thư mục `www` đã có, nên chạy `pnpm --filter @tubutree/miniapp build` trước. |
+| `zmp deploy -M production` (script `pnpm --filter @tubutree/miniapp deploy`, `apps/miniapp/package.json:10`) | `-M` = `--mode`: chỉ là tên mode môi trường khi build (đọc `.env.production`), KHÔNG phải "nộp production". Không có `-t` thì zmp hỏi loại phiên bản; mặc định là **Development**, bản này bị ghi đè ở lần deploy sau và không hiện ở Quản lý phiên bản. Nên dùng thêm `-t` nếu muốn có bản lưu để gửi duyệt. |
+| Gửi duyệt và phát hành production | KHÔNG có lệnh nào trong zmp-cli làm việc này (CLI chỉ có hai loại phiên bản: Development và Testing). Làm thủ công trên trang quản lý Mini App của Zalo (mini.zalo.me): chọn phiên bản Testing đã UAT, gửi xét duyệt, chờ Zalo duyệt, rồi phát hành. Thời gian duyệt do Zalo quyết định, tính vào lịch ra mắt. |
 
 Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã ra, màn đánh giá của Mini App mới sẽ hỏng. Chờ cho tới khi gần như không còn khả năng phải quay lại.
 

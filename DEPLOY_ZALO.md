@@ -1,7 +1,11 @@
 # DEPLOY_ZALO.md — Đưa Mini App lên Zalo (việc DUY NHẤT còn lại buổi sáng)
 
-> Backend đã tự deploy qua CI/CD (push `main`). **Chỉ còn bước đẩy Mini App lên Zalo** —
-> bước này cần đăng nhập `zmp` (phiên login nằm trên máy của Long, agent không có).
+> **Phần lớn tài liệu này là bản chụp 2026-06 và không còn đúng.** Backend KHÔNG tự deploy khi push `main`:
+> `.github/workflows/deploy.yml:16-22` đã tắt trigger `workflow_run`. Deploy backend làm tay qua SSH vào VPS Vietnix,
+> xem [docs/launch/deploy-rollback-runbook.md](docs/launch/deploy-rollback-runbook.md) và
+> [ops/README-vietnix-deploy.md](ops/README-vietnix-deploy.md). Phần còn dùng được là cách đưa Mini App lên Zalo
+> (các mục TL;DR, bundle, cài `zmp`, kiểm sau deploy). Lệnh `zmp deploy` đẩy bản nào lên đâu: xem bước 13 của runbook.
+> Bước này cần đăng nhập `zmp` (phiên login nằm trên máy của Long, agent không có).
 
 ## TL;DR (2 lệnh)
 ```bash
@@ -35,7 +39,9 @@ zmp -v
 4. Vào 1 sản phẩm → thêm giỏ → checkout COD → đơn `CONFIRMED`.
 5. Vườn Xanh: điểm danh, quiz, tưới cây hoạt động.
 
-## Backend & catalog — đã LIVE (CI/CD đêm nay)
+## Backend & catalog — bản chụp 2026-06, KHÔNG còn đúng
+
+Mục này không phản ánh hiện trạng: chưa có khách thật và chưa deploy production theo runbook. Hiện trạng và cách deploy: hai tài liệu nêu ở đầu file.
 - API `https://api.tubutree.com` + web `https://app.tubutree.com` đã rebuild qua GitHub Actions.
 - Migration `20260616000000_demo_catalog_multibrand` tự áp khi container API khởi động →
   catalog 8 thương hiệu + ảnh đã lên prod (kiểm chứng: `GET /api/brands`).
