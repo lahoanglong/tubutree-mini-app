@@ -12,8 +12,8 @@ import type { ZaloBridgeEvent, ZaloBridgeHealth, ZaloCredentials } from './types
 // Các kiểu dưới đây là phần nhỏ của zca-js 2.1.2 mà cầu nối dùng; đã đối chiếu với:
 //  - dist/models/Message.d.ts:15-50 (TMessage: msgId/cliMsgId/uidFrom/dName là string, ts là string, content là string | attachment),
 //    :54-64 (TQuote.globalMsgId/cliMsgId là number), :81-90 (GroupMessage: type, threadId, isSelf)
-//  - dist/models/Undo.d.ts:1-7,30-35 (TUndoContent.globalMsgId là number; Undo: threadId, isGroup)
-//  - dist/apis/listen.d.ts:22-31 (CloseReason.DuplicateConnection = 3000) và :33-41 (sự kiện closed/disconnected/error/connected/undo)
+//  - dist/models/Undo.d.ts:1-7,28-34 (TUndoContent.globalMsgId là number; Undo: threadId, isGroup)
+//  - dist/apis/listen.d.ts:22-27 (CloseReason: DuplicateConnection = 3000 ở :25, KickConnection = 3003 ở :26) và :28-45 (ListenerEvents: connected :29, disconnected :30, closed :31, error :32, undo :41)
 //  - dist/apis/sendMessage.d.ts:1-3 (SendMessageResult.msgId là number)
 //  - dist/models/Enum.d.ts:1-3 (ThreadType.Group = 1)
 export interface ZcaMessageLike {
@@ -87,12 +87,20 @@ export class BridgeError extends Error {
 }
 
 const GROUP_THREAD = 1;
-// DuplicateConnection và KickConnection (node_modules/zca-js/dist/apis/listen.d.ts:23-27): có người khác mở phiên, không giành lại.
+// DuplicateConnection và KickConnection (node_modules/zca-js/dist/apis/listen.d.ts:25-26): có người khác mở phiên, không giành lại.
 const KICKED_CODES = new Set([3000, 3003]);
 const LOGIN_TIMEOUT_MS = 60_000;
 const QR_FIRST_IMAGE_TIMEOUT_MS = 20_000;
 const GROUP_INFO_CHUNK = 50;
 const STABLE_MS = 60_000;
+
+interface QrAttempt {
+  ended: boolean;
+  abandoned: boolean;
+  abort: (() => unknown) | null;
+  saved: Promise<string | null> | null;
+  first: Promise<{ status: 'WAITING_SCAN'; image: string }>;
+}
 
 type BridgeState = ZaloBridgeHealth['state'];
 
@@ -119,7 +127,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let avatar: string | null = null;
   let lastPushedKey: string | null = null;
   let qr: QrState = idleQr();
-  let qrAbort: (() => unknown) | null = null;
+  let qrAttempt: QrAttempt | null = null;
+  let sessionSaveError: string | null = null;
   const inflight = new Map<string, Promise<{ msgId: string }>>();
   const reconnector = new Reconnector(() => void connect(false));
   let stableTimer: NodeJS.Timeout | null = null;
@@ -136,8 +145,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
   function setState(next: BridgeState, error: string | null = null): void {
     if (state !== next) since = new Date(now()).toISOString();
     state = next;
-    lastError = error;
-    const key = `${next}|${error ?? ''}`;
+    lastError = error ?? (next === 'CONNECTED' ? sessionSaveError : null);
+    const key = `${next}|${lastError ?? ''}`;
     if (key === lastPushedKey) return;
     lastPushedKey = key;
     pushEvent({ type: 'state', state: next, since, lastError, zaloUid, displayName });
@@ -235,13 +244,13 @@ export function createZaloClient(deps: ZaloClientDeps) {
     });
     next.listener.on('closed', dropped);
     next.listener.on('disconnected', dropped);
-    // zca-js cũng phát error cho một khung không giải mã được trên socket vẫn khoẻ (listen.js:357-360); chỉ ghi nhận,
+    // zca-js cũng phát error cho một khung không giải mã được trên socket vẫn khoẻ (dist/apis/listen.js:358-360 trong bộ xử lý onmessage, và :141-144 cho ws.onerror); chỉ ghi nhận,
     // việc nối lại do closed/disconnected quyết định.
     next.listener.on('error', live(() => {
       if (state === 'CONNECTED') setState('CONNECTED', 'Lỗi từ listener Zalo');
     }));
 
-    setState('CONNECTING');
+    setState('CONNECTING', state === 'CONNECTING' ? lastError : null);
     next.listener.start({ retryOnClose: false });
   }
 
@@ -264,6 +273,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     try {
       const next = await withTimeout(zalo.login(creds), LOGIN_TIMEOUT_MS, 'Đăng nhập Zalo');
       if (gen !== generation) return;
+      sessionSaveError = null;
       await attach(next);
     } catch (e) {
       if (gen !== generation) return;
@@ -293,9 +303,9 @@ export function createZaloClient(deps: ZaloClientDeps) {
     generation++;
     reconnector.reset();
     detach();
-    qrAbort?.();
-    qrAbort = null;
+    abandonQr();
     qr = idleQr();
+    sessionSaveError = null;
     await credentials.clear();
     zaloUid = null;
     displayName = null;
@@ -303,40 +313,74 @@ export function createZaloClient(deps: ZaloClientDeps) {
     setState('NEED_QR');
   }
 
+  function abandonQr(): void {
+    const a = qrAttempt;
+    qrAttempt = null;
+    if (!a) return;
+    a.abandoned = true;
+    a.ended = true;
+    a.abort?.();
+  }
+
+  // Một lượt QR đang chạy thì mọi lời gọi qrStart dùng chung ảnh đầu của nó. Lượt bị bỏ (quá 20 giây, logout) không được
+  // đổi trạng thái hay lưu phiên nữa dù zca-js có phát sự kiện muộn.
   function qrStart(): Promise<{ status: 'WAITING_SCAN'; image: string }> {
-    if (qr.status === 'WAITING_SCAN' && qr.image) return Promise.resolve({ status: 'WAITING_SCAN', image: qr.image });
-    qrAbort?.();
+    if (qrAttempt && !qrAttempt.ended) return qrAttempt.first;
+    abandonQr();
     qr = idleQr();
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new BridgeError('QR_FAILED', 'Không lấy được mã QR')), QR_FIRST_IMAGE_TIMEOUT_MS);
+    const attempt: QrAttempt = { ended: false, abandoned: false, abort: null, saved: null, first: null as never };
+    qrAttempt = attempt;
+    const finish = (): void => {
+      attempt.ended = true;
+      if (qrAttempt === attempt) qrAttempt = null;
+    };
+    attempt.first = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        abandonQr();
+        qr = { status: 'FAILED' };
+        reject(new BridgeError('QR_FAILED', 'Không lấy được mã QR'));
+      }, QR_FIRST_IMAGE_TIMEOUT_MS);
       zalo
         .loginQR((e) => {
+          if (attempt.abandoned) return;
           qr = applyQrEvent(qr, e);
-          if (e.actions?.abort) qrAbort = e.actions.abort;
+          if (e.actions?.abort) attempt.abort = e.actions.abort;
           if (e.type === 0 && qr.image) {
             clearTimeout(timer);
             resolve({ status: 'WAITING_SCAN', image: qr.image });
           }
           if (e.type === 1 || e.type === 3) {
             clearTimeout(timer);
+            attempt.ended = true;
             e.actions?.abort();
             reject(new BridgeError('QR_FAILED', 'Mã QR không dùng được'));
           }
           if (e.type === 4 && e.data?.cookie && e.data.imei && e.data.userAgent) {
-            void credentials.save({ cookie: e.data.cookie, imei: e.data.imei, userAgent: e.data.userAgent, savedAt: new Date(now()).toISOString() });
+            attempt.saved = credentials
+              .save({ cookie: e.data.cookie, imei: e.data.imei, userAgent: e.data.userAgent, savedAt: new Date(now()).toISOString() })
+              .then(() => null, (err: unknown) => errMsg(err));
           }
         })
         .then(async (next) => {
-          qrAbort = null;
+          clearTimeout(timer);
+          if (attempt.abandoned) return;
+          finish();
           reconnector.reset();
+          const saveFailure = await attempt.saved;
+          if (attempt.abandoned) return;
+          sessionSaveError = saveFailure === null ? null : `Không lưu được phiên đăng nhập: ${saveFailure}`;
+          if (saveFailure !== null) console.error('[zalo] không lưu được phiên đăng nhập sau khi quét QR');
           await attach(next);
         })
         .catch((e) => {
           clearTimeout(timer);
+          if (attempt.abandoned) return;
+          finish();
           if (qr.status !== 'EXPIRED' && qr.status !== 'FAILED' && qr.status !== 'SUCCESS') qr = { status: 'FAILED' };
           reject(new BridgeError('QR_FAILED', errMsg(e)));
         });
     });
+    return attempt.first;
   }
 
   async function groups(): Promise<{ id: string; name: string; memberCount: number }[]> {

@@ -24,6 +24,13 @@ export function createEventPoster(deps: EventPosterDeps): (e: ZaloBridgeEvent) =
     } catch {
       return 'retry';
     }
+    if (res.status < 200 || res.status >= 300) {
+      try {
+        await res.body?.cancel();
+      } catch {
+        // thân đã đóng
+      }
+    }
     // Chỉ 400 và 413 là yêu cầu hỏng mà gửi lại không bao giờ sửa được. Mọi mã khác (401 lệch khoá khi đang xoay khoá,
     // 404 sai địa chỉ, 503 chat đang tắt, 5xx) đều có thể hết sau khi vận hành sửa, và outbox tự bỏ sau 24 giờ.
     if (res.status === 400 || res.status === 413) return 'drop';

@@ -50,11 +50,11 @@ export class SendQueue {
       const wait = this.lastStart + gap - this.now();
       if (wait > 0) await this.sleep(wait);
     }
-    this.starts = this.starts.filter((t) => this.now() - t < HOUR_MS);
-    if (this.starts.length >= this.maxPerHour) {
-      const wait = this.starts[0] + HOUR_MS - this.now();
-      if (wait > 0) await this.sleep(wait);
+    // Kiểm lại sau mỗi lần ngủ: tỉnh sớm hay đồng hồ nhảy cũng không được vượt trần trong một giờ trượt.
+    for (;;) {
       this.starts = this.starts.filter((t) => this.now() - t < HOUR_MS);
+      if (this.starts.length < this.maxPerHour) break;
+      await this.sleep(Math.max(1, this.starts[0] + HOUR_MS - this.now()));
     }
     const start = this.now();
     this.lastStart = start;

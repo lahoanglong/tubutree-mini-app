@@ -120,4 +120,23 @@ describe('server', () => {
   it('đường lạ có xác thực thì 404', async () => {
     expect((await call('GET', '/khong-co')).status).toBe(404);
   });
+
+  it('thân quá 64 KB thì 413 BODY_TOO_LARGE', async () => {
+    const r = await call('POST', '/send', { idempotencyKey: 'k', text: 'x'.repeat(70 * 1024) });
+    expect(r.status).toBe(413);
+    expect(await r.json()).toEqual({ code: 'BODY_TOO_LARGE' });
+    expect(client.send).not.toHaveBeenCalled();
+  });
+
+  it('JSON hỏng, null hay không phải object thì 400 BAD_REQUEST', async () => {
+    const raw = (path: string, body: string) =>
+      fetch(base + path, { method: path === '/config' ? 'PUT' : 'POST', headers: { authorization: `Bearer ${SECRET}`, 'content-type': 'application/json' }, body });
+    for (const path of ['/send', '/config']) {
+      for (const body of ['{không', 'null', '[1]', '5', '"x"']) {
+        const r = await raw(path, body);
+        expect([path, body, r.status]).toEqual([path, body, 400]);
+        expect(await r.json()).toEqual({ code: 'BAD_REQUEST' });
+      }
+    }
+  });
 });

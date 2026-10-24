@@ -23,4 +23,15 @@ describe('crypto', () => {
     expect(() => decrypt(blob, randomBytes(32))).toThrow();
     expect(() => decrypt('rác', key)).toThrow();
   });
+
+  it('IV ngắn, tag ngắn hoặc tag bị sửa đều ném đúng một lỗi rõ ràng, không lộ lỗi OpenSSL', () => {
+    const [v, iv, tag, ct] = encrypt('bí mật', key).split(':');
+    const shortIv = Buffer.from(iv, 'base64').subarray(0, 8).toString('base64');
+    const shortTag = Buffer.from(tag, 'base64').subarray(0, 4).toString('base64');
+    const badTag = Buffer.from(tag, 'base64');
+    badTag[0] ^= 1;
+    for (const bad of [[v, shortIv, tag, ct], [v, iv, shortTag, ct], [v, iv, badTag.toString('base64'), ct]]) {
+      expect(() => decrypt(bad.join(':'), key)).toThrow('credentials file corrupt');
+    }
+  });
 });

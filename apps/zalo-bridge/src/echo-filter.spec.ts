@@ -54,4 +54,17 @@ describe('EchoFilter', () => {
     expect(f.isEcho({ msgId: 'x', isSelf: true, text: 'A' })).toBe(true);
     expect(f.isEcho({ msgId: 'y', isSelf: true, text: 'A' })).toBe(true);
   });
+
+  it('1000 mục noteSent quá hạn bị dọn, mục còn hạn vẫn là echo', () => {
+    const { f, advance } = make();
+    for (let i = 0; i < 1000; i++) {
+      f.noteSent(`m${i}`, `t${i}`);
+      advance(10);
+    }
+    advance(60_000);
+    f.noteSent('mới', 'mới');
+    expect(f.isEcho({ msgId: 'x', isSelf: true, text: 't500' })).toBe(false);
+    expect(f.isEcho({ msgId: 'x', isSelf: true, text: 'mới' })).toBe(true);
+    expect((f as unknown as { sent: unknown[] }).sent).toHaveLength(1);
+  });
 });

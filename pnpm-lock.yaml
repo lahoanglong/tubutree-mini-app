@@ -327,9 +327,6 @@ importers:
       '@tubutree/eslint-config':
         specifier: workspace:*
         version: link:../../packages/eslint-config
-      '@tubutree/typescript-config':
-        specifier: workspace:*
-        version: link:../../packages/typescript-config
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.19

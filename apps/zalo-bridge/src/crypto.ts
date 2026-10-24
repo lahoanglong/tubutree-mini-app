@@ -1,6 +1,8 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 const IV_LENGTH = 12;
+const TAG_LENGTH = 16;
+const CORRUPT = 'credentials file corrupt';
 
 export function encrypt(plain: string, key: Buffer): string {
   const iv = randomBytes(IV_LENGTH);
@@ -15,7 +17,14 @@ export function decrypt(blob: string, key: Buffer): string {
     throw new Error('Định dạng dữ liệu mã hoá không hợp lệ');
   }
   const [, iv, tag, ct] = parts;
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
-  decipher.setAuthTag(Buffer.from(tag, 'base64'));
-  return Buffer.concat([decipher.update(Buffer.from(ct, 'base64')), decipher.final()]).toString('utf8');
+  const ivBuf = Buffer.from(iv, 'base64');
+  const tagBuf = Buffer.from(tag, 'base64');
+  if (ivBuf.length !== IV_LENGTH || tagBuf.length !== TAG_LENGTH) throw new Error(CORRUPT);
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, ivBuf, { authTagLength: TAG_LENGTH });
+    decipher.setAuthTag(tagBuf);
+    return Buffer.concat([decipher.update(Buffer.from(ct, 'base64')), decipher.final()]).toString('utf8');
+  } catch {
+    throw new Error(CORRUPT);
+  }
 }

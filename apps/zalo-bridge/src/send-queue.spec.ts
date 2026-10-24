@@ -68,4 +68,21 @@ describe('SendQueue', () => {
     await Promise.all([a, b]);
     expect(q.size()).toBe(0);
   });
+
+  it('tỉnh dậy sớm hoặc đồng hồ nhảy thì vẫn không quá 300 lệnh trong một giờ trượt', async () => {
+    const c = fakeClock();
+    let early = true;
+    const sleep = async (ms: number) => {
+      if (early && ms > 60_000) {
+        early = false;
+        c.advance(1_000);
+        return;
+      }
+      c.advance(ms);
+    };
+    const q = new SendQueue({ spacingMs: 0, jitterMs: 0, now: c.now, sleep, random: () => 0 });
+    const times: number[] = [];
+    for (let i = 0; i < 301; i++) await q.enqueue(async () => times.push(c.now()));
+    expect(times[300] - times[0]).toBeGreaterThanOrEqual(3_600_000);
+  });
 });

@@ -72,4 +72,13 @@ describe('createEventPoster', () => {
   it('lỗi mạng thì retry', async () => {
     expect(await poster(() => Promise.reject(new Error('ECONNREFUSED'))).post(msg)).toBe('retry');
   });
+
+  it('mọi phản hồi không phải 2xx đều huỷ thân để giải phóng kết nối', async () => {
+    const cancel = vi.fn(async () => undefined);
+    const res = { status: 500, body: { cancel } } as unknown as Response;
+    expect(await poster(() => res).post(msg)).toBe('retry');
+    expect(cancel).toHaveBeenCalledTimes(1);
+    const bad = { status: 400, body: { cancel: vi.fn(async () => { throw new Error('x'); }) } } as unknown as Response;
+    expect(await poster(() => bad).post(msg)).toBe('drop');
+  });
 });

@@ -1,6 +1,12 @@
 const DAY_MS = 24 * 3_600_000;
 const TEXT_WINDOW_MS = 60_000;
 
+function dropExpired(list: Recent[], t: number): Recent[] {
+  let i = 0;
+  while (i < list.length && t - list[i].at > TEXT_WINDOW_MS) i++;
+  return i === 0 ? list : list.slice(i);
+}
+
 interface Recent {
   text: string;
   at: number;
@@ -21,6 +27,7 @@ export class EchoFilter {
 
   noteSent(msgId: string, text: string): void {
     const t = this.now();
+    this.sentIds.delete(msgId);
     this.sentIds.set(msgId, t);
     const i = this.sending.findIndex((s) => s.text === text);
     if (i >= 0) this.sending.splice(i, 1);
@@ -36,10 +43,12 @@ export class EchoFilter {
 
   private prune(): void {
     const t = this.now();
+    // Map giữ thứ tự chèn và các mục chèn theo thời gian, nên dừng ở mục đầu tiên còn hạn.
     for (const [id, at] of this.sentIds) {
-      if (t - at > DAY_MS) this.sentIds.delete(id);
+      if (t - at <= DAY_MS) break;
+      this.sentIds.delete(id);
     }
-    this.sending = this.sending.filter((r) => t - r.at <= TEXT_WINDOW_MS);
-    this.sent = this.sent.filter((r) => t - r.at <= TEXT_WINDOW_MS);
+    this.sending = dropExpired(this.sending, t);
+    this.sent = dropExpired(this.sent, t);
   }
 }

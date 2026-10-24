@@ -3,6 +3,12 @@ import { isAuthorized } from './auth';
 import type { BridgeEnv } from './env';
 import { BridgeError, type ZaloClient } from './zalo-client';
 
+class HttpError extends Error {
+  constructor(readonly status: number, readonly code: string) {
+    super(code);
+  }
+}
+
 const MAX_BODY = 64 * 1024;
 
 function send(res: ServerResponse, status: number, body: unknown): void {
@@ -15,11 +21,18 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   let size = 0;
   for await (const c of req) {
     size += (c as Buffer).length;
-    if (size > MAX_BODY) throw new BridgeError('SEND_FAILED', 'Thân yêu cầu quá lớn');
+    if (size > MAX_BODY) throw new HttpError(413, 'BODY_TOO_LARGE');
     chunks.push(c as Buffer);
   }
   const raw = Buffer.concat(chunks).toString('utf8');
-  return raw ? JSON.parse(raw) : {};
+  let parsed: unknown;
+  try {
+    parsed = raw ? JSON.parse(raw) : {};
+  } catch {
+    throw new HttpError(400, 'BAD_REQUEST');
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) throw new HttpError(400, 'BAD_REQUEST');
+  return parsed;
 }
 
 export function createServer(client: ZaloClient, env: Pick<BridgeEnv, 'ZALO_BRIDGE_SECRET'>): Server {
@@ -68,6 +81,10 @@ export function createServer(client: ZaloClient, env: Pick<BridgeEnv, 'ZALO_BRID
     }
     route(req, res).catch((e: unknown) => {
       if (res.headersSent) return;
+      if (e instanceof HttpError) {
+        if (e.status === 413) req.resume();
+        return send(res, e.status, { code: e.code });
+      }
       if (e instanceof BridgeError) {
         if (e.code === 'NOT_CONNECTED' || e.code === 'NO_GROUP') return send(res, 409, { code: e.code });
         return send(res, 502, { code: e.code, message: e.message });
