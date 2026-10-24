@@ -41,7 +41,7 @@ function setup(opts: { groupId?: string | null; creds?: boolean; login?: () => P
   };
   const credentials = {
     load: vi.fn(async () => (opts.creds === false ? null : CREDS)),
-    save: vi.fn(async () => undefined),
+    save: vi.fn(async (_c?: unknown) => undefined),
     clear: vi.fn(async () => undefined),
   };
   const api = opts.api === null ? undefined : (opts.api ?? fakeApi());
@@ -469,7 +469,7 @@ describe('zalo-client: đăng nhập QR', () => {
     cb({ type: 2, data: { display_name: 'Tubu CSKH' } });
     expect(s.client.qrStatus()).toMatchObject({ status: 'SCANNED', displayName: 'Tubu CSKH' });
     cb({ type: 4, data: { cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' } });
-    expect(s.credentials.save).toHaveBeenCalledWith(expect.objectContaining({ cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' }));
+    await vi.waitFor(() => expect(s.credentials.save).toHaveBeenCalledWith(expect.objectContaining({ cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' })));
     done(api2);
     await vi.waitFor(() => expect(api2.listener.start).toHaveBeenCalled());
     api2.listener.emit('connected');
@@ -495,14 +495,18 @@ describe('zalo-client: đăng nhập QR', () => {
     const s = setup({ api: null, creds: false });
     const cbs: QrCb[] = [];
     const dones: ((a: ZcaApiLike) => void)[] = [];
+    const fails: ((e: Error) => void)[] = [];
     const aborts: ReturnType<typeof vi.fn>[] = [];
     const loginQR = vi.fn((c) => {
       cbs.push(c as QrCb);
       aborts.push(vi.fn());
-      return new Promise<ZcaApiLike>((r) => dones.push(r));
+      return new Promise<ZcaApiLike>((r, j) => {
+        dones.push(r);
+        fails.push(j);
+      });
     });
     s.deps.zalo.loginQR = loginQR;
-    return { s, cbs, dones, aborts, loginQR };
+    return { s, cbs, dones, fails, aborts, loginQR };
   }
   const ok4 = { type: 4, data: { cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' } };
 
@@ -759,6 +763,126 @@ describe('zalo-client: đăng nhập QR', () => {
       cbs[1]({ type: 4, data: { cookie: [{ b: 2 }], imei: 'im2', userAgent: 'ua3' } });
       await vi.advanceTimersByTimeAsync(100);
       expect(s.credentials.clear).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  // Kho phiên giả có độ trễ điều khiển được; file là thứ nằm trên đĩa.
+  function fakeDisk(s: ReturnType<typeof setup>, init: unknown, delay: (c: { imei?: string }) => number = () => 0) {
+    const disk = { file: init as { imei?: string } | null, clears: 0 };
+    s.credentials.load.mockImplementation(async () => disk.file as never);
+    s.credentials.save.mockImplementation(async (raw?: unknown) => {
+      const c = raw as { imei?: string };
+      await new Promise((r) => setTimeout(r, delay(c)));
+      disk.file = c;
+    });
+    s.credentials.clear.mockImplementation(async () => {
+      disk.clears++;
+      disk.file = null;
+    });
+    return disk;
+  }
+  const apiUid = (uid: string) => fakeApi({ getOwnId: () => uid });
+
+  it('v3: phiên nạp từ đĩa, lượt QR chậm bị bỏ rồi sự kiện muộn: tệp phiên còn nguyên và nối lại vẫn đăng nhập được', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const { s, cbs, fails } = qrSetup();
+      const disk = fakeDisk(s, { cookie: [], imei: 'disk', userAgent: 'u' });
+      await s.client.start();
+      expect(s.login).toHaveBeenCalledTimes(1);
+      const p = s.client.qrStart();
+      p.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(20_200);
+      cbs[0]({ type: 0, data: { image: 'LATE' }, actions: { abort: () => fails[0](new Error('ZaloApiLoginQRAborted')) } });
+      await vi.advanceTimersByTimeAsync(50);
+      expect(disk.clears).toBe(0);
+      expect(disk.file).toMatchObject({ imei: 'disk' });
+      await s.client.reconnect();
+      expect(s.login).toHaveBeenCalledTimes(2);
+      expect(s.client.state().state).not.toBe('NEED_QR');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('v2: logout lúc lượt A đang lưu chậm, B quét xong trước khi A lưu xong: tệp của B còn và trạng thái CONNECTED là B', async () => {
+    const { s, cbs, dones } = qrSetup();
+    const disk = fakeDisk(s, null, (c) => (c.imei === 'imA' ? 80 : 0));
+    await s.client.start();
+    const pa = s.client.qrStart();
+    cbs[0]({ type: 0, data: { image: 'A' } });
+    await pa;
+    cbs[0]({ type: 4, data: { cookie: [{ a: 1 }], imei: 'imA', userAgent: 'ua' } });
+    await new Promise((r) => setTimeout(r, 10));
+    const lo = s.client.logout();
+    const pb = s.client.qrStart();
+    cbs[1]({ type: 0, data: { image: 'B' } });
+    await pb;
+    cbs[1]({ type: 4, data: { cookie: [{ b: 2 }], imei: 'imB', userAgent: 'ua' } });
+    const apiB = apiUid('UB');
+    dones[1](apiB);
+    await vi.waitFor(() => expect(apiB.listener.start).toHaveBeenCalled());
+    apiB.listener.emit('connected');
+    await lo;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(s.client.state()).toMatchObject({ state: 'CONNECTED', zaloUid: 'UB' });
+    expect(disk.file).toMatchObject({ imei: 'imB' });
+  });
+
+  it('N3: lần lưu lại phiên cũ chạy muộn không đè lên tệp của phiên mới', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      let failFirst = true;
+      const disk = fakeDisk(s, null, (c) => (c.imei === 'im' ? 200 : 0));
+      const baseSave = s.credentials.save.getMockImplementation()!;
+      s.credentials.save.mockImplementation(async (c?: unknown) => {
+        if (failFirst) {
+          failFirst = false;
+          throw new Error('ENOSPC');
+        }
+        await baseSave(c);
+      });
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'AAAA' } });
+      await p;
+      cbs[0](ok4);
+      const api2 = fakeApi();
+      dones[0](api2);
+      await vi.advanceTimersByTimeAsync(5);
+      api2.listener.emit('connected');
+      s.login.mockResolvedValueOnce(fakeApi());
+      api2.listener.emit('closed', 1006, '');
+      await vi.advanceTimersByTimeAsync(5_000);
+      const p2 = s.client.qrStart();
+      cbs[1]({ type: 0, data: { image: 'BBBB' } });
+      await p2;
+      cbs[1]({ type: 4, data: { cookie: [{ b: 2 }], imei: 'imB', userAgent: 'ua3' } });
+      await vi.advanceTimersByTimeAsync(500);
+      expect(disk.file).toMatchObject({ imei: 'imB' });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('N4: fetchAccountInfo quá hạn khi đổi tài khoản thì không giữ tên và ảnh của tài khoản trước', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const s = await connected();
+      expect(s.client.state().displayName).toBe('Tubu CSKH');
+      const api2 = fakeApi({ getOwnId: () => 'U2', fetchAccountInfo: () => new Promise(() => undefined) });
+      s.login.mockResolvedValueOnce(api2);
+      const re = s.client.reconnect();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await re;
+      expect(s.client.state()).toMatchObject({ zaloUid: 'U2', displayName: null, avatar: null });
     } finally {
       vi.useRealTimers();
       vi.restoreAllMocks();

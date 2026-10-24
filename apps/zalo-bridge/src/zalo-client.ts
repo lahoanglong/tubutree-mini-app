@@ -86,6 +86,7 @@ export class BridgeError extends Error {
   }
 }
 
+const DISK_SESSION = {};
 const GROUP_THREAD = 1;
 // DuplicateConnection và KickConnection (node_modules/zca-js/dist/apis/listen.d.ts:25-26): có người khác mở phiên, không giành lại.
 const KICKED_CODES = new Set([3000, 3003]);
@@ -132,7 +133,20 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let qr: QrState = idleQr();
   let qrAttempt: QrAttempt | null = null;
   let sessionSaveError: string | null = null;
-  let memCreds: ZaloCredentials | null = null;
+  // Một chủ duy nhất của tệp phiên: `desired` là phiên PHẢI nằm trên đĩa (DISK_SESSION = bản đã có sẵn, null = đã đăng xuất).
+  // Mọi thao tác đĩa đi qua persist(), tuần tự, và chỉ chạy nếu token còn khớp `desired` đúng lúc chạm đĩa.
+  let desired: object | null = DISK_SESSION;
+  let memSession: { token: object; creds: ZaloCredentials } | null = null;
+  let persistChain: Promise<unknown> = Promise.resolve();
+  function persist(token: object | null, creds: ZaloCredentials | null): Promise<void> {
+    const run = persistChain.then(async () => {
+      if (token !== desired) return;
+      if (creds) await credentials.save(creds);
+      else await credentials.clear();
+    });
+    persistChain = run.catch(() => undefined);
+    return run;
+  }
   const inflight = new Map<string, Promise<{ msgId: string }>>();
   const reconnector = new Reconnector(() => void connect(false));
   let stableTimer: NodeJS.Timeout | null = null;
@@ -199,6 +213,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     const gen = ++generation;
     detach();
     api = next;
+    const previousUid = zaloUid;
     zaloUid = next.getOwnId();
     let profile: { displayName: string; avatar: string } | null = null;
     try {
@@ -211,6 +226,9 @@ export function createZaloClient(deps: ZaloClientDeps) {
     if (profile) {
       displayName = profile.displayName || null;
       avatar = profile.avatar || null;
+    } else if (previousUid !== zaloUid) {
+      displayName = null;
+      avatar = null;
     }
     const live = <A extends never[]>(fn: (...a: A) => void) => (...a: A) => {
       if (gen === generation) fn(...a);
@@ -275,7 +293,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     }
     if (gen !== generation) return;
     // Lưu phiên đang lỗi thì tệp trên đĩa cũ hoặc không có: dùng bản trong bộ nhớ để một lần rớt socket không làm mất phiên.
-    if (sessionSaveError !== null && memCreds) creds = memCreds;
+    if (sessionSaveError !== null && memSession && memSession.token === desired) creds = memSession.creds;
     if (!creds) {
       setState('NEED_QR', lastError);
       return;
@@ -297,15 +315,11 @@ export function createZaloClient(deps: ZaloClientDeps) {
   }
 
   function retrySessionSave(): void {
-    const pending = memCreds;
-    if (sessionSaveError === null || !pending) return;
-    credentials.save(pending).then(
+    const session = memSession;
+    if (sessionSaveError === null || !session) return;
+    persist(session.token, session.creds).then(
       () => {
-        if (memCreds !== pending) {
-          // Đã đăng xuất thì tệp vừa ghi phải đi; phiên mới thay thế thì tệp đó là của phiên mới, không được đụng.
-          if (memCreds === null) void credentials.clear().catch(() => undefined);
-          return;
-        }
+        if (desired !== session.token) return;
         sessionSaveError = null;
         if (state === 'CONNECTED') setState('CONNECTED');
       },
@@ -330,18 +344,17 @@ export function createZaloClient(deps: ZaloClientDeps) {
     generation++;
     reconnector.reset();
     detach();
-    const abandoned = qrAttempt;
     abandonQr();
     qr = idleQr();
     sessionSaveError = null;
-    memCreds = null;
-    // Lệnh lưu của lượt vừa bỏ có thể còn đang chạy (zca-js phát type 4 trước khi loginQR xong): đợi nó xong rồi mới xoá, nếu không tệp phiên sống lại.
-    await abandoned?.saved;
-    await credentials.clear();
+    memSession = null;
+    desired = null;
     zaloUid = null;
     displayName = null;
     avatar = null;
+    // Trạng thái đổi ngay, trước khi đợi đĩa: nếu không, phần đuôi của logout cũ đè lên phiên QR mới đã lên CONNECTED.
     setState('NEED_QR');
+    await persist(null, null);
   }
 
   function abandonQr(): void {
@@ -398,27 +411,19 @@ export function createZaloClient(deps: ZaloClientDeps) {
           }
           if (e.type === 4 && e.data?.cookie && e.data.imei && e.data.userAgent) {
             const fresh: ZaloCredentials = { cookie: e.data.cookie, imei: e.data.imei, userAgent: e.data.userAgent, savedAt: new Date(now()).toISOString() };
-            memCreds = fresh;
-            attempt.saved = credentials
-              .save(fresh)
-              .then(() => null, (err: unknown) => errMsg(err));
+            const token = {};
+            desired = token;
+            memSession = { token, creds: fresh };
+            attempt.saved = persist(token, fresh).then(() => null, (err: unknown) => errMsg(err));
           }
         })
         .then(async (next) => {
           clearTimeout(timer);
-          if (attempt.abandoned) {
-            await attempt.saved;
-            if (memCreds === null) await credentials.clear().catch(() => undefined);
-            return;
-          }
+          if (attempt.abandoned) return;
           // Giữ lượt này là lượt đang chạy tới khi attach xong, để qrStart trong lúc đang lưu nhập vào đây thay vì mở loginQR thứ hai.
           reconnector.reset();
           const saveFailure = await attempt.saved;
-          if (attempt.abandoned) {
-            // Lệnh lưu có thể xong sau lệnh xoá của logout và ghi lại tệp phiên.
-            if (memCreds === null) await credentials.clear().catch(() => undefined);
-            return;
-          }
+          if (attempt.abandoned) return;
           sessionSaveError = saveFailure === null ? null : `Không lưu được phiên đăng nhập: ${saveFailure}`;
           if (saveFailure !== null) console.error('[zalo] không lưu được phiên đăng nhập sau khi quét QR');
           try {
@@ -427,13 +432,9 @@ export function createZaloClient(deps: ZaloClientDeps) {
             finish();
           }
         })
-        .catch(async (e) => {
+        .catch((e) => {
           clearTimeout(timer);
-          if (attempt.abandoned) {
-            await attempt.saved;
-            if (memCreds === null) await credentials.clear().catch(() => undefined);
-            return;
-          }
+          if (attempt.abandoned) return;
           finish();
           if (qr.status !== 'EXPIRED' && qr.status !== 'FAILED' && qr.status !== 'SUCCESS') qr = { status: 'FAILED' };
           reject(new BridgeError('QR_FAILED', errMsg(e)));
