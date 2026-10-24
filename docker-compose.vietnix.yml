@@ -2,8 +2,8 @@
 # Tubu Tree — deploy TẠM trên VPS Vietnix dùng CHUNG với ChoDeli (2026-09-12).
 #
 # Khác docker-compose.prod.yml ở 4 chỗ, vì máy này KHÔNG phải VM riêng:
-#   1. KHÔNG có service `caddy` — cổng 80/443 đã do nginx aaPanel (WordPress) giữ.
-#      api/web chỉ bind ra 127.0.0.1 (không lộ ra ngoài); aaPanel nginx sẽ reverse-proxy
+#   1. KHÔNG có service `caddy` — cổng 80/443 đã do Apache (WordPress) giữ.
+#      api/web chỉ bind ra 127.0.0.1 (không lộ ra ngoài); Apache sẽ reverse-proxy
 #      vào 2 cổng này cho api.tubutree.com / app.tubutree.com — xem hướng dẫn kèm theo.
 #   2. Cổng host CỐ TÌNH lệch xa dải ChoDeli đang dùng (3000/3003/3004/5435) để không đụng.
 #   3. `mem_limit` mọi service — máy đang chia RAM với ChoDeli + WordPress/MariaDB, giới hạn

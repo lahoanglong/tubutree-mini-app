@@ -35,7 +35,7 @@ describe.each(COMPOSE_FILES)('%s', (file) => {
     expect(block).toMatch(/\n {6}ZALO_BRIDGE_CREDENTIALS_KEY: \$\{ZALO_BRIDGE_CREDENTIALS_KEY:-\}/);
     expect(block).not.toMatch(/DATABASE_URL|JWT/);
     expect(block).toMatch(/\n {4}networks: \[tubu\]\n/);
-    expect(compose).toMatch(/\nvolumes:\n(?:  \w+:\n)*  zalo_bridge_data:\n/);
+    expect(compose).toMatch(/\nvolumes:\n(?: {2}\w+:\n)* {2}zalo_bridge_data:\n/);
   });
 
   it('Redis chạy maxmemory-policy noeviction (BullMQ mất job âm thầm nếu Redis tự xoá key)', () => {

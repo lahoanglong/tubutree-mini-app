@@ -991,3 +991,7 @@ Web không có schema riêng: quay web một mình bằng `docker tag "${WEB_NAM
 - [docs/2026-10-review/99-release-readiness.md](../2026-10-review/99-release-readiness.md): lần phát hành trước, kể cả đo thời gian migration.
 - [pilot-order-playbook.md](pilot-order-playbook.md): kịch bản đơn thử thật sau khi lên bản mới.
 - Lệnh kiểm tra: `pnpm run go-live:check` (trong `apps/api`), mã nguồn ở `apps/api/scripts/go-live-check.ts` và `apps/api/src/config/go-live/`.
+
+## 9. Chat CSKH qua Zalo cá nhân
+
+Lần phát hành có chat thêm service `zalo-bridge` (khai trong `docker-compose.prod.yml` và `docker-compose.vietnix.yml`, volume `zalo_bridge_data`, không có cổng ra ngoài) và hai migration chỉ thêm: `20261023100000_support_chat`, `20261023110000_support_bridge_actions`. API cần `ZALO_BRIDGE_URL`, `ZALO_BRIDGE_SECRET`; bridge cần `ZALO_BRIDGE_SECRET`, `ZALO_BRIDGE_CREDENTIALS_KEY`. Gộp với `chat.enabled = false`. Gỡ về: tắt công tắc chat, `stop zalo-bridge`; không cần gỡ migration. Chi tiết: [docs/2026-10-23-q5/bat-chat-zalo.md](../2026-10-23-q5/bat-chat-zalo.md).
