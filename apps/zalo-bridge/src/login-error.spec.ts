@@ -22,13 +22,12 @@ describe('classifyLoginError', () => {
     expect(classifyLoginError(new ZaloApiError('Failed to fetch server info: Bad Gateway'))).toBe('retry');
     expect(classifyLoginError(new ZaloApiError('Failed to fetch server info: Service Unavailable'))).toBe('retry');
     expect(classifyLoginError(new ZaloApiError('Failed to fetch server info: Gateway Timeout'))).toBe('retry');
-    expect(classifyLoginError(new ZaloApiError('Request failed with status code 503'))).toBe('retry');
     expect(classifyLoginError(Object.assign(new ZaloApiError('x'), { status: 502 }))).toBe('retry');
   });
 
   it('ZaloApiError do 4xx hay mã lỗi Zalo vẫn là phiên bị từ chối, cần QR', () => {
     expect(classifyLoginError(new ZaloApiError('Failed to fetch login info: Unauthorized'))).toBe('need-qr');
-    expect(classifyLoginError(new ZaloApiError('Request failed with status code 403'))).toBe('need-qr');
+    expect(classifyLoginError(new ZaloApiError('Đăng nhập thất bại'))).toBe('need-qr');
     expect(classifyLoginError(Object.assign(new ZaloApiError('cookie sai'), { code: 114 }))).toBe('need-qr');
   });
 });

@@ -2,7 +2,7 @@ export interface SendQueueOptions {
   spacingMs?: number;
   jitterMs?: number;
   maxPerHour?: number;
-  now: () => number;
+  now?: () => number;
   sleep: (ms: number) => Promise<void>;
   random: () => number;
 }
@@ -26,7 +26,8 @@ export class SendQueue {
     this.spacingMs = opts.spacingMs ?? 1500;
     this.jitterMs = opts.jitterMs ?? 1000;
     this.maxPerHour = opts.maxPerHour ?? 300;
-    this.now = opts.now;
+    // Đồng hồ đơn điệu: đồng hồ treo tường nhảy (NTP, đổi giờ) không được làm cửa sổ một giờ co lại hay giãn ra.
+    this.now = opts.now ?? (() => performance.now());
     this.sleep = opts.sleep;
     this.random = opts.random;
   }

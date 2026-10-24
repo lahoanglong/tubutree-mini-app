@@ -429,12 +429,18 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     expect(seq.filter((k, i) => i > 0 && k === seq[i - 1])).toEqual([]);
   });
 
-  it('đăng nhập lỗi HTTP 5xx của Zalo thì CONNECTING và hẹn thử lại, không NEED_QR', async () => {
-    const s = setup({ api: null, login: async () => { throw new ZaloApiError('Failed to fetch login info: Bad Gateway'); } });
+  it.each(['Failed to fetch login info: Service Unavailable', 'Failed to fetch server info: Bad Gateway'])('đăng nhập lỗi HTTP 5xx của Zalo (%s) thì CONNECTING và hẹn thử lại, không NEED_QR', async (message) => {
+    const s = setup({ api: null, login: async () => { throw new ZaloApiError(message); } });
     await s.client.start();
     expect(s.client.state().state).toBe('CONNECTING');
     await vi.advanceTimersByTimeAsync(5_000);
     expect(s.login).toHaveBeenCalledTimes(2);
+  });
+
+  it('Đăng nhập thất bại (zca-js không lấy được loginInfo) thì NEED_QR', async () => {
+    const s = setup({ api: null, login: async () => { throw new ZaloApiError('Đăng nhập thất bại'); } });
+    await s.client.start();
+    expect(s.client.state().state).toBe('NEED_QR');
   });
 
   it('đăng nhập bị từ chối 4xx thì NEED_QR và không thử lại', async () => {
@@ -568,6 +574,95 @@ describe('zalo-client: đăng nhập QR', () => {
       expect(await p2).toMatchObject({ image: 'data:image/png;base64,NEW' });
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  it('lượt A bị logout trước khi có ảnh: đồng hồ 20 giây của A không làm hỏng lượt B', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const { s, cbs } = qrSetup();
+      await s.client.start();
+      const a = s.client.qrStart();
+      a.catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(100);
+      await s.client.logout();
+      await vi.advanceTimersByTimeAsync(9_900);
+      const b = s.client.qrStart();
+      await vi.advanceTimersByTimeAsync(10_100);
+      cbs[1]({ type: 0, data: { image: 'B' } });
+      expect(await b).toMatchObject({ image: 'data:image/png;base64,B' });
+      expect(s.client.qrStatus().status).toBe('WAITING_SCAN');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lượt đã bị bỏ trước khi zca phát sự kiện đầu thì sự kiện đó gọi abort của zca', async () => {
+    const { s, cbs } = qrSetup();
+    await s.client.start();
+    s.client.qrStart().catch(() => undefined);
+    await s.client.logout();
+    const abort = vi.fn();
+    cbs[0]({ type: 0, data: { image: 'A' }, actions: { abort } });
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(s.client.qrStatus().status).toBe('IDLE');
+  });
+
+  it('logout giữa lúc đang lưu phiên sau khi quét: vẫn NEED_QR, phiên bị xoá lại, qrStart không mở loginQR thứ hai', async () => {
+    const { s, cbs, dones, loginQR } = qrSetup();
+    let fileExists = false;
+    s.credentials.save.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      fileExists = true;
+    });
+    s.credentials.clear.mockImplementation(async () => {
+      fileExists = false;
+    });
+    await s.client.start();
+    const p = s.client.qrStart();
+    cbs[0]({ type: 0, data: { image: 'AAAA' } });
+    await p;
+    cbs[0](ok4);
+    const api2 = fakeApi();
+    dones[0](api2);
+    await new Promise((r) => setTimeout(r, 10));
+    await expect(s.client.qrStart()).resolves.toMatchObject({ image: 'data:image/png;base64,AAAA' });
+    expect(loginQR).toHaveBeenCalledTimes(1);
+    await s.client.logout();
+    await new Promise((r) => setTimeout(r, 150));
+    expect(s.client.state().state).toBe('NEED_QR');
+    expect(fileExists).toBe(false);
+    expect(api2.listener.start).not.toHaveBeenCalled();
+  });
+
+  it('lưu phiên lỗi: rớt socket thì nối lại bằng phiên trong bộ nhớ, rồi lưu lại và xoá lỗi lưu', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    try {
+      const { s, cbs, dones } = qrSetup();
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      s.credentials.save.mockRejectedValueOnce(new Error('ENOSPC'));
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'AAAA' } });
+      await p;
+      cbs[0](ok4);
+      const api2 = fakeApi();
+      dones[0](api2);
+      await vi.advanceTimersByTimeAsync(5);
+      api2.listener.emit('connected');
+      expect(s.client.state().lastError).toContain('ENOSPC');
+      const api3 = fakeApi();
+      s.login.mockResolvedValueOnce(api3);
+      api2.listener.emit('closed', 1006, '');
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(s.login).toHaveBeenCalledWith(expect.objectContaining({ cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' }));
+      api3.listener.emit('connected');
+      await vi.advanceTimersByTimeAsync(5);
+      expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: null });
+      expect(s.credentials.save).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
     }
   });
 });

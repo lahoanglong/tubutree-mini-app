@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SendQueue } from './send-queue';
 
 function fakeClock() {
@@ -84,5 +84,29 @@ describe('SendQueue', () => {
     const times: number[] = [];
     for (let i = 0; i < 301; i++) await q.enqueue(async () => times.push(c.now()));
     expect(times[300] - times[0]).toBeGreaterThanOrEqual(3_600_000);
+  });
+
+  it('mặc định dùng đồng hồ đơn điệu: đồng hồ treo tường nhảy +1 giờ không cho thêm lệnh', async () => {
+    let mono = 5_000;
+    const perf = vi.spyOn(performance, 'now').mockImplementation(() => mono);
+    const date = vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000 + mono);
+    try {
+      const q = new SendQueue({
+        spacingMs: 0,
+        jitterMs: 0,
+        sleep: async (ms) => {
+          mono += ms;
+        },
+        random: () => 0,
+      });
+      const times: number[] = [];
+      for (let i = 0; i < 300; i++) await q.enqueue(async () => times.push(mono));
+      date.mockImplementation(() => 1_700_000_000_000 + mono + 3_600_000);
+      await q.enqueue(async () => times.push(mono));
+      expect(times[300] - times[0]).toBeGreaterThanOrEqual(3_600_000);
+    } finally {
+      perf.mockRestore();
+      date.mockRestore();
+    }
   });
 });

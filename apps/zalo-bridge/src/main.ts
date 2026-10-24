@@ -38,7 +38,7 @@ const client: ZaloClient = createZaloClient({
   configStore: new ConfigStore(dir),
   outbox,
   echo: new EchoFilter(now),
-  queue: new SendQueue({ now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), random: Math.random }),
+  queue: new SendQueue({ sleep: (ms) => new Promise((r) => setTimeout(r, ms)), random: Math.random }),
   dedupe: new SendDedupe(undefined, undefined, now, join(dir, 'sent.json')),
   now,
 });

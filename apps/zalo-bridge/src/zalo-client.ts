@@ -99,6 +99,7 @@ interface QrAttempt {
   abandoned: boolean;
   abort: (() => unknown) | null;
   saved: Promise<string | null> | null;
+  timer: NodeJS.Timeout | null;
   first: Promise<{ status: 'WAITING_SCAN'; image: string }>;
 }
 
@@ -129,6 +130,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let qr: QrState = idleQr();
   let qrAttempt: QrAttempt | null = null;
   let sessionSaveError: string | null = null;
+  let memCreds: ZaloCredentials | null = null;
   const inflight = new Map<string, Promise<{ msgId: string }>>();
   const reconnector = new Reconnector(() => void connect(false));
   let stableTimer: NodeJS.Timeout | null = null;
@@ -266,6 +268,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
       lastError = errMsg(e);
     }
     if (gen !== generation) return;
+    // Lưu phiên đang lỗi thì tệp trên đĩa cũ hoặc không có: dùng bản trong bộ nhớ để một lần rớt socket không làm mất phiên.
+    if (sessionSaveError !== null && memCreds) creds = memCreds;
     if (!creds) {
       setState('NEED_QR', lastError);
       return;
@@ -273,7 +277,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     try {
       const next = await withTimeout(zalo.login(creds), LOGIN_TIMEOUT_MS, 'Đăng nhập Zalo');
       if (gen !== generation) return;
-      sessionSaveError = null;
+      retrySessionSave();
       await attach(next);
     } catch (e) {
       if (gen !== generation) return;
@@ -284,6 +288,22 @@ export function createZaloClient(deps: ZaloClientDeps) {
         reconnector.schedule();
       }
     }
+  }
+
+  function retrySessionSave(): void {
+    const pending = memCreds;
+    if (sessionSaveError === null || !pending) return;
+    credentials.save(pending).then(
+      () => {
+        if (memCreds !== pending) {
+          void credentials.clear().catch(() => undefined);
+          return;
+        }
+        sessionSaveError = null;
+        if (state === 'CONNECTED') setState('CONNECTED');
+      },
+      () => console.error('[zalo] chưa lưu lại được phiên đăng nhập, sẽ thử ở lần nối lại sau'),
+    );
   }
 
   async function start(): Promise<void> {
@@ -306,6 +326,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     abandonQr();
     qr = idleQr();
     sessionSaveError = null;
+    memCreds = null;
     await credentials.clear();
     zaloUid = null;
     displayName = null;
@@ -319,6 +340,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     if (!a) return;
     a.abandoned = true;
     a.ended = true;
+    if (a.timer) clearTimeout(a.timer);
     a.abort?.();
   }
 
@@ -328,7 +350,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     if (qrAttempt && !qrAttempt.ended) return qrAttempt.first;
     abandonQr();
     qr = idleQr();
-    const attempt: QrAttempt = { ended: false, abandoned: false, abort: null, saved: null, first: null as never };
+    const attempt: QrAttempt = { ended: false, abandoned: false, abort: null, saved: null, timer: null, first: null as never };
     qrAttempt = attempt;
     const finish = (): void => {
       attempt.ended = true;
@@ -336,13 +358,20 @@ export function createZaloClient(deps: ZaloClientDeps) {
     };
     attempt.first = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        abandonQr();
-        qr = { status: 'FAILED' };
+        if (qrAttempt === attempt) qr = { status: 'FAILED' };
+        attempt.abandoned = true;
+        attempt.ended = true;
+        attempt.abort?.();
+        if (qrAttempt === attempt) qrAttempt = null;
         reject(new BridgeError('QR_FAILED', 'Không lấy được mã QR'));
       }, QR_FIRST_IMAGE_TIMEOUT_MS);
+      attempt.timer = timer;
       zalo
         .loginQR((e) => {
-          if (attempt.abandoned) return;
+          if (attempt.abandoned) {
+            e.actions?.abort?.();
+            return;
+          }
           qr = applyQrEvent(qr, e);
           if (e.actions?.abort) attempt.abort = e.actions.abort;
           if (e.type === 0 && qr.image) {
@@ -356,21 +385,31 @@ export function createZaloClient(deps: ZaloClientDeps) {
             reject(new BridgeError('QR_FAILED', 'Mã QR không dùng được'));
           }
           if (e.type === 4 && e.data?.cookie && e.data.imei && e.data.userAgent) {
+            const fresh: ZaloCredentials = { cookie: e.data.cookie, imei: e.data.imei, userAgent: e.data.userAgent, savedAt: new Date(now()).toISOString() };
+            memCreds = fresh;
             attempt.saved = credentials
-              .save({ cookie: e.data.cookie, imei: e.data.imei, userAgent: e.data.userAgent, savedAt: new Date(now()).toISOString() })
+              .save(fresh)
               .then(() => null, (err: unknown) => errMsg(err));
           }
         })
         .then(async (next) => {
           clearTimeout(timer);
           if (attempt.abandoned) return;
-          finish();
+          // Giữ lượt này là lượt đang chạy tới khi attach xong, để qrStart trong lúc đang lưu nhập vào đây thay vì mở loginQR thứ hai.
           reconnector.reset();
           const saveFailure = await attempt.saved;
-          if (attempt.abandoned) return;
+          if (attempt.abandoned) {
+            // Lệnh lưu có thể xong sau lệnh xoá của logout và ghi lại tệp phiên.
+            await credentials.clear().catch(() => undefined);
+            return;
+          }
           sessionSaveError = saveFailure === null ? null : `Không lưu được phiên đăng nhập: ${saveFailure}`;
           if (saveFailure !== null) console.error('[zalo] không lưu được phiên đăng nhập sau khi quét QR');
-          await attach(next);
+          try {
+            await attach(next);
+          } finally {
+            finish();
+          }
         })
         .catch((e) => {
           clearTimeout(timer);
