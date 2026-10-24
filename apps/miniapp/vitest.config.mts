@@ -6,6 +6,8 @@ import { defineConfig } from 'vitest/config';
 // - Test component (*.spec.tsx) cần DOM → jsdom, khai báo riêng qua environmentMatchGlobs
 //   để không bắt toàn bộ test còn lại gánh chi phí dựng DOM.
 export default defineConfig({
+  // Hai bản React trong một bundle làm hook null; web dùng React 19 nên ép một bản duy nhất.
+  resolve: { dedupe: ['react', 'react-dom'] },
   test: {
     environment: 'node',
     environmentMatchGlobs: [['**/*.spec.tsx', 'jsdom']],

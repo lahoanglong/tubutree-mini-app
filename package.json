@@ -31,6 +31,8 @@
     "packageExtensions": {
       "zmp-ui": {
         "peerDependencies": {
+          "react": "^18.0.0",
+          "react-dom": "^18.0.0",
           "@types/react": "^18.0.0"
         },
         "peerDependenciesMeta": {
@@ -62,6 +64,26 @@
       "lucide-react": {
         "peerDependencies": {
           "@types/react": "*"
+        },
+        "peerDependenciesMeta": {
+          "@types/react": {
+            "optional": true
+          }
+        }
+      },
+      "react-router": {
+        "peerDependencies": {
+          "@types/react": "^18.0.0"
+        },
+        "peerDependenciesMeta": {
+          "@types/react": {
+            "optional": true
+          }
+        }
+      },
+      "react-router-dom": {
+        "peerDependencies": {
+          "@types/react": "^18.0.0"
         },
         "peerDependenciesMeta": {
           "@types/react": {
