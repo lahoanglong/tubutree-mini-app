@@ -9,7 +9,7 @@ import { useStorefrontContext } from '../../store/storefront-context';
 import { copyText } from '../../utils/clipboard';
 import { formatVnd } from '../../utils/format';
 import { isRetailOnly } from '../../utils/retail-only';
-import { shippingEtaLabel } from '../../utils/shipping-eta';
+import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { vi } from '../../i18n/vi';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { Button } from '../ui/button';

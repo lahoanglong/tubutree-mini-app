@@ -13,6 +13,7 @@ import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
 import { OWN_RETAIL_SPEND_SQL } from '../orders/own-retail-spend';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { voucherCode } from './voucher-code';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 type GrantFailures = { count: number; first?: unknown };
 
@@ -197,6 +198,7 @@ export class VouchersService {
    * được `grant()` tự cô lập (P2002 nuốt, notify `.catch(() => undefined)`).
    */
   @Cron(CronExpression.EVERY_HOUR, { timeZone: CRON_TZ })
+  @TrackCron()
   async welcomeVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -243,6 +245,7 @@ export class VouchersService {
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
   @Cron('0 1 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async birthdayVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -291,6 +294,7 @@ export class VouchersService {
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
   @Cron('0 2 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async winbackVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -333,6 +337,7 @@ export class VouchersService {
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
   @Cron('0 5 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async milestoneVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -429,8 +434,9 @@ export class VouchersService {
    * đã tự có, giảm giá chỉ là chi phí).
    */
   @Cron('0 10 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async secondOrderVouchers(): Promise<CronBatchResult> {
-    if (this.secondOrderRunning) return { skipped: 'RUNNING' };
+    if (this.secondOrderRunning) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.secondOrderRunning = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt (nhiều instance cùng lịch thì chỉ một chạy); việc cấp chạy trên
@@ -439,7 +445,7 @@ export class VouchersService {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${VouchersService.SECOND_ORDER_LOCK})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.grantSecondOrderBatches();
         },
         { maxWait: 10_000, timeout: 10 * 60_000 },

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CRON_TZ } from '../../../common/cron-tz';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 export interface OpenSessionLike {
   shift: { approvedEnd: Date | null; endAt: Date };
@@ -32,6 +33,7 @@ export class AttendanceJob {
 
   /** Mỗi 5 phút: đóng phiên đã quá giờ hết ca (chốt tại giờ hết ca). Không cắt theo heartbeat. */
   @Cron(CronExpression.EVERY_5_MINUTES, { timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 2 })
   async sweep(): Promise<{ closed: number }> {
     const now = new Date();
     const open = await this.prisma.attendanceSession.findMany({

@@ -13,6 +13,7 @@ import {
 } from '../../jobs/queues';
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 import { MerchantModule } from '../merchant/merchant.module';
+import { CronRunService } from './cron-run.service';
 import { OpsController } from './ops.controller';
 import { OpsEmailService } from './ops-email.service';
 import { OPS_QUEUES, OpsHealthService } from './ops-health.service';
@@ -26,6 +27,7 @@ const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUE
   controllers: [OpsController],
   providers: [
     { provide: OPS_QUEUES, inject: QUEUES.map((q) => getQueueToken(q)), useFactory: (...queues: Queue[]) => queues },
+    CronRunService,
     OpsEmailService,
     OpsHealthService,
     OpsInboxService,

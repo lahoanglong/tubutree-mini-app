@@ -163,7 +163,7 @@ ACCESSTRADE_WEBHOOK_SECRET=<secret_tu_dat>   # khớp với dashboard Accesstrad
 
 ## 4) Cách đặt key vào hệ thống (chuẩn cho MỌI key)
 
-> Deploy và đặt key đều làm tay qua SSH vào VPS. `.github/workflows/deploy.yml:16-22` đã tắt trigger `workflow_run`, nên đẩy lên main không tự deploy. `gh secret set` và `ops.yml action=set-env` không dùng được vì ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY` vẫn trỏ máy ảo GCP đã đóng ([runbook mục 0.3, 2, 388-411](launch/deploy-rollback-runbook.md)).
+> Deploy và đặt key đều làm tay qua SSH vào VPS. `.github/workflows/deploy.yml:16-22` đã tắt trigger `workflow_run`, nên đẩy lên main không tự deploy. `gh secret set` và `ops.yml action=set-env` không dùng được vì ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY` vẫn trỏ máy ảo GCP đã đóng ([runbook mục 0.3 và 2](launch/deploy-rollback-runbook.md)). Năm workflow VM (`deploy.yml`, `ops.yml`, `logs.yml`, `smoke.yml`, `smoke-purchase.yml`) còn dừng ở bước chặn đầu tiên cho tới khi biến repo `VM_WORKFLOWS_ENABLED` bằng `true`; chỉ đặt biến này sau khi trỏ lại ba secret trên.
 
 Key không nằm trong git. Cách đặt cho MỌI key:
 
@@ -266,6 +266,7 @@ GOMDON_WEBHOOK_SECRET=<secret>
 
 > Workflow `ops.yml`/`deploy.yml`/`smoke*.yml`/`logs.yml` SSH vào máy theo secret `VM_HOST`/`VM_USER`/`VM_SSH_KEY`
 > và biến repo `DEPLOY_DIR` (mặc định `/opt/tubutree`), `COMPOSE_FILE` (mặc định `docker-compose.vietnix.yml`).
+> Cả năm workflow này dừng ở một bước chặn đầu tiên cho tới khi biến repo `VM_WORKFLOWS_ENABLED` bằng `true` (đặt sau khi đã trỏ lại các secret SSH).
 > Đến 2026-10 ba secret `VM_*` vẫn trỏ VM GCP đã đóng: cập nhật sang VPS Vietnix trước khi dùng
 > `set-env`/`audit`; chưa cập nhật thì đặt key thẳng vào `/opt/tubutree/.env` trên VPS rồi tạo lại container api.
 

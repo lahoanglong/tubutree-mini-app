@@ -13,6 +13,7 @@ import { merchantStoreUnavailableReason, TUBU_FULFILLER_NAME, type UnavailableRe
 import { isPartnerStore } from '../merchant/partner-store';
 import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -611,6 +612,7 @@ export class CatalogService {
 
   /** Cron 03:00 hằng ngày — tính lại số đã bán (social proof không cần realtime). */
   @Cron('0 3 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async recomputeSoldCron(): Promise<void> {
     // Nuốt lỗi im lặng ở đây từng khiến hỏng mà không ai biết — số "đã bán" sai cả ngày và
     // không có một dòng log nào để lần ra.

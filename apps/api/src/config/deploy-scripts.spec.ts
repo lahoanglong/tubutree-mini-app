@@ -35,6 +35,9 @@ function runWithFakeDocker(
 echo "docker $*" >> "${log}"
 case "$*" in *"migrate deploy"*|*"up -d"*) echo "POSTGRES_USER=\${POSTGRES_USER-unset} POSTGRES_DB=\${POSTGRES_DB-unset} :: $*" >> "${log}.env";; esac
 if [ -n "$FAIL_ON" ] && [[ "$*" == *"$FAIL_ON"* ]]; then exit 1; fi
+case "$*" in *"migrate status"*) if [ -n "$FAKE_MIGRATE_UNREACHABLE" ]; then echo "Error: P1001: Can't reach database server at postgres:5432"; exit 1; fi; if [ -n "$FAKE_MIGRATE_PENDING" ]; then echo "Following migrations have not yet been applied: \${FAKE_MIGRATE_NAME:-2026x_new}"; exit 1; fi; exit 0;; esac
+case "$*" in *"ps -q --status running zalo-bridge"*) if [ -n "$FAKE_BRIDGE_RUNNING" ]; then echo fakeid; fi; exit 0;; *"ps -q zalo-bridge"*|*"ps -a"*zalo-bridge*) if [ -n "$FAKE_BRIDGE_EXISTS$FAKE_BRIDGE_RUNNING" ]; then echo fakeid; fi; exit 0;; esac
+case "$*" in *"config --services"*) printf 'postgres\\nredis\\napi\\nweb\\n'; if [ -z "$FAKE_NO_BRIDGE" ]; then echo zalo-bridge; fi; exit 0;; esac
 case "$*" in *"migrate deploy"*) touch "${log}.migrated";; *" stop api"*) touch "${log}.stopped";; *" start api"*|*"up -d"*) rm -f "${log}.stopped";; esac
 case "$*" in
   *"State.Running"*) if [ -f "${log}.stopped" ]; then echo false; else echo "\${FAKE_API_RUNNING:-false}"; fi;;
@@ -330,6 +333,120 @@ describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm
     expect(out).toMatch(/không đọc được DB/);
     expect(out).toMatch(/points_1d/);
     expect(out).not.toMatch(/docker tag \S+ \S+/);
+  });
+});
+
+describe('tools/deploy/deploy.sh: backup trước migrate khi có BẤT KỲ migration chờ', () => {
+  const base = { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1' };
+
+  it('prisma migrate status báo còn migration chờ (points_1d đã áp) → backup ngay trước migrate, API không bị dừng', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { ...base, FAKE_MIGRATE_PENDING: '1' } });
+    expect({ status, out }).toMatchObject({ status: 0 });
+    const statusCall = idx(calls, 'run --rm --no-deps api pnpm exec prisma migrate status');
+    const backup = idx(calls, 'pg_dump');
+    const migrate = idx(calls, 'migrate deploy');
+    expect(statusCall).toBeGreaterThan(idx(calls, 'node dist/config/check-env.js'));
+    expect(backup).toBeGreaterThan(statusCall);
+    expect(migrate).toBeGreaterThan(backup);
+    expect(idx(calls, ' stop api')).toBe(-1);
+  });
+
+  it('không migration nào chờ → không backup', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: base });
+    expect(status).toBe(0);
+    expect(idx(calls, 'pg_dump')).toBe(-1);
+  });
+
+  it('migration chờ, backup lỗi → dừng trước migrate, API cũ vẫn chạy', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { ...base, FAKE_MIGRATE_PENDING: '1' }, failOn: 'pg_dump' });
+    expect(status).toBe(2);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+    expect(idx(calls, ' stop api')).toBe(-1);
+    expect(out).toMatch(/backup local lỗi/);
+  });
+
+  it('points_1d chờ: vẫn dừng API rồi backup như cũ dù status không báo gì', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' } });
+    expect(status).toBe(0);
+    const stop = idx(calls, ' stop api');
+    expect(stop).toBeGreaterThan(-1);
+    expect(idx(calls, 'pg_dump')).toBeGreaterThan(stop);
+  });
+});
+
+describe('tools/deploy/deploy.sh: zalo-bridge chỉ cập nhật khi đang chạy lúc bắt đầu deploy', () => {
+  const KEY = 'ZALO_BRIDGE_SECRET=' + 'k'.repeat(40) + '\n';
+  const RUNNING = { dotenv: KEY, env: { FAKE_BRIDGE_RUNNING: '1' } };
+  const bridgeCalls = (calls: string[]) => calls.filter((c) => /(build|up -d).*zalo-bridge/.test(c));
+
+  it('đang chạy: api và web build + thay trước, rồi bridge build riêng và thay sau cùng', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], RUNNING);
+    expect({ status, out }).toMatchObject({ status: 0 });
+    expect(idx(calls, ' build api web')).toBeGreaterThan(-1);
+    expect(calls.filter((c) => /build .*api web zalo-bridge/.test(c))).toEqual([]);
+    const upWeb = idx(calls, 'up -d --no-build web');
+    const buildBridge = idx(calls, ' build zalo-bridge');
+    const upBridge = idx(calls, 'up -d --no-build zalo-bridge');
+    expect(buildBridge).toBeGreaterThan(upWeb);
+    expect(upBridge).toBeGreaterThan(buildBridge);
+    expect(calls.some((c) => c.includes('ps -q --status running zalo-bridge'))).toBe(true);
+  });
+
+  it.each([
+    ['container đã dừng chủ ý (còn trong ps -a), .env vẫn có khoá', { FAKE_BRIDGE_EXISTS: '1' }],
+    ['chưa có container, .env có khoá', {}],
+  ])('%s → bỏ qua, một dòng nói lý do và lệnh bật tay, không build/up bridge', (_l, env) => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { dotenv: KEY, env });
+    expect({ status, out }).toMatchObject({ status: 0 });
+    expect(bridgeCalls(calls)).toEqual([]);
+    const lines = out.split('\n').filter((l) => /zalo-bridge/.test(l) && /bỏ qua/i.test(l));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('up -d --build zalo-bridge');
+    expect(lines[0]).toContain('docker-compose.vietnix.yml');
+  });
+
+  it('compose không có service zalo-bridge → bỏ qua, không lỗi', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { ...RUNNING, env: { FAKE_BRIDGE_RUNNING: '1', FAKE_NO_BRIDGE: '1' } });
+    expect(status).toBe(0);
+    expect(bridgeCalls(calls)).toEqual([]);
+  });
+
+  it('bridge đang chạy mà build lại lỗi → api và web đã chạy, thoát mã 4, nói rõ api/web không bị ảnh hưởng', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { ...RUNNING, failOn: ' build zalo-bridge' });
+    expect(status).toBe(4);
+    expect(idx(calls, 'up -d --no-build web')).toBeGreaterThan(-1);
+    expect(out).toMatch(/api và web .*đã chạy/);
+  });
+
+  it('api không healthy → không đụng bridge', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { ...RUNNING, failOn: '.State.Health' });
+    expect(status).not.toBe(0);
+    expect(bridgeCalls(calls)).toEqual([]);
+  });
+});
+
+describe('tools/deploy/deploy.sh: prisma migrate status không đọc được DB', () => {
+  it('DB không nối được (P1001) → dừng mã 2 ngay, không backup, không migrate, không dừng API', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1', FAKE_MIGRATE_UNREACHABLE: '1' } });
+    expect(status).toBe(2);
+    expect(idx(calls, 'pg_dump')).toBe(-1);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+    expect(idx(calls, ' stop api')).toBe(-1);
+    expect(out).toContain("Can't reach database server");
+    expect(out).toMatch(/postgres/);
+  });
+
+  it('tên migration chờ có chữ "top1000" không bị nhầm là P1000: vẫn backup, không dừng mã 2', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1', FAKE_MIGRATE_PENDING: '1', FAKE_MIGRATE_NAME: '20261101000000_top1000_p1001x_index' } });
+    expect(status).toBe(0);
+    expect(idx(calls, 'pg_dump')).toBeGreaterThan(-1);
+  });
+
+  it('migration chờ: in kết quả của prisma vào log rồi backup như cũ', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1', FAKE_MIGRATE_PENDING: '1' } });
+    expect(status).toBe(0);
+    expect(out).toContain('have not yet been applied');
+    expect(idx(calls, 'pg_dump')).toBeGreaterThan(-1);
   });
 });
 

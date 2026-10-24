@@ -94,7 +94,11 @@ function jwtCheck(env: Env, key: string, id: string, title: string): CheckResult
   if (!v) return fail(G_CORE, id, title, `${key} chưa đặt`, sign);
   if (looksLikePlaceholder(v)) return fail(G_CORE, id, title, `${key} còn là giá trị mẫu`, sign);
   if (v.length < 16) return fail(G_CORE, id, title, `${key} ${describeSecret(v)}`, sign);
-  if (v.length < 32) return warn(G_CORE, id, title, `${key} ${describeSecret(v)}`, sign);
+  if (v.length < 32) {
+    // Khớp env.validation.ts: production không boot với khoá dưới 32 ký tự.
+    const make = envValue(env, 'NODE_ENV') === 'production' ? fail : warn;
+    return make(G_CORE, id, title, `${key} ${describeSecret(v)} (production đòi từ 32 ký tự)`, sign);
+  }
   return pass(G_CORE, id, title, `${key} ${describeSecret(v)}`);
 }
 
