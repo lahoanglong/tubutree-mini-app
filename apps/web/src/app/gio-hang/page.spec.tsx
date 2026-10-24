@@ -474,8 +474,9 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
     state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
     click(container.querySelector('button[aria-label="Bỏ mã giảm giá WELCOME"]'));
+    // Bỏ mã → tải lại giỏ → hết debounce mới hỏi lại giá phần chọn: máy CI chậm có thể cần hơn một nhịp settle.
+    await vi.waitFor(() => expect(state.selection).toHaveBeenCalledTimes(2), { timeout: 3000, interval: 50 });
     await settle();
-    expect(state.selection).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain('-3.000đ');
     expect(container.textContent).toContain('Tổng100.000đ');
   });
