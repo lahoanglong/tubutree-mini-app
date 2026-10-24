@@ -119,6 +119,30 @@ describe('SupportChatForwardProcessor', () => {
     expect(bridge.send).not.toHaveBeenCalled();
   });
 
+  it('lỗi thử-lại-được mà forward bị xoá giữa lúc gửi: không ném P2025 (cập nhật lastError bằng updateMany), vẫn ném lỗi cho BullMQ', async () => {
+    const send = jest.fn().mockResolvedValue({ ok: false, retry: true, unknown: false, code: 'NOT_CONNECTED', message: 'm' });
+    const { proc, prisma, job } = setup({ send });
+    prisma.supportForward.update.mockRejectedValue(Object.assign(new Error('gone'), { code: 'P2025' }));
+    await expect(proc.process(job())).rejects.toThrow('NOT_CONNECTED');
+    expect(prisma.supportForward.update).not.toHaveBeenCalled();
+  });
+
+  it('dựng nội dung ném lỗi DB (Prisma): không chốt BUILD_FAILED, ném để BullMQ thử lại', async () => {
+    const { Prisma } = await import('@prisma/client');
+    const errs = [
+      new Prisma.PrismaClientKnownRequestError('timeout', { code: 'P1008', clientVersion: 'x' }),
+      new Prisma.PrismaClientUnknownRequestError('unk', { clientVersion: 'x' }),
+      new Prisma.PrismaClientInitializationError('init', 'x'),
+      new Prisma.PrismaClientRustPanicError('panic', 'x'),
+    ];
+    for (const userError of errs) {
+      const { proc, forwards, bridge, job } = setup({ userError });
+      await expect(proc.process(job())).rejects.toBe(userError);
+      expect(forwards[0]!.status).toBe('PENDING');
+      expect(bridge.send).not.toHaveBeenCalled();
+    }
+  });
+
   it('dựng nội dung tin chuyển ném lỗi: chốt FAILED mã BUILD_FAILED, không gửi, không ném, không đặt lịch lại', async () => {
     const { proc, bridge, forwards, service, job } = setup({ userError: new Error('user table down') });
     await expect(proc.process(job())).resolves.toBeUndefined();

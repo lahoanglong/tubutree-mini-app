@@ -4,9 +4,9 @@ import { replyPreview } from './reply-notifier';
 type Ev = Parameters<BridgeEventsService['handle']>[0];
 
 const msg = (o: Record<string, unknown> = {}): Ev =>
-  ({ type: 'message', groupId: 'g1', msgId: 'z100', cliMsgId: 'c100', uidFrom: 'u9', dName: 'Hoa CSKH', isSelf: false, ts: 1, text: 'Dạ vâng', imageUrl: null, quote: null, ...o }) as Ev;
+  ({ type: 'message', groupId: 'g1', msgId: 'z100', cliMsgId: 'c100', uidFrom: 'u9', dName: 'Hoa CSKH', isSelf: false, ts: Date.now(), text: 'Dạ vâng', imageUrl: null, quote: null, ...o }) as Ev;
 
-function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; createError?: unknown; blocked?: boolean; bridge?: any; tombstones?: string[]; recallExists?: boolean; recallCount?: number[] } = {}) {
+function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; createError?: unknown; blocked?: boolean; bridge?: any; tombstones?: string[]; recallCount?: number[] } = {}) {
   const convs = opts.convs ?? [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: opts.blocked ? new Date() : null }];
   const forwards = opts.forwards ?? [];
   const created: any[] = [];
@@ -28,15 +28,11 @@ function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; creat
         return Promise.resolve({ id: `m${created.length}`, createdAt: new Date(), ...data });
       }),
       findUnique: jest.fn().mockImplementation(({ where }: any) =>
-        Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId && (!where.sender || (m.sender ?? 'STAFF') === where.sender)) ?? (opts.recallExists ? { id: 'mx' } : null))),
+        Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId && (!where.sender || (m.sender ?? 'STAFF') === where.sender)) ?? null)),
       updateMany: jest.fn().mockImplementation(() => Promise.resolve({ count: (opts.recallCount ?? [1]).shift() ?? 0 })),
     },
     supportRecallTombstone: {
-      deleteMany: jest.fn().mockImplementation(({ where }: any) => {
-        const i = tombstones.indexOf(where.zaloMsgId);
-        if (i >= 0) tombstones.splice(i, 1);
-        return Promise.resolve({ count: i >= 0 ? 1 : 0 });
-      }),
+      findUnique: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(tombstones.includes(where.zaloMsgId) ? { zaloMsgId: where.zaloMsgId } : null)),
       upsert: jest.fn().mockImplementation(({ where }: any) => { if (!tombstones.includes(where.zaloMsgId)) tombstones.push(where.zaloMsgId); return Promise.resolve({}); }),
     },
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null), upsert: jest.fn().mockResolvedValue({}) },
@@ -325,21 +321,36 @@ describe('BridgeEventsService.handle message', () => {
   });
 
   describe('thu hồi đến trước tin', () => {
-    it('tin có tombstone: không lưu gì, không chuông, xoá tombstone', async () => {
+    it('tin có tombstone: không lưu gì, không chuông, GIỮ tombstone (để gửi lại vẫn bị bỏ)', async () => {
       const { svc, created, notifier, tombstones } = setup({ tombstones: ['z100'] });
+      expect(await svc.handle(msg({ text: '#K7Q2 hi' }))).toEqual({ status: 200, body: { ok: true } });
       expect(await svc.handle(msg({ text: '#K7Q2 hi' }))).toEqual({ status: 200, body: { ok: true } });
       expect(created).toHaveLength(0);
       expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
-      expect(tombstones).toEqual([]);
+      expect(tombstones).toEqual(['z100']);
     });
 
     it('tombstone xuất hiện giữa lúc kiểm và lúc lưu: tin vừa lưu bị thu hồi ngay, không chuông', async () => {
       const { svc, prisma, notifier, created } = setup();
-      prisma.supportRecallTombstone.deleteMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+      prisma.supportRecallTombstone.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ zaloMsgId: 'z100' });
       await svc.handle(msg({ text: '#K7Q2 hi' }));
       expect(created).toHaveLength(1);
       expect(prisma.supportMessage.updateMany).toHaveBeenCalledWith({ where: { zaloMsgId: 'z100', sender: 'STAFF', recalledAt: null }, data: { recalledAt: expect.any(Date) } });
       expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
+    });
+
+    it('trùng msgId (P2002) mà tombstone có từ giữa chừng: vẫn thu hồi hàng đã lưu', async () => {
+      const { svc, prisma, notifier } = setup({ createError: { code: 'P2002' } });
+      prisma.supportRecallTombstone.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ zaloMsgId: 'z100' });
+      expect((await svc.handle(msg({ text: '#K7Q2 hi' }))).status).toBe(200);
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledWith({ where: { zaloMsgId: 'z100', sender: 'STAFF', recalledAt: null }, data: { recalledAt: expect.any(Date) } });
+      expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
+    });
+
+    it('kiểm tombstone sau khi lưu ném lỗi: ném ra để cầu nối gửi lại (gửi lại đi đường P2002 và kiểm lại)', async () => {
+      const { svc, prisma } = setup();
+      prisma.supportRecallTombstone.findUnique.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('db'));
+      await expect(svc.handle(msg({ text: '#K7Q2 hi' }))).rejects.toThrow('db');
     });
 
     it('tombstone của tin khác không chặn tin này', async () => {
@@ -347,6 +358,22 @@ describe('BridgeEventsService.handle message', () => {
       await svc.handle(msg({ text: '#K7Q2 hi' }));
       expect(created).toHaveLength(1);
       expect(tombstones).toEqual(['zkhac']);
+    });
+  });
+
+  describe('trích chưa khớp kèm #MÃ: 503 chỉ khi sự kiện còn mới (ts trong 5 phút)', () => {
+    const pending = [fwd({ status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 60_000) })];
+    const unresolved = { globalMsgId: 'chua-co', cliMsgId: '1', text: 'một câu bình thường' };
+
+    it('ts cũ hơn 5 phút: định tuyến theo #MÃ dù còn forward PENDING', async () => {
+      const { svc, created } = setup({ forwards: pending });
+      expect(await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved, ts: Date.now() - 6 * 60_000 }))).toEqual({ status: 200, body: { ok: true } });
+      expect(created).toHaveLength(1);
+    });
+
+    it('ts mới: vẫn 503', async () => {
+      const { svc } = setup({ forwards: pending });
+      expect((await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved, ts: Date.now() - 60_000 }))).status).toBe(503);
     });
   });
 });
@@ -377,22 +404,15 @@ describe('BridgeEventsService.handle undo và state', () => {
     });
   });
 
-  it('undo mà tin chưa có: ghi tombstone, vẫn 200', async () => {
-    const { svc, prisma, tombstones } = setup({ recallCount: [0, 0] });
+  it('undo: ghi tombstone TRƯỚC rồi mới thu hồi hàng (không kiểm tồn tại)', async () => {
+    const { svc, prisma, tombstones } = setup({ recallCount: [0] });
+    const order: string[] = [];
+    prisma.supportRecallTombstone.upsert.mockImplementation(() => { order.push('tombstone'); return Promise.resolve({}); });
+    prisma.supportMessage.updateMany.mockImplementation(() => { order.push('recall'); return Promise.resolve({ count: 0 }); });
     expect(await svc.handle({ type: 'undo', groupId: 'g1', msgId: 'z100' })).toEqual({ status: 200, body: { ok: true } });
+    expect(order).toEqual(['tombstone', 'recall']);
     expect(prisma.supportRecallTombstone.upsert).toHaveBeenCalledWith({ where: { zaloMsgId: 'z100' }, create: { zaloMsgId: 'z100' }, update: {} });
-    expect(tombstones).toEqual(['z100']);
-  });
-
-  it('undo mà tin đã thu hồi từ trước: không ghi tombstone', async () => {
-    const { svc, prisma } = setup({ recallCount: [0], recallExists: true });
-    await svc.handle({ type: 'undo', groupId: 'g1', msgId: 'z100' });
-    expect(prisma.supportRecallTombstone.upsert).not.toHaveBeenCalled();
-  });
-
-  it('undo: tin lưu xong giữa lúc kiểm tra và ghi tombstone thì thu hồi bù và xoá tombstone', async () => {
-    const { svc, tombstones } = setup({ recallCount: [0, 1] });
-    await svc.handle({ type: 'undo', groupId: 'g1', msgId: 'z100' });
+    expect(prisma.supportMessage.findUnique).not.toHaveBeenCalled();
     expect(tombstones).toEqual([]);
   });
 

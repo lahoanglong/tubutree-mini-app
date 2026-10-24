@@ -61,7 +61,7 @@ export async function sendAndSettle(
     return null;
   }
   if (r.retry && canRetry) {
-    await prisma.supportForward.update({ where: { id: forward.id }, data: { lastError } });
+    await prisma.supportForward.updateMany({ where: { id: forward.id }, data: { lastError } });
     return lastError;
   }
   await settle(prisma, forward.id, { status: 'FAILED', lastError });

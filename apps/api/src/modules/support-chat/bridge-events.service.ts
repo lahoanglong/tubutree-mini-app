@@ -44,14 +44,17 @@ export class BridgeEventsService {
     return r.count;
   }
 
+  /**
+   * Thu hồi và tin có thể được xử lý song song hoặc ngược thứ tự. Thu hồi ghi tombstone TRƯỚC rồi mới đánh dấu hàng (nếu có);
+   * tin kiểm tombstone trước khi lưu và kiểm lại sau khi lưu. Theo cặp này, dù xen kẽ thế nào cũng có một bên thấy bên kia.
+   */
   private async recall(msgId: string): Promise<void> {
-    if ((await this.markRecalled(msgId)) > 0) return;
-    // Đã thu hồi từ trước thì không cần gì thêm.
-    if (await this.prisma.supportMessage.findUnique({ where: { zaloMsgId: msgId, sender: 'STAFF' }, select: { id: true } })) return;
-    // Tin chưa tới: nhớ lại để lúc nó tới thì bỏ.
     await this.prisma.supportRecallTombstone.upsert({ where: { zaloMsgId: msgId }, create: { zaloMsgId: msgId }, update: {} });
-    // Tin có thể vừa được lưu giữa hai bước trên; thu hồi bù và bỏ tombstone.
-    if ((await this.markRecalled(msgId)) > 0) await this.prisma.supportRecallTombstone.deleteMany({ where: { zaloMsgId: msgId } });
+    await this.markRecalled(msgId);
+  }
+
+  private hasTombstone(msgId: string): Promise<boolean> {
+    return this.prisma.supportRecallTombstone.findUnique({ where: { zaloMsgId: msgId } }).then((t) => !!t);
   }
 
   private async handleMessage(e: MessageEvent): Promise<BridgeEventResult> {
@@ -61,8 +64,8 @@ export class BridgeEventsService {
     if (await this.prisma.supportForward.findUnique({ where: { zaloMsgId: e.msgId } })) return OK;
     if (e.isSelf && isForwardHeader(text)) return OK;
 
-    // Thu hồi đã tới trước tin này: bỏ tin, xoá tombstone (deleteMany để hai lần gửi lại không ném P2025).
-    if ((await this.prisma.supportRecallTombstone.deleteMany({ where: { zaloMsgId: e.msgId } })).count > 0) return OK;
+    // Thu hồi đã tới trước tin này: bỏ tin. Tombstone giữ lại (lần gửi lại vẫn bị bỏ), việc dọn để retention lo.
+    if (await this.hasTombstone(e.msgId)) return OK;
 
     const { code, body } = parseStaffReply(e.text);
     const conv = await this.findConversation(e, code);
@@ -87,12 +90,15 @@ export class BridgeEventsService {
         },
       });
     } catch (err) {
-      if (isP2002(err)) return OK;
-      throw err;
+      if (!isP2002(err)) throw err;
+      // Hàng đã có từ lần gửi trước: lần đó có thể chết trước bước kiểm lại nên kiểm ở đây, rồi không báo chuông lần nữa.
+      if (await this.hasTombstone(e.msgId)) await this.markRecalled(e.msgId);
+      return OK;
     }
 
-    // Thu hồi có thể ghi tombstone ngay sau lúc ta kiểm ở trên mà trước khi tin này lưu xong: kiểm lại sau khi lưu.
-    if ((await this.prisma.supportRecallTombstone.deleteMany({ where: { zaloMsgId: e.msgId } })).count > 0) {
+    // Thu hồi có thể ghi tombstone sau lần kiểm đầu mà trước khi tin này lưu xong: kiểm lại sau khi lưu.
+    // Lỗi ở đây ném ra để cầu nối gửi lại; lần gửi lại đi đường P2002 ở trên và kiểm lại.
+    if (await this.hasTombstone(e.msgId)) {
       await this.markRecalled(e.msgId);
       return OK;
     }
@@ -122,10 +128,12 @@ export class BridgeEventsService {
         return quoted;
       }
       // Trích chưa khớp mà có forward đang gửi dở: chờ nó ghi zaloMsgId rồi thử lại, kể cả khi câu có #MÃ, để quy tắc conflict còn áp được.
-      const pending = await this.prisma.supportForward.findFirst({
+      // Chỉ chờ khi chính sự kiện còn mới: nhóm bận không được giữ một câu trả lời ở 503 hàng giờ.
+      const fresh = !Number.isFinite(e.ts) || Date.now() - e.ts <= PENDING_FORWARD_WINDOW_MS;
+      const pending = fresh && (await this.prisma.supportForward.findFirst({
         where: { status: 'PENDING', zaloMsgId: null, createdAt: { gte: new Date(Date.now() - PENDING_FORWARD_WINDOW_MS) } },
         select: { id: true },
-      });
+      }));
       if (pending) return 'retry';
     }
     if (!code) return null;

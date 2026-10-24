@@ -707,8 +707,10 @@ describe('SystemConfigService.set — khoá chat CSKH (chat.*)', () => {
     const ok = mk(365);
     await ok.svc.set('retention.support_chat_days', 90, 'admin1');
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
-    await expect(mk(365).svc.set('retention.support_chat_days', 89, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(mk(365).svc.set('retention.support_chat_days', 3651, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(mk(365).svc.set('retention.support_chat_days', 100.5, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    for (const bad of [89, 3651, 100.5]) {
+      const m = mk(365);
+      await expect(m.svc.set('retention.support_chat_days', bad, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
   });
 });

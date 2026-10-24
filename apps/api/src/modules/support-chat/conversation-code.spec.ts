@@ -29,4 +29,14 @@ describe('issueConversationCode', () => {
   it('bỏ qua mã đang có hội thoại và mã đã nghỉ của khách xoá tài khoản', async () => {
     expect(await issueConversationCode(db(['K7Q2'], ['M4N5']) as any, seq('K7Q2', 'M4N5', 'R8S9'))).toBe('R8S9');
   });
+
+  it('kiểm bảng hội thoại trước, rồi mới tới bảng mã nghỉ, tuần tự', async () => {
+    const order: string[] = [];
+    const d = {
+      supportConversation: { findUnique: jest.fn().mockImplementation(async () => { order.push('conversation:start'); await Promise.resolve(); order.push('conversation:end'); return null; }) },
+      supportRetiredCode: { findUnique: jest.fn().mockImplementation(async () => { order.push('retired'); return null; }) },
+    };
+    await issueConversationCode(d as any, seq('K7Q2'));
+    expect(order).toEqual(['conversation:start', 'conversation:end', 'retired']);
+  });
 });

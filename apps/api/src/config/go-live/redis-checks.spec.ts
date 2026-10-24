@@ -6,8 +6,8 @@ const status = (s: RedisSnapshot, id: string) => byId(evaluateRedis(s), id).stat
 const patch = (p: Partial<RedisSnapshot>): RedisSnapshot => ({ ...GOOD_REDIS, ...p });
 
 describe('evaluateRedis', () => {
-  it('khớp đúng 6 hàng đợi của ops', () => {
-    expect([...EXPECTED_QUEUES].sort()).toEqual(['gomdon-events', 'gomdon-push', 'notifications', 'pancake-events', 'pancake-push', 'zalo-oa-events']);
+  it('khớp đúng 8 hàng đợi của ops', () => {
+    expect([...EXPECTED_QUEUES].sort()).toEqual(['gomdon-events', 'gomdon-push', 'notifications', 'pancake-events', 'pancake-push', 'support-chat-forward', 'support-chat-notify', 'zalo-oa-events']);
   });
 
   it('Redis tốt: mọi dòng PASS', () => {

@@ -123,7 +123,7 @@ export const GOOD_REDIS: RedisSnapshot = {
   maxmemoryPolicy: 'noeviction',
   maxmemoryBytes: 150 * 1024 * 1024,
   appendonly: 'yes',
-  queues: ['pancake-push', 'pancake-events', 'gomdon-push', 'gomdon-events', 'notifications', 'zalo-oa-events'].map((name) => ({
+  queues: ['pancake-push', 'pancake-events', 'gomdon-push', 'gomdon-events', 'notifications', 'zalo-oa-events', 'support-chat-forward', 'support-chat-notify'].map((name) => ({
     name,
     ok: true,
     counts: { waiting: 0, active: 0, delayed: 0, failed: 0 },

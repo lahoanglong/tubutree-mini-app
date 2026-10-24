@@ -76,7 +76,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
   const job = (conversationId: string): any => ({ data: { conversationId }, attemptsMade: 0, opts: { attempts: 5 } });
 
   function reply(o: Record<string, unknown> = {}): ZaloBridgeEvent {
-    return { type: 'message', groupId: 'g-it', msgId: `zm-${randCode(10)}`, cliMsgId: randCode(6), uidFrom: 'staff', dName: 'Hoa', isSelf: false, ts: 1, text: 'Dạ vâng', imageUrl: null, quote: null, ...o } as ZaloBridgeEvent;
+    return { type: 'message', groupId: 'g-it', msgId: `zm-${randCode(10)}`, cliMsgId: randCode(6), uidFrom: 'staff', dName: 'Hoa', isSelf: false, ts: Date.now(), text: 'Dạ vâng', imageUrl: null, quote: null, ...o } as ZaloBridgeEvent;
   }
 
   it('5 lần send song song rồi processor chạy (cả conv-<id> lẫn conv-<id>-next): một SupportForward chứa đủ 5 tin', async () => {
@@ -236,28 +236,81 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'CUSTOMER' } })).toBe(MAX_MESSAGES_PER_DAY);
   });
 
-  it('thu hồi tới trước tin: tin tới sau không được lưu và tombstone bị xoá', async () => {
-    const { conv, code } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
-    const msgId = `zm-${randCode(10)}`;
-    expect((await events.handle({ type: 'undo', groupId: 'g-it', msgId } as ZaloBridgeEvent)).status).toBe(200);
-    expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(1);
-    expect((await events.handle(reply({ msgId, text: `#${code} Dạ ạ` }))).status).toBe(200);
-    expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'STAFF' } })).toBe(0);
-    expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(0);
-  });
-
-  it('thu hồi và tin chạy song song 20 lần: tin hoặc không có, hoặc đã thu hồi; không còn tombstone', async () => {
-    const { conv, code } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
-    for (let i = 0; i < 20; i++) {
-      const msgId = `zm-${randCode(10)}`;
-      await Promise.all([
-        events.handle({ type: 'undo', groupId: 'g-it', msgId } as ZaloBridgeEvent),
-        events.handle(reply({ msgId, text: `#${code} lần ${i}` })),
-      ]);
-      const rows = await prisma.supportMessage.findMany({ where: { conversationId: conv.id, zaloMsgId: msgId } });
+  describe('thu hồi và tin: mọi thứ tự đều không để khách thấy tin, không chuông', () => {
+    const undo = (msgId: string) => ({ type: 'undo', groupId: 'g-it', msgId }) as ZaloBridgeEvent;
+    async function expectHidden(convId: string, userId: string, msgId: string) {
+      const rows = await prisma.supportMessage.findMany({ where: { conversationId: convId, zaloMsgId: msgId } });
       expect(rows.every((r) => r.recalledAt !== null)).toBe(true);
-      expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(0);
+      const seen = await chat.getThread(userId);
+      expect(seen.messages.filter((m) => m.sender === 'STAFF')).toHaveLength(0);
+      expect(scheduleReplyBell).not.toHaveBeenCalled();
     }
+    beforeEach(() => scheduleReplyBell.mockClear());
+
+    it('(a) thu hồi chạy xong giữa lần kiểm tombstone đầu và lúc lưu tin', async () => {
+      const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const msgId = `zm-${randCode(10)}`;
+      let release!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      let reached!: () => void;
+      const atHook = new Promise<void>((r) => { reached = r; });
+      const real = prisma.supportRecallTombstone.findUnique.bind(prisma.supportRecallTombstone);
+      const spy = jest.spyOn(prisma.supportRecallTombstone, 'findUnique').mockImplementationOnce(((args: never) => {
+        const res = real(args);
+        return res.then(async (v) => { reached(); await gate; return v; });
+      }) as never);
+      try {
+        const handling = events.handle(reply({ msgId, text: `#${code} Dạ ạ` }));
+        await atHook;
+        await events.handle(undo(msgId));
+        release();
+        expect((await handling).status).toBe(200);
+      } finally {
+        spy.mockRestore();
+      }
+      await expectHidden(conv.id, u.id, msgId);
+    });
+
+    it('(b) thu hồi trước, tin sau: không lưu', async () => {
+      const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const msgId = `zm-${randCode(10)}`;
+      await events.handle(undo(msgId));
+      expect((await events.handle(reply({ msgId, text: `#${code} Dạ ạ` }))).status).toBe(200);
+      expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, zaloMsgId: msgId } })).toBe(0);
+      await expectHidden(conv.id, u.id, msgId);
+    });
+
+    it('(c) tin trước, thu hồi sau: hàng bị đánh dấu thu hồi', async () => {
+      const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const msgId = `zm-${randCode(10)}`;
+      await events.handle(reply({ msgId, text: `#${code} Dạ ạ` }));
+      scheduleReplyBell.mockClear();
+      await events.handle(undo(msgId));
+      await expectHidden(conv.id, u.id, msgId);
+    });
+
+    it('(d) tin bị bỏ rồi cầu nối gửi lại: vẫn bị bỏ (tombstone còn)', async () => {
+      const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const msgId = `zm-${randCode(10)}`;
+      await events.handle(undo(msgId));
+      const e = reply({ msgId, text: `#${code} Dạ ạ` });
+      await events.handle(e);
+      await events.handle(e);
+      expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, zaloMsgId: msgId } })).toBe(0);
+      expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(1);
+      await expectHidden(conv.id, u.id, msgId);
+    });
+
+    it('song song 30 lần: tin hoặc không có, hoặc đã thu hồi', async () => {
+      const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      for (let i = 0; i < 30; i++) {
+        const msgId = `zm-${randCode(10)}`;
+        await Promise.all([events.handle(undo(msgId)), events.handle(reply({ msgId, text: `#${code} lần ${i}` }))]);
+        const rows = await prisma.supportMessage.findMany({ where: { conversationId: conv.id, zaloMsgId: msgId } });
+        expect(rows.every((r) => r.recalledAt !== null)).toBe(true);
+      }
+      expect((await chat.getThread(u.id)).messages.filter((m) => m.sender === 'STAFF')).toHaveLength(0);
+    });
   });
 
   it('mã đã nghỉ không được cấp lại', async () => {

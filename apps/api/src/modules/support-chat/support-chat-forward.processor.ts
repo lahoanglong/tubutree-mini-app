@@ -1,7 +1,7 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import type { Job } from 'bullmq';
-import type { SupportForward, SupportMessage } from '@prisma/client';
+import { Prisma, type SupportForward, type SupportMessage } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
@@ -14,6 +14,15 @@ import { CHAT_GROUP_KEY } from './support-chat.config';
 
 /** Một tin nhóm Zalo chứa tối đa chừng này ký tự nội dung khách; phần dư để job sau. */
 const MAX_FORWARD_CHARS = 3000;
+
+function isPrismaRuntimeError(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError ||
+    e instanceof Prisma.PrismaClientUnknownRequestError ||
+    e instanceof Prisma.PrismaClientInitializationError ||
+    e instanceof Prisma.PrismaClientRustPanicError
+  );
+}
 
 /** Cập nhật gán forwardId trúng ít dòng hơn số tin đã chọn: khoá advisory đáng lẽ loại trường hợp này, nên huỷ cả giao dịch thay vì gửi thiếu tin. */
 class ClaimMismatchError extends Error {}
@@ -112,6 +121,8 @@ export class SupportChatForwardProcessor extends WorkerHost {
     try {
       text = await buildForwardText(this.prisma, conv, messages);
     } catch (e) {
+      // Lỗi DB tạm thời (mất kết nối, hết giờ) phải để BullMQ thử lại, không được biến thành FAILED vĩnh viễn.
+      if (isPrismaRuntimeError(e)) throw e;
       // Lỗi dựng nội dung (ví dụ dòng khách không đọc được) không phải lỗi tạm: chốt FAILED để admin thấy, không để job thử lại mỗi phút.
       await settle(this.prisma, forward.id, { status: 'FAILED', lastError: `BUILD_FAILED: ${(e as Error).message}`.slice(0, 500) });
       return null;

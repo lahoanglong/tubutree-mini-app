@@ -4,6 +4,8 @@ import {
   QUEUE_NOTIFICATIONS,
   QUEUE_PANCAKE_EVENTS,
   QUEUE_PANCAKE_PUSH,
+  QUEUE_SUPPORT_CHAT_FORWARD,
+  QUEUE_SUPPORT_CHAT_NOTIFY,
   QUEUE_ZALO_OA_EVENTS,
 } from '../../jobs/queues';
 import { fail, pass, warn, type CheckResult, type GoLivePhase } from './types';
@@ -18,6 +20,8 @@ export const EXPECTED_QUEUES = [
   QUEUE_GOMDON_EVENTS,
   QUEUE_NOTIFICATIONS,
   QUEUE_ZALO_OA_EVENTS,
+  QUEUE_SUPPORT_CHAT_FORWARD,
+  QUEUE_SUPPORT_CHAT_NOTIFY,
 ] as const;
 
 export interface QueueSnapshot {

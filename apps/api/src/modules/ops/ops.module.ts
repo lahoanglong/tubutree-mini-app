@@ -7,6 +7,8 @@ import {
   QUEUE_NOTIFICATIONS,
   QUEUE_PANCAKE_EVENTS,
   QUEUE_PANCAKE_PUSH,
+  QUEUE_SUPPORT_CHAT_FORWARD,
+  QUEUE_SUPPORT_CHAT_NOTIFY,
   QUEUE_ZALO_OA_EVENTS,
 } from '../../jobs/queues';
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
@@ -17,7 +19,7 @@ import { OPS_QUEUES, OpsHealthService } from './ops-health.service';
 import { OpsInboxService } from './ops-inbox.service';
 import { OpsWebhookEventsService } from './ops-webhook-events.service';
 
-const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS];
+const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD, QUEUE_SUPPORT_CHAT_NOTIFY];
 
 @Module({
   imports: [GomdonModule, MerchantModule],

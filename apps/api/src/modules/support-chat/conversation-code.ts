@@ -24,11 +24,11 @@ type CodeDb = {
 export async function issueConversationCode(db: CodeDb, random: () => number = Math.random): Promise<string> {
   for (;;) {
     const code = newConversationCode(random);
-    const [inUse, retired] = await Promise.all([
-      db.supportConversation.findUnique({ where: { code }, select: { id: true } }),
-      db.supportRetiredCode.findUnique({ where: { code } }),
-    ]);
-    if (!inUse && !retired) return code;
+    // Tuần tự, bảng hội thoại trước: xoá tài khoản ghi mã nghỉ rồi mới xoá hội thoại trong một giao dịch, nên đọc theo thứ tự này
+    // không thể bỏ sót cả hai khi giao dịch đó commit giữa chừng.
+    if (await db.supportConversation.findUnique({ where: { code }, select: { id: true } })) continue;
+    if (await db.supportRetiredCode.findUnique({ where: { code } })) continue;
+    return code;
   }
 }
 
