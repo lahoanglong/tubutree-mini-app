@@ -38,6 +38,6 @@ async function syncDir(dir: string): Promise<void> {
   } catch (e) {
     // Windows và vài hệ tệp mạng từ chối mở hay fsync thư mục.
     if (DIR_FSYNC_UNSUPPORTED.has((e as NodeJS.ErrnoException).code ?? '')) return;
-    console.error('[bridge] fsync thư mục lỗi sau khi đổi tên tệp');
+    console.error(`[bridge] fsync thư mục lỗi sau khi đổi tên tệp (mã ${(e as NodeJS.ErrnoException).code ?? 'không rõ'})`);
   }
 }

@@ -16,7 +16,7 @@ export function decrypt(blob: string, key: Buffer): string {
   if (parts.length !== 4 || parts[0] !== 'v1') {
     throw new Error('Định dạng dữ liệu mã hoá không hợp lệ');
   }
-  const [, iv, tag, ct] = parts;
+  const [, iv = '', tag = '', ct = ''] = parts;
   const ivBuf = Buffer.from(iv, 'base64');
   const tagBuf = Buffer.from(tag, 'base64');
   if (ivBuf.length !== IV_LENGTH || tagBuf.length !== TAG_LENGTH) throw new Error(CORRUPT);

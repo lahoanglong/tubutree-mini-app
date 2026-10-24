@@ -119,7 +119,9 @@ describe('writeFileAtomic', () => {
       faults.sync.dir = 'EIO';
       await writeFileAtomic(path, '{"a":1}');
       expect(await readFile(path, 'utf8')).toBe('{"a":1}');
-      expect(err).toHaveBeenCalled();
+      expect(err).toHaveBeenCalledTimes(1);
+      expect(String(err.mock.calls[0][0])).toContain('EIO');
+      expect(String(err.mock.calls[0][0])).not.toContain(path);
       err.mockRestore();
       reset();
     });

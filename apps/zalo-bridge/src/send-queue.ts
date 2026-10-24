@@ -55,7 +55,7 @@ export class SendQueue {
     for (;;) {
       this.starts = this.starts.filter((t) => this.now() - t < HOUR_MS);
       if (this.starts.length < this.maxPerHour) break;
-      await this.sleep(Math.max(1, this.starts[0] + HOUR_MS - this.now()));
+      await this.sleep(Math.max(1, (this.starts[0] ?? 0) + HOUR_MS - this.now()));
     }
     const start = this.now();
     this.lastStart = start;

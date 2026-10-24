@@ -665,6 +665,105 @@ describe('zalo-client: đăng nhập QR', () => {
       vi.restoreAllMocks();
     }
   });
+
+  it('thứ tự thật của zca-js: type 4 phát trước, logout lúc đang lưu, loginQR xong sau: tệp phiên vắng và nối lại không lên CONNECTED', async () => {
+    const { s, cbs, dones } = qrSetup();
+    let fileExists = false;
+    s.credentials.save.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      fileExists = true;
+    });
+    s.credentials.clear.mockImplementation(async () => {
+      fileExists = false;
+    });
+    s.credentials.load.mockImplementation(async () => (fileExists ? CREDS : null));
+    await s.client.start();
+    const p = s.client.qrStart();
+    cbs[0]({ type: 0, data: { image: 'AAAA' } });
+    await p;
+    cbs[0](ok4);
+    await new Promise((r) => setTimeout(r, 10));
+    await s.client.logout();
+    dones[0](fakeApi());
+    await new Promise((r) => setTimeout(r, 200));
+    expect(fileExists).toBe(false);
+    await s.client.reconnect();
+    expect(s.client.state().state).toBe('NEED_QR');
+    expect(s.login).not.toHaveBeenCalled();
+  });
+
+  it('lượt bị bỏ trước khi có ảnh thì qrStart đang chờ bị từ chối ngay bằng QR_CANCELLED, không treo', async () => {
+    const { s } = qrSetup();
+    await s.client.start();
+    const p = s.client.qrStart();
+    const rejected = expect(p).rejects.toMatchObject({ code: 'QR_CANCELLED' });
+    await s.client.logout();
+    await rejected;
+  });
+
+  it('fetchAccountInfo treo thì sau 15 giây attach vẫn nghe tin, không có tên hiển thị', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const api = fakeApi({ fetchAccountInfo: () => new Promise(() => undefined) });
+      const s = setup({ api });
+      const started = s.client.start();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await started;
+      expect(api.listener.start).toHaveBeenCalled();
+      expect(s.client.state()).toMatchObject({ displayName: null, avatar: null });
+      expect(err).toHaveBeenCalledTimes(1);
+    } finally {
+      err.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('logout trong lúc fetchAccountInfo thì không để lại tên hiển thị cũ', async () => {
+    let release: (v: { profile: { displayName: string; avatar: string } }) => void = () => undefined;
+    const api = fakeApi({ fetchAccountInfo: () => new Promise((r) => (release = r)) });
+    const s = setup({ api });
+    const started = s.client.start();
+    await s.client.logout();
+    release({ profile: { displayName: 'Cũ', avatar: 'c.png' } });
+    await started;
+    expect(s.client.state()).toMatchObject({ displayName: null, avatar: null });
+  });
+
+  it('lưu lại phiên lần nối lại xong sau khi phiên mới thay thế thì không xoá tệp của phiên mới', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      let n = 0;
+      s.credentials.save.mockImplementation(async () => {
+        n++;
+        if (n === 1) throw new Error('ENOSPC');
+        if (n === 2) await new Promise((r) => setTimeout(r, 50));
+      });
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'AAAA' } });
+      await p;
+      cbs[0](ok4);
+      const api2 = fakeApi();
+      dones[0](api2);
+      await vi.advanceTimersByTimeAsync(5);
+      api2.listener.emit('connected');
+      s.login.mockResolvedValueOnce(fakeApi());
+      api2.listener.emit('closed', 1006, '');
+      await vi.advanceTimersByTimeAsync(5_000);
+      const p2 = s.client.qrStart();
+      cbs[1]({ type: 0, data: { image: 'BBBB' } });
+      await p2;
+      cbs[1]({ type: 4, data: { cookie: [{ b: 2 }], imei: 'im2', userAgent: 'ua3' } });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(s.credentials.clear).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 describe('zalo-client: nhóm, cấu hình, sổ gửi', () => {

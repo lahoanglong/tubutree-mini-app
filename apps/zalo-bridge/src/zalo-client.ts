@@ -75,7 +75,7 @@ export interface ZaloClientDeps {
   now: () => number;
 }
 
-export type BridgeErrorCode = 'NOT_CONNECTED' | 'NO_GROUP' | 'SEND_FAILED' | 'QR_FAILED';
+export type BridgeErrorCode = 'NOT_CONNECTED' | 'NO_GROUP' | 'SEND_FAILED' | 'QR_FAILED' | 'QR_CANCELLED';
 
 export class BridgeError extends Error {
   constructor(
@@ -91,6 +91,7 @@ const GROUP_THREAD = 1;
 const KICKED_CODES = new Set([3000, 3003]);
 const LOGIN_TIMEOUT_MS = 60_000;
 const QR_FIRST_IMAGE_TIMEOUT_MS = 20_000;
+const ACCOUNT_INFO_TIMEOUT_MS = 15_000;
 const GROUP_INFO_CHUNK = 50;
 const STABLE_MS = 60_000;
 
@@ -100,6 +101,7 @@ interface QrAttempt {
   abort: (() => unknown) | null;
   saved: Promise<string | null> | null;
   timer: NodeJS.Timeout | null;
+  cancelFirst: ((e: BridgeError) => void) | null;
   first: Promise<{ status: 'WAITING_SCAN'; image: string }>;
 }
 
@@ -198,14 +200,18 @@ export function createZaloClient(deps: ZaloClientDeps) {
     detach();
     api = next;
     zaloUid = next.getOwnId();
+    let profile: { displayName: string; avatar: string } | null = null;
     try {
-      const { profile } = await next.fetchAccountInfo();
-      displayName = profile.displayName || null;
-      avatar = profile.avatar || null;
-    } catch {
-      // thiếu tên hiển thị không chặn việc nghe tin
+      profile = (await withTimeout(next.fetchAccountInfo(), ACCOUNT_INFO_TIMEOUT_MS, 'Lấy thông tin tài khoản Zalo')).profile;
+    } catch (e) {
+      // thiếu tên hiển thị không chặn việc nghe tin, nhưng một lần fetch treo cũng không được giữ chân cả lượt đăng nhập
+      console.error(`[zalo] không lấy được thông tin tài khoản: ${errMsg(e)}`);
     }
     if (gen !== generation) return;
+    if (profile) {
+      displayName = profile.displayName || null;
+      avatar = profile.avatar || null;
+    }
     const live = <A extends never[]>(fn: (...a: A) => void) => (...a: A) => {
       if (gen === generation) fn(...a);
     };
@@ -296,7 +302,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
     credentials.save(pending).then(
       () => {
         if (memCreds !== pending) {
-          void credentials.clear().catch(() => undefined);
+          // Đã đăng xuất thì tệp vừa ghi phải đi; phiên mới thay thế thì tệp đó là của phiên mới, không được đụng.
+          if (memCreds === null) void credentials.clear().catch(() => undefined);
           return;
         }
         sessionSaveError = null;
@@ -323,10 +330,13 @@ export function createZaloClient(deps: ZaloClientDeps) {
     generation++;
     reconnector.reset();
     detach();
+    const abandoned = qrAttempt;
     abandonQr();
     qr = idleQr();
     sessionSaveError = null;
     memCreds = null;
+    // Lệnh lưu của lượt vừa bỏ có thể còn đang chạy (zca-js phát type 4 trước khi loginQR xong): đợi nó xong rồi mới xoá, nếu không tệp phiên sống lại.
+    await abandoned?.saved;
     await credentials.clear();
     zaloUid = null;
     displayName = null;
@@ -342,6 +352,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     a.ended = true;
     if (a.timer) clearTimeout(a.timer);
     a.abort?.();
+    a.cancelFirst?.(new BridgeError('QR_CANCELLED', 'Lượt đăng nhập QR đã bị huỷ'));
   }
 
   // Một lượt QR đang chạy thì mọi lời gọi qrStart dùng chung ảnh đầu của nó. Lượt bị bỏ (quá 20 giây, logout) không được
@@ -350,7 +361,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     if (qrAttempt && !qrAttempt.ended) return qrAttempt.first;
     abandonQr();
     qr = idleQr();
-    const attempt: QrAttempt = { ended: false, abandoned: false, abort: null, saved: null, timer: null, first: null as never };
+    const attempt: QrAttempt = { ended: false, abandoned: false, abort: null, saved: null, timer: null, cancelFirst: null, first: null as never };
     qrAttempt = attempt;
     const finish = (): void => {
       attempt.ended = true;
@@ -366,6 +377,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
         reject(new BridgeError('QR_FAILED', 'Không lấy được mã QR'));
       }, QR_FIRST_IMAGE_TIMEOUT_MS);
       attempt.timer = timer;
+      attempt.cancelFirst = reject;
       zalo
         .loginQR((e) => {
           if (attempt.abandoned) {
@@ -394,13 +406,17 @@ export function createZaloClient(deps: ZaloClientDeps) {
         })
         .then(async (next) => {
           clearTimeout(timer);
-          if (attempt.abandoned) return;
+          if (attempt.abandoned) {
+            await attempt.saved;
+            if (memCreds === null) await credentials.clear().catch(() => undefined);
+            return;
+          }
           // Giữ lượt này là lượt đang chạy tới khi attach xong, để qrStart trong lúc đang lưu nhập vào đây thay vì mở loginQR thứ hai.
           reconnector.reset();
           const saveFailure = await attempt.saved;
           if (attempt.abandoned) {
             // Lệnh lưu có thể xong sau lệnh xoá của logout và ghi lại tệp phiên.
-            await credentials.clear().catch(() => undefined);
+            if (memCreds === null) await credentials.clear().catch(() => undefined);
             return;
           }
           sessionSaveError = saveFailure === null ? null : `Không lưu được phiên đăng nhập: ${saveFailure}`;
@@ -411,14 +427,19 @@ export function createZaloClient(deps: ZaloClientDeps) {
             finish();
           }
         })
-        .catch((e) => {
+        .catch(async (e) => {
           clearTimeout(timer);
-          if (attempt.abandoned) return;
+          if (attempt.abandoned) {
+            await attempt.saved;
+            if (memCreds === null) await credentials.clear().catch(() => undefined);
+            return;
+          }
           finish();
           if (qr.status !== 'EXPIRED' && qr.status !== 'FAILED' && qr.status !== 'SUCCESS') qr = { status: 'FAILED' };
           reject(new BridgeError('QR_FAILED', errMsg(e)));
         });
     });
+    attempt.first.catch(() => undefined);
     return attempt.first;
   }
 

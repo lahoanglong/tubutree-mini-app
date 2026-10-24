@@ -3,7 +3,7 @@ const TEXT_WINDOW_MS = 60_000;
 
 function dropExpired(list: Recent[], t: number): Recent[] {
   let i = 0;
-  while (i < list.length && t - list[i].at > TEXT_WINDOW_MS) i++;
+  while (i < list.length && t - (list[i]?.at ?? t) > TEXT_WINDOW_MS) i++;
   return i === 0 ? list : list.slice(i);
 }
 
