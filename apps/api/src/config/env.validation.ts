@@ -95,6 +95,9 @@ export const envSchema = z.object({
   ZALOPAY_KEY1: z.string().default(''),
   ZALOPAY_KEY2: z.string().default(''),
   ZALOPAY_ENDPOINT: z.string().default('https://sb-openapi.zalopay.vn/v2'),
+  // Mặc định của ZALOPAY_ENDPOINT là sandbox nên quên đặt khi lên thật sẽ nhận "thanh toán" giả. Production đã cấu hình
+  // ZaloPay mà vẫn trỏ sandbox thì không boot, trừ khi cố ý chạy thử (đặt 1).
+  ZALOPAY_ALLOW_SANDBOX: z.string().default(''),
 
   // ZNS
   ZNS_BASE_URL: z.string().default('https://business.openapi.zalo.me'),
@@ -150,6 +153,23 @@ export const envSchema = z.object({
   }
   // Fail-closed ở production: bắt buộc khai báo webhook secret để không bị forge.
   if (env.NODE_ENV === 'production') {
+    for (const key of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'] as const) {
+      if (env[key].length < 32) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: `${key} phải dài ít nhất 32 ký tự ở production. Sinh khoá mới: openssl rand -base64 48 (đổi khoá đang chạy sẽ đăng xuất mọi người dùng, nên làm trước khi mở bán).`,
+        });
+      }
+    }
+    if (env.ZALOPAY_APP_ID && /sb-openapi|sandbox/i.test(env.ZALOPAY_ENDPOINT) && env.ZALOPAY_ALLOW_SANDBOX !== '1') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ZALOPAY_ENDPOINT'],
+        message:
+          'ZALOPAY_ENDPOINT đang là sandbox trong khi ZALOPAY_APP_ID đã đặt: khách sẽ thanh toán giả. Đặt ZALOPAY_ENDPOINT=https://openapi.zalopay.vn/v2 (điền cả khoá thật), hoặc ZALOPAY_ALLOW_SANDBOX=1 nếu cố ý chạy thử.',
+      });
+    }
     if (!env.PANCAKE_WEBHOOK_SECRET) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
