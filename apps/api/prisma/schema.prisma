@@ -3835,6 +3835,8 @@ model SupportBridgeStatus {
   avatar        String?
   checkedAt     DateTime
   downAlertedAt DateTime?
+  /// Cầu nối báo CONNECTED nhưng listener không còn nhận tin (cron đặt mỗi phút).
+  deaf          Boolean   @default(false)
 
   @@map("support_bridge_status")
 }

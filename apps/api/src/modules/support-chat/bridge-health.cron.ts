@@ -6,6 +6,7 @@ import { formatVnDateTime } from '../../common/vn-time';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import type { ZaloBridgeHealth } from '@tubutree/shared-types';
 import { BridgeClient } from './bridge-client';
 import { buildForwardText, sendAndSettle } from './forward-delivery';
 import { STALE_AFTER_MS, resumableFailedForwardWhere, resumablePendingForwardWhere } from './support-chat-health';
@@ -13,6 +14,8 @@ import { SupportChatService } from './support-chat.service';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
 const ALERT_EVERY_MS = 60 * 60_000;
+/** Cầu nối bật selfListen nên mỗi tin nó gửi đều dội lại thành một sự kiện; gửi đã quá ngần này mà chưa có sự kiện nào sau đó là listener đã điếc. */
+export const DEAF_AFTER_SEND_MS = 5 * 60_000;
 /** Tin khách chưa chuyển quá ngần này mới quét: tin mới còn trong cửa sổ gộp 15 giây của job thường. */
 const SWEEP_AFTER_MS = 2 * 60_000;
 const SWEEP_BATCH = 100;
@@ -28,6 +31,8 @@ export class BridgeHealthCron {
   private readonly logger = new Logger(BridgeHealthCron.name);
   private running = false;
   private canResumeFailed = false;
+  /** Chống báo lặp các cảnh báo vận hành (điếc, outbox bỏ tin); mất khi API khởi động lại thì báo lại một lần, chấp nhận được. */
+  private readonly alerted = new Map<string, { at: number; count: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -67,8 +72,10 @@ export class BridgeHealthCron {
     const state = h?.state ?? 'UNREACHABLE';
     // since chỉ nhích khi trạng thái đổi, để "mất kết nối từ lúc nào" không trôi theo từng lần kiểm.
     const since = prev && prev.state === state ? prev.since : h ? new Date(h.since) : now;
+    const deaf = h ? isDeaf(h, now) : false;
     const fields = {
       state,
+      deaf,
       since,
       lastError: h ? h.lastError : 'Không gọi được cầu nối',
       zaloUid: h?.zaloUid ?? null,
@@ -85,7 +92,28 @@ export class BridgeHealthCron {
       this.canResumeFailed = state === 'CONNECTED' && groupSet;
     }
     // Chat đang tắt thì vẫn kiểm, đồng bộ nhóm và quét (tin nhận lúc chat bật vẫn phải đi), chỉ không làm phiền admin.
-    if (state !== 'CONNECTED' && (await this.config.get<boolean>(CHAT_ENABLED_KEY, false))) await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
+    const chatOn = await this.config.get<boolean>(CHAT_ENABLED_KEY, false);
+    if (state !== 'CONNECTED' && chatOn) await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
+    if (chatOn && deaf) {
+      await this.alertOps('deaf', now, 0, 'Cầu nối Zalo báo đang kết nối nhưng không nhận được tin nào từ nhóm sau lần gửi gần nhất (hơn 5 phút): tin nhân viên trả lời có thể đang bị mất. Vào tab Chat CSKH bấm Kết nối lại.');
+    }
+    const dropped = h?.outboxDropped ?? 0;
+    if (chatOn && dropped > 0) {
+      await this.alertOps('outbox', now, dropped, `Cầu nối Zalo đã bỏ ${dropped} sự kiện chưa báo được lên hệ thống quá 24 giờ (tin nhân viên trả lời có thể đã mất). Kiểm tra khoá ZALO_BRIDGE_SECRET và log cầu nối rồi báo kỹ thuật.`);
+    }
+  }
+
+  /** Báo lại sau 1 giờ; riêng cảnh báo có `count` (số tin bị bỏ) chỉ báo lại khi số đó tăng. */
+  private async alertOps(kind: string, now: Date, count: number, message: string): Promise<void> {
+    const last = this.alerted.get(kind);
+    if (last) {
+      if (count > 0 ? count <= last.count : now.getTime() - last.at <= ALERT_EVERY_MS) return;
+    }
+    this.alerted.set(kind, { at: now.getTime(), count });
+    await notifyAdmins(
+      { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+      { template: 'OPS_ZALO_BRIDGE_ALERT', subject: 'cầu nối Zalo gặp sự cố', data: () => ({ message }) },
+    );
   }
 
   /** Admin sửa `chat.zalo_group_id` ở tab Cấu hình chung thì cầu nối không biết; cron kéo nó về đúng giá trị cấu hình. Trả true khi sau lượt này cầu nối đang ở đúng nhóm cấu hình (và có nhóm). */
@@ -176,4 +204,13 @@ export class BridgeHealthCron {
       if (left > 0) this.logger.warn(`Quét tin chưa chuyển: còn ${left} hội thoại chờ lượt sau (mỗi phút tối đa ${SWEEP_BATCH}).`);
     }
   }
+}
+
+/** Cầu nối bản cũ chưa báo lastSentAt/lastEventAt thì không bao giờ bị coi là điếc. */
+function isDeaf(h: ZaloBridgeHealth, now: Date): boolean {
+  if (h.state !== 'CONNECTED' || !h.lastSentAt) return false;
+  const sent = Date.parse(h.lastSentAt);
+  if (!Number.isFinite(sent) || now.getTime() - sent <= DEAF_AFTER_SEND_MS) return false;
+  const event = h.lastEventAt ? Date.parse(h.lastEventAt) : NaN;
+  return !Number.isFinite(event) || sent > event;
 }
