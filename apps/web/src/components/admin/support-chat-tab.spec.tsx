@@ -422,6 +422,43 @@ describe('SupportChatTab — hội thoại', () => {
     expect(row.textContent).toContain('Chưa chuyển được');
   });
 
+  describe('làm mới danh sách', () => {
+    const pages = (): Handler => (c) =>
+      c.path.includes('cursor=n1')
+        ? { body: { items: [{ ...ROW, id: 'c2', code: 'M2M2' }], nextCursor: null } }
+        : { body: { items: [ROW], nextCursor: 'n1' } };
+    const tick = async (ms: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    };
+
+    it('mới tải một trang: mỗi 30 giây hỏi lại', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      stub({ 'GET conversations': pages() });
+      mount(<SupportChatTab isAdmin={false} />);
+      await flush();
+      expect(made('GET', 'conversations')).toHaveLength(1);
+      await tick(30_000);
+      await flush();
+      expect(made('GET', 'conversations').length).toBeGreaterThan(1);
+    });
+
+    it('đã bấm "Xem thêm" (từ hai trang): ngừng hỏi lại theo nhịp 30 giây', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      stub({ 'GET conversations': pages() });
+      const { container } = mount(<SupportChatTab isAdmin={false} />);
+      await flush();
+      click(byText(container, 'button', 'Xem thêm'));
+      await flush();
+      expect(container.querySelector('[data-conv="c2"]')).not.toBeNull();
+      const before = made('GET', 'conversations').length;
+      await tick(90_000);
+      await flush();
+      expect(made('GET', 'conversations')).toHaveLength(before);
+    });
+  });
+
   it('tìm theo SĐT hoặc mã và lọc "Có tin chưa chuyển được" gửi đúng tham số', async () => {
     stub();
     const { container } = mount(<SupportChatTab isAdmin={false} />);

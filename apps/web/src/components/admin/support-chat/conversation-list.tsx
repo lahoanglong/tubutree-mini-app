@@ -18,7 +18,8 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
     queryFn: ({ pageParam }) => listSupportConversations({ q, unforwarded, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
-    refetchInterval: 30_000,
+    // Nhịp hỏi lại của infinite query nạp lần lượt mọi trang đã tải; từ trang thứ hai chỉ làm mới khi focus hoặc sau thao tác.
+    refetchInterval: (query) => ((query.state.data?.pages.length ?? 1) > 1 ? false : 30_000),
   });
   const items = listQ.data?.pages.flatMap((p) => p.items) ?? [];
 
