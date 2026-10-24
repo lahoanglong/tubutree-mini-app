@@ -139,6 +139,38 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     await prisma.supportBridgeStatus.deleteMany({ where: { id: 'main' } });
   });
 
+  it('forward được chọn lúc còn NOT_CONNECTED, admin gửi lại thành SEND_FAILED trước khi quét chốt: quét không gửi', async () => {
+    const u = await customer();
+    await chat.getThread(u.id);
+    const conv = await prisma.supportConversation.findUniqueOrThrow({ where: { userId: u.id } });
+    const f = await prisma.supportForward.create({
+      data: { conversationId: conv.id, groupId: 'g-it', status: 'FAILED', lastError: 'NOT_CONNECTED: Cầu nối chưa kết nối', attempts: 5 },
+    });
+    await prisma.supportMessage.create({ data: { conversationId: conv.id, sender: 'CUSTOMER', source: 'WEB', body: 'tin bị kẹt', forwardId: f.id, clientMsgId: `cm-${randCode(10)}` } });
+    const selected = await prisma.supportForward.findUniqueOrThrow({ where: { id: f.id } });
+    await prisma.supportForward.update({ where: { id: f.id }, data: { lastError: 'SEND_FAILED: Zalo từ chối' } });
+
+    const send = jest.fn(async () => ({ ok: true, msgId: 'zr-x' }));
+    const cronBridge: any = {
+      isConfigured: () => true,
+      send,
+      setGroup: async () => ({ ok: true, data: {} }),
+      health: async () => ({ state: 'CONNECTED', zaloUid: 'z', displayName: 'CSKH', avatar: null, since: new Date().toISOString(), lastError: null, queueSize: 0, outboxSize: 0, groupId: 'g-it' }),
+    };
+    const findMany = jest.spyOn(prisma.supportForward, 'findMany').mockResolvedValueOnce([selected] as never);
+    try {
+      await new BridgeHealthCron(prisma, cronBridge, cfg, chat, { notify: jest.fn() } as never).everyMinute();
+    } finally {
+      findMany.mockRestore();
+    }
+
+    expect(send).not.toHaveBeenCalled();
+    const after = await prisma.supportForward.findUniqueOrThrow({ where: { id: f.id } });
+    expect(after.status).toBe('FAILED');
+    expect(after.lastError).toBe('SEND_FAILED: Zalo từ chối');
+    await prisma.supportBridgeStatus.deleteMany({ where: { id: 'main' } });
+  });
+
   async function convWithForward(forward: { status?: 'PENDING' | 'SENT'; zaloMsgId?: string | null } = {}) {
     const u = await customer();
     const c = await chat.getThread(u.id);
