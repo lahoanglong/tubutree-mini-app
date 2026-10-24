@@ -112,6 +112,9 @@ services:
         NEXT_PUBLIC_ZALO_OA_ID: ${ZALO_OA_ID:-}
         NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
         NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET: ${CLOUDINARY_UPLOAD_PRESET:-}
+        # Rỗng = web không nạp SDK lỗi. DSN phía trình duyệt nằm trong bundle nên là DSN công khai theo thiết kế của Sentry.
+        NEXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
         # Để trống ở production: build web dừng nếu ZALO_APP_ID rỗng. Chỉ đặt 1 cho bản thử không dùng Zalo.
         ALLOW_EMPTY_ZALO_APP_ID: ${ALLOW_EMPTY_ZALO_APP_ID:-}
     restart: unless-stopped
@@ -134,6 +137,8 @@ services:
       API_BASE_URL: http://api:3001/api
       # Cùng giá trị với api: SSR gửi qua header x-throttle-bypass để không bị 429 theo IP máy chủ web.
       THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
     ports:
       - '127.0.0.1:14000:3000' # Apache aaPanel proxy_pass vào đây cho app.tubutree.com
     depends_on:
