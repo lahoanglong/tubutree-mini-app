@@ -154,6 +154,24 @@ describe('SupportChatTab — thẻ trạng thái cầu nối', () => {
     expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đăng xuất')).toBe(true);
   });
 
+  it('đang kết nối mà còn lỗi (lưu phiên/tệp cũ): có nút Kết nối lại để lưu lại phiên mà không phải đăng xuất', async () => {
+    stub({
+      'GET bridge': () => ({
+        body: { ...BRIDGE, state: 'CONNECTED', lastError: 'Không lưu được phiên đăng nhập: EACCES. Không xoá được tệp phiên đăng nhập cũ (EACCES)' },
+      }),
+    });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Kết nối lại')).toBe(true);
+  });
+
+  it('đang kết nối bình thường thì không có nút Kết nối lại', async () => {
+    stub();
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Kết nối lại')).toBe(false);
+  });
+
   it('chờ quét QR bình thường (không lỗi) thì không có nút Đăng xuất', async () => {
     stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'NEED_QR', zaloUid: null, displayName: null } }) });
     const { container } = mount(<SupportChatTab isAdmin />);

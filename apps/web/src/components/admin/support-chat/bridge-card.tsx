@@ -162,7 +162,8 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
                 <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => login.mutate()}>
                   {login.isPending ? 'Đang lấy mã…' : 'Đăng nhập Zalo'}
                 </button>
-                {status.state !== 'CONNECTED' && status.state !== 'NEED_QR' && (
+                {/* Đang kết nối mà còn lỗi (lưu phiên, tệp cũ): kết nối lại sẽ lưu lại phiên đang chạy, không phải đăng xuất. */}
+                {((status.state !== 'CONNECTED' && status.state !== 'NEED_QR') || (status.state === 'CONNECTED' && !!status.lastError)) && (
                   <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => reconnect.mutate()}>
                     {reconnect.isPending ? 'Đang kết nối…' : 'Kết nối lại'}
                   </button>
