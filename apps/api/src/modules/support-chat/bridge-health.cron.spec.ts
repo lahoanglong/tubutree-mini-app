@@ -223,6 +223,26 @@ describe('BridgeHealthCron', () => {
     expect(opsCalls(notifications)).toHaveLength(2);
   });
 
+  it('cầu nối khởi động lại (outboxDropped thấp hơn lần trước) thì tính lại: số mới > 0 vẫn báo', async () => {
+    const { cron, notifications, bridge } = setup({ health: health({ outboxDropped: 5 }) });
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ outboxDropped: 0 }));
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ outboxDropped: 1 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('hết điếc rồi điếc lại trong vòng 1 giờ thì báo lại', async () => {
+    const { cron, notifications, bridge } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ lastSentAt: min(6).toISOString(), lastEventAt: min(1).toISOString() }));
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(deafHealth());
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
   it('outboxDropped 0 hoặc thiếu → không báo', async () => {
     const a = setup({ health: health({ outboxDropped: 0 }) });
     await a.cron.everyMinute();
