@@ -8,11 +8,12 @@ import { afterEach } from 'vitest';
 // khi vitest đóng jsdom thì gọi setState, React 18 đọc window.event và ném "window is not defined" (lỗi chưa xử lý, rải rác).
 // Huỷ các timer đó ở cuối mỗi test: cây đã gỡ nên không còn gì để chúng cập nhật.
 if (typeof window !== 'undefined') {
+  const sheetTimerStats = ((globalThis as { __sheetTimerStats?: { tracked: number } }).__sheetTimerStats = { tracked: 0 });
   const sheetTimers = new Set<ReturnType<typeof setTimeout>>();
   const realSetTimeout = globalThis.setTimeout;
   const realClearTimeout = globalThis.clearTimeout;
   globalThis.setTimeout = ((fn: (...a: unknown[]) => void, ms?: number, ...args: unknown[]) => {
-    const fromSheet = ms === 200 && (new Error().stack ?? '').includes('components/sheet/content');
+    const fromSheet = ms === 200 && /components[\\/]sheet[\\/]content/.test(new Error().stack ?? '');
     if (!fromSheet) return realSetTimeout(fn, ms, ...args);
     const handle = realSetTimeout(
       (...a: unknown[]) => {
@@ -23,6 +24,7 @@ if (typeof window !== 'undefined') {
       ...args,
     );
     sheetTimers.add(handle);
+    sheetTimerStats.tracked += 1;
     return handle;
   }) as typeof setTimeout;
   afterEach(() => {

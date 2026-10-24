@@ -1,6 +1,8 @@
 import { createContext, useContext, useLayoutEffect, useRef, type MutableRefObject, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
+let warned = false;
+
 export const LivePathnameContext = createContext<MutableRefObject<string> | null>(null);
 
 /**
@@ -20,5 +22,10 @@ export function LivePathnameProvider({ children }: { children: ReactNode }) {
 
 /** null khi không có provider (test dựng riêng): bên gọi coi như vẫn đang ở trang. */
 export function useLivePathnameRef(): MutableRefObject<string> | null {
-  return useContext(LivePathnameContext);
+  const ref = useContext(LivePathnameContext);
+  if (ref === null && import.meta.env.DEV && !warned) {
+    warned = true;
+    console.warn('LivePathnameProvider chưa được gắn: không biết khách đã rời màn chưa, ảnh tải xong sẽ vẫn được gửi.');
+  }
+  return ref;
 }
