@@ -751,7 +751,7 @@ export default function ProductDetailPage() {
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <SectionTitle style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
         <Box flex flexDirection="column" style={{ gap: 6 }}>
-          {['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(config.returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].map((t) => (
+          {['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(config.returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null).map((t) => (
             <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
               <Icon icon={Check} size="sm" tone="brand" style={{ flexShrink: 0 }} />
               <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>{t}</Text>

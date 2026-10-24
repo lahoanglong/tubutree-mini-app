@@ -53,7 +53,7 @@ export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['in
 /** Cam kết Tubu: tín hiệu an tâm trước khi mua; `children` là chỗ cho nút chat OA. */
 export function PdpPromises({ children }: { children?: React.ReactNode }) {
   const { returnWindowDays } = usePublicConfig();
-  const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'];
+  const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null);
   return (
     <section className="mt-8">
       <h2 className={ui.sectionTitle}>Cam kết Tubu</h2>

@@ -94,6 +94,11 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     const first = renderPdp();
     await screen.findByText('Đổi trả trong 10 ngày nếu lỗi');
     first.unmount();
+    mocks.returnWindowDays = 0;
+    const zero = renderPdp();
+    await screen.findByText('Hàng chính hãng — nguồn gốc rõ ràng');
+    expect(document.body.textContent).not.toContain('Đổi trả');
+    zero.unmount();
     mocks.returnWindowDays = undefined;
     renderPdp();
     await screen.findByText('Đổi trả nếu sản phẩm lỗi');
