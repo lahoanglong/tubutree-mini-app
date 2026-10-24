@@ -27,6 +27,8 @@ export interface PublicConfig {
   returnWindowDays?: number;
   /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
   support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
+  /** Đơn vị vận hành (tên, MST, địa chỉ, link đã thông báo Bộ Công Thương); từng trường null khi admin để trống, thiếu khi API cũ. */
+  company?: { legalName: string | null; taxCode: string | null; address: string | null; bctNoticeUrl: string | null };
   /** Số cho khách mới (D2-07): voucher chào mừng và freeship đơn đầu (mặc định bật từ 199.000đ). Thiếu khi API cũ → không hứa con số. */
   newCustomer?: {
     welcomeVoucher: { amount: number; minOrder: number };

@@ -8,6 +8,7 @@ import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import { requestAccountDeletion } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import type { PublicConfig } from '../services/shop-api';
 import { openOAChat, hasOA, callPhone, openExternal } from '../services/zmp-bridge';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -35,6 +36,11 @@ const POLICIES = {
     body: 'Tubu Tree thu thập tên, số điện thoại và địa chỉ nhận hàng để xử lý đơn và chăm sóc khách hàng. Chúng tôi KHÔNG bán hay chia sẻ dữ liệu cho bên thứ ba ngoài đối tác vận chuyển/thanh toán cần thiết. Bạn có thể yêu cầu xoá tài khoản & dữ liệu bất kỳ lúc nào trong mục Tài khoản.',
   },
 } as const;
+/** "Đơn vị vận hành: tên · MST mã · địa chỉ"; ẩn phần chưa nhập, null khi không còn gì. */
+function operatorLine(company: PublicConfig['company']): string | null {
+  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(Boolean);
+  return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
+}
 type PolicyKey = keyof typeof POLICIES | 'returns';
 
 /** Số ngày đổi trả đọc từ cấu hình công khai (cùng nguồn với FAQ ở about-data); chưa có thì không nêu con số. */
@@ -121,6 +127,8 @@ export default function AboutPage() {
     setPolicyOpen(true);
   };
   const policyContent = policy === 'returns' ? returnsPolicy(publicConfig.returnWindowDays) : POLICIES[policy];
+  const operator = operatorLine(publicConfig.company);
+  const bctUrl = publicConfig.company?.bctNoticeUrl ?? null;
   const shownFaq = faq.filter((f) => faqCat === ALL_CATS || f.cat === faqCat);
 
   return (
@@ -254,7 +262,13 @@ export default function AboutPage() {
         <LinkRow label="Điều khoản sử dụng" onClick={() => showPolicy('terms')} />
         <LinkRow label="Chính sách bảo mật" onClick={() => showPolicy('privacy')} />
         <LinkRow label="Chính sách đổi trả" onClick={() => showPolicy('returns')} />
-        <LinkRow label="Chính sách vận chuyển" onClick={() => openWebPolicy('shipping')} external last />
+        <LinkRow label="Chính sách vận chuyển" onClick={() => openWebPolicy('shipping')} external last={!operator && !bctUrl} />
+        {bctUrl && <LinkRow label="Đã thông báo Bộ Công Thương" onClick={() => void openExternal(bctUrl)} external last={!operator} />}
+        {operator && (
+          <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
+            {operator}
+          </Text>
+        )}
       </Section>
 
       {/* Nội dung điều khoản hiển thị ngay trong app (không rời mini app) */}

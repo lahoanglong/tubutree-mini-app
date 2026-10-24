@@ -306,3 +306,33 @@ describe('Điều khoản & Chính sách mở bản đầy đủ trên web (D5-0
     expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 });
+
+describe('Đơn vị vận hành trên trang Về Tubu Tree', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.apiGet.mockResolvedValue({ data: [] });
+  });
+
+  it('chưa nhập thì không có dòng vận hành và không có link Bộ Công Thương', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: null, taxCode: null, address: null, bctNoticeUrl: null } });
+    renderPage();
+    await screen.findByText('Điều khoản & Chính sách');
+    expect(document.body.textContent).not.toContain('Đơn vị vận hành');
+    expect(screen.queryByText('Đã thông báo Bộ Công Thương')).toBeNull();
+  });
+
+  it('có thông tin thì hiện đúng một dòng "Đơn vị vận hành: tên · MST mã · địa chỉ"', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: '1 Đường A, Quận B', bctNoticeUrl: null } });
+    renderPage();
+    expect(await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678 · 1 Đường A, Quận B')).toBeInTheDocument();
+  });
+
+  it('ẩn phần còn trống; link Bộ Công Thương mở bằng openExternal', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: 'https://online.gov.vn/x' } });
+    renderPage();
+    expect(await screen.findByText('Đơn vị vận hành: MST 0312345678')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Đã thông báo Bộ Công Thương'));
+    expect(mocks.openExternal).toHaveBeenCalledWith('https://online.gov.vn/x');
+  });
+});
+
