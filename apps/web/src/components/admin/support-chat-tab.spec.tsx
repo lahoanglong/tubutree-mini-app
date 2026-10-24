@@ -31,6 +31,7 @@ const BRIDGE = {
   checkedAt: '2026-10-23T03:06:00.000Z',
   groupId: 'G1',
   enabled: false,
+  deaf: false,
 };
 const GROUPS = { groups: [{ id: 'G1', name: 'Nhóm CSKH', memberCount: 5 }, { id: 'G2', name: 'Nhóm thử', memberCount: 2 }] };
 const ROW = {
@@ -140,6 +141,20 @@ describe('SupportChatTab — thẻ trạng thái cầu nối', () => {
     const { container } = mount(<SupportChatTab isAdmin />);
     await flush();
     expect(container.querySelector('[data-bridge-state]')!.textContent).toContain('Không lưu được phiên đăng nhập: ENOSPC');
+  });
+
+  it('CONNECTED mà deaf: hiện dòng lỗi dạng alert và cho admin Kết nối lại; không deaf thì không có', async () => {
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'CONNECTED', deaf: true } }) });
+    const a = mount(<SupportChatTab isAdmin />);
+    await flush();
+    const alert = a.container.querySelector('[data-bridge-deaf] [role=alert]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('không nhận được tin');
+    expect([...a.container.querySelectorAll('button')].some((b) => b.textContent === 'Kết nối lại')).toBe(true);
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'CONNECTED', deaf: false } }) });
+    const b = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(b.container.querySelector('[data-bridge-deaf]')).toBeNull();
   });
 
   it('chờ quét QR mà tệp phiên cũ chưa xoá được: hiện lỗi và vẫn có nút Đăng xuất để xoá lại', async () => {

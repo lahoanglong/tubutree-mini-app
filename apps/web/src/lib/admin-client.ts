@@ -1708,6 +1708,8 @@ export interface SupportBridgeStatus {
   checkedAt: string | null;
   groupId: string;
   enabled: boolean;
+  /** Cầu nối báo CONNECTED nhưng không còn nhận tin từ nhóm. */
+  deaf?: boolean;
 }
 export const getSupportBridge = () => apiFetch<SupportBridgeStatus>('/admin/support-chat/bridge');
 

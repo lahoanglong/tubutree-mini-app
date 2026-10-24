@@ -104,3 +104,9 @@ Thẻ chỉ ghi "Không lưu được phiên đăng nhập: …" (không kèm d�
 
    Rồi bấm **Đăng xuất** lại để thẻ hết báo lỗi, và kiểm tra quyền thư mục, dung lượng đĩa của máy chủ.
 4. Không xoá tay được: đổi `ZALO_BRIDGE_CREDENTIALS_KEY` trong `.env` (`openssl rand -base64 32`) rồi `docker compose -f <file compose của máy> up -d zalo-bridge`. Tệp cũ không giải mã được nữa nên cầu nối về "Cần quét QR". Tệp cũ vẫn nằm trên volume: đừng khôi phục khoá cũ từ bản sao `.env`, và xoá tệp khi vào lại được máy.
+
+## 8. Cầu nối "điếc", tin nhân viên không tới khách, outbox bỏ tin
+
+- **Điếc**: thẻ **Cầu nối Zalo** vẫn "Đang kết nối" nhưng có dòng đỏ "không nhận được tin nào từ nhóm", và admin nhận thông báo `OPS_ZALO_BRIDGE_ALERT` (lặp tối đa mỗi giờ). Cầu nối bật selfListen nên mỗi tin nó gửi đi đều dội lại; lần gửi gần nhất đã quá 5 phút mà không có sự kiện nào sau đó nghĩa là đường nhận tin đã chết. Bấm **Kết nối lại**; không hết thì kiểm tra Zalo PC/Web có đang mở cùng tài khoản. Chỉ phát hiện được sau một lần cầu nối gửi tin (chuyển tin khách, tin thử).
+- **Tin trả lời không tới khách**: trích tin chuyển hoặc mở đầu bằng `#MÃ` mà cầu nối không lưu được thì nhóm nhận một dòng "chưa tới khách" kèm lý do (không phải chữ/ảnh như sticker, tệp, thoại; khách đã xoá tài khoản; chỉ có mã, không có nội dung; hoặc mã lạ/mã xung đột như trước). Tin dán link vẫn nhận được: cầu nối ghép tiêu đề và đường dẫn của link làm chữ. Tin không trích tin chuyển và không mở đầu bằng `#` vẫn bị bỏ im lặng.
+- **Outbox bỏ tin**: sự kiện không gửi được lên API quá 24 giờ bị bỏ (log `[outbox] bỏ sự kiện quá hạn`, có loại, mã, tuổi, không có nội dung). Health có `outboxDropped` (từ lúc tiến trình khởi động); khác 0 thì admin nhận cảnh báo, báo lại mỗi khi số tăng. Nguyên nhân thường là `ZALO_BRIDGE_SECRET` lệch (API trả 401 liên tục) hoặc API tắt lâu. Cầu nối khởi động lại thì số về 0 nhưng log vẫn còn.
