@@ -23,5 +23,8 @@ Các dòng được tạo rỗng bởi `seed-reference` (nhóm `company` nằm t
 - `returns.window_days` (mặc định 7): dòng "Đổi trả trong N ngày nếu lỗi" ở trang sản phẩm (web và Mini App). Chưa đọc được cấu hình thì hiện "Đổi trả nếu sản phẩm lỗi", không số.
 - `shipping.free_threshold` và `shipping.flat_fee_below_threshold` (mặc định 19.000): bản nháp chính sách vận chuyển nay nói đúng quy tắc thật: miễn phí từ ngưỡng, dưới ngưỡng phí cố định, không theo địa chỉ hay khối lượng.
 
+## Nếu đặt `returns.window_days` = 0
+Dòng cam kết đổi trả ở trang sản phẩm (web, Mini App) và ở trang gian hàng `/s/[slug]` tự ẩn. Các chỗ chữ chung không nêu số vẫn còn nói có đổi trả, cần sửa thêm bằng tay: FAQ dự phòng ("Chính sách đổi/trả thế nào?") và trang Về Tubu Tree trong Mini App (mục Chính sách đổi trả), cùng bản nháp chính sách đổi trả trên web.
+
 ## Kiểm tra
 `pnpm go-live:check` trong apps/api có mục mới `db.company_identity` (FAIL khi thiếu tên, MST hoặc địa chỉ).

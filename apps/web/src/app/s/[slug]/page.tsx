@@ -13,7 +13,8 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { getStorefront, type ProductCard as ProductCardData } from '@/lib/api';
+import { returnsPromise } from '@tubutree/app-core/returns-copy';
+import { getReturnWindowDays, getStorefront, type ProductCard as ProductCardData } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
@@ -53,6 +54,7 @@ export default async function StorefrontPage({
   const { slug } = await params;
   const sf = await getStorefront(slug);
   if (!sf) notFound();
+  const returns = returnsPromise(await getReturnWindowDays());
 
   // Màu chủ đề do chủ gian hàng chọn (dữ liệu, không phải token) — CHỈ dùng làm điểm nhấn không mang chữ
   // (ảnh bìa, avatar, thanh tiêu đề bộ sưu tập). Mọi chữ dùng token để luôn đủ tương phản bất kể màu họ chọn.
@@ -233,10 +235,12 @@ export default async function StorefrontPage({
             <CreditCard className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
             <span className="text-xs font-semibold text-stone-800">Thanh toán qua Tubu Tree</span>
           </div>
-          <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-            <RotateCcw className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
-            <span className="text-xs font-semibold text-stone-800">Đổi trả 7 ngày (hàng lỗi NSX)</span>
-          </div>
+          {returns && (
+            <div className="flex items-center gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+              <RotateCcw className="h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
+              <span className="text-xs font-semibold text-stone-800">{returns}</span>
+            </div>
+          )}
         </div>
       </section>
 
