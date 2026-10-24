@@ -85,9 +85,16 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 
 ## 7. Cầu nối báo không xoá được hoặc không lưu được tệp phiên
 
-Thẻ **Cầu nối Zalo** ghi "Không xoá được tệp phiên đăng nhập cũ (…)", hoặc bấm **Đăng xuất** thì báo `LOGOUT_CLEAR_FAILED`: đĩa của cầu nối từ chối xoá tệp phiên của tài khoản đã đăng xuất. Cầu nối đang chạy vẫn an toàn, nó không đăng nhập lại bằng tệp đó. Nhưng nếu container khởi động lại lúc tệp còn đó, nó sẽ đăng nhập lại tài khoản vừa đăng xuất. Dòng này hiện ở mọi trạng thái, kể cả khi đã quét QR tài khoản khác, cho tới khi tệp được xoá hoặc ghi đè.
+Thẻ **Cầu nối Zalo** ghi "Không xoá được tệp phiên đăng nhập cũ (…)", hoặc bấm **Đăng xuất** thì báo `LOGOUT_CLEAR_FAILED`: trên đĩa còn tệp phiên của một tài khoản cầu nối không còn dùng (tài khoản đã đăng xuất, hoặc phiên cũ trước lần quét QR mới) mà đĩa từ chối xoá. Cầu nối đang chạy vẫn an toàn, nó không đăng nhập bằng tệp đó. Nhưng nếu container khởi động lại lúc tệp còn đó, nó sẽ đăng nhập lại tài khoản cũ. Vì vậy **đừng khởi động lại container** cho tới khi thẻ hết báo.
 
-Thẻ chỉ ghi "Không lưu được phiên đăng nhập: …" (không kèm dòng trên): phiên mới không ghi được nên khởi động lại sẽ phải quét QR lại. Xem quyền và dung lượng đĩa.
+Thẻ chỉ ghi "Không lưu được phiên đăng nhập: …" (không kèm dòng trên): phiên đang chạy chưa ghi được ra đĩa, tệp cũ đã xoá, nên khởi động lại sẽ phải quét QR lại. Sửa quyền hoặc dung lượng đĩa rồi bấm **Kết nối lại**.
+
+**Thẻ đang "Đang kết nối"** (tài khoản cầu nối đang chạy và chuyển tin):
+
+- Không bấm **Đăng xuất**: nó đăng xuất luôn tài khoản đang trả lời khách.
+- Sửa quyền thư mục hoặc dung lượng đĩa trên máy chủ, rồi bấm **Kết nối lại**. Cầu nối lưu lại phiên đang chạy, đè lên tệp cũ, và thẻ hết báo.
+
+**Thẻ đang "Cần quét QR"** (đã đăng xuất):
 
 1. Lời báo là `ETIMEDOUT` (đĩa chậm): đợi khoảng một phút rồi xem lại thẻ. Không còn dòng "Không xoá được…" là xong.
 2. Còn dòng đó: bấm **Đăng xuất** lại một lần.
