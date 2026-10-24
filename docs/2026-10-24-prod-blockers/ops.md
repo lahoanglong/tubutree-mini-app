@@ -18,7 +18,7 @@
 
 - `tools/backup/backup-db.sh` từ chối đẩy lên remote không phải rclone `crypt`: log `ERROR`, `UPLOAD_FAILED=1`, thoát 3 và ping `/fail` của healthchecks.io (cùng đường với lỗi upload cũ; bản local vẫn giữ). Ngoại lệ: `BACKUP_ALLOW_PLAIN_REMOTE=1`.
 - **Hệ quả khi triển khai**: `ops/backup-predeploy.sh` (gọi cùng script) cũng bị từ chối nếu `RCLONE_REMOTE` còn là `gdrive:...`, và deploy dừng ở bước backup. Phải tạo remote crypt và đổi `RCLONE_REMOTE` trong cron lẫn lệnh predeploy TRƯỚC lần deploy tới.
-- `docs/launch/deploy-rollback-runbook.md` (mục backup, dòng ~285-288) vẫn ghi `RCLONE_REMOTE=gdrive:tubutree-backups` và lấy bản từ `gdrive:`: lỗi thời, cần sửa theo `tubucrypt:` (file đó ngoài phạm vi nhánh này).
+- `docs/launch/deploy-rollback-runbook.md` (mục 1.2, 1.6.2, 5.6) đã sửa theo `tubucrypt:`, có bước tạo remote crypt và bước xoá bản trần cũ.
 - `.github/workflows/ops.yml` (action crontab) lấy `RCLONE_REMOTE` từ biến repo `BACKUP_RCLONE_REMOTE`: biến này phải trỏ remote crypt (`tubucrypt:`), nếu không backup bị từ chối.
 - `pnpm run go-live:check` (`backup.offsite`): FAIL khi remote đang dùng không phải crypt (WARN nếu cron đặt BACKUP_ALLOW_PLAIN_REMOTE=1) (đọc từ `rclone listremotes --long`).
 
