@@ -19,6 +19,8 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     // Nhịp hỏi lại của infinite query nạp lần lượt mọi trang đã tải; từ trang thứ hai chỉ làm mới khi focus hoặc sau thao tác.
+    // QueryClient của web tắt refetch khi focus mặc định; từ trang thứ hai không còn nhịp nên phải bật lại ở đây.
+    refetchOnWindowFocus: true,
     refetchInterval: (query) => ((query.state.data?.pages.length ?? 1) > 1 ? false : 30_000),
   });
   const items = listQ.data?.pages.flatMap((p) => p.items) ?? [];

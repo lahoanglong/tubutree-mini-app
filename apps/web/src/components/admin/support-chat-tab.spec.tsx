@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { createQueryClient } from '@/lib/query-client';
 import { SupportChatTab } from './support-chat-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
@@ -457,6 +460,34 @@ describe('SupportChatTab — hội thoại', () => {
       await flush();
       expect(made('GET', 'conversations')).toHaveLength(before);
     });
+  });
+
+  it('đã tải hai trang: quay lại cửa sổ thì làm mới (QueryClient thật của web tắt focus refetch mặc định)', async () => {
+    stub({ 'GET conversations': (c) => (c.path.includes('cursor=n1')
+      ? { body: { items: [{ ...ROW, id: 'c2', code: 'M2M2' }], nextCursor: null } }
+      : { body: { items: [ROW], nextCursor: 'n1' } }) });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <QueryClientProvider client={createQueryClient()}>
+          <SupportChatTab isAdmin={false} />
+        </QueryClientProvider>,
+      );
+    });
+    mounted.push({ container, root, unmount: () => { act(() => root.unmount()); container.remove(); } });
+    await flush();
+    click(byText(container, 'button', 'Xem thêm'));
+    await flush();
+    const before = made('GET', 'conversations').length;
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await flush();
+    expect(made('GET', 'conversations').length).toBeGreaterThan(before);
+    act(() => focusManager.setFocused(undefined));
   });
 
   it('tìm theo SĐT hoặc mã và lọc "Có tin chưa chuyển được" gửi đúng tham số', async () => {
