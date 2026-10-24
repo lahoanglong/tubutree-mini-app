@@ -162,6 +162,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let qr: QrState = idleQr();
   let qrAttempt: QrAttempt | null = null;
   let sessionSaveError: string | null = null;
+  // Tệp phiên của trạng thái đã đăng xuất có thể còn trên đĩa: chỉ lệnh xoá lúc desired null đặt nó, xoá được hay ghi đè bằng phiên mới thì hết.
+  let staleFileError: string | null = null;
   // `desired` là phiên PHẢI nằm trên đĩa và là phiên duy nhất được dùng để đăng nhập: DISK_SESSION = bản có sẵn lúc khởi động,
   // null = đã đăng xuất (không bao giờ đọc đĩa nữa), Session = phiên QR đã đăng nhập xong (nối lại dùng creds trong bộ nhớ).
   // Đổi desired trước, rồi mới xếp lệnh đĩa. Mọi lệnh đĩa chạy tuần tự trong diskChain, mỗi lệnh có hạn PERSIST_TIMEOUT_MS:
@@ -195,6 +197,23 @@ export function createZaloClient(deps: ZaloClientDeps) {
     });
   }
   const clearFile = () => bounded(credentials.clear(), 'Xoá tệp phiên');
+  function setStaleFile(msg: string | null): void {
+    if (staleFileError === msg) return;
+    // Chỉ thay khi health đang hiện chính lỗi này (hoặc không lỗi gì): không đè lỗi khác đang hiện.
+    const shown = desired === null && lastError === staleFileError;
+    staleFileError = msg;
+    if (shown) setState(state);
+  }
+  // Xoá tệp lúc đã đăng xuất (logout và đồng bộ lại): kết quả của chính lệnh này quyết định health có báo tệp cũ còn sót.
+  async function clearLoggedOut(): Promise<void> {
+    try {
+      await clearFile();
+    } catch (e) {
+      setStaleFile(`Không xoá được tệp phiên đăng nhập cũ (${errCode(e)})`);
+      throw e;
+    }
+    setStaleFile(null);
+  }
   // Một lần đồng bộ lại đọc desired lúc nó chạy, nên nhiều lệnh muộn chỉ cần một lần đang chờ; nếu không, đĩa chậm làm chuỗi dài mãi.
   let resyncPending = false;
   function resync(): void {
@@ -203,16 +222,12 @@ export function createZaloClient(deps: ZaloClientDeps) {
     onDisk(() => {
       resyncPending = false;
       const want = desired;
-      if (want === null) return clearFile();
+      if (want === null) {
+        return clearLoggedOut().catch((e: unknown) => console.error(`[zalo] đồng bộ lại tệp phiên: không xoá được (${errCode(e)})`));
+      }
       if (want === DISK_SESSION) return Promise.resolve();
       return writeSession(want);
-    }).catch((e: unknown) => {
-      // writeSession đã tự ghi log và lastError; còn lại là lệnh xoá của trạng thái đã đăng xuất.
-      if (desired !== null) return;
-      const code = errCode(e);
-      console.error(`[zalo] đồng bộ lại tệp phiên: không xoá được (${code})`);
-      setState(state, `Không xoá được tệp phiên đăng nhập cũ (${code})`);
-    });
+    }).catch(() => undefined); // writeSession đã tự ghi log và lastError
   }
   function noteSaveError(msg: string | null): void {
     if (sessionSaveError === msg) return;
@@ -225,10 +240,14 @@ export function createZaloClient(deps: ZaloClientDeps) {
       await bounded(credentials.save(s.creds, () => desired === s), 'Lưu phiên');
     } catch (e) {
       console.error(`[zalo] không lưu được phiên đăng nhập (${errCode(e)}), xoá tệp phiên cũ`);
-      await clearFile().catch((c: unknown) => console.error(`[zalo] không xoá được tệp phiên (${errCode(c)})`));
+      await clearFile().then(
+        () => setStaleFile(null),
+        (c: unknown) => console.error(`[zalo] không xoá được tệp phiên (${errCode(c)})`),
+      );
       if (desired === s) noteSaveError(`Không lưu được phiên đăng nhập: ${errMsg(e)}`);
       throw e;
     }
+    setStaleFile(null);
     if (desired === s) noteSaveError(null);
   }
   const persistSession = (s: Session): Promise<void> => onDisk(() => writeSession(s));
@@ -248,7 +267,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
   function setState(next: BridgeState, error: string | null = null): void {
     if (state !== next) since = new Date(now()).toISOString();
     state = next;
-    lastError = error ?? (next === 'CONNECTED' ? sessionSaveError : null);
+    lastError = error ?? (next === 'CONNECTED' ? sessionSaveError : desired === null ? staleFileError : null);
     const key = `${next}|${lastError ?? ''}`;
     if (key === lastPushedKey) return;
     lastPushedKey = key;
@@ -431,7 +450,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     // Trạng thái đổi ngay, trước khi đợi đĩa: nếu không, phần đuôi của logout cũ đè lên phiên QR mới đã lên CONNECTED.
     setState('NEED_QR');
     // Bộ nhớ đã an toàn từ đây (desired null, NEED_QR). Quá hạn thì báo lỗi cho admin nhưng lệnh xoá vẫn nằm trong chuỗi và chạy sau.
-    const cleared = onDisk(clearFile);
+    const cleared = onDisk(clearLoggedOut);
     let timer: NodeJS.Timeout | undefined;
     let answered = false;
     const deadline = new Promise<never>((_, reject) => {

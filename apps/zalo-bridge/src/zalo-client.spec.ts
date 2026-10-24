@@ -1241,6 +1241,51 @@ describe('zalo-client: đăng nhập QR', () => {
       vi.restoreAllMocks();
     }
   });
+
+  it('lỗi "không xoá được tệp phiên cũ" hết hiện khi một lần xoá sau đó thành công', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const s = setup({ api: null });
+      const d = manualDisk(s);
+      await s.client.start();
+      s.client.logout().catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(15_100);
+      // lệnh xoá của logout chạm đĩa muộn: đồng bộ lại xoá lần nữa, lần này cũng treo quá hạn
+      d.releaseFirst(1);
+      await vi.advanceTimersByTimeAsync(15_100);
+      expect(s.client.state().lastError).toContain('ETIMEDOUT');
+      // lệnh treo đó chạm đĩa muộn, lần đồng bộ lại kế tiếp xoá được
+      d.goInstant();
+      d.releaseFirst(1);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: null });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('lệnh xoá của logout lỗi sau hạn 8 giây thì health vẫn báo mã lỗi thật', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const s = setup({ api: null });
+      await s.client.start();
+      s.credentials.clear.mockImplementationOnce(
+        () => new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('permission denied'), { code: 'EACCES' })), 10_000)),
+      );
+      let outcome: unknown = 'pending';
+      s.client.logout().catch((e: unknown) => (outcome = e));
+      await vi.advanceTimersByTimeAsync(8_100);
+      expect(outcome).toMatchObject({ code: 'LOGOUT_CLEAR_FAILED', message: 'ETIMEDOUT' });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: expect.stringContaining('EACCES') });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 describe('zalo-client: nhóm, cấu hình, sổ gửi', () => {
