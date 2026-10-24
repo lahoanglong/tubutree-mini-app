@@ -10,7 +10,7 @@ import { requestAccountDeletion } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import type { PublicConfig } from '../services/shop-api';
 import { openOAChat, hasOA, callPhone, openExternal } from '../services/zmp-bridge';
-import { WEB_BASE_URL } from '../utils/web-base-url';
+import { openWebPolicyPage, type WebPolicySlug } from '../utils/web-policy';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -54,13 +54,13 @@ function returnsPolicy(returnWindowDays: unknown): { title: string; body: string
 }
 
 // Bản đầy đủ do admin quản lý nằm ở web (/chinh-sach/[loai]); bản tóm tắt trong app chỉ để đọc nhanh.
-const WEB_POLICY_SLUG: Record<PolicyKey | 'shipping', string> = {
+const WEB_POLICY_SLUG: Record<PolicyKey | 'shipping', WebPolicySlug> = {
   terms: 'dieu-khoan',
   privacy: 'bao-mat',
   returns: 'doi-tra',
   shipping: 'van-chuyen',
 };
-const openWebPolicy = (key: PolicyKey | 'shipping') => void openExternal(`${WEB_BASE_URL}/chinh-sach/${WEB_POLICY_SLUG[key]}`);
+const openWebPolicy = (key: PolicyKey | 'shipping') => openWebPolicyPage(WEB_POLICY_SLUG[key]);
 
 const FAQ_SKELETON_ROWS = 4;
 
