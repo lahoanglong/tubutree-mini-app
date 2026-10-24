@@ -76,9 +76,11 @@ export function initSentry(env: Record<string, string | undefined> = process.env
 export function captureServerError(err: unknown, sdk: SentrySdk = Sentry): void {
   if (!on) return;
   if (err instanceof HttpException && err.getStatus() < 500) return;
-  // http-errors của body-parser/raw-body (413, 415, 400 request aborted) mang statusCode/status, không phải HttpException.
-  const status = (err as { statusCode?: unknown; status?: unknown } | null)?.statusCode ?? (err as { status?: unknown } | null)?.status;
-  if (typeof status === 'number' && status < 500) return;
+  // http-errors của body-parser/raw-body (413, 415, 400 request aborted) mang statusCode/status và expose=true, không phải HttpException.
+  // AxiosError cũng có .status (của phản hồi từ bên thứ ba) nhưng khi không bắt thì khách nhận 500, nên không được bỏ qua.
+  const e = err as { statusCode?: unknown; status?: unknown; expose?: unknown; isAxiosError?: unknown } | null;
+  const status = e?.statusCode ?? e?.status;
+  if (typeof status === 'number' && status < 500 && e?.expose === true && e.isAxiosError !== true) return;
   sdk.captureException(err);
 }
 
@@ -91,7 +93,7 @@ export function capturePrismaError(err: unknown, route: string, sdk: SentrySdk =
   const cls = e?.constructor?.name ?? 'PrismaError';
   const code = typeof e?.code === 'string' ? ` ${e.code}` : '';
   const model = typeof e?.meta?.modelName === 'string' ? ` model=${e.meta.modelName}` : '';
-  const safe = new Error(`${cls}${code}${model} on ${redactUrl(route)}`);
+  const safe = new Error(`${cls}${code}${model} on ${redactUrl(route.split(/[?#]/)[0]!)}`);
   safe.name = cls;
   sdk.captureException(safe);
 }

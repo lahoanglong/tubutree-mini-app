@@ -66,13 +66,27 @@ describe('captureServerError', () => {
   });
 
   it.each([
-    ['PayloadTooLargeError 413 (statusCode)', Object.assign(new Error('request entity too large'), { statusCode: 413 })],
-    ['request aborted 400 (status)', Object.assign(new Error('request aborted'), { status: 400 })],
-    ['unsupported media 415', Object.assign(new Error('x'), { statusCode: 415 })],
+    ['PayloadTooLargeError 413', Object.assign(new Error('request entity too large'), { statusCode: 413, status: 413, expose: true })],
+    ['request aborted 400', Object.assign(new Error('request aborted'), { status: 400, expose: true })],
+    ['unsupported media 415', Object.assign(new Error('x'), { statusCode: 415, expose: true })],
   ])('lỗi http-errors của body-parser không được gửi: %s', (_n, err) => {
     const sdk = on();
     captureServerError(err, sdk);
     expect(sdk.captureException).not.toHaveBeenCalled();
+  });
+
+  it('AxiosError 401 từ lời gọi ra ngoài vẫn được gửi (khách thấy 500)', () => {
+    const sdk = on();
+    captureServerError(Object.assign(new Error('Request failed with status code 401'), { isAxiosError: true, status: 401, expose: true }), sdk);
+    captureServerError(Object.assign(new Error('x'), { isAxiosError: true, status: 404 }), sdk);
+    expect(sdk.captureException).toHaveBeenCalledTimes(2);
+  });
+
+  it('lỗi 502 thường vẫn được gửi', () => {
+    const sdk = on();
+    captureServerError(Object.assign(new Error('x'), { status: 502 }), sdk);
+    captureServerError(Object.assign(new Error('x'), { status: 404 }), sdk);
+    expect(sdk.captureException).toHaveBeenCalledTimes(2);
   });
 
   it('lỗi có statusCode 5xx vẫn được gửi', () => {
@@ -160,6 +174,17 @@ describe('capturePrismaError', () => {
     expect(blob).toContain('PrismaClientKnownRequestError');
     expect(blob).toContain('P2000');
     expect(blob).toContain('User');
+  });
+
+  it('route có query không đưa query vào message', () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const sdk = fakeSdk();
+    initSentry({ SENTRY_DSN: 'https://k@o.example.com/1' }, sdk);
+    capturePrismaError(new Prisma.PrismaClientValidationError('x', { clientVersion: 't' }), 'GET /api/admin/support-chat?q=0901234567#h', sdk);
+    const sent = sdk.captureException.mock.calls[0]![0] as Error;
+    expect(`${sent.message} ${sent.stack}`).not.toContain('0901234567');
+    expect(sent.message).not.toContain('?');
+    expect(sent.message).toContain('/api/admin/support-chat');
   });
 
   it('PrismaClientValidationError (không code) cũng chỉ gửi tên lớp và route', () => {
