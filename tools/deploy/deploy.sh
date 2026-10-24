@@ -134,10 +134,15 @@ guarded_migration_pending() { migration_pending "$GUARDED_MIGRATION"; }
 log "=== Deploy $(git rev-parse --short HEAD 2>/dev/null || echo '?') với $COMPOSE_FILE ==="
 PREV_API="$(running_image api)"
 PREV_WEB="$(running_image web)"
-# zalo-bridge không bắt buộc có trong compose (bản thử, compose cũ): thiếu thì bỏ qua, không làm deploy lỗi.
+# zalo-bridge chỉ đi cùng khi chat Zalo cá nhân được bật: compose có service này VÀ (.env đã có ZALO_BRIDGE_SECRET hoặc bridge đang chạy).
+# Thiếu khoá thì bridge thoát lỗi ngay khi khởi động (apps/zalo-bridge/src/env.ts), restart-loop, deploy chờ hết giờ rồi báo lỗi oan.
 BRIDGE_SVC=""
 if dc config --services 2>/dev/null | grep -qx zalo-bridge; then
-  BRIDGE_SVC="zalo-bridge"
+  if [ -n "$(env_value ZALO_BRIDGE_SECRET)" ] || [ -n "$(dc ps -q zalo-bridge 2>/dev/null || true)" ]; then
+    BRIDGE_SVC="zalo-bridge"
+  else
+    log "Bỏ qua zalo-bridge: .env chưa có ZALO_BRIDGE_SECRET và bridge chưa chạy (chat Zalo cá nhân chưa bật). Bật chat theo docs/2026-10-23-q5/bat-chat-zalo.md."
+  fi
 fi
 
 if api_running && guarded_migration_pending; then
@@ -172,8 +177,8 @@ api_state_note() {
   fi
 }
 
-log "1/6 Build image api + web${BRIDGE_SVC:+ + $BRIDGE_SVC} (container cũ vẫn chạy)"
-dc build api web $BRIDGE_SVC
+log "1/6 Build image api + web (container cũ vẫn chạy)"
+dc build api web
 
 log "2/6 Kiểm cấu hình môi trường (.env) bằng image MỚI"
 if ! dc run --rm --no-deps api node dist/config/check-env.js; then
@@ -185,9 +190,18 @@ fi
 # khác 0 khi còn migration chờ, và cả khi không nối được DB: cả hai đều backup cho chắc (không đọc được thì bước backup/migrate
 # phía sau cũng sẽ dừng deploy).
 BACKUP_NEEDED="$POINTS_1D_PENDING_AT_START"
-if [ "$BACKUP_NEEDED" != 1 ] && ! dc run --rm --no-deps api pnpm exec prisma migrate status >/dev/null 2>&1; then
-  BACKUP_NEEDED=1
-  log "prisma migrate status: còn migration chờ áp (hoặc không đọc được trạng thái) — sẽ backup DB ngay trước migrate."
+if [ "$BACKUP_NEEDED" != 1 ]; then
+  status_rc=0
+  status_out="$(dc run --rm --no-deps api pnpm exec prisma migrate status 2>&1)" || status_rc=$?
+  if [ "$status_rc" -ne 0 ]; then
+    printf '%s\n' "$status_out" | tail -n 25
+    if printf '%s' "$status_out" | grep -Eqi "P100[0-2]|Can't reach database server|Authentication failed"; then
+      log "ERROR: không nối được DB để kiểm migration — DỪNG, chưa backup, chưa migrate. $(api_state_note) Kiểm tra: docker compose -f $COMPOSE_FILE ps postgres, rồi POSTGRES_PASSWORD trong .env."
+      exit 2
+    fi
+    BACKUP_NEEDED=1
+    log "prisma migrate status: còn migration chờ áp (hoặc lệch/lỗi, xem kết quả ở trên) — sẽ backup DB ngay trước migrate."
+  fi
 fi
 
 if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
@@ -253,14 +267,17 @@ if ! wait_healthy web; then
   exit 3
 fi
 
-# Sau khi api healthy: bridge gửi sự kiện về api. Tạo lại bridge có thể làm một tin đang chuyển tiếp bị gửi hai lần (đã biết, chấp nhận).
+# Sau khi api và web đã chạy: bridge gửi sự kiện về api, và build riêng để bridge hỏng không chặn api/web. Tạo lại bridge có thể làm
+# một tin đang chuyển tiếp bị gửi hai lần (đã biết, chấp nhận). Lỗi ở đây thoát mã 4: api và web đã chạy bản mới, chỉ chat Zalo cá nhân ngưng.
 if [ -n "$BRIDGE_SVC" ]; then
-  log "6/6 Thay container $BRIDGE_SVC"
-  dc up -d --no-build "$BRIDGE_SVC"
-  if ! wait_healthy "$BRIDGE_SVC"; then
-    log "api và web đã chạy bản mới; chỉ $BRIDGE_SVC lỗi (chat Zalo cá nhân tạm ngưng, đơn hàng không bị ảnh hưởng)."
-    log "Xem log: docker compose -f $COMPOSE_FILE logs --tail 200 $BRIDGE_SVC. Chạy lại deploy.sh hoặc: docker compose -f $COMPOSE_FILE up -d --build $BRIDGE_SVC"
-    exit 3
+  log "6/6 Build và thay container $BRIDGE_SVC"
+  bridge_ok=1
+  dc build "$BRIDGE_SVC" || bridge_ok=0
+  if [ "$bridge_ok" = 1 ]; then dc up -d --no-build "$BRIDGE_SVC" || bridge_ok=0; fi
+  if [ "$bridge_ok" = 1 ]; then wait_healthy "$BRIDGE_SVC" || bridge_ok=0; fi
+  if [ "$bridge_ok" != 1 ]; then
+    log "ERROR: $BRIDGE_SVC lỗi (mã 4). api và web đã chạy bản mới và không bị ảnh hưởng; chỉ chat Zalo cá nhân tạm ngưng. Xem: docker compose -f $COMPOSE_FILE logs --tail 200 $BRIDGE_SVC (kiểm ZALO_BRIDGE_SECRET dài từ 32 ký tự, ZALO_BRIDGE_CREDENTIALS_KEY 32 byte), rồi chạy lại: docker compose -f $COMPOSE_FILE up -d --build $BRIDGE_SVC"
+    exit 4
   fi
 fi
 
