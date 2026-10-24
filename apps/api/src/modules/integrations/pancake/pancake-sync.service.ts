@@ -38,7 +38,8 @@ export const CATALOG_SYNC_RUNNING = 'CATALOG_SYNC_RUNNING';
 
 /** Một lượt đồng bộ danh mục đang chạy (trên replica này hay replica khác) — 409 để admin không đọc thành "đồng bộ 0 sản phẩm". */
 export class CatalogSyncBusyError extends ConflictException {
-  constructor() {
+  /** LOCAL: cờ `running` của chính tiến trình này (có thể là lượt treo); LEASE: replica khác giữ khoá. */
+  constructor(readonly source: 'LOCAL' | 'LEASE' = 'LEASE') {
     super({
       statusCode: 409,
       error: 'Conflict',
@@ -156,7 +157,8 @@ export class PancakeSyncService implements OnModuleInit {
   /** Lượt tự động gặp lượt khác đang chạy là chuyện bình thường (boot chậm gặp mốc cron, admin vừa bấm) — chỉ cảnh báo. */
   private logFailure(what: string, err: unknown): void {
     if (err instanceof CatalogSyncBusyError) {
-      markCronSkipped('BUSY');
+      // Cờ cục bộ kẹt phải đi qua phát hiện treo (chỉ áp dụng cho RUNNING); khoá của replica khác là bận thật.
+      markCronSkipped(err.source === 'LOCAL' ? 'RUNNING' : 'BUSY');
       this.logger.warn(`${what}: một lượt đồng bộ danh mục khác đang chạy — bỏ qua lượt này.`);
       return;
     }
@@ -178,13 +180,19 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   /** Quét toàn bộ mỗi đêm: lượt 15 phút theo updated_since không thấy được hàng đã bị xoá khỏi Pancake. */
-  @Cron('0 30 3 * * *', { timeZone: CRON_TZ })
+  // Lệch khỏi lưới 15 phút của scheduledSync: cùng giây thì một bên luôn thua cờ `running` và bị bỏ qua.
+  @Cron('0 37 3 * * *', { timeZone: CRON_TZ })
   @TrackCron()
   async nightlyFullSync(): Promise<void> {
     if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; }
     try {
       await this.syncProducts();
     } catch (err) {
+      // Quét đêm là lần duy nhất thấy hàng bị xoá khỏi Pancake: bị bỏ lỡ vì bận phải thành lỗi để có báo động, không phải bỏ qua êm.
+      if (err instanceof CatalogSyncBusyError) {
+        this.logger.error('Quét đêm danh mục Pancake không chạy được: một lượt đồng bộ khác đang chạy.');
+        return;
+      }
       this.logFailure('nightlyFullSync', err);
     }
   }
@@ -205,7 +213,7 @@ export class PancakeSyncService implements OnModuleInit {
       this.logger.warn('Pancake chưa cấu hình — skip sync.');
       return 0;
     }
-    if (this.running) throw new CatalogSyncBusyError();
+    if (this.running) throw new CatalogSyncBusyError('LOCAL');
     this.running = true;
     let lease: RunLease | null = null;
     try {

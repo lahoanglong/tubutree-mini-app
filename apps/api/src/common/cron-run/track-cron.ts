@@ -20,6 +20,8 @@ export interface CronRunReport {
   errorLine?: string;
   /** Lỗi gốc khi THREW. */
   error?: unknown;
+  /** Lý do bỏ qua (RUNNING, LOCKED, NOT_CONFIGURED, BUSY) khi outcome là SKIPPED. */
+  skipReason?: string;
   /** Số lần hỏng liên tiếp trước khi báo admin; mặc định 1. */
   alertAfter?: number;
 }
@@ -139,6 +141,7 @@ async function report(
       finishedAt: new Date(),
       outcome,
       errorCount,
+      ...(outcome === 'SKIPPED' && ctx.skipped !== undefined ? { skipReason: ctx.skipped } : {}),
       ...(errorLine !== undefined ? { errorLine: errorLine.slice(0, 300) } : {}),
       ...(failed ? { error } : {}),
       ...(options.alertAfter !== undefined ? { alertAfter: options.alertAfter } : {}),
