@@ -329,6 +329,17 @@ describe('SupportChatAdminService', () => {
     });
   });
 
+  it('đăng xuất quá hạn vì đĩa chậm (ETIMEDOUT): bảo đợi rồi xem lại, không bảo bấm Đăng xuất lại', async () => {
+    const { svc, bridge } = setup();
+    bridge.logout.mockResolvedValue({ ok: false, retry: false, unknown: false, code: 'LOGOUT_CLEAR_FAILED', message: 'ETIMEDOUT' });
+    const err = await svc.logout('admin1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadGatewayException);
+    const body = (err as BadGatewayException).getResponse() as { code: string; message: string };
+    expect(body.code).toBe('LOGOUT_CLEAR_FAILED');
+    expect(body.message).toMatch(/chưa xoá xong.*Đợi khoảng một phút.*mục 7/);
+    expect(body.message).not.toContain('Bấm Đăng xuất lại');
+  });
+
   it('lượt QR bị huỷ vì đăng xuất: 409 kèm lời nhắn tiếng Việt, không phải 502', async () => {
     const { svc, bridge } = setup();
     bridge.qrStart.mockResolvedValue({ ok: false, retry: false, unknown: false, code: 'QR_CANCELLED', message: 'Cầu nối trả 409' });

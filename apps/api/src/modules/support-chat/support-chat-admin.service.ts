@@ -252,7 +252,11 @@ export class SupportChatAdminService {
     }
     if (r.code === 'LOGOUT_CLEAR_FAILED') {
       // Cầu nối đã đăng xuất trong bộ nhớ nhưng tệp phiên còn trên đĩa: khởi động lại sẽ đăng nhập lại tài khoản này.
-      const message = `Không xoá được tệp phiên đăng nhập của cầu nối (${r.message}). Bấm Đăng xuất lại; vẫn lỗi thì làm theo mục 7 của docs/2026-10-23-q5/bat-chat-zalo.md.`;
+      // ETIMEDOUT: lệnh xoá vẫn nằm trong hàng của cầu nối và còn chạy, nên chưa có gì để bấm lại.
+      const message =
+        r.message === 'ETIMEDOUT'
+          ? 'Cầu nối chưa xoá xong tệp phiên đăng nhập (đĩa chậm). Đợi khoảng một phút rồi xem lại thẻ Cầu nối Zalo; còn báo lỗi thì làm theo mục 7 của docs/2026-10-23-q5/bat-chat-zalo.md.'
+          : `Không xoá được tệp phiên đăng nhập của cầu nối (${r.message}). Bấm Đăng xuất lại; vẫn lỗi thì làm theo mục 7 của docs/2026-10-23-q5/bat-chat-zalo.md.`;
       throw new BadGatewayException({ statusCode: 502, error: 'Bad Gateway', code: r.code, message });
     }
     throw new BadGatewayException({ statusCode: 502, error: 'Bad Gateway', ...body });
