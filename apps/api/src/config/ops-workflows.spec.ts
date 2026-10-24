@@ -21,6 +21,21 @@ describe.each(SSH_WORKFLOWS)('%s', (file) => {
   });
 });
 
+describe.each(SSH_WORKFLOWS)('%s: khoá bằng VM_WORKFLOWS_ENABLED', (file) => {
+  const wf = read(file);
+
+  it('bước đầu tiên của job thất bại trừ khi biến repo VM_WORKFLOWS_ENABLED == true', () => {
+    const afterSteps = wf.split('\n    steps:\n')[1] ?? '';
+    const lines = afterSteps.split('\n');
+    const nextStepAt = lines.findIndex((l, i) => i > 0 && /^ {6}- /.test(l));
+    const first = lines.slice(0, nextStepAt).join('\n');
+    expect(first).toContain("if: ${{ vars.VM_WORKFLOWS_ENABLED != 'true' }}");
+    expect(first).toContain('exit 1');
+    expect(first).toContain('VM_WORKFLOWS_ENABLED=true');
+    expect(wf.split('\n').filter((l) => /^ {4}steps:/.test(l))).toHaveLength(1);
+  });
+});
+
 describe('smoke-purchase.yml', () => {
   it('không đặt đơn thật trên PROD (kho sẽ đóng gói, trừ tồn, lẫn doanh thu)', () => {
     const wf = read('.github/workflows/smoke-purchase.yml');
@@ -200,9 +215,10 @@ describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
     expect(doc).toMatch(/không\*\* tự gửi lại mỗi 5 phút/);
   });
 
-  it('GO-LIVE-KEYS.md dặn đặt nhãn môi trường bằng biến (gh variable set), không phải secret', () => {
+  // Đặt khoá bằng sửa .env qua SSH (ops.yml chưa SSH được tới VPS); nhãn vẫn không bao giờ là secret.
+  it('GO-LIVE-KEYS.md dặn ghi nhãn môi trường vào .env, không phải secret', () => {
     const doc = read('docs/GO-LIVE-KEYS.md');
-    expect(doc).toContain('gh variable set OPS_ALERT_ENV_LABEL');
+    expect(doc).toMatch(/^OPS_ALERT_ENV_LABEL=/m);
     expect(doc).not.toContain('gh secret set OPS_ALERT_ENV_LABEL');
   });
 });

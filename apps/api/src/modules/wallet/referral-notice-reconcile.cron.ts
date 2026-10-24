@@ -7,6 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { isReportableNotice, referralDedupeKey, sendReferralNotices, type ReferralNotice } from './referral-notify';
 import { referralNoticeFromLedger, REFERRAL_NOTICE_REASON_PREFIXES, type ReferralLedgerRow } from './referral-notice-ledger';
 import { MILESTONE_PREFIX } from './referral-reward';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -64,6 +65,7 @@ export class ReferralNoticeReconcileCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */10 * * * *', { name: 'wallet.referral-notice-reconcile', timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     try {
       const res = await this.reconcile();
@@ -78,7 +80,7 @@ export class ReferralNoticeReconcileCron {
   }
 
   async reconcile(now: Date = new Date()): Promise<ReferralNoticeReconcileResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Việc gửi chạy trên
@@ -87,7 +89,7 @@ export class ReferralNoticeReconcileCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.sweep(now);
         },
         { maxWait: 10_000, timeout: 5 * 60_000 },

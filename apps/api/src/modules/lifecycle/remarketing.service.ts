@@ -6,6 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate } from '../../common/vn-time';
 import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /** Khung giờ nhắc giỏ bỏ quên — admin-config-rules so chéo hai khoá này (và mặc định) lúc ghi. */
 export const CART_ABANDON_MIN_HOURS_KEY = 'remarketing.cart_abandon_min_hours';
@@ -41,6 +42,7 @@ export class RemarketingService {
    * cô lập ở try/catch trong vòng lặp bên dưới.
    */
   @Cron('0 * * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async sendCartAbandonReminders(): Promise<void> {
     try {
       const minH = await this.config.get<number>(CART_ABANDON_MIN_HOURS_KEY, CART_ABANDON_DEFAULT_MIN_HOURS);
@@ -125,6 +127,7 @@ export class RemarketingService {
    * ở try/catch trong vòng lặp bên dưới.
    */
   @Cron('0 5 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async sendVoucherExpiryReminders(): Promise<void> {
     try {
       const days = await this.config.get<number>('remarketing.voucher_expiry_days', 3);

@@ -90,3 +90,58 @@ describe('envSchema — SENTRY_DSN', () => {
     expect(envSchema.safeParse({ ...PROD_BASE, SENTRY_DSN: 'not-a-dsn' }).success).toBe(false);
   });
 });
+
+describe('envSchema — production: JWT secret đủ dài', () => {
+  const issuesFor = (over: Record<string, unknown>) => {
+    const r = envSchema.safeParse({ ...PROD_BASE, ...over });
+    return r.success ? null : r.error.issues;
+  };
+
+  it.each(['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'])('%s ngắn hơn 32 ký tự → không boot, hướng dẫn sinh khoá và nói đổi sẽ đăng xuất mọi người', (key) => {
+    const issues = issuesFor({ [key]: 'x'.repeat(31) });
+    const hit = issues?.find((i) => i.path.includes(key));
+    expect(hit?.message).toContain('openssl rand -base64 48');
+    expect(hit?.message).toContain('đăng xuất');
+  });
+
+  it('đủ 32 ký tự → boot', () => {
+    expect(issuesFor({})).toBeNull();
+  });
+
+  it('dev vẫn cho secret 16 ký tự', () => {
+    const r = envSchema.safeParse({ ...PROD_BASE, NODE_ENV: 'development', JWT_ACCESS_SECRET: 'y'.repeat(16), JWT_REFRESH_SECRET: 'z'.repeat(16) });
+    expect(r.success).toBe(true);
+  });
+});
+
+describe('envSchema — production: ZaloPay sandbox', () => {
+  const SANDBOX = 'https://sb-openapi.zalopay.vn/v2';
+  const issuesFor = (over: Record<string, unknown>) => {
+    const r = envSchema.safeParse({ ...PROD_BASE, ...over });
+    return r.success ? null : r.error.issues;
+  };
+
+  it('đã đặt ZALOPAY_APP_ID mà endpoint là sandbox (kể cả bỏ trống = mặc định sandbox) → không boot', () => {
+    for (const over of [{ ZALOPAY_APP_ID: '2553', ZALOPAY_ENDPOINT: SANDBOX }, { ZALOPAY_APP_ID: '2553' }]) {
+      const hit = issuesFor(over)?.find((i) => i.path.includes('ZALOPAY_ENDPOINT'));
+      expect(hit?.message).toContain('ZALOPAY_ALLOW_SANDBOX=1');
+    }
+  });
+
+  it('ZALOPAY_ALLOW_SANDBOX=1 → cho phép sandbox', () => {
+    expect(issuesFor({ ZALOPAY_APP_ID: '2553', ZALOPAY_ALLOW_SANDBOX: '1' })).toBeNull();
+  });
+
+  it('endpoint thật → boot', () => {
+    expect(issuesFor({ ZALOPAY_APP_ID: '2553', ZALOPAY_ENDPOINT: 'https://openapi.zalopay.vn/v2' })).toBeNull();
+  });
+
+  it('chưa cấu hình ZaloPay (APP_ID rỗng) → không đòi gì', () => {
+    expect(issuesFor({})).toBeNull();
+  });
+
+  it('ngoài production không chặn sandbox', () => {
+    const r = envSchema.safeParse({ ...PROD_BASE, NODE_ENV: 'development', ZALOPAY_APP_ID: '2553' });
+    expect(r.success).toBe(true);
+  });
+});

@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { OrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 interface RetentionResult {
   newBuyers: number;
@@ -98,6 +99,7 @@ export class AnalyticsAggregationService {
    * nếu host chạy giờ VN, kết quả lùi thêm 1 ngày).
    */
   @Cron('0 3 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async runNightly(): Promise<void> {
     // Ngày VN hôm qua, tính TƯỜNG MINH bằng offset +7h thay vì phụ thuộc giờ host (cùng cách
     // game-economy.service.ts/loyalty.service.ts đã dùng cho "ngày VN" ở nơi khác).

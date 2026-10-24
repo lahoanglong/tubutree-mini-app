@@ -4,7 +4,7 @@ Tài liệu này hướng dẫn **đăng ký từng dịch vụ bên thứ ba** 
 Hệ thống được thiết kế **fail-safe**: thiếu key thì chức năng đó tự tắt/êm (COD, Ví, TubuXu, in-app vẫn chạy),
 KHÔNG làm sập app. Khi có key → bật dần từng cái.
 
-> ⚠️ **Bảo mật:** TUYỆT ĐỐI không commit key vào git. Key đặt ở 3 nơi (mục cuối): GitHub Secrets → VM `.env` (qua `ops.yml`).
+> ⚠️ **Bảo mật:** TUYỆT ĐỐI không commit key vào git. Key chỉ nằm trong file `/opt/tubutree/.env` trên VPS (mục 4), sửa qua SSH.
 
 Tóm tắt việc cần làm (theo độ ưu tiên):
 
@@ -46,13 +46,12 @@ Tóm tắt việc cần làm (theo độ ưu tiên):
 
 ### Đặt vào hệ thống
 ```bash
-gh secret set ZALOPAY_APP_ID  --body "<app_id>"
-gh secret set ZALOPAY_KEY1    --body "<key1>"
-gh secret set ZALOPAY_KEY2    --body "<key2>"
-gh workflow run ops.yml -f action=set-env   # ghi vào VM .env
+ZALOPAY_APP_ID=<app_id>
+ZALOPAY_KEY1=<key1>
+ZALOPAY_KEY2=<key2>
 # rồi deploy/restart để API nạp env (xem mục cuối)
 ```
-> Khi lên Production: thêm `gh secret set ZALOPAY_ENDPOINT --body "https://openapi.zalopay.vn/v2"`.
+> Khi lên Production: thêm dòng `ZALOPAY_ENDPOINT=https://openapi.zalopay.vn/v2` vào `.env`.
 
 ---
 
@@ -127,12 +126,11 @@ Web khách (`https://app.tubutree.com`) chỉ có **một** cách đăng nhập 
 
 ### Đặt vào hệ thống
 ```bash
-gh secret set ZALO_APP_ID          --body "<app_id>"
-gh secret set ZALO_APP_SECRET      --body "<app_secret>"
-gh secret set ZALO_OA_ID            --body "<oa_id>"
-gh secret set ZALO_OA_ACCESS_TOKEN  --body "<oa_access_token>"
-gh secret set ZALO_OA_REFRESH_TOKEN --body "<oa_refresh_token>"   # để cron tự làm mới
-gh workflow run ops.yml -f action=set-env
+ZALO_APP_ID=<app_id>
+ZALO_APP_SECRET=<app_secret>
+ZALO_OA_ID=<oa_id>
+ZALO_OA_ACCESS_TOKEN=<oa_access_token>
+ZALO_OA_REFRESH_TOKEN=<oa_refresh_token>   # để cron tự làm mới
 ```
 
 ---
@@ -152,45 +150,39 @@ gh workflow run ops.yml -f action=set-env
    - URL: `https://api.tubutree.com/api/webhooks/accesstrade`
    - `ACCESSTRADE_WEBHOOK_SECRET`: token bí mật bạn TỰ đặt, khai báo trùng 2 phía (Accesstrade dashboard + env). Hệ thống dùng nó để **verify** postback (chống giả mạo). Nếu Accesstrade không cho đặt secret, ta xác thực bằng cơ chế khác — báo lại.
 
-> Hiện tại `ops.yml action=set-env` **tự sinh 1 `ACCESSTRADE_WEBHOOK_SECRET` ngẫu nhiên** để API boot được ở prod (fail-closed). Khi go-live thật, **đặt lại** giá trị khớp 2 phía bằng `gh secret set` (xem dưới).
+> Khi go-live thật, đặt `ACCESSTRADE_WEBHOOK_SECRET` trong `.env` khớp với Accesstrade dashboard (xem dưới).
 
 ### Đặt vào hệ thống
 ```bash
-gh secret set ACCESSTRADE_TOKEN          --body "<token>"
-gh secret set ACCESSTRADE_PUBLISHER_ID   --body "<publisher_id>"
-gh secret set ACCESSTRADE_WEBHOOK_SECRET --body "<secret_tu_dat>"   # khớp với dashboard Accesstrade
-gh workflow run ops.yml -f action=set-env
+ACCESSTRADE_TOKEN=<token>
+ACCESSTRADE_PUBLISHER_ID=<publisher_id>
+ACCESSTRADE_WEBHOOK_SECRET=<secret_tu_dat>   # khớp với dashboard Accesstrade
 ```
 
 ---
 
 ## 4) Cách đặt key vào hệ thống (chuẩn cho MỌI key)
 
-> **Máy ảo GCP đã đóng** ([runbook mục 0.3 và 2](launch/deploy-rollback-runbook.md)). Cho tới khi trỏ lại ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, mọi lệnh `gh workflow run ops.yml` trong tài liệu này lỗi ở bước SSH. Khi đó SSH vào VPS, sửa thẳng `/opt/tubutree/.env`, rồi tạo lại container đọc khoá đó (ví dụ `docker compose -f docker-compose.vietnix.yml up -d --no-deps api`), vì container chỉ đọc `.env` lúc khởi động.
+> Deploy và đặt key đều làm tay qua SSH vào VPS. `.github/workflows/deploy.yml:16-22` đã tắt trigger `workflow_run`, nên đẩy lên main không tự deploy. `gh secret set` và `ops.yml action=set-env` không dùng được vì ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY` vẫn trỏ máy ảo GCP đã đóng ([runbook mục 0.3 và 2](launch/deploy-rollback-runbook.md)). Năm workflow VM (`deploy.yml`, `ops.yml`, `logs.yml`, `smoke.yml`, `smoke-purchase.yml`) còn dừng ở bước chặn đầu tiên cho tới khi biến repo `VM_WORKFLOWS_ENABLED` bằng `true`; chỉ đặt biến này sau khi trỏ lại ba secret trên.
 
-Key đi qua **2 lớp**, không bao giờ nằm trong git:
+Key không nằm trong git. Cách đặt cho MỌI key:
 
-1. **GitHub Secrets** (kho bí mật của repo):
+1. **Sửa `.env` trên VPS** (thêm hoặc sửa dòng `TÊN_BIẾN=giá_trị`, không để dấu cách quanh `=`):
    ```bash
-   gh secret set <TÊN_BIẾN> --body "<giá_trị>"
-   gh secret list            # kiểm tra đã có (không in giá trị)
+   ssh <user>@<vps>
+   cd /opt/tubutree
+   nano .env
    ```
-2. **VM `.env`** — nạp từ GitHub Secrets qua workflow `ops.yml` (chỉ in `SET/EMPTY`, không lộ giá trị):
+2. **Tạo lại container api** để nạp env, vì container chỉ đọc `.env` lúc khởi động:
    ```bash
-   gh workflow run ops.yml -f action=set-env
+   docker compose -f docker-compose.vietnix.yml up -d --no-deps api
    ```
-3. **API nạp env mới** ở lần deploy/restart kế tiếp:
+3. **Kiểm tra đã nhận key** (chỉ in tên, không lộ giá trị):
    ```bash
-   # cách 1: đẩy 1 commit bất kỳ lên main → CI xanh → tự deploy (rebuild container, nạp .env)
-   # cách 2 (không cần commit): SSH vào VPS Vietnix, tạo lại container api để nạp .env
-   cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps api
-   ```
-4. **Kiểm tra đã nhận key (không lộ giá trị):**
-   ```bash
-   gh workflow run ops.yml -f action=audit   # xem mục ENV: SET/EMPTY
+   grep -E '^(ZALOPAY|ZALO|PANCAKE|GOMDON|ACCESSTRADE|OPS_ALERT|SMTP)[A-Z_]*=' .env | sed 's/=.*/=<đã đặt>/'
    ```
 
-> Có thể đặt nhiều `gh secret set` rồi chạy `set-env` **một lần** cho tất cả.
+> Đặt nhiều key trong một lần sửa `.env`, tạo lại container **một lần**.
 
 ---
 
@@ -215,8 +207,7 @@ phần còn lại của app. Có thể bật sau.
 
 ### Đặt vào hệ thống
 ```bash
-gh secret set ZALO_OA_WEBHOOK_SECRET --body "<secret_tu_dat>"   # khớp với Zalo OA dashboard
-gh workflow run ops.yml -f action=set-env
+ZALO_OA_WEBHOOK_SECRET=<secret_tu_dat>   # khớp với Zalo OA dashboard
 ```
 
 ---
@@ -234,13 +225,11 @@ gh workflow run ops.yml -f action=set-env
    Production thiếu secret thì webhook bị từ chối (401).
 
 ### Đặt vào hệ thống
-Trong lúc máy ảo GCP còn đóng (mục 4): thêm ba dòng `PANCAKE_API_KEY=`, `PANCAKE_SHOP_ID=`, `PANCAKE_WEBHOOK_SECRET=` vào `/opt/tubutree/.env` trên VPS, rồi `docker compose -f docker-compose.vietnix.yml up -d --no-deps api`. Khi đã trỏ lại GitHub Actions thì dùng các lệnh dưới.
+Thêm ba dòng dưới vào `/opt/tubutree/.env` trên VPS rồi tạo lại container api (mục 4).
 ```bash
-gh secret set PANCAKE_API_KEY --body "<api_key>"
-gh secret set PANCAKE_SHOP_ID --body "<shop_id>"
-gh secret set PANCAKE_WEBHOOK_SECRET --body "<secret_trùng_header_webhook>"
-gh workflow run ops.yml -f action=set-env
-gh workflow run ops.yml -f action=audit   # PANCAKE_* phải là SET
+PANCAKE_API_KEY=<api_key>
+PANCAKE_SHOP_ID=<shop_id>
+PANCAKE_WEBHOOK_SECRET=<secret_trùng_header_webhook>
 ```
 `PANCAKE_BASE_URL` để mặc định `https://pos.pages.fm/api/v1`.
 
@@ -270,14 +259,14 @@ UPDATE system_configs SET description = 'Công tắc kỹ thuật Gomdon. Khách
 ```
 
 ```bash
-gh secret set GOMDON_PHONE --body "<sdt>"
-gh secret set GOMDON_PASSWORD --body "<mat_khau>"     # KHÔNG nhập vào tab Cấu hình admin
-gh secret set GOMDON_WEBHOOK_SECRET --body "<secret>"
-gh workflow run ops.yml -f action=set-env
+GOMDON_PHONE=<sdt>
+GOMDON_PASSWORD=<mat_khau>     # KHÔNG nhập vào tab Cấu hình admin
+GOMDON_WEBHOOK_SECRET=<secret>
 ```
 
 > Workflow `ops.yml`/`deploy.yml`/`smoke*.yml`/`logs.yml` SSH vào máy theo secret `VM_HOST`/`VM_USER`/`VM_SSH_KEY`
 > và biến repo `DEPLOY_DIR` (mặc định `/opt/tubutree`), `COMPOSE_FILE` (mặc định `docker-compose.vietnix.yml`).
+> Cả năm workflow này dừng ở một bước chặn đầu tiên cho tới khi biến repo `VM_WORKFLOWS_ENABLED` bằng `true` (đặt sau khi đã trỏ lại các secret SSH).
 > Đến 2026-10 ba secret `VM_*` vẫn trỏ VM GCP đã đóng: cập nhật sang VPS Vietnix trước khi dùng
 > `set-env`/`audit`; chưa cập nhật thì đặt key thẳng vào `/opt/tubutree/.env` trên VPS rồi tạo lại container api.
 
@@ -308,11 +297,9 @@ Lời báo động nêu tới 5 mã đơn; danh sách đầy đủ, nút **Chạ
   "problems": [{"key", "message"}], "generatedAt"}`.
 
 ```bash
-gh secret set OPS_ALERT_WEBHOOK_URL --body "https://hooks.slack.com/services/T.../B.../..."   # phải có https://
-gh workflow run ops.yml -f action=set-env
-gh workflow run ops.yml -f action=audit   # OPS_ALERT_WEBHOOK_URL phải là SET
+OPS_ALERT_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../...   # phải có https://
 ```
-URL thiếu `https://` thì `set-env` từ chối ghi và API cũng không khởi động với giá trị đó. Bỏ trống = chỉ báo in-app.
+URL thiếu `https://` thì API không khởi động với giá trị đó. Bỏ trống = chỉ báo in-app.
 
 ### Email (kênh thứ hai, tuỳ chọn)
 
@@ -336,12 +323,12 @@ với lúc lỗi (sửa `SMTP_PASS` rồi chạy lại API), (2) admin bấm **G
 | `SMTP_SECURE` | Nhận `true`/`false`/`yes`/`no`/`1`/`0`/`on`/`off` (không phân biệt hoa thường), giá trị khác thì API không khởi động. `true` = TLS ngay từ đầu (thường cổng 465); `false`/trống = STARTTLS (cổng 587). Có tài khoản mà không dùng TLS ngay từ đầu thì bắt buộc STARTTLS, không gửi mật khẩu dạng thô |
 | `SMTP_USER`, `SMTP_PASS` | Tài khoản đăng nhập SMTP, đi **cặp** (cả hai hoặc không cái nào). Mật khẩu nên là mật khẩu ứng dụng, không chứa `$` hay dấu nháy |
 | `SMTP_FROM` | Địa chỉ gửi: `alerts@tubutree.com` hoặc `Tubu Tree <alerts@tubutree.com>`. Để trống thì dùng `SMTP_USER` nếu nó là địa chỉ email |
-| `OPS_ALERT_ENV_LABEL` | Tuỳ chọn: nhãn môi trường trong tiêu đề (vd `staging`). Trống = `NODE_ENV`. Staging chạy `NODE_ENV=production` thì đặt nhãn để không lẫn với prod. Tối đa 24 ký tự, một dòng, không chứa `[` `]`. **Không bí mật**: đặt bằng biến GitHub (`gh variable set`), không dùng `gh secret set` |
+| `OPS_ALERT_ENV_LABEL` | Tuỳ chọn: nhãn môi trường trong tiêu đề (vd `staging`). Trống = `NODE_ENV`. Staging chạy `NODE_ENV=production` thì đặt nhãn để không lẫn với prod. Tối đa 24 ký tự, một dòng, không chứa `[` `]`. Không bí mật |
 
 Bỏ trống **cả bảy** biến email = tắt kênh, app chạy như cũ. Đã đặt một biến thì phải đủ (`OPS_ALERT_EMAIL_TO`,
 `SMTP_HOST`, và `SMTP_FROM` hoặc `SMTP_USER` là địa chỉ email) và đúng định dạng — dở dang thì API không khởi động và
 `tools/deploy/deploy.sh` dừng ở bước kiểm `.env`, thông báo nêu rõ khoá còn thiếu (không in mật khẩu); bản đang chạy vẫn
-phục vụ. `set-env` cũng từ chối ghi khi gộp secret mới với `.env` hiện có vẫn thiếu khoá.
+phục vụ.
 
 **Nội dung email:** tiêu đề `[Tubu Tree · <môi trường>] Sự cố vận hành: N vấn đề cần xử lý` (hoặc `Vận hành đã ổn trở lại`);
 thân văn bản + HTML nêu từng vấn đề, số lượng và mã đơn cũ nhất như lời báo của webhook. Số điện thoại, khoá/token và
@@ -350,14 +337,12 @@ thông tin đăng nhập trong URL nằm trong thông điệp lỗi tự do bị
 hệ thống** để xử lý.
 
 ```bash
-gh secret set OPS_ALERT_EMAIL_TO --body "ops@tubutree.com,ceo@tubutree.com"
-gh secret set SMTP_HOST --body "smtp.example.com"
-gh secret set SMTP_USER --body "alerts@tubutree.com"
-gh secret set SMTP_PASS --body "<mat_khau_ung_dung>"      # KHÔNG commit, không nhập vào tab Cấu hình admin
-gh secret set SMTP_FROM --body "Tubu Tree <alerts@tubutree.com>"
-gh variable set OPS_ALERT_ENV_LABEL --body "staging"      # tuỳ chọn, biến (vars) chứ không phải secret; prod để trống
-gh workflow run ops.yml -f action=set-env
-gh workflow run ops.yml -f action=audit   # in SET/EMPTY từng khoá email (SMTP_PORT, SMTP_SECURE, OPS_ALERT_ENV_LABEL trống là bình thường)
+OPS_ALERT_EMAIL_TO=ops@tubutree.com,ceo@tubutree.com
+SMTP_HOST=smtp.example.com
+SMTP_USER=alerts@tubutree.com
+SMTP_PASS=<mat_khau_ung_dung>      # KHÔNG commit, không nhập vào tab Cấu hình admin
+SMTP_FROM=Tubu Tree <alerts@tubutree.com>
+OPS_ALERT_ENV_LABEL=staging      # tuỳ chọn, biến (vars) chứ không phải secret; prod để trống
 ```
 
 **Gửi thử** (không đụng trí nhớ chống báo lặp, không làm mất hay thêm báo động thật): ở màn **Sức khoẻ hệ thống** →
@@ -385,10 +370,10 @@ Lỗi vĩnh viễn hiện rõ trên thẻ, vd "Lỗi xác thực SMTP — kiểm
 4. **CSKH Quick-reply webhook** (tính năng tăng trưởng, không bắt buộc — bật khi rảnh).
 5. **Kênh báo động vận hành** (mục 8) trước ngày mở bán, để sự cố Pancake/Gomdon không chỉ nằm trong app.
 
-Sau mỗi lần go-live 1 dịch vụ: chạy `ops.yml action=audit` để xác nhận, rồi test 1 giao dịch thật nhỏ.
+Sau mỗi lần go-live 1 dịch vụ: kiểm lại bằng lệnh `grep` ở mục 4, rồi test 1 giao dịch thật nhỏ.
 
 ---
 
 ## Chat CSKH qua Zalo cá nhân
 
-Chat với khách chuyển tin vào một nhóm Zalo qua tài khoản Zalo cá nhân (SIM riêng) làm cầu nối. Khoá cần điền: API có `ZALO_BRIDGE_URL` và `ZALO_BRIDGE_SECRET`; service `zalo-bridge` có `ZALO_BRIDGE_SECRET` (cùng giá trị, tối thiểu 32 ký tự) và `ZALO_BRIDGE_CREDENTIALS_KEY` (base64 của 32 byte). Hai migration mới: `20261023100000_support_chat`, `20261023110000_support_bridge_actions`. Nhân viên không bao giờ mở Zalo PC/Web bằng tài khoản cầu nối. Zalo có thể khoá tài khoản cầu nối (điều 4.7). Các bước chi tiết, thử tay và gỡ về: [docs/2026-10-23-q5/bat-chat-zalo.md](2026-10-23-q5/bat-chat-zalo.md).
+Chat với khách chuyển tin vào một nhóm Zalo qua tài khoản Zalo cá nhân (SIM riêng) làm cầu nối. Khoá cần điền: API có `ZALO_BRIDGE_URL` và `ZALO_BRIDGE_SECRET`; service `zalo-bridge` có `ZALO_BRIDGE_SECRET` (cùng giá trị, tối thiểu 32 ký tự) và `ZALO_BRIDGE_CREDENTIALS_KEY` (base64 của 32 byte). Bốn migration mới, đều chỉ thêm: `20261023100000_support_chat`, `20261023110000_support_bridge_actions`, `20261024100000_support_chat_hardening`, `20261024120000_support_message_seen`. API lên trước bản Mini App mới (bản mới gửi `{ ids }` khi đánh dấu đã đọc, API cũ trả 400). Nhân viên không bao giờ mở Zalo PC/Web bằng tài khoản cầu nối. Zalo có thể khoá tài khoản cầu nối (điều 4.7). Các bước chi tiết, thử tay và gỡ về: [docs/2026-10-23-q5/bat-chat-zalo.md](2026-10-23-q5/bat-chat-zalo.md).

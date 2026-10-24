@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { GroupBuyService } from './groupbuy.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /** Quét nhóm mua chung quá hạn → FAILED (mỗi 15 phút). */
 @Injectable()
@@ -10,6 +11,7 @@ export class GroupBuyCron {
   constructor(private readonly groupBuy: GroupBuyService) {}
 
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 2 })
   async sweep() {
     try {
       const n = await this.groupBuy.expireGroups();

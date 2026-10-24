@@ -10,6 +10,7 @@ import { CashbackProviderRegistry } from './providers/cashback-provider.registry
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
 import { CRON_TZ } from '../../common/cron-tz';
 import { maskPhoneKeepLast3 } from '../../common/mask-pii';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /**
  * Cashback sàn ngoài (Build Spec §9, §15 cashback.*). Provider-agnostic: I/O vendor nằm ở
@@ -308,6 +309,7 @@ export class CashbackService {
 
   /** Cron mỗi giờ: cashback CONFIRMED quá hold_days → chuyển pending→Ví (PAID). */
   @Cron('0 30 * * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async settleConfirmed(): Promise<void> {
     try {
       const holdDays = await this.config.get<number>('cashback.hold_days', 30);
@@ -363,6 +365,7 @@ export class CashbackService {
    * (isReconcileEnabled) rồi feed qua ingest() (idempotent). Bắt postback rớt.
    */
   @Cron('0 0 */6 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async reconcile(): Promise<void> {
     const lookbackDays = await this.config.get<number>('cashback.reconcile_lookback_days', 45);
     const since = new Date(Date.now() - lookbackDays * 24 * 3600 * 1000);

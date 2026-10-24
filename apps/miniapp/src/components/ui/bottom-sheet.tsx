@@ -1,8 +1,11 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Sheet } from 'zmp-ui';
 import { X } from 'lucide-react';
 import { Heading, Text } from './text';
 import { IconButton } from './icon-button';
+
+/** Lớn hơn ANIMATION_DURATION (200ms) trong zmp-ui/esm/components/sheet/content.js. */
+const REOPEN_REMOUNT_MS = 300;
 
 export type BottomSheetSize = 'auto' | 'half' | 'full';
 
@@ -75,8 +78,20 @@ export function BottomSheet({
   children,
 }: BottomSheetProps) {
   const sizeConfig = SIZE_CONFIG[size];
+  // ZaUI hẹn setTimeout(200ms) sau khi đóng để gỡ nội dung và không huỷ hẹn giờ đó khi mở lại: mở lại trong
+  // khoảng này thì nội dung bị gỡ trong lúc `open` vẫn true (sheet biến mất, nút mở bấm không còn tác dụng).
+  // Mở lại khi hẹn giờ cũ có thể còn treo → dựng Sheet mới, hẹn giờ cũ chỉ chạm bản đã gỡ.
+  const [prevOpen, setPrevOpen] = useState(open);
+  const [closedAt, setClosedAt] = useState<number | null>(null);
+  const [instance, setInstance] = useState(0);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) setClosedAt(Date.now());
+    else if (closedAt !== null && Date.now() - closedAt < REOPEN_REMOUNT_MS) setInstance((n) => n + 1);
+  }
   return (
     <Sheet
+      key={instance}
       visible={open}
       unmountOnClose
       onClose={dismissible ? onClose : undefined}

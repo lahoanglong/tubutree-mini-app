@@ -192,6 +192,11 @@ export function BankTransferPanel({
             className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-[var(--color-border-subtle)]"
           />
           <p className="text-xl font-bold text-stone-900 max-md:mt-2 max-md:text-lg max-md:text-success-fg">{formatVnd(data.amount)}</p>
+          {!!data.paidSoFar && data.paidSoFar > 0 && (
+            <p data-testid="paid-so-far" className="text-xs text-warning-fg max-md:mt-1 max-md:text-sm">
+              Đã nhận {formatVnd(data.paidSoFar)}, còn thiếu {formatVnd(data.amount)}. Mã QR đã trừ phần này.
+            </p>
+          )}
           <button
             type="button"
             onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}

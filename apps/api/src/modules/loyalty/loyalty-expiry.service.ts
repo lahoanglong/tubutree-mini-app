@@ -14,6 +14,7 @@ import {
   REFERRAL_ORDER2_PREFIX,
   REFERRAL_ORDER2_REVOKE_PREFIX,
 } from '../wallet/referral-reward';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 const DAY = 864e5;
 const BATCH = 500; // kích thước mỗi trang candidate.
@@ -377,6 +378,7 @@ export class LoyaltyExpiryService {
    * expireUser().catch() cô lập.
    */
   @Cron('0 1 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async expirePoints(): Promise<void> {
     try {
       const now = new Date();
@@ -468,6 +470,7 @@ export class LoyaltyExpiryService {
    * remindUser().catch() cô lập.
    */
   @Cron('0 8 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async remindExpiringPoints(): Promise<void> {
     try {
       const reminderDays = await this.config.get<number>('loyalty.point_expiry_reminder_days', 7);

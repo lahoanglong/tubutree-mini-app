@@ -389,6 +389,29 @@ describe('evaluateDb', () => {
     it('đủ thì PASS', () => expect(byId(run(GOOD_DB), 'db.shipping_rates').detail).toContain('freeship từ'));
   });
 
+  describe('ngày giao dự kiến (db.shipping_eta)', () => {
+    const eta = (configs: Record<string, unknown>) => dbWith({ configs });
+    it('đủ khoảng hợp lệ thì PASS', () => {
+      const r = byId(run(GOOD_DB), 'db.shipping_eta');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('2 đến 4 ngày');
+    });
+    it('khoá chưa có hoặc null (seed) thì WARN: khách không thấy dòng Giao dự kiến', () => {
+      expect(status(dbWith({ dropConfigs: ['shipping.eta_min_days', 'shipping.eta_max_days'] }), 'db.shipping_eta')).toBe('WARN');
+      const r = byId(run(eta({ 'shipping.eta_min_days': null, 'shipping.eta_max_days': null })), 'db.shipping_eta');
+      expect(r.status).toBe('WARN');
+      expect(r.hint).toContain('shipping.eta_min_days');
+    });
+    it('chỉ đặt một trong hai thì WARN', () => {
+      expect(status(eta({ 'shipping.eta_max_days': null }), 'db.shipping_eta')).toBe('WARN');
+    });
+    it('khoảng sai (max < min, âm, quá 60, không nguyên) thì WARN vì phía đọc cũng ẩn', () => {
+      expect(status(eta({ 'shipping.eta_min_days': 5, 'shipping.eta_max_days': 3 }), 'db.shipping_eta')).toBe('WARN');
+      expect(status(eta({ 'shipping.eta_min_days': 1, 'shipping.eta_max_days': 61 }), 'db.shipping_eta')).toBe('WARN');
+      expect(status(eta({ 'shipping.eta_min_days': '2', 'shipping.eta_max_days': 4 }), 'db.shipping_eta')).toBe('WARN');
+    });
+  });
+
   describe('phí sàn đối tác', () => {
     it.each([['15 thay vì 0.15', 15], ['bằng 1', 1], ['âm', -0.1], ['chuỗi', '0.15']])('%s thì FAIL', (_l, v) => {
       expect(status(dbWith({ configs: { 'merchant.commission_pct': v } }), 'db.merchant_terms')).toBe('FAIL');

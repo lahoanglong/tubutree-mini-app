@@ -8,6 +8,7 @@ import { LifecycleService } from '../lifecycle/lifecycle.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { isSellableVariation, SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '../admin/coupon-input-rules';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
@@ -627,6 +628,7 @@ export class FlashSaleService {
    * để 1 lần gửi hỏng không chặn cả lô.
    */
   @Cron('* * * * *', { timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 2 })
   async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
     try {
       // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét
@@ -701,6 +703,7 @@ export class FlashSaleService {
    * lượt thứ hai trong cửa sổ không gửi lại vì notifyWishlistPriceDrop có cooldown theo user × sản phẩm.
    */
   @Cron('10 * * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async notifyWishlistOfStartedSales(now: Date = new Date()): Promise<void> {
     try {
       const sales = await this.prisma.flashSale.findMany({

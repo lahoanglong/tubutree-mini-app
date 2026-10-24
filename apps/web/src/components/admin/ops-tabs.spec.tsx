@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
 import { AttendanceTab } from './attendance-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { formatDateTime } from '@/lib/format-date';
 import { scrollRegionProblems, smallTouchTargets } from '@/test-utils/a11y';
 
 let mounted: Rendered[] = [];
@@ -367,6 +368,48 @@ describe('OpsHealthTab — kênh email báo động (R8)', () => {
     const { c } = await card({ email: email({ lastErrorAt: '2026-10-14T02:30:00.000Z', lastError: 'x' }) });
     expect(scrollRegionProblems(c)).toEqual([]);
     expect(smallTouchTargets(c).filter((x) => !x.includes('min-h-[44px]'))).toEqual([]);
+  });
+});
+
+describe('OpsHealthTab — tác vụ nền (cron_runs)', () => {
+  const JOBS = [
+    { job: 'Foo.bar', lastStartedAt: '2026-10-24T03:00:00.000Z', lastFinishedAt: '2026-10-24T03:00:02.000Z', lastSuccessAt: '2026-10-24T03:00:02.000Z', lastErrorAt: null, lastError: null, consecutiveFailures: 0, lastDurationMs: 2000, lastOutcome: 'OK', lastErrorCount: 0 },
+    { job: 'Baz.qux', lastStartedAt: '2026-10-24T04:00:00.000Z', lastFinishedAt: '2026-10-24T04:00:01.000Z', lastSuccessAt: null, lastErrorAt: '2026-10-24T04:00:01.000Z', lastError: 'TypeError: kho lỗi', consecutiveFailures: 3, lastDurationMs: 1000, lastOutcome: 'THREW', lastErrorCount: 0 },
+    { job: 'Log.er', lastStartedAt: '2026-10-24T05:00:00.000Z', lastFinishedAt: '2026-10-24T05:00:01.000Z', lastSuccessAt: '2026-10-24T02:00:00.000Z', lastErrorAt: '2026-10-24T05:00:01.000Z', lastError: 'pancake timeout', consecutiveFailures: 2, lastDurationMs: 1000, lastOutcome: 'ERRORS', lastErrorCount: 4 },
+    { job: 'Skip.ped', lastStartedAt: '2026-10-24T06:00:00.000Z', lastFinishedAt: '2026-10-24T06:00:01.000Z', lastSuccessAt: null, lastErrorAt: null, lastError: null, consecutiveFailures: 0, lastDurationMs: 1000, lastOutcome: 'SKIPPED', lastErrorCount: 0 },
+  ];
+
+  it('liệt kê job, lần thành công cuối, lỗi cuối và số lần lỗi liên tiếp; job đang lỗi tô đỏ', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...HEALTH, cronJobs: JOBS } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    const section = c.querySelector('section[aria-label="Tác vụ nền"]');
+    expect(section).not.toBeNull();
+    expect(section!.textContent).toContain('Foo.bar');
+    expect(section!.textContent).toContain('Baz.qux');
+    expect(section!.textContent).toContain('TypeError: kho lỗi');
+    expect(section!.textContent).toContain('chưa có');
+    const rows = [...section!.querySelectorAll('tbody tr')];
+    expect(rows[0]!.textContent).toContain('Baz.qux');
+    expect(rows[0]!.textContent).toContain('Ném lỗi');
+    expect(rows[0]!.querySelector('.text-danger-fg')).not.toBeNull();
+    expect(rows[1]!.textContent).toContain('Log.er');
+    expect(rows[1]!.textContent).toContain('Lỗi 4 lần ghi log');
+    expect(rows[2]!.textContent).toContain('Foo.bar');
+    expect(rows[2]!.textContent).toContain('OK');
+    expect(rows[2]!.querySelector('.text-danger-fg')).toBeNull();
+    expect(rows[0]!.textContent).toContain(`Bắt đầu ${formatDateTime(JOBS[1]!.lastStartedAt)}`);
+    expect(rows[0]!.textContent).toContain(`Xong ${formatDateTime(JOBS[1]!.lastFinishedAt)}`);
+    expect(rows[3]!.textContent).toContain('Bỏ qua');
+    expect(rows[3]!.textContent).toContain(`Bỏ qua lúc ${formatDateTime(JOBS[3]!.lastFinishedAt)}`);
+    expect(rows[3]!.textContent).not.toContain('Bắt đầu');
+    expect(rows[3]!.querySelector('.text-danger-fg')).toBeNull();
+    expect(scrollRegionProblems(c)).toEqual([]);
+  });
+
+  it('API cũ hoặc chưa có dòng nào: không hiện mục', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    expect(c.querySelector('section[aria-label="Tác vụ nền"]')).toBeNull();
   });
 });
 

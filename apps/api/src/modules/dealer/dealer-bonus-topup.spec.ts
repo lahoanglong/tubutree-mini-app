@@ -1,4 +1,4 @@
-import { DealerService } from './dealer.service';
+import { DealerService, SETTLE_VISIBILITY_MARGIN_MS } from './dealer.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 
@@ -21,7 +21,7 @@ const makeConfig = (values: Record<string, unknown> = {}): SystemConfigService =
   ({ get: async <T>(key: string, fb?: T): Promise<T> => (key in values ? values[key] : fb) as T }) as unknown as SystemConfigService;
 
 type Ledger = { userId: string; delta: number; refType: string; refId: string | null; note: string | null; createdAt?: Date };
-type OrderRow = { id: string; total: number; status: string; paymentStatus: string; createdAt: Date; paidAt: Date | null };
+type OrderRow = { id: string; total: number; shippingFee: number; status: string; paymentStatus: string; createdAt: Date; paidAt: Date | null };
 
 /** prisma giả: 1 đại lý d1, sổ công nợ và đơn nằm trong bộ nhớ; transaction chạy thẳng trên chính nó. */
 function makePrisma(orders: OrderRow[], ledger: Ledger[] = []) {
@@ -78,6 +78,7 @@ function matches(l: Ledger, w: Where): boolean {
 const order = (id: string, total: number, createdAt: string, settledAt: string = createdAt): OrderRow => ({
   id,
   total,
+  shippingFee: 0,
   status: 'DELIVERED',
   paymentStatus: 'PAID',
   createdAt: new Date(createdAt),
@@ -299,11 +300,23 @@ describe('DealerService.topUpQuarterlyBonuses — mốc createdAt của dòng gh
     expect(row.createdAt).toEqual(EXPIRES_AT);
   });
 
-  it('lượt quét trong cửa sổ: để mặc định giờ DB (không ép createdAt)', async () => {
-    const { prisma, tx } = makePrisma([A, d], [{ ...paid }]);
-    await svc(prisma).service.topUpQuarterlyBonuses(new Date('2026-05-20T03:00:00Z'));
+  it('lượt quét trong cửa sổ: createdAt = giờ chạy − biên (đơn đang chốt dở chưa commit không bị coi là đã tính)', async () => {
+    const settledBefore = order('d', 90_000_000, '2026-03-28T03:00:00Z', '2026-05-15T03:00:00Z');
+    const { prisma, tx } = makePrisma([A, settledBefore], [{ ...paid }]);
+    const now = new Date('2026-05-20T03:00:00Z');
+    await svc(prisma).service.topUpQuarterlyBonuses(now);
     const data = (tx.dealerCreditLedger.create.mock.calls[0] as unknown as [{ data: Ledger }])[0].data;
-    expect(data.createdAt).toBeUndefined();
+    expect(data.createdAt).toEqual(new Date(now.getTime() - SETTLE_VISIBILITY_MARGIN_MS));
+  });
+
+  it('đơn chốt trong biên trước giờ chạy chưa được tính: lượt sau mới bù', async () => {
+    const now = new Date('2026-05-20T03:00:00Z');
+    const inMargin = order('d', 90_000_000, '2026-03-28T03:00:00Z', new Date(now.getTime() - 30_000).toISOString());
+    const { prisma, tx } = makePrisma([A, inMargin], [{ ...paid }]);
+    await svc(prisma).service.topUpQuarterlyBonuses(now);
+    expect(tx.dealerCreditLedger.create).not.toHaveBeenCalled();
+    await svc(prisma).service.topUpQuarterlyBonuses(new Date('2026-05-21T03:00:00Z'));
+    expect(tx.dealerCreditLedger.create).toHaveBeenCalledTimes(1);
   });
 });
 

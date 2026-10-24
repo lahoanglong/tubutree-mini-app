@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { DealerService } from './dealer.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /** Trả thưởng doanh số quý cho đại lý vào ngày 10 tháng đầu mỗi quý (10/01, 10/04, 10/07, 10/10). */
 @Injectable()
@@ -13,10 +14,14 @@ export class DealerCron {
   // chốt (đã thanh toán/ghi công nợ + đã đóng gói trở đi); trước đây chạy ngày 1 nên đơn đặt vài
   // ngày cuối quý chưa kịp đóng gói sẽ bị loại vĩnh viễn (payout idempotent, chỉ chạy 1 lần/quý).
   @Cron('0 0 4 10 1,4,7,10 *', { timeZone: CRON_TZ })
+  @TrackCron()
   async payoutQuarterly() {
     try {
       const { paid, quarter, failed } = await this.dealer.payoutQuarterlyBonuses();
-      this.logger.log(`Cron thưởng quý ${quarter}: đã trả ${paid} đại lý${failed > 0 ? `, ${failed} đại lý lỗi` : ''}.`);
+      const summary = `Cron thưởng quý ${quarter}: đã trả ${paid} đại lý${failed > 0 ? `, ${failed} đại lý lỗi` : ''}.`;
+      // Trả một phần cũng là hỏng: quý chỉ chạy một lần, phải để sổ cron báo.
+      if (failed > 0) this.logger.error(summary);
+      else this.logger.log(summary);
     } catch (err) {
       this.logger.error(`Cron trả thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
     }
@@ -24,11 +29,14 @@ export class DealerCron {
 
   // 05:00 hằng ngày, sau giờ trả thưởng 04:00 ngày 10: đơn của quý chốt muộn hơn ngày 10 được trả bù trong cửa sổ cấu hình.
   @Cron('0 0 5 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async topUpQuarterly() {
     try {
       const { toppedUp, quarters, failed } = await this.dealer.topUpQuarterlyBonuses();
       if (toppedUp > 0 || failed > 0) {
-        this.logger.log(`Cron trả bù thưởng quý ${quarters.join(', ')}: đã bù ${toppedUp} khoản${failed > 0 ? `, ${failed} lượt đại lý lỗi` : ''}.`);
+        const summary = `Cron trả bù thưởng quý ${quarters.join(', ')}: đã bù ${toppedUp} khoản${failed > 0 ? `, ${failed} lượt đại lý lỗi` : ''}.`;
+        if (failed > 0) this.logger.error(summary);
+        else this.logger.log(summary);
       }
     } catch (err) {
       this.logger.error(`Cron trả bù thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);

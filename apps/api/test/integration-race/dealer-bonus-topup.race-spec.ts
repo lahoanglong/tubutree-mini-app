@@ -81,10 +81,9 @@ describe('Trả bù thưởng quý cho đơn chốt muộn (real Postgres)', () 
     await prisma.orderStatusHistory.create({ data: { orderId, fromStatus: 'CONFIRMED', toStatus: 'PACKED', actorType: 'SYSTEM', createdAt: at } });
   }
 
-  /** payoutQuarterlyBonuses ghi createdAt bằng giờ thật; kéo về giờ mô phỏng để so với giờ chốt đơn trong cùng thời gian giả. */
+  /** Trả thưởng ở giờ mô phỏng `at`; dòng thưởng mang mốc at − SETTLE_VISIBILITY_MARGIN_MS, cùng thời gian giả với giờ chốt đơn. */
   async function payoutAt(at: Date) {
     await dealer.payoutQuarterlyBonuses(at);
-    await prisma.dealerCreditLedger.updateMany({ where: { refType: 'QUARTER_BONUS', createdAt: { gt: new Date('2026-01-01') } }, data: { createdAt: at } });
   }
 
   function returnOrder(orderId: string) {

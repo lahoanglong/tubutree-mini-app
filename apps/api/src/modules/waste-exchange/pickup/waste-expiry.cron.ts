@@ -8,6 +8,7 @@ import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { WasteShipLockService } from '../core/waste-ship-lock.service';
 import { GOMDON_DISPATCHED_STATUSES } from '../waste.constants';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
 
@@ -36,6 +37,7 @@ export class WasteExpiryCron {
 
   // @Cron không tự bắt lỗi: lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 30 3 * * *', { name: 'waste.expiry', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.run();
@@ -46,7 +48,7 @@ export class WasteExpiryCron {
   }
 
   async run(now: Date = new Date()): Promise<{ expired: number }> {
-    if (this.running) return { expired: 0 };
+    if (this.running) { markCronSkipped('RUNNING'); return { expired: 0 }; }
     this.running = true;
     try {
       const cfg = await this.config.snapshot();
@@ -56,7 +58,7 @@ export class WasteExpiryCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext('cron:waste.expiry')) AS "locked"`;
-          if (!row?.locked) return { expired: 0 };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { expired: 0 }; }
           return this.sweep(now, cfg);
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },

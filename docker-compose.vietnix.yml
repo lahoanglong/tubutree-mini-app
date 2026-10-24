@@ -82,6 +82,8 @@ services:
       PORT: 3001
       # Cron/Date local theo giờ VN (cron còn có timeZone riêng, xem apps/api/src/common/cron-tz.ts).
       TZ: Asia/Ho_Chi_Minh
+      # ~70% mem_limit: không đặt thì V8 tính trần heap theo RAM của máy chủ, vượt mem_limit trước khi GC kịp và bị OOM-kill không log.
+      NODE_OPTIONS: '--max-old-space-size=512'
       # Một instance API; pool mặc định của Prisma theo số CPU nên dễ cạn khi tải bùng nổ (P2028). 20 kết nối nằm
       # xa dưới max_connections=100 của Postgres, pool_timeout dài hơn để request xếp hàng thay vì lỗi 500.
       DATABASE_URL: postgresql://${POSTGRES_USER:-tubu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tubutree}?connection_limit=20&pool_timeout=30
@@ -136,6 +138,7 @@ services:
       # vẫn curl qua port-map bình thường vì NAT route thẳng vào IP bridge đó). Docker healthcheck
       # (node fetch http://localhost:3000/) vì vậy luôn "unhealthy" dù app chạy đúng. Ép 0.0.0.0.
       HOSTNAME: '0.0.0.0'
+      NODE_OPTIONS: '--max-old-space-size=352' # ~70% mem_limit, lý do như api
       API_BASE_URL: http://api:3001/api
       # Cùng giá trị với api: SSR gửi qua header x-throttle-bypass để không bị 429 theo IP máy chủ web.
       THROTTLE_BYPASS_TOKEN: ${THROTTLE_BYPASS_TOKEN:-}

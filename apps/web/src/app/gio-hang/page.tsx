@@ -134,7 +134,9 @@ export default function CartPage() {
   const allItems = cart?.items ?? [];
   const selectedItems = allItems.filter((it) => !deselected.has(it.id));
   const allSelected = selectedItems.length === allItems.length;
-  const selectedSubtotal = selectedItems.reduce((sum, it) => sum + it.total, 0);
+  // Dòng hết hàng (tồn 0) không mua được: không cộng vào tạm tính hay tiến độ miễn phí giao, như Mini App.
+  const buyableSelected = selectedItems.filter((it) => it.stock > 0);
+  const selectedSubtotal = buyableSelected.reduce((sum, it) => sum + it.total, 0);
   const selectedCount = selectedItems.reduce((sum, it) => sum + it.quantity, 0);
   // Chỉ chặn theo các dòng đang chọn: bỏ chọn dòng hết hàng thì vẫn thanh toán được phần còn lại.
   const stockBlocked = selectedItems.some((it) => it.stock <= 0 || it.quantity > it.stock);
@@ -144,8 +146,9 @@ export default function CartPage() {
   const withHeaders = showFulfillerHeaders(groups);
   const hasMerchant = groupByFulfiller(selectedItems).some((g) => g.fulfiller.kind === 'MERCHANT');
   // Tiến độ miễn phí giao hàng theo phần ĐANG CHỌN (đúng số sẽ thanh toán); có hàng gian hàng tự giao thì chỉ tính phần Tubu giao.
-  const freeshipBase = hasMerchant ? tubuSubtotal(selectedItems) : selectedSubtotal;
-  const freeshipReached = (!hasMerchant && allSelected && !!cart?.freeship) || (!!cart && freeshipBase >= cart.freeshipThreshold);
+  const freeshipBase = hasMerchant ? tubuSubtotal(buyableSelected) : selectedSubtotal;
+  // `cart.freeship` do máy chủ tính trên cả giỏ kể cả dòng hết hàng, nên không tin khi còn dòng hết hàng đang chọn.
+  const freeshipReached = (!hasMerchant && allSelected && !!cart?.freeship && buyableSelected.length === selectedItems.length) || (!!cart && freeshipBase >= cart.freeshipThreshold);
   const remainingFreeship =
     cart && selectedItems.length > 0 && (!hasMerchant || freeshipBase > 0) ? Math.max(0, cart.freeshipThreshold - freeshipBase) : 0;
   // Số giảm hiển thị: cả giỏ lấy từ giỏ, một phần giỏ lấy từ giá phần chọn của máy chủ; chưa có giá đó thì không hiện (thanh toán tính lại).

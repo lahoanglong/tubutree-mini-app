@@ -132,3 +132,36 @@ describe('OpsHealthService — kênh webhook báo động (R6-ADMIN-4)', () => {
     expect(await channel(svc)).toMatchObject({ state: 'READY', lastErrorKind: 'PERMANENT' });
   });
 });
+
+describe('OpsHealthService.cronJobs (mục Tác vụ nền của màn sức khoẻ)', () => {
+  const row = { job: 'A.x', lastStartedAt: 'a', lastFinishedAt: 'b', lastSuccessAt: null, lastErrorAt: 'c', lastError: 'Error: e', consecutiveFailures: 2, lastDurationMs: 5 };
+
+  it('trả các dòng cron_runs', async () => {
+    const svc = new OpsHealthService({} as never, {} as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => [row] } as never);
+    await expect(svc.cronJobs()).resolves.toEqual([row]);
+  });
+
+  it('đọc bảng lỗi (chưa migrate…) thì trả rỗng, không làm hỏng cả màn', async () => {
+    const svc = new OpsHealthService({} as never, {} as never, [], undefined, undefined, undefined, undefined, undefined, { list: async () => Promise.reject(new Error('no table')) } as never);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    await expect(svc.cronJobs()).resolves.toEqual([]);
+  });
+
+  it('thiếu CronRunService: rỗng', async () => {
+    const svc = new OpsHealthService({} as never, {} as never, []);
+    await expect(svc.cronJobs()).resolves.toEqual([]);
+  });
+});
+
+describe('cron thoát sớm vì chạy chồng', () => {
+  it('OpsHealthService.handleCron báo SKIPPED cho sổ cron', async () => {
+    const { setCronRunSink } = await import('../../common/cron-run/track-cron');
+    const reports: { outcome: string }[] = [];
+    setCronRunSink({ record: (r) => void reports.push(r) });
+    const svc = new OpsHealthService({} as never, {} as never, []);
+    (svc as unknown as { running: boolean }).running = true;
+    await svc.handleCron();
+    setCronRunSink(undefined);
+    expect(reports).toEqual([expect.objectContaining({ outcome: 'SKIPPED' })]);
+  });
+});

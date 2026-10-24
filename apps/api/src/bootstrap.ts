@@ -1,4 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { CronAwareLogger } from './common/cron-run/cron-aware-logger';
 import { Logger, type NestApplicationOptions, type Type } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -107,7 +108,7 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
     // Retry-After không thuộc nhóm header CORS-safelisted: không expose thì webview miniapp
     // (khác origin) không đọc được và phải đoán thời gian chờ khi bị 429.
     cors: { origin: corsOrigin, credentials: true, exposedHeaders: ['Retry-After'] },
-    ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
+    logger: opts.logger ?? new CronAwareLogger(),
   });
 
   // Graceful shutdown: dọn dẹp kết nối Prisma và queue khi container nhận SIGTERM/SIGINT.

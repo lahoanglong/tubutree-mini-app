@@ -1,11 +1,11 @@
-import type { ShippingEta } from '../services/shop-api';
+import type { ShippingEta } from './api/config';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /**
- * "02/10 – 04/10" từ khoảng ngày cấu hình (ngày lịch, chưa theo tỉnh — spec §2).
- * Tự ghép dd/MM từ ngày-tháng địa phương thay vì `toLocaleDateString('vi-VN')`: định dạng đó phụ
- * thuộc ICU của từng webview/Node (có nơi ra "01-10"), còn màn này cần đúng "dd/MM".
+ * "02/10 – 04/10" từ khoảng ngày cấu hình (ngày lịch, chưa theo tỉnh). Tự ghép dd/MM từ ngày-tháng địa phương thay vì
+ * `toLocaleDateString('vi-VN')`: định dạng đó phụ thuộc ICU của từng trình duyệt/Node (có nơi ra "01-10"), còn màn này cần đúng "dd/MM".
+ * Dùng chung cho web và Mini App.
  */
 export function shippingEtaLabel(eta: ShippingEta, now: Date = new Date()): string {
   const fmt = (days: number) => {

@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 const DAY = 864e5;
 
@@ -46,6 +47,7 @@ export class GameReminderService {
    * ngoài này bắt phần còn lại (vd truy vấn gameProfile/notificationLog lỗi giữa chừng).
    */
   @Cron('0 11 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async sendDailyReminders(): Promise<void> {
     try {
       const checkin = await this.sendCheckInReminders();
