@@ -156,4 +156,33 @@ describe('Outbox', () => {
       err.mockRestore();
     }
   });
+
+  it('sự kiện quá 24 giờ bị bỏ: ghi log id và tuổi (không nội dung), tăng dropped()', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ob-'));
+    let t = 1_000_000;
+    const post = vi.fn<(e: ZaloBridgeEvent) => Promise<'ok' | 'retry' | 'drop'>>(async () => 'retry');
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const ob = new Outbox(dir, post, () => t);
+    expect(ob.dropped()).toBe(0);
+    await ob.push({ type: 'message', groupId: 'g', msgId: 'M42', cliMsgId: 'c', uidFrom: 'u', dName: 'Lan', isSelf: false, ts: 1, text: 'BÍ MẬT 0901234567', imageUrl: null, quote: null });
+    t += 24 * 3_600_000 + 5 * 3_600_000;
+    await ob.flushOnce();
+    expect(ob.size()).toBe(0);
+    expect(ob.dropped()).toBe(1);
+    const logged = JSON.stringify(err.mock.calls);
+    expect(logged).toContain('M42');
+    expect(logged).toContain('message');
+    expect(logged).toMatch(/29/);
+    expect(logged).not.toContain('BÍ MẬT');
+    expect(logged).not.toContain('0901234567');
+    err.mockRestore();
+  });
+
+  it('sự kiện drop do API từ chối (400) không tính vào dropped()', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ob-'));
+    const ob = new Outbox(dir, async () => 'drop', () => 0);
+    await ob.push(ev('1'));
+    await ob.flushOnce();
+    expect(ob.dropped()).toBe(0);
+  });
 });

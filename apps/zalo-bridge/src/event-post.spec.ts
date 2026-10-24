@@ -32,6 +32,23 @@ describe('createEventPoster', () => {
     expect(p.notify).toHaveBeenCalledWith({ idempotencyKey: 'unknown-M9', text: 'Không tìm thấy mã #K7Q3, tin chưa tới khách.' });
   });
 
+  it.each([
+    ['unsupported', 'Tin trả lời này không phải chữ hay ảnh (sticker, tệp, thoại...) nên chưa tới khách. Gõ lại bằng chữ.'],
+    ['gone', 'Khách của tin được trích đã xoá tài khoản, tin chưa tới khách.'],
+    ['empty', 'Tin trả lời chỉ có mã, chưa có nội dung nên chưa tới khách. Gõ thêm nội dung rồi gửi lại.'],
+  ])('notStored %s thì báo lên nhóm, khoá unsent-<msgId>, không mở đầu bằng #', async (reason, text) => {
+    const p = poster(() => json(200, { ok: true, notStored: reason }));
+    expect(await p.post(msg)).toBe('ok');
+    expect(p.notify).toHaveBeenCalledWith({ idempotencyKey: 'unsent-M9', text });
+    expect(text.startsWith('#')).toBe(false);
+  });
+
+  it('notStored lạ thì không báo', async () => {
+    const p = poster(() => json(200, { ok: true, notStored: 'whatever' }));
+    expect(await p.post(msg)).toBe('ok');
+    expect(p.notify).not.toHaveBeenCalled();
+  });
+
   it('notify treo mãi vẫn trả ok ngay, không chặn hộp thư đi', async () => {
     const p = poster(() => json(200, { unknownCode: 'K7Q3' }));
     p.notify.mockImplementationOnce(() => new Promise(() => undefined));

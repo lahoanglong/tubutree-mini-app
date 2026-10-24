@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getWallet: vi.fn(),
   getLoyalty: vi.fn(),
   getWasteMe: vi.fn(),
+  openWebPolicyPage: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
   sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand' },
@@ -26,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
+  Page: ({ children, style }: { children: ReactNode; style?: React.CSSProperties }) => <div data-testid="page" data-page-style={JSON.stringify(style ?? {})}>{children}</div>,
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/checkout', search: '', state: mocks.locState }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
@@ -43,6 +44,7 @@ vi.mock('../services/account-api', () => ({
   getLoyalty: mocks.getLoyalty,
   updateAddress: vi.fn(),
 }));
+vi.mock('../utils/web-policy', () => ({ openWebPolicyPage: mocks.openWebPolicyPage }));
 vi.mock('../services/affiliate-api', () => ({ recordReferralTouch: mocks.recordReferralTouch }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/zalo-profile', () => ({
@@ -152,6 +154,25 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
 
     const body = await placeOrderClick();
     expect(body.referralCode).toBe('AB12CD34');
+  });
+
+  it('dòng đồng ý điều khoản nằm trong nội dung trang ngay trên thanh Đặt hàng (không làm thanh cao thêm), hai link mở trang Điều khoản và Chính sách đổi trả trên web, không có ô tick', async () => {
+    renderPage();
+    const line = await screen.findByTestId('order-consent');
+    expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.');
+    expect(screen.getByTestId('sticky-bar')).not.toContainElement(line);
+    expect(line.compareDocumentPosition(screen.getByTestId('sticky-bar')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(line).queryByRole('checkbox')).toBeNull();
+    fireEvent.click(within(line).getByRole('button', { name: 'Điều khoản' }));
+    expect(mocks.openWebPolicyPage).toHaveBeenLastCalledWith('dieu-khoan');
+    fireEvent.click(within(line).getByRole('button', { name: 'Chính sách đổi trả' }));
+    expect(mocks.openWebPolicyPage).toHaveBeenLastCalledWith('doi-tra');
+  });
+
+  it('đáy trang chừa chỗ cho thanh Đặt hàng cộng vùng an toàn (không để dòng đồng ý nằm dưới thanh)', async () => {
+    renderPage();
+    await screen.findByTestId('sticky-bar');
+    expect(JSON.parse(screen.getByTestId('page').dataset.pageStyle ?? '{}').paddingBottom).toBe('calc(96px + var(--safe-bottom))');
   });
 
   it('sản phẩm chưa có ảnh: dòng hàng hiện khung placeholder như giỏ hàng, không dựng img với src rỗng (BUYERMINI-13)', async () => {

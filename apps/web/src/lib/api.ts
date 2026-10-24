@@ -336,7 +336,11 @@ export interface SupportContact {
   zaloOaName?: string;
   /** Kênh cộng đồng của chủ shop; chỉ có khoá nào admin đã nhập link https. */
   community?: { zaloGroupUrl?: string; facebookUrl?: string; tiktokUrl?: string };
+  /** Đơn vị vận hành; chỉ có trường admin đã nhập (BCT chỉ nhận link https). */
+  company?: { legalName?: string; taxCode?: string; address?: string; bctNoticeUrl?: string };
 }
+
+const trimmed = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
 
 const httpsOnly = (v: unknown): string | undefined => (typeof v === 'string' && /^https:\/\//.test(v.trim()) ? v.trim() : undefined);
 
@@ -352,7 +356,7 @@ export async function getPublicSupport(): Promise<SupportContact> {
   try {
     const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return DEFAULT_SUPPORT;
-    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown } };
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown }; company?: { legalName?: unknown; taxCode?: unknown; address?: unknown; bctNoticeUrl?: unknown } };
     const community = Object.fromEntries(
       (['zaloGroupUrl', 'facebookUrl', 'tiktokUrl'] as const).flatMap((k) => {
         const u = httpsOnly(json.community?.[k]);
@@ -360,14 +364,33 @@ export async function getPublicSupport(): Promise<SupportContact> {
       }),
     );
     const zaloOaName = json.support?.zaloOaName?.trim();
+    const company = {
+      ...(trimmed(json.company?.legalName) ? { legalName: trimmed(json.company?.legalName) } : {}),
+      ...(trimmed(json.company?.taxCode) ? { taxCode: trimmed(json.company?.taxCode) } : {}),
+      ...(trimmed(json.company?.address) ? { address: trimmed(json.company?.address) } : {}),
+      ...(httpsOnly(json.company?.bctNoticeUrl) ? { bctNoticeUrl: httpsOnly(json.company?.bctNoticeUrl) } : {}),
+    };
     return {
       hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,
       email: json.support?.email?.trim() || DEFAULT_SUPPORT.email,
       ...(zaloOaName ? { zaloOaName } : {}),
       ...(Object.keys(community).length ? { community } : {}),
+      ...(Object.keys(company).length ? { company } : {}),
     };
   } catch {
     return DEFAULT_SUPPORT;
+  }
+}
+
+/** Số ngày đổi trả (returns.window_days) cho trang server; không đọc được thì undefined để chữ nói chung, không số. */
+export async function getReturnWindowDays(): Promise<number | undefined> {
+  try {
+    const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
+    if (!res.ok) return undefined;
+    const json = (await res.json()) as { returnWindowDays?: unknown };
+    return typeof json.returnWindowDays === 'number' ? json.returnWindowDays : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -390,7 +413,7 @@ function nonNegativeOr(v: unknown, fallback: number): number {
  * Lỗi tạm thời thì ném: ISR giữ bản đã render thay vì thay nội dung đã duyệt bằng bản nháp.
  */
 export async function getLegalDoc(loai: string): Promise<LegalDoc> {
-  const json = await fetchDetail<{ content?: unknown; vars?: { returnWindowDays?: unknown; freeshipThreshold?: unknown } }>(
+  const json = await fetchDetail<{ content?: unknown; vars?: { returnWindowDays?: unknown; freeshipThreshold?: unknown; shippingFlatFee?: unknown; legalName?: unknown; taxCode?: unknown; address?: unknown } }>(
     `/config/legal/${encodeURIComponent(loai)}`,
     300,
   );
@@ -399,6 +422,10 @@ export async function getLegalDoc(loai: string): Promise<LegalDoc> {
     vars: {
       returnWindowDays: nonNegativeOr(json?.vars?.returnWindowDays, DEFAULT_LEGAL_VARS.returnWindowDays),
       freeshipThreshold: nonNegativeOr(json?.vars?.freeshipThreshold, DEFAULT_LEGAL_VARS.freeshipThreshold),
+      shippingFlatFee: nonNegativeOr(json?.vars?.shippingFlatFee, DEFAULT_LEGAL_VARS.shippingFlatFee ?? 0),
+      ...(trimmed(json?.vars?.legalName) ? { legalName: trimmed(json?.vars?.legalName) } : {}),
+      ...(trimmed(json?.vars?.taxCode) ? { taxCode: trimmed(json?.vars?.taxCode) } : {}),
+      ...(trimmed(json?.vars?.address) ? { address: trimmed(json?.vars?.address) } : {}),
     },
   };
 }

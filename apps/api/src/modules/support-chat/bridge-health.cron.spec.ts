@@ -156,6 +156,124 @@ describe('BridgeHealthCron', () => {
     });
   });
 
+  describe('điếc và outbox bỏ tin', () => {
+  const deafHealth = (o: Record<string, unknown> = {}) => health({ lastSentAt: min(6).toISOString(), lastEventAt: min(30).toISOString(), ...o });
+  const opsCalls = (n: any) => n.notify.mock.calls.filter((c: any[]) => c[1] === 'OPS_ZALO_BRIDGE_ALERT');
+
+  it('CONNECTED, gửi cách 6 phút và chưa có sự kiện nào sau đó → báo admin, deaf = true', async () => {
+    const { cron, notifications, prisma } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+    expect(opsCalls(notifications)[0][2].message).toContain('không nhận được tin');
+    expect(saved(prisma).update.deaf).toBe(true);
+  });
+
+  it('lastEventAt null cũng là điếc', async () => {
+    const { cron, notifications } = setup({ health: deafHealth({ lastEventAt: null }) });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+  });
+
+  it.each([
+    ['gửi mới 4 phút', { lastSentAt: min(4).toISOString() }],
+    ['có sự kiện sau lần gửi', { lastEventAt: min(2).toISOString() }],
+    ['sự kiện cùng mốc lần gửi', { lastEventAt: min(6).toISOString() }],
+    ['cầu nối cũ không có trường nào', { lastSentAt: undefined, lastEventAt: undefined }],
+    ['chưa từng gửi', { lastSentAt: null }],
+  ])('không điếc: %s', async (_n, over) => {
+    const { cron, notifications, prisma } = setup({ health: deafHealth(over) });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(0);
+    expect(saved(prisma).update.deaf).toBe(false);
+  });
+
+  it('không CONNECTED thì không xét điếc', async () => {
+    const { cron, notifications } = setup({ health: deafHealth({ state: 'CONNECTING' }) });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(0);
+  });
+
+  it('chat đang tắt: không báo nhưng vẫn ghi deaf', async () => {
+    const { cron, notifications, prisma } = setup({ health: deafHealth(), enabled: false });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(0);
+    expect(saved(prisma).update.deaf).toBe(true);
+  });
+
+  it('báo lặp: phút sau không báo lại, quá 1 giờ báo lại', async () => {
+    const { cron, notifications } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    jest.setSystemTime(new Date(NOW.getTime() + 60_000));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+    jest.setSystemTime(new Date(NOW.getTime() + 61 * 60_000));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('outboxDropped > 0 → báo admin kèm số; không báo lại khi số không tăng, báo lại khi tăng', async () => {
+    const { cron, notifications, bridge } = setup({ health: health({ outboxDropped: 2 }) });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+    expect(opsCalls(notifications)[0][2].message).toContain('2');
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+    bridge.health.mockResolvedValue(health({ outboxDropped: 3 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('cầu nối khởi động lại (outboxDropped thấp hơn lần trước) thì tính lại: số mới > 0 vẫn báo', async () => {
+    const { cron, notifications, bridge } = setup({ health: health({ outboxDropped: 5 }) });
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ outboxDropped: 0 }));
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ outboxDropped: 1 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('hết điếc rồi điếc lại trong vòng 1 giờ thì báo lại', async () => {
+    const { cron, notifications, bridge } = setup({ health: deafHealth() });
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ lastSentAt: min(6).toISOString(), lastEventAt: min(1).toISOString() }));
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(deafHealth());
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('health() null (chập chờn) không xoá mốc đã báo: không báo lại điếc và outbox sau khi có lại', async () => {
+    const { cron, notifications, bridge } = setup({ health: deafHealth({ outboxDropped: 5 }) });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+    bridge.health.mockResolvedValue(null);
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(deafHealth({ outboxDropped: 5 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('outboxDropped thiếu (cầu nối cũ) không xoá mốc đã báo', async () => {
+    const { cron, notifications, bridge } = setup({ health: health({ outboxDropped: 5 }) });
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health());
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ outboxDropped: 5 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+  });
+
+  it('outboxDropped 0 hoặc thiếu → không báo', async () => {
+    const a = setup({ health: health({ outboxDropped: 0 }) });
+    await a.cron.everyMinute();
+    const b = setup({ health: health() });
+    await b.cron.everyMinute();
+    expect(opsCalls(a.notifications)).toHaveLength(0);
+    expect(opsCalls(b.notifications)).toHaveLength(0);
+  });
+});
+
   it('không CONNECTED quá 10 phút, chưa báo → báo admin một lần và đặt downAlertedAt', async () => {
     const { cron, notifications, prisma } = setup({ health: health({ state: 'NEED_QR', since: min(11).toISOString() }), prev: { state: 'NEED_QR', since: min(11), downAlertedAt: null } });
     await cron.everyMinute();

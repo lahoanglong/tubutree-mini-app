@@ -1,11 +1,14 @@
 'use client';
 
+import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { reportError } from '@/lib/error-report';
 import { ui } from '@/lib/guest-ui';
 
 // Bắt lỗi ở CHÍNH root layout (Providers/SiteHeader throw) — error.tsx thường không phủ được
 // trường hợp này vì nó nằm TRONG layout. Phải tự vẽ <html>/<body> vì layout gốc đã hỏng.
-export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => reportError(error), [error]);
   return (
     <html lang="vi">
       <body className="font-ui">

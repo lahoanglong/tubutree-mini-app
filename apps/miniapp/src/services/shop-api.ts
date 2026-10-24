@@ -241,6 +241,8 @@ export interface PublicConfig {
   /** Trần Điểm Xanh thưởng một sự kiện cộng đồng (giới hạn của API). Thiếu khi API cũ. */
   community?: { eventRewardMaxPoints: number; zaloGroupUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null };
   chat?: { enabled: boolean; hours: { start: string; end: string } };
+  /** Đơn vị vận hành (tên, MST, địa chỉ, link đã thông báo Bộ Công Thương); từng trường null khi admin để trống, thiếu khi API cũ. */
+  company?: { legalName: string | null; taxCode: string | null; address: string | null; bctNoticeUrl: string | null };
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

@@ -90,13 +90,55 @@ describe('BridgeEventsService.handle message', () => {
     expect((await b.svc.handle(msg({ quote }))).status).toBe(503);
   });
 
-  it('forward khớp nhưng hội thoại đã xoá: 200 bỏ, không 503 dù còn forward PENDING khác', async () => {
+  it('forward khớp nhưng hội thoại đã xoá: 200 kèm notStored gone, không 503 dù còn forward PENDING khác', async () => {
     const { svc, created } = setup({
       convs: [],
       forwards: [fwd({ conversationId: 'gone' }), fwd({ id: 'f2', status: 'PENDING', zaloMsgId: null })],
     });
-    expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true } });
+    expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true, notStored: 'gone' } });
     expect(created).toHaveLength(0);
+  });
+
+  describe('tin trả lời không lưu được thì báo notStored', () => {
+    it('tin không phải chữ/ảnh trích forward khớp: notStored unsupported, không lưu', async () => {
+      const { svc, created } = setup({ forwards: [fwd()] });
+      expect(await svc.handle(msg({ text: null, unsupportedType: 'chat.sticker', quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true, notStored: 'unsupported' } });
+      expect(created).toHaveLength(0);
+    });
+
+    it('tin không phải chữ/ảnh trích đầu tin chuyển của mã lạ: giữ unknownCode', async () => {
+      const { svc } = setup();
+      const r = await svc.handle(msg({ text: null, unsupportedType: 'share.file', quote: { globalMsgId: 'zzz', cliMsgId: '1', text: '#ZZZZ · Lan · 09••••234\n—\nhi' } }));
+      expect(r).toEqual({ status: 200, body: { ok: true, unknownCode: 'ZZZZ' } });
+    });
+
+    it('tin không phải chữ/ảnh trích tin thường (không phải forward): bỏ im lặng', async () => {
+      const { svc } = setup();
+      const r = await svc.handle(msg({ text: null, unsupportedType: 'chat.sticker', quote: { globalMsgId: 'zzz', cliMsgId: '1', text: 'chuyện phiếm' } }));
+      expect(r).toEqual({ status: 200, body: { ok: true } });
+    });
+
+    it('tin không phải chữ/ảnh trích forward còn PENDING chưa có zaloMsgId: 503 để gửi lại như tin chữ', async () => {
+      const { svc } = setup({ forwards: [fwd({ status: 'PENDING', zaloMsgId: null })] });
+      expect((await svc.handle(msg({ text: null, unsupportedType: 'chat.sticker', quote: { globalMsgId: 'zzz', cliMsgId: '1', text: null } }))).status).toBe(503);
+    });
+
+    it('#MÃ khớp hội thoại nhưng không có nội dung: notStored empty, không lưu', async () => {
+      const { svc, created } = setup();
+      expect(await svc.handle(msg({ text: '#K7Q2' }))).toEqual({ status: 200, body: { ok: true, notStored: 'empty' } });
+      expect(created).toHaveLength(0);
+    });
+
+    it('tin thường, không trích, không bắt đầu bằng #: vẫn bỏ im lặng', async () => {
+      const { svc } = setup();
+      expect(await svc.handle(msg({ text: 'chuyện nhóm' }))).toEqual({ status: 200, body: { ok: true } });
+    });
+
+    it('tin chữ trích forward khớp được lưu bình thường, không notStored', async () => {
+      const { svc, created } = setup({ forwards: [fwd()] });
+      expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true } });
+      expect(created).toHaveLength(1);
+    });
   });
 
   it('trích tin chuyển hôm trước khớp đúng hội thoại', async () => {
@@ -213,9 +255,9 @@ describe('BridgeEventsService.handle message', () => {
     expect(created).toHaveLength(1);
   });
 
-  it('hội thoại đã mất (khách xoá): bỏ êm 200', async () => {
+  it('hội thoại đã mất (khách xoá): 200, không lưu, báo notStored gone', async () => {
     const { svc, created } = setup({ convs: [], forwards: [fwd()] });
-    expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true } });
+    expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true, notStored: 'gone' } });
     expect(created).toHaveLength(0);
   });
 

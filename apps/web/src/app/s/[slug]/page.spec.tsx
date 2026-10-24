@@ -85,7 +85,7 @@ describe('trang gian hàng /s/[slug] — tin cậy chỉ khi đúng sự thật 
     expect(text).toContain('Sản phẩm đã qua duyệt của Tubu Tree');
     expect(text).toContain('Thanh toán qua Tubu Tree');
     expect(text).toContain('Theo dõi đơn trên Tubu Tree');
-    expect(text).toContain('Đổi trả 7 ngày (hàng lỗi NSX)');
+    expect(text).toContain('Đổi trả nếu sản phẩm lỗi');
   });
 });
 

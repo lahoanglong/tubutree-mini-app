@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({ http: { get: vi.fn() } }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+const cfg = vi.hoisted(() => ({ returnWindowDays: undefined as number | undefined }));
+vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => ({ returnWindowDays: cfg.returnWindowDays }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
@@ -19,6 +21,7 @@ const mount = (ui: React.ReactElement) => {
   return r;
 };
 afterEach(() => {
+  cfg.returnWindowDays = undefined;
   mounted.forEach((m) => m.unmount());
   mounted = [];
   mocks.http.get.mockReset();
@@ -55,8 +58,21 @@ describe('PdpPromises', () => {
   it('ba cam kết của Tubu và chỗ cho nút chat', () => {
     const { container } = mount(<PdpPromises><button>Chat</button></PdpPromises>);
     expect(container.querySelectorAll('li')).toHaveLength(3);
-    expect(container.textContent).toContain('Đổi trả trong 7 ngày nếu lỗi');
+    expect(container.textContent).toContain('Đổi trả nếu sản phẩm lỗi');
     expect(byText(container, 'button', 'Chat')).not.toBeNull();
+  });
+
+  it('số ngày đổi trả lấy từ cấu hình; chưa có cấu hình thì không nêu số', () => {
+    cfg.returnWindowDays = 10;
+    expect(mount(<PdpPromises />).container.textContent).toContain('Đổi trả trong 10 ngày nếu lỗi');
+    cfg.returnWindowDays = 0;
+    const zero = mount(<PdpPromises />).container;
+    expect(zero.querySelectorAll('li')).toHaveLength(2);
+    expect(zero.textContent).not.toContain('Đổi trả');
+    cfg.returnWindowDays = undefined;
+    const text = mount(<PdpPromises />).container.textContent ?? '';
+    expect(text).toContain('Đổi trả nếu sản phẩm lỗi');
+    expect(text).not.toMatch(/\d+ ngày/);
   });
 });
 

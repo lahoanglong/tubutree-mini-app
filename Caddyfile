@@ -5,6 +5,7 @@
 # Web (Next.js)
 app.{$WEB_DOMAIN} {
 	encode gzip zstd
+	header Strict-Transport-Security "max-age=31536000"
 	reverse_proxy web:3000
 }
 

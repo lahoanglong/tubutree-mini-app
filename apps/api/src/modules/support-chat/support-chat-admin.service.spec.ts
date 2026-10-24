@@ -357,7 +357,7 @@ describe('SupportChatAdminService', () => {
 
   it('trạng thái cầu nối kèm groupId và enabled', async () => {
     const { svc } = setup();
-    expect(await svc.bridgeStatus()).toMatchObject({ state: 'CONNECTED', groupId: 'G1', enabled: true, displayName: 'CSKH' });
+    expect(await svc.bridgeStatus()).toMatchObject({ state: 'CONNECTED', groupId: 'G1', enabled: true, displayName: 'CSKH', deaf: false });
   });
 
   it('test gửi tin thử qua cầu nối', async () => {

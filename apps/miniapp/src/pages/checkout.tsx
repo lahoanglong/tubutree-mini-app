@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
@@ -46,6 +46,7 @@ import {
 import { convertedPointsNote } from '../utils/points-lots';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { openWebPolicyPage } from '../utils/web-policy';
 import { formatLineQty } from '../utils/waste-labels';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductThumb } from '../components/ui/product-thumb';
@@ -481,7 +482,7 @@ export default function CheckoutPage() {
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(96px + var(--safe-bottom))' }}>
       <PageHeader title="Thanh toán" />
 
       {shownCartIssue && (
@@ -1063,6 +1064,11 @@ export default function CheckoutPage() {
         </Box>
       )}
 
+      <Text size="xSmall" data-testid="order-consent" style={{ display: 'block', padding: '12px 16px 0', color: 'var(--color-text-secondary)' }}>
+        Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => openWebPolicyPage('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}
+        <ConsentLink onPress={() => openWebPolicyPage('doi-tra')}>Chính sách đổi trả</ConsentLink>.
+      </Text>
+
       {/* ── Sticky CTA ── */}
       <StickyActionBar
         primary={
@@ -1238,4 +1244,17 @@ function CheckoutSkeleton() {
 /** Lỗi đặt đơn mà khách chỉ sửa được bằng cách đổi số lượng trong giỏ. */
 function isCartFixableError(message: string): boolean {
   return /không đủ tồn kho/.test(message) || message === 'Vượt giới hạn mua ưu đãi.' || message === 'Hết suất ưu đãi.';
+}
+
+/** Liên kết nằm giữa câu: chữ có gạch chân, giữ nguyên dòng chữ xung quanh (vùng chạm là cả dòng cao 16px + khoảng đệm của thanh). */
+function ConsentLink({ onPress, children }: { onPress: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onPress}
+      style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', color: 'var(--color-text-brand)', textDecoration: 'underline', cursor: 'pointer' }}
+    >
+      {children}
+    </button>
+  );
 }

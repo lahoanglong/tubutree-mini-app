@@ -41,28 +41,53 @@ describe('LegalConfigController.get — nội dung điều khoản/chính sách 
   it('kèm các số mà bản nháp nhắc tới (hạn đổi trả, ngưỡng freeship) lấy từ đúng khoá hệ thống đang dùng', async () => {
     const config = makeConfig({ 'returns.window_days': 10, 'shipping.free_threshold': 300000 });
     const out = await new LegalConfigController(config).get('doi-tra');
-    expect(out.vars).toEqual({ returnWindowDays: 10, freeshipThreshold: 300000 });
+    expect(out.vars).toMatchObject({ returnWindowDays: 10, freeshipThreshold: 300000 });
     const def = await new LegalConfigController(makeConfig()).get('doi-tra');
-    expect(def.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 199000 });
+    expect(def.vars).toMatchObject({ returnWindowDays: 7, freeshipThreshold: 199000 });
   });
 
   it('ngưỡng freeship 0 là giá trị hợp lệ (mọi đơn miễn phí vận chuyển) và hạn đổi trả 0 cũng vậy: giữ nguyên số 0, không tự đổi về mặc định', async () => {
     const config = makeConfig({ 'shipping.free_threshold': 0, 'returns.window_days': 0 });
     const out = await new LegalConfigController(config).get('van-chuyen');
-    expect(out.vars).toEqual({ returnWindowDays: 0, freeshipThreshold: 0 });
+    expect(out.vars).toMatchObject({ returnWindowDays: 0, freeshipThreshold: 0 });
   });
 
   it('số cấu hình null/rỗng/đúng kiểu sai: về mặc định, không bị Number(null) = 0 đổi thành "miễn phí mọi đơn"', async () => {
     for (const bad of [null, '', '  ', true, [], {}]) {
       const config = makeConfig({ 'shipping.free_threshold': bad, 'returns.window_days': bad });
       const out = await new LegalConfigController(config).get('van-chuyen');
-      expect(out.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 199000 });
+      expect(out.vars).toMatchObject({ returnWindowDays: 7, freeshipThreshold: 199000 });
     }
   });
 
   it('số cấu hình hỏng (chuỗi, âm, NaN) → rơi về mặc định thay vì in "NaN ngày" lên trang chính sách', async () => {
     const config = makeConfig({ 'returns.window_days': 'abc', 'shipping.free_threshold': -5 });
     const out = await new LegalConfigController(config).get('van-chuyen');
-    expect(out.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 199000 });
+    expect(out.vars).toMatchObject({ returnWindowDays: 7, freeshipThreshold: 199000 });
+  });
+});
+
+describe('LegalConfigController.get — đơn vị vận hành và phí giao cố định', () => {
+  it('mặc định: phí giao cố định 19.000, thông tin công ty null', async () => {
+    const out = await new LegalConfigController(makeConfig()).get('van-chuyen');
+    expect(out.vars).toEqual({ returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 19000, legalName: null, taxCode: null, address: null });
+  });
+
+  it('lấy phí giao cố định và thông tin công ty (cắt khoảng trắng) từ khoá hệ thống', async () => {
+    const config = makeConfig({
+      'shipping.flat_fee_below_threshold': 25000,
+      'company.legal_name': ' Công ty TNHH A ',
+      'company.tax_code': '0312345678',
+      'company.address': '1 Đường B, Quận C',
+    });
+    const out = await new LegalConfigController(config).get('dieu-khoan');
+    expect(out.vars).toMatchObject({ shippingFlatFee: 25000, legalName: 'Công ty TNHH A', taxCode: '0312345678', address: '1 Đường B, Quận C' });
+  });
+
+  it('phí giao 0 hợp lệ; hỏng thì mặc định; công ty rỗng hoặc sai kiểu là null', async () => {
+    expect((await new LegalConfigController(makeConfig({ 'shipping.flat_fee_below_threshold': 0 })).get('van-chuyen')).vars.shippingFlatFee).toBe(0);
+    expect((await new LegalConfigController(makeConfig({ 'shipping.flat_fee_below_threshold': -1 })).get('van-chuyen')).vars.shippingFlatFee).toBe(19000);
+    const out = await new LegalConfigController(makeConfig({ 'company.legal_name': '  ', 'company.tax_code': 5 })).get('van-chuyen');
+    expect(out.vars).toMatchObject({ legalName: null, taxCode: null });
   });
 });

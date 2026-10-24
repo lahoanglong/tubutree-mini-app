@@ -217,7 +217,17 @@ async function findRepoRoot(start: string, explicit: string | undefined): Promis
   return null;
 }
 
-/** Chỉ đọc và liệt kê: không chạy backup, không chạm vào file backup, không gọi rclone ngoài `listremotes`. */
+/** Dòng `listremotes --long`: "tên:  loại", rclone mới (1.66+) có thể thêm cột mô tả thứ ba nên chỉ lấy hai cột đầu. */
+export function parseRemoteTypes(stdout: string): Record<string, string> {
+  const types: Record<string, string> = {};
+  for (const line of stdout.split('\n')) {
+    const m = /^(\S+?):\s+(\S+)(?:\s.*)?$/.exec(line.trim());
+    if (m?.[1] && m[2]) types[m[1]] = m[2];
+  }
+  return types;
+}
+
+/** Chỉ đọc và liệt kê: không chạy backup, không chạm vào file backup, không gọi rclone ngoài `listremotes --long`. */
 export async function collectBackupSnapshot(env: Env, now: Date = new Date(), cwd: string = process.cwd()): Promise<BackupSnapshot> {
   const root = await findRepoRoot(cwd, env.GO_LIVE_REPO_ROOT);
   let script: BackupSnapshot['script'] = 'unknown';
@@ -227,8 +237,9 @@ export async function collectBackupSnapshot(env: Env, now: Date = new Date(), cw
 
   let rclone: BackupSnapshot['rclone'] = { available: false, remotes: [] };
   try {
-    const { stdout } = await run('rclone', ['listremotes'], { timeout: 5000 });
-    rclone = { available: true, remotes: stdout.split('\n').map((l) => l.trim().replace(/:$/, '')).filter(Boolean) };
+    const { stdout } = await run('rclone', ['listremotes', '--long'], { timeout: 5000 });
+    const types = parseRemoteTypes(stdout);
+    rclone = { available: true, remotes: Object.keys(types), types };
   } catch {
     /* không có rclone ở nơi chạy: để evaluateBackup báo "không kiểm được" */
   }

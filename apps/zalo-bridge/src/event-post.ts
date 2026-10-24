@@ -10,6 +10,13 @@ export interface EventPosterDeps {
 
 const TIMEOUT_MS = 10_000;
 
+// Không mở đầu bằng # để chính thông báo không bị đọc lại như một lệnh trả lời.
+const NOT_STORED_NOTICE: Record<string, string> = {
+  unsupported: 'Tin trả lời này không phải chữ hay ảnh (sticker, tệp, thoại...) nên chưa tới khách. Gõ lại bằng chữ.',
+  gone: 'Khách của tin được trích đã xoá tài khoản, tin chưa tới khách.',
+  empty: 'Tin trả lời chỉ có mã, chưa có nội dung nên chưa tới khách. Gõ thêm nội dung rồi gửi lại.',
+};
+
 export function createEventPoster(deps: EventPosterDeps): (e: ZaloBridgeEvent) => Promise<PostResult> {
   const doFetch = deps.fetchFn ?? fetch;
   return async (event) => {
@@ -40,6 +47,7 @@ export function createEventPoster(deps: EventPosterDeps): (e: ZaloBridgeEvent) =
     }
     const body = (await res.json().catch(() => null)) as {
       unknownCode?: unknown;
+      notStored?: unknown;
       conflict?: { routed?: unknown; typed?: unknown };
     } | null;
     if (event.type === 'message' && typeof body?.conflict?.routed === 'string' && typeof body.conflict.typed === 'string') {
@@ -49,6 +57,12 @@ export function createEventPoster(deps: EventPosterDeps): (e: ZaloBridgeEvent) =
           text: `Tin trả lời trích tin của #${body.conflict.routed} nhưng ghi mã #${body.conflict.typed}, chưa gửi cho khách nào. Trích đúng tin hoặc chỉ ghi một mã rồi gửi lại.`,
         })
         .catch(() => console.error('[bridge] không báo được mã xung đột lên nhóm'));
+    }
+    const notStoredText = typeof body?.notStored === 'string' ? NOT_STORED_NOTICE[body.notStored] : undefined;
+    if (event.type === 'message' && notStoredText) {
+      void deps
+        .notify({ idempotencyKey: `unsent-${event.msgId}`, text: notStoredText })
+        .catch(() => console.error('[bridge] không báo được tin chưa tới khách lên nhóm'));
     }
     if (event.type === 'message' && typeof body?.unknownCode === 'string') {
       // Báo lên nhóm không được await: nó đi qua hàng đợi gửi giãn cách (có thể chờ hàng giờ) và sẽ chặn cả hộp thư đi; lỗi cũng không được làm sự kiện gốc bị gửi lại.

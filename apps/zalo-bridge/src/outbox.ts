@@ -25,6 +25,7 @@ export class Outbox {
   private timer: NodeJS.Timeout | null = null;
   private flushing = false;
   private writeChain: Promise<void> = Promise.resolve();
+  private droppedCount = 0;
 
   constructor(
     dir: string,
@@ -39,6 +40,11 @@ export class Outbox {
 
   size(): number {
     return this.entries.length;
+  }
+
+  /** Số sự kiện bị bỏ vì quá hạn kể từ lúc tiến trình khởi động. */
+  dropped(): number {
+    return this.droppedCount;
   }
 
   async push(event: ZaloBridgeEvent): Promise<void> {
@@ -67,6 +73,9 @@ export class Outbox {
       for (const entry of [...this.entries]) {
         const t = this.now();
         if (t - entry.at > MAX_AGE_MS) {
+          this.droppedCount++;
+          const id = 'msgId' in entry.event ? entry.event.msgId : '-';
+          console.error(`[outbox] bỏ sự kiện quá hạn: loại ${entry.event.type}, mã ${id}, tuổi ${Math.round((t - entry.at) / 3_600_000)} giờ`);
           this.remove(entry);
           changed = true;
           continue;

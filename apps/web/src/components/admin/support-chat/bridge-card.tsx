@@ -156,6 +156,14 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
             {status.lastError && <span className="min-w-0 break-words text-xs text-stone-500">{status.lastError}</span>}
           </div>
 
+          {connected && status.deaf && (
+            <div data-bridge-deaf>
+              <Notice tone="danger" role="alert">
+                Cầu nối báo đang kết nối nhưng không nhận được tin nào từ nhóm sau lần gửi gần nhất. Tin nhân viên trả lời có thể đang bị mất: bấm Kết nối lại.
+              </Notice>
+            </div>
+          )}
+
           {isAdmin && (
             <>
               <div className="flex flex-wrap gap-2">
@@ -163,7 +171,7 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
                   {login.isPending ? 'Đang lấy mã…' : 'Đăng nhập Zalo'}
                 </button>
                 {/* Đang kết nối mà còn lỗi (lưu phiên, tệp cũ): kết nối lại sẽ lưu lại phiên đang chạy, không phải đăng xuất. */}
-                {((status.state !== 'CONNECTED' && status.state !== 'NEED_QR') || (status.state === 'CONNECTED' && !!status.lastError)) && (
+                {((status.state !== 'CONNECTED' && status.state !== 'NEED_QR') || (status.state === 'CONNECTED' && (!!status.lastError || !!status.deaf))) && (
                   <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => reconnect.mutate()}>
                     {reconnect.isPending ? 'Đang kết nối…' : 'Kết nối lại'}
                   </button>

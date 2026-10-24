@@ -75,3 +75,18 @@ describe('envSchema — Pancake (PLATFORM-1)', () => {
     expect(r.success).toBe(true);
   });
 });
+
+describe('envSchema — SENTRY_DSN', () => {
+  it('không đặt hoặc rỗng → tắt, production vẫn boot', () => {
+    for (const extra of [{}, { SENTRY_DSN: '' }]) {
+      const r = envSchema.safeParse({ ...PROD_BASE, ...extra });
+      expect(r.success).toBe(true);
+      if (r.success) expect(r.data.SENTRY_DSN).toBe('');
+    }
+  });
+
+  it('DSN dạng URL qua; chuỗi không phải URL bị chặn lúc boot', () => {
+    expect(envSchema.safeParse({ ...PROD_BASE, SENTRY_DSN: 'https://k@o.example.com/1' }).success).toBe(true);
+    expect(envSchema.safeParse({ ...PROD_BASE, SENTRY_DSN: 'not-a-dsn' }).success).toBe(false);
+  });
+});

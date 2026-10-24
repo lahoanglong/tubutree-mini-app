@@ -152,13 +152,13 @@ Vì sao: BullMQ giữ mọi job trong Redis, `allkeys-lru` có thể xoá âm th
 
 Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "Cài đặt trên VPS Vietnix", "Cài crontab (6 giờ/lần)" và "Diễn tập restore". Tóm tắt những gì phải có:
 
-- `rclone config` đã tạo remote Google Drive tên `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop; từng bước ở mục "Remote Google Drive" của README trên), thử được: `rclone lsd gdrive:`.
-- Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=<remote>:<thư mục> HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
+- `rclone config` đã tạo remote Google Drive tên `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop; từng bước ở mục "Remote Google Drive" của README trên), thử được: `rclone lsd gdrive:`. Rồi bọc nó bằng remote **crypt** `tubucrypt` (mục "Mã hoá bản ngoài máy" của README trên): `backup-db.sh` từ chối đẩy lên remote không mã hoá. `BACKUP_ALLOW_PLAIN_REMOTE=1` chỉ là ngoại lệ tạm thời có chủ ý.
+- Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
 - Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
 
 ```bash
-COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB RCLONE_REMOTE=<remote>:<thư mục> bash tools/backup/backup-db.sh
+COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB RCLONE_REMOTE=tubucrypt: bash tools/backup/backup-db.sh
 F=$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1); echo "$F"
 $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'CREATE DATABASE tubutree_drill'
 gunzip -c "$F" | $DC exec -T postgres psql -q -v ON_ERROR_STOP=1 --single-transaction -U "$PGUSER" -d tubutree_drill > /dev/null
@@ -170,7 +170,7 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 
 Kỳ vọng: hai dòng số khớp nhau (chênh vài đơn mới nếu đang có khách). Ghi lại thời gian chạy `backup-db.sh` (dùng `time` đứng trước lệnh): cần cho mục 3.
 
-Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`rclone copy <remote>:<thư mục>/<file> /tmp/`, rồi nạp file đó thay cho `$F`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
+Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`rclone copy tubucrypt:<file> /tmp/`, rồi nạp file đó thay cho `$F`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
 
 Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron backup do `ops.yml` (hành động `crontab`, nay cài lịch 6 giờ/lần) hoặc `crontab -e` cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
 
@@ -283,9 +283,11 @@ Hệ thống chỉ có MỘT đường đưa sản phẩm từ Pancake sang: `Pa
 
 1. Laptop: `rclone authorize "drive" "eyJzY29wZSI6ImRyaXZlLmZpbGUifQ=="`, đăng nhập Google, chép khối `{"access_token":...}`. VPS: `rclone config`, remote tên `gdrive`, loại `drive`, scope `drive.file`, "Use web browser to automatically authenticate" chọn `n`, dán khối JSON. `rclone config update gdrive use_trash false` để bản cũ bị xoá hẳn thay vì chiếm chỗ trong thùng rác.
 2. Thử: `rclone mkdir gdrive:tubutree-backups && rclone lsd gdrive:`.
-3. Cron mỗi 6 giờ, một dòng, có `RCLONE_REMOTE=gdrive:tubutree-backups` và `REMOTE_KEEP_DAYS=90` (mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)): `17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=gdrive:tubutree-backups REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=<url> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1`.
-4. Trước mỗi deploy: `cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=gdrive:tubutree-backups bash ops/backup-predeploy.sh`.
-5. Diễn tập khôi phục MỘT lần trước ra mắt với bản lấy từ `gdrive:` (`rclone copy gdrive:tubutree-backups/<file> /tmp/`), khối lệnh ở mục 1.2 và README, ghi thời gian vào ô RTO.
+3. Bọc Drive bằng remote crypt (bản trần bị `backup-db.sh` từ chối; lệnh y như README, mục "Mã hoá bản ngoài máy", trỏ vào thư mục MỚI `tubutree-backups-enc`, không dùng lại thư mục có bản trần): `PASS1=$(openssl rand -base64 32); PASS2=$(openssl rand -base64 32); rclone config create tubucrypt crypt remote gdrive:tubutree-backups-enc filename_encryption standard directory_name_encryption true password "$(rclone obscure "$PASS1")" password2 "$(rclone obscure "$PASS2")"; echo "$PASS1"; echo "$PASS2"; unset PASS1 PASS2`. Chép cả hai mật khẩu vào password manager của chủ (ngoài VPS, thêm một bản ở nơi thứ hai) ngay lúc này: mất là mọi bản backup ngoài máy không đọc lại được. Rồi `chmod 600 ~/.config/rclone/rclone.conf`, thử `rclone listremotes --long` (có dòng `tubucrypt:  crypt`) và `echo test | rclone rcat tubucrypt:thu.txt && rclone cat tubucrypt:thu.txt && rclone delete tubucrypt:thu.txt`.
+4. Cron mỗi 6 giờ, một dòng, có `RCLONE_REMOTE=tubucrypt:` và `REMOTE_KEEP_DAYS=90` (mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)): `17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=<url> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1`.
+5. Trước mỗi deploy: `cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=tubucrypt: bash ops/backup-predeploy.sh`.
+6. Diễn tập khôi phục MỘT lần trước ra mắt với bản lấy từ `tubucrypt:` (`rclone copy tubucrypt:<file> /tmp/`), khối lệnh ở mục 1.2 và README, ghi thời gian vào ô RTO.
+7. Sau khi bản mã hoá đầu tiên đã kiểm (`rclone ls tubucrypt:` thấy file, diễn tập bước 6 qua): xoá bản trần cũ nếu có, `rclone purge gdrive:tubutree-backups` rồi dọn thùng rác Drive. Việc dọn bản cũ theo `REMOTE_KEEP_DAYS` chỉ chạy trên `tubucrypt:` nên không tự xoá chúng.
 
 #### 1.6.3 Đợt thẻ hộp hàng sàn đầu tiên (A12)
 
@@ -600,7 +602,7 @@ Kỳ vọng: `redis` ở trạng thái `healthy` (hoặc `Up`, vài giây sau l�
 Làm SAU khi API đã dừng, để bản này chứa mọi dữ liệu và không còn ai ghi vào DB:
 
 ```bash
-COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB RCLONE_REMOTE=<remote>:<thư mục> bash tools/backup/backup-db.sh
+COMPOSE_FILE=docker-compose.vietnix.yml POSTGRES_USER=$PGUSER POSTGRES_DB=$PGDB RCLONE_REMOTE=tubucrypt: bash tools/backup/backup-db.sh
 ROLLBACK_DUMP=$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1)
 echo "$ROLLBACK_DUMP" | tee .rollback-dump
 ls -lh "$ROLLBACK_DUMP" && gunzip -t "$ROLLBACK_DUMP" && echo "gunzip OK"
@@ -829,7 +831,7 @@ Vì sao chờ: nếu phải quay API về bản cũ sau khi Mini App mới đã 
 
 ### Bước 14. Theo dõi 24 giờ
 
-- [ ] Sau tối đa 6 giờ: `tail /var/log/tubutree-backup.log` thấy backup theo cron thành công (không có dòng `WARN`), `rclone ls <remote>:<thư mục> | tail -3` thấy file mới, healthcheck xanh.
+- [ ] Sau tối đa 6 giờ: `tail /var/log/tubutree-backup.log` thấy backup theo cron thành công (không có dòng `WARN`), `rclone ls tubucrypt: | tail -3` thấy file mới, healthcheck xanh.
 - [ ] Chạy lại `go-live:check` (không kèm `--phase`).
 - [ ] Màn Sức khoẻ hệ thống: không còn dòng đỏ tồn quá 1 giờ.
 - [ ] Làm [pilot-order-playbook.md](pilot-order-playbook.md) (đơn thử thật) trước khi mở bán rộng.

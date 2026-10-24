@@ -457,6 +457,30 @@ describe('evaluateDb', () => {
     });
   });
 
+  describe('đơn vị vận hành (company.*)', () => {
+    it('đủ tên, MST, địa chỉ thì PASS', () => expect(status(GOOD_DB, 'db.company_identity')).toBe('PASS'));
+    it.each([
+      ['thiếu tên', { 'company.legal_name': '' }],
+      ['thiếu MST', { 'company.tax_code': '  ' }],
+      ['thiếu địa chỉ', { 'company.address': 5 }],
+    ])('%s thì FAIL', (_l, configs) => {
+      expect(status(dbWith({ configs }), 'db.company_identity')).toBe('FAIL');
+    });
+    it('trước deploy (DB mới chưa seed-reference) thì chỉ WARN, không FAIL', () => {
+      const configs = { 'company.legal_name': '' };
+      expect(status(dbWith({ configs }), 'db.company_identity', 'pre-deploy')).toBe('WARN');
+      expect(status(dbWith({ dropConfigs: ['company.legal_name', 'company.tax_code', 'company.address'] }), 'db.company_identity', 'pre-deploy')).toBe('WARN');
+      expect(status(GOOD_DB, 'db.company_identity', 'pre-deploy')).toBe('PASS');
+    });
+    it('chưa có khoá nào thì FAIL, nêu đủ ba khoá', () => {
+      const r = byId(run(dbWith({ dropConfigs: ['company.legal_name', 'company.tax_code', 'company.address'] })), 'db.company_identity');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('company.legal_name');
+      expect(r.detail).toContain('company.tax_code');
+      expect(r.detail).toContain('company.address');
+    });
+  });
+
   describe('trần COD', () => {
     it('mã khác 5.000.000đ thì FAIL', () => expect(status(dbWith({ codMaxPerOrder: 3_000_000 }), 'db.cod_cap')).toBe('FAIL'));
     it('đúng 5.000.000đ thì PASS và nói rõ là hằng số trong mã', () => {

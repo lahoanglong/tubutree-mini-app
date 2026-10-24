@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ExternalLink, Mail, Phone } from 'lucide-react';
-import { getPublicSupport } from '@/lib/api';
+import { getPublicSupport, type SupportContact } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import tubuLogo from '@/assets/tubu-logo.png';
 import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
@@ -9,9 +9,30 @@ import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
 
+/** "Đơn vị vận hành: <tên> · MST <mã> · <địa chỉ>"; ẩn từng phần admin chưa nhập, ẩn cả dòng khi không còn gì. */
+function operatorLine(company: SupportContact['company']): string | null {
+  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : undefined, company?.address].filter(Boolean);
+  return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
+}
+
+function CompanyInfo({ company, className }: { company: SupportContact['company']; className: string }) {
+  const line = operatorLine(company);
+  if (!line && !company?.bctNoticeUrl) return null;
+  return (
+    <div className={className} data-testid="footer-company">
+      {line && <p className="text-xs text-stone-600">{line}</p>}
+      {company?.bctNoticeUrl && (
+        <a href={company.bctNoticeUrl} target="_blank" rel="noopener noreferrer" className={LINK}>
+          Đã thông báo Bộ Công Thương
+        </a>
+      )}
+    </div>
+  );
+}
+
 /** Chân trang web khách: liên hệ hỗ trợ lấy từ cấu hình công khai (admin đổi được). */
 export default async function SiteFooter() {
-  const { hotline, email, community } = await getPublicSupport();
+  const { hotline, email, community, company } = await getPublicSupport();
   // `tel:` chỉ nhận chữ số và dấu +, bỏ khoảng trắng/dấu chấm cho số hiển thị "0984 606 774".
   const tel = hotline.replace(/[^\d+]/g, '');
   const channels = [
@@ -76,6 +97,7 @@ export default async function SiteFooter() {
           ))}
         </ul>
       </nav>
+      <CompanyInfo company={company} className="mx-auto max-w-6xl px-4 pb-6" />
     </footer>
 
     {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline và chính sách vẫn phải với tới được từ mọi trang.
@@ -96,6 +118,7 @@ export default async function SiteFooter() {
           ))}
         </ul>
       </nav>
+      <CompanyInfo company={company} className="mt-1" />
     </footer>
     </>
   );

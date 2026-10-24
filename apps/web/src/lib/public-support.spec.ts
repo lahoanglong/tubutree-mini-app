@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SUPPORT, getPublicSupport } from './api';
+import { DEFAULT_SUPPORT, getPublicSupport, getReturnWindowDays } from './api';
 
 function res(status: number, body: unknown = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -57,5 +57,29 @@ describe('getPublicSupport', () => {
     expect((await getPublicSupport()).community).toEqual({ zaloGroupUrl: 'https://zalo.me/g/a' });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { community: { eventRewardMaxPoints: 1000 } })));
     expect((await getPublicSupport()).community).toBeUndefined();
+  });
+
+  it('đọc thông tin đơn vị vận hành: bỏ trường rỗng, link BCT chỉ nhận https; không có gì thì không có trường company', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { legalName: ' Công ty A ', taxCode: '', address: null, bctNoticeUrl: 'http://x.vn' } })));
+    expect((await getPublicSupport()).company).toEqual({ legalName: 'Công ty A' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { taxCode: '0312345678', bctNoticeUrl: 'https://online.gov.vn/x' } })));
+    expect((await getPublicSupport()).company).toEqual({ taxCode: '0312345678', bctNoticeUrl: 'https://online.gov.vn/x' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { legalName: null, taxCode: '  ' } })));
+    expect((await getPublicSupport()).company).toBeUndefined();
+  });
+});
+
+describe('getReturnWindowDays', () => {
+  it('đọc returnWindowDays (kể cả 0); thiếu, sai kiểu, lỗi API hoặc mất mạng thì undefined', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { returnWindowDays: 10 })));
+    await expect(getReturnWindowDays()).resolves.toBe(10);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { returnWindowDays: 0 })));
+    await expect(getReturnWindowDays()).resolves.toBe(0);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { returnWindowDays: '7' })));
+    await expect(getReturnWindowDays()).resolves.toBeUndefined();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(503)));
+    await expect(getReturnWindowDays()).resolves.toBeUndefined();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('x')));
+    await expect(getReturnWindowDays()).resolves.toBeUndefined();
   });
 });

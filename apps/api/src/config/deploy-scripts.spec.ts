@@ -47,7 +47,9 @@ exit 0
   );
   chmodSync(join(dir, 'docker'), 0o755);
   for (const name of opts.stubs ?? []) {
-    writeFileSync(join(dir, name), `#!/usr/bin/env bash\necho "${name} $*" >> "${log}"\nif [ -n "$FAIL_ON" ] && [[ "$*" == *"$FAIL_ON"* ]]; then exit 1; fi\nexit 0\n`);
+    // rclone giả: `listremotes --long` trả mọi remote là loại $FAKE_RCLONE_TYPE (mặc định crypt) để backup-db.sh chịu đẩy.
+    const listRemotes = name === 'rclone' ? `if [ "$1 $2" = "listremotes --long" ]; then for r in gdrive r2 plain; do echo "$r:  \${FAKE_RCLONE_TYPE:-crypt}"; done; exit 0; fi\n` : '';
+    writeFileSync(join(dir, name), `#!/usr/bin/env bash\n${listRemotes}echo "${name} $*" >> "${log}"\nif [ -n "$FAIL_ON" ] && [[ "$*" == *"$FAIL_ON"* ]]; then exit 1; fi\nexit 0\n`);
     chmodSync(join(dir, name), 0o755);
   }
   mkdirSync(join(dir, 'backups'));
@@ -436,6 +438,36 @@ describe('tools/backup/backup-db.sh', () => {
     expect(calls.filter((c) => c.startsWith('curl')).pop()).toMatch(/https:\/\/hc\.test\/abc$/);
   });
 
+  it('remote không phải crypt (drive): KHÔNG đẩy, thoát 3, ping /fail, bản local vẫn giữ', () => {
+    const { status, out, calls, files } = runWithFakeDocker('tools/backup/backup-db.sh', [], {
+      env: { RCLONE_REMOTE: 'gdrive:bk', HEALTHCHECK_URL: 'https://hc.test/abc', FAKE_RCLONE_TYPE: 'drive' },
+      stubs: ['rclone', 'curl'],
+    });
+    expect(status).toBe(3);
+    expect(out).toMatch(/ERROR: remote 'gdrive' không phải rclone crypt/);
+    expect(calls.some((c) => c.startsWith('rclone copy'))).toBe(false);
+    expect(files).toHaveLength(1);
+    expect(calls.filter((c) => c.startsWith('curl')).pop()).toMatch(/https:\/\/hc\.test\/abc\/fail$/);
+  });
+
+  it('remote không phải crypt nhưng BACKUP_ALLOW_PLAIN_REMOTE=1: vẫn đẩy như cũ', () => {
+    const { status, calls } = runWithFakeDocker('tools/backup/backup-db.sh', [], {
+      env: { RCLONE_REMOTE: 'gdrive:bk', BACKUP_ALLOW_PLAIN_REMOTE: '1', HEALTHCHECK_OPTIONAL: '1', FAKE_RCLONE_TYPE: 'drive' },
+      stubs: ['rclone'],
+    });
+    expect(status).toBe(0);
+    expect(calls.some((c) => c.startsWith('rclone copy'))).toBe(true);
+  });
+
+  it('remote không có trong cấu hình rclone: từ chối như remote không phải crypt', () => {
+    const { status, calls } = runWithFakeDocker('tools/backup/backup-db.sh', [], {
+      env: { RCLONE_REMOTE: 'khongco:bk', HEALTHCHECK_OPTIONAL: '1' },
+      stubs: ['rclone'],
+    });
+    expect(status).toBe(3);
+    expect(calls.some((c) => c.startsWith('rclone copy'))).toBe(false);
+  });
+
   it('đẩy ra ngoài máy lỗi: thoát 3, ping /fail, bản local vẫn giữ và vẫn dọn theo số bản (đĩa không đầy khi remote hỏng nhiều ngày)', () => {
     const seed = [1, 2, 3].map((h) => `tubutree_20260101_0${h}0000_cron.sql.gz`);
     const { status, calls, files } = runWithFakeDocker('tools/backup/backup-db.sh', [], {
@@ -474,7 +506,7 @@ describe('ops/crontab.backup.example', () => {
   const sample = readFileSync(join(REPO, 'ops/crontab.backup.example'), 'utf8');
 
   it('dòng cron 6 giờ/lần được go-live:check nhận ra: có backup-db.sh, remote rclone và healthcheck', () => {
-    expect(parseCronBackup(sample)).toEqual({ hasBackupLine: true, remoteName: 'gdrive', hasHealthcheck: true });
+    expect(parseCronBackup(sample)).toEqual({ hasBackupLine: true, remoteName: 'tubucrypt', hasHealthcheck: true });
     const active = sample.split('\n').filter((l) => /backup-db\.sh/.test(l) && !l.trim().startsWith('#'));
     expect(active).toHaveLength(1);
     expect(active[0]).toMatch(/^17 \*\/6 \* \* \* /);

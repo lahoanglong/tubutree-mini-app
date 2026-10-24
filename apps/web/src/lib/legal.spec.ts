@@ -63,8 +63,9 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
 
   it('ngưỡng freeship 0: ghi "miễn phí vận chuyển cho mọi đơn", không in "Đơn từ 0đ" hay mốc mặc định 199.000đ', () => {
     const text = defaultLegalContent('van-chuyen', { returnWindowDays: 7, freeshipThreshold: 0 }, SUPPORT);
-    expect(text).toContain('Mọi đơn đều được miễn phí vận chuyển');
+    expect(text).toContain('Mọi phần hàng do Tubu Tree giao đều được miễn phí vận chuyển');
     expect(text).not.toContain('Đơn từ');
+    expect(text).not.toContain('từ 0đ');
     expect(text).not.toContain('0đ');
     expect(text).not.toContain('199.000đ');
     expect(text).not.toContain('ngưỡng miễn phí khác');
@@ -95,6 +96,49 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
     expect(dk).toContain('chuyển khoản ngân hàng');
     expect(dk).toContain('Ví Tubu');
     expect(dk).not.toMatch(/Visa|MasterCard|MoMo|ZaloPay|VNPay/i);
+  });
+});
+
+describe('legal — đơn vị vận hành điền từ cấu hình', () => {
+  const FILLED = { ...VARS, legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: '1 Đường A, Quận B' };
+
+  it.each(LEGAL_SLUGS)('%s: điền tên, MST, địa chỉ khi có, không còn chỗ giữ [ ] của pháp nhân', (slug) => {
+    const text = defaultLegalContent(slug, FILLED, SUPPORT);
+    expect(text).toContain('- Đơn vị vận hành: Công ty TNHH Tubu');
+    expect(text).toContain('- Mã số thuế: 0312345678');
+    expect(text).toContain('- Địa chỉ: 1 Đường A, Quận B');
+    expect(text).not.toMatch(/\[(Tên công ty|Mã số thuế|Địa chỉ trụ sở)\]/);
+  });
+
+  it('điều khoản và bảo mật gọi đúng tên công ty trong câu mở đầu', () => {
+    expect(defaultLegalContent('dieu-khoan', FILLED, SUPPORT)).toContain('do Công ty TNHH Tubu ("Tubu Tree"');
+    expect(defaultLegalContent('bao-mat', FILLED, SUPPORT)).toContain('cách Công ty TNHH Tubu ("Tubu Tree"');
+  });
+
+  it('điền từng phần: phần thiếu vẫn giữ chỗ [ ]', () => {
+    const text = defaultLegalContent('dieu-khoan', { ...VARS, taxCode: '0312345678' }, SUPPORT);
+    expect(text).toContain('- Mã số thuế: 0312345678');
+    expect(text).toContain('- Đơn vị vận hành: [Tên công ty]');
+    expect(text).toContain('- Địa chỉ: [Địa chỉ trụ sở]');
+  });
+});
+
+describe('legal — phí vận chuyển đúng luật tính phí thật', () => {
+  const vc = (v: object) => defaultLegalContent('van-chuyen', { ...VARS, ...v }, SUPPORT);
+
+  it('miễn phí từ ngưỡng, dưới ngưỡng là phí cố định lấy từ cấu hình, không nói theo địa chỉ hay khối lượng đơn', () => {
+    const text = vc({ freeshipThreshold: 300000, shippingFlatFee: 25000 });
+    expect(text).toContain('Phần hàng do Tubu Tree giao từ 300.000đ được miễn phí vận chuyển');
+    expect(text).toContain('của riêng phần đó');
+    expect(text).toContain('gian hàng đối tác được giao riêng, theo phí và mức miễn phí vận chuyển của chính gian hàng đó');
+    expect(text).toContain('phí vận chuyển cố định 25.000đ');
+    expect(text).not.toContain('được tính theo địa chỉ nhận hàng và khối lượng');
+  });
+
+  it('thiếu biến phí thì dùng 19.000đ; phí 0 thì nói không mất phí; freeship mọi đơn thì không nói phí cố định', () => {
+    expect(vc({})).toContain('phí vận chuyển cố định 19.000đ');
+    expect(vc({ shippingFlatFee: 0 })).toContain('cũng không mất phí vận chuyển');
+    expect(vc({ freeshipThreshold: 0 })).not.toContain('phí vận chuyển cố định');
   });
 });
 

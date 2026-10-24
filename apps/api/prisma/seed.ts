@@ -83,6 +83,11 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'support.hotline', value: '0984 606 774', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.email', value: 'tubutree@gmail.com', category: 'support', description: 'Email CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.zalo_oa_name', value: '', category: 'support', description: 'Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)', createOnly: true },
+  // Đơn vị vận hành hiển thị ở chân trang, trang Về Tubu Tree và các trang chính sách. Để trống thì ẩn; go-live:check FAIL khi tên/MST/địa chỉ còn trống.
+  { key: 'company.legal_name', value: '', category: 'company', description: 'Tên pháp lý của đơn vị vận hành (theo giấy đăng ký kinh doanh), hiển thị cho khách', createOnly: true },
+  { key: 'company.tax_code', value: '', category: 'company', description: 'Mã số thuế của đơn vị vận hành, hiển thị cho khách', createOnly: true },
+  { key: 'company.address', value: '', category: 'company', description: 'Địa chỉ trụ sở đã đăng ký, hiển thị cho khách', createOnly: true },
+  { key: 'company.bct_notice_url', value: '', category: 'company', description: 'Link https tới trang đã thông báo với Bộ Công Thương (không bắt buộc). Để trống = ẩn dòng "Đã thông báo Bộ Công Thương"', createOnly: true },
   {
     key: 'referral.milestones_points',
     value: [
@@ -842,6 +847,7 @@ export const NOTIFICATION_TEMPLATES = [
   // Chat CSKH: cùng mã/nội dung với migration 20261023100000_support_chat. createOnly: admin sửa nội dung rồi thì seed không ghi đè.
   { id: 'nt-support-chat-reply', code: 'SUPPORT_CHAT_REPLY', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã trả lời bạn: {{preview}}', createOnly: true },
   { id: 'nt-ops-zalo-bridge-down', code: 'OPS_ZALO_BRIDGE_DOWN', channel: 'INAPP', bodyTemplate: 'Cầu nối Zalo của chat CSKH mất kết nối từ {{since}} ({{state}}). Vào tab Chat CSKH để kết nối lại.', createOnly: true },
+  { id: 'nt-ops-zalo-bridge-alert', code: 'OPS_ZALO_BRIDGE_ALERT', channel: 'INAPP', bodyTemplate: '{{message}}', createOnly: true },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   // PD-3 OQ-10: báo khách có xu đã quy sang Điểm Xanh (1.000 xu = 1 điểm, làm tròn lên). Cùng mã/nội dung với migration
