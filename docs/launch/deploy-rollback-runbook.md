@@ -385,6 +385,21 @@ Không đạt thì để `AI_ADVISOR_ENABLED=false`: Mini App ẩn lối vào, k
 
   Kỳ vọng: 0 dòng. Có dòng: tắt mã đó (isActive = false) và tạo mã mới (id mới).
 
+### 1.9 Lần deploy đầu từ bản thử `cb92dc8` (đã diễn tập trên máy dev 2026-10-24)
+
+Áp dụng khi mục 1.0 cho thấy PROD là bản thử dựng 2026-09-12 và đang ở `cb92dc8`: bảng `_prisma_migrations` có 115 dòng đã xong, dòng cuối trùng tên với `git ls-tree -d --name-only cb92dc8 apps/api/prisma/migrations/ | tail -1`. Ngày 2026-10-24 bản thử vẫn trả `{"status":"ok","db":"up"}` ở `/api/health` khi gọi thẳng `http://14.225.207.177` kèm `Host: api.tubutree.com`, nên bước 2 của mục 5 làm bình thường. Bản thử khác `cb92dc8` thì không dùng các số dưới đây.
+
+Cách diễn tập: Postgres 16 tạm, `prisma migrate deploy` rồi `prisma:seed` bằng mã `cb92dc8` (như lúc dựng bản thử), thêm 2 khách có điểm; sau đó dùng mã main `0b578bce` chạy bước 7, 7b, 7c và 10 theo đúng runbook. Kết quả:
+
+- Bước 7: áp 103 migration, in `All migrations have been successfully applied.`; `prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code` in `No difference detected.`. DB gần như rỗng nên 3 giây không phải thời gian thật: vẫn phải làm mục 3.4 trên bản sao backup PROD.
+- `points_1d` nhân đúng một lần: số dư 120 thành 120000, giao dịch 150 và -30 thành 150000 và -30000, `loyalty.vnd_per_point_redeem` từ 1000 thành 1.
+- Bước 7b in khác DB mới, và như vậy là đúng: `system_configs` thêm 71 (99 có sẵn), `business_configs` đủ sẵn (6), `notification_templates` thêm 3, `community_categories` thêm 5, `game_quizzes` đủ sẵn (43), mốc quỹ "đã có mốc, giữ nguyên". Truy vấn xác minh của bước 7b cho `chu_de` 11, `quiz` 49, `loai_cay` 10, `mau_tin` 123, `moc_quy` 1, `hang`, `bac_dai_ly`, `nhiem_vu` cùng 4; `system_configs` tổng 249 dòng (DB mới là 216). Bốn chủ đề cây cảnh còn bật: ẩn bằng SQL như bước 7b.
+- Bước 7c: bản xem trước gắn `KIỂM TAY TRƯỚC KHI APPLY` cho cả 44 sản phẩm. Lý do: `prisma:seed` của bản thử ghi lại sản phẩm demo sau mốc nạp 2026-06-15, nên `updatedAt` của cả 44 đều muộn hơn mốc đó. Nếu mọi `updatedAt` trong danh sách nằm trong cùng một phút (lúc chạy seed) thì đó là do seed, không phải người sửa: đưa danh sách cho chủ shop xác nhận không có hàng thật rồi chạy `--apply`. Sản phẩm nào có `updatedAt` lệch khỏi phút đó là có người sửa qua ứng dụng: xử lý theo điểm dừng của bước 7c. Mục 4 có đúng 3 mã (`WELCOME30`, `FREESHIP`, `XANH10`), không có dòng `[do seed tạo]`. Sau `--apply`: tắt 44 sản phẩm và 48 biến thể, không tắt mã nào; chạy lại thì không đổi dòng nào.
+- Bước 10 (env giả): chỉ 2 FAIL, đều đúng dự kiến: `db.admin_user` (chưa cấp quyền admin, làm `grant-admin`) và `backup.cron` (máy dev không có cron). `db.demo_products`, `db.membership_tiers`, `db.dealer_tiers`, `db.bank_account` đều PASS; tài khoản nhận chuyển khoản do migration `20261018200000_launch_owner_config` ghi.
+- Quay lại: lần này có migration không đảo được (`points_1d` nhân 1.000 mọi số điểm), nên ở mục 7.0 chỉ còn đường 7.3 (khôi phục bản backup của bước 6). Không dùng 7.2.
+
+Chưa diễn tập được (cần SSH và bản backup PROD): thời gian migrate trên dữ liệu thật, PD-3 và p4 trên `users`, `orders` thật, go-live check `--phase=pre-deploy`, các kiểm `backup.*`, cấu hình Redis thật, cấp quyền admin.
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.
@@ -664,7 +679,7 @@ Chỉnh khoá cấu hình và nhiệm vụ ở Quản trị, Cấu hình; hạng
 
 Migration `20260616000000_demo_catalog_multibrand` nạp vào MỌI DB mới 44 sản phẩm và 48 biến thể demo (giá giả, khách đặt được, đơn đẩy sang Pancake sẽ lỗi) cùng 3 mã giảm giá công khai còn hạn tới 31/12/2026, mà chủ dự án đã chốt GIỮ CẢ BA cho đợt ra mắt (A4, 2026-10-18; xem điểm 2 bên dưới): `WELCOME30` (giảm 30.000đ cho đơn từ 199.000đ, 1 lượt mỗi khách, không giới hạn tổng), `FREESHIP` (đơn từ 99.000đ, 3 lượt mỗi khách), `XANH10` (giảm 10%, tối đa 50.000đ, đơn từ 250.000đ, 2 lượt mỗi khách). Bản thử trên VPS đã áp migration này từ tháng 6, nên dữ liệu đó có thể đang nằm trên PROD; DB dựng mới chắc chắn có. Làm bước này ở mọi lần deploy cho tới khi `db.demo_products` và `db.demo_coupons` đều PASS. Chạy lại an toàn: không còn gì để đổi thì không đổi gì.
 
-DB từng chạy `prisma db seed` (bản thử, máy dev) có thêm 3 mã cùng tên do seed tạo: id khác, hạn tới 01/01/2027, cùng điều kiện như trên. Lệnh dọn và go-live check coi chúng là mã demo (nhận theo mã và điều kiện), xem trước ghi `[do seed tạo]`. DB như vậy còn dữ liệu demo khác mà lệnh này KHÔNG dọn: nhiệm vụ (`missions`), câu đố (`game_quizzes`), merchant hoàn tiền (`cashback_merchants`), mục tiêu cộng đồng, mùa giải, loài cây, cấp đại lý, mẫu thông báo do `prisma/seed.ts` tạo. Thấy `[do seed tạo]` ở mục 4 thì báo tech lead rà các bảng đó ở Quản trị trước khi mở bán.
+DB từng chạy `prisma db seed` (bản thử, máy dev) có thể có thêm 3 mã cùng tên do seed tạo (diễn tập từ bản thử `cb92dc8` không thấy, xem 1.9): id khác, hạn tới 01/01/2027, cùng điều kiện như trên. Lệnh dọn và go-live check coi chúng là mã demo (nhận theo mã và điều kiện), xem trước ghi `[do seed tạo]`. DB như vậy còn dữ liệu demo khác mà lệnh này KHÔNG dọn: nhiệm vụ (`missions`), câu đố (`game_quizzes`), merchant hoàn tiền (`cashback_merchants`), mục tiêu cộng đồng, mùa giải, loài cây, cấp đại lý, mẫu thông báo do `prisma/seed.ts` tạo. Thấy `[do seed tạo]` ở mục 4 thì báo tech lead rà các bảng đó ở Quản trị trước khi mở bán.
 
 1. Xem trước (không ghi gì):
 

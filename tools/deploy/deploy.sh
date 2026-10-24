@@ -172,7 +172,7 @@ dc build api web
 
 log "2/5 Kiểm cấu hình môi trường (.env) bằng image MỚI"
 if ! dc run --rm --no-deps api node dist/config/check-env.js; then
-  log "ERROR: .env không qua kiểm tra của bản mới — DỪNG. $(api_state_note) Sửa .env (ops.yml set-env) rồi deploy lại."
+  log "ERROR: .env không qua kiểm tra của bản mới — DỪNG. $(api_state_note) Sửa /opt/tubutree/.env qua SSH (xem docs/GO-LIVE-KEYS.md) rồi deploy lại."
   exit 2
 fi
 
