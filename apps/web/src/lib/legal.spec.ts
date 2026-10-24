@@ -63,8 +63,9 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
 
   it('ngưỡng freeship 0: ghi "miễn phí vận chuyển cho mọi đơn", không in "Đơn từ 0đ" hay mốc mặc định 199.000đ', () => {
     const text = defaultLegalContent('van-chuyen', { returnWindowDays: 7, freeshipThreshold: 0 }, SUPPORT);
-    expect(text).toContain('Mọi đơn đều được miễn phí vận chuyển');
+    expect(text).toContain('Mọi phần hàng do Tubu Tree giao đều được miễn phí vận chuyển');
     expect(text).not.toContain('Đơn từ');
+    expect(text).not.toContain('từ 0đ');
     expect(text).not.toContain('0đ');
     expect(text).not.toContain('199.000đ');
     expect(text).not.toContain('ngưỡng miễn phí khác');
@@ -127,7 +128,9 @@ describe('legal — phí vận chuyển đúng luật tính phí thật', () => 
 
   it('miễn phí từ ngưỡng, dưới ngưỡng là phí cố định lấy từ cấu hình, không nói theo địa chỉ hay khối lượng đơn', () => {
     const text = vc({ freeshipThreshold: 300000, shippingFlatFee: 25000 });
-    expect(text).toContain('Đơn từ 300.000đ được miễn phí vận chuyển');
+    expect(text).toContain('Phần hàng do Tubu Tree giao từ 300.000đ được miễn phí vận chuyển');
+    expect(text).toContain('của riêng phần đó');
+    expect(text).toContain('gian hàng đối tác được giao riêng, theo phí và mức miễn phí vận chuyển của chính gian hàng đó');
     expect(text).toContain('phí vận chuyển cố định 25.000đ');
     expect(text).not.toContain('được tính theo địa chỉ nhận hàng và khối lượng');
   });

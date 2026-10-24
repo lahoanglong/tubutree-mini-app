@@ -466,6 +466,12 @@ describe('evaluateDb', () => {
     ])('%s thì FAIL', (_l, configs) => {
       expect(status(dbWith({ configs }), 'db.company_identity')).toBe('FAIL');
     });
+    it('trước deploy (DB mới chưa seed-reference) thì chỉ WARN, không FAIL', () => {
+      const configs = { 'company.legal_name': '' };
+      expect(status(dbWith({ configs }), 'db.company_identity', 'pre-deploy')).toBe('WARN');
+      expect(status(dbWith({ dropConfigs: ['company.legal_name', 'company.tax_code', 'company.address'] }), 'db.company_identity', 'pre-deploy')).toBe('WARN');
+      expect(status(GOOD_DB, 'db.company_identity', 'pre-deploy')).toBe('PASS');
+    });
     it('chưa có khoá nào thì FAIL, nêu đủ ba khoá', () => {
       const r = byId(run(dbWith({ dropConfigs: ['company.legal_name', 'company.tax_code', 'company.address'] })), 'db.company_identity');
       expect(r.status).toBe('FAIL');

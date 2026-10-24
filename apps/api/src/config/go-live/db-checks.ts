@@ -389,12 +389,14 @@ function bankCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.bank_account', title, `BIN ${(bin as string).trim()}, số tài khoản đuôi ${last4}`);
 }
 
-function companyIdentityCheck(s: DbSnapshot): CheckResult {
+function companyIdentityCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   const title = 'Đơn vị vận hành hiển thị cho khách';
   const labels = { 'company.legal_name': 'tên công ty', 'company.tax_code': 'mã số thuế', 'company.address': 'địa chỉ trụ sở' } as const;
   const lack = (Object.keys(labels) as (keyof typeof labels)[]).filter((k) => typeof s.configs[k] !== 'string' || (s.configs[k] as string).trim() === '');
   if (lack.length > 0) {
-    return fail(G_DB, 'db.company_identity', title, `chưa điền: ${lack.join(', ')}`, 'Điền ở Quản trị, Cấu hình, nhóm company; thiếu thì chân trang và trang chính sách không nói ai bán hàng (luật thương mại điện tử yêu cầu).');
+    // Trước deploy, dòng company.* chưa có là bình thường: seed-reference chạy ở bước 7b.
+    const red = phase === 'pre-deploy' ? warn : fail;
+    return red(G_DB, 'db.company_identity', title, `chưa điền: ${lack.join(', ')}`, 'Điền ở Quản trị, Cấu hình, nhóm company; thiếu thì chân trang và trang chính sách không nói ai bán hàng (luật thương mại điện tử yêu cầu).');
   }
   return pass(G_DB, 'db.company_identity', title, `đã có ${Object.values(labels).join(', ')}`);
 }
@@ -515,7 +517,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     holdCheck(s),
     consignmentFromCheck(s),
     bankCheck(s),
-    companyIdentityCheck(s),
+    companyIdentityCheck(s, ctx.phase),
     codCapCheck(s),
     ...gomdonToggleChecks(s, ctx.env),
     membershipTierCheck(s, ctx.phase),

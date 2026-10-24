@@ -65,6 +65,10 @@ describe('PdpPromises', () => {
   it('số ngày đổi trả lấy từ cấu hình; chưa có cấu hình thì không nêu số', () => {
     cfg.returnWindowDays = 10;
     expect(mount(<PdpPromises />).container.textContent).toContain('Đổi trả trong 10 ngày nếu lỗi');
+    cfg.returnWindowDays = 0;
+    const zero = mount(<PdpPromises />).container;
+    expect(zero.querySelectorAll('li')).toHaveLength(2);
+    expect(zero.textContent).not.toContain('Đổi trả');
     cfg.returnWindowDays = undefined;
     const text = mount(<PdpPromises />).container.textContent ?? '';
     expect(text).toContain('Đổi trả nếu sản phẩm lỗi');

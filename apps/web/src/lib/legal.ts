@@ -231,15 +231,15 @@ ${operator(support, vars)}`;
 function vanChuyen(vars: LegalVars, support: Support): string {
   const freeship =
     vars.freeshipThreshold > 0
-      ? `Đơn từ ${formatVnd(vars.freeshipThreshold)} được miễn phí vận chuyển. Một số hạng thành viên hoặc chương trình có thể có ngưỡng miễn phí khác, được hiển thị ở giỏ hàng.`
-      : 'Mọi đơn đều được miễn phí vận chuyển.';
+      ? `Phần hàng do Tubu Tree giao từ ${formatVnd(vars.freeshipThreshold)} được miễn phí vận chuyển. Một số hạng thành viên hoặc chương trình có thể có ngưỡng miễn phí khác, được hiển thị ở giỏ hàng.`
+      : 'Mọi phần hàng do Tubu Tree giao đều được miễn phí vận chuyển.';
   const fee = vars.shippingFlatFee ?? DEFAULT_SHIPPING_FLAT_FEE;
   const flatFee =
     vars.freeshipThreshold <= 0
       ? ''
       : fee > 0
-        ? `- Đơn chưa đạt mức miễn phí chịu phí vận chuyển cố định ${formatVnd(fee)}, không phụ thuộc địa chỉ hay khối lượng. Phí hiển thị trước khi bạn bấm đặt hàng.`
-        : '- Đơn chưa đạt mức miễn phí cũng không mất phí vận chuyển.';
+        ? `- Phần hàng Tubu Tree giao chưa đạt mức miễn phí (tính trên tiền hàng của riêng phần đó) chịu phí vận chuyển cố định ${formatVnd(fee)}, không phụ thuộc địa chỉ hay khối lượng.`
+        : '- Phần hàng Tubu Tree giao chưa đạt mức miễn phí cũng không mất phí vận chuyển.';
   return `## 1. Phạm vi giao hàng
 
 Tubu Tree giao hàng tới các khu vực mà đơn vị vận chuyển phục vụ. Nếu địa chỉ của bạn nằm ngoài vùng giao, hệ thống sẽ báo ở bước thanh toán.
@@ -248,6 +248,7 @@ Tubu Tree giao hàng tới các khu vực mà đơn vị vận chuyển phục v
 
 - ${freeship}
 ${flatFee}
+- Sản phẩm của gian hàng đối tác được giao riêng, theo phí và mức miễn phí vận chuyển của chính gian hàng đó. Các khoản này hiển thị ở bước thanh toán trước khi bạn bấm đặt hàng.
 
 ## 3. Thời gian giao hàng dự kiến
 
