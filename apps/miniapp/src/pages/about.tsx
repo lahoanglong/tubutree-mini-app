@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Page, useSnackbar } from 'zmp-ui';
+import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronDown, ExternalLink, TreePine } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
@@ -89,6 +89,7 @@ export default function AboutPage() {
   // FAQ do admin nhập (tab Câu hỏi thường gặp); chưa có dòng nào hoặc lỗi mạng thì dùng bản dự phòng.
   const faqQ = useQuery({ queryKey: ['faqs'], queryFn: fetchFaqs, staleTime: 10 * 60_000 });
   const publicConfig = usePublicConfig();
+  const navigate = useNavigate();
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
   const faq = faqQ.data && faqQ.data.length > 0 ? faqQ.data : faqQ.isLoading ? [] : fallbackFaq(publicConfig);
   const faqCats = [ALL_CATS, ...new Set(faq.map((f) => f.cat))];
@@ -231,8 +232,9 @@ export default function AboutPage() {
       </Section>
 
       {/* Hỗ trợ */}
-      {supportRows.length > 0 && (
+      {(supportRows.length > 0 || publicConfig.chat?.enabled === true) && (
         <Section title="Hỗ trợ khách hàng">
+          {publicConfig.chat?.enabled === true && <LinkRow label="Chat với Tubu Tree" onClick={() => navigate('/chat')} last={supportRows.length === 0} />}
           {supportRows.map((r, i) => (
             <KeyValueRow
               key={r.label}

@@ -50,6 +50,7 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/profile': { name: 'Tài khoản', miniapp: '/profile', web: '/tai-khoan', role: 'CUSTOMER' },
   '/edit-profile': { name: 'Sửa hồ sơ', miniapp: '/edit-profile', web: '/tai-khoan/ho-so', role: 'CUSTOMER' },
   '/settings': { name: 'Cài đặt', miniapp: '/settings', web: '/tai-khoan/cai-dat', role: 'CUSTOMER' },
+  '/chat': { name: 'Chat với Tubu Tree', miniapp: `/chat?order=${ORDER_DELIVERED}`, web: `/ho-tro/chat?order=${ORDER_DELIVERED}`, role: 'CUSTOMER' },
   '/notifications': { name: 'Thông báo', miniapp: '/notifications', web: '/tai-khoan/thong-bao', role: 'CUSTOMER' },
   '/loyalty': { name: 'Điểm Xanh và hạng', miniapp: '/loyalty', web: '/tai-khoan/diem-xanh', role: 'CUSTOMER' },
   '/wallet': { name: 'Ví Tubu', miniapp: '/wallet', web: '/tai-khoan/vi-tubu', role: 'CUSTOMER' },

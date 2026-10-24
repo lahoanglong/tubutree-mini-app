@@ -1,7 +1,7 @@
 import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Heart, MapPin, Leaf, Wallet, Users, Pencil,
+  Heart, MapPin, MessageCircle, Leaf, Wallet, Users, Pencil,
   Bell, Store, Settings, Info, ChevronRight, Copy, MessagesSquare, ShieldCheck, CalendarClock, Recycle, Sparkles, BookOpen, BadgePercent, ScanLine, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
@@ -21,6 +21,7 @@ import { Heading, Text } from '../components/ui/text';
 import { getOwnedBrand, getOwnsBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
+import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 import { formatVnd, formatPoints } from '../utils/format';
@@ -74,6 +75,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     items: [
       { Icon: Bell, label: 'Thông báo', to: '/notifications' },
       { Icon: BookOpen, label: 'Câu chuyện thương hiệu', to: '/brand-story' },
+      { Icon: MessageCircle, label: 'Chat với Tubu Tree', to: '/chat' },
       { Icon: Settings, label: 'Cài đặt', to: '/settings' },
       { Icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
     ],
@@ -137,7 +139,10 @@ export default function ProfilePage() {
   const aiEnabled = useAiAdvisorEnabled();
   const cfg = usePublicConfig();
   const claimEnabled = cfg.loyalty?.marketplaceClaimEnabled === true;
-  const withDealer = MENU.map((s) => ({ ...s, items: s.items.filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (claimEnabled || it.to !== '/points/scan')) })).map((s) =>
+  const chatEnabled = cfg.chat?.enabled === true;
+  const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: status === 'authenticated' && chatEnabled });
+  const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
+  const withDealer = MENU.map((s) => ({ ...s, items: s.items.filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (claimEnabled || it.to !== '/points/scan') && (chatEnabled || it.to !== '/chat')) })).map((s) =>
     s.group === 'Hợp tác'
       ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
       : s,
@@ -344,6 +349,16 @@ export default function ProfilePage() {
                   item.to === '/notifications' && unreadCount > 0 ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <UnreadCount count={unreadCount} />
+                      <Icon icon={ChevronRight} size="sm" tone="muted" />
+                    </span>
+                  ) : item.to === '/chat' && chatUnread ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <span
+                        data-testid="chat-unread-dot"
+                        role="img"
+                        aria-label="Có tin nhắn mới"
+                        style={{ width: 10, height: 10, borderRadius: 'var(--radius-pill)', background: 'var(--color-action-danger-bg)' }}
+                      />
                       <Icon icon={ChevronRight} size="sm" tone="muted" />
                     </span>
                   ) : (

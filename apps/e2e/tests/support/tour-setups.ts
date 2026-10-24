@@ -145,6 +145,22 @@ export const SETUPS: Record<string, (api: MockApi) => void> = {
     api.get('/me/wishlist', catalogCards().slice(0, 3));
     api.get('/me/wishlist/ids', catalogCards().slice(0, 3).map((p) => p.id));
   },
+  '/chat': (api) => {
+    const at = (m: number) => `2026-10-18T07:${String(m).padStart(2, '0')}:00.000Z`;
+    const msg = (id: string, sender: string, body: string, m: number) => ({ id, sender, body, imageUrl: null, context: null, clientMsgId: null, createdAt: at(m) });
+    api.get('/me/support-chat', {
+      code: 'K7Q3', blocked: false, enabled: true, slow: true, hasMore: false,
+      messages: [
+        msg('c1', 'CUSTOMER', 'Cho mình hỏi đơn này bao giờ giao ạ?', 10),
+        msg('c2', 'SYSTEM', 'Tubu Tree trả lời từ 8:00 đến 21:00. Tin của bạn đã được ghi lại.', 10),
+        msg('c3', 'STAFF', 'Dạ chào bạn, đơn của bạn đang trên đường giao, dự kiến chiều nay đến nơi ạ.', 14),
+        msg('c4', 'CUSTOMER', 'Cảm ơn shop nhé', 15),
+      ],
+    });
+    api.post('/me/support-chat/read', { ok: true });
+    api.get('/me/support-chat/summary', { unreadCount: 0 });
+    api.get('/config/public', publicConfig({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } }, support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null } } as never));
+  },
   '/group-buy': (api) => api.get('/group-buy', [GROUP('g1'), GROUP('g2')]),
   '/group-buy/:id': (api) => {
     api.get('/group-buy', [GROUP('g1')]);

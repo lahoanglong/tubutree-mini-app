@@ -4,6 +4,8 @@ import {
   QUEUE_NOTIFICATIONS,
   QUEUE_PANCAKE_EVENTS,
   QUEUE_PANCAKE_PUSH,
+  QUEUE_SUPPORT_CHAT_FORWARD,
+  QUEUE_SUPPORT_CHAT_NOTIFY,
   QUEUE_ZALO_OA_EVENTS,
 } from '../../jobs/queues';
 import { fail, pass, warn, type CheckResult, type GoLivePhase } from './types';
@@ -18,7 +20,11 @@ export const EXPECTED_QUEUES = [
   QUEUE_GOMDON_EVENTS,
   QUEUE_NOTIFICATIONS,
   QUEUE_ZALO_OA_EVENTS,
+  QUEUE_SUPPORT_CHAT_FORWARD,
+  QUEUE_SUPPORT_CHAT_NOTIFY,
 ] as const;
+
+const QUEUES_TITLE = `Đủ ${EXPECTED_QUEUES.length} hàng đợi truy cập được`;
 
 export interface QueueSnapshot {
   name: string;
@@ -46,7 +52,7 @@ export function evaluateRedis(s: RedisSnapshot, phase: GoLivePhase = 'post-deplo
   if (!s.reachable) {
     return [
       fail(G_REDIS, 'redis.reachable', 'Redis kết nối được', s.error ?? 'không kết nối được', 'Kiểm container redis đang chạy và REDIS_URL (compose: redis://redis:6379).'),
-      fail(G_QUEUE, 'queues.reachable', 'Đủ 6 hàng đợi truy cập được', 'không kiểm được vì Redis không kết nối', 'Sửa Redis trước.'),
+      fail(G_QUEUE, 'queues.reachable', QUEUES_TITLE, 'không kiểm được vì Redis không kết nối', 'Sửa Redis trước.'),
     ];
   }
   const out: CheckResult[] = [pass(G_REDIS, 'redis.reachable', 'Redis kết nối được', `PING ổn, dùng DB số ${s.dbIndex}`)];
@@ -104,8 +110,8 @@ export function evaluateRedis(s: RedisSnapshot, phase: GoLivePhase = 'post-deplo
   const broken = EXPECTED_QUEUES.filter((n) => !byName.get(n)?.ok);
   out.push(
     broken.length === 0
-      ? pass(G_QUEUE, 'queues.reachable', 'Đủ 6 hàng đợi truy cập được', EXPECTED_QUEUES.join(', '))
-      : fail(G_QUEUE, 'queues.reachable', 'Đủ 6 hàng đợi truy cập được', `không đọc được: ${broken.join(', ')}`, 'Xem log api (docker compose logs api); thường là Redis hết bộ nhớ hoặc kết nối bị ngắt.'),
+      ? pass(G_QUEUE, 'queues.reachable', QUEUES_TITLE, EXPECTED_QUEUES.join(', '))
+      : fail(G_QUEUE, 'queues.reachable', QUEUES_TITLE, `không đọc được: ${broken.join(', ')}`, 'Xem log api (docker compose logs api); thường là Redis hết bộ nhớ hoặc kết nối bị ngắt.'),
   );
 
   const noisy = s.queues.filter((q) => q.ok && q.counts && (q.counts.failed > 0 || q.counts.waiting > BACKLOG_WAITING));

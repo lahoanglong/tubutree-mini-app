@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   getCart: vi.fn(),
   getProductStock: vi.fn(),
   flash: [] as unknown[],
-  config: { freeshipThreshold: 199000, subscribeDiscountPct: 0.12, groupBuy: { discountPct: 15, targetSize: 3 } as unknown, isLoaded: true },
+  config: { freeshipThreshold: 199000, subscribeDiscountPct: 0.12, groupBuy: { discountPct: 15, targetSize: 3 } as unknown, isLoaded: true } as Record<string, unknown>,
   oa: { available: true, openChat: vi.fn() },
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
@@ -286,14 +286,47 @@ describe('PdpContentKitRow', () => {
 });
 
 describe('PdpChatButton', () => {
+  const chatOn = { enabled: true, hours: { start: '08:00', end: '21:00' } };
+
   it('mở chat OA kèm câu hỏi về sản phẩm', () => {
-    const { container } = mount(<PdpChatButton productName="Dầu gội" />);
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
     click(byText(container, 'button', 'Chat với Tubu Tree'));
     expect(mocks.oa.openChat).toHaveBeenCalledWith('Mình muốn hỏi về sản phẩm: Dầu gội');
   });
   it('OA chưa cấu hình thì không hiện nút', () => {
     mocks.oa.available = false;
-    expect(mount(<PdpChatButton productName="Dầu gội" />).container.innerHTML).toBe('');
+    expect(mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />).container.innerHTML).toBe('');
+  });
+
+  it('chat bật và đã đăng nhập: nút dẫn tới /ho-tro/chat?product=<slug>, không còn nút OA', () => {
+    mocks.config.chat = chatOn;
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    const link = container.querySelector('a')!;
+    expect(link.textContent).toContain('Chat với Tubu Tree');
+    expect(link.getAttribute('href')).toBe('/ho-tro/chat?product=dau-goi');
+    expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('chat bật nhưng chưa đăng nhập: giữ nút OA, thêm lời mời đăng nhập quay lại đúng trang chat', () => {
+    mocks.config.chat = chatOn;
+    mocks.phase = 'guest';
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    expect(byText(container, 'button', 'Chat với Tubu Tree')).not.toBeNull();
+    const invite = byText(container, 'a', 'Đăng nhập để chat với Tubu Tree')!;
+    expect(invite.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fho-tro%2Fchat%3Fproduct%3Ddau-goi');
+  });
+
+  it('chat bật, đang khôi phục phiên: không có nút chat lẫn lời mời', () => {
+    mocks.config.chat = chatOn;
+    mocks.phase = 'loading';
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('chat tắt: không có lời mời đăng nhập dù chưa đăng nhập', () => {
+    mocks.phase = 'guest';
+    const { container } = mount(<PdpChatButton productName="Dầu gội" productSlug="dau-goi" />);
+    expect(container.querySelector('a')).toBeNull();
   });
 });
 

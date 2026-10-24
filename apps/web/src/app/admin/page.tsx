@@ -148,6 +148,7 @@ import { DealerPriceHistoryTab } from '@/components/admin/dealer-price-history-t
 import { CommissionRatesTab } from '@/components/admin/commission-rates-tab';
 import { ProductCategoriesTab } from '@/components/admin/product-categories-tab';
 import { EngagementTab } from '@/components/admin/engagement-tab';
+import { SupportChatTab } from '@/components/admin/support-chat-tab';
 import { ExternalOrdersTab } from '@/components/admin/external-orders-tab';
 import { ExternalClaimsTab } from '@/components/admin/external-claims-tab';
 import { CommunityModerationTab, type CommunityView } from '@/components/admin/community-moderation-tab';
@@ -181,6 +182,7 @@ type Tab =
   | 'productCategories'
   | 'engagement'
   | 'community'
+  | 'supportChat'
   | 'payouts'
   | 'customerRefunds'
   | 'orders'
@@ -258,6 +260,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'users', label: 'Người dùng' },
       { k: 'reviews', label: 'Đánh giá' },
       { k: 'community', label: 'Cộng đồng' },
+      { k: 'supportChat', label: 'Chat CSKH' },
       { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'posCredits', label: 'Tích điểm tại quầy' },
       { k: 'waste', label: 'Đổi rác' },
@@ -307,7 +310,7 @@ const DEFAULT_TAB: Tab = 'inbox';
  */
 const STAFF_TABS: Record<'BASE' | StaffPermission, Tab[]> = {
   BASE: ['waste'],
-  CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community'],
+  CSKH: ['inbox', 'orders', 'externalOrders', 'externalClaims', 'returns', 'users', 'quickReplies', 'community', 'supportChat'],
   KHO: ['inbox', 'orders', 'returns'],
   MARKETING: ['inbox', 'reports', 'community', 'coupons', 'flashSales', 'faqs', 'contentKit', 'academy', 'notificationTemplates'],
   KE_TOAN: ['inbox', 'orders', 'externalClaims', 'reports', 'merchantFulfilment', 'customerRefunds', 'cashback', 'dealerClaims', 'dealerAccounts', 'payouts'],
@@ -496,6 +499,8 @@ export default function AdminPage() {
       payouts: 'payouts',
       payoutsToPay: 'payouts',
       externalPoints: 'externalClaims',
+      supportChatUnforwarded: 'supportChat',
+      zaloBridgeDown: 'supportChat',
     };
     setTab(target[k]);
   };
@@ -557,6 +562,7 @@ export default function AdminPage() {
           {active === 'engagement' && <EngagementTab />}
           {active === 'externalOrders' && <ExternalOrdersTab isAdmin={isAdmin} />}
           {active === 'externalClaims' && <ExternalClaimsTab isAdmin={isAdmin} meId={user?.id} canAct={isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH')} />}
+          {active === 'supportChat' && <SupportChatTab isAdmin={isAdmin} />}
           {active === 'community' && <CommunityModerationTab key={communitySeed?.n ?? 0} initialView={communitySeed?.view} isAdmin={isAdmin} />}
           {active === 'payouts' && <PayoutAdminTab canReview={isAdmin} />}
           {active === 'customerRefunds' && <CustomerRefundsTab meId={user?.id} isAdmin={isAdmin} />}

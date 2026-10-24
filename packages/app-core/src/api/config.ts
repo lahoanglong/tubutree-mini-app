@@ -47,6 +47,8 @@ export interface PublicConfig {
   dealer?: { maxDiscountPct: number | null; reviewHours: number | null };
   /** Trần Điểm Xanh thưởng một sự kiện cộng đồng (giới hạn của API). Thiếu khi API cũ. */
   community?: { eventRewardMaxPoints: number; zaloGroupUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null };
+  /** Chat CSKH: bật/tắt và giờ làm việc (HH:MM). Thiếu khi API cũ → coi như tắt. */
+  chat?: { enabled: boolean; hours: { start: string; end: string } };
 }
 
 export const getPublicConfig = (http: HttpClient) => http.get<PublicConfig>('/config/public');

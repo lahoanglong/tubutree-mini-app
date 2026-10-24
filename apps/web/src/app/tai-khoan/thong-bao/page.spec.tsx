@@ -149,6 +149,18 @@ describe('/tai-khoan/thong-bao: chi tiết', () => {
     expect(d.textContent).toContain('Đơn TT001 đã được xác nhận');
   });
 
+  it('chạm tin "Tubu Tree trả lời bạn": đánh dấu đã đọc và vào thẳng trang chat web, không mở chi tiết', async () => {
+    mocks.get.mockResolvedValue([
+      { id: 'n5', templateCode: 'SUPPORT_CHAT_REPLY', payload: { body: 'Tubu Tree đã trả lời bạn: Dạ shop kiểm tra ạ', data: { route: '/chat' } }, status: 'SENT', sentAt: SENT_AT },
+    ]);
+    const { container } = await mount();
+    click(rowOf(container, 'Dạ shop kiểm tra ạ'));
+    await flush(4);
+    expect(mocks.post).toHaveBeenCalledWith('/me/notifications/n5/read');
+    expect(mocks.push).toHaveBeenCalledWith('/ho-tro/chat');
+    expect(dialog()).toBeNull();
+  });
+
   it('đánh dấu đã đọc xong thì nạp lại danh sách', async () => {
     const { container } = await mount();
     await openRow(container, 'Đơn TT001 đã được xác nhận');

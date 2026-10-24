@@ -19,6 +19,7 @@ import type {
   AdminExternalClaimRow,
   AdminReverseClaimResponse,
   ExternalClaimState,
+  ZaloBridgeState,
 } from '@tubutree/shared-types';
 
 export interface DealerApp {
@@ -1687,12 +1688,102 @@ export type InboxKey =
   | 'communityPending'
   | 'communityUnanswered'
   | 'invoicePending'
-  | 'externalPoints';
+  | 'externalPoints'
+  | 'supportChatUnforwarded'
+  | 'zaloBridgeDown';
 export interface OpsInbox {
   generatedAt: string;
   items: { key: InboxKey; count: number }[];
 }
 export const getOpsInbox = () => apiFetch<OpsInbox>('/admin/ops/inbox');
+
+// ── Chat CSKH qua cầu nối Zalo ──
+export interface SupportBridgeStatus {
+  state: ZaloBridgeState;
+  since: string | null;
+  lastError: string | null;
+  zaloUid: string | null;
+  displayName: string | null;
+  avatar: string | null;
+  checkedAt: string | null;
+  groupId: string;
+  enabled: boolean;
+}
+export const getSupportBridge = () => apiFetch<SupportBridgeStatus>('/admin/support-chat/bridge');
+
+export type SupportQrStatus = 'IDLE' | 'WAITING_SCAN' | 'SCANNED' | 'SUCCESS' | 'EXPIRED' | 'FAILED';
+export interface SupportQrState {
+  status: SupportQrStatus;
+  image?: string;
+  displayName?: string;
+}
+export const startSupportQr = () => apiFetch<SupportQrState>('/admin/support-chat/bridge/qr', { method: 'POST' });
+export const getSupportQr = () => apiFetch<SupportQrState>('/admin/support-chat/bridge/qr');
+export const logoutSupportBridge = () => apiFetch<{ ok: true }>('/admin/support-chat/bridge/logout', { method: 'POST' });
+export const reconnectSupportBridge = () => apiFetch<{ ok: true }>('/admin/support-chat/bridge/reconnect', { method: 'POST' });
+export interface SupportZaloGroup {
+  id: string;
+  name: string;
+  memberCount: number;
+}
+export const listSupportGroups = () => apiFetch<{ groups: SupportZaloGroup[] }>('/admin/support-chat/bridge/groups');
+export const testSupportBridge = () => apiFetch<{ ok: true }>('/admin/support-chat/bridge/test', { method: 'POST' });
+export const updateSupportSettings = (body: { enabled?: boolean; groupId?: string }) =>
+  apiFetch<{ enabled: boolean; groupId: string; bridgeSynced: boolean }>('/admin/support-chat/settings', { method: 'PUT', body });
+
+export interface SupportConversationRow {
+  id: string;
+  code: string;
+  blocked: boolean;
+  lastMessageAt: string;
+  user: { id: string; fullName: string | null; phone: string | null };
+  lastMessage: { sender: 'CUSTOMER' | 'STAFF' | 'SYSTEM'; body: string; hasImage: boolean } | null;
+  needsAttention: boolean;
+}
+export interface SupportConversationPage {
+  items: SupportConversationRow[];
+  nextCursor: string | null;
+}
+export const listSupportConversations = (p: { q?: string; unforwarded?: boolean; cursor?: string }) => {
+  const qs = new URLSearchParams();
+  if (p.q?.trim()) qs.set('q', p.q.trim());
+  if (p.unforwarded) qs.set('filter', 'unforwarded');
+  if (p.cursor) qs.set('cursor', p.cursor);
+  const s = qs.toString();
+  return apiFetch<SupportConversationPage>(`/admin/support-chat/conversations${s ? `?${s}` : ''}`);
+};
+
+export type SupportForwardStatus = 'PENDING' | 'SENT' | 'FAILED' | 'UNKNOWN';
+export interface SupportAdminMessage {
+  id: string;
+  sender: 'CUSTOMER' | 'STAFF' | 'SYSTEM';
+  source: 'MINIAPP' | 'WEB' | 'ZALO' | 'ADMIN' | 'SYSTEM';
+  body: string;
+  imageUrl: string | null;
+  context: { orderCode?: string; productSlug?: string } | null;
+  staffName: string | null;
+  adminUserId: string | null;
+  recalledAt: string | null;
+  createdAt: string;
+  forward: { id: string; status: SupportForwardStatus; lastError: string | null; attempts: number; resendable: boolean } | null;
+}
+export interface SupportConversationDetail {
+  id: string;
+  code: string;
+  blocked: boolean;
+  blockedAt: string | null;
+  blockedByUserId: string | null;
+  user: { id: string; fullName: string | null; phone: string | null };
+  truncated: boolean;
+  messages: SupportAdminMessage[];
+}
+export const getSupportConversation = (id: string) => apiFetch<SupportConversationDetail>(`/admin/support-chat/conversations/${id}`);
+export const replySupportConversation = (id: string, body: string) =>
+  apiFetch<SupportAdminMessage>(`/admin/support-chat/conversations/${id}/reply`, { method: 'POST', body: { body } });
+export const blockSupportConversation = (id: string) => apiFetch<{ ok: true }>(`/admin/support-chat/conversations/${id}/block`, { method: 'POST' });
+export const unblockSupportConversation = (id: string) => apiFetch<{ ok: true }>(`/admin/support-chat/conversations/${id}/block`, { method: 'DELETE' });
+export const resendSupportForward = (forwardId: string) =>
+  apiFetch<{ id: string; status: SupportForwardStatus; lastError: string | null; attempts: number }>(`/admin/support-chat/forwards/${forwardId}/resend`, { method: 'POST' });
 
 export type StaffPermission = 'CSKH' | 'KHO' | 'MARKETING' | 'KE_TOAN';
 export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {

@@ -60,6 +60,12 @@
         </IfModule>
     </IfModule>
 
+    # Cổng nội bộ của cầu nối Zalo (/api/internal/*): cầu nối gọi thẳng container trong mạng Docker, không qua vhost,
+    # nên từ ngoài luôn từ chối. Chỉ khớp đúng tiền tố này, các đường /api/* khác không đổi.
+    <LocationMatch "(?i)^/api/internal(/|$)">
+        Require all denied
+    </LocationMatch>
+
     # Apache tái dùng kết nối rảnh tới Node. `ttl=30` bỏ kết nối rảnh quá 30 giây, ngắn hơn keepAliveTimeout 125 giây của API
     # (apps/api/src/config/http-timeouts.ts), nên Apache không gặp kết nối Node vừa đóng (502 lẻ "error reading status line", A3-010).
     # Dự phòng nếu vẫn thấy 502 lẻ trong error_log: thêm `disablereuse=On` sau `ttl=30` (mỗi request một kết nối mới).

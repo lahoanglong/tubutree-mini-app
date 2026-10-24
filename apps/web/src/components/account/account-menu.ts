@@ -1,5 +1,5 @@
 import {
-  BadgePercent, BookOpen, Bell, CalendarClock, Heart, Info, Leaf, MapPin, MessagesSquare, Recycle, ScanLine, Settings, ShieldCheck, Sparkles, Store, Users, Wallet,
+  BadgePercent, BookOpen, Bell, CalendarClock, Heart, Info, Leaf, MapPin, MessageCircle, MessagesSquare, Recycle, ScanLine, Settings, ShieldCheck, Sparkles, Store, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 import type { DealerMe } from '@tubutree/app-core/api/dealer';
@@ -20,6 +20,7 @@ export interface AccountMenuContext {
   role: string | undefined;
   aiEnabled: boolean;
   claimEnabled: boolean;
+  chatEnabled: boolean;
   cashbackEnabled: boolean;
   dealer: Pick<DealerMe, 'status' | 'isDealer'> & { tier?: { name?: string } | null } | null | undefined;
   ownedBrandName: string | null | undefined;
@@ -74,6 +75,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
       items: [
         { icon: Bell, label: 'Thông báo', to: '/tai-khoan/thong-bao' },
         { icon: BookOpen, label: 'Câu chuyện thương hiệu', to: '/cau-chuyen' },
+        ...(c.chatEnabled ? [{ icon: MessageCircle, label: 'Chat với Tubu Tree', to: '/ho-tro/chat' }] : []),
         { icon: Settings, label: 'Cài đặt', to: '/tai-khoan/cai-dat' },
         { icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/gioi-thieu' },
       ],

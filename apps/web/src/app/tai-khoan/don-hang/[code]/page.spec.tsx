@@ -16,11 +16,13 @@ const mocks = vi.hoisted(() => ({
   qr: { paymentStatus: 'UNPAID' as string, calls: 0, paymentDeadline: undefined as string | undefined, error: null as unknown },
   support: { hotline: '0984 606 774', email: 'tubutree@gmail.com' } as Record<string, string> | Error,
 }));
-vi.mock('@/lib/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/api')>()),
-  getPublicSupport: async () => {
-    if (mocks.support instanceof Error) throw mocks.support;
-    return mocks.support;
+vi.mock('@/lib/core-http', () => ({
+  coreHttp: {
+    get: async (path: string) => {
+      if (path !== '/config/public') throw new Error(`chưa mock ${path}`);
+      if (mocks.support instanceof Error) throw mocks.support;
+      return { support: mocks.support };
+    },
   },
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
@@ -97,39 +99,29 @@ afterEach(() => {
   mounted = [];
 });
 
-describe('/tai-khoan/don-hang/[code] — lời liên hệ huỷ/đổi đơn (Q-17)', () => {
-  const contact = (c: HTMLElement) => Array.from(c.querySelectorAll('p')).find((p) => (p.textContent ?? '').includes('Cần huỷ hoặc đổi đơn'))?.textContent ?? '';
+describe('/tai-khoan/don-hang/[code] — khối "Cần hỗ trợ?" (Q-17)', () => {
+  const block = (c: HTMLElement) => Array.from(c.querySelectorAll('div')).find((d) => (d.firstElementChild?.textContent ?? '') === 'Cần hỗ trợ?') ?? null;
 
-  it('chưa có Zalo OA: ghi thẳng hotline và email, không nhắc Zalo OA', async () => {
+  it('ghi thẳng hotline (tel:) và email (mailto:), không có nút Zalo OA khi chưa cấu hình', async () => {
     const { container } = await mount();
-    const t = contact(container);
-    expect(t).toContain('0984 606 774');
-    expect(t).toContain('tubutree@gmail.com');
-    expect(t).not.toContain('Zalo OA');
-  });
-
-  it('admin đã cấu hình Zalo OA: nhắc đúng tên OA bên cạnh hotline', async () => {
-    mocks.support = { hotline: '1900 1234', email: 'cskh@tubutree.com', zaloOaName: 'Tubu Tree Official' };
-    const { container } = await mount();
-    const t = contact(container);
-    expect(t).toContain('1900 1234');
-    expect(t).toContain('Zalo OA Tubu Tree Official');
+    const b = block(container)!;
+    expect(b.querySelector('a[href="tel:0984606774"]')?.textContent).toBe('Gọi hotline 0984 606 774');
+    expect(b.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
+    expect(b.textContent).not.toContain('Zalo OA');
   });
 
   it('hotline cấu hình số liền 18001234 được ghi "1800 1234" cho dễ đọc (R5-BUYER-5)', async () => {
     mocks.support = { hotline: '18001234', email: 'cskh@tubutree.com' };
     const { container } = await mount();
-    const t = contact(container);
-    expect(t).toContain('Gọi hotline 1800 1234');
-    expect(t).not.toContain('18001234');
+    const b = block(container)!;
+    expect(b.textContent).toContain('Gọi hotline 1800 1234');
+    expect(b.textContent).not.toContain('18001234');
   });
 
-  it('đọc cấu hình lỗi: vẫn hiện hotline/email mặc định, không nhắc Zalo OA', async () => {
+  it('đọc cấu hình lỗi: vẫn hiện hotline/email mặc định', async () => {
     mocks.support = new Error('boom');
     const { container } = await mount();
-    const t = contact(container);
-    expect(t).toContain('0984 606 774');
-    expect(t).not.toContain('Zalo OA');
+    expect(block(container)!.querySelector('a[href="tel:0984606774"]')).not.toBeNull();
   });
 });
 

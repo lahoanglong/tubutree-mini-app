@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 const http = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() }));
 vi.mock('./api', () => ({ api: http }));
+import { getSupportChatPage } from '@tubutree/app-core/api/support-chat';
 import { coreHttp } from './core-http';
 
 beforeEach(() => { for (const f of Object.values(http)) f.mockReset().mockResolvedValue({ data: 'DATA' }); });
@@ -29,6 +30,12 @@ describe('core-http (Mini App) — chỉ chuyển tham số được truyền ch
     expect(http[verb]).toHaveBeenCalledTimes(1);
     expect(http[verb]).toHaveBeenCalledWith(...args);
     expect(http[verb].mock.calls[0]).toHaveLength(args.length);
+  });
+
+  it('getSupportChatPage({ after: undefined }): params không có khoá after', async () => {
+    await getSupportChatPage(coreHttp, { after: undefined });
+    expect(http.get).toHaveBeenCalledTimes(1);
+    expect(Object.keys(http.get.mock.calls[0]![1].params)).toEqual([]);
   });
 
   it('lỗi HttpError đi thẳng ra ngoài, không bọc', async () => {

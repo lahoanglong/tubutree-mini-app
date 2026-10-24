@@ -25,7 +25,7 @@ import { QrCode } from '@/components/ui/qr-code';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
-import { RecycleSupport } from './recycle-support';
+import { SupportContact } from '@/components/support-contact';
 import { RecycleTimeline } from './recycle-timeline';
 import {
   METHOD_LABELS,
@@ -371,7 +371,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             </Link>
           )}
           <section className="flex flex-col gap-2">
-            <RecycleSupport />
+            <SupportContact />
           </section>
         </div>
       </div>

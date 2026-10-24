@@ -36,6 +36,8 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   communityPending: { title: 'Bài cộng đồng chờ duyệt', hint: 'Khách vừa đăng, chưa ai duyệt' },
   communityUnanswered: { title: 'Câu hỏi cộng đồng chưa ai trả lời', hint: 'Đã chờ quá lâu mà chưa có câu trả lời' },
   invoicePending: { title: 'Hoá đơn VAT chờ xuất', hint: 'Khách yêu cầu xuất hoá đơn, chưa phát hành' },
+  supportChatUnforwarded: { title: 'Chat CSKH: tin chưa chuyển được vào Zalo', hint: 'Tin khách chuyển lỗi, không rõ kết quả hoặc chờ quá lâu' },
+  zaloBridgeDown: { title: 'Cầu nối Zalo mất kết nối', hint: 'Cầu nối không ở trạng thái đang kết nối quá 10 phút, tin khách chưa vào nhóm Zalo' },
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 

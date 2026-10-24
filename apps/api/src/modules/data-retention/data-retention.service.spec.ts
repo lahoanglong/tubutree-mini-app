@@ -82,7 +82,7 @@ describe('DataRetentionService (C-046)', () => {
     await first;
   });
 
-  it('xoá đủ 6 bảng và xoá SĐT đơn ngoài app, mốc cắt = now - số ngày TTL cấu hình', async () => {
+  it('xoá đủ các bảng và xoá SĐT đơn ngoài app, mốc cắt = now - số ngày TTL cấu hình', async () => {
     const { svc, prisma } = make({ config: { 'retention.notification_logs_days': 60 } });
     const res = await svc.runAll({ now: NOW, pauseMs: 0 });
     expect(res).toEqual({
@@ -96,11 +96,14 @@ describe('DataRetentionService (C-046)', () => {
         'external_orders.phone_after_final': 0,
         'external_points_claims.order_phone': 0,
         refresh_tokens: 0,
+        support_messages: 0,
+        support_forwards: 0,
+        support_recall_tombstones: 0,
       },
       truncated: false,
     });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(9);
-    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(12);
+    const cutoffs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => datesIn(call(prisma, i).values)[0]!.getTime());
     expect(cutoffs).toEqual([
       NOW.getTime() - 395 * DAY,
       NOW.getTime() - 60 * DAY,
@@ -111,6 +114,9 @@ describe('DataRetentionService (C-046)', () => {
       NOW.getTime() - 7 * DAY,
       NOW.getTime() - 7 * DAY,
       NOW.getTime() - 30 * DAY,
+      NOW.getTime() - 365 * DAY,
+      NOW.getTime() - 365 * DAY,
+      NOW.getTime() - 2 * DAY,
     ]);
   });
 
@@ -156,7 +162,7 @@ describe('DataRetentionService (C-046)', () => {
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0 });
     expect(res).toMatchObject({ truncated: false });
     expect((res as { deleted: Record<string, number> }).deleted.analytics_events).toBe(7);
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 8);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3 + 11);
     expect(call(prisma, 0).values).toContain(3);
   });
 
@@ -164,7 +170,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make({ batchCounts: [3, 3, 3, 3] });
     const res = await svc.runAll({ now: NOW, batchSize: 3, pauseMs: 0, maxRunMs: -1 });
     expect(res).toMatchObject({ truncated: true });
-    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(10);
+    expect(prisma.$executeRaw.mock.calls.length).toBeLessThan(13);
   });
 
   it('bảng tồn đọng vô hạn không nuốt hết ngân sách thời gian của các bảng sau', async () => {
@@ -185,7 +191,7 @@ describe('DataRetentionService (C-046)', () => {
     const { svc, prisma } = make();
     prisma.$executeRaw.mockRejectedValueOnce(new Error('boom'));
     const res = await svc.runAll({ now: NOW, pauseMs: 0 });
-    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 8);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1 + 11);
     expect((res as { deleted: Record<string, number> }).deleted).not.toHaveProperty('analytics_events');
     expect((res as { deleted: Record<string, number> }).deleted).toHaveProperty('refresh_tokens');
   });

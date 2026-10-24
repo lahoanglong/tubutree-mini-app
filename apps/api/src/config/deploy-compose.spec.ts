@@ -26,6 +26,18 @@ describe.each(COMPOSE_FILES)('%s', (file) => {
     expect(Object.keys(svc)).toEqual(expect.arrayContaining(['postgres', 'redis', 'api', 'web']));
   });
 
+  it('zalo-bridge không mở cổng ra ngoài, giữ phiên Zalo trong volume riêng và không đọc cả .env', () => {
+    const block = svc['zalo-bridge'] ?? '';
+    expect(block).not.toMatch(/\n {4}ports:/);
+    expect(block).toMatch(/\n {6}- zalo_bridge_data:\/data\n/);
+    expect(block).not.toMatch(/\n {4}env_file:/);
+    expect(block).toMatch(/\n {6}ZALO_BRIDGE_SECRET: \$\{ZALO_BRIDGE_SECRET:-\}/);
+    expect(block).toMatch(/\n {6}ZALO_BRIDGE_CREDENTIALS_KEY: \$\{ZALO_BRIDGE_CREDENTIALS_KEY:-\}/);
+    expect(block).not.toMatch(/DATABASE_URL|JWT/);
+    expect(block).toMatch(/\n {4}networks: \[tubu\]\n/);
+    expect(compose).toMatch(/\nvolumes:\n(?: {2}\w+:\n)* {2}zalo_bridge_data:\n/);
+  });
+
   it('Redis chạy maxmemory-policy noeviction (BullMQ mất job âm thầm nếu Redis tự xoá key)', () => {
     const command = /\n {4}command: (.*)\n/.exec(svc.redis ?? '')?.[1] ?? '';
     expect(command).toMatch(/'--maxmemory-policy',\s*'noeviction'/);

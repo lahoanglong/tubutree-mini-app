@@ -10,6 +10,7 @@ const ctx = (over: Partial<AccountMenuContext> = {}): AccountMenuContext => ({
   role: 'CUSTOMER',
   aiEnabled: false,
   claimEnabled: false,
+  chatEnabled: false,
   cashbackEnabled: false,
   dealer: null,
   ownedBrandName: null,
@@ -30,6 +31,13 @@ describe('nhóm menu hub tài khoản', () => {
     expect(labels(m, 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu']);
     expect(labels(m, 'Hợp tác')).toEqual(['Cộng tác viên', 'Đăng ký đại lý']);
     expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
+  });
+
+  it('"Chat với Tubu Tree" chỉ hiện khi chat bật, đứng sau Câu chuyện thương hiệu và dẫn tới /ho-tro/chat', () => {
+    expect(all(buildAccountMenu(ctx())).some((i) => i.to === '/ho-tro/chat')).toBe(false);
+    const m = buildAccountMenu(ctx({ chatEnabled: true }));
+    expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Chat với Tubu Tree', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
+    expect(all(m).find((i) => i.label === 'Chat với Tubu Tree')?.to).toBe('/ho-tro/chat');
   });
 
   it('đích là route web của mục Mini App tương ứng', () => {

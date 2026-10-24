@@ -72,7 +72,10 @@ export default function NotificationsPage() {
 
   const onTap = (n: NotificationDTO) => {
     if (n.status !== 'READ') readMut.mutate(n.id);
-    setSelected(n);
+    // Chi tiết của tin trả lời chỉ lặp lại một đoạn của câu trả lời; khách bấm vào là để đọc và nhắn tiếp.
+    const chat = n.templateCode === 'SUPPORT_CHAT_REPLY' ? notificationAction(n.templateCode, n.payload.data) : null;
+    if (chat) router.push(chat.to);
+    else setSelected(n);
   };
 
   // Tra đúng variation trong payload qua purchased-items (đơn đã giao của chính khách). Lỗi / API cũ 404 / hết hàng → điều hướng dự phòng.

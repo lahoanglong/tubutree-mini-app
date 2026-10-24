@@ -623,3 +623,94 @@ describe('SystemConfigService.set — mặc định hoa hồng không vượt tr
     await expect(svc({}).set('affiliate.max_rate_pct', 8, 'a')).resolves.toBeUndefined();
   });
 });
+
+describe('SystemConfigService.set — khoá chat CSKH (chat.*)', () => {
+  function mk(existing: unknown) {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ value: existing }), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+  const hours = { start: '08:00', end: '21:00' };
+
+  it('chat.hours nhận {start, end} hợp lệ', async () => {
+    const { svc, tx } = mk(hours);
+    await svc.set('chat.hours', { start: '07:30', end: '22:00' }, 'admin1');
+    expect(tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['giờ sai dạng', { start: '8h', end: '21:00' }],
+    ['start >= end', { start: '21:00', end: '08:00' }],
+    ['start == end', { start: '08:00', end: '08:00' }],
+    ['thiếu end', { start: '08:00' }],
+    ['giờ 24:00', { start: '08:00', end: '24:00' }],
+  ])('chat.hours từ chối: %s', async (_name, value) => {
+    const { svc, tx } = mk(hours);
+    await expect(svc.set('chat.hours', value, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.systemConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('chat.enabled chỉ nhận boolean', async () => {
+    const ok = mk(false);
+    await ok.svc.set('chat.enabled', true, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    const bad = mk(false);
+    await expect(bad.svc.set('chat.enabled', 'true', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(bad.tx.systemConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('chat.off_hours_text: chuỗi không rỗng sau trim, tối đa 1000 ký tự', async () => {
+    const ok = mk('x');
+    await ok.svc.set('chat.off_hours_text', 'Mai trả lời nhé', 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    const blank = mk('x');
+    await expect(blank.svc.set('chat.off_hours_text', '   ', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(blank.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    const long = mk('x');
+    await expect(long.svc.set('chat.off_hours_text', 'a'.repeat(1001), 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(long.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    const edge = mk('x');
+    await edge.svc.set('chat.off_hours_text', 'a'.repeat(1000), 'admin1');
+    expect(edge.tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  it('chat.zalo_group_id: chuỗi rỗng được nhận (bỏ chọn nhóm) và được ghi', async () => {
+    const m = mk('g-old');
+    await m.svc.set('chat.zalo_group_id', '', 'admin1');
+    expect(m.tx.systemConfig.upsert).toHaveBeenCalledTimes(1);
+    expect(m.tx.systemConfig.upsert.mock.calls[0]![0]).toMatchObject({ update: { value: '' } });
+  });
+
+  it.each([
+    ['toàn khoảng trắng', '   '],
+    ['có khoảng trắng giữa', '123 456'],
+    ['dài hơn 64 ký tự', '1'.repeat(65)],
+    ['không phải chuỗi', 123],
+  ])('chat.zalo_group_id từ chối: %s, không ghi', async (_name, value) => {
+    const m = mk('g-old');
+    await expect(m.svc.set('chat.zalo_group_id', value, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('chat.zalo_group_id: đúng 64 ký tự được nhận', async () => {
+    const m = mk('x');
+    await m.svc.set('chat.zalo_group_id', '1'.repeat(64), 'admin1');
+    expect(m.tx.systemConfig.upsert).toHaveBeenCalled();
+  });
+
+  it('retention.support_chat_days: số nguyên 90–3650', async () => {
+    const ok = mk(365);
+    await ok.svc.set('retention.support_chat_days', 90, 'admin1');
+    expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
+    for (const bad of [89, 3651, 100.5]) {
+      const m = mk(365);
+      await expect(m.svc.set('retention.support_chat_days', bad, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+});

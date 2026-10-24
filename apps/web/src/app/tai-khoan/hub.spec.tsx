@@ -226,6 +226,21 @@ describe('hub /tai-khoan — mục theo vai trò và cờ', () => {
     expect(link(await mount(), '/tu-van')).not.toBeNull();
   });
 
+  it('Chat với Tubu Tree: chỉ hiện khi chat bật; chấm đỏ khi có tin chưa đọc, không gọi API số chưa đọc khi chat tắt', async () => {
+    expect(link(await mount(), '/ho-tro/chat')).toBeNull();
+    expect(mocks.calls).not.toContain('/me/support-chat/summary');
+    mocks.routes['/config/public'] = () => ({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 0 });
+    const quiet = await mount();
+    expect(link(quiet, '/ho-tro/chat')!.textContent).toContain('Chat với Tubu Tree');
+    expect(quiet.querySelector('[data-testid="chat-unread-dot"]')).toBeNull();
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 2 });
+    const unread = await mount();
+    const row = link(unread, '/ho-tro/chat')!;
+    expect(row.querySelector('[data-testid="chat-unread-dot"]')).not.toBeNull();
+    expect(row.getAttribute('aria-label')).toBe('Chat với Tubu Tree, có tin mới');
+  });
+
   it('Tích điểm đơn sàn (marketplaceClaimEnabled): là nút mở thông báo "cần mở trên Zalo", không phải liên kết', async () => {
     mocks.routes['/config/public'] = () => ({ loyalty: { marketplaceClaimEnabled: true } });
     const c = await mount();

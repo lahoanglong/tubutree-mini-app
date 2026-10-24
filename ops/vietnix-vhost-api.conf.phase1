@@ -19,6 +19,12 @@
     ProxyRequests Off
     RequestHeader set X-Forwarded-Proto "http"
 
+    # Cổng nội bộ của cầu nối Zalo (/api/internal/*): cầu nối gọi thẳng container trong mạng Docker, không qua vhost,
+    # nên từ ngoài luôn từ chối. Chỉ khớp đúng tiền tố này, các đường /api/* khác không đổi.
+    <LocationMatch "(?i)^/api/internal(/|$)">
+        Require all denied
+    </LocationMatch>
+
     ProxyPass /.well-known/acme-challenge/ !
     ProxyPass / http://127.0.0.1:14001/
     ProxyPassReverse / http://127.0.0.1:14001/

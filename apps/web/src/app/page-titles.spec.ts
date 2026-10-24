@@ -25,6 +25,7 @@ import { metadata as recycleDesk } from './doi-rac/quay/layout';
 import { metadata as advisor } from './tu-van/layout';
 import { metadata as cashback } from './hoan-tien/layout';
 import { metadata as wishlist } from './tai-khoan/yeu-thich/layout';
+import { metadata as supportChat } from './ho-tro/chat/layout';
 import { metadata as orders } from './tai-khoan/don-hang/layout';
 import { metadata as bankPayment } from './thanh-toan/chuyen-khoan/[code]/layout';
 import { metadata as ctv } from './ctv/layout';
@@ -47,7 +48,10 @@ const CORE: TitleCase[] = [
   ['/tai-khoan/dia-chi', addresses, 'Sổ địa chỉ — Tubu Tree'],
   ['/tai-khoan/vi-tubu', wallet, 'Ví Tubu — Tubu Tree'],
 ];
-const SHOP: TitleCase[] = [['/tai-khoan/yeu-thich', wishlist, 'Sản phẩm yêu thích — Tubu Tree']];
+const SHOP: TitleCase[] = [
+  ['/tai-khoan/yeu-thich', wishlist, 'Sản phẩm yêu thích — Tubu Tree'],
+  ['/ho-tro/chat', supportChat, 'Chat với Tubu Tree — Tubu Tree'],
+];
 const ORDER: TitleCase[] = [
   ['/thanh-toan/chuyen-khoan/[code]', bankPayment, 'Thanh toán chuyển khoản — Tubu Tree'],
   ['/tai-khoan/don-hang', orders, 'Đơn hàng — Tubu Tree'],
