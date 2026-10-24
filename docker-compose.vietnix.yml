@@ -98,6 +98,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     networks: [tubu]
 
   web:
@@ -145,6 +147,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     networks: [tubu]
 
   zalo-bridge:
@@ -172,6 +176,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     networks: [tubu]
 
 volumes:

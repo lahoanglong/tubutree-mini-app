@@ -34,7 +34,7 @@ export interface BackupSnapshot {
   /** tools/backup/backup-db.sh của repo: unknown khi không thấy thư mục repo (vd chạy trong container, image không chứa tools/). */
   script: 'found' | 'missing' | 'unknown';
   cron: { visible: boolean } & CronBackupInfo;
-  rclone: { available: boolean; remotes: string[] };
+  rclone: { available: boolean; remotes: string[]; /** Loại từng remote (drive, crypt...) theo `listremotes --long`; thiếu thì không biết. */ types?: Record<string, string> };
   dir: { path: string; visible: boolean; fileCount: number; newest: { ageHours: number; sizeBytes: number } | null };
 }
 
@@ -70,6 +70,8 @@ export function evaluateBackup(s: BackupSnapshot, env: Env): CheckResult[] {
     out.push(warn(G_BACKUP, 'backup.offsite', remoteTitle, 'không kiểm được: không biết remote nào vì không đọc được cron và không có RCLONE_REMOTE trong môi trường', CANNOT_TELL_HOST));
   } else if (!s.rclone.available) {
     out.push(warn(G_BACKUP, 'backup.offsite', remoteTitle, `remote "${remoteName}" được đặt nhưng không chạy được rclone từ nơi này nên chưa xác nhận`, CANNOT_TELL_HOST));
+  } else if (s.rclone.remotes.includes(remoteName) && s.rclone.types && s.rclone.types[remoteName] !== 'crypt') {
+    out.push(warn(G_BACKUP, 'backup.offsite', remoteTitle, `remote "${remoteName}" loại "${s.rclone.types[remoteName]}", không phải crypt: backup ngoài máy (SĐT, địa chỉ, tài khoản hoàn tiền) nằm dạng rõ, và backup-db.sh sẽ từ chối đẩy`, 'Tạo remote crypt bọc remote này theo tools/backup/README.md mục "Mã hoá bản ngoài máy", rồi đổi RCLONE_REMOTE sang remote crypt.'));
   } else if (s.rclone.remotes.includes(remoteName)) {
     out.push(pass(G_BACKUP, 'backup.offsite', remoteTitle, `remote "${remoteName}" đã cấu hình trong rclone`));
   } else {

@@ -26,6 +26,8 @@ REMOTE_KEEP_DAYS="${REMOTE_KEEP_DAYS:-90}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"
 # 1 = không cảnh báo khi thiếu HEALTHCHECK_URL (bản chạy tay trước deploy không cần dead-man switch).
 HEALTHCHECK_OPTIONAL="${HEALTHCHECK_OPTIONAL:-0}"
+# Dump chứa SĐT, địa chỉ, tài khoản ngân hàng hoàn tiền của khách: remote phải là rclone `crypt`. 1 = cho phép đẩy bản rõ.
+BACKUP_ALLOW_PLAIN_REMOTE="${BACKUP_ALLOW_PLAIN_REMOTE:-0}"
 
 case "$BACKUP_LABEL" in
   *[!A-Za-z0-9]*) echo "ERROR: BACKUP_LABEL chỉ gồm chữ và số (đang là '$BACKUP_LABEL')" >&2; exit 1 ;;
@@ -104,12 +106,21 @@ else
   exit 2
 fi
 
+# Loại của remote (drive, crypt, s3...) theo `listremotes --long`: không in cấu hình nên không lộ khoá. Không thấy thì rỗng.
+# Tên remote bắt đầu bằng ":" (connection string) hay không có trong cấu hình cũng ra rỗng và bị từ chối.
+remote_type() {
+  rclone listremotes --long 2>/dev/null | awk -v n="$1:" '$1 == n { print $2; exit }'
+}
+
 # Bản ngoài máy. Lỗi upload là lỗi backup (exit 3 ở cuối, để cảnh báo bắn ra); bản local vẫn giữ và việc dọn bản cũ
 # vẫn chạy bên dưới, nếu không remote hỏng nhiều ngày thì đĩa đầy dần.
 UPLOAD_FAILED=0
 if [ -n "$RCLONE_REMOTE" ]; then
   if ! command -v rclone >/dev/null 2>&1; then
     log "ERROR: RCLONE_REMOTE đã đặt nhưng máy chưa cài rclone"
+    UPLOAD_FAILED=1
+  elif [ "$BACKUP_ALLOW_PLAIN_REMOTE" != 1 ] && [ "$(remote_type "${RCLONE_REMOTE%%:*}")" != crypt ]; then
+    log "ERROR: remote '${RCLONE_REMOTE%%:*}' không phải rclone crypt — KHÔNG đẩy bản backup chưa mã hoá ra ngoài máy (xem tools/backup/README.md mục 'Mã hoá bản ngoài máy'). Chỉ khi chủ chấp nhận rủi ro: BACKUP_ALLOW_PLAIN_REMOTE=1"
     UPLOAD_FAILED=1
   else
     log "Đang đẩy lên ${RCLONE_REMOTE} ..."
