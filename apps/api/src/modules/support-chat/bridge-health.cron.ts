@@ -95,10 +95,10 @@ export class BridgeHealthCron {
     const chatOn = await this.config.get<boolean>(CHAT_ENABLED_KEY, false);
     if (state !== 'CONNECTED' && chatOn) await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
     // Hết điếc thì lần điếc sau phải báo ngay, như downAlertedAt được xoá khi nối lại.
-    if (!deaf) this.alerted.delete('deaf');
+    if (h && !deaf) this.alerted.delete('deaf');
     const dropped = h?.outboxDropped ?? 0;
     // Số thấp hơn lần đã báo nghĩa là cầu nối khởi động lại và đếm lại từ 0.
-    if (dropped < (this.alerted.get('outbox')?.count ?? 0)) this.alerted.delete('outbox');
+    if (h && h.outboxDropped !== undefined && dropped < (this.alerted.get('outbox')?.count ?? 0)) this.alerted.delete('outbox');
     if (chatOn && deaf) {
       await this.alertOps('deaf', now, 0, 'Cầu nối Zalo báo đang kết nối nhưng không nhận được tin nào từ nhóm sau lần gửi gần nhất (hơn 5 phút): tin nhân viên trả lời có thể đang bị mất. Vào tab Chat CSKH bấm Kết nối lại.');
     }

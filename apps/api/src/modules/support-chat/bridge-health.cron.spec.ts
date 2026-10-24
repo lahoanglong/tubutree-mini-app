@@ -243,6 +243,27 @@ describe('BridgeHealthCron', () => {
     expect(opsCalls(notifications)).toHaveLength(2);
   });
 
+  it('health() null (chập chờn) không xoá mốc đã báo: không báo lại điếc và outbox sau khi có lại', async () => {
+    const { cron, notifications, bridge } = setup({ health: deafHealth({ outboxDropped: 5 }) });
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+    bridge.health.mockResolvedValue(null);
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(deafHealth({ outboxDropped: 5 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(2);
+  });
+
+  it('outboxDropped thiếu (cầu nối cũ) không xoá mốc đã báo', async () => {
+    const { cron, notifications, bridge } = setup({ health: health({ outboxDropped: 5 }) });
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health());
+    await cron.everyMinute();
+    bridge.health.mockResolvedValue(health({ outboxDropped: 5 }));
+    await cron.everyMinute();
+    expect(opsCalls(notifications)).toHaveLength(1);
+  });
+
   it('outboxDropped 0 hoặc thiếu → không báo', async () => {
     const a = setup({ health: health({ outboxDropped: 0 }) });
     await a.cron.everyMinute();
