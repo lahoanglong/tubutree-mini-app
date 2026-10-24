@@ -299,14 +299,17 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     expect(s.login).toHaveBeenCalledTimes(1);
   });
 
-  it('error của listener (một khung hỏng) giữ CONNECTED, không dừng listener, không nối lại', async () => {
+  it('error của listener (một khung hỏng) chỉ ghi log: giữ CONNECTED không kèm lỗi, không dừng listener, không nối lại', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const s = await connected();
     s.api.listener.emit('error', new Error('bad frame'));
-    expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: 'Lỗi từ listener Zalo' });
+    expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: null });
+    expect(err).toHaveBeenCalled();
     expect(s.api.listener.stop).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(s.login).not.toHaveBeenCalled();
-    expect(s.pushed.filter((e) => e.type === 'state').map((e) => (e as { state: string }).state)).toEqual(['CONNECTING', 'CONNECTED', 'CONNECTED']);
+    expect(s.pushed.filter((e) => e.type === 'state').map((e) => (e as { state: string }).state)).toEqual(['CONNECTING', 'CONNECTED']);
+    err.mockRestore();
   });
 
   it('đóng mã 3003 như 3000: KICKED, không nối lại', async () => {
@@ -400,10 +403,10 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     expect(s.login).not.toHaveBeenCalled();
   });
 
-  it('khi vào CONNECTED thì lastError cũ (lỗi listener) bị xoá', async () => {
+  it('khi vào CONNECTED thì lastError cũ (lỗi mất kết nối) bị xoá', async () => {
     const s = await connected();
-    s.api.listener.emit('error', new Error('bad frame'));
-    expect(s.client.state().lastError).toBe('Lỗi từ listener Zalo');
+    s.api.listener.emit('disconnected', 1006, '');
+    expect(s.client.state().lastError).toContain('Mất kết nối Zalo');
     s.api.listener.emit('connected');
     expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: null });
   });
@@ -1264,6 +1267,72 @@ describe('zalo-client: đăng nhập QR', () => {
       vi.useRealTimers();
       vi.restoreAllMocks();
     }
+  });
+
+  it('tệp phiên của tài khoản đã đăng xuất còn trên đĩa thì health báo cả khi phiên mới đang CONNECTED', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' });
+      await s.client.start();
+      const eacces = () => Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      s.credentials.clear.mockRejectedValueOnce(eacces());
+      await s.client.logout().catch(() => undefined);
+      expect(s.client.state().lastError).toContain('Không xoá được tệp phiên đăng nhập cũ (EACCES)');
+      // B đăng nhập; lưu B lỗi và lệnh xoá sau đó cũng lỗi: tệp của X vẫn nằm đó
+      s.credentials.save.mockRejectedValueOnce(eacces());
+      s.credentials.clear.mockRejectedValueOnce(eacces());
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'B' } });
+      await p;
+      cbs[0](four('imB'));
+      const apiB = apiUid('UB');
+      dones[0](apiB);
+      await vi.advanceTimersByTimeAsync(6_000);
+      apiB.listener.emit('connected');
+      const st = s.client.state();
+      expect(st.state).toBe('CONNECTED');
+      expect(st.lastError).toContain('Không lưu được phiên đăng nhập');
+      expect(st.lastError).toContain('Không xoá được tệp phiên đăng nhập cũ (EACCES)');
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('lần lưu bị bỏ (phiên không còn là desired) không xoá lỗi "tệp phiên cũ còn sót"', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      const disk = fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' }, (c) => (c.imei === 'imB' ? 3_000 : 0), true);
+      await s.client.start();
+      s.credentials.clear.mockRejectedValueOnce(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+      await s.client.logout().catch(() => undefined);
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'B' } });
+      await p;
+      cbs[0](four('imB'));
+      dones[0](apiUid('UB'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      // logout trong lúc lưu B: lần lưu B sẽ bị bỏ; lệnh xoá của logout treo để thấy khoảng giữa
+      s.credentials.clear.mockImplementationOnce(() => new Promise(() => undefined));
+      s.client.logout().catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(disk.file).toMatchObject({ imei: 'imX' });
+      expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: expect.stringContaining('Không xoá được tệp phiên đăng nhập cũ') });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('tệp phiên không giải mã được lúc khởi động: lời nhắn tiếng Việt, chờ quét QR', async () => {
+    const s = setup({ api: null });
+    s.credentials.load.mockRejectedValueOnce(new Error('credentials file corrupt'));
+    await s.client.start();
+    expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: expect.stringMatching(/^Không đọc được tệp phiên đăng nhập.*quét QR/) });
   });
 
   it('lệnh xoá của logout lỗi sau hạn 8 giây thì health vẫn báo mã lỗi thật', async () => {

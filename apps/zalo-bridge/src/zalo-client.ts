@@ -164,6 +164,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let sessionSaveError: string | null = null;
   // Tệp phiên của trạng thái đã đăng xuất có thể còn trên đĩa: chỉ lệnh xoá lúc desired null đặt nó, xoá được hay ghi đè bằng phiên mới thì hết.
   let staleFileError: string | null = null;
+  let stateError: string | null = null;
   // `desired` là phiên PHẢI nằm trên đĩa và là phiên duy nhất được dùng để đăng nhập: DISK_SESSION = bản có sẵn lúc khởi động,
   // null = đã đăng xuất (không bao giờ đọc đĩa nữa), Session = phiên QR đã đăng nhập xong (nối lại dùng creds trong bộ nhớ).
   // Đổi desired trước, rồi mới xếp lệnh đĩa. Mọi lệnh đĩa chạy tuần tự trong diskChain, mỗi lệnh có hạn PERSIST_TIMEOUT_MS:
@@ -199,10 +200,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
   const clearFile = () => bounded(credentials.clear(), 'Xoá tệp phiên');
   function setStaleFile(msg: string | null): void {
     if (staleFileError === msg) return;
-    // Chỉ thay khi health đang hiện chính lỗi này (hoặc không lỗi gì): không đè lỗi khác đang hiện.
-    const shown = desired === null && lastError === staleFileError;
     staleFileError = msg;
-    if (shown) setState(state);
+    publishState();
   }
   // Xoá tệp lúc đã đăng xuất (logout và đồng bộ lại): kết quả của chính lệnh này quyết định health có báo tệp cũ còn sót.
   async function clearLoggedOut(): Promise<void> {
@@ -232,12 +231,17 @@ export function createZaloClient(deps: ZaloClientDeps) {
   function noteSaveError(msg: string | null): void {
     if (sessionSaveError === msg) return;
     sessionSaveError = msg;
-    if (state === 'CONNECTED') setState('CONNECTED');
+    publishState();
   }
   async function writeSession(s: Session): Promise<void> {
     if (desired !== s) return;
+    // Lần lưu bị bỏ ở bước kiểm trước rename vẫn trả về bình thường: chỉ rename thật mới ghi đè tệp cũ.
+    let committed = false;
     try {
-      await bounded(credentials.save(s.creds, () => desired === s), 'Lưu phiên');
+      await bounded(
+        credentials.save(s.creds, () => (committed = desired === s)),
+        'Lưu phiên',
+      );
     } catch (e) {
       console.error(`[zalo] không lưu được phiên đăng nhập (${errCode(e)}), xoá tệp phiên cũ`);
       await clearFile().then(
@@ -247,7 +251,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
       if (desired === s) noteSaveError(`Không lưu được phiên đăng nhập: ${errMsg(e)}`);
       throw e;
     }
-    setStaleFile(null);
+    if (committed) setStaleFile(null);
     if (desired === s) noteSaveError(null);
   }
   const persistSession = (s: Session): Promise<void> => onDisk(() => writeSession(s));
@@ -264,14 +268,21 @@ export function createZaloClient(deps: ZaloClientDeps) {
     outbox.push(e).catch(() => console.error(`[zalo] không ghi được sự kiện ${e.type} vào hộp thư đi`));
   };
 
+  /** `error`: lỗi của chính trạng thái này. Lỗi lưu phiên (khi CONNECTED) và lỗi tệp phiên cũ còn sót (mọi trạng thái) ghép thêm khi hiện. */
   function setState(next: BridgeState, error: string | null = null): void {
     if (state !== next) since = new Date(now()).toISOString();
     state = next;
-    lastError = error ?? (next === 'CONNECTED' ? sessionSaveError : desired === null ? staleFileError : null);
-    const key = `${next}|${lastError ?? ''}`;
+    stateError = error;
+    publishState();
+  }
+
+  function publishState(): void {
+    const base = stateError ?? (state === 'CONNECTED' ? sessionSaveError : null);
+    lastError = staleFileError && base !== staleFileError ? (base ? `${base}. ${staleFileError}` : staleFileError) : base;
+    const key = `${state}|${lastError ?? ''}`;
     if (key === lastPushedKey) return;
     lastPushedKey = key;
-    pushEvent({ type: 'state', state: next, since, lastError, zaloUid, displayName: ownProfile()?.displayName ?? null });
+    pushEvent({ type: 'state', state, since, lastError, zaloUid, displayName: ownProfile()?.displayName ?? null });
   }
 
   function detach(): void {
@@ -371,10 +382,10 @@ export function createZaloClient(deps: ZaloClientDeps) {
     // zca-js cũng phát error cho một khung không giải mã được trên socket vẫn khoẻ (dist/apis/listen.js:358-360 trong bộ xử lý onmessage, và :141-144 cho ws.onerror); chỉ ghi nhận,
     // việc nối lại do closed/disconnected quyết định.
     next.listener.on('error', live(() => {
-      if (state === 'CONNECTED') setState('CONNECTED', 'Lỗi từ listener Zalo');
+      console.error('[zalo] listener báo lỗi (socket vẫn mở)');
     }));
 
-    setState('CONNECTING', state === 'CONNECTING' ? lastError : null);
+    setState('CONNECTING', state === 'CONNECTING' ? stateError : null);
     next.listener.start({ retryOnClose: false });
   }
 
@@ -384,22 +395,23 @@ export function createZaloClient(deps: ZaloClientDeps) {
     const want = desired;
     // Đã đăng xuất: không đọc đĩa (tệp có thể còn nếu lệnh xoá lỗi), chỉ quét QR mới đăng nhập lại được.
     if (want === null) {
-      setState('NEED_QR', lastError);
+      setState('NEED_QR', stateError);
       return;
     }
-    setState('CONNECTING', initial ? null : lastError);
+    setState('CONNECTING', initial ? null : stateError);
     // Đĩa chỉ được đọc khi desired vẫn là bản có sẵn lúc khởi động; có phiên QR rồi thì dùng creds trong bộ nhớ.
     let creds: ZaloCredentials | null = null;
+    let loadError: string | null = null;
     if (want === DISK_SESSION) {
       try {
         creds = await credentials.load();
       } catch (e) {
-        lastError = errMsg(e);
+        loadError = `Không đọc được tệp phiên đăng nhập (${errMsg(e)}): quét QR lại`;
       }
     } else creds = want.creds;
     if (gen !== generation || desired !== want) return;
     if (!creds) {
-      setState('NEED_QR', lastError);
+      setState('NEED_QR', loadError ?? stateError);
       return;
     }
     try {
