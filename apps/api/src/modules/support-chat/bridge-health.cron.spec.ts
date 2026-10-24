@@ -10,7 +10,7 @@ const NOW = new Date('2026-10-23T05:00:00Z');
 const min = (n: number) => new Date(NOW.getTime() - n * 60_000);
 const health = (o: Record<string, unknown> = {}) => ({ state: 'CONNECTED', zaloUid: 'z', displayName: 'CSKH', avatar: null, since: min(30).toISOString(), lastError: null, queueSize: 0, outboxSize: 0, groupId: 'G1', ...o });
 
-function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; failed?: any[]; claimCount?: number; messages?: any[]; schedule?: jest.Mock; count?: number; configured?: boolean; enabled?: boolean } = {}) {
+function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; failed?: any[]; claimCount?: number; messages?: any[]; schedule?: jest.Mock; count?: number; configured?: boolean; enabled?: boolean; setGroup?: jest.Mock } = {}) {
   const prisma: any = {
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(o.prev ?? null), upsert: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
     supportConversation: { findMany: jest.fn().mockResolvedValue(o.convs ?? []), count: jest.fn().mockResolvedValue(o.count ?? 0) },
@@ -22,7 +22,7 @@ function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; 
     supportMessage: { findMany: jest.fn().mockResolvedValue(o.messages ?? [{ id: 'm1' }]) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'adm1' }]) },
   };
-  const bridge: any = { isConfigured: jest.fn().mockReturnValue(o.configured ?? true), health: jest.fn().mockResolvedValue('health' in o ? o.health : health()), setGroup: jest.fn().mockResolvedValue({ ok: true, data: {} }) };
+  const bridge: any = { isConfigured: jest.fn().mockReturnValue(o.configured ?? true), health: jest.fn().mockResolvedValue('health' in o ? o.health : health()), setGroup: o.setGroup ?? jest.fn().mockResolvedValue({ ok: true, data: {} }) };
   const config: any = { get: jest.fn().mockImplementation((k: string) => Promise.resolve(k === 'chat.enabled' ? (o.enabled ?? true) : (o.groupCfg ?? 'G1'))) };
   const chat: any = { scheduleForward: o.schedule ?? jest.fn().mockResolvedValue(undefined) };
   const notifications: any = { notify: jest.fn().mockResolvedValue(undefined) };
@@ -100,6 +100,29 @@ describe('BridgeHealthCron', () => {
       expect(sendAndSettle).toHaveBeenCalledTimes(2);
       expect((sendAndSettle as jest.Mock).mock.calls[0].slice(2).map((x: any) => (typeof x === 'object' ? x.id : x))).toEqual(['f1', 'nội dung', false]);
       expect(bridge.setGroup).not.toHaveBeenCalled();
+    });
+
+    it('cầu nối báo nhóm khác cấu hình và đồng bộ lỗi: không gửi lại lượt này, kẻo đăng nhầm nhóm', async () => {
+      const setGroup = jest.fn().mockResolvedValue({ ok: false, code: 'NETWORK', message: 'x', retry: true, unknown: false });
+      const { cron, prisma } = setup({ health: health({ groupId: 'OLD' }), groupCfg: 'G1', failed: [fwd('f1')], setGroup });
+      await cron.everyMinute();
+      expect(setGroup).toHaveBeenCalledWith('G1');
+      expect(prisma.supportForward.findMany).not.toHaveBeenCalled();
+      expect(sendAndSettle).not.toHaveBeenCalled();
+    });
+
+    it('đồng bộ nhóm ném lỗi: không gửi lại lượt này', async () => {
+      const setGroup = jest.fn().mockRejectedValue(new Error('boom'));
+      const { cron, prisma } = setup({ health: health({ groupId: 'OLD' }), groupCfg: 'G1', failed: [fwd('f1')], setGroup });
+      await cron.everyMinute();
+      expect(prisma.supportForward.findMany).not.toHaveBeenCalled();
+    });
+
+    it('cầu nối báo nhóm khác nhưng đồng bộ thành công trong lượt này: gửi lại bình thường', async () => {
+      const { cron, prisma } = setup({ health: health({ groupId: 'OLD' }), groupCfg: 'G1', failed: [fwd('f1')] });
+      prisma.supportConversation.findUnique = jest.fn(async ({ where }: any) => ({ id: where.id, userId: 'u', code: 'K7Q2' }));
+      await cron.everyMinute();
+      expect(sendAndSettle).toHaveBeenCalledTimes(1);
     });
 
     it('cầu nối chưa CONNECTED thì không động tới forward nào', async () => {

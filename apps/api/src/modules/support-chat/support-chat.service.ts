@@ -16,7 +16,7 @@ import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
 import { withQueueTimeout } from '../../jobs/queue-timeout';
 import { startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isWithinHours } from './chat-hours';
-import { newConversationCode } from './conversation-code';
+import { issueConversationCode } from './conversation-code';
 import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, DEFAULT_CHAT_HOURS, DEFAULT_OFF_HOURS_TEXT } from './support-chat.config';
 
 export const SUPPORT_FORWARD_JOB = 'forward';
@@ -126,27 +126,35 @@ export class SupportChatService {
     if (conv.blockedAt) throw new ForbiddenException({ statusCode: 403, error: 'Forbidden', code: 'CHAT_BLOCKED', message: CHAT_BLOCKED_MESSAGE });
 
     const now = new Date();
-    const sentToday = await this.prisma.supportMessage.count({
-      where: { conversationId: conv.id, sender: 'CUSTOMER', createdAt: { gte: startOfVnDay(now) } },
-    });
-    if (sentToday >= MAX_MESSAGES_PER_DAY) {
-      throw new HttpException({ statusCode: 429, error: 'Too Many Requests', code: 'CHAT_DAILY_LIMIT', message: 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.' }, HttpStatus.TOO_MANY_REQUESTS);
-    }
-
     const context = await this.ownedContext(userId, input.context);
     let created: SupportMessage;
     try {
-      created = await this.prisma.supportMessage.create({
-        data: {
-          conversationId: conv.id,
-          sender: 'CUSTOMER',
-          source,
-          body,
-          imageUrl: input.imageUrl ?? null,
-          context: context ? (context as Prisma.InputJsonValue) : undefined,
-          clientMsgId: input.clientMsgId,
-        },
+      // Đếm và tạo dưới cùng một khoá: gửi song song không cùng đọc "còn chỗ" rồi cùng ghi vượt trần ngày.
+      const result = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`support-chat-send:${conv.id}`}))`;
+        const dup = await tx.supportMessage.findFirst({ where: { conversationId: conv.id, clientMsgId: input.clientMsgId } });
+        if (dup) return { row: dup, fresh: false };
+        const sentToday = await tx.supportMessage.count({
+          where: { conversationId: conv.id, sender: 'CUSTOMER', createdAt: { gte: startOfVnDay(now) } },
+        });
+        if (sentToday >= MAX_MESSAGES_PER_DAY) {
+          throw new HttpException({ statusCode: 429, error: 'Too Many Requests', code: 'CHAT_DAILY_LIMIT', message: 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.' }, HttpStatus.TOO_MANY_REQUESTS);
+        }
+        const row = await tx.supportMessage.create({
+          data: {
+            conversationId: conv.id,
+            sender: 'CUSTOMER',
+            source,
+            body,
+            imageUrl: input.imageUrl ?? null,
+            context: context ? (context as Prisma.InputJsonValue) : undefined,
+            clientMsgId: input.clientMsgId,
+          },
+        });
+        return { row, fresh: true };
       });
+      if (!result.fresh) return toCustomerDTO(result.row);
+      created = result.row;
     } catch (e) {
       // Hai request cùng clientMsgId đua nhau: bên thua trả tin của bên thắng, không đặt lịch lần nữa.
       if (!isP2002(e)) throw e;
@@ -266,7 +274,7 @@ export class SupportChatService {
     if (found) return found;
     for (let i = 0; i < CODE_ATTEMPTS; i++) {
       try {
-        return await this.prisma.supportConversation.create({ data: { userId, code: newConversationCode() } });
+        return await this.prisma.supportConversation.create({ data: { userId, code: await issueConversationCode(this.prisma) } });
       } catch (e) {
         if (!isP2002(e)) throw e;
         // P2002 có thể do userId (request song song đã tạo) hoặc code trùng.

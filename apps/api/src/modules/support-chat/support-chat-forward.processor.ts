@@ -7,13 +7,16 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { QUEUE_SUPPORT_CHAT_FORWARD } from '../../jobs/queues';
 import { BridgeClient } from './bridge-client';
 import { forwardItemLength } from './forward-format';
-import { buildForwardText, sendAndSettle } from './forward-delivery';
+import { buildForwardText, sendAndSettle, settle } from './forward-delivery';
 import { SupportChatService } from './support-chat.service';
 import { STALE_PENDING_AUTO_MAX_MS } from './support-chat-health';
 import { CHAT_GROUP_KEY } from './support-chat.config';
 
 /** Một tin nhóm Zalo chứa tối đa chừng này ký tự nội dung khách; phần dư để job sau. */
 const MAX_FORWARD_CHARS = 3000;
+
+/** Cập nhật gán forwardId trúng ít dòng hơn số tin đã chọn: khoá advisory đáng lẽ loại trường hợp này, nên huỷ cả giao dịch thay vì gửi thiếu tin. */
+class ClaimMismatchError extends Error {}
 
 interface ForwardJobData {
   conversationId: string;
@@ -49,7 +52,15 @@ export class SupportChatForwardProcessor extends WorkerHost {
       where: { conversationId, status: 'PENDING', zaloMsgId: null, updatedAt: { gte: new Date(Date.now() - STALE_PENDING_AUTO_MAX_MS) } },
       orderBy: { createdAt: 'asc' },
     });
-    const claimed = pending ? { forward: pending, messages: await this.messagesOf(pending.id, conversationId) } : await this.claim(conversationId);
+    let claimed: { forward: SupportForward; messages: SupportMessage[] } | null;
+    try {
+      claimed = pending ? { forward: pending, messages: await this.messagesOf(pending.id, conversationId) } : await this.claim(conversationId);
+    } catch (e) {
+      if (!(e instanceof ClaimMismatchError)) throw e;
+      this.logger.warn(`Nhận tin hội thoại ${conversationId} lệch số lượng, đã huỷ và đặt lịch lại.`);
+      await this.rescheduleIfLeft(conversationId);
+      return;
+    }
     if (!claimed) return;
 
     let retryError: string | null;
@@ -84,7 +95,8 @@ export class SupportChatForwardProcessor extends WorkerHost {
       }
       if (taken.length === 0) return null;
       const forward = await tx.supportForward.create({ data: { conversationId, groupId } });
-      await tx.supportMessage.updateMany({ where: { id: { in: taken.map((m) => m.id) }, forwardId: null }, data: { forwardId: forward.id } });
+      const linked = await tx.supportMessage.updateMany({ where: { id: { in: taken.map((m) => m.id) }, forwardId: null }, data: { forwardId: forward.id } });
+      if (linked.count !== taken.length) throw new ClaimMismatchError(`${linked.count}/${taken.length}`);
       return { forward, messages: taken };
     });
   }
@@ -96,7 +108,14 @@ export class SupportChatForwardProcessor extends WorkerHost {
     messages: SupportMessage[],
     final: boolean,
   ): Promise<string | null> {
-    const text = await buildForwardText(this.prisma, conv, messages);
+    let text: string;
+    try {
+      text = await buildForwardText(this.prisma, conv, messages);
+    } catch (e) {
+      // Lỗi dựng nội dung (ví dụ dòng khách không đọc được) không phải lỗi tạm: chốt FAILED để admin thấy, không để job thử lại mỗi phút.
+      await settle(this.prisma, forward.id, { status: 'FAILED', lastError: `BUILD_FAILED: ${(e as Error).message}`.slice(0, 500) });
+      return null;
+    }
     return sendAndSettle(this.prisma, this.bridge, forward, text, !final);
   }
 

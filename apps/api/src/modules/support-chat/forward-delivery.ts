@@ -25,7 +25,7 @@ export async function buildForwardText(
 /**
  * Kết quả UNKNOWN/FAILED chỉ chốt khi còn PENDING: kết quả muộn của một lượt gửi chồng nhau không được ghi đè trạng thái đã chốt (SENT, hoặc admin gửi lại).
  */
-function settle(prisma: PrismaService, id: string, data: Prisma.SupportForwardUpdateManyMutationInput) {
+export function settle(prisma: PrismaService, id: string, data: Prisma.SupportForwardUpdateManyMutationInput) {
   return prisma.supportForward.updateMany({ where: { id, status: 'PENDING' }, data });
 }
 
@@ -46,7 +46,9 @@ export async function sendAndSettle(
   text: string,
   canRetry: boolean,
 ): Promise<string | null> {
-  await prisma.supportForward.update({ where: { id: forward.id }, data: { attempts: { increment: 1 } } });
+  // updateMany: forward có thể đã bị xoá cùng hội thoại (khách xoá tài khoản) giữa lúc nhận tin và lúc gửi; khi đó không gửi gì.
+  const bumped = await prisma.supportForward.updateMany({ where: { id: forward.id }, data: { attempts: { increment: 1 } } });
+  if (bumped.count === 0) return null;
   const r = await bridge.send(forward.id, text);
   if (r.ok) {
     await settleSent(prisma, forward.id, { status: 'SENT', zaloMsgId: r.msgId, sentAt: new Date(), lastError: null });

@@ -25,12 +25,15 @@ function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?:
         return Promise.resolve(row);
       }),
     },
+    supportRetiredCode: { findUnique: jest.fn().mockResolvedValue(null) },
+    $executeRaw: jest.fn().mockResolvedValue(1),
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null) },
     order: {
       findFirst: jest.fn().mockImplementation(({ where }: any) =>
         Promise.resolve((opts.orders ?? []).find((o) => o.code === where.code && o.userId === where.userId) ?? null)),
     },
   };
+  prisma.$transaction = jest.fn().mockImplementation((fn: any) => fn(prisma));
   const config: any = {
     get: jest.fn().mockImplementation((key: string, fb: unknown) =>
       Promise.resolve(key === CHAT_ENABLED_KEY ? (opts.enabled ?? true) : fb)),
@@ -225,6 +228,27 @@ describe('send', () => {
     const where = prisma.supportMessage.count.mock.calls[0][0].where;
     expect(where.createdAt.gte).toEqual(new Date('2026-10-22T17:00:00.000Z'));
     expect(where.sender).toBe('CUSTOMER');
+  });
+
+  it('đếm trong ngày và tạo tin chạy trong một giao dịch giữ khoá advisory theo hội thoại', async () => {
+    const { svc, prisma } = setup({ dayCount: 3 });
+    const calls: string[] = [];
+    const tx: any = {
+      $executeRaw: jest.fn().mockImplementation((strings: TemplateStringsArray, ...values: unknown[]) => { calls.push(`lock:${strings.join('?')}:${values.join(',')}`); return Promise.resolve(1); }),
+      supportMessage: {
+        findFirst: jest.fn().mockImplementation(() => { calls.push('dedupe'); return Promise.resolve(null); }),
+        count: jest.fn().mockImplementation(() => { calls.push('count'); return Promise.resolve(3); }),
+        create: jest.fn().mockImplementation(({ data }: any) => { calls.push('create'); return Promise.resolve({ id: 'm9', recalledAt: null, createdAt: new Date(), context: null, imageUrl: null, ...data }); }),
+      },
+    };
+    prisma.$transaction.mockImplementation((fn: any) => fn(tx));
+    prisma.supportMessage.count.mockClear();
+    prisma.supportMessage.create.mockClear();
+    await svc.send('u1', { ...input, body: 'a' }, 'MINIAPP');
+    expect(calls[0]).toBe("lock:SELECT pg_advisory_xact_lock(hashtext(?)):support-chat-send:c1");
+    expect(calls.slice(1)).toEqual(['dedupe', 'count', 'create']);
+    expect(prisma.supportMessage.count).not.toHaveBeenCalled();
+    expect(prisma.supportMessage.create).not.toHaveBeenCalled();
   });
 
   it('tin thứ 200 vẫn qua', async () => {

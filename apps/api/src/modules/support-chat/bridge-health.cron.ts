@@ -88,13 +88,16 @@ export class BridgeHealthCron {
     if (state !== 'CONNECTED' && (await this.config.get<boolean>(CHAT_ENABLED_KEY, false))) await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
   }
 
-  /** Admin sửa `chat.zalo_group_id` ở tab Cấu hình chung thì cầu nối không biết; cron kéo nó về đúng giá trị cấu hình. */
+  /** Admin sửa `chat.zalo_group_id` ở tab Cấu hình chung thì cầu nối không biết; cron kéo nó về đúng giá trị cấu hình. Trả true khi sau lượt này cầu nối đang ở đúng nhóm cấu hình (và có nhóm). */
   private async healGroup(bridgeGroupId: string | null): Promise<boolean> {
     const wanted = await this.config.get<string>(CHAT_GROUP_KEY, '');
     if (wanted !== (bridgeGroupId ?? '')) {
       // Cấu hình rỗng là "không nhóm nào": cầu nối còn nhóm cũ thì vẫn nghe và chuyển tin vào nhóm đó.
       const r = await this.bridge.setGroup(wanted === '' ? null : wanted);
-      if (!r.ok) this.logger.warn(`Không đồng bộ được nhóm cho cầu nối: ${r.code}`);
+      if (!r.ok) {
+        this.logger.warn(`Không đồng bộ được nhóm cho cầu nối: ${r.code}`);
+        return false;
+      }
     }
     return wanted !== '';
   }
