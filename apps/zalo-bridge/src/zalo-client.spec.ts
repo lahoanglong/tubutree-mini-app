@@ -1139,6 +1139,108 @@ describe('zalo-client: đăng nhập QR', () => {
       err.mockRestore();
     }
   });
+
+  // Vòng 5. Đĩa điều khiển tay: mỗi lệnh treo tới khi gọi release.
+  function manualDisk(s: ReturnType<typeof setup>) {
+    const held: (() => void)[] = [];
+    let instant = false;
+    const hold = () => (instant ? Promise.resolve(undefined) : new Promise<undefined>((r) => held.push(() => r(undefined))));
+    s.credentials.save.mockImplementation(hold);
+    s.credentials.clear.mockImplementation(hold);
+    return {
+      held,
+      releaseFirst: (n: number) => held.splice(0, n).forEach((f) => f()),
+      goInstant: () => (instant = true),
+    };
+  }
+
+  it('G1: ba lệnh đĩa quá hạn chạm đĩa muộn cùng lúc chỉ xếp đúng một lần đồng bộ lại', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      const d = manualDisk(s);
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'A' } });
+      await p;
+      cbs[0](four('imA'));
+      dones[0](apiUid('UA'));
+      // chuỗi: lưu A [0-15 s], xoá sau lỗi [15-30], xoá của logout 1 [30-45], xoá của logout 2 [45-60]
+      await vi.advanceTimersByTimeAsync(5_100);
+      s.client.logout().catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(30_000);
+      s.client.logout().catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(d.held).toHaveLength(4);
+      // ba lệnh đầu chạm đĩa muộn trong lúc lệnh thứ tư còn chặn chuỗi
+      d.releaseFirst(3);
+      d.goInstant();
+      await vi.advanceTimersByTimeAsync(1);
+      const clearsBefore = s.credentials.clear.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(s.credentials.clear.mock.calls.length - clearsBefore).toBe(1);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('G2: lần đồng bộ lại (xoá) lỗi thì ghi log kèm mã lỗi và hiện ở lastError', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const s = setup({ api: null });
+      const d = manualDisk(s);
+      await s.client.start();
+      s.client.logout().catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(15_100);
+      err.mockClear();
+      s.credentials.clear.mockRejectedValueOnce(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+      d.releaseFirst(1);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(JSON.stringify(err.mock.calls)).toContain('EACCES');
+      expect(s.client.state()).toMatchObject({ state: 'NEED_QR', lastError: expect.stringContaining('EACCES') });
+    } finally {
+      err.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('G3: logout sau một lần lưu treo trả LOGOUT_CLEAR_FAILED ETIMEDOUT sau khoảng 8 giây; lệnh xoá vẫn chạy sau đó', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      const disk = fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' }, (c) => (c.imei === 'imA' ? -1 : 0));
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'A' } });
+      await p;
+      cbs[0](four('imA'));
+      dones[0](apiUid('UA'));
+      await vi.advanceTimersByTimeAsync(5_100);
+      let outcome: unknown = 'pending';
+      s.client.logout().then(
+        () => (outcome = 'resolved'),
+        (e: unknown) => (outcome = e),
+      );
+      await vi.advanceTimersByTimeAsync(7_800);
+      expect(outcome).toBe('pending');
+      await vi.advanceTimersByTimeAsync(300);
+      expect(outcome).toMatchObject({ code: 'LOGOUT_CLEAR_FAILED', message: 'ETIMEDOUT' });
+      expect(s.client.state().state).toBe('NEED_QR');
+      expect(disk.file).toMatchObject({ imei: 'imX' });
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(disk.file).toBeNull();
+      await s.client.reconnect();
+      expect(s.client.state().state).toBe('NEED_QR');
+      expect(s.login).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 describe('zalo-client: nhóm, cấu hình, sổ gửi', () => {

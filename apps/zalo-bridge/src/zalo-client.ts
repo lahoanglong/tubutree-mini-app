@@ -98,6 +98,8 @@ const STABLE_MS = 60_000;
 const PERSIST_TIMEOUT_MS = 15_000;
 // Sau khi quét QR xong, attach chờ lần lưu phiên tối đa chừng này rồi chạy tiếp; lỗi lưu đến sau vẫn hiện ở lastError.
 const ATTACH_SAVE_WAIT_MS = 5_000;
+// logout trả lời trong hạn này dù đĩa chậm; phải dưới hạn 10 giây API đặt cho mỗi lần gọi cầu nối (apps/api bridge-client.ts).
+const LOGOUT_DEADLINE_MS = 8_000;
 
 // Phiên đăng nhập QR đã thành công; danh tính của object là token của phiên.
 interface Session {
@@ -193,13 +195,24 @@ export function createZaloClient(deps: ZaloClientDeps) {
     });
   }
   const clearFile = () => bounded(credentials.clear(), 'Xoá tệp phiên');
+  // Một lần đồng bộ lại đọc desired lúc nó chạy, nên nhiều lệnh muộn chỉ cần một lần đang chờ; nếu không, đĩa chậm làm chuỗi dài mãi.
+  let resyncPending = false;
   function resync(): void {
+    if (resyncPending) return;
+    resyncPending = true;
     onDisk(() => {
+      resyncPending = false;
       const want = desired;
       if (want === null) return clearFile();
       if (want === DISK_SESSION) return Promise.resolve();
       return writeSession(want);
-    }).catch(() => undefined);
+    }).catch((e: unknown) => {
+      // writeSession đã tự ghi log và lastError; còn lại là lệnh xoá của trạng thái đã đăng xuất.
+      if (desired !== null) return;
+      const code = errCode(e);
+      console.error(`[zalo] đồng bộ lại tệp phiên: không xoá được (${code})`);
+      setState(state, `Không xoá được tệp phiên đăng nhập cũ (${code})`);
+    });
   }
   function noteSaveError(msg: string | null): void {
     if (sessionSaveError === msg) return;
@@ -417,13 +430,26 @@ export function createZaloClient(deps: ZaloClientDeps) {
     profile = null;
     // Trạng thái đổi ngay, trước khi đợi đĩa: nếu không, phần đuôi của logout cũ đè lên phiên QR mới đã lên CONNECTED.
     setState('NEED_QR');
+    // Bộ nhớ đã an toàn từ đây (desired null, NEED_QR). Quá hạn thì báo lỗi cho admin nhưng lệnh xoá vẫn nằm trong chuỗi và chạy sau.
+    const cleared = onDisk(clearFile);
+    let timer: NodeJS.Timeout | undefined;
+    let answered = false;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error('ETIMEDOUT'), { code: 'ETIMEDOUT' })), LOGOUT_DEADLINE_MS);
+    });
+    cleared.catch((e: unknown) => {
+      if (answered) console.error(`[zalo] đăng xuất: lệnh xoá tệp phiên chạy sau hạn vẫn lỗi (${errCode(e)})`);
+    });
     try {
-      await onDisk(clearFile);
+      await Promise.race([cleared, deadline]);
     } catch (e) {
       // desired vẫn là null nên nối lại không đọc tệp còn sót; admin bấm đăng xuất lại để xoá.
       const code = errCode(e);
       console.error(`[zalo] đăng xuất: không xoá được tệp phiên (${code})`);
       throw new BridgeError('LOGOUT_CLEAR_FAILED', code);
+    } finally {
+      answered = true;
+      clearTimeout(timer);
     }
   }
 
