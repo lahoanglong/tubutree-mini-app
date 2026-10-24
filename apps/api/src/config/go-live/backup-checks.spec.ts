@@ -49,6 +49,13 @@ describe('parseCronBackup', () => {
   });
 });
 
+describe('parseCronBackup allowPlainRemote', () => {
+  it('nhận BACKUP_ALLOW_PLAIN_REMOTE=1, không nhận =0', () => {
+    expect(parseCronBackup('0 2 * * * BACKUP_ALLOW_PLAIN_REMOTE=1 RCLONE_REMOTE=g:x /opt/tubutree/tools/backup/backup-db.sh').allowPlainRemote).toBe(true);
+    expect(parseCronBackup('0 2 * * * BACKUP_ALLOW_PLAIN_REMOTE=0 RCLONE_REMOTE=g:x /opt/tubutree/tools/backup/backup-db.sh').allowPlainRemote).toBeUndefined();
+  });
+});
+
 describe('evaluateBackup', () => {
   it('đủ hết thì mọi dòng PASS', () => {
     expect(evaluateBackup(GOOD_BACKUP, GOOD_ENV).filter((r) => r.status !== 'PASS')).toEqual([]);
@@ -84,7 +91,8 @@ describe('evaluateBackup', () => {
       expect(status(s, 'backup.offsite')).toBe('FAIL');
     });
     it('remote có trong rclone thì PASS', () => expect(status(GOOD_BACKUP, 'backup.offsite')).toBe('PASS'));
-    it('remote loại drive (không crypt) thì WARN', () => expect(status(snap({ rclone: { available: true, remotes: ['r2'], types: { r2: 'drive' } } }), 'backup.offsite')).toBe('WARN'));
+    it('remote loại drive (không crypt) thì FAIL: script không đẩy gì ra ngoài máy', () => expect(status(snap({ rclone: { available: true, remotes: ['r2'], types: { r2: 'drive' } } }), 'backup.offsite')).toBe('FAIL'));
+    it('remote drive nhưng cron đặt BACKUP_ALLOW_PLAIN_REMOTE=1 thì WARN', () => expect(status(snap({ cron: { ...GOOD_BACKUP.cron, allowPlainRemote: true }, rclone: { available: true, remotes: ['r2'], types: { r2: 'drive' } } }), 'backup.offsite')).toBe('WARN'));
     it('remote loại crypt thì PASS', () => expect(status(snap({ rclone: { available: true, remotes: ['r2'], types: { r2: 'crypt' } } }), 'backup.offsite')).toBe('PASS'));
     it('remote không có trong rclone thì FAIL', () => expect(status(snap({ rclone: { available: true, remotes: ['khac'] } }), 'backup.offsite')).toBe('FAIL'));
     it('có tên remote nhưng không có rclone thì WARN', () => expect(status(snap({ rclone: { available: false, remotes: [] } }), 'backup.offsite')).toBe('WARN'));
