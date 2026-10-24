@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { buildCatalogRedirects } from './src/lib/catalog-redirects.mjs';
+import { sentryOrigin } from './src/lib/sentry-origin.mjs';
 import { buildMiniappRedirects } from './src/lib/miniapp-redirects.mjs';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +23,8 @@ const apiOrigin = (() => {
     return '';
   }
 })();
+
+const sentryConnect = sentryOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
 
 /**
  * CSP ở chế độ BÁO CÁO trước, chưa chặn.
@@ -50,7 +53,7 @@ const cspReportOnly = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''} https://api.cloudinary.com`,
+  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''} https://api.cloudinary.com${sentryConnect ? ` ${sentryConnect}` : ''}`,
 ].join('; ');
 
 /** @type {import('next').NextConfig} */
