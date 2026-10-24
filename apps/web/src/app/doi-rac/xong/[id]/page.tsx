@@ -1,5 +1,6 @@
 import { RecycleDone } from '@/components/recycle/recycle-done';
 
-export default function RecycleDonePage({ params }: { params: { id: string } }) {
-  return <RecycleDone id={params.id} />;
+export default async function RecycleDonePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <RecycleDone id={id} />;
 }

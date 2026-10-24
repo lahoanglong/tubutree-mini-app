@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
@@ -59,9 +60,9 @@ function CallbackInner() {
             <a href={failure.retryHref} className={ui.btnPrimary}>
               {failure.transient ? 'Thử lại' : 'Đăng nhập lại'}
             </a>
-            <a href="/" className={ui.btnSecondary}>
+            <Link href="/" className={ui.btnSecondary}>
               Về trang chủ
-            </a>
+            </Link>
           </div>
         </>
       ) : (

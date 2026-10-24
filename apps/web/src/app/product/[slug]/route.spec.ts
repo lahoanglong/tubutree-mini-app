@@ -34,11 +34,6 @@ describe('/product/[slug] (link Content Kit cũ) chuyển sang /san-pham/[slug]'
     }
   });
 
-  it('chấp nhận params dạng đồng bộ (Next 14) lẫn Promise (Next 15)', async () => {
-    const sync = await GET(new NextRequest('https://app.tubutree.com/product/tra-xanh'), { params: { slug: 'tra-xanh' } });
-    expect(sync.headers.get('location')).toBe('/san-pham/tra-xanh');
-  });
-
   it('HEAD cũng chuyển hướng (bộ xem trước link của Zalo/Facebook dò bằng HEAD)', async () => {
     const res = await HEAD(new NextRequest('https://app.tubutree.com/product/tra-xanh?ref=A'), { params: Promise.resolve({ slug: 'tra-xanh' }) });
     expect(res.status).toBe(307);

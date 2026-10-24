@@ -1,5 +1,6 @@
 import { RecycleRequestDetail } from '@/components/recycle/recycle-request';
 
-export default function RecycleRequestPage({ params }: { params: { id: string } }) {
-  return <RecycleRequestDetail id={params.id} />;
+export default async function RecycleRequestPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <RecycleRequestDetail id={id} />;
 }

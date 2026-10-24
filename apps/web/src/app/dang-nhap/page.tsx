@@ -97,9 +97,9 @@ function LoginInner() {
         </>
       )}
 
-      <a href="/" className={`${ui.backLink} mt-4 text-stone-600 hover:text-stone-900`}>
+      <Link href="/" className={`${ui.backLink} mt-4 text-stone-600 hover:text-stone-900`}>
         Quay lại trang chủ
-      </a>
+      </Link>
     </main>
   );
 }
