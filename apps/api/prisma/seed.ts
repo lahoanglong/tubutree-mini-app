@@ -83,6 +83,11 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'support.hotline', value: '0984 606 774', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.email', value: 'tubutree@gmail.com', category: 'support', description: 'Email CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.zalo_oa_name', value: '', category: 'support', description: 'Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)', createOnly: true },
+  // Đơn vị vận hành hiển thị ở chân trang, trang Về Tubu Tree và các trang chính sách. Để trống thì ẩn; go-live:check FAIL khi tên/MST/địa chỉ còn trống.
+  { key: 'company.legal_name', value: '', category: 'company', description: 'Tên pháp lý của đơn vị vận hành (theo giấy đăng ký kinh doanh), hiển thị cho khách', createOnly: true },
+  { key: 'company.tax_code', value: '', category: 'company', description: 'Mã số thuế của đơn vị vận hành, hiển thị cho khách', createOnly: true },
+  { key: 'company.address', value: '', category: 'company', description: 'Địa chỉ trụ sở đã đăng ký, hiển thị cho khách', createOnly: true },
+  { key: 'company.bct_notice_url', value: '', category: 'company', description: 'Link https tới trang đã thông báo với Bộ Công Thương (không bắt buộc). Để trống = ẩn dòng "Đã thông báo Bộ Công Thương"', createOnly: true },
   {
     key: 'referral.milestones_points',
     value: [

@@ -36,31 +36,41 @@ export function isLegalSlug(value: string): value is LegalSlug {
 export interface LegalVars {
   returnWindowDays: number;
   freeshipThreshold: number;
+  /** Phí giao cố định cho đơn dưới ngưỡng freeship (shipping.flat_fee_below_threshold). */
+  shippingFlatFee?: number;
+  /** Đơn vị vận hành (company.*); chưa nhập thì không có trường và bản nháp giữ chỗ [ ] để điền. */
+  legalName?: string;
+  taxCode?: string;
+  address?: string;
 }
 
-export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThreshold: 199000 };
+export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThreshold: 199000, shippingFlatFee: 19000 };
+
+const DEFAULT_SHIPPING_FLAT_FEE = 19000;
 
 interface Support {
   hotline: string;
   email: string;
 }
 
-function operator(support: Support): string {
+const companyName = (vars: LegalVars) => vars.legalName ?? '[Tên công ty]';
+
+function operator(support: Support, vars: LegalVars): string {
   return [
-    '- Đơn vị vận hành: [Tên công ty]',
-    '- Mã số thuế: [Mã số thuế]',
-    '- Địa chỉ: [Địa chỉ trụ sở]',
+    `- Đơn vị vận hành: ${companyName(vars)}`,
+    `- Mã số thuế: ${vars.taxCode ?? '[Mã số thuế]'}`,
+    `- Địa chỉ: ${vars.address ?? '[Địa chỉ trụ sở]'}`,
     `- Hotline: ${support.hotline}`,
     `- Email: ${support.email}`,
   ].join('\n');
 }
 
-function dieuKhoan(support: Support): string {
+function dieuKhoan(vars: LegalVars, support: Support): string {
   return `## 1. Giới thiệu
 
-Tubu Tree là nền tảng bán mỹ phẩm và đồ tiêu dùng thiên nhiên, do [Tên công ty] ("Tubu Tree", "chúng tôi") vận hành. Khi truy cập website, mini app Zalo hoặc đặt hàng, bạn đồng ý với các điều khoản dưới đây. Nếu không đồng ý, vui lòng ngừng sử dụng dịch vụ.
+Tubu Tree là nền tảng bán mỹ phẩm và đồ tiêu dùng thiên nhiên, do ${companyName(vars)} ("Tubu Tree", "chúng tôi") vận hành. Khi truy cập website, mini app Zalo hoặc đặt hàng, bạn đồng ý với các điều khoản dưới đây. Nếu không đồng ý, vui lòng ngừng sử dụng dịch vụ.
 
-${operator(support)}
+${operator(support, vars)}
 
 ## 2. Tài khoản
 
@@ -114,12 +124,12 @@ Chúng tôi có thể cập nhật điều khoản và sẽ đăng bản mới t
 Mọi thắc mắc về điều khoản này, vui lòng liên hệ hotline ${support.hotline} hoặc email ${support.email}.`;
 }
 
-function baoMat(support: Support): string {
+function baoMat(vars: LegalVars, support: Support): string {
   return `## 1. Phạm vi
 
-Chính sách này giải thích cách [Tên công ty] ("Tubu Tree") thu thập, sử dụng, chia sẻ và bảo vệ thông tin cá nhân của bạn khi dùng website và mini app Zalo của Tubu Tree.
+Chính sách này giải thích cách ${companyName(vars)} ("Tubu Tree") thu thập, sử dụng, chia sẻ và bảo vệ thông tin cá nhân của bạn khi dùng website và mini app Zalo của Tubu Tree.
 
-${operator(support)}
+${operator(support, vars)}
 
 ## 2. Thông tin chúng tôi thu thập
 
@@ -215,7 +225,7 @@ Xem thêm [Chính sách vận chuyển](/chinh-sach/van-chuyen).
 
 ## 7. Liên hệ
 
-${operator(support)}`;
+${operator(support, vars)}`;
 }
 
 function vanChuyen(vars: LegalVars, support: Support): string {
@@ -223,14 +233,21 @@ function vanChuyen(vars: LegalVars, support: Support): string {
     vars.freeshipThreshold > 0
       ? `Đơn từ ${formatVnd(vars.freeshipThreshold)} được miễn phí vận chuyển. Một số hạng thành viên hoặc chương trình có thể có ngưỡng miễn phí khác, được hiển thị ở giỏ hàng.`
       : 'Mọi đơn đều được miễn phí vận chuyển.';
+  const fee = vars.shippingFlatFee ?? DEFAULT_SHIPPING_FLAT_FEE;
+  const flatFee =
+    vars.freeshipThreshold <= 0
+      ? ''
+      : fee > 0
+        ? `- Đơn chưa đạt mức miễn phí chịu phí vận chuyển cố định ${formatVnd(fee)}, không phụ thuộc địa chỉ hay khối lượng. Phí hiển thị trước khi bạn bấm đặt hàng.`
+        : '- Đơn chưa đạt mức miễn phí cũng không mất phí vận chuyển.';
   return `## 1. Phạm vi giao hàng
 
 Tubu Tree giao hàng tới các khu vực mà đơn vị vận chuyển phục vụ. Nếu địa chỉ của bạn nằm ngoài vùng giao, hệ thống sẽ báo ở bước thanh toán.
 
 ## 2. Phí vận chuyển
 
-- Phí vận chuyển được tính theo địa chỉ nhận hàng và khối lượng đơn, hiển thị trước khi bạn bấm đặt hàng.
 - ${freeship}
+${flatFee}
 
 ## 3. Thời gian giao hàng dự kiến
 
@@ -257,16 +274,16 @@ Bạn xem trạng thái và mã vận đơn trong mục Đơn hàng của tài k
 
 ## 8. Liên hệ
 
-${operator(support)}`;
+${operator(support, vars)}`;
 }
 
 /** Bản nháp dùng khi admin chưa nhập nội dung đã duyệt (SystemConfig legal.<loai>). */
 export function defaultLegalContent(slug: LegalSlug, vars: LegalVars, support: Support): string {
   switch (slug) {
     case 'dieu-khoan':
-      return dieuKhoan(support);
+      return dieuKhoan(vars, support);
     case 'bao-mat':
-      return baoMat(support);
+      return baoMat(vars, support);
     case 'doi-tra':
       return doiTra(vars, support);
     case 'van-chuyen':

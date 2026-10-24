@@ -58,4 +58,13 @@ describe('getPublicSupport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { community: { eventRewardMaxPoints: 1000 } })));
     expect((await getPublicSupport()).community).toBeUndefined();
   });
+
+  it('đọc thông tin đơn vị vận hành: bỏ trường rỗng, link BCT chỉ nhận https; không có gì thì không có trường company', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { legalName: ' Công ty A ', taxCode: '', address: null, bctNoticeUrl: 'http://x.vn' } })));
+    expect((await getPublicSupport()).company).toEqual({ legalName: 'Công ty A' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { taxCode: '0312345678', bctNoticeUrl: 'https://online.gov.vn/x' } })));
+    expect((await getPublicSupport()).company).toEqual({ taxCode: '0312345678', bctNoticeUrl: 'https://online.gov.vn/x' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { legalName: null, taxCode: '  ' } })));
+    expect((await getPublicSupport()).company).toBeUndefined();
+  });
 });

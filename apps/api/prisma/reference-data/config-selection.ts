@@ -18,6 +18,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'wallet',
   'referral',
   'support',
+  'company',
   'community',
   'game',
   'subscribe',

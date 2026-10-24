@@ -136,6 +136,22 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(inCard!.className).toMatch(/\bmd:inline-flex\b/);
   });
 
+  it('dòng đồng ý điều khoản nằm ngay trên nút Đặt hàng ở thanh dính và ở khung tóm tắt, có link tới Điều khoản và Chính sách đổi trả, không có ô tick', async () => {
+    const c = await mount();
+    const lines = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="order-consent"]'));
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.');
+      expect(Array.from(line.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+        ['Điều khoản', '/chinh-sach/dieu-khoan'],
+        ['Chính sách đổi trả', '/chinh-sach/doi-tra'],
+      ]);
+      expect(line.nextElementSibling?.tagName).toBe('BUTTON');
+    }
+    expect(bar(c)!.contains(lines[1]!)).toBe(true);
+    expect(bar(c)!.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+
   it('vùng chạm 44px và mọi nút có tên', async () => {
     const c = await mount();
     expect(smallTouchTargets(c)).toEqual([]);

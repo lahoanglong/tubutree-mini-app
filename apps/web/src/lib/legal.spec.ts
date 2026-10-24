@@ -98,6 +98,47 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
   });
 });
 
+describe('legal — đơn vị vận hành điền từ cấu hình', () => {
+  const FILLED = { ...VARS, legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: '1 Đường A, Quận B' };
+
+  it.each(LEGAL_SLUGS)('%s: điền tên, MST, địa chỉ khi có, không còn chỗ giữ [ ] của pháp nhân', (slug) => {
+    const text = defaultLegalContent(slug, FILLED, SUPPORT);
+    expect(text).toContain('- Đơn vị vận hành: Công ty TNHH Tubu');
+    expect(text).toContain('- Mã số thuế: 0312345678');
+    expect(text).toContain('- Địa chỉ: 1 Đường A, Quận B');
+    expect(text).not.toMatch(/\[(Tên công ty|Mã số thuế|Địa chỉ trụ sở)\]/);
+  });
+
+  it('điều khoản và bảo mật gọi đúng tên công ty trong câu mở đầu', () => {
+    expect(defaultLegalContent('dieu-khoan', FILLED, SUPPORT)).toContain('do Công ty TNHH Tubu ("Tubu Tree"');
+    expect(defaultLegalContent('bao-mat', FILLED, SUPPORT)).toContain('cách Công ty TNHH Tubu ("Tubu Tree"');
+  });
+
+  it('điền từng phần: phần thiếu vẫn giữ chỗ [ ]', () => {
+    const text = defaultLegalContent('dieu-khoan', { ...VARS, taxCode: '0312345678' }, SUPPORT);
+    expect(text).toContain('- Mã số thuế: 0312345678');
+    expect(text).toContain('- Đơn vị vận hành: [Tên công ty]');
+    expect(text).toContain('- Địa chỉ: [Địa chỉ trụ sở]');
+  });
+});
+
+describe('legal — phí vận chuyển đúng luật tính phí thật', () => {
+  const vc = (v: object) => defaultLegalContent('van-chuyen', { ...VARS, ...v }, SUPPORT);
+
+  it('miễn phí từ ngưỡng, dưới ngưỡng là phí cố định lấy từ cấu hình, không nói theo địa chỉ hay khối lượng đơn', () => {
+    const text = vc({ freeshipThreshold: 300000, shippingFlatFee: 25000 });
+    expect(text).toContain('Đơn từ 300.000đ được miễn phí vận chuyển');
+    expect(text).toContain('phí vận chuyển cố định 25.000đ');
+    expect(text).not.toContain('được tính theo địa chỉ nhận hàng và khối lượng');
+  });
+
+  it('thiếu biến phí thì dùng 19.000đ; phí 0 thì nói không mất phí; freeship mọi đơn thì không nói phí cố định', () => {
+    expect(vc({})).toContain('phí vận chuyển cố định 19.000đ');
+    expect(vc({ shippingFlatFee: 0 })).toContain('cũng không mất phí vận chuyển');
+    expect(vc({ freeshipThreshold: 0 })).not.toContain('phí vận chuyển cố định');
+  });
+});
+
 describe('legal — chính sách đổi trả: tiền hoàn đi đâu', () => {
   const text = defaultLegalContent('doi-tra', VARS, SUPPORT);
   it('nói đúng như Mini App và luồng hoàn tiền của API: Ví Tubu hoặc tài khoản ngân hàng khách chọn sau khi duyệt', () => {

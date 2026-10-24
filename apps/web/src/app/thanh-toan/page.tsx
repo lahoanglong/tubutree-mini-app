@@ -9,6 +9,7 @@ import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
+import { OrderConsent } from '@/components/order-consent';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
 import {
   getCart,
@@ -760,11 +761,12 @@ export default function CheckoutPage() {
           )}
 
           {/* Dưới md nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
+          <OrderConsent className="mt-4 hidden md:block" />
           <button
             type="button"
             onClick={() => place.mutate()}
             disabled={placeDisabled}
-            className={`${ui.btnPrimary} mt-4 hidden w-full md:inline-flex`}
+            className={`${ui.btnPrimary} mt-2 hidden w-full md:inline-flex`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
@@ -800,6 +802,7 @@ export default function CheckoutPage() {
             {barHint}
           </p>
         )}
+        <OrderConsent className="mb-2" />
         <button
           type="button"
           onClick={() => place.mutate()}

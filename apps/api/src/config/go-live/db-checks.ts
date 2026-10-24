@@ -122,6 +122,9 @@ export const CONFIG_KEYS_OF_INTEREST = [
   'payment.bank_bin',
   'payment.bank_account_no',
   'payment.bank_account_name',
+  'company.legal_name',
+  'company.tax_code',
+  'company.address',
   ...Object.values(OPS_THRESHOLD_KEYS).map((t) => t.key),
 ] as const;
 
@@ -386,6 +389,16 @@ function bankCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.bank_account', title, `BIN ${(bin as string).trim()}, số tài khoản đuôi ${last4}`);
 }
 
+function companyIdentityCheck(s: DbSnapshot): CheckResult {
+  const title = 'Đơn vị vận hành hiển thị cho khách';
+  const labels = { 'company.legal_name': 'tên công ty', 'company.tax_code': 'mã số thuế', 'company.address': 'địa chỉ trụ sở' } as const;
+  const lack = (Object.keys(labels) as (keyof typeof labels)[]).filter((k) => typeof s.configs[k] !== 'string' || (s.configs[k] as string).trim() === '');
+  if (lack.length > 0) {
+    return fail(G_DB, 'db.company_identity', title, `chưa điền: ${lack.join(', ')}`, 'Điền ở Quản trị, Cấu hình, nhóm company; thiếu thì chân trang và trang chính sách không nói ai bán hàng (luật thương mại điện tử yêu cầu).');
+  }
+  return pass(G_DB, 'db.company_identity', title, `đã có ${Object.values(labels).join(', ')}`);
+}
+
 function codCapCheck(s: DbSnapshot): CheckResult {
   const title = 'Trần COD mỗi đơn con';
   if (s.codMaxPerOrder !== COD_CAP_VND) {
@@ -502,6 +515,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     holdCheck(s),
     consignmentFromCheck(s),
     bankCheck(s),
+    companyIdentityCheck(s),
     codCapCheck(s),
     ...gomdonToggleChecks(s, ctx.env),
     membershipTierCheck(s, ctx.phase),
