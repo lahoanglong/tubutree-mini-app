@@ -57,8 +57,8 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
    - `20261023110000_support_bridge_actions`
    - `20261024100000_support_chat_hardening`
    - `20261024120000_support_message_seen`
-   Lưu ý: trước khi hai khoá `ZALO_BRIDGE_SECRET` và `ZALO_BRIDGE_CREDENTIALS_KEY` có trong `.env`, service `zalo-bridge` từ chối khởi động và `restart: unless-stopped` làm nó khởi động lại liên tục (ồn log, không hại gì). Hoặc điền hai khoá trước, hoặc dựng các service khác theo tên (`docker compose up -d api web ...`) và để `zalo-bridge` cho sau.
-4. Dựng service mới: `docker compose -f <file compose của máy> up -d --build zalo-bridge`, rồi deploy API và web theo `docs/launch/deploy-rollback-runbook.md`. Service không có cổng ra ngoài; `/health` trả 200 cả khi đang chờ quét QR.
+   Lưu ý: `deploy.sh` KHÔNG BAO GIỜ tự bật `zalo-bridge`; lần đầu bật là lệnh tay ở bước 4, sau khi cả hai khoá đã có trong `.env`. Khi bridge đang chạy, mỗi lần `deploy.sh` build lại và thay nó. Trước khi hai khoá `ZALO_BRIDGE_SECRET` và `ZALO_BRIDGE_CREDENTIALS_KEY` có trong `.env`, service `zalo-bridge` từ chối khởi động và `restart: unless-stopped` làm nó khởi động lại liên tục (ồn log, không hại gì). Hoặc điền hai khoá trước, hoặc dựng các service khác theo tên (`docker compose up -d api web ...`) và để `zalo-bridge` cho sau.
+4. Dựng service mới (lần đầu, làm tay vì `deploy.sh` không tự bật bridge): `docker compose -f <file compose của máy> up -d --build zalo-bridge`, rồi deploy API và web theo `docs/launch/deploy-rollback-runbook.md`. Service không có cổng ra ngoài; `/health` trả 200 cả khi đang chờ quét QR.
 5. Thứ tự với Mini App: deploy API TRƯỚC khi phát hành bất kỳ bản Mini App nào có thay đổi này. Bản Mini App mới luôn gửi `{ ids }` khi đánh dấu đã đọc; API cũ (chưa có `ReadDto`) trả 400 vì `forbidNonWhitelisted`. Đúng với ràng buộc 1 của `docs/launch/deploy-rollback-runbook.md` (bật API mới trước khi phát hành Mini App mới).
 
 ## 4. Bật trong tab Chat CSKH (admin)
@@ -79,7 +79,7 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 ## 6. Gỡ về (rollback)
 
 1. Tắt công tắc **Cho khách chat** trong tab admin (hoặc đặt `chat.enabled = false`): khách thấy chat tạm đóng cùng hotline, các nút OA/hotline/email như trước.
-2. Dừng service: `docker compose -f <file compose của máy> stop zalo-bridge`. Tin khách gửi trước đó vẫn lưu trong DB.
+2. Dừng service: `docker compose -f <file compose của máy> stop zalo-bridge`. Tin khách gửi trước đó vẫn lưu trong DB. Lần `deploy.sh` kế tiếp để nguyên bridge đã dừng (chỉ cập nhật bridge đang chạy); `ZALO_BRIDGE_SECRET` cứ để trong `.env` vì API cần nó.
 3. Bốn migration đều chỉ thêm (additive; bản `support_message_seen` chỉ điền cột mới), nên quay API/web về bản cũ không cần gỡ migration; bảng và cột mới nằm im không ai đọc. Không chạy `migrate down` trên PROD.
 4. Nếu tài khoản cầu nối bị khoá: chat tự rơi về chế độ chờ (mục 0.1); thay SIM/tài khoản mới và quét QR lại ở bước 4.
 
