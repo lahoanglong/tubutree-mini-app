@@ -34,6 +34,8 @@ Nhánh `fix/api-deps-2026-10-24`, xếp trên PR #35 (Next 15).
 - multer: chỉ dùng `NoFilesInterceptor` ở webhook Gomdon (không có endpoint tải file). Spec gomdon-webhook xanh.
 - axios: không dùng interceptor, `proxy`, `httpsAgent`, `maxRedirects`, `validateStatus` trong api; chỉ post/get và `isAxiosError`. Bridge không dùng axios.
 - body-parser: `bootstrap.ts` dùng `json`/`urlencoded` của express với `limit`, không có `verify`/`rawBody`; không webhook nào ký trên byte thô.
+- body-parser 1.20.9 kéo qs 6.16.1 cho body urlencoded (query string của express vẫn qs 6.14.2). Khoá xung đột như `a[b]=2&a=1` nay ra `{"a":[{"b":"2"},"1"]}` thay vì `{"a":{"1":true,"b":"2"}}`; khoá thường (`data[a]=1`, `x[]=`, khoá lặp) không đổi. Chỉ webhook Gomdon có thể gửi urlencoded; chưa có mẫu thật để đối chiếu.
+- Bridge cũng nhận override form-data 4.0.6 (qua zca-js): tên trường và tên tệp multipart có `"`, CR, LF được mã thành `%22`, `%0D`, `%0A`.
 
 ## Kiểm chứng
 - Cài sạch từ `node_modules` đã xoá: `pnpm install --frozen-lockfile` qua.
