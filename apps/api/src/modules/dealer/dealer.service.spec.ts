@@ -82,6 +82,13 @@ describe('DealerService.pricelist', () => {
     const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
     expect(findMany.mock.calls[0]![0].where.AND).toContainEqual({ product: { storefrontId: null } });
   });
+
+  it('thứ tự cố định theo tên SP, tên biến thể rồi id: không sắp thì Postgres trả tuỳ ý, bảng giá đổi chỗ giữa các lần tải', async () => {
+    const prisma = prismaForPricelist({ id: 'd1', role: 'DEALER', metadata: null }, null, []);
+    await new DealerService(prisma, makeConfig()).pricelist('d1');
+    const findMany = (prisma as unknown as { variation: { findMany: jest.Mock } }).variation.findMany;
+    expect(findMany.mock.calls[0]![0].orderBy).toEqual([{ product: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }]);
+  });
 });
 
 describe('DealerService.quarterlyReport (thưởng doanh số quý)', () => {

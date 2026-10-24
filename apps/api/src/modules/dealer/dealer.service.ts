@@ -194,9 +194,11 @@ export class DealerService {
     // Cùng điều kiện với placeOrder: FE cho đặt trước cả hàng tồn 0, nên một dòng không bán được mà vẫn
     // lên bảng giá sẽ làm cả đơn bị PRODUCT_DISCONTINUED.
     // Hàng của gian hàng đối tác chỉ bán giá lẻ (partner-goods.ts), không lên bảng giá đại lý.
+    // Mini App hiện theo đúng thứ tự trả về; không sắp thì Postgres trả tuỳ ý và các dòng đổi chỗ giữa các lần tải.
     const variations = await this.prisma.variation.findMany({
       where: { AND: [SELLABLE_PANCAKE_VARIATION_WHERE, TUBU_OWNED_VARIATION_WHERE] },
       include: { product: { select: { name: true, brand: true } } },
+      orderBy: [{ product: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }],
     });
     return variations.map((v) => {
       const dealerPrice = this.unitPrice(v, tier?.id, discountPct);
