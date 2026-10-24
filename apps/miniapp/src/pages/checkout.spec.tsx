@@ -171,7 +171,8 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
 
   it('đáy trang chừa chỗ cho thanh Đặt hàng cộng vùng an toàn (không để dòng đồng ý nằm dưới thanh)', async () => {
     renderPage();
-    expect(JSON.parse((await screen.findByTestId('page')).dataset.pageStyle ?? '{}').paddingBottom).toBe('calc(96px + var(--safe-bottom))');
+    await screen.findByTestId('sticky-bar');
+    expect(JSON.parse(screen.getByTestId('page').dataset.pageStyle ?? '{}').paddingBottom).toBe('calc(96px + var(--safe-bottom))');
   });
 
   it('sản phẩm chưa có ảnh: dòng hàng hiện khung placeholder như giỏ hàng, không dựng img với src rỗng (BUYERMINI-13)', async () => {
