@@ -84,8 +84,9 @@ const DATA = {
   items: [review('a', 5, { verifiedPurchase: true }), review('b', 5, { videoUrl: 'https://v/x.mp4' }), review('c', 3, { images: ['https://i/1.jpg'] })],
 };
 
+let qc: QueryClient;
 function renderSection(props: { openForOrderId?: string; onOrderLinkUsed?: () => void } = {}) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <ReviewsSection slug="nuoc-rua-chen" {...props} />
@@ -96,6 +97,13 @@ function renderSection(props: { openForOrderId?: string; onOrderLinkUsed?: () =>
 const MYREVIEWS: Record<string, unknown> = { a: MINE_A, b: MINE_B };
 
 describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
+  // Test kết thúc ngay khi createReview vừa được gọi thì onSuccess/onDone chạy sau khi RTL gỡ cây và vitest đóng jsdom:
+  // setState lúc đó đọc window.event và ném "window is not defined" như lỗi chưa xử lý. Chờ mutation và truy vấn xong trước khi gỡ.
+  afterEach(async () => {
+    await waitFor(() => expect(qc.isMutating() + qc.isFetching()).toBe(0));
+    await act(async () => undefined);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.auth = { status: 'authenticated' };
