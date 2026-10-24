@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -99,7 +99,9 @@ describe('SupportContact — kênh hỗ trợ trên chi tiết đơn', () => {
     mocks.fetchSupportContact.mockResolvedValue({ hotline: null, email: null, zaloOaName: null });
     const { container } = renderBlock();
     await waitFor(() => expect(mocks.fetchSupportContact).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 0));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
     expect(container.textContent).toBe('');
   });
 
