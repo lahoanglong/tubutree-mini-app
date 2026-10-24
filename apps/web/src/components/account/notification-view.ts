@@ -1,5 +1,5 @@
 import {
-  CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins, ShoppingBag, Gift, Leaf, Zap, Bell, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle,
+  CheckCircle2, Truck, PackageCheck, Receipt, FileText, Coins, ShoppingBag, Gift, Leaf, Zap, Bell, Store, TriangleAlert, Repeat, Undo2, PackageOpen, XCircle, UserPlus, Recycle, MessageCircle,
   type LucideIcon,
 } from 'lucide-react';
 import routeMapJson from '@tubutree/app-core/route-map.json';
@@ -32,6 +32,7 @@ export function notificationMeta(code: string): { Icon: LucideIcon; title: strin
   if (code.startsWith('FLASH')) return { Icon: Zap, title: 'Ưu đãi giờ vàng' };
   if (code.startsWith('DEALER')) return { Icon: Store, title: 'Đại lý' };
   if (code.startsWith('WASTE')) return { Icon: Recycle, title: 'Đổi rác lấy quà' };
+  if (code === 'SUPPORT_CHAT_REPLY') return { Icon: MessageCircle, title: 'Tubu Tree trả lời bạn' };
   // OPS_* gửi tài khoản ADMIN; admin đăng nhập vẫn thấy trong danh sách (không lọc theo mã) nên cần nhãn riêng.
   if (code.startsWith('OPS_')) return { Icon: TriangleAlert, title: 'Cảnh báo vận hành' };
   return { Icon: Bell, title: 'Thông báo' };
@@ -113,6 +114,7 @@ function miniappAction(templateCode: string, data: Record<string, string> | unde
   if (notificationOrderLink(templateCode, orderCode)) {
     return { kind: 'link', label: 'Xem chi tiết đơn hàng', to: orderCode ? `/order/${enc(orderCode)}` : '/orders' };
   }
+  if (templateCode === 'SUPPORT_CHAT_REPLY') return { kind: 'link', label: 'Mở chat với Tubu Tree', to: '/chat' };
   if (route) return { kind: 'link', label: 'Xem chi tiết', to: route };
   if (templateCode.startsWith('FLASH')) {
     // Không có slug thì về Trang chủ, nơi dải "Ưu đãi giờ vàng" đang hiển thị.

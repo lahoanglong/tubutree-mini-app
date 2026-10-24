@@ -4,12 +4,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchRelated: vi.fn(), fetchBoughtTogether: vi.fn(), openOAChat: vi.fn(), hasOA: true }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchRelated: vi.fn(), fetchBoughtTogether: vi.fn(), openOAChat: vi.fn(), hasOA: true, chatOn: false, authStatus: 'guest', navigate: vi.fn(), login: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
   useSnackbar: () => ({ openSnackbar: vi.fn() }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mocks.navigate,
 }));
 vi.mock('../services/shop-api', () => ({
   fetchProduct: mocks.fetchProduct,
@@ -31,8 +31,8 @@ vi.mock('../services/zmp-bridge', () => ({
     return mocks.hasOA;
   },
 }));
-vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn() }) }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
+vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.authStatus, login: mocks.login }) }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1, chat: { enabled: mocks.chatOn, hours: { start: '08:00', end: '21:00' } } }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../components/subscribe-sheet', () => ({ SubscribeSheet: () => null }));
@@ -71,6 +71,8 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasOA = true;
+    mocks.chatOn = false;
+    mocks.authStatus = 'guest';
     mocks.fetchProduct.mockResolvedValue(product);
     mocks.fetchRelated.mockResolvedValue([]);
     mocks.fetchBoughtTogether.mockResolvedValue([]);
@@ -108,6 +110,45 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
     expect(screen.queryByRole('button', { name: 'Chat với Tubu Tree' })).toBeNull();
     expect(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: 'Xem giỏ hàng' })).toBeInTheDocument();
+  });
+});
+
+describe('ProductDetailPage — chat với Tubu Tree khi chat bật', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.hasOA = true;
+    mocks.chatOn = true;
+    mocks.fetchProduct.mockResolvedValue(product);
+    mocks.fetchRelated.mockResolvedValue([]);
+    mocks.fetchBoughtTogether.mockResolvedValue([]);
+  });
+
+  it('đã đăng nhập: nút Chat mở /chat?product=<slug>, không mở OA', async () => {
+    mocks.authStatus = 'authenticated';
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    fireEvent.click(screen.getByRole('button', { name: 'Chat với Tubu Tree' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat?product=xa-phong');
+    expect(mocks.openOAChat).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' })).toBeNull();
+  });
+
+  it('chưa đăng nhập: giữ nút OA cũ và thêm lời mời đăng nhập, không đẩy sang /chat', async () => {
+    mocks.authStatus = 'guest';
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    fireEvent.click(screen.getByRole('button', { name: 'Chat với Tubu Tree' }));
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' }));
+    expect(mocks.login).toHaveBeenCalled();
+  });
+
+  it('đang khôi phục phiên: không có lời mời đăng nhập', async () => {
+    mocks.authStatus = 'loading';
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    expect(screen.queryByRole('button', { name: 'Đăng nhập để chat với Tubu Tree' })).toBeNull();
   });
 });
 

@@ -309,7 +309,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     mocks.order = { ...BASE, status };
     const { container } = await mount();
     expect(btn(container, 'Huỷ đơn')).toBeUndefined();
-    expect(container.textContent).toContain('Cần huỷ hoặc đổi đơn?');
+    expect(container.textContent).toContain('Cần hỗ trợ?');
   });
 
   it('R3-CANCEL-2: đơn đang đóng gói mà kho đã đặt hãng (mã GHN) — chip "Đã đặt đơn vị vận chuyển", không có nút Huỷ đơn', async () => {
@@ -317,7 +317,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     const { container } = await mount();
     expect(btn(container, 'Huỷ đơn')).toBeUndefined();
     expect(container.textContent).toContain('Đã đặt đơn vị vận chuyển');
-    expect(container.textContent).toContain('Cần huỷ hoặc đổi đơn?');
+    expect(container.textContent).toContain('Cần hỗ trợ?');
   });
 
   it('R3-CANCEL-2: API báo canCancel=false thì ẩn nút dù trạng thái còn trong mốc huỷ', async () => {

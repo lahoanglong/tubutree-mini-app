@@ -10,6 +10,7 @@ import {
 } from '../../src/modules/users/account-deletion.service';
 import { createOrder, createUser, randCode, summarize, warmPool } from './helpers';
 import { cleanupWaste, createWarehouse, createWasteItem, createWastePoint, createWasteRequest } from './fixtures/waste-fixtures';
+import { SupportChatForwardProcessor } from '../../src/modules/support-chat/support-chat-forward.processor';
 import { MerchantFulfilmentService } from '../../src/modules/merchant/merchant-fulfilment.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 
@@ -60,6 +61,98 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     const request = await prisma.accountDeletionRequest.create({ data: { userId: user.id, reason: 'không dùng nữa' } });
     return { user, request };
   }
+
+  it('xoá hẳn hội thoại chat CSKH của khách (tin, lần chuyển, hội thoại) trong cùng lần xử lý; chat của người khác còn nguyên', async () => {
+    const { user, request } = await customerWithRequest();
+    const other = await createUser(prisma, {});
+    const mk = async (userId: string) => {
+      const conv = await prisma.supportConversation.create({ data: { userId, code: randCode(4).toUpperCase() } });
+      const fwd = await prisma.supportForward.create({ data: { conversationId: conv.id, groupId: 'G1' } });
+      await prisma.supportMessage.create({ data: { conversationId: conv.id, sender: 'CUSTOMER', source: 'MINIAPP', body: 'SĐT 0901234567', forwardId: fwd.id } });
+      return conv;
+    };
+    const mine = await mk(user.id);
+    const theirs = await mk(other.id);
+
+    await svc.process(request.id, admin.id);
+
+    expect(await prisma.supportConversation.count({ where: { id: mine.id } })).toBe(0);
+    expect(await prisma.supportMessage.count({ where: { conversationId: mine.id } })).toBe(0);
+    expect(await prisma.supportForward.count({ where: { conversationId: mine.id } })).toBe(0);
+    expect(await prisma.supportMessage.count({ where: { conversationId: theirs.id } })).toBe(1);
+    expect(await prisma.supportForward.count({ where: { conversationId: theirs.id } })).toBe(1);
+  });
+
+  it('xoá tài khoản giữ chỗ mã hội thoại: mã vào sổ mã nghỉ cùng giao dịch xoá', async () => {
+    const { user, request } = await customerWithRequest();
+    const code = randCode(4).toUpperCase();
+    await prisma.supportConversation.create({ data: { userId: user.id, code } });
+    await svc.process(request.id, admin.id);
+    expect(await prisma.supportConversation.count({ where: { userId: user.id } })).toBe(0);
+    expect(await prisma.supportRetiredCode.count({ where: { code } })).toBe(1);
+  });
+
+  describe('xoá tài khoản khi forward đang gửi dở', () => {
+    async function seed() {
+      const { user, request } = await customerWithRequest();
+      const conv = await prisma.supportConversation.create({ data: { userId: user.id, code: randCode(4).toUpperCase() } });
+      await prisma.supportMessage.createMany({
+        data: [0, 1].map((i) => ({ conversationId: conv.id, sender: 'CUSTOMER' as const, source: 'WEB' as const, body: `SĐT 090123456${i}`, clientMsgId: `cm-${randCode(8)}-${i}` })),
+      });
+      return { user, request, conv };
+    }
+    const orphans = async (convId: string) => ({
+      conv: await prisma.supportConversation.count({ where: { id: convId } }),
+      messages: await prisma.supportMessage.count({ where: { conversationId: convId } }),
+      forwards: await prisma.supportForward.count({ where: { conversationId: convId } }),
+    });
+    const job = (conversationId: string): any => ({ data: { conversationId }, attemptsMade: 0, opts: { attempts: 5 } });
+    const config: any = { get: async () => 'g-it' };
+    const chat: any = { scheduleForward: async () => undefined };
+
+    it('xoá chen vào giữa lúc nhận tin và lúc gửi: forward không ném, không gửi, không còn hàng mồ côi', async () => {
+      const { request, conv } = await seed();
+      let release!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      let reachedBuild!: () => void;
+      const reached = new Promise<void>((r) => { reachedBuild = r; });
+      // Dừng bộ xử lý ngay sau khi nhận tin (khoá đã nhả), ở bước dựng nội dung.
+      const slowPrisma = new Proxy(prisma, {
+        get(target, prop) {
+          if (prop === 'user') {
+            return { findUnique: async (...a: unknown[]) => { reachedBuild(); await gate; return (target.user.findUnique as any)(...a); } };
+          }
+          const v = Reflect.get(target, prop, target);
+          return typeof v === 'function' ? v.bind(target) : v;
+        },
+      }) as PrismaService;
+      const send = jest.fn().mockResolvedValue({ ok: true, msgId: 'zr-x' });
+      const processor = new SupportChatForwardProcessor(slowPrisma, config, { send } as any, chat);
+
+      const run = processor.process(job(conv.id));
+      await reached;
+      expect(await prisma.supportForward.count({ where: { conversationId: conv.id } })).toBe(1);
+      await svc.process(request.id, admin.id);
+      release();
+      await expect(run).resolves.toBeUndefined();
+
+      expect(send).not.toHaveBeenCalled();
+      expect(await orphans(conv.id)).toEqual({ conv: 0, messages: 0, forwards: 0 });
+    });
+
+    it('xoá và nhận tin chạy song song: kết quả luôn sạch, bộ xử lý không ném', async () => {
+      for (let i = 0; i < 5; i++) {
+        const { request, conv } = await seed();
+        const send = jest.fn().mockImplementation(async () => { await new Promise((r) => setTimeout(r, 20)); return { ok: true, msgId: `zr-${randCode(8)}` }; });
+        const processor = new SupportChatForwardProcessor(prisma, config, { send } as any, chat);
+        const [, del] = await Promise.allSettled([processor.process(job(conv.id)), svc.process(request.id, admin.id)]);
+        expect(del.status).toBe('fulfilled');
+        const results = await Promise.allSettled([processor.process(job(conv.id))]);
+        expect(results[0]!.status).toBe('fulfilled');
+        expect(await orphans(conv.id)).toEqual({ conv: 0, messages: 0, forwards: 0 });
+      }
+    });
+  });
 
   it('ẩn danh dữ liệu cá nhân, giữ nguyên đơn/hoa hồng/sổ tiền, thu hồi token, đánh dấu RESOLVED', async () => {
     const { user, request } = await customerWithRequest({ role: 'AFFILIATE' });

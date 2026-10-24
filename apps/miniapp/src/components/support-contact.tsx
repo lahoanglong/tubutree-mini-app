@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSnackbar } from 'zmp-ui';
-import { Copy, MessageSquare, Phone } from 'lucide-react';
+import { useNavigate, useSnackbar } from 'zmp-ui';
+import { Copy, MessageCircle, MessageSquare, Phone } from 'lucide-react';
 import { Button } from './ui/button';
 import { Text } from './ui/text';
 import { DEFAULT_SUPPORT, fetchSupportContact } from '../pages/about-data';
@@ -8,6 +8,9 @@ import { callPhone, hasOA, openOAChat } from '../services/zmp-bridge';
 import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
+import { useAuthStore } from '../store/auth';
+import { useAuthPhase } from '../hooks/use-auth-phase';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
 
 /**
@@ -17,12 +20,18 @@ import { vi } from '../i18n/vi';
  */
 export function SupportContact({ orderCode }: { orderCode?: string }) {
   const { openSnackbar } = useSnackbar();
+  const navigate = useNavigate();
+  const chatOn = usePublicConfig().chat?.enabled === true;
+  const phase = useAuthPhase();
+  const loggedIn = phase === 'authenticated';
+  const login = useAuthStore((s) => s.login);
+  const chatReady = chatOn && loggedIn;
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
-  if (!support && !hasOA) return null;
+  if (!support && !hasOA && !chatReady) return null;
   const hotline = support?.hotline ?? null;
   const email = support?.email ?? null;
-  if (!hasOA && !hotline && !email) return null;
+  if (!hasOA && !hotline && !email && !chatReady) return null;
 
   const copyEmail = async (value: string) => {
     haptic('light');
@@ -37,13 +46,27 @@ export function SupportContact({ orderCode }: { orderCode?: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <Text variant="caption" tone="tertiary">{vi.orders.support}</Text>
-      {hasOA && (
+      {chatReady && (
+        <Button
+          variant="ghost"
+          icon={MessageCircle}
+          onPress={() => navigate(orderCode ? `/chat?order=${encodeURIComponent(orderCode)}` : '/chat')}
+        >
+          Chat với Tubu Tree
+        </Button>
+      )}
+      {!chatReady && hasOA && (
         <Button
           variant="ghost"
           icon={MessageSquare}
           onPress={() => void openOAChat(orderCode ? `Hỗ trợ đơn ${orderCode}` : undefined)}
         >
           Nhắn Zalo OA
+        </Button>
+      )}
+      {chatOn && phase === 'guest' && (
+        <Button variant="ghost" icon={MessageCircle} onPress={() => void login()}>
+          Đăng nhập để chat với Tubu Tree
         </Button>
       )}
       {hotline && (

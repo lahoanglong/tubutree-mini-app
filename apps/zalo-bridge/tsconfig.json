@@ -1,0 +1,12 @@
+{
+  "extends": "@tubutree/typescript-config/nestjs.json",
+  "compilerOptions": {
+    "declaration": true,
+    "noUncheckedIndexedAccess": false,
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

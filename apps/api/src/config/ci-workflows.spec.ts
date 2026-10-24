@@ -22,6 +22,13 @@ describe('.github/workflows/docker-build.yml (D6-09a)', () => {
     expect(wf).toMatch(/permissions:\s*\n\s+contents: read/);
   });
 
+  it('dựng cả image zalo-bridge và kiểm zca-js nạp được từ image', () => {
+    expect(wf).toMatch(/matrix:\s*\n\s+app: \[api, web, zalo-bridge\]/);
+    expect(wf).toContain('apps/zalo-bridge/Dockerfile');
+    expect(wf).toContain("- 'apps/zalo-bridge/**'");
+    expect(wf).toMatch(/require\('zca-js'\)/);
+  });
+
   it('không đẩy image đi đâu: không login registry, không docker push, không push: true', () => {
     const c = code(wf);
     expect(c).not.toMatch(/docker push|docker login|docker\/login-action|push: true/);

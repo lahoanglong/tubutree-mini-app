@@ -108,6 +108,24 @@ describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
     expect(onOpen).toHaveBeenCalledWith('payoutsToPay');
   });
 
+  it('có hai thẻ Chat CSKH và cầu nối Zalo; bấm thẻ mở đúng khoá', async () => {
+    stubInbox([
+      { key: 'supportChatUnforwarded', count: 2 },
+      { key: 'zaloBridgeDown', count: 1 },
+    ]);
+    const onOpen = vi.fn();
+    const r = render(<OpsInboxTab onOpen={onOpen} />);
+    mounted.push(r);
+    await flush();
+    const card = (k: string) => r.container.querySelector<HTMLButtonElement>(`[data-inbox="${k}"]`)!;
+    expect(card('supportChatUnforwarded').textContent).toContain('Chat CSKH: tin chưa chuyển được vào Zalo');
+    expect(card('supportChatUnforwarded').textContent).toContain('2');
+    expect(card('zaloBridgeDown').textContent).toContain('Cầu nối Zalo mất kết nối');
+    click(card('supportChatUnforwarded'));
+    click(card('zaloBridgeDown'));
+    expect(onOpen.mock.calls.map((c) => c[0])).toEqual(['supportChatUnforwarded', 'zaloBridgeDown']);
+  });
+
   it('mọi khoá của hộp việc có nhãn tiếng Việt có dấu và gợi ý', () => {
     for (const [key, l] of Object.entries(INBOX_LABELS)) {
       expect(l.title.length, key).toBeGreaterThan(5);

@@ -5,6 +5,9 @@ const uploadPreset = () => (process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? 
 /** Bản build có dịch vụ lưu ảnh (Cloudinary) không. Ảnh đại diện chỉ lưu được dạng URL nên cần có nó. */
 export const isCloudinaryConfigured = (): boolean => Boolean(cloudName() && uploadPreset());
 
+/** Ảnh gốc quá lớn thì không đưa lên (cùng ngưỡng với Mini App). */
+export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
 /** Tải một ảnh lên Cloudinary (preset unsigned) → secure_url; chưa cấu hình hoặc lỗi thì null để nơi gọi tự báo. */
 export async function uploadToCloudinary(file: File | Blob): Promise<string | null> {
   if (!isCloudinaryConfigured()) return null;

@@ -224,6 +224,11 @@ export async function deleteItData(
   const flashSaleIds = ids.flashSaleIds ?? [];
   const orders = Prisma.sql`SELECT "id" FROM "orders" WHERE "userId" = ANY(${userIds}::text[])`;
   const variations = Prisma.sql`SELECT "id" FROM "variations" WHERE "productId" = ANY(${productIds}::text[])`;
+  // Hội thoại chat CSKH trỏ users bằng RESTRICT; tin và lượt chuyển theo hội thoại, xoá con trước cha.
+  const supportConvs = Prisma.sql`SELECT "id" FROM "support_conversations" WHERE "userId" = ANY(${userIds}::text[])`;
+  await prisma.$executeRaw`DELETE FROM "support_messages" WHERE "conversationId" IN (${supportConvs})`;
+  await prisma.$executeRaw`DELETE FROM "support_forwards" WHERE "conversationId" IN (${supportConvs})`;
+  await prisma.$executeRaw`DELETE FROM "support_conversations" WHERE "userId" = ANY(${userIds}::text[])`;
   await prisma.$executeRaw`DELETE FROM "return_requests" WHERE "userId" = ANY(${userIds}::text[])`;
   await prisma.$executeRaw`
     DELETE FROM "waste_events"

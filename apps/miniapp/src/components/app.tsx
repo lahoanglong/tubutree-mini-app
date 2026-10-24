@@ -17,6 +17,7 @@ import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
+import { LivePathnameProvider } from '../hooks/use-live-pathname';
 import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/analytics';
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
@@ -76,6 +77,7 @@ const CashbackPage = lazy(() => import('../pages/cashback'));
 const DealerPage = lazy(() => import('../pages/dealer'));
 const AboutPage = lazy(() => import('../pages/about'));
 const WishlistPage = lazy(() => import('../pages/wishlist'));
+const SupportChatPage = lazy(() => import('../pages/support-chat'));
 const EditProfilePage = lazy(() => import('../pages/edit-profile'));
 const SettingsPage = lazy(() => import('../pages/settings'));
 const BrandStoryPage = lazy(() => import('../pages/brand-story'));
@@ -181,6 +183,7 @@ export default function MyApp() {
             <ZMPRouter>
               <ScreenTracker />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}
+              <LivePathnameProvider>
               <NavigationTypeProvider>
                 <MainLandmark>
                 <Suspense fallback={<RouteFallback />}>
@@ -228,6 +231,7 @@ export default function MyApp() {
                     <Route path="/dealer" element={<DealerPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/wishlist" element={<WishlistPage />} />
+                    <Route path="/chat" element={<SupportChatPage />} />
                     <Route path="/edit-profile" element={<EditProfilePage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="/brand-story" element={<BrandStoryPage />} />
@@ -246,6 +250,7 @@ export default function MyApp() {
                 </Suspense>
                 </MainLandmark>
               </NavigationTypeProvider>
+              </LivePathnameProvider>
               <BottomNav />
               <BackButton />
               <OnboardingGate />

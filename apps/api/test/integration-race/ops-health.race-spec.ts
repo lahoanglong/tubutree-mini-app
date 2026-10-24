@@ -169,6 +169,8 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
         'payoutsToPay',
         'invoicePending',
         'externalPoints',
+        'supportChatUnforwarded',
+        'zaloBridgeDown',
         'wasteToCount',
         'wasteUnmatched',
         'wasteBlockedPending',
@@ -181,7 +183,7 @@ describe('Sức khoẻ vận hành + việc cần xử lý (real Postgres)', () 
     );
 
     const cskh = await inbox.counts({ role: 'STAFF', staffPermissions: ['CSKH'] });
-    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'returnsPending', 'wasteToCount', 'wasteUnmatched']);
+    expect(cskh.items.map((i) => i.key).sort()).toEqual(['communityPending', 'communityUnanswered', 'externalPoints', 'returnsPending', 'supportChatUnforwarded', 'wasteToCount', 'wasteUnmatched']);
     const kho = await inbox.counts({ role: 'STAFF', staffPermissions: ['KHO'] });
     expect(kho.items.map((i) => i.key).sort()).toEqual(['gomdonAttention', 'pancakeAttention', 'pancakeUnsynced', 'returnsToReceive', 'wasteToCount', 'wasteUnmatched']);
     const marketing = await inbox.counts({ role: 'STAFF', staffPermissions: ['MARKETING'] });

@@ -40,6 +40,7 @@ export const REFERENCE_CONFIG_PREFIXES: readonly string[] = [
   'retention',
   'pancake',
   'home',
+  'chat',
 ];
 
 /**

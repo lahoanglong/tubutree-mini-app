@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Clock, Leaf, MessageCircle, Megaphone, Repeat, Truck, Users } from 'lucide-react';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
@@ -317,17 +318,43 @@ export function PdpContentKitRow({ slug }: { slug: string }) {
   );
 }
 
-/** Chat với Zalo OA của Tubu Tree; ẩn khi OA chưa cấu hình (web chỉ mở trang OA, không gắn sẵn nội dung tin nhắn). */
-export function PdpChatButton({ productName }: { productName: string }) {
-  if (!platformBridge.oa.available) return null;
+/**
+ * Chat với Tubu Tree. Chat bật và đã đăng nhập: vào màn chat kèm sản phẩm; chưa đăng nhập: giữ nút OA và mời đăng nhập;
+ * đang khôi phục phiên: chỉ nút OA. Chat tắt: như trước, chỉ Zalo OA (web chỉ mở trang OA, không gắn sẵn nội dung tin nhắn).
+ */
+export function PdpChatButton({ productName, productSlug }: { productName: string; productSlug: string }) {
+  const phase = useAuthPhase();
+  const chatOn = usePublicConfig().chat?.enabled === true;
+  const chatReady = chatOn && phase === 'authenticated';
+  const oa = platformBridge.oa.available;
+  if (chatReady) {
+    return (
+      <Link href={`/ho-tro/chat?product=${encodeURIComponent(productSlug)}`} className={`${ui.btnSecondary} mt-3 gap-2`}>
+        <MessageCircle className="h-4 w-4" aria-hidden="true" />
+        Chat với Tubu Tree
+      </Link>
+    );
+  }
+  const invite = chatOn && phase === 'guest';
+  if (!oa && !invite) return null;
   return (
-    <button
-      type="button"
-      onClick={() => void platformBridge.oa.openChat(`Mình muốn hỏi về sản phẩm: ${productName}`)}
-      className={`${ui.btnSecondary} mt-3 gap-2`}
-    >
-      <MessageCircle className="h-4 w-4" aria-hidden="true" />
-      Chat với Tubu Tree
-    </button>
+    <>
+      {oa && (
+        <button
+          type="button"
+          onClick={() => void platformBridge.oa.openChat(`Mình muốn hỏi về sản phẩm: ${productName}`)}
+          className={`${ui.btnSecondary} mt-3 gap-2`}
+        >
+          <MessageCircle className="h-4 w-4" aria-hidden="true" />
+          Chat với Tubu Tree
+        </button>
+      )}
+      {invite && (
+        <Link href={loginHref(`/ho-tro/chat?product=${encodeURIComponent(productSlug)}`)} className={`${ui.btnSecondary} mt-3 gap-2`}>
+          <MessageCircle className="h-4 w-4" aria-hidden="true" />
+          Đăng nhập để chat với Tubu Tree
+        </Link>
+      )}
+    </>
   );
 }

@@ -386,3 +386,9 @@ Lỗi vĩnh viễn hiện rõ trên thẻ, vd "Lỗi xác thực SMTP — kiểm
 5. **Kênh báo động vận hành** (mục 8) trước ngày mở bán, để sự cố Pancake/Gomdon không chỉ nằm trong app.
 
 Sau mỗi lần go-live 1 dịch vụ: chạy `ops.yml action=audit` để xác nhận, rồi test 1 giao dịch thật nhỏ.
+
+---
+
+## Chat CSKH qua Zalo cá nhân
+
+Chat với khách chuyển tin vào một nhóm Zalo qua tài khoản Zalo cá nhân (SIM riêng) làm cầu nối. Khoá cần điền: API có `ZALO_BRIDGE_URL` và `ZALO_BRIDGE_SECRET`; service `zalo-bridge` có `ZALO_BRIDGE_SECRET` (cùng giá trị, tối thiểu 32 ký tự) và `ZALO_BRIDGE_CREDENTIALS_KEY` (base64 của 32 byte). Hai migration mới: `20261023100000_support_chat`, `20261023110000_support_bridge_actions`. Nhân viên không bao giờ mở Zalo PC/Web bằng tài khoản cầu nối. Zalo có thể khoá tài khoản cầu nối (điều 4.7). Các bước chi tiết, thử tay và gỡ về: [docs/2026-10-23-q5/bat-chat-zalo.md](2026-10-23-q5/bat-chat-zalo.md).

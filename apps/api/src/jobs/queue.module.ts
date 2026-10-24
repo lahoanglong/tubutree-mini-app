@@ -2,7 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import type { Env } from '../config/env.validation';
-import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS, QUEUE_PANCAKE_PUSH, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS } from './queues';
+import { QUEUE_PANCAKE_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_ZALO_OA_EVENTS, QUEUE_PANCAKE_PUSH, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD, QUEUE_SUPPORT_CHAT_NOTIFY } from './queues';
 import { NotificationsProcessor } from '../modules/notifications/notifications.processor';
 
 /**
@@ -21,7 +21,7 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
           backoff: { type: 'exponential', delay: 2000 },
           removeOnComplete: 1000,
           // Redis chạy noeviction với trần bộ nhớ (docker-compose.vietnix.yml): job thất bại kèm
-          // stacktrace × 6 queue không được giữ quá nhiều. Trạng thái thật nằm ở DB (orders.pancakeOrderId,
+          // stacktrace × mọi queue không được giữ quá nhiều. Trạng thái thật nằm ở DB (orders.pancakeOrderId,
           // orders.gomdonStatus/gomdonCancelStatus, *_webhook_events, notification_logs) cho cron/admin.
           removeOnFail: 1000,
         },
@@ -34,6 +34,8 @@ import { NotificationsProcessor } from '../modules/notifications/notifications.p
       { name: QUEUE_PANCAKE_PUSH },
       { name: QUEUE_GOMDON_PUSH },
       { name: QUEUE_GOMDON_EVENTS },
+      { name: QUEUE_SUPPORT_CHAT_FORWARD },
+      { name: QUEUE_SUPPORT_CHAT_NOTIFY },
     ),
   ],
   // NotificationsProcessor xử lý QUEUE_NOTIFICATIONS (gửi ZNS + thử lại lỗi tạm thời — xem

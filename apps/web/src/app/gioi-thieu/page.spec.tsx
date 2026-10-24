@@ -227,6 +227,24 @@ describe('/gioi-thieu: liên hệ hỗ trợ', () => {
     expect(mocks.openChat).toHaveBeenCalledTimes(1);
   });
 
+  it('chat bật: dòng "Chat với Tubu Tree" đứng đầu khối Hỗ trợ và dẫn tới /ho-tro/chat; chat tắt thì không có', async () => {
+    const off = await mount();
+    expect(off.container.querySelector('a[href="/ho-tro/chat"]')).toBeNull();
+    setup({ config: { support: SUPPORT, chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } } });
+    const { container } = await mount();
+    const row = container.querySelector<HTMLAnchorElement>('a[href="/ho-tro/chat"]')!;
+    expect(row.textContent).toContain('Chat với Tubu Tree');
+    const section = row.closest('section')!;
+    expect(section.querySelector('h2')!.textContent).toBe('Hỗ trợ khách hàng');
+    expect(section.querySelector('a, button')).toBe(row);
+  });
+
+  it('chat bật mà admin để trống mọi liên hệ: khối Hỗ trợ vẫn có dòng chat', async () => {
+    setup({ config: { support: { hotline: null, email: null, zaloOaName: null }, chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } } });
+    const { container } = await mount();
+    expect(container.querySelector('a[href="/ho-tro/chat"]')).not.toBeNull();
+  });
+
   it('chỉ có email thì chỉ hiện dòng Email', async () => {
     setup({ config: { support: { hotline: '   ', email: 'a@b.vn', zaloOaName: null } } });
     const { container } = await mount();

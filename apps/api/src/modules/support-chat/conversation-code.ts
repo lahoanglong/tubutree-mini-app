@@ -1,0 +1,36 @@
+/** Bỏ 0 O 1 I để nhân viên gõ tay trong nhóm Zalo không nhầm. */
+export const CONVERSATION_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function randomCode(random: () => number): string {
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += CONVERSATION_CODE_ALPHABET[Math.min(CONVERSATION_CODE_ALPHABET.length - 1, Math.floor(random() * CONVERSATION_CODE_ALPHABET.length))];
+  }
+  return code;
+}
+
+export function newConversationCode(random: () => number = Math.random): string {
+  let code = randomCode(random);
+  while (BANNED_CODES.has(code)) code = randomCode(random);
+  return code;
+}
+
+type CodeDb = {
+  supportConversation: { findUnique(args: { where: { code: string }; select?: { id: true } }): Promise<unknown> };
+  supportRetiredCode: { findUnique(args: { where: { code: string } }): Promise<unknown> };
+};
+
+/** Mã chưa có hội thoại và chưa nằm trong sổ mã nghỉ: mã của khách đã xoá tài khoản không được cấp lại cho khách mới. */
+export async function issueConversationCode(db: CodeDb, random: () => number = Math.random): Promise<string> {
+  for (;;) {
+    const code = newConversationCode(random);
+    // Tuần tự, bảng hội thoại trước: xoá tài khoản ghi mã nghỉ rồi mới xoá hội thoại trong một giao dịch, nên đọc theo thứ tự này
+    // không thể bỏ sót cả hai khi giao dịch đó commit giữa chừng.
+    if (await db.supportConversation.findUnique({ where: { code }, select: { id: true } })) continue;
+    if (await db.supportRetiredCode.findUnique({ where: { code } })) continue;
+    return code;
+  }
+}
+
+/** Từ thông dụng nhân viên hay gõ làm thẻ (#test, #sale...): mã trùng nó sẽ nhận nhầm tin trả lời không dành cho khách nào. */
+const BANNED_CODES = new Set(['TEST', 'SALE', 'SHIP', 'FREE', 'HELP', 'INFO', 'CODE', 'NOTE', 'DONE', 'GIAO', 'NHAN', 'HANG', 'SHOP', 'ZALO']);

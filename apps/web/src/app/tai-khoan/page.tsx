@@ -9,6 +9,7 @@ import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -40,7 +41,7 @@ function MenuIcon({ item }: { item: AccountMenuItem }) {
   );
 }
 
-function RowBody({ item, unread = 0 }: { item: AccountMenuItem; unread?: number }) {
+function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unread?: number; dot?: boolean }) {
   return (
     <>
       <MenuIcon item={item} />
@@ -53,6 +54,7 @@ function RowBody({ item, unread = 0 }: { item: AccountMenuItem; unread?: number 
           {unread}
         </span>
       )}
+      {dot && <span data-testid="chat-unread-dot" aria-hidden="true" className="h-2.5 w-2.5 flex-none rounded-full bg-[var(--color-action-danger-bg)]" />}
       <ChevronRight className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
     </>
   );
@@ -79,6 +81,9 @@ export default function AccountPage() {
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
+  const chatEnabled = cfgQ.data?.chat?.enabled === true;
+  const chatSummaryQ = useQuery({ ...supportChatSummaryQuery(coreHttp), enabled: authed && chatEnabled });
+  const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
   // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại. Giữ kết quả 5 phút để mỗi
   // lần quay lại hub không lặp lại một request 404; sửa nhãn thì khoá 'owned-brand' bị làm mới.
   // Cờ ownsBrand trên /auth/me (Mini App cũng hỏi riêng): false thì khỏi gọi /brand/owner/me. /auth/me lỗi hoặc API cũ thiếu cờ (null) thì giữ cách cũ.
@@ -131,6 +136,7 @@ export default function AccountPage() {
     role: user.role,
     aiEnabled: cfgQ.data?.aiAdvisorEnabled === true,
     claimEnabled: cfgQ.data?.loyalty?.marketplaceClaimEnabled === true,
+    chatEnabled,
     cashbackEnabled: CASHBACK_ENABLED,
     dealer: dealerQ.data,
     ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,
@@ -237,6 +243,7 @@ export default function AccountPage() {
             <ul className={`${ui.card} divide-y divide-stone-200 overflow-hidden ${mini.card}`}>
               {section.items.map((item) => {
                 const isNotif = item.to === '/tai-khoan/thong-bao';
+                const isChat = item.to === '/ho-tro/chat';
                 if (item.miniAppOnly) {
                   return (
                     <li key={item.to}>
@@ -253,8 +260,8 @@ export default function AccountPage() {
                 }
                 return (
                   <li key={item.to}>
-                    <Link href={item.to} aria-label={isNotif && unread > 0 ? `${item.label}, ${unread} chưa đọc` : undefined} className={ROW}>
-                      <RowBody item={item} unread={isNotif ? unread : 0} />
+                    <Link href={item.to} aria-label={isNotif && unread > 0 ? `${item.label}, ${unread} chưa đọc` : isChat && chatUnread ? `${item.label}, có tin mới` : undefined} className={ROW}>
+                      <RowBody item={item} unread={isNotif ? unread : 0} dot={isChat && chatUnread} />
                     </Link>
                   </li>
                 );

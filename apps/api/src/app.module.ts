@@ -49,6 +49,7 @@ import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
 import { ContentKitModule } from './modules/content-kit/content-kit.module';
 import { AcademyModule } from './modules/academy/academy.module';
 import { CskhModule } from './modules/cskh/cskh.module';
+import { SupportChatModule } from './modules/support-chat/support-chat.module';
 import { ExternalPointsModule } from './modules/external-points/external-points.module';
 import { OpsModule } from './modules/ops/ops.module';
 import { ZaloOaModule } from './modules/integrations/zalo-oa/zalo-oa.module';
@@ -109,6 +110,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     ContentKitModule,
     AcademyModule,
     CskhModule,
+    SupportChatModule,
     ExternalPointsModule,
     OpsModule,
     ZaloOaModule,

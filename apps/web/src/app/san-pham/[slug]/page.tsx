@@ -171,7 +171,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <div className="max-md:px-4 max-md:py-6">
       <PdpIngredients ingredients={product.ingredients} />
       <PdpPromises>
-        <PdpChatButton productName={product.name} />
+        <PdpChatButton productName={product.name} productSlug={product.slug} />
       </PdpPromises>
       {description && <PdpDescription text={description} />}
 

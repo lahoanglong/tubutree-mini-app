@@ -160,6 +160,8 @@ function FaqSection({ initialFaqs, initialConfig }: { initialFaqs?: FaqItem[]; i
 
 function SupportSection({ initialSupport }: { initialSupport?: SupportContact }) {
   const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: STALE_MS, initialData: initialSupport });
+  const configQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: STALE_MS });
+  const chatOn = configQ.data?.chat?.enabled === true;
   const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
   const oa = platformBridge.oa.available;
   // Dòng chưa có giá trị thì ẩn hẳn (Q-17), không hiện nhãn trống.
@@ -199,9 +201,18 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
       ),
     });
   }
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && !chatOn) return null;
   return (
     <Section title="Hỗ trợ khách hàng">
+      {chatOn && (
+        <Link
+          href="/ho-tro/chat"
+          className={`flex min-h-11 items-center justify-between gap-3 py-2 text-sm text-stone-900 hover:text-forest-700 max-md:font-semibold ${rows.length > 0 ? 'border-b border-stone-200' : ''}`}
+        >
+          Chat với Tubu Tree
+          <ChevronRight className="h-4 w-4 text-stone-500" aria-hidden="true" />
+        </Link>
+      )}
       {rows.map((r, i) => (
         <div key={r.label} className={`flex min-h-11 items-center justify-between gap-3 py-1 ${i < rows.length - 1 ? 'border-b border-stone-200' : ''}`}>
           <span className="text-sm text-stone-600">{r.label}</span>

@@ -357,7 +357,7 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái đóng và kết quả (§4.6)', 
     expect(c.textContent).toContain('Bị từ chối');
     expect(c.textContent).toContain('Ướt: thùng ướt');
     expect(c.querySelector('ol[aria-label="Tiến độ yêu cầu"]')).toBeNull();
-    expect(c.textContent).not.toContain('Cần hỗ trợ');
+    expect(c.textContent).toContain('Cần hỗ trợ?');
     expect(c.querySelector('a[href^="tel:"]')?.getAttribute('href')).toBe('tel:0984606774');
     expect(c.querySelector('a[href="mailto:tubutree@gmail.com"]')).not.toBeNull();
   });

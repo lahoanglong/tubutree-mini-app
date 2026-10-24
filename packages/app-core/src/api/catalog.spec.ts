@@ -48,6 +48,12 @@ describe('catalog — hợp đồng gọi API', () => {
     ]);
   });
 
+  it('fetchProduct mã hoá slug để một tham số lạ không đổi đường dẫn', async () => {
+    const { http, calls } = fakeHttp();
+    await fetchProduct(http, '../auth/me');
+    expect(calls).toEqual([{ method: 'get', path: '/products/..%2Fauth%2Fme' }]);
+  });
+
   it('fetchProductsBySlugs: bỏ trùng, tối đa 20, rỗng thì không gọi', async () => {
     const { http, calls } = fakeHttp(() => page(0, ['a']));
     expect(await fetchProductsBySlugs(http, [])).toEqual([]);

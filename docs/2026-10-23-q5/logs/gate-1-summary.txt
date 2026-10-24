@@ -1,0 +1,29 @@
+gate.sh full, 2026-10-24, HEAD bbcfaa03 + task 12
+XANH: mọi bước bắt buộc có kết quả và không đỏ
+
+shared-types 0
+prisma-generate 0
+tsc-api 0
+tsc-miniapp 0
+tsc-web 0
+tsc-e2e 0
+lint-vars 0
+lint-parity 0
+eslint-api 0
+eslint-miniapp 0
+eslint-web 0
+migrate 0
+migrate-status 0
+drift 0
+partial-idx 0
+jest-api 0
+race-shard-1 0
+race-shard-2 0
+vitest-miniapp 0
+vitest-miniapp-utc 0
+vitest-web 0
+vitest-web-utc 0
+vitest-app-core 0
+build-api 0
+build-web 0
+build-miniapp 0

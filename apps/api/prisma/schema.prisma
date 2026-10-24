@@ -307,6 +307,7 @@ model User {
   bottleReturns          BottleReturn[]
   wasteRequests          WasteRequest[]
   wasteGiftRedemptions   WasteGiftRedemption[]
+  supportConversation    SupportConversation?
   wastePointStaff        WastePointStaff[]
   wasteFlags             WasteUserFlags?
   betaTester             BetaTester?
@@ -3711,4 +3712,140 @@ model WasteGiftRedemption {
   @@index([status, claimExpiresAt])
   @@index([userId, createdAt])
   @@map("waste_gift_redemptions")
+}
+
+enum SupportSender {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
+enum SupportSource {
+  MINIAPP
+  WEB
+  ZALO
+  ADMIN
+  SYSTEM
+}
+
+enum SupportForwardStatus {
+  PENDING
+  SENT
+  FAILED
+  UNKNOWN
+}
+
+/// Chat CSKH: mỗi khách một hội thoại, mã 4 ký tự để nhân viên trả lời trong nhóm Zalo.
+model SupportConversation {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  code                 String    @unique
+  lastMessageAt        DateTime  @default(now())
+  customerReadAt       DateTime?
+  /// Ngày VN (YYYY-MM-DD) đã gửi lời nhắn ngoài giờ gần nhất, để mỗi ngày chỉ nhắn một lần.
+  lastOffHoursNoticeOn String?
+  blockedAt            DateTime?
+  blockedByUserId      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  messages SupportMessage[]
+  forwards SupportForward[]
+
+  @@index([lastMessageAt])
+  @@map("support_conversations")
+}
+
+model SupportMessage {
+  id             String        @id @default(cuid())
+  conversationId String
+  sender         SupportSender
+  source         SupportSource
+  body           String        @default("")
+  imageUrl       String?
+  context        Json?
+  /// Do app khách tự sinh; cùng cặp (conversationId, clientMsgId) gửi lại thì trả tin cũ.
+  clientMsgId    String?
+  zaloMsgId      String?       @unique
+  staffName      String?
+  adminUserId    String?
+  forwardId      String?
+  recalledAt     DateTime?
+  /// Tin STAFF/SYSTEM mà màn khách đã báo là đã hiển thị: chuông và số chưa đọc dựa vào đây, không so theo thời điểm.
+  seenAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, clientMsgId])
+  @@index([conversationId, createdAt, id])
+  /// Quét tin khách chưa chuyển (forwardId null, createdAt cũ) và đếm hộp thư ops.
+  @@index([forwardId, createdAt])
+  /// Dọn theo chính sách lưu trữ (support_chat: createdAt < cutoff).
+  @@index([createdAt])
+  @@map("support_messages")
+}
+
+model SupportForward {
+  id             String               @id @default(cuid())
+  conversationId String
+  status         SupportForwardStatus @default(PENDING)
+  zaloMsgId      String?              @unique
+  attempts       Int                  @default(0)
+  lastError      String?
+  groupId        String
+  sentAt         DateTime?
+  createdAt      DateTime             @default(now())
+  /// Mốc lần đổi trạng thái gần nhất: PENDING cũ quá hạn là lần chuyển bị bỏ dở (admin gửi lại giữa chừng, job BullMQ mất).
+  updatedAt      DateTime             @updatedAt
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([conversationId])
+  @@map("support_forwards")
+}
+
+/// Mã hội thoại của khách đã xoá tài khoản: không cấp lại, để trả lời muộn trong nhóm Zalo không đến nhầm khách mới.
+model SupportRetiredCode {
+  code      String   @id
+  retiredAt DateTime @default(now())
+
+  @@map("support_retired_codes")
+}
+
+/// Nhân viên thu hồi (undo) đến trước tin của họ (hộp thư đi của cầu nối không FIFO): nhớ msgId trong 2 ngày để tin đến sau bị bỏ.
+model SupportRecallTombstone {
+  zaloMsgId String   @id
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("support_recall_tombstones")
+}
+
+/// Một dòng duy nhất (id 'main'): cron ghi mỗi phút nên không để ở system_configs (sẽ đầy SystemConfigHistory).
+model SupportBridgeStatus {
+  id            String    @id @default("main")
+  state         String
+  since         DateTime
+  lastError     String?
+  zaloUid       String?
+  displayName   String?
+  avatar        String?
+  checkedAt     DateTime
+  downAlertedAt DateTime?
+
+  @@map("support_bridge_status")
+}
+
+/// Sổ việc admin làm trên cầu nối Zalo (đăng nhập QR, đăng xuất, kết nối lại). Không dùng UserAdminEvent vì sổ đó khoá theo người bị tác động.
+model SupportBridgeAction {
+  id          String   @id @default(cuid())
+  action      String
+  adminUserId String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("support_bridge_actions")
 }

@@ -137,7 +137,7 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
     expect(PRIVATE_PATHS).toEqual(
       expect.arrayContaining(['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap']),
     );
-    expect(PRIVATE_PATHS).toEqual(expect.arrayContaining(['/doi-rac', '/kho-qua', '/dai-ly']));
+    expect(PRIVATE_PATHS).toEqual(expect.arrayContaining(['/doi-rac', '/kho-qua', '/dai-ly', '/ho-tro/chat']));
     expect(new Set(PRIVATE_PATHS).size).toBe(PRIVATE_PATHS.length);
     expect(PRIVATE_PATHS.some((p) => p.includes(':'))).toBe(false);
   });
@@ -145,7 +145,7 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
   it('robots chặn tiền tố mới cả dạng trần lẫn cây con, và mở lại route công khai bên trong', async () => {
     const robots = (await import('../app/robots')).default;
     const rule = [robots().rules].flat()[0]!;
-    expect(rule.disallow).toEqual(expect.arrayContaining(['/doi-rac', '/doi-rac/']));
+    expect(rule.disallow).toEqual(expect.arrayContaining(['/doi-rac', '/doi-rac/', '/ho-tro/chat', '/ho-tro/chat/']));
     expect(rule.allow).toEqual(expect.arrayContaining(['/', '/doi-rac/quy-dinh']));
     expect([rule.allow].flat().some((a) => a?.includes(':'))).toBe(false);
   });

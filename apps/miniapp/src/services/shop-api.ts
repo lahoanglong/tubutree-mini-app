@@ -240,6 +240,7 @@ export interface PublicConfig {
   dealer?: { maxDiscountPct: number | null; reviewHours: number | null };
   /** Trần Điểm Xanh thưởng một sự kiện cộng đồng (giới hạn của API). Thiếu khi API cũ. */
   community?: { eventRewardMaxPoints: number; zaloGroupUrl?: string | null; facebookUrl?: string | null; tiktokUrl?: string | null };
+  chat?: { enabled: boolean; hours: { start: string; end: string } };
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
