@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('./client-api', () => ({ apiFetch }));
+import { getSupportChatPage } from '@tubutree/app-core/api/support-chat';
 import { coreHttp } from './core-http';
 
 beforeEach(() => apiFetch.mockReset().mockResolvedValue('DATA'));
@@ -21,6 +22,11 @@ describe('core-http (web client) — bọc apiFetch', () => {
   it('get có query toàn rỗng thì không để lại dấu ?', async () => {
     await coreHttp.get('/waste/points', { query: { provinceCode: undefined } });
     expect(apiFetch).toHaveBeenCalledWith('/waste/points', { method: 'GET' });
+  });
+
+  it('getSupportChatPage({ after: undefined }): URL không có tham số after', async () => {
+    await getSupportChatPage(coreHttp, { after: undefined });
+    expect(apiFetch).toHaveBeenCalledWith('/me/support-chat/messages', { method: 'GET' });
   });
 
   it('get chuyển headers', async () => {

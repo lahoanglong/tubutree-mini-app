@@ -22,6 +22,14 @@ describe('support-chat — hợp đồng gọi API', () => {
     ]);
   });
 
+  it('getSupportChatPage: after/before để undefined thì không có khoá nào trong query', async () => {
+    const { http, calls } = fakeHttp();
+    await getSupportChatPage(http, { after: undefined });
+    await getSupportChatPage(http, { after: undefined, before: 'm0' });
+    expect(Object.keys(calls[0]!.opts!.query!)).toEqual([]);
+    expect(Object.keys(calls[1]!.opts!.query!)).toEqual(['before']);
+  });
+
   it('query: khoá và đường dẫn', async () => {
     const { http, calls } = fakeHttp();
     const a = supportChatQuery(http);
