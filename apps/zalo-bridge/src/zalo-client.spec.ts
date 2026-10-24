@@ -153,14 +153,31 @@ describe('zalo-client: nhận tin', () => {
     expect(s.messages()).toHaveLength(0);
   });
 
-  it('chat.recommended (link) lấy title và href làm text để #MÃ vẫn chạy', async () => {
+  it('chat.recommended action recommened.link lấy title làm text, chỉ thêm href khi title chưa chứa nó', async () => {
     const s = await connected();
-    s.api.listener.emit('message', groupMsg({}, { msgType: 'chat.recommended', content: { title: '#K7Q2 xem https://a.vn/x', href: 'https://a.vn/x', description: 'mô tả trang' } }));
-    s.api.listener.emit('message', groupMsg({}, { msgId: '901', msgType: 'chat.recommended', content: { title: '', href: 'https://b.vn' } }));
-    await vi.waitFor(() => expect(s.messages()).toHaveLength(2));
-    expect(s.messages()[0]).toMatchObject({ text: '#K7Q2 xem https://a.vn/x https://a.vn/x', imageUrl: null });
+    const link = (msgId: string, content: Record<string, unknown>) =>
+      s.api.listener.emit('message', groupMsg({}, { msgId, msgType: 'chat.recommended', content: { action: 'recommened.link', ...content } }));
+    link('900', { title: '#K7Q2 xem https://a.vn/x', href: 'https://a.vn/x', description: 'mô tả trang' });
+    link('901', { title: '', href: 'https://b.vn' });
+    link('902', { title: '#K7Q2 xem giúp', href: 'https://c.vn' });
+    await vi.waitFor(() => expect(s.messages()).toHaveLength(3));
+    expect(s.messages()[0]).toMatchObject({ text: '#K7Q2 xem https://a.vn/x', imageUrl: null });
     expect(s.messages()[1]).toMatchObject({ text: 'https://b.vn' });
+    expect(s.messages()[2]).toMatchObject({ text: '#K7Q2 xem giúp https://c.vn' });
     expect(s.messages()[0].unsupportedType).toBeUndefined();
+  });
+
+  it('chat.recommended không phải link (danh thiếp...) không lộ ra: bỏ, có trích tin chuyển thì đẩy unsupportedType', async () => {
+    const s = await connected();
+    const card = { action: 'recommened.user', title: 'Anh Bình', href: 'https://zalo.me/0901234567' };
+    s.api.listener.emit('message', groupMsg({}, { msgType: 'chat.recommended', content: card }));
+    s.api.listener.emit('message', groupMsg({}, { msgId: '901', msgType: 'chat.recommended', content: { title: 'x', href: 'https://y' } }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(s.messages()).toHaveLength(0);
+    s.api.listener.emit('message', groupMsg({}, { msgId: '902', msgType: 'chat.recommended', content: card, quote: { globalMsgId: 5, cliMsgId: 6, msg: '#K7Q2 · Lan' } }));
+    await vi.waitFor(() => expect(s.messages()).toHaveLength(1));
+    expect(s.messages()[0]).toMatchObject({ text: null, imageUrl: null, unsupportedType: 'chat.recommended' });
+    expect(JSON.stringify(s.messages()[0])).not.toContain('Bình');
   });
 
   it('nội dung không phải chữ cũng không phải ảnh thì bỏ', async () => {
@@ -250,6 +267,19 @@ describe('zalo-client: dấu hiệu nghe tin (health)', () => {
     const h = s.client.state();
     expect(h.lastSentAt).toBe(iso(start));
     expect(Date.parse(h.lastEventAt!)).toBeGreaterThanOrEqual(Date.parse(h.lastSentAt!));
+  });
+
+  it('sendMessage cũ xong sau khi nối lại không ghi lastSentAt', async () => {
+    const api = fakeApi();
+    let release!: () => void;
+    api.sendMessage.mockImplementationOnce(() => new Promise((r) => { release = () => r({ message: { msgId: 5 }, attachment: [] }); }));
+    const s = await connected({ api });
+    const sending = s.client.send({ idempotencyKey: 'k', text: 'a' });
+    await vi.waitFor(() => expect(api.sendMessage).toHaveBeenCalled());
+    await s.client.reconnect();
+    release();
+    await sending.catch(() => undefined);
+    expect(s.client.state().lastSentAt).toBeNull();
   });
 
   it('gửi lỗi không đổi lastSentAt', async () => {

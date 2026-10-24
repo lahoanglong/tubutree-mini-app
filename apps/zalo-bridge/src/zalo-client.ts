@@ -316,11 +316,13 @@ export function createZaloClient(deps: ZaloClientDeps) {
       imageUrl = c.href;
       const caption = [c.title, c.description].find((x) => typeof x === 'string' && x.trim() !== '');
       text = typeof caption === 'string' ? caption : null;
-    } else if (m.data.msgType === 'chat.recommended') {
-      // Tin dán link: không có chuỗi thuần, ghép title (nơi mã #MÃ có thể nằm) với href để nhân viên vẫn trả lời khách bằng link được.
-      const parts = [c?.title, c?.href].filter((x): x is string => typeof x === 'string' && x.trim() !== '');
-      if (parts.length === 0) return null;
-      text = parts.join(' ');
+    } else if (m.data.msgType === 'chat.recommended' && c?.action === 'recommened.link') {
+      // Tin dán link (sendLink của zca-js đặt cả chữ gõ lẫn URL vào title): lấy title làm text để mã #MÃ vẫn chạy.
+      // Các tin chat.recommended khác (danh thiếp...) mang tên và đường dẫn hồ sơ người khác nên không được chuyển cho khách.
+      const title = typeof c.title === 'string' ? c.title.trim() : '';
+      const href = typeof c.href === 'string' ? c.href.trim() : '';
+      text = title.includes(href) || !href ? title : title ? `${title} ${href}` : href;
+      if (!text) return null;
     } else {
       // Chỉ trả lời có trích tin mới đáng báo "chưa tới khách"; tin tự gửi (isSelf) không phải của nhân viên đang chờ phản hồi.
       if (!m.data.quote || m.isSelf) return null;
@@ -642,7 +644,8 @@ export function createZaloClient(deps: ZaloClientDeps) {
       // sendMessage.d.ts:2). Hai giá trị cùng một mã tin nhưng số dài có thể mất chính xác khi qua number, nên
       // khớp theo nội dung (60 giây) là lưới an toàn khi mã không trùng.
       echo.noteSent(id, text);
-      lastSentAt = startedAt;
+      // Lượt gửi của kết nối cũ xong muộn: echo của nó không về listener mới, ghi mốc này sẽ gây báo điếc nhầm.
+      if (api === current) lastSentAt = startedAt;
       return id;
     });
     dedupe.set(idempotencyKey, msgId);
