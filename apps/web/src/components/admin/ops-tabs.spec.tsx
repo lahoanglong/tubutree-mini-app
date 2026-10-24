@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { OpsHealthTab } from './ops-health-tab';
 import { AttendanceTab } from './attendance-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { formatDateTime } from '@/lib/format-date';
 import { scrollRegionProblems, smallTouchTargets } from '@/test-utils/a11y';
 
 let mounted: Rendered[] = [];
@@ -396,6 +397,8 @@ describe('OpsHealthTab — tác vụ nền (cron_runs)', () => {
     expect(rows[2]!.textContent).toContain('Foo.bar');
     expect(rows[2]!.textContent).toContain('OK');
     expect(rows[2]!.querySelector('.text-danger-fg')).toBeNull();
+    expect(rows[0]!.textContent).toContain(`Bắt đầu ${formatDateTime(JOBS[1]!.lastStartedAt)}`);
+    expect(rows[0]!.textContent).toContain(`Xong ${formatDateTime(JOBS[1]!.lastFinishedAt)}`);
     expect(rows[3]!.textContent).toContain('Bỏ qua');
     expect(rows[3]!.querySelector('.text-danger-fg')).toBeNull();
     expect(scrollRegionProblems(c)).toEqual([]);

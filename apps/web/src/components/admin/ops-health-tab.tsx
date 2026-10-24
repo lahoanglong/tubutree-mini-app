@@ -544,6 +544,7 @@ function HealthBody({
                 <tr>
                   <th className="px-3 py-2 font-medium">Tác vụ</th>
                   <th className="px-3 py-2 font-medium">Kết quả gần nhất</th>
+                  <th className="px-3 py-2 font-medium">Lần chạy gần nhất</th>
                   <th className="px-3 py-2 font-medium">Thành công gần nhất</th>
                   <th className="px-3 py-2 font-medium">Lỗi gần nhất</th>
                   <th className="px-3 py-2 font-medium">Lỗi liên tiếp</th>
@@ -556,6 +557,10 @@ function HealthBody({
                     <tr key={j.job} className="border-t border-stone-100 align-top">
                       <td className="px-3 py-2 font-medium text-stone-900">{j.job}</td>
                       <td className={`px-3 py-2 ${j.lastOutcome === 'ERRORS' || j.lastOutcome === 'THREW' ? 'text-danger-fg' : 'text-stone-600'}`}>{cronOutcomeLabel(j)}</td>
+                      <td className="px-3 py-2 text-xs text-stone-500">
+                        <span className="block">Bắt đầu {formatDateTime(j.lastStartedAt)}</span>
+                        <span className="block">Xong {formatDateTime(j.lastFinishedAt)}</span>
+                      </td>
                       <td className="px-3 py-2">{ago(j.lastSuccessAt)}</td>
                       <td className="px-3 py-2">
                         {j.lastError ? (
