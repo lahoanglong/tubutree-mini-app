@@ -114,13 +114,13 @@ describe('tiêu đề trang khách', () => {
   });
 
   it('/tai-khoan/don-hang/[code] có tiêu đề theo mã đơn, không lập chỉ mục', async () => {
-    const meta = await orderDetail({ params: { code: 'TB260901' } });
+    const meta = await orderDetail({ params: Promise.resolve({ code: 'TB260901' }) });
     expect(meta.title).toBe('Đơn TB260901 — Tubu Tree');
     expect(meta.robots).toEqual({ index: false, follow: false });
   });
 
   it('mã đơn trên URL được giải mã; mã hỏng không làm vỡ tiêu đề', async () => {
-    expect((await orderDetail({ params: { code: 'TB%2F1' } })).title).toBe('Đơn TB/1 — Tubu Tree');
-    expect((await orderDetail({ params: { code: '%E0%A4%A' } })).title).toBe('Đơn hàng — Tubu Tree');
+    expect((await orderDetail({ params: Promise.resolve({ code: 'TB%2F1' }) })).title).toBe('Đơn TB/1 — Tubu Tree');
+    expect((await orderDetail({ params: Promise.resolve({ code: '%E0%A4%A' }) })).title).toBe('Đơn hàng — Tubu Tree');
   });
 });

@@ -507,11 +507,11 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     });
 
     it('gọi thất bại thì không coi là đã báo: id cũ được gửi lại (không bị coi là đã báo)', async () => {
-      mocks.markRead.mockRejectedValueOnce(new Error('mạng'));
+      mocks.markRead.mockImplementationOnce(() => new Promise((_, reject) => setTimeout(() => reject(new Error('mạng')), 30)));
       mocks.getThread.mockResolvedValueOnce(thread({ messages: [m('m1', 'STAFF', 1)] }));
       mount();
       await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
-      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
       mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1), m('m2', 'STAFF', 2)] }));
       await refetchThread();
       await waitFor(() => expect(mocks.markRead.mock.calls.flatMap((c) => (c[0] as { ids: string[] }).ids)).toContain('m2'));
@@ -519,11 +519,11 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     });
 
     it('báo lỗi một lần rồi thread tải lại với dữ liệu y hệt: gửi lại đúng các id đó; thành công rồi thì không gửi nữa', async () => {
-      mocks.markRead.mockRejectedValueOnce(new Error('mạng'));
+      mocks.markRead.mockImplementationOnce(() => new Promise((_, reject) => setTimeout(() => reject(new Error('mạng')), 30)));
       mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1)] }));
       mount();
       await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
-      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
       await refetchThread();
       await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(2));
       expect(mocks.markRead).toHaveBeenLastCalledWith({ ids: ['m1'] });
