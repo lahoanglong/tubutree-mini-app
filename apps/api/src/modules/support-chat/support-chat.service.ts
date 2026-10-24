@@ -188,8 +188,17 @@ export class SupportChatService {
     return Object.keys(kept).length > 0 ? kept : undefined;
   }
 
-  async markRead(userId: string): Promise<{ ok: true }> {
-    await this.prisma.supportConversation.updateMany({ where: { userId }, data: { customerReadAt: new Date() } });
+  /** `upToId`: tin mới nhất màn khách đã hiển thị. Đánh dấu đã đọc đến đúng tin đó, không phải "bây giờ", để tin đến sau lúc màn vẽ không bị coi là đã thấy. */
+  async markRead(userId: string, upToId?: string): Promise<{ ok: true }> {
+    const conv = await this.prisma.supportConversation.findUnique({ where: { userId }, select: { id: true } });
+    if (!conv) return { ok: true };
+    const rendered = upToId ? await this.prisma.supportMessage.findFirst({ where: { id: upToId, conversationId: conv.id }, select: { createdAt: true } }) : null;
+    const at = rendered?.createdAt ?? new Date();
+    // Chỉ tiến lên: một yêu cầu đến muộn mang tin cũ hơn không được kéo mốc đã đọc lùi lại.
+    await this.prisma.supportConversation.updateMany({
+      where: { id: conv.id, OR: [{ customerReadAt: null }, { customerReadAt: { lt: at } }] },
+      data: { customerReadAt: at },
+    });
     return { ok: true };
   }
 

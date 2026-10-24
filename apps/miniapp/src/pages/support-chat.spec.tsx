@@ -222,7 +222,7 @@ describe('Màn chat với Tubu Tree', () => {
     mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
     renderPage();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    await waitFor(() => expect(mocks.markRead).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith('m1'));
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['support-chat-summary'] }));
   });
 

@@ -84,7 +84,7 @@ function ChatBody() {
 
   useEffect(() => {
     if (!visible || !lastId) return;
-    void markSupportChatRead(coreHttp)
+    void markSupportChatRead(coreHttp, lastId)
       .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQuery(coreHttp).queryKey }))
       .catch(() => undefined);
   }, [lastId, visible, qc]);

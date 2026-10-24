@@ -22,6 +22,16 @@ describe('support-chat — hợp đồng gọi API', () => {
     ]);
   });
 
+  it('markSupportChatRead: có id tin đã hiển thị thì gửi upToId, không có thì không gửi body', async () => {
+    const { http, calls } = fakeHttp();
+    await markSupportChatRead(http, 'm9');
+    await markSupportChatRead(http);
+    expect(calls).toEqual([
+      { method: 'post', path: '/me/support-chat/read', body: { upToId: 'm9' } },
+      { method: 'post', path: '/me/support-chat/read' },
+    ]);
+  });
+
   it('getSupportChatPage: after/before để undefined thì không có khoá nào trong query', async () => {
     const { http, calls } = fakeHttp();
     await getSupportChatPage(http, { after: undefined });

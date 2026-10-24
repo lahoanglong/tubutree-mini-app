@@ -38,7 +38,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path.startsWith('/products/')) return mocks.product(path);
       return Promise.reject(new Error(`chưa mock ${path}`));
     },
-    post: (path: string, body?: unknown) => (path === '/me/support-chat/read' ? mocks.markRead() : mocks.send(body)),
+    post: (path: string, body?: unknown) => (path === '/me/support-chat/read' ? mocks.markRead(body) : mocks.send(body)),
   },
 }));
 vi.mock('@/components/account/cloudinary-upload', () => ({
@@ -456,7 +456,7 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
     const c = mount();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    await waitFor(() => expect(mocks.markRead).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith({ upToId: 'm1' }));
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['support-chat-summary'] }));
     expect(c.textContent).toContain('Tubu Tree');
   });

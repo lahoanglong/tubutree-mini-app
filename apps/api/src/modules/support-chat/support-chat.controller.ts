@@ -10,6 +10,10 @@ class PageQuery {
   @IsOptional() @IsString() @MaxLength(64) before?: string;
 }
 
+class ReadBody {
+  @IsOptional() @IsString() @MaxLength(64) upToId?: string;
+}
+
 @Controller('me/support-chat')
 export class SupportChatController {
   constructor(private readonly chat: SupportChatService) {}
@@ -32,8 +36,8 @@ export class SupportChatController {
   }
 
   @Post('read')
-  read(@CurrentUser('sub') userId: string) {
-    return this.chat.markRead(userId);
+  read(@CurrentUser('sub') userId: string, @Body() body?: ReadBody) {
+    return this.chat.markRead(userId, body?.upToId);
   }
 
   @Get('summary')

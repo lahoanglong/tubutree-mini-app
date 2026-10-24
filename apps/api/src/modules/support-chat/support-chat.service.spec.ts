@@ -313,11 +313,41 @@ describe('unreadCount / markRead', () => {
     expect(b.prisma.supportConversation.create).not.toHaveBeenCalled();
   });
 
-  it('markRead đặt customerReadAt', async () => {
-    const { svc, prisma } = setup();
-    expect(await svc.markRead('u1')).toEqual({ ok: true });
-    expect(prisma.supportConversation.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'u1' }, data: { customerReadAt: expect.any(Date) },
+  describe('markRead', () => {
+    const T = new Date('2026-10-23T11:00:00Z');
+
+    it('không có upToId: customerReadAt = bây giờ, chỉ tiến lên (không lùi)', async () => {
+      const { svc, prisma } = setup();
+      expect(await svc.markRead('u1')).toEqual({ ok: true });
+      const call = prisma.supportConversation.updateMany.mock.calls[0][0];
+      expect(call.where).toEqual({ id: 'c1', OR: [{ customerReadAt: null }, { customerReadAt: { lt: expect.any(Date) } }] });
+      expect(call.data).toEqual({ customerReadAt: expect.any(Date) });
+      expect(prisma.supportMessage.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('có upToId thuộc hội thoại của khách: customerReadAt = createdAt của tin đó', async () => {
+      const { svc, prisma } = setup();
+      prisma.supportMessage.findFirst.mockResolvedValueOnce({ createdAt: T });
+      await svc.markRead('u1', 'm7');
+      expect(prisma.supportMessage.findFirst).toHaveBeenCalledWith({ where: { id: 'm7', conversationId: 'c1' }, select: { createdAt: true } });
+      const call = prisma.supportConversation.updateMany.mock.calls[0][0];
+      expect(call.data).toEqual({ customerReadAt: T });
+      expect(call.where.OR).toEqual([{ customerReadAt: null }, { customerReadAt: { lt: T } }]);
+    });
+
+    it('upToId của hội thoại khác hoặc không có: dùng bây giờ như cũ', async () => {
+      const { svc, prisma } = setup();
+      prisma.supportMessage.findFirst.mockResolvedValueOnce(null);
+      await svc.markRead('u1', 'xa-la');
+      expect(prisma.supportConversation.updateMany.mock.calls[0][0].data.customerReadAt.getTime()).toBeGreaterThan(T.getTime());
+    });
+
+    it('khách chưa có hội thoại: không làm gì, không tạo', async () => {
+      const { svc, prisma } = setup();
+      prisma.supportConversation.findUnique.mockResolvedValue(null);
+      expect(await svc.markRead('u1')).toEqual({ ok: true });
+      expect(prisma.supportConversation.updateMany).not.toHaveBeenCalled();
+      expect(prisma.supportConversation.create).not.toHaveBeenCalled();
     });
   });
 });
