@@ -89,4 +89,12 @@ describe('BottomSheet', () => {
     const { Dialog } = await import('./bottom-sheet');
     expect(Dialog).toBe(BottomSheet);
   });
+
+  it('đóng rồi mở lại trước khi animation đóng xong: nội dung vẫn còn sau khi hẹn giờ đóng cũ chạy', async () => {
+    const { rerender } = render(<BottomSheet open title="t" onClose={() => {}}>Nội dung</BottomSheet>);
+    rerender(<BottomSheet open={false} title="t" onClose={() => {}}>Nội dung</BottomSheet>);
+    rerender(<BottomSheet open title="t" onClose={() => {}}>Nội dung</BottomSheet>);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(screen.getByText('Nội dung')).toBeInTheDocument();
+  });
 });

@@ -391,9 +391,7 @@ describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)'
     fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
     await screen.findByText('Rút tiền về ngân hàng');
-    // Tiêu đề sheet có thể render trước form trên máy CI chậm: chờ đúng ô nhập.
-    const amount = await waitFor(() => inputOf('Số tiền rút'), { timeout: 3000 });
-    fireEvent.change(amount, { target: { value: '400000' } });
+    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
     press();
     await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
     expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
