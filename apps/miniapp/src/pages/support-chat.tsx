@@ -15,6 +15,7 @@ import { Composer } from '../components/support-chat/composer';
 import { ContextChip } from '../components/support-chat/context-chip';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { getErrorMessage, isHttpError } from '../services/api';
+import { useLivePathnameRef } from '../hooks/use-live-pathname';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPhoneDisplay } from '../utils/phone';
 import { haptic } from '../utils/haptic';
@@ -56,7 +57,8 @@ function toItem(m: SupportChatMessageDTO): ChatItem {
 }
 
 function ChatBody() {
-  const { search } = useLocation();
+  const { pathname, search } = useLocation();
+  const livePathname = useLivePathnameRef();
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const params = useMemo(() => new URLSearchParams(search), [search]);
@@ -226,7 +228,11 @@ function ChatBody() {
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
             <Composer
               onSend={(body) => enqueue(body, null)}
-              onSendImage={(url) => enqueue('', url)}
+              onSendImage={(url) => {
+                // Trang cũ còn mount suốt hiệu ứng thoát nên composer chưa unmount: hỏi router thật xem khách còn ở màn chat không.
+                if (livePathname && livePathname.current !== pathname) return;
+                enqueue('', url);
+              }}
               onImageError={(text) => openSnackbar({ text, type: 'error' })}
             />
           </>

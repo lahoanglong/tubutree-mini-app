@@ -47,6 +47,7 @@ vi.mock('./about-data', async (importOriginal) => ({
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { LivePathnameContext } from '../hooks/use-live-pathname';
 import SupportChatPage from './support-chat';
 
 const msg = (over: Record<string, unknown>) => ({
@@ -289,6 +290,27 @@ describe('Màn chat với Tubu Tree', () => {
     fireEvent.change(container.querySelector('input[type=file]')!, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
     await waitFor(() => expect(mocks.upload).toHaveBeenCalledTimes(1));
     unmount();
+    await act(async () => finishUpload('https://img.example/a.jpg'));
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('ảnh tải xong khi router đã sang trang khác (trang cũ còn mount lúc hiệu ứng thoát): không gửi tin', async () => {
+    mocks.cloudinary = true;
+    let finishUpload!: (url: string) => void;
+    mocks.upload.mockReturnValue(new Promise((r) => (finishUpload = r)));
+    const live = { current: '/chat' };
+    qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <LivePathnameContext.Provider value={live}>
+          <SupportChatPage />
+        </LivePathnameContext.Provider>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('textbox');
+    fireEvent.change(container.querySelector('input[type=file]')!, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledTimes(1));
+    live.current = '/orders';
     await act(async () => finishUpload('https://img.example/a.jpg'));
     expect(mocks.send).not.toHaveBeenCalled();
   });

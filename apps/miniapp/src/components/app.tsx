@@ -17,6 +17,7 @@ import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
+import { LivePathnameProvider } from '../hooks/use-live-pathname';
 import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/analytics';
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
@@ -182,6 +183,7 @@ export default function MyApp() {
             <ZMPRouter>
               <ScreenTracker />
               {/* Loại điều hướng thật cho trang con — useNavigationType của react-router luôn là POP trong AnimationRoutes. */}
+              <LivePathnameProvider>
               <NavigationTypeProvider>
                 <MainLandmark>
                 <Suspense fallback={<RouteFallback />}>
@@ -248,6 +250,7 @@ export default function MyApp() {
                 </Suspense>
                 </MainLandmark>
               </NavigationTypeProvider>
+              </LivePathnameProvider>
               <BottomNav />
               <BackButton />
               <OnboardingGate />
