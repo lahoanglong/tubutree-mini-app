@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
@@ -60,9 +59,11 @@ function CallbackInner() {
             <a href={failure.retryHref} className={ui.btnPrimary}>
               {failure.transient ? 'Thử lại' : 'Đăng nhập lại'}
             </a>
-            <Link href="/" className={ui.btnSecondary}>
+            {/* Tải lại hẳn trang: trao đổi mã lỗi để trạng thái đăng nhập ở 'idle'; tải lại mới khôi phục phiên cookie còn hạn. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a href="/" className={ui.btnSecondary}>
               Về trang chủ
-            </Link>
+            </a>
           </div>
         </>
       ) : (
