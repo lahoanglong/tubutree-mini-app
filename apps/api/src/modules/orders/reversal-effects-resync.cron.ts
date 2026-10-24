@@ -37,7 +37,7 @@ export class ReversalEffectsResyncCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */5 * * * *', { name: 'orders.reversal-effects-resync', timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     try {
       const res = await this.resyncPending();

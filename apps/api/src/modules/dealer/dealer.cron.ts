@@ -18,7 +18,10 @@ export class DealerCron {
   async payoutQuarterly() {
     try {
       const { paid, quarter, failed } = await this.dealer.payoutQuarterlyBonuses();
-      this.logger.log(`Cron thưởng quý ${quarter}: đã trả ${paid} đại lý${failed > 0 ? `, ${failed} đại lý lỗi` : ''}.`);
+      const summary = `Cron thưởng quý ${quarter}: đã trả ${paid} đại lý${failed > 0 ? `, ${failed} đại lý lỗi` : ''}.`;
+      // Trả một phần cũng là hỏng: quý chỉ chạy một lần, phải để sổ cron báo.
+      if (failed > 0) this.logger.error(summary);
+      else this.logger.log(summary);
     } catch (err) {
       this.logger.error(`Cron trả thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);
     }
@@ -31,7 +34,9 @@ export class DealerCron {
     try {
       const { toppedUp, quarters, failed } = await this.dealer.topUpQuarterlyBonuses();
       if (toppedUp > 0 || failed > 0) {
-        this.logger.log(`Cron trả bù thưởng quý ${quarters.join(', ')}: đã bù ${toppedUp} khoản${failed > 0 ? `, ${failed} lượt đại lý lỗi` : ''}.`);
+        const summary = `Cron trả bù thưởng quý ${quarters.join(', ')}: đã bù ${toppedUp} khoản${failed > 0 ? `, ${failed} lượt đại lý lỗi` : ''}.`;
+        if (failed > 0) this.logger.error(summary);
+        else this.logger.log(summary);
       }
     } catch (err) {
       this.logger.error(`Cron trả bù thưởng quý lỗi: ${err instanceof Error ? err.stack ?? err.message : err}`);

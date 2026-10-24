@@ -33,7 +33,7 @@ export class WastePickupSweepCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */5 * * * *', { name: 'waste.pickup-sweep', timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     try {
       const res = await this.run();
@@ -56,7 +56,7 @@ export class WastePickupSweepCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext('cron:waste.pickup_sweep')) AS "locked"`;
-          if (!row?.locked) return none;
+          if (!row?.locked) { markCronSkipped('LOCKED'); return none; }
           return this.sweep();
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },

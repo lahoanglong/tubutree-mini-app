@@ -31,7 +31,7 @@ export class ZalopayReconcileCron {
   ) {}
 
   @Cron('20 */5 * * * *', { name: 'payments.zalopay-reconcile', timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     try {
       const res = await this.reconcile();

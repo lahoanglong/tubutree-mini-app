@@ -32,7 +32,7 @@ export class ExternalClaimCron {
 
   /** Mỗi 30 phút: ghép lại lần gửi mã chưa thấy đơn, rồi cộng claim tới hạn. */
   @Cron('0 */30 * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async everyThirtyMinutes(): Promise<void> {
     if (this.running) { markCronSkipped('RUNNING'); return; }
     this.running = true;
@@ -52,7 +52,7 @@ export class ExternalClaimCron {
 
   /** Mỗi 10 phút: kéo dự phòng (cờ tắt thì không làm gì). */
   @Cron('0 */10 * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async pollFallback(): Promise<void> {
     try {
       await this.poll.pollOnce();

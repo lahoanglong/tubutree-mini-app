@@ -513,7 +513,7 @@ export class OpsHealthService {
   }
 
   @Cron('0 */5 * * * *', { name: 'ops.health-alert', timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     if (this.running) { markCronSkipped('RUNNING'); return; }
     this.running = true;

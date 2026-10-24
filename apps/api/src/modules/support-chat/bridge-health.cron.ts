@@ -44,10 +44,13 @@ export class BridgeHealthCron {
   ) {}
 
   @Cron('0 * * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async everyMinute(): Promise<void> {
     // Chưa cấu hình cầu nối (môi trường chưa dùng chat): không có gì để kiểm, báo hay quét.
-    if (this.running || !this.bridge.isConfigured()) { markCronSkipped('RUNNING'); return; }
+    if (this.running || !this.bridge.isConfigured()) {
+      markCronSkipped(this.running ? 'RUNNING' : 'NOT_CONFIGURED');
+      return;
+    }
     this.running = true;
     this.canResumeFailed = false;
     try {

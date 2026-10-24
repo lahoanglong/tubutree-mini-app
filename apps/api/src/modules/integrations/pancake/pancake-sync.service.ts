@@ -156,6 +156,7 @@ export class PancakeSyncService implements OnModuleInit {
   /** Lượt tự động gặp lượt khác đang chạy là chuyện bình thường (boot chậm gặp mốc cron, admin vừa bấm) — chỉ cảnh báo. */
   private logFailure(what: string, err: unknown): void {
     if (err instanceof CatalogSyncBusyError) {
+      markCronSkipped('BUSY');
       this.logger.warn(`${what}: một lượt đồng bộ danh mục khác đang chạy — bỏ qua lượt này.`);
       return;
     }
@@ -163,7 +164,7 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async scheduledSync(): Promise<void> {
     if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; } // dev: bỏ qua khi chưa có key
     // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — syncProducts() ném ra ngoài (Pancake

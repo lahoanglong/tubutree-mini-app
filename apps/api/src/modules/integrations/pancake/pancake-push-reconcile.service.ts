@@ -71,7 +71,7 @@ export class PancakePushReconcileService {
   // unhandledRejection, Node 20 mặc định crash cả process. Lỗi enqueuePush từng đơn đã được cô
   // lập ở try/catch trong vòng lặp bên dưới; lớp ngoài này bắt phần còn lại (query, v.v).
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút, lệch mốc với PancakeSyncService cho dễ đọc log
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async reconcile(): Promise<void> {
     try {
       if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; } // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()

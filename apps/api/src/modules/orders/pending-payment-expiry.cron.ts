@@ -46,7 +46,7 @@ export class PendingPaymentExpiryCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */10 * * * *', { name: 'orders.pending-payment-expiry', timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     try {
       const res = await this.expireStale();

@@ -49,7 +49,7 @@ export class PancakeEventsReconcileService {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('45 */10 * * * *', { name: 'pancake.events-reconcile', timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async reconcile(): Promise<void> {
     try {
       await this.redriveEvents();

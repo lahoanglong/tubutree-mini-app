@@ -11,7 +11,7 @@ export class GroupBuyCron {
   constructor(private readonly groupBuy: GroupBuyService) {}
 
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async sweep() {
     try {
       const n = await this.groupBuy.expireGroups();

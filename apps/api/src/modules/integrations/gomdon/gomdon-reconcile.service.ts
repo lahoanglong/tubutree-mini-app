@@ -55,7 +55,7 @@ export class GomdonReconcileService {
   // Mỗi bước bọc try/catch riêng: @Cron không tự bắt lỗi (unhandledRejection làm sập process), và
   // một bước lỗi không được chặn các bước còn lại.
   @Cron('30 */10 * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async reconcile(): Promise<void> {
     for (const [name, step] of [
       ['events', () => this.redriveEvents()],

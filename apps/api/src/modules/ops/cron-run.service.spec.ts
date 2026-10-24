@@ -54,8 +54,8 @@ const at = (min: number) => new Date(T0.getTime() + min * 60_000);
 const base = (job: string, startMin: number) => ({ job, startedAt: at(startMin), finishedAt: new Date(at(startMin).getTime() + 1500) });
 const ok = (job: string, m: number) => ({ ...base(job, m), outcome: 'OK' as const, errorCount: 0 });
 const skipped = (job: string, m: number) => ({ ...base(job, m), outcome: 'SKIPPED' as const, errorCount: 0 });
-const threw = (job: string, m: number, error: unknown = new Error('e')) => ({ ...base(job, m), outcome: 'THREW' as const, errorCount: 0, error });
-const logged = (job: string, m: number, line = 'sync lỗi', n = 2) => ({ ...base(job, m), outcome: 'ERRORS' as const, errorCount: n, errorLine: line });
+const threw = (job: string, m: number, error: unknown = new Error('e'), alertAfter?: number) => ({ ...base(job, m), outcome: 'THREW' as const, errorCount: 0, error, ...(alertAfter ? { alertAfter } : {}) });
+const logged = (job: string, m: number, line = 'sync lỗi', n = 2, alertAfter?: number) => ({ ...base(job, m), outcome: 'ERRORS' as const, errorCount: n, errorLine: line, ...(alertAfter ? { alertAfter } : {}) });
 
 describe('CronRunService.record', () => {
   afterEach(() => setCronRunSink(undefined));
@@ -79,17 +79,24 @@ describe('CronRunService.record', () => {
     expect(rows.get('A.x')).toMatchObject({ lastOutcome: 'ERRORS', consecutiveFailures: 1, lastErrorCount: 3, lastError: 'pancake timeout', lastSuccessAt: null });
   });
 
-  it('một lần lỗi lẻ chưa báo; từ lần liên tiếp thứ hai mới báo, đúng một lần mỗi 6 giờ', async () => {
+  it('mặc định báo ngay từ lần hỏng đầu (job hiếm: hằng ngày, hằng tuần, hằng quý)', async () => {
+    const { svc, notify } = build();
+    await svc.record(threw('Rare.job', 0));
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith('a0', 'OPS_CRON_FAILED', { job: 'Rare.job', count: '1', error: 'Error: e' });
+  });
+
+  it('job chạy dày (alertAfter 2): một lần lỗi lẻ chưa báo; từ lần liên tiếp thứ hai báo, đúng một lần mỗi 6 giờ', async () => {
     const { svc, rows, notify } = build();
-    await svc.record(logged('A.x', 0));
+    await svc.record(logged('A.x', 0, 'sync lỗi', 2, 2));
     expect(notify).not.toHaveBeenCalled();
-    await svc.record(logged('A.x', 5, 'sync lỗi'));
+    await svc.record(logged('A.x', 5, 'sync lỗi', 2, 2));
     expect(notify).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith('a0', 'OPS_CRON_FAILED', { job: 'A.x', count: '2', error: 'sync lỗi' });
-    await svc.record(threw('A.x', 359));
+    await svc.record(threw('A.x', 359, new Error('e'), 2));
     expect(notify).toHaveBeenCalledTimes(1);
     expect(rows.get('A.x')!.consecutiveFailures).toBe(3);
-    await svc.record(threw('A.x', 372));
+    await svc.record(threw('A.x', 372, new Error('e'), 2));
     expect(notify).toHaveBeenCalledTimes(2);
   });
 
@@ -130,10 +137,9 @@ describe('CronRunService.record', () => {
 
   it('gửi báo lỗi thì nhả mốc báo để lượt sau thử lại, record không ném', async () => {
     const { svc, rows, notify } = build({ notifyFails: true });
-    await svc.record(threw('A.x', 0));
-    await expect(svc.record(threw('A.x', 1))).resolves.toBeUndefined();
+    await expect(svc.record(threw('A.x', 0))).resolves.toBeUndefined();
     expect(rows.get('A.x')!.lastAlertedAt).toBeNull();
-    await svc.record(threw('A.x', 2));
+    await svc.record(threw('A.x', 1));
     expect(notify).toHaveBeenCalledTimes(2);
   });
 

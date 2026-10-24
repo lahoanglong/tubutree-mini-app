@@ -27,7 +27,7 @@ export class DealerBackorderService {
   // Lệch 30s sau mốc Pancake sync (0 */15 phút) để chạy NGAY SAU khi stock vừa được cập nhật —
   // không bắt buộc đúng thứ tự (chạy trước cũng không sai), chỉ để giảm độ trễ lấp hàng.
   @Cron('30 */15 * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async reconcile(): Promise<number> {
     // Toàn thân bọc try/catch: 1 lỗi DB tạm thời (Prisma timeout/connection) không được phép
     // thoát ra khỏi hàm cron — Node 20 coi unhandledRejection là lỗi chết tiến trình, và job này

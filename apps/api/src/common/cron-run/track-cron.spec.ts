@@ -44,6 +44,26 @@ class Probe {
     markCronSkipped('RUNNING');
   }
 
+  running = false;
+  release: (() => void) | null = null;
+  reason = 'RUNNING';
+
+  /** Mẫu cron có guard chạy chồng; hangAfterMs nhỏ để test không phải chờ 2 giờ. */
+  @Cron('0 0 1 1 *', { name: 'probe.guarded', timeZone: CRON_TZ })
+  @TrackCron({ hangAfterMs: 30, alertAfter: 2 })
+  async guarded(): Promise<void> {
+    if (this.running) {
+      markCronSkipped(this.reason);
+      return;
+    }
+    this.running = true;
+    try {
+      await new Promise<void>((resolve) => (this.release = resolve));
+    } finally {
+      this.running = false;
+    }
+  }
+
   @Cron('0 0 1 1 *', { name: 'probe.named', timeZone: CRON_TZ })
   @TrackCron()
   async named(): Promise<string> {
@@ -144,6 +164,40 @@ describe('TrackCron (chạy trên @nestjs/schedule + cron thật)', () => {
     await mod.close();
   });
 
+  describe('lần chạy treo', () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    it('lượt sau bị bỏ qua vì lượt trước còn chạy quá hangAfterMs: tính là hỏng, nói rõ treo từ lúc nào', async () => {
+      const { mod, probe, registry } = await boot();
+      const job = registry.getCronJob('probe.guarded');
+      job.fireOnTick();
+      await sleep(5);
+      job.fireOnTick();
+      await until(() => reports.length > 0);
+      expect(reports[0]).toMatchObject({ outcome: 'SKIPPED', alertAfter: 2 });
+      await sleep(40);
+      job.fireOnTick();
+      await until(() => reports.length > 1);
+      expect(reports[1]).toMatchObject({ job: 'probe.guarded', outcome: 'ERRORS', errorCount: 1, alertAfter: 2 });
+      expect(reports[1]!.errorLine).toMatch(/^Đang chạy treo từ \d{2}:\d{2}/);
+      probe.release!();
+      await mod.close();
+    });
+
+    it('bỏ qua vì lý do khác (chưa cấu hình) thì không bao giờ là treo', async () => {
+      const { mod, probe, registry } = await boot();
+      const job = registry.getCronJob('probe.guarded');
+      job.fireOnTick();
+      await sleep(45);
+      probe.reason = 'NOT_CONFIGURED';
+      job.fireOnTick();
+      await until(() => reports.length > 0);
+      expect(reports[0]).toMatchObject({ outcome: 'SKIPPED' });
+      probe.release!();
+      await mod.close();
+    });
+  });
+
   it('markCronSkipped ngoài cron: không làm gì', () => {
     expect(() => markCronSkipped('RUNNING')).not.toThrow();
   });
@@ -191,7 +245,7 @@ describe('mọi @Cron đều kèm @TrackCron()', () => {
       let j = i + 1;
       let found = false;
       while (j < lines.length && /^[ \t]*(@|\}|\)|[a-zA-Z]*:|\/\/)/.test(lines[j] ?? '')) {
-        if (/^[ \t]*@TrackCron\(\)/.test(lines[j] ?? '')) found = true;
+        if (/^[ \t]*@TrackCron\(/.test(lines[j] ?? '')) found = true;
         j++;
       }
       expect({ line: i + 1, found }).toEqual({ line: i + 1, found: true });

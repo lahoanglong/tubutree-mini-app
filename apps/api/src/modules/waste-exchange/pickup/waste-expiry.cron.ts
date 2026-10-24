@@ -58,7 +58,7 @@ export class WasteExpiryCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext('cron:waste.expiry')) AS "locked"`;
-          if (!row?.locked) return { expired: 0 };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { expired: 0 }; }
           return this.sweep(now, cfg);
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },

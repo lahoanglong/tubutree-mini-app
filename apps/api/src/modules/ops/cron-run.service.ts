@@ -5,8 +5,6 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const ALERT_EVERY_MS = 6 * 3_600_000;
-/** Một lần lỗi lẻ (mạng chập chờn) chưa đáng báo. */
-const ALERT_AFTER_FAILURES = 2;
 const RECOVERY_QUIET_MS = 3_600_000;
 const MAX_ERROR_LENGTH = 300;
 
@@ -83,7 +81,7 @@ export class CronRunService implements OnModuleInit, CronRunSink {
       create: { job: run.job, ...timing, ...fail, consecutiveFailures: 1 },
       update: { ...timing, ...fail, consecutiveFailures: { increment: 1 } },
     });
-    if (row.consecutiveFailures < ALERT_AFTER_FAILURES) return;
+    if (row.consecutiveFailures < (run.alertAfter ?? 1)) return;
     // Giành quyền báo bằng một UPDATE có điều kiện: hai lần lỗi sát nhau chỉ một bên thấy count = 1.
     const claimed = await this.prisma.cronRun.updateMany({
       where: { job: run.job, OR: [{ lastAlertedAt: null }, { lastAlertedAt: { lt: new Date(run.finishedAt.getTime() - ALERT_EVERY_MS) } }] },

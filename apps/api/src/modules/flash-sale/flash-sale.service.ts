@@ -628,7 +628,7 @@ export class FlashSaleService {
    * để 1 lần gửi hỏng không chặn cả lô.
    */
   @Cron('* * * * *', { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async notifyStartedFlashSales(now: Date = new Date()): Promise<void> {
     try {
       // Lọc cửa sổ sale NGAY TRONG TRUY VẤN. Trước đây chỉ lọc `notifiedAt: null` rồi mới xét

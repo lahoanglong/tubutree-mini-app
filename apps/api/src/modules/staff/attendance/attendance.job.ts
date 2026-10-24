@@ -33,7 +33,7 @@ export class AttendanceJob {
 
   /** Mỗi 5 phút: đóng phiên đã quá giờ hết ca (chốt tại giờ hết ca). Không cắt theo heartbeat. */
   @Cron(CronExpression.EVERY_5_MINUTES, { timeZone: CRON_TZ })
-  @TrackCron()
+  @TrackCron({ alertAfter: 2 })
   async sweep(): Promise<{ closed: number }> {
     const now = new Date();
     const open = await this.prisma.attendanceSession.findMany({
