@@ -84,6 +84,8 @@ describe('evaluateBackup', () => {
       expect(status(s, 'backup.offsite')).toBe('FAIL');
     });
     it('remote có trong rclone thì PASS', () => expect(status(GOOD_BACKUP, 'backup.offsite')).toBe('PASS'));
+    it('remote loại drive (không crypt) thì WARN', () => expect(status(snap({ rclone: { available: true, remotes: ['r2'], types: { r2: 'drive' } } }), 'backup.offsite')).toBe('WARN'));
+    it('remote loại crypt thì PASS', () => expect(status(snap({ rclone: { available: true, remotes: ['r2'], types: { r2: 'crypt' } } }), 'backup.offsite')).toBe('PASS'));
     it('remote không có trong rclone thì FAIL', () => expect(status(snap({ rclone: { available: true, remotes: ['khac'] } }), 'backup.offsite')).toBe('FAIL'));
     it('có tên remote nhưng không có rclone thì WARN', () => expect(status(snap({ rclone: { available: false, remotes: [] } }), 'backup.offsite')).toBe('WARN'));
     it('không biết remote nào thì WARN', () => expect(status(BLIND, 'backup.offsite')).toBe('WARN'));

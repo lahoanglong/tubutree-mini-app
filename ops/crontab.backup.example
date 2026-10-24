@@ -9,7 +9,7 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # bản ngoài máy giữ theo REMOTE_KEEP_DAYS (mặc định 90 ngày). Chỉ hạ BACKUP_KEEP_COUNT khi đã có RCLONE_REMOTE chạy thật
 # (bản ngoài máy là bản sao thứ hai); chưa có remote thì bản trên máy là bản duy nhất, đừng hạ.
 # Thiếu RCLONE_REMOTE hoặc HEALTHCHECK_URL thì vẫn chạy, chỉ in WARN vào log (nhưng go-live:check sẽ báo FAIL/WARN).
-17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=gdrive:tubutree-backups REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
+17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
 
 # Bản TRƯỚC mỗi deploy không đặt trong cron: chạy tay `bash ops/backup-predeploy.sh` ngay trước deploy
 # (nhãn predeploy, giữ 10 bản, không ping healthcheck của cron này).

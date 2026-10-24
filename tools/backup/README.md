@@ -20,7 +20,8 @@ Mặc định cả hai script dùng `docker-compose.vietnix.yml` (VPS Vietnix đ
 | `COMPOSE_FILE` | `<repo>/docker-compose.vietnix.yml` | Compose của máy đang chạy |
 | `BACKUP_DIR` | `/var/backups/tubutree` | Thư mục lưu file `.sql.gz` |
 | `BACKUP_KEEP_DAYS` | `30` | Giữ backup local bao nhiêu ngày |
-| `RCLONE_REMOTE` | *(trống)* | Đích ngoài máy, ví dụ `gdrive:tubutree-backups`. Đặt mà upload lỗi thì script exit khác 0 |
+| `RCLONE_REMOTE` | *(trống)* | Đích ngoài máy, ví dụ `tubucrypt:`. PHẢI là remote rclone loại `crypt` (xem "Mã hoá bản ngoài máy"); loại khác thì script không đẩy, in ERROR và exit 3. Đặt mà upload lỗi thì script exit khác 0 |
+| `BACKUP_ALLOW_PLAIN_REMOTE` | `0` | `1` = cho đẩy bản KHÔNG mã hoá lên remote không phải crypt. Chỉ dùng khi chủ chấp nhận rủi ro; mặc định cấm vì dump có SĐT, địa chỉ, tài khoản ngân hàng hoàn tiền của khách |
 | `REMOTE_KEEP_DAYS` | `90` | Xoá bản trên remote cũ hơn số ngày này (cron 6 giờ/lần ra ~360 file trong 90 ngày) |
 | `BACKUP_LABEL` | *(trống)* | Nhãn gắn vào tên file: `tubutree_<giờ>_<nhãn>.sql.gz` (chỉ chữ và số). Cron dùng `cron`, bản trước deploy dùng `predeploy`. Trống = tên cũ `tubutree_<giờ>.sql.gz` |
 | `BACKUP_KEEP_COUNT` | `0` | Giữ N bản mới nhất **cùng nhãn** trên máy, xoá bản cũ hơn. `0` = không xoá theo số bản (chỉ theo `BACKUP_KEEP_DAYS`). Nhãn khác và bản không nhãn không bị đụng |
@@ -47,8 +48,8 @@ rclone config                       # tạo remote tên "gdrive" (xem "Remote Go
 rclone mkdir gdrive:tubutree-backups    # thư mục đích
 
 # Chạy thử với đúng biến sẽ đặt trong cron
-RCLONE_REMOTE=gdrive:tubutree-backups ./tools/backup/backup-db.sh
-ls -lh /var/backups/tubutree/ && rclone ls gdrive:tubutree-backups
+RCLONE_REMOTE=tubucrypt: ./tools/backup/backup-db.sh
+ls -lh /var/backups/tubutree/ && rclone ls tubucrypt:
 ```
 
 ## Remote Google Drive (`gdrive:tubutree-backups`)
@@ -62,7 +63,7 @@ Cần một tài khoản Google còn chỗ trống (một bản dump nén vài c
 5. Thử: `rclone mkdir gdrive:tubutree-backups && rclone lsd gdrive:` (thấy thư mục `tubutree-backups`), rồi chạy thử một bản (lệnh ở "Cài đặt" bên trên) và `rclone ls gdrive:tubutree-backups`.
 6. Token hết hạn hay bị thu hồi thì upload lỗi, script thoát 3 và healthchecks.io báo: lặp lại bước 2 và 3 (`rclone config reconnect gdrive:` rồi dán token mới).
 
-Biến cho cron: `RCLONE_REMOTE=gdrive:tubutree-backups`, `REMOTE_KEEP_DAYS=90` (đặt thêm vào dòng cron nếu muốn khác 90; 6 giờ/lần ra khoảng 360 file trong 90 ngày).
+Biến cho cron: `RCLONE_REMOTE=tubucrypt:`, `REMOTE_KEEP_DAYS=90` (đặt thêm vào dòng cron nếu muốn khác 90; 6 giờ/lần ra khoảng 360 file trong 90 ngày).
 
 ## Cài crontab (6 giờ/lần) và bản trước mỗi deploy
 
@@ -71,7 +72,7 @@ Mất tối đa 6 giờ dữ liệu khi phải khôi phục (trước đây cron
 ```bash
 crontab -l 2>/dev/null | grep -v 'tools/backup/backup-db.sh' > /tmp/cron.new   # bỏ dòng 02:00 cũ nếu có
 cat >> /tmp/cron.new <<'CRON'
-17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=gdrive:tubutree-backups REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
+17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=https://hc-ping.com/<uuid> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1
 CRON
 crontab /tmp/cron.new && crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
 ```
@@ -83,18 +84,51 @@ Giữ 120 bản `cron` trên máy (30 ngày x 4, bằng mức 30 ngày của cro
 Bản trước mỗi deploy (chạy tay ngay trước deploy, sau khi mã mới đã về máy):
 
 ```bash
-cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=gdrive:tubutree-backups bash ops/backup-predeploy.sh
+cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=tubucrypt: bash ops/backup-predeploy.sh
 ```
 
 Script này gọi `backup-db.sh` với `BACKUP_LABEL=predeploy BACKUP_KEEP_COUNT=10` và KHÔNG ping `HEALTHCHECK_URL` của cron (ping bất thường sẽ che việc cron ngừng chạy); đặt `PREDEPLOY_HEALTHCHECK_URL` nếu muốn một check riêng. Bước sao lưu lần cuối khi API đã dừng, trong [runbook deploy](../../docs/launch/deploy-rollback-runbook.md) mục 5 bước 6, vẫn dùng `backup-db.sh` trực tiếp như cũ.
 
-Kiểm tra: `crontab -l | grep backup-db`, sau 6 giờ xem `tail /var/log/tubutree-backup.log` (không có dòng `WARN`) và `rclone ls gdrive:tubutree-backups | tail`. Kiểm cả VPS: `bash ops/check-edge.sh --local` (dòng `backup:` báo khi bản mới nhất quá 8 giờ).
+Kiểm tra: `crontab -l | grep backup-db`, sau 6 giờ xem `tail /var/log/tubutree-backup.log` (không có dòng `WARN`) và `rclone ls tubucrypt: | tail`. Kiểm cả VPS: `bash ops/check-edge.sh --local` (dòng `backup:` báo khi bản mới nhất quá 8 giờ).
+
+## Mã hoá bản ngoài máy (rclone crypt)
+
+`backup-db.sh` chỉ đẩy lên remote loại `crypt` (đọc loại bằng `rclone listremotes --long`). Remote Google Drive trần (`gdrive:`) bị từ chối: log `ERROR: remote 'gdrive' không phải rclone crypt`, không upload, `UPLOAD_FAILED=1` nên script thoát 3 và ping `/fail` của healthchecks.io (bản local vẫn giữ). Remote crypt là lớp mã hoá bọc ngoài Drive: Google chỉ thấy file tên lạ và nội dung mã hoá; `rclone copy tubucrypt: ...` tải về tự giải mã, nên `restore-db.sh` không phải đổi gì (nó nhận file `.sql.gz` đã giải mã trên đĩa).
+
+Tạo remote (chạy MỘT lần trên VPS, sau khi `gdrive` đã chạy được theo mục trên). Cú pháp dưới đây theo tài liệu rclone, CHƯA chạy thử trên máy này vì máy dev chưa cài rclone: kiểm bằng bước "thử" ngay sau đó.
+
+```bash
+# Mật khẩu: sinh ngẫu nhiên, CHÉP NGAY vào password manager, đừng gõ tay
+PASS1=$(openssl rand -base64 32); PASS2=$(openssl rand -base64 32)
+rclone config create tubucrypt crypt \
+  remote gdrive:tubutree-backups-enc \
+  filename_encryption standard directory_name_encryption true \
+  password "$(rclone obscure "$PASS1")" password2 "$(rclone obscure "$PASS2")"
+echo "$PASS1"; echo "$PASS2"   # chép vào password manager rồi xoá khỏi lịch sử terminal: history -c
+unset PASS1 PASS2
+rclone listremotes --long       # dòng "tubucrypt:  crypt"
+echo test | rclone rcat tubucrypt:thu.txt && rclone cat tubucrypt:thu.txt && rclone delete tubucrypt:thu.txt
+```
+
+Rồi đổi mọi chỗ `RCLONE_REMOTE=gdrive:...` (dòng cron, `ops/backup-predeploy.sh`, runbook) sang `RCLONE_REMOTE=tubucrypt:`. Thư mục `tubutree-backups` cũ trên Drive còn các bản `.sql.gz` chưa mã hoá: tải về nếu cần rồi xoá thủ công (`rclone purge gdrive:tubutree-backups`), kể cả trong thùng rác Drive.
+
+Giữ mật khẩu ở đâu: `password` và `password2` (và cả bản `rclone config show tubucrypt` nếu cần dựng lại) cất trong password manager của chủ, KHÔNG để trên VPS ngoài file `~/.config/rclone/rclone.conf` (đã obscure, không phải mã hoá: ai đọc được file này giải mã được backup, nên `chmod 600` và đừng chép ra ngoài). **Mất cả hai mật khẩu thì mọi bản backup ngoài máy không đọc lại được, không có cách khôi phục.** Cất thêm một bản ở nơi thứ hai (két, người thứ hai tin cậy).
+
+Diễn tập restore từ máy khác (chứng minh mật khẩu trong password manager đủ để đọc backup, không phụ thuộc VPS):
+
+```bash
+rclone config create tubucrypt crypt remote gdrive:tubutree-backups-enc \
+  filename_encryption standard directory_name_encryption true \
+  password "$(rclone obscure '<password>')" password2 "$(rclone obscure '<password2>')"
+RF=$(rclone lsf tubucrypt: --files-only | sort | tail -1); echo "$RF"
+rclone copy "tubucrypt:$RF" /tmp/ && gunzip -t "/tmp/$RF" && echo "giải mã + gunzip OK"
+```
 
 ## Restore
 
 ```bash
 ./tools/backup/restore-db.sh /var/backups/tubutree/tubutree_YYYYMMDD_HHMMSS.sql.gz
-# bản ngoài máy: rclone copy gdrive:tubutree-backups/tubutree_YYYYMMDD_HHMMSS.sql.gz /tmp/ rồi restore file đó
+# bản ngoài máy: rclone copy tubucrypt:tubutree_YYYYMMDD_HHMMSS.sql.gz /tmp/ rồi restore file đó
 ```
 
 Script làm theo thứ tự:
@@ -115,8 +149,8 @@ Backup mà chưa restore thử thì coi như không có backup. Diễn tập kh�
 ```bash
 DC="docker compose -f docker-compose.vietnix.yml"
 # 1. Bản mới nhất TỪ REMOTE (không dùng remote thì bỏ hai dòng này, bước 2 tự lấy bản local)
-RF=$(rclone lsf gdrive:tubutree-backups --files-only | sort | tail -1); echo "$RF"
-rclone copy "gdrive:tubutree-backups/$RF" /tmp/ && F=/tmp/$RF
+RF=$(rclone lsf tubucrypt: --files-only | sort | tail -1); echo "$RF"
+rclone copy "tubucrypt:$RF" /tmp/ && F=/tmp/$RF
 # 2. Nạp vào DB tạm rồi đếm vài bảng, so với DB thật
 F=${F:-$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1)}; echo "$F"; gunzip -t "$F" && echo "gunzip OK"
 time (
@@ -140,5 +174,5 @@ Kỳ vọng: `gunzip OK`, hai dòng số khớp (chênh vài đơn nếu bản b
 tail -f /var/log/tubutree-backup.log
 du -sh /var/backups/tubutree/
 ls -lht /var/backups/tubutree/ | head -20
-rclone ls gdrive:tubutree-backups | tail
+rclone ls tubucrypt: | tail
 ```
