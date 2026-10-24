@@ -27,7 +27,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  Page: ({ children, style }: { children: ReactNode; style?: React.CSSProperties }) => <div data-testid="page" style={style}>{children}</div>,
+  Page: ({ children, style }: { children: ReactNode; style?: React.CSSProperties }) => <div data-testid="page" data-page-style={JSON.stringify(style ?? {})}>{children}</div>,
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: '/checkout', search: '', state: mocks.locState }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
@@ -171,7 +171,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
 
   it('đáy trang chừa chỗ cho thanh Đặt hàng cộng vùng an toàn (không để dòng đồng ý nằm dưới thanh)', async () => {
     renderPage();
-    expect((await screen.findByTestId('page')).style.paddingBottom).toBe('calc(96px + var(--safe-bottom))');
+    expect(JSON.parse((await screen.findByTestId('page')).dataset.pageStyle ?? '{}').paddingBottom).toBe('calc(96px + var(--safe-bottom))');
   });
 
   it('sản phẩm chưa có ảnh: dòng hàng hiện khung placeholder như giỏ hàng, không dựng img với src rỗng (BUYERMINI-13)', async () => {
