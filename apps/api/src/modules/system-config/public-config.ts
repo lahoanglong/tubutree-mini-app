@@ -12,6 +12,7 @@ import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLA
 import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim.config';
 import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem } from '../support-chat/support-chat.config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
+import { readCompanyIdentity } from './company-config';
 
 /** Chỉ hai trường công khai, để khoá phụ lưu thêm trong cấu hình không lọt ra endpoint công khai. */
 const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end: v.end });
@@ -68,6 +69,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     waste,
     chatEnabled,
     chatHours,
+    company,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -105,6 +107,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     computeWastePublicFlags(config).catch(() => ({ enabled: false, dropoff: false, mailin: false, pickup: false })),
     config.get<unknown>(CHAT_ENABLED_KEY, false),
     config.get<unknown>(CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS),
+    readCompanyIdentity(config),
   ]);
   return {
     freeshipThreshold,
@@ -120,6 +123,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
     groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
     returnWindowDays,
     support: { hotline: displayText(hotline), email: displayText(supportEmail), zaloOaName: displayText(zaloOaName) },
+    // Đơn vị vận hành (tên, MST, địa chỉ, link thông báo Bộ Công Thương); trường chưa nhập là null để FE ẩn.
+    company,
     newCustomer: {
       welcomeVoucher: { amount: welcomeAmount, minOrder: welcomeMinOrder },
       // Chỉ boolean true thật mới bật: chuỗi "false" là truthy, cờ gõ nhầm không được hứa freeship.

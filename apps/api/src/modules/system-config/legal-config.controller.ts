@@ -3,6 +3,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
 import { FREE_SHIP_THRESHOLD_DEFAULT } from '../pricing/pricing.service';
+import { readCompanyIdentity } from './company-config';
 
 /**
  * Nội dung điều khoản/chính sách hiển thị ở web (/chinh-sach/:loai). Admin nhập ở tab Cấu hình dưới dạng markdown hoặc chữ
@@ -18,6 +19,8 @@ export const LEGAL_CONFIG_KEYS: Readonly<Record<string, string>> = {
 
 const DEFAULT_RETURN_WINDOW_DAYS = 7;
 const DEFAULT_FREESHIP_THRESHOLD = FREE_SHIP_THRESHOLD_DEFAULT;
+/** Khớp mặc định của PricingService.calcShippingFee. */
+const DEFAULT_FLAT_SHIPPING_FEE = 19000;
 
 /**
  * Số không âm hợp lệ (0 là hợp lệ: freeship mọi đơn, hạn đổi trả 0 ngày — khớp loyalty.returnWindowDays), không thì mặc định:
@@ -40,10 +43,12 @@ export class LegalConfigController {
   async get(@Param('loai') loai: string) {
     const key = Object.prototype.hasOwnProperty.call(LEGAL_CONFIG_KEYS, loai) ? LEGAL_CONFIG_KEYS[loai] : undefined;
     if (!key) throw new NotFoundException('Không có trang chính sách này.');
-    const [raw, returnWindowDays, freeshipThreshold] = await Promise.all([
+    const [raw, returnWindowDays, freeshipThreshold, flatFee, company] = await Promise.all([
       this.config.get<unknown>(key, ''),
       this.config.get<unknown>('returns.window_days', DEFAULT_RETURN_WINDOW_DAYS),
       this.config.get<unknown>('shipping.free_threshold', DEFAULT_FREESHIP_THRESHOLD),
+      this.config.get<unknown>('shipping.flat_fee_below_threshold', DEFAULT_FLAT_SHIPPING_FEE),
+      readCompanyIdentity(this.config),
     ]);
     return {
       loai,
@@ -52,6 +57,10 @@ export class LegalConfigController {
       vars: {
         returnWindowDays: nonNegativeOr(returnWindowDays, DEFAULT_RETURN_WINDOW_DAYS),
         freeshipThreshold: nonNegativeOr(freeshipThreshold, DEFAULT_FREESHIP_THRESHOLD),
+        shippingFlatFee: nonNegativeOr(flatFee, DEFAULT_FLAT_SHIPPING_FEE),
+        legalName: company.legalName,
+        taxCode: company.taxCode,
+        address: company.address,
       },
     };
   }
