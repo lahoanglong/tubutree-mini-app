@@ -7,8 +7,11 @@ import { parseStaffReply } from './staff-reply-parse';
 
 type MessageEvent = Extract<ZaloBridgeEvent, { type: 'message' }>;
 export type BridgeEventResult =
-  | { status: 200; body: { ok: true; unknownCode?: string; conflict?: { routed: string; typed: string } } }
+  | { status: 200; body: { ok: true; unknownCode?: string; conflict?: { routed: string; typed: string }; notStored?: NotStoredReason } }
   | { status: 503; body: { retry: true } };
+
+/** Lý do một tin trả lời của nhân viên không tới khách; cầu nối đổi thành thông báo trong nhóm. */
+export type NotStoredReason = 'unsupported' | 'gone' | 'empty';
 
 const OK: BridgeEventResult = { status: 200, body: { ok: true } };
 /** Quá ngần này mà forward vẫn chưa có zaloMsgId thì coi là hỏng, không giữ tin nhân viên chờ mãi. */
@@ -74,10 +77,12 @@ export class BridgeEventsService {
     const { code, body } = parseStaffReply(e.text);
     const conv = await this.findConversation(e, code);
     if (conv === 'retry') return { status: 503, body: { retry: true } };
+    if (conv === 'gone') return { status: 200, body: { ok: true, notStored: 'gone' } };
     if (conv && 'unknown' in conv) return { status: 200, body: { ok: true, unknownCode: conv.unknown } };
     if (conv && 'conflict' in conv) return { status: 200, body: { ok: true, conflict: conv.conflict } };
     if (!conv) return OK;
-    if (!body && !e.imageUrl) return OK;
+    if (e.unsupportedType) return { status: 200, body: { ok: true, notStored: 'unsupported' } };
+    if (!body && !e.imageUrl) return { status: 200, body: { ok: true, notStored: 'empty' } };
 
     let created: { id: string; body: string; imageUrl: string | null };
     try {
@@ -117,14 +122,14 @@ export class BridgeEventsService {
     return OK;
   }
 
-  /** `retry`: tin trích chưa khớp mà forward chưa kịp ghi zaloMsgId; `unknown`: mã (đầu câu hoặc đầu tin trích) không có hội thoại; `conflict`: tin trích và mã đầu câu chỉ hai khách khác nhau; null: không phải trả lời. */
+  /** `gone`: hội thoại của tin trích đã bị xoá; `retry`: tin trích chưa khớp mà forward chưa kịp ghi zaloMsgId; `unknown`: mã (đầu câu hoặc đầu tin trích) không có hội thoại; `conflict`: tin trích và mã đầu câu chỉ hai khách khác nhau; null: không phải trả lời. */
   private async findConversation(
     e: MessageEvent,
     code: string | null,
-  ): Promise<ConversationHit | 'retry' | { unknown: string } | { conflict: { routed: string; typed: string } } | null> {
+  ): Promise<ConversationHit | 'retry' | 'gone' | { unknown: string } | { conflict: { routed: string; typed: string } } | null> {
     if (e.quote) {
       const quoted = await this.findByQuote(e.quote);
-      if (quoted === 'gone') return null;
+      if (quoted === 'gone') return 'gone';
       if (quoted && 'unknown' in quoted) return quoted;
       if (quoted) {
         // Hai tín hiệu chỉ hai khách khác nhau thì không đoán: gửi nhầm khách tệ hơn là bắt nhân viên gửi lại.

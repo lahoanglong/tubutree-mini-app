@@ -847,6 +847,7 @@ export const NOTIFICATION_TEMPLATES = [
   // Chat CSKH: cùng mã/nội dung với migration 20261023100000_support_chat. createOnly: admin sửa nội dung rồi thì seed không ghi đè.
   { id: 'nt-support-chat-reply', code: 'SUPPORT_CHAT_REPLY', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã trả lời bạn: {{preview}}', createOnly: true },
   { id: 'nt-ops-zalo-bridge-down', code: 'OPS_ZALO_BRIDGE_DOWN', channel: 'INAPP', bodyTemplate: 'Cầu nối Zalo của chat CSKH mất kết nối từ {{since}} ({{state}}). Vào tab Chat CSKH để kết nối lại.', createOnly: true },
+  { id: 'nt-ops-zalo-bridge-alert', code: 'OPS_ZALO_BRIDGE_ALERT', channel: 'INAPP', bodyTemplate: '{{message}}', createOnly: true },
   { id: 'nt-comm-answer', code: 'COMMUNITY_NEW_ANSWER', channel: 'INAPP', bodyTemplate: '💬 {{author}} vừa trả lời câu hỏi "{{title}}" của bạn.' },
   { id: 'nt-comm-expert', code: 'COMMUNITY_EXPERT_REPLIED', channel: 'INAPP', bodyTemplate: '🌿 Chuyên gia Tubu vừa trả lời câu hỏi "{{title}}" của bạn.' },
   // PD-3 OQ-10: báo khách có xu đã quy sang Điểm Xanh (1.000 xu = 1 điểm, làm tròn lên). Cùng mã/nội dung với migration

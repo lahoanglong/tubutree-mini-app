@@ -42,6 +42,7 @@ export class SupportChatAdminService {
       displayName: row?.displayName ?? null,
       avatar: row?.avatar ?? null,
       checkedAt: row?.checkedAt ?? null,
+      deaf: row?.deaf ?? false,
       groupId,
       enabled,
     };
