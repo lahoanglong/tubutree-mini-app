@@ -235,6 +235,42 @@ describe('SupportChatAdminService', () => {
       expect(r.user).toMatchObject({ phone: '0901234234' });
     });
 
+    it('forward.resendable: FAILED/UNKNOWN và PENDING bỏ dở quá 10 phút là true; SENT, PENDING mới, PENDING đã có zaloMsgId là false', async () => {
+      const old = new Date(Date.now() - 11 * 60_000);
+      const { svc } = setup({
+        forwards: [
+          fwd({ id: 'fF', status: 'FAILED' }),
+          fwd({ id: 'fU', status: 'UNKNOWN' }),
+          fwd({ id: 'fS', status: 'SENT', zaloMsgId: 'z1' }),
+          fwd({ id: 'fPold', status: 'PENDING', updatedAt: old }),
+          fwd({ id: 'fPnew', status: 'PENDING', updatedAt: new Date() }),
+          fwd({ id: 'fPid', status: 'PENDING', updatedAt: old, zaloMsgId: 'z2' }),
+        ],
+        messages: ['fF', 'fU', 'fS', 'fPold', 'fPnew', 'fPid'].map((id) => custMsg({ id: `m-${id}`, forwardId: id })),
+      });
+      const r = await svc.get('c1');
+      const flag = (id: string) => (r.messages.find((m: any) => m.id === `m-${id}`) as any).forward.resendable;
+      expect(['fF', 'fU', 'fS', 'fPold', 'fPnew', 'fPid'].map(flag)).toEqual([true, true, false, true, false, false]);
+    });
+
+    it('truncated: true khi hội thoại có hơn 500 tin, chỉ trả 500 tin mới nhất', async () => {
+      const many = Array.from({ length: 501 }, (_, i) => custMsg({ id: `m${i}`, forwardId: null, createdAt: new Date(Date.UTC(2026, 9, 23, 0, 0, 0) - i * 1000) }));
+      const { svc, prisma } = setup({ messages: many });
+      const r = await svc.get('c1');
+      expect(prisma.supportMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 501 }));
+      expect(r.truncated).toBe(true);
+      expect(r.messages).toHaveLength(500);
+      expect(r.messages[r.messages.length - 1]!.id).toBe('m0');
+    });
+
+    it('truncated: false khi đúng 500 tin', async () => {
+      const exact = Array.from({ length: 500 }, (_, i) => custMsg({ id: `m${i}`, forwardId: null }));
+      const { svc } = setup({ messages: exact });
+      const r = await svc.get('c1');
+      expect(r.truncated).toBe(false);
+      expect(r.messages).toHaveLength(500);
+    });
+
     it('không có hội thoại: 404', async () => {
       const { svc } = setup({ conv: null });
       await expect(svc.get('zz')).rejects.toBeInstanceOf(NotFoundException);

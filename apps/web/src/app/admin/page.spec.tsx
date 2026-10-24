@@ -142,6 +142,8 @@ vi.mock('@/lib/admin-client', async (importOriginal) => {
           { key: 'communityUnanswered', count: 1 },
           { key: 'invoicePending', count: 2 },
           { key: 'payoutsToPay', count: 2 },
+          { key: 'supportChatUnforwarded', count: 2 },
+          { key: 'zaloBridgeDown', count: 1 },
         ],
       };
     },
@@ -384,7 +386,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(41);
+    expect(items).toHaveLength(42);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
@@ -396,6 +398,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
     expect(group('Khách hàng')).toContain('Đổi rác');
+    expect(group('Khách hàng')).toContain('Chat CSKH');
     expect(group('Khách hàng')).not.toContain('Đổi vỏ chai');
     expect(items.map((b) => b.textContent)).not.toContain('Đổi vỏ chai');
     const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
@@ -2161,7 +2164,7 @@ describe('admin/page — khung cuộn bảng focus được bằng bàn phím', 
 
 // PG-3 (axe heading-order): tiêu đề form của các tab sau h1 "Quản trị Tubu Tree" phải là h2, không nhảy h1 -> h3.
 describe('admin/page — thứ bậc heading của các tab', () => {
-  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'waste', 'attendance', 'staffRoster', 'shiftApproval', 'payroll'])(
+  it.each(['config', 'flashSales', 'faqs', 'quickReplies', 'contentKit', 'academy', 'users', 'orders', 'inbox', 'opsHealth', 'waste', 'attendance', 'staffRoster', 'shiftApproval', 'payroll', 'supportChat'])(
     'tab %s: không nhảy cấp heading',
     async (tab) => {
       window.history.replaceState(null, '', `/admin?tab=${tab}`);
@@ -2224,6 +2227,36 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     const items = navItems(container);
     for (const k of ['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']) expect(items).not.toContain(k);
     expect(container.textContent).not.toContain('Xuất CSV');
+  });
+
+  it('Chat CSKH: chỉ nhân viên CSKH và ADMIN thấy; KHO thì không và URL ?tab=supportChat rơi về tab đầu được phép', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
+    window.history.replaceState(null, '', '/admin?tab=supportChat');
+    const kho = await mount();
+    expect(navItems(kho.container)).not.toContain('Chat CSKH');
+    expect(kho.container.querySelector('#bridge-h')).toBeNull();
+    kho.unmount();
+    mounted = [];
+
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH'] };
+    window.history.replaceState(null, '', '/admin?tab=supportChat');
+    const cskh = await mount();
+    expect(navItems(cskh.container)).toContain('Chat CSKH');
+    expect(cskh.container.querySelector('#bridge-h')!.textContent).toBe('Cầu nối Zalo');
+    expect([...cskh.container.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Đăng nhập Zalo');
+  });
+
+  it('thẻ Chat CSKH và cầu nối Zalo của Việc cần xử lý mở tab Chat CSKH', async () => {
+    for (const key of ['supportChatUnforwarded', 'zaloBridgeDown']) {
+      window.history.replaceState(null, '', '/admin');
+      const { container, unmount } = await mount();
+      click(container.querySelector(`[data-inbox="${key}"]`));
+      await flush();
+      expect(window.location.search).toBe('?tab=supportChat');
+      unmount();
+      mounted = [];
+    }
   });
 
   it('CSKH ở tab Người dùng: xem chi tiết được, không có nút khoá, cấp quyền hay xuất CSV', async () => {

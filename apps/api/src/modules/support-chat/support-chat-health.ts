@@ -17,6 +17,11 @@ export function stalePendingForwardWhere(now: Date): Prisma.SupportForwardWhereI
   return { status: 'PENDING', zaloMsgId: null, updatedAt: { lt: new Date(now.getTime() - STALE_PENDING_MS) } };
 }
 
+/** Cùng điều kiện với stalePendingForwardWhere, cho dữ liệu đã nạp trong bộ nhớ. */
+export function isStalePendingForward(f: { status: string; zaloMsgId: string | null; updatedAt: Date }, now: Date): boolean {
+  return f.status === 'PENDING' && f.zaloMsgId === null && f.updatedAt.getTime() < now.getTime() - STALE_PENDING_MS;
+}
+
 export function unforwardedMessageWhere(now: Date): Prisma.SupportMessageWhereInput {
   return { sender: 'CUSTOMER', forwardId: null, createdAt: { lt: new Date(now.getTime() - STALE_AFTER_MS) } };
 }

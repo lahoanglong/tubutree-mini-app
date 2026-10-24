@@ -8,7 +8,7 @@ import { searchPhone, userPhoneClauses } from '../admin/admin-order-filter';
 import { BridgeClient, type BridgeFailure } from './bridge-client';
 import { NOTIFY_DEDUPE_MS, replyPreview } from './bridge-events.service';
 import { buildForwardText, sendAndSettle } from './forward-delivery';
-import { stalePendingForwardWhere, unforwardedWhere } from './support-chat-health';
+import { isStalePendingForward, stalePendingForwardWhere, unforwardedWhere } from './support-chat-health';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
 const PAGE = 30;
@@ -145,12 +145,15 @@ export class SupportChatAdminService {
     const rows = await this.prisma.supportMessage.findMany({
       where: { conversationId: id },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: THREAD_MAX,
+      take: THREAD_MAX + 1,
     });
+    const truncated = rows.length > THREAD_MAX;
+    if (truncated) rows.length = THREAD_MAX;
     rows.reverse();
     const ids = [...new Set(rows.map((m) => m.forwardId).filter((x): x is string => !!x))];
     const forwards = ids.length ? await this.prisma.supportForward.findMany({ where: { id: { in: ids } } }) : [];
     const byId = new Map(forwards.map((f) => [f.id, f]));
+    const now = new Date();
     return {
       id: conv.id,
       code: conv.code,
@@ -158,8 +161,9 @@ export class SupportChatAdminService {
       blockedAt: conv.blockedAt,
       blockedByUserId: conv.blockedByUserId,
       user: conv.user,
+      truncated,
       // forwardId có thể trỏ forward đã bị chính sách lưu trữ xoá: coi như không có trạng thái.
-      messages: rows.map((m) => toAdminMessage(m, m.forwardId ? (byId.get(m.forwardId) ?? null) : null)),
+      messages: rows.map((m) => toAdminMessage(m, m.forwardId ? (byId.get(m.forwardId) ?? null) : null, now)),
     };
   }
 
@@ -181,7 +185,7 @@ export class SupportChatAdminService {
     } catch (err) {
       this.logger.warn(`Bước phụ sau trả lời của admin ${created.id} lỗi: ${(err as Error).message}`);
     }
-    return toAdminMessage(created, null);
+    return toAdminMessage(created, null, new Date());
   }
 
   async block(adminId: string, id: string) {
@@ -253,7 +257,7 @@ export class SupportChatAdminService {
 
 type AdminMessageRow = Pick<SupportMessage, 'id' | 'sender' | 'source' | 'body' | 'imageUrl' | 'context' | 'staffName' | 'adminUserId' | 'recalledAt' | 'createdAt'>;
 
-function toAdminMessage(m: AdminMessageRow, forward: Pick<SupportForward, 'id' | 'status' | 'lastError' | 'attempts'> | null) {
+function toAdminMessage(m: AdminMessageRow, forward: Pick<SupportForward, 'id' | 'status' | 'lastError' | 'attempts' | 'zaloMsgId' | 'updatedAt'> | null, now: Date) {
   return {
     id: m.id,
     sender: m.sender,
@@ -265,6 +269,14 @@ function toAdminMessage(m: AdminMessageRow, forward: Pick<SupportForward, 'id' |
     adminUserId: m.adminUserId,
     recalledAt: m.recalledAt,
     createdAt: m.createdAt,
-    forward: forward ? { id: forward.id, status: forward.status, lastError: forward.lastError, attempts: forward.attempts } : null,
+    forward: forward
+      ? {
+          id: forward.id,
+          status: forward.status,
+          lastError: forward.lastError,
+          attempts: forward.attempts,
+          resendable: forward.status === 'FAILED' || forward.status === 'UNKNOWN' || isStalePendingForward(forward, now),
+        }
+      : null,
   };
 }
