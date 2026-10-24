@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { PrismaClient } from '@prisma/client';
-import { collectBackupSnapshot, collectDbSnapshot, listExpectedMigrations } from './collect';
+import { parseRemoteTypes, collectBackupSnapshot, collectDbSnapshot, listExpectedMigrations } from './collect';
 
 type Row = Record<string, unknown>;
 
@@ -232,5 +232,11 @@ describe('collectBackupSnapshot (phần đọc file)', () => {
     expect(typeof snap.cron.hasBackupLine).toBe('boolean');
     expect(typeof snap.rclone.available).toBe('boolean');
     expect(Array.isArray(snap.rclone.remotes)).toBe(true);
+  });
+});
+
+describe('parseRemoteTypes', () => {
+  it('hai cột và ba cột (có mô tả) đều ra đúng tên và loại', () => {
+    expect(parseRemoteTypes('gdrive:  drive\ntubucrypt:  crypt  mã hoá bản backup\n\n')).toEqual({ gdrive: 'drive', tubucrypt: 'crypt' });
   });
 });

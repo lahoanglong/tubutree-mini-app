@@ -193,7 +193,7 @@ if [ "$POINTS_1D_PENDING_AT_START" = 1 ]; then
     bash "$REPO_ROOT/ops/backup-predeploy.sh" || backup_rc=$?
   if [ "$backup_rc" -ne 0 ]; then
     if [ "$backup_rc" -eq 3 ]; then
-      log "ERROR: bản backup local đã tạo nhưng đẩy ra ngoài máy (RCLONE_REMOTE) lỗi — vẫn DỪNG cho chắc, chưa migrate gì. Sửa rclone rồi chạy lại, hoặc tự quyết dùng bản local."
+      log "ERROR: bản backup local đã tạo nhưng đẩy ra ngoài máy (RCLONE_REMOTE) lỗi, hoặc RCLONE_REMOTE chưa phải remote rclone crypt (xem tools/backup/README.md, mục 'Mã hoá bản ngoài máy') — vẫn DỪNG cho chắc, chưa migrate gì. Sửa rclone rồi chạy lại, hoặc tự quyết dùng bản local."
     else
       log "ERROR: backup local lỗi (exit $backup_rc) — DỪNG, chưa migrate gì."
     fi
