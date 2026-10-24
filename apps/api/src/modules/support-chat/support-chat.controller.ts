@@ -2,16 +2,13 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { ReadDto } from './dto/read.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { SupportChatService } from './support-chat.service';
 
 class PageQuery {
   @IsOptional() @IsString() @MaxLength(64) after?: string;
   @IsOptional() @IsString() @MaxLength(64) before?: string;
-}
-
-class ReadBody {
-  @IsOptional() @IsString() @MaxLength(64) upToId?: string;
 }
 
 @Controller('me/support-chat')
@@ -36,8 +33,8 @@ export class SupportChatController {
   }
 
   @Post('read')
-  read(@CurrentUser('sub') userId: string, @Body() body?: ReadBody) {
-    return this.chat.markRead(userId, body?.upToId);
+  read(@CurrentUser('sub') userId: string, @Body() body?: ReadDto) {
+    return this.chat.markRead(userId, { ids: body?.ids, upToId: body?.upToId });
   }
 
   @Get('summary')

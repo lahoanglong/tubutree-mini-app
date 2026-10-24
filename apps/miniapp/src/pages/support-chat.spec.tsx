@@ -223,7 +223,7 @@ describe('Màn chat với Tubu Tree', () => {
     mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1', sender: 'STAFF' })] }));
     renderPage();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
-    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith('m1'));
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['m1']));
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['support-chat-summary'] }));
   });
 
@@ -392,6 +392,64 @@ describe('Màn chat với Tubu Tree', () => {
       renderPage();
       await screen.findByRole('textbox');
       expect(mocks.markRead).not.toHaveBeenCalled();
+    });
+
+    const m = (id: string, sender: string, at: number) => msg({ id, sender, createdAt: `2026-10-23T03:${String(at).padStart(2, '0')}:00.000Z` });
+    const refetchThread = () => act(async () => { await qc.invalidateQueries({ queryKey: ['support-chat'] }); });
+
+    it('báo đúng id các tin STAFF/SYSTEM đã hiển thị (không gồm tin của khách)', async () => {
+      mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1), m('m2', 'CUSTOMER', 2), m('m3', 'SYSTEM', 3)] }));
+      renderPage();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
+      expect(mocks.markRead).toHaveBeenCalledWith(['m1', 'm3']);
+    });
+
+    it('trả lời commit muộn nằm TRƯỚC tin cuối (lastId không đổi): vẫn báo id của nó', async () => {
+      mocks.getThread.mockResolvedValueOnce(thread({ messages: [m('m1', 'STAFF', 1), m('m9', 'CUSTOMER', 9)] }));
+      renderPage();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['m1']));
+      mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1), m('m5', 'STAFF', 5), m('m9', 'CUSTOMER', 9)] }));
+      await refetchThread();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenLastCalledWith(['m5']));
+      expect(mocks.markRead).toHaveBeenCalledTimes(2);
+    });
+
+    it('tập tin hiển thị không đổi: không gọi lại', async () => {
+      mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1)] }));
+      renderPage();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
+      await refetchThread();
+      await refetchThread();
+      expect(mocks.markRead).toHaveBeenCalledTimes(1);
+    });
+
+    it('gọi thất bại thì không coi là đã báo: id cũ được gửi lại (không bị coi là đã báo)', async () => {
+      mocks.markRead.mockRejectedValueOnce(new Error('mạng'));
+      mocks.getThread.mockResolvedValueOnce(thread({ messages: [m('m1', 'STAFF', 1)] }));
+      renderPage();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1), m('m2', 'STAFF', 2)] }));
+      await refetchThread();
+      await waitFor(() => expect(mocks.markRead.mock.calls.flatMap((c) => c[0] as string[])).toContain('m2'));
+      expect(mocks.markRead.mock.calls.flatMap((c) => c[0] as string[]).filter((id) => id === 'm1').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('tin cũ tải bằng "Xem tin cũ hơn" cũng được báo', async () => {
+      mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [m('m5', 'STAFF', 5)] }));
+      mocks.getPage.mockResolvedValue({ hasMore: false, messages: [m('m3', 'STAFF', 3)] });
+      renderPage();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['m5']));
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem tin cũ hơn' }));
+      await waitFor(() => expect(mocks.markRead).toHaveBeenLastCalledWith(['m3']));
+    });
+
+    it('quá 100 id thì tách thành nhiều lần gọi', async () => {
+      const many = Array.from({ length: 150 }, (_, i) => m(`s${String(i).padStart(3, '0')}`, 'STAFF', 1 + (i % 50)));
+      mocks.getThread.mockResolvedValue(thread({ messages: many }));
+      renderPage();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(2));
+      expect(mocks.markRead.mock.calls.map((c) => (c[0] as string[]).length).sort((a, b) => a - b)).toEqual([50, 100]);
     });
 
     it('đang ẩn thì không gọi; hiện lại thì gọi', async () => {

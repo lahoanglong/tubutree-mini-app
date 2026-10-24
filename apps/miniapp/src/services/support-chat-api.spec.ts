@@ -22,7 +22,7 @@ describe('support-chat-api (Mini App)', () => {
     mocks.post.mockResolvedValue({});
     await sendSupportChat({ clientMsgId: 'c1', body: 'xin chào' });
     expect(mocks.post).toHaveBeenCalledWith('/me/support-chat/messages', { clientMsgId: 'c1', body: 'xin chào' });
-    await markSupportChatRead();
-    expect(mocks.post).toHaveBeenCalledWith('/me/support-chat/read');
+    await markSupportChatRead(['m1']);
+    expect(mocks.post).toHaveBeenCalledWith('/me/support-chat/read', { ids: ['m1'] });
   });
 });

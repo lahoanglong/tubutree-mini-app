@@ -11,4 +11,4 @@ export const supportChatQueryOptions = () => supportChatQuery(coreHttp);
 export const supportChatSummaryQueryOptions = () => supportChatSummaryQuery(coreHttp);
 export const getSupportChatPage = (q: { after?: string; before?: string }) => corePage(coreHttp, q);
 export const sendSupportChat = (input: SupportChatSendInput) => coreSend(coreHttp, input);
-export const markSupportChatRead = (upToId?: string) => coreRead(coreHttp, upToId);
+export const markSupportChatRead = (ids: string[]) => coreRead(coreHttp, ids);

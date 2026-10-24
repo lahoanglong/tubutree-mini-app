@@ -18,6 +18,7 @@ function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?:
     supportMessage: {
       findFirst: jest.fn().mockResolvedValue(opts.existing ?? null),
       findMany: jest.fn().mockResolvedValue([]),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       count: jest.fn().mockResolvedValue(opts.dayCount ?? 0),
       create: jest.fn().mockImplementation(({ data }: any) => {
         const row = { id: `m${created.length + 1}`, recalledAt: null, createdAt: new Date(), context: null, imageUrl: null, ...data };
@@ -292,21 +293,16 @@ describe('send ngoài giờ', () => {
 });
 
 describe('unreadCount / markRead', () => {
-  it('đếm STAFF/SYSTEM chưa thu hồi sau customerReadAt', async () => {
-    const readAt = new Date(1000);
-    const { svc, prisma } = setup({ conv: { customerReadAt: readAt } });
+  it('đếm STAFF/SYSTEM chưa thu hồi và chưa đánh dấu đã thấy (seenAt null), không dùng customerReadAt', async () => {
+    const { svc, prisma } = setup({ conv: { customerReadAt: new Date(1000) } });
     prisma.supportMessage.count.mockResolvedValue(3);
     expect(await svc.unreadCount('u1')).toBe(3);
     expect(prisma.supportMessage.count).toHaveBeenCalledWith({
-      where: { conversationId: 'c1', sender: { in: ['STAFF', 'SYSTEM'] }, recalledAt: null, createdAt: { gt: readAt } },
+      where: { conversationId: 'c1', sender: { in: ['STAFF', 'SYSTEM'] }, recalledAt: null, seenAt: null },
     });
   });
 
-  it('chưa đọc lần nào thì đếm tất cả; chưa có hội thoại thì 0 và không tạo', async () => {
-    const a = setup();
-    a.prisma.supportMessage.count.mockResolvedValue(2);
-    await a.svc.unreadCount('u1');
-    expect(a.prisma.supportMessage.count.mock.calls[0][0].where.createdAt).toBeUndefined();
+  it('chưa có hội thoại thì 0 và không tạo', async () => {
     const b = setup();
     b.prisma.supportConversation.findUnique.mockResolvedValue(null);
     expect(await b.svc.unreadCount('u1')).toBe(0);
@@ -315,37 +311,64 @@ describe('unreadCount / markRead', () => {
 
   describe('markRead', () => {
     const T = new Date('2026-10-23T11:00:00Z');
+    const SEEN = { sender: { in: ['STAFF', 'SYSTEM'] }, seenAt: null };
 
-    it('không có upToId: customerReadAt = bây giờ, chỉ tiến lên (không lùi)', async () => {
+    it('có ids: chỉ đánh dấu đúng các tin STAFF/SYSTEM của hội thoại khách, seenAt = bây giờ; id lạ không khớp gì', async () => {
       const { svc, prisma } = setup();
-      expect(await svc.markRead('u1')).toEqual({ ok: true });
-      const call = prisma.supportConversation.updateMany.mock.calls[0][0];
-      expect(call.where).toEqual({ id: 'c1', OR: [{ customerReadAt: null }, { customerReadAt: { lt: expect.any(Date) } }] });
-      expect(call.data).toEqual({ customerReadAt: expect.any(Date) });
+      prisma.supportMessage.updateMany.mockResolvedValue({ count: 2 });
+      expect(await svc.markRead('u1', { ids: ['m1', 'm2', 'xa-la'] })).toEqual({ ok: true });
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['m1', 'm2', 'xa-la'] }, conversationId: 'c1', ...SEEN },
+        data: { seenAt: expect.any(Date) },
+      });
       expect(prisma.supportMessage.findFirst).not.toHaveBeenCalled();
     });
 
-    it('có upToId thuộc hội thoại của khách: customerReadAt = createdAt của tin đó', async () => {
+    it('hai tin cùng createdAt, chỉ gửi id một tin: tin kia vẫn chưa thấy (không so theo thời điểm)', async () => {
       const { svc, prisma } = setup();
-      prisma.supportMessage.findFirst.mockResolvedValueOnce({ createdAt: T });
-      await svc.markRead('u1', 'm7');
-      expect(prisma.supportMessage.findFirst).toHaveBeenCalledWith({ where: { id: 'm7', conversationId: 'c1' }, select: { createdAt: true } });
-      const call = prisma.supportConversation.updateMany.mock.calls[0][0];
-      expect(call.data).toEqual({ customerReadAt: T });
-      expect(call.where.OR).toEqual([{ customerReadAt: null }, { customerReadAt: { lt: T } }]);
+      await svc.markRead('u1', { ids: ['m1'] });
+      const where = prisma.supportMessage.updateMany.mock.calls[0][0].where;
+      expect(where.createdAt).toBeUndefined();
+      expect(where.id).toEqual({ in: ['m1'] });
     });
 
-    it('upToId của hội thoại khác hoặc không có: dùng bây giờ như cũ', async () => {
+    it('không ids, có upToId của khách: đánh dấu mọi tin STAFF/SYSTEM có createdAt <= tin đó', async () => {
       const { svc, prisma } = setup();
-      prisma.supportMessage.findFirst.mockResolvedValueOnce(null);
-      await svc.markRead('u1', 'xa-la');
-      expect(prisma.supportConversation.updateMany.mock.calls[0][0].data.customerReadAt.getTime()).toBeGreaterThan(T.getTime());
+      prisma.supportMessage.findFirst.mockResolvedValueOnce({ createdAt: T });
+      await svc.markRead('u1', { upToId: 'm7' });
+      expect(prisma.supportMessage.findFirst).toHaveBeenCalledWith({ where: { id: 'm7', conversationId: 'c1' }, select: { createdAt: true } });
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledWith({ where: { conversationId: 'c1', ...SEEN, createdAt: { lte: T } }, data: { seenAt: expect.any(Date) } });
+    });
+
+    it('không ids, upToId lạ hoặc không có: đánh dấu mọi tin tới bây giờ', async () => {
+      const a = setup();
+      a.prisma.supportMessage.findFirst.mockResolvedValueOnce(null);
+      await a.svc.markRead('u1', { upToId: 'xa-la' });
+      const b = setup();
+      await b.svc.markRead('u1');
+      for (const x of [a, b]) {
+        const w = x.prisma.supportMessage.updateMany.mock.calls[0][0].where;
+        expect(w).toMatchObject({ conversationId: 'c1', ...SEEN });
+        expect(w.createdAt.lte).toBeInstanceOf(Date);
+      }
+    });
+
+    it('vẫn đẩy customerReadAt tới bây giờ (chỉ tiến lên) ở cả hai nhánh', async () => {
+      for (const arg of [{ ids: ['m1'] }, undefined]) {
+        const { svc, prisma } = setup();
+        await svc.markRead('u1', arg);
+        const call = prisma.supportConversation.updateMany.mock.calls[0][0];
+        expect(call.where).toEqual({ id: 'c1', OR: [{ customerReadAt: null }, { customerReadAt: { lt: expect.any(Date) } }] });
+        expect(call.data).toEqual({ customerReadAt: expect.any(Date) });
+      }
     });
 
     it('khách chưa có hội thoại: không làm gì, không tạo', async () => {
       const { svc, prisma } = setup();
       prisma.supportConversation.findUnique.mockResolvedValue(null);
-      expect(await svc.markRead('u1')).toEqual({ ok: true });
+      expect(await svc.markRead('u1', { ids: ['m1'] })).toEqual({ ok: true });
+      expect(prisma.supportMessage.updateMany).not.toHaveBeenCalled();
       expect(prisma.supportConversation.updateMany).not.toHaveBeenCalled();
       expect(prisma.supportConversation.create).not.toHaveBeenCalled();
     });

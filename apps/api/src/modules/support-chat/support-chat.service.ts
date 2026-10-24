@@ -188,16 +188,28 @@ export class SupportChatService {
     return Object.keys(kept).length > 0 ? kept : undefined;
   }
 
-  /** `upToId`: tin mới nhất màn khách đã hiển thị. Đánh dấu đã đọc đến đúng tin đó, không phải "bây giờ", để tin đến sau lúc màn vẽ không bị coi là đã thấy. */
-  async markRead(userId: string, upToId?: string): Promise<{ ok: true }> {
+  /**
+   * `ids`: các tin STAFF/SYSTEM màn khách thực sự đã hiển thị, đánh dấu từng tin (seenAt) chứ không theo thời điểm: tin commit muộn
+   * hoặc trùng createdAt với tin đã hiển thị không bị coi là đã thấy. Không có `ids` (Mini App bản cũ) thì đánh dấu mọi tin
+   * có createdAt tới tin `upToId`, hoặc tới bây giờ.
+   */
+  async markRead(userId: string, input: { ids?: string[]; upToId?: string } = {}): Promise<{ ok: true }> {
     const conv = await this.prisma.supportConversation.findUnique({ where: { userId }, select: { id: true } });
     if (!conv) return { ok: true };
-    const rendered = upToId ? await this.prisma.supportMessage.findFirst({ where: { id: upToId, conversationId: conv.id }, select: { createdAt: true } }) : null;
-    const at = rendered?.createdAt ?? new Date();
-    // Chỉ tiến lên: một yêu cầu đến muộn mang tin cũ hơn không được kéo mốc đã đọc lùi lại.
+    const now = new Date();
+    const staffRows = { conversationId: conv.id, sender: { in: ['STAFF', 'SYSTEM'] as ('STAFF' | 'SYSTEM')[] }, seenAt: null };
+    if (input.ids) {
+      if (input.ids.length > 0) {
+        await this.prisma.supportMessage.updateMany({ where: { id: { in: input.ids }, ...staffRows }, data: { seenAt: now } });
+      }
+    } else {
+      const rendered = input.upToId ? await this.prisma.supportMessage.findFirst({ where: { id: input.upToId, conversationId: conv.id }, select: { createdAt: true } }) : null;
+      await this.prisma.supportMessage.updateMany({ where: { ...staffRows, createdAt: { lte: rendered?.createdAt ?? now } }, data: { seenAt: now } });
+    }
+    // Chỉ tiến lên: một yêu cầu đến muộn không được kéo mốc lùi lại.
     await this.prisma.supportConversation.updateMany({
-      where: { id: conv.id, OR: [{ customerReadAt: null }, { customerReadAt: { lt: at } }] },
-      data: { customerReadAt: at },
+      where: { id: conv.id, OR: [{ customerReadAt: null }, { customerReadAt: { lt: now } }] },
+      data: { customerReadAt: now },
     });
     return { ok: true };
   }
@@ -210,7 +222,7 @@ export class SupportChatService {
         conversationId: conv.id,
         sender: { in: ['STAFF', 'SYSTEM'] },
         recalledAt: null,
-        ...(conv.customerReadAt ? { createdAt: { gt: conv.customerReadAt } } : {}),
+        seenAt: null,
       },
     });
   }

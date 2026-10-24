@@ -47,7 +47,7 @@ describe('ReplyNotifier.scheduleReplyBell', () => {
 describe('SupportChatNotifyProcessor', () => {
   const T0 = new Date('2026-10-24T10:00:00Z');
   function setup(o: { message?: any; conversation?: any } = {}) {
-    const message = o.message === undefined ? { id: 'm1', conversationId: 'c1', body: 'Dạ vâng', imageUrl: null, recalledAt: null, createdAt: T0 } : o.message;
+    const message = o.message === undefined ? { id: 'm1', conversationId: 'c1', body: 'Dạ vâng', imageUrl: null, recalledAt: null, seenAt: null, createdAt: T0 } : o.message;
     const conversation = o.conversation === undefined ? { id: 'c1', userId: 'u1', customerReadAt: null } : o.conversation;
     const prisma: any = {
       supportMessage: { findUnique: jest.fn().mockResolvedValue(message) },
@@ -59,32 +59,20 @@ describe('SupportChatNotifyProcessor', () => {
   }
   const job: any = { data: { messageId: 'm1' } };
 
-  it('khách chưa đọc: báo như cũ (cùng mẫu, khoá gộp 10 phút)', async () => {
-    const { proc, notifications } = setup({ conversation: { id: 'c1', userId: 'u1', customerReadAt: new Date(T0.getTime() - 60_000) } });
+  it('tin chưa được khách thấy (seenAt null): báo (cùng mẫu, khoá gộp 10 phút), dù customerReadAt đã muộn hơn createdAt', async () => {
+    const { proc, notifications } = setup({ conversation: { id: 'c1', userId: 'u1', customerReadAt: new Date(T0.getTime() + 60_000) } });
     await proc.process(job);
     expect(notifications.notify).toHaveBeenCalledWith('u1', 'SUPPORT_CHAT_REPLY', { preview: 'Dạ vâng', route: '/chat' }, { dedupeKey: 'support-reply-c1', dedupeWithinMs: NOTIFY_DEDUPE_MS });
   });
 
-  it('chưa từng đọc (customerReadAt null): báo', async () => {
-    const { proc, notifications } = setup();
-    await proc.process(job);
-    expect(notifications.notify).toHaveBeenCalledTimes(1);
-  });
-
-  it('khách đã đọc sau khi tin đến (customerReadAt >= createdAt): không báo', async () => {
-    const { proc, notifications } = setup({ conversation: { id: 'c1', userId: 'u1', customerReadAt: new Date(T0.getTime() + 5_000) } });
-    await proc.process(job);
-    expect(notifications.notify).not.toHaveBeenCalled();
-  });
-
-  it('customerReadAt đúng bằng createdAt: coi là đã thấy', async () => {
-    const { proc, notifications } = setup({ conversation: { id: 'c1', userId: 'u1', customerReadAt: T0 } });
+  it('tin đã được khách thấy (seenAt đặt): không báo', async () => {
+    const { proc, notifications } = setup({ message: { id: 'm1', conversationId: 'c1', body: 'x', imageUrl: null, recalledAt: null, seenAt: new Date(), createdAt: T0 } });
     await proc.process(job);
     expect(notifications.notify).not.toHaveBeenCalled();
   });
 
   it('tin đã bị thu hồi: không báo', async () => {
-    const { proc, notifications } = setup({ message: { id: 'm1', conversationId: 'c1', body: 'x', imageUrl: null, recalledAt: new Date(), createdAt: T0 } });
+    const { proc, notifications } = setup({ message: { id: 'm1', conversationId: 'c1', body: 'x', imageUrl: null, recalledAt: new Date(), seenAt: null, createdAt: T0 } });
     await proc.process(job);
     expect(notifications.notify).not.toHaveBeenCalled();
   });

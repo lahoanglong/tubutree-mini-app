@@ -10,6 +10,6 @@ export const getSupportChatPage = (http: HttpClient, q: { after?: string; before
     },
   });
 export const sendSupportChat = (http: HttpClient, input: SupportChatSendInput) => http.post<SupportChatMessageDTO>('/me/support-chat/messages', input);
-export const markSupportChatRead = (http: HttpClient, upToId?: string) =>
-  upToId ? http.post<{ ok: boolean }>('/me/support-chat/read', { upToId } satisfies SupportChatReadInput) : http.post<{ ok: boolean }>('/me/support-chat/read');
+export const markSupportChatRead = (http: HttpClient, ids: string[]) =>
+  http.post<{ ok: boolean }>('/me/support-chat/read', { ids } satisfies SupportChatReadInput);
 export const getSupportChatSummary = (http: HttpClient) => http.get<{ unreadCount: number }>('/me/support-chat/summary');

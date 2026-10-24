@@ -13,8 +13,8 @@ export interface SupportChatSendInput {
   clientMsgId: string; body?: string; imageUrl?: string; context?: SupportChatContext;
   source?: 'MINIAPP' | 'WEB';
 }
-/** `upToId`: tin mới nhất màn khách đã hiển thị; bỏ trống thì đánh dấu đến bây giờ. */
-export interface SupportChatReadInput { upToId?: string }
+/** `ids`: các tin STAFF/SYSTEM màn khách thực sự đã hiển thị (tối đa 100). `upToId` chỉ còn cho Mini App bản cũ chưa gửi ids. */
+export interface SupportChatReadInput { ids?: string[]; upToId?: string }
 export type ZaloBridgeState = 'CONNECTED' | 'CONNECTING' | 'NEED_QR' | 'KICKED' | 'ERROR' | 'UNREACHABLE';
 export type ZaloBridgeEvent =
   | { type: 'message'; groupId: string; msgId: string; cliMsgId: string; uidFrom: string; dName: string;

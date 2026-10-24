@@ -3772,6 +3772,8 @@ model SupportMessage {
   adminUserId    String?
   forwardId      String?
   recalledAt     DateTime?
+  /// Tin STAFF/SYSTEM mà màn khách đã báo là đã hiển thị: chuông và số chưa đọc dựa vào đây, không so theo thời điểm.
+  seenAt         DateTime?
   createdAt      DateTime      @default(now())
 
   conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)

@@ -8,6 +8,8 @@ import { SupportChatService } from '../../src/modules/support-chat/support-chat.
 import { SupportChatForwardProcessor } from '../../src/modules/support-chat/support-chat-forward.processor';
 import { BridgeHealthCron } from '../../src/modules/support-chat/bridge-health.cron';
 import { BridgeEventsService } from '../../src/modules/support-chat/bridge-events.service';
+import { ReplyNotifier } from '../../src/modules/support-chat/reply-notifier';
+import { SupportChatNotifyProcessor } from '../../src/modules/support-chat/support-chat-notify.processor';
 import { issueConversationCode } from '../../src/modules/support-chat/conversation-code';
 import { MAX_MESSAGES_PER_DAY } from '../../src/modules/support-chat/support-chat.service';
 import { formatForward } from '../../src/modules/support-chat/forward-format';
@@ -301,6 +303,32 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
       await expectHidden(conv.id, u.id, msgId);
     });
 
+    it('(e) thu hồi xen giữa, kiểm sau-lưu lỗi, cầu nối gửi lại: hàng đã lưu vẫn bị thu hồi', async () => {
+      const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const msgId = `zm-${randCode(10)}`;
+      let release!: () => void;
+      const gate = new Promise<void>((r) => { release = r; });
+      let reached!: () => void;
+      const atHook = new Promise<void>((r) => { reached = r; });
+      const real = prisma.supportRecallTombstone.findUnique.bind(prisma.supportRecallTombstone);
+      const spy = jest.spyOn(prisma.supportRecallTombstone, 'findUnique')
+        .mockImplementationOnce(((args: never) => real(args).then(async (v) => { reached(); await gate; return v; })) as never)
+        .mockImplementationOnce((() => Promise.reject(new Error('db tạm thời'))) as never);
+      const e = reply({ msgId, text: `#${code} Dạ ạ` });
+      try {
+        const first = events.handle(e);
+        await atHook;
+        await events.handle(undo(msgId));
+        release();
+        await expect(first).rejects.toThrow('db tạm thời');
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, zaloMsgId: msgId, recalledAt: null } })).toBe(1);
+      expect((await events.handle(e)).status).toBe(200);
+      await expectHidden(conv.id, u.id, msgId);
+    });
+
     it('song song 30 lần: tin hoặc không có, hoặc đã thu hồi', async () => {
       const { conv, code, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
       for (let i = 0; i < 30; i++) {
@@ -310,6 +338,47 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
         expect(rows.every((r) => r.recalledAt !== null)).toBe(true);
       }
       expect((await chat.getThread(u.id)).messages.filter((m) => m.sender === 'STAFF')).toHaveLength(0);
+    });
+  });
+
+  describe('đã thấy theo từng tin', () => {
+    async function twoReplies() {
+      const { conv, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const at = new Date();
+      const [a, b] = await Promise.all(['một', 'hai'].map((body, i) => prisma.supportMessage.create({
+        data: { conversationId: conv.id, sender: 'STAFF', source: 'ZALO', body, zaloMsgId: `zm-${randCode(10)}`, createdAt: at },
+      })));
+      return { conv, u, a: a!, b: b! };
+    }
+    const processor = () => {
+      const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
+      return { notifications, proc: new SupportChatNotifyProcessor(prisma, new ReplyNotifier(notifications as never, {} as never)) };
+    };
+
+    it('hai tin cùng createdAt, khách báo đã thấy một: tin kia còn chưa đọc và chuông của nó vẫn bắn', async () => {
+      const { u, a, b } = await twoReplies();
+      expect(await chat.unreadCount(u.id)).toBe(2);
+      await chat.markRead(u.id, { ids: [a.id] });
+      expect(await chat.unreadCount(u.id)).toBe(1);
+      const { proc, notifications } = processor();
+      await proc.process({ data: { messageId: a.id } } as never);
+      expect(notifications.notify).not.toHaveBeenCalled();
+      await proc.process({ data: { messageId: b.id } } as never);
+      expect(notifications.notify).toHaveBeenCalledTimes(1);
+    });
+
+    it('ids của hội thoại khác hoặc của tin khách: không đánh dấu gì', async () => {
+      const mine = await twoReplies();
+      const other = await twoReplies();
+      const cust = await prisma.supportMessage.create({ data: { conversationId: mine.conv.id, sender: 'CUSTOMER', source: 'WEB', body: 'hi' } });
+      await chat.markRead(mine.u.id, { ids: [other.a.id, cust.id] });
+      expect(await prisma.supportMessage.count({ where: { id: { in: [other.a.id, cust.id] }, seenAt: { not: null } } })).toBe(0);
+    });
+
+    it('không có ids (Mini App bản cũ): đánh dấu mọi tin tới bây giờ', async () => {
+      const { u } = await twoReplies();
+      await chat.markRead(u.id);
+      expect(await chat.unreadCount(u.id)).toBe(0);
     });
   });
 

@@ -74,20 +74,12 @@ function ChatBody() {
   const productQ = useQuery({ ...productQuery(coreHttp, productSlug ?? ''), enabled: !!productSlug && !orderCode && SLUG_PATTERN.test(productSlug), staleTime: 10 * 60_000, retry: false });
   const hotline = supportQ.isError ? DEFAULT_HOTLINE : supportQ.data?.hotline ?? null;
   const thread = threadQ.data;
-  const lastId = thread?.messages[thread.messages.length - 1]?.id;
 
   useEffect(() => {
     const onVisibility = () => setVisible(document.visibilityState === 'visible');
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
-
-  useEffect(() => {
-    if (!visible || !lastId) return;
-    void markSupportChatRead(coreHttp, lastId)
-      .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQuery(coreHttp).queryKey }))
-      .catch(() => undefined);
-  }, [lastId, visible, qc]);
 
   const patch = useCallback((id: string, next: Partial<Pending>) => {
     setPending((list) => list.map((p) => (p.clientMsgId === id ? { ...p, ...next } : p)));
@@ -143,6 +135,23 @@ function ChatBody() {
     const all = thread ? mergeWindow(seen, thread.messages, thread.hasMore) : seen;
     return [...all.values()].sort(byTime);
   }, [seen, thread]);
+
+  // Báo id từng tin STAFF/SYSTEM đã hiển thị (kể cả tin commit muộn nằm trước tin cuối và tin cũ tải thêm), không báo theo thời điểm.
+  const reportedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!visible) return;
+    const todo = server.filter((m) => m.sender !== 'CUSTOMER' && !reportedRef.current.has(m.id)).map((m) => m.id);
+    for (let i = 0; i < todo.length; i += 100) {
+      const ids = todo.slice(i, i + 100);
+      for (const id of ids) reportedRef.current.add(id);
+      void markSupportChatRead(coreHttp, ids)
+        .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQuery(coreHttp).queryKey }))
+        .catch(() => {
+          // Chưa báo được thì lần đổi tập tin sau gửi lại.
+          for (const id of ids) reportedRef.current.delete(id);
+        });
+    }
+  }, [server, visible, qc]);
 
   const items = useMemo<ChatItem[]>(() => {
     const known = new Set(server.map((m) => m.clientMsgId).filter(Boolean));
