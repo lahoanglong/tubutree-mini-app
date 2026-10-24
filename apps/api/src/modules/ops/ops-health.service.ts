@@ -33,6 +33,7 @@ import {
   type OpsProblem,
   type OpsThresholds,
 } from './ops-alerts';
+import { CronRunService, type CronRunRow } from './cron-run.service';
 import { DISABLED_EMAIL_STATE, OpsEmailService, type EmailAlertOutcome } from './ops-email.service';
 import {
   CATALOG_STATE_KEY,
@@ -183,6 +184,7 @@ export class OpsHealthService {
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() @Inject(OPS_FETCH) private readonly fetchImpl?: FetchLike,
     @Optional() private readonly email?: OpsEmailService,
+    @Optional() private readonly cronRuns?: CronRunService,
   ) {}
 
   async thresholds(): Promise<OpsThresholds> {
@@ -196,15 +198,26 @@ export class OpsHealthService {
     return Object.fromEntries(entries) as unknown as OpsThresholds;
   }
 
+  /** Chỉ để hiển thị: lỗi đọc không được làm hỏng cả màn sức khoẻ. */
+  async cronJobs(): Promise<CronRunRow[]> {
+    try {
+      return (await this.cronRuns?.list()) ?? [];
+    } catch (err) {
+      this.logger.warn(`Không đọc được sổ tác vụ nền: ${err instanceof Error ? err.message : err}`);
+      return [];
+    }
+  }
+
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
       this.email?.state() ?? DISABLED_EMAIL_STATE,
       this.orderHealth(now),
       this.webhookChannel(),
+      this.cronJobs(),
     ]);
     const problems = opsProblems(
       {
@@ -231,7 +244,7 @@ export class OpsHealthService {
       },
       t,
     );
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, problems };
   }
 
   private webhookUrl(): string {

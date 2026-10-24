@@ -3161,6 +3161,23 @@ model CronLease {
   @@map("cron_leases")
 }
 
+/// Một dòng cho mỗi @Cron (khoá = tên cron Nest hoặc Lớp.phươngThức): lần chạy gần nhất và chuỗi lỗi liên tiếp. Chỉ leader ghi.
+model CronRun {
+  job                 String    @id
+  lastStartedAt       DateTime
+  lastFinishedAt      DateTime
+  lastSuccessAt       DateTime?
+  lastErrorAt         DateTime?
+  /// Tên lớp lỗi + dòng đầu thông điệp, cắt 300 ký tự; không stack, không dữ liệu request.
+  lastError           String?
+  consecutiveFailures Int       @default(0)
+  lastDurationMs      Int
+  /// Lần báo admin gần nhất của chuỗi lỗi hiện tại; xoá khi job chạy lại thành công.
+  lastAlertedAt       DateTime?
+
+  @@map("cron_runs")
+}
+
 /// Nguồn đơn Pancake không phải đơn đặt trong app: sàn (Shopee/Lazada/TikTok), chat/điện thoại, hoặc chưa biết.
 enum ExternalOrderSource {
   MARKETPLACE
