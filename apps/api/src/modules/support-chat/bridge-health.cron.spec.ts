@@ -95,7 +95,8 @@ describe('BridgeHealthCron', () => {
         conversation: { blockedAt: null },
         OR: ['NOT_CONNECTED', 'NO_GROUP', 'NETWORK', 'BRIDGE_NOT_CONFIGURED'].map((c) => ({ lastError: { startsWith: `${c}:` } })),
       });
-      expect(prisma.supportForward.updateMany).toHaveBeenCalledWith({ where: { id: 'f1', status: 'FAILED' }, data: { status: 'PENDING' } });
+      // Chốt lặp lại đủ điều kiện chọn: admin bấm "Gửi lại" giữa lượt quét làm forward thành SEND_FAILED thì không được gửi lần nữa.
+      expect(prisma.supportForward.updateMany).toHaveBeenCalledWith({ where: { id: 'f1', ...q.where }, data: { status: 'PENDING' } });
       expect(sendAndSettle).toHaveBeenCalledTimes(2);
       expect((sendAndSettle as jest.Mock).mock.calls[0].slice(2).map((x: any) => (typeof x === 'object' ? x.id : x))).toEqual(['f1', 'nội dung', false]);
       expect(bridge.setGroup).not.toHaveBeenCalled();

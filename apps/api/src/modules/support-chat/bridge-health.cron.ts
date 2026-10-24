@@ -121,7 +121,7 @@ export class BridgeHealthCron {
     });
     for (const forward of failed) {
       try {
-        await this.resumeOne(forward);
+        await this.resumeOne(forward, now);
       } catch (err) {
         this.logger.warn(`Gửi lại forward ${forward.id} lỗi: ${(err as Error).message}`);
         const lastError = `RESUME: ${(err as Error).message}`.slice(0, 500);
@@ -132,15 +132,18 @@ export class BridgeHealthCron {
     }
   }
 
-  private async resumeOne(forward: { id: string; conversationId: string }): Promise<void> {
+  private async resumeOne(forward: { id: string; conversationId: string }, now: Date): Promise<void> {
     const messages = await this.prisma.supportMessage.findMany({
       where: { conversationId: forward.conversationId, forwardId: forward.id },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
     const conv = await this.prisma.supportConversation.findUnique({ where: { id: forward.conversationId } });
     if (messages.length === 0 || !conv) return;
-    // Cùng cách chuyển trạng thái nguyên tử với admin gửi lại: hai lượt quét chạy song song thì chỉ một bên gửi.
-    const claimed = await this.prisma.supportForward.updateMany({ where: { id: forward.id, status: 'FAILED' }, data: { status: 'PENDING' } });
+    // Chốt nguyên tử và lặp lại đủ điều kiện chọn: hai lượt quét song song thì chỉ một bên gửi, và forward admin vừa gửi lại thành SEND_FAILED (có thể đã đăng) thì không gửi nữa.
+    const claimed = await this.prisma.supportForward.updateMany({
+      where: { id: forward.id, ...resumableFailedForwardWhere(now) },
+      data: { status: 'PENDING' },
+    });
     if (claimed.count === 0) return;
     const text = await buildForwardText(this.prisma, conv, messages);
     await sendAndSettle(this.prisma, this.bridge, forward, text, false);

@@ -155,15 +155,11 @@ describe('BridgeEventsService.handle message', () => {
     expect(prisma.supportMessage.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { zaloMsgId: 'zcust', sender: 'STAFF' } }));
   });
 
-  it('khách vừa đọc (customerReadAt trong 15 giây): lưu tin nhưng không báo chuông; quá 15 giây thì báo', async () => {
-    const mk = (readAgoMs: number) => setup({ convs: [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: null, customerReadAt: new Date(Date.now() - readAgoMs) }] });
-    const open = mk(5_000);
-    await open.svc.handle(msg({ text: '#K7Q2 hi' }));
-    expect(open.created).toHaveLength(1);
-    expect(open.notifications.notify).not.toHaveBeenCalled();
-    const away = mk(20_000);
-    await away.svc.handle(msg({ text: '#K7Q2 hi' }));
-    expect(away.notifications.notify).toHaveBeenCalledTimes(1);
+  it('khách vừa đọc vài giây trước vẫn được báo chuông', async () => {
+    const { svc, created, notifications } = setup({ convs: [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: null, customerReadAt: new Date(Date.now() - 3_000) }] });
+    await svc.handle(msg({ text: '#K7Q2 hi' }));
+    expect(created).toHaveLength(1);
+    expect(notifications.notify).toHaveBeenCalledTimes(1);
   });
 
   it('mã không tồn tại: 200 kèm unknownCode, không tạo tin', async () => {

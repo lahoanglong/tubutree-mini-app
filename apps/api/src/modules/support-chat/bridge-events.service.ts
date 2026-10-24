@@ -13,17 +13,12 @@ export type BridgeEventResult =
 const OK: BridgeEventResult = { status: 200, body: { ok: true } };
 /** Quá ngần này mà forward vẫn chưa có zaloMsgId thì coi là hỏng, không giữ tin nhân viên chờ mãi. */
 const PENDING_FORWARD_WINDOW_MS = 5 * 60_000;
+/** Chuông luôn báo (gộp trong 10 phút), kể cả khi khách đang mở màn chat: API không biết chắc khách còn xem, mà bỏ sót chuông thì khách lỡ câu trả lời. */
 export const NOTIFY_DEDUPE_MS = 10 * 60_000;
-/** Màn chat đang mở thì đánh dấu đã đọc theo mỗi lần hỏi 5 giây; trong ngần này coi là khách đang xem, không cần chuông. */
-const CUSTOMER_VIEWING_MS = 15_000;
-
-export function customerIsViewing(conv: { customerReadAt: Date | null }, now = Date.now()): boolean {
-  return !!conv.customerReadAt && now - conv.customerReadAt.getTime() <= CUSTOMER_VIEWING_MS;
-}
 const PREVIEW_MAX = 60;
 const IMAGE_PREVIEW = 'Ảnh từ Tubu Tree';
 
-type ConversationHit = { id: string; userId: string; code: string; customerReadAt: Date | null };
+type ConversationHit = { id: string; userId: string; code: string };
 
 const isP2002 = (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
 
@@ -97,14 +92,12 @@ export class BridgeEventsService {
 
     try {
       await this.prisma.supportConversation.update({ where: { id: conv.id }, data: { lastMessageAt: new Date() } });
-      if (!customerIsViewing(conv)) {
-        await this.notifications.notify(
-          conv.userId,
-          'SUPPORT_CHAT_REPLY',
-          { preview: replyPreview(body, e.imageUrl), route: '/chat' },
-          { dedupeKey: `support-reply-${conv.id}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
-        );
-      }
+      await this.notifications.notify(
+        conv.userId,
+        'SUPPORT_CHAT_REPLY',
+        { preview: replyPreview(body, e.imageUrl), route: '/chat' },
+        { dedupeKey: `support-reply-${conv.id}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
+      );
     } catch (err) {
       // Tin đã lưu; gửi lại sự kiện cũng chỉ đụng unique zaloMsgId nên không giúp được gì.
       this.logger.warn(`Bước phụ sau tin nhân viên ${created.id} lỗi: ${(err as Error).message}`);

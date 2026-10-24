@@ -91,11 +91,11 @@ describe('SupportChatAdminService', () => {
     expect(bridge.send).not.toHaveBeenCalled();
   });
 
-  it('reply: khách vừa đọc trong 15 giây thì lưu tin nhưng không báo chuông', async () => {
+  it('reply: khách vừa đọc vài giây trước vẫn được báo chuông', async () => {
     const { svc, created, notifications } = setup({ conv: { id: 'c1', userId: 'u1', code: 'K7Q2', customerReadAt: new Date(Date.now() - 3_000) } });
     await svc.reply('admin1', 'c1', 'Dạ');
     expect(created).toHaveLength(1);
-    expect(notifications.notify).not.toHaveBeenCalled();
+    expect(notifications.notify).toHaveBeenCalledTimes(1);
   });
 
   it('reply: hội thoại không có thì 404', async () => {
