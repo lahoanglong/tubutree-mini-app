@@ -201,6 +201,21 @@ export class SupportChatService {
     if (input.ids) {
       if (input.ids.length > 0) {
         await this.prisma.supportMessage.updateMany({ where: { id: { in: input.ids }, ...staffRows }, data: { seenAt: now } });
+        // Màn chat luôn vẽ trang mới nhất (PAGE_SIZE tin): tin cũ hơn ranh giới đó là lịch sử khách đã mở, nên không kẹt "chưa đọc" mãi.
+        // Rủi ro commit muộn/trùng thời điểm chỉ ở sát tin mới nhất, không ở 50 tin trước.
+        const [boundary] = await this.prisma.supportMessage.findMany({
+          where: { conversationId: conv.id, ...VISIBLE },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          skip: PAGE_SIZE - 1,
+          take: 1,
+          select: { id: true, createdAt: true },
+        });
+        if (boundary) {
+          await this.prisma.supportMessage.updateMany({
+            where: { ...staffRows, OR: [{ createdAt: { lt: boundary.createdAt } }, { createdAt: boundary.createdAt, id: { lt: boundary.id } }] },
+            data: { seenAt: now },
+          });
+        }
       }
     } else {
       const rendered = input.upToId ? await this.prisma.supportMessage.findFirst({ where: { id: input.upToId, conversationId: conv.id }, select: { createdAt: true } }) : null;

@@ -32,7 +32,7 @@ export class ReplyNotifier {
   ) {}
 
   /** Đặt chuông trễ 20 giây; không đặt được (Redis sập/treo) thì báo ngay, vì sót chuông tệ hơn thừa một chuông. */
-  async scheduleReplyBell(conv: { id: string; userId: string }, message: { id: string; body: string; imageUrl: string | null }): Promise<void> {
+  async scheduleReplyBell(conv: { id: string; userId: string; customerReadAt?: Date | null }, message: { id: string; body: string; imageUrl: string | null }): Promise<void> {
     try {
       await withQueueTimeout(
         this.queue.add(SUPPORT_NOTIFY_JOB, { messageId: message.id }, { jobId: `notify-${message.id}`, delay: NOTIFY_DELAY_MS }),
@@ -44,12 +44,16 @@ export class ReplyNotifier {
     }
   }
 
-  notifyNow(conv: { id: string; userId: string }, preview: string): Promise<unknown> {
+  /**
+   * Khoá gộp có thêm mốc đọc của khách: chuông sau chỉ bị gộp khi khách chưa đọc gì kể từ chuông trước.
+   * markRead đẩy customerReadAt tới, nên khách đã mở chat xem tin A rồi thì tin B trong 10 phút sau vẫn báo.
+   */
+  notifyNow(conv: { id: string; userId: string; customerReadAt?: Date | null }, preview: string): Promise<unknown> {
     return this.notifications.notify(
       conv.userId,
       'SUPPORT_CHAT_REPLY',
       { preview, route: '/chat' },
-      { dedupeKey: `support-reply-${conv.id}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
+      { dedupeKey: conv.customerReadAt ? `support-reply-${conv.id}-${conv.customerReadAt.getTime()}` : `support-reply-${conv.id}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
     );
   }
 }

@@ -518,6 +518,20 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
       expect(mocks.markRead.mock.calls.flatMap((c) => (c[0] as { ids: string[] }).ids).filter((id) => id === 'm1').length).toBeGreaterThanOrEqual(2);
     });
 
+    it('báo lỗi một lần rồi thread tải lại với dữ liệu y hệt: gửi lại đúng các id đó; thành công rồi thì không gửi nữa', async () => {
+      mocks.markRead.mockRejectedValueOnce(new Error('mạng'));
+      mocks.getThread.mockResolvedValue(thread({ messages: [m('m1', 'STAFF', 1)] }));
+      mount();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(1));
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      await refetchThread();
+      await waitFor(() => expect(mocks.markRead).toHaveBeenCalledTimes(2));
+      expect(mocks.markRead).toHaveBeenLastCalledWith({ ids: ['m1'] });
+      await refetchThread();
+      await refetchThread();
+      expect(mocks.markRead).toHaveBeenCalledTimes(2);
+    });
+
     it('quá 100 id thì tách thành nhiều lần gọi', async () => {
       const many = Array.from({ length: 150 }, (_, i) => m(`s${String(i).padStart(3, '0')}`, 'STAFF', 1 + (i % 50)));
       mocks.getThread.mockResolvedValue(thread({ messages: many }));

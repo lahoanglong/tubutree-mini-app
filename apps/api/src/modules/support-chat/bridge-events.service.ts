@@ -13,7 +13,7 @@ export type BridgeEventResult =
 const OK: BridgeEventResult = { status: 200, body: { ok: true } };
 /** Quá ngần này mà forward vẫn chưa có zaloMsgId thì coi là hỏng, không giữ tin nhân viên chờ mãi. */
 const PENDING_FORWARD_WINDOW_MS = 5 * 60_000;
-type ConversationHit = { id: string; userId: string; code: string };
+type ConversationHit = { id: string; userId: string; code: string; customerReadAt?: Date | null };
 
 const isP2002 = (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
 

@@ -52,11 +52,14 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 
 1. Gộp mã với `chat.enabled = false` (mặc định), nên khách chưa thấy gì.
 2. Thêm ba biến ở mục 2 vào `.env` trên máy chủ.
-3. Áp hai migration mới (chỉ thêm bảng/cột, không sửa dữ liệu cũ):
+3. Áp các migration mới (chỉ thêm bảng/cột/chỉ mục; bản `support_message_seen` có một câu UPDATE điền lại `seenAt` cho tin cũ):
    - `20261023100000_support_chat`
    - `20261023110000_support_bridge_actions`
+   - `20261024100000_support_chat_hardening`
+   - `20261024120000_support_message_seen`
    Lưu ý: trước khi hai khoá `ZALO_BRIDGE_SECRET` và `ZALO_BRIDGE_CREDENTIALS_KEY` có trong `.env`, service `zalo-bridge` từ chối khởi động và `restart: unless-stopped` làm nó khởi động lại liên tục (ồn log, không hại gì). Hoặc điền hai khoá trước, hoặc dựng các service khác theo tên (`docker compose up -d api web ...`) và để `zalo-bridge` cho sau.
 4. Dựng service mới: `docker compose -f <file compose của máy> up -d --build zalo-bridge`, rồi deploy API và web theo `docs/launch/deploy-rollback-runbook.md`. Service không có cổng ra ngoài; `/health` trả 200 cả khi đang chờ quét QR.
+5. Thứ tự với Mini App: deploy API TRƯỚC khi phát hành bất kỳ bản Mini App nào có thay đổi này. Bản Mini App mới luôn gửi `{ ids }` khi đánh dấu đã đọc; API cũ (chưa có `ReadDto`) trả 400 vì `forbidNonWhitelisted`. Đúng với ràng buộc 1 của `docs/launch/deploy-rollback-runbook.md` (bật API mới trước khi phát hành Mini App mới).
 
 ## 4. Bật trong tab Chat CSKH (admin)
 

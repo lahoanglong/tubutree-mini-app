@@ -147,11 +147,11 @@ function ChatBody() {
       void markSupportChatRead(coreHttp, ids)
         .then(() => qc.invalidateQueries({ queryKey: supportChatSummaryQuery(coreHttp).queryKey }))
         .catch(() => {
-          // Chưa báo được thì lần đổi tập tin sau gửi lại.
+          // Chưa báo được thì lần tải thread kế tiếp (dataUpdatedAt tăng sau mỗi lần tải thành công, kể cả dữ liệu y hệt) gửi lại.
           for (const id of ids) reportedRef.current.delete(id);
         });
     }
-  }, [server, visible, qc]);
+  }, [server, visible, qc, threadQ.dataUpdatedAt]);
 
   const items = useMemo<ChatItem[]>(() => {
     const known = new Set(server.map((m) => m.clientMsgId).filter(Boolean));

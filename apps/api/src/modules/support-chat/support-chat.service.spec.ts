@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import { SupportChatService } from './support-chat.service';
+import { PAGE_SIZE, SupportChatService } from './support-chat.service';
 import { CHAT_ENABLED_KEY, DEFAULT_OFF_HOURS_TEXT } from './support-chat.config';
 
 const NOON = new Date('2026-10-23T12:00:00+07:00');
@@ -323,6 +323,35 @@ describe('unreadCount / markRead', () => {
         data: { seenAt: expect.any(Date) },
       });
       expect(prisma.supportMessage.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('ids: đánh dấu thêm mọi tin STAFF/SYSTEM cũ hơn hẳn ranh giới trang mới nhất (tin thứ PAGE_SIZE, cùng thứ tự và bộ lọc với getThread)', async () => {
+      const { svc, prisma } = setup();
+      const boundary = { id: 'm50', createdAt: T };
+      prisma.supportMessage.findMany.mockResolvedValueOnce([boundary]);
+      await svc.markRead('u1', { ids: ['m51'] });
+      expect(prisma.supportMessage.findMany).toHaveBeenCalledWith({
+        where: { conversationId: 'c1', OR: [{ sender: { not: 'STAFF' } }, { recalledAt: null }] },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: PAGE_SIZE - 1,
+        take: 1,
+        select: { id: true, createdAt: true },
+      });
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledTimes(2);
+      expect(prisma.supportMessage.updateMany).toHaveBeenLastCalledWith({
+        where: {
+          conversationId: 'c1', sender: { in: ['STAFF', 'SYSTEM'] }, seenAt: null,
+          OR: [{ createdAt: { lt: T } }, { createdAt: T, id: { lt: 'm50' } }],
+        },
+        data: { seenAt: expect.any(Date) },
+      });
+    });
+
+    it('hội thoại có không quá PAGE_SIZE tin: không có ranh giới, chỉ đánh dấu đúng ids', async () => {
+      const { svc, prisma } = setup();
+      prisma.supportMessage.findMany.mockResolvedValueOnce([]);
+      await svc.markRead('u1', { ids: ['m1'] });
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledTimes(1);
     });
 
     it('hai tin cùng createdAt, chỉ gửi id một tin: tin kia vẫn chưa thấy (không so theo thời điểm)', async () => {

@@ -375,6 +375,30 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
       expect(await prisma.supportMessage.count({ where: { id: { in: [other.a.id, cust.id] }, seenAt: { not: null } } })).toBe(0);
     });
 
+    it('55 tin STAFF chưa đọc: báo đúng 50 id của trang mới nhất thì không còn tin nào chưa đọc (5 tin cũ hơn ranh giới tính là đã mở)', async () => {
+      const { conv, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const base = Date.now() - 3_600_000;
+      await prisma.supportMessage.createMany({
+        data: Array.from({ length: 55 }, (_, i) => ({ conversationId: conv.id, sender: 'STAFF' as const, source: 'ZALO' as const, body: `t${i}`, zaloMsgId: `zm-${randCode(10)}-${i}`, createdAt: new Date(base + i * 1000) })),
+      });
+      expect(await chat.unreadCount(u.id)).toBe(55);
+      const page = await chat.getThread(u.id);
+      expect(page.messages).toHaveLength(50);
+      await chat.markRead(u.id, { ids: page.messages.map((m) => m.id) });
+      expect(await chat.unreadCount(u.id)).toBe(0);
+    });
+
+    it('30 tin STAFF: báo 1 id thì chỉ tin đó được đánh dấu', async () => {
+      const { conv, u } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+      const base = Date.now() - 3_600_000;
+      await prisma.supportMessage.createMany({
+        data: Array.from({ length: 30 }, (_, i) => ({ conversationId: conv.id, sender: 'STAFF' as const, source: 'ZALO' as const, body: `t${i}`, zaloMsgId: `zm-${randCode(10)}-${i}`, createdAt: new Date(base + i * 1000) })),
+      });
+      const first = await prisma.supportMessage.findFirstOrThrow({ where: { conversationId: conv.id, sender: 'STAFF' }, orderBy: { createdAt: 'asc' } });
+      await chat.markRead(u.id, { ids: [first.id] });
+      expect(await chat.unreadCount(u.id)).toBe(29);
+    });
+
     it('không có ids (Mini App bản cũ): đánh dấu mọi tin tới bây giờ', async () => {
       const { u } = await twoReplies();
       await chat.markRead(u.id);
