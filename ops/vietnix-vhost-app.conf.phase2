@@ -31,6 +31,12 @@
     ProxyRequests Off
     RequestHeader set X-Forwarded-Proto "https"
 
+    # HSTS cho web (next.config không gửi). Chỉ ở vhost 443; api đã có từ helmet. Cố ý KHÔNG includeSubDomains/preload:
+    # includeSubDomains sẽ ép cả subdomain khác của tên miền gốc (chưa chắc có HTTPS) và preload thì không gỡ lại được.
+    <IfModule mod_headers.c>
+        Header always set Strict-Transport-Security "max-age=31536000"
+    </IfModule>
+
     # Nén phản hồi (JSON, HTML, JS, CSS, SVG). Next đã tự nén phản hồi của nó nên mod_deflate
     # bỏ qua phản hồi đã có Content-Encoding. Thiếu mod_deflate hoặc mod_filter thì khối này bị bỏ qua, không gây lỗi: kiểm bằng
     # `bash ops/check-edge.sh` (dòng "nén"). Bật ☁ cam của Cloudflare thì Cloudflare tự nén ở biên, khối này vẫn vô hại.
