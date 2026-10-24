@@ -50,7 +50,7 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
       </div>
       {listQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {listQ.isError && <LoadError onRetry={() => void listQ.refetch()} retrying={listQ.isFetching}>Không tải được danh sách hội thoại.</LoadError>}
-      {listQ.data && items.length === 0 && <p className="text-sm text-stone-500">Chưa có hội thoại nào.</p>}
+      {listQ.data && items.length === 0 && <p className="text-sm text-stone-500">{q || unforwarded ? 'Không có hội thoại khớp.' : 'Chưa có hội thoại nào.'}</p>}
       <ul className="space-y-2">
         {items.map((c) => (
           <li key={c.id}>

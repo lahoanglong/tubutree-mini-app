@@ -184,6 +184,12 @@ describe('SupportChatAdminService', () => {
       expect(w.AND[0].OR).toContainEqual({ code: 'K7Q2' });
     });
 
+    it.each(['#K7Q2', '  #k7q2 ', '#k7q2'])("q=%j có dấu # đầu vẫn khớp mã K7Q2", async (q) => {
+      const { svc, prisma } = setup();
+      await svc.list({ q });
+      expect(where(svc, prisma).AND[0].OR).toContainEqual({ code: 'K7Q2' });
+    });
+
     it("q='0901' khớp SĐT người dùng theo cách ô tìm người dùng đang làm, không khớp mã", async () => {
       const { svc, prisma } = setup();
       await svc.list({ q: '0901' });
@@ -251,6 +257,20 @@ describe('SupportChatAdminService', () => {
       const r = await svc.get('c1');
       const flag = (id: string) => (r.messages.find((m: any) => m.id === `m-${id}`) as any).forward.resendable;
       expect(['fF', 'fU', 'fS', 'fPold', 'fPnew', 'fPid'].map(flag)).toEqual([true, true, false, true, false, false]);
+    });
+
+    it('forward.resendable: PENDING đúng 10 phút tuổi vẫn false (so sánh nghiêm ngặt)', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-10-23T12:00:00Z'));
+      try {
+        const { svc } = setup({
+          forwards: [fwd({ id: 'fE', status: 'PENDING', updatedAt: new Date('2026-10-23T11:50:00Z') })],
+          messages: [custMsg({ id: 'm-fE', forwardId: 'fE' })],
+        });
+        const r = await svc.get('c1');
+        expect((r.messages[0] as any).forward.resendable).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('truncated: true khi hội thoại có hơn 500 tin, chỉ trả 500 tin mới nhất', async () => {

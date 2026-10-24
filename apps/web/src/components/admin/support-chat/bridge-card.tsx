@@ -55,9 +55,11 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // Chỉ theo groupId: mỗi lần poll trả đối tượng mới (checkedAt đổi) và sẽ xoá lựa chọn nhóm chưa lưu.
+  const savedGroupId = status?.groupId;
   useEffect(() => {
-    if (status) setGroupId(status.groupId);
-  }, [status]);
+    if (savedGroupId !== undefined) setGroupId(savedGroupId);
+  }, [savedGroupId]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: BRIDGE_QUERY_KEY });
   const fail = (fallback: string) => (e: unknown) => setNote({ ok: false, text: errText(e, fallback) });

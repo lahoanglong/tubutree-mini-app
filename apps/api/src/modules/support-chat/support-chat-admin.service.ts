@@ -95,7 +95,7 @@ export class SupportChatAdminService {
 
   async list(q: { q?: string; filter?: 'unforwarded'; cursor?: string }) {
     const and: Prisma.SupportConversationWhereInput[] = [];
-    const term = q.q?.trim();
+    const term = q.q?.trim().replace(/^#+/, '').trim();
     if (term) {
       const or: Prisma.SupportConversationWhereInput[] = [];
       if (CODE_QUERY.test(term.toUpperCase())) or.push({ code: term.toUpperCase() });

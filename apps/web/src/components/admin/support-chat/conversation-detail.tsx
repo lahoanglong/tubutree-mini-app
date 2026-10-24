@@ -31,8 +31,10 @@ const errText = (e: unknown, fallback: string) => (e instanceof Error && e.messa
 function senderLabel(m: SupportAdminMessage): string {
   if (m.sender === 'CUSTOMER') return 'Khách';
   if (m.sender === 'SYSTEM') return 'Hệ thống';
-  return m.staffName ?? (m.source === 'ADMIN' ? 'Admin' : 'Nhân viên');
+  return m.staffName ?? (SOURCE_LABEL[m.source] ?? 'Nhân viên');
 }
+
+const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
 
 /** Toàn bộ tin của một hội thoại kèm người trả lời, trạng thái chuyển vào Zalo, ô trả lời, chặn/bỏ chặn. */
 export function ConversationDetail({ id }: { id: string }) {
@@ -84,7 +86,7 @@ export function ConversationDetail({ id }: { id: string }) {
   };
 
   if (detailQ.isLoading) return <p className="text-sm text-stone-500">Đang tải…</p>;
-  if (detailQ.isError || !d) return <LoadError onRetry={() => void detailQ.refetch()} retrying={detailQ.isFetching}>Không tải được hội thoại.</LoadError>;
+  if (!d) return <LoadError onRetry={() => void detailQ.refetch()} retrying={detailQ.isFetching}>Không tải được hội thoại.</LoadError>;
 
   const firstOfForward = new Set<string>();
   const resendShownFor = (m: SupportAdminMessage) => {
@@ -115,6 +117,11 @@ export function ConversationDetail({ id }: { id: string }) {
           )}
         </div>
       </div>
+      {detailQ.isError && (
+        <p data-refresh-error role="alert" className="text-xs text-danger-fg">
+          Không làm mới được hội thoại.
+        </p>
+      )}
       {d.truncated && <p className="text-xs text-stone-500">Chỉ hiện 500 tin gần nhất.</p>}
       <ol className="max-h-[60vh] space-y-2 overflow-y-auto rounded-card border border-stone-200 bg-stone-50 p-3" tabIndex={0} aria-label="Tin trong hội thoại">
         {d.messages.map((m) => (
@@ -122,7 +129,7 @@ export function ConversationDetail({ id }: { id: string }) {
             <div className={`max-w-[85%] rounded-card px-3 py-2 text-sm ${m.sender === 'CUSTOMER' ? 'bg-stone-0 text-stone-900' : 'bg-forest-100 text-stone-900'}`}>
               <p className="text-[11px] text-stone-500">
                 {senderLabel(m)}
-                {m.sender === 'STAFF' && SOURCE_LABEL[m.source] ? ` · ${SOURCE_LABEL[m.source]}` : ''} · {formatDateTime(m.createdAt)}
+                {m.sender === 'STAFF' && m.staffName && SOURCE_LABEL[m.source] ? ` · ${SOURCE_LABEL[m.source]}` : ''} · {formatDateTime(m.createdAt)}
               </p>
               {m.context && (
                 <p className="text-[11px] text-stone-500">
@@ -132,10 +139,13 @@ export function ConversationDetail({ id }: { id: string }) {
                 </p>
               )}
               {m.body && <p className={`whitespace-pre-wrap break-words ${m.recalledAt ? 'line-through opacity-60' : ''}`}>{m.body}</p>}
-              {m.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element -- ảnh khách tải lên, miền không cố định
-                <img src={m.imageUrl} alt="Ảnh khách gửi" className="mt-1 max-h-48 rounded-control" />
-              )}
+              {m.imageUrl &&
+                (isHttpUrl(m.imageUrl) ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- ảnh từ khách hoặc Zalo, miền không cố định
+                  <img src={m.imageUrl} alt={m.sender === 'CUSTOMER' ? 'Ảnh khách gửi' : 'Ảnh nhân viên gửi'} className="mt-1 max-h-48 rounded-control" />
+                ) : (
+                  <p className="text-[11px] text-stone-500">Ảnh không hiển thị được</p>
+                ))}
               {m.recalledAt && <p className="text-[11px] text-stone-500">Đã thu hồi</p>}
               {m.forward && (
                 <p data-forward={m.forward.status} className="mt-1 flex flex-wrap items-center gap-2">

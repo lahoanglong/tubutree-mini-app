@@ -350,6 +350,27 @@ describe('SupportChatTab — nhóm nhận tin', () => {
     expect(made('PUT', 'settings')[0]!.body).toEqual({ groupId: 'G2' });
   });
 
+  it('poll trạng thái (cùng groupId, checkedAt mới) không làm mất lựa chọn nhóm chưa lưu', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let checkedAt = '2026-10-23T03:06:00.000Z';
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, checkedAt } }) });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    const select = container.querySelector<HTMLSelectElement>('select[name="groupId"]')!;
+    act(() => {
+      select.value = 'G2';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    checkedAt = '2026-10-23T03:07:00.000Z';
+    const before = made('GET', 'bridge').length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await flush();
+    expect(made('GET', 'bridge').length).toBeGreaterThan(before);
+    expect(container.querySelector<HTMLSelectElement>('select[name="groupId"]')!.value).toBe('G2');
+  });
+
   it('Gửi tin thử gọi POST bridge/test và hiện kết quả; lỗi hiện nguyên văn', async () => {
     stub();
     const { container } = mount(<SupportChatTab isAdmin />);
@@ -412,6 +433,17 @@ describe('SupportChatTab — hội thoại', () => {
     click(byText(container, 'button', 'Có tin chưa chuyển được'));
     await flush();
     expect(calls.some((c) => c.method === 'GET' && c.path === 'conversations?q=0901&filter=unforwarded')).toBe(true);
+  });
+
+  it('tìm hoặc lọc mà không có kết quả: "Không có hội thoại khớp."', async () => {
+    stub({ 'GET conversations': () => ({ body: { items: [], nextCursor: null } }) });
+    const { container } = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    expect(container.textContent).toContain('Chưa có hội thoại nào.');
+    click(byText(container, 'button', 'Có tin chưa chuyển được'));
+    await flush();
+    expect(container.textContent).toContain('Không có hội thoại khớp.');
+    expect(container.textContent).not.toContain('Chưa có hội thoại nào.');
   });
 
   it('danh sách trống và lỗi tải', async () => {
@@ -483,6 +515,54 @@ describe('SupportChatTab — hội thoại', () => {
     await flush();
     await openDetail(container);
     expect(container.textContent).not.toContain('Chỉ hiện 500 tin gần nhất.');
+  });
+
+  it('ảnh chỉ hiện khi URL http(s); javascript: thì không có img; alt theo người gửi', async () => {
+    stub({
+      'GET conversations/c1': () => ({
+        body: {
+          ...DETAIL,
+          messages: [
+            msg({ id: 'i1', body: '', imageUrl: 'https://cdn.test/a.png' }),
+            msg({ id: 'i2', body: '', imageUrl: 'javascript:alert(1)' }),
+            msg({ id: 'i3', body: '', sender: 'STAFF', source: 'ZALO', staffName: 'Hoa', imageUrl: 'https://cdn.test/b.png' }),
+          ],
+        },
+      }),
+    });
+    const { container } = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    await openDetail(container);
+    const m = (id: string) => container.querySelector<HTMLElement>(`[data-msg="${id}"]`)!;
+    expect(m('i1').querySelector('img')!.getAttribute('alt')).toBe('Ảnh khách gửi');
+    expect(m('i2').querySelector('img')).toBeNull();
+    expect(m('i2').textContent).toContain('Ảnh không hiển thị được');
+    expect(m('i3').querySelector('img')!.getAttribute('alt')).toBe('Ảnh nhân viên gửi');
+  });
+
+  it('một lần làm mới nền lỗi vẫn giữ thread đã tải, chỉ hiện dòng lỗi nhỏ', async () => {
+    let fail = false;
+    stub({ 'GET conversations/c1': () => (fail ? { status: 500, body: { message: 'hỏng' } } : { body: DETAIL }) });
+    const { container } = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    await openDetail(container);
+    fail = true;
+    click(byText(container, 'button', 'Chặn chat'));
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[data-msg="m1"]')).not.toBeNull();
+    expect(container.querySelector('[data-refresh-error]')!.textContent).toContain('Không làm mới được hội thoại.');
+  });
+
+  it('tin STAFF nguồn ADMIN không có tên: chỉ hiện "Admin" một lần', async () => {
+    stub();
+    const { container } = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    await openDetail(container);
+    const head = container.querySelector<HTMLElement>('[data-msg="m6"] p')!.textContent ?? '';
+    expect(head.match(/Admin/g)).toHaveLength(1);
+    const zalo = container.querySelector<HTMLElement>('[data-msg="m5"] p')!.textContent ?? '';
+    expect(zalo).toContain('Hoa · Zalo');
   });
 
   it('trả lời gọi POST conversations/:id/reply, xoá ô nhập; nút khoá khi ô trống', async () => {
