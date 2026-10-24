@@ -2,11 +2,10 @@ import { BadGatewayException, ConflictException, Injectable, Logger, NotFoundExc
 import type { Prisma, SupportForward, SupportMessage } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import { VN_OFFSET_MS } from '../../common/vn-time';
 import { searchPhone, userPhoneClauses } from '../admin/admin-order-filter';
 import { BridgeClient, type BridgeFailure } from './bridge-client';
-import { NOTIFY_DEDUPE_MS, replyPreview } from './bridge-events.service';
+import { ReplyNotifier } from './reply-notifier';
 import { buildForwardText, sendAndSettle } from './forward-delivery';
 import { isStalePendingForward, stalePendingForwardWhere, unforwardedWhere } from './support-chat-health';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
@@ -26,7 +25,7 @@ export class SupportChatAdminService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly bridge: BridgeClient,
-    private readonly notifications: NotificationsService,
+    private readonly notifier: ReplyNotifier,
   ) {}
 
   async bridgeStatus() {
@@ -117,7 +116,9 @@ export class SupportChatAdminService {
     });
     const page = rows.slice(0, PAGE);
     const attention = new Set(
-      (await this.prisma.supportConversation.findMany({ where: { AND: [{ id: { in: page.map((c) => c.id) } }, unforwardedWhere(new Date())] }, select: { id: true } })).map((c) => c.id),
+      page.length === 0
+        ? []
+        : (await this.prisma.supportConversation.findMany({ where: { AND: [{ id: { in: page.map((c) => c.id) } }, unforwardedWhere(new Date())] }, select: { id: true } })).map((c) => c.id),
     );
     return {
       items: page.map((c) => {
@@ -176,12 +177,7 @@ export class SupportChatAdminService {
     });
     try {
       await this.prisma.supportConversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } });
-      await this.notifications.notify(
-        conv.userId,
-        'SUPPORT_CHAT_REPLY',
-        { preview: replyPreview(text, null), route: '/chat' },
-        { dedupeKey: `support-reply-${conversationId}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
-      );
+      await this.notifier.scheduleReplyBell(conv, created);
     } catch (err) {
       this.logger.warn(`Bước phụ sau trả lời của admin ${created.id} lỗi: ${(err as Error).message}`);
     }

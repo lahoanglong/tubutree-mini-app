@@ -27,7 +27,11 @@ function setup(o: { forwards?: any[]; messages?: any[]; conv?: any | null; send?
       updateMany: jest.fn().mockImplementation(({ where, data }: any) => {
         const f = forwards.find((x) => x.id === where.id);
         const fresh = (x: any) => x.status === 'PENDING' && x.zaloMsgId == null && x.updatedAt < where.OR?.[1]?.updatedAt?.lt;
-        const ok = !f ? false : where.OR ? where.OR[0].status.in.includes(f.status) || fresh(f) : typeof where.status === 'string' ? f.status === where.status : where.status.in.includes(f.status);
+        if (data.attempts && f) {
+          f.attempts = (f.attempts ?? 0) + data.attempts.increment;
+          return Promise.resolve({ count: 1 });
+        }
+        const ok = !f ? false : !where.OR && where.status === undefined ? true : where.OR ? where.OR[0].status.in.includes(f.status) || fresh(f) : typeof where.status === 'string' ? f.status === where.status : where.status.in.includes(f.status);
         if (!ok) return Promise.resolve({ count: 0 });
         Object.assign(f, data);
         return Promise.resolve({ count: 1 });
@@ -49,9 +53,9 @@ function setup(o: { forwards?: any[]; messages?: any[]; conv?: any | null; send?
     qrStatus: jest.fn().mockResolvedValue({ ok: true, data: { status: 'IDLE' } }),
     groups: jest.fn().mockResolvedValue({ ok: true, data: { groups: [] } }),
   };
-  const notifications: any = { notify: jest.fn().mockResolvedValue(undefined) };
-  const svc = new SupportChatAdminService(prisma, config, bridge, notifications);
-  return { svc, prisma, config, bridge, notifications, created, forwards };
+  const notifier: any = { scheduleReplyBell: jest.fn().mockResolvedValue(undefined) };
+  const svc = new SupportChatAdminService(prisma, config, bridge, notifier);
+  return { svc, prisma, config, bridge, notifier, created, forwards };
 }
 
 const fwd = (o: Record<string, unknown> = {}) => ({ id: 'f1', conversationId: 'c1', status: 'FAILED', zaloMsgId: null, attempts: 1, lastError: 'x', createdAt: new Date(), updatedAt: new Date(), ...o });
@@ -78,24 +82,15 @@ describe('SupportChatAdminService', () => {
     expect(bridge.setGroup).toHaveBeenCalledWith(null);
   });
 
-  it('reply tạo tin STAFF nguồn ADMIN có adminUserId, báo khách, không gửi vào Zalo', async () => {
-    const { svc, created, notifications, bridge } = setup();
+  it('reply tạo tin STAFF nguồn ADMIN có adminUserId, đặt chuông trễ, không gửi vào Zalo', async () => {
+    const { svc, created, notifier, bridge } = setup();
     await svc.reply('admin1', 'c1', '  Dạ shop nhận rồi ạ 0912345678  ');
     expect(created).toEqual([{ conversationId: 'c1', sender: 'STAFF', source: 'ADMIN', body: 'Dạ shop nhận rồi ạ 0912345678', adminUserId: 'admin1' }]);
-    expect(notifications.notify).toHaveBeenCalledWith(
-      'u1',
-      'SUPPORT_CHAT_REPLY',
-      { preview: 'Dạ shop nhận rồi ạ …', route: '/chat' },
-      { dedupeKey: 'support-reply-c1', dedupeWithinMs: 600000 },
+    expect(notifier.scheduleReplyBell).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', userId: 'u1' }),
+      expect.objectContaining({ id: 'm-new', body: 'Dạ shop nhận rồi ạ 0912345678', imageUrl: null }),
     );
     expect(bridge.send).not.toHaveBeenCalled();
-  });
-
-  it('reply: khách vừa đọc vài giây trước vẫn được báo chuông', async () => {
-    const { svc, created, notifications } = setup({ conv: { id: 'c1', userId: 'u1', code: 'K7Q2', customerReadAt: new Date(Date.now() - 3_000) } });
-    await svc.reply('admin1', 'c1', 'Dạ');
-    expect(created).toHaveLength(1);
-    expect(notifications.notify).toHaveBeenCalledTimes(1);
   });
 
   it('reply: hội thoại không có thì 404', async () => {
@@ -104,8 +99,8 @@ describe('SupportChatAdminService', () => {
   });
 
   it('reply: lỗi thông báo không làm mất tin đã lưu', async () => {
-    const { svc, notifications } = setup();
-    notifications.notify.mockRejectedValue(new Error('boom'));
+    const { svc, notifier } = setup();
+    notifier.scheduleReplyBell.mockRejectedValue(new Error('boom'));
     await expect(svc.reply('a', 'c1', 'x')).resolves.toMatchObject({ id: 'm-new' });
   });
 
@@ -155,11 +150,16 @@ describe('SupportChatAdminService', () => {
       expect(forwards[0]).toMatchObject({ status: 'FAILED', lastError: 'ADMIN_RESEND: db sập' });
     });
 
-    it('forward bị xoá giữa chừng (P2025): 404', async () => {
-      const { svc, prisma, forwards } = setup({ forwards: [fwd()], messages: [custMsg()] });
-      prisma.supportForward.update.mockRejectedValue(Object.assign(new Error('gone'), { code: 'P2025' }));
+    it('forward bị xoá giữa lúc nhận và lúc gửi (khách xoá tài khoản): không gửi, 404', async () => {
+      const { svc, prisma, bridge, forwards } = setup({ forwards: [fwd()], messages: [custMsg()] });
+      const real = prisma.supportForward.updateMany.getMockImplementation()!;
+      prisma.supportForward.updateMany.mockImplementation((a: any) => {
+        if (!a.data.attempts) return real(a);
+        forwards.length = 0;
+        return Promise.resolve({ count: 0 });
+      });
       await expect(svc.resend('f1')).rejects.toBeInstanceOf(NotFoundException);
-      expect(forwards[0]!.status).toBe('FAILED');
+      expect(bridge.send).not.toHaveBeenCalled();
     });
 
     it('forward không còn: 404', async () => {
@@ -211,6 +211,13 @@ describe('SupportChatAdminService', () => {
       const w = where(svc, prisma);
       expect(JSON.stringify(w)).toContain('"status":{"in":["FAILED","UNKNOWN"]}');
       expect(JSON.stringify(w)).toContain('"forwardId":null');
+    });
+
+    it('trang rỗng thì không chạy truy vấn cờ needsAttention', async () => {
+      const { svc, prisma } = setup({ conv: null });
+      const r = await svc.list({});
+      expect(r.items).toEqual([]);
+      expect(prisma.supportConversation.findMany).toHaveBeenCalledTimes(1);
     });
 
     it('trả nextCursor khi còn trang sau và đủ thông tin dòng, có SĐT đầy đủ', async () => {

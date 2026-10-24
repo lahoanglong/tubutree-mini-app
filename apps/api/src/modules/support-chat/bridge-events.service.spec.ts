@@ -1,14 +1,16 @@
-import { BridgeEventsService, replyPreview } from './bridge-events.service';
+import { BridgeEventsService } from './bridge-events.service';
+import { replyPreview } from './reply-notifier';
 
 type Ev = Parameters<BridgeEventsService['handle']>[0];
 
 const msg = (o: Record<string, unknown> = {}): Ev =>
   ({ type: 'message', groupId: 'g1', msgId: 'z100', cliMsgId: 'c100', uidFrom: 'u9', dName: 'Hoa CSKH', isSelf: false, ts: 1, text: 'Dạ vâng', imageUrl: null, quote: null, ...o }) as Ev;
 
-function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; createError?: unknown; blocked?: boolean; bridge?: any } = {}) {
+function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; createError?: unknown; blocked?: boolean; bridge?: any; tombstones?: string[]; recallExists?: boolean; recallCount?: number[] } = {}) {
   const convs = opts.convs ?? [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: opts.blocked ? new Date() : null }];
   const forwards = opts.forwards ?? [];
   const created: any[] = [];
+  const tombstones = [...(opts.tombstones ?? [])];
   const prisma: any = {
     supportForward: {
       findUnique: jest.fn().mockImplementation(({ where }: any) => Promise.resolve(forwards.find((f) => f.zaloMsgId === where.zaloMsgId) ?? null)),
@@ -26,14 +28,22 @@ function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; creat
         return Promise.resolve({ id: `m${created.length}`, createdAt: new Date(), ...data });
       }),
       findUnique: jest.fn().mockImplementation(({ where }: any) =>
-        Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId && (!where.sender || (m.sender ?? 'STAFF') === where.sender)) ?? null)),
-      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId && (!where.sender || (m.sender ?? 'STAFF') === where.sender)) ?? (opts.recallExists ? { id: 'mx' } : null))),
+      updateMany: jest.fn().mockImplementation(() => Promise.resolve({ count: (opts.recallCount ?? [1]).shift() ?? 0 })),
+    },
+    supportRecallTombstone: {
+      deleteMany: jest.fn().mockImplementation(({ where }: any) => {
+        const i = tombstones.indexOf(where.zaloMsgId);
+        if (i >= 0) tombstones.splice(i, 1);
+        return Promise.resolve({ count: i >= 0 ? 1 : 0 });
+      }),
+      upsert: jest.fn().mockImplementation(({ where }: any) => { if (!tombstones.includes(where.zaloMsgId)) tombstones.push(where.zaloMsgId); return Promise.resolve({}); }),
     },
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null), upsert: jest.fn().mockResolvedValue({}) },
   };
-  const notifications: any = { notify: jest.fn().mockResolvedValue(undefined) };
-  const svc = new BridgeEventsService(prisma, notifications);
-  return { svc, prisma, notifications, created };
+  const notifier: any = { scheduleReplyBell: jest.fn().mockResolvedValue(undefined) };
+  const svc = new BridgeEventsService(prisma, notifier);
+  return { svc, prisma, notifier, created, tombstones };
 }
 
 const fwd = (o: Record<string, unknown> = {}) => ({ id: 'f1', conversationId: 'c1', status: 'SENT', zaloMsgId: 'zf1', createdAt: new Date(), ...o });
@@ -116,13 +126,13 @@ describe('BridgeEventsService.handle message', () => {
     const quoteA = { globalMsgId: 'zA', cliMsgId: '1', text: null };
 
     it('mã khác hội thoại được trích (dù mã đó có thật): không gửi cho ai, trả conflict', async () => {
-      const { svc, created, notifications } = setup(two);
+      const { svc, created, notifier } = setup(two);
       expect(await svc.handle(msg({ text: '#BBBB Dạ đơn giao chiều nay', quote: quoteA }))).toEqual({
         status: 200,
         body: { ok: true, conflict: { routed: 'AAAA', typed: 'BBBB' } },
       });
       expect(created).toHaveLength(0);
-      expect(notifications.notify).not.toHaveBeenCalled();
+      expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
     });
 
     it('mã khác và không tồn tại cũng là conflict, không rơi về unknownCode', async () => {
@@ -156,10 +166,10 @@ describe('BridgeEventsService.handle message', () => {
   });
 
   it('khách vừa đọc vài giây trước vẫn được báo chuông', async () => {
-    const { svc, created, notifications } = setup({ convs: [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: null, customerReadAt: new Date(Date.now() - 3_000) }] });
+    const { svc, created, notifier } = setup({ convs: [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: null, customerReadAt: new Date(Date.now() - 3_000) }] });
     await svc.handle(msg({ text: '#K7Q2 hi' }));
     expect(created).toHaveLength(1);
-    expect(notifications.notify).toHaveBeenCalledTimes(1);
+    expect(notifier.scheduleReplyBell).toHaveBeenCalledTimes(1);
   });
 
   it('mã không tồn tại: 200 kèm unknownCode, không tạo tin', async () => {
@@ -191,9 +201,9 @@ describe('BridgeEventsService.handle message', () => {
   });
 
   it('trùng msgId (P2002) bỏ êm: 200, không báo chuông', async () => {
-    const { svc, notifications } = setup({ forwards: [fwd()], createError: { code: 'P2002' } });
+    const { svc, notifier } = setup({ forwards: [fwd()], createError: { code: 'P2002' } });
     expect(await svc.handle(msg({ quote: quoteF1 }))).toEqual({ status: 200, body: { ok: true } });
-    expect(notifications.notify).not.toHaveBeenCalled();
+    expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
   });
 
   it('lỗi DB khác thì ném để cầu nối gửi lại', async () => {
@@ -232,19 +242,112 @@ describe('BridgeEventsService.handle message', () => {
     expect(created[0]).not.toHaveProperty('createdAt');
   });
 
-  it('tin STAFF mới báo chuông gộp 10 phút, preview <= 60 ký tự', async () => {
-    const { svc, notifications } = setup();
+  it('tin STAFF mới đặt chuông trễ cho đúng hội thoại và tin vừa lưu', async () => {
+    const { svc, notifier } = setup();
     await svc.handle(msg({ text: `#K7Q2 ${'a'.repeat(200)}` }));
-    const [userId, code, data, opts] = notifications.notify.mock.calls[0];
-    expect([userId, code, opts]).toEqual(['u1', 'SUPPORT_CHAT_REPLY', { dedupeKey: 'support-reply-c1', dedupeWithinMs: 600000 }]);
-    expect(data.route).toBe('/chat');
-    expect(data.preview.length).toBeLessThanOrEqual(60);
+    expect(notifier.scheduleReplyBell).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', userId: 'u1' }),
+      expect.objectContaining({ id: 'm1', body: 'a'.repeat(200), imageUrl: null }),
+    );
   });
 
-  it('lỗi báo chuông không làm hỏng tin đã lưu', async () => {
-    const { svc, notifications } = setup();
-    notifications.notify.mockRejectedValue(new Error('x'));
+  it('lỗi đặt chuông không làm hỏng tin đã lưu', async () => {
+    const { svc, notifier } = setup();
+    notifier.scheduleReplyBell.mockRejectedValue(new Error('x'));
     expect((await svc.handle(msg({ text: '#K7Q2 hi' }))).status).toBe(200);
+  });
+
+  describe('mã đã nghỉ (khách xoá tài khoản)', () => {
+    it('#MÃ đầu câu của mã đã nghỉ: như mã không tồn tại, 200 kèm unknownCode, không lưu gì', async () => {
+      const { svc, created, notifier } = setup({ convs: [] });
+      expect(await svc.handle(msg({ text: '#K7Q2 Dạ ạ' }))).toEqual({ status: 200, body: { ok: true, unknownCode: 'K7Q2' } });
+      expect(created).toHaveLength(0);
+      expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
+    });
+
+    it('mã nghỉ ở đầu tin được trích: unknownCode ngay, không rơi vào cửa sổ 503 dù còn forward PENDING', async () => {
+      const { svc, created } = setup({ convs: [], forwards: [fwd({ status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 60_000) })] });
+      const r = await svc.handle(msg({ text: 'Dạ ạ', quote: { globalMsgId: 'cu', cliMsgId: '1', text: '#K7Q2 · Lan · 09••••234\n—\nhi' } }));
+      expect(r).toEqual({ status: 200, body: { ok: true, unknownCode: 'K7Q2' } });
+      expect(created).toHaveLength(0);
+    });
+  });
+
+  describe('mã ở đầu tin được trích (đường c)', () => {
+    const header = (code: string) => `#${code} · Lan · 09••••234\n—\nhi`;
+    const two = { convs: [{ id: 'c1', userId: 'u1', code: 'AAAA', blockedAt: null }, { id: 'c2', userId: 'u2', code: 'BBBB', blockedAt: null }] };
+
+    it('mã không có hội thoại nào: unknownCode ngay, không 503', async () => {
+      const { svc, created } = setup({ ...two, forwards: [fwd({ conversationId: 'c1', status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 1_000) })] });
+      const r = await svc.handle(msg({ text: 'Dạ ạ', quote: { globalMsgId: 'cu', cliMsgId: '1', text: header('ZZZZ') } }));
+      expect(r).toEqual({ status: 200, body: { ok: true, unknownCode: 'ZZZZ' } });
+      expect(created).toHaveLength(0);
+    });
+
+    it('mã đầu tin trích (c) và #MÃ đầu câu (d) khác nhau: conflict, không gửi cho ai', async () => {
+      const { svc, created } = setup(two);
+      const r = await svc.handle(msg({ text: '#BBBB Dạ ạ', quote: { globalMsgId: 'cu', cliMsgId: '1', text: header('AAAA') } }));
+      expect(r).toEqual({ status: 200, body: { ok: true, conflict: { routed: 'AAAA', typed: 'BBBB' } } });
+      expect(created).toHaveLength(0);
+    });
+  });
+
+  describe('có trích mà chưa khớp, kèm #MÃ đầu câu', () => {
+    const pending = [fwd({ status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 60_000) })];
+    const unresolved = { globalMsgId: 'chua-co', cliMsgId: '1', text: 'một câu bình thường' };
+
+    it('còn forward PENDING chưa có zaloMsgId trong 5 phút: 503 trước khi định tuyến theo #MÃ', async () => {
+      const { svc, created } = setup({ forwards: pending });
+      expect(await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved }))).toEqual({ status: 503, body: { retry: true } });
+      expect(created).toHaveLength(0);
+    });
+
+    it('không có forward PENDING như vậy: định tuyến theo #MÃ như cũ', async () => {
+      const { svc, created } = setup();
+      expect(await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved }))).toEqual({ status: 200, body: { ok: true } });
+      expect(created[0]).toMatchObject({ conversationId: 'c1', body: 'Dạ ạ' });
+    });
+
+    it('forward PENDING quá 5 phút: định tuyến theo #MÃ', async () => {
+      const { svc, created } = setup({ forwards: [fwd({ status: 'PENDING', zaloMsgId: null, createdAt: new Date(Date.now() - 6 * 60_000) })] });
+      await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved }));
+      expect(created).toHaveLength(1);
+    });
+
+    it('thử lại khi tin trích đã khớp: áp quy tắc conflict', async () => {
+      const retried = setup({
+        convs: [{ id: 'c1', userId: 'u1', code: 'AAAA', blockedAt: null }, { id: 'c2', userId: 'u2', code: 'BBBB', blockedAt: null }],
+        forwards: [fwd({ conversationId: 'c1', zaloMsgId: 'zA' })],
+      });
+      const r = await retried.svc.handle(msg({ text: '#BBBB Dạ ạ', quote: { globalMsgId: 'zA', cliMsgId: '1', text: null } }));
+      expect(r.body).toEqual({ ok: true, conflict: { routed: 'AAAA', typed: 'BBBB' } });
+    });
+  });
+
+  describe('thu hồi đến trước tin', () => {
+    it('tin có tombstone: không lưu gì, không chuông, xoá tombstone', async () => {
+      const { svc, created, notifier, tombstones } = setup({ tombstones: ['z100'] });
+      expect(await svc.handle(msg({ text: '#K7Q2 hi' }))).toEqual({ status: 200, body: { ok: true } });
+      expect(created).toHaveLength(0);
+      expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
+      expect(tombstones).toEqual([]);
+    });
+
+    it('tombstone xuất hiện giữa lúc kiểm và lúc lưu: tin vừa lưu bị thu hồi ngay, không chuông', async () => {
+      const { svc, prisma, notifier, created } = setup();
+      prisma.supportRecallTombstone.deleteMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+      await svc.handle(msg({ text: '#K7Q2 hi' }));
+      expect(created).toHaveLength(1);
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledWith({ where: { zaloMsgId: 'z100', sender: 'STAFF', recalledAt: null }, data: { recalledAt: expect.any(Date) } });
+      expect(notifier.scheduleReplyBell).not.toHaveBeenCalled();
+    });
+
+    it('tombstone của tin khác không chặn tin này', async () => {
+      const { svc, created, tombstones } = setup({ tombstones: ['zkhac'] });
+      await svc.handle(msg({ text: '#K7Q2 hi' }));
+      expect(created).toHaveLength(1);
+      expect(tombstones).toEqual(['zkhac']);
+    });
   });
 });
 
@@ -272,6 +375,25 @@ describe('BridgeEventsService.handle undo và state', () => {
       where: { zaloMsgId: 'z100', sender: 'STAFF', recalledAt: null },
       data: { recalledAt: expect.any(Date) },
     });
+  });
+
+  it('undo mà tin chưa có: ghi tombstone, vẫn 200', async () => {
+    const { svc, prisma, tombstones } = setup({ recallCount: [0, 0] });
+    expect(await svc.handle({ type: 'undo', groupId: 'g1', msgId: 'z100' })).toEqual({ status: 200, body: { ok: true } });
+    expect(prisma.supportRecallTombstone.upsert).toHaveBeenCalledWith({ where: { zaloMsgId: 'z100' }, create: { zaloMsgId: 'z100' }, update: {} });
+    expect(tombstones).toEqual(['z100']);
+  });
+
+  it('undo mà tin đã thu hồi từ trước: không ghi tombstone', async () => {
+    const { svc, prisma } = setup({ recallCount: [0], recallExists: true });
+    await svc.handle({ type: 'undo', groupId: 'g1', msgId: 'z100' });
+    expect(prisma.supportRecallTombstone.upsert).not.toHaveBeenCalled();
+  });
+
+  it('undo: tin lưu xong giữa lúc kiểm tra và ghi tombstone thì thu hồi bù và xoá tombstone', async () => {
+    const { svc, tombstones } = setup({ recallCount: [0, 1] });
+    await svc.handle({ type: 'undo', groupId: 'g1', msgId: 'z100' });
+    expect(tombstones).toEqual([]);
   });
 
   const state = (s: string, since = '2026-10-23T01:00:00.000Z') =>

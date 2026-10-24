@@ -15,3 +15,5 @@ export const QUEUE_GOMDON_PUSH = 'gomdon-push';
 export const QUEUE_GOMDON_EVENTS = 'gomdon-events';
 /** Chuyển tin khách sang nhóm Zalo (gộp 15 giây theo hội thoại) — xem modules/support-chat. */
 export const QUEUE_SUPPORT_CHAT_FORWARD = 'support-chat-forward';
+/** Chuông báo khách có trả lời mới, trễ ~20 giây để bỏ qua khi khách đã xem — xem modules/support-chat/reply-notifier.ts. */
+export const QUEUE_SUPPORT_CHAT_NOTIFY = 'support-chat-notify';

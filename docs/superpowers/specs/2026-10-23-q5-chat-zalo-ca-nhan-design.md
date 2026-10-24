@@ -67,7 +67,7 @@ Thành công là: khách hỏi trong Mini App, nhân viên thấy tin trên Zalo
 - Tin của khách có trạng thái nhỏ: "Đang gửi", "Đã gửi". Tin không chuyển được vào Zalo vẫn hiện "Đã gửi" với khách (tin đã nằm trong hệ thống), lỗi chuyển là việc của admin.
 - Ngoài giờ (mặc định 8:00–21:00, giờ VN): sau tin đầu tiên ngoài giờ trong ngày, hệ thống thêm một tin "Tubu Tree trả lời từ 8:00 đến 21:00. Tin của bạn đã được ghi lại." (một lần mỗi ngày mỗi khách).
 - Khi cầu nối mất kết nối quá 10 phút: đầu màn chat hiện dòng "Nhân viên có thể trả lời chậm. Cần gấp, gọi hotline 1900…" (số lấy từ `support.hotline`).
-- Màn đang mở và đang hiển thị: hỏi tin mới mỗi 5 giây. Khi có tin Tubu Tree mới: thông báo trong chuông "Tubu Tree đã trả lời bạn", bấm mở màn chat; gộp, tối đa một thông báo mỗi 10 phút mỗi khách, kể cả khi khách đang mở màn chat. API không biết chắc khách còn xem hay không, mà bỏ sót chuông thì khách lỡ câu trả lời **(quyết định của agent khi review cuối)**.
+- Màn đang mở và đang hiển thị: hỏi tin mới mỗi 5 giây (màn mở gọi đánh dấu đã đọc khi có tin mới). Khi có tin Tubu Tree mới: thông báo trong chuông "Tubu Tree đã trả lời bạn", bấm mở màn chat; chuông chỉ được gửi nếu khách chưa xem câu trả lời trong khoảng 20 giây (job trễ; tin đã thu hồi cũng không báo; không đặt được job thì báo ngay); gộp, tối đa một thông báo mỗi 10 phút mỗi khách.
 - Web khổ điện thoại phải giống Mini App (quy tắc của chủ, `project-web-mobile-equals-miniapp`).
 
 ### 4.3 Nhân viên trên Zalo

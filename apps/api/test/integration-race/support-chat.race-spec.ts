@@ -8,6 +8,8 @@ import { SupportChatService } from '../../src/modules/support-chat/support-chat.
 import { SupportChatForwardProcessor } from '../../src/modules/support-chat/support-chat-forward.processor';
 import { BridgeHealthCron } from '../../src/modules/support-chat/bridge-health.cron';
 import { BridgeEventsService } from '../../src/modules/support-chat/bridge-events.service';
+import { issueConversationCode } from '../../src/modules/support-chat/conversation-code';
+import { MAX_MESSAGES_PER_DAY } from '../../src/modules/support-chat/support-chat.service';
 import { formatForward } from '../../src/modules/support-chat/forward-format';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY } from '../../src/modules/support-chat/support-chat.config';
 import { createUser, deleteItData, pinConfig, randCode, warmPool } from './helpers';
@@ -22,7 +24,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
   let chat: SupportChatService;
   let processor: SupportChatForwardProcessor;
   let events: BridgeEventsService;
-  let notify: jest.Mock;
+  let scheduleReplyBell: jest.Mock;
   let bridge: any;
   let cfg: SystemConfigService;
   let sends: { key: string; text: string }[];
@@ -56,8 +58,8 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
       },
     };
     processor = new SupportChatForwardProcessor(prisma, config, bridge, chat);
-    notify = jest.fn().mockResolvedValue(undefined);
-    events = new BridgeEventsService(prisma, { notify } as never);
+    scheduleReplyBell = jest.fn().mockResolvedValue(undefined);
+    events = new BridgeEventsService(prisma, { scheduleReplyBell } as never);
   });
 
   afterAll(async () => {
@@ -187,7 +189,7 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     const staff = await prisma.supportMessage.findMany({ where: { conversationId: conv.id, sender: 'STAFF' } });
     expect(staff).toHaveLength(1);
     expect(staff[0]!.body).toBe('Dạ đơn giao chiều nay');
-    expect(notify).toHaveBeenCalledTimes(1);
+    expect(scheduleReplyBell).toHaveBeenCalledTimes(1);
   });
 
   it('trả lời tới khi forward còn PENDING: 503, sau khi ghi zaloMsgId gửi lại thì đúng một tin STAFF', async () => {
@@ -210,5 +212,61 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     const r = await events.handle(reply({ isSelf: true, text }));
     expect(r.status).toBe(200);
     expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'STAFF' } })).toBe(0);
+  });
+
+  it('hạn mức ngày: còn đúng 1 tin, 5 send song song của cùng khách: lưu đúng 1, 4 bên kia nhận CHAT_DAILY_LIMIT 429', async () => {
+    const u = await customer();
+    await chat.getThread(u.id);
+    const conv = await prisma.supportConversation.findUniqueOrThrow({ where: { userId: u.id } });
+    await prisma.supportMessage.createMany({
+      data: Array.from({ length: MAX_MESSAGES_PER_DAY - 1 }, (_, i) => ({
+        conversationId: conv.id, sender: 'CUSTOMER' as const, source: 'WEB' as const, body: `cũ ${i}`, clientMsgId: `old-${i}`, forwardId: 'done',
+      })),
+    });
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, (_, i) => chat.send(u.id, { clientMsgId: `cm-${randCode(8)}-${i}`, body: `mới ${i}` }, 'WEB')),
+    );
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+    expect(rejected).toHaveLength(4);
+    for (const r of rejected) {
+      expect((r.reason as { status?: number }).status).toBe(429);
+      expect((r.reason as { getResponse(): { code: string } }).getResponse().code).toBe('CHAT_DAILY_LIMIT');
+    }
+    expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'CUSTOMER' } })).toBe(MAX_MESSAGES_PER_DAY);
+  });
+
+  it('thu hồi tới trước tin: tin tới sau không được lưu và tombstone bị xoá', async () => {
+    const { conv, code } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+    const msgId = `zm-${randCode(10)}`;
+    expect((await events.handle({ type: 'undo', groupId: 'g-it', msgId } as ZaloBridgeEvent)).status).toBe(200);
+    expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(1);
+    expect((await events.handle(reply({ msgId, text: `#${code} Dạ ạ` }))).status).toBe(200);
+    expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'STAFF' } })).toBe(0);
+    expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(0);
+  });
+
+  it('thu hồi và tin chạy song song 20 lần: tin hoặc không có, hoặc đã thu hồi; không còn tombstone', async () => {
+    const { conv, code } = await convWithForward({ status: 'SENT', zaloMsgId: `zf-${randCode(10)}` });
+    for (let i = 0; i < 20; i++) {
+      const msgId = `zm-${randCode(10)}`;
+      await Promise.all([
+        events.handle({ type: 'undo', groupId: 'g-it', msgId } as ZaloBridgeEvent),
+        events.handle(reply({ msgId, text: `#${code} lần ${i}` })),
+      ]);
+      const rows = await prisma.supportMessage.findMany({ where: { conversationId: conv.id, zaloMsgId: msgId } });
+      expect(rows.every((r) => r.recalledAt !== null)).toBe(true);
+      expect(await prisma.supportRecallTombstone.count({ where: { zaloMsgId: msgId } })).toBe(0);
+    }
+  });
+
+  it('mã đã nghỉ không được cấp lại', async () => {
+    const retiredCode = 'BCDF';
+    await prisma.supportRetiredCode.upsert({ where: { code: retiredCode }, create: { code: retiredCode }, update: {} });
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const seq = [...retiredCode, ...'GHJK'].map((ch) => (alphabet.indexOf(ch) + 0.5) / alphabet.length);
+    let i = 0;
+    expect(await issueConversationCode(prisma, () => seq[i++ % seq.length]!)).toBe('GHJK');
+    await prisma.supportRetiredCode.delete({ where: { code: retiredCode } });
   });
 });
