@@ -129,6 +129,7 @@ describe('Màn chat với Tubu Tree', () => {
     expect(within(bubble).getByText('Xin chào')).toBeInTheDocument();
     expect(within(bubble).getByText('Đang gửi')).toBeInTheDocument();
     expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(mocks.send.mock.calls[0]![0].source).toBe('MINIAPP');
     const calls = mocks.getThread.mock.calls.length;
     resolve(msg({ id: 'srv1', body: 'Xin chào', clientMsgId: 'cid-1' }));
     await waitFor(() => expect(within(screen.getByTestId('msg-cid-1')).getByText('Đã gửi')).toBeInTheDocument());
@@ -297,6 +298,33 @@ describe('Màn chat với Tubu Tree', () => {
     typeAndSend('Xin chào');
     expect(await screen.findByText('Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Gửi lại' })).toBeInTheDocument();
+  });
+
+  it('429 CHAT_DAILY_LIMIT: hiện câu của máy chủ, không có "Gửi lại"', async () => {
+    const m = 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.';
+    mocks.send.mockRejectedValue(Object.assign(new Error(m), { isHttpError: true, response: { status: 429, data: { code: 'CHAT_DAILY_LIMIT', message: m } } }));
+    renderPage();
+    await screen.findByRole('textbox');
+    typeAndSend('Xin chào');
+    expect(await screen.findByText(m)).toBeInTheDocument();
+    expect(screen.queryByText(/thao tác hơi nhanh/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Gửi lại' })).toBeNull();
+  });
+
+  it('401/403 thô của Nest không lộ ra: khi gửi và khi tải hội thoại', async () => {
+    mocks.send.mockRejectedValue(httpError(403, 'Forbidden'));
+    renderPage();
+    await screen.findByRole('textbox');
+    typeAndSend('Xin chào');
+    expect(await screen.findByText(/Phiên đăng nhập đã hết hạn/)).toBeInTheDocument();
+    expect(screen.queryByText('Forbidden')).toBeNull();
+  });
+
+  it('tải hội thoại báo 401 "Unauthorized": hiện câu phiên hết hạn', async () => {
+    mocks.getThread.mockRejectedValue(httpError(401, 'Unauthorized'));
+    renderPage();
+    expect(await screen.findByText(/Phiên đăng nhập đã hết hạn/)).toBeInTheDocument();
+    expect(screen.queryByText('Unauthorized')).toBeNull();
   });
 
   it('400: báo lỗi của máy chủ, không có "Gửi lại"', async () => {

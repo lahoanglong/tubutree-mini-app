@@ -55,7 +55,7 @@ const msg = (over: Record<string, unknown>) => ({
 const thread = (over: Record<string, unknown> = {}) => ({
   code: 'K7Q3', blocked: false, enabled: true, slow: false, hasMore: false, messages: [], ...over,
 });
-const statusError = (status: number, message: string) => Object.assign(new Error(message), { status });
+const statusError = (status: number, message: string, code: string | null = null) => Object.assign(new Error(message), { status, code });
 
 let qc: QueryClient;
 let unmounts: (() => void)[] = [];
@@ -212,6 +212,7 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     expect(b.textContent).toContain('Xin chào');
     expect(b.textContent).toContain('Đang gửi');
     expect(textbox(c)!.value).toBe('');
+    expect(mocks.send.mock.calls[0]![0].source).toBe('WEB');
     const calls = mocks.getThread.mock.calls.length;
     resolve(msg({ id: 'srv1', body: 'Xin chào', clientMsgId: 'cid-1' }));
     await waitFor(() => expect(bubble(c, 'cid-1')!.textContent).toContain('Đã gửi'));
@@ -260,6 +261,35 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     await waitFor(() => expect(c.textContent).toContain('Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.'));
     expect(c.textContent).not.toContain('Throttler');
     expect(buttonByName(c, 'Gửi lại')).not.toBeNull();
+  });
+
+  it('429 CHAT_DAILY_LIMIT: hiện câu của máy chủ, không có "Gửi lại"', async () => {
+    const m = 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.';
+    mocks.send.mockRejectedValue(statusError(429, m, 'CHAT_DAILY_LIMIT'));
+    const c = mount();
+    await flush(3);
+    typeAndSend(c, 'Xin chào');
+    await waitFor(() => expect(c.textContent).toContain(m));
+    expect(c.textContent).not.toContain('thao tác hơi nhanh');
+    expect(buttonByName(c, 'Gửi lại')).toBeNull();
+  });
+
+  it('401/403 thô của Nest ("Unauthorized"/"Forbidden") không lộ ra: khi gửi và khi tải hội thoại', async () => {
+    mocks.send.mockRejectedValue(statusError(403, 'Forbidden'));
+    const c = mount();
+    await flush(3);
+    typeAndSend(c, 'Xin chào');
+    await waitFor(() => expect(c.textContent).toContain('Tài khoản này không có quyền xem nội dung này.'));
+    expect(c.textContent).not.toContain('Forbidden');
+
+    mocks.getThread.mockRejectedValue(statusError(401, 'Unauthorized'));
+    const down = mount();
+    // QueryClient của web thử lại một lần sau 1 giây trước khi báo lỗi.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1300));
+    });
+    await waitFor(() => expect(down.textContent).toContain('Phiên đăng nhập đã hết hạn'));
+    expect(down.textContent).not.toContain('Unauthorized');
   });
 
   it('400: báo lỗi của máy chủ, không có "Gửi lại"', async () => {
@@ -317,6 +347,14 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     mocks.product.mockResolvedValue({ name: 'Xà bông thảo mộc' });
     const named = mount();
     await waitFor(() => expect(named.textContent).toContain('Về sản phẩm Xà bông thảo mộc'));
+  });
+
+  it('slug bắt đầu bằng gạch nối vẫn được tra tên sản phẩm, không hiện nguyên chuỗi', async () => {
+    mocks.search = 'product=-abc123';
+    mocks.product.mockResolvedValue({ name: 'Nước rửa chén' });
+    const c = mount();
+    await waitFor(() => expect(c.textContent).toContain('Về sản phẩm Nước rửa chén'));
+    expect(mocks.product).toHaveBeenCalledWith('/products/-abc123');
   });
 
   it('slug lạ như ../auth/me: không gọi API sản phẩm, thẻ dùng nguyên chuỗi đó', async () => {

@@ -3,7 +3,7 @@ import { Page, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared-types';
 import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support-chat-view';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { AuthGate } from '../components/ui/auth-gate';
 import { PageHeader } from '../components/ui/page-header';
 import { ErrorState } from '../components/ui/empty-state';
@@ -14,7 +14,7 @@ import { MessageList, type ChatItem } from '../components/support-chat/message-l
 import { Composer } from '../components/support-chat/composer';
 import { ContextChip } from '../components/support-chat/context-chip';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from '../services/support-chat-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isHttpError } from '../services/api';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPhoneDisplay } from '../utils/phone';
 import { haptic } from '../utils/haptic';
@@ -23,6 +23,22 @@ import { DEFAULT_SUPPORT, fetchSupportContact } from './about-data';
 const POLL_MS = 5000;
 const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
+
+const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.';
+const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
+
+/**
+ * getErrorMessage thay câu 429 bằng "thao tác hơi nhanh", nhưng trần tin trong ngày là câu nghiệp vụ của máy chủ phải hiện nguyên;
+ * chữ thô tiếng Anh của Nest ở 401/403 thì không được lộ cho khách.
+ */
+function chatErrorText(e: unknown): string {
+  if (!isHttpError(e)) return getErrorMessage(e);
+  const data = e.response?.data as { message?: string | string[] } | undefined;
+  const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
+  if (e.response?.status === 429 && errorCode(e) === 'CHAT_DAILY_LIMIT' && message) return message;
+  if ((e.response?.status === 401 || e.response?.status === 403) && (!message || GENERIC_AUTH_MESSAGES.has(message))) return SESSION_EXPIRED_TEXT;
+  return getErrorMessage(e);
+}
 
 type PendingStatus = 'sending' | 'sent' | 'failed' | 'rejected';
 interface Pending {
@@ -88,15 +104,16 @@ function ChatBody() {
       try {
         await sendSupportChat({
           clientMsgId: p.clientMsgId,
+          source: 'MINIAPP',
           ...(p.body ? { body: p.body } : {}),
           ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}),
           ...(p.context ? { context: p.context } : {}),
         });
         patch(p.clientMsgId, { status: 'sent' });
       } catch (e) {
-        const kind = sendFailureKind(errorStatus(e));
+        const kind = sendFailureKind(errorStatus(e), errorCode(e));
         if (kind === 'rate-limited') patch(p.clientMsgId, { status: 'failed', error: getErrorMessage(e) });
-        else if (kind === 'rejected') patch(p.clientMsgId, { status: 'rejected', error: getErrorMessage(e) });
+        else if (kind === 'rejected') patch(p.clientMsgId, { status: 'rejected', error: chatErrorText(e) });
         else patch(p.clientMsgId, { status: 'failed' });
       } finally {
         void qc.invalidateQueries({ queryKey: supportChatQueryOptions().queryKey });
@@ -162,7 +179,7 @@ function ChatBody() {
       });
       setOlderHasMore(page.hasMore);
     } catch (e) {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      openSnackbar({ text: chatErrorText(e), type: 'error' });
     } finally {
       setLoadingOlder(false);
     }
@@ -176,7 +193,7 @@ function ChatBody() {
       </div>
     );
   }
-  if (!thread) return <ErrorState message={getErrorMessage(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
+  if (!thread) return <ErrorState message={chatErrorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
 
   const closedText = thread.blocked ? BLOCKED_TEXT : !thread.enabled ? DISABLED_TEXT : null;
   const productName = productSlug ? qc.getQueryData<{ name?: string }>(['product', productSlug])?.name ?? productSlug : null;

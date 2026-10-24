@@ -347,7 +347,7 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      <div className="mt-6 px-4 md:px-0">
+      <div className="mt-4 px-4 md:px-0">
         <SupportContact orderCode={o.code} />
       </div>
     </Shell>

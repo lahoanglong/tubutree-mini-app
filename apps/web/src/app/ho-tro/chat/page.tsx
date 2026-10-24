@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type React
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared-types';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat } from '@tubutree/app-core/api/support-chat';
 import { productQuery } from '@tubutree/app-core/queries/catalog';
 import { supportContactQuery } from '@tubutree/app-core/queries/config';
@@ -20,11 +20,12 @@ import { PageHeader } from '@/components/ui/page-header';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
+import { friendlyError } from '@/lib/friendly-error';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 
 const POLL_MS = 5000;
 /** Dạng slug sản phẩm (chữ thường, số, gạch nối): tham số lạ như `../auth/me` không được đổi thành một lệnh gọi API. */
-const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const SLUG_PATTERN = /^-?[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 const RATE_LIMITED_TEXT = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
@@ -42,7 +43,7 @@ interface Pending {
   createdAt: string;
 }
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = friendlyError;
 
 function toItem(m: SupportChatMessageDTO): ChatItem {
   return { key: m.id, sender: m.sender, body: m.body, imageUrl: m.imageUrl, createdAt: m.createdAt, status: 'sent' };
@@ -98,13 +99,14 @@ function ChatBody() {
       try {
         await sendSupportChat(coreHttp, {
           clientMsgId: p.clientMsgId,
+          source: 'WEB',
           ...(p.body ? { body: p.body } : {}),
           ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}),
           ...(p.context ? { context: p.context } : {}),
         });
         patch(p.clientMsgId, { status: 'sent' });
       } catch (e) {
-        const kind = sendFailureKind(errorStatus(e));
+        const kind = sendFailureKind(errorStatus(e), errorCode(e));
         if (kind === 'rate-limited') patch(p.clientMsgId, { status: 'failed', error: RATE_LIMITED_TEXT });
         else if (kind === 'rejected') patch(p.clientMsgId, { status: 'rejected', error: errorText(e) });
         else patch(p.clientMsgId, { status: 'failed' });

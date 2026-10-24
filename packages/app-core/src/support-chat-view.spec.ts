@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SupportChatMessageDTO } from '@tubutree/shared-types';
+import { errorCode } from './api/error-status';
 import { byTime, mergeWindow, sendFailureKind } from './support-chat-view';
 
 const m = (n: number, over: Partial<SupportChatMessageDTO> = {}): SupportChatMessageDTO => ({
@@ -54,5 +55,20 @@ describe('sendFailureKind', () => {
     expect(sendFailureKind(500)).toBe('failed');
     expect(sendFailureKind(503)).toBe('failed');
     expect(sendFailureKind(undefined)).toBe('failed');
+  });
+
+  it('429 CHAT_DAILY_LIMIT → rejected: chờ vài giây không giúp được, gửi lại vô ích', () => {
+    expect(sendFailureKind(429, 'CHAT_DAILY_LIMIT')).toBe('rejected');
+    expect(sendFailureKind(429, 'OTHER')).toBe('rate-limited');
+    expect(sendFailureKind(429, null)).toBe('rate-limited');
+  });
+});
+
+describe('errorCode', () => {
+  it('ApiError của web có code ở gốc, HttpError của Mini App có code nghiệp vụ trong response.data', () => {
+    expect(errorCode(Object.assign(new Error('x'), { status: 429, code: 'CHAT_DAILY_LIMIT' }))).toBe('CHAT_DAILY_LIMIT');
+    expect(errorCode(Object.assign(new Error('x'), { response: { status: 429, data: { code: 'CHAT_DAILY_LIMIT' } } }))).toBe('CHAT_DAILY_LIMIT');
+    expect(errorCode(new Error('x'))).toBeNull();
+    expect(errorCode(null)).toBeNull();
   });
 });

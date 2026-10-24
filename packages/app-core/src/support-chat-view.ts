@@ -19,9 +19,12 @@ export function mergeWindow(prev: ReadonlyMap<string, SupportChatMessageDTO>, wi
 
 export type SendFailureKind = 'rate-limited' | 'rejected' | 'failed';
 
-/** 429 vẫn cho gửi lại; 4xx khác máy chủ đã từ chối nên gửi lại cũng vậy; mạng chập chờn và 5xx thì gửi lại được. */
-export function sendFailureKind(status: number | undefined): SendFailureKind {
-  if (status === 429) return 'rate-limited';
+/**
+ * 429 vẫn cho gửi lại (đợi vài giây là hết) trừ trần tin trong ngày, đợi cũng vô ích; 4xx khác máy chủ đã từ chối nên gửi lại cũng vậy;
+ * mạng chập chờn và 5xx thì gửi lại được.
+ */
+export function sendFailureKind(status: number | undefined, code?: string | null): SendFailureKind {
+  if (status === 429) return code === 'CHAT_DAILY_LIMIT' ? 'rejected' : 'rate-limited';
   if (status !== undefined && status >= 400 && status < 500) return 'rejected';
   return 'failed';
 }
