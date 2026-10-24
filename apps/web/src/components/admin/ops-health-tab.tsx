@@ -11,6 +11,7 @@ import {
   retryOpsWebhookEvent,
   runPancakeSync,
   sendOpsTestEmail,
+  type OpsCronJob,
   type OpsEmailChannel,
   type OpsWebhookChannel,
   type OpsHealth,
@@ -42,6 +43,13 @@ const QUEUE_LABELS: Record<string, string> = {
   'support-chat-forward': 'Chuyển tin chat CSKH vào nhóm Zalo',
   'support-chat-notify': 'Chuông báo trả lời chat CSKH',
 };
+
+function cronOutcomeLabel(j: OpsCronJob): string {
+  if (j.lastOutcome === 'THREW') return 'Ném lỗi';
+  if (j.lastOutcome === 'ERRORS') return `Lỗi ${j.lastErrorCount} lần ghi log`;
+  if (j.lastOutcome === 'SKIPPED') return 'Bỏ qua';
+  return 'OK';
+}
 
 const OPS_HEALTH_KEY = ['admin-ops-health'] as const;
 
@@ -535,6 +543,7 @@ function HealthBody({
               <thead className="bg-stone-50 text-xs text-stone-500">
                 <tr>
                   <th className="px-3 py-2 font-medium">Tác vụ</th>
+                  <th className="px-3 py-2 font-medium">Kết quả gần nhất</th>
                   <th className="px-3 py-2 font-medium">Thành công gần nhất</th>
                   <th className="px-3 py-2 font-medium">Lỗi gần nhất</th>
                   <th className="px-3 py-2 font-medium">Lỗi liên tiếp</th>
@@ -546,6 +555,7 @@ function HealthBody({
                   .map((j) => (
                     <tr key={j.job} className="border-t border-stone-100 align-top">
                       <td className="px-3 py-2 font-medium text-stone-900">{j.job}</td>
+                      <td className={`px-3 py-2 ${j.lastOutcome === 'ERRORS' || j.lastOutcome === 'THREW' ? 'text-danger-fg' : 'text-stone-600'}`}>{cronOutcomeLabel(j)}</td>
                       <td className="px-3 py-2">{ago(j.lastSuccessAt)}</td>
                       <td className="px-3 py-2">
                         {j.lastError ? (

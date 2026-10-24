@@ -1883,6 +1883,9 @@ export interface OpsCronJob {
   lastError: string | null;
   consecutiveFailures: number;
   lastDurationMs: number;
+  /** OK | ERRORS (chạy xong nhưng có log lỗi) | THREW (ném lỗi) | SKIPPED (chạy chồng/chưa cấu hình). */
+  lastOutcome: 'OK' | 'ERRORS' | 'THREW' | 'SKIPPED';
+  lastErrorCount: number;
 }
 export interface OpsHealth {
   generatedAt: string;
