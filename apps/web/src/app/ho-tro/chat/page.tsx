@@ -23,6 +23,8 @@ import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 
 const POLL_MS = 5000;
+/** Dạng slug sản phẩm (chữ thường, số, gạch nối): tham số lạ như `../auth/me` không được đổi thành một lệnh gọi API. */
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 const RATE_LIMITED_TEXT = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
@@ -68,7 +70,7 @@ function ChatBody() {
   // QueryClient của web tắt refetchOnWindowFocus mặc định nên bật lại riêng cho query này.
   const threadQ = useQuery({ ...supportChatQuery(coreHttp), refetchInterval: POLL_MS, refetchOnWindowFocus: true });
   const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: 10 * 60_000 });
-  const productQ = useQuery({ ...productQuery(coreHttp, productSlug ?? ''), enabled: !!productSlug && !orderCode, staleTime: 10 * 60_000, retry: false });
+  const productQ = useQuery({ ...productQuery(coreHttp, productSlug ?? ''), enabled: !!productSlug && !orderCode && SLUG_PATTERN.test(productSlug), staleTime: 10 * 60_000, retry: false });
   const hotline = supportQ.isError ? DEFAULT_HOTLINE : supportQ.data?.hotline ?? null;
   const thread = threadQ.data;
   const lastId = thread?.messages[thread.messages.length - 1]?.id;
@@ -188,11 +190,11 @@ function ChatBody() {
   if (!thread) return <ErrorState message={errorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
 
   const closedText = thread.blocked ? BLOCKED_TEXT : !thread.enabled ? DISABLED_TEXT : null;
-  const productName = productSlug && !productQ.isLoading ? productQ.data?.name ?? productSlug : null;
+  const productName = productSlug && !productQ.isLoading ? (productQ.data?.name ?? productSlug) : null;
   const chipLabel = orderCode ? `Về đơn ${orderCode}` : productName ? `Về sản phẩm ${productName}` : null;
 
   return (
-    <div className="flex flex-col max-md:min-h-[calc(100dvh-72px)] md:min-h-[60vh]">
+    <div className="flex flex-col max-md:min-h-[calc(100dvh-72px)]">
       {thread.slow && (
         <div style={{ padding: '8px 16px', background: 'var(--color-bg-subtle)' }}>
           <Text variant="caption" tone="secondary">
@@ -200,7 +202,7 @@ function ChatBody() {
           </Text>
         </div>
       )}
-      <div style={{ flex: 1 }}>
+      <div data-chat-pane="" className="max-md:flex-1 md:h-[60vh] md:overflow-y-auto">
         {(olderHasMore ?? thread.hasMore) && (
           <div style={{ textAlign: 'center', paddingTop: 8 }}>
             <Button variant="ghost" loading={loadingOlder} onPress={() => void loadOlder()}>Xem tin cũ hơn</Button>
@@ -212,17 +214,17 @@ function ChatBody() {
         className="max-md:sticky max-md:bottom-0"
         style={{ borderTop: '1px solid var(--color-border-subtle)', background: 'var(--color-bg-surface)', paddingBottom: 'var(--safe-bottom, env(safe-area-inset-bottom, 0px))' }}
       >
+        {notice && (
+          <div role="alert" style={{ padding: '8px 12px 0' }}>
+            <Text variant="caption" tone="danger">{notice}</Text>
+          </div>
+        )}
         {closedText ? (
           <div style={{ padding: 16, textAlign: 'center' }}>
             <Text variant="body-sm" tone="secondary">{closedText}</Text>
           </div>
         ) : (
           <>
-            {notice && (
-              <div role="alert" style={{ padding: '8px 12px 0' }}>
-                <Text variant="caption" tone="danger">{notice}</Text>
-              </div>
-            )}
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
             <Composer
               onSend={(body) => enqueue(body, null)}
@@ -247,6 +249,14 @@ function Shell({ children }: { children: ReactNode }) {
 
 function SupportChatPageBody() {
   const phase = useAuthPhase();
+  const params = useSearchParams();
+  const orderCode = params.get('order');
+  const productSlug = params.get('product');
+  const returnTo = orderCode
+    ? `/ho-tro/chat?order=${encodeURIComponent(orderCode)}`
+    : productSlug
+      ? `/ho-tro/chat?product=${encodeURIComponent(productSlug)}`
+      : '/ho-tro/chat';
   if (phase === 'loading') {
     return (
       <Shell>
@@ -264,7 +274,7 @@ function SupportChatPageBody() {
   if (phase === 'guest') {
     return (
       <Shell>
-        <LoginRequired message="Đăng nhập để chat với Tubu Tree." returnTo="/ho-tro/chat" />
+        <LoginRequired message="Đăng nhập để chat với Tubu Tree." returnTo={returnTo} />
       </Shell>
     );
   }

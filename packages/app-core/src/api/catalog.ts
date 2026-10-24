@@ -162,7 +162,7 @@ export const fetchProducts = async (http: HttpClient, params: Record<string, str
     },
   };
 };
-export const fetchProduct = (http: HttpClient, slug: string) => http.get<ProductDetail>(`/products/${slug}`);
+export const fetchProduct = (http: HttpClient, slug: string) => http.get<ProductDetail>(`/products/${encodeURIComponent(slug)}`);
 /** `slug` có khi nhãn đã công khai trang /brand/:slug; API cũ chưa trả thì thiếu. */
 export interface BrandCount {
   brand: string;

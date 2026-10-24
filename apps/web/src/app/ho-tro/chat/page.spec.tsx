@@ -158,6 +158,18 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     expect(mocks.getThread).not.toHaveBeenCalled();
   });
 
+  it('khách chưa đăng nhập vào từ đơn hoặc sản phẩm: đăng nhập xong quay lại đúng chat đó', async () => {
+    mocks.phase = 'guest';
+    mocks.search = 'order=TT12345';
+    const order = mount();
+    await flush(3);
+    expect(order.querySelector('a[href^="/dang-nhap"]')?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fho-tro%2Fchat%3Forder%3DTT12345');
+    mocks.search = 'product=xa-bong';
+    const product = mount();
+    await flush(3);
+    expect(product.querySelector('a[href^="/dang-nhap"]')?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fho-tro%2Fchat%3Fproduct%3Dxa-bong');
+  });
+
   it('có đúng một h1 "Chat với Tubu Tree"', async () => {
     const c = mount();
     await flush(3);
@@ -230,6 +242,16 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     expect(buttonByName(c, 'Gửi lại')).toBeNull();
   });
 
+  it('409 CHAT_DISABLED khi gửi: hiện câu của máy chủ, không có "Gửi lại"', async () => {
+    const m = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
+    mocks.send.mockRejectedValue(statusError(409, m));
+    const c = mount();
+    await flush(3);
+    typeAndSend(c, 'Xin chào');
+    await waitFor(() => expect(bubble(c, 'cid-1')!.textContent).toContain(m));
+    expect(buttonByName(c, 'Gửi lại')).toBeNull();
+  });
+
   it('429: hiện câu "thao tác hơi nhanh" và vẫn cho "Gửi lại"', async () => {
     mocks.send.mockRejectedValue(statusError(429, 'ThrottlerException: Too Many Requests'));
     const c = mount();
@@ -295,6 +317,13 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     mocks.product.mockResolvedValue({ name: 'Xà bông thảo mộc' });
     const named = mount();
     await waitFor(() => expect(named.textContent).toContain('Về sản phẩm Xà bông thảo mộc'));
+  });
+
+  it('slug lạ như ../auth/me: không gọi API sản phẩm, thẻ dùng nguyên chuỗi đó', async () => {
+    mocks.search = `product=${encodeURIComponent('../auth/me')}`;
+    const c = mount();
+    await waitFor(() => expect(c.textContent).toContain('Về sản phẩm ../auth/me'));
+    expect(mocks.product).not.toHaveBeenCalled();
   });
 
   it('slow: dòng báo chậm kèm hotline', async () => {
@@ -408,6 +437,46 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     });
   });
 
+  describe('khung tin ở màn rộng', () => {
+    const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    const intoView = vi.fn();
+    beforeEach(() => {
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 900 });
+      Element.prototype.scrollIntoView = intoView;
+      intoView.mockClear();
+    });
+    afterEach(() => {
+      if (scrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollHeight);
+      else delete (HTMLElement.prototype as { scrollHeight?: number }).scrollHeight;
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+      delete (window as { matchMedia?: unknown }).matchMedia;
+    });
+    const media = (matches: boolean) => {
+      window.matchMedia = ((q: string) => ({ matches, media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia;
+    };
+
+    it('từ md: cuộn chính khung tin xuống cuối, không cuộn cả trang; ô nhập nằm ngoài khung cuộn', async () => {
+      media(true);
+      mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1' })] }));
+      const c = mount();
+      await waitFor(() => expect(bubble(c, 'm1')).not.toBeNull());
+      const pane = c.querySelector<HTMLElement>('[data-chat-pane]')!;
+      expect(pane.scrollTop).toBe(900);
+      expect(intoView).not.toHaveBeenCalled();
+      expect(pane.contains(bubble(c, 'm1'))).toBe(true);
+      expect(pane.contains(textbox(c))).toBe(false);
+    });
+
+    it('khổ điện thoại: vẫn cuộn trang tới tin cuối như Mini App', async () => {
+      media(false);
+      mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'm1' })] }));
+      const c = mount();
+      await waitFor(() => expect(bubble(c, 'm1')).not.toBeNull());
+      expect(intoView).toHaveBeenCalled();
+      expect(c.querySelector<HTMLElement>('[data-chat-pane]')!.scrollTop).toBe(0);
+    });
+  });
+
   describe('hỏi tin mới', () => {
     afterEach(() => {
       focusManager.setFocused(undefined);
@@ -508,6 +577,16 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
       mocks.getThread.mockResolvedValue(thread({ messages: [] }));
       await refetch();
       await waitFor(() => expect(bubble(c, 'm1')).toBeNull());
+    });
+
+    it('chat đang đóng: xem tin cũ hơn lỗi vẫn hiện thông báo', async () => {
+      mocks.getThread.mockResolvedValue(thread({ blocked: true, hasMore: true, messages: [m(5)] }));
+      mocks.getPage.mockRejectedValue(new Error('Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.'));
+      const c = mount();
+      await waitFor(() => expect(buttonByName(c, 'Xem tin cũ hơn')).not.toBeNull());
+      click(buttonByName(c, 'Xem tin cũ hơn'));
+      await waitFor(() => expect(c.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối'));
+      expect(textbox(c)).toBeNull();
     });
 
     it('hasMore=false: không có nút', async () => {

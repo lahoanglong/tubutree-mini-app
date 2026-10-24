@@ -8,7 +8,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { ApiError } from '@/lib/client-api';
-import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { fetchMyRefunds, fetchMyReturns, fetchOrder, formatVnd, type OrderDetailDTO } from '@/lib/shop-client';
 import {
   addressLine,
@@ -31,7 +30,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { BankTransferPanel, type BankPanelState } from '../../../thanh-toan/bank-transfer-panel';
 import { formatDateTime } from '@/lib/format-date';
 import { formatCount } from '@/lib/checkout-points';
-import { formatPhoneDisplay } from '@/lib/phone-display';
+import { SupportContact } from '@/components/support-contact';
 import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
@@ -84,9 +83,6 @@ export default function OrderDetailPage() {
     enabled: phase === 'authenticated' && (orderStatus === 'DELIVERED' || orderStatus === 'RETURNED'),
     retry: 0,
   });
-  // Lỗi/đang tải thì rơi về hotline mặc định: kênh liên hệ không được biến mất vì API cấu hình chậm.
-  const supportQ = useQuery({ queryKey: ['public-support'], queryFn: getPublicSupport, staleTime: 5 * 60_000 });
-  const support = supportQ.data ?? DEFAULT_SUPPORT;
   // Tiền về thì đơn hết "chờ thanh toán" và `canPayNow` thành false ngay lượt tải lại, nên nếu chỉ dựa vào nó khung
   // "Đã nhận thanh toán" bị gỡ ngay sau khi vừa hiện. Ghi nhớ trong trang tới khi khách rời trang.
   const [paidNotice, setPaidNotice] = useState(false);
@@ -351,10 +347,9 @@ export default function OrderDetailPage() {
         </section>
       )}
 
-      <p className="mt-6 px-4 text-sm text-stone-600 md:px-0">
-        Cần huỷ hoặc đổi đơn? Gọi hotline {formatPhoneDisplay(support.hotline)} hoặc email {support.email}
-        {support.zaloOaName ? `, hoặc nhắn Zalo OA ${support.zaloOaName}` : ''} để được hỗ trợ.
-      </p>
+      <div className="mt-6 px-4 md:px-0">
+        <SupportContact orderCode={o.code} />
+      </div>
     </Shell>
   );
 }

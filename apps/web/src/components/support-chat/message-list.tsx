@@ -74,7 +74,12 @@ export function MessageList({ items }: { items: ChatItem[] }) {
   const endRef = useRef<HTMLDivElement>(null);
   const last = items[items.length - 1];
   useEffect(() => {
-    endRef.current?.scrollIntoView?.({ block: 'end' });
+    const end = endRef.current;
+    if (!end) return;
+    // Từ md khung tin là ô cuộn riêng: cuộn ô đó, không cuộn cả trang (ô nhập bên dưới phải luôn nằm trong tầm nhìn).
+    const pane = end.closest<HTMLElement>('[data-chat-pane]');
+    if (pane && window.matchMedia?.('(min-width: 768px)').matches) pane.scrollTop = pane.scrollHeight;
+    else end.scrollIntoView?.({ block: 'end' });
   }, [last?.key, last?.status]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
