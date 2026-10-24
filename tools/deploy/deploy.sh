@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy bản mã đang có trong working tree: build -> kiểm .env -> migrate -> thay container API -> web.
+# Deploy bản mã đang có trong working tree: build -> kiểm .env -> migrate -> thay container API -> web -> zalo-bridge.
 #
 # Thứ tự này là bắt buộc. `docker compose run` KHÔNG build lại image, nên chạy migrate trước khi
 # build sẽ dùng thư mục migrations của image CŨ, báo "No pending migrations" và migration mới chỉ
@@ -134,6 +134,11 @@ guarded_migration_pending() { migration_pending "$GUARDED_MIGRATION"; }
 log "=== Deploy $(git rev-parse --short HEAD 2>/dev/null || echo '?') với $COMPOSE_FILE ==="
 PREV_API="$(running_image api)"
 PREV_WEB="$(running_image web)"
+# zalo-bridge không bắt buộc có trong compose (bản thử, compose cũ): thiếu thì bỏ qua, không làm deploy lỗi.
+BRIDGE_SVC=""
+if dc config --services 2>/dev/null | grep -qx zalo-bridge; then
+  BRIDGE_SVC="zalo-bridge"
+fi
 
 if api_running && guarded_migration_pending; then
   log "ERROR: bản này có migration $GUARDED_MIGRATION (đổi chỉ mục duy nhất của bảng reviews) chưa áp, mà API cũ đang chạy và vẫn ghi đánh giá theo khoá cũ — DỪNG, chưa build hay migrate gì. Làm tay theo docs/launch/deploy-rollback-runbook.md: dừng API cũ, backup, migrate, bật web rồi API mới."
@@ -167,13 +172,22 @@ api_state_note() {
   fi
 }
 
-log "1/5 Build image api + web (container cũ vẫn chạy)"
-dc build api web
+log "1/6 Build image api + web${BRIDGE_SVC:+ + $BRIDGE_SVC} (container cũ vẫn chạy)"
+dc build api web $BRIDGE_SVC
 
-log "2/5 Kiểm cấu hình môi trường (.env) bằng image MỚI"
+log "2/6 Kiểm cấu hình môi trường (.env) bằng image MỚI"
 if ! dc run --rm --no-deps api node dist/config/check-env.js; then
   log "ERROR: .env không qua kiểm tra của bản mới — DỪNG. $(api_state_note) Sửa .env (ops.yml set-env) rồi deploy lại."
   exit 2
+fi
+
+# Bất kỳ migration nào chờ cũng là thay đổi một chiều của DB: dùng image MỚI (có đủ thư mục migrations) hỏi prisma. Lệnh thoát
+# khác 0 khi còn migration chờ, và cả khi không nối được DB: cả hai đều backup cho chắc (không đọc được thì bước backup/migrate
+# phía sau cũng sẽ dừng deploy).
+BACKUP_NEEDED="$POINTS_1D_PENDING_AT_START"
+if [ "$BACKUP_NEEDED" != 1 ] && ! dc run --rm --no-deps api pnpm exec prisma migrate status >/dev/null 2>&1; then
+  BACKUP_NEEDED=1
+  log "prisma migrate status: còn migration chờ áp (hoặc không đọc được trạng thái) — sẽ backup DB ngay trước migrate."
 fi
 
 if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
@@ -185,9 +199,10 @@ if [ "$STOP_API_FOR_POINTS_1D" = 1 ]; then
 fi
 
 # Migration một chiều: luôn backup NGAY trước khi áp, kể cả khi API đã tắt từ trước (chạy lại sau lần lỗi: bản backup lần trước
-# có thể đã cũ vì API từng được bật phục vụ khách). API đã dừng nên không còn ghi nào lọt giữa bản backup và migration.
-if [ "$POINTS_1D_PENDING_AT_START" = 1 ]; then
-  log "Backup DB ngay trước migrate $POINTS_1D_MIGRATION (ops/backup-predeploy.sh)"
+# có thể đã cũ vì API từng được bật phục vụ khách). Nhánh points_1d đã dừng API nên không còn ghi nào lọt giữa bản backup và
+# migration; migration khác thì API cũ còn chạy, ghi sau backup sẽ mất nếu phải khôi phục.
+if [ "$BACKUP_NEEDED" = 1 ]; then
+  log "Backup DB ngay trước migrate (ops/backup-predeploy.sh)"
   backup_rc=0
   POSTGRES_USER="$(env_value POSTGRES_USER)" POSTGRES_DB="$(env_value POSTGRES_DB)" COMPOSE_FILE="$COMPOSE_FILE" \
     bash "$REPO_ROOT/ops/backup-predeploy.sh" || backup_rc=$?
@@ -205,7 +220,7 @@ if [ "$POINTS_1D_PENDING_AT_START" = 1 ]; then
   fi
 fi
 
-log "3/5 Áp migration bằng image MỚI"
+log "3/6 Áp migration bằng image MỚI"
 if ! dc run --rm --no-deps api pnpm exec prisma migrate deploy; then
   if api_running; then
     log "ERROR: migration lỗi — DỪNG. $(api_state_note) Xử lý theo mục Rollback của runbook."
@@ -216,7 +231,7 @@ if ! dc run --rm --no-deps api pnpm exec prisma migrate deploy; then
 fi
 
 if [ "$RUN_SEED_REFERENCE" = 1 ]; then
-  log "3b/5 Nạp dữ liệu tham chiếu (seed-reference, chỉ tạo dòng thiếu) khi API còn dừng"
+  log "3b/6 Nạp dữ liệu tham chiếu (seed-reference, chỉ tạo dòng thiếu) khi API còn dừng"
   # shellcheck disable=SC2086 # tách từ có chủ ý: rỗng thì không truyền gì
   if ! dc run --rm --no-deps api pnpm run prisma:seed:reference $SEED_REFERENCE_ARGS; then
     log "ERROR: seed-reference lỗi — DỪNG. $(api_state_note) Migration đã áp nên KHÔNG quay lại image cũ. Đọc lỗi rồi chạy lại deploy.sh (đi lại đủ luồng, seed-reference an toàn chạy lại)."
@@ -224,18 +239,29 @@ if [ "$RUN_SEED_REFERENCE" = 1 ]; then
   fi
 fi
 
-log "4/5 Thay container api"
+log "4/6 Thay container api"
 dc up -d --no-build api
 if ! wait_healthy api; then
   rollback_hint api "$PREV_API"
   exit 3
 fi
 
-log "5/5 Thay container web"
+log "5/6 Thay container web"
 dc up -d --no-build web
 if ! wait_healthy web; then
   rollback_hint web "$PREV_WEB"
   exit 3
+fi
+
+# Sau khi api healthy: bridge gửi sự kiện về api. Tạo lại bridge có thể làm một tin đang chuyển tiếp bị gửi hai lần (đã biết, chấp nhận).
+if [ -n "$BRIDGE_SVC" ]; then
+  log "6/6 Thay container $BRIDGE_SVC"
+  dc up -d --no-build "$BRIDGE_SVC"
+  if ! wait_healthy "$BRIDGE_SVC"; then
+    log "api và web đã chạy bản mới; chỉ $BRIDGE_SVC lỗi (chat Zalo cá nhân tạm ngưng, đơn hàng không bị ảnh hưởng)."
+    log "Xem log: docker compose -f $COMPOSE_FILE logs --tail 200 $BRIDGE_SVC. Chạy lại deploy.sh hoặc: docker compose -f $COMPOSE_FILE up -d --build $BRIDGE_SVC"
+    exit 3
+  fi
 fi
 
 log "=== Deploy xong. Chạy smoke test theo runbook (/api/health, /api/config/public, đăng nhập) ==="

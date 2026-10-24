@@ -35,6 +35,8 @@ function runWithFakeDocker(
 echo "docker $*" >> "${log}"
 case "$*" in *"migrate deploy"*|*"up -d"*) echo "POSTGRES_USER=\${POSTGRES_USER-unset} POSTGRES_DB=\${POSTGRES_DB-unset} :: $*" >> "${log}.env";; esac
 if [ -n "$FAIL_ON" ] && [[ "$*" == *"$FAIL_ON"* ]]; then exit 1; fi
+case "$*" in *"migrate status"*) if [ -n "$FAKE_MIGRATE_PENDING" ]; then exit 1; fi; exit 0;; esac
+case "$*" in *"config --services"*) printf 'postgres\\nredis\\napi\\nweb\\n'; if [ -z "$FAKE_NO_BRIDGE" ]; then echo zalo-bridge; fi; exit 0;; esac
 case "$*" in *"migrate deploy"*) touch "${log}.migrated";; *" stop api"*) touch "${log}.stopped";; *" start api"*|*"up -d"*) rm -f "${log}.stopped";; esac
 case "$*" in
   *"State.Running"*) if [ -f "${log}.stopped" ]; then echo false; else echo "\${FAKE_API_RUNNING:-false}"; fi;;
@@ -330,6 +332,69 @@ describe('tools/deploy/deploy.sh: migration points_1d (đổi đơn vị điểm
     expect(out).toMatch(/không đọc được DB/);
     expect(out).toMatch(/points_1d/);
     expect(out).not.toMatch(/docker tag \S+ \S+/);
+  });
+});
+
+describe('tools/deploy/deploy.sh: backup trước migrate khi có BẤT KỲ migration chờ', () => {
+  const base = { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '1' };
+
+  it('prisma migrate status báo còn migration chờ (points_1d đã áp) → backup ngay trước migrate, API không bị dừng', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { ...base, FAKE_MIGRATE_PENDING: '1' } });
+    expect({ status, out }).toMatchObject({ status: 0 });
+    const statusCall = idx(calls, 'run --rm --no-deps api pnpm exec prisma migrate status');
+    const backup = idx(calls, 'pg_dump');
+    const migrate = idx(calls, 'migrate deploy');
+    expect(statusCall).toBeGreaterThan(idx(calls, 'node dist/config/check-env.js'));
+    expect(backup).toBeGreaterThan(statusCall);
+    expect(migrate).toBeGreaterThan(backup);
+    expect(idx(calls, ' stop api')).toBe(-1);
+  });
+
+  it('không migration nào chờ → không backup', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: base });
+    expect(status).toBe(0);
+    expect(idx(calls, 'pg_dump')).toBe(-1);
+  });
+
+  it('migration chờ, backup lỗi → dừng trước migrate, API cũ vẫn chạy', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { ...base, FAKE_MIGRATE_PENDING: '1' }, failOn: 'pg_dump' });
+    expect(status).toBe(2);
+    expect(idx(calls, 'migrate deploy')).toBe(-1);
+    expect(idx(calls, ' stop api')).toBe(-1);
+    expect(out).toMatch(/backup local lỗi/);
+  });
+
+  it('points_1d chờ: vẫn dừng API rồi backup như cũ dù status không báo gì', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { FAKE_API_RUNNING: 'true', FAKE_POINTS_1D_APPLIED: '0' } });
+    expect(status).toBe(0);
+    const stop = idx(calls, ' stop api');
+    expect(stop).toBeGreaterThan(-1);
+    expect(idx(calls, 'pg_dump')).toBeGreaterThan(stop);
+  });
+});
+
+describe('tools/deploy/deploy.sh: zalo-bridge theo cùng bản mã', () => {
+  it('build cùng api web, rồi chỉ thay bridge SAU KHI api healthy', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', []);
+    expect({ status, out }).toMatchObject({ status: 0 });
+    expect(idx(calls, ' build api web zalo-bridge')).toBeGreaterThan(-1);
+    const upApi = idx(calls, 'up -d --no-build api');
+    const upBridge = idx(calls, 'up -d --no-build zalo-bridge');
+    expect(upBridge).toBeGreaterThan(upApi);
+    expect(calls.slice(upApi, upBridge).some((c) => c.includes('inspect'))).toBe(true);
+  });
+
+  it('compose không có service zalo-bridge → bỏ qua, không lỗi, không nhắc bridge trong build/up', () => {
+    const { status, calls, out } = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { FAKE_NO_BRIDGE: '1' } });
+    expect({ status, out }).toMatchObject({ status: 0 });
+    expect(calls.filter((c) => c.includes('zalo-bridge'))).toEqual([]);
+    expect(idx(calls, ' build api web')).toBeGreaterThan(-1);
+  });
+
+  it('api không healthy → không đụng bridge', () => {
+    const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { failOn: '.State.Health' });
+    expect(status).not.toBe(0);
+    expect(idx(calls, 'up -d --no-build zalo-bridge')).toBe(-1);
   });
 });
 
