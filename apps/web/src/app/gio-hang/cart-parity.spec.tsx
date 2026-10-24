@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { recallCheckoutSelection } from '@/lib/checkout-selection';
@@ -109,9 +110,9 @@ describe('/gio-hang — xoá có hoàn tác, liên kết sản phẩm, suất gi
     const { container } = await mount();
     vi.useFakeTimers();
     click(button(container, 'Xoá Dầu gội bồ kết khỏi giỏ hàng'));
-    await vi.advanceTimersByTimeAsync(50);
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
     expect(undoButton(container)).toBeDefined();
-    await vi.advanceTimersByTimeAsync(3600);
+    await act(async () => { await vi.advanceTimersByTimeAsync(3600); });
     expect(undoButton(container)).toBeUndefined();
   });
 

@@ -59,6 +59,8 @@ function CallbackInner() {
             <a href={failure.retryHref} className={ui.btnPrimary}>
               {failure.transient ? 'Thử lại' : 'Đăng nhập lại'}
             </a>
+            {/* Tải lại hẳn trang: trao đổi mã lỗi để trạng thái đăng nhập ở 'idle'; tải lại mới khôi phục phiên cookie còn hạn. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a href="/" className={ui.btnSecondary}>
               Về trang chủ
             </a>

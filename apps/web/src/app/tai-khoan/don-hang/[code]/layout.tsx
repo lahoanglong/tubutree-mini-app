@@ -8,8 +8,8 @@ function readCode(raw: string): string | null {
   }
 }
 
-export async function generateMetadata({ params }: { params: { code: string } }): Promise<Metadata> {
-  const code = readCode(params.code);
+export async function generateMetadata({ params }: { params: Promise<{ code: string }> }): Promise<Metadata> {
+  const code = readCode((await params).code);
   return { title: `${code ? `Đơn ${code}` : 'Đơn hàng'} — Tubu Tree`, robots: { index: false, follow: false } };
 }
 

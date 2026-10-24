@@ -71,9 +71,9 @@ import RecyclePage from './doi-rac/page';
 import RecycleRequestsPage from './doi-rac/yeu-cau/page';
 import RecycleNewPage from './doi-rac/tao/page';
 import RecyclePointsPage from './doi-rac/diem-nhan/page';
-import RecycleRequestDetailPage from './doi-rac/yeu-cau/[id]/page';
-import RecycleEditPage from './doi-rac/yeu-cau/[id]/sua/page';
-import RecycleDonePage from './doi-rac/xong/[id]/page';
+import { RecycleRequestDetail } from '@/components/recycle/recycle-request';
+import { RecycleEdit } from '@/components/recycle/recycle-edit';
+import { RecycleDone } from '@/components/recycle/recycle-done';
 import RecycleDeskPage from './doi-rac/quay/page';
 
 let mounted: Rendered[] = [];
@@ -92,7 +92,7 @@ afterEach(() => {
   mounted = [];
 });
 
-type PageCase = [string, () => JSX.Element];
+type PageCase = [string, () => React.JSX.Element];
 const CORE: PageCase[] = [
   ['/gio-hang', () => <CartPage />],
   ['/thanh-toan', () => <CheckoutPage />],
@@ -143,9 +143,9 @@ const RECYCLE: PageCase[] = [
   ['/doi-rac/yeu-cau', () => <RecycleRequestsPage />],
   ['/doi-rac/tao', () => <RecycleNewPage />],
   ['/doi-rac/diem-nhan', () => <RecyclePointsPage />],
-  ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetailPage params={{ id: 'req-77' }} />],
-  ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEditPage params={{ id: 'req-77' }} />],
-  ['/doi-rac/xong/[id]', () => <RecycleDonePage params={{ id: 'req-77' }} />],
+  ['/doi-rac/yeu-cau/[id]', () => <RecycleRequestDetail id="req-77" />],
+  ['/doi-rac/yeu-cau/[id]/sua', () => <RecycleEdit id="req-77" />],
+  ['/doi-rac/xong/[id]', () => <RecycleDone id="req-77" />],
   ['/doi-rac/quay', () => <RecycleDeskPage />],
 ];
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];

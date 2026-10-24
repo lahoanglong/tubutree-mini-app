@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 
-type Ctx = { params: Promise<{ slug: string }> | { slug: string } };
+type Ctx = { params: Promise<{ slug: string }> };
 
 /**
  * Link Content Kit và chia sẻ của Mini App có dạng `/product/<slug>?ref=<mã CTV>`; trang sản phẩm của web nằm ở

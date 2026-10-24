@@ -28,7 +28,7 @@ let savedOverflow = '';
  * khi một `role="alertdialog"` (ConfirmDialog) đang mở phía trên: hộp đó tự xử Esc/Tab, nếu không Esc sẽ đóng cả hai và mất lý
  * do khách vừa gõ.
  */
-export function useModalA11y<T extends HTMLElement = HTMLDivElement>(onClose: () => void): RefObject<T> {
+export function useModalA11y<T extends HTMLElement = HTMLDivElement>(onClose: () => void): RefObject<T | null> {
   const panelRef = useRef<T>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;

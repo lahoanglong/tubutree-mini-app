@@ -15,6 +15,8 @@ export default defineConfig(({ command, mode }) => {
     root: '.',
     base: '',
     plugins: [zaloMiniApp(), react()],
+    // Hai bản React trong một bundle làm hook null; web dùng React 19 nên ép một bản duy nhất.
+    resolve: { dedupe: ['react', 'react-dom'] },
     server: {
       port: 3113,
       host: '0.0.0.0',

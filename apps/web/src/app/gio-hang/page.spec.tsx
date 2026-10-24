@@ -332,8 +332,9 @@ describe('/gio-hang — dòng giá Giờ vàng (R4-BUYER-4)', () => {
 });
 
 describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang chọn', () => {
+  // Debounce 300ms của trang + dư cho máy CI chậm (React 19 render lại thêm một nhịp).
   const settle = async () => {
-    await new Promise((r) => setTimeout(r, 350));
+    await new Promise((r) => setTimeout(r, 500));
     await flush(6);
   };
   const MIN = { code: 'MIN250', type: 'PERCENT', value: 10, minOrder: 250000, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
@@ -372,8 +373,9 @@ describe('/gio-hang — xem trước mức giảm mã theo đúng giỏ đang ch
 });
 
 describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấy từ máy chủ (GET /cart?itemIds)', () => {
+  // Debounce 300ms của trang + dư cho máy CI chậm (React 19 render lại thêm một nhịp).
   const settle = async () => {
-    await new Promise((r) => setTimeout(r, 350));
+    await new Promise((r) => setTimeout(r, 500));
     await flush(6);
   };
   const two = () => ({
@@ -474,8 +476,9 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     state.cart = { ...two(), couponCode: null, discount: 0, comboDiscount: 0, tierDiscount: 0 };
     state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: null, subtotal: 100000, comboDiscount: 0, discount: 0, tierDiscount: 0 });
     click(container.querySelector('button[aria-label="Bỏ mã giảm giá WELCOME"]'));
+    // Bỏ mã → tải lại giỏ → hết debounce mới hỏi lại giá phần chọn: máy CI chậm có thể cần hơn một nhịp settle.
+    await vi.waitFor(() => expect(state.selection).toHaveBeenCalledTimes(2), { timeout: 3000, interval: 50 });
     await settle();
-    expect(state.selection).toHaveBeenCalledTimes(2);
     expect(container.textContent).not.toContain('-3.000đ');
     expect(container.textContent).toContain('Tổng100.000đ');
   });
@@ -491,8 +494,9 @@ describe('/gio-hang — chọn một phần giỏ: giá của phần chọn lấ
     state.selection.mockResolvedValueOnce({ ...cartOf([]), couponCode: 'WELCOME', subtotal: 100000, comboDiscount: 0, discount: 3000, tierDiscount: 0 });
     typeInto(container.querySelector('#coupon-code'), 'welcome');
     click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Áp dụng')!);
+    // Áp mã → tải lại giỏ → hết debounce mới hỏi lại giá phần chọn: máy CI chậm có thể cần hơn một nhịp settle.
+    await vi.waitFor(() => expect(state.selection).toHaveBeenCalledTimes(2), { timeout: 3000, interval: 50 });
     await settle();
-    expect(state.selection).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain('-3.000đ');
     expect(container.textContent).toContain('Tổng97.000đ');
   });

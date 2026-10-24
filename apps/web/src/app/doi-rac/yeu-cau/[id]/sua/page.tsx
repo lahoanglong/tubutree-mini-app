@@ -1,5 +1,6 @@
 import { RecycleEdit } from '@/components/recycle/recycle-edit';
 
-export default function RecycleEditPage({ params }: { params: { id: string } }) {
-  return <RecycleEdit id={params.id} />;
+export default async function RecycleEditPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <RecycleEdit id={id} />;
 }
