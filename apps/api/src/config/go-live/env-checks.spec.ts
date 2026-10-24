@@ -78,10 +78,14 @@ describe('evaluateEnv', () => {
       ['thiếu', undefined, 'FAIL'],
       ['là giá trị mẫu', 'dev-access-secret-change-me-please', 'FAIL'],
       ['dưới 16 ký tự', 'abc123', 'FAIL'],
-      ['16 đến 31 ký tự', 'Zq8Lm3Vx7Tn1Bw5Rk9Yd', 'WARN'],
+      ['16 đến 31 ký tự', 'Zq8Lm3Vx7Tn1Bw5Rk9Yd', 'FAIL'],
       ['từ 32 ký tự', long, 'PASS'],
     ])('access %s thì %s', (_label, value, expected) => {
       expect(status({ JWT_ACCESS_SECRET: value }, 'env.jwt_access')).toBe(expected);
+    });
+
+    it('ngoài production 16 đến 31 ký tự chỉ cảnh báo (schema chỉ đòi 16)', () => {
+      expect(status({ NODE_ENV: 'development', JWT_ACCESS_SECRET: 'Zq8Lm3Vx7Tn1Bw5Rk9Yd' }, 'env.jwt_access')).toBe('WARN');
     });
 
     it('refresh cũng được kiểm riêng', () => {

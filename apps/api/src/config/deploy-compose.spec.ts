@@ -222,3 +222,15 @@ describe('tài liệu chủ làm theo dùng đúng file compose của VPS thật
     }
   });
 });
+
+describe('docker-compose.vietnix.yml — trần heap Node theo mem_limit', () => {
+  const svc = services(repoFile('docker-compose.vietnix.yml'));
+  const heap = (name: string) => /\n {6}NODE_OPTIONS: '--max-old-space-size=(\d+)'/.exec(svc[name] ?? '')?.[1];
+  const limit = (name: string) => Number(/\n {4}mem_limit: (\d+)m/.exec(svc[name] ?? '')?.[1]);
+
+  it.each([['api', 512], ['web', 352]])('%s có --max-old-space-size=%i, khoảng 70% mem_limit (heap vượt trần thì Node tự báo lỗi thay vì bị OOM-kill)', (name, mb) => {
+    expect(Number(heap(name))).toBe(mb);
+    expect(Number(heap(name)) / limit(name)).toBeGreaterThan(0.6);
+    expect(Number(heap(name)) / limit(name)).toBeLessThan(0.75);
+  });
+});
