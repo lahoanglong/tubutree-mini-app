@@ -1,14 +1,13 @@
 # Ghi chú vận hành: gói ops 2026-10-24
 
-## 1. deploy.sh cập nhật cả zalo-bridge
-- `tools/deploy/deploy.sh` build `api web zalo-bridge` cùng lúc, và chỉ thay container bridge SAU KHI api và web đã healthy (bridge gửi sự kiện về api).
-- Compose không có service `zalo-bridge` thì bỏ qua, không lỗi (kiểm bằng `docker compose config --services`).
+## 1. deploy.sh và zalo-bridge
+- Bridge chỉ được xử lý khi compose có service `zalo-bridge` VÀ (`.env` có `ZALO_BRIDGE_SECRET` hoặc bridge đang chạy). Ngược lại deploy.sh ghi một dòng "Bỏ qua zalo-bridge" và đi tiếp (chat Zalo cá nhân dự kiến TẮT lúc go-live; thiếu khoá thì bridge restart-loop).
+- Api và web build + thay trước. Bridge build riêng và thay sau cùng. Bridge lỗi (build, up hoặc không healthy) thì thoát mã 4: api và web đã chạy bản mới, chỉ chat tạm ngưng. Mã 3 vẫn là api/web không healthy.
 - Biết và chấp nhận: tạo lại bridge có thể làm một tin đang chuyển tiếp bị gửi hai lần.
-- Bridge không healthy: deploy.sh thoát 3, nói rõ api và web đã chạy bản mới, chỉ chat Zalo cá nhân tạm ngưng.
 
 ## 2. Backup trước mọi migration đang chờ
-- Sau bước kiểm .env, deploy.sh chạy `prisma migrate status` bằng image mới. Thoát khác 0 (còn migration chờ, hoặc không nối được DB) thì chạy `ops/backup-predeploy.sh` ngay trước `migrate deploy`.
-- Giữ nguyên nhánh points_1d: dừng API cũ rồi backup. Với migration khác API cũ vẫn chạy, nên dữ liệu ghi giữa lúc backup và migrate sẽ mất nếu phải khôi phục backup. Bản backup lỗi (exit khác 0) vẫn dừng deploy với exit 2.
+- Sau bước kiểm .env, deploy.sh chạy `prisma migrate status` bằng image mới và in kết quả vào log. Không nối được DB (P1000-P1002, "Can't reach database server") thì dừng mã 2, chưa backup, chưa migrate. Thoát khác 0 vì lý do khác (còn migration chờ, lệch, lỗi) thì chạy `ops/backup-predeploy.sh` ngay trước `migrate deploy`.
+- Giữ nguyên nhánh points_1d: dừng API cũ rồi backup. Với migration khác API cũ vẫn chạy, nên ghi sau bản backup sẽ mất nếu khôi phục. Backup lỗi vẫn dừng deploy với exit 2.
 
 ## 3. Cấu hình production bị chặn khi boot
 - `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET` phải từ 32 ký tự khi NODE_ENV=production. Sinh bằng `openssl rand -base64 48`. Đổi khoá đang chạy sẽ đăng xuất mọi người dùng.
@@ -16,7 +15,7 @@
 - Quy tắc nằm trong `apps/api/src/config/env.validation.ts`. `check-env.ts` chỉ gọi lại `validateEnv`, không có bản sao quy tắc nào khác.
 - Việc cần làm trước deploy tới: xem `.env` trên VPS có JWT secret đủ 32 ký tự chưa. Nếu chưa, deploy sẽ dừng ở bước kiểm .env (an toàn), nhưng đổi khoá vẫn đăng xuất mọi người.
 - Bằng chứng deploy dừng trước khi thay container cũ, không có downtime (`tools/deploy/deploy.sh`):
-  - dòng 179: `dc run --rm --no-deps api node dist/config/check-env.js` chạy bằng image mới (compose đặt NODE_ENV=production cho api), lỗi thì `exit 2`.
+  - dòng 179 (kiểm lại số dòng nếu deploy.sh đổi): `dc run --rm --no-deps api node dist/config/check-env.js` chạy bằng image mới (compose đặt NODE_ENV=production cho api), lỗi thì `exit 2`.
   - dòng 195 (`dc stop api`, chỉ nhánh points_1d), dòng 243 (`up -d --no-build api`), 250 (web), 259 (bridge) đều nằm sau dòng 179.
   - Chỉ `docker compose build` chạy trước, và nó không đụng container đang chạy.
 

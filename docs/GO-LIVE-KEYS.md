@@ -166,7 +166,7 @@ gh workflow run ops.yml -f action=set-env
 
 ## 4) Cách đặt key vào hệ thống (chuẩn cho MỌI key)
 
-> **Máy ảo GCP đã đóng** ([runbook mục 0.3 và 2](launch/deploy-rollback-runbook.md)). Cho tới khi trỏ lại ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, mọi lệnh `gh workflow run ops.yml` trong tài liệu này lỗi ở bước SSH. Khi đó SSH vào VPS, sửa thẳng `/opt/tubutree/.env`, rồi tạo lại container đọc khoá đó (ví dụ `docker compose -f docker-compose.vietnix.yml up -d --no-deps api`), vì container chỉ đọc `.env` lúc khởi động.
+> **Máy ảo GCP đã đóng** ([runbook mục 0.3 và 2](launch/deploy-rollback-runbook.md)). Cho tới khi trỏ lại ba secret `VM_HOST`, `VM_USER`, `VM_SSH_KEY` và đặt biến repo `VM_WORKFLOWS_ENABLED=true`, mọi lệnh `gh workflow run ops.yml` trong tài liệu này dừng ở bước chặn đầu tiên (rồi lỗi ở bước SSH nếu chỉ bật biến). Khi đó SSH vào VPS, sửa thẳng `/opt/tubutree/.env`, rồi tạo lại container đọc khoá đó (ví dụ `docker compose -f docker-compose.vietnix.yml up -d --no-deps api`), vì container chỉ đọc `.env` lúc khởi động.
 
 Key đi qua **2 lớp**, không bao giờ nằm trong git:
 
@@ -278,6 +278,7 @@ gh workflow run ops.yml -f action=set-env
 
 > Workflow `ops.yml`/`deploy.yml`/`smoke*.yml`/`logs.yml` SSH vào máy theo secret `VM_HOST`/`VM_USER`/`VM_SSH_KEY`
 > và biến repo `DEPLOY_DIR` (mặc định `/opt/tubutree`), `COMPOSE_FILE` (mặc định `docker-compose.vietnix.yml`).
+> Cả năm workflow này dừng ở một bước chặn đầu tiên cho tới khi biến repo `VM_WORKFLOWS_ENABLED` bằng `true` (đặt sau khi đã trỏ lại các secret SSH).
 > Đến 2026-10 ba secret `VM_*` vẫn trỏ VM GCP đã đóng: cập nhật sang VPS Vietnix trước khi dùng
 > `set-env`/`audit`; chưa cập nhật thì đặt key thẳng vào `/opt/tubutree/.env` trên VPS rồi tạo lại container api.
 
