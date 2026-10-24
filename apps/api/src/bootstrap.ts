@@ -1,6 +1,6 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger, type NestApplicationOptions, type Type } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 // Import trực tiếp — không phải qua @nestjs/platform-express — nên PHẢI là dependency trực
@@ -9,8 +9,10 @@ import helmet from 'helmet';
 // khác đi, và `require('express')` vỡ ở runtime với "Cannot find module 'express'".
 import { json, urlencoded } from 'express';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
+import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { createValidationPipe } from './common/validation-pipe';
+import { isSentryOn } from './config/sentry';
 import { applyHttpTimeouts } from './config/http-timeouts';
 
 /** Dọn app khởi động hỏng tối đa chừng này rồi vẫn thoát — đóng hàng đợi/Redis treo không được giữ process lại. */
@@ -123,7 +125,11 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   app.setGlobalPrefix('api');
   app.useGlobalPipes(createValidationPipe());
   // Map Prisma errors → HTTP status nhất quán (tránh 500 trần khi P2025/P2002/...).
-  app.useGlobalFilters(new PrismaExceptionFilter());
+  // Filter đăng ký sau được hỏi trước: Prisma lo lỗi Prisma, còn lại rơi xuống filter Sentry (chỉ có khi đã bật DSN).
+  app.useGlobalFilters(
+    ...(isSentryOn() ? [new SentryExceptionFilter(app.get(HttpAdapterHost).httpAdapter)] : []),
+    new PrismaExceptionFilter(),
+  );
 
   // Swagger chỉ bật ở non-production để tránh lộ schema/endpoint nội bộ.
   if (!isProd) {

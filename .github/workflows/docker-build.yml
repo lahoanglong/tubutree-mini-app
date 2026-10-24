@@ -48,7 +48,7 @@ jobs:
         if: matrix.app == 'api'
         run: >-
           docker run --rm --entrypoint node tubutree-api:ci
-          -e "require('express'); require('helmet'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@prisma/client'); require('./dist/bootstrap.js'); console.log('api modules ok')"
+          -e "require('express'); require('helmet'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@sentry/node'); require('@prisma/client'); require('./dist/bootstrap.js'); console.log('api modules ok')"
 
       - name: Build image web
         # ZALO_APP_ID giả: Dockerfile dừng khi rỗng. NEXT_PUBLIC_* chỉ nhúng vào bundle, không có giá trị thật nào ở đây.
