@@ -25,8 +25,8 @@ export class CredentialStore {
     return JSON.parse(decrypt(blob.trim(), this.key)) as ZaloCredentials;
   }
 
-  async save(c: ZaloCredentials): Promise<void> {
-    await writeFileAtomic(this.path, encrypt(JSON.stringify(c), this.key));
+  async save(c: ZaloCredentials, shouldCommit?: () => boolean): Promise<void> {
+    await writeFileAtomic(this.path, encrypt(JSON.stringify(c), this.key), 0o600, shouldCommit);
   }
 
   async clear(): Promise<void> {

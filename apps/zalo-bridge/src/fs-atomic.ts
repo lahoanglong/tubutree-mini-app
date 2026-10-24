@@ -3,7 +3,8 @@ import { mkdir, open, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 // Ghi tệp tạm, fsync, đổi tên rồi fsync thư mục: tiến trình chết hay mất điện giữa chừng cũng chỉ còn bản cũ hoặc bản mới nguyên vẹn.
-export async function writeFileAtomic(path: string, data: string, mode = 0o600): Promise<void> {
+// shouldCommit được hỏi ngay trước rename: một lần ghi chậm mà người gọi đã không còn muốn thì bỏ tệp tạm, không đè lên tệp đích.
+export async function writeFileAtomic(path: string, data: string, mode = 0o600, shouldCommit?: () => boolean): Promise<void> {
   const dir = dirname(path);
   await mkdir(dir, { recursive: true });
   const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
@@ -15,6 +16,10 @@ export async function writeFileAtomic(path: string, data: string, mode = 0o600):
     } finally {
       // Lỗi đóng không được che lỗi ghi gốc; nếu ghi và fsync đã xong thì dữ liệu đã bền.
       await file.close().catch(() => undefined);
+    }
+    if (shouldCommit && !shouldCommit()) {
+      await rm(tmp, { force: true }).catch(() => undefined);
+      return;
     }
     await rename(tmp, path);
   } catch (e) {

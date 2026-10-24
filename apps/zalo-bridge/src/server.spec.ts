@@ -97,6 +97,13 @@ describe('server', () => {
     expect(await r.json()).toEqual({ code: 'QR_CANCELLED' });
   });
 
+  it('POST /logout không xoá được tệp phiên thì 502 LOGOUT_CLEAR_FAILED kèm mã lỗi để admin thử lại', async () => {
+    client.logout.mockRejectedValueOnce(new BridgeError('LOGOUT_CLEAR_FAILED', 'EACCES'));
+    const r = await call('POST', '/logout');
+    expect(r.status).toBe(502);
+    expect(await r.json()).toEqual({ code: 'LOGOUT_CLEAR_FAILED', message: 'EACCES' });
+  });
+
   it('PUT /config lưu groupId, từ chối kiểu sai', async () => {
     const r = await call('PUT', '/config', { groupId: 'G1' });
     expect(await r.json()).toEqual({ groupId: 'G1' });

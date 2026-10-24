@@ -24,6 +24,14 @@ describe('CredentialStore', () => {
     await store.clear();
   });
 
+  it('save với shouldCommit trả false thì không thay tệp đang có', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'cred-'));
+    const store = new CredentialStore(dir, randomBytes(32));
+    await store.save(creds);
+    await store.save({ ...creds, imei: 'imei-2' }, () => false);
+    expect(await store.load()).toEqual(creds);
+  });
+
   it('khoá sai thì load ném lỗi thay vì trả rỗng', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'cred-'));
     await new CredentialStore(dir, randomBytes(32)).save(creds);

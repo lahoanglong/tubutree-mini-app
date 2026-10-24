@@ -63,6 +63,22 @@ describe('writeFileAtomic', () => {
     expect(order).toEqual(['file.sync', 'file.close', 'rename', 'dir.sync', 'dir.close']);
   });
 
+  it('shouldCommit trả false ngay trước rename thì không đổi tên, tệp đích giữ bản cũ và không còn tệp tạm', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fa-'));
+    const path = join(dir, 'c.json');
+    await writeFileAtomic(path, '{"v":1}');
+    let asked = 0;
+    await writeFileAtomic(path, '{"v":2}', 0o600, () => {
+      asked++;
+      return false;
+    });
+    expect(asked).toBe(1);
+    expect(await readFile(path, 'utf8')).toBe('{"v":1}');
+    expect(await readdir(dir)).toEqual(['c.json']);
+    await writeFileAtomic(path, '{"v":3}', 0o600, () => true);
+    expect(await readFile(path, 'utf8')).toBe('{"v":3}');
+  });
+
   describe('lỗi giữa chừng', () => {
     const reset = () => {
       faults.sync = {};

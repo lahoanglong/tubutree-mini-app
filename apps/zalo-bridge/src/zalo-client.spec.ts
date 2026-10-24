@@ -41,7 +41,7 @@ function setup(opts: { groupId?: string | null; creds?: boolean; login?: () => P
   };
   const credentials = {
     load: vi.fn(async () => (opts.creds === false ? null : CREDS)),
-    save: vi.fn(async (_c?: unknown) => undefined),
+    save: vi.fn(async (_c?: unknown, _commit?: unknown) => undefined),
     clear: vi.fn(async () => undefined),
   };
   const api = opts.api === null ? undefined : (opts.api ?? fakeApi());
@@ -469,8 +469,9 @@ describe('zalo-client: đăng nhập QR', () => {
     cb({ type: 2, data: { display_name: 'Tubu CSKH' } });
     expect(s.client.qrStatus()).toMatchObject({ status: 'SCANNED', displayName: 'Tubu CSKH' });
     cb({ type: 4, data: { cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' } });
-    await vi.waitFor(() => expect(s.credentials.save).toHaveBeenCalledWith(expect.objectContaining({ cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' })));
+    expect(s.credentials.save).not.toHaveBeenCalled();
     done(api2);
+    await vi.waitFor(() => expect(s.credentials.save).toHaveBeenCalledWith(expect.objectContaining({ cookie: [{ a: 1 }], imei: 'im', userAgent: 'ua2' }), expect.any(Function)));
     await vi.waitFor(() => expect(api2.listener.start).toHaveBeenCalled());
     api2.listener.emit('connected');
     expect(s.client.state().state).toBe('CONNECTED');
@@ -761,26 +762,37 @@ describe('zalo-client: đăng nhập QR', () => {
       cbs[1]({ type: 0, data: { image: 'BBBB' } });
       await p2;
       cbs[1]({ type: 4, data: { cookie: [{ b: 2 }], imei: 'im2', userAgent: 'ua3' } });
+      dones[1](fakeApi());
       await vi.advanceTimersByTimeAsync(100);
-      expect(s.credentials.clear).not.toHaveBeenCalled();
+      // lần lưu đầu lỗi thì có một lệnh xoá (F1), nhưng không lệnh xoá nào chạy sau lần lưu phiên mới
+      const lastSave = s.credentials.save.mock.invocationCallOrder.at(-1)!;
+      expect(s.credentials.save.mock.calls.at(-1)?.[0]).toMatchObject({ imei: 'im2' });
+      expect(s.credentials.clear.mock.invocationCallOrder.filter((o) => o > lastSave)).toEqual([]);
     } finally {
       vi.useRealTimers();
       vi.restoreAllMocks();
     }
   });
 
-  // Kho phiên giả có độ trễ điều khiển được; file là thứ nằm trên đĩa.
-  function fakeDisk(s: ReturnType<typeof setup>, init: unknown, delay: (c: { imei?: string }) => number = () => 0) {
-    const disk = { file: init as { imei?: string } | null, clears: 0 };
+  // Kho phiên giả có độ trễ điều khiển được; file là thứ nằm trên đĩa, history là mọi lần đĩa đổi (imei hoặc null).
+  // honorCommit = false mô phỏng một lần ghi bỏ qua kiểm tra trước rename (kho cũ, hay rename đã lỡ chạy).
+  function fakeDisk(s: ReturnType<typeof setup>, init: unknown, delay: (c: { imei?: string }) => number = () => 0, honorCommit = false) {
+    const disk = { file: init as { imei?: string } | null, clears: 0, history: [] as (string | null)[] };
     s.credentials.load.mockImplementation(async () => disk.file as never);
-    s.credentials.save.mockImplementation(async (raw?: unknown) => {
+    s.credentials.save.mockImplementation(async (raw?: unknown, commit?: unknown) => {
       const c = raw as { imei?: string };
-      await new Promise((r) => setTimeout(r, delay(c)));
+      const ms = delay(c);
+      if (ms < 0) return new Promise<undefined>(() => undefined);
+      await new Promise((r) => setTimeout(r, ms));
+      if (honorCommit && typeof commit === 'function' && !commit()) return undefined;
       disk.file = c;
+      disk.history.push(c.imei ?? '?');
+      return undefined;
     });
     s.credentials.clear.mockImplementation(async () => {
       disk.clears++;
       disk.file = null;
+      disk.history.push(null);
     });
     return disk;
   }
@@ -863,6 +875,7 @@ describe('zalo-client: đăng nhập QR', () => {
       cbs[1]({ type: 0, data: { image: 'BBBB' } });
       await p2;
       cbs[1]({ type: 4, data: { cookie: [{ b: 2 }], imei: 'imB', userAgent: 'ua3' } });
+      dones[1](fakeApi());
       await vi.advanceTimersByTimeAsync(500);
       expect(disk.file).toMatchObject({ imei: 'imB' });
     } finally {
@@ -886,6 +899,244 @@ describe('zalo-client: đăng nhập QR', () => {
     } finally {
       vi.useRealTimers();
       vi.restoreAllMocks();
+    }
+  });
+
+  // Vòng 4. Bất biến: đĩa chỉ giữ phiên mà cầu nối đang muốn (desired); không bao giờ đăng nhập lại tài khoản đã đăng xuất hay đã bỏ.
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const four = (imei: string) => ({ type: 4, data: { cookie: [{ k: imei }], imei, userAgent: 'ua' } });
+  async function scan(cbs: QrCb[], i: number, imei: string, p: Promise<unknown>) {
+    cbs[i]({ type: 0, data: { image: imei } });
+    await p;
+    cbs[i](four(imei));
+  }
+  async function restartFrom(file: unknown) {
+    const r = setup({ api: null });
+    fakeDisk(r, file);
+    await r.client.start();
+    return r;
+  }
+
+  it('F1: A đã đăng nhập và lưu chậm, logout, B quét xong rồi lưu B lỗi: đĩa không còn A, khởi động lại phải quét QR', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      const disk = fakeDisk(s, null, (c) => (c.imei === 'imA' ? 80 : 0));
+      const base = s.credentials.save.getMockImplementation()!;
+      s.credentials.save.mockImplementation(async (c?: unknown, commit?: unknown) => {
+        if ((c as { imei?: string }).imei === 'imB') throw new Error('ENOSPC');
+        return base(c, commit);
+      });
+      await s.client.start();
+      await scan(cbs, 0, 'imA', s.client.qrStart());
+      dones[0](apiUid('UA'));
+      await wait(10);
+      const lo = s.client.logout();
+      await scan(cbs, 1, 'imB', s.client.qrStart());
+      const apiB = apiUid('UB');
+      dones[1](apiB);
+      await lo;
+      await wait(150);
+      apiB.listener.emit('connected');
+      expect(s.client.state()).toMatchObject({ state: 'CONNECTED', zaloUid: 'UB', lastError: expect.stringContaining('ENOSPC') });
+      expect(disk.file).toBeNull();
+      const r = await restartFrom(disk.file);
+      expect(r.client.state().state).toBe('NEED_QR');
+      expect(r.login).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F1: lệnh xoá của logout luôn chạy dù B đã thay desired: trong lúc B đang lưu, đĩa không còn A', async () => {
+    const { s, cbs, dones } = qrSetup();
+    const disk = fakeDisk(s, null, (c) => (c.imei === 'imA' ? 80 : 60));
+    await s.client.start();
+    await scan(cbs, 0, 'imA', s.client.qrStart());
+    dones[0](apiUid('UA'));
+    await wait(10);
+    const lo = s.client.logout();
+    await scan(cbs, 1, 'imB', s.client.qrStart());
+    dones[1](apiUid('UB'));
+    await lo;
+    await wait(200);
+    // kho giả bỏ qua kiểm tra trước rename nên A vẫn ghi được; lệnh xoá phải chen vào trước khi B ghi
+    expect(disk.history).toEqual(['imA', null, 'imB']);
+    expect(disk.file).toMatchObject({ imei: 'imB' });
+  });
+
+  it('F3: kho thật kiểm tra token trước rename: lần ghi A đang dở lúc logout không bao giờ vào chỗ', async () => {
+    const { s, cbs, dones } = qrSetup();
+    const disk = fakeDisk(s, null, (c) => (c.imei === 'imA' ? 80 : 0), true);
+    await s.client.start();
+    await scan(cbs, 0, 'imA', s.client.qrStart());
+    dones[0](apiUid('UA'));
+    await wait(10);
+    const lo = s.client.logout();
+    await scan(cbs, 1, 'imB', s.client.qrStart());
+    dones[1](apiUid('UB'));
+    await lo;
+    await wait(200);
+    expect(disk.history).not.toContain('imA');
+    expect(disk.file).toMatchObject({ imei: 'imB' });
+  });
+
+  it('F1: phiên từ đĩa X, quét QR B thành công nhưng lưu B lỗi: xoá tệp X, khởi động lại không đăng nhập X', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      const disk = fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' });
+      const base = s.credentials.save.getMockImplementation()!;
+      s.credentials.save.mockImplementation(async (c?: unknown, commit?: unknown) => {
+        if ((c as { imei?: string }).imei === 'imB') throw new Error('ENOSPC');
+        return base(c, commit);
+      });
+      await s.client.start();
+      await scan(cbs, 0, 'imB', s.client.qrStart());
+      dones[0](apiUid('UB'));
+      await wait(50);
+      expect(disk.file).toBeNull();
+      const r = await restartFrom(disk.file);
+      expect(r.client.state().state).toBe('NEED_QR');
+      expect(r.login).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F2: nối lại trong lúc B còn đang lưu thì dùng phiên B trong bộ nhớ, không đọc tệp cũ trên đĩa', async () => {
+    const { s, cbs, dones } = qrSetup();
+    fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' }, (c) => (c.imei === 'imB' ? 100 : 0));
+    await s.client.start();
+    expect(s.login).toHaveBeenCalledTimes(1);
+    await scan(cbs, 0, 'imB', s.client.qrStart());
+    dones[0](apiUid('UB'));
+    await wait(10);
+    await s.client.reconnect();
+    expect(s.login).toHaveBeenCalledTimes(2);
+    expect(s.login.mock.calls[1]).toEqual([expect.objectContaining({ imei: 'imB' })]);
+  });
+
+  it('F3: lần lưu treo không chặn: sau thời hạn chờ vẫn attach và CONNECTED, sau 15 giây lastError báo lưu lỗi, logout vẫn trả về', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      fakeDisk(s, null, () => -1);
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'B' } });
+      await p;
+      cbs[0](four('imB'));
+      const apiB = apiUid('UB');
+      dones[0](apiB);
+      await vi.advanceTimersByTimeAsync(5_100);
+      expect(apiB.listener.start).toHaveBeenCalled();
+      apiB.listener.emit('connected');
+      expect(s.client.state().state).toBe('CONNECTED');
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: expect.stringContaining('Không lưu được phiên đăng nhập') });
+      let done = false;
+      void s.client.logout().then(() => (done = true));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F3: lần ghi A treo rồi vào chỗ muộn sau logout thì đĩa được xoá lại; logout chỉ chờ trong thời hạn', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      const disk = fakeDisk(s, null, (c) => (c.imei === 'imA' ? 20_000 : 0));
+      await s.client.start();
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'A' } });
+      await p;
+      cbs[0](four('imA'));
+      dones[0](apiUid('UA'));
+      await vi.advanceTimersByTimeAsync(6_000);
+      let settled = false;
+      s.client.logout().then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      await vi.advanceTimersByTimeAsync(9_100);
+      expect(settled).toBe(true);
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(disk.history).toContain('imA');
+      expect(disk.file).toBeNull();
+      expect(s.client.state().state).toBe('NEED_QR');
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F4: type 4 rồi loginQR bị từ chối: không lưu, giữ tài khoản đang chạy, QR FAILED, nối lại vẫn là tài khoản cũ', async () => {
+    const { s, cbs, fails } = qrSetup();
+    const disk = fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' });
+    await s.client.start();
+    await scan(cbs, 0, 'imB', s.client.qrStart());
+    await wait(5);
+    fails[0](new ZaloApiError('Failed to fetch login info: Service Unavailable'));
+    await wait(10);
+    expect(s.client.qrStatus().status).toBe('FAILED');
+    expect(s.credentials.save).not.toHaveBeenCalled();
+    expect(disk.file).toMatchObject({ imei: 'imX' });
+    await s.client.reconnect();
+    expect(s.login.mock.calls.map((c) => ((c as unknown[])[0] as { imei: string }).imei)).toEqual(['imX', 'imX']);
+  });
+
+  it('F5: hai attach chồng nhau cho tài khoản mới, fetch quá hạn: không ghép uid mới với tên tài khoản cũ', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const s = await connected();
+      expect(s.client.state()).toMatchObject({ zaloUid: 'U1', displayName: 'Tubu CSKH' });
+      const cbs: QrCb[] = [];
+      const dones: ((a: ZcaApiLike) => void)[] = [];
+      s.deps.zalo.loginQR = vi.fn((c) => {
+        cbs.push(c as QrCb);
+        return new Promise<ZcaApiLike>((r) => dones.push(r));
+      });
+      const hang = () => fakeApi({ getOwnId: () => 'U2', fetchAccountInfo: () => new Promise(() => undefined) });
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'Q' } });
+      await p;
+      cbs[0](four('im2'));
+      dones[0](hang());
+      await vi.advanceTimersByTimeAsync(5);
+      expect(s.client.state()).toMatchObject({ zaloUid: 'U2', displayName: null, avatar: null });
+      s.login.mockResolvedValueOnce(hang());
+      void s.client.reconnect();
+      await vi.advanceTimersByTimeAsync(15_300);
+      expect(s.client.state()).toMatchObject({ zaloUid: 'U2', displayName: null, avatar: null });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('F6: xoá tệp lúc logout lỗi: logout báo LOGOUT_CLEAR_FAILED kèm mã lỗi, ghi log mã, nối lại không đăng nhập từ đĩa', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const s = setup({ api: null });
+      const disk = fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' });
+      await s.client.start();
+      expect(s.login).toHaveBeenCalledTimes(1);
+      s.credentials.clear.mockRejectedValueOnce(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+      await expect(s.client.logout()).rejects.toMatchObject({ code: 'LOGOUT_CLEAR_FAILED', message: 'EACCES' });
+      expect(JSON.stringify(err.mock.calls)).toContain('EACCES');
+      expect(disk.file).toMatchObject({ imei: 'imX' });
+      await s.client.reconnect();
+      expect(s.client.state().state).toBe('NEED_QR');
+      expect(s.login).toHaveBeenCalledTimes(1);
+    } finally {
+      err.mockRestore();
     }
   });
 });
