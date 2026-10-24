@@ -92,6 +92,8 @@ export const GOOD_DB: DbSnapshot = {
     'ops.alert_gomdon_backlog_minutes': 15,
     'shipping.free_threshold': 199000,
     'shipping.flat_fee_below_threshold': 19000,
+    'shipping.eta_min_days': 2,
+    'shipping.eta_max_days': 4,
     'shipping.gomdon.recycling_enabled': true,
     'shipping.gomdon.config': {
       defaultWarehouse: { name: 'Kho Tubu', phone: '0899149229', address: '1 Đường A', ward: 'Phường B', district: 'Quận C', province: 'Thành phố D' },

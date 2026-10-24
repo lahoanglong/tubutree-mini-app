@@ -1,6 +1,7 @@
 import { parseConsignmentSettleFrom } from '../../modules/merchant/merchant-config';
 import { WASTE_CONFIG_KEYS } from '../../modules/waste-exchange/waste-config.keys';
 import { OPS_THRESHOLD_KEYS, type OpsThresholds } from '../../modules/ops/ops-alerts';
+import { toShippingEta } from '../../modules/system-config/shipping-eta';
 import { evaluateDemoData, type DemoDataSnapshot } from './demo-data-checks';
 import { envValue } from './secrets';
 import { fail, pass, warn, type CheckResult, type Env, type GoLivePhase } from './types';
@@ -107,6 +108,8 @@ export interface DbSnapshot {
 export const CONFIG_KEYS_OF_INTEREST = [
   'shipping.free_threshold',
   'shipping.flat_fee_below_threshold',
+  'shipping.eta_min_days',
+  'shipping.eta_max_days',
   'shipping.gomdon.config',
   'shipping.gomdon.recycling_enabled',
   'waste.enabled',
@@ -331,6 +334,19 @@ function shippingRateCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.shipping_rates', title, `freeship từ ${vnd(s.configs[keys[0]] as number)}, phí ${vnd(s.configs[keys[1]] as number)} khi dưới ngưỡng`);
 }
 
+function shippingEtaCheck(s: DbSnapshot): CheckResult {
+  const title = 'Ngày giao dự kiến (Giao dự kiến ở màn thanh toán)';
+  const [min, max] = [s.configs['shipping.eta_min_days'], s.configs['shipping.eta_max_days']];
+  const eta = toShippingEta(min, max);
+  if (eta) return pass(G_DB, 'db.shipping_eta', title, `${eta.minDays} đến ${eta.maxDays} ngày`);
+  const unset = (v: unknown) => v === undefined || v === null;
+  const detail =
+    unset(min) && unset(max)
+      ? 'shipping.eta_min_days và shipping.eta_max_days chưa đặt: khách không thấy dòng "Giao dự kiến"'
+      : 'khoảng ngày thiếu hoặc không hợp lệ (cần hai số nguyên 0 đến 60, max không nhỏ hơn min): khách không thấy dòng "Giao dự kiến"';
+  return warn(G_DB, 'db.shipping_eta', title, detail, 'Đặt shipping.eta_min_days và shipping.eta_max_days ở Quản trị, Cấu hình, nhóm shipping. Một khoảng chung cho cả nước, chưa theo tỉnh.');
+}
+
 function commissionCheck(s: DbSnapshot): CheckResult {
   const title = 'Phí sàn và phí ship đối tác';
   const pct = s.configs['merchant.commission_pct'];
@@ -513,6 +529,7 @@ export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
     wastePointCheck(s, ctx.env),
     opsThresholdCheck(s),
     shippingRateCheck(s),
+    shippingEtaCheck(s),
     commissionCheck(s),
     holdCheck(s),
     consignmentFromCheck(s),
