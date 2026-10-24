@@ -37,7 +37,8 @@ test.describe('Chat với Tubu Tree — Mini App', () => {
     expect(box.x).toBeLessThan(myBox.x);
 
     const listBox = (await mine.locator('xpath=..').boundingBox())!;
-    const composerBox = (await page.getByRole('textbox', { name: 'Nội dung tin nhắn' }).boundingBox())!;
+    // Thanh nhập là khối ngoài có viền trên (gồm cả padding), không phải riêng ô textarea.
+    const composerBox = (await page.getByRole('textbox', { name: 'Nội dung tin nhắn' }).locator('xpath=ancestor::div[contains(@style,"border-top")][1]').boundingBox())!;
     expect(Math.abs(box.x - listBox.x)).toBeLessThanOrEqual(24);
     expect(Math.abs(listBox.x + listBox.width - (myBox.x + myBox.width))).toBeLessThanOrEqual(24);
     expect(box.y + box.height).toBeLessThanOrEqual(composerBox.y);
