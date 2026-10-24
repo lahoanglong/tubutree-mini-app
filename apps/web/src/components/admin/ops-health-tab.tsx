@@ -558,8 +558,14 @@ function HealthBody({
                       <td className="px-3 py-2 font-medium text-stone-900">{j.job}</td>
                       <td className={`px-3 py-2 ${j.lastOutcome === 'ERRORS' || j.lastOutcome === 'THREW' ? 'text-danger-fg' : 'text-stone-600'}`}>{cronOutcomeLabel(j)}</td>
                       <td className="px-3 py-2 text-xs text-stone-500">
-                        <span className="block">Bắt đầu {formatDateTime(j.lastStartedAt)}</span>
-                        <span className="block">Xong {formatDateTime(j.lastFinishedAt)}</span>
+                        {j.lastOutcome === 'SKIPPED' ? (
+                          <span className="block">Bỏ qua lúc {formatDateTime(j.lastFinishedAt)}</span>
+                        ) : (
+                          <>
+                            <span className="block">Bắt đầu {formatDateTime(j.lastStartedAt)}</span>
+                            <span className="block">Xong {formatDateTime(j.lastFinishedAt)}</span>
+                          </>
+                        )}
                       </td>
                       <td className="px-3 py-2">{ago(j.lastSuccessAt)}</td>
                       <td className="px-3 py-2">
