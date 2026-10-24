@@ -48,6 +48,10 @@ export const envSchema = z.object({
   ZALO_BRIDGE_URL: z.union([z.literal(''), z.string().url()]).default(''),
   ZALO_BRIDGE_SECRET: z.string().default(''),
 
+  // Theo dõi lỗi (Sentry cloud hoặc GlitchTip tự host, cùng DSN). Rỗng = tắt hẳn, SDK không được khởi tạo.
+  SENTRY_DSN: z.union([z.literal(''), z.string().url()]).default(''),
+  SENTRY_ENVIRONMENT: z.string().default(''), // rỗng = NODE_ENV
+  SENTRY_RELEASE: z.string().default(''), // image chưa mang git sha, đặt tay nếu muốn gắn bản phát hành
   // Pancake POS
   PANCAKE_BASE_URL: z.string().default('https://pos.pages.fm/api/v1'),
   PANCAKE_API_KEY: z.string().default(''),
