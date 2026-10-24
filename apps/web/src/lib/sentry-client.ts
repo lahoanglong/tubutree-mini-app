@@ -11,7 +11,6 @@ export function startClientSentry(): typeof Sentry {
     dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
     environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT || process.env.NODE_ENV,
     sendDefaultPii: false,
-    tracesSampleRate: 0,
     // Không replay, không tracing; breadcrumb tắt hẳn (xem sentry-scrub).
     integrations: (defaults) => defaults.filter((i) => i.name !== 'BrowserSession'),
     beforeBreadcrumb: () => null,

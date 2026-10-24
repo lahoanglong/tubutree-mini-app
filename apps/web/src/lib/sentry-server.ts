@@ -7,7 +7,6 @@ export function startServerSentry(): void {
     dsn: process.env.SENTRY_DSN,
     environment: process.env.SENTRY_ENVIRONMENT || process.env.NODE_ENV,
     sendDefaultPii: false,
-    tracesSampleRate: 0,
     // Giá trị biến cục bộ trong stack có thể là SĐT/địa chỉ/token.
     integrations: (defaults) => defaults.filter((i) => i.name !== 'LocalVariables' && i.name !== 'LocalVariablesAsync'),
     beforeBreadcrumb: () => null,

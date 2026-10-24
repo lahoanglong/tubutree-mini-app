@@ -13,7 +13,10 @@ export interface ScrubbableEvent {
   breadcrumbs?: unknown[];
 }
 
-const DROP_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-webhook-token', 'x-throttle-bypass', 'x-api-key']);
+// Danh sách cho phép: SDK chép nguyên header request, mỗi nhà cung cấp có header token riêng.
+const ALLOW_HEADERS = new Set(['user-agent', 'content-type', 'content-length', 'accept', 'accept-language', 'host', 'referer']);
+
+const stripQuery = (u: string) => u.split(/[?#]/)[0]!;
 
 export function scrubEvent<T extends ScrubbableEvent>(event: T): T {
   const req = event.request;
@@ -21,9 +24,14 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T {
     delete req.cookies;
     delete req.data;
     delete req.query_string;
-    if (req.url) req.url = req.url.split(/[?#]/)[0]!;
+    if (req.url) req.url = stripQuery(req.url);
     if (req.headers) {
-      req.headers = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !DROP_HEADERS.has(k.toLowerCase())));
+      req.headers = Object.fromEntries(
+        Object.entries(req.headers)
+          .filter(([k]) => ALLOW_HEADERS.has(k.toLowerCase()))
+          // Referer của callback OAuth Zalo mang ?code=&state=.
+          .map(([k, v]) => [k, k.toLowerCase() === 'referer' ? stripQuery(String(v)) : v]),
+      );
     }
   }
   // Breadcrumb (URL gọi ra ngoài, dòng console, chữ trên nút bấm) khó đảm bảo sạch nên bỏ hết.

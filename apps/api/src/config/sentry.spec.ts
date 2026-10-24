@@ -1,6 +1,6 @@
 import type { ErrorEvent } from '@sentry/node';
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { captureServerError, initSentry, isSentryOn, resetSentryForTest, scrubEvent, type SentrySdk } from './sentry';
+import { captureServerError, capturePrismaError, initSentry, isSentryOn, resetSentryForTest, scrubEvent, type SentrySdk } from './sentry';
 
 function fakeSdk(): jest.Mocked<SentrySdk> {
   return {
@@ -26,7 +26,8 @@ describe('initSentry', () => {
     const sdk = fakeSdk();
     expect(initSentry({ SENTRY_DSN: 'https://k@o.example.com/1', NODE_ENV: 'production' }, sdk)).toBe(true);
     const opts = sdk.init.mock.calls[0]![0]!;
-    expect(opts).toMatchObject({ dsn: 'https://k@o.example.com/1', sendDefaultPii: false, tracesSampleRate: 0, environment: 'production' });
+    expect(opts).toMatchObject({ dsn: 'https://k@o.example.com/1', sendDefaultPii: false, environment: 'production' });
+    expect(opts).not.toHaveProperty('tracesSampleRate');
     expect(opts.beforeSend).toBe(scrubEvent);
     expect(opts.release).toBeUndefined();
   });
@@ -64,6 +65,22 @@ describe('captureServerError', () => {
     expect(sdk.captureException).toHaveBeenNthCalledWith(1, err);
   });
 
+  it.each([
+    ['PayloadTooLargeError 413 (statusCode)', Object.assign(new Error('request entity too large'), { statusCode: 413 })],
+    ['request aborted 400 (status)', Object.assign(new Error('request aborted'), { status: 400 })],
+    ['unsupported media 415', Object.assign(new Error('x'), { statusCode: 415 })],
+  ])('lỗi http-errors của body-parser không được gửi: %s', (_n, err) => {
+    const sdk = on();
+    captureServerError(err, sdk);
+    expect(sdk.captureException).not.toHaveBeenCalled();
+  });
+
+  it('lỗi có statusCode 5xx vẫn được gửi', () => {
+    const sdk = on();
+    captureServerError(Object.assign(new Error('x'), { statusCode: 502 }), sdk);
+    expect(sdk.captureException).toHaveBeenCalledTimes(1);
+  });
+
   it('HttpException 4xx không bao giờ được gửi', () => {
     const sdk = on();
     captureServerError(new HttpException('x', HttpStatus.NOT_FOUND), sdk);
@@ -97,5 +114,61 @@ describe('scrubEvent', () => {
 
   it('event không có request vẫn qua', () => {
     expect(scrubEvent({ message: 'm' } as ErrorEvent)).toEqual({ message: 'm' });
+  });
+});
+
+describe('scrubEvent: transaction, allowlist header, referer', () => {
+  it('transaction mang đường dẫn thô được che token webhook', () => {
+    const out = scrubEvent({ transaction: 'POST /api/webhooks/gomdon/SUPERSECRET123' } as ErrorEvent)!;
+    expect(out.transaction).not.toContain('SUPERSECRET123');
+  });
+
+  it('chỉ giữ header vô hại; token lạ như x-accesstrade-token bị bỏ', () => {
+    const out = scrubEvent({
+      request: {
+        headers: {
+          'x-accesstrade-token': 'AT-SECRET',
+          'x-webhook-token': 's',
+          authorization: 'Bearer t',
+          cookie: 'a=b',
+          'idempotency-key': 'k',
+          'user-agent': 'curl',
+          'content-type': 'application/json',
+          Referer: 'https://app.x.com/cb?code=ZALO&state=S',
+        },
+      },
+    } as unknown as ErrorEvent)!;
+    expect(out.request!.headers).toEqual({ 'user-agent': 'curl', 'content-type': 'application/json', Referer: 'https://app.x.com/cb' });
+  });
+});
+
+describe('capturePrismaError', () => {
+  it('gửi thông điệp cố định, không có message gốc hay giá trị meta', () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const sdk = fakeSdk();
+    initSentry({ SENTRY_DSN: 'https://k@o.example.com/1' }, sdk);
+    const err = new Prisma.PrismaClientKnownRequestError('Invalid invocation phone: "0901234567"', {
+      code: 'P2000',
+      clientVersion: 't',
+      meta: { modelName: 'User', target: ['0901234567'] },
+    });
+    capturePrismaError(err, 'POST /api/webhooks/gomdon/SUPERSECRET', sdk);
+    const sent = sdk.captureException.mock.calls[0]![0] as Error;
+    const blob = `${sent.name} ${sent.message} ${sent.stack}`;
+    expect(blob).not.toContain('0901234567');
+    expect(blob).not.toContain('SUPERSECRET');
+    expect(blob).toContain('PrismaClientKnownRequestError');
+    expect(blob).toContain('P2000');
+    expect(blob).toContain('User');
+  });
+
+  it('PrismaClientValidationError (không code) cũng chỉ gửi tên lớp và route', () => {
+    const { Prisma } = jest.requireActual('@prisma/client');
+    const sdk = fakeSdk();
+    initSentry({ SENTRY_DSN: 'https://k@o.example.com/1' }, sdk);
+    capturePrismaError(new Prisma.PrismaClientValidationError('address: "12 Le Loi" 0901234567', { clientVersion: 't' }), 'GET /x', sdk);
+    const sent = sdk.captureException.mock.calls[0]![0] as Error;
+    expect(`${sent.message} ${sent.stack}`).not.toContain('0901234567');
+    expect(sent.message).toContain('GET /x');
   });
 });

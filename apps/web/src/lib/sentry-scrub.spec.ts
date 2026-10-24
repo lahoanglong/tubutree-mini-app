@@ -17,6 +17,22 @@ describe('scrubEvent', () => {
     expect(out.breadcrumbs).toEqual([]);
   });
 
+  it('chỉ giữ header vô hại, referer bị cắt query', () => {
+    const out = scrubEvent({
+      request: {
+        headers: { 'x-accesstrade-token': 'AT', 'x-webhook-token': 's', authorization: 'B', cookie: 'c', 'user-agent': 'ua', Referer: 'https://app.x.com/cb?code=Z&state=S' },
+      },
+    });
+    expect(out.request!.headers).toEqual({ 'user-agent': 'ua', Referer: 'https://app.x.com/cb' });
+  });
+
+  it('không init SDK với tracesSampleRate (0 vẫn bật span và nạp thêm integration OTel)', async () => {
+    const { readFileSync } = await import('node:fs');
+    for (const f of ['sentry-client.ts', 'sentry-server.ts']) {
+      expect(readFileSync(new URL(`./${f}`, import.meta.url), 'utf8')).not.toMatch(/tracesSampleRate:/);
+    }
+  });
+
   it('event không có request vẫn qua', () => {
     expect(scrubEvent({})).toEqual({});
   });

@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Response } from 'express';
-import { captureServerError } from '../../config/sentry';
+import { capturePrismaError } from '../../config/sentry';
 import { redactUrl } from './redact-url';
 
 /**
@@ -49,7 +49,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       // Không có `code` ổn định để phân loại (Init/Validation/Unknown/RustPanic) — log đầy đủ,
       // trả 500 chung, không lộ chi tiết lỗi thật ra ngoài.
       this.logger.error(`Prisma ${exception.constructor.name} on ${route}: ${exception.message}`, exception.stack);
-      captureServerError(exception);
+      capturePrismaError(exception, route);
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         code: 'INTERNAL_ERROR',
@@ -74,7 +74,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
       return;
     }
     this.logger.error(`Prisma ${exception.code} on ${route}: ${exception.message}`);
-    captureServerError(exception);
+    capturePrismaError(exception, route);
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       message: 'Lỗi cơ sở dữ liệu.',
