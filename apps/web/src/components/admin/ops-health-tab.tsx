@@ -527,6 +527,45 @@ function HealthBody({
         )}
       </section>
 
+      {h.cronJobs && h.cronJobs.length > 0 && (
+        <section aria-label="Tác vụ nền" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+          <h3 className="font-display text-sm font-semibold text-stone-900">Tác vụ nền (cron)</h3>
+          <ScrollRegion label="Bảng tác vụ nền" className="mt-2">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-stone-50 text-xs text-stone-500">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Tác vụ</th>
+                  <th className="px-3 py-2 font-medium">Thành công gần nhất</th>
+                  <th className="px-3 py-2 font-medium">Lỗi gần nhất</th>
+                  <th className="px-3 py-2 font-medium">Lỗi liên tiếp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...h.cronJobs]
+                  .sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.job.localeCompare(b.job))
+                  .map((j) => (
+                    <tr key={j.job} className="border-t border-stone-100 align-top">
+                      <td className="px-3 py-2 font-medium text-stone-900">{j.job}</td>
+                      <td className="px-3 py-2">{ago(j.lastSuccessAt)}</td>
+                      <td className="px-3 py-2">
+                        {j.lastError ? (
+                          <>
+                            <span className="block text-xs text-stone-500">{formatDateTime(j.lastErrorAt ?? j.lastFinishedAt)}</span>
+                            <span className={`block break-words text-xs ${j.consecutiveFailures > 0 ? 'text-danger-fg' : 'text-stone-500'}`}>{j.lastError}</span>
+                          </>
+                        ) : (
+                          <span className="text-stone-500">chưa có</span>
+                        )}
+                      </td>
+                      <td className={`px-3 py-2 ${j.consecutiveFailures > 0 ? 'font-semibold text-danger-fg' : 'text-stone-500'}`}>{j.consecutiveFailures}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </ScrollRegion>
+        </section>
+      )}
+
       {events.length > 0 && (
         <ListSection title="Webhook lỗi cần xử lý">
           {events.map((e) => (

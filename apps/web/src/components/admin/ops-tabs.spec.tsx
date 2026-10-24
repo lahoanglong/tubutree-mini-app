@@ -370,6 +370,35 @@ describe('OpsHealthTab — kênh email báo động (R8)', () => {
   });
 });
 
+describe('OpsHealthTab — tác vụ nền (cron_runs)', () => {
+  const JOBS = [
+    { job: 'Foo.bar', lastStartedAt: '2026-10-24T03:00:00.000Z', lastFinishedAt: '2026-10-24T03:00:02.000Z', lastSuccessAt: '2026-10-24T03:00:02.000Z', lastErrorAt: null, lastError: null, consecutiveFailures: 0, lastDurationMs: 2000 },
+    { job: 'Baz.qux', lastStartedAt: '2026-10-24T04:00:00.000Z', lastFinishedAt: '2026-10-24T04:00:01.000Z', lastSuccessAt: null, lastErrorAt: '2026-10-24T04:00:01.000Z', lastError: 'TypeError: kho lỗi', consecutiveFailures: 3, lastDurationMs: 1000 },
+  ];
+
+  it('liệt kê job, lần thành công cuối, lỗi cuối và số lần lỗi liên tiếp; job đang lỗi tô đỏ', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...HEALTH, cronJobs: JOBS } } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    const section = c.querySelector('section[aria-label="Tác vụ nền"]');
+    expect(section).not.toBeNull();
+    expect(section!.textContent).toContain('Foo.bar');
+    expect(section!.textContent).toContain('Baz.qux');
+    expect(section!.textContent).toContain('TypeError: kho lỗi');
+    expect(section!.textContent).toContain('chưa có');
+    const rows = [...section!.querySelectorAll('tbody tr')];
+    expect(rows[0]!.textContent).toContain('Baz.qux');
+    expect(rows[0]!.querySelector('.text-danger-fg')).not.toBeNull();
+    expect(rows[1]!.querySelector('.text-danger-fg')).toBeNull();
+    expect(scrollRegionProblems(c)).toEqual([]);
+  });
+
+  it('API cũ hoặc chưa có dòng nào: không hiện mục', async () => {
+    vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: HEALTH } }).fn));
+    const c = await mount(<OpsHealthTab />);
+    expect(c.querySelector('section[aria-label="Tác vụ nền"]')).toBeNull();
+  });
+});
+
 describe('OpsHealthTab — kênh webhook báo động (R6-ADMIN-4)', () => {
   const EMAIL = { state: 'DISABLED', recipients: 0, issues: [], lastOkAt: null, lastErrorAt: null, lastError: null };
   const webhook = (over: Record<string, unknown> = {}) => ({

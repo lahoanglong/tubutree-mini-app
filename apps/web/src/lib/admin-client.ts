@@ -1873,6 +1873,17 @@ export interface OpsWebhookChannel {
   /** Cách sửa cho lỗi PERMANENT. */
   lastErrorHint?: string | null;
 }
+/** Lần chạy gần nhất của một tác vụ nền (@Cron) ở API. */
+export interface OpsCronJob {
+  job: string;
+  lastStartedAt: string;
+  lastFinishedAt: string;
+  lastSuccessAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+  consecutiveFailures: number;
+  lastDurationMs: number;
+}
 export interface OpsHealth {
   generatedAt: string;
   thresholds: {
@@ -1922,6 +1933,8 @@ export interface OpsHealth {
   };
   /** Kênh báo động ngoài app. Tuỳ chọn: API cũ chưa trả trường này. */
   alertChannels?: { email: OpsEmailChannel; webhook?: OpsWebhookChannel };
+  /** Tác vụ nền đã chạy ít nhất một lần. Tuỳ chọn: API cũ chưa trả trường này. */
+  cronJobs?: OpsCronJob[];
   problems: { key: string; message: string }[];
 }
 export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
