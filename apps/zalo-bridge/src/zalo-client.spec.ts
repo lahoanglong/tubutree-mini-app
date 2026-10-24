@@ -217,6 +217,19 @@ describe('zalo-client: send', () => {
     await expect(s.client.send({ idempotencyKey: 'k', text: 'a' })).resolves.toEqual({ msgId: '111' });
   });
 
+  it('tin đã xếp hàng mà phiên bị đăng xuất hay bị đá trước lúc tới lượt thì NOT_CONNECTED, không gửi', async () => {
+    const s = await connected();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const first = s.deps.queue.enqueue(() => gate);
+    const second = s.client.send({ idempotencyKey: 'late', text: 'b' });
+    await s.client.logout();
+    release();
+    await first;
+    await expect(second).rejects.toMatchObject({ code: 'NOT_CONNECTED' });
+    expect(s.api.sendMessage).not.toHaveBeenCalled();
+  });
+
   it('chưa có nhóm thì NO_GROUP, chưa kết nối thì NOT_CONNECTED', async () => {
     const s = await connected({ groupId: null });
     await expect(s.client.send({ idempotencyKey: 'k', text: 'a' })).rejects.toMatchObject({ code: 'NO_GROUP' });
@@ -253,6 +266,28 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(s.login).toHaveBeenCalledTimes(2);
     expect(s.client.state().state).toBe('CONNECTING');
+  });
+
+  it('socket chập chờn (nối được rồi rớt trong vài giây) thì thời gian chờ nối lại tăng dần', async () => {
+    const s = await connected();
+    let api = s.api;
+    const waits: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const next = fakeApi();
+      s.login.mockResolvedValueOnce(next);
+      api.listener.emit('closed', 1006, '');
+      const before = s.login.mock.calls.length;
+      const wait = 5_000 * 2 ** i;
+      await vi.advanceTimersByTimeAsync(wait - 1);
+      expect(s.login.mock.calls.length).toBe(before);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(s.login.mock.calls.length).toBe(before + 1);
+      waits.push(wait);
+      next.listener.emit('connected');
+      await vi.advanceTimersByTimeAsync(5_000);
+      api = next;
+    }
+    expect(waits).toEqual([5_000, 10_000, 20_000]);
   });
 
   it('closed rồi disconnected liên tiếp chỉ hẹn một lần', async () => {
@@ -308,6 +343,7 @@ describe('zalo-client: trạng thái và kết nối lại', () => {
     await vi.advanceTimersByTimeAsync(5_000);
     api2.listener.emit('connected');
     expect(s.client.state().state).toBe('CONNECTED');
+    await vi.advanceTimersByTimeAsync(60_000);
     s.login.mockRejectedValue(new Error('net'));
     api2.listener.emit('closed', 1006, '');
     await vi.advanceTimersByTimeAsync(5_000);

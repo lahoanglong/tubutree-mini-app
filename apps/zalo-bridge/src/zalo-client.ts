@@ -92,6 +92,7 @@ const KICKED_CODES = new Set([3000, 3003]);
 const LOGIN_TIMEOUT_MS = 60_000;
 const QR_FIRST_IMAGE_TIMEOUT_MS = 20_000;
 const GROUP_INFO_CHUNK = 50;
+const STABLE_MS = 60_000;
 
 type BridgeState = ZaloBridgeHealth['state'];
 
@@ -121,6 +122,11 @@ export function createZaloClient(deps: ZaloClientDeps) {
   let qrAbort: (() => unknown) | null = null;
   const inflight = new Map<string, Promise<{ msgId: string }>>();
   const reconnector = new Reconnector(() => void connect(false));
+  let stableTimer: NodeJS.Timeout | null = null;
+  const clearStable = (): void => {
+    if (stableTimer) clearTimeout(stableTimer);
+    stableTimer = null;
+  };
 
   // Không log nội dung tin; outbox đã tự ghi đĩa nên lỗi ghi chỉ cần dấu vết, không được làm sập tiến trình.
   const pushEvent = (e: ZaloBridgeEvent): void => {
@@ -138,6 +144,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
   }
 
   function detach(): void {
+    clearStable();
     const old = api;
     api = null;
     if (!old) return;
@@ -193,7 +200,12 @@ export function createZaloClient(deps: ZaloClientDeps) {
     };
 
     next.listener.on('connected', live(() => {
-      reconnector.reset();
+      // Chỉ coi là ổn định (đặt lại thời gian chờ) khi đã giữ được kết nối một lúc, nếu không socket chập chờn sẽ nối lại mỗi 5 giây mãi.
+      clearStable();
+      stableTimer = setTimeout(() => {
+        stableTimer = null;
+        reconnector.reset();
+      }, STABLE_MS);
       setState('CONNECTED');
     }));
 
@@ -346,6 +358,7 @@ export function createZaloClient(deps: ZaloClientDeps) {
     if (!groupId) throw new BridgeError('NO_GROUP');
     const current = api;
     const msgId = await queue.enqueue(async () => {
+      if (api !== current || state !== 'CONNECTED') throw new BridgeError('NOT_CONNECTED');
       // Phải ghi nhận trước khi gọi: Zalo có thể phát lại tin (isSelf) trước khi sendMessage trả về.
       echo.noteSending(text);
       let res: Awaited<ReturnType<ZcaApiLike['sendMessage']>>;

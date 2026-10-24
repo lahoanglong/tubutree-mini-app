@@ -48,8 +48,25 @@ describe('createEventPoster', () => {
     expect(await p.post(msg)).toBe('ok');
   });
 
-  it.each([[503, 'retry'], [500, 'retry'], [502, 'retry'], [401, 'drop'], [400, 'drop'], [404, 'drop']])('HTTP %i thì %s', async (status, want) => {
+  it('conflict thì báo lên nhóm với khoá conflict-<msgId>', async () => {
+    const p = poster(() => json(200, { ok: true, conflict: { routed: 'K7Q2', typed: 'B2CD' } }));
+    expect(await p.post(msg)).toBe('ok');
+    expect(p.notify).toHaveBeenCalledWith({
+      idempotencyKey: 'conflict-M9',
+      text: 'Tin trả lời trích tin của #K7Q2 nhưng ghi mã #B2CD, chưa gửi cho khách nào. Trích đúng tin hoặc chỉ ghi một mã rồi gửi lại.',
+    });
+  });
+
+  it.each([[503, 'retry'], [500, 'retry'], [502, 'retry'], [401, 'retry'], [404, 'retry'], [403, 'retry'], [400, 'drop'], [413, 'drop']])('HTTP %i thì %s', async (status, want) => {
     expect(await poster(() => json(status)).post(msg)).toBe(want);
+  });
+
+  it('401 ghi một dòng nhắc kiểm tra khoá, không lộ khoá', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await poster(() => json(401)).post(msg);
+    expect(err).toHaveBeenCalledWith('[bridge] API từ chối khoá (401) — kiểm tra ZALO_BRIDGE_SECRET');
+    expect(JSON.stringify(err.mock.calls)).not.toContain('S'.repeat(32));
+    err.mockRestore();
   });
 
   it('lỗi mạng thì retry', async () => {

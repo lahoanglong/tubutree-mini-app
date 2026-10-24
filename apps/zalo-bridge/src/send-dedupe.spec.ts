@@ -27,6 +27,14 @@ describe('SendDedupe', () => {
   });
 });
 
+describe('SendDedupe sức chứa mặc định', () => {
+  it('đủ giữ 24 giờ ở trần 300 tin mỗi giờ (7.200 khoá)', () => {
+    const d = new SendDedupe();
+    for (let i = 0; i < 7_200; i++) d.set(`k${i}`, `m${i}`);
+    expect(d.get('k0')).toBe('m0');
+  });
+});
+
 describe('SendDedupe lưu đĩa', () => {
   it('nạp lại sau khi khởi động lại, bỏ mục hết hạn', async () => {
     const { mkdtempSync } = await import('node:fs');

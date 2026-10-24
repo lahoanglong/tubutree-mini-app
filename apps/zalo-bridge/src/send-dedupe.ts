@@ -10,7 +10,8 @@ export class SendDedupe {
 
   constructor(
     private readonly ttlMs = DAY_MS,
-    private readonly max = 5000,
+    // Phải phủ đủ 24 giờ ở trần 300 tin/giờ (7.200 khoá): khoá bị đẩy ra sớm hơn TTL thì gửi lại có thể đăng trùng lên nhóm.
+    private readonly max = 10_000,
     private readonly now: () => number = Date.now,
     private readonly path?: string,
   ) {

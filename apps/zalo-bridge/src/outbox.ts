@@ -115,8 +115,10 @@ export class Outbox {
     let raw: string;
     try {
       raw = readFileSync(this.path, 'utf8');
-    } catch {
-      return [];
+    } catch (e) {
+      // Chỉ "chưa có tệp" mới được bắt đầu rỗng; lỗi khác mà nuốt thì lần ghi sau sẽ ghi đè các tin chưa gửi.
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw e;
     }
     const t = this.now();
     const out: Entry[] = [];

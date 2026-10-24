@@ -36,7 +36,8 @@ export function createServer(client: ZaloClient, env: Pick<BridgeEnv, 'ZALO_BRID
         await client.logout();
         return send(res, 200, { ok: true });
       case 'POST /reconnect':
-        await client.reconnect();
+        // connect() có thể chạy tới 60 giây; kết quả đã có ở sự kiện trạng thái nên không giữ người gọi chờ.
+        client.reconnect().catch(() => console.error('[bridge] kết nối lại lỗi'));
         return send(res, 200, { ok: true });
       case 'GET /groups':
         return send(res, 200, { groups: await client.groups() });

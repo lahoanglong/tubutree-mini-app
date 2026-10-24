@@ -68,6 +68,20 @@ describe('server', () => {
     expect(client.reconnect).toHaveBeenCalled();
   });
 
+  it('POST /reconnect trả ngay, không đợi connect, lỗi chỉ được ghi log', async () => {
+    client.reconnect.mockImplementationOnce(() => new Promise(() => undefined));
+    const r = await Promise.race([call('POST', '/reconnect'), new Promise<null>((res) => setTimeout(() => res(null), 500))]);
+    expect(r).not.toBeNull();
+    expect(await (r as Response).json()).toEqual({ ok: true });
+
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    client.reconnect.mockRejectedValueOnce(new Error('boom'));
+    expect((await call('POST', '/reconnect')).status).toBe(200);
+    await new Promise((res) => setImmediate(res));
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
+  });
+
   it('GET /groups, chưa kết nối thì 409', async () => {
     expect(await (await call('GET', '/groups')).json()).toEqual({ groups: [{ id: 'G1', name: 'n', memberCount: 2 }] });
     client.groups.mockRejectedValueOnce(new BridgeError('NOT_CONNECTED'));

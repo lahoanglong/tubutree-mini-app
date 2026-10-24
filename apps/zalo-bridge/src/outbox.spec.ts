@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -79,6 +79,17 @@ describe('Outbox', () => {
     await ob.push(ev('1'));
     await ob.flushOnce();
     expect(ob.size()).toBe(0);
+  });
+
+  it('tệp không đọc được vì lý do khác ENOENT thì ném, không bắt đầu rỗng để rồi ghi đè', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ob-'));
+    await mkdir(file(dir));
+    expect(() => new Outbox(dir, async () => 'ok', () => 0)).toThrow();
+  });
+
+  it('chưa có tệp (ENOENT) thì bắt đầu rỗng', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ob-'));
+    expect(new Outbox(dir, async () => 'ok', () => 0).size()).toBe(0);
   });
 
   it('dòng hỏng trong tệp bị bỏ qua, không làm sập', async () => {
