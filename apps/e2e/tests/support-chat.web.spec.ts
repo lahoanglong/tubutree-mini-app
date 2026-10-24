@@ -51,6 +51,12 @@ test.describe('Chat với Tubu Tree — web', () => {
     const box = (await reply.locator('div').filter({ hasText: STAFF_REPLY_TEXT }).last().boundingBox())!;
     const myBox = (await mine.locator('div').filter({ hasText: CUSTOMER_TEXT }).last().boundingBox())!;
     expect(box.x).toBeLessThan(myBox.x);
+
+    const listBox = (await mine.locator('xpath=..').boundingBox())!;
+    const composerBox = (await page.getByRole('textbox', { name: 'Nội dung tin nhắn' }).boundingBox())!;
+    expect(Math.abs(box.x - listBox.x)).toBeLessThanOrEqual(24);
+    expect(Math.abs(listBox.x + listBox.width - (myBox.x + myBox.width))).toBeLessThanOrEqual(24);
+    expect(box.y + box.height).toBeLessThanOrEqual(composerBox.y);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
     // Cả hai project web chạy spec này ở 390 px; chỉ một project ghi ảnh để hai lượt không ghi đè nhau.

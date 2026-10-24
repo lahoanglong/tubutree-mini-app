@@ -36,6 +36,12 @@ test.describe('Chat với Tubu Tree — Mini App', () => {
     const myBox = (await mine.locator('div').filter({ hasText: CUSTOMER_TEXT }).last().boundingBox())!;
     expect(box.x).toBeLessThan(myBox.x);
 
+    const listBox = (await mine.locator('xpath=..').boundingBox())!;
+    const composerBox = (await page.getByRole('textbox', { name: 'Nội dung tin nhắn' }).boundingBox())!;
+    expect(Math.abs(box.x - listBox.x)).toBeLessThanOrEqual(24);
+    expect(Math.abs(listBox.x + listBox.width - (myBox.x + myBox.width))).toBeLessThanOrEqual(24);
+    expect(box.y + box.height).toBeLessThanOrEqual(composerBox.y);
+
     if (process.env.Q5_SCREENS === '1') {
       mkdirSync(SCREENS, { recursive: true });
       await page.screenshot({ path: resolve(SCREENS, 'chat-miniapp-390.png'), scale: 'css' });
