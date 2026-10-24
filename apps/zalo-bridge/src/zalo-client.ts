@@ -244,9 +244,13 @@ export function createZaloClient(deps: ZaloClientDeps) {
       );
     } catch (e) {
       console.error(`[zalo] không lưu được phiên đăng nhập (${errCode(e)}), xoá tệp phiên cũ`);
+      // Xoá cũng lỗi thì trên đĩa còn một phiên không phải desired (phiên nạp lúc khởi động hay tài khoản trước): khởi động lại sẽ dùng nó.
       await clearFile().then(
         () => setStaleFile(null),
-        (c: unknown) => console.error(`[zalo] không xoá được tệp phiên (${errCode(c)})`),
+        (c: unknown) => {
+          console.error(`[zalo] không xoá được tệp phiên (${errCode(c)})`);
+          setStaleFile(`Không xoá được tệp phiên đăng nhập cũ (${errCode(c)})`);
+        },
       );
       if (desired === s) noteSaveError(`Không lưu được phiên đăng nhập: ${errMsg(e)}`);
       throw e;

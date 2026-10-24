@@ -1301,6 +1301,41 @@ describe('zalo-client: đăng nhập QR', () => {
     }
   });
 
+  it('quét QR đè phiên từ đĩa mà lưu lỗi và xoá cũng lỗi: health báo tệp phiên cũ còn sót; kết nối lại lưu được thì hết báo', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const { s, cbs, dones } = qrSetup();
+      // honorCommit: như CredentialStore thật, lần lưu gọi lệnh kiểm trước rename
+      const disk = fakeDisk(s, { cookie: [], imei: 'imX', userAgent: 'u' }, () => 0, true);
+      await s.client.start();
+      const eacces = () => Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      s.credentials.save.mockRejectedValueOnce(eacces());
+      s.credentials.clear.mockRejectedValueOnce(eacces());
+      const p = s.client.qrStart();
+      cbs[0]({ type: 0, data: { image: 'B' } });
+      await p;
+      cbs[0](four('imB'));
+      const apiB = apiUid('UB');
+      dones[0](apiB);
+      await vi.advanceTimersByTimeAsync(6_000);
+      apiB.listener.emit('connected');
+      expect(disk.file).toMatchObject({ imei: 'imX' });
+      expect(s.client.state().lastError).toContain('Không xoá được tệp phiên đăng nhập cũ (EACCES)');
+      // sửa quyền xong, admin bấm Kết nối lại: phiên B được lưu đè lên tệp cũ
+      const apiB2 = apiUid('UB');
+      s.login.mockResolvedValueOnce(apiB2 as never);
+      await s.client.reconnect();
+      await vi.advanceTimersByTimeAsync(100);
+      apiB2.listener.emit('connected');
+      expect(disk.file).toMatchObject({ imei: 'imB' });
+      expect(s.client.state()).toMatchObject({ state: 'CONNECTED', lastError: null });
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
   it('lần lưu bị bỏ (phiên không còn là desired) không xoá lỗi "tệp phiên cũ còn sót"', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
