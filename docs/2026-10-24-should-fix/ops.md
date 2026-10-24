@@ -16,7 +16,7 @@
 - Việc cần làm trước deploy tới: xem `.env` trên VPS có JWT secret đủ 32 ký tự chưa. Nếu chưa, deploy sẽ dừng ở bước kiểm .env (an toàn), nhưng đổi khoá vẫn đăng xuất mọi người.
 - Bằng chứng deploy dừng trước khi thay container cũ, không có downtime (`tools/deploy/deploy.sh`):
   - dòng 184: `dc run --rm --no-deps api node dist/config/check-env.js` chạy bằng image mới (compose đặt NODE_ENV=production cho api), lỗi thì `exit 2`.
-  - dòng 209 (`dc stop api`, chỉ nhánh points_1d), dòng 257 (`up -d --no-build api`), 264 (web), 276 (bridge) đều nằm sau dòng 179.
+  - dòng 209 (`dc stop api`, chỉ nhánh points_1d), dòng 257 (`up -d --no-build api`), 264 (web), 276 (bridge) đều nằm sau dòng 184.
   - Chỉ `docker compose build` chạy trước, và nó không đụng container đang chạy.
 
 ## 4. Trần heap Node
