@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { isPublicProduct } from '../catalog/public-product';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /** Giảm dưới 5% không đáng báo; admin đổi bằng SystemConfig wishlist.price_drop_min_pct (phân số 0..1). */
 const DEFAULT_PRICE_DROP_MIN_PCT = 0.05;
@@ -69,6 +70,7 @@ export class LifecycleService {
    * phần còn lại.
    */
   @Cron('0 4 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async sendReorderReminders(): Promise<void> {
     try {
       // Mặc định mới 30 ngày × 0,8 = nhắc ở ngày 24: SP tiêu dùng phổ thông (dầu gội/tắm/tẩy rửa

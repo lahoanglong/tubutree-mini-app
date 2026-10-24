@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WastePickupHooks } from './waste-pickup-hooks.service';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
 
@@ -32,6 +33,7 @@ export class WastePickupSweepCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */5 * * * *', { name: 'waste.pickup-sweep', timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 2 })
   async handleCron(): Promise<void> {
     try {
       const res = await this.run();
@@ -45,7 +47,7 @@ export class WastePickupSweepCron {
 
   async run(): Promise<SweepResult> {
     const none: SweepResult = { cancelled: 0, started: 0, anomalies: 0 };
-    if (this.running) return none;
+    if (this.running) { markCronSkipped('RUNNING'); return none; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Từng yêu cầu chạy
@@ -54,7 +56,7 @@ export class WastePickupSweepCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext('cron:waste.pickup_sweep')) AS "locked"`;
-          if (!row?.locked) return none;
+          if (!row?.locked) { markCronSkipped('LOCKED'); return none; }
           return this.sweep();
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },

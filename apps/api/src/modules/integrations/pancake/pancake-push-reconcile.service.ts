@@ -17,6 +17,7 @@ import { PREPAID_METHODS } from '../../orders/order-transition';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
 import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { CRON_TZ } from '../../../common/cron-tz';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 /**
  * Lưới an toàn cuối cho P0-2 (docs/2026-09-08-review-progress.md): nếu enqueuePush() ở
@@ -70,9 +71,10 @@ export class PancakePushReconcileService {
   // unhandledRejection, Node 20 mặc định crash cả process. Lỗi enqueuePush từng đơn đã được cô
   // lập ở try/catch trong vòng lặp bên dưới; lớp ngoài này bắt phần còn lại (query, v.v).
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút, lệch mốc với PancakeSyncService cho dễ đọc log
+  @TrackCron({ alertAfter: 2 })
   async reconcile(): Promise<void> {
     try {
-      if (!this.client.isConfigured()) return; // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()
+      if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; } // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()
     } catch (err) {
       this.logger.error(`reconcile lỗi: ${err instanceof Error ? err.message : err}`);
       return;

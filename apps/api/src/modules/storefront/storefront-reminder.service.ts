@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /**
  * Nhắc CTV thêm sản phẩm nổi bật họ chưa có trong gian hàng — giữ CTV quay lại cập nhật thay vì
@@ -32,6 +33,7 @@ export class StorefrontReminderService {
    * lập ở try/catch trong vòng lặp bên dưới.
    */
   @Cron('0 9 * * 1', { timeZone: CRON_TZ })
+  @TrackCron()
   async remindTrendingProducts(): Promise<void> {
     try {
       const trending = await this.prisma.product.findMany({

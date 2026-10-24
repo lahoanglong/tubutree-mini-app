@@ -64,6 +64,7 @@ import { loadDefaultRate, resolveVariationRate } from './commission-rate';
 import { loadPublicVisibility } from '../storefront/public-visibility';
 import type { PublicVisibilityOptions } from '../storefront/storefront-visibility';
 import { affiliateAccess, canPlaceOrderForCustomer, canRegisterAsAffiliate } from './affiliate-access';
+import { TrackCron } from '../../common/cron-run/track-cron';
 export { CTV_MONTHLY_MILESTONES, type CtvMilestone } from './ctv-milestones';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -1330,6 +1331,7 @@ export class AffiliateService {
    * là nhất thời. Bắt lỗi + log để cron thử lại giờ sau thay vì sập process.
    */
   @Cron('0 0 * * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async approveDueCommissions(): Promise<void> {
     try {
       const holdDays = await this.effectiveHoldDays();

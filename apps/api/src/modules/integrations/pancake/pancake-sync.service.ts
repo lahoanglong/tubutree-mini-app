@@ -20,6 +20,7 @@ import {
   type FlatPancakeCategory,
   type PancakeCategoryMap,
 } from './pancake-category-map';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
@@ -155,6 +156,7 @@ export class PancakeSyncService implements OnModuleInit {
   /** Lượt tự động gặp lượt khác đang chạy là chuyện bình thường (boot chậm gặp mốc cron, admin vừa bấm) — chỉ cảnh báo. */
   private logFailure(what: string, err: unknown): void {
     if (err instanceof CatalogSyncBusyError) {
+      markCronSkipped('BUSY');
       this.logger.warn(`${what}: một lượt đồng bộ danh mục khác đang chạy — bỏ qua lượt này.`);
       return;
     }
@@ -162,8 +164,9 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút
+  @TrackCron({ alertAfter: 2 })
   async scheduledSync(): Promise<void> {
-    if (!this.client.isConfigured()) return; // dev: bỏ qua khi chưa có key
+    if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; } // dev: bỏ qua khi chưa có key
     // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — syncProducts() ném ra ngoài (Pancake
     // timeout, DB lỗi...) là unhandledRejection, Node 20 mặc định crash cả process. syncProducts()
     // tự nó vẫn được phép throw (pancake.controller gọi trực tiếp, cần biết khi lỗi để trả HTTP).
@@ -176,8 +179,9 @@ export class PancakeSyncService implements OnModuleInit {
 
   /** Quét toàn bộ mỗi đêm: lượt 15 phút theo updated_since không thấy được hàng đã bị xoá khỏi Pancake. */
   @Cron('0 30 3 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async nightlyFullSync(): Promise<void> {
-    if (!this.client.isConfigured()) return;
+    if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; }
     try {
       await this.syncProducts();
     } catch (err) {
