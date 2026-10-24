@@ -41,6 +41,23 @@ describe('BridgeClient', () => {
     expect(r).toMatchObject({ ok: false, unknown: true, retry: false });
   });
 
+  it('qrStart chờ tới 25 giây (cầu nối đợi ảnh QR đầu tới 20 giây), các lời gọi khác vẫn 10 giây', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn().mockImplementation((_u: string, init: any) =>
+      new Promise((_res, rej) => init.signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' })))),
+    ) as any;
+    let qrDone = false;
+    let groupsDone = false;
+    const qr = client().qrStart().then((v) => ((qrDone = true), v));
+    const groups = client().groups().then((v) => ((groupsDone = true), v));
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(groupsDone).toBe(true);
+    expect(qrDone).toBe(false);
+    await jest.advanceTimersByTimeAsync(15_000);
+    expect(await qr).toMatchObject({ ok: false, code: 'TIMEOUT' });
+    await groups;
+  });
+
   it('409 NOT_CONNECTED thì retry:true, NO_GROUP và 502 thì retry:false', async () => {
     global.fetch = jest.fn().mockReturnValueOnce(json(409, { code: 'NOT_CONNECTED' })).mockReturnValueOnce(json(409, { code: 'NO_GROUP' }))
       .mockReturnValueOnce(json(502, { code: 'SEND_FAILED', message: 'boom' })).mockReturnValueOnce(json(500, {})).mockReturnValueOnce(Promise.resolve({ status: 502, ok: false, json: () => Promise.reject(new Error('no body')) } as Response)) as any;

@@ -25,7 +25,8 @@ function setup(opts: { staffMsgs?: any[]; forwards?: any[]; convs?: any[]; creat
         created.push(data);
         return Promise.resolve({ id: `m${created.length}`, createdAt: new Date(), ...data });
       }),
-      findUnique: jest.fn().mockImplementation(({ where }: any) => Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId) ?? null)),
+      findUnique: jest.fn().mockImplementation(({ where }: any) =>
+        Promise.resolve((opts.staffMsgs ?? []).find((m) => m.zaloMsgId === where.zaloMsgId && (!where.sender || (m.sender ?? 'STAFF') === where.sender)) ?? null)),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null), upsert: jest.fn().mockResolvedValue({}) },
@@ -105,6 +106,64 @@ describe('BridgeEventsService.handle message', () => {
     const { svc, created } = setup();
     await svc.handle(msg({ text: '#k7q2 Dạ đơn giao chiều nay' }));
     expect(created[0]).toMatchObject({ conversationId: 'c1', body: 'Dạ đơn giao chiều nay' });
+  });
+
+  describe('trích tin một khách nhưng ghi mã khách khác', () => {
+    const two = {
+      convs: [{ id: 'c1', userId: 'u1', code: 'AAAA', blockedAt: null }, { id: 'c2', userId: 'u2', code: 'BBBB', blockedAt: null }],
+      forwards: [fwd({ conversationId: 'c1', zaloMsgId: 'zA' })],
+    };
+    const quoteA = { globalMsgId: 'zA', cliMsgId: '1', text: null };
+
+    it('mã khác hội thoại được trích (dù mã đó có thật): không gửi cho ai, trả conflict', async () => {
+      const { svc, created, notifications } = setup(two);
+      expect(await svc.handle(msg({ text: '#BBBB Dạ đơn giao chiều nay', quote: quoteA }))).toEqual({
+        status: 200,
+        body: { ok: true, conflict: { routed: 'AAAA', typed: 'BBBB' } },
+      });
+      expect(created).toHaveLength(0);
+      expect(notifications.notify).not.toHaveBeenCalled();
+    });
+
+    it('mã khác và không tồn tại cũng là conflict, không rơi về unknownCode', async () => {
+      const { svc, created } = setup(two);
+      expect(await svc.handle(msg({ text: '#zzzz hi', quote: quoteA }))).toEqual({
+        status: 200,
+        body: { ok: true, conflict: { routed: 'AAAA', typed: 'ZZZZ' } },
+      });
+      expect(created).toHaveLength(0);
+    });
+
+    it('mã trùng hội thoại được trích (khác hoa thường): gửi cho khách đó, bỏ mã khỏi nội dung', async () => {
+      const { svc, created } = setup(two);
+      expect(await svc.handle(msg({ text: '#aaaa Dạ ạ', quote: quoteA }))).toEqual({ status: 200, body: { ok: true } });
+      expect(created[0]).toMatchObject({ conversationId: 'c1', body: 'Dạ ạ' });
+    });
+
+    it('trích câu trả lời STAFF cũ của khách này mà ghi mã khách kia: conflict', async () => {
+      const { svc, created } = setup({ ...two, forwards: [], staffMsgs: [{ zaloMsgId: 'zs', conversationId: 'c1', sender: 'STAFF' }] });
+      const r = await svc.handle(msg({ text: '#BBBB hi', quote: { globalMsgId: 'zs', cliMsgId: '1', text: 'x' } }));
+      expect(r.body).toEqual({ ok: true, conflict: { routed: 'AAAA', typed: 'BBBB' } });
+      expect(created).toHaveLength(0);
+    });
+  });
+
+  it('tìm tin được trích chỉ trong tin STAFF, bỏ qua hàng của khách', async () => {
+    const { svc, created, prisma } = setup({ staffMsgs: [{ zaloMsgId: 'zcust', conversationId: 'c1', sender: 'CUSTOMER' }] });
+    expect(await svc.handle(msg({ text: 'Dạ', quote: { globalMsgId: 'zcust', cliMsgId: '1', text: 'x' } }))).toEqual({ status: 200, body: { ok: true } });
+    expect(created).toHaveLength(0);
+    expect(prisma.supportMessage.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { zaloMsgId: 'zcust', sender: 'STAFF' } }));
+  });
+
+  it('khách vừa đọc (customerReadAt trong 15 giây): lưu tin nhưng không báo chuông; quá 15 giây thì báo', async () => {
+    const mk = (readAgoMs: number) => setup({ convs: [{ id: 'c1', userId: 'u1', code: 'K7Q2', blockedAt: null, customerReadAt: new Date(Date.now() - readAgoMs) }] });
+    const open = mk(5_000);
+    await open.svc.handle(msg({ text: '#K7Q2 hi' }));
+    expect(open.created).toHaveLength(1);
+    expect(open.notifications.notify).not.toHaveBeenCalled();
+    const away = mk(20_000);
+    await away.svc.handle(msg({ text: '#K7Q2 hi' }));
+    expect(away.notifications.notify).toHaveBeenCalledTimes(1);
   });
 
   it('mã không tồn tại: 200 kèm unknownCode, không tạo tin', async () => {

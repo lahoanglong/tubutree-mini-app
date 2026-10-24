@@ -5,6 +5,8 @@ import type { Env } from '../../config/env.validation';
 
 const SEND_TIMEOUT_MS = 15_000;
 const DEFAULT_TIMEOUT_MS = 10_000;
+/** Cầu nối đợi ảnh QR đầu tiên tới 20 giây. */
+const QR_START_TIMEOUT_MS = 25_000;
 
 export interface BridgeFailure {
   ok: false;
@@ -46,7 +48,7 @@ export class BridgeClient {
   }
 
   qrStart() {
-    return this.call<{ status: 'WAITING_SCAN'; image: string }>('POST', '/qr/start');
+    return this.call<{ status: 'WAITING_SCAN'; image: string }>('POST', '/qr/start', undefined, QR_START_TIMEOUT_MS);
   }
   qrStatus() {
     return this.call<BridgeQrStatus>('GET', '/qr/status');

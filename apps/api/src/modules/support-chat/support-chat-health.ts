@@ -13,6 +13,20 @@ export function resumablePendingForwardWhere(now: Date): Prisma.SupportForwardWh
   return { status: 'PENDING', zaloMsgId: null, updatedAt: { lt: new Date(now.getTime() - STALE_PENDING_MS), gte: new Date(now.getTime() - STALE_PENDING_AUTO_MAX_MS) } };
 }
 
+/** Mã lỗi chứng tỏ cầu nối chưa đăng gì lên nhóm: gửi lại tự động an toàn. SEND_FAILED và UNKNOWN thì không (có thể đã đăng). */
+export const TRANSIENT_FAILURE_CODES = ['NOT_CONNECTED', 'NO_GROUP', 'NETWORK', 'BRIDGE_NOT_CONFIGURED'] as const;
+
+/** `lastError` được ghi dạng `MÃ: lời nhắn` (forward-delivery) nên mã nằm ở đầu chuỗi. */
+export function resumableFailedForwardWhere(now: Date): Prisma.SupportForwardWhereInput {
+  return {
+    status: 'FAILED',
+    zaloMsgId: null,
+    createdAt: { gte: new Date(now.getTime() - STALE_PENDING_AUTO_MAX_MS) },
+    conversation: { blockedAt: null },
+    OR: TRANSIENT_FAILURE_CODES.map((c) => ({ lastError: { startsWith: `${c}:` } })),
+  };
+}
+
 export function stalePendingForwardWhere(now: Date): Prisma.SupportForwardWhereInput {
   return { status: 'PENDING', zaloMsgId: null, updatedAt: { lt: new Date(now.getTime() - STALE_PENDING_MS) } };
 }

@@ -133,6 +133,7 @@ export class SupportChatService {
       throw new HttpException({ statusCode: 429, error: 'Too Many Requests', code: 'CHAT_DAILY_LIMIT', message: 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.' }, HttpStatus.TOO_MANY_REQUESTS);
     }
 
+    const context = await this.ownedContext(userId, input.context);
     let created: SupportMessage;
     try {
       created = await this.prisma.supportMessage.create({
@@ -142,7 +143,7 @@ export class SupportChatService {
           source,
           body,
           imageUrl: input.imageUrl ?? null,
-          context: input.context ? (input.context as Prisma.InputJsonValue) : undefined,
+          context: context ? (context as Prisma.InputJsonValue) : undefined,
           clientMsgId: input.clientMsgId,
         },
       });
@@ -168,6 +169,15 @@ export class SupportChatService {
       this.logger.warn(`Bước phụ sau khi lưu tin hội thoại ${conv.id} lỗi: ${(e as Error).message}`);
     }
     return toCustomerDTO(created);
+  }
+
+  /** Mã đơn đi tới nhân viên như một dòng hệ thống đáng tin, nên chỉ giữ khi đơn thuộc chính người gửi (mã đơn lấy từ URL, dễ nhầm hoặc bị chép). */
+  private async ownedContext(userId: string, context: SupportChatSendInput['context']): Promise<SupportChatSendInput['context']> {
+    if (!context?.orderCode) return context;
+    const { orderCode, ...rest } = context;
+    const own = await this.prisma.order.findFirst({ where: { code: orderCode, userId }, select: { id: true } });
+    const kept = own ? context : rest;
+    return Object.keys(kept).length > 0 ? kept : undefined;
   }
 
   async markRead(userId: string): Promise<{ ok: true }> {

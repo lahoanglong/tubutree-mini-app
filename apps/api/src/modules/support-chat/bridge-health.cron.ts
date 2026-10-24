@@ -7,7 +7,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { BridgeClient } from './bridge-client';
-import { STALE_AFTER_MS, resumablePendingForwardWhere } from './support-chat-health';
+import { buildForwardText, sendAndSettle } from './forward-delivery';
+import { STALE_AFTER_MS, resumableFailedForwardWhere, resumablePendingForwardWhere } from './support-chat-health';
 import { SupportChatService } from './support-chat.service';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
@@ -15,6 +16,8 @@ const ALERT_EVERY_MS = 60 * 60_000;
 /** Tin khách chưa chuyển quá ngần này mới quét: tin mới còn trong cửa sổ gộp 15 giây của job thường. */
 const SWEEP_AFTER_MS = 2 * 60_000;
 const SWEEP_BATCH = 100;
+/** Mỗi phút gửi lại tối đa ngần này forward FAILED: sau sự cố dài không dồn một cục vào hàng đợi 300 tin/giờ của cầu nối. */
+const RESUME_FAILED_BATCH = 20;
 
 /**
  * Mỗi phút: ghi trạng thái cầu nối, đồng bộ nhóm, báo admin khi mất kết nối lâu, và nhặt lại tin khách chưa được chuyển
@@ -24,6 +27,7 @@ const SWEEP_BATCH = 100;
 export class BridgeHealthCron {
   private readonly logger = new Logger(BridgeHealthCron.name);
   private running = false;
+  private canResumeFailed = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -38,9 +42,11 @@ export class BridgeHealthCron {
     // Chưa cấu hình cầu nối (môi trường chưa dùng chat): không có gì để kiểm, báo hay quét.
     if (this.running || !this.bridge.isConfigured()) return;
     this.running = true;
+    this.canResumeFailed = false;
     try {
       await this.step('kiểm tra sức khoẻ cầu nối', () => this.checkHealth());
       await this.step('quét tin chưa chuyển', () => this.sweep());
+      await this.step('gửi lại forward lỗi tạm', () => this.resumeFailedForwards());
     } finally {
       this.running = false;
     }
@@ -74,17 +80,23 @@ export class BridgeHealthCron {
     };
     await this.prisma.supportBridgeStatus.upsert({ where: { id: 'main' }, create: { id: 'main', ...fields }, update: fields });
 
-    if (h) await this.healGroup(h.groupId);
+    if (h) {
+      const groupSet = await this.healGroup(h.groupId);
+      this.canResumeFailed = state === 'CONNECTED' && groupSet;
+    }
     // Chat đang tắt thì vẫn kiểm, đồng bộ nhóm và quét (tin nhận lúc chat bật vẫn phải đi), chỉ không làm phiền admin.
     if (state !== 'CONNECTED' && (await this.config.get<boolean>(CHAT_ENABLED_KEY, false))) await this.alertIfDown(state, since, prev?.downAlertedAt ?? null, now);
   }
 
   /** Admin sửa `chat.zalo_group_id` ở tab Cấu hình chung thì cầu nối không biết; cron kéo nó về đúng giá trị cấu hình. */
-  private async healGroup(bridgeGroupId: string | null): Promise<void> {
+  private async healGroup(bridgeGroupId: string | null): Promise<boolean> {
     const wanted = await this.config.get<string>(CHAT_GROUP_KEY, '');
-    if (wanted === '' || wanted === (bridgeGroupId ?? '')) return;
-    const r = await this.bridge.setGroup(wanted);
-    if (!r.ok) this.logger.warn(`Không đồng bộ được nhóm cho cầu nối: ${r.code}`);
+    if (wanted !== (bridgeGroupId ?? '')) {
+      // Cấu hình rỗng là "không nhóm nào": cầu nối còn nhóm cũ thì vẫn nghe và chuyển tin vào nhóm đó.
+      const r = await this.bridge.setGroup(wanted === '' ? null : wanted);
+      if (!r.ok) this.logger.warn(`Không đồng bộ được nhóm cho cầu nối: ${r.code}`);
+    }
+    return wanted !== '';
   }
 
   private async alertIfDown(state: string, since: Date, alertedAt: Date | null, now: Date): Promise<void> {
@@ -95,6 +107,43 @@ export class BridgeHealthCron {
       { template: 'OPS_ZALO_BRIDGE_DOWN', subject: 'cầu nối Zalo mất kết nối', data: () => ({ since: formatVnDateTime(since), state }) },
     );
     await this.prisma.supportBridgeStatus.update({ where: { id: 'main' }, data: { downAlertedAt: now } });
+  }
+
+  /** Forward FAILED vì cầu nối chưa nhận gửi (mất kết nối, chưa chọn nhóm...) tự gửi lại khi cầu nối đã CONNECTED và có nhóm. */
+  private async resumeFailedForwards(): Promise<void> {
+    if (!this.canResumeFailed) return;
+    const now = new Date();
+    // Sắp theo updatedAt tăng dần: forward vừa thử lại (và hỏng lại) xuống cuối, không chặn các forward sau.
+    const failed = await this.prisma.supportForward.findMany({
+      where: resumableFailedForwardWhere(now),
+      orderBy: { updatedAt: 'asc' },
+      take: RESUME_FAILED_BATCH,
+    });
+    for (const forward of failed) {
+      try {
+        await this.resumeOne(forward);
+      } catch (err) {
+        this.logger.warn(`Gửi lại forward ${forward.id} lỗi: ${(err as Error).message}`);
+        const lastError = `RESUME: ${(err as Error).message}`.slice(0, 500);
+        await this.prisma.supportForward
+          .updateMany({ where: { id: forward.id, status: 'PENDING' }, data: { status: 'FAILED', lastError } })
+          .catch(() => undefined);
+      }
+    }
+  }
+
+  private async resumeOne(forward: { id: string; conversationId: string }): Promise<void> {
+    const messages = await this.prisma.supportMessage.findMany({
+      where: { conversationId: forward.conversationId, forwardId: forward.id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const conv = await this.prisma.supportConversation.findUnique({ where: { id: forward.conversationId } });
+    if (messages.length === 0 || !conv) return;
+    // Cùng cách chuyển trạng thái nguyên tử với admin gửi lại: hai lượt quét chạy song song thì chỉ một bên gửi.
+    const claimed = await this.prisma.supportForward.updateMany({ where: { id: forward.id, status: 'FAILED' }, data: { status: 'PENDING' } });
+    if (claimed.count === 0) return;
+    const text = await buildForwardText(this.prisma, conv, messages);
+    await sendAndSettle(this.prisma, this.bridge, forward, text, false);
   }
 
   private async sweep(): Promise<void> {

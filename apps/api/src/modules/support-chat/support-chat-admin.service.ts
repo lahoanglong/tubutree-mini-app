@@ -6,7 +6,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { VN_OFFSET_MS } from '../../common/vn-time';
 import { searchPhone, userPhoneClauses } from '../admin/admin-order-filter';
 import { BridgeClient, type BridgeFailure } from './bridge-client';
-import { NOTIFY_DEDUPE_MS, replyPreview } from './bridge-events.service';
+import { NOTIFY_DEDUPE_MS, customerIsViewing, replyPreview } from './bridge-events.service';
 import { buildForwardText, sendAndSettle } from './forward-delivery';
 import { isStalePendingForward, stalePendingForwardWhere, unforwardedWhere } from './support-chat-health';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
@@ -176,12 +176,14 @@ export class SupportChatAdminService {
     });
     try {
       await this.prisma.supportConversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date() } });
-      await this.notifications.notify(
-        conv.userId,
-        'SUPPORT_CHAT_REPLY',
-        { preview: replyPreview(text, null), route: '/chat' },
-        { dedupeKey: `support-reply-${conversationId}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
-      );
+      if (!customerIsViewing(conv)) {
+        await this.notifications.notify(
+          conv.userId,
+          'SUPPORT_CHAT_REPLY',
+          { preview: replyPreview(text, null), route: '/chat' },
+          { dedupeKey: `support-reply-${conversationId}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
+        );
+      }
     } catch (err) {
       this.logger.warn(`Bước phụ sau trả lời của admin ${created.id} lỗi: ${(err as Error).message}`);
     }

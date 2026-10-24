@@ -6,6 +6,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { SupportChatService } from '../../src/modules/support-chat/support-chat.service';
 import { SupportChatForwardProcessor } from '../../src/modules/support-chat/support-chat-forward.processor';
+import { BridgeHealthCron } from '../../src/modules/support-chat/bridge-health.cron';
 import { BridgeEventsService } from '../../src/modules/support-chat/bridge-events.service';
 import { formatForward } from '../../src/modules/support-chat/forward-format';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY } from '../../src/modules/support-chat/support-chat.config';
@@ -22,6 +23,8 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
   let processor: SupportChatForwardProcessor;
   let events: BridgeEventsService;
   let notify: jest.Mock;
+  let bridge: any;
+  let cfg: SystemConfigService;
   let sends: { key: string; text: string }[];
   const userIds: string[] = [];
   const restores: (() => Promise<void>)[] = [];
@@ -36,12 +39,13 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     // Cả ngày là giờ làm việc để không sinh tin SYSTEM ngoài giờ lẫn vào kết quả.
     restores.push(await pinConfig(prisma, CHAT_HOURS_KEY, { start: '00:00', end: '23:59' }));
     const config = new SystemConfigService(prisma);
+    cfg = config;
     const queue: any = { getJob: async () => null, add: async () => ({}) };
     chat = new SupportChatService(prisma, config, queue);
     sends = [];
     // Giống cầu nối thật: cùng idempotencyKey thì trả lại msgId cũ, không gửi đôi.
     const byKey = new Map<string, string>();
-    const bridge: any = {
+    bridge = {
       send: async (key: string, text: string) => {
         await new Promise((r) => setTimeout(r, 30));
         if (!byKey.has(key)) {
@@ -99,6 +103,40 @@ describe('Chat CSKH: chuyển tin khách và nhận trả lời (real Postgres)'
     expect(a.id).toBe(b.id);
     const conv = await prisma.supportConversation.findUniqueOrThrow({ where: { userId: u.id } });
     expect(await prisma.supportMessage.count({ where: { conversationId: conv.id, sender: 'CUSTOMER' } })).toBe(1);
+  });
+
+  it('forward FAILED NOT_CONNECTED: hai lượt quét song song khi cầu nối đã CONNECTED chỉ gửi lại đúng một lần', async () => {
+    const u = await customer();
+    await chat.getThread(u.id);
+    const conv = await prisma.supportConversation.findUniqueOrThrow({ where: { userId: u.id } });
+    const f = await prisma.supportForward.create({
+      data: { conversationId: conv.id, groupId: 'g-it', status: 'FAILED', lastError: 'NOT_CONNECTED: Cầu nối chưa kết nối', attempts: 5 },
+    });
+    await prisma.supportMessage.create({ data: { conversationId: conv.id, sender: 'CUSTOMER', source: 'WEB', body: 'tin bị kẹt', forwardId: f.id, clientMsgId: `cm-${randCode(10)}` } });
+    const noise = await prisma.supportForward.create({
+      data: { conversationId: conv.id, groupId: 'g-it', status: 'FAILED', lastError: 'SEND_FAILED: Zalo từ chối', attempts: 1 },
+    });
+
+    const callsFor: string[] = [];
+    const cronBridge: any = {
+      isConfigured: () => true,
+      send: (key: string, text: string) => {
+        callsFor.push(key);
+        return bridge.send(key, text);
+      },
+      setGroup: async () => ({ ok: true, data: {} }),
+      health: async () => ({ state: 'CONNECTED', zaloUid: 'z', displayName: 'CSKH', avatar: null, since: new Date().toISOString(), lastError: null, queueSize: 0, outboxSize: 0, groupId: 'g-it' }),
+    };
+    const mk = () => new BridgeHealthCron(prisma, cronBridge, cfg, chat, { notify: jest.fn() } as never);
+    await Promise.all([mk().everyMinute(), mk().everyMinute()]);
+
+    const after = await prisma.supportForward.findUniqueOrThrow({ where: { id: f.id } });
+    expect(after.status).toBe('SENT');
+    expect(after.zaloMsgId).toMatch(/^zr-/);
+    expect(callsFor.filter((k) => k === f.id)).toHaveLength(1);
+    expect((await prisma.supportForward.findUniqueOrThrow({ where: { id: noise.id } })).status).toBe('FAILED');
+    expect(callsFor).not.toContain(noise.id);
+    await prisma.supportBridgeStatus.deleteMany({ where: { id: 'main' } });
   });
 
   async function convWithForward(forward: { status?: 'PENDING' | 'SENT'; zaloMsgId?: string | null } = {}) {

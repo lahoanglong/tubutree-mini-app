@@ -7,15 +7,23 @@ import { parseStaffReply } from './staff-reply-parse';
 
 type MessageEvent = Extract<ZaloBridgeEvent, { type: 'message' }>;
 export type BridgeEventResult =
-  | { status: 200; body: { ok: true; unknownCode?: string } }
+  | { status: 200; body: { ok: true; unknownCode?: string; conflict?: { routed: string; typed: string } } }
   | { status: 503; body: { retry: true } };
 
 const OK: BridgeEventResult = { status: 200, body: { ok: true } };
 /** Quá ngần này mà forward vẫn chưa có zaloMsgId thì coi là hỏng, không giữ tin nhân viên chờ mãi. */
 const PENDING_FORWARD_WINDOW_MS = 5 * 60_000;
 export const NOTIFY_DEDUPE_MS = 10 * 60_000;
+/** Màn chat đang mở thì đánh dấu đã đọc theo mỗi lần hỏi 5 giây; trong ngần này coi là khách đang xem, không cần chuông. */
+const CUSTOMER_VIEWING_MS = 15_000;
+
+export function customerIsViewing(conv: { customerReadAt: Date | null }, now = Date.now()): boolean {
+  return !!conv.customerReadAt && now - conv.customerReadAt.getTime() <= CUSTOMER_VIEWING_MS;
+}
 const PREVIEW_MAX = 60;
 const IMAGE_PREVIEW = 'Ảnh từ Tubu Tree';
+
+type ConversationHit = { id: string; userId: string; code: string; customerReadAt: Date | null };
 
 const isP2002 = (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002';
 
@@ -64,6 +72,7 @@ export class BridgeEventsService {
     const conv = await this.findConversation(e, code);
     if (conv === 'retry') return { status: 503, body: { retry: true } };
     if (conv === 'unknown') return { status: 200, body: { ok: true, unknownCode: code! } };
+    if (conv && 'conflict' in conv) return { status: 200, body: { ok: true, conflict: conv.conflict } };
     if (!conv) return OK;
     if (!body && !e.imageUrl) return OK;
 
@@ -88,12 +97,14 @@ export class BridgeEventsService {
 
     try {
       await this.prisma.supportConversation.update({ where: { id: conv.id }, data: { lastMessageAt: new Date() } });
-      await this.notifications.notify(
-        conv.userId,
-        'SUPPORT_CHAT_REPLY',
-        { preview: replyPreview(body, e.imageUrl), route: '/chat' },
-        { dedupeKey: `support-reply-${conv.id}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
-      );
+      if (!customerIsViewing(conv)) {
+        await this.notifications.notify(
+          conv.userId,
+          'SUPPORT_CHAT_REPLY',
+          { preview: replyPreview(body, e.imageUrl), route: '/chat' },
+          { dedupeKey: `support-reply-${conv.id}`, dedupeWithinMs: NOTIFY_DEDUPE_MS },
+        );
+      }
     } catch (err) {
       // Tin đã lưu; gửi lại sự kiện cũng chỉ đụng unique zaloMsgId nên không giúp được gì.
       this.logger.warn(`Bước phụ sau tin nhân viên ${created.id} lỗi: ${(err as Error).message}`);
@@ -101,22 +112,16 @@ export class BridgeEventsService {
     return OK;
   }
 
-  /** `retry`: chưa khớp nhưng forward chưa kịp ghi zaloMsgId; `unknown`: mã đầu câu không có hội thoại; null: không phải trả lời. */
-  private async findConversation(
-    e: MessageEvent,
-    code: string | null,
-  ): Promise<{ id: string; userId: string } | 'retry' | 'unknown' | null> {
+  /** `retry`: chưa khớp nhưng forward chưa kịp ghi zaloMsgId; `unknown`: mã đầu câu không có hội thoại; `conflict`: tin trích và mã đầu câu chỉ hai khách khác nhau; null: không phải trả lời. */
+  private async findConversation(e: MessageEvent, code: string | null): Promise<ConversationHit | 'retry' | 'unknown' | { conflict: { routed: string; typed: string } } | null> {
     if (e.quote) {
-      const forward = await this.prisma.supportForward.findUnique({ where: { zaloMsgId: e.quote.globalMsgId } });
-      // Forward khớp mà khách đã xoá: bỏ hẳn, không để rơi xuống nhánh 503 chờ mãi một tin không bao giờ khớp.
-      if (forward) return this.prisma.supportConversation.findUnique({ where: { id: forward.conversationId } });
-      // Nhân viên trích lại chính câu trả lời trước đó của mình.
-      const staffMsg = await this.prisma.supportMessage.findUnique({ where: { zaloMsgId: e.quote.globalMsgId }, select: { conversationId: true } });
-      if (staffMsg) return this.prisma.supportConversation.findUnique({ where: { id: staffMsg.conversationId } });
-      // Forward kết thúc UNKNOWN thì chưa có zaloMsgId, nhưng đầu tin được trích vẫn mang mã hội thoại.
-      const quotedCode = e.quote.text && isForwardHeader(e.quote.text) ? parseStaffReply(e.quote.text).code : null;
-      const byQuotedCode = quotedCode ? await this.prisma.supportConversation.findUnique({ where: { code: quotedCode } }) : null;
-      if (byQuotedCode) return byQuotedCode;
+      const quoted = await this.findByQuote(e.quote);
+      if (quoted === 'gone') return null;
+      if (quoted) {
+        // Hai tín hiệu chỉ hai khách khác nhau thì không đoán: gửi nhầm khách tệ hơn là bắt nhân viên gửi lại.
+        if (code && quoted.code.toUpperCase() !== code) return { conflict: { routed: quoted.code, typed: code } };
+        return quoted;
+      }
     }
     const byCode = code ? await this.prisma.supportConversation.findUnique({ where: { code } }) : null;
     if (byCode) return byCode;
@@ -128,6 +133,19 @@ export class BridgeEventsService {
       if (pending) return 'retry';
     }
     return code ? 'unknown' : null;
+  }
+
+  /** `gone`: tin trích khớp nhưng hội thoại đã bị xoá. */
+  private async findByQuote(quote: NonNullable<MessageEvent['quote']>): Promise<ConversationHit | 'gone' | null> {
+    const forward = await this.prisma.supportForward.findUnique({ where: { zaloMsgId: quote.globalMsgId } });
+    // Forward khớp mà khách đã xoá: bỏ hẳn, không để rơi xuống nhánh 503 chờ mãi một tin không bao giờ khớp.
+    if (forward) return (await this.prisma.supportConversation.findUnique({ where: { id: forward.conversationId } })) ?? 'gone';
+    // Nhân viên trích lại chính câu trả lời trước đó của mình.
+    const staffMsg = await this.prisma.supportMessage.findUnique({ where: { zaloMsgId: quote.globalMsgId, sender: 'STAFF' }, select: { conversationId: true } });
+    if (staffMsg) return (await this.prisma.supportConversation.findUnique({ where: { id: staffMsg.conversationId } })) ?? 'gone';
+    // Forward kết thúc UNKNOWN thì chưa có zaloMsgId, nhưng đầu tin được trích vẫn mang mã hội thoại.
+    const quotedCode = quote.text && isForwardHeader(quote.text) ? parseStaffReply(quote.text).code : null;
+    return quotedCode ? this.prisma.supportConversation.findUnique({ where: { code: quotedCode } }) : null;
   }
 
   private async saveState(e: Extract<ZaloBridgeEvent, { type: 'state' }>): Promise<void> {

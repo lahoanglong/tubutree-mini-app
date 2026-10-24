@@ -5,7 +5,7 @@ import { CHAT_ENABLED_KEY, DEFAULT_OFF_HOURS_TEXT } from './support-chat.config'
 const NOON = new Date('2026-10-23T12:00:00+07:00');
 const NIGHT = new Date('2026-10-23T22:30:00+07:00');
 
-function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?: number; bridge?: any } = {}) {
+function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?: number; bridge?: any; orders?: { code: string; userId: string }[] } = {}) {
   const conv = { id: 'c1', userId: 'u1', code: 'K7Q3', customerReadAt: null, lastOffHoursNoticeOn: null, blockedAt: null, ...opts.conv };
   const created: any[] = [];
   const prisma: any = {
@@ -26,6 +26,10 @@ function setup(opts: { enabled?: boolean; conv?: any; existing?: any; dayCount?:
       }),
     },
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(opts.bridge ?? null) },
+    order: {
+      findFirst: jest.fn().mockImplementation(({ where }: any) =>
+        Promise.resolve((opts.orders ?? []).find((o) => o.code === where.code && o.userId === where.userId) ?? null)),
+    },
   };
   const config: any = {
     get: jest.fn().mockImplementation((key: string, fb: unknown) =>
@@ -166,6 +170,30 @@ describe('send', () => {
     const dto = await svc.send('u1', { ...input, body: 'a' }, 'MINIAPP');
     expect(dto.id).toBe('w');
     expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  describe('mã đơn trong ngữ cảnh', () => {
+    const orders = [{ code: 'TUBU1', userId: 'u1' }, { code: 'TUBU2', userId: 'u2' }];
+
+    it('đơn của chính người gửi thì giữ', async () => {
+      const { svc, created } = setup({ orders });
+      await svc.send('u1', { ...input, body: 'a', context: { orderCode: 'TUBU1', productSlug: 'sua-bo' } }, 'WEB');
+      expect(created[0].context).toEqual({ orderCode: 'TUBU1', productSlug: 'sua-bo' });
+    });
+
+    it('đơn của khách khác thì bỏ mã đơn, tin vẫn lưu, giữ phần còn lại của ngữ cảnh', async () => {
+      const { svc, created } = setup({ orders });
+      await svc.send('u1', { ...input, body: 'a', context: { orderCode: 'TUBU2', productSlug: 'sua-bo' } }, 'WEB');
+      expect(created).toHaveLength(1);
+      expect(created[0].context).toEqual({ productSlug: 'sua-bo' });
+    });
+
+    it('mã không có thật thì bỏ, ngữ cảnh rỗng thì không ghi ngữ cảnh', async () => {
+      const { svc, created } = setup({ orders });
+      await svc.send('u1', { ...input, body: 'a', context: { orderCode: 'NOPE' } }, 'MINIAPP');
+      expect(created).toHaveLength(1);
+      expect(created[0].context).toBeUndefined();
+    });
   });
 
   it('chat tắt → 409 CHAT_DISABLED', async () => {

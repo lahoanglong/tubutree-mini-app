@@ -1,13 +1,25 @@
 import { BridgeHealthCron } from './bridge-health.cron';
+import { buildForwardText, sendAndSettle } from './forward-delivery';
+
+jest.mock('./forward-delivery', () => ({
+  buildForwardText: jest.fn().mockResolvedValue('nội dung'),
+  sendAndSettle: jest.fn().mockResolvedValue(null),
+}));
 
 const NOW = new Date('2026-10-23T05:00:00Z');
 const min = (n: number) => new Date(NOW.getTime() - n * 60_000);
 const health = (o: Record<string, unknown> = {}) => ({ state: 'CONNECTED', zaloUid: 'z', displayName: 'CSKH', avatar: null, since: min(30).toISOString(), lastError: null, queueSize: 0, outboxSize: 0, groupId: 'G1', ...o });
 
-function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; schedule?: jest.Mock; count?: number; configured?: boolean; enabled?: boolean } = {}) {
+function setup(o: { health?: any; prev?: any; groupCfg?: string; convs?: any[]; failed?: any[]; claimCount?: number; messages?: any[]; schedule?: jest.Mock; count?: number; configured?: boolean; enabled?: boolean } = {}) {
   const prisma: any = {
     supportBridgeStatus: { findUnique: jest.fn().mockResolvedValue(o.prev ?? null), upsert: jest.fn().mockResolvedValue({}), update: jest.fn().mockResolvedValue({}) },
     supportConversation: { findMany: jest.fn().mockResolvedValue(o.convs ?? []), count: jest.fn().mockResolvedValue(o.count ?? 0) },
+    supportForward: {
+      findMany: jest.fn().mockResolvedValue(o.failed ?? []),
+      updateMany: jest.fn().mockResolvedValue({ count: o.claimCount ?? 1 }),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    supportMessage: { findMany: jest.fn().mockResolvedValue(o.messages ?? [{ id: 'm1' }]) },
     user: { findMany: jest.fn().mockResolvedValue([{ id: 'adm1' }]) },
   };
   const bridge: any = { isConfigured: jest.fn().mockReturnValue(o.configured ?? true), health: jest.fn().mockResolvedValue('health' in o ? o.health : health()), setGroup: jest.fn().mockResolvedValue({ ok: true, data: {} }) };
@@ -47,13 +59,77 @@ describe('BridgeHealthCron', () => {
     expect(bridge.setGroup).toHaveBeenCalledWith('G1');
   });
 
-  it('cấu hình rỗng hoặc trùng thì không gọi setGroup', async () => {
-    const a = setup({ health: health({ groupId: 'OLD' }), groupCfg: '' });
-    await a.cron.everyMinute();
-    expect(a.bridge.setGroup).not.toHaveBeenCalled();
+  it('cấu hình trùng thì không gọi setGroup', async () => {
     const b = setup();
     await b.cron.everyMinute();
     expect(b.bridge.setGroup).not.toHaveBeenCalled();
+  });
+
+  it('bỏ chọn nhóm (cấu hình rỗng) mà cầu nối còn nhóm → setGroup(null); cả hai đều rỗng thì thôi', async () => {
+    const a = setup({ health: health({ groupId: 'OLD' }), groupCfg: '' });
+    await a.cron.everyMinute();
+    expect(a.bridge.setGroup).toHaveBeenCalledWith(null);
+    const b = setup({ health: health({ groupId: null }), groupCfg: '' });
+    await b.cron.everyMinute();
+    expect(b.bridge.setGroup).not.toHaveBeenCalled();
+  });
+
+  describe('gửi lại forward FAILED vì cầu nối chưa nhận gửi', () => {
+    const fwd = (id: string) => ({ id, conversationId: `c-${id}` });
+    beforeEach(() => {
+      (sendAndSettle as jest.Mock).mockClear();
+      (buildForwardText as jest.Mock).mockClear();
+    });
+
+    it('cầu nối CONNECTED và đã có nhóm: chọn đúng mã tạm thời trong 20 giờ, tối đa 20, chốt PENDING có điều kiện rồi gửi qua sendAndSettle không retry', async () => {
+      const { cron, prisma, bridge } = setup({ failed: [fwd('f1'), fwd('f2')] });
+      prisma.supportConversation.findUnique = jest.fn(async ({ where }: any) => ({ id: where.id, userId: 'u', code: 'K7Q2' }));
+      await cron.everyMinute();
+      const q = prisma.supportForward.findMany.mock.calls[0][0];
+      expect(q.take).toBe(20);
+      expect(q.orderBy).toEqual({ updatedAt: 'asc' });
+      expect(q.where).toEqual({
+        status: 'FAILED',
+        zaloMsgId: null,
+        createdAt: { gte: new Date(NOW.getTime() - 20 * 3_600_000) },
+        conversation: { blockedAt: null },
+        OR: ['NOT_CONNECTED', 'NO_GROUP', 'NETWORK', 'BRIDGE_NOT_CONFIGURED'].map((c) => ({ lastError: { startsWith: `${c}:` } })),
+      });
+      expect(prisma.supportForward.updateMany).toHaveBeenCalledWith({ where: { id: 'f1', status: 'FAILED' }, data: { status: 'PENDING' } });
+      expect(sendAndSettle).toHaveBeenCalledTimes(2);
+      expect((sendAndSettle as jest.Mock).mock.calls[0].slice(2).map((x: any) => (typeof x === 'object' ? x.id : x))).toEqual(['f1', 'nội dung', false]);
+      expect(bridge.setGroup).not.toHaveBeenCalled();
+    });
+
+    it('cầu nối chưa CONNECTED thì không động tới forward nào', async () => {
+      const { cron, prisma } = setup({ health: health({ state: 'CONNECTING' }), failed: [fwd('f1')] });
+      await cron.everyMinute();
+      expect(prisma.supportForward.findMany).not.toHaveBeenCalled();
+      expect(sendAndSettle).not.toHaveBeenCalled();
+    });
+
+    it('chưa chọn nhóm thì không gửi lại', async () => {
+      const { cron, prisma } = setup({ groupCfg: '', health: health({ groupId: null }), failed: [fwd('f1')] });
+      await cron.everyMinute();
+      expect(prisma.supportForward.findMany).not.toHaveBeenCalled();
+    });
+
+    it('đã có bên khác chốt trước (updateMany đếm 0) thì không gửi', async () => {
+      const { cron } = setup({ failed: [fwd('f1')], claimCount: 0 });
+      await cron.everyMinute();
+      expect(sendAndSettle).not.toHaveBeenCalled();
+    });
+
+    it('một forward lỗi không chặn forward sau, và forward còn PENDING được chốt lại FAILED', async () => {
+      const { cron, prisma } = setup({ failed: [fwd('f1'), fwd('f2')] });
+      prisma.supportConversation.findUnique = jest.fn(async ({ where }: any) => ({ id: where.id, userId: 'u', code: 'K7Q2' }));
+      (sendAndSettle as jest.Mock).mockRejectedValueOnce(new Error('db')).mockResolvedValue(null);
+      await cron.everyMinute();
+      expect(sendAndSettle).toHaveBeenCalledTimes(2);
+      expect(prisma.supportForward.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'f1', status: 'PENDING' }, data: expect.objectContaining({ status: 'FAILED' }) }),
+      );
+    });
   });
 
   it('không CONNECTED quá 10 phút, chưa báo → báo admin một lần và đặt downAlertedAt', async () => {
