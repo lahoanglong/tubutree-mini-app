@@ -72,4 +72,46 @@ describe('SiteFooter', () => {
     expect(out).toContain('TikTok');
     expect(out).not.toContain('Facebook');
   });
+
+  describe('đơn vị vận hành', () => {
+    const base = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
+    const company = { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: '1 Đường A, Quận B', bctNoticeUrl: 'https://online.gov.vn/x' };
+
+    it('chưa nhập gì thì không vẽ dòng nào', async () => {
+      mocks.getPublicSupport.mockResolvedValue(base);
+      const out = await html();
+      expect(out).not.toContain('Đơn vị vận hành');
+      expect(out).not.toContain('Bộ Công Thương');
+    });
+
+    it('đủ thông tin: dòng "Đơn vị vận hành: tên · MST mã · địa chỉ" ở cả chân trang đầy đủ và gọn, kèm link BCT mở tab mới', async () => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company });
+      const out = await html();
+      const line = 'Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678 · 1 Đường A, Quận B';
+      expect(out.split(line)).toHaveLength(3);
+      const links = out.match(/<a [^>]*href="https:\/\/online.gov.vn\/x"[^>]*>/g) ?? [];
+      expect(links).toHaveLength(2);
+      for (const a of links) {
+        expect(a).toContain('target="_blank"');
+        expect(a).toContain('rel="noopener noreferrer"');
+        expect(a).toContain('min-h-11');
+      }
+      expect(out.split('Đã thông báo Bộ Công Thương')).toHaveLength(3);
+    });
+
+    it('ẩn từng phần còn trống, không để dấu nối thừa', async () => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company: { taxCode: '0312345678' } });
+      const out = await html();
+      expect(out).toContain('Đơn vị vận hành: MST 0312345678<');
+      expect(out).not.toContain('·');
+      expect(out).not.toContain('Bộ Công Thương');
+    });
+
+    it('chỉ có link BCT thì vẽ link, không vẽ dòng vận hành', async () => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company: { bctNoticeUrl: 'https://online.gov.vn/x' } });
+      const out = await html();
+      expect(out).not.toContain('Đơn vị vận hành');
+      expect(out).toContain('Đã thông báo Bộ Công Thương');
+    });
+  });
 });
