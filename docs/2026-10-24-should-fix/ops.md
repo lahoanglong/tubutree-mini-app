@@ -1,12 +1,12 @@
 # Ghi chú vận hành: gói ops 2026-10-24
 
 ## 1. deploy.sh và zalo-bridge
-- Bridge chỉ được xử lý khi compose có service `zalo-bridge` VÀ (`.env` có `ZALO_BRIDGE_SECRET` hoặc bridge đang chạy). Ngược lại deploy.sh ghi một dòng "Bỏ qua zalo-bridge" và đi tiếp (chat Zalo cá nhân dự kiến TẮT lúc go-live; thiếu khoá thì bridge restart-loop).
+- Bridge chỉ được cập nhật khi đang CHẠY lúc bắt đầu deploy (`docker compose ps -q --status running zalo-bridge` khác rỗng). Chưa từng bật, hoặc dừng chủ ý (gỡ chat về, bat-chat-zalo.md mục 6) thì deploy.sh ghi một dòng "Bỏ qua zalo-bridge" kèm lệnh bật tay `docker compose -f <compose> up -d --build zalo-bridge` và để nguyên. Có `ZALO_BRIDGE_SECRET` trong `.env` KHÔNG làm deploy bật bridge.
 - Api và web build + thay trước. Bridge build riêng và thay sau cùng. Bridge lỗi (build, up hoặc không healthy) thì thoát mã 4: api và web đã chạy bản mới, chỉ chat tạm ngưng. Mã 3 vẫn là api/web không healthy.
 - Biết và chấp nhận: tạo lại bridge có thể làm một tin đang chuyển tiếp bị gửi hai lần.
 
 ## 2. Backup trước mọi migration đang chờ
-- Sau bước kiểm .env, deploy.sh chạy `prisma migrate status` bằng image mới và in kết quả vào log. Không nối được DB (P1000-P1002, "Can't reach database server") thì dừng mã 2, chưa backup, chưa migrate. Thoát khác 0 vì lý do khác (còn migration chờ, lệch, lỗi) thì chạy `ops/backup-predeploy.sh` ngay trước `migrate deploy`.
+- Sau bước kiểm .env, deploy.sh chạy `prisma migrate status` bằng image mới và in kết quả vào log. Không nối được DB (mã P1000-P1002 đứng riêng, "Can't reach database server", "Authentication failed"; so khớp phân biệt hoa thường để tên migration như `top1000` không bị nhầm) thì dừng mã 2, chưa backup, chưa migrate. Thoát khác 0 vì lý do khác (còn migration chờ, lệch, lỗi) thì chạy `ops/backup-predeploy.sh` ngay trước `migrate deploy`.
 - Giữ nguyên nhánh points_1d: dừng API cũ rồi backup. Với migration khác API cũ vẫn chạy, nên ghi sau bản backup sẽ mất nếu khôi phục. Backup lỗi vẫn dừng deploy với exit 2.
 
 ## 3. Cấu hình production bị chặn khi boot

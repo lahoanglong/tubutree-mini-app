@@ -134,14 +134,14 @@ guarded_migration_pending() { migration_pending "$GUARDED_MIGRATION"; }
 log "=== Deploy $(git rev-parse --short HEAD 2>/dev/null || echo '?') với $COMPOSE_FILE ==="
 PREV_API="$(running_image api)"
 PREV_WEB="$(running_image web)"
-# zalo-bridge chỉ đi cùng khi chat Zalo cá nhân được bật: compose có service này VÀ (.env đã có ZALO_BRIDGE_SECRET hoặc bridge đang chạy).
-# Thiếu khoá thì bridge thoát lỗi ngay khi khởi động (apps/zalo-bridge/src/env.ts), restart-loop, deploy chờ hết giờ rồi báo lỗi oan.
+# zalo-bridge chỉ được cập nhật khi nó ĐANG CHẠY lúc bắt đầu deploy. Chưa từng bật (chat chưa mở, .env chưa đủ khoá nên bridge sẽ
+# restart-loop) hay đã dừng chủ ý (gỡ chat về, bat-chat-zalo.md mục 6) thì deploy để nguyên, không tự bật lại.
 BRIDGE_SVC=""
 if dc config --services 2>/dev/null | grep -qx zalo-bridge; then
-  if [ -n "$(env_value ZALO_BRIDGE_SECRET)" ] || [ -n "$(dc ps -q zalo-bridge 2>/dev/null || true)" ]; then
+  if [ -n "$(dc ps -q --status running zalo-bridge 2>/dev/null || true)" ]; then
     BRIDGE_SVC="zalo-bridge"
   else
-    log "Bỏ qua zalo-bridge: .env chưa có ZALO_BRIDGE_SECRET và bridge chưa chạy (chat Zalo cá nhân chưa bật). Bật chat theo docs/2026-10-23-q5/bat-chat-zalo.md."
+    log "Bỏ qua zalo-bridge: container không chạy (chưa từng bật, hoặc đã dừng chủ ý), deploy để nguyên. Bật tay khi cần: docker compose -f $COMPOSE_FILE up -d --build zalo-bridge (xem docs/2026-10-23-q5/bat-chat-zalo.md)."
   fi
 fi
 
@@ -195,7 +195,7 @@ if [ "$BACKUP_NEEDED" != 1 ]; then
   status_out="$(dc run --rm --no-deps api pnpm exec prisma migrate status 2>&1)" || status_rc=$?
   if [ "$status_rc" -ne 0 ]; then
     printf '%s\n' "$status_out" | tail -n 25
-    if printf '%s' "$status_out" | grep -Eqi "P100[0-2]|Can't reach database server|Authentication failed"; then
+    if printf '%s' "$status_out" | grep -Eq '(^|[^[:alnum:]])P100[0-2]([^0-9]|$)|Can.t reach database server|Authentication failed'; then
       log "ERROR: không nối được DB để kiểm migration — DỪNG, chưa backup, chưa migrate. $(api_state_note) Kiểm tra: docker compose -f $COMPOSE_FILE ps postgres, rồi POSTGRES_PASSWORD trong .env."
       exit 2
     fi
