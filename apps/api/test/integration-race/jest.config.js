@@ -17,5 +17,6 @@ module.exports = {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/../../tsconfig.json' }],
   },
   setupFiles: ['<rootDir>/setup-env.ts'],
+  setupFilesAfterEnv: ['<rootDir>/tier-isolation.ts'],
   testTimeout: 60000,
 };
