@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchRelated: vi.fn(), fetchBoughtTogether: vi.fn(), openOAChat: vi.fn(), hasOA: true, chatOn: false, authStatus: 'guest', navigate: vi.fn(), login: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchRelated: vi.fn(), fetchBoughtTogether: vi.fn(), openOAChat: vi.fn(), hasOA: true, chatOn: false, returnWindowDays: undefined as number | undefined, authStatus: 'guest', navigate: vi.fn(), login: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -32,7 +32,7 @@ vi.mock('../services/zmp-bridge', () => ({
   },
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.authStatus, login: mocks.login }) }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1, chat: { enabled: mocks.chatOn, hours: { start: '08:00', end: '21:00' } } }) }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1, returnWindowDays: mocks.returnWindowDays, chat: { enabled: mocks.chatOn, hours: { start: '08:00', end: '21:00' } } }) }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../components/subscribe-sheet', () => ({ SubscribeSheet: () => null }));
@@ -72,6 +72,7 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     vi.clearAllMocks();
     mocks.hasOA = true;
     mocks.chatOn = false;
+    mocks.returnWindowDays = undefined;
     mocks.authStatus = 'guest';
     mocks.fetchProduct.mockResolvedValue(product);
     mocks.fetchRelated.mockResolvedValue([]);
@@ -86,6 +87,17 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     fireEvent.click(chat);
     expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
     expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('Xà phòng sả chanh'));
+  });
+
+  it('cam kết đổi trả nêu số ngày từ cấu hình; chưa có cấu hình thì không nêu số', async () => {
+    mocks.returnWindowDays = 10;
+    const first = renderPdp();
+    await screen.findByText('Đổi trả trong 10 ngày nếu lỗi');
+    first.unmount();
+    mocks.returnWindowDays = undefined;
+    renderPdp();
+    await screen.findByText('Đổi trả nếu sản phẩm lỗi');
+    expect(document.body.textContent).not.toContain('7 ngày');
   });
 
   it('thanh CTA dính giữ bố cục cũ: chỉ nút giỏ 48px, không có nút Chat làm hẹp hai nút chính', async () => {

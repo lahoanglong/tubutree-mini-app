@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import { Check, Star } from 'lucide-react';
+import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import type { ProductDetail } from '@/lib/api';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 
 const COLLAPSED_LINES_THRESHOLD = 220;
@@ -48,15 +50,15 @@ export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['in
   );
 }
 
-const PROMISES = ['Hàng chính hãng — nguồn gốc rõ ràng', 'Đổi trả trong 7 ngày nếu lỗi', 'Sản phẩm xanh, an lành cho cả nhà'];
-
 /** Cam kết Tubu: tín hiệu an tâm trước khi mua; `children` là chỗ cho nút chat OA. */
 export function PdpPromises({ children }: { children?: React.ReactNode }) {
+  const { returnWindowDays } = usePublicConfig();
+  const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'];
   return (
     <section className="mt-8">
       <h2 className={ui.sectionTitle}>Cam kết Tubu</h2>
       <ul className="mt-2 flex flex-col gap-1.5">
-        {PROMISES.map((t) => (
+        {promises.map((t) => (
           <li key={t} className="flex items-center gap-2 text-sm text-stone-700">
             <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
             {t}
