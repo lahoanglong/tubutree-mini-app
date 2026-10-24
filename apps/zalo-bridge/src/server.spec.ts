@@ -90,6 +90,13 @@ describe('server', () => {
     expect(await r.json()).toEqual({ code: 'NOT_CONNECTED' });
   });
 
+  it('POST /qr/start bị huỷ vì đăng xuất thì 409 QR_CANCELLED, không phải lỗi cầu nối', async () => {
+    client.qrStart.mockRejectedValueOnce(new BridgeError('QR_CANCELLED'));
+    const r = await call('POST', '/qr/start');
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ code: 'QR_CANCELLED' });
+  });
+
   it('PUT /config lưu groupId, từ chối kiểu sai', async () => {
     const r = await call('PUT', '/config', { groupId: 'G1' });
     expect(await r.json()).toEqual({ groupId: 'G1' });

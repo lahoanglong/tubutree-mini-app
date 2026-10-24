@@ -86,7 +86,7 @@ export function createServer(client: ZaloClient, env: Pick<BridgeEnv, 'ZALO_BRID
         return send(res, e.status, { code: e.code });
       }
       if (e instanceof BridgeError) {
-        if (e.code === 'NOT_CONNECTED' || e.code === 'NO_GROUP') return send(res, 409, { code: e.code });
+        if (e.code === 'NOT_CONNECTED' || e.code === 'NO_GROUP' || e.code === 'QR_CANCELLED') return send(res, 409, { code: e.code });
         return send(res, 502, { code: e.code, message: e.message });
       }
       if (e instanceof SyntaxError) return send(res, 400, { code: 'BAD_REQUEST' });
