@@ -23,7 +23,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { shippingEtaLabel } from '../utils/shipping-eta';
+import { shippingEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
 import {
   checkoutPoints,
