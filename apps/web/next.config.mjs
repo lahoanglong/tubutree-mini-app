@@ -68,6 +68,9 @@ const nextConfig = {
     ...(standalone ? { outputFileTracingRoot: path.join(dirname, '../../') } : {}),
   },
   ...(standalone ? { output: 'standalone' } : {}),
+  // Next 14 có lỗ RCE chưa xác thực ở /_next/image, bản vá chỉ có từ 15.5. Tắt tối ưu ảnh để route đó
+  // không còn xử lý ảnh; ảnh đã là PNG nhỏ import tĩnh, ảnh khác đến từ host tuỳ ý nên vốn không qua optimizer.
+  images: { unoptimized: true },
   transpilePackages: ['@tubutree/shared-types', '@tubutree/app-core'],
   env: {
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api',
