@@ -150,6 +150,18 @@ describe('Trang Thông báo: chi tiết thông báo', () => {
     expect(within(dialog).getByText('Đơn đã xác nhận')).toBeInTheDocument();
   });
 
+  it('chạm tin "Tubu Tree trả lời bạn": đánh dấu đã đọc và vào thẳng màn chat, không mở chi tiết', async () => {
+    mocks.getNotifications.mockResolvedValue([
+      { id: 'n3', templateCode: 'SUPPORT_CHAT_REPLY', payload: { body: 'Tubu Tree đã trả lời bạn: Dạ shop kiểm tra ạ', data: { route: '/chat' } }, status: 'SENT', sentAt: SENT_AT },
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Dạ shop kiểm tra ạ/ }));
+    expect(mocks.trackEvent).toHaveBeenCalledWith('notification_opened', 'miniapp', { notificationId: 'n3', templateCode: 'SUPPORT_CHAT_REPLY' });
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledWith('n3'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    expect(screen.queryByRole('dialog', { name: 'Chi tiết thông báo' })).toBeNull();
+  });
+
   it('chạm tin đã đọc: không gọi đánh dấu đã đọc', async () => {
     renderPage();
     await openRow('Bạn nhận thêm 50 điểm Xanh');

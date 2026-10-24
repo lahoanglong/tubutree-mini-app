@@ -251,7 +251,9 @@ export default function NotificationsPage() {
     void trackEvent('notification_opened', 'miniapp', { notificationId: n.id, templateCode: n.templateCode });
     haptic('light');
     if (n.status !== 'READ') readMut.mutate(n.id);
-    setSelectedNotif(n);
+    // Chi tiết của tin trả lời chỉ lặp lại một đoạn của câu trả lời; khách bấm vào là để đọc và nhắn tiếp.
+    if (n.templateCode === 'SUPPORT_CHAT_REPLY') navigate('/chat');
+    else setSelectedNotif(n);
   };
 
   return (
