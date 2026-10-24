@@ -156,11 +156,12 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(body.referralCode).toBe('AB12CD34');
   });
 
-  it('dòng đồng ý điều khoản nằm trong thanh Đặt hàng, hai link mở trang Điều khoản và Chính sách đổi trả trên web, không có ô tick', async () => {
+  it('dòng đồng ý điều khoản nằm trong nội dung trang ngay trên thanh Đặt hàng (không làm thanh cao thêm), hai link mở trang Điều khoản và Chính sách đổi trả trên web, không có ô tick', async () => {
     renderPage();
     const line = await screen.findByTestId('order-consent');
     expect(line.textContent).toBe('Bằng việc đặt hàng, bạn đồng ý với Điều khoản và Chính sách đổi trả.');
-    expect(screen.getByTestId('sticky-bar')).toContainElement(line);
+    expect(screen.getByTestId('sticky-bar')).not.toContainElement(line);
+    expect(line.compareDocumentPosition(screen.getByTestId('sticky-bar')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(line).queryByRole('checkbox')).toBeNull();
     fireEvent.click(within(line).getByRole('button', { name: 'Điều khoản' }));
     expect(mocks.openWebPolicyPage).toHaveBeenLastCalledWith('dieu-khoan');

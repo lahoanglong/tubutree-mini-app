@@ -1064,14 +1064,13 @@ export default function CheckoutPage() {
         </Box>
       )}
 
+      <Text size="xSmall" data-testid="order-consent" style={{ display: 'block', padding: '12px 16px 0', color: 'var(--color-text-secondary)' }}>
+        Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => openWebPolicyPage('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}
+        <ConsentLink onPress={() => openWebPolicyPage('doi-tra')}>Chính sách đổi trả</ConsentLink>.
+      </Text>
+
       {/* ── Sticky CTA ── */}
       <StickyActionBar
-        summary={
-          <Text size="xSmall" data-testid="order-consent" style={{ color: 'var(--color-text-secondary)' }}>
-            Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => openWebPolicyPage('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}
-            <ConsentLink onPress={() => openWebPolicyPage('doi-tra')}>Chính sách đổi trả</ConsentLink>.
-          </Text>
-        }
         primary={
           <Button
             fullWidth
