@@ -200,9 +200,10 @@ describe('Email báo động vận hành qua quy trình chuẩn (R8)', () => {
     expect(doc).toMatch(/không\*\* tự gửi lại mỗi 5 phút/);
   });
 
-  it('GO-LIVE-KEYS.md dặn đặt nhãn môi trường bằng biến (gh variable set), không phải secret', () => {
+  // Đặt khoá bằng sửa .env qua SSH (ops.yml chưa SSH được tới VPS); nhãn vẫn không bao giờ là secret.
+  it('GO-LIVE-KEYS.md dặn ghi nhãn môi trường vào .env, không phải secret', () => {
     const doc = read('docs/GO-LIVE-KEYS.md');
-    expect(doc).toContain('gh variable set OPS_ALERT_ENV_LABEL');
+    expect(doc).toMatch(/^OPS_ALERT_ENV_LABEL=/m);
     expect(doc).not.toContain('gh secret set OPS_ALERT_ENV_LABEL');
   });
 });
