@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ──────────────────────────────────────────────────────────────
-# Tubu Tree Web (Next.js 14 standalone) — pnpm monorepo.
+# Tubu Tree Web (Next.js 15 standalone) — pnpm monorepo.
 # Build context = ROOT monorepo:
 #   docker build -f apps/web/Dockerfile -t tubutree-web \
 #     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.<domain>/api \

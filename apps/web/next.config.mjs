@@ -62,21 +62,19 @@ const nextConfig = {
   poweredByHeader: false, // ẩn header X-Powered-By: Next.js (info-disclosure nhỏ, không cần thiết)
   experimental: {
     webpackBuildWorker: false,
-    // Next 14 chỉ chạy src/instrumentation.ts (khởi tạo Sentry phía server) khi bật cờ này. Nó không làm gì nếu SENTRY_DSN rỗng.
-    instrumentationHook: true,
-    // SDK Node vá module lúc chạy: để Node tự require thay vì gói vào bundle server.
-    serverComponentsExternalPackages: ['@sentry/node'],
-    // Ảnh chia sẻ gian hàng đọc font và ảnh mặc định bằng readFile lúc chạy (app/s/[slug]/og-render.tsx). Next chỉ chép vào bản
-    // standalone những tệp nó thấy qua import, nên hai tệp này phải khai ở đây, nếu không route ảnh trả ảnh nhúng 1x1 trên Docker.
-    // Khoá dùng `*` thay `[slug]` vì picomatch hiểu `[slug]` là tập ký tự.
-    outputFileTracingIncludes: {
-      '/s/*/opengraph-image': ['./src/assets/fonts/BeVietnamPro-SemiBold.ttf', './src/assets/og-default.png'],
-    },
-    ...(standalone ? { outputFileTracingRoot: path.join(dirname, '../../') } : {}),
   },
+  // SDK Node vá module lúc chạy: để Node tự require thay vì gói vào bundle server.
+  serverExternalPackages: ['@sentry/node'],
+  // Ảnh chia sẻ gian hàng đọc font và ảnh mặc định bằng readFile lúc chạy (app/s/[slug]/og-render.tsx). Next chỉ chép vào bản
+  // standalone những tệp nó thấy qua import, nên hai tệp này phải khai ở đây, nếu không route ảnh trả ảnh nhúng 1x1 trên Docker.
+  // Khoá dùng `*` thay `[slug]` vì picomatch hiểu `[slug]` là tập ký tự.
+  outputFileTracingIncludes: {
+    '/s/*/opengraph-image': ['./src/assets/fonts/BeVietnamPro-SemiBold.ttf', './src/assets/og-default.png'],
+  },
+  ...(standalone ? { outputFileTracingRoot: path.join(dirname, '../../') } : {}),
   ...(standalone ? { output: 'standalone' } : {}),
-  // Next 14 có lỗ RCE chưa xác thực ở /_next/image, bản vá chỉ có từ 15.5. Tắt tối ưu ảnh để route đó
-  // không còn xử lý ảnh; ảnh đã là PNG nhỏ import tĩnh, ảnh khác đến từ host tuỳ ý nên vốn không qua optimizer.
+  // Giữ tắt tối ưu ảnh dù đã lên Next 15.5.x (đã vá lỗ /_next/image): ảnh đã là PNG nhỏ import tĩnh, ảnh khác đến từ host tuỳ ý nên vốn
+  // không qua optimizer. Bật lại là một việc riêng (cần remotePatterns + đo tải).
   images: { unoptimized: true },
   transpilePackages: ['@tubutree/shared-types', '@tubutree/app-core'],
   env: {
