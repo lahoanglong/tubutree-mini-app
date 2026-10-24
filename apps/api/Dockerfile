@@ -23,7 +23,10 @@ RUN pnpm --filter @tubutree/api build
 # ──────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl tzdata
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# Mặc định corepack cất pnpm trong ~/.cache của người chạy lệnh prepare (root): user node không thấy, sẽ tải lại pnpm từ
+# npm mỗi lần `pnpm exec prisma migrate deploy` / seed (hỏng khi mất mạng). Đặt kho chung và chown lúc build.
+ENV COREPACK_HOME=/opt/corepack
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && chown -R node:node /opt/corepack
 WORKDIR /app
 ENV NODE_ENV=production
 # Mốc "đầu ngày" của Date local và cron không có timeZone theo giờ VN (cần tzdata trên alpine).
@@ -33,6 +36,9 @@ ENV TZ=Asia/Ho_Chi_Minh
 COPY --from=builder /app ./
 
 WORKDIR /app/apps/api
+# API không ghi file nào lúc chạy (ảnh upload đi thẳng Cloudinary, log ra stdout, Prisma engine nằm sẵn trong node_modules),
+# nên cây /app để root sở hữu, chỉ đọc được với node. Thêm đường ghi file thì chown thư mục đó ở đây, đừng chạy root.
+USER node
 EXPOSE 3001
 
 # Áp migration (idempotent) rồi khởi động API. Deploy chuẩn (tools/deploy/deploy.sh) đã migrate
