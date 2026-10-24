@@ -7,6 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { isReportableNotice, referralDedupeKey, sendReferralNotices, type ReferralNotice } from './referral-notify';
 import { referralNoticeFromLedger, REFERRAL_NOTICE_REASON_PREFIXES, type ReferralLedgerRow } from './referral-notice-ledger';
 import { MILESTONE_PREFIX } from './referral-reward';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -64,6 +65,7 @@ export class ReferralNoticeReconcileCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */10 * * * *', { name: 'wallet.referral-notice-reconcile', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.reconcile();

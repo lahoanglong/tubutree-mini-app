@@ -8,6 +8,7 @@ import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { WasteShipLockService } from '../core/waste-ship-lock.service';
 import { GOMDON_DISPATCHED_STATUSES } from '../waste.constants';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
 
@@ -36,6 +37,7 @@ export class WasteExpiryCron {
 
   // @Cron không tự bắt lỗi: lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 30 3 * * *', { name: 'waste.expiry', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.run();

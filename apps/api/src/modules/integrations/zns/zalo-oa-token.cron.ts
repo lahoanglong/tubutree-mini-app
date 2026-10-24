@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { ZaloOaTokenService } from './zalo-oa-token.service';
 import { CRON_TZ } from '../../../common/cron-tz';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 /** Làm mới OA access token Zalo định kỳ (token sống ~25h) → ZNS không chết giữa chừng. */
 @Injectable()
@@ -15,6 +16,7 @@ export class ZaloOaTokenCron {
   // (network, Zalo trả lỗi...) ném ra ngoài là unhandledRejection, mà Node 20 mặc định crash cả
   // process (sập toàn bộ API, không chỉ riêng ZNS).
   @Cron('0 0 */6 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async refresh() {
     try {
       const ok = await this.tokens.refreshIfNeeded();

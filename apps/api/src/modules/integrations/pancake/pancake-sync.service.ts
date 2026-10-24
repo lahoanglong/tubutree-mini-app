@@ -20,6 +20,7 @@ import {
   type FlatPancakeCategory,
   type PancakeCategoryMap,
 } from './pancake-category-map';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
@@ -162,6 +163,7 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   @Cron('0 */15 * * * *', { timeZone: CRON_TZ }) // mỗi 15 phút
+  @TrackCron()
   async scheduledSync(): Promise<void> {
     if (!this.client.isConfigured()) return; // dev: bỏ qua khi chưa có key
     // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — syncProducts() ném ra ngoài (Pancake
@@ -176,6 +178,7 @@ export class PancakeSyncService implements OnModuleInit {
 
   /** Quét toàn bộ mỗi đêm: lượt 15 phút theo updated_since không thấy được hàng đã bị xoá khỏi Pancake. */
   @Cron('0 30 3 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async nightlyFullSync(): Promise<void> {
     if (!this.client.isConfigured()) return;
     try {

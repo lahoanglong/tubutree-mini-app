@@ -9,6 +9,7 @@ import { ExternalChatService } from './external-chat.service';
 import { ExternalClaimPollService } from './external-claim-poll.service';
 import { releaseDueClaims } from './external-claim-release';
 import { ExternalClaimService } from './external-claim.service';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /**
  * Hai cron của điểm đơn ngoài app (đơn sàn và đơn chat). Cron chỉ chạy trên instance giữ lease (CronLeaderService); mỗi việc còn tự an toàn khi chạy chồng
@@ -31,6 +32,7 @@ export class ExternalClaimCron {
 
   /** Mỗi 30 phút: ghép lại lần gửi mã chưa thấy đơn, rồi cộng claim tới hạn. */
   @Cron('0 */30 * * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async everyThirtyMinutes(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -50,6 +52,7 @@ export class ExternalClaimCron {
 
   /** Mỗi 10 phút: kéo dự phòng (cờ tắt thì không làm gì). */
   @Cron('0 */10 * * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async pollFallback(): Promise<void> {
     try {
       await this.poll.pollOnce();

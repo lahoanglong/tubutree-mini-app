@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { OrderStatusService } from './order-status.service';
 import { REVERSAL_EFFECTS_GRACE_MINUTES, REVERSAL_EFFECTS_WINDOW_DAYS } from './reversal-effects';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -36,6 +37,7 @@ export class ReversalEffectsResyncCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */5 * * * *', { name: 'orders.reversal-effects-resync', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.resyncPending();

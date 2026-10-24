@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PayrollService } from './payroll.service';
 import { CRON_TZ } from '../../../common/cron-tz';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 @Injectable()
 export class PayrollJob {
@@ -22,6 +23,7 @@ export class PayrollJob {
    * tháng không bao giờ được cron đưa vào bảng lương tháng đó.
    */
   @Cron('30 0 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async nightly(): Promise<void> {
     const vn = new Date(Date.now() + 7 * 60 * 60 * 1000);
     const year = vn.getUTCFullYear();

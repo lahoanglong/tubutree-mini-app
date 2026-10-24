@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { CHAT_RETENTION_KEY, RECALL_TOMBSTONE_TTL_MS } from '../support-chat/support-chat.config';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 export const RETENTION_LOCK_KEY = 'cron:data-retention.cleanup';
 export const BATCH_SIZE = 5_000;
@@ -57,6 +58,7 @@ export class DataRetentionService {
 
   // Sau cron retention 03:00 (đã đọc refresh_tokens của hôm qua để tính DAU) và trước giờ cao điểm sáng.
   @Cron('0 30 4 * * *', { name: 'data-retention.cleanup', timeZone: 'Asia/Ho_Chi_Minh' })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.runAll();

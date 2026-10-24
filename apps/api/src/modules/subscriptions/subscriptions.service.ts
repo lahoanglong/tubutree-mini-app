@@ -27,6 +27,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from '../cart/partner-goods';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -581,6 +582,7 @@ export class SubscriptionsService {
    * đã được cô lập ở try/catch trong vòng lặp bên dưới.
    */
   @Cron('0 3 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async processDue(): Promise<void> {
     try {
       const now = new Date();

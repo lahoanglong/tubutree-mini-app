@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 export const PERSONAL_COUPON_RETENTION_KEY = 'coupons.personal_expired_retention_days';
 export const DEFAULT_PERSONAL_COUPON_RETENTION_DAYS = 90;
@@ -36,6 +37,7 @@ export class CouponCleanupCron {
   // 04:30 giờ VN: sau các cron cấp voucher/tính hạng ban đêm, trước giờ khách vào app.
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 30 4 * * *', { name: 'coupons.cleanup-personal-expired', timeZone: 'Asia/Ho_Chi_Minh' })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.purgeExpiredPersonal();

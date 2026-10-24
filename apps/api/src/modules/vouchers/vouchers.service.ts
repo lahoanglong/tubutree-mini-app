@@ -13,6 +13,7 @@ import { REAL_USER_SQL, REAL_USER_WHERE } from '../../common/real-user';
 import { OWN_RETAIL_SPEND_SQL } from '../orders/own-retail-spend';
 import { COUNTED_ORDER_WHERE } from '../../common/first-order';
 import { voucherCode } from './voucher-code';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 type GrantFailures = { count: number; first?: unknown };
 
@@ -195,6 +196,7 @@ export class VouchersService {
    * được `grant()` tự cô lập (P2002 nuốt, notify `.catch(() => undefined)`).
    */
   @Cron(CronExpression.EVERY_HOUR, { timeZone: CRON_TZ })
+  @TrackCron()
   async welcomeVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -241,6 +243,7 @@ export class VouchersService {
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
   @Cron('0 1 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async birthdayVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -289,6 +292,7 @@ export class VouchersService {
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
   @Cron('0 2 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async winbackVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -331,6 +335,7 @@ export class VouchersService {
    * unhandledRejection, Node 20 mặc định crash cả process.
    */
   @Cron('0 5 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async milestoneVouchers(): Promise<void> {
     const failures: GrantFailures = { count: 0 };
     let granted = 0;
@@ -424,6 +429,7 @@ export class VouchersService {
    * đã tự có, giảm giá chỉ là chi phí).
    */
   @Cron('0 10 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async secondOrderVouchers(): Promise<CronBatchResult> {
     if (this.secondOrderRunning) return { skipped: 'RUNNING' };
     this.secondOrderRunning = true;

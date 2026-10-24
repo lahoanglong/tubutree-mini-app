@@ -6,6 +6,7 @@ import { OrderStatusService } from './order-status.service';
 import { PREPAID_METHODS } from './order-transition';
 import { CRON_TZ } from '../../common/cron-tz';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 export {
   DEALER_PENDING_PAYMENT_TTL_KEY,
@@ -45,6 +46,7 @@ export class PendingPaymentExpiryCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */10 * * * *', { name: 'orders.pending-payment-expiry', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.expireStale();

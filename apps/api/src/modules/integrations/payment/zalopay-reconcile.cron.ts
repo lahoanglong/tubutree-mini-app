@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { ZalopayService } from './zalopay.service';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 export type ZalopayReconcileResult =
   | { skipped: 'RUNNING' | 'NOT_CONFIGURED' }
@@ -30,6 +31,7 @@ export class ZalopayReconcileCron {
   ) {}
 
   @Cron('20 */5 * * * *', { name: 'payments.zalopay-reconcile', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.reconcile();

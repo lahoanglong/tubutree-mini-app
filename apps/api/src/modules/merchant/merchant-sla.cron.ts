@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MerchantFulfilmentService, slaStateOf } from './merchant-fulfilment.service';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 const LOCK_KEY = 'cron:merchant.sla_reminder';
 /** Nhắc lại cùng một đơn tối đa mỗi chừng này giờ. */
@@ -36,6 +37,7 @@ export class MerchantSlaCron {
   ) {}
 
   @Cron('0 15 * * * *', { name: 'merchant.sla-reminder', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.remind();

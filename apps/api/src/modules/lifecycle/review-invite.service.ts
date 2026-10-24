@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 export type ReviewInviteRunResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { sent: number; claimed: number };
 
@@ -48,6 +49,7 @@ export class ReviewInviteService {
 
   /** 10h và 19h giờ VN: tránh gửi tin lúc khách ngủ. */
   @Cron('0 10,19 * * *', { timeZone: CRON_TZ })
+  @TrackCron()
   async sendReviewInvites(): Promise<ReviewInviteRunResult> {
     if (this.running) return { skipped: 'RUNNING' };
     this.running = true;

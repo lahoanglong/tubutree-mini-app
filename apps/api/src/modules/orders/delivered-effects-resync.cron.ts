@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { OrderStatusService } from './order-status.service';
 import { deliveredEffectsResyncWhere } from './delivered-effects';
+import { TrackCron } from '../../common/cron-run/track-cron';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -34,6 +35,7 @@ export class DeliveredEffectsResyncCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */10 * * * *', { name: 'orders.delivered-effects-resync', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.resyncPending();

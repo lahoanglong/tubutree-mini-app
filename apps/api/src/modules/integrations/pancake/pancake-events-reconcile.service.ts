@@ -12,6 +12,7 @@ import {
   PANCAKE_JOB_EVENT,
   PANCAKE_STOCK_EVENT,
 } from './pancake-webhook-dedupe';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 const LOCK_KEY = 'pancake.events-reconcile';
 
@@ -48,6 +49,7 @@ export class PancakeEventsReconcileService {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('45 */10 * * * *', { name: 'pancake.events-reconcile', timeZone: CRON_TZ })
+  @TrackCron()
   async reconcile(): Promise<void> {
     try {
       await this.redriveEvents();

@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WastePickupHooks } from './waste-pickup-hooks.service';
+import { TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
 
@@ -32,6 +33,7 @@ export class WastePickupSweepCron {
 
   // Toàn thân bọc try/catch: @Cron không tự bắt lỗi — lỗi ném ra ngoài là unhandledRejection.
   @Cron('0 */5 * * * *', { name: 'waste.pickup-sweep', timeZone: CRON_TZ })
+  @TrackCron()
   async handleCron(): Promise<void> {
     try {
       const res = await this.run();
