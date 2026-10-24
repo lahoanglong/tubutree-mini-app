@@ -51,6 +51,21 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Giờ cron trả thưởng quý (dealer.cron.ts, 04:00 ngày 10 giờ VN) tính từ 00:00 ngày đó. */
 const PAYOUT_HOUR_MS = 4 * 60 * 60 * 1000;
 
+/**
+ * Mốc chốt đơn (dòng lịch sử PACKED, paidAt, dòng công nợ ORDER) được ghi TRƯỚC khi transaction chốt đơn commit. Lượt trả
+ * thưởng/trả bù đọc doanh số (READ COMMITTED) đúng lúc đó không thấy đơn, nhưng nếu ghi dòng thưởng ở giờ chạy thì về sau đơn
+ * bị coi là "đã tính": đại lý mất khoản bù, huỷ đơn thì bị thu hồi khoản thưởng chưa từng được trả. Nên mỗi lượt chỉ tính đơn
+ * chốt tới (giờ chạy − biên này) và ghi đúng mốc đó vào createdAt dòng thưởng: đơn chốt trước mốc chắc chắn đã commit lúc đọc.
+ * Biên lớn hơn hẳn thời gian sống của transaction chốt đơn (timeout mặc định của Prisma, 5 giây) cộng lệch giờ app/DB; đơn chốt
+ * trong biên để bước trả bù hằng ngày trả.
+ */
+export const SETTLE_VISIBILITY_MARGIN_MS = 60_000;
+
+/** Mốc "doanh số đã thấy" của lượt chạy ở `now`. Kẹp theo giờ thật: `now` ở tương lai thì mốc có thể rơi vào đơn chưa commit. */
+function settledVisibleBy(now: Date): Date {
+  return new Date(Math.min(now.getTime(), Date.now()) - SETTLE_VISIBILITY_MARGIN_MS);
+}
+
 /** Nhãn tiếng Việt cho trạng thái yêu cầu nhận thưởng (message trả về đại lý/admin). */
 const CLAIM_STATUS_LABEL: Record<DealerRewardClaimStatus, string> = {
   PENDING: 'Đang chờ duyệt',
@@ -719,7 +734,8 @@ export class DealerService {
 
   /**
    * Doanh số đại lý trong [start, end) — nền DUY NHẤT cho báo cáo quý, thưởng quý (tiền thật
-   * vào công nợ) và mốc thưởng tour/quà. Một đơn chỉ được tính ("đã chốt") khi:
+   * vào công nợ) và mốc thưởng tour/quà. Doanh số của một đơn là TIỀN HÀNG (total − shippingFee): phí ship
+   * đại lý trả không phải hàng bán ra nên không đẩy đại lý lên bậc thưởng. Một đơn chỉ được tính ("đã chốt") khi:
    *  1. KHÔNG còn tự huỷ được (PACKED/SHIPPING/DELIVERED — xem DEALER_SETTLED_STATUSES), và
    *  2. đã có cam kết tiền: đã thanh toán (paymentStatus=PAID) hoặc là đơn "Ghi công nợ" (có
    *     dòng DealerCreditLedger refType=ORDER — đơn CREDIT không bao giờ lật PAID).
@@ -748,7 +764,7 @@ export class DealerService {
         createdAt: { gte: start, lt: end },
         ...(excludeOrderId ? { id: { not: excludeOrderId } } : {}),
       },
-      select: { id: true, total: true, status: true, paymentStatus: true, createdAt: true, paidAt: true },
+      select: { id: true, total: true, shippingFee: true, status: true, paymentStatus: true, createdAt: true, paidAt: true },
     });
     const isSettledStatus = (s: string) => DEALER_SETTLED_STATUSES.includes(s);
     const unpaidSettledIds = orders
@@ -770,7 +786,7 @@ export class DealerService {
       if (isSettledStatus(o.status) && (o.paymentStatus === 'PAID' || creditAtById.has(o.id))) {
         settledRows.push(o);
       } else {
-        v.pending += o.total;
+        v.pending += o.total - o.shippingFee;
         v.pendingCount += 1;
       }
     }
@@ -784,7 +800,7 @@ export class DealerService {
       counted = settledRows.filter((o) => settledAt.get(o.id)!.getTime() <= countedBy.getTime());
     }
     for (const o of counted) {
-      v.settled += o.total;
+      v.settled += o.total - o.shippingFee;
       v.settledCount += 1;
     }
     return v;
@@ -1434,12 +1450,14 @@ export class DealerService {
             select: { id: true },
           });
           if (existed) return null;
-          // CHỈ doanh số đã chốt (đã thanh toán/ghi công nợ + không còn tự huỷ được) — xem dealerVolume.
-          const revenue = (await this.dealerVolume(d.id, start, end, tx)).settled;
+          // CHỈ doanh số đã chốt (đã thanh toán/ghi công nợ + không còn tự huỷ được) — xem dealerVolume. Tính tới seenBy và ghi
+          // createdAt = seenBy (xem SETTLE_VISIBILITY_MARGIN_MS): thu hồi và trả bù coi đúng tập đơn chốt ≤ createdAt là đã tính.
+          const seenBy = settledVisibleBy(now);
+          const revenue = (await this.dealerVolume(d.id, start, end, tx, undefined, seenBy)).settled;
           const { bonusAmount } = bonusForRevenue(revenue, sorted);
           if (bonusAmount <= 0) return null;
           await tx.dealerCreditLedger.create({
-            data: { userId: d.id, delta: -bonusAmount, refType: 'QUARTER_BONUS', refId: quarter, note: `Thưởng doanh số ${quarter}` },
+            data: { userId: d.id, delta: -bonusAmount, refType: 'QUARTER_BONUS', refId: quarter, note: `Thưởng doanh số ${quarter}`, createdAt: seenBy },
           });
           return { bonusAmount, revenue };
         });
@@ -1548,7 +1566,8 @@ export class DealerService {
    *
    * Idempotent: dưới khoá advisory (đại lý, quý) dùng chung với payout và thu hồi, nên 2 lượt chồng nhau tuần tự và lượt
    * sau thấy phần chênh = 0; unique (userId, refType, refId = `quý:topup:số thứ tự`) + bắt P2002 là lưới cuối khi khoá
-   * advisory không có tác dụng. createdAt của dòng bù là mốc "doanh số đã tính" cho lần thu hồi sau (xem clawback), nên lượt chạy sau hạn ghi createdAt = hạn.
+   * advisory không có tác dụng. createdAt của dòng bù (và dòng trả muộn) là mốc "doanh số đã tính" cho lần thu hồi sau (xem clawback), nên
+   * ghi đúng mốc cắt doanh số: min(hạn cửa sổ, giờ chạy − SETTLE_VISIBILITY_MARGIN_MS).
    */
   async topUpQuarterlyBonuses(now: Date = new Date()): Promise<{ toppedUp: number; quarters: string[]; failed: number }> {
     const windowDays = await this.topUpWindowDays();
@@ -1562,9 +1581,7 @@ export class DealerService {
     let failed = 0;
     for (const period of periods) {
       const tiers = await this.tiersForTopUp(period.key, currentTiers);
-      // Doanh số cắt ở expiresAt; lượt quét thêm chạy SAU mốc đó nên createdAt của dòng ghi phải ép về expiresAt, nếu không
-      // thu hồi coi đơn chốt trong khoảng expiresAt..giờ chạy là đã được tính. Trong cửa sổ thì để giờ DB mặc định.
-      const stampedAt = now.getTime() > period.expiresAt.getTime() ? period.expiresAt : undefined;
+      const pastExpiry = now.getTime() > period.expiresAt.getTime();
       for (const d of dealers) {
         let outcome: { amount: number; revenue: number; latePayout: boolean } | null;
         try {
@@ -1583,7 +1600,10 @@ export class DealerService {
             });
             const held = Math.max(-rows.reduce((sum, r) => sum + r.delta, 0), 0);
             const paidRows = rows.filter((r) => r.refType !== 'QUARTER_BONUS_ADJ');
-            const revenue = (await this.dealerVolume(d.id, period.start, period.end, tx, undefined, period.expiresAt)).settled;
+            // Doanh số cắt ở expiresAt (lượt quét thêm chạy sau hạn) và không quá giờ chạy − biên (đơn đang chốt dở chưa commit, xem
+            // SETTLE_VISIBILITY_MARGIN_MS). Dòng ghi mang đúng mốc này, nên thu hồi coi đúng các đơn chốt ≤ mốc là đã tính.
+            const countedBy = new Date(Math.min(period.expiresAt.getTime(), settledVisibleBy(now).getTime()));
+            const revenue = (await this.dealerVolume(d.id, period.start, period.end, tx, undefined, countedBy)).settled;
             const bonusNow = bonusForRevenue(revenue, tiers).bonusAmount;
             // Mốc "đã thấy": lần trả muộn nhất; chưa có lần trả nào thì mốc là giờ cron trả ngày 10.
             const seenAt =
@@ -1596,7 +1616,7 @@ export class DealerService {
             if (paidRows.length === 0 && bonusSeen > 0 && bonusNow > 0) {
               // Đã đạt bậc ngay lúc trả ngày 10 mà không có dòng thưởng: lần trả đó không chạy được. Trả trọn như payout.
               await tx.dealerCreditLedger.create({
-                data: { userId: d.id, delta: -bonusNow, refType: 'QUARTER_BONUS', refId: period.key, note: `Thưởng doanh số ${period.key} (trả muộn)`, createdAt: stampedAt },
+                data: { userId: d.id, delta: -bonusNow, refType: 'QUARTER_BONUS', refId: period.key, note: `Thưởng doanh số ${period.key} (trả muộn)`, createdAt: countedBy },
               });
               return { amount: bonusNow, revenue, latePayout: true };
             }
@@ -1610,7 +1630,7 @@ export class DealerService {
                 delta: -amount,
                 refType: 'QUARTER_BONUS_TOPUP',
                 refId: `${period.key}:topup:${seq}`,
-                createdAt: stampedAt,
+                createdAt: countedBy,
                 note: `Trả bù thưởng quý ${period.key}: đơn chốt sau ngày chốt thưởng, doanh số đã chốt ${vnd(revenue)}`,
               },
             });
@@ -1619,9 +1639,9 @@ export class DealerService {
         } catch (err) {
           if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') continue;
           // Lỗi của một đại lý không được chặn các đại lý sau. Chưa có dòng nào được ghi nên lượt cron hôm sau thử lại, trừ lượt quét
-          // sau hạn (stampedAt): quý đó không còn được quét nữa nên phải chạy tay hoặc đối soát.
+          // sau hạn: quý đó không còn được quét nữa nên phải chạy tay hoặc đối soát.
           failed += 1;
-          const after = stampedAt ? ' Đã hết cửa sổ trả bù: cần chạy tay hoặc đối soát.' : '';
+          const after = pastExpiry ? ' Đã hết cửa sổ trả bù: cần chạy tay hoặc đối soát.' : '';
           this.logger.error(`Trả bù thưởng ${period.key} lỗi cho đại lý ${d.id}: ${(err as Error).message}.${after}`, (err as Error).stack);
           continue;
         }
@@ -1661,7 +1681,7 @@ export class DealerService {
    * Thu hồi theo PHẦN BIÊN của chính đơn này, KHÔNG tính lại cả quý:
    *   clawback = min(thưởng còn giữ, bonus(Vtrước) − bonus(Vtrước − đơn))
    * với Vtrước = doanh số ĐÃ CHỐT ngay trước lần huỷ = doanh số các đơn khác (dealerVolume qua `tx`,
-   * loại hẳn đơn này theo id) + tổng tiền đơn này. Tính lại cả quý (bản trước) phạt nhầm quý trả
+   * loại hẳn đơn này theo id) + tiền hàng đơn này (total − shippingFee, cùng cách dealerVolume tính). Tính lại cả quý (bản trước) phạt nhầm quý trả
    * thưởng theo quy tắc CŨ (mọi đơn chưa huỷ đều tính): lần huỷ đầu tiên thu luôn cả phần chênh giữa
    * 2 quy tắc. CHỈ thu khi đơn ĐANG được tính vào doanh số đã chốt ngay trước lần huỷ: trạng thái cũ
    * (ảnh chụp `order.status` trước lần lật) ∈ PACKED/SHIPPING/DELIVERED và (đã PAID — theo
@@ -1692,6 +1712,7 @@ export class DealerService {
       type: string;
       createdAt: Date;
       total: number;
+      shippingFee: number;
       status: string;
       paymentStatus: string;
     },
@@ -1722,16 +1743,17 @@ export class DealerService {
     if (!(await this.wasCountedBeforeReversal(tx, order, opts.paidBeforeReversal))) {
       return { quarter, clawedBack: 0 }; // đơn không nằm trong doanh số đã chốt → thưởng không tính trên nó
     }
-    // Dòng thưởng/trả bù ghi trong cùng transaction với lúc đọc doanh số nên createdAt của dòng muộn nhất là mốc "doanh
-    // số đã tính". Đơn (và các đơn khác) chốt sau mốc đó chưa từng góp vào thưởng đã trả: không được thu hồi vì
-    // chúng, và không được làm "doanh số các đơn khác" phình ra khiến phần biên của đơn đã tính bị thu quá tay.
+    // createdAt của mỗi dòng thưởng/trả bù là đúng mốc cắt doanh số của lượt ghi nó (xem SETTLE_VISIBILITY_MARGIN_MS) nên
+    // createdAt của dòng muộn nhất là mốc "doanh số đã tính". Đơn (và các đơn khác) chốt sau mốc đó chưa từng góp vào
+    // thưởng đã trả: không được thu hồi vì chúng, và không được làm "doanh số các đơn khác" phình ra khiến phần biên của
+    // đơn đã tính bị thu quá tay.
     const payoutAt = new Date(Math.max(...payRows.map((r) => new Date(r.createdAt).getTime())));
     if (!(await this.wasCountedByPayout(tx, order, payoutAt, opts.paidBeforeReversal))) {
       return { quarter, clawedBack: 0 };
     }
 
     const others = (await this.dealerVolume(order.userId, qStart, qEnd, tx, order.id, payoutAt)).settled;
-    const before = others + order.total;
+    const before = others + order.total - order.shippingFee;
     const tiers = (await this.quarterTiersSnapshot(tx, quarter)) ?? (await this.bonusTiers());
     const marginal = bonusForRevenue(before, tiers).bonusAmount - bonusForRevenue(others, tiers).bonusAmount;
     const clawback = Math.min(heldBonus, marginal);

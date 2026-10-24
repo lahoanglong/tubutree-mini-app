@@ -36,6 +36,7 @@ function build(order: Record<string, unknown> | null, over: { actor?: string; no
     },
     orderStatusHistory: { findFirst: jest.fn().mockResolvedValue({ actorType: over.actor ?? 'ADMIN', createdAt: CLOSED_AT }) },
     notificationLog: { findFirst: jest.fn().mockResolvedValue(over.noticeSent ? { id: 'n1' } : null) },
+    orderCustomerRefund: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) },
     gomdonAlert: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   };
   const notifications = { notify: jest.fn().mockResolvedValue(undefined) };
@@ -167,5 +168,83 @@ describe('OrderStatusService.resyncReversalEffects (Q19)', () => {
     bySeller.prisma.order.findUnique.mockResolvedValue(merchantOrder);
     await bySeller.svc.resyncReversalEffects('o1');
     expect(bySeller.notifications.notify).not.toHaveBeenCalledWith('owner1', 'MERCHANT_ORDER_CANCELLED', expect.anything());
+  });
+
+  describe('khoản hoàn số tiền khách chuyển thiếu (đơn chuyển khoản huỷ khi Pancake báo đã nhận 100.000đ)', () => {
+    function withUnderpayment(noticeSent: boolean, placedForCustomer = false) {
+      const b = build(makeOrder({ placedForCustomer }), { noticeSent });
+      b.prisma.order.findUnique.mockResolvedValue({
+        id: 'o1', code: 'TUBU1', userId: 'u1', status: 'CANCELLED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID',
+        pancakePaidReported: 100_000, placedForCustomer,
+      });
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([]),
+        orderCustomerRefund: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+      };
+      Object.assign(b.prisma, { $transaction: jest.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)), user: { findMany: jest.fn().mockResolvedValue([]) } });
+      return b;
+    }
+    const sentTo = (n: { notify: jest.Mock }, tpl: string) => n.notify.mock.calls.filter((c) => c[1] === tpl);
+
+    it('tin huỷ đã đi thiếu dòng hoàn: cron ghi khoản hoàn và khoản hoàn tự báo khách đúng một lần', async () => {
+      const { svc, notifications } = withUnderpayment(true);
+      await expect(svc.resyncReversalEffects('o1')).resolves.toEqual({ outcome: 'DONE' });
+      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toEqual([['u1', 'REFUND_LATE_PAYMENT', expect.objectContaining({ order_code: 'TUBU1' })]]);
+      expect(sentTo(notifications, 'ORDER_CANCELLED')).toHaveLength(0);
+    });
+
+    it('chưa có tin huỷ: một tin huỷ mang dòng khoản hoàn, không có tin hoàn riêng', async () => {
+      const { svc, notifications } = withUnderpayment(false);
+      await expect(svc.resyncReversalEffects('o1')).resolves.toEqual({ outcome: 'DONE' });
+      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toHaveLength(0);
+      const cancelled = sentTo(notifications, 'ORDER_CANCELLED');
+      expect(cancelled).toHaveLength(1);
+      expect((cancelled[0]![2] as Record<string, string>).refund_note).toContain('100.000');
+    });
+
+    it('lần chạy trước ghi khoản hoàn rồi hỏng ở bước sau: lần sau (ghi được 0) vẫn gửi tin huỷ có dòng khoản hoàn, không có tin hoàn riêng', async () => {
+      const b = withUnderpayment(false);
+      b.hooks.afterLocalCancel.mockResolvedValueOnce(false);
+      await expect(b.svc.resyncReversalEffects('o1')).resolves.toMatchObject({ outcome: 'INCOMPLETE' });
+      expect(b.notifications.notify).not.toHaveBeenCalled();
+
+      const tx = {
+        $queryRaw: jest.fn(),
+        orderCustomerRefund: { findFirst: jest.fn().mockResolvedValue(null), aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 100_000 } }), createMany: jest.fn() },
+      };
+      (b.prisma as unknown as { $transaction: jest.Mock }).$transaction.mockImplementation(async (cb: (t: typeof tx) => unknown) => cb(tx));
+      b.prisma.orderCustomerRefund.aggregate.mockResolvedValue({ _sum: { amount: 100_000 } });
+      await expect(b.svc.resyncReversalEffects('o1')).resolves.toEqual({ outcome: 'DONE' });
+      expect(sentTo(b.notifications, 'REFUND_LATE_PAYMENT')).toHaveLength(0);
+      const cancelled = sentTo(b.notifications, 'ORDER_CANCELLED');
+      expect(cancelled).toHaveLength(1);
+      expect((cancelled[0]![2] as Record<string, string>).refund_note).toContain('100.000');
+    });
+
+    it('đơn CTV lên hộ: tin huỷ đã đi thì khoản hoàn không mời CTV chọn nơi nhận', async () => {
+      const { svc, notifications } = withUnderpayment(true, true);
+      await svc.resyncReversalEffects('o1');
+      expect(sentTo(notifications, 'REFUND_LATE_PAYMENT')).toHaveLength(0);
+    });
+
+    it('khoản hoàn đã ghi từ trước (outcome 0): không báo lại', async () => {
+      const b = withUnderpayment(true);
+      const tx = {
+        $queryRaw: jest.fn(),
+        orderCustomerRefund: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          aggregate: jest.fn().mockResolvedValue({ _sum: { amount: 100_000 } }),
+          createMany: jest.fn(),
+        },
+      };
+      (b.prisma as unknown as { $transaction: jest.Mock }).$transaction.mockImplementation(async (cb: (t: typeof tx) => unknown) => cb(tx));
+      await b.svc.resyncReversalEffects('o1');
+      expect(sentTo(b.notifications, 'REFUND_LATE_PAYMENT')).toHaveLength(0);
+      expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+    });
   });
 });

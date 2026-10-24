@@ -50,6 +50,17 @@ function sessionExpiredText(error: unknown): string {
   return message && !GENERIC_AUTH_MESSAGES.has(message) ? message : SESSION_EXPIRED_MESSAGE;
 }
 
+// Máy chủ 503 kèm lý do (vd. chưa cấu hình tài khoản nhận tiền): getErrorMessage giấu message của 5xx sau câu chung, nhưng ở đây
+// lý do ấy là thứ khách cần đọc. Vẫn không phải lỗi cuối: dò nền và nút Thử lại cứ chạy, cấu hình xong là tự ra QR.
+function loadErrorMessage(error: unknown): string {
+  if (isHttpError(error) && error.response?.status === 503) {
+    const data = error.response.data as { message?: string | string[] } | undefined;
+    const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
+    if (message) return message;
+  }
+  return getErrorMessage(error);
+}
+
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
 
 export default function BankPaymentPage() {
@@ -186,7 +197,7 @@ export default function BankPaymentPage() {
             và hotline dựng ngay dưới (showSupport tắt để hotline không nằm trên nút phụ). */}
         <ErrorState
           title="Chưa tải được thông tin thanh toán"
-          message={getErrorMessage(error)}
+          message={loadErrorMessage(error)}
           showSupport={false}
           retrying={isFetching}
           onRetry={() => void refetch()}

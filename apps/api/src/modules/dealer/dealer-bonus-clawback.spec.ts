@@ -35,6 +35,7 @@ const ORDER = {
   type: 'DEALER',
   createdAt: new Date('2026-03-20T03:00:00Z'),
   total: 30_000_000,
+  shippingFee: 0,
   status: 'DELIVERED',
   paymentStatus: 'PAID',
 };
@@ -42,6 +43,7 @@ const ORDER = {
 type Row = {
   id: string;
   total: number;
+  shippingFee?: number;
   status: string;
   paymentStatus: string;
   createdAt?: Date;
@@ -74,7 +76,7 @@ function makeTx(opts: {
   const credit = new Set(opts.creditOrderIds ?? []);
   const rows: Row[] = (opts.others as (number | Row)[]).map((o, i) =>
     typeof o === 'number' ? { id: `r${i}`, total: o, status: 'DELIVERED', paymentStatus: 'PAID' } : o,
-  ).map((r) => ({ createdAt: new Date('2026-03-10T03:00:00Z'), paidAt: null, ...r }));
+  ).map((r) => ({ createdAt: new Date('2026-03-10T03:00:00Z'), paidAt: null, shippingFee: 0, ...r }));
   const packedOf = new Map<string, Date>(rows.filter((r) => r.packedAt).map((r) => [r.id, r.packedAt!]));
   if (opts.reversed?.packedAt) packedOf.set('o9', opts.reversed.packedAt);
   const tx = {
@@ -447,5 +449,29 @@ describe('Thông báo DEALER_BONUS_ADJUSTED cho đại lý (chỉ SAU KHI lần 
     await jest.advanceTimersByTimeAsync(10 * 60_000);
     expect(findFirst).not.toHaveBeenCalled();
     expect(notifications.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('Thu hồi theo tiền hàng, không gồm phí ship', () => {
+  it('phần biên tính trên tiền hàng của đơn bị huỷ và của các đơn khác', async () => {
+    // Các đơn khác 70tr hàng + 19.000đ ship; đơn bị huỷ 30tr hàng + 19.000đ ship. Theo tiền hàng: bonus(100tr)=3tr −
+    // bonus(70tr)=1,4tr = 1,6tr. Cộng cả phí ship thì ra 1.600.760đ.
+    const { tx } = makeTx({
+      bonusDelta: -3_000_000,
+      others: [{ id: 'r0', total: 70_019_000, shippingFee: 19_000, status: 'DELIVERED', paymentStatus: 'PAID' }],
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, { ...ORDER, total: 30_019_000, shippingFee: 19_000 });
+    expect(r).toEqual({ quarter: 'Q1/2026', clawedBack: 1_600_000 });
+  });
+
+  it('hàng vừa đủ bậc nhờ đơn bị huỷ, phí ship không kéo "các đơn khác" lên bậc → thu đúng chênh bậc', async () => {
+    // Các đơn khác 49,99tr hàng + 19.000đ ship (dưới bậc 50tr theo tiền hàng); đơn bị huỷ 10tr hàng.
+    // bonus(59,99tr)=1.199.800đ − bonus(49,99tr)=0.
+    const { tx } = makeTx({
+      bonusDelta: -1_199_800,
+      others: [{ id: 'r0', total: 50_009_000, shippingFee: 19_000, status: 'DELIVERED', paymentStatus: 'PAID' }],
+    });
+    const r = await service().clawbackQuarterBonusForOrder(tx as never, { ...ORDER, total: 10_000_000 });
+    expect(r.clawedBack).toBe(1_199_800);
   });
 });

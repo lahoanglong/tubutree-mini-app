@@ -303,6 +303,15 @@ export async function recordCumulativeLatePayment(
   return outcome;
 }
 
+/** Tổng các khoản hoàn "chuyển thiếu" Pancake đã ghi cho đơn (kể cả do lần chạy trước), để tin huỷ nói đúng số dù lần này ghi được 0. */
+export async function recordedPancakeUnderpayment(prisma: Pick<PrismaClient, 'orderCustomerRefund'>, orderId: string): Promise<number> {
+  const r = await prisma.orderCustomerRefund.aggregate({
+    where: { orderId, kind: 'LATE_PAYMENT', refKey: { startsWith: 'PANCAKE:' } },
+    _sum: { amount: true },
+  });
+  return r._sum.amount ?? 0;
+}
+
 /**
  * Đơn chuyển khoản bị huỷ khi Pancake đã báo khách chuyển một phần (R3-MONEY-5): hoàn ngay số đã nhận (cùng khoá với
  * webhook Pancake báo lại số đó sau này, nên không thành hai khoản). Mặc định caller báo khách trong chính tin huỷ đơn

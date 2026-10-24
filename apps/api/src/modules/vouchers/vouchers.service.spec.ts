@@ -7,8 +7,8 @@ import { priorOrderWhere } from '../../common/first-order';
 import { startOfVnMonth } from '../../common/vn-time';
 
 /**
- * milestoneVouchers quét hai kỳ (tháng trước, tháng này), mỗi kỳ một vòng keyset. Mock SQL chỉ trả dòng cho kỳ THÁNG NÀY và
- * rỗng cho kỳ trước để các ca đếm số coupon/cursor không nhân đôi; kỳ trước có test riêng. Tham số Date đầu tiên là đầu kỳ.
+ * milestoneVouchers quét tháng này và 3 tháng trước, mỗi kỳ một vòng keyset. Mock SQL chỉ trả dòng cho kỳ THÁNG NÀY và
+ * rỗng cho các kỳ trước để các ca đếm số coupon/cursor không nhân đôi; kỳ trước có test riêng. Tham số Date đầu tiên là đầu kỳ.
  */
 function isCurrentPeriodCall(a: unknown[]): boolean {
   const start = a.find((x): x is Date => x instanceof Date);
@@ -555,7 +555,7 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
   // idempotency lại theo THÁNG DƯƠNG LỊCH (`MILESTONE<spend>-yyyy-mm`). Cùng một lần chi tiêu
   // nằm trong 30 ngày trượt sẽ sinh khoá khác khi sang tháng mới → cấp voucher LẦN 2 cho đúng
   // số tiền đó. Phải cho 2 thứ dùng CHUNG một mốc thời gian: gom theo tháng dương lịch.
-  it('gom chi tiêu theo THÁNG DƯƠNG LỊCH (giờ VN), không phải 30 ngày trượt: kỳ tháng trước rồi kỳ tháng này', async () => {
+  it('gom chi tiêu theo THÁNG DƯƠNG LỊCH (giờ VN), không phải 30 ngày trượt: 3 kỳ tháng trước rồi kỳ tháng này', async () => {
     const { svc, prisma } = setup([{ userId: 'u1', spent: BigInt(3_500_000) }]);
     jest.useFakeTimers().setSystemTime(new Date('2026-10-05T03:00:00Z')); // 10:00 ngày 5/10 giờ VN
     try {
@@ -566,6 +566,8 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
     // Mốc đầu tháng theo giờ VN: 1/9 = 2026-08-31T17:00:00Z, 1/10 = 2026-09-30T17:00:00Z, 1/11 = 2026-10-31T17:00:00Z.
     const dates = queryDates(prisma);
     expect(dates.map((d) => d.slice(0, 2).map((x) => x.toISOString()))).toEqual([
+      ['2026-06-30T17:00:00.000Z', '2026-07-31T17:00:00.000Z'],
+      ['2026-07-31T17:00:00.000Z', '2026-08-31T17:00:00.000Z'],
       ['2026-08-31T17:00:00.000Z', '2026-09-30T17:00:00.000Z'],
       ['2026-09-30T17:00:00.000Z', '2026-10-31T17:00:00.000Z'],
     ]);
@@ -579,14 +581,32 @@ describe('VouchersService.milestoneVouchers (§6.6)', () => {
     } finally {
       jest.useRealTimers();
     }
-    expect(queryDates(prisma)[1]![2]!.toISOString()).toBe('2026-10-13T03:00:00.000Z');
+    expect(queryDates(prisma)[3]![2]!.toISOString()).toBe('2026-10-13T03:00:00.000Z');
+  });
+
+  it('quét kỳ cách 2 tháng: đơn tạo 28/9 đủ điều kiện sau 4/11 vẫn được cấp, mã mang khoá 2026-09', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
+      const start = a.find((x): x is Date => x instanceof Date)!;
+      return start.toISOString() === '2026-08-31T17:00:00.000Z' ? [{ userId: 'u1', spent: BigInt(1_200_000) }] : [];
+    });
+    const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
+    const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-05T03:00:00Z'));
+    try {
+      await new VouchersService(prisma, makeConfig(), notify).milestoneVouchers();
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(String(create.mock.calls[0][0].data.code)).toContain('MILESTONE1000000-2026-09-');
   });
 
   it('đơn của kỳ tháng trước cấp mã mang khoá tháng trước (không dán nhãn tháng này)', async () => {
     const create = jest.fn().mockResolvedValue({});
     const queryRaw = jest.fn(async (_s: TemplateStringsArray, ...a: unknown[]) => {
       const start = a.find((x): x is Date => x instanceof Date)!;
-      return start.toISOString() === '2026-09-30T17:00:00.000Z' ? [] : [{ userId: 'u1', spent: BigInt(5_500_000) }];
+      return start.toISOString() === '2026-08-31T17:00:00.000Z' ? [{ userId: 'u1', spent: BigInt(5_500_000) }] : [];
     });
     const prisma = { $queryRaw: queryRaw, coupon: { findUnique: jest.fn().mockResolvedValue(null), create } } as unknown as PrismaService;
     const notify = { notify: jest.fn().mockResolvedValue(undefined) } as unknown as NotificationsService;

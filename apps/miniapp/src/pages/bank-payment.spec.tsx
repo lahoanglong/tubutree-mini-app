@@ -470,6 +470,32 @@ describe('Thanh toán chuyển khoản: lỗi tải có hướng dẫn và hotli
     expect(screen.getByTestId('error-state-icon')).toBeInTheDocument();
   });
 
+  it('503 ngay lần tải đầu kèm lý do (chưa cấu hình tài khoản nhận tiền): hiện lý do máy chủ, có Thử lại, không báo đơn đã đóng', async () => {
+    mocks.getBankQr.mockRejectedValue(new HttpError('x', 'ERR_BAD_RESPONSE', { status: 503, data: { message: 'Chưa cấu hình tài khoản nhận tiền.' } }));
+    renderPage();
+    expect(await screen.findByText('Chưa cấu hình tài khoản nhận tiền.')).toBeInTheDocument();
+    expect(screen.queryByText('Đơn không còn chờ chuyển khoản')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+  });
+
+  it('503 lần đầu rồi cấu hình xong: dò nền tự ra QR không cần thao tác', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    mocks.getBankQr
+      .mockRejectedValueOnce(new HttpError('x', 'ERR_BAD_RESPONSE', { status: 503, data: { message: 'Chưa cấu hình tài khoản nhận tiền.' } }))
+      .mockResolvedValue(QR);
+    renderPage();
+    const tick = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    try {
+      await tick(0);
+      expect(screen.getByText('Chưa cấu hình tài khoản nhận tiền.')).toBeInTheDocument();
+      await tick(4_000);
+      await tick(4_000);
+      expect(screen.getByAltText('VietQR')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('mất mạng: nói thẳng "mất mạng" thay vì cùng câu với lỗi máy chủ', async () => {
     vi.stubGlobal('navigator', { ...navigator, onLine: false });
     mocks.getBankQr.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
