@@ -153,10 +153,12 @@ Mini App / web ──HTTPS──> API (NestJS) ──HTTP nội bộ──> zalo
 - Admin: `GET/POST` dưới `admin/support-chat/*` cho bridge status, QR, logout, reconnect, groups, test message, danh sách hội thoại, chi tiết, gửi lại, trả lời. Đăng ký vào `common/staff-permissions.matrix.spec.ts` và `endpoint-inventory.spec.ts`. Thao tác đổi cấu hình ghi `SystemConfigHistory` như các khoá khác; đăng nhập, đăng xuất ghi một dòng sự kiện (bảng riêng hoặc dạng `UserAdminEvent`, người làm chọn).
 - Chặn `/api/internal/*` ở `Caddyfile` để chỉ gọi được trong mạng nội bộ, ngoài lớp kiểm Bearer **(quyết định của agent)**.
 
-### 5.3 Dữ liệu (Prisma, một migration)
+### 5.3 Dữ liệu (Prisma, bốn migration chỉ thêm)
 - `SupportConversation`: `id`, `userId` unique (mỗi khách một hội thoại), `code` unique (4 ký tự, bỏ `0 O 1 I`), `lastMessageAt`, `customerReadAt`, `lastOffHoursNoticeOn` (ngày VN), `blockedAt?`, `blockedByUserId?`, `createdAt`, `updatedAt`.
 - Đầu tin chuyển: tên hiển thị của khách, số điện thoại che giữa nếu có (không có thì bỏ phần này), hạng nếu có.
 - `SupportMessage`: `id`, `conversationId`, `sender` (`CUSTOMER | STAFF | SYSTEM`), `source` (`MINIAPP | WEB | ZALO | ADMIN | SYSTEM`), `body` (≤2.000 ký tự), `imageUrl?`, `context?` (JSON `{orderCode?, productSlug?}`), `clientMsgId?` (unique cùng `conversationId`), `zaloMsgId?` unique, `staffName?`, `adminUserId?`, `forwardId?`, `recalledAt?`, `seenAt?` (khách đã thấy tin STAFF/SYSTEM này; chấm đỏ và chuông dựa vào đây), `createdAt`. Chỉ mục `(conversationId, createdAt)`.
+- `SupportRetiredCode`: mã hội thoại của khách đã xoá tài khoản; không bao giờ cấp lại, câu trả lời mang mã này bị coi là mã lạ.
+- `SupportRecallTombstone`: `zaloMsgId` của tin nhân viên đã thu hồi, ghi trước khi đánh dấu tin; tin tới sau lệnh thu hồi bị bỏ; dọn sau 2 ngày.
 - `SupportForward`: `id`, `conversationId`, `status` (`PENDING | SENT | FAILED | UNKNOWN`), `zaloMsgId?` unique, `attempts`, `lastError?`, `groupId`, `sentAt?`, `createdAt`.
 - Khoá cấu hình (seed `createOnly`): `chat.enabled` (`false`), `chat.zalo_group_id` (`""`), `chat.hours` (JSON `{"start":"08:00","end":"21:00"}`, có luật kiểm trong `JSON_RULES`), `chat.off_hours_text` (chuỗi). Public config thêm `chat.enabled`, `chat.hours`. Cờ "cầu nối đang chậm" trả trong `GET /me/support-chat` (không qua public config vì public config được cache lâu).
 - `SupportBridgeStatus`: `id` (`'main'`), `state`, `since`, `lastError?`, `zaloUid?`, `displayName?`, `avatar?`, `checkedAt`, `downAlertedAt?`.
@@ -166,7 +168,7 @@ Mini App / web ──HTTPS──> API (NestJS) ──HTTP nội bộ──> zalo
 ### 5.4 Mini App và web
 - Route Mini App `/chat`, web `/ho-tro/chat`, `private: true`, thêm vào `packages/app-core/src/route-map.json` **(quyết định của agent)**.
 - Lối vào theo mục 4.2. `zmp-bridge.openOAChat` và `platform-bridge` giữ nguyên cho khi chat tắt.
-- Hỏi tin mới: react-query `refetchInterval: 5000` khi màn đang hiện (dừng khi ẩn), lấy `after=<id cuối>`.
+- Hỏi tin mới: react-query `refetchInterval: 5000` khi màn đang hiện (dừng khi ẩn), mỗi lần lấy trang mới nhất (50 tin) rồi ghép theo id, nên tin ghi muộn vẫn hiện ở lần hỏi sau; `before=<id>` để xem tin cũ hơn.
 - Tin gửi đi hiện ngay (lạc quan) rồi khớp bằng `clientMsgId`.
 
 ## 6. Kiểm thử
