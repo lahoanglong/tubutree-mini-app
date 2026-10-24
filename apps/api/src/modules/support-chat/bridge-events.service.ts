@@ -65,7 +65,11 @@ export class BridgeEventsService {
     if (e.isSelf && isForwardHeader(text)) return OK;
 
     // Thu hồi đã tới trước tin này: bỏ tin. Tombstone giữ lại (lần gửi lại vẫn bị bỏ), việc dọn để retention lo.
-    if (await this.hasTombstone(e.msgId)) return OK;
+    // Đánh dấu luôn cả hàng nếu đã có: lần gửi trước có thể đã lưu tin rồi chết trước bước kiểm lại sau lưu.
+    if (await this.hasTombstone(e.msgId)) {
+      await this.markRecalled(e.msgId);
+      return OK;
+    }
 
     const { code, body } = parseStaffReply(e.text);
     const conv = await this.findConversation(e, code);
@@ -97,7 +101,7 @@ export class BridgeEventsService {
     }
 
     // Thu hồi có thể ghi tombstone sau lần kiểm đầu mà trước khi tin này lưu xong: kiểm lại sau khi lưu.
-    // Lỗi ở đây ném ra để cầu nối gửi lại; lần gửi lại đi đường P2002 ở trên và kiểm lại.
+    // Lỗi ở đây ném ra để cầu nối gửi lại; lần gửi lại thấy tombstone ở lần kiểm đầu và đánh dấu hàng đã lưu.
     if (await this.hasTombstone(e.msgId)) {
       await this.markRecalled(e.msgId);
       return OK;
@@ -129,7 +133,7 @@ export class BridgeEventsService {
       }
       // Trích chưa khớp mà có forward đang gửi dở: chờ nó ghi zaloMsgId rồi thử lại, kể cả khi câu có #MÃ, để quy tắc conflict còn áp được.
       // Chỉ chờ khi chính sự kiện còn mới: nhóm bận không được giữ một câu trả lời ở 503 hàng giờ.
-      const fresh = !Number.isFinite(e.ts) || Date.now() - e.ts <= PENDING_FORWARD_WINDOW_MS;
+      const fresh = Number.isFinite(e.ts) && Math.abs(Date.now() - e.ts) <= PENDING_FORWARD_WINDOW_MS;
       const pending = fresh && (await this.prisma.supportForward.findFirst({
         where: { status: 'PENDING', zaloMsgId: null, createdAt: { gte: new Date(Date.now() - PENDING_FORWARD_WINDOW_MS) } },
         select: { id: true },

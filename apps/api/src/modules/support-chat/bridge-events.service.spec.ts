@@ -353,6 +353,18 @@ describe('BridgeEventsService.handle message', () => {
       await expect(svc.handle(msg({ text: '#K7Q2 hi' }))).rejects.toThrow('db');
     });
 
+    it('gửi lại sau khi kiểm sau-lưu ném lỗi: hàng đã lưu (chưa thu hồi) được đánh dấu thu hồi ở lần kiểm đầu', async () => {
+      const { svc, prisma, tombstones, created } = setup();
+      prisma.supportRecallTombstone.findUnique.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('db'));
+      await expect(svc.handle(msg({ text: '#K7Q2 hi' }))).rejects.toThrow('db');
+      expect(created).toHaveLength(1);
+      tombstones.push('z100');
+      prisma.supportMessage.updateMany.mockClear();
+      expect(await svc.handle(msg({ text: '#K7Q2 hi' }))).toEqual({ status: 200, body: { ok: true } });
+      expect(prisma.supportMessage.updateMany).toHaveBeenCalledWith({ where: { zaloMsgId: 'z100', sender: 'STAFF', recalledAt: null }, data: { recalledAt: expect.any(Date) } });
+      expect(created).toHaveLength(1);
+    });
+
     it('tombstone của tin khác không chặn tin này', async () => {
       const { svc, created, tombstones } = setup({ tombstones: ['zkhac'] });
       await svc.handle(msg({ text: '#K7Q2 hi' }));
@@ -368,6 +380,16 @@ describe('BridgeEventsService.handle message', () => {
     it('ts cũ hơn 5 phút: định tuyến theo #MÃ dù còn forward PENDING', async () => {
       const { svc, created } = setup({ forwards: pending });
       expect(await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved, ts: Date.now() - 6 * 60_000 }))).toEqual({ status: 200, body: { ok: true } });
+      expect(created).toHaveLength(1);
+    });
+
+    it.each([
+      ['thiếu ts', undefined],
+      ['ts NaN', Number.NaN],
+      ['ts xa trong tương lai (1 giờ)', Date.now() + 3_600_000],
+    ])('%s: không chờ, định tuyến theo #MÃ', async (_n, ts) => {
+      const { svc, created } = setup({ forwards: pending });
+      expect((await svc.handle(msg({ text: '#K7Q2 Dạ ạ', quote: unresolved, ts }))).status).toBe(200);
       expect(created).toHaveLength(1);
     });
 

@@ -39,6 +39,8 @@ const QUEUE_LABELS: Record<string, string> = {
   'gomdon-events': 'Webhook Gomdon',
   notifications: 'Thông báo (ZNS / in-app)',
   'zalo-oa-events': 'Sự kiện Zalo OA',
+  'support-chat-forward': 'Chuyển tin chat CSKH vào nhóm Zalo',
+  'support-chat-notify': 'Chuông báo trả lời chat CSKH',
 };
 
 const OPS_HEALTH_KEY = ['admin-ops-health'] as const;

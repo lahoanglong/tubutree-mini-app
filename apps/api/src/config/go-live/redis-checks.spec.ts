@@ -10,6 +10,14 @@ describe('evaluateRedis', () => {
     expect([...EXPECTED_QUEUES].sort()).toEqual(['gomdon-events', 'gomdon-push', 'notifications', 'pancake-events', 'pancake-push', 'support-chat-forward', 'support-chat-notify', 'zalo-oa-events']);
   });
 
+  it('tiêu đề hàng đợi đếm theo độ dài danh sách, cả khi Redis lỗi lẫn khi một hàng đợi hỏng', () => {
+    const n = `Đủ ${EXPECTED_QUEUES.length} hàng đợi truy cập được`;
+    expect(n).toContain('8');
+    expect(byId(evaluateRedis(GOOD_REDIS), 'queues.reachable').title).toBe(n);
+    expect(byId(evaluateRedis(patch({ reachable: false })), 'queues.reachable').title).toBe(n);
+    expect(byId(evaluateRedis(patch({ queues: GOOD_REDIS.queues.filter((q) => q.name !== 'gomdon-push') })), 'queues.reachable').title).toBe(n);
+  });
+
   it('Redis tốt: mọi dòng PASS', () => {
     expect(evaluateRedis(GOOD_REDIS).filter((r) => r.status !== 'PASS')).toEqual([]);
   });
