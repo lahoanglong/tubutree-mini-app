@@ -280,6 +280,19 @@ describe('Màn chat với Tubu Tree', () => {
     expect(mocks.send.mock.calls[1]![0].context).toBeUndefined();
   });
 
+  it('rời màn khi ảnh còn đang tải lên: tải xong cũng không gửi tin', async () => {
+    mocks.cloudinary = true;
+    let finishUpload!: (url: string) => void;
+    mocks.upload.mockReturnValue(new Promise((r) => (finishUpload = r)));
+    const { container, unmount } = renderPage();
+    await screen.findByRole('textbox');
+    fireEvent.change(container.querySelector('input[type=file]')!, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => finishUpload('https://img.example/a.jpg'));
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
   it('ảnh quá 20MB: báo lỗi, không tải lên', async () => {
     mocks.cloudinary = true;
     const { container } = renderPage();
@@ -416,6 +429,19 @@ describe('Màn chat với Tubu Tree', () => {
       });
       await waitFor(() => expect(screen.queryByTestId('msg-m4')).toBeNull());
       expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m1', 'msg-m2', 'msg-m3', 'msg-m5', 'msg-m6']);
+    });
+
+    it('hasMore=false: tin thu hồi nằm trước tin đầu cửa sổ cũng biến mất', async () => {
+      const m = (n: number) => msg({ id: `m${n}`, body: `tin ${n}`, createdAt: `2026-10-23T03:0${n}:00.000Z` });
+      mocks.getThread.mockResolvedValueOnce(thread({ hasMore: false, messages: [m(1), m(2), m(3)] }));
+      renderPage();
+      await screen.findByTestId('msg-m1');
+      mocks.getThread.mockResolvedValue(thread({ hasMore: false, messages: [m(2), m(3)] }));
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['support-chat'] });
+      });
+      await waitFor(() => expect(screen.queryByTestId('msg-m1')).toBeNull());
+      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m2', 'msg-m3']);
     });
 
     it('cửa sổ rỗng và hết tin: xoá hết tin đã thấy', async () => {

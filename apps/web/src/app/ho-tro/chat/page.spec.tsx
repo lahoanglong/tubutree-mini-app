@@ -418,6 +418,19 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     expect(mocks.send.mock.calls[1]![0].context).toBeUndefined();
   });
 
+  it('rời màn khi ảnh còn đang tải lên: tải xong cũng không gửi tin', async () => {
+    mocks.cloudinary = true;
+    let finishUpload!: (url: string) => void;
+    mocks.upload.mockReturnValue(new Promise((r) => (finishUpload = r)));
+    const c = mount();
+    await waitFor(() => expect(textbox(c)).not.toBeNull());
+    pickFile(c, new File(['x'], 'a.jpg', { type: 'image/jpeg' }));
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledTimes(1));
+    unmounts[unmounts.length - 1]!();
+    await act(async () => finishUpload('https://img.example/a.jpg'));
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
   it('ảnh quá 20MB: báo lỗi, không tải lên', async () => {
     mocks.cloudinary = true;
     const c = mount();

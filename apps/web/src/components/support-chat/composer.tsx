@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ImagePlus, Loader2 } from 'lucide-react';
 import { Button, IconButton } from '@/components/mini';
 import { isCloudinaryConfigured, MAX_IMAGE_BYTES, uploadToCloudinary } from '@/components/account/cloudinary-upload';
@@ -15,6 +15,13 @@ export function Composer({ onSend, onSendImage, onImageError }: Props) {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const canImage = isCloudinaryConfigured();
   const body = text.trim();
 
@@ -34,6 +41,7 @@ export function Composer({ onSend, onSendImage, onImageError }: Props) {
     }
     setUploading(true);
     const url = await uploadToCloudinary(file);
+    if (!mountedRef.current) return;
     setUploading(false);
     if (url) onSendImage(url);
     else onImageError('Tải ảnh thất bại. Hãy chọn lại ảnh khác.');
