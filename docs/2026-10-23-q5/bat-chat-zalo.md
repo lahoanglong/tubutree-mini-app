@@ -80,5 +80,13 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 
 1. Tắt công tắc **Cho khách chat** trong tab admin (hoặc đặt `chat.enabled = false`): khách thấy chat tạm đóng cùng hotline, các nút OA/hotline/email như trước.
 2. Dừng service: `docker compose -f <file compose của máy> stop zalo-bridge`. Tin khách gửi trước đó vẫn lưu trong DB.
-3. Hai migration chỉ thêm (additive), nên quay API/web về bản cũ không cần gỡ migration; bảng mới nằm im không ai đọc. Không chạy `migrate down` trên PROD.
+3. Bốn migration đều chỉ thêm (additive; bản `support_message_seen` chỉ điền cột mới), nên quay API/web về bản cũ không cần gỡ migration; bảng và cột mới nằm im không ai đọc. Không chạy `migrate down` trên PROD.
 4. Nếu tài khoản cầu nối bị khoá: chat tự rơi về chế độ chờ (mục 0.1); thay SIM/tài khoản mới và quét QR lại ở bước 4.
+
+## 7. Đăng xuất báo không xoá được tệp phiên
+
+Tab admin báo `LOGOUT_CLEAR_FAILED`, hoặc trạng thái cầu nối ghi "Không xoá được tệp phiên đăng nhập cũ (…)": đĩa của cầu nối từ chối xoá tệp phiên. Cầu nối đang chạy đã an toàn: nó không đăng nhập lại bằng tệp đó. Nhưng nếu khởi động lại container lúc tệp còn đó, nó sẽ đăng nhập lại tài khoản vừa đăng xuất.
+
+1. Bấm **Đăng xuất** lại một lần. Lỗi do đĩa chậm thường tự hết.
+2. Vẫn báo lỗi: xoá tay tệp trong volume `zalo_bridge_data`: `docker compose -f <file compose của máy> exec zalo-bridge sh -c 'rm -f /data/credentials.enc /data/credentials.enc.*.tmp'`. Rồi kiểm tra quyền và dung lượng đĩa của máy chủ.
+3. Không vào được container: đổi `ZALO_BRIDGE_CREDENTIALS_KEY` trong `.env` (`openssl rand -base64 32`) rồi `up -d zalo-bridge`. Tệp cũ không giải mã được nữa, nên cầu nối về "Cần quét QR".
