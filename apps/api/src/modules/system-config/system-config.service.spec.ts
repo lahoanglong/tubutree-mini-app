@@ -661,23 +661,46 @@ describe('SystemConfigService.set — khoá chat CSKH (chat.*)', () => {
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
     const bad = mk(false);
     await expect(bad.svc.set('chat.enabled', 'true', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(bad.tx.systemConfig.upsert).not.toHaveBeenCalled();
   });
 
   it('chat.off_hours_text: chuỗi không rỗng sau trim, tối đa 1000 ký tự', async () => {
     const ok = mk('x');
     await ok.svc.set('chat.off_hours_text', 'Mai trả lời nhé', 'admin1');
     expect(ok.tx.systemConfig.upsert).toHaveBeenCalled();
-    await expect(mk('x').svc.set('chat.off_hours_text', '   ', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(mk('x').svc.set('chat.off_hours_text', 'a'.repeat(1001), 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    await mk('x').svc.set('chat.off_hours_text', 'a'.repeat(1000), 'admin1');
+    const blank = mk('x');
+    await expect(blank.svc.set('chat.off_hours_text', '   ', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(blank.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    const long = mk('x');
+    await expect(long.svc.set('chat.off_hours_text', 'a'.repeat(1001), 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(long.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    const edge = mk('x');
+    await edge.svc.set('chat.off_hours_text', 'a'.repeat(1000), 'admin1');
+    expect(edge.tx.systemConfig.upsert).toHaveBeenCalled();
   });
 
-  it('chat.zalo_group_id: chuỗi ≤64 ký tự không khoảng trắng, rỗng được', async () => {
-    await mk('x').svc.set('chat.zalo_group_id', '', 'admin1');
-    await mk('x').svc.set('chat.zalo_group_id', '12345678901', 'admin1');
-    await expect(mk('x').svc.set('chat.zalo_group_id', '123 456', 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(mk('x').svc.set('chat.zalo_group_id', '1'.repeat(65), 'admin1')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(mk('x').svc.set('chat.zalo_group_id', 123, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+  it('chat.zalo_group_id: chuỗi rỗng được nhận (bỏ chọn nhóm) và được ghi', async () => {
+    const m = mk('g-old');
+    await m.svc.set('chat.zalo_group_id', '', 'admin1');
+    expect(m.tx.systemConfig.upsert).toHaveBeenCalledTimes(1);
+    expect(m.tx.systemConfig.upsert.mock.calls[0]![0]).toMatchObject({ update: { value: '' } });
+  });
+
+  it.each([
+    ['toàn khoảng trắng', '   '],
+    ['có khoảng trắng giữa', '123 456'],
+    ['dài hơn 64 ký tự', '1'.repeat(65)],
+    ['không phải chuỗi', 123],
+  ])('chat.zalo_group_id từ chối: %s, không ghi', async (_name, value) => {
+    const m = mk('g-old');
+    await expect(m.svc.set('chat.zalo_group_id', value, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('chat.zalo_group_id: đúng 64 ký tự được nhận', async () => {
+    const m = mk('x');
+    await m.svc.set('chat.zalo_group_id', '1'.repeat(64), 'admin1');
+    expect(m.tx.systemConfig.upsert).toHaveBeenCalled();
   });
 
   it('retention.support_chat_days: số nguyên 90–3650', async () => {

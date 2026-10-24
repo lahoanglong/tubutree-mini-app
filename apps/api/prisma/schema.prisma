@@ -3778,6 +3778,10 @@ model SupportMessage {
 
   @@unique([conversationId, clientMsgId])
   @@index([conversationId, createdAt, id])
+  /// Quét tin khách chưa chuyển (forwardId null, createdAt cũ) và đếm hộp thư ops.
+  @@index([forwardId, createdAt])
+  /// Dọn theo chính sách lưu trữ (support_chat: createdAt < cutoff).
+  @@index([createdAt])
   @@map("support_messages")
 }
 
@@ -3799,6 +3803,23 @@ model SupportForward {
   @@index([status, createdAt])
   @@index([conversationId])
   @@map("support_forwards")
+}
+
+/// Mã hội thoại của khách đã xoá tài khoản: không cấp lại, để trả lời muộn trong nhóm Zalo không đến nhầm khách mới.
+model SupportRetiredCode {
+  code      String   @id
+  retiredAt DateTime @default(now())
+
+  @@map("support_retired_codes")
+}
+
+/// Nhân viên thu hồi (undo) đến trước tin của họ (hộp thư đi của cầu nối không FIFO): nhớ msgId trong 2 ngày để tin đến sau bị bỏ.
+model SupportRecallTombstone {
+  zaloMsgId String   @id
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("support_recall_tombstones")
 }
 
 /// Một dòng duy nhất (id 'main'): cron ghi mỗi phút nên không để ở system_configs (sẽ đầy SystemConfigHistory).

@@ -140,7 +140,8 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
       dealerApplication: { updateMany: noop },
       storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
-      supportConversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }), delete: del('conversation') },
+      supportConversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', code: 'K7Q2' }), delete: del('conversation') },
+      supportRetiredCode: { upsert: jest.fn().mockImplementation(() => { order.push('retired'); return Promise.resolve({}); }) },
       supportMessage: { deleteMany: del('messages') },
       supportForward: { deleteMany: del('forwards') },
     };
@@ -149,7 +150,23 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     expect(tx.supportMessage.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'c1' } });
     expect(tx.supportForward.deleteMany).toHaveBeenCalledWith({ where: { conversationId: 'c1' } });
     expect(tx.supportConversation.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
-    expect(order.indexOf('conversation')).toBe(2);
+    expect(order.indexOf('conversation')).toBe(3);
+    expect(tx.supportRetiredCode.upsert).toHaveBeenCalledWith({ where: { code: 'K7Q2' }, create: { code: 'K7Q2' }, update: {} });
+  });
+
+  it('mã hội thoại bị xoá được giữ chỗ trong cùng giao dịch, trước khi xoá hội thoại', async () => {
+    const order: string[] = [];
+    const noop = jest.fn().mockResolvedValue({ count: 0 });
+    const tx: any = {
+      user: { update: jest.fn() }, referralTouch: { updateMany: noop }, address: { updateMany: noop }, order: { updateMany: noop },
+      refreshToken: { updateMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
+      $executeRaw: jest.fn().mockResolvedValue(0),
+      supportConversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', code: 'K7Q2' }), delete: jest.fn().mockImplementation(() => { order.push('conversation'); return Promise.resolve({}); }) },
+      supportRetiredCode: { upsert: jest.fn().mockImplementation(() => { order.push('retired'); return Promise.resolve({}); }) },
+      supportMessage: { deleteMany: jest.fn() }, supportForward: { deleteMany: jest.fn() },
+    };
+    await (new AccountDeletionService({} as unknown as PrismaService) as any).anonymize(tx, 'u1', 'req-1', new Date());
+    expect(order).toEqual(['retired', 'conversation']);
   });
 
   it('khách chưa từng chat: không có gì để xoá, không lỗi', async () => {
@@ -159,6 +176,7 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
       refreshToken: { updateMany: noop }, dealerApplication: { updateMany: noop }, storefront: { updateMany: noop },
       $executeRaw: jest.fn().mockResolvedValue(0),
       supportConversation: { findUnique: jest.fn().mockResolvedValue(null), delete: jest.fn() },
+      supportRetiredCode: { upsert: jest.fn() },
       supportMessage: { deleteMany: jest.fn() }, supportForward: { deleteMany: jest.fn() },
     };
     const svc = new AccountDeletionService({} as unknown as PrismaService);

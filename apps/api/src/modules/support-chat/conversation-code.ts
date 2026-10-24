@@ -15,5 +15,22 @@ export function newConversationCode(random: () => number = Math.random): string 
   return code;
 }
 
+type CodeDb = {
+  supportConversation: { findUnique(args: { where: { code: string }; select?: { id: true } }): Promise<unknown> };
+  supportRetiredCode: { findUnique(args: { where: { code: string } }): Promise<unknown> };
+};
+
+/** Mã chưa có hội thoại và chưa nằm trong sổ mã nghỉ: mã của khách đã xoá tài khoản không được cấp lại cho khách mới. */
+export async function issueConversationCode(db: CodeDb, random: () => number = Math.random): Promise<string> {
+  for (;;) {
+    const code = newConversationCode(random);
+    const [inUse, retired] = await Promise.all([
+      db.supportConversation.findUnique({ where: { code }, select: { id: true } }),
+      db.supportRetiredCode.findUnique({ where: { code } }),
+    ]);
+    if (!inUse && !retired) return code;
+  }
+}
+
 /** Từ thông dụng nhân viên hay gõ làm thẻ (#test, #sale...): mã trùng nó sẽ nhận nhầm tin trả lời không dành cho khách nào. */
 const BANNED_CODES = new Set(['TEST', 'SALE', 'SHIP', 'FREE', 'HELP', 'INFO', 'CODE', 'NOTE', 'DONE', 'GIAO', 'NHAN', 'HANG', 'SHOP', 'ZALO']);

@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { CHAT_RETENTION_KEY } from '../support-chat/support-chat.config';
+import { CHAT_RETENTION_KEY, RECALL_TOMBSTONE_TTL_MS } from '../support-chat/support-chat.config';
 
 export const RETENTION_LOCK_KEY = 'cron:data-retention.cleanup';
 export const BATCH_SIZE = 5_000;
@@ -196,6 +196,8 @@ export class DataRetentionService {
         return [
           { table: 'support_messages', where: Prisma.sql`"createdAt" < ${cutoff}` },
           { table: 'support_forwards', where: Prisma.sql`"createdAt" < ${cutoff}` },
+          // Tombstone thu hồi chỉ cần vài ngày, không theo số ngày lưu tin cấu hình.
+          { table: 'support_recall_tombstones', where: Prisma.sql`"createdAt" < ${new Date(now.getTime() - RECALL_TOMBSTONE_TTL_MS)}` },
         ];
     }
   }
