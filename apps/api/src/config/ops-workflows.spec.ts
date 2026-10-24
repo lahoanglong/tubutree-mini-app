@@ -21,6 +21,21 @@ describe.each(SSH_WORKFLOWS)('%s', (file) => {
   });
 });
 
+describe.each(SSH_WORKFLOWS)('%s: khoá bằng VM_WORKFLOWS_ENABLED', (file) => {
+  const wf = read(file);
+
+  it('bước đầu tiên của job thất bại trừ khi biến repo VM_WORKFLOWS_ENABLED == true', () => {
+    const afterSteps = wf.split('\n    steps:\n')[1] ?? '';
+    const lines = afterSteps.split('\n');
+    const nextStepAt = lines.findIndex((l, i) => i > 0 && /^ {6}- /.test(l));
+    const first = lines.slice(0, nextStepAt).join('\n');
+    expect(first).toContain("if: ${{ vars.VM_WORKFLOWS_ENABLED != 'true' }}");
+    expect(first).toContain('exit 1');
+    expect(first).toContain('VM_WORKFLOWS_ENABLED=true');
+    expect(wf.split('\n').filter((l) => /^ {4}steps:/.test(l))).toHaveLength(1);
+  });
+});
+
 describe('smoke-purchase.yml', () => {
   it('không đặt đơn thật trên PROD (kho sẽ đóng gói, trừ tồn, lẫn doanh thu)', () => {
     const wf = read('.github/workflows/smoke-purchase.yml');

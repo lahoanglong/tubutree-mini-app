@@ -13,6 +13,13 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
+      - name: Chặn workflow VM cũ (cần biến repo VM_WORKFLOWS_ENABLED=true)
+        # Các secret VM_* từng trỏ VM GCP đã đóng. Workflow này có thể đã bị trỏ nhầm sang VPS Vietnix: deploy.yml chạy git pull + deploy.sh,
+        # smoke*.yml ghi user thử vào DB thật. Chỉ bật biến sau khi đã kiểm VM_HOST/VM_USER/VM_SSH_KEY và biết mình đang chạy gì.
+        if: ${{ vars.VM_WORKFLOWS_ENABLED != 'true' }}
+        run: |
+          echo "::error::Workflow này đang bị khoá để không chạy nhầm lên máy chủ thật. Nếu chủ ý chạy: kiểm VM_HOST, VM_USER, VM_SSH_KEY đã trỏ đúng máy, rồi đặt biến repo VM_WORKFLOWS_ENABLED=true (Settings > Secrets and variables > Actions > Variables)."
+          exit 1
       - name: SSH smoke
         uses: appleboy/ssh-action@v1.0.3
         with:
