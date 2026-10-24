@@ -6,7 +6,7 @@ import { OrderStatusService } from './order-status.service';
 import { PREPAID_METHODS } from './order-transition';
 import { CRON_TZ } from '../../common/cron-tz';
 import { readDealerPendingPaymentTtlHours, readPendingPaymentTtlHours } from './pending-payment-ttl';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 export {
   DEALER_PENDING_PAYMENT_TTL_KEY,
@@ -59,7 +59,7 @@ export class PendingPaymentExpiryCron {
   }
 
   async expireStale(now: Date = new Date()): Promise<ExpireResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt chạy: nhiều instance API cùng lên lịch thì chỉ một
@@ -68,7 +68,7 @@ export class PendingPaymentExpiryCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.cancelExpired(now);
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },

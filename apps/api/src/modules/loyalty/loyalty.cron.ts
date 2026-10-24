@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { LoyaltyService } from './loyalty.service';
 import { CRON_TZ } from '../../common/cron-tz';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 /** Tính lại hạng thành viên hằng đêm (áp rớt hạng sau khi hết ân hạn §6.6). */
 @Injectable()
@@ -18,6 +18,7 @@ export class LoyaltyCron {
   async recalcTiers() {
     if (this.running) {
       this.logger.warn('recalcTiers đang chạy, bỏ qua lượt này.');
+      markCronSkipped('RUNNING');
       return;
     }
     this.running = true;

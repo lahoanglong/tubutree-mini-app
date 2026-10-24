@@ -17,7 +17,7 @@ import { PREPAID_METHODS } from '../../orders/order-transition';
 import { GOMDON_STATE, isGomdonPayable } from '../gomdon/gomdon-status';
 import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from '../gomdon/gomdon-alert.service';
 import { CRON_TZ } from '../../../common/cron-tz';
-import { TrackCron } from '../../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 /**
  * Lưới an toàn cuối cho P0-2 (docs/2026-09-08-review-progress.md): nếu enqueuePush() ở
@@ -74,7 +74,7 @@ export class PancakePushReconcileService {
   @TrackCron()
   async reconcile(): Promise<void> {
     try {
-      if (!this.client.isConfigured()) return; // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()
+      if (!this.client.isConfigured()) { markCronSkipped('NOT_CONFIGURED'); return; } // dev: Pancake chưa cấu hình, bỏ qua như pushOrder()
     } catch (err) {
       this.logger.error(`reconcile lỗi: ${err instanceof Error ? err.message : err}`);
       return;

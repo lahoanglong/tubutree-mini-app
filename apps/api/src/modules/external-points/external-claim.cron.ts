@@ -9,7 +9,7 @@ import { ExternalChatService } from './external-chat.service';
 import { ExternalClaimPollService } from './external-claim-poll.service';
 import { releaseDueClaims } from './external-claim-release';
 import { ExternalClaimService } from './external-claim.service';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 /**
  * Hai cron của điểm đơn ngoài app (đơn sàn và đơn chat). Cron chỉ chạy trên instance giữ lease (CronLeaderService); mỗi việc còn tự an toàn khi chạy chồng
@@ -34,7 +34,7 @@ export class ExternalClaimCron {
   @Cron('0 */30 * * * *', { timeZone: CRON_TZ })
   @TrackCron()
   async everyThirtyMinutes(): Promise<void> {
-    if (this.running) return;
+    if (this.running) { markCronSkipped('RUNNING'); return; }
     this.running = true;
     try {
       const r = await this.claims.rematchUnmatched();

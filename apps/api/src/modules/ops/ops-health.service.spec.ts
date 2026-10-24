@@ -152,3 +152,16 @@ describe('OpsHealthService.cronJobs (mục Tác vụ nền của màn sức kho�
     await expect(svc.cronJobs()).resolves.toEqual([]);
   });
 });
+
+describe('cron thoát sớm vì chạy chồng', () => {
+  it('OpsHealthService.handleCron báo SKIPPED cho sổ cron', async () => {
+    const { setCronRunSink } = await import('../../common/cron-run/track-cron');
+    const reports: { outcome: string }[] = [];
+    setCronRunSink({ record: (r) => void reports.push(r) });
+    const svc = new OpsHealthService({} as never, {} as never, []);
+    (svc as unknown as { running: boolean }).running = true;
+    await svc.handleCron();
+    setCronRunSink(undefined);
+    expect(reports).toEqual([expect.objectContaining({ outcome: 'SKIPPED' })]);
+  });
+});

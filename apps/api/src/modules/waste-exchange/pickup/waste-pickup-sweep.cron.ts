@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WastePickupHooks } from './waste-pickup-hooks.service';
-import { TrackCron } from '../../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 const PAGE = 200;
 
@@ -47,7 +47,7 @@ export class WastePickupSweepCron {
 
   async run(): Promise<SweepResult> {
     const none: SweepResult = { cancelled: 0, started: 0, anomalies: 0 };
-    if (this.running) return none;
+    if (this.running) { markCronSkipped('RUNNING'); return none; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Từng yêu cầu chạy

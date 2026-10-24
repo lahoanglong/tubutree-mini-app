@@ -1,11 +1,12 @@
 import 'reflect-metadata';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron, ScheduleModule, SchedulerRegistry } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, sep } from 'path';
 import { CRON_TZ } from '../cron-tz';
-import { setCronRunSink, TrackCron, type CronRunReport } from './track-cron';
+import { CronAwareLogger } from './cron-aware-logger';
+import { markCronSkipped, setCronRunSink, TrackCron, type CronRunReport } from './track-cron';
 
 @Injectable()
 class Probe {
@@ -17,6 +18,30 @@ class Probe {
   async unnamed(): Promise<void> {
     this.calls++;
     if (this.fail) throw this.fail;
+  }
+
+  /** Mẫu cron của repo: tự bắt lỗi và chỉ ghi log. */
+  @Cron('0 0 1 1 *', { name: 'probe.logs-error', timeZone: CRON_TZ })
+  @TrackCron()
+  async logsError(): Promise<void> {
+    try {
+      throw new Error('pancake timeout\n    at secret (x.ts:1)');
+    } catch (err) {
+      new Logger('Probe').error(`sync lỗi: ${(err as Error).message}`, (err as Error).stack);
+      new Logger('Probe').error('lần hai');
+    }
+  }
+
+  @Cron('0 0 1 1 *', { name: 'probe.logs-warn', timeZone: CRON_TZ })
+  @TrackCron()
+  async logsWarn(): Promise<void> {
+    new Logger('Probe').warn('chỉ cảnh báo');
+  }
+
+  @Cron('0 0 1 1 *', { name: 'probe.skips', timeZone: CRON_TZ })
+  @TrackCron()
+  async skips(): Promise<void> {
+    markCronSkipped('RUNNING');
   }
 
   @Cron('0 0 1 1 *', { name: 'probe.named', timeZone: CRON_TZ })
@@ -39,7 +64,7 @@ describe('TrackCron (chạy trên @nestjs/schedule + cron thật)', () => {
 
   async function boot() {
     setCronRunSink({ record: async (r) => void reports.push(r) });
-    const mod = await Test.createTestingModule({ imports: [ScheduleModule.forRoot()], providers: [Probe] }).compile();
+    const mod = await Test.createTestingModule({ imports: [ScheduleModule.forRoot()], providers: [Probe] }).setLogger(new CronAwareLogger()).compile();
     await mod.init();
     return { mod, probe: mod.get(Probe), registry: mod.get(SchedulerRegistry) };
   }
@@ -53,6 +78,7 @@ describe('TrackCron (chạy trên @nestjs/schedule + cron thật)', () => {
     expect(probe.calls).toBe(1);
     expect(reports[0]).toMatchObject({ job: 'Probe.unnamed' });
     expect(reports[0]!.error).toBeUndefined();
+    expect(reports[0]).toMatchObject({ outcome: 'OK', errorCount: 0 });
     expect(reports[0]!.finishedAt.getTime()).toBeGreaterThanOrEqual(reports[0]!.startedAt.getTime());
     await mod.close();
   });
@@ -72,7 +98,54 @@ describe('TrackCron (chạy trên @nestjs/schedule + cron thật)', () => {
     job.fireOnTick();
     await until(() => reports.length > 0);
     expect(reports[0]!.error).toBe(probe.fail);
+    expect(reports[0]!.outcome).toBe('THREW');
     await mod.close();
+  });
+
+  describe('ngữ cảnh log lỗi', () => {
+    beforeEach(() => Logger.overrideLogger(new CronAwareLogger()));
+    afterEach(() => Logger.overrideLogger(['error']));
+    const silence = () => jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    it('cron tự bắt lỗi rồi chỉ Logger.error: ERRORS, đếm số log và giữ dòng đầu (không stack)', async () => {
+      const spy = silence();
+      const { mod, registry } = await boot();
+      registry.getCronJob('probe.logs-error').fireOnTick();
+      await until(() => reports.length > 0);
+      spy.mockRestore();
+      expect(reports[0]).toMatchObject({ job: 'probe.logs-error', outcome: 'ERRORS', errorCount: 2, errorLine: 'sync lỗi: pancake timeout' });
+      expect(reports[0]!.error).toBeUndefined();
+      await mod.close();
+    });
+
+    it('cron chỉ log warn: OK', async () => {
+      const spy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const { mod, registry } = await boot();
+      registry.getCronJob('probe.logs-warn').fireOnTick();
+      await until(() => reports.length > 0);
+      spy.mockRestore();
+      expect(reports[0]).toMatchObject({ outcome: 'OK', errorCount: 0 });
+      await mod.close();
+    });
+
+    it('Logger.error ngoài cron không đếm vào đâu và vẫn in ra như thường', () => {
+      const spy = silence();
+      new Logger('X').error('ngoài cron');
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  it('markCronSkipped: SKIPPED', async () => {
+    const { mod, registry } = await boot();
+    registry.getCronJob('probe.skips').fireOnTick();
+    await until(() => reports.length > 0);
+    expect(reports[0]).toMatchObject({ outcome: 'SKIPPED', errorCount: 0 });
+    await mod.close();
+  });
+
+  it('markCronSkipped ngoài cron: không làm gì', () => {
+    expect(() => markCronSkipped('RUNNING')).not.toThrow();
   });
 
   it('ghi nhận hỏng (sink ném) không làm cron hỏng theo', async () => {

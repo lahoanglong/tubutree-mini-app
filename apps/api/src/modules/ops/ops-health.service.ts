@@ -44,7 +44,7 @@ import {
   type WebhookDeliveryResult,
   type WebhookFailureKind,
 } from './ops-state';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 /** Phần của BullMQ Queue mà màn sức khoẻ đọc — khai báo cấu trúc để test dựng hàng đợi giả. */
 export interface OpsQueue {
@@ -515,7 +515,7 @@ export class OpsHealthService {
   @Cron('0 */5 * * * *', { name: 'ops.health-alert', timeZone: CRON_TZ })
   @TrackCron()
   async handleCron(): Promise<void> {
-    if (this.running) return;
+    if (this.running) { markCronSkipped('RUNNING'); return; }
     this.running = true;
     try {
       const res = await this.checkAndAlert();

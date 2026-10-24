@@ -1,16 +1,50 @@
 import 'reflect-metadata';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Logger } from '@nestjs/common';
+
+/**
+ * THREW: phương thức ném lỗi. ERRORS: chạy xong nhưng ghi ít nhất một log mức error (cron tự bắt lỗi rồi chỉ log).
+ * SKIPPED: thoát sớm vì đang chạy chồng / chưa cấu hình (markCronSkipped). OK: còn lại.
+ */
+export type CronOutcome = 'OK' | 'ERRORS' | 'THREW' | 'SKIPPED';
 
 export interface CronRunReport {
   job: string;
   startedAt: Date;
   finishedAt: Date;
-  /** Có = lần chạy này ném lỗi. */
+  outcome: CronOutcome;
+  /** Số log mức error trong lúc chạy. */
+  errorCount: number;
+  /** Dòng đầu của log error đầu tiên (ERRORS). */
+  errorLine?: string;
+  /** Lỗi gốc khi THREW. */
   error?: unknown;
 }
 
 export interface CronRunSink {
   record(run: CronRunReport): Promise<void> | void;
+}
+
+interface CronContext {
+  errors: number;
+  firstError?: string;
+  skipped?: string;
+}
+
+const als = new AsyncLocalStorage<CronContext>();
+
+/** CronAwareLogger gọi khi có log error; ngoài một lần chạy @TrackCron() thì không làm gì. */
+export function noteCronError(line: string): void {
+  const ctx = als.getStore();
+  if (!ctx) return;
+  ctx.errors++;
+  ctx.firstError ??= line;
+}
+
+/** Đặt ở chỗ thoát sớm của cron (đang chạy chồng, chưa cấu hình): lần chạy đó không tính là thành công hay thất bại. */
+export function markCronSkipped(reason: string): void {
+  const ctx = als.getStore();
+  if (ctx) ctx.skipped = reason;
 }
 
 let sink: CronRunSink | undefined;
@@ -35,16 +69,17 @@ export function TrackCron(): MethodDecorator {
     const fallbackName = `${target.constructor.name}.${String(key)}`;
     const wrapped = async function (this: unknown, ...args: unknown[]): Promise<unknown> {
       const startedAt = new Date();
+      const ctx: CronContext = { errors: 0 };
       let error: unknown;
       let failed = false;
       try {
-        return await original.apply(this, args);
+        return await als.run(ctx, () => original.apply(this, args));
       } catch (err) {
         failed = true;
         error = err;
         throw err;
       } finally {
-        await report(wrapped, fallbackName, startedAt, failed, error);
+        await report(wrapped, fallbackName, startedAt, ctx, failed, error);
       }
     };
     Object.defineProperty(wrapped, 'name', { value: String(key) });
@@ -52,11 +87,20 @@ export function TrackCron(): MethodDecorator {
   };
 }
 
-async function report(fn: object, fallbackName: string, startedAt: Date, failed: boolean, error: unknown): Promise<void> {
+async function report(fn: object, fallbackName: string, startedAt: Date, ctx: CronContext, failed: boolean, error: unknown): Promise<void> {
   if (!sink) return;
   try {
     const opts = Reflect.getMetadata(SCHEDULE_CRON_OPTIONS, fn) as { name?: string } | undefined;
-    await sink.record({ job: opts?.name || fallbackName, startedAt, finishedAt: new Date(), ...(failed ? { error } : {}) });
+    const outcome: CronOutcome = failed ? 'THREW' : ctx.errors > 0 ? 'ERRORS' : ctx.skipped !== undefined ? 'SKIPPED' : 'OK';
+    await sink.record({
+      job: opts?.name || fallbackName,
+      startedAt,
+      finishedAt: new Date(),
+      outcome,
+      errorCount: ctx.errors,
+      ...(ctx.firstError !== undefined ? { errorLine: ctx.firstError.slice(0, 300) } : {}),
+      ...(failed ? { error } : {}),
+    });
   } catch (err) {
     logger.error(`Không ghi nhận được lần chạy cron ${fallbackName}: ${err instanceof Error ? err.message : err}`);
   }

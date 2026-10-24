@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MerchantFulfilmentService, slaStateOf } from './merchant-fulfilment.service';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 const LOCK_KEY = 'cron:merchant.sla_reminder';
 /** Nhắc lại cùng một đơn tối đa mỗi chừng này giờ. */
@@ -48,14 +48,14 @@ export class MerchantSlaCron {
   }
 
   async remind(now: Date = new Date()): Promise<SlaReminderResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       return await this.prisma.$transaction(
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.remindOverdue(now);
         },
         { maxWait: 10_000, timeout: 10 * 60_000 },

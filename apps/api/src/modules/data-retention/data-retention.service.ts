@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { CHAT_RETENTION_KEY, RECALL_TOMBSTONE_TTL_MS } from '../support-chat/support-chat.config';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 export const RETENTION_LOCK_KEY = 'cron:data-retention.cleanup';
 export const BATCH_SIZE = 5_000;
@@ -73,7 +73,7 @@ export class DataRetentionService {
   }
 
   async runAll(opts: RunOpts = {}): Promise<RetentionResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt chạy: nhiều instance cùng lên lịch thì chỉ một instance dọn.
@@ -82,7 +82,7 @@ export class DataRetentionService {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${RETENTION_LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.cleanupAll(opts);
         },
         { maxWait: 10_000, timeout: 3 * 3_600_000 },

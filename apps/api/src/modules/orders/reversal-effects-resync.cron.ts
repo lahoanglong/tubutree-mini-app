@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { OrderStatusService } from './order-status.service';
 import { REVERSAL_EFFECTS_GRACE_MINUTES, REVERSAL_EFFECTS_WINDOW_DAYS } from './reversal-effects';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 const PAGE = 50;
 const MAX_PER_TICK = 200;
@@ -50,7 +50,7 @@ export class ReversalEffectsResyncCron {
   }
 
   async resyncPending(now: Date = new Date()): Promise<ReversalEffectsResyncResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt chạy: hai replica cùng lên lịch thì chỉ một bên quét. Từng đơn chạy trên
@@ -59,7 +59,7 @@ export class ReversalEffectsResyncCron {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.sweep(now);
         },
         { maxWait: 10_000, timeout: 15 * 60_000 },

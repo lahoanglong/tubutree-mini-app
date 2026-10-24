@@ -12,7 +12,7 @@ import { buildForwardText, sendAndSettle } from './forward-delivery';
 import { STALE_AFTER_MS, resumableFailedForwardWhere, resumablePendingForwardWhere } from './support-chat-health';
 import { SupportChatService } from './support-chat.service';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 const ALERT_EVERY_MS = 60 * 60_000;
 /** Cầu nối bật selfListen nên mỗi tin nó gửi đều dội lại thành một sự kiện; gửi đã quá ngần này mà chưa có sự kiện nào sau đó là listener đã điếc. */
@@ -47,7 +47,7 @@ export class BridgeHealthCron {
   @TrackCron()
   async everyMinute(): Promise<void> {
     // Chưa cấu hình cầu nối (môi trường chưa dùng chat): không có gì để kiểm, báo hay quét.
-    if (this.running || !this.bridge.isConfigured()) return;
+    if (this.running || !this.bridge.isConfigured()) { markCronSkipped('RUNNING'); return; }
     this.running = true;
     this.canResumeFailed = false;
     try {

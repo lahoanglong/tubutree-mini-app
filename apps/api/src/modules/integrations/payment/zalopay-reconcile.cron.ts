@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { ZalopayService } from './zalopay.service';
-import { TrackCron } from '../../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 export type ZalopayReconcileResult =
   | { skipped: 'RUNNING' | 'NOT_CONFIGURED' }
@@ -46,8 +46,8 @@ export class ZalopayReconcileCron {
   }
 
   async reconcile(now: Date = new Date()): Promise<ZalopayReconcileResult> {
-    if (!this.zalopay.configured) return { skipped: 'NOT_CONFIGURED' };
-    if (this.running) return { skipped: 'RUNNING' };
+    if (!this.zalopay.configured) { markCronSkipped('NOT_CONFIGURED'); return { skipped: 'NOT_CONFIGURED' }; }
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       const attempts = await this.prisma.paymentAttempt.findMany({

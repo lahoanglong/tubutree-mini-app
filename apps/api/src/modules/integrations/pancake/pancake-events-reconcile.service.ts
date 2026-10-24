@@ -12,7 +12,7 @@ import {
   PANCAKE_JOB_EVENT,
   PANCAKE_STOCK_EVENT,
 } from './pancake-webhook-dedupe';
-import { TrackCron } from '../../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 
 const LOCK_KEY = 'pancake.events-reconcile';
 
@@ -59,7 +59,7 @@ export class PancakeEventsReconcileService {
   }
 
   async redriveEvents(now: Date = new Date()): Promise<RedriveResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       // Khoá advisory giữ suốt lượt chạy: nhiều instance API cùng lên lịch thì chỉ một instance quét.
@@ -67,7 +67,7 @@ export class PancakeEventsReconcileService {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return { enqueued: await this.enqueueStuck(now) };
         },
         { maxWait: 10_000, timeout: 5 * 60_000 },

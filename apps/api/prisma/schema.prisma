@@ -3172,8 +3172,12 @@ model CronRun {
   lastError           String?
   consecutiveFailures Int       @default(0)
   lastDurationMs      Int
-  /// Lần báo admin gần nhất của chuỗi lỗi hiện tại; xoá khi job chạy lại thành công.
+  /// Lần báo admin gần nhất của chuỗi lỗi hiện tại; xoá khi job chạy lại thành công và lần lỗi cuối đã hơn 1 giờ.
   lastAlertedAt       DateTime?
+  /// OK | ERRORS (chạy xong nhưng có log error) | THREW (ném lỗi) | SKIPPED (chạy chồng/chưa cấu hình).
+  lastOutcome         String    @default("OK")
+  /// Số log error của lần chạy gần nhất.
+  lastErrorCount      Int       @default(0)
 
   @@map("cron_runs")
 }

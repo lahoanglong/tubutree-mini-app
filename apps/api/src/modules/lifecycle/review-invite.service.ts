@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
-import { TrackCron } from '../../common/cron-run/track-cron';
+import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 
 export type ReviewInviteRunResult = { skipped: 'RUNNING' | 'LOCKED' | 'ERROR' } | { sent: number; claimed: number };
 
@@ -51,7 +51,7 @@ export class ReviewInviteService {
   @Cron('0 10,19 * * *', { timeZone: CRON_TZ })
   @TrackCron()
   async sendReviewInvites(): Promise<ReviewInviteRunResult> {
-    if (this.running) return { skipped: 'RUNNING' };
+    if (this.running) { markCronSkipped('RUNNING'); return { skipped: 'RUNNING' }; }
     this.running = true;
     try {
       // Khoá advisory theo transaction giữ suốt lượt (nhiều instance chỉ một chạy); claim từng đơn vẫn là chốt cuối.
@@ -59,7 +59,7 @@ export class ReviewInviteService {
         async (tx) => {
           const [row] = await tx.$queryRaw<{ locked: boolean }[]>`
             SELECT pg_try_advisory_xact_lock(hashtext(${ReviewInviteService.LOCK_KEY})) AS "locked"`;
-          if (!row?.locked) return { skipped: 'LOCKED' as const };
+          if (!row?.locked) { markCronSkipped('LOCKED'); return { skipped: 'LOCKED' as const }; }
           return this.processBatches();
         },
         { maxWait: 10_000, timeout: 10 * 60_000 },
