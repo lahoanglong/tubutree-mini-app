@@ -136,7 +136,8 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
   const busy = login.isPending || logout.isPending || reconnect.isPending || saveGroup.isPending || toggle.isPending;
   const view = status ? stateView(status) : null;
   const groups = groupsQ.data?.groups ?? [];
-  const hasSession = status && ['CONNECTED', 'CONNECTING', 'KICKED', 'ERROR'].includes(status.state);
+  // Chờ quét QR mà còn lỗi (thường là tệp phiên cũ chưa xoá được): vẫn cho đăng xuất để cầu nối xoá lại.
+  const hasSession = status && (['CONNECTED', 'CONNECTING', 'KICKED', 'ERROR'].includes(status.state) || (status.state === 'NEED_QR' && !!status.lastError));
 
   return (
     <section aria-labelledby="bridge-h" className="space-y-3 rounded-card border border-stone-200 bg-stone-0 p-4">
@@ -152,7 +153,7 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
               <img src={status.avatar} alt="" referrerPolicy="no-referrer" className="h-7 w-7 rounded-full" />
             )}
             {status.displayName && <span className="font-medium text-stone-900">{status.displayName}</span>}
-            {status.state === 'ERROR' && status.lastError && <span className="min-w-0 break-words text-xs text-stone-500">{status.lastError}</span>}
+            {status.lastError && <span className="min-w-0 break-words text-xs text-stone-500">{status.lastError}</span>}
           </div>
 
           {isAdmin && (

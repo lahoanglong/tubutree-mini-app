@@ -250,6 +250,11 @@ export class SupportChatAdminService {
     if (r.code === 'QR_CANCELLED') {
       throw new ConflictException({ statusCode: 409, error: 'Conflict', code: r.code, message: 'Lượt QR đã bị huỷ do đăng xuất.' });
     }
+    if (r.code === 'LOGOUT_CLEAR_FAILED') {
+      // Cầu nối đã đăng xuất trong bộ nhớ nhưng tệp phiên còn trên đĩa: khởi động lại sẽ đăng nhập lại tài khoản này.
+      const message = `Không xoá được tệp phiên đăng nhập của cầu nối (${r.message}). Bấm Đăng xuất lại; vẫn lỗi thì làm theo mục 7 của docs/2026-10-23-q5/bat-chat-zalo.md.`;
+      throw new BadGatewayException({ statusCode: 502, error: 'Bad Gateway', code: r.code, message });
+    }
     throw new BadGatewayException({ statusCode: 502, error: 'Bad Gateway', ...body });
   }
 }

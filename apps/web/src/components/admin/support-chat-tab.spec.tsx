@@ -135,6 +135,32 @@ describe('SupportChatTab — thẻ trạng thái cầu nối', () => {
     expect(container.querySelector('[data-bridge-state]')!.getAttribute('data-bridge-state')).toBe(state);
   });
 
+  it('lỗi của cầu nối hiện ở mọi trạng thái, không chỉ ERROR (lưu phiên lỗi lúc đang kết nối)', async () => {
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'CONNECTED', lastError: 'Không lưu được phiên đăng nhập: ENOSPC' } }) });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(container.querySelector('[data-bridge-state]')!.textContent).toContain('Không lưu được phiên đăng nhập: ENOSPC');
+  });
+
+  it('chờ quét QR mà tệp phiên cũ chưa xoá được: hiện lỗi và vẫn có nút Đăng xuất để xoá lại', async () => {
+    stub({
+      'GET bridge': () => ({
+        body: { ...BRIDGE, state: 'NEED_QR', zaloUid: null, displayName: null, lastError: 'Không xoá được tệp phiên đăng nhập cũ (EACCES)' },
+      }),
+    });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(container.querySelector('[data-bridge-state]')!.textContent).toContain('Không xoá được tệp phiên đăng nhập cũ (EACCES)');
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đăng xuất')).toBe(true);
+  });
+
+  it('chờ quét QR bình thường (không lỗi) thì không có nút Đăng xuất', async () => {
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'NEED_QR', zaloUid: null, displayName: null } }) });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'Đăng xuất')).toBe(false);
+  });
+
   it('hiện tên tài khoản cầu nối', async () => {
     stub();
     const { container } = mount(<SupportChatTab isAdmin />);

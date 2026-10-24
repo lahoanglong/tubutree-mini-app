@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, ConflictException, NotFoundException } from '@nestjs/common';
 import { SupportChatAdminService } from './support-chat-admin.service';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY } from './support-chat.config';
 
@@ -316,6 +316,17 @@ describe('SupportChatAdminService', () => {
     await (svc as any)[m]('admin1');
     expect(prisma.supportBridgeAction.create).toHaveBeenCalledWith({ data: { action, adminUserId: 'admin1' } });
     expect(bridge[m]).toHaveBeenCalled();
+  });
+
+  it('đăng xuất mà cầu nối không xoá được tệp phiên: 502 kèm mã lỗi đĩa và cách xử lý bằng tiếng Việt', async () => {
+    const { svc, bridge } = setup();
+    bridge.logout.mockResolvedValue({ ok: false, retry: false, unknown: false, code: 'LOGOUT_CLEAR_FAILED', message: 'EACCES' });
+    const err = await svc.logout('admin1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadGatewayException);
+    expect((err as BadGatewayException).getResponse()).toMatchObject({
+      code: 'LOGOUT_CLEAR_FAILED',
+      message: expect.stringMatching(/Không xoá được tệp phiên đăng nhập của cầu nối \(EACCES\).*Đăng xuất lại.*bat-chat-zalo\.md/),
+    });
   });
 
   it('lượt QR bị huỷ vì đăng xuất: 409 kèm lời nhắn tiếng Việt, không phải 502', async () => {
