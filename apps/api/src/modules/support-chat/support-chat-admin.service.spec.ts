@@ -318,6 +318,14 @@ describe('SupportChatAdminService', () => {
     expect(bridge[m]).toHaveBeenCalled();
   });
 
+  it('lượt QR bị huỷ vì đăng xuất: 409 kèm lời nhắn tiếng Việt, không phải 502', async () => {
+    const { svc, bridge } = setup();
+    bridge.qrStart.mockResolvedValue({ ok: false, retry: false, unknown: false, code: 'QR_CANCELLED', message: 'Cầu nối trả 409' });
+    const err = await svc.qrStart('admin1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).getResponse()).toMatchObject({ code: 'QR_CANCELLED', message: 'Lượt QR đã bị huỷ do đăng xuất.' });
+  });
+
   it('cầu nối lỗi thì trả lỗi có mã, vẫn đã ghi sổ', async () => {
     const { svc, bridge, prisma } = setup();
     bridge.logout.mockResolvedValue({ ok: false, retry: false, unknown: false, code: 'HTTP_500', message: 'hỏng' });

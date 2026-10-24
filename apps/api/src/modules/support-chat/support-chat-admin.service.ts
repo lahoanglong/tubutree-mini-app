@@ -247,6 +247,9 @@ export class SupportChatAdminService {
   private fail(r: BridgeFailure): never {
     const body = { code: r.code, message: r.message };
     if (r.code === 'NOT_CONNECTED' || r.code === 'NO_GROUP') throw new ConflictException({ statusCode: 409, error: 'Conflict', ...body });
+    if (r.code === 'QR_CANCELLED') {
+      throw new ConflictException({ statusCode: 409, error: 'Conflict', code: r.code, message: 'Lượt QR đã bị huỷ do đăng xuất.' });
+    }
     throw new BadGatewayException({ statusCode: 502, error: 'Bad Gateway', ...body });
   }
 }
