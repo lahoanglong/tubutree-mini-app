@@ -482,7 +482,7 @@ export default function CheckoutPage() {
   const previewRecalcNote = !wholeCart && (!!cart.data?.couponCode || (cart.data?.comboDiscount ?? 0) > 0 || (cart.data?.tierDiscount ?? 0) > 0);
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(96px + var(--safe-bottom))' }}>
       <PageHeader title="Thanh toán" />
 
       {shownCartIssue && (

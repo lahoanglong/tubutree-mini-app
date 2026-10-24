@@ -2,10 +2,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 
-const api = vi.hoisted(() => ({ storefront: null as unknown, tracker: [] as unknown[] }));
+const api = vi.hoisted(() => ({ storefront: null as unknown, tracker: [] as unknown[], returnDays: undefined as number | undefined }));
 vi.mock('@/lib/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/api')>()),
   getStorefront: async () => api.storefront,
+  getReturnWindowDays: async () => api.returnDays,
 }));
 const auth = vi.hoisted(() => ({ user: null as null | { referralCode: string } }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: auth.user, status: auth.user ? 'authenticated' : 'unauthenticated', initialized: true }) }));
@@ -38,7 +39,28 @@ afterEach(() => {
   mounted?.unmount();
   mounted = undefined;
   api.tracker = [];
+  api.returnDays = undefined;
   auth.user = null;
+});
+
+describe('/s/[slug] — cam kết đổi trả đọc từ cấu hình', () => {
+  const page = async () => render(await StorefrontPage({ params: Promise.resolve({ slug: 'greenshop' }) }));
+
+  it('nêu số ngày từ cấu hình, không còn "7 ngày" cứng; 0 ngày thì ẩn; chưa biết thì nói chung', async () => {
+    api.storefront = SF;
+    api.returnDays = 14;
+    mounted = await page();
+    expect(mounted.container.textContent).toContain('Đổi trả trong 14 ngày nếu lỗi');
+    expect(mounted.container.textContent).not.toContain('7 ngày');
+    mounted.unmount();
+    api.returnDays = 0;
+    mounted = await page();
+    expect(mounted.container.textContent).not.toContain('Đổi trả');
+    mounted.unmount();
+    api.returnDays = undefined;
+    mounted = await page();
+    expect(mounted.container.textContent).toContain('Đổi trả nếu sản phẩm lỗi');
+  });
 });
 
 describe('/s/[slug] — gian hàng mở qua subdomain', () => {

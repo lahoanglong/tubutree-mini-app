@@ -382,6 +382,18 @@ export async function getPublicSupport(): Promise<SupportContact> {
   }
 }
 
+/** Số ngày đổi trả (returns.window_days) cho trang server; không đọc được thì undefined để chữ nói chung, không số. */
+export async function getReturnWindowDays(): Promise<number | undefined> {
+  try {
+    const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
+    if (!res.ok) return undefined;
+    const json = (await res.json()) as { returnWindowDays?: unknown };
+    return typeof json.returnWindowDays === 'number' ? json.returnWindowDays : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface LegalDoc {
   /** Markdown admin đã nhập; null = chưa nhập, trang dùng bản nháp mặc định. */
   content: string | null;
