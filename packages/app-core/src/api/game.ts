@@ -116,8 +116,12 @@ export interface HarvestSpecies {
   ecoFact: string | null;
 }
 export type HarvestCouponCap = 'DAY' | 'MONTH';
+/** Lý do không phát thưởng thu hoạch: 'GUEST' = chưa đăng nhập Zalo/SĐT nên không nhận mã và điểm cây mầm. */
+export type HarvestRewardBlocked = 'GUEST';
 export interface HarvestReward {
   coupon?: string;
+  /** Mọi mã cấp trong lần tưới (một lần tưới có thể thu hoạch nhiều cây); `coupon` là mã đầu tiên. */
+  coupons?: string[];
   certificate?: string;
   species?: HarvestSpecies;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
@@ -132,6 +136,7 @@ export const waterTree = (http: HttpClient, drops: number) =>
     revivedFromDead?: boolean;
     /** Lần thu hoạch có cây nhưng không cấp mã vì chạm trần mã theo ngày hoặc theo tháng. */
     couponCapped?: HarvestCouponCap;
+    rewardBlocked?: HarvestRewardBlocked;
     reward?: HarvestReward;
   }>('/game/tree/water', { drops });
 /**
@@ -248,6 +253,7 @@ export const waterPlot = (http: HttpClient, plotId: string, drops: number) =>
     treesPlanted: number;
     revivedFromDead: boolean;
     couponCapped?: HarvestCouponCap;
+    rewardBlocked?: HarvestRewardBlocked;
     reward?: HarvestReward;
   }>(`/game/garden/plot/${plotId}/water`, { drops });
 

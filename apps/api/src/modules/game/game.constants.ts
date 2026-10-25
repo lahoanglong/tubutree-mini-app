@@ -57,8 +57,13 @@ export function ladderTarget(ladder: readonly number[], treesPlanted: number): n
   return ladder[Math.min(Math.max(0, treesPlanted), ladder.length - 1)]!;
 }
 
-/** Khách vãng lai (zaloId bắt đầu `guest_`): không nhận điểm thưởng game. */
-export const isGuestZaloId = (zaloId: string | null | undefined): boolean => !!zaloId && zaloId.startsWith('guest_');
+/**
+ * Tiền tố mã thu hoạch: lô nhà `HARVEST…`, lô phụ `GARDEN…`. Mã vòng quay và nhiệm vụ mang tiền tố `GAME…` nên KHÔNG
+ * được đếm vào trần mã thu hoạch ngày/tháng.
+ */
+export const HARVEST_COUPON_PREFIX = 'HARVEST';
+export const GARDEN_COUPON_PREFIX = 'GARDEN';
+export const HARVEST_COUPON_CODE_PREFIXES = [HARVEST_COUPON_PREFIX, GARDEN_COUPON_PREFIX] as const;
 
 export const DAILY_LOGIN_SEEDS_DEFAULT = 10;
 export const DEW_SEEDS_DEFAULT = 15;
