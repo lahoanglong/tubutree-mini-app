@@ -47,7 +47,7 @@ import {
 } from '../integrations/pancake/pancake-attention';
 import { GOMDON_ALERT_KIND, GomdonAlertService, resolveGomdonAlertKinds } from '../integrations/gomdon/gomdon-alert.service';
 import { gomdonOwnsShipping } from '../integrations/gomdon/gomdon-status';
-import { receivedRefundNote, recordedPancakeUnderpayment, refundReportedUnderpayment } from './refund-queue';
+import { announceDeletedAccountRefund, receivedRefundNote, recordedPancakeUnderpayment, refundReportedUnderpayment } from './refund-queue';
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
@@ -458,6 +458,12 @@ export class OrderStatusService {
     // Admin/hệ thống/Pancake huỷ hoặc trả đơn đã trả tiền: khách được báo số tiền hoàn và nơi tiền về (R2-LIFECYCLE-5).
     if ((targetStatus === 'CANCELLED' || targetStatus === 'RETURNED') && notifyData.refund_note === undefined) {
       const r = reversed as ReversalResult | null;
+      if (r?.refund?.to === 'DELETED_ACCOUNT') {
+        await announceDeletedAccountRefund(
+          { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+          { orderCode: order.code, amount: r.refund.amount },
+        );
+      }
       const reason = opts.customerReason?.trim();
       notifyData.refund_note =
         (reason ? ` Lý do: ${reason.replace(/[.\s]+$/, '')}.` : '') +

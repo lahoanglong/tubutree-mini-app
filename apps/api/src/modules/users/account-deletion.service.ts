@@ -59,11 +59,11 @@ type BlockerUser = {
   cashbackPending: number;
 };
 
-/** dd/mm/yyyy theo giờ Việt Nam (không dùng toLocale*: định dạng đổi theo bản ICU). */
-function vnDateLabel(d: Date): string {
+/** "HH:mm ngày dd/MM/yyyy" theo giờ Việt Nam (không dùng toLocale*: định dạng đổi theo bản ICU). */
+function vnDateTimeLabel(d: Date): string {
   const v = new Date(d.getTime() + 7 * 3600 * 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
+  return `${pad(v.getUTCHours())}:${pad(v.getUTCMinutes())} ngày ${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
 }
 
 const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] as const;
@@ -350,7 +350,7 @@ export class AccountDeletionService {
       if (rw) {
         add(
           'ORDER_RETURN_WINDOW',
-          `Bạn còn đơn trong hạn đổi trả. Bạn xoá được tài khoản từ ngày ${vnDateLabel(rw.latestExpiry)}.`,
+          `khách còn đơn trong hạn đổi/trả, xoá được từ ${vnDateTimeLabel(rw.latestExpiry)}`,
         );
       }
       if (n(payoutN) > 0) add('PAYOUT_PENDING', `còn ${n(payoutN)} yêu cầu rút tiền chờ xử lý`);

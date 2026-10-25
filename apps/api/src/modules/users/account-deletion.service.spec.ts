@@ -300,9 +300,10 @@ describe('AccountDeletionService — đơn đã giao còn trong hạn đổi/tr�
     const err = await svc.process('req-1', 'admin-1').then(() => null, (e: unknown) => e);
     const blockers = ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers;
     const expiry = new Date(later.getTime() + 7 * day + 7 * 3600 * 1000);
-    const label = `${String(expiry.getUTCDate()).padStart(2, '0')}/${String(expiry.getUTCMonth() + 1).padStart(2, '0')}/${expiry.getUTCFullYear()}`;
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const label = `${p2(expiry.getUTCHours())}:${p2(expiry.getUTCMinutes())} ngày ${p2(expiry.getUTCDate())}/${p2(expiry.getUTCMonth() + 1)}/${expiry.getUTCFullYear()}`;
     expect(blockers).toEqual([
-      { code: 'ORDER_RETURN_WINDOW', message: `Bạn còn đơn trong hạn đổi trả. Bạn xoá được tài khoản từ ngày ${label}.` },
+      { code: 'ORDER_RETURN_WINDOW', message: `khách còn đơn trong hạn đổi/trả, xoá được từ ${label}` },
     ]);
     expect(config.get).toHaveBeenCalledWith('returns.window_days', 7);
     expect(anonymize).not.toHaveBeenCalled();

@@ -13,6 +13,10 @@ import { RewardPointsService } from '../../src/modules/wallet/reward-points.serv
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
 import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
+import { OPEN_REFUND_FOR_EXPORT } from '../../src/modules/orders/refund-queue';
+import { exportPaymentStatus } from '../../src/modules/admin/admin-export';
+import { NO_PARTIAL_RETURNS } from '../../src/modules/orders/return-ledger';
+import { WALLET_DESTINATION } from '../../src/modules/orders/refund-destination';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
 import { createOrder, createUser, randCode, setConfig, sleep, warmPool } from './helpers';
 
@@ -184,16 +188,15 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     await prisma.order.update({ where: { id: order.id }, data: { deliveredAt } });
     const req = await prisma.accountDeletionRequest.create({ data: { userId: u.id } });
     const expiry = new Date(deliveredAt.getTime() + 7 * 864e5 + 7 * 3600e3);
-    const label = [expiry.getUTCDate(), expiry.getUTCMonth() + 1, expiry.getUTCFullYear()]
-      .map((n, i) => String(n).padStart(i === 2 ? 4 : 2, '0'))
-      .join('/');
-    await expect(deletion.process(req.id, admin.id)).rejects.toThrow(`Bạn còn đơn trong hạn đổi trả. Bạn xoá được tài khoản từ ngày ${label}.`);
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const label = `${p2(expiry.getUTCHours())}:${p2(expiry.getUTCMinutes())} ngày ${p2(expiry.getUTCDate())}/${p2(expiry.getUTCMonth() + 1)}/${expiry.getUTCFullYear()}`;
+    await expect(deletion.process(req.id, admin.id)).rejects.toThrow(`Chưa thể xoá tài khoản: khách còn đơn trong hạn đổi/trả, xoá được từ ${label}`);
     await prisma.order.update({ where: { id: order.id }, data: { deliveredAt: new Date(Date.now() - 9 * 864e5) } });
     const done = await deletion.process(req.id, admin.id);
     expect(done.alreadyProcessed).toBe(false);
   });
 
-  it('đơn đã giao trả muộn sau khi khách xoá tài khoản: không cộng Ví vào tài khoản đã ẩn danh, đơn vào "cần xử lý"', async () => {
+  async function deletedCustomerWithPaidOrder() {
     const u = await walletUser(0);
     const order = await createOrder(prisma, {
       userId: u.id,
@@ -205,18 +208,50 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     });
     const req = await prisma.accountDeletionRequest.create({ data: { userId: u.id } });
     await deletion.process(req.id, admin.id);
-
-    const reversal = new OrderReversalService({ restore: jest.fn() } as never, { release: jest.fn() } as never);
     const full = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
-    const result = await prisma.$transaction((tx) => reversal.reverseFinancials(tx, full));
+    return { u, order, full };
+  }
+  const newReversal = () => new OrderReversalService({ restore: jest.fn() } as never, { release: jest.fn() } as never);
+
+  it('đơn đã giao trả muộn sau khi khách xoá tài khoản: không cộng Ví đã ẩn danh, có khoản hoàn PENDING chờ chuyển tay, CSV đơn ghi "Đang hoàn tiền"', async () => {
+    const { u, order, full } = await deletedCustomerWithPaidOrder();
+    const result = await prisma.$transaction((tx) => newReversal().reverseFinancials(tx, full));
 
     expect(result.moneyRefunded).toBe(false);
+    expect(result.refund).toEqual({ amount: 120_000, to: 'DELETED_ACCOUNT' });
     const l = await ledger(u.id);
     expect(l.user.walletBalance).toBe(0);
     expect(l.rows.filter((r) => r.type === 'ORDER_REFUND')).toHaveLength(0);
     const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
     expect(after.paymentStatus).toBe('REFUNDED');
-    expect(after.pancakeAttention).toContain('đã xoá tài khoản');
+    expect(after.pancakeAttention).toBeNull();
+    const rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 120_000, customerUserId: null, kind: 'RETURN', reason: 'RETURNED' });
+    const exported = await prisma.order.findUniqueOrThrow({
+      where: { id: order.id },
+      select: { status: true, paymentMethod: true, paymentStatus: true, customerRefunds: { where: OPEN_REFUND_FOR_EXPORT, select: { method: true, kind: true } } },
+    });
+    expect(exportPaymentStatus({ ...exported, openRefunds: exported.customerRefunds })).toBe('Đang hoàn tiền');
+  });
+
+  it('trả một phần được duyệt sau khi khách xoá tài khoản: không cộng Ví, có khoản hoàn PENDING; duyệt lặp lại không tạo khoản thứ hai', async () => {
+    const { u, order, full } = await deletedCustomerWithPaidOrder();
+    const shares = { isFull: false, goods: 40_000, shipping: 0, pointsUsedBack: 0, convertedBack: 0, pointsEarnedBack: 0, ratioBefore: 0, ratioAfter: 0, lines: [] };
+    const run = () =>
+      prisma.$transaction((tx) =>
+        newReversal().reversePartialReturn(tx, full, { requestId: 'rr-1', shares, destination: WALLET_DESTINATION, prior: NO_PARTIAL_RETURNS, standardPointsExpiresAt: null }),
+      );
+    const first = await run();
+    expect(first.refund).toEqual({ amount: 40_000, to: 'DELETED_ACCOUNT' });
+    await run();
+
+    const l = await ledger(u.id);
+    expect(l.user.walletBalance).toBe(0);
+    expect(l.rows.filter((r) => r.type === 'ORDER_REFUND')).toHaveLength(0);
+    const rows = await prisma.orderCustomerRefund.findMany({ where: { orderId: order.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ method: 'MANUAL_TRANSFER', status: 'PENDING', amount: 40_000, customerUserId: null, kind: 'RETURN', refKey: 'rr-1' });
   });
 
   it('hai admin cùng bấm xử lý một yêu cầu: Ví chỉ bị trừ một lần', async () => {

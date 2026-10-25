@@ -1118,7 +1118,7 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
 
   // D12-01: DELIVERED trên đơn COD có thể do kho bấm "Đã nhận" hàng loạt/nhầm — không phải bằng chứng đã thu COD.
   describe('"Đã hoàn" (5) trên đơn ĐÃ GIAO: tiền chỉ tự hoàn khi có bằng chứng đã nhận tiền', () => {
-    const refundSpy = () => jest.spyOn(OrderReversalService.prototype as unknown as { refundToWallet: () => Promise<boolean> }, 'refundToWallet').mockResolvedValue(true);
+    const refundSpy = () => jest.spyOn(OrderReversalService.prototype as unknown as { refundToWallet: () => Promise<string> }, 'refundToWallet').mockResolvedValue('CREDITED');
     afterEach(() => jest.restoreAllMocks());
 
     it('đơn COD chưa có bằng chứng đã thu → vẫn RETURNED, đảo điểm/hoa hồng, KHÔNG hoàn Ví, vào hàng cần xử lý', async () => {
@@ -1159,7 +1159,7 @@ describe('PancakeProcessor — mã trạng thái Pancake POS và hoàn hàng', (
       await proc.onStatusUpdated({ id: 'p1', status: 5 });
       expect(statusFlips(txUpdateMany)[0]!.data).toMatchObject({ status: 'RETURNED' });
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0]).toEqual([expect.anything(), 'u1', expect.objectContaining({ id: 'o1' }), 300000]);
+      expect(spy.mock.calls[0]).toEqual([expect.anything(), 'u1', expect.objectContaining({ id: 'o1' }), 300000, expect.objectContaining({ kind: 'RETURN', reason: 'RETURNED' })]);
       expect(loyalty.reverseOrderPoints).toHaveBeenCalledWith('o1');
       expect(attentionFlags(txUpdateMany)).toHaveLength(0);
       const rows = (prisma.orderCustomerRefund.createMany as jest.Mock).mock.calls.flatMap(([a]) => a.data as { status: string }[]);

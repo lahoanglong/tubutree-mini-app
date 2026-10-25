@@ -14,7 +14,7 @@ import { OrderReversalService, type ReversalResult } from './order-reversal.serv
 import { OrderStatusService } from './order-status.service';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
-import { announceBankRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
+import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
 import { pendingPaymentDeadlines } from './pending-payment-ttl';
 import { cancelHandover } from './order-transition';
@@ -452,6 +452,9 @@ export class OrdersService {
         { orderCode: code, amount: refund.amount, userId, ...bank },
         { notifyCustomer: false },
       );
+    }
+    if (refund?.to === 'DELETED_ACCOUNT') {
+      await announceDeletedAccountRefund({ prisma: this.prisma, notifications: this.notifications, logger: this.logger }, { orderCode: code, amount: refund.amount });
     }
     const pointsBack = ((reversed as ReversalResult | null)?.pointsRefunded ?? 0) + standardPointsBack;
     await this.notifications
