@@ -144,29 +144,36 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
     expect(statement.totals).toMatchObject({ grossAmount: 3_000_000, taxWithheld: 300_000, netAmount: 2_700_000 });
   });
 
-  it('khoá hành vi: vai trò DEALER chỉ còn hoa hồng (không gian hàng) rút về ngân hàng 4 lần song song → đúng 1 lệnh REQUESTED, hoa hồng gắn lô một lần', async () => {
+  it('khoá hành vi: vai trò DEALER chỉ còn hoa hồng (không gian hàng) chuyển vào Ví 4 lần song song → đúng 1 lệnh PAID, hoa hồng chuyển một lần', async () => {
     const d = await dealer();
     await approvedCommission(d.id, 600_000);
     await approvedCommission(d.id, 400_000);
-    const bank = { bankName: 'VCB', accountNumber: '0123456789', accountName: 'DAI LY IT' };
 
     const results = await Promise.allSettled(
-      Array.from({ length: 4 }, () => affiliate.requestPayout(d.id, 1_000_000, 'BANK', bank, `dl-${randCode(10)}`)),
+      Array.from({ length: 4 }, () => affiliate.requestPayout(d.id, 1_000_000, 'WALLET_BALANCE', undefined, `dl-${randCode(10)}`)),
     );
     expect(summarize(results).fulfilled).toHaveLength(1);
 
     const payouts = await prisma.payout.findMany({ where: { userId: d.id } });
     expect(payouts).toHaveLength(1);
-    expect(payouts[0]).toMatchObject({ status: 'REQUESTED', method: 'BANK', grossAmount: 1_000_000, taxWithheld: 0, amount: 1_000_000 });
-    const batched = await prisma.commission.count({ where: { affiliateUserId: d.id, payoutBatchId: payouts[0]!.id } });
-    expect(batched).toBe(2);
+    expect(payouts[0]).toMatchObject({ status: 'PAID', method: 'WALLET_BALANCE', grossAmount: 1_000_000, taxWithheld: 0, amount: 1_000_000 });
+    const paid = await prisma.commission.count({ where: { affiliateUserId: d.id, status: 'PAID' } });
+    expect(paid).toBe(2);
     const dash = await affiliate.dashboard(d.id);
     expect(dash.withdrawableCommission).toBe(0);
-    expect(dash.withdrawingCommission).toBe(1_000_000);
-    expect((await ledgerOf(d.id)).balance).toBe(0);
+    expect(dash.withdrawingCommission).toBe(0);
+    expect((await ledgerOf(d.id)).balance).toBe(1_000_000);
   });
 
-  it('khoá hành vi: vai trò DEALER rút Ví và ngân hàng chạy chồng nhau → tổng gross các lệnh rút đúng bằng hoa hồng đã duyệt, không ai rút trùng', async () => {
+  it('khoá hành vi: rút về ngân hàng bị chặn ở service cho vai trò DEALER, không tạo lệnh, hoa hồng còn nguyên', async () => {
+    const d = await dealer();
+    await approvedCommission(d.id, 1_000_000);
+    await expect(affiliate.requestPayout(d.id, 1_000_000, 'BANK', { bankName: 'VCB' })).rejects.toThrow('Hoa hồng chỉ chuyển vào Ví Tubu');
+    expect(await prisma.payout.count({ where: { userId: d.id } })).toBe(0);
+    expect((await affiliate.dashboard(d.id)).withdrawableCommission).toBe(1_000_000);
+  });
+
+  it('khoá hành vi: vai trò DEALER chuyển Ví chạy chồng nhau (kèm lệnh ngân hàng bị chặn) → tổng gross các lệnh rút đúng bằng hoa hồng đã duyệt, không ai rút trùng', async () => {
     const d = await dealer({ store: true });
     await approvedCommission(d.id, 800_000);
     await approvedCommission(d.id, 700_000);

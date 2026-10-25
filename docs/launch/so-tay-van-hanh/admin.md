@@ -38,7 +38,7 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 | Phí ship, ngưỡng miễn phí (mặc định 19.000đ dưới 199.000đ) | `shipping.flat_fee_below_threshold`, `shipping.free_threshold` |
 | Số ngày khách được đổi/trả (mặc định 7) | `returns.window_days` |
 | Giờ chờ thanh toán chuyển khoản trước khi tự huỷ (mặc định 24) | `orders.pending_payment_ttl_hours` |
-| Số ngày giữ hoa hồng CTV (mặc định 10), mức rút tối thiểu (50.000đ) | `affiliate.hold_days`, `affiliate.min_withdraw_bank` |
+| Số ngày giữ hoa hồng CTV (mặc định 10), ngưỡng khấu trừ thuế TNCN theo tổng tháng (mặc định 5.000.000đ) | `affiliate.hold_days`, `affiliate.pit_withhold_threshold` |
 | Số ngày giữ tiền đối tác trước đối soát (mặc định 7) | `merchant.settlement_hold_days` |
 | Hotline hiển thị cho khách | `support.hotline` |
 | Bật tích điểm tại quầy | Thẻ "Điểm Xanh — điểm danh & tích điểm tại quầy", công tắc "Bật tích điểm tại quầy (POS)" |

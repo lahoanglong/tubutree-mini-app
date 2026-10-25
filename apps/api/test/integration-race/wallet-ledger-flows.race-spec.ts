@@ -221,10 +221,10 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
     expect(credits[0]).toMatchObject({ delta: 100_000, refType: 'PAYOUT', refId: payout.id });
   });
 
-  it('SELLER-11: CTV rút 2,5 triệu hoa hồng về ví 4 lần song song, lần đầu khai CCCD → khấu trừ 10% đúng 1 lần, CCCD lưu hồ sơ và lệnh rút', async () => {
+  it('SELLER-11: CTV rút 6 triệu hoa hồng (trên ngưỡng 5 triệu) về ví 4 lần song song, lần đầu khai CCCD → khấu trừ 10% đúng 1 lần, CCCD lưu hồ sơ và lệnh rút', async () => {
     const ctv = await newWallet(0, { role: 'AFFILIATE' });
     const buyer = await createUser(prisma);
-    const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', referrerUserId: ctv.id, total: 25_000_000 });
+    const order = await createOrder(prisma, { userId: buyer.id, status: 'DELIVERED', referrerUserId: ctv.id, total: 60_000_000 });
     await prisma.commission.create({
       data: {
         affiliateUserId: ctv.id,
@@ -232,28 +232,28 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
         orderTotal: order.total,
         commissionableTotal: order.total,
         rate: 10,
-        amount: 2_500_000,
+        amount: 6_000_000,
         status: 'APPROVED',
         lockedAt: new Date(Date.now() - 30 * 864e5),
         approvedAt: new Date(),
       },
     });
-    const noTaxId = await affiliate.requestPayout(ctv.id, 2_500_000, 'WALLET_BALANCE').catch((e: Error) => e);
+    const noTaxId = await affiliate.requestPayout(ctv.id, 6_000_000, 'WALLET_BALANCE').catch((e: Error) => e);
     expect((noTaxId as { getResponse?: () => unknown }).getResponse?.()).toMatchObject({ code: 'PIT_TAX_ID_REQUIRED' });
     expect(await prisma.commission.count({ where: { affiliateUserId: ctv.id, status: 'APPROVED', payoutBatchId: null } })).toBe(1);
 
     await Promise.allSettled(
-      Array.from({ length: 4 }, () => affiliate.requestPayout(ctv.id, 2_500_000, 'WALLET_BALANCE', undefined, undefined, '079201001234')),
+      Array.from({ length: 4 }, () => affiliate.requestPayout(ctv.id, 6_000_000, 'WALLET_BALANCE', undefined, undefined, '079201001234')),
     );
     const l = await expectBalanced(ctv.id);
-    expect(l.balance).toBe(2_250_000);
+    expect(l.balance).toBe(5_400_000);
     const payouts = await prisma.payout.findMany({ where: { userId: ctv.id } });
     expect(payouts).toHaveLength(1);
-    expect(payouts[0]).toMatchObject({ grossAmount: 2_500_000, taxWithheld: 250_000, amount: 2_250_000, taxId: '079201001234' });
+    expect(payouts[0]).toMatchObject({ grossAmount: 6_000_000, taxWithheld: 600_000, amount: 5_400_000, taxId: '079201001234' });
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ctv.id }, select: { personalTaxId: true } });
     expect(user.personalTaxId).toBe('079201001234');
     const report = await affiliate.pitReport(new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 7));
-    expect(report.rows.find((r) => r.userId === ctv.id)).toMatchObject({ taxId: '079201001234', grossAmount: 2_500_000, taxWithheld: 250_000 });
+    expect(report.rows.find((r) => r.userId === ctv.id)).toMatchObject({ taxId: '079201001234', grossAmount: 6_000_000, taxWithheld: 600_000 });
   });
 
   it('cron settle cashback chạy chồng 2 lần → ví cộng đúng 1 lần, 1 dòng CASHBACK theo giao dịch', async () => {

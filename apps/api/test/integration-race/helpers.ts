@@ -293,3 +293,40 @@ export async function legacyBankWithdraw(prisma: PrismaService, userId: string, 
     return { payoutId: created.id };
   });
 }
+
+/**
+ * Dựng lại lệnh rút hoa hồng về ngân hàng REQUESTED như dữ liệu cũ (API rút đã bỏ): cùng khoá tháng, cùng cách tính thuế cộng dồn và
+ * cùng cách gán lô như nhánh BANK từng có trong requestPayout, để test từ chối/duyệt lệnh cũ và thuế cộng dồn vẫn chạm đường thật.
+ */
+export async function legacyBankCommissionPayout(
+  prisma: PrismaService,
+  affiliate: Pick<import('../../src/modules/affiliate/affiliate.service').AffiliateService, 'lockPitMonth' | 'personalIncomeTax'>,
+  userId: string,
+  taxId?: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const now = new Date();
+    await affiliate.lockPitMonth(tx, userId, now);
+    const rows = await tx.commission.findMany({ where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null }, select: { id: true, amount: true } });
+    const total = rows.reduce((s, c) => s + c.amount, 0);
+    if (total <= 0) throw new Error('Không có hoa hồng khả dụng');
+    const taxWithheld = await affiliate.personalIncomeTax(tx, userId, total, now);
+    if (taxId) await tx.user.update({ where: { id: userId }, data: { personalTaxId: taxId } });
+    const payout = await tx.payout.create({
+      data: {
+        userId,
+        amount: total - taxWithheld,
+        grossAmount: total,
+        taxWithheld,
+        taxId: taxId ?? null,
+        method: 'BANK',
+        bankInfo: { bankName: 'VCB', accountNumber: '0123456789', accountName: 'CTV IT' },
+        status: 'REQUESTED',
+        requestedAt: now,
+      },
+    });
+    const marked = await tx.commission.updateMany({ where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null }, data: { payoutBatchId: payout.id } });
+    if (marked.count !== rows.length) throw new Error('Dữ liệu hoa hồng đã thay đổi');
+    return payout;
+  });
+}

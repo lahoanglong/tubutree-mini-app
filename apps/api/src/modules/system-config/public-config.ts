@@ -113,6 +113,9 @@ export async function buildPublicConfig(config: SystemConfigService) {
     // Luật Ví ×1,5 đã bỏ: rút hoa hồng về Ví Tubu là 1:1 (affiliate.service). Giữ trường (cố định 1) để miniapp
     // đã phát hành không vỡ kiểu dữ liệu; không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB.
     affiliateWalletMultiplier: 1,
+    // Rút về ngân hàng đã bỏ, nhưng Mini App đã phát hành có thể còn đọc trường này (mức rút tối thiểu); thiếu trường thì màn cũ hiện
+    // sai. Giữ giá trị mặc định cũ thêm một bản phát hành, không đọc khoá affiliate.min_withdraw_bank.
+    affiliateMinWithdrawBank: 50000,
     affiliatePitWithhold: { pct: pitPct, threshold: pitThreshold },
     cashbackHoldDays,
     waste,

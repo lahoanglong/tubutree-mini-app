@@ -19,11 +19,10 @@ import { clientIp } from '../../common/throttle/throttle.config';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
-import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN } from './affiliate.service';
+import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN, WALLET_ONLY_MESSAGE } from './affiliate.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
 
-const WALLET_ONLY_MESSAGE = 'Hoa hồng chỉ chuyển vào Ví Tubu để mua hàng.';
 
 class CreateLinkDto {
   @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;
@@ -115,8 +114,7 @@ export class AffiliateController {
     return this.affiliate.listMyPayouts(userId);
   }
 
-  // Chính sách Zalo 4.5 cấm rút tiền/trả thưởng: hoa hồng chỉ đi một đường, vào Ví Tubu 1:1. Chặn ở đây (không ở service)
-  // để nhánh BANK còn lại trong service phục vụ xử lý lệnh cũ và các spec thuế/từ chối; không route nào khác gọi requestPayout.
+  // Chính sách Zalo 4.5 cấm rút tiền/trả thưởng: hoa hồng chỉ đi một đường, vào Ví Tubu 1:1 (controller và service cùng chặn method khác).
   // Idempotency-Key: chống double-tap/retry chuyển trùng lần.
   @Post('payouts')
   payout(
