@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
@@ -44,6 +45,8 @@ export interface HomeInitial {
   suggest?: PageResponse<ProductCard>;
   categories?: CategoryDTO[];
   brands?: { brand: string; count: number; slug?: string | null }[];
+  /** Cấu hình công khai: khối "Quà khách mới" của khách vãng lai có ngay trong HTML server (không hiện sau hydrate làm Danh mục nhảy). */
+  publicConfig?: PublicConfig;
 }
 
 const STALE = 60_000;
@@ -90,7 +93,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
     member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome: kind === 'new' ? <NewCustomerGift /> : null,
+    welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
     shortcuts: <ShortcutGrid />,
     purchased: <PurchasedRail restoring={restoring} />,
     flash: (

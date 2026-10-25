@@ -8,7 +8,7 @@ import type { NewCustomerOffer } from '@tubutree/app-core/api/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
 import { useAuth } from '@/lib/auth-context';
-import { useAuthPhase } from '@/lib/auth-phase';
+import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -55,17 +55,18 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
  * Đang tải, lỗi tải hay thiếu cấu hình → không vẽ gì: đây là khối quảng bá phụ, không đáng một khung chờ hay thẻ lỗi và không được hiện số suy đoán.
  */
-export function NewCustomerGift() {
+export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
   const phase = useAuthPhase();
+  const restoring = useAuthRestoring();
   const authed = phase === 'authenticated';
   const userId = useAuth().user?.id;
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.
-  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
+  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, ...(initialConfig ? { initialData: initialConfig } : {}) });
   const offerQ = useQuery({ ...newCustomerOfferQuery(coreHttp, userId), enabled: authed, retry: false });
 
-  // Web chưa biết khách đã đăng nhập hay chưa (đang khôi phục phiên, hoặc mất mạng lúc khôi phục) thì không hiện bản dành cho khách vãng lai
-  // rồi biến mất khi phiên về.
-  if (phase === 'loading' || phase === 'unavailable') return null;
+  // Đang khôi phục một phiên đã có (có cờ phiên) hoặc mất mạng lúc khôi phục thì không hiện bản dành cho khách vãng lai rồi biến mất khi phiên về.
+  // 'loading' mà không có cờ phiên là khách vãng lai thật (HTML server dựng sẵn bản này nên Danh mục không nhảy sau hydrate).
+  if (restoring || phase === 'unavailable') return null;
   // Chưa biết có phải khách mới thì không chiếm chỗ: khung chờ cố định sẽ làm trang nhảy với mọi khách đã có đơn rồi mới biến mất.
   if (cfgQ.isError || cfgQ.isPending || (authed && (offerQ.isError || offerQ.isPending))) return null;
   if (authed && offerQ.data?.isNewCustomer !== true) return null;

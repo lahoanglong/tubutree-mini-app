@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useMemo, useRef } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { parsePage } from './catalog-filter';
 import { SEARCH_PARAM_KEYS, parseSearchState, serializeSearchState, type SearchState } from './search-state';
+import { useShellPathname } from './shell-pathname';
 
 export interface UseBrowseState {
   state: SearchState;
@@ -42,7 +43,7 @@ function withPatch(prev: URLSearchParams, patch: Partial<SearchState>): URLSearc
 export function useBrowseState(): UseBrowseState {
   const params = useSearchParams();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useShellPathname();
   const raw = params.toString();
   const state = useMemo(() => parseSearchState(new URLSearchParams(raw)), [raw]);
   const urlKey = useMemo(() => serializeSearchState(state).toString(), [state]);

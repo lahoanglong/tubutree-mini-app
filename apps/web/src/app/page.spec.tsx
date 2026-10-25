@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks.get }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn().mockResolvedValue([]) } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest', useAuthRestoring: () => false }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'loading', useAuthRestoring: () => false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -43,6 +43,7 @@ beforeEach(() => {
     }
     if (path === '/categories') return CATEGORIES;
     if (path === '/brands') return [{ brand: 'Tubu', count: 3 }];
+    if (path === '/config/public') return { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, affiliateMinWithdrawBank: 50000, cashbackHoldDays: 30 };
     throw new Error(`đường dẫn lạ ${path}`);
   });
 });
@@ -80,6 +81,21 @@ describe('HomePage — server render phần công khai', () => {
     expect(out).toContain('aria-label="Thông báo"');
     expect(out).not.toContain('chưa đọc');
     expect(out).not.toContain('Dành cho bạn');
+  });
+
+  it('khách vãng lai (chưa có cờ phiên): HTML đầu đã có khối Quà khách mới với số lấy từ cấu hình công khai, để Danh mục không nhảy sau hydrate', async () => {
+    const out = await render();
+    expect(out).toContain('Quà khách mới');
+    expect(out).toContain('Đặt định kỳ giảm 17% mỗi đơn');
+    expect(out).toContain('350.000');
+    expect(out.indexOf('Quà khách mới')).toBeLessThan(out.indexOf('Danh mục'));
+  });
+
+  it('cấu hình công khai lỗi: bỏ khối Quà khách mới (không bịa số), phần còn lại vẫn dựng', async () => {
+    failing = ['/config/public'];
+    const out = await render();
+    expect(out).not.toContain('Quà khách mới');
+    expect(out).toContain('Bán chạy nhất');
   });
 
   it('giữ cấu trúc heading: đúng một h1 (font Fraunces), h2 cho từng khối', async () => {

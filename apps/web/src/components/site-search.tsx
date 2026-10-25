@@ -1,11 +1,12 @@
 'use client';
 
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { SEARCH_MAX_LENGTH, normalizeSearchQuery } from '@/lib/catalog-filter';
 import { BROWSE_PATH, EMPTY_SEARCH_STATE, browseHref } from '@/lib/search-state';
 import { tenantSubdomainOf } from '@/lib/site';
+import { useShellPathname } from '@/lib/shell-pathname';
 
 const FIELD_CLASS =
   'min-h-11 min-w-0 flex-1 rounded-control border border-stone-450 bg-stone-0 px-3 text-sm text-stone-900 placeholder:text-stone-500';
@@ -18,7 +19,7 @@ const FIELD_CLASS =
  * /san-pham cũng ẩn: trang đó có ô tìm riêng kèm gợi ý, hai ô trùng tên sẽ làm trình đọc màn hình đọc đôi.
  */
 export default function SiteSearch() {
-  const onBrowsePage = usePathname() === BROWSE_PATH;
+  const onBrowsePage = useShellPathname() === BROWSE_PATH;
   const [onTenantHost, setOnTenantHost] = useState(false);
   useEffect(() => {
     setOnTenantHost(tenantSubdomainOf(window.location.host) !== null);

@@ -1,4 +1,5 @@
 import { fetchBrands, fetchCategories, fetchProducts } from '@tubutree/app-core/api/catalog';
+import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import type { HomeInitial } from '@/components/home/home-view';
@@ -18,7 +19,11 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   // (cùng hành vi getListOrEmptyAtBuild). Riêng `next build` thường chạy khi API chưa lên: không ném, client tự tải lại.
   const failed = grids.find((g): g is PromiseRejectedResult => g.status === 'rejected');
   if (failed && grids.every((g) => g.status === 'rejected') && process.env.NEXT_PHASE !== 'phase-production-build') throw failed.reason;
-  const [categories, brands] = await Promise.all([orUndefined(fetchCategories(http)), orUndefined(fetchBrands(http))]);
+  const [categories, brands, publicConfig] = await Promise.all([
+    orUndefined(fetchCategories(http)),
+    orUndefined(fetchBrands(http)),
+    orUndefined(publicConfigQuery(http).queryFn()),
+  ]);
   const [bestSellers, suggest] = grids.map((g) => (g.status === 'fulfilled' ? g.value : undefined));
-  return { bestSellers, suggest, categories, brands };
+  return { bestSellers, suggest, categories, brands, publicConfig };
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { apiFetch } from '@/lib/client-api';
@@ -9,6 +9,7 @@ import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
 import { useOffersDot } from '@/lib/use-offers-dot';
 import { GardenHintBubble } from './garden-hint-bubble';
 import { CountBadge } from './mini/badge';
+import { useShellPathname } from '@/lib/shell-pathname';
 
 /** Khoá nằm dưới tiền tố ['orders'] nên mọi lần làm mới ['orders'] (đặt đơn, huỷ đơn) cũng làm mới badge, như Mini App. */
 const ACTIVE_ORDER_COUNT_KEY = ['orders', 'active-count'] as const;
@@ -24,7 +25,7 @@ const fetchActiveOrderCount = async () => {
  * sắp hết hạn; tab Cá nhân mang huy hiệu số đơn đang xử lý. Chỉ hiện ở 5 route gốc; ẩn khi trang có `sticky-action-bar` (globals.css, theo lớp `has-sticky-bar` của <body>). Khối đệm cùng chiều cao giữ chân trang không bị che.
  */
 export default function BottomNav() {
-  const pathname = usePathname();
+  const pathname = useShellPathname();
   const { status } = useAuth();
   const isRoot = isWebRootPath(pathname);
   const tabs = readyNavTabs();

@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 
 // Chép ý nghĩa new-customer-gift.spec của Mini App (D2-07b): khối "Quà khách mới".
-const mocks = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated' }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), phase: 'authenticated', restoring: false }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
 
 import { NewCustomerGift } from './new-customer-gift';
@@ -42,6 +42,7 @@ const region = (c: HTMLElement) => c.querySelector('section[aria-label="Quà kh�
 
 beforeEach(() => {
   mocks.phase = 'authenticated';
+  mocks.restoring = false;
   config = CONFIG;
   offer = OFFER;
   mocks.get.mockReset().mockImplementation((path: string) => {
@@ -143,11 +144,20 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
   });
 
   it('đang khôi phục phiên hoặc mất mạng lúc khôi phục: không hiện bản khách vãng lai rồi biến mất, không gọi API', async () => {
-    for (const phase of ['loading', 'unavailable']) {
+    for (const [phase, restoring] of [['loading', true], ['unavailable', false]] as const) {
       mocks.phase = phase;
+      mocks.restoring = restoring;
       expect((await mount()).textContent).toBe('');
       mounted!.unmount();
     }
+    expect(paths()).not.toContain('/me/new-customer-offer');
+  });
+
+  it('chưa biết phiên nhưng KHÔNG có cờ phiên (khách vãng lai ở HTML server): vẫn hiện 3 lợi ích, không gọi API khách', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = false;
+    const text = (await mount()).textContent ?? '';
+    expect(text).toContain('Đặt định kỳ giảm 17% mỗi đơn');
     expect(paths()).not.toContain('/me/new-customer-offer');
   });
 

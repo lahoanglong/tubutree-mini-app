@@ -25,6 +25,7 @@ Phạm vi: lần phát hành đưa PROD từ bản đang chạy lên SHA đã ch
 - Chạy trên VPS Vietnix `14.225.207.177`, chung với ChoDeli và WordPress. Thư mục `/opt/tubutree`, file compose `docker-compose.vietnix.yml`. Chi tiết nền: [ops/README-vietnix-deploy.md](../../ops/README-vietnix-deploy.md).
 - **Máy ảo GCP cũ đã đóng.** Ba secret GitHub `VM_HOST`, `VM_USER`, `VM_SSH_KEY` vẫn trỏ vào máy đó. Hệ quả: các workflow `deploy.yml` và `ops.yml` (audit, backup, gin, set-env, crontab, grant-admin) sẽ lỗi ở bước SSH cho tới khi trỏ lại. Mục 2 nói cần trỏ lại những gì. Cho đến lúc đó, mọi việc làm tay qua SSH theo tài liệu này. Năm workflow VM (`deploy.yml`, `ops.yml`, `logs.yml`, `smoke.yml`, `smoke-purchase.yml`) còn có bước chặn đầu tiên: chúng dừng ngay ở đó cho tới khi biến repo `VM_WORKFLOWS_ENABLED` bằng `true` (đặt sau khi đã trỏ lại các secret SSH).
 - Kể cả khi đã trỏ lại: KHÔNG chạy `deploy.yml` cho lần phát hành này (nó gọi `deploy.sh`, vi phạm ràng buộc 2; `deploy.sh` tự dừng với mã 2 khi migration `20261015150000` còn chờ áp mà API cũ còn chạy, nhưng đừng dựa vào đó). Cách quay lại của `deploy.yml` cũng là quay image theo mục 7, không phải checkout commit cũ.
+- Trang `/` của web trả `Vary: Cookie` (khách có cookie `tubu_web_session` nhận bản dựng sẵn khung chờ khác bản khách vãng lai). Nếu sau này đặt Cloudflare "cache everything" trước web, phải thêm luật bỏ qua cache (bypass) khi request có cookie `tubu_web_session`, nếu không bản của người này bị trả cho người khác.
 
 ### 0.4 Hai dòng gõ đầu mỗi cửa sổ SSH
 
