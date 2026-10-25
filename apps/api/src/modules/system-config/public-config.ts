@@ -37,7 +37,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
   const [
     freeshipThreshold,
     subscribeDiscountPct,
-    affiliateMinWithdrawBank,
     cashbackHoldDays,
     etaMinDays,
     etaMaxDays,
@@ -73,7 +72,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
-    config.get<number>('affiliate.min_withdraw_bank', 50000),
     config.get<number>('cashback.hold_days', 30),
     config.get<number | null>('shipping.eta_min_days', null),
     config.get<number | null>('shipping.eta_max_days', null),
@@ -115,7 +113,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     // Luật Ví ×1,5 đã bỏ: rút hoa hồng về Ví Tubu là 1:1 (affiliate.service). Giữ trường (cố định 1) để miniapp
     // đã phát hành không vỡ kiểu dữ liệu; không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB.
     affiliateWalletMultiplier: 1,
-    affiliateMinWithdrawBank,
     affiliatePitWithhold: { pct: pitPct, threshold: pitThreshold },
     cashbackHoldDays,
     waste,

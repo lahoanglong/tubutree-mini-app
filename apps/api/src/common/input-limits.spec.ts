@@ -2,12 +2,11 @@ import 'reflect-metadata';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { PlaceOrderDto } from '../modules/checkout/dto/checkout.dto';
-import { WithdrawDto } from '../modules/wallet/wallet.controller';
 import { CreatePostDto, EditPostDto } from '../modules/feed/community-feed.controller';
 
 /**
  * MONEY-14: chuỗi/mảng không giới hạn cho phép một tài khoản (kể cả khách) ghi hàng trăm KB vào DB và làm
- * vỡ màn admin (danh sách rút tiền, feed). Body tối đa 10mb ở main.ts không phải giới hạn của từng trường.
+ * vỡ màn admin (feed). Body tối đa 10mb ở main.ts không phải giới hạn của từng trường.
  */
 async function errorsFor<T extends object>(cls: new () => T, plain: Record<string, unknown>) {
   const errs = await validate(plainToInstance(cls, plain), { whitelist: true });
@@ -25,25 +24,6 @@ describe('PlaceOrderDto.note', () => {
   });
   it('ghi chú bình thường → hợp lệ', async () => {
     expect(await errorsFor(PlaceOrderDto, { ...base, note: 'Giao giờ hành chính, gọi trước 15 phút' })).toEqual([]);
-  });
-});
-
-describe('WithdrawDto.bankInfo', () => {
-  const bank = { bankName: 'Techcombank', accountNumber: '19031234567', accountName: 'LA HOANG LONG' };
-  it('thông tin ngân hàng hợp lệ (kể cả STK có dấu cách) → hợp lệ', async () => {
-    expect(await errorsFor(WithdrawDto, { amount: 100000, bankInfo: bank })).toEqual([]);
-    const dto = plainToInstance(WithdrawDto, { amount: 100000, bankInfo: { ...bank, accountNumber: ' 1903 1234 567 ' } });
-    expect(await validate(dto)).toEqual([]);
-    expect(dto.bankInfo.accountNumber).toBe('19031234567');
-  });
-  it.each([
-    ['tên ngân hàng 100.000 ký tự', { bankName: 'x'.repeat(100_000) }, 'bankInfo.bankName.maxLength'],
-    ['tên chủ TK quá dài', { accountName: 'x'.repeat(121) }, 'bankInfo.accountName.maxLength'],
-    ['STK quá ngắn', { accountNumber: '12345' }, 'bankInfo.accountNumber.matches'],
-    ['STK quá dài', { accountNumber: '1'.repeat(21) }, 'bankInfo.accountNumber.matches'],
-    ['STK có chữ cái lạ', { accountNumber: '1903<script>' }, 'bankInfo.accountNumber.matches'],
-  ])('%s → lỗi', async (_label, over, key) => {
-    expect(await errorsFor(WithdrawDto, { amount: 100000, bankInfo: { ...bank, ...over } })).toContain(key);
   });
 });
 

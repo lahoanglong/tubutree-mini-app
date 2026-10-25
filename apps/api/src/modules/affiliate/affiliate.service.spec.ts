@@ -1349,7 +1349,7 @@ describe('AffiliateService.requestPayout (money safety)', () => {
     const { prisma, userUpdate, payoutCreate } = makePrisma({ available: 100_000 });
     await expect(
       new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 60_000, 'WALLET_BALANCE'),
-    ).rejects.toThrow('không hỗ trợ rút một phần');
+    ).rejects.toThrow('không chuyển một phần');
     expect(userUpdate).not.toHaveBeenCalled();
     expect(payoutCreate).not.toHaveBeenCalled();
   });
@@ -1375,15 +1375,6 @@ describe('AffiliateService.requestPayout (money safety)', () => {
       new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 100_000, 'WALLET_BALANCE'),
     ).rejects.toThrow('đã được xử lý');
     expect(userUpdate).not.toHaveBeenCalled();
-  });
-
-  it('BANK dưới mức tối thiểu → BadRequest (available === amount, chỉ available nhỏ)', async () => {
-    // amount PHẢI === available (rút toàn bộ, Bug 2 fix) — set available=10k để test riêng
-    // ngưỡng minWithdraw, không lẫn với check "không hỗ trợ rút một phần".
-    const { prisma } = makePrisma({ available: 10_000, rows: [{ id: 'c1', amount: 10_000 }] });
-    await expect(new AffiliateService(prisma, config, pricing, pancakeOrder, coins, analytics).requestPayout('u1', 10_000, 'BANK', {})).rejects.toThrow(
-      'tối thiểu',
-    );
   });
 
   it('BANK hợp lệ → payout.amount = TỔNG THỰC + gán batch, hoa hồng vẫn APPROVED ("Đang rút") tới khi admin chuyển tiền (SELLER-10)', async () => {

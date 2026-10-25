@@ -1119,7 +1119,6 @@ export class AffiliateService {
     idempotencyKey?: string,
     taxIdInput?: string,
   ) {
-    const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
     // P0 FIX (audit A5-07, 2026-09-27): KHÔNG đọc `affiliate.tubu_wallet_multiplier` ở đây nữa —
     // walletBalance là tiền VND rút được 1:1 ra ngân hàng thật (wallet.service.ts:withdraw, trừ phí
     // cố định), nên nhân hệ số ở đường quy đổi hoa hồng→Ví là in tiền thật (1.000.000đ hoa hồng →
@@ -1160,7 +1159,7 @@ export class AffiliateService {
       _sum: { amount: true },
     });
     const available = approved._sum.amount ?? 0;
-    if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
+    if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để chuyển vào Ví.');
     if (amount > available) throw new BadRequestException('Số dư hoa hồng khả dụng không đủ.');
     // Bug đã sửa: trước đây 'amount' chỉ được VALIDATE (amount > available → throw ở trên) nhưng
     // KHÔNG ĐƯỢC DÙNG để giới hạn số tiền rút thực — code luôn rút/cộng HẾT toàn bộ available bất
@@ -1173,7 +1172,7 @@ export class AffiliateService {
     // amount" (bug cũ) lẫn 1 thuật toán chọn row phức tạp khó review.
     if (amount < available) {
       throw new BadRequestException(
-        `Chỉ hỗ trợ rút toàn bộ số dư hoa hồng khả dụng (${available.toLocaleString('vi-VN')}đ), không hỗ trợ rút một phần.`,
+        `Chỉ chuyển được toàn bộ hoa hồng khả dụng (${available.toLocaleString('vi-VN')}đ) vào Ví, không chuyển một phần.`,
       );
     }
 
@@ -1232,8 +1231,8 @@ export class AffiliateService {
               refType: 'PAYOUT',
               refId: payout.id,
               reason: taxWithheld
-                ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
-                : `Rút ${rows.length} khoản hoa hồng về Ví`,
+                ? `Chuyển ${rows.length} khoản hoa hồng vào Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
+                : `Chuyển ${rows.length} khoản hoa hồng vào Ví`,
             });
           }
           return { credited };
@@ -1262,14 +1261,11 @@ export class AffiliateService {
         note:
           result.credited > 0
             ? `Đã cộng ${result.credited}đ vào Ví Tubu.`
-            : 'Toàn bộ số rút lần này được khấu trừ thuế TNCN (truy thu các lần rút trước trong tháng), chưa có tiền cộng vào Ví.',
+            : 'Toàn bộ số chuyển lần này được khấu trừ thuế TNCN (truy thu các lần chuyển trước trong tháng), chưa có tiền cộng vào Ví.',
       };
     }
 
-    // Rút về STK ngân hàng.
-    if (amount < minWithdraw) {
-      throw new BadRequestException(`Số tiền rút tối thiểu ${minWithdraw.toLocaleString('vi-VN')}đ.`);
-    }
+    // Rút về STK ngân hàng: không còn route nào tới đây (AffiliateController chặn); giữ để spec thuế/từ chối lệnh cũ chạy được.
     let payout: { id: string; status: string };
     try {
       payout = await this.prisma.$transaction(async (tx) => {
@@ -1280,7 +1276,7 @@ export class AffiliateService {
           select: { id: true, amount: true },
         });
         const total = rows.reduce((s, c) => s + c.amount, 0);
-        if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
+        if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để chuyển vào Ví.');
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
         const p = await tx.payout.create({

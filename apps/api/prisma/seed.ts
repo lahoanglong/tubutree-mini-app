@@ -63,7 +63,6 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'affiliate.hold_days', value: 10, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
   // Q-31: cửa sổ ghi nhận "chạm" giới thiệu CTV (AffiliateService.recordTouch). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'affiliate.attribution_days', value: 7, category: 'affiliate', description: 'Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó', createOnly: true },
-  { key: 'affiliate.min_withdraw_bank', value: 50000, category: 'affiliate', description: 'Min rút STK' },
 
   // Cashback
   { key: 'cashback.merchant_user_share', value: 0.7, category: 'cashback', description: 'User nhận 70% commission' },
@@ -71,9 +70,6 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
   { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
 
-  // Rút Ví về ngân hàng: tối thiểu 100k, phí 3k (xu đã gộp vào Điểm Xanh, Ví không còn đổi sang xu).
-  { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
-  { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
   // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
   // pd3_points_config_keys chép giá trị DB cũ bằng CEIL(xu/1000); seed không đè.
   { key: 'referral.referrer_reward_points', value: 5000, category: 'referral', description: 'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)', createOnly: true },
