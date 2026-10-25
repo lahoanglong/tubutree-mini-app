@@ -6,8 +6,8 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { GameCommunityService } from './game-community.service';
 import { GameCollectionService } from './game-collection.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
-import { DEFAULT_TREE_TYPE, harvestCouponMinOrder } from './game.constants';
-import { startOfVnDay } from '../../common/vn-time';
+import { DEFAULT_TREE_TYPE, HARVEST_COUPON_MONTHLY_CAP_DEFAULT, configInt, harvestCouponMinOrder } from './game.constants';
+import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
 
 type TreeHealth = 'HEALTHY' | 'WILTED' | 'DEAD';
 type UnlockCurrency = 'SEEDS' | 'XU';
@@ -152,14 +152,15 @@ export class GameGardenService {
   async waterPlot(userId: string, plotId: string, drops: number) {
     if (!Number.isInteger(drops) || drops <= 0) throw new BadRequestException('Số giọt nước không hợp lệ.');
 
-    const deathDays = await this.config.get<number>('game.death_days', 7);
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
     // Trần cứng số coupon thu hoạch/ngày — mirror waterTree() ở game.service.ts (P0-1): nước rẻ hơn
     // nhiều giá trị coupon thu hoạch, không có trần thì vòng kiếm-nước→tưới→thu-hoạch in coupon vô hạn
     // ở LÔ PHỤ cũng như lô nhà.
     const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
+    const monthlyCap = await configInt(this.config, 'game.harvest_coupon_monthly_cap', HARVEST_COUPON_MONTHLY_CAP_DEFAULT);
     const dayStart = startOfVnDay();
+    const monthStart = startOfVnMonth();
 
     let progress = 0;
     let target = 600;
@@ -167,7 +168,7 @@ export class GameGardenService {
     let harvestCount = 0;
     let couponCode: string | undefined;
     let certificateCode: string | undefined;
-    let revivedFromDead = false;
+    let couponCapped: 'DAY' | 'MONTH' | undefined;
 
     try {
       // ATOMIC + Serializable: đọc lô, đếm trần coupon, trừ nước, cấp thưởng, cập nhật lô đều
@@ -195,40 +196,36 @@ export class GameGardenService {
           // Đếm TRONG cùng transaction Serializable — DÙNG CHUNG trần với waterTree (lô nhà):
           // cả coupon 'GAME'-prefix lẫn 'GARDEN'-prefix đều tính vào 1 trần/user/ngày, tránh
           // lách trần bằng cách tưới lô nhà + lô phụ song song trong cùng ngày.
-          let couponsToday = await db.coupon.count({
-            where: {
-              OR: [{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }],
-              scopeMeta: { path: ['userId'], equals: userId },
-              startAt: { gte: dayStart },
-            },
-          });
+          const harvestCouponWhere = {
+            OR: [{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }],
+            scopeMeta: { path: ['userId'], equals: userId },
+          };
+          let couponsToday = await db.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: dayStart } } });
+          let couponsMonth = await db.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: monthStart } } });
 
+          // Lô bỏ lâu chỉ héo, không mất tiến độ.
           let p = plot.progress;
-          // §6.7.3: lô CHẾT (≥ death_days không tưới, có tiến trình) → reset, trồng lại.
-          let revived = false;
-          if (
-            plot.lastWateredAt &&
-            p > 0 &&
-            (Date.now() - new Date(plot.lastWateredAt).getTime()) / 864e5 >= deathDays
-          ) {
-            p = 0;
-            revived = true;
-          }
           p += drops;
 
           let planted = plot.treesPlanted;
           let harvests = 0;
           let coupon: string | undefined;
           let certificate: string | undefined;
+          let capped: 'DAY' | 'MONTH' | undefined;
           while (p >= plot.target) {
             p -= plot.target;
             planted += 1;
             harvests += 1;
             // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
             certificate = await this.plantTree(userId, plot.treeType, db);
-            if (couponsToday < dailyCap) {
+            if (couponsToday >= dailyCap) {
+              capped = 'DAY';
+            } else if (couponsMonth >= monthlyCap) {
+              capped = 'MONTH';
+            } else {
               coupon = await this.grantCoupon(userId, harvestAmount, harvestMinOrder, db);
               couponsToday += 1;
+              couponsMonth += 1;
             }
           }
 
@@ -245,7 +242,7 @@ export class GameGardenService {
             harvestCount: harvests,
             couponCode: coupon,
             certificateCode: certificate,
-            revivedFromDead: revived,
+            capped,
           };
         },
         { isolationLevel: 'Serializable' },
@@ -256,7 +253,7 @@ export class GameGardenService {
       harvestCount = result.harvestCount;
       couponCode = result.couponCode;
       certificateCode = result.certificateCode;
-      revivedFromDead = result.revivedFromDead;
+      couponCapped = result.capped;
     } catch (err) {
       // P2034 = Postgres serialization failure (2 request song song đụng trần coupon/tồn kho
       // nước) — không nuốt lỗi: báo rõ để client thử lại, giao dịch đã tự rollback nguyên vẹn.
@@ -299,7 +296,7 @@ export class GameGardenService {
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
     };
-    return { progress, target, harvested, treesPlanted, revivedFromDead, reward };
+    return { progress, target, harvested, treesPlanted, revivedFromDead: false, ...(couponCapped ? { couponCapped } : {}), reward };
   }
 
   // ── Helpers ────────────────────────────────────────

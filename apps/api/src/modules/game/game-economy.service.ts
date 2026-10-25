@@ -5,6 +5,15 @@ import { SeasonPassService } from './season-pass.service';
 import { ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { vnDateKey } from '../../common/vn-time';
+import {
+  COMEBACK_GAP_DAYS_DEFAULT,
+  COMEBACK_SEEDS_DEFAULT,
+  DAILY_LOGIN_SEEDS_DEFAULT,
+  DEW_SEEDS_DEFAULT,
+  FIRST_CHECKIN_BONUS_DEFAULT,
+  configInt,
+  streak7Seeds,
+} from './game.constants';
 
 const DAY = 864e5;
 
@@ -56,7 +65,9 @@ export class GameEconomyService {
 
         const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
         const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + seeds);
-        return { seedsEarned: seeds, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
+        // Số 💧 thật vào bình (bình đầy thì phần tràn bị cắt), không phải số định cộng.
+        const seedsEarned = Math.max(0, Math.min(seeds, totalSeeds - p.totalSeeds));
+        return { seedsEarned, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
       }
     }
     throw new BadRequestException('Điểm danh chưa xong, bạn thử lại nhé 🌿');
@@ -113,17 +124,34 @@ export class GameEconomyService {
       }
     }
 
-    const loginSeeds = await this.config.get<number>('game.daily_login_seeds', 10);
+    const loginSeeds = await configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT);
     let seeds = loginSeeds;
-    let bonusNote = '';
+    const notes: string[] = [];
     if (streakDays % 7 === 0) {
-      const bonus = await this.config.get<{ seeds: number }>('game.streak_7_bonus', { seeds: 20 });
-      seeds += bonus.seeds ?? 20;
-      bonusNote = `+${bonus.seeds ?? 20} 💧 chuỗi 7 ngày!`;
+      const bonus = await streak7Seeds(this.config);
+      seeds += bonus;
+      notes.push(`+${bonus} 💧 chuỗi 7 ngày!`);
     } else if (streakDays % 3 === 0) {
       seeds += 5;
-      bonusNote = '+5 💧 chuỗi 3 ngày!';
+      notes.push('+5 💧 chuỗi 3 ngày!');
     }
+    // Quà lần điểm danh đầu: chỉ một lần, vì điều kiện ghi bên dưới (lastCheckInAt null hoặc trước hôm nay) chỉ cho một
+    // request thắng, request song song còn lại ghi hụt rồi gặp "đã điểm danh hôm nay".
+    if (p.lastCheckInAt === null) {
+      const first = await configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT);
+      if (first > 0) {
+        seeds += first;
+        notes.push(`+${first} 💧 quà điểm danh đầu tiên!`);
+      }
+    } else if (gapDays !== null) {
+      const gapNeeded = await configInt(this.config, 'game.comeback_gap_days', COMEBACK_GAP_DAYS_DEFAULT);
+      const comeback = await configInt(this.config, 'game.comeback_seeds', COMEBACK_SEEDS_DEFAULT);
+      if (gapDays >= gapNeeded && comeback > 0) {
+        seeds += comeback;
+        notes.unshift(`Chào mừng bạn quay lại! +${comeback} 💧`);
+      }
+    }
+    const bonusNote = notes.join(' ');
     // Idempotent write: only one concurrent call wins (race-safe backstop).
     // totalSeeds ghi ATOMIC bằng increment (không phải absolute value đọc-ngoài-tx) — chống
     // lost-update khi checkIn đụng độ với spin/buySeeds/quiz/gift khác đang đổi totalSeeds cùng
@@ -158,7 +186,7 @@ export class GameEconomyService {
     if (p.lastDewAt && vnDateKey(p.lastDewAt) === vnDateKey()) {
       throw new BadRequestException('Hôm nay bạn đã hứng giọt sương rồi 🌿');
     }
-    const dew = await this.config.get<number>('game.dew_seeds', 15);
+    const dew = await configInt(this.config, 'game.dew_seeds', DEW_SEEDS_DEFAULT);
     const tankCap = await this.config.get<number>('game.tank_capacity', 500);
 
     // Idempotent write: only one concurrent call wins (race-safe backstop).
@@ -179,7 +207,8 @@ export class GameEconomyService {
 
     const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
     const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + dew);
-    return { seedsEarned: dew, totalSeeds };
+    const seedsEarned = Math.max(0, Math.min(dew, totalSeeds - p.totalSeeds));
+    return { seedsEarned, totalSeeds };
   }
 
   /** §streak-repair: hồi sinh chuỗi vừa mất bằng 💧, trong cửa sổ 48h, tối đa 1 lần/30 ngày. */

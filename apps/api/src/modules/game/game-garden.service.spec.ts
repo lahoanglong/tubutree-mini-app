@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { GameGardenService } from './game-garden.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
+import { startOfVnMonth } from '../../common/vn-time';
 
 /** Config mock: override theo key, fallback nếu không có. */
 function makeConfig(overrides: Record<string, unknown> = {}): SystemConfigService {
@@ -285,16 +286,55 @@ describe('GameGardenService.waterPlot', () => {
     expect(prisma.gardenPlot.update).not.toHaveBeenCalled();
   }, 3000);
 
-  it('tưới lô CHẾT (≥ death_days) → reset tiến trình rồi +drops, revivedFromDead', async () => {
+  it('tưới lô quá death_days → GIỮ tiến độ (chỉ héo), +drops, revivedFromDead luôn false', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(
       plotRow({ progress: 500, target: 600, lastWateredAt: new Date(Date.now() - 8 * DAYMS) }),
     );
     const svc = new GameGardenService(prisma, makeConfig());
     const r = await svc.waterPlot('u1', 'p1', 20);
-    expect(r.revivedFromDead).toBe(true);
-    expect(r.progress).toBe(20);
+    expect(r.revivedFromDead).toBe(false);
+    expect(r.progress).toBe(520);
     expect(r.harvested).toBe(false);
+  });
+
+  describe('trần mã thu hoạch ngày/tháng (dùng chung với lô nhà)', () => {
+    const harvestPlot = () => plotRow({ progress: 590, target: 600, treesPlanted: 2 });
+
+    it('đếm cả mã GAME và GARDEN từ đầu tháng giờ VN; đủ 4 mã trong tháng → không cấp, couponCapped = MONTH', async () => {
+      const prisma = makePrisma();
+      (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
+      const monthStart = startOfVnMonth().getTime();
+      (prisma.coupon.count as jest.Mock).mockImplementation(async ({ where }: { where: { startAt: { gte: Date } } }) =>
+        where.startAt.gte.getTime() === monthStart ? 4 : 0,
+      );
+      const svc = new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }));
+      const r = await svc.waterPlot('u1', 'p1', 20);
+      expect(r.harvested).toBe(true);
+      expect(r.couponCapped).toBe('MONTH');
+      expect(r.reward.coupon).toBeUndefined();
+      expect(prisma.coupon.create).not.toHaveBeenCalled();
+      expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
+      const where = (prisma.coupon.count as jest.Mock).mock.calls.map((c) => c[0].where).find((w) => w.startAt.gte.getTime() === monthStart);
+      expect(where.OR).toEqual([{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }]);
+    });
+
+    it('đủ trần ngày → couponCapped = DAY (ngày được xét trước tháng)', async () => {
+      const prisma = makePrisma();
+      (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
+      (prisma.coupon.count as jest.Mock).mockResolvedValue(9);
+      const r = await new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterPlot('u1', 'p1', 20);
+      expect(r.couponCapped).toBe('DAY');
+      expect(prisma.coupon.create).not.toHaveBeenCalled();
+    });
+
+    it('còn dưới cả hai trần → cấp mã, không có couponCapped', async () => {
+      const prisma = makePrisma();
+      (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(harvestPlot());
+      const r = await new GameGardenService(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterPlot('u1', 'p1', 20);
+      expect(r.reward.coupon).toBeTruthy();
+      expect(r).not.toHaveProperty('couponCapped');
+    });
   });
 
   it('thu hoạch gói trừ-nước + cấp-thưởng + cập-nhật-lô trong 1 $transaction (atomic)', async () => {

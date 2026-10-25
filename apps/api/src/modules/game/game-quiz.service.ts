@@ -2,8 +2,8 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { DEFAULT_TREE_TYPE } from './game.constants';
-import { ensureGameProfile } from './game-profile';
+import { QUIZ_WRONG_SEEDS_DEFAULT, configInt } from './game.constants';
+import { ensureGameProfile, initialEcoImpact } from './game-profile';
 import { vnDateKey } from '../../common/vn-time';
 
 @Injectable()
@@ -95,10 +95,12 @@ export class GameQuizService {
     }
 
     let waterEarned = 0;
-    if (isCorrect) {
+    // Câu sai vẫn được ít nước (quiz_wrong_seeds) để người mới không trả lời xong hai tay trắng.
+    const reward = isCorrect ? quiz.waterReward : await configInt(this.config, 'game.quiz_wrong_seeds', QUIZ_WRONG_SEEDS_DEFAULT);
+    if (reward > 0) {
       const tankCap = await this.config.get<number>('game.tank_capacity', 500);
-      waterEarned = quiz.waterReward;
-      const target = await this.config.get<number>('game.tree_default_target', 600);
+      waterEarned = reward;
+      const ecoImpact = await initialEcoImpact(this.config);
       // Atomic increment để 2 quiz answer song song (cùng user, khác quizId) KHÔNG mất 1 lần cộng:
       // pattern cũ (read totalSeeds → write Math.min(...)) là race lost-update — cả 2 đọc X rồi
       // cùng ghi X+w → totalSeeds = X+w thay vì X+2w.
@@ -109,7 +111,7 @@ export class GameQuizService {
         create: {
           userId,
           totalSeeds: Math.min(tankCap, waterEarned),
-          ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
+          ecoImpact,
         },
       });
       // Clamp về tankCap nếu increment vượt — chấp nhận đôi khi mất nước thừa khi đã đầy bình,

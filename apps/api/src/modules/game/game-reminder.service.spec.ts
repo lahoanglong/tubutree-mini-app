@@ -77,6 +77,21 @@ describe('GameReminderService.sendThirstyTreeReminders', () => {
   });
 });
 
+describe('GameReminderService.sendThirstyTreeReminders — cây bỏ lâu không còn chết', () => {
+  it('chỉ nhắc trong 7 ngày sau lần tưới cuối, không phụ thuộc game.death_days', async () => {
+    const cfg = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'game.death_days' ? (30 as T) : (fb as T)) } as unknown as SystemConfigService;
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { gameProfile: { findMany }, notificationLog: { findMany: jest.fn().mockResolvedValue([]) } } as unknown as PrismaService;
+    const svc = new GameReminderService(prisma, cfg, { notify: jest.fn() } as unknown as NotificationsService);
+    const before = Date.now();
+    await svc.sendThirstyTreeReminders();
+    const gt = findMany.mock.calls[0][0].where.lastWateredAt.gt as Date;
+    const ageDays = (before - gt.getTime()) / 864e5;
+    expect(ageDays).toBeGreaterThan(6.99);
+    expect(ageDays).toBeLessThan(7.01);
+  });
+});
+
 describe('GameReminderService.sendDailyReminders (cron)', () => {
   it('gọi cả hai loại nhắc trong 1 lần chạy', async () => {
     const { svc, findMany } = setup([]);

@@ -191,6 +191,7 @@ describe('SeasonPassService.claim', () => {
     // Cộng ATOMIC qua upsert increment (không phải absolute value đọc-ngoài-tx).
     const upsertArg = (p.gameProfile.upsert as jest.Mock).mock.calls[0][0];
     expect(upsertArg.update).toEqual({ totalSeeds: { increment: 20 } });
+    expect(upsertArg.create.ecoImpact).toEqual(expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }));
     // Vượt cap → clamp guarded (totalSeeds > cap), không set tuyệt đối không điều kiện.
     expect((p.gameProfile.updateMany as jest.Mock).mock.calls[0][0]).toMatchObject({
       where: { userId: 'u1', totalSeeds: { gt: 500 } },
