@@ -1,25 +1,26 @@
-import { Home, LayoutGrid, Package, Sprout, User, type LucideIcon } from 'lucide-react';
+import { Gift, Home, LayoutGrid, Sprout, User, type LucideIcon } from 'lucide-react';
+import { NAV_TAB_SPECS, type NavTabId, type NavTabSpec } from '@tubutree/app-core/home-layout';
 import { isWebRouteReady } from '@/lib/route-map';
 
 /**
- * 5 mục gốc của web, cùng nhãn, icon và thứ tự với `apps/miniapp/src/components/nav-config.ts`
- * (đường dẫn là route web tương ứng trong route-map.json). Thanh đáy điện thoại và thanh đầu máy tính cùng đọc từ đây.
+ * 5 mục gốc của web, cùng nhãn, thứ tự và huy hiệu với `apps/miniapp/src/components/nav-config.ts` (cả hai đọc `NAV_TAB_SPECS`
+ * ở app-core); ở đây chỉ gắn biểu tượng và route web (route-map.json). Phương án A: "Ưu đãi" thay "Đơn hàng", đơn nằm ở hàng
+ * trạng thái đầu trang Cá nhân. Thanh đáy điện thoại và thanh đầu máy tính cùng đọc từ đây.
  */
-export interface WebNavTab {
+export interface WebNavTab extends NavTabSpec {
   path: string;
-  label: string;
   Icon: LucideIcon;
-  center?: boolean;
-  badge?: 'active-orders';
 }
 
-export const WEB_NAV_TABS: readonly WebNavTab[] = [
-  { path: '/', label: 'Trang chủ', Icon: Home },
-  { path: '/san-pham', label: 'Danh mục', Icon: LayoutGrid },
-  { path: '/vuon-xanh', label: 'Vườn Xanh', Icon: Sprout, center: true },
-  { path: '/tai-khoan/don-hang', label: 'Đơn hàng', Icon: Package, badge: 'active-orders' },
-  { path: '/tai-khoan', label: 'Cá nhân', Icon: User },
-];
+const WEB_VISUALS: Record<NavTabId, { path: string; Icon: LucideIcon }> = {
+  home: { path: '/', Icon: Home },
+  browse: { path: '/san-pham', Icon: LayoutGrid },
+  garden: { path: '/vuon-xanh', Icon: Sprout },
+  offers: { path: '/uu-dai', Icon: Gift },
+  profile: { path: '/tai-khoan', Icon: User },
+};
+
+export const WEB_NAV_TABS: readonly WebNavTab[] = NAV_TAB_SPECS.map((t) => ({ ...t, ...WEB_VISUALS[t.id] }));
 
 export const WEB_ROOT_PATHS: readonly string[] = WEB_NAV_TABS.map((t) => t.path);
 

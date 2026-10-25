@@ -48,7 +48,7 @@ describe('PageHeader', () => {
       nav.pathname = '/doi-rac/tao';
       const child = mount(<PageHeader title="X" />).container.querySelector('h1')!.parentElement!;
       expect(child.className).toContain('max-md:pl-12');
-      nav.pathname = '/tai-khoan/don-hang';
+      nav.pathname = '/uu-dai';
       const root = mount(<PageHeader title="X" backHref="/tai-khoan" />).container.querySelector('h1')!.parentElement!;
       expect(root.className).not.toContain('max-md:pl-12');
     });

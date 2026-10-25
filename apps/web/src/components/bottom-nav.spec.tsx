@@ -13,6 +13,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({ usePathname: () => mocks.pathname }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: mocks.status }) }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => mocks.ready(p) }));
+const offers = vi.hoisted(() => ({ dot: null as string | null, enabled: [] as boolean[] }));
+vi.mock('@/lib/use-offers-dot', () => ({
+  useOffersDot: (enabled: boolean) => {
+    offers.enabled.push(enabled);
+    return enabled ? offers.dot : null;
+  },
+}));
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (opts: unknown) => {
     mocks.query(opts);
@@ -32,6 +39,8 @@ beforeEach(() => {
   mocks.count = 0;
   mocks.ready = (p) => p === '/' || p === '/tai-khoan';
   mocks.query.mockReset();
+  offers.dot = null;
+  offers.enabled = [];
 });
 
 describe('BottomNav (điện thoại)', () => {
@@ -43,7 +52,7 @@ describe('BottomNav (điện thoại)', () => {
   });
 
   it('hiện ở 5 route gốc, kể cả route gốc chưa làm xong', () => {
-    for (const p of ['/', '/san-pham', '/vuon-xanh', '/tai-khoan/don-hang', '/tai-khoan']) {
+    for (const p of ['/', '/san-pham', '/vuon-xanh', '/uu-dai', '/tai-khoan']) {
       expect(render(p), p).toContain('<nav');
     }
   });
@@ -60,13 +69,13 @@ describe('BottomNav (điện thoại)', () => {
     expect(out).toContain('href="/tai-khoan"');
     expect(out).not.toContain('href="/san-pham"');
     expect(out).not.toContain('href="/vuon-xanh"');
-    expect(out).not.toContain('href="/tai-khoan/don-hang"');
+    expect(out).not.toContain('href="/uu-dai"');
   });
 
   it('đủ 5 mục đúng nhãn như Mini App khi mọi route đã xong; Vườn Xanh là nút nổi giữa', () => {
     mocks.ready = () => true;
     const out = render('/');
-    const labels = ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Đơn hàng', 'Cá nhân'];
+    const labels = ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Ưu đãi', 'Cá nhân'];
     const positions = labels.map((l) => out.indexOf(`>${l}<`));
     expect(positions.every((i) => i > 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -80,11 +89,12 @@ describe('BottomNav (điện thoại)', () => {
     expect(out).toMatch(/href="\/tai-khoan"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/tai-khoan"/);
   });
 
-  it('badge đơn đang xử lý: có số thì gắn vào nhãn truy cập, không có thì không hiện', () => {
+  it('badge đơn đang xử lý nằm ở tab Cá nhân: có số thì gắn vào nhãn truy cập, không có thì không hiện', () => {
     mocks.ready = () => true;
     mocks.count = 3;
     const out = render('/');
-    expect(out).toContain('Đơn hàng, 3 đơn đang xử lý');
+    expect(out).toContain('Cá nhân, 3 đơn đang xử lý');
+    expect(out).not.toContain('Ưu đãi, 3');
     expect(out).toContain('>3<');
     mocks.count = 0;
     expect(render('/')).not.toContain('đơn đang xử lý');
@@ -104,10 +114,24 @@ describe('BottomNav (điện thoại)', () => {
     expect((mocks.query.mock.calls.at(-1)![0] as { enabled: boolean }).enabled).toBe(false);
   });
 
-  it('không hỏi badge khi mục Đơn hàng chưa hiện (route còn pending)', () => {
-    mocks.ready = (p) => p !== '/tai-khoan/don-hang';
+  it('không hỏi badge khi mục Cá nhân chưa hiện (route còn pending)', () => {
+    mocks.ready = (p) => p !== '/tai-khoan';
     render('/');
     expect((mocks.query.mock.calls[0]![0] as { enabled: boolean }).enabled).toBe(false);
+  });
+
+  it('tab Ưu đãi có chấm đỏ khi việc cần làm; không có thì không chấm; chỉ hỏi khi tab hiện', () => {
+    mocks.ready = () => true;
+    offers.dot = 'checkin';
+    const out = render('/');
+    expect(out).toContain('Ưu đãi, có việc cần làm');
+    expect(out).toContain('data-testid="offers-dot"');
+    offers.dot = null;
+    expect(render('/')).not.toContain('offers-dot');
+    mocks.ready = (p) => p !== '/uu-dai';
+    offers.enabled = [];
+    render('/');
+    expect(offers.enabled.at(-1)).toBe(false);
   });
 
   it('globals.css ẩn thanh khi có sticky-action-bar', () => {
