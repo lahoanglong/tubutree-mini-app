@@ -43,6 +43,16 @@ const isNewCustomerOnlyRefusal = (message: string) => /đơn đầu tiên/i.test
 /** Khách đang ở màn tích điểm đơn sàn (vào từ thẻ): việc chính là tích điểm, quà thẻ không được kéo khách đi chỗ khác. */
 const onScanRoute = () => typeof window !== 'undefined' && /\/points\/scan\/?$/.test(window.location.pathname);
 
+/** Cờ tích điểm đơn sàn lúc cần quyết (đợi config nếu chưa tải); lỗi hoặc thiếu coi là tắt. */
+async function marketplaceFlagOn(queryClient: ReturnType<typeof useQueryClient>): Promise<boolean> {
+  try {
+    const cfg = await queryClient.fetchQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+    return cfg.loyalty?.marketplaceClaimEnabled === true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Nhận mã từ thẻ QR trong hộp hàng sàn (D2-03): link `?claim=CODE` mở Mini App → lưu mã trên máy → khi đã có tài khoản Zalo
  * thì nhận vào ví và báo bằng sheet "Bạn nhận được ưu đãi". Chưa đăng nhập Zalo (tài khoản khách) thì mời đăng nhập; mã
@@ -55,9 +65,7 @@ export function CouponClaimGate() {
   const queryClient = useQueryClient();
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: onScanRoute() });
   // Cờ tắt thì màn Tích điểm chỉ là "sắp mở": nút chính của sheet không được hứa việc chưa làm được.
-  const scanFlowOn = onScanRoute() && cfgQ.data?.loyalty?.marketplaceClaimEnabled !== false;
-  const scanFlowOnRef = useRef(scanFlowOn);
-  scanFlowOnRef.current = scanFlowOn;
+  const scanFlowOn = onScanRoute() && cfgQ.data?.loyalty?.marketplaceClaimEnabled === true;
   const navigate = useNavigate();
   const cartCount = useCartCount();
   const [pending, setPending] = useState<string | null>(null);
@@ -101,7 +109,7 @@ export function CouponClaimGate() {
         const message = getErrorMessage(err);
         if (needsZaloLogin(message)) {
           setPhase({ kind: 'needLogin' });
-        } else if (isNewCustomerOnlyRefusal(message) && scanFlowOnRef.current) {
+        } else if (isNewCustomerOnlyRefusal(message) && onScanRoute() && (await marketplaceFlagOn(queryClient))) {
           await forget();
           setCardGiftNote('new-customers-only');
           setPhase({ kind: 'closed' });

@@ -53,9 +53,9 @@ export function claimUrl(base: string, code: string, opts: ClaimLinkOptions = {}
   return `${base.trim().replace(/\/+$/, '')}${path}?${params.toString()}`;
 }
 
-/** Link lưu cùng lô: lô mới luôn có (mặc định mở màn quét); lô tạo trước khi có cột không có, link của chúng là `/?claim=`. */
+/** Link lưu cùng lô: lô mới luôn có (không truyền thì mở trang chủ); lô tạo trước khi có cột không có, link của chúng là `/?claim=`. */
 export function normalizeLink(link: ClaimLinkOptions | undefined): Required<Pick<ClaimLinkOptions, 'page'>> & ClaimLinkOptions {
-  return { page: link?.page ?? 'scan', ...(link?.src ? { src: link.src } : {}), ...(link?.card ? { card: link.card } : {}) };
+  return { page: link?.page ?? 'home', ...(link?.src ? { src: link.src } : {}), ...(link?.card ? { card: link.card } : {}) };
 }
 
 function savedLink(raw: unknown): ClaimLinkOptions | null {

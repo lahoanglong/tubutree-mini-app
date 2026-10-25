@@ -538,7 +538,8 @@ export const vi = {
     closedTitle: 'Chưa mở',
     closedBody: 'Tính năng tích điểm đơn sàn chưa mở. Bạn quay lại sau nhé.',
     soonTitle: 'Tích điểm đơn sàn sắp mở',
-    soonBody: 'Bạn cứ giữ lại thẻ trong hộp. Khi tính năng mở, hãy quét lại thẻ trong vòng 60 ngày kể từ ngày đặt đơn để tích điểm cho đơn này.',
+    soonBody: (days?: number | null) =>
+      `Bạn cứ giữ lại thẻ trong hộp. Khi tính năng mở, hãy quét lại thẻ${days ? ` trong vòng ${days} ngày kể từ ngày đặt đơn` : ''} để tích điểm cho đơn này.`,
     soonShop: 'Xem sản phẩm',
     soonHome: 'Về trang chủ',
     greeting: (channel: string | null) => `Cảm ơn bạn đã mua Tubu Tree${channel ? ` trên ${channel}` : ''}`,
@@ -548,6 +549,7 @@ export const vi = {
     phoneDeclined: 'Tubu chưa có số điện thoại nên chưa ghép được đơn. Mã bạn nhập vẫn được giữ, bạn bấm "Chia sẻ số điện thoại" khi sẵn sàng nhé.',
     giftNewOnly: 'Quà thẻ dành cho tài khoản chưa có đơn. Bạn vẫn tích điểm đơn này được.',
     scanCardLink: 'Đây là mã trên thẻ Tubu. Bạn quét mã vạch trên nhãn dán ngoài hộp nhé.',
+    codeLinkInvalid: 'Link bạn mở có mã vận đơn không đúng dạng nên chưa điền sẵn. Bạn nhập hoặc quét lại mã trên nhãn nhé.',
     scanNoCode: 'Chưa tìm thấy mã vận đơn trong nội dung vừa quét. Bạn kiểm tra mã trong ô bên dưới hoặc quét lại nhé.',
     chatSupport: 'Nhắn Tubu Tree',
     chatSupportMessage: (maskedCode: string) => `Mình cần hỗ trợ tích điểm cho mã ${maskedCode}`,

@@ -230,13 +230,13 @@ function OaInvite({ onDone }: { onDone: (note: string | null) => void }) {
   );
 }
 
-function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; channel: string | null; initialCode: string }) {
+function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { fromCard: boolean; channel: string | null; initialCode: string; codeParamRejected: boolean }) {
   const qc = useQueryClient();
   const hasPhone = useAuthStore((s) => !!s.user?.phone);
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const giftNote = useCardGiftNote();
   const [code, setCode] = useState(initialCode);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(codeParamRejected ? t.codeLinkInvalid : null);
   const [notice, setNotice] = useState<string | null>(null);
   const [needPhone, setNeedPhone] = useState(false);
   const [phoneDeclined, setPhoneDeclined] = useState(false);
@@ -249,6 +249,10 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
   const [scanned, setScanned] = useState<string | null>(initialCode || null);
   const submitWrap = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (codeParamRejected) setError(t.codeLinkInvalid);
+  }, [codeParamRejected]);
 
   useEffect(() => {
     if (initialCode) {
@@ -475,14 +479,14 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
   );
 }
 
-function ClosedView({ fromCard }: { fromCard: boolean }) {
+function ClosedView({ fromCard, maxAgeDays }: { fromCard: boolean; maxAgeDays: number | null }) {
   const navigate = useNavigate();
   return (
     <div data-testid={fromCard ? 'claim-soon' : 'claim-closed'}>
       <EmptyState
         art="sprout"
         heading={fromCard ? t.soonTitle : t.closedTitle}
-        body={fromCard ? t.soonBody : t.closedBody}
+        body={fromCard ? t.soonBody(maxAgeDays) : t.closedBody}
         ctaLabel={t.soonShop}
         onCta={() => navigate('/browse')}
       />
@@ -499,7 +503,9 @@ export default function ExternalPointsPage() {
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const enabled = cfgQ.data?.loyalty?.marketplaceClaimEnabled === true;
   const { fromCard, channel } = cardEntryOf(getSessionAttribution());
-  const initialCode = extractClaimCode(new URLSearchParams(search).get('code')).code ?? '';
+  const codeParam = new URLSearchParams(search).get('code');
+  const initialCode = extractClaimCode(codeParam).code ?? '';
+  const codeParamRejected = !!codeParam?.trim() && !initialCode;
 
   let body;
   if (cfgQ.isError) {
@@ -507,13 +513,14 @@ export default function ExternalPointsPage() {
   } else if (cfgQ.isPending) {
     body = <div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>;
   } else if (!enabled) {
-    body = <ClosedView fromCard={fromCard} />;
+    const days = cfgQ.data?.loyalty?.marketplaceClaimMaxAgeDays;
+    body = <ClosedView fromCard={fromCard} maxAgeDays={typeof days === 'number' && Number.isInteger(days) && days > 0 ? days : null} />;
   } else if (phase !== 'authenticated') {
     body = <AuthPhaseView phase={phase} loading={<div style={{ padding: 16 }}><Skeleton height={160} radius="var(--radius-card)" /></div>} />;
   } else {
     body = (
       <>
-        <ClaimForm fromCard={fromCard} channel={channel} initialCode={initialCode} />
+        <ClaimForm fromCard={fromCard} channel={channel} initialCode={initialCode} codeParamRejected={codeParamRejected} />
         <PointsBoostStrip placement="scan" />
         <div style={{ padding: '0 16px 32px' }}>
           <Text variant="body-lg" as="h2" style={{ fontWeight: 600, marginBottom: 10 }}>{t.listTitle}</Text>

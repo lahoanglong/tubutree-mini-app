@@ -86,19 +86,25 @@ describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)',
         scope: 'CLAIM',
         newCustomerOnly: true,
         batch: 'SHOPEE',
-        batchLink: { page: 'scan' },
+        batchLink: { page: 'home' },
       });
     }
     expect(out).toMatchObject({ batch: 'SHOPEE', created: 3, claimUrlBase: 'https://zalo.me/s/123' });
     expect(out.codes.map((c) => c.code).sort()).toEqual(rows.map((r) => r.code as string).sort());
     const first = out.codes[0]!;
-    expect(first.url).toBe(`https://zalo.me/s/123/points/scan?claim=${first.code}`);
+    expect(first.url).toBe(`https://zalo.me/s/123/?claim=${first.code}`);
   });
 
   it('link trong kết quả tạo lô mang trang đích, src, card theo lựa chọn', async () => {
     const { svc } = make();
     const out = await svc.create({ ...INPUT, link: { page: 'scan', src: 'tiktok', card: '2611' } });
     expect(out.codes[0]!.url).toBe(`https://zalo.me/s/123/points/scan?src=tiktok&card=2611&claim=${out.codes[0]!.code}`);
+  });
+
+  it('không truyền link: lưu và dùng trang chủ (tương thích web cũ, script)', async () => {
+    const { svc } = make();
+    const out = await svc.create(INPUT);
+    expect(out.link).toEqual({ page: 'home' });
   });
 
   it('link được lưu cùng mọi mã của lô để tải lại CSV ra đúng link', async () => {
@@ -155,7 +161,7 @@ describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)',
     const { svc } = make({ base: '' });
     const out = await svc.create(INPUT);
     expect(out.claimUrlBase).toBeNull();
-    expect(out.codes[0]!.url).toMatch(/^\/points\/scan\?claim=SHOPEE-/);
+    expect(out.codes[0]!.url).toMatch(/^\/\?claim=SHOPEE-/);
   });
 });
 

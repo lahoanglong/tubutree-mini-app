@@ -445,6 +445,14 @@ describe('Trang Tích điểm đơn sàn', () => {
       mocks.search = `?src=shopee&card=2611&code=${bad}`;
       renderPage();
       expect(((await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement).value).toBe('');
+      expect(screen.getByRole('alert')).toHaveTextContent('chưa điền sẵn');
+    });
+
+    it('?code= là mã vạch hàng Việt Nam (893...): báo thay vì bỏ im lặng', async () => {
+      mocks.search = '?code=8934673123457';
+      renderPage();
+      expect(((await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement).value).toBe('');
+      expect(screen.getByRole('alert')).toHaveTextContent('chưa điền sẵn');
     });
 
     it('?code= đổi khi vẫn ở trang này (OpenApp cùng route): ô nhập theo mã mới', async () => {
@@ -463,14 +471,24 @@ describe('Trang Tích điểm đơn sàn', () => {
       mocks.search = '?code=abc';
       renderPage();
       expect(((await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement).value).toBe('');
+      expect(screen.getByRole('alert')).toHaveTextContent('chưa điền sẵn');
+    });
+
+    it('cờ tắt, config không có số ngày: câu "sắp mở" bỏ cụm số ngày', async () => {
+      openFromCard('src=lazada&card=2611');
+      mocks.getPublicConfig.mockResolvedValue({ loyalty: { ...LOYALTY, marketplaceClaimEnabled: false } });
+      renderPage();
+      const soon = await screen.findByTestId('claim-soon');
+      expect(soon).toHaveTextContent('hãy quét lại thẻ để tích điểm cho đơn này');
+      expect(soon).not.toHaveTextContent('ngày');
     });
 
     it('cờ tắt mà vào từ thẻ: trạng thái "sắp mở" có nút Xem sản phẩm và Về trang chủ, không có ô nhập', async () => {
       openFromCard('src=lazada&card=2611');
-      mocks.getPublicConfig.mockResolvedValue({ loyalty: { ...LOYALTY, marketplaceClaimEnabled: false } });
+      mocks.getPublicConfig.mockResolvedValue({ loyalty: { ...LOYALTY, marketplaceClaimEnabled: false, marketplaceClaimMaxAgeDays: 45 } });
       renderPage();
       expect(await screen.findByText('Tích điểm đơn sàn sắp mở')).toBeInTheDocument();
-      expect(screen.getByTestId('claim-soon')).toHaveTextContent('trong vòng 60 ngày');
+      expect(screen.getByTestId('claim-soon')).toHaveTextContent('trong vòng 45 ngày kể từ ngày đặt đơn');
       expect(screen.queryByLabelText('Hoặc nhập mã vận đơn')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Xem sản phẩm' }));
       expect(mocks.navigate).toHaveBeenCalledWith('/browse');

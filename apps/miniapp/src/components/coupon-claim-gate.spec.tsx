@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   cartCount: 0,
   enabled: true,
+  configFails: false,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -40,7 +41,10 @@ vi.mock('../services/api', async (importOriginal) => ({
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getPublicConfig: async () => ({ loyalty: { marketplaceClaimEnabled: mocks.enabled } }),
+  getPublicConfig: async () => {
+    if (mocks.configFails) throw new Error('config lỗi');
+    return { loyalty: { marketplaceClaimEnabled: mocks.enabled } };
+  },
 }));
 vi.mock('../hooks/use-cart-count', () => ({ useCartCount: () => mocks.cartCount }));
 
@@ -124,6 +128,18 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Tích điểm đơn này' })).toBeNull();
     mocks.enabled = true;
+  });
+
+  it('trên /points/scan khi config lỗi/chưa tải: coi như tắt, giữ "Dùng ngay"', async () => {
+    mocks.configFails = true;
+    window.history.replaceState({}, '', '/points/scan?src=shopee&card=2611&claim=SHOPEE-AB12CD34');
+    mocks.post.mockResolvedValue({ data: CLAIMED });
+    setAuth(REAL);
+    renderGate();
+    expect(await screen.findByText('Bạn nhận được ưu đãi')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Tích điểm đơn này' })).toBeNull();
+    mocks.configFails = false;
   });
 
   it('trên /points/scan: "Xem ưu đãi" đi mua sắm', async () => {

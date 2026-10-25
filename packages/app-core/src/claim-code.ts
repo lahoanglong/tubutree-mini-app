@@ -23,17 +23,24 @@ const CARD_LINK = /(^|[/.])zalo\.me\/s\/\d+/i;
 const URL_START = /^[a-z][a-z0-9+.-]*:\/\//i;
 const WIFI = /^WIFI:/i;
 const PREFERRED_KEY = /code|track|waybill|bill|^sn$|order|ma$/i;
+/** Tham số theo dõi quảng cáo, phiên, id nội bộ: không bao giờ là mã vận đơn. */
+const IGNORED_KEY = /^(utm_.*|ref|id|session.*|fbclid|gclid)$/i;
+/** Khoá ưu tiên phải thắng mọi ứng viên không có khoá: chữ+số (2) cộng tiền tố hãng (1) tối đa 3. */
+const PREFERRED_BOOST = 5;
 const TOKEN = /[A-Za-z0-9][A-Za-z0-9_-]{6,}/g;
 const SHOP_HOSTS = /(^|\.)(shopee\.vn|shp\.ee|lazada\.vn|lzd\.co|tiktok\.com|tiktokshop\.com)$/i;
 const CARRIER_PREFIX = /^(SPX|GHN|GHTK|JT|LZ|LEX|VN|TTS|VTP|NJV|BEST|SHP|LGS)/;
 
-/** Mã sản phẩm GTIN-8/12/13/14 có số kiểm đúng (mã vạch sản phẩm, đầu 893 là hàng Việt Nam), không phải mã vận đơn. */
+/** Chuỗi toàn số có độ dài và số kiểm của GTIN-8/12/13/14. Nhiều mã vận đơn toàn số trùng số kiểm do ngẫu nhiên nên chỉ dùng để xếp hạng thấp, trừ EAN-13 đầu 893. */
 export function isGtin(digits: string): boolean {
   if (!/^\d+$/.test(digits) || ![8, 12, 13, 14].includes(digits.length)) return false;
   let sum = 0;
   for (let i = 0; i < digits.length - 1; i++) sum += Number(digits[digits.length - 2 - i]) * (i % 2 === 0 ? 3 : 1);
   return (10 - (sum % 10)) % 10 === Number(digits[digits.length - 1]);
 }
+
+/** Mã vạch hàng Việt Nam (EAN-13 đầu 893, số kiểm đúng): chắc chắn là mã sản phẩm, loại hẳn. */
+const isVnProductBarcode = (digits: string): boolean => digits.length === 13 && digits.startsWith('893') && isGtin(digits);
 
 const isPhoneLike = (digits: string): boolean => /^(0|84)\d{9}$/.test(digits);
 
@@ -42,7 +49,7 @@ function acceptable(raw: string, requireDigit: boolean): string | null {
   const code = normalizeClaimCode(raw);
   if (!code) return null;
   if (requireDigit && !/\d/.test(code)) return null;
-  if (/^\d+$/.test(code) && (isGtin(code) || isPhoneLike(code))) return null;
+  if (/^\d+$/.test(code) && (isVnProductBarcode(code) || isPhoneLike(code))) return null;
   return code;
 }
 
@@ -58,6 +65,7 @@ function best(cands: Candidate[]): string | null {
     let score = c.boost;
     if (/[A-Z]/.test(c.code) && /\d/.test(c.code)) score += 2;
     if (CARRIER_PREFIX.test(c.code)) score += 1;
+    if (isGtin(c.code)) score -= 3;
     if (!top || score > top.score) top = { code: c.code, score };
   }
   return top?.code ?? null;
@@ -82,7 +90,10 @@ function leafCandidates(value: unknown, keyBoost: number, depth: number, out: Ca
   } else if (Array.isArray(value)) {
     for (const v of value) leafCandidates(v, keyBoost, depth + 1, out);
   } else if (value && typeof value === 'object') {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) leafCandidates(v, PREFERRED_KEY.test(k) ? 2 : 0, depth + 1, out);
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (IGNORED_KEY.test(k)) continue;
+      leafCandidates(v, PREFERRED_KEY.test(k) ? PREFERRED_BOOST : 0, depth + 1, out);
+    }
   }
 }
 
@@ -97,7 +108,8 @@ function safeDecode(s: string): string {
 function urlCandidates(u: URL): Candidate[] {
   const out: Candidate[] = [];
   for (const [k, v] of u.searchParams.entries()) {
-    const boost = PREFERRED_KEY.test(k) ? 2 : 0;
+    if (IGNORED_KEY.test(k)) continue;
+    const boost = PREFERRED_KEY.test(k) ? PREFERRED_BOOST : 0;
     const whole = acceptable(v, true);
     if (whole) out.push({ code: whole, boost });
     else out.push(...tokensOf(v, boost));
@@ -125,6 +137,16 @@ export function extractClaimCode(content: unknown): ClaimScanResult {
   if (!text || WIFI.test(text)) return { kind: 'none', code: null };
   if (CARD_LINK.test(text)) return { kind: 'card_link', code: codeParamOfCardLink(text) };
 
+  // Nhiều mảnh cách nhau bởi khoảng trắng: chấm từng mảnh, không gộp (gộp "MÃ SĐT" thành một chuỗi 25 ký tự lách bộ lọc SĐT).
+  // Không mảnh nào đứng riêng được thì mới thử gộp, cho mã in chia nhóm như "SPX VN 0123456789".
+  const pieces = text.split(/\s+/).filter(Boolean);
+  if (pieces.length > 1 && !text.startsWith('{') && !text.startsWith('[') && !URL_START.test(text)) {
+    const code = best(pieces.flatMap((piece) => {
+      const c = acceptable(piece, true);
+      return c ? [{ code: c, boost: 0 }] : [];
+    }));
+    if (code) return { kind: 'code', code };
+  }
   const plain = acceptable(text, false);
   if (plain) return { kind: 'code', code: plain };
 
