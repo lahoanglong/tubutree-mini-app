@@ -33,9 +33,9 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
-  /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền; thiếu khi API cũ. */
+  /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng cũ chưa chuyển tiền (chỉ còn dữ liệu trước khi bỏ rút); thiếu khi API cũ. */
   withdrawingCommission?: number;
-  /** Thuế TNCN sẽ bị khấu trừ nếu rút hết ngay (cộng dồn các lần rút trong tháng VN); thiếu khi API cũ. */
+  /** Thuế TNCN sẽ bị khấu trừ nếu chuyển hết ngay (cộng dồn các lần chuyển trong tháng VN); thiếu khi API cũ. */
   withdrawTaxPreview?: number;
   totalClicks: number;
   totalConversions: number;
@@ -156,20 +156,13 @@ export interface PayoutResult {
 }
 export const getMyPayouts = (http: HttpClient) => http.get<AffiliatePayout[]>('/affiliate/payouts');
 /**
- * Gửi lại cùng Idempotency-Key (chạm đúp, thử lại sau lỗi mạng) không tạo lệnh rút thứ hai. `taxId`: MST/CCCD khai lần đầu khi
- * lần rút bị khấu trừ thuế TNCN.
+ * Chuyển toàn bộ hoa hồng khả dụng vào Ví Tubu (rút về ngân hàng/ZaloPay đã bỏ). Gửi lại cùng Idempotency-Key (chạm đúp, thử lại
+ * sau lỗi mạng) không tạo lệnh thứ hai. `taxId`: MST/CCCD khai lần đầu khi lần chuyển bị khấu trừ thuế TNCN.
  */
-export const requestPayout = (
-  http: HttpClient,
-  amount: number,
-  method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY',
-  bankInfo: { bankName: string; accountNumber: string; accountName: string } | undefined,
-  idempotencyKey: string,
-  taxId?: string,
-) =>
+export const requestPayout = (http: HttpClient, amount: number, idempotencyKey: string, taxId?: string) =>
   http.post<PayoutResult>(
     '/affiliate/payouts',
-    { amount, method, bankInfo, ...(taxId ? { taxId } : {}) },
+    { amount, method: 'WALLET_BALANCE', ...(taxId ? { taxId } : {}) },
     { headers: { 'Idempotency-Key': idempotencyKey } },
   );
 
