@@ -37,7 +37,7 @@ export function StatsSection() {
         <h2 className={ui.sectionTitle}>Thống kê 30 ngày</h2>
       </div>
       <div className="mb-3 flex gap-2">
-        <StatBox value={String(data.orders30d)} label={`Đơn (7 ngày: ${data.orders7d})`} />
+        <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
         <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
         <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" brand />
       </div>

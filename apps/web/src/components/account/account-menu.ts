@@ -1,3 +1,4 @@
+import { OPEN_STOREFRONT_MENU_HINT, OPEN_STOREFRONT_MENU_LABEL } from '@tubutree/app-core/storefront-signup';
 import {
   BadgePercent, BookOpen, Bell, CalendarClock, Heart, Info, Leaf, MapPin, MessageCircle, MessagesSquare, Recycle, ScanLine, Settings, ShieldCheck, Sparkles, Store, Users, Wallet,
   type LucideIcon,
@@ -64,7 +65,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
     {
       group: 'Hợp tác',
       items: [
-        { icon: Users, label: 'Cộng tác viên', to: '/ctv', hint: 'Chia sẻ — nhận hoa hồng' },
+        { icon: Users, label: OPEN_STOREFRONT_MENU_LABEL, to: '/ctv', hint: OPEN_STOREFRONT_MENU_HINT },
         ...(c.cashbackEnabled ? [{ icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/hoan-tien' }] : []),
         dealerItem,
         ...(c.ownedBrandName ? [{ icon: Store, label: 'Quản lý nhãn hàng', to: '/chu-thuong-hieu', hint: c.ownedBrandName }] : []),

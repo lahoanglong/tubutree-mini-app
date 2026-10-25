@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   copied: [] as string[],
   registerGate: null as null | Promise<unknown>,
   routeReady: { gianHang: true },
+  courses: [{ id: 'c1' }] as unknown[],
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
@@ -43,6 +44,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/affiliate/payouts') return state.payouts;
       if (path === '/affiliate/tiers') return state.tiers;
       if (path === '/affiliate/milestones') return state.milestones;
+      if (path === '/academy/courses') return state.courses;
       if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
       if (path === '/affiliate/analytics/products') return state.products;
       if (path === '/config/public') return { affiliateMinWithdrawBank: 70_000 };
@@ -94,6 +96,7 @@ beforeEach(() => {
   state.share = vi.fn(async () => 'shared');
   state.registerGate = null;
   state.routeReady.gianHang = true;
+  state.courses = [{ id: 'c1' }];
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void state.copied.push(t) } });
   state.copied = [];
 });
@@ -396,6 +399,13 @@ describe('/ctv — bảng điều khiển', () => {
     const { container } = mount();
     await flush();
     expect(container.textContent).toContain('Chưa có lệnh rút nào.');
+  });
+
+  it('không có khoá học nào thì ẩn lối vào Học viện (B-37)', async () => {
+    state.courses = [];
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('a[href="/hoc-vien"]')).toBeNull();
   });
 
   it('lối sang /hoc-vien chỉ hiện khi route web đã sẵn sàng', async () => {

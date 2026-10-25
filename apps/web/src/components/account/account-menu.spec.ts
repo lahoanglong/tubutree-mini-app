@@ -29,7 +29,7 @@ describe('nhóm menu hub tài khoản', () => {
     const m = buildAccountMenu(ctx());
     expect(labels(m, 'Mua sắm')).toEqual(['Mua chung nhóm', 'Đổi rác lấy quà', 'Sản phẩm yêu thích', 'Sổ địa chỉ', 'Cộng đồng hỏi đáp']);
     expect(labels(m, 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu']);
-    expect(labels(m, 'Hợp tác')).toEqual(['Cộng tác viên', 'Đăng ký đại lý']);
+    expect(labels(m, 'Hợp tác')).toEqual(['Mở gian hàng & nhận hoa hồng', 'Đăng ký đại lý']);
     expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
   });
 
@@ -86,9 +86,9 @@ describe('mục theo cờ', () => {
     expect(labels(buildAccountMenu(ctx({ claimEnabled: true })), 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu', 'Tích điểm đơn sàn']);
   });
 
-  it('Hoàn tiền sàn ngoài chỉ hiện khi bật CASHBACK_ENABLED, giữa Cộng tác viên và đại lý', () => {
+  it('Hoàn tiền sàn ngoài chỉ hiện khi bật CASHBACK_ENABLED, giữa mục mở gian hàng và đại lý', () => {
     expect(labels(buildAccountMenu(ctx()), 'Hợp tác')).not.toContain('Hoàn tiền sàn ngoài');
-    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Cộng tác viên', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
+    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Mở gian hàng & nhận hoa hồng', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
   });
 
   it('khi cờ tắt, không nhãn nào nhắc "sàn ngoài"', () => {

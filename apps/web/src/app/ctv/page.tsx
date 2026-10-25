@@ -17,6 +17,7 @@ import {
   affiliateStorefrontAnalyticsQuery,
   affiliateTaxStatementQuery,
 } from '@tubutree/app-core/queries/affiliate';
+import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -167,6 +168,7 @@ function RegisterGate() {
   };
 
   const benefits = [
+    { Icon: Store, text: 'Gian hàng riêng với đường dẫn mang tên bạn để gửi cho khách' },
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
     { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
     { Icon: Landmark, text: `Rút về ngân hàng (tối thiểu ${formatVndShort(minBank)}) hoặc quy đổi 1:1 vào Ví Tubu` },
@@ -321,6 +323,9 @@ function Dashboard() {
   const pbQ = useQuery(affiliateProductBreakdownQuery(coreHttp));
   const tiersQ = useQuery(affiliateCtvTiersQuery(coreHttp));
   const milestonesQ = useQuery(affiliateMilestonesQuery(coreHttp));
+  // Lối vào Học viện chỉ hiện khi đã có khoá để học: vào mà thấy trống thì CTV mới tưởng sản phẩm chưa xong.
+  const academyQ = useQuery({ ...academyCoursesQuery(coreHttp), retry: false });
+  const hasCourses = (academyQ.data?.length ?? 0) > 0;
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -446,7 +451,7 @@ function Dashboard() {
             <MilestoneRewards data={milestonesQ.data} />
           ) : null}
 
-          {isWebRouteReady('/hoc-vien') && (
+          {hasCourses && isWebRouteReady('/hoc-vien') && (
             <div>
               <Link href="/hoc-vien" className={`${ui.btnSecondary} ${phoneSecondary} w-full gap-2`}>
                 <GraduationCap className="h-5 w-5" aria-hidden="true" />

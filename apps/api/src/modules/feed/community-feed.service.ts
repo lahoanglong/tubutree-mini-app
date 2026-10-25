@@ -13,7 +13,7 @@ import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
 import { EVENT_REWARD_MAX_POINTS, EVENT_REWARD_MIN_POINTS } from './community-limits';
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
-import { PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
+import { leaderboardAuthorName, PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
 import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
@@ -287,7 +287,7 @@ export class CommunityFeedService {
       include: { user: { select: { fullName: true, avatarUrl: true } } },
     });
     return rows.map((p) => ({
-      author: p.user.fullName ?? 'Bạn Tubu',
+      author: leaderboardAuthorName(p.user.fullName),
       avatar: p.user.avatarUrl ?? null,
       reputation: p.reputation,
       level: p.level,

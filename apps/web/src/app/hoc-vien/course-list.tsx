@@ -66,7 +66,8 @@ export function CtvOnlyNotice() {
 }
 
 function Courses() {
-  const q = useQuery(academyCoursesQuery(coreHttp));
+  // 403 (khách thường) không đổi khi thử lại; lỗi khác đã có nút Thử lại, nên không tự thử lại ngầm.
+  const q = useQuery({ ...academyCoursesQuery(coreHttp), retry: false });
   if (q.isLoading) {
     return (
       <div className="grid gap-3 md:grid-cols-2" aria-hidden="true">
@@ -84,6 +85,9 @@ function Courses() {
       <section className={`${ui.card} p-8 text-center`}>
         <h2 className="font-display text-base font-semibold text-stone-900">Chưa có khoá học nào</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tubu sẽ sớm thêm khoá học đào tạo cho CTV.</p>
+        <Link href="/ctv" className={`${ui.btnPrimary} mt-4`}>
+          Về trang Cộng tác viên
+        </Link>
       </section>
     );
   }

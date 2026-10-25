@@ -181,6 +181,13 @@ describe('/dai-ly — khách, phiên và trạng thái hồ sơ, luôn đúng m�
     expect(c.textContent).toContain('Lý do: Ảnh CCCD mờ');
   });
 
+  it('đã duyệt: thẻ Gian hàng đối tác dẫn tới /merchant (B-41)', async () => {
+    const c = await mount();
+    const card = c.querySelector('[data-testid="partner-storefront-note"]')!;
+    expect(card.textContent).toContain('Gian hàng đối tác');
+    expect(card.querySelector('a')?.getAttribute('href')).toBe('/merchant');
+  });
+
   it('đã duyệt (APPROVED hoặc isDealer): hub với bậc, công nợ, hạn mức; ?tab= chọn tab', async () => {
     let c = await mount();
     expect(c.textContent).toContain('Bạc');
@@ -213,6 +220,14 @@ describe('/dai-ly — đăng ký đại lý', () => {
     typeInto(field(c, 'Số điện thoại *'), '0901234567');
     typeInto(field(c, 'Địa chỉ kinh doanh *'), '1 Lê Lợi');
   };
+
+  it('có điều kiện, quyền lợi và thời gian duyệt trước form (B-86)', async () => {
+    const c = await mount();
+    const box = c.querySelector('[data-testid="dealer-conditions"]')!;
+    expect(box.textContent).toContain('Điều kiện đăng ký');
+    expect(box.textContent).toContain('Quyền lợi');
+    expect(box.textContent).toMatch(/Tubu duyệt hồ sơ/);
+  });
 
   it('nút gửi khoá tới khi đủ trường bắt buộc kể cả hai ảnh CCCD; gửi đúng body tới /dealer/apply', async () => {
     m.post['/dealer/apply'] = () => ({ ok: true });

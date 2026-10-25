@@ -13,12 +13,13 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
+import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE } from '@tubutree/app-core/storefront-signup';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { getReturnWindowDays, getStorefront, type ProductCard as ProductCardData } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
 import { StorefrontTracker } from '@/components/storefront-tracker';
 import { isPartnerStore } from '@/lib/partner-store';
-import { StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
+import { OpenStorefrontCta, StorefrontAction, StorefrontEmpty } from '@/components/affiliate/storefront-owner';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import ProductCard from '@/components/product-card';
 import { safeHexColor } from '@/lib/safe-color';
@@ -144,6 +145,11 @@ export default async function StorefrontPage({
                 <h1 className="font-display text-xl font-semibold tracking-tight text-stone-900 sm:text-2xl">
                   {sf.title}
                 </h1>
+                {sf.isSample && (
+                  <span className="inline-flex items-center rounded-full bg-promo-bg px-2.5 py-0.5 text-xs font-semibold text-promo-fg">
+                    {SAMPLE_STOREFRONT_LABEL}
+                  </span>
+                )}
                 {badgeLabel && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-forest-700 px-2.5 py-0.5 text-xs font-semibold text-stone-0 shadow-card">
                     <Sparkles className="h-3 w-3" aria-hidden="true" />
@@ -171,6 +177,12 @@ export default async function StorefrontPage({
             <StorefrontAction slug={sf.slug} title={sf.title} referralCode={sf.referralCode} />
           </div>
         </div>
+
+        {sf.isSample && (
+          <p data-testid="sample-note" className="mt-3 text-xs text-stone-600 max-md:mt-2">
+            {SAMPLE_STOREFRONT_NOTE}
+          </p>
+        )}
 
         {/* Bio / Slogan */}
         {sf.headerNote && (
@@ -273,6 +285,7 @@ export default async function StorefrontPage({
           </div>
         </section>
       ))}
+      {sf.type === 'CTV' && <OpenStorefrontCta referralCode={sf.referralCode} />}
     </main>
   );
 }

@@ -87,11 +87,6 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><StorefrontBuilderPage /></QueryClientProvider>);
 }
 
-/** Trạng thái "chưa có gian hàng": API /storefront/me trả 404. */
-function notFound() {
-  mocks.getMyStorefront.mockRejectedValue({ response: { status: 404 } });
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getMyStorefront.mockResolvedValue(storefront());

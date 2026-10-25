@@ -7,6 +7,13 @@ import { applyDealer, type DealerApplyInput } from '@tubutree/app-core/api/deale
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
+import {
+  DEALER_BENEFITS,
+  DEALER_BENEFITS_TITLE,
+  DEALER_REQUIREMENTS,
+  DEALER_REQUIREMENTS_TITLE,
+  dealerReviewLine,
+} from '@tubutree/app-core/dealer-apply-copy';
 import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
@@ -56,6 +63,22 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           <h2 className="mt-1 font-display text-lg font-semibold">Trở thành đại lý Tubu</h2>
           <p className="mt-1 text-sm text-stone-100">{applyPitch(config.isLoaded ? config.dealer?.maxDiscountPct : null)}</p>
         </div>
+
+        <section data-testid="dealer-conditions" className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-3">
+          <h3 className="text-sm font-semibold text-stone-900">{DEALER_REQUIREMENTS_TITLE}</h3>
+          <ul className="mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600">
+            {DEALER_REQUIREMENTS.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+          <h3 className="text-sm font-semibold text-stone-900">{DEALER_BENEFITS_TITLE}</h3>
+          <ul className="mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600">
+            {DEALER_BENEFITS.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-stone-600">{dealerReviewLine(config.isLoaded ? config.dealer?.reviewHours : null)}</p>
+        </section>
 
         {rejected && (
           <div className="mt-3 rounded-control bg-danger-bg p-3 text-sm text-danger-fg">

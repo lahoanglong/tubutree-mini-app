@@ -13,6 +13,7 @@ import {
   type PickerProduct,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
+import { STOREFRONT_REVIEW_PROMISE, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
@@ -21,6 +22,7 @@ import { phoneBrandText, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { cssUrl } from '@/lib/safe-color';
 import { Badge } from '@/components/ui/badge';
 import { Sheet } from '@/components/ui/sheet';
+import { StorefrontPreview } from './storefront-preview';
 import { ContentKitSheet, StorefrontShareSheet } from './storefront-share';
 import { QuestSection, StatsSection } from './storefront-panels';
 import { KIND_LABEL, LAYOUT_LABEL, storefrontHost } from './storefront-rules';
@@ -88,6 +90,8 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const view = storefrontStatusView(sf);
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<string | null>(null);
@@ -111,7 +115,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
     onSuccess: () => {
-      notify('Đã đăng gian hàng 🎉');
+      notify('Đã gửi gian hàng. Tubu sẽ thông báo khi duyệt xong.');
       void refresh();
     },
     onError: fail,
@@ -186,15 +190,15 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             <div className="flex flex-wrap items-center gap-1.5">
               <h2 className="font-display text-lg font-semibold text-stone-900">{sf.title}</h2>
               {/* Không có nhãn này thì CTV không biết gian hàng đã đăng hay còn nháp: "Xem trước" ra trang lỗi mà không hiểu vì sao. */}
-              <Badge tone={sf.isPublished ? 'success' : 'neutral'} size="sm">
-                {sf.isPublished ? 'Đang hiển thị' : 'Nháp — chưa đăng'}
+              <Badge tone={view.tone} size="sm">
+                {view.label}
               </Badge>
             </div>
             <div className="text-xs text-stone-600">{storefrontHost(sf)}</div>
-            {sf.isPublished && <div className="text-xs text-stone-600">Trang web cập nhật sau vài phút khi bạn đổi nội dung.</div>}
-            {sf.publicHiddenReason && (
+            {view.code === 'LIVE' && <div className="text-xs text-stone-600">Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.</div>}
+            {(view.hint || sf.publicHiddenReason) && (
               <div data-testid="hidden-reason" role="status" className="mt-2 rounded-control bg-warning-bg px-3 py-2 text-xs text-warning-fg">
-                {sf.publicHiddenReason}
+                {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
               </div>
             )}
             <div className="mt-3 flex gap-2">
@@ -204,13 +208,13 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
               </button>
               <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setConfigOpen(true)}>
                 <Settings className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Cấu hình
+                Cài đặt bán hàng
               </button>
             </div>
             {sf.isPublished && (
               <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} mt-2 w-full`} onClick={() => setConfirmUnpublish(true)}>
                 <EyeOff className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Gỡ đăng
+                {view.code === 'PENDING_APPROVAL' ? 'Huỷ gửi duyệt' : 'Gỡ đăng'}
               </button>
             )}
           </div>
@@ -336,23 +340,32 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
       <div className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}>
         {!sf.isPublished && itemCount === 0 && <p className="mb-2 text-xs text-stone-700">Thêm ít nhất 1 sản phẩm để đăng gian hàng.</p>}
         <div className="mx-auto flex max-w-5xl gap-2">
-          {sf.isPublished ? (
+          {view.canShare ? (
             <Link href={`/s/${sf.slug}`} className={`${ui.btnSecondary} ${phoneSecondary} flex-1`}>
               Xem trước
             </Link>
           ) : (
-            <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => notify('Gian hàng đang là nháp — bấm "Lưu & Đăng" để khách xem được.', true)}>
+            <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setPreviewOpen(true)}>
               Xem trước
             </button>
           )}
-          {sf.isPublished ? (
-            <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1 max-md:overflow-hidden max-md:whitespace-nowrap`} onClick={() => setShareOpen(true)}>
+          {view.canShare ? (
+            <button type="button" className={`${ui.btnPrimary} min-w-0 flex-1 max-md:overflow-hidden max-md:whitespace-nowrap`} aria-label="Chia sẻ gian hàng" onClick={() => setShareOpen(true)}>
               <Share2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              Chia sẻ gian hàng
+              Chia sẻ
+            </button>
+          ) : sf.isPublished ? (
+            <button
+              type="button"
+              className={`${ui.btnPrimary} min-w-0 flex-1`}
+              disabled
+              aria-label={view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau khi Tubu duyệt' : 'Chia sẻ gian hàng'}
+            >
+              {view.code === 'PENDING_APPROVAL' ? 'Chia sẻ sau' : 'Chia sẻ'}
             </button>
           ) : (
             <button type="button" className={`${ui.btnPrimary} flex-1`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
-              {publishMut.isPending ? 'Đang đăng…' : 'Lưu & Đăng'}
+              {publishMut.isPending ? 'Đang gửi…' : 'Gửi duyệt'}
             </button>
           )}
         </div>
@@ -390,6 +403,18 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         onClose={() => setConfirmDeleteItem(null)}
         onConfirm={() => confirmDeleteItem && delItemMut.mutate(confirmDeleteItem)}
       />
+
+      <Sheet
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        title="Xem trước"
+        description={view.code === 'DRAFT' ? 'Gian hàng chưa gửi duyệt nên khách chưa thấy. Đây là bản xem trước của bạn.' : STOREFRONT_REVIEW_PROMISE}
+      >
+        <StorefrontPreview sf={sf} />
+        <button type="button" className={`${ui.btnSecondary} mt-3 w-full`} onClick={() => setPreviewOpen(false)}>
+          Đóng
+        </button>
+      </Sheet>
 
       <Sheet
         open={!!noting}

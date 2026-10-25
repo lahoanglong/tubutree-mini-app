@@ -221,6 +221,9 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
     const root = await mount();
     expect(root.textContent).toContain('Kênh dành cho đối tác');
     expect(byText(root, 'button', 'Gian hàng & Subdomain')).toBeNull();
+    expect(root.textContent).not.toContain('Mini App');
+    expect(root.querySelector('a[href="/ctv"]')?.textContent).toBe('Đăng ký Cộng tác viên');
+    expect(root.querySelector('a[href="/dai-ly"]')?.textContent).toBe('Đăng ký đại lý');
   });
 
   it('thẻ số liệu đọc tổng từ meta; huy hiệu xuất bản theo token success, chưa xuất bản theo token warning', async () => {
