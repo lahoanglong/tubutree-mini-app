@@ -6,7 +6,16 @@ import { DEFAULT_TREE_TYPE, ladderTarget, treeTargetLadder } from './game.consta
 /** ecoImpact của hồ sơ mới: cây đầu dùng bậc đầu của thang. Gọi NGOÀI giao dịch (đọc cấu hình). */
 export async function initialEcoImpact(config: Pick<SystemConfigService, 'get'>): Promise<Prisma.InputJsonObject> {
   const ladder = await treeTargetLadder(config);
-  return { progress: 0, target: ladderTarget(ladder, 0), treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
+  return { progress: 0, target: ladderTarget(ladder, 0), treeType: DEFAULT_TREE_TYPE, treesPlanted: 0, sproutRewarded: false };
+}
+
+/**
+ * Đã cấp (hoặc coi như đã cấp) điểm cây mầm chưa. Có cờ thì theo cờ. Hồ sơ cũ không có cờ: đã có cây thu hoạch
+ * (treesPlanted > 0) thì coi như xong để không cộng bù cho người đã qua mốc này trước khi có cờ; chưa thu hoạch thì còn nhận.
+ */
+export function sproutAlreadyRewarded(eco: { sproutRewarded?: boolean; treesPlanted: number }): boolean {
+  if (eco.sproutRewarded !== undefined) return eco.sproutRewarded;
+  return eco.treesPlanted > 0;
 }
 
 /**
