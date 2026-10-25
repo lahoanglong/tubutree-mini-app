@@ -1,14 +1,23 @@
 import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Matches, Max, Min, ValidateNested } from 'class-validator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AllowStaff } from '../../common/staff-permissions';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { AdminCouponBatchService, BATCH_PREFIX_RE, COUPON_BATCH_MAX } from './admin-coupon-batch.service';
+import { AdminCouponBatchService, BATCH_PREFIX_RE, COUPON_BATCH_MAX, LINK_TOKEN_RE } from './admin-coupon-batch.service';
 import { COUPON_AMOUNT_MAX, MaxIfAmount, MaxIfPercent } from './admin.controller';
 
 const upperTrim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toUpperCase() : value);
+
+const lowerTrim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim().toLowerCase() : value);
+
+/** Trang đích và nhãn nguồn của link in trong CSV. */
+export class ClaimLinkDto {
+  @IsOptional() @IsIn(['home', 'scan']) page?: 'home' | 'scan';
+  @IsOptional() @Transform(lowerTrim) @Matches(LINK_TOKEN_RE, { message: 'Nhãn nguồn gồm chữ thường không dấu, số, gạch ngang hoặc gạch dưới, tối đa 40 ký tự.' }) src?: string;
+  @IsOptional() @Transform(lowerTrim) @Matches(LINK_TOKEN_RE, { message: 'Tên đợt thẻ gồm chữ thường không dấu, số, gạch ngang hoặc gạch dưới, tối đa 40 ký tự, vd 2611.' }) card?: string;
+}
 
 export class CreateCouponBatchDto {
   @Transform(upperTrim)
@@ -23,6 +32,7 @@ export class CreateCouponBatchDto {
   @IsDateString() startAt!: string;
   @IsDateString() endAt!: string;
   @IsOptional() @IsBoolean() newCustomerOnly?: boolean;
+  @IsOptional() @ValidateNested() @Type(() => ClaimLinkDto) link?: ClaimLinkDto;
 }
 
 export class SetCouponBatchActiveDto {

@@ -46,7 +46,7 @@ describe('SeasonPass — icon nét thay emoji (D7-6)', () => {
 
 describe('StreakRepair — icon nét thay emoji (D7-6)', () => {
   it('tiêu đề "Bạn vừa mất chuỗi N ngày" có icon, chữ không kèm emoji', () => {
-    render(<StreakRepair brokenStreakDays={7} cost={50} pending={false} onRepair={vi.fn()} />);
+    render(<StreakRepair brokenStreakDays={7} cost={50} totalSeeds={500} pending={false} onRepair={vi.fn()} onNeedWater={vi.fn()} />);
     const title = screen.getByText('Bạn vừa mất chuỗi 7 ngày');
     expect(title.querySelector('svg')).not.toBeNull();
   });

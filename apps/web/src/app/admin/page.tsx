@@ -100,6 +100,10 @@ import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
+import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
+import { ShopInfoCard } from '@/components/admin/shop-info-card';
+import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
@@ -236,7 +240,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'returns', label: 'Đổi / Trả' },
       { k: 'customerRefunds', label: 'Hoàn tiền khách' },
-      { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
+      ...(CASHBACK_ENABLED ? [{ k: 'cashback' as const, label: 'Hoàn tiền sàn ngoài' }] : []),
     ],
   },
   {
@@ -551,6 +555,7 @@ export default function AdminPage() {
           badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
+          <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
           {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
@@ -595,7 +600,7 @@ export default function AdminPage() {
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
           {active === 'waste' && <WasteTab key={wasteSeed?.n ?? 0} isAdmin={isAdmin} seed={wasteSeed} />}
-          {active === 'config' && <ConfigTab />}
+          {active === 'config' && <ConfigTab onOpenSupportChat={allowed.has('supportChat') ? () => setTab('supportChat') : undefined} />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}
           {active === 'staffRoster' && <StaffRosterTab />}
@@ -614,6 +619,7 @@ export default function AdminPage() {
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab />}
           {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
+          </TabErrorBoundary>
         </div>
       </div>
     </main>
@@ -2042,7 +2048,7 @@ function groupConfigRows(rows: ConfigRow[]): { name: string; rows: ConfigRow[] }
   return [...groups.filter((g) => g.name !== CONFIG_OTHER_GROUP), ...groups.filter((g) => g.name === CONFIG_OTHER_GROUP)];
 }
 
-function ConfigTab() {
+function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
   const [search, setSearch] = useState('');
@@ -2053,6 +2059,8 @@ function ConfigTab() {
   if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => void q.refetch()} />;
   return (
     <div className="space-y-4">
+      <FeatureFlagsCard rows={q.data} onOpenSupportChat={onOpenSupportChat} />
+      <ShopInfoCard rows={q.data} />
       <GomdonConfigCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
       <div>
@@ -2141,6 +2149,7 @@ function CouponsTab() {
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
   return (
     <div className="space-y-6">
+    <ClaimCampaignPanel />
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
       <Field label="Mã giảm giá">
         <input
@@ -2206,7 +2215,6 @@ function CouponsTab() {
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
-    <ClaimCampaignPanel />
     <CouponList />
     </div>
   );

@@ -3,6 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
@@ -533,21 +534,42 @@ export const vi = {
   },
 
   externalPoints: {
-    title: 'Tích điểm đơn ngoài app',
+    title: 'Tích điểm đơn sàn',
     menuLabel: 'Tích điểm đơn sàn',
-    menuHint: 'Nhập mã vận đơn Shopee, Lazada, TikTok',
+    menuHint: 'Quét mã trên phiếu giao hàng',
     closedTitle: 'Chưa mở',
-    closedBody: 'Tính năng tích điểm đơn mua ngoài app chưa mở. Bạn quay lại sau nhé.',
+    closedBody: 'Tính năng tích điểm đơn sàn chưa mở. Bạn quay lại sau nhé.',
+    soonTitle: 'Tích điểm đơn sàn sắp mở',
+    soonBody: (days?: number | null) =>
+      `Bạn cứ giữ lại thẻ trong hộp. Khi tính năng mở, hãy quét lại thẻ${days ? ` trong vòng ${days} ngày kể từ ngày đặt đơn` : ''} để tích điểm cho đơn này.`,
+    soonShop: 'Xem sản phẩm',
+    soonHome: 'Về trang chủ',
+    greeting: (channel: string | null) => `Cảm ơn bạn đã mua Tubu Tree${channel ? ` trên ${channel}` : ''}`,
+    steps: ['Quét mã trên nhãn dán ngoài hộp', 'Tubu ghép đúng đơn của bạn', 'Nhận Điểm Xanh sau khi đơn giao thành công'],
+    scanMain: 'Quét mã trên nhãn',
+    phoneWhy: 'Tubu dùng số điện thoại Zalo của bạn để ghép đúng đơn và báo khi điểm được cộng.',
+    phoneDeclined: 'Tubu chưa có số điện thoại nên chưa ghép được đơn. Mã bạn nhập vẫn được giữ, bạn bấm "Chia sẻ số điện thoại" khi sẵn sàng nhé.',
+    giftNewOnly: 'Quà thẻ dành cho tài khoản chưa có đơn. Bạn vẫn tích điểm đơn này được.',
+    scanCardLink: 'Đây là mã trên thẻ Tubu. Bạn quét mã vạch trên nhãn dán ngoài hộp nhé.',
+    codeLinkInvalid: 'Link bạn mở có mã vận đơn không đúng dạng nên chưa điền sẵn. Bạn nhập hoặc quét lại mã trên nhãn nhé.',
+    scanNoCode: 'Chưa tìm thấy mã vận đơn trong nội dung vừa quét. Bạn kiểm tra mã trong ô bên dưới hoặc quét lại nhé.',
+    chatSupport: 'Nhắn Tubu Tree',
+    chatSupportMessage: (maskedCode: string) => `Mình cần hỗ trợ tích điểm cho mã ${maskedCode}`,
+    oaInviteTitle: 'Theo dõi Tubu Tree trên Zalo',
+    oaInviteBody: 'Nhận mẹo dùng sản phẩm và ưu đãi thành viên từ Tubu Tree.',
+    oaFollow: 'Theo dõi',
+    oaLater: 'Để sau',
+    oaFollowed: 'Đã theo dõi Tubu Tree trên Zalo.',
+    oaDeclined: 'Chưa theo dõi được lúc này. Bạn có thể thử lại trong Cài đặt.',
     boostTitleDouble: 'Mua trong Mini App: tích gấp đôi',
     boostTitleMore: 'Mua trong Mini App tích nhiều hơn',
     boostSub: (marketplacePct: string, appPct: string) =>
       `Đơn sàn ${marketplacePct} · Mua trong Mini App từ ${appPct}, nhân theo hạng`,
     boostPlain: (appPct: string) => `Tích ${appPct} tiền hàng thành Điểm Xanh khi mua trong Mini App`,
-    inputLabel: 'Mã vận đơn hoặc mã đơn trên sàn',
+    inputLabel: 'Hoặc nhập mã vận đơn',
     inputPlaceholder: 'Ví dụ: SPXVN0123456789',
-    inputHelp: 'Mã nằm trong chi tiết đơn hàng trên Shopee, Lazada hoặc TikTok Shop.',
+    inputHelp: 'Mã vận đơn in trên phiếu giao hàng dán ngoài hộp. Không còn phiếu thì xem trong chi tiết đơn trên Shopee, Lazada hoặc TikTok Shop.',
     submit: 'Tích điểm',
-    scan: 'Quét mã',
     scanFailed: 'Chưa đọc được mã. Bạn nhập mã bằng tay giúp Tubu nhé.',
     emptyCode: 'Bạn nhập mã vận đơn trước nhé.',
     resultClaimed: (channel: string | null, code: string) => `Đã ghi nhận đơn${channel ? ` ${channel}` : ''} ${code}`,
@@ -558,14 +580,14 @@ export const vi = {
     resultSearching: 'Chưa thấy đơn này. Tubu sẽ tìm lại trong vài ngày tới và báo cho bạn khi có.',
     resultClaimedByOther: 'Mã này đang được một tài khoản khác dùng để tích điểm. Nếu đây là đơn của bạn, liên hệ CSKH.',
     searchingTitle: 'Đang tìm đơn',
-    listTitle: 'Đơn ngoài app của bạn',
-    listEmpty: 'Bạn chưa tích điểm đơn ngoài app nào.',
+    listTitle: 'Đơn sàn của bạn',
+    listEmpty: 'Bạn chưa tích điểm đơn sàn nào.',
     listLoadFailed: 'Chưa tải được danh sách đơn.',
     pointsPending: 'Điểm chưa tính được',
     prev: 'Trước',
     next: 'Sau',
     pageOf: (page: number, pages: number) => `Trang ${page}/${pages}`,
-    channelFallback: 'Đơn ngoài app',
+    channelFallback: 'Đơn sàn',
     state: {
       waitDelivery: 'Chờ giao hàng',
       waitCredit: 'Chờ cộng điểm',
@@ -580,7 +602,7 @@ export const vi = {
     sharePhone: 'Chia sẻ số điện thoại',
     reject: {
       DISABLED: 'Tính năng này chưa mở. Bạn quay lại sau nhé.',
-      NOT_ELIGIBLE_USER: 'Bạn cần đăng nhập Zalo và cho phép Tubu xem số điện thoại để tích điểm đơn ngoài app.',
+      NOT_ELIGIBLE_USER: 'Bạn cần đăng nhập Zalo và cho phép Tubu xem số điện thoại để tích điểm đơn sàn.',
       INVALID_CODE: 'Mã chưa đúng. Mã vận đơn hoặc mã đơn gồm 8 đến 30 chữ và số, bạn kiểm tra lại nhé.',
       LOCKED: 'Bạn đã nhập mã chưa tìm thấy nhiều lần. Bạn thử lại sau 24 giờ hoặc liên hệ Tubu nhé.',
       DAILY_ATTEMPTS: 'Hôm nay bạn đã nhập mã nhiều lần rồi. Bạn thử lại vào ngày mai nhé.',
@@ -591,7 +613,7 @@ export const vi = {
       CLOSED: 'Đơn này đã huỷ hoặc hoàn nên không tích điểm được.',
       ALREADY_CLAIMED: 'Mã này đã được dùng để tích điểm trước đó. Cần hỗ trợ, bạn liên hệ Tubu nhé.',
       DAILY_MAX: 'Hôm nay bạn đã tích đủ số đơn cho phép. Bạn quay lại vào ngày mai nhé.',
-      MONTHLY_CAP: 'Bạn đã đạt mức điểm tối đa từ đơn ngoài app trong tháng này.',
+      MONTHLY_CAP: 'Bạn đã đạt mức điểm tối đa từ đơn sàn trong tháng này.',
       ZERO_POINTS: 'Giá trị đơn nhỏ quá nên chưa quy ra được Điểm Xanh.',
     },
   },
@@ -887,6 +909,8 @@ export const vi = {
   },
 
   game: {
+    /** Chữ nhịp người mới, dùng chung với web (packages/app-core/src/game-newbie.ts). */
+    newbie: gameNewbieCopy,
     streakRepair: {
       title: (n: number) => `Bạn vừa mất chuỗi ${formatNumber(n)} ngày`,
       body: 'Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.',

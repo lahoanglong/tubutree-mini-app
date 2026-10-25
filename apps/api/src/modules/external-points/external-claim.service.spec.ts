@@ -27,6 +27,7 @@ function build(opts: { config?: Record<string, unknown>; order?: Record<string, 
       updateMany: jest.fn(async () => ({ count: 1 })),
     },
     externalClaimEvent: { create: jest.fn(async () => ({})) },
+    analyticsEvent: { create: jest.fn(async () => ({})) },
     order: { findFirst: jest.fn(async () => (opts.appOrder ? { id: 'o1' } : null)) },
     externalOrder: {
       findFirst: jest.fn(async () => (opts.order ? { id: 'x1' } : null)),
@@ -74,6 +75,40 @@ const codeOf = async (p: Promise<unknown>): Promise<string> => {
     return ((e as HttpException).getResponse() as { code: string }).code;
   }
 };
+
+describe('ExternalClaimService.submit: sự kiện phễu ext_claim_submitted', () => {
+  const evt = (tx: { analyticsEvent: { create: jest.Mock } }) => tx.analyticsEvent.create.mock.calls.map((c) => (c[0] as { data: Record<string, unknown> }).data);
+  it('CLAIMED: ghi một sự kiện máy chủ kèm kênh, điểm, via', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    await svc.submit('u1', 'SPXVN0123456789', 'scan');
+    expect(evt(tx)).toEqual([
+      expect.objectContaining({ eventName: 'ext_claim_submitted', userId: 'u1', platform: 'system', props: { via: 'scan', result: 'CLAIMED', channel: 'shopee', points: 2_000 } }),
+    ]);
+  });
+  it('SEARCHING và REVIEW', async () => {
+    const a = build({ config: flagOn, order: null });
+    await a.svc.submit('u1', 'SPXVN0123456789');
+    expect(evt(a.tx)[0]).toMatchObject({ props: { result: 'SEARCHING' } });
+    const b = build({ config: flagOn, order: order({ goodsValue: null }) });
+    await b.svc.submit('u1', 'SPXVN0123456789', 'typed');
+    expect(evt(b.tx)[0]).toMatchObject({ props: { via: 'typed', result: 'REVIEW' } });
+  });
+  it('từ chối nghiệp vụ vẫn ghi REJECT_<mã> (transaction vẫn commit)', async () => {
+    const { svc, tx } = build({ config: flagOn, order: null, appOrder: true });
+    await codeOf(svc.submit('u1', 'SPXVN0123456789'));
+    expect(evt(tx)[0]).toMatchObject({ props: { result: 'REJECT_APP_ORDER' } });
+  });
+  it('mã sai dạng hoặc cờ tắt: không ghi gì', async () => {
+    const { svc, tx } = build({ config: flagOn });
+    await codeOf(svc.submit('u1', 'abc'));
+    expect(tx.analyticsEvent.create).not.toHaveBeenCalled();
+  });
+  it('ghi lỗi thì cả transaction lỗi (không có ngoại lệ nuốt)', async () => {
+    const { svc, tx } = build({ config: flagOn, order: order() });
+    tx.analyticsEvent.create.mockRejectedValueOnce(new Error('boom'));
+    await expect(svc.submit('u1', 'SPXVN0123456789')).rejects.toThrow('boom');
+  });
+});
 
 describe('ExternalClaimService.submit', () => {
   it('cờ tắt: 404 DISABLED ngay, không chạm DB', async () => {

@@ -48,6 +48,7 @@ function mockGame(api: MockApi, profile: GameProfile = PROFILE) {
   api.get('/game/season/leaderboard', []);
   api.get('/game/friends', []);
   api.get('/game/garden', GARDEN);
+  api.get('/me/loyalty', { pointsBalance: 900, redeemablePoints: 900, redeemableTotal: 900, tier: null, nextTier: null, tiers: [] });
   api.allowUnmocked('GET /game/season-pass', 'POST /events');
 }
 
@@ -59,19 +60,20 @@ test.describe('Vườn Xanh', () => {
     await expect(page.getByText('Cây Sưa Đỏ').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('progressbar', { name: 'Tiến độ cây' })).toHaveAttribute('aria-valuenow', '40');
     await expect(page.getByText(/🔥 5 ngày/)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
 
     await page.getByText('Vườn', { exact: true }).first().click();
+    await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(/ })).toBeVisible();
     await expect(page.getByText('Lô đất của bạn (2/4)')).toBeVisible();
     await expect(page.getByText('Lô 2 · Cây Lim Xanh')).toBeVisible();
   });
 
-  test('chạm đúp "Tưới cây" chỉ gửi một request và hiện tiến độ mới', async ({ page, api }) => {
-    mockGame(api);
+  test('chạm đúp "Tưới hết" chỉ gửi một request (drops = toàn bộ số giọt) và hiện tiến độ mới', async ({ page, api }) => {
+    mockGame(api, { ...PROFILE, lastCheckInAt: new Date().toISOString() });
     api.post('/game/tree/water', slow({ progress: 60, target: 100, harvested: false, treesPlanted: 3 }));
     await page.goto('/game');
 
-    const water = page.getByRole('button', { name: /Tưới cây/ });
+    const water = page.getByRole('button', { name: /Tưới hết/ });
     await expect(water).toBeEnabled({ timeout: 15_000 });
     // Hai click cùng một tick: chỉ khoá đồng bộ mới chặn được, `disabled` chưa kịp áp dụng.
     await water.evaluate((el) => {
@@ -81,7 +83,7 @@ test.describe('Vườn Xanh', () => {
 
     await expect(page.getByText(/Đã tưới · 60\/100/)).toBeVisible();
     expect(api.callsTo('POST', '/game/tree/water')).toHaveLength(1);
-    expect(api.callsTo('POST', '/game/tree/water')[0]!.body).toEqual({ drops: 20 });
+    expect(api.callsTo('POST', '/game/tree/water')[0]!.body).toEqual({ drops: 340 });
   });
 
   test('góp quỹ trồng cây: hộp xác nhận, một request kèm Idempotency-Key dù chạm đúp, báo thành công', async ({ page, api }) => {
@@ -92,7 +94,8 @@ test.describe('Vườn Xanh', () => {
     );
     await page.goto('/game');
 
-    await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click({ timeout: 15_000 });
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
     await expect(page.getByText('Góp quỹ trồng cây?')).toBeVisible();
     expect(api.callsTo('POST', '/game/tree/buy')).toHaveLength(0);
 
@@ -125,7 +128,8 @@ test.describe('Vườn Xanh', () => {
     });
     await page.goto('/game');
 
-    await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click({ timeout: 15_000 });
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
     await page.getByRole('button', { name: 'Xác nhận' }).click();
     await expect(page.getByText('Không đủ Điểm Xanh để góp cây.')).toBeVisible();
     await expect(page.getByText('Góp quỹ trồng cây?')).toBeVisible();
@@ -158,6 +162,42 @@ test.describe('Vườn Xanh', () => {
     expect(calls[0]!.path).toBe('/game/garden/plot/plot-2/water');
   });
 
+  test('khách mới: điểm danh nhận 65💧, tưới hết thu hoạch cây mầm +2.000 Điểm Xanh, rồi còn câu đố để kiếm nước', async ({ page, api }) => {
+    let checkedIn = false;
+    let harvested = false;
+    mockGame(api);
+    api.get('/game/profile', () => ({
+      ...PROFILE,
+      totalSeeds: harvested ? 5 : checkedIn ? 65 : 0,
+      streakDays: checkedIn ? 1 : 0,
+      lastCheckInAt: checkedIn ? new Date().toISOString() : null,
+      dailyLoginSeeds: 15,
+      dewSeeds: 15,
+      firstCheckinBonus: checkedIn ? 0 : 50,
+      ecoImpact: { progress: harvested ? 5 : 0, target: harvested ? 300 : 60, treeType: 'Cây Dứa', treesPlanted: harvested ? 1 : 0 },
+    }));
+    api.get('/game/quiz/today', [{ id: 'q1', question: 'Cây cần gì?', options: ['Nước', 'Đá'], category: 'cay', difficulty: 1, waterReward: 8 }]);
+    api.post('/game/check-in', () => {
+      checkedIn = true;
+      return { seedsEarned: 65, pointsEarned: 0, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' };
+    });
+    api.post('/game/tree/water', () => {
+      harvested = true;
+      return { progress: 5, target: 300, harvested: true, treesPlanted: 1, reward: { points: 2000 } };
+    });
+    await page.goto('/game');
+
+    await page.getByRole('button', { name: 'Điểm danh nhận 65💧' }).click({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Tưới hết (65💧)' }).click();
+    await expect(page.getByText('+2.000 Điểm Xanh')).toBeVisible();
+    await expect(page.getByText('Cây tiếp theo cần 300💧')).toBeVisible();
+    expect(api.callsTo('POST', '/game/tree/water')[0]!.body).toEqual({ drops: 65 });
+    await page.getByRole('button', { name: 'Tuyệt vời!' }).click();
+
+    await page.getByRole('button', { name: 'Kiếm thêm nước' }).click();
+    await expect(page.getByText('Làm câu đố (còn 1 câu)')).toBeVisible();
+  });
+
   test('profile lỗi 500: hiện thông báo lỗi kèm nút thử lại, không sập; thử lại thì phục hồi', async ({ page, api }) => {
     mockGame(api);
     let fail = true;
@@ -165,10 +205,10 @@ test.describe('Vườn Xanh', () => {
     await page.goto('/game');
 
     await expect(page.getByText('Máy chủ đang bận, thử lại nhé.')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Tưới cây/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toHaveCount(0);
 
     fail = false;
     await page.getByRole('button', { name: /Thử lại/ }).click();
-    await expect(page.getByRole('button', { name: /Tưới cây/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
   });
 });

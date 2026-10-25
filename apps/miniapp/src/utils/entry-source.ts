@@ -65,7 +65,7 @@ export function parseEntryParams(params: URLSearchParams): LaunchAttribution | n
   return out;
 }
 
-/** ZMPRouter dùng hash nên tham số có thể ở `location.search` HOẶC sau dấu `?` của `location.hash`; search thắng khi trùng khoá. */
+/** ZMPRouter là BrowserRouter có basename `/zapps/<appId>` nên tham số nằm ở `location.search`; vẫn đọc cả phần sau dấu `?` của `location.hash` cho link cũ, search thắng khi trùng khoá. */
 export function parseLaunchUrl(search: string, hash: string): LaunchAttribution | null {
   const params = new URLSearchParams(search);
   const q = hash.indexOf('?');

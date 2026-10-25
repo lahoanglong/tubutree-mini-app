@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 export const GAME_TABS = [
   { key: 'today', label: 'Hôm nay' },
   { key: 'garden', label: 'Vườn' },
-  { key: 'community', label: 'Cộng đồng' },
 ] as const;
 
 export type GameTabKey = (typeof GAME_TABS)[number]['key'];

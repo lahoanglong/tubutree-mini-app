@@ -41,7 +41,7 @@ export function DealerAccountsTab({ isAdmin = true }: { isAdmin?: boolean } = {}
     queryFn: () => listDealerAccounts({ page, search, tierId, debtOnly }),
     placeholderData: keepPreviousData,
   });
-  const tiersQ = useQuery({ queryKey: ['admin-dealer-tiers'], queryFn: listDealerTiersForEdit, enabled: isAdmin });
+  const tiersQ = useQuery({ queryKey: ['admin-dealer-tiers', 'manage'], queryFn: listDealerTiersForEdit, enabled: isAdmin });
   const refetchList = () => void qc.invalidateQueries({ queryKey: ['admin-dealer-accounts'] });
 
   const total = q.data?.meta.total ?? 0;

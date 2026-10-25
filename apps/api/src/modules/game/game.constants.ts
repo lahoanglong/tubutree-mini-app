@@ -36,3 +36,57 @@ export async function spinVoucherMinOrder(config: Pick<SystemConfigService, 'get
   const multiplier = Number.isFinite(raw) && raw >= 1 ? raw : SPIN_VOUCHER_MIN_ORDER_MULTIPLIER_DEFAULT;
   return Math.round(couponAmount * multiplier);
 }
+
+/** Thang số 💧 để thu hoạch cây nhà: cây thứ n (từ 1) dùng phần tử n, quá độ dài thì dùng phần tử cuối. */
+export const TREE_TARGET_LADDER_DEFAULT: readonly number[] = [60, 300, 600];
+
+/** Thang hợp lệ = mảng số nguyên dương không rỗng. Config hỏng rơi về mặc định (vòng thu hoạch không được có target <= 0). */
+export function parseTreeTargetLadder(raw: unknown): number[] {
+  if (Array.isArray(raw) && raw.length > 0 && raw.every((n) => Number.isInteger(n) && (n as number) > 0)) {
+    return raw as number[];
+  }
+  return [...TREE_TARGET_LADDER_DEFAULT];
+}
+
+export async function treeTargetLadder(config: Pick<SystemConfigService, 'get'>): Promise<number[]> {
+  return parseTreeTargetLadder(await config.get<unknown>('game.tree_target_ladder', [...TREE_TARGET_LADDER_DEFAULT]));
+}
+
+/** Target của cây kế tiếp sau khi đã trồng `treesPlanted` cây. */
+export function ladderTarget(ladder: readonly number[], treesPlanted: number): number {
+  return ladder[Math.min(Math.max(0, treesPlanted), ladder.length - 1)]!;
+}
+
+/**
+ * Tiền tố mã thu hoạch: lô nhà `HARVEST…`, lô phụ `GARDEN…`. Mã vòng quay và nhiệm vụ mang tiền tố `GAME…` nên KHÔNG
+ * được đếm vào trần mã thu hoạch ngày/tháng.
+ */
+export const HARVEST_COUPON_PREFIX = 'HARVEST';
+export const GARDEN_COUPON_PREFIX = 'GARDEN';
+export const HARVEST_COUPON_CODE_PREFIXES = [HARVEST_COUPON_PREFIX, GARDEN_COUPON_PREFIX] as const;
+
+export const DAILY_LOGIN_SEEDS_DEFAULT = 10;
+export const DEW_SEEDS_DEFAULT = 15;
+export const STREAK_7_SEEDS_DEFAULT = 20;
+export const QUIZ_WRONG_SEEDS_DEFAULT = 2;
+export const FIRST_CHECKIN_BONUS_DEFAULT = 50;
+export const COMEBACK_GAP_DAYS_DEFAULT = 7;
+export const COMEBACK_SEEDS_DEFAULT = 60;
+export const FIRST_HARVEST_POINTS_DEFAULT = 2000;
+export const HARVEST_COUPON_DAILY_CAP_DEFAULT = 1;
+export const HARVEST_COUPON_MONTHLY_CAP_DEFAULT = 4;
+/** Nhắc "cây khát" chỉ trong ngần ấy ngày sau lần tưới cuối: cây không còn "chết" nên không nhắc mãi người đã bỏ. */
+export const THIRSTY_REMINDER_MAX_DAYS = 7;
+
+/** Số nguyên không âm từ cấu hình; hỏng rơi về mặc định. */
+export async function configInt(config: Pick<SystemConfigService, 'get'>, key: string, fallback: number): Promise<number> {
+  const n = Number(await config.get<number>(key, fallback));
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
+
+/** `game.streak_7_bonus.seeds`: object hỏng/thiếu rơi về mặc định. */
+export async function streak7Seeds(config: Pick<SystemConfigService, 'get'>): Promise<number> {
+  const raw = await config.get<{ seeds?: unknown } | null>('game.streak_7_bonus', { seeds: STREAK_7_SEEDS_DEFAULT });
+  const n = Number(raw?.seeds ?? STREAK_7_SEEDS_DEFAULT);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : STREAK_7_SEEDS_DEFAULT;
+}

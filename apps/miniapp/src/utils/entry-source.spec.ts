@@ -119,6 +119,18 @@ describe('parseEntryParams', () => {
   });
 });
 
+describe('link thẻ trong hộp hàng sàn tới /points/scan', () => {
+  it('src, card, claim: nguồn là sàn, chiến dịch card-<đợt>, claim không lẫn vào nguồn', () => {
+    expect(parse('src=shopee&card=2611&claim=SHOPEE11-AB2CD3EF')).toEqual({ source: 'shopee', campaign: 'card-2611' });
+  });
+  it('chỉ có card: nguồn là card-<đợt>', () => {
+    expect(parse('card=2611')).toEqual({ source: 'card-2611' });
+  });
+  it('đọc từ search của đường dẫn /points/scan', () => {
+    expect(parseLaunchUrl('?src=tiktok&card=2611&claim=X', '')).toEqual({ source: 'tiktok', campaign: 'card-2611' });
+  });
+});
+
 describe('parseLaunchUrl — tham số nằm ở search hoặc sau dấu ? của hash (ZMPRouter dùng hash)', () => {
   it('search', () => {
     expect(parseLaunchUrl('?src=shopee&utm_campaign=c1', '')).toEqual({ source: 'shopee', campaign: 'c1' });

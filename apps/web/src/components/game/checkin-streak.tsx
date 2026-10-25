@@ -1,4 +1,5 @@
 import { Check, Droplets, Flame, Snowflake } from 'lucide-react';
+import { STREAK_3_SEEDS, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '@tubutree/app-core/api/game';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary, miniCard, miniSectionTitle } from '@/components/loyalty/mini-surface';
@@ -14,6 +15,7 @@ export function CheckInStreak({
   freezePending,
   onCollectDew,
   dewPending,
+  onNeedWater,
 }: {
   profile: GameProfile | undefined;
   onCheckIn: () => void;
@@ -22,10 +24,16 @@ export function CheckInStreak({
   freezePending: boolean;
   onCollectDew: () => void;
   dewPending: boolean;
+  /** Thiếu nước cho vé giữ lửa: mở sheet "Kiếm nước" với số giọt còn thiếu. */
+  onNeedWater: (missing: number) => void;
 }) {
   const streakDays = profile?.streakDays ?? 0;
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
+  const t = gameNewbieCopy.checkin;
+  const freezeCost = profile?.streakFreezeCost ?? 80;
+  const freezeShort = profile ? missingDrops(profile.totalSeeds, freezeCost) : 0;
+  const dayReward = (day: number): number | null => (day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null);
   return (
     <section className={`p-4 ${miniCard}`}>
       <div className="flex items-center justify-between gap-3">
@@ -34,7 +42,7 @@ export function CheckInStreak({
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             Điểm danh chuỗi {streakDays} ngày
           </h2>
-          <p className="text-xs text-stone-600">Nhận giọt nước tưới cây mỗi ngày</p>
+          <p className="text-xs text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
         <button type="button" disabled={checkedInToday || checkInPending} onClick={onCheckIn} className={`${ui.btnPrimary} flex-none gap-1`}>
           {checkedInToday && <Check className="h-4 w-4" aria-hidden="true" />}
@@ -46,6 +54,7 @@ export function CheckInStreak({
           const day = i + 1;
           const done = streakDays % 7 === 0 && streakDays > 0 ? true : day <= streakDays % 7;
           const bonus = day === 3 || day === 7;
+          const reward = dayReward(day);
           return (
             <div key={day} className="flex-1 text-center">
               <div
@@ -55,6 +64,7 @@ export function CheckInStreak({
                 {done ? '💧' : bonus ? '🎁' : day}
               </div>
               <div className="mt-0.5 text-xs text-stone-600">N{day}</div>
+              {bonus && reward != null && <div className="text-xs font-bold text-stone-700">{t.dayReward(reward)}💧</div>}
             </div>
           );
         })}
@@ -67,13 +77,18 @@ export function CheckInStreak({
             <Snowflake className="h-4 w-4 text-stone-500" aria-hidden="true" />
             Vé giữ lửa: <span className="font-bold text-stone-900">{profile?.streakFreezes ?? 0}</span>
           </span>
-          <button type="button" disabled={freezePending} onClick={onBuyFreeze} className={`${miniBtnSecondary} flex-none`}>
-            Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
+          <button
+            type="button"
+            disabled={freezePending}
+            onClick={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
+            className={`${miniBtnSecondary} flex-none`}
+          >
+            {freezeShort > 0 ? gameNewbieCopy.short(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </button>
         </div>
         <button type="button" disabled={dewCollectedToday || dewPending} onClick={onCollectDew} className={`${miniBtnSecondary} mt-2 w-full gap-1.5`}>
           <Droplets className="h-4 w-4" aria-hidden="true" />
-          {dewCollectedToday ? 'Đã hứng sương' : 'Hứng giọt sương'}
+          {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </button>
         <p className="mt-2 text-xs text-stone-600">Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.</p>
       </div>

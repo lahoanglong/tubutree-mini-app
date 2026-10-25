@@ -8,6 +8,7 @@ import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
 import { CouponClaimGate } from './coupon-claim-gate';
+import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
@@ -257,6 +258,7 @@ export default function MyApp() {
               <BackButton />
               <OnboardingGate />
               <CouponClaimGate />
+              <OpenAppRouter />
             </ZMPRouter>
           </SnackbarProvider>
         </App>

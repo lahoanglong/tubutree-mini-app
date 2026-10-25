@@ -9,7 +9,7 @@ import { publicCommunityUrl } from './community-links';
 import { isAdvisorAvailable } from '../ai-advisor/advisor-config';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths } from '../loyalty/points-expiry-date';
 import { DEFAULT_EARN_PCT, DEFAULT_MARKETPLACE_EARN_PCT, EARN_PCT_KEY, MARKETPLACE_EARN_PCT_KEY, MAX_MARKETPLACE_EARN_PCT } from '../loyalty/earn-rates';
-import { MARKETPLACE_CLAIM_ENABLED_KEY } from '../external-points/external-claim.config';
+import { MARKETPLACE_CLAIM_ENABLED_KEY, MARKETPLACE_CLAIM_MAX_AGE_KEY, normalizeClaimMaxAgeDays } from '../external-points/external-claim.config';
 import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem } from '../support-chat/support-chat.config';
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import { readCompanyIdentity } from './company-config';
@@ -56,6 +56,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     earnPct,
     marketplaceClaimEnabled,
     marketplaceEarnPct,
+    marketplaceClaimMaxAgeDays,
     vndPerPointRedeem,
     maxRedeemPct,
     pointExpireMonths,
@@ -94,6 +95,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<number>(EARN_PCT_KEY, DEFAULT_EARN_PCT),
     config.get<unknown>(MARKETPLACE_CLAIM_ENABLED_KEY, false),
     config.get<unknown>(MARKETPLACE_EARN_PCT_KEY, DEFAULT_MARKETPLACE_EARN_PCT),
+    config.get<unknown>(MARKETPLACE_CLAIM_MAX_AGE_KEY, null),
     config.get<number>('loyalty.vnd_per_point_redeem', 1),
     config.get<unknown>('loyalty.max_redeem_pct', LOYALTY_MAX_REDEEM_PCT_DEFAULT),
     config.get<unknown>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS),
@@ -135,6 +137,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
       earnPct,
       // Chỉ boolean true thật mới bật (cờ gõ nhầm không được hứa tích điểm đơn sàn). Tỉ lệ hỏng thì rơi về mặc định như phía cộng điểm.
       marketplaceClaimEnabled: marketplaceClaimEnabled === true,
+      marketplaceClaimMaxAgeDays: normalizeClaimMaxAgeDays(marketplaceClaimMaxAgeDays),
       marketplaceEarnPct: typeof marketplaceEarnPct === 'number' && Number.isFinite(marketplaceEarnPct) && marketplaceEarnPct > 0 ? Math.min(marketplaceEarnPct, MAX_MARKETPLACE_EARN_PCT) : DEFAULT_MARKETPLACE_EARN_PCT,
       // Bản app cũ chưa đọc earnPct: giữ số đồng cho 1 điểm.
       vndPerPoint: typeof earnPct === 'number' && earnPct > 0 ? Math.round(100 / earnPct) : Math.round(100 / DEFAULT_EARN_PCT),

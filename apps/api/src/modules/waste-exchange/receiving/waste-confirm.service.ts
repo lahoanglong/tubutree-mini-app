@@ -24,6 +24,7 @@ import { vnMonthKey } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RewardPointsService } from '../../wallet/reward-points.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
+import { initialEcoImpact } from '../../game/game-profile';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService, type WasteConfigSnapshot } from '../core/waste-config.service';
 import { writeWasteEvent, type WasteDeviceMeta } from '../core/waste-events';
@@ -93,6 +94,7 @@ export class WasteConfirmService {
     const cfg = await this.config.snapshot();
     const expiresAt = await this.rewards.expiresAt();
     const tankCap = await this.systemConfig.get<number>('game.tank_capacity', 500);
+    const ecoImpact = await initialEcoImpact(this.systemConfig);
     const now = new Date();
 
     await this.assertCallerAccess(call, cfg);
@@ -188,7 +190,7 @@ export class WasteConfirmService {
 
         let dropsAwarded = 0;
         if (bonus > 0) {
-          await tx.gameProfile.upsert({ where: { userId: req.userId }, create: { userId: req.userId }, update: {} });
+          await tx.gameProfile.upsert({ where: { userId: req.userId }, create: { userId: req.userId, ecoImpact }, update: {} });
           const [row] = await tx.$queryRaw<{ totalSeeds: number }[]>`SELECT "totalSeeds" FROM "game_profiles" WHERE "userId" = ${req.userId} FOR UPDATE`;
           dropsAwarded = Math.max(0, Math.min(bonus, tankCap - Number(row?.totalSeeds ?? 0)));
           if (dropsAwarded > 0) {

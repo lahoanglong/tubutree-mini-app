@@ -25,7 +25,8 @@ import { coreHttp } from '@/lib/core-http';
  */
 export function useGameData(authed: boolean) {
   const profileQ = useQuery({ ...gameProfileQuery(coreHttp), enabled: authed });
-  const { data: quiz } = useQuery({ ...gameQuizQuery(coreHttp), enabled: authed });
+  const quizQ = useQuery({ ...gameQuizQuery(coreHttp), enabled: authed });
+  const quiz = quizQ.data;
   const { data: missions } = useQuery({ ...gameMissionsQuery(coreHttp), enabled: authed });
   const { data: forest } = useQuery({ ...gameForestQuery(coreHttp), enabled: authed });
   const { data: board } = useQuery(gameBoardQuery(coreHttp));
@@ -37,5 +38,5 @@ export function useGameData(authed: boolean) {
   const { data: garden } = useQuery({ ...gameGardenQuery(coreHttp), enabled: authed });
   const { data: seasonPass } = useQuery({ ...gameSeasonPassQuery(coreHttp), enabled: authed && SEASON_PASS_ENABLED });
 
-  return { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass };
+  return { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass };
 }

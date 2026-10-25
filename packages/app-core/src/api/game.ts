@@ -8,6 +8,7 @@ export interface GameProfile {
   streakFreezes: number;
   lastDewAt: string | null;
   lastCheckInAt: string | null;
+  /** Target đã chuẩn hoá như lúc tưới: hồ sơ cũ chưa tưới giọt nào hiện bậc đầu của thang, không phải 600. */
   ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
   /** §streak-repair: chuỗi vừa mất, còn trong cửa sổ hồi sinh (xem streakRepairable). */
   brokenStreakDays?: number;
@@ -20,6 +21,16 @@ export interface GameProfile {
   tankCapacity?: number;
   /** Điểm Xanh cho 1 lượt quay (game.spin_buy_cost_points). */
   spinCostPoints?: number;
+  /** 💧 mỗi lần điểm danh, hứng sương, thưởng ngày 7 của chuỗi, câu đố trả lời sai: hiện trước khi khách bấm. */
+  dailyLoginSeeds?: number;
+  dewSeeds?: number;
+  streak7Seeds?: number;
+  quizWrongSeeds?: number;
+  /** 💧 quà một lần của lần điểm danh đầu tiên; 0 khi đã điểm danh. */
+  firstCheckinBonus?: number;
+  /** 💧 cần để thu hoạch cây đang trồng, và cây kế tiếp sau khi thu hoạch (thang game.tree_target_ladder). */
+  currentTreeTarget?: number;
+  nextTreeTarget?: number;
 }
 export interface CheckInResult {
   seedsEarned: number;
@@ -105,13 +116,37 @@ export interface HarvestSpecies {
   rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
   ecoFact: string | null;
 }
+export type HarvestCouponCap = 'DAY' | 'MONTH';
+/** Lý do không phát thưởng thu hoạch: 'GUEST' = chưa đăng nhập Zalo/SĐT nên không nhận mã và điểm cây mầm. */
+export type HarvestRewardBlocked = 'GUEST';
+export interface HarvestReward {
+  coupon?: string;
+  /** Mọi mã cấp trong lần tưới (một lần tưới có thể thu hoạch nhiều cây); `coupon` là mã đầu tiên. */
+  coupons?: string[];
+  certificate?: string;
+  species?: HarvestSpecies;
+  /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
+  points?: number;
+  /** Lần tưới có thu hoạch cây mầm (cây đầu tiên, nhận điểm thay mã, không góp quỹ cây). Cây có `certificate` là cây góp quỹ thật. */
+  sprout?: boolean;
+}
+export interface ShareHarvestResult {
+  shared: true;
+  alreadyShared: boolean;
+}
+/** Khách tự chia sẻ thành tích thu hoạch lên Cộng đồng (chỉ web); nội dung do máy chủ dựng. */
+export const shareHarvest = (http: HttpClient) => http.post<ShareHarvestResult>('/game/harvest/share');
 export const waterTree = (http: HttpClient, drops: number) =>
   http.post<{
     progress: number;
     target: number;
     harvested: boolean;
     treesPlanted: number;
-    reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
+    revivedFromDead?: boolean;
+    /** Lần thu hoạch có cây nhưng không cấp mã vì chạm trần mã theo ngày hoặc theo tháng. */
+    couponCapped?: HarvestCouponCap;
+    rewardBlocked?: HarvestRewardBlocked;
+    reward?: HarvestReward;
   }>('/game/tree/water', { drops });
 /**
  * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn.
@@ -226,7 +261,9 @@ export const waterPlot = (http: HttpClient, plotId: string, drops: number) =>
     harvested: boolean;
     treesPlanted: number;
     revivedFromDead: boolean;
-    reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
+    couponCapped?: HarvestCouponCap;
+    rewardBlocked?: HarvestRewardBlocked;
+    reward?: HarvestReward;
   }>(`/game/garden/plot/${plotId}/water`, { drops });
 
 export interface SeasonPassReward {

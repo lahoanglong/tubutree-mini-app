@@ -81,7 +81,6 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     const { container } = renderPage();
     expect(await screen.findByText(/Góp quỹ trồng cây/)).toBeInTheDocument();
     await screen.findByText(/Rừng Tubu/);
-    await screen.findByText(/Xếp hạng góp nước mùa này/);
     const text = container.textContent ?? '';
 
     expect(text).toContain('Mua (1.500💧)');
@@ -91,7 +90,6 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     expect(text).toContain('12.000/50.000💧 · 💧 1.250.000');
     expect(text).toContain('Mở lô (1.200💧)');
     expect(text).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
-    expect(text).toContain('1.250.000💧');
     expect(text).not.toMatch(/(^|[^\d.])\d{4,}(?![\d.])/);
   });
 });

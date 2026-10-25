@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
@@ -9,7 +11,13 @@ import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage } from '../services/api';
+import { getLoyalty } from '../services/account-api';
+import { shareLink } from '../services/zmp-bridge';
+import { pointsSummary } from '../utils/points-lots';
+import { dismissGameTutorial, isGameTutorialDismissed } from '../utils/game-tutorial';
 import { MessagesSquare, Recycle } from 'lucide-react';
+import { vi } from '../i18n/vi';
+import { Text } from '../components/ui/text';
 import { GameLoginGate, GameSkeleton } from '../components/game/game-states';
 import { GardenHero } from '../components/game/garden-hero';
 import { GameLinkRow } from '../components/game/game-link-row';
@@ -18,24 +26,31 @@ import { TreeHealthAlert } from '../components/game/tree-health-alert';
 import { CheckInStreak } from '../components/game/checkin-streak';
 import { StreakRepair } from '../components/game/streak-repair';
 import { TreeActions } from '../components/game/tree-actions';
+import { TreeFund } from '../components/game/tree-fund';
+import { EarnWaterSheet, type EarnQuizState } from '../components/game/earn-water-sheet';
+import { NewbieGuide } from '../components/game/newbie-guide';
+import { isSameVNDay } from '../components/game/game-utils';
 import { GardenPlots } from '../components/game/garden-plots';
 import { SeasonPass } from '../components/game/season-pass';
 import { CommunityGoal } from '../components/game/community-goal';
 import { SpeciesCodex } from '../components/game/species-codex';
-import { FriendGifts } from '../components/game/friend-gifts';
 import { EcoImpact } from '../components/game/eco-impact';
 import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
 import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
 import { MissionsCard } from '../components/game/missions-card';
-import { SeasonLeaderboard } from '../components/game/season-leaderboard';
-import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
 import { WheelPrizeSheet } from '../components/game/wheel-prize-sheet';
 import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
 import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
-import { useGameActions, type HarvestReward } from '../components/game/use-game-actions';
+import { useGameActions, type HarvestMeta, type HarvestReward } from '../components/game/use-game-actions';
 import { SEASON_PASS_ENABLED } from '../utils/features';
+
+const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
+  catalog: '/browse',
+  'delivered-orders': '/orders?tab=delivered',
+  invite: '/wallet',
+};
 
 export default function GamePage() {
   const phase = useAuthPhase();
@@ -44,7 +59,7 @@ export default function GamePage() {
   const publicConfig = usePublicConfig();
   const authed = phase === 'authenticated';
 
-  const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } =
+  const { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, seasonPass } =
     useGameData(authed);
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
@@ -55,21 +70,51 @@ export default function GamePage() {
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
   const [tab, setTab] = useState<GameTabKey>('today');
   const [harvested, setHarvested] = useState(false);
-  const [harvestCoupon, setHarvestCoupon] = useState<string | null>(null);
+  const [harvestCoupons, setHarvestCoupons] = useState<string[]>([]);
   const [harvestCert, setHarvestCert] = useState<string | null>(null);
   const [harvestSpecies, setHarvestSpecies] = useState<HarvestSpecies | null>(null);
+  const [harvestPoints, setHarvestPoints] = useState<number | null>(null);
+  const [harvestMeta, setHarvestMeta] = useState<HarvestMeta | null>(null);
+  // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
+  const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
+  const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
+  const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
+  // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null
+  // để nút vẫn bấm được (API là lưới an toàn).
+  const loyalty = loyaltyQ.data;
+  const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
+  const fundPoints = loyalty ? (loyalty.redeemableTotal ?? pointsSummary(loyalty).total) : null;
 
-  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
+  const { checkInM, dewM, freezeM, repairM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
     useGameActions({
-      onHarvest: (reward: HarvestReward | undefined) => {
-        setHarvestCoupon(reward?.coupon ?? null);
+      onHarvest: (reward: HarvestReward | undefined, meta: HarvestMeta) => {
+        setHarvestCoupons(meta.coupons);
         setHarvestCert(reward?.certificate ?? null);
         setHarvestSpecies(reward?.species ?? null);
+        setHarvestPoints(reward?.points ?? null);
+        setHarvestMeta(meta);
         setHarvested(true); // mở modal celebration
       },
       onAnswered: (r, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
     });
   const wheelPrize = useWheelPrize();
+  const openEarn = (missing: number | null = null) => setEarn({ open: true, missing });
+  const closeEarn = () => setEarn((e) => ({ ...e, open: false }));
+  const goTab = (key: GameTabKey, scrollToId?: string) => {
+    closeEarn();
+    setTab(key);
+    if (scrollToId) setTimeout(() => document.getElementById(scrollToId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 60);
+  };
+  const claimDaily = (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) =>
+    checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
+  const goMission = (target: MissionTarget) => {
+    if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
+    else navigate(MISSION_PATHS[target]);
+  };
+  const shareHarvest = () => {
+    const t = vi.game.newbie.harvest;
+    void shareLink({ title: t.shareTitle, description: t.shareDescription, path: '/game' }).catch(() => undefined);
+  };
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
@@ -96,6 +141,18 @@ export default function GamePage() {
   if (isError && !profile) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
 
   const eco = profile?.ecoImpact;
+  const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
+  const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
+  const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
+  const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
+  const quizState: EarnQuizState = quiz
+    ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
+    : quizQ.isError
+      ? { status: 'error' }
+      : { status: 'loading' };
+  const quizTotal = quiz ? quiz.reduce((sum, q) => sum + (q.waterReward ?? 0), 0) : null;
+  const earnError = checkInM.isError ? getErrorMessage(checkInM.error) : dewM.isError ? getErrorMessage(dewM.error) : null;
+  const plotsOpen = garden ? extraPlotsVisible(eco?.treesPlanted, garden.plots.some((p) => !p.isHome)) : false;
 
   return shell(
     <>
@@ -117,20 +174,34 @@ export default function GamePage() {
             <StreakRepair
               brokenStreakDays={profile.brokenStreakDays}
               cost={profile.streakRepairCost}
+              totalSeeds={profile.totalSeeds}
               pending={repairM.isPending}
               onRepair={() => repairM.mutate()}
+              onNeedWater={openEarn}
             />
           )}
 
+          <NewbieGuide
+            profile={profile}
+            dismissed={tutorialDismissed}
+            quizTotal={quizTotal}
+            tomorrowGain={tomorrowGain}
+            onDismiss={() => {
+              dismissGameTutorial();
+              setTutorialDismissed(true);
+            }}
+          />
+
           <TreeActions
-            treePointsPrice={profile?.treePointsPrice}
-            waterPending={waterM.isPending}
-            onWater={() => waterM.mutate()}
-            buyPending={buyTreeM.isPending}
-            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
+            profile={profile}
+            pending={waterM.isPending || checkInM.isPending || dewM.isPending}
+            onClaim={claimDaily}
+            onWater={(drops) => waterM.mutate(drops)}
+            onEarn={() => openEarn()}
           />
 
           {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
+          <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
             onCheckIn={() => checkInM.mutate()}
@@ -139,7 +210,9 @@ export default function GamePage() {
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}
             dewPending={dewM.isPending}
+            onNeedWater={openEarn}
           />
+          </div>
 
           <MissionsCard
             missions={missions}
@@ -147,19 +220,28 @@ export default function GamePage() {
             claimPending={claimMissionM.isPending}
             claimVariables={claimMissionM.variables}
             onClaim={(code) => claimMissionM.mutate(code)}
+            onGo={goMission}
           />
 
-          <QuizCard
-            quiz={quiz}
-            currentQuiz={currentQuiz}
-            answeredCount={answeredIds.size}
-            reveal={reveal}
-            pending={answerM.isPending}
-            onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-            onNext={nextQuiz}
-          />
+          <div id="game-quiz">
+            <QuizCard
+              quiz={quiz}
+              currentQuiz={currentQuiz}
+              answeredCount={answeredIds.size}
+              reveal={reveal}
+              pending={answerM.isPending}
+              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+              onNext={nextQuiz}
+            />
+          </div>
 
-          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10_000} onSpin={handleSpin} onResult={wheelPrize.onResult} />
+          <LuckyWheelCard
+            cost={profile?.spinCostPoints ?? 10_000}
+            points={wheelPoints}
+            onEarnPoints={() => navigate('/loyalty')}
+            onSpin={handleSpin}
+            onResult={wheelPrize.onResult}
+          />
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9) */}
           {publicConfig.waste.enabled && (
@@ -175,9 +257,11 @@ export default function GamePage() {
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
-          {garden && (
+          {garden && plotsOpen && (
             <GardenPlots
               garden={garden}
+              totalSeeds={profile?.totalSeeds ?? 0}
+              onNeedWater={openEarn}
               waterPlotPending={waterPlotM.isPending}
               waterPlotVariables={waterPlotM.variables}
               onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
@@ -186,17 +270,29 @@ export default function GamePage() {
             />
           )}
 
+          {garden && !plotsOpen && (
+            <Text variant="caption" tone="secondary" as="div">
+              {vi.game.newbie.plots.locked}
+            </Text>
+          )}
+
           {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
           {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
 
           {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
           <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
 
+          <TreeFund
+            treePointsPrice={profile?.treePointsPrice}
+            points={fundPoints}
+            onEarnPoints={() => navigate('/loyalty')}
+            buyPending={buyTreeM.isPending}
+            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
+          />
+
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
-        </GameTabPanel>
 
-        <GameTabPanel tab="community" active={tab === 'community'}>
           {/* Banner mùa/sự kiện (Phase 4) */}
           {season && <SeasonBanner season={season} />}
 
@@ -210,44 +306,61 @@ export default function GamePage() {
             />
           )}
 
-          {/* Tặng nước bạn bè (social) */}
-          {friends && friends.length > 0 && (
-            <FriendGifts
-              friends={friends}
-              giftPending={giftM.isPending}
-              giftVariables={giftM.variables}
-              onGift={(recipientId) => giftM.mutate(recipientId)}
-            />
-          )}
-
-          <WeeklyLeaderboard board={board} />
-
-          {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
-
+          {/* Cộng đồng trong Mini App chỉ đọc (chính sách Zalo 4.6): không tặng nước bạn bè, không bảng xếp hạng người chơi, nên không có tab riêng. */}
           {/* Bảng tin cộng đồng (§6.14.12) */}
           <GameLinkRow
             icon={MessagesSquare}
-            title="Bảng tin cộng đồng"
-            hint="Khoe thành tích xanh & cổ vũ nhau trồng cây"
+            title={vi.game.newbie.community.feedTitle}
+            hint={vi.game.newbie.community.feedHintReadOnly}
             onClick={() => navigate('/feed')}
           />
         </GameTabPanel>
+
       </div>
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
       <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => navigate('/browse')} />
 
+      <EarnWaterSheet
+        open={earn.open}
+        onClose={closeEarn}
+        totalSeeds={profile?.totalSeeds ?? 0}
+        missing={earn.missing}
+        checkedInToday={checkedInToday}
+        dewToday={dewToday}
+        checkInGain={dailyGain}
+        dewGain={profile?.dewSeeds ?? null}
+        checkInPending={checkInM.isPending}
+        dewPending={dewM.isPending}
+        onCheckIn={() => checkInM.mutate()}
+        onDew={() => dewM.mutate()}
+        quiz={quizState}
+        onRetryQuiz={() => void quizQ.refetch()}
+        onGoQuiz={() => goTab('today', 'game-quiz')}
+        error={earnError}
+      />
+
       {/* Harvest celebration */}
       <HarvestCelebration
         open={harvested}
-        coupon={harvestCoupon}
+        coupons={harvestCoupons}
+        guest={harvestMeta?.guest ?? false}
+        onLogin={() => {
+          setHarvested(false);
+          void login();
+        }}
         certificate={harvestCert}
         species={harvestSpecies}
+        points={harvestPoints}
+        sprout={harvestMeta?.sprout ?? false}
+        couponCapped={harvestMeta?.couponCapped ?? null}
+        nextTarget={harvestMeta?.nextTarget ?? null}
         onClose={() => setHarvested(false)}
         onUseCoupon={() => {
           setHarvested(false);
           navigate('/browse');
         }}
+        onShare={shareHarvest}
       />
     </>,
   );

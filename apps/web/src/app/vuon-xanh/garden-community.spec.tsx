@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -97,7 +98,7 @@ const PASS = {
   })),
 };
 const profile = () => ({
-  totalSeeds: 1_250, streakDays: 3, treeStage: 1, treeHealth: 'HEALTHY', streakFreezes: 1, lastDewAt: null, lastCheckInAt: null,
+  totalSeeds: 1_250, streakDays: 3, treeStage: 1, treeHealth: 'HEALTHY', streakFreezes: 1, lastDewAt: null, lastCheckInAt: new Date().toISOString(),
   ecoImpact: { progress: 600, target: 1_000, treeType: 'Cây Sưa', treesPlanted: 2 }, streakFreezeCost: 80, treePointsPrice: 20_000, spinCostPoints: 10,
 });
 
@@ -182,7 +183,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(c2.textContent).toContain('Mở thêm lô đất để trồng nhiều cây cùng lúc');
   });
 
-  it('mỗi lô: tiến độ có dấu nghìn, héo/chết có nhãn, giai đoạn cây theo phần trăm', async () => {
+  it('mỗi lô: tiến độ có dấu nghìn, héo có nhãn (lô DEAD cũ cũng chỉ héo), giai đoạn cây theo phần trăm', async () => {
     state.data['/game/garden'] = GARDEN({
       plots: [HOME, plot(2, { progress: 1_250, target: 2_500, treeHealth: 'WILTED' }), plot(3, { progress: 20, target: 20, treeHealth: 'DEAD' }), plot(4, { progress: 2, target: 20 })],
     });
@@ -190,7 +191,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     const plots = panel(c, 'Vườn');
     expect(plots.textContent).toContain('1.250/2.500💧');
     expect(plots.textContent).toContain('héo');
-    expect(plots.textContent).toContain('chết');
+    expect(plots.textContent).not.toContain('chết');
     expect(plots.textContent).toContain('🌿');
     expect(plots.textContent).toContain('🌳');
     expect(plots.textContent).toContain('🌱');
@@ -495,7 +496,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     reward: { coupon: 'XANH-123', certificate: 'TT-77', species: { id: 's', name: 'Sao đen', emoji: '🌴', rarity: 'LEGENDARY', ecoFact: 'Sống hàng trăm năm.' } },
   };
   const water = async (c: HTMLElement) => {
-    click(btn(c, 'Tưới cây'));
+    click(btn(c, /Tưới hết/));
     await flush(8);
   };
 
@@ -512,6 +513,61 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     expect(dlg.textContent).toContain('🌴 Sao đen');
     expect(dlg.textContent).toContain('Sống hàng trăm năm.');
     expect(c.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('"Chia sẻ lên Cộng đồng": gọi /game/harvest/share một lần, báo đã chia sẻ và khoá nút', async () => {
+    state.posts['/game/tree/water'] = () => harvest;
+    state.posts['/game/harvest/share'] = () => ({ shared: true, alreadyShared: false });
+    const c = await mount();
+    await water(c);
+    const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
+    const share = btn(dlg, 'Chia sẻ lên Cộng đồng');
+    act(() => {
+      share.click();
+      share.click();
+    });
+    await flush(8);
+    expect(postsOf('/game/harvest/share')).toHaveLength(1);
+    expect(btn(dlg, 'Đã chia sẻ').disabled).toBe(true);
+    expect(document.body.textContent).toContain('Đã chia sẻ lên Cộng đồng');
+  });
+
+  it('nút chia sẻ có dòng báo bài sẽ hiện tên khách', async () => {
+    state.posts['/game/tree/water'] = () => harvest;
+    const c = await mount();
+    await water(c);
+    expect((document.querySelector('[role="dialog"]') as HTMLElement).textContent).toContain('Bài sẽ hiện tên của bạn trên Cộng đồng');
+  });
+
+  it('API báo alreadyShared: thông báo "Bạn đã chia sẻ cây này rồi"', async () => {
+    state.posts['/game/tree/water'] = () => harvest;
+    state.posts['/game/harvest/share'] = () => ({ shared: true, alreadyShared: true });
+    const c = await mount();
+    await water(c);
+    click(btn(document.querySelector('[role="dialog"]') as HTMLElement, 'Chia sẻ lên Cộng đồng'));
+    await flush(8);
+    expect(document.body.textContent).toContain('Bạn đã chia sẻ cây này rồi');
+    expect(document.body.textContent).not.toContain('Đã chia sẻ lên Cộng đồng');
+  });
+
+  it('thu hoạch ở lô phụ: hộp chúc mừng không có nút chia sẻ', async () => {
+    state.data['/game/garden'] = GARDEN();
+    state.posts['/game/garden/plot/p2/water'] = () => ({ progress: 0, target: 20, harvested: true, treesPlanted: 2, revivedFromDead: false, reward: { certificate: 'TT-9' } });
+    const c = await mount();
+    const waters = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
+    click(waters[0]!);
+    await flush(8);
+    const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dlg.textContent).toContain('Thu hoạch thành công!');
+    expect(dlg.textContent).not.toContain('Chia sẻ lên Cộng đồng');
+  });
+
+  it('khách vãng lai: hộp thu hoạch không có nút chia sẻ', async () => {
+    state.posts['/game/tree/water'] = () => ({ progress: 50, target: 50, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST' });
+    const c = await mount();
+    await water(c);
+    const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dlg.textContent).not.toContain('Chia sẻ lên Cộng đồng');
   });
 
   it('thu hoạch không có quà: không có mã, không có "Dùng mã giảm giá ngay"; "Tuyệt vời!" đóng hộp', async () => {
@@ -585,7 +641,7 @@ describe('Vườn Xanh: hộp thu hoạch khi trình duyệt không có clipboar
     });
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
     const c = await mount();
-    click(btn(c, 'Tưới cây'));
+    click(btn(c, /Tưới hết/));
     await flush(8);
     click(document.querySelector<HTMLElement>('[role="dialog"] [data-coupon]'));
     await flush();

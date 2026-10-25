@@ -168,7 +168,30 @@ describe('StorefrontsTab (D3-02)', () => {
       const second = await open([row()], detail({ approved: true, approvedAt: '2026-10-03T00:00:00.000Z' }));
       click(byText(document.body.querySelector('[role="dialog"]') as HTMLElement, 'button', 'Bỏ duyệt'));
       await flush();
+      expect(second.api.calls.some((c) => c.url.includes('/approval'))).toBe(false);
+      expect((dialog() as HTMLElement).textContent).toContain('Bỏ duyệt gian hàng');
+      click(byText(dialog() as HTMLElement, 'button', 'Huỷ'));
+      await flush();
+      expect(second.api.calls.some((c) => c.url.includes('/approval'))).toBe(false);
+      click(byText(document.body.querySelector('[role="dialog"]') as HTMLElement, 'button', 'Bỏ duyệt'));
+      await flush();
+      click(byText(dialog() as HTMLElement, 'button', 'Bỏ duyệt'));
+      await flush();
       expect(second.api.calls.find((c) => c.url.includes('/approval'))!.init?.body).toBe(JSON.stringify({ approved: false }));
+    });
+
+    it('nút Duyệt ngay trên thẻ gian hàng CTV chưa duyệt, không có ở thẻ đã duyệt', async () => {
+      const api = mockFetch({
+        '/admin/storefronts?': page([row(), row({ id: 's2', title: 'Shop đã duyệt', approved: true })]),
+        '/admin/storefronts/s1/approval': { body: { ok: true } },
+      });
+      vi.stubGlobal('fetch', vi.fn(api.fn));
+      const { container } = mount(<StorefrontsTab />);
+      await flush();
+      expect(byText(container.querySelector('article[aria-label="Shop đã duyệt"]') as HTMLElement, 'button', 'Duyệt')).toBeNull();
+      click(byText(container.querySelector('article[aria-label="Shop của Linh"]') as HTMLElement, 'button', 'Duyệt'));
+      await flush();
+      expect(api.calls.find((c) => c.url.includes('/s1/approval'))!.init?.body).toBe(JSON.stringify({ approved: true }));
     });
 
     it('gian hàng đối tác không có nút duyệt (luôn tính là đã duyệt)', async () => {
