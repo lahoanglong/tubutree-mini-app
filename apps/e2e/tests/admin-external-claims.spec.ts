@@ -38,6 +38,8 @@ function mockAdminSession(api: MockApi) {
     itemCount: 0,
   });
   api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
+  // GET /admin/config?category= trả object {khoá: giá trị}; băng "tính năng đang tắt" đọc cờ từ đây.
+  api.get('/admin/config', { 'loyalty.marketplace_claim_enabled': true });
 }
 
 function claim(over: Partial<AdminExternalClaimRow> & Pick<AdminExternalClaimRow, 'id' | 'maskedCode'>): AdminExternalClaimRow {

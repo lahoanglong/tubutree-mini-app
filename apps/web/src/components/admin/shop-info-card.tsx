@@ -115,7 +115,7 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
                 <button type="button" disabled={!dirty(key) || save.isPending || value.length > LEGAL_MAX} onClick={() => save.mutate([key])} className={BTN_PRIMARY}>
                   Lưu
                 </button>
-                <span className={`text-xs ${value.length > LEGAL_MAX ? 'text-danger-fg' : 'text-stone-500'}`}>{value.length.toLocaleString('vi-VN')} / {LEGAL_MAX.toLocaleString('vi-VN')} ký tự</span>
+                <span className={`text-xs ${value.length > LEGAL_MAX ? 'text-danger-fg' : 'text-stone-500'}`}>{value.length} / 50.000 ký tự</span>
                 {msg && msg.key === key && (
                   <span role={msg.ok ? 'status' : 'alert'} className={`text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</span>
                 )}
