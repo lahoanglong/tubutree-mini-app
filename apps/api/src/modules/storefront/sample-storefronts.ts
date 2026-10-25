@@ -183,12 +183,13 @@ export function dbNeedingConfirmation(databaseUrl: string | undefined, argv: rea
 export const CONFIRM_DB_ENV = 'SEED_CONFIRM_DB';
 
 /**
- * Xác nhận đích danh DB trước khi ghi. Có TTY: người chạy gõ lại đúng tên DB. Không có TTY (CI, pipe): từ chối, trừ khi biến môi trường
+ * Xác nhận đích danh DB trước khi ghi. Có TTY: người chạy luôn gõ lại đúng tên DB, kể cả khi SEED_CONFIRM_DB đã đặt (biến export sẵn
+ * trong shell không được thay cho bước gõ lại, vì có thể đang có tunnel tới PROD). Không có TTY (CI, pipe): từ chối, trừ khi
  * SEED_CONFIRM_DB bằng đúng tên DB. `typed` là chuỗi người chạy gõ (chỉ dùng khi có TTY).
  */
 export function assertDbConfirmed(opts: { dbName: string; isTTY: boolean; env: NodeJS.ProcessEnv; typed?: string }): void {
-  if (opts.env[CONFIRM_DB_ENV] === opts.dbName) return;
   if (!opts.isTTY) {
+    if (opts.env[CONFIRM_DB_ENV] === opts.dbName) return;
     throw new SampleSeedRefusal(`Từ chối chạy: không có terminal để xác nhận. Đặt ${CONFIRM_DB_ENV}=${opts.dbName} nếu chắc chắn muốn ghi vào DB "${opts.dbName}".`);
   }
   if ((opts.typed ?? '').trim() !== opts.dbName) {

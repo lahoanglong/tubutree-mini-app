@@ -34,7 +34,7 @@ async function main() {
   if (mustConfirm) {
     const isTTY = Boolean(process.stdin.isTTY);
     let typed: string | undefined;
-    if (isTTY && process.env.SEED_CONFIRM_DB !== mustConfirm) {
+    if (isTTY) {
       const rl = createInterface({ input: process.stdin, output: process.stdout });
       typed = await rl.question(`Gõ lại tên DB "${mustConfirm}" để xác nhận ghi: `);
       rl.close();

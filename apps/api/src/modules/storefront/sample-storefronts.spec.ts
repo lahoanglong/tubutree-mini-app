@@ -101,8 +101,11 @@ describe('xác nhận tên DB khi qua bằng --allow-db', () => {
     expect(() => assertDbConfirmed({ ...base, env: { SEED_CONFIRM_DB: 'tubutree' } })).not.toThrow();
   });
 
-  it('có TTY nhưng SEED_CONFIRM_DB đúng thì không cần gõ', () => {
-    expect(() => assertDbConfirmed({ dbName: 'tubutree', isTTY: true, env: { SEED_CONFIRM_DB: 'tubutree' } })).not.toThrow();
+  it('có TTY: SEED_CONFIRM_DB không thay được bước gõ lại tên DB', () => {
+    const env = { SEED_CONFIRM_DB: 'tubutree' };
+    expect(() => assertDbConfirmed({ dbName: 'tubutree', isTTY: true, env })).toThrow(SampleSeedRefusal);
+    expect(() => assertDbConfirmed({ dbName: 'tubutree', isTTY: true, env, typed: 'khac' })).toThrow(SampleSeedRefusal);
+    expect(() => assertDbConfirmed({ dbName: 'tubutree', isTTY: true, env, typed: 'tubutree' })).not.toThrow();
   });
 });
 
