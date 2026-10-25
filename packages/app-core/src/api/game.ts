@@ -20,6 +20,16 @@ export interface GameProfile {
   tankCapacity?: number;
   /** Điểm Xanh cho 1 lượt quay (game.spin_buy_cost_points). */
   spinCostPoints?: number;
+  /** 💧 mỗi lần điểm danh, hứng sương, thưởng ngày 7 của chuỗi, câu đố trả lời sai: hiện trước khi khách bấm. */
+  dailyLoginSeeds?: number;
+  dewSeeds?: number;
+  streak7Seeds?: number;
+  quizWrongSeeds?: number;
+  /** 💧 quà một lần của lần điểm danh đầu tiên; 0 khi đã điểm danh. */
+  firstCheckinBonus?: number;
+  /** 💧 cần để thu hoạch cây đang trồng, và cây kế tiếp sau khi thu hoạch (thang game.tree_target_ladder). */
+  currentTreeTarget?: number;
+  nextTreeTarget?: number;
 }
 export interface CheckInResult {
   seedsEarned: number;
@@ -105,13 +115,24 @@ export interface HarvestSpecies {
   rarity: 'COMMON' | 'RARE' | 'LEGENDARY';
   ecoFact: string | null;
 }
+export type HarvestCouponCap = 'DAY' | 'MONTH';
+export interface HarvestReward {
+  coupon?: string;
+  certificate?: string;
+  species?: HarvestSpecies;
+  /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
+  points?: number;
+}
 export const waterTree = (http: HttpClient, drops: number) =>
   http.post<{
     progress: number;
     target: number;
     harvested: boolean;
     treesPlanted: number;
-    reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
+    revivedFromDead?: boolean;
+    /** Lần thu hoạch có cây nhưng không cấp mã vì chạm trần mã theo ngày hoặc theo tháng. */
+    couponCapped?: HarvestCouponCap;
+    reward?: HarvestReward;
   }>('/game/tree/water', { drops });
 /**
  * Góp 1 cây vào quỹ trồng cây (PlantedTree) bằng Điểm Xanh: BE lấy điểm thường trước, thiếu thì lấy điểm không hết hạn.
@@ -226,7 +247,8 @@ export const waterPlot = (http: HttpClient, plotId: string, drops: number) =>
     harvested: boolean;
     treesPlanted: number;
     revivedFromDead: boolean;
-    reward?: { coupon?: string; certificate?: string; species?: HarvestSpecies };
+    couponCapped?: HarvestCouponCap;
+    reward?: HarvestReward;
   }>(`/game/garden/plot/${plotId}/water`, { drops });
 
 export interface SeasonPassReward {
