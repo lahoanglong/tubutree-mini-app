@@ -957,6 +957,26 @@ describe('StorefrontService.getPublicBySlug', () => {
   });
 });
 
+describe('StorefrontService.getPublicBySlug — gian hàng mẫu không mang nhãn tin cậy', () => {
+  it('isSample: approved=false, ownerTier=null, isPartner=false, không có kho dù là MERCHANT đã duyệt có kho', async () => {
+    const getPublicTier = jest.fn().mockResolvedValue({ name: 'Bạc', emoji: '🌳' });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'mau', title: 'Mẫu', isPublished: true, isSample: true, type: 'MERCHANT', isPartner: true, approvedAt: new Date(),
+        warehouseAddress: '1 Lê Lợi', warehouseCity: 'Đà Nẵng', ownerUserId: 'u1', collections: [],
+      }) },
+    });
+    const svc = new StorefrontService(prisma, config, { getPublicTier, commissionEligibleRoles: async () => new Set(['AFFILIATE', 'DEALER']) } as unknown as AffiliateService);
+    const r = await svc.getPublicBySlug('mau');
+    expect(r.isSample).toBe(true);
+    expect(r.approved).toBe(false);
+    expect(r.ownerTier).toBeNull();
+    expect(r.isPartner).toBe(false);
+    expect(r).not.toHaveProperty('warehouseCity');
+    expect(getPublicTier).not.toHaveBeenCalled();
+  });
+});
+
 describe('StorefrontService.pickerProducts — guardrail role', () => {
   it('CUSTOMER gọi picker → BadRequest (không lộ %HH cho khách)', async () => {
     const prisma = makePrisma({
@@ -1137,6 +1157,16 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
       expect(pending.status).toBe('PENDING_APPROVAL');
       const live = await new StorefrontService(mine({ isPublished: true, approvedAt: new Date() }), approvalOn, affiliate).getMine('u1');
       expect(live.status).toBe('LIVE');
+    });
+
+    it('needsApproval: chưa duyệt + cờ bật = true; đã duyệt = false; cờ tắt = false', async () => {
+      const flag = (on: boolean) => ({ get: async <T>(_k: string, fb?: T): Promise<T> => (_k === 'storefront.require_approval' ? on : fb) as T } as unknown as SystemConfigService);
+      const need = await new StorefrontService(mine({ approvedAt: null }), flag(true), affiliate).getMine('u1');
+      expect(need.needsApproval).toBe(true);
+      const done = await new StorefrontService(mine({ approvedAt: new Date() }), flag(true), affiliate).getMine('u1');
+      expect(done.needsApproval).toBe(false);
+      const off = await new StorefrontService(mine({ approvedAt: null }), flag(false), affiliate).getMine('u1');
+      expect(off.needsApproval).toBe(false);
     });
 
     it('CTV bị hạ về khách thường: vẫn trả gian hàng, kèm lý do ẩn', async () => {

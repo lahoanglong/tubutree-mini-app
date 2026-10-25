@@ -588,7 +588,28 @@ describe('đăng gian hàng và xem trước', () => {
     click(btn('Gửi duyệt'));
     await flush();
     expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/publish', { isPublished: true }]]);
-    expect(text()).toContain('Đã gửi gian hàng');
+    expect(text()).toContain('Đã gửi duyệt');
+  });
+
+  it('gian hàng đã duyệt từ trước (vừa gỡ đăng): nút "Đăng lại", không hứa duyệt', async () => {
+    state.sf = storefront({ status: 'DRAFT', approved: true, needsApproval: false });
+    mount();
+    await flush();
+    expect(hasBtn('Gửi duyệt')).toBe(false);
+    click(btn('Đăng lại'));
+    await flush();
+    expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/publish', { isPublished: true }]]);
+    expect(text()).toContain('Đã đăng lại gian hàng');
+  });
+
+  it('cờ duyệt tắt, chưa từng duyệt: nút "Đăng gian hàng", không nhắc gửi duyệt', async () => {
+    state.sf = storefront({ status: 'DRAFT', approved: false, needsApproval: false });
+    mount();
+    await flush();
+    expect(hasBtn('Gửi duyệt')).toBe(false);
+    click(btn('Đăng gian hàng'));
+    await flush();
+    expect(writes().map((c) => c.path)).toEqual(['/storefront/me/publish']);
   });
 
   it('chưa có sản phẩm: "Gửi duyệt" tắt kèm lời nhắc, không gọi API', async () => {

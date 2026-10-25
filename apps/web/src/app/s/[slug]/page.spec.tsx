@@ -231,6 +231,13 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
     expect((m.openGraph as { url?: string }).url).toBe('https://app.tubutree.com/s/linh');
   });
 
+  it('gian hàng mẫu: noindex; gian hàng thật: không chặn công cụ tìm kiếm', async () => {
+    mocks.sf = { ...SF, isSample: true };
+    expect((await meta()).robots).toEqual({ index: false, follow: false });
+    mocks.sf = { ...SF };
+    expect((await meta()).robots).toBeUndefined();
+  });
+
   it('ảnh chia sẻ do opengraph-image của trang dựng: metadata không nhét ảnh gốc (kể cả base64) vào og:image', async () => {
     mocks.sf = {
       ...SF, coverUrl: 'data:image/png;base64,AAAA',

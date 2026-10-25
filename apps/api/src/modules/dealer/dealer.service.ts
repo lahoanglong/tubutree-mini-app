@@ -186,8 +186,14 @@ export class DealerService {
       _sum: { delta: true },
     });
     const rules = await this.orderRules();
+    const partnerStore = await this.prisma.storefront.findFirst({
+      where: { ownerUserId: userId, isSample: false, OR: [{ type: 'MERCHANT' }, { isPartner: true }] },
+      select: { id: true },
+    });
     return {
       isDealer: user.role === 'DEALER',
+      // Thẻ "Gian hàng đối tác" chỉ hiện khi đại lý thật sự có gian hàng đối tác để quản lý.
+      hasPartnerStorefront: partnerStore != null,
       status: application?.status ?? 'NONE',
       // SELLER-12: hồ sơ bị từ chối phải cho người đăng ký biết vì sao để bổ sung rồi nộp lại.
       rejectionReason: application?.status === 'REJECTED' ? (application.rejectionReason ?? null) : null,

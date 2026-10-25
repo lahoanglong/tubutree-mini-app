@@ -1,4 +1,4 @@
-import { OPEN_STOREFRONT_MENU_HINT, OPEN_STOREFRONT_MENU_LABEL } from '@tubutree/app-core/storefront-signup';
+import { ctvMenuEntry, OPEN_STOREFRONT_MENU_HINT, OPEN_STOREFRONT_MENU_LABEL } from '@tubutree/app-core/storefront-signup';
 import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -143,9 +143,17 @@ export default function ProfilePage() {
   const chatEnabled = cfg.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: status === 'authenticated' && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
+  const ctvEntry = ctvMenuEntry(user?.role);
   const withDealer = MENU.map((s) => ({ ...s, items: s.items.filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (claimEnabled || it.to !== '/points/scan') && (chatEnabled || it.to !== '/chat')) })).map((s) =>
     s.group === 'Hợp tác'
-      ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
+      ? {
+          ...s,
+          items: s.items.map((it) => {
+            if (it.to === '/dealer') return dealerItem;
+            if (it.to === '/affiliate') return { ...it, label: ctvEntry.label, hint: ctvEntry.hint };
+            return it;
+          }),
+        }
       : s,
   );
   // Query bị disable khi cờ chuyển sang false vẫn giữ data cũ → bỏ data đó để mục không còn hiện.

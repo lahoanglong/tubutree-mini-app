@@ -1303,6 +1303,8 @@ export class MerchantFulfilmentService {
     // Không giới hạn số dòng: bộ lọc đã ở trong truy vấn, nên cắt trước khi lọc sẽ làm rơi gian hàng đối tác xếp sau theo tên.
     const stores = await this.prisma.storefront.findMany({
       where: {
+        // Gian hàng mẫu của máy thử không phải đối tác thật: không vào danh sách đối soát.
+        isSample: false,
         AND: [
           // Gian hàng đã tắt cờ vẫn hiện khi có thể còn dòng mở (lọc chính xác bằng bảng kê bên dưới) để admin lập phiếu thu.
           { OR: [PARTNER_STORE_WHERE, { id: { in: [...pendingStores] } }] },

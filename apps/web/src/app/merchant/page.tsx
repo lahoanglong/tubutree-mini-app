@@ -400,6 +400,12 @@ export default function MerchantPage() {
             {(storeQ.error as Error).message}
           </div>
         )}
+        {authed && !storeQ.isLoading && !storeQ.isError && !store && (
+          <div data-testid="merchant-empty" className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center">
+            <p className="text-sm font-semibold text-stone-900">Chưa có gian hàng để quản lý</p>
+            <p className="mt-1 text-sm text-stone-600">Trang này dành cho gian hàng đối tác và Cộng tác viên đã có gian hàng. Khi gian hàng được tạo, sản phẩm, đơn và đối soát sẽ hiện ở đây.</p>
+          </div>
+        )}
 
         {store && (
           <>

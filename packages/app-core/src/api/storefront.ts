@@ -78,6 +78,8 @@ export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerT
   isPublished: boolean;
   /** Trạng thái do API tính cho chủ (DRAFT, PENDING_APPROVAL, LIVE, TAKEN_DOWN, HIDDEN); API cũ có thể chưa trả. */
   status?: StorefrontStatusCode;
+  /** Gian hàng còn phải qua Tubu duyệt trước khi khách thấy (cờ duyệt bật và chưa được duyệt); API cũ chưa trả. */
+  needsApproval?: boolean;
   /** Lý do khách không thấy gian hàng dù đã đăng (bị gỡ, chủ không còn là CTV…); null khi khách thấy bình thường. */
   publicHiddenReason?: string | null;
   collections: StorefrontCollectionEdit[];

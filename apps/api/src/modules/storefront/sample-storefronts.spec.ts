@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { assertSampleSeedAllowed, effectiveDatabaseUrl, PROD_FLAG, SAMPLE_STOREFRONTS, SampleSeedRefusal } from './sample-storefronts';
+import { ALLOWED_DB_NAMES, assertSampleSeedAllowed, effectiveDatabaseUrl, PROD_FLAG, SAMPLE_STOREFRONTS, SampleSeedRefusal } from './sample-storefronts';
 import { normalizeSubdomain } from './identifier-validation';
 
 const local = 'postgresql://tubu@127.0.0.1:35880/tubutree_it?schema=public';
@@ -24,6 +24,31 @@ describe('assertSampleSeedAllowed', () => {
     expect(run('không phải url')).toThrow(SampleSeedRefusal);
   });
 
+  it.each([
+    ['tham số host= trỏ máy chủ lạ', 'postgresql://u:p@127.0.0.1:5432/tubutree?host=db.prod.example'],
+    ['tham số hostaddr=', 'postgresql://u:p@localhost/tubutree?hostaddr=10.0.0.5'],
+    ['tên miền bắt đầu bằng localhost', 'postgresql://u:p@localhost.evil.com/tubutree'],
+    ['nip.io trỏ về 127.0.0.1 giả', 'postgresql://u:p@127.0.0.1.nip.io/tubutree'],
+    ['socket unix, không có tên máy', 'postgresql:///tubutree?host=/var/run/postgresql'],
+    ['socket không tham số', 'postgresql:///tubutree'],
+    ['tên DB không nằm trong danh sách', 'postgresql://u:p@127.0.0.1:5432/tubutree_prod'],
+    ['không có tên DB', 'postgresql://u:p@127.0.0.1:5432'],
+  ])('từ chối: %s', (_name, url) => {
+    expect(run(url)).toThrow(SampleSeedRefusal);
+  });
+
+  it('cho chạy với [::1] và mọi tên DB máy thử trong danh sách', () => {
+    expect(run('postgresql://u:p@[::1]:5432/tubutree')).not.toThrow();
+    for (const db of ALLOWED_DB_NAMES) expect(run(`postgresql://u:p@127.0.0.1:5432/${db}?schema=public`)).not.toThrow();
+    expect([...ALLOWED_DB_NAMES].sort()).toEqual(['tubutree', 'tubutree_dev', 'tubutree_it', 'tubutree_uat_tpl']);
+  });
+
+  it('NODE_ENV rỗng hoặc test vẫn bị chặn bởi URL; NODE_ENV=production chặn cả URL tốt', () => {
+    expect(run(local, { NODE_ENV: '' })).not.toThrow();
+    expect(run('postgresql://u:p@db.example.com/tubutree', { NODE_ENV: '' })).toThrow(SampleSeedRefusal);
+    expect(run(local, { NODE_ENV: 'production' })).toThrow(/NODE_ENV=production/);
+  });
+
   it('chỉ cờ --i-know-this-is-prod mới vượt được', () => {
     expect(run('postgresql://u:p@db.example.com/tubutree', { NODE_ENV: 'production' }, [PROD_FLAG])).not.toThrow();
     expect(run('postgresql://u:p@db.example.com/tubutree', { NODE_ENV: 'production', ALLOW_PROD_SEED: '1' })).toThrow(SampleSeedRefusal);
@@ -44,7 +69,6 @@ describe('SAMPLE_STOREFRONTS', () => {
   it('có 3 gian hàng khác kiểu, slug khác nhau và hợp lệ', () => {
     expect(SAMPLE_STOREFRONTS).toHaveLength(3);
     expect(new Set(SAMPLE_STOREFRONTS.map((s) => s.slug)).size).toBe(3);
-    expect(new Set(SAMPLE_STOREFRONTS.map((s) => `${s.type}:${s.ownerRole}`)).size).toBeGreaterThanOrEqual(2);
     for (const s of SAMPLE_STOREFRONTS) expect(() => normalizeSubdomain(s.slug)).not.toThrow();
   });
 

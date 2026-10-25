@@ -134,13 +134,16 @@ export class StorefrontService {
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
     const { owner, ...rest } = sf;
     const subdomainEnabled = await isStorefrontSubdomainEnabled(this.config);
-    const ownerState = ownerStorefrontState(sf, owner, await this.visibilityOptions());
+    const visibility = await this.visibilityOptions();
+    const ownerState = ownerStorefrontState(sf, owner, visibility);
     // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
     return {
       ...withSubdomainFlag(rest, subdomainEnabled),
       // Nút Chia sẻ của builder dựng link /s/<slug>?ref=<mã> từ đây, cùng cách trang công khai trả mã (SELLER-4).
       referralCode: owner?.referralCode ?? null,
       approved: isStorefrontApproved(sf),
+      // Cờ duyệt bật và chưa được duyệt: đăng xong còn chờ Tubu. Đã duyệt hoặc cờ tắt thì đăng lại là lên ngay.
+      needsApproval: visibility.requireApproval && !isStorefrontApproved(sf),
       // Màn không tự suy trạng thái từ isPublished: đã đăng chưa chắc khách đã thấy (còn chờ duyệt lần đầu).
       status: ownerState.status,
       // Chủ vẫn xem và sửa được gian hàng đang ẩn với khách; dòng này nói vì sao.
@@ -291,8 +294,9 @@ export class StorefrontService {
     // Huy hiệu bậc CHỈ cho gian hàng CTV (bậc tính theo doanh số cá nhân — MERCHANT/BRAND không
     // có khái niệm này). CHỈ trả tên+icon (getPublicTier), không lộ doanh thu/bonusPct thật cho
     // khách xem gian hàng.
+    // Gian hàng mẫu không mang nhãn tin cậy nào (bậc, duyệt, đối tác, kho): chỉ là minh hoạ, không phải người bán thật.
     const ownerTier =
-      sf.type === 'CTV' && sf.ownerUserId ? await this.affiliate.getPublicTier(sf.ownerUserId) : null;
+      !sf.isSample && sf.type === 'CTV' && sf.ownerUserId ? await this.affiliate.getPublicTier(sf.ownerUserId) : null;
     return {
       id: sf.id,
       slug: sf.slug,
@@ -301,10 +305,10 @@ export class StorefrontService {
       ownerTier,
       ...withSubdomainFlag({ subdomain: sf.subdomain, customDomain: sf.customDomain }, await isStorefrontSubdomainEnabled(this.config)),
       type: sf.type,
-      isPartner: isPartnerStore(sf),
+      isPartner: !sf.isSample && isPartnerStore(sf),
       isSample: sf.isSample,
       // Tick xanh và nhãn "CTV tuyển chọn" chỉ dành cho gian hàng admin đã duyệt, dù cờ duyệt lần đầu bật hay tắt.
-      approved: isStorefrontApproved(sf),
+      approved: !sf.isSample && isStorefrontApproved(sf),
       title: sf.title,
       headerNote: sf.headerNote,
       avatarUrl: publicStorefrontImage(sf.id, 'avatar', sf.avatarUrl),
@@ -312,7 +316,7 @@ export class StorefrontService {
       theme: sf.theme,
       themeColor: sf.themeColor ?? '#16a34a',
       // Kho gửi hàng chỉ có ở gian hàng đối tác tự giao; gian hàng CTV có thể còn dữ liệu cũ nhập nhầm (SELLER-8).
-      ...(isPartnerStore(sf)
+      ...(!sf.isSample && isPartnerStore(sf)
         ? {
             warehouseAddress: sf.warehouseAddress,
             warehouseCity: sf.warehouseCity,

@@ -226,6 +226,14 @@ describe('cổng đối tác /merchant — khung trang (DS v2)', () => {
     expect(root.querySelector('a[href="/dai-ly"]')?.textContent).toBe('Đăng ký đại lý');
   });
 
+  it('đăng nhập đủ quyền nhưng chưa có dữ liệu gian hàng: trạng thái trống có lời giải thích, không trang trắng', async () => {
+    mocks.store = null;
+    const root = await mount();
+    const empty = root.querySelector('[data-testid="merchant-empty"]')!;
+    expect(empty.textContent).toContain('Chưa có gian hàng để quản lý');
+    expect(empty.textContent).toContain('Cộng tác viên');
+  });
+
   it('thẻ số liệu đọc tổng từ meta; huy hiệu xuất bản theo token success, chưa xuất bản theo token warning', async () => {
     const root = await mount();
     const kpi = Array.from(root.querySelectorAll('p.text-2xl')).map((p) => p.textContent);

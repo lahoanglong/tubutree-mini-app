@@ -10,6 +10,8 @@ import {
   STOREFRONT_NOTE_MAX,
   STOREFRONT_REVIEW_PROMISE,
   signupGate,
+  storefrontNeedsReview,
+  storefrontPublishCopy,
   validateStorefrontInfo,
 } from '@tubutree/app-core/storefront-signup';
 import {
@@ -151,7 +153,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
       <Card>
         <p className="mb-2.5 text-sm text-stone-600">{SIGNUP_COPY.conditionsIntro}</p>
         <ul className="flex flex-col gap-2">
-          {SIGNUP_COPY.conditions.map((c) => (
+          {[...SIGNUP_COPY.conditions, ...(!sf || storefrontNeedsReview(sf) ? [SIGNUP_COPY.reviewCondition] : [])].map((c) => (
             <li key={c} className="flex items-start gap-2 text-sm text-stone-900">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-forest-700" aria-hidden="true" />
               {c}
@@ -376,6 +378,8 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const copy = storefrontPublishCopy(sf);
+  const needsReview = storefrontNeedsReview(sf);
   const submitMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
     onSuccess: async () => {
@@ -390,18 +394,20 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
     <>
       <p className="text-sm text-stone-600">{SIGNUP_COPY.reviewIntro}</p>
       <StorefrontPreview sf={sf} />
-      <Card>
-        <p className="text-sm font-semibold text-stone-900">{STOREFRONT_REVIEW_PROMISE}</p>
-      </Card>
+      {needsReview && (
+        <Card>
+          <p className="text-sm font-semibold text-stone-900">{STOREFRONT_REVIEW_PROMISE}</p>
+        </Card>
+      )}
       <div role="status" aria-live="polite">
-        {done && <p className="text-sm font-medium text-success-fg">{SIGNUP_COPY.submitted}</p>}
+        {done && <p className="text-sm font-medium text-success-fg">{copy.done}</p>}
       </div>
       {error && (
         <p role="alert" className={ui.error}>
           {error}
         </p>
       )}
-      <StepBar onBack={onBack} next={{ label: SIGNUP_COPY.submit, loading: submitMut.isPending, onPress: () => submitMut.mutate() }} />
+      <StepBar onBack={onBack} next={{ label: copy.button, loading: submitMut.isPending, onPress: () => submitMut.mutate() }} />
     </>
   );
 }

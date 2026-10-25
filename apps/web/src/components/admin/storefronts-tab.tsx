@@ -30,6 +30,7 @@ const errorText = (e: unknown) => (e instanceof ApiError || e instanceof Error ?
 function StatusBadges({ row }: { row: AdminStorefrontRow }) {
   return (
     <>
+      {row.isSample && <ToneBadge tone="warning">Mẫu</ToneBadge>}
       {row.takenDownAt ? (
         <ToneBadge tone="danger">Đã gỡ đăng</ToneBadge>
       ) : row.isPublished ? (

@@ -111,11 +111,11 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
 
     await page.goto('/profile');
 
-    await expect(page.getByText('Mở gian hàng & nhận hoa hồng', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Cộng tác viên', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Quản lý nhãn hàng')).toHaveCount(0);
     expect(api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
     expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
-    await page.getByText('Mở gian hàng & nhận hoa hồng', { exact: true }).click();
+    await page.getByText('Cộng tác viên', { exact: true }).click();
 
     // Dashboard CTV: bậc theo doanh số đã chốt (không còn "+X% bonus").
     await expect(page.getByText('CTV Đồng')).toBeVisible();

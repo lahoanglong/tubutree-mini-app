@@ -21,6 +21,20 @@ const labels = (menu: AccountMenuGroup[], group: string) => menu.find((g) => g.g
 const all = (menu: AccountMenuGroup[]) => menu.flatMap((g) => g.items);
 
 describe('nhóm menu hub tài khoản', () => {
+  it('CTV và đại lý thấy "Cộng tác viên" (bảng điều khiển), không còn lời mời mở gian hàng', () => {
+    for (const role of ['AFFILIATE', 'DEALER']) {
+      const items = buildAccountMenu(ctx({ role })).find((g) => g.group === 'Hợp tác')!.items;
+      const entry = items.find((i) => i.to === '/ctv')!;
+      expect(entry.label).toBe('Cộng tác viên');
+      expect(items.map((i) => i.label)).not.toContain('Mở gian hàng Cộng tác viên');
+    }
+  });
+
+  it('lời mời mở gian hàng không nhắc hoa hồng (chính sách Zalo)', () => {
+    const entry = buildAccountMenu(ctx()).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/ctv')!;
+    expect(`${entry.label} ${entry.hint}`).not.toMatch(/hoa hồng/i);
+  });
+
   it('bốn nhóm theo thứ tự Mua sắm, Tài sản, Hợp tác, Khác; khách thường không có nhóm Công việc', () => {
     expect(buildAccountMenu(ctx()).map((g) => g.group)).toEqual(['Mua sắm', 'Tài sản', 'Hợp tác', 'Khác']);
   });
@@ -29,7 +43,7 @@ describe('nhóm menu hub tài khoản', () => {
     const m = buildAccountMenu(ctx());
     expect(labels(m, 'Mua sắm')).toEqual(['Mua chung nhóm', 'Đổi rác lấy quà', 'Sản phẩm yêu thích', 'Sổ địa chỉ', 'Cộng đồng hỏi đáp']);
     expect(labels(m, 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu']);
-    expect(labels(m, 'Hợp tác')).toEqual(['Mở gian hàng & nhận hoa hồng', 'Đăng ký đại lý']);
+    expect(labels(m, 'Hợp tác')).toEqual(['Mở gian hàng Cộng tác viên', 'Đăng ký đại lý']);
     expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
   });
 
@@ -88,7 +102,7 @@ describe('mục theo cờ', () => {
 
   it('Hoàn tiền sàn ngoài chỉ hiện khi bật CASHBACK_ENABLED, giữa mục mở gian hàng và đại lý', () => {
     expect(labels(buildAccountMenu(ctx()), 'Hợp tác')).not.toContain('Hoàn tiền sàn ngoài');
-    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Mở gian hàng & nhận hoa hồng', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
+    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Mở gian hàng Cộng tác viên', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
   });
 
   it('khi cờ tắt, không nhãn nào nhắc "sàn ngoài"', () => {

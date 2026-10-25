@@ -8,6 +8,8 @@ import type { PrismaClient, StorefrontType, UserRole } from '@prisma/client';
 
 export const PROD_FLAG = '--i-know-this-is-prod';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+/** Tên DB máy thử đang dùng trong repo: dev compose (`tubutree`), race test (`tubutree_it`), và hai tên dành cho môi trường dev/UAT. */
+export const ALLOWED_DB_NAMES: ReadonlySet<string> = new Set(['tubutree', 'tubutree_it', 'tubutree_dev', 'tubutree_uat_tpl']);
 
 export interface SampleStorefrontDef {
   slug: string;
@@ -18,7 +20,6 @@ export interface SampleStorefrontDef {
   ownerRole: UserRole;
   ownerName: string;
   isPartner: boolean;
-  warehouseCity?: string;
   collections: { title: string; items: { productSlug: string; note?: string }[] }[];
 }
 
@@ -55,13 +56,12 @@ export const SAMPLE_STOREFRONTS: SampleStorefrontDef[] = [
   {
     slug: 'bepxanhmay',
     title: 'Bếp Xanh Nhà Mây',
-    headerNote: 'Cửa hàng đại lý đồ tẩy rửa sinh học, giao nhanh trong thành phố. Ghé cửa hàng hoặc đặt ngay trên đây.',
+    headerNote: 'Đồ tẩy rửa sinh học dịu tay cho bếp và nhà cửa, mình dùng thật rồi mới giới thiệu.',
     themeColor: '#0d9488',
-    type: 'MERCHANT',
-    ownerRole: 'DEALER',
-    ownerName: 'Cửa hàng Bếp Xanh Nhà Mây',
-    isPartner: true,
-    warehouseCity: 'Đà Nẵng',
+    type: 'CTV',
+    ownerRole: 'AFFILIATE',
+    ownerName: 'Bếp Xanh Nhà Mây',
+    isPartner: false,
     collections: [
       {
         title: 'Bếp sạch dịu tay',
@@ -132,13 +132,23 @@ export function assertSampleSeedAllowed(opts: { env: NodeJS.ProcessEnv; database
   }
   if (!opts.databaseUrl) throw new SampleSeedRefusal('Từ chối chạy: không tìm thấy DATABASE_URL nên không biết đang ghi vào đâu.');
   let host: string;
+  let url: URL;
   try {
-    host = new URL(opts.databaseUrl).hostname.toLowerCase();
+    url = new URL(opts.databaseUrl);
+    host = url.hostname.toLowerCase();
   } catch {
     throw new SampleSeedRefusal('Từ chối chạy: DATABASE_URL không đọc được nên không xác nhận được đây là máy thử.');
   }
+  // `?host=` và `?hostaddr=` ghi đè máy chủ trong URL (libpq/Prisma), nên URL trông như localhost vẫn có thể nối ra ngoài.
+  if (url.searchParams.has('host') || url.searchParams.has('hostaddr')) {
+    throw new SampleSeedRefusal(`Từ chối chạy: DATABASE_URL có tham số host/hostaddr nên không xác nhận được máy chủ thật. Muốn đưa lên PROD thì thêm cờ ${PROD_FLAG}.`);
+  }
   if (!LOCAL_HOSTS.has(host)) {
     throw new SampleSeedRefusal(`Từ chối chạy: DATABASE_URL trỏ tới "${host}", không phải localhost hoặc 127.0.0.1. Gian hàng mẫu chỉ dành cho máy thử; muốn đưa lên PROD thì thêm cờ ${PROD_FLAG}.`);
+  }
+  const dbName = decodeURIComponent(url.pathname.replace(/^\//, ''));
+  if (!ALLOWED_DB_NAMES.has(dbName)) {
+    throw new SampleSeedRefusal(`Từ chối chạy: tên DB "${dbName}" không nằm trong danh sách máy thử (${[...ALLOWED_DB_NAMES].join(', ')}). Muốn đưa lên PROD thì thêm cờ ${PROD_FLAG}.`);
   }
 }
 
@@ -191,7 +201,6 @@ export async function seedSampleStorefronts(db: Db, defs: readonly SampleStorefr
         title: def.title,
         headerNote: def.headerNote,
         themeColor: def.themeColor,
-        warehouseCity: def.warehouseCity ?? null,
         isPublished: true,
         publishedAt: now,
         approvedAt: now,
@@ -230,23 +239,29 @@ export interface SampleRemoveResult {
   keptOwners: string[];
 }
 
-/** Gỡ mọi gian hàng đánh dấu mẫu và tài khoản chủ do script tạo; tài khoản đã phát sinh dữ liệu khác (khoá ngoại) được giữ lại và báo ra. */
-export async function removeSampleStorefronts(db: Pick<PrismaClient, 'user' | 'storefront'>): Promise<SampleRemoveResult> {
-  const samples = await db.storefront.findMany({ where: { isSample: true }, select: { id: true, ownerUserId: true } });
-  let storefronts = 0;
-  for (const sf of samples) {
-    await db.storefront.delete({ where: { id: sf.id } });
-    storefronts++;
-  }
-  const owners = await db.user.findMany({ where: { metadata: { path: ['sampleStorefront'], equals: true } }, select: { id: true, referralCode: true } });
+/**
+ * Gỡ mọi gian hàng đánh dấu mẫu và tài khoản chủ do script tạo. Phần xoá gian hàng + hạ chủ về khách nằm trong một giao dịch: nếu
+ * dừng giữa chừng thì không còn chủ mẫu nào giữ vai CTV/đại lý với mã giới thiệu cũ. Sau đó mới thử xoá tài khoản; tài khoản đã
+ * phát sinh dữ liệu khác (khoá ngoại) được giữ lại ở vai khách, mã giới thiệu đã đổi, và báo ra.
+ */
+export async function removeSampleStorefronts(db: Pick<PrismaClient, 'user' | 'storefront' | '$transaction'>): Promise<SampleRemoveResult> {
+  const { storefronts, ownerIds } = await db.$transaction(async (tx) => {
+    const samples = await tx.storefront.findMany({ where: { isSample: true }, select: { id: true } });
+    for (const sf of samples) await tx.storefront.delete({ where: { id: sf.id } });
+    const owners = await tx.user.findMany({ where: { metadata: { path: ['sampleStorefront'], equals: true } }, select: { id: true } });
+    for (const u of owners) {
+      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', referralCode: `SAMPLE-GONE-${u.id.slice(0, 8).toUpperCase()}` } });
+    }
+    return { storefronts: samples.length, ownerIds: owners.map((u) => u.id) };
+  });
   let removedOwners = 0;
   const keptOwners: string[] = [];
-  for (const u of owners) {
+  for (const id of ownerIds) {
     try {
-      await db.user.delete({ where: { id: u.id } });
+      await db.user.delete({ where: { id } });
       removedOwners++;
     } catch {
-      keptOwners.push(u.referralCode);
+      keptOwners.push(id);
     }
   }
   return { storefronts, owners: removedOwners, keptOwners };

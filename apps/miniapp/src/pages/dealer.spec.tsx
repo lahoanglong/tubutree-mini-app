@@ -165,7 +165,7 @@ describe('DealerPage bảng giá — đặt trước hàng chưa về (C-081)', 
 });
 
 const APPROVED_ME = {
-  isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000,
+  isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000, hasPartnerStorefront: true,
 };
 const h1Count = () => screen.queryAllByRole('heading', { level: 1 }).length;
 const openTab = (label: string) => fireEvent.click(screen.getByText(label, { exact: true }));
@@ -594,5 +594,12 @@ describe('DealerPage — điều kiện, nhãn, gian hàng đối tác (B-86, B-
     const note = await screen.findByTestId('partner-storefront-note');
     expect(note).toHaveTextContent('Gian hàng đối tác');
     expect(note.querySelector('a')).toBeNull();
+  });
+
+  it('đại lý chưa có gian hàng đối tác: không hiện thẻ', async () => {
+    mocks.getDealerMe.mockResolvedValue({ ...APPROVED_ME, hasPartnerStorefront: false });
+    renderPage();
+    await screen.findByText('Bạc');
+    expect(screen.queryByTestId('partner-storefront-note')).toBeNull();
   });
 });

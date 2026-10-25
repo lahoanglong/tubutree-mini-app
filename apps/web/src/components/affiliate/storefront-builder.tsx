@@ -13,7 +13,7 @@ import {
   type PickerProduct,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
-import { STOREFRONT_REVIEW_PROMISE, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
+import { STOREFRONT_REVIEW_PROMISE, storefrontPublishCopy, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
@@ -92,6 +92,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const view = storefrontStatusView(sf);
+  const publishCopy = storefrontPublishCopy(sf);
   const [editingCol, setEditingCol] = useState<string | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<string | null>(null);
@@ -115,7 +116,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
     onSuccess: () => {
-      notify('Đã gửi gian hàng. Tubu sẽ thông báo khi duyệt xong.');
+      notify(publishCopy.done);
       void refresh();
     },
     onError: fail,
@@ -365,7 +366,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
             </button>
           ) : (
             <button type="button" className={`${ui.btnPrimary} flex-1`} disabled={itemCount === 0 || publishMut.isPending} onClick={() => publishMut.mutate()}>
-              {publishMut.isPending ? 'Đang gửi…' : 'Gửi duyệt'}
+              {publishMut.isPending ? 'Đang gửi…' : publishCopy.button}
             </button>
           )}
         </div>
@@ -408,7 +409,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         title="Xem trước"
-        description={view.code === 'DRAFT' ? 'Gian hàng chưa gửi duyệt nên khách chưa thấy. Đây là bản xem trước của bạn.' : STOREFRONT_REVIEW_PROMISE}
+        description={view.code === 'DRAFT' ? publishCopy.previewHint : STOREFRONT_REVIEW_PROMISE}
       >
         <StorefrontPreview sf={sf} />
         <button type="button" className={`${ui.btnSecondary} mt-3 w-full`} onClick={() => setPreviewOpen(false)}>

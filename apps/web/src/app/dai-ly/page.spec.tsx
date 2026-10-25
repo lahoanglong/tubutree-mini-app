@@ -63,7 +63,7 @@ vi.mock('@/lib/core-http', () => ({
 
 import DealerPage from './page';
 
-const APPROVED = { isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000 };
+const APPROVED = { isDealer: true, status: 'APPROVED', tier: { id: 't1', name: 'Bạc', creditLimit: 50_000_000 }, currentDebt: 1_000_000, hasPartnerStorefront: true };
 const row = (over: Record<string, unknown> = {}) => ({
   variationId: 'v1', sku: 'POLANG-500', product: 'Nước rửa chén', brand: 'Pơ Lang', variation: '500ml',
   retailPrice: 100_000, dealerPrice: 80_000, discountPct: 20, stock: 5, ...over,
@@ -186,6 +186,13 @@ describe('/dai-ly — khách, phiên và trạng thái hồ sơ, luôn đúng m�
     const card = c.querySelector('[data-testid="partner-storefront-note"]')!;
     expect(card.textContent).toContain('Gian hàng đối tác');
     expect(card.querySelector('a')?.getAttribute('href')).toBe('/merchant');
+  });
+
+  it('đại lý chưa có gian hàng đối tác: không hiện thẻ Gian hàng đối tác', async () => {
+    setup({ '/dealer/me': { ...APPROVED, hasPartnerStorefront: false } });
+    const c = await mount();
+    expect(c.textContent).toContain('Bạc');
+    expect(c.querySelector('[data-testid="partner-storefront-note"]')).toBeNull();
   });
 
   it('đã duyệt (APPROVED hoặc isDealer): hub với bậc, công nợ, hạn mức; ?tab= chọn tab', async () => {

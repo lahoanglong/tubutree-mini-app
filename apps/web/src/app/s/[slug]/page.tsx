@@ -44,6 +44,7 @@ export async function generateMetadata({
     alternates: { canonical },
     openGraph: { title, description, url: canonical, type: 'website' },
     twitter: { card: 'summary_large_image', title, description },
+    ...(sf.isSample ? { robots: { index: false, follow: false } } : {}),
   };
 }
 

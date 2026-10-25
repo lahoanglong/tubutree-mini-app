@@ -8,6 +8,8 @@ import {
   STOREFRONT_NOTE_MAX,
   STOREFRONT_REVIEW_PROMISE,
   signupGate,
+  storefrontNeedsReview,
+  storefrontPublishCopy,
   validateStorefrontInfo,
 } from '@tubutree/app-core/storefront-signup';
 import {
@@ -117,7 +119,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
       <Card style={SECTION}>
         <Text variant="body-sm" tone="secondary" as="p" style={{ margin: '0 0 10px' }}>{SIGNUP_COPY.conditionsIntro}</Text>
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {SIGNUP_COPY.conditions.map((c) => (
+          {[...SIGNUP_COPY.conditions, ...(!sf || storefrontNeedsReview(sf) ? [SIGNUP_COPY.reviewCondition] : [])].map((c) => (
             <li key={c} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <Icon icon={Check} size="sm" tone="brand" style={{ marginTop: 2, flexShrink: 0 }} />
               <Text variant="body-sm">{c}</Text>
@@ -311,11 +313,13 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
 function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
+  const copy = storefrontPublishCopy(sf);
+  const needsReview = storefrontNeedsReview(sf);
   const submitMut = useMutation({
     mutationFn: () => publishStorefront(true),
     onSuccess: async () => {
       haptic('medium');
-      openSnackbar({ text: SIGNUP_COPY.submitted, type: 'success' });
+      openSnackbar({ text: copy.done, type: 'success' });
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
     },
@@ -328,10 +332,12 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
       <div style={SECTION}>
         <StorefrontPreview sf={sf} />
       </div>
-      <Card style={SECTION}>
-        <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{STOREFRONT_REVIEW_PROMISE}</Text>
-      </Card>
-      <StepBar onBack={onBack} next={{ label: SIGNUP_COPY.submit, loading: submitMut.isPending, onPress: () => submitMut.mutate() }} />
+      {needsReview && (
+        <Card style={SECTION}>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{STOREFRONT_REVIEW_PROMISE}</Text>
+        </Card>
+      )}
+      <StepBar onBack={onBack} next={{ label: copy.button, loading: submitMut.isPending, onPress: () => submitMut.mutate() }} />
     </>
   );
 }

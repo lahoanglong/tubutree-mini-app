@@ -306,10 +306,12 @@ function DealerHub() {
         </div>
       </div>
 
+      {me?.hasPartnerStorefront && (
       <div style={{ margin: '0 16px 12px', padding: 12, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)' }} data-testid="partner-storefront-note">
         <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{PARTNER_STOREFRONT_TITLE}</Text>
         <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 2 }}>{PARTNER_STOREFRONT_WEB_HINT}</Text>
       </div>
+      )}
 
       <div style={{ margin: '0 16px 12px' }}>
         <SegmentedTabs items={TABS} value={tab} onChange={(key) => setTab(key as Tab)} />

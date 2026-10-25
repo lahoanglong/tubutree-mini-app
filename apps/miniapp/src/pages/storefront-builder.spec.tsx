@@ -316,7 +316,24 @@ describe('Đăng gian hàng và xem trước', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Gửi duyệt' }));
     await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi gian hàng. Tubu sẽ thông báo khi duyệt xong.', type: 'success' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi duyệt. Tubu sẽ thông báo khi xong.', type: 'success' }));
+  });
+
+  it('gian hàng đã duyệt từ trước (vừa gỡ đăng): nút "Đăng lại", không hứa duyệt', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ status: 'DRAFT', approved: true, needsApproval: false }));
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'Gửi duyệt' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng lại' }));
+    await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đăng lại gian hàng. Khách xem được ngay.', type: 'success' }));
+  });
+
+  it('cờ duyệt tắt, chưa từng duyệt: nút "Đăng gian hàng", không nhắc gửi duyệt', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ status: 'DRAFT', approved: false, needsApproval: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng gian hàng' }));
+    await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
+    expect(screen.queryByRole('button', { name: 'Gửi duyệt' })).toBeNull();
   });
 
   it('đang đăng: nút "Gửi duyệt" báo bận và bấm lại không đăng lần hai', async () => {

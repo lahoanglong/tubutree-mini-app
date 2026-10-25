@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { myStorefrontQuery } from '@tubutree/app-core/queries/storefront';
+import { shouldStartSignupWizard } from '@tubutree/app-core/storefront-signup';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -34,6 +35,8 @@ export default function CtvStorefrontPage() {
   // retry: false để 404 (chưa có gian hàng) không bị thử lại; lỗi khác có nút Thử lại.
   const sfQ = useQuery({ ...myStorefrontQuery(coreHttp), enabled: phase === 'authenticated', retry: false });
   const [fullEditor, setFullEditor] = useState(false);
+  // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
+  const wizardRef = useRef<boolean | null>(null);
 
   if (phase === 'loading') {
     return (
@@ -73,8 +76,9 @@ export default function CtvStorefrontPage() {
     );
   }
   const sf = sfQ.data ?? null;
-  // Luồng 4 bước dành cho gian hàng chưa gửi duyệt; API cũ chưa trả `status` thì giữ trình dựng như trước.
-  if (!sf || (sf.status === 'DRAFT' && !fullEditor)) {
+  // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
+  wizardRef.current ??= shouldStartSignupWizard(sf);
+  if (!sf || (wizardRef.current && sf.status === 'DRAFT' && !fullEditor)) {
     return (
       <Shell>
         <StorefrontSignupFlow sf={sf} onOpenEditor={() => setFullEditor(true)} />

@@ -26,6 +26,7 @@ const LIST_SELECT = {
   title: true,
   type: true,
   isPartner: true,
+  isSample: true,
   isPublished: true,
   publishedAt: true,
   approvedAt: true,

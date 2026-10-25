@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   restore: vi.fn(),
   authStatus: 'authenticated' as 'authenticated' | 'idle' | 'error' | 'loading',
   notifications: [] as { status: string }[],
+  role: 'CUSTOMER',
   getPublicConfig: vi.fn(async () => ({})),
   chatSummary: vi.fn(),
 }));
@@ -42,7 +43,7 @@ vi.mock('../store/auth', () => {
   const state = () => ({
     status: mocks.authStatus,
     error: null,
-    user: { fullName: 'Lan', role: 'CUSTOMER', referralCode: 'LAN1', pointsBalance: 100, walletBalance: 40000, avatarUrl: null },
+    user: { fullName: 'Lan', role: mocks.role, referralCode: 'LAN1', pointsBalance: 100, walletBalance: 40000, avatarUrl: null },
     logout: vi.fn(),
     restore: mocks.restore,
   });
@@ -64,6 +65,7 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     vi.clearAllMocks();
     mocks.authStatus = 'authenticated';
     mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
   });
 
   it('có đúng ba số dư: Điểm Xanh (tổng hai lô), Ví Tubu, Mã giảm giá — không còn ô xu (C-047, PD-3)', async () => {
@@ -75,6 +77,17 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     expect(balances.map((b) => (b.getAttribute('aria-label') ?? '').split(':')[0])).toEqual(['Điểm Xanh', 'Ví Tubu', 'Mã giảm giá']);
     expect(screen.queryByText(/TubuXu/)).toBeNull();
     expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
+  });
+
+  it('khách thường thấy lời mời "Mở gian hàng Cộng tác viên" (không nhắc hoa hồng); CTV thấy "Cộng tác viên"', async () => {
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Mở gian hàng Cộng tác viên')).toBeInTheDocument();
+    expect(screen.queryByText(/hoa hồng/i)).toBeNull();
+    unmount();
+    mocks.role = 'AFFILIATE';
+    renderPage();
+    expect(await screen.findByText('Cộng tác viên')).toBeInTheDocument();
+    expect(screen.queryByText('Mở gian hàng Cộng tác viên')).toBeNull();
   });
 
   it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {

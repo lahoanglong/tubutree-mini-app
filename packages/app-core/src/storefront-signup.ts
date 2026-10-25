@@ -10,8 +10,17 @@ export const STOREFRONT_REVIEW_PROMISE = 'Tubu duyệt trong 1 ngày làm việc
 export const SAMPLE_STOREFRONT_LABEL = 'Gian hàng mẫu';
 export const SAMPLE_STOREFRONT_NOTE = 'Đây là gian hàng mẫu để giới thiệu cách hoạt động, không phải người bán thật.';
 
-export const OPEN_STOREFRONT_MENU_LABEL = 'Mở gian hàng & nhận hoa hồng';
-export const OPEN_STOREFRONT_MENU_HINT = 'Gian hàng riêng, chia sẻ link, nhận hoa hồng';
+export const OPEN_STOREFRONT_MENU_LABEL = 'Mở gian hàng Cộng tác viên';
+export const OPEN_STOREFRONT_MENU_HINT = 'Gian hàng riêng, chia sẻ link cho bạn bè';
+export const CTV_MENU_LABEL = 'Cộng tác viên';
+export const CTV_MENU_HINT = 'Bảng điều khiển, gian hàng, ví';
+
+/** Mục menu Cá nhân cho CTV: người đang là CTV/đại lý vào bảng điều khiển của họ; người chưa là CTV thấy lối đăng ký và mở gian hàng. */
+export function ctvMenuEntry(role: string | null | undefined): { label: string; hint: string } {
+  return role === 'AFFILIATE' || role === 'DEALER'
+    ? { label: CTV_MENU_LABEL, hint: CTV_MENU_HINT }
+    : { label: OPEN_STOREFRONT_MENU_LABEL, hint: OPEN_STOREFRONT_MENU_HINT };
+}
 export const OPEN_STOREFRONT_PROMPT = 'Bạn cũng muốn có gian hàng như này?';
 export const OPEN_STOREFRONT_CTA = 'Mở gian hàng';
 
@@ -30,8 +39,8 @@ export const SIGNUP_COPY = {
     'Là Cộng tác viên của Tubu Tree (đăng ký miễn phí).',
     'Đồng ý điều khoản hoa hồng và thuế khi đăng ký Cộng tác viên.',
     'Có ít nhất 1 sản phẩm trong gian hàng.',
-    'Gian hàng mới cần Tubu duyệt lần đầu trước khi khách xem được.',
   ],
+  reviewCondition: 'Gian hàng mới cần Tubu duyệt lần đầu trước khi khách xem được.',
   isCtv: 'Bạn đã là Cộng tác viên.',
   needsCtv: 'Bạn cần là Cộng tác viên trước khi mở gian hàng.',
   registerCta: 'Đăng ký làm Cộng tác viên',
@@ -61,6 +70,8 @@ export const SIGNUP_COPY = {
   reviewIntro: 'Khách sẽ thấy gian hàng như thế này.',
   submit: 'Gửi duyệt',
   submitted: 'Đã gửi duyệt. Tubu sẽ thông báo khi xong.',
+  publish: 'Đăng gian hàng',
+  published: 'Đã đăng gian hàng. Khách xem được ngay.',
   openFullEditor: 'Mở trình chỉnh sửa đầy đủ',
 } as const;
 
@@ -80,6 +91,38 @@ export function signupGate(me: { isAffiliate?: boolean; canRegister?: boolean; c
   if (me.isAffiliate && me.canOpenStorefront !== false) return 'READY';
   if (me.canRegister !== false) return 'NEEDS_CTV';
   return 'CANNOT_BE_CTV';
+}
+
+/** Gian hàng này còn phải qua Tubu duyệt trước khi khách thấy? API trả `needsApproval`; API cũ thì suy từ `approved` (chưa duyệt = cần). */
+export function storefrontNeedsReview(sf: { needsApproval?: boolean; approved?: boolean }): boolean {
+  return sf.needsApproval ?? sf.approved !== true;
+}
+
+/**
+ * Có đưa chủ vào luồng 4 bước không. Gian hàng chưa có hoặc đang nháp và còn cần duyệt: có. Đã duyệt từ trước hoặc cờ duyệt tắt: chỉ khi
+ * gian hàng còn trống (mới tạo); đã có sản phẩm (ví dụ vừa bấm Gỡ đăng) thì vào trình dựng và đăng lại ngay, không đi lại 4 bước.
+ */
+export function shouldStartSignupWizard(
+  sf: { status?: StorefrontStatusCode; needsApproval?: boolean; approved?: boolean; collections: { items: unknown[] }[] } | null | undefined,
+): boolean {
+  if (!sf) return true;
+  // API cũ chưa trả `status`: giữ trình dựng như trước.
+  if (sf.status !== 'DRAFT') return false;
+  if (storefrontNeedsReview(sf)) return true;
+  return sf.collections.every((c) => c.items.length === 0);
+}
+
+/** Chữ nút đăng và lời báo theo việc gian hàng có phải qua duyệt không: không hứa "Tubu duyệt" khi đăng lại là lên ngay. */
+export function storefrontPublishCopy(sf: { needsApproval?: boolean; approved?: boolean }): { button: string; done: string; previewHint: string } {
+  if (storefrontNeedsReview(sf)) {
+    return { button: SIGNUP_COPY.submit, done: SIGNUP_COPY.submitted, previewHint: 'Gian hàng chưa gửi duyệt nên khách chưa thấy. Đây là bản xem trước của bạn.' };
+  }
+  const republish = sf.approved === true;
+  return {
+    button: republish ? 'Đăng lại' : SIGNUP_COPY.publish,
+    done: republish ? 'Đã đăng lại gian hàng. Khách xem được ngay.' : SIGNUP_COPY.published,
+    previewHint: 'Gian hàng chưa đăng nên khách chưa thấy. Đây là bản xem trước của bạn.',
+  };
 }
 
 export interface StorefrontStatusView {
@@ -108,7 +151,10 @@ const STATUS_VIEWS: Record<StorefrontStatusCode, Omit<StorefrontStatusView, 'cod
  * Trạng thái hiển thị cho chủ. Ưu tiên `status` do API tính; thiếu (API cũ hơn app) thì suy từ isPublished như trước, coi đã đăng là
  * đang hiển thị vì không có thông tin nào nói ngược lại.
  */
-export function storefrontStatusView(sf: { status?: StorefrontStatusCode; isPublished: boolean }): StorefrontStatusView {
+export function storefrontStatusView(sf: { status?: StorefrontStatusCode; isPublished: boolean; needsApproval?: boolean; approved?: boolean }): StorefrontStatusView {
   const code: StorefrontStatusCode = sf.status ?? (sf.isPublished ? 'LIVE' : 'DRAFT');
+  if (code === 'DRAFT' && !storefrontNeedsReview(sf)) {
+    return { code, label: 'Chưa đăng, khách chưa thấy', tone: 'neutral', hint: 'Đăng gian hàng để khách xem được ngay.', canShare: false };
+  }
   return { code, ...STATUS_VIEWS[code] };
 }

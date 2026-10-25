@@ -43,6 +43,7 @@ function HubBody() {
         {me?.tier && <div className="mt-2 text-xs text-stone-100">Hạn mức: {formatVnd(me.tier.creditLimit)}</div>}
       </section>
 
+      {me?.hasPartnerStorefront && (
       <section data-testid="partner-storefront-note" className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-3">
         <h2 className="text-sm font-semibold text-stone-900">{PARTNER_STOREFRONT_TITLE}</h2>
         <p className="mt-0.5 text-xs text-stone-600">Quản lý sản phẩm, đơn và đối soát của gian hàng đối tác tại trang riêng.</p>
@@ -50,6 +51,7 @@ function HubBody() {
           Mở trang quản lý
         </Link>
       </section>
+      )}
 
       <div className="mt-3">
         <SegmentedTabs items={[...TABS]} value={tab} onChange={setTab} label="Mục của kênh đại lý" />

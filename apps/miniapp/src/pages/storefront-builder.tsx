@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,7 +12,7 @@ import {
   getQuests, claimQuest, getStorefrontStats,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
-import { STOREFRONT_REVIEW_PROMISE, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
+import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { getErrorMessage } from '../services/api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -61,6 +61,8 @@ function BuilderShell({ children, style }: { children: ReactNode; style?: CSSPro
 export default function StorefrontBuilderPage() {
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
   const [fullEditor, setFullEditor] = useState(false);
+  // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
+  const wizardRef = useRef<boolean | null>(null);
 
   if (sfQ.isLoading) {
     return (
@@ -80,8 +82,9 @@ export default function StorefrontBuilderPage() {
     );
   }
   const sf = sfQ.data ?? null;
-  // Luồng 4 bước dành cho gian hàng chưa gửi duyệt; API cũ chưa trả `status` thì giữ trình dựng như trước.
-  if (sf && (sf.status !== 'DRAFT' || fullEditor)) return <Builder sf={sf} />;
+  // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
+  wizardRef.current ??= shouldStartSignupWizard(sf);
+  if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) return <Builder sf={sf} />;
   return (
     <BuilderShell>
       <StorefrontSignupFlow sf={sf} onOpenEditor={() => setFullEditor(true)} />
@@ -118,6 +121,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const view = storefrontStatusView(sf);
+  const publishCopy = storefrontPublishCopy(sf);
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -141,7 +145,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(true),
-    onSuccess: () => { haptic('medium'); openSnackbar({ text: vi.storefront.published, type: 'success' }); void refresh(); },
+    onSuccess: () => { haptic('medium'); openSnackbar({ text: publishCopy.done, type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const unpublishMut = useMutation({
@@ -421,7 +425,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             </Button>
           ) : (
             <Button fullWidth disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
-              {vi.storefront.publish}
+              {publishCopy.button}
             </Button>
           )
         }
@@ -436,7 +440,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
       />
 
-      <BottomSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title={vi.storefront.preview} description={view.code === 'DRAFT' ? vi.storefront.previewDraftHint : STOREFRONT_REVIEW_PROMISE}>
+      <BottomSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title={vi.storefront.preview} description={view.code === 'DRAFT' ? publishCopy.previewHint : STOREFRONT_REVIEW_PROMISE}>
         <div style={SCROLL_BODY}>
           <StorefrontPreview sf={sf} />
           <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onPress={() => setPreviewOpen(false)}>{vi.common.close}</Button>
