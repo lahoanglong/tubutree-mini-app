@@ -28,6 +28,7 @@ describe('Pancake push race (real Postgres)', () => {
     isConfigured: jest.fn().mockReturnValue(true),
     createOrder: jest.fn(),
     searchOrders: jest.fn().mockResolvedValue([]),
+    resolveOrderTags: jest.fn().mockResolvedValue([]),
     getOrder: jest.fn(),
     updateOrder: jest.fn(),
   };

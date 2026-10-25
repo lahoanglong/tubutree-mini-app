@@ -171,6 +171,10 @@ export class PancakeClient {
     }
   }
 
+  invalidateOrderTags(): void {
+    this.tagCache = null;
+  }
+
   /**
    * Tên thẻ → thẻ có trong shop (khớp tên đã trim, không phân biệt hoa thường). Tên không có trong shop bị bỏ; không
    * đọc được danh sách thì trả [] — thẻ không bao giờ được làm hỏng việc đẩy đơn.

@@ -181,4 +181,13 @@ describe('PancakeClient.resolveOrderTags', () => {
     await expect(client.fetchOrderTags()).rejects.toThrow();
     await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([]);
   });
+
+  it('invalidateOrderTags → lần sau gọi lại GET', async () => {
+    const get = jest.fn().mockResolvedValue(shopTags);
+    const client = makeClient(get);
+    await client.resolveOrderTags(['MINIAPP']);
+    client.invalidateOrderTags();
+    await client.resolveOrderTags(['MINIAPP']);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
 });
