@@ -42,6 +42,8 @@ function prof(extra: Record<string, unknown> = {}) {
 describe('GameEconomyService.checkIn', () => {
   it('chuỗi liên tiếp +1 và thưởng 💧, KHÔNG cộng điểm Xanh', async () => {
     const p = prisma(prof());
+    // lần đọc đầu (ensure) trả bình 100, lần đọc sau khi ghi trả bình đã cộng
+    (p.gameProfile.findUnique as jest.Mock).mockResolvedValueOnce(prof()).mockResolvedValue({ totalSeeds: 110 });
     const svc = new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 10 }), sp(), analytics);
     const r = await svc.checkIn('u1');
     expect(r.streakDays).toBe(2);
@@ -254,8 +256,10 @@ describe('GameEconomyService.repairStreak', () => {
 describe('GameEconomyService.collectDew', () => {
   it('lần đầu trong ngày → +💧 và set lastDewAt', async () => {
     const p = prisma(prof({ lastDewAt: null }));
+    (p.gameProfile.findUnique as jest.Mock).mockResolvedValueOnce(prof({ lastDewAt: null })).mockResolvedValue({ totalSeeds: 115 });
     const r = await new GameEconomyService(p, cfg({ 'game.dew_seeds': 15 }), sp(), analytics).collectDew('u1');
     expect(r.seedsEarned).toBe(15);
+    expect(r.totalSeeds).toBe(115);
   });
   it('lần 2 trong ngày → BadRequest', async () => {
     const p = prisma(prof({ lastDewAt: new Date() }));
@@ -280,5 +284,145 @@ describe('GameEconomyService.buyStreakFreeze', () => {
     (p.gameProfile.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
     await expect(new GameEconomyService(p, cfg({ 'game.streak_freeze_cost': 80 }), sp(), analytics).buyStreakFreeze('u1'))
       .rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+/**
+ * DB giả có ngữ nghĩa thật của các điều kiện ghi mà checkIn dựa vào (lastCheckInAt null hoặc trước hôm nay, streakDays,
+ * streakFreezes, brokenStreakAt, totalSeeds > cap) và của increment, để kiểm nhịp người mới mà không cần Postgres.
+ * Race thật chạy ở race suite (game-first-checkin.race.spec.ts).
+ */
+function fakeDb(initial: Record<string, unknown>) {
+  const state: Record<string, unknown> = { ...initial };
+  const gameProfile = {
+    findUnique: jest.fn(async () => ({ ...state })),
+    create: jest.fn(async () => ({ ...state })),
+    updateMany: jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      const last = state.lastCheckInAt as Date | null;
+      const or = where.OR as { lastCheckInAt: null | { lt: Date } }[] | undefined;
+      if (or && !or.some((c) => (c.lastCheckInAt === null ? last === null : last !== null && last < c.lastCheckInAt!.lt))) {
+        return { count: 0 };
+      }
+      for (const k of ['streakDays', 'streakFreezes'] as const) if (k in where && where[k] !== state[k]) return { count: 0 };
+      const gt = (where.totalSeeds as { gt?: number } | undefined)?.gt;
+      if (gt !== undefined) {
+        if ((state.totalSeeds as number) <= gt) return { count: 0 };
+        state.totalSeeds = data.totalSeeds;
+        return { count: 1 };
+      }
+      for (const [k, v] of Object.entries(data)) {
+        if (v && typeof v === 'object' && 'increment' in (v as object)) state[k] = (state[k] as number) + (v as { increment: number }).increment;
+        else state[k] = v;
+      }
+      return { count: 1 };
+    }),
+  };
+  return { prisma: { gameProfile } as unknown as PrismaService, state };
+}
+
+describe('GameEconomyService.checkIn — nhịp người mới', () => {
+  const never = (over: Record<string, unknown> = {}) =>
+    prof({ lastCheckInAt: null, streakDays: 0, longestStreak: 0, totalSeeds: 0, ...over });
+
+  it('lần điểm danh đầu: 15 + quà lần đầu 50 = 65 giọt, có ghi chú', async () => {
+    const { prisma: p, state } = fakeDb(never());
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.first_checkin_bonus': 50 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(65);
+    expect(r.totalSeeds).toBe(65);
+    expect(r.bonusNote).toContain('+50');
+    expect(state.totalSeeds).toBe(65);
+  });
+
+  it('quà lần đầu theo mặc định mã là 50 khi thiếu khoá', async () => {
+    const { prisma: p } = fakeDb(never());
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(65);
+  });
+
+  it('lần sau (đã từng điểm danh, hôm qua) KHÔNG có quà lần đầu', async () => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 0 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(15);
+    expect(r.bonusNote).toBe('');
+  });
+
+  it('quà lần đầu = 0 trong config → không cộng, không ghi chú', async () => {
+    const { prisma: p } = fakeDb(never());
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.first_checkin_bonus': 0 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(15);
+    expect(r.bonusNote).toBe('');
+  });
+
+  it('hai request điểm danh lần đầu cùng lúc → đúng một lần thắng, quà cộng một lần', async () => {
+    const { prisma: p, state } = fakeDb(never());
+    const svc = new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.first_checkin_bonus': 50 }), sp(), analytics);
+    const results = await Promise.allSettled([svc.checkIn('u1'), svc.checkIn('u1')]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const lost = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(lost.reason).toBeInstanceOf(BadRequestException);
+    expect(state.totalSeeds).toBe(65);
+  });
+
+  it.each([
+    [7, true],
+    [8, true],
+    [6, false],
+    [2, false],
+  ])('vắng %i ngày → quà quay lại có = %s (ngưỡng 7)', async (gap, expectBonus) => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 0, streakDays: 3, lastCheckInAt: new Date(Date.now() - gap * DAY) }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(expectBonus ? 75 : 15);
+    expect(r.bonusNote.includes('quay lại')).toBe(expectBonus);
+    expect(r.streakDays).toBe(1); // vắng nhiều ngày vẫn reset chuỗi, quà không phụ thuộc chuỗi
+  });
+
+  it('quà quay lại theo config (gap 10, 100 giọt): vắng 9 ngày không có, vắng 10 ngày có', async () => {
+    const conf = { 'game.daily_login_seeds': 15, 'game.comeback_gap_days': 10, 'game.comeback_seeds': 100 };
+    const a = fakeDb(prof({ totalSeeds: 0, lastCheckInAt: new Date(Date.now() - 9 * DAY) }));
+    expect((await new GameEconomyService(a.prisma, cfg(conf), sp(), analytics).checkIn('u1')).seedsEarned).toBe(15);
+    const b = fakeDb(prof({ totalSeeds: 0, lastCheckInAt: new Date(Date.now() - 10 * DAY) }));
+    expect((await new GameEconomyService(b.prisma, cfg(conf), sp(), analytics).checkIn('u1')).seedsEarned).toBe(115);
+  });
+
+  it('ngày thứ 7 của chuỗi lấy thưởng từ game.streak_7_bonus ({ seeds: 30 }), không phải số cứng', async () => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 0, streakDays: 6 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.streak_7_bonus': { seeds: 30 } }), sp(), analytics).checkIn('u1');
+    expect(r.streakDays).toBe(7);
+    expect(r.seedsEarned).toBe(45);
+    expect(r.bonusNote).toContain('+30');
+  });
+
+  it('seedsEarned là số thật vào bình: bình 1000 đang 990, +15 → trả 10 chứ không phải 15', async () => {
+    const { prisma: p, state } = fakeDb(prof({ totalSeeds: 990 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.tank_capacity': 1000 }), sp(), analytics).checkIn('u1');
+    expect(state.totalSeeds).toBe(1000);
+    expect(r.totalSeeds).toBe(1000);
+    expect(r.seedsEarned).toBe(10);
+  });
+
+  it('bình đã đầy → seedsEarned = 0, không âm', async () => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 1000 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.tank_capacity': 1000 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(0);
+  });
+});
+
+describe('GameEconomyService.collectDew — số nước thật', () => {
+  it('bình 500 đang 495, sương 15 → trả 5', async () => {
+    const { prisma: p, state } = fakeDb(prof({ totalSeeds: 495, lastDewAt: null }));
+    // fakeDb.updateMany xử lý lastDewAt như điểm danh: thêm điều kiện riêng cho dew
+    (p.gameProfile.updateMany as jest.Mock).mockImplementation(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+      const gt = (where.totalSeeds as { gt?: number } | undefined)?.gt;
+      if (gt !== undefined) {
+        if ((state.totalSeeds as number) <= gt) return { count: 0 };
+        state.totalSeeds = data.totalSeeds;
+        return { count: 1 };
+      }
+      state.totalSeeds = (state.totalSeeds as number) + (data.totalSeeds as { increment: number }).increment;
+      return { count: 1 };
+    });
+    const r = await new GameEconomyService(p, cfg({ 'game.dew_seeds': 15, 'game.tank_capacity': 500 }), sp(), analytics).collectDew('u1');
+    expect(r.totalSeeds).toBe(500);
+    expect(r.seedsEarned).toBe(5);
   });
 });

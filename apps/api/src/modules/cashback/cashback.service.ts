@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { CashbackProviderRegistry } from './providers/cashback-provider.registry';
 import type { NormalizedCashbackEvent } from './providers/cashback-provider.interface';
 import { CRON_TZ } from '../../common/cron-tz';
@@ -330,13 +330,14 @@ export class CashbackService {
             where: { id: tx.id, status: 'CONFIRMED' },
             data: { status: 'PAID', paidAt: new Date() },
           });
-          if (marked.count === 0) return false;
+          if (marked.count === 0) return 'none' as const;
           await t.user.update({
             where: { id: tx.userId },
             data: { cashbackPending: { decrement: tx.userReward } },
           });
+          let credited = tx.userReward > 0;
           if (tx.userReward > 0) {
-            await applyWalletDelta(t, {
+            const res = await creditWalletUnlessAnonymized(t, {
               userId: tx.userId,
               delta: tx.userReward,
               type: 'CASHBACK',
@@ -344,11 +345,18 @@ export class CashbackService {
               refId: tx.id,
               reason: 'Cashback hết thời gian giữ',
             });
+            // Tài khoản đã xoá thì khách đã đồng ý bỏ số dư Ví khi xoá; cashback chốt PAID mà không cộng để cron không quét lại mãi.
+            if (!res.credited) {
+              credited = false;
+              this.logger.error(
+                `Cashback ${tx.id} ${tx.userReward}đ: tài khoản ${tx.userId} đã ẩn danh từ ${res.anonymizedAt}, KHÔNG cộng Ví, kế toán xử lý tay.`,
+              );
+            }
           }
-          return true;
+          return credited ? ('credited' as const) : ('skipped' as const);
         });
         // Không có tiền vào Ví thì không báo "Hoàn tiền 0đ".
-        if (settled && tx.userReward > 0) {
+        if (settled === 'credited') {
           await this.notifications
             .notify(tx.userId, 'CASHBACK_PAID', { amount: tx.userReward.toLocaleString('vi-VN') })
             .catch((err) => this.logger.error(`Notify CASHBACK_PAID lỗi: ${err instanceof Error ? err.message : err}`));

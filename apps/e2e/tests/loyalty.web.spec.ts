@@ -92,8 +92,8 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
 });
 
 /**
- * Web khách: Ví Tubu (/tai-khoan/vi-tubu). Rút tiền phải gửi đúng POST /wallet/withdraw một lần dù bấm đúp,
- * kèm Idempotency-Key; sao kê tải thêm theo 20 dòng/trang.
+ * Web khách: Ví Tubu (/tai-khoan/vi-tubu). Không còn nút rút về ngân hàng (chính sách Zalo 4.5);
+ * sao kê tải thêm theo 20 dòng/trang, dòng rút cũ vẫn hiện nhãn lịch sử.
  */
 const WALLET_TXNS = [
   { id: 't1', delta: 50_000, balanceAfter: 1_250_000, type: 'CASHBACK', reason: null, orderId: null, createdAt: '2026-10-05T07:04:00Z' },
@@ -104,14 +104,13 @@ const WALLET_TXNS = [
 function mockWallet(api: MockApi) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
-  api.get('/me/wallet', { walletBalance: 1_250_000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 100_000, withdrawFee: 3_000 });
+  api.get('/me/wallet', { walletBalance: 1_250_000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
   api.get('/me/loyalty', { pointsBalance: 1681, pointsConvertedBalance: 119, tier: { id: 't1', name: 'Mầm Xanh', multiplier: 1, perks: [] }, tiers: TIERS, rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 } });
   api.get('/me/referral', { referralCode: 'AN123', successCount: 2, earnedPoints: 20, milestones: [{ count: 5, bonusPoints: 50 }], nextMilestone: { count: 5, bonusPoints: 50 } });
   api.get('/me/wallet/transactions', ({ call }) => {
     const page = Number(call.query.get('page') ?? 1);
     return { data: page === 1 ? WALLET_TXNS.slice(0, 2) : WALLET_TXNS.slice(2), meta: { page, limit: 2, total: 3 } };
   });
-  api.post('/wallet/withdraw', () => ({ ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 200_000, fee: 3_000, net: 197_000 }));
 }
 
 test.describe('Web khách: Ví Tubu', () => {
@@ -137,22 +136,13 @@ test.describe('Web khách: Ví Tubu', () => {
     await expect(page.getByText('Số dư 1.300.000đ')).toBeVisible();
   });
 
-  test('rút tiền: nhập đủ thông tin, bấm đúp chỉ gửi một POST kèm Idempotency-Key và đúng body', async ({ page, api }) => {
+  test('không còn nút hay sheet rút về ngân hàng, không gọi POST /wallet/withdraw', async ({ page, api }) => {
     mockWallet(api);
     await page.goto('/tai-khoan/vi-tubu');
-    await page.getByRole('button', { name: 'Rút ngân hàng' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Rút tiền về ngân hàng' });
-    await dialog.getByLabel('Số tiền rút').fill('200000');
-    await dialog.getByLabel('Tên ngân hàng').fill('Techcombank');
-    await dialog.getByLabel('Số tài khoản').fill('19031234567');
-    await dialog.getByLabel('Chủ tài khoản').fill('LA HOANG LONG');
-    await expect(dialog.getByText(/Thực nhận: 197\.000đ/)).toBeVisible();
-    await dialog.getByRole('button', { name: 'Rút 200.000đ' }).dblclick();
-    await expect(page.getByText('Đã gửi yêu cầu rút. Thực nhận 197.000đ trong 1-3 ngày làm việc.')).toBeVisible();
-    const posts = api.callsTo('POST', '/wallet/withdraw');
-    expect(posts).toHaveLength(1);
-    expect(posts[0]!.body).toEqual({ amount: 200_000, bankInfo: { bankName: 'Techcombank', accountNumber: '19031234567', accountName: 'LA HOANG LONG' } });
-    expect(posts[0]!.headers['idempotency-key']).toBeTruthy();
+    await expect(page.getByText('Ví Tubu (số dư khả dụng)')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Rút/ })).toHaveCount(0);
+    await expect(page.getByText('Dùng để trả tiền hàng ở bước thanh toán')).toBeVisible();
+    expect(api.callsTo('POST', '/wallet/withdraw')).toHaveLength(0);
   });
 
   test('khách chưa đăng nhập được mời đăng nhập, không gọi API ví', async ({ page, api }) => {
@@ -261,7 +251,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     api.get('/cashback/merchants', CASHBACK_MERCHANTS);
     api.get('/cashback/transactions', []);
-    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 123_000, commissionApproved: 0, commissionPending: 0, withdrawMin: 100_000, withdrawFee: 3_000 });
+    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 123_000, commissionApproved: 0, commissionPending: 0 });
     api.post('/cashback/click', () => ({ deeplink: 'https://example.com/aff/abc' }));
     await context.route('https://example.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<title>Sàn</title>' }));
     await page.goto('/hoan-tien');

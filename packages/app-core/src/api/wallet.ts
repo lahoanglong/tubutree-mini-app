@@ -5,8 +5,6 @@ export interface WalletSummary {
   cashbackPending: number;
   commissionApproved: number;
   commissionPending: number;
-  withdrawMin: number;
-  withdrawFee: number;
 }
 
 /** Một dòng sao kê Ví Tubu (sổ cái wallet_transactions). delta có dấu: + vào ví, − ra khỏi ví. */
@@ -25,18 +23,6 @@ export interface WalletTxnPage {
   meta: { page: number; limit: number; total: number };
 }
 
-export interface BankInfo {
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
 export const getWallet = (http: HttpClient) => http.get<WalletSummary>('/me/wallet');
 export const getWalletTransactions = (http: HttpClient, page: number, limit = 20) =>
   http.get<WalletTxnPage>('/me/wallet/transactions', { query: { page, limit } });
-export const withdraw = (http: HttpClient, amount: number, bankInfo: BankInfo, idempotencyKey: string) =>
-  http.post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
-    '/wallet/withdraw',
-    { amount, bankInfo },
-    { headers: { 'Idempotency-Key': idempotencyKey } },
-  );

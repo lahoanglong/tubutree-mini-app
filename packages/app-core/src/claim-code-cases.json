@@ -1,0 +1,376 @@
+{
+  "normalize": [
+    [
+      "SPXVN0123456789",
+      "SPXVN0123456789"
+    ],
+    [
+      "  spx-vn_0123456789 ",
+      "SPXVN0123456789"
+    ],
+    [
+      "SPX VN 0123 456789",
+      "SPXVN0123456789"
+    ],
+    [
+      "12345678",
+      "12345678"
+    ],
+    [
+      "1234567",
+      null
+    ],
+    [
+      "1234567890123456789012345678901",
+      null
+    ],
+    [
+      "123456789012345678901234567890",
+      "123456789012345678901234567890"
+    ],
+    [
+      "SPXVN0123456789!",
+      null
+    ],
+    [
+      "https://zalo.me/s/2070857098114207963",
+      null
+    ],
+    [
+      "",
+      null
+    ]
+  ],
+  "extract": [
+    [
+      "SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "spx-vn-0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "  SPX_VN_0123456789\n",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://spx.vn/track?tracking_number=SPXVN0123456789&lang=vi",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://tracking.example.com/SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://example.com/t?utm_campaign=trackingwave&code=GHN12345AB",
+      "code",
+      "GHN12345AB"
+    ],
+    [
+      "{\"tracking\":\"SPXVN0123456789\",\"ts\":1}",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "{\"order\":{\"sn\":\"2610AB12CD34EF\"}}",
+      "code",
+      "2610AB12CD34EF"
+    ],
+    [
+      "Mã vận đơn: SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "Tracking: 84012345678901",
+      "code",
+      "84012345678901"
+    ],
+    [
+      "https://zalo.me/s/2070857098114207963/points/scan?src=shopee&card=2611",
+      "card_link",
+      null
+    ],
+    [
+      "zalo.me/s/2070857098114207963",
+      "card_link",
+      null
+    ],
+    [
+      "https://example.com/about",
+      "url",
+      null
+    ],
+    [
+      "abc 123",
+      "none",
+      null
+    ],
+    [
+      "",
+      "none",
+      null
+    ],
+    [
+      "{\"a\":1}",
+      "none",
+      null
+    ],
+    [
+      "8934673123457",
+      "none",
+      null
+    ],
+    [
+      "8935001123453",
+      "none",
+      null
+    ],
+    [
+      "0912345678",
+      "none",
+      null
+    ],
+    [
+      "84912345678",
+      "none",
+      null
+    ],
+    [
+      "https://shopee.vn/product/123/456?smtt=0.0.9",
+      "url",
+      null
+    ],
+    [
+      "https://lazada.vn/products/x-i123456789.html",
+      "url",
+      null
+    ],
+    [
+      "https://vt.tiktok.com/ZSabc12345/",
+      "url",
+      null
+    ],
+    [
+      "SĐT: 0912345678 - Mã: SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "{\"phone\":\"0912345678\",\"tracking\":\"SPXVN0123456789\"}",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "{\"phone\":\"0912345678\"}",
+      "none",
+      null
+    ],
+    [
+      "WIFI:T:WPA;S:Tubu123456;P:matkhau12345;;",
+      "none",
+      null
+    ],
+    [
+      "Mã sản phẩm 8934673123457, vận đơn GHN12345AB",
+      "code",
+      "GHN12345AB"
+    ],
+    [
+      "https://example.com/p/8934673123457?code=SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://zalo.me/s/2070857098114207963/points/scan?src=shopee&card=2611&code=spx-vn-0123456789",
+      "card_link",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://example.com/%ZZ/SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://example.com/%ZZ",
+      "url",
+      null
+    ],
+    [
+      "%ZZ",
+      "none",
+      null
+    ],
+    [
+      "{\"id\":\"a1b2c3d4e5\",\"waybill\":\"840012345678\"}",
+      "code",
+      "840012345678"
+    ],
+    [
+      "https://example.com/t?ref=abc12345&billcode=840012345678",
+      "code",
+      "840012345678"
+    ],
+    [
+      "https://jtexpress.vn/track/840012345678?utm_campaign=sale2024",
+      "code",
+      "840012345678"
+    ],
+    [
+      "840012345672",
+      "code",
+      "840012345672"
+    ],
+    [
+      "8934567890120",
+      "none",
+      null
+    ],
+    [
+      "SPXVN0123456789 0912345678",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "HD12345678 SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "spx vn 0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "Tel 0912345678",
+      "none",
+      null
+    ],
+    [
+      "Phone 0912345678",
+      "none",
+      null
+    ],
+    [
+      "DT 0912345678",
+      "none",
+      null
+    ],
+    [
+      "Tel 0912 345 678",
+      "none",
+      null
+    ],
+    [
+      "0912345678 abc",
+      "none",
+      null
+    ],
+    [
+      "SPX VN 0912345678",
+      "code",
+      "SPXVN0912345678"
+    ],
+    [
+      "SPXVN0123 456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "https://tracking.ninjavan.co/vi-vn/tracking?id=NJVVN0123456789",
+      "code",
+      "NJVVN0123456789"
+    ],
+    [
+      "https://x.vn/t?ID=840012345678",
+      "code",
+      "840012345678"
+    ],
+    [
+      "{\"barcode\":\"5901234123457\",\"waybill\":\"840012345672\"}",
+      "code",
+      "840012345672"
+    ],
+    [
+      "Mã vận đơn:SPXVN0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "012345678905 8612345678909",
+      "code",
+      "8612345678909"
+    ],
+    [
+      "8612345678909 012345678905",
+      "code",
+      "8612345678909"
+    ],
+    [
+      "40123455 8612345678909",
+      "code",
+      "8612345678909"
+    ],
+    [
+      "00012345600012 8612345678909",
+      "code",
+      "00012345600012"
+    ],
+    [
+      "VN 0912345678",
+      "none",
+      null
+    ],
+    [
+      "VN 0912 345 678",
+      "none",
+      null
+    ],
+    [
+      "SPX 0912345678",
+      "none",
+      null
+    ],
+    [
+      "VN 8934673123457",
+      "none",
+      null
+    ],
+    [
+      "EB 123 456 789 VN",
+      "code",
+      "EB123456789VN"
+    ],
+    [
+      "840 012 345 678",
+      "code",
+      "840012345678"
+    ],
+    [
+      "Nguyen Van An Q1 HCM",
+      "none",
+      null
+    ],
+    [
+      "Mã vận đơn 8400 1234 5678",
+      "code",
+      "840012345678"
+    ],
+    [
+      "Ma van don: SPX VN 0123456789",
+      "code",
+      "SPXVN0123456789"
+    ],
+    [
+      "Le Van A 1234 5678",
+      "code",
+      "12345678"
+    ]
+  ]
+}

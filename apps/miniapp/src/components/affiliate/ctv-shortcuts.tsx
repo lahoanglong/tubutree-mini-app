@@ -13,7 +13,7 @@ export interface CtvShortcut {
   disabled?: boolean;
 }
 
-/** Hàng lối tắt ngay dưới thẻ hoa hồng: việc CTV làm hằng ngày (chia sẻ, gian hàng, lên đơn hộ, rút) không phải cuộn tới cuối trang dài. */
+/** Hàng lối tắt ngay dưới thẻ hoa hồng: việc CTV làm hằng ngày (chia sẻ, gian hàng, lên đơn hộ, chuyển hoa hồng vào Ví) không phải cuộn tới cuối trang dài. */
 export function CtvShortcuts({ items }: { items: CtvShortcut[] }) {
   return (
     <div

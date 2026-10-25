@@ -42,8 +42,8 @@ const OVERVIEW: WasteOverviewDTO = wasteOverview({
   alerts: [{ kind: 'QUOTA_PACE', pointId: 'p1', pointName: 'Tạp hoá Cô Ba', value: 72, threshold: 60, detail: 'Đã dùng 72% hạn mức trong 10 ngày đầu tháng' }],
 });
 
-const CONFIG_OFF = [{ key: 'waste.enabled', value: false, description: null, category: 'waste' }];
-const CONFIG_ON = [{ key: 'waste.enabled', value: true, description: null, category: 'waste' }];
+const CONFIG_OFF = { 'waste.enabled': false };
+const CONFIG_ON = { 'waste.enabled': true };
 
 type Route = { status?: number; body: unknown };
 async function mount(ui: React.ReactElement, overrides: { overview?: Route; config?: Route } = {}) {

@@ -1,6 +1,7 @@
 import { Lightbulb } from 'lucide-react';
 import { useSnackbar } from 'zmp-ui';
-import type { HarvestSpecies } from '../../services/game-api';
+import type { HarvestCouponCap, HarvestSpecies } from '../../services/game-api';
+import { vi } from '../../i18n/vi';
 import { copyText } from '../../utils/clipboard';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -13,20 +14,42 @@ import { rarityColor, rarityLabel } from './game-utils';
 // Luôn dựng sẵn và điều khiển bằng `open`: BottomSheet cần còn mounted để chạy hoạt ảnh đóng.
 export function HarvestCelebration({
   open,
-  coupon,
+  coupons,
+  guest,
+  onLogin,
   certificate,
   species,
+  points,
+  sprout,
+  couponCapped,
+  nextTarget,
   onClose,
   onUseCoupon,
+  onShare,
 }: {
   open: boolean;
-  coupon: string | null;
+  coupons: string[];
+  /** Khách vãng lai: không có quà thu hoạch, mời đăng nhập. */
+  guest: boolean;
+  onLogin: () => void;
   certificate: string | null;
   species: HarvestSpecies | null;
+  /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu); khi có thì không có mã và không nói chuyện góp quỹ cây. */
+  points: number | null;
+  /** Lần tưới có thu hoạch cây mầm (xem `HarvestReward.sprout`). */
+  sprout: boolean;
+  couponCapped: HarvestCouponCap | null;
+  /** 💧 cần cho cây kế tiếp. */
+  nextTarget: number | null;
   onClose: () => void;
   onUseCoupon: () => void;
+  /** Mở hộp chia sẻ Zalo gốc. Cộng đồng trong Mini App chỉ đọc nên không đăng bài ở đây. */
+  onShare: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
+  const t = vi.game.newbie.harvest;
+  const seedling = sprout || (points != null && points > 0);
+  const showPoints = points != null && points > 0;
   return (
     <BottomSheet
       open={open}
@@ -34,12 +57,22 @@ export function HarvestCelebration({
       title="Thu hoạch thành công!"
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {coupon && (
+          {coupons.length > 0 && (
             <Button fullWidth variant="secondary" onPress={onUseCoupon}>
               Dùng mã giảm giá ngay
             </Button>
           )}
-          <Button fullWidth onPress={onClose}>
+          {guest && (
+            <Button fullWidth onPress={onLogin}>
+              {t.guestCta}
+            </Button>
+          )}
+          {!guest && (
+            <Button fullWidth variant="secondary" onPress={onShare}>
+              {t.shareFriends}
+            </Button>
+          )}
+          <Button fullWidth variant={guest ? 'secondary' : 'primary'} onPress={onClose}>
             Tuyệt vời!
           </Button>
         </div>
@@ -48,10 +81,35 @@ export function HarvestCelebration({
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 56, lineHeight: 1.2 }}>🌳</div>
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
-          Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây</b> vào quỹ trồng cây 🌿
+          {certificate ? t.fund : seedling ? t.seedling : t.grown}
         </Text>
-        {coupon && (
+        {showPoints && (
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', border: '1px dashed var(--color-border-selected)' }}>
+            <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700 }}>
+              {t.points(points)}
+            </Text>
+            <Text variant="caption" tone="secondary" as="div">
+              {t.pointsCaption}
+            </Text>
+          </div>
+        )}
+        {guest && (
+          <div role="note" style={{ marginTop: 12, padding: 12, background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
+            <Text variant="caption" tone="warning" as="div">
+              {t.guest}
+            </Text>
+          </div>
+        )}
+        {couponCapped && (
+          <div role="note" style={{ marginTop: 12, padding: 12, background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}>
+            <Text variant="caption" tone="warning" as="div">
+              {t.capped[couponCapped]}
+            </Text>
+          </div>
+        )}
+        {coupons.map((coupon) => (
           <div
+            key={coupon}
             role="button"
             {...rowKeyboardProps()}
             className="tubu-press"
@@ -80,7 +138,7 @@ export function HarvestCelebration({
               {coupon}
             </Text>
           </div>
-        )}
+        ))}
         {certificate && (
           <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
             <Text variant="caption" tone="secondary" as="div">
@@ -114,6 +172,11 @@ export function HarvestCelebration({
               </Text>
             )}
           </div>
+        )}
+        {nextTarget != null && nextTarget > 0 && (
+          <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 12 }}>
+            {t.nextTree(nextTarget)}
+          </Text>
         )}
       </div>
     </BottomSheet>

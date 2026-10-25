@@ -7,7 +7,7 @@ import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
 import { EXPORT_BATCH, row, text } from './admin-export';
 
 /**
- * File cho kế toán (D1-14): khấu trừ TNCN của CTV, lệnh rút tiền, khoản hoàn tiền khách. Cùng quy ước với admin-export.ts (BOM UTF-8
+ * File cho kế toán (D1-14): khấu trừ TNCN của CTV, lệnh rút tiền cũ (còn lại trước khi bỏ rút ngân hàng), khoản hoàn tiền khách. Cùng quy ước với admin-export.ts (BOM UTF-8
  * ở streamCsv, ô bắt đầu bằng = + - @ được thêm dấu nháy đơn ở csvCell, SĐT/MST/số tài khoản dạng chữ để Excel không bỏ số 0 đầu).
  */
 interface Range {

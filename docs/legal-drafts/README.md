@@ -42,8 +42,8 @@ Soạn ngày 2026-10-18, nhánh `lr2/legal`. Chưa luật sư nào xem. Đây l�
 `dieu-khoan.md`
 - Mục 1: vai trò Tubu Tree với gian hàng đối tác (người bán hay sàn trung gian), ai đứng tên trách nhiệm.
 - Mục 2 và `bao-mat.md` mục 10: mốc 16 tuổi và cách xin đồng ý của cha mẹ.
-- Mục 6: bản chất Ví Tubu. Ví chỉ nhận tiền hoàn, hoa hồng, thưởng (không có nạp tiền: `apps/api/src/modules/wallet/wallet.controller.ts:30-61` không có route nạp) và cho rút về ngân hàng (`wallet.controller.ts:40`). Cần xác nhận không rơi vào dịch vụ ví điện tử phải có giấy phép.
-- Mục 9: điều khoản CTV, đại lý, gian hàng; khấu trừ TNCN 10%. Trong mã thuế chỉ khấu trừ khi một lần rút từ 2.000.000đ (`apps/api/prisma/seed.ts:148-149`, `apps/api/src/modules/affiliate/affiliate.service.ts:92-93`, `:543-548`), còn chủ dự án nói "10% theo quy định hiện hành" và quyết định B17 còn chờ kế toán (`docs/2026-10-18-launch-review/03-cau-hoi-sang.md:51`, `:114`). Đại lý là doanh nghiệp hay hộ kinh doanh có phải trừ không? Luật Thuế TNCN mới có hiệu lực từ 2026 nên cần kiểm lại ngưỡng.
+- Mục 6: bản chất Ví Tubu. Ví chỉ nhận tiền hoàn, hoa hồng, thưởng (không có nạp tiền: `apps/api/src/modules/wallet/wallet.controller.ts:30-61` không có route nạp) và không cho rút về ngân hàng (`wallet.controller.ts` trả 410 cho route rút cũ; hoa hồng chỉ vào Ví 1:1, `affiliate.controller.ts`). Cần xác nhận không rơi vào dịch vụ ví điện tử phải có giấy phép.
+- Mục 9: điều khoản CTV, đại lý, gian hàng; khấu trừ TNCN 10%. Trong mã thuế khấu trừ khi tổng hoa hồng chuyển vào Ví trong tháng (giờ VN) từ 5.000.000đ, theo Nghị định 253/2026/NĐ-CP (`apps/api/prisma/seed.ts`, `apps/api/src/modules/affiliate/affiliate.service.ts` hàm `personalIncomeTax`), còn chủ dự án nói "10% theo quy định hiện hành" và quyết định B17 còn chờ kế toán (`docs/2026-10-18-launch-review/03-cau-hoi-sang.md:51`, `:114`). Đại lý là doanh nghiệp hay hộ kinh doanh có phải trừ không? Luật Thuế TNCN mới có hiệu lực từ 2026 nên cần kiểm lại ngưỡng.
 - Mục 14: giới hạn trách nhiệm không được trái quyền người tiêu dùng.
 - Mục 15: cách ghi cơ quan, tổ chức hỗ trợ và thẩm quyền Toà án.
 - Mục 18: danh sách văn bản (xem mục 7 dưới đây) và nghĩa vụ thông báo/đăng ký với Bộ Công Thương theo Luật Thương mại điện tử 2025.
@@ -85,7 +85,7 @@ Xác nhận trong mã:
 | Tubu phản hồi đổi trả trong 24 giờ | `apps/web/src/app/tai-khoan/don-hang/[code]/return-request-form.tsx:123` |
 | Điểm Xanh hết hạn 12 tháng, nhắc trước 7 ngày; điểm không trừ vào phí ship | `apps/api/prisma/seed.ts:26-27`; `apps/api/src/modules/loyalty/points-expiry-date.ts:2`, `:17`; `loyalty-expiry.service.ts:436-449`; `pricing.service.ts:127` |
 | Trần dùng điểm 20% giá trị đơn (bài ghi "hiện là 20%") | `apps/api/prisma/seed.ts:25`; `pricing.service.ts:98-101` |
-| Ví Tubu: rút tối thiểu 100.000đ, phí 3.000đ mỗi lần (bài ghi "hiện là") | `apps/api/prisma/seed.ts:72-73`; `apps/api/src/modules/wallet/wallet.service.ts:10` |
+| Ví Tubu chỉ dùng trả tiền hàng, hoa hồng chỉ chuyển vào Ví 1:1, không rút về ngân hàng/ZaloPay (chính sách Zalo 4.5) | `apps/api/src/modules/wallet/wallet.controller.ts:24`; `apps/api/src/modules/affiliate/affiliate.controller.ts:117`; `affiliate.service.ts:96` |
 | Hoa hồng: bỏ sản phẩm bị chặn CTV; tự mua không có hoa hồng; giữ tối thiểu bằng hạn đổi trả | `apps/api/src/modules/affiliate/affiliate.service.ts:886`, `:895-912`, `:1305-1311` |
 | Tin khuyến mãi tắt được ở Cài đặt "Khuyến mãi & mã giảm giá"; tin giao dịch luôn gửi | `apps/api/src/modules/notifications/notification-categories.ts:3`, `:12`; `apps/miniapp/src/pages/settings.tsx:111` |
 | Xoá tài khoản: Mini App → "Về Tubu Tree & Hỗ trợ" → "Xóa tài khoản" → "Gửi yêu cầu xóa"; CSKH xử lý trong 3 ngày làm việc; chưa xoá ngay | `apps/miniapp/src/pages/profile.tsx:75`; `about.tsx:98-107`, `:273-295`; `apps/api/src/modules/users/users.service.ts:199`, `:220`; `users.controller.ts:35` |

@@ -132,10 +132,22 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     expect(container.textContent).toContain('Không có đơn nào trong khoảng ngày này');
   });
 
+  it('chuyển sang "Khách mới theo đợt thẻ": gọi báo cáo theo chiến dịch, cột đổi tên', async () => {
+    const { container } = mount(<ReportsTab sections={['sources']} />);
+    await flush();
+    const chip = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Khách mới theo đợt thẻ')!;
+    expect(chip.getAttribute('aria-pressed')).toBe('false');
+    click(chip);
+    await flush();
+    expect(mocks.getSourceReport).toHaveBeenLastCalledWith({ from: '2026-09-19', to: '2026-10-18' }, 'campaign');
+    expect(chip.getAttribute('aria-pressed')).toBe('true');
+    expect(container.textContent).toContain('Chiến dịch');
+  });
+
   it('bảng nguồn × tuần: khách mới, đơn đầu, đơn 2, doanh thu; tuần chưa đóng kỳ ghi "đang tăng"', async () => {
     const { container } = mount(<ReportsTab />);
     await flush();
-    expect(mocks.getSourceReport).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' });
+    expect(mocks.getSourceReport).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' }, 'source');
     const total = container.querySelector('tr[data-source-total]')?.textContent ?? '';
     expect(total).toContain('30');
     expect(total).toContain('900.000');
@@ -192,12 +204,12 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(mocks.downloadPitCsv).toHaveBeenCalledWith(range);
       expect(container.textContent).toContain('Đã tải thue.csv');
 
-      click(btn(container, 'Xuất CSV lệnh rút tiền'));
+      click(btn(container, 'Xuất CSV lệnh chuyển hoa hồng'));
       await flush();
       expect(mocks.downloadPayoutsCsv).toHaveBeenLastCalledWith(range, undefined);
       const selects = container.querySelectorAll('select');
       selectValue(selects[0]!, 'PAID');
-      click(btn(container, 'Xuất CSV lệnh rút tiền'));
+      click(btn(container, 'Xuất CSV lệnh chuyển hoa hồng'));
       await flush();
       expect(mocks.downloadPayoutsCsv).toHaveBeenLastCalledWith(range, 'PAID');
 
@@ -207,10 +219,10 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(mocks.downloadRefundsCsv).toHaveBeenCalledWith(range, 'OPEN');
     });
 
-    it('câu chỉ sang tab rút tiền dùng đúng tên mục trên thanh bên ("Yêu cầu rút tiền")', async () => {
+    it('câu chỉ sang tab thuế dùng đúng tên mục trên thanh bên ("Thuế TNCN hoa hồng")', async () => {
       const { container } = mount(<ReportsTab />);
       await flush();
-      expect(container.textContent).toContain('mục Yêu cầu rút tiền');
+      expect(container.textContent).toContain('mục Thuế TNCN hoa hồng');
       expect(container.textContent).not.toContain('Duyệt yêu cầu rút tiền');
     });
 

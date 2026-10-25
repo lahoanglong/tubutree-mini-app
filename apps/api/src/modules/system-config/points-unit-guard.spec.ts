@@ -69,6 +69,7 @@ const POINTS_NUMBER_KEYS: Record<string, { max: number }> = {
   'community.answer_reward_points': { max: 20_000 },
   'community.best_answer_reward_points': { max: 20_000 },
   'game.tree_points_price': { max: 500_000 },
+  'game.first_harvest_points': { max: 10_000 },
   'waste.mailin_min_points': { max: 1_000_000 },
   'waste.pickup_min_points': { max: 1_000_000 },
   'waste.customer_monthly_cap_points': { max: 2_000_000 },

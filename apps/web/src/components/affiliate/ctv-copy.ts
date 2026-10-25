@@ -19,11 +19,12 @@ export const CTV_TERMS = {
 export const COMMISSION_META: Record<CommissionStatus, { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Đang chờ · đơn chưa giao', tone: 'promo' },
   LOCKED: { label: 'Đang chờ · đang giữ', tone: 'info' },
-  APPROVED: { label: 'Có thể rút', tone: 'success' },
+  APPROVED: { label: 'Có thể chuyển vào Ví', tone: 'success' },
   PAID: { label: 'Đã trả', tone: 'neutral' },
   REJECTED: { label: 'Từ chối', tone: 'danger' },
 };
-export const WITHDRAWING_META: { label: string; tone: BadgeTone } = { label: 'Đang rút', tone: 'info' };
+// Chỉ còn cho lệnh rút ngân hàng cũ (trước khi bỏ rút) chưa chuyển tiền.
+export const WITHDRAWING_META: { label: string; tone: BadgeTone } = { label: 'Lệnh rút cũ đang xử lý', tone: 'info' };
 
 export const PAYOUT_META: Record<PayoutStatus, { label: string; tone: BadgeTone }> = {
   REQUESTED: { label: 'Chờ duyệt', tone: 'promo' },

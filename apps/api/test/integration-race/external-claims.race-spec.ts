@@ -57,6 +57,7 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
   afterAll(async () => {
     const claimIds = (await prisma.externalPointsClaim.findMany({ where: { OR: [{ userId: { in: userIds } }, { externalOrderId: { in: orderIds } }] }, select: { id: true } })).map((c) => c.id);
     await prisma.externalClaimEvent.deleteMany({ where: { claimId: { in: claimIds } } });
+    await prisma.analyticsEvent.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.externalClaimAttempt.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.externalPointsClaim.deleteMany({ where: { OR: [{ userId: { in: userIds } }, { externalOrderId: { in: orderIds } }] } });
     await prisma.externalOrder.deleteMany({ where: { id: { in: orderIds } } });
@@ -181,6 +182,9 @@ describe('Điểm đơn ngoài app: claim, cộng, đảo (real Postgres)', () =
     expect(await balanceOf(user.id)).toBe(2_000);
     const after = await prisma.externalPointsClaim.findUniqueOrThrow({ where: { id: claim.id } });
     expect(after).toMatchObject({ state: 'CREDITED', pointsTxId: rows[0]!.id });
+    const credited = await prisma.analyticsEvent.findMany({ where: { eventName: 'ext_claim_credited', userId: user.id } });
+    expect(credited).toHaveLength(1);
+    expect(credited[0]!.props).toMatchObject({ points: 2_000 });
     await noDrift();
   });
 

@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { GameService } from './game.service';
@@ -65,6 +66,11 @@ export class GameController {
   answer(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() dto: AnswerDto) {
     return this.quiz.answerQuiz(userId, id, dto.choice);
   }
+
+  // Mỗi lượt giữ một khoá tư vấn và một kết nối pool; 5 lượt/phút như route đăng bài của Cộng đồng.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('harvest/share')
+  shareHarvest(@CurrentUser('sub') userId: string) { return this.game.shareHarvest(userId); }
 
   @Post('tree/water')
   water(@CurrentUser('sub') userId: string, @Body() dto: WaterDto) { return this.game.waterTree(userId, dto.drops); }

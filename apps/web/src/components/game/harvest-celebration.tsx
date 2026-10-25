@@ -1,5 +1,6 @@
 import { Lightbulb } from 'lucide-react';
-import type { HarvestSpecies } from '@tubutree/app-core/api/game';
+import type { HarvestCouponCap, HarvestSpecies } from '@tubutree/app-core/api/game';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
@@ -8,21 +9,50 @@ import { rarityBorder, rarityLabel, rarityText } from './game-utils';
 // Harvest celebration. 🌳 lớn, 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
 export function HarvestCelebration({
   open,
-  coupon,
+  coupons,
+  guest,
+  onLogin,
   certificate,
   species,
+  points,
+  sprout,
+  canShare,
+  couponCapped,
+  nextTarget,
   onClose,
   onCopyCoupon,
   onUseCoupon,
+  shared,
+  sharing,
+  onShare,
 }: {
   open: boolean;
-  coupon: string | null;
+  coupons: string[];
+  /** Khách vãng lai: không có quà thu hoạch, mời đăng nhập. */
+  guest: boolean;
+  onLogin: () => void;
   certificate: string | null;
   species: HarvestSpecies | null;
+  /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu); khi có thì không có mã và không nói chuyện góp quỹ cây. */
+  points: number | null;
+  /** Lần tưới có thu hoạch cây mầm (xem `HarvestReward.sprout`). */
+  sprout: boolean;
+  /** Chỉ cây ở lô nhà mới chia sẻ được. */
+  canShare: boolean;
+  couponCapped: HarvestCouponCap | null;
+  /** 💧 cần cho cây kế tiếp. */
+  nextTarget: number | null;
   onClose: () => void;
   onCopyCoupon: (code: string) => void;
   onUseCoupon: () => void;
+  /** Đã đăng thành tích lần thu hoạch này lên Cộng đồng. */
+  shared: boolean;
+  sharing: boolean;
+  onShare: () => void;
 }) {
+  const t = gameNewbieCopy.harvest;
+  const seedling = sprout || (points != null && points > 0);
+  const showPoints = points != null && points > 0;
   return (
     <Sheet
       open={open}
@@ -30,12 +60,25 @@ export function HarvestCelebration({
       title="Thu hoạch thành công!"
       footer={
         <div className="flex flex-col gap-2">
-          {coupon && (
+          {coupons.length > 0 && (
             <button type="button" onClick={onUseCoupon} className={`${miniBtnSecondary} w-full`}>
               Dùng mã giảm giá ngay
             </button>
           )}
-          <button type="button" onClick={onClose} className={`${ui.btnPrimary} w-full`}>
+          {guest && (
+            <button type="button" onClick={onLogin} className={`${ui.btnPrimary} w-full`}>
+              {t.guestCta}
+            </button>
+          )}
+          {!guest && canShare && (
+            <>
+              <button type="button" disabled={shared || sharing} onClick={onShare} className={`${miniBtnSecondary} w-full`}>
+                {shared ? t.shareCommunityDone : sharing ? t.shareCommunityBusy : t.shareCommunity}
+              </button>
+              <p className="text-center text-xs text-stone-700">{t.shareCommunityNote}</p>
+            </>
+          )}
+          <button type="button" onClick={onClose} className={`${guest ? miniBtnSecondary : ui.btnPrimary} w-full`}>
             Tuyệt vời!
           </button>
         </div>
@@ -46,10 +89,27 @@ export function HarvestCelebration({
           🌳
         </div>
         <p className="mt-1 text-sm text-stone-700">
-          Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây</b> vào quỹ trồng cây 🌿
+          {certificate ? t.fund : seedling ? t.seedling : t.grown}
         </p>
-        {coupon && (
+        {showPoints && (
+          <div className="mt-3 rounded-control border border-dashed border-stone-450 bg-stone-50 p-3">
+            <div className="text-base font-bold text-forest-700">{t.points(points)}</div>
+            <div className="text-xs text-stone-700">{t.pointsCaption}</div>
+          </div>
+        )}
+        {guest && (
+          <p role="note" className="mt-3 rounded-control bg-warning-bg p-3 text-xs text-warning-fg">
+            {t.guest}
+          </p>
+        )}
+        {couponCapped && (
+          <p role="note" className="mt-3 rounded-control bg-warning-bg p-3 text-xs text-warning-fg">
+            {t.capped[couponCapped]}
+          </p>
+        )}
+        {coupons.map((coupon) => (
           <button
+            key={coupon}
             type="button"
             data-coupon
             onClick={() => onCopyCoupon(coupon)}
@@ -58,7 +118,7 @@ export function HarvestCelebration({
             <span className="block text-xs text-stone-700">Quà thu hoạch — mã giảm giá (chạm để sao chép)</span>
             <span className="block break-all text-base font-bold tracking-wide text-forest-700">{coupon}</span>
           </button>
-        )}
+        ))}
         {certificate && (
           <div className="mt-2 rounded-control bg-stone-50 p-3">
             <div className="text-xs text-stone-700">Mã đóng góp quỹ trồng cây</div>
@@ -79,6 +139,7 @@ export function HarvestCelebration({
             )}
           </div>
         )}
+        {nextTarget != null && nextTarget > 0 && <p className="mt-3 text-sm text-stone-700">{t.nextTree(nextTarget)}</p>}
       </div>
     </Sheet>
   );

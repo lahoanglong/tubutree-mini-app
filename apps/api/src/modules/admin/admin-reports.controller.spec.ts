@@ -97,6 +97,13 @@ describe('AdminReportsController', () => {
     expect(sourceReport).toHaveBeenCalledWith({ from: '2026-10-01' });
   });
 
+  it('GET sources chuyển chiều chiến dịch cho báo cáo nguồn', async () => {
+    const sourceReport = jest.fn().mockResolvedValue({ rows: [] });
+    const ctrl = new AdminReportsController({} as never, {} as never, { sourceReport } as never);
+    await ctrl.sources({ from: '2026-10-01', by: 'campaign' });
+    expect(sourceReport).toHaveBeenCalledWith({ from: '2026-10-01', by: 'campaign' });
+  });
+
   it.each([
     ['ngày không có thật', { from: '2026-02-31' }],
     ['không phải ngày', { to: 'hôm nay' }],

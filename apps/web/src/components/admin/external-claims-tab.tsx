@@ -5,6 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import {
   approveExternalClaim,
   attachExternalClaimAttempt,
+  getConfig,
   getExternalClaim,
   keepExternalClaimPoints,
   listExternalClaimAttempts,
@@ -38,6 +39,7 @@ import {
   type ClaimActor,
   groupThousands,
 } from '@/lib/external-claims';
+import { configValue } from '@/lib/admin-config-forms';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
@@ -64,6 +66,9 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
   const rows = claims.data?.pages.flatMap((p) => p.data) ?? [];
   const total = claims.data?.pages[0]?.meta.total;
   const who = { isAdmin, canAct, meId };
+  // Chỉ admin đọc được cấu hình; nhân viên không thấy băng này.
+  const flag = useQuery({ queryKey: ['admin-config', 'loyalty'], queryFn: () => getConfig('loyalty'), enabled: isAdmin });
+  const flagOff = isAdmin && flag.isSuccess && configValue<unknown>(flag.data, 'loyalty.marketplace_claim_enabled', false) !== true;
 
   return (
     <div className="space-y-4">
@@ -71,6 +76,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId }: Who) {
         <h2 className="font-display text-lg font-semibold text-stone-900">Tích điểm đơn sàn</h2>
         {total !== undefined && <span className="text-xs text-stone-500">{total} yêu cầu</span>}
       </div>
+      {flagOff && <Notice tone="warning">Tính năng đang tắt với khách. Bật ở Bật/tắt tính năng.</Notice>}
       <Notice>
         Khách nhập mã vận đơn đơn sàn trong Mini App để tích Điểm Xanh. Điểm chỉ được cộng khi đơn giao thành công và qua thời gian đối soát.
         Không ai xử lý được yêu cầu của chính mình, và người gắn đơn hoặc đưa yêu cầu vào chờ duyệt không tự duyệt được.

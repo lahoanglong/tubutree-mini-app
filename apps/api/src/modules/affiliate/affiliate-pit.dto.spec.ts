@@ -9,18 +9,21 @@ async function errors<T extends object>(cls: new () => T, plain: object) {
   return res.flatMap((e) => Object.values(e.constraints ?? {}));
 }
 
-describe('SELLER-10 DTO: rút hoa hồng cần tài khoản nhận trừ khi rút về ví', () => {
-  const BANK = { bankName: 'VCB', accountNumber: '0071000123456', accountName: 'NGUYEN VAN A' };
+describe('DTO chuyển hoa hồng vào Ví', () => {
+  it('chuyển vào Ví không cần bankInfo', async () => {
+    expect(await errors(PayoutDto, { amount: 500_000, method: 'WALLET_BALANCE' })).toEqual([]);
+  });
 
-  it('mọi phương thức khác WALLET_BALANCE (kể cả ZALOPAY cũ) phải kèm bankInfo hợp lệ', async () => {
+  it('client cũ gửi BANK/ZALOPAY kèm hoặc không kèm bankInfo vẫn qua DTO (controller trả câu "chỉ chuyển vào Ví")', async () => {
+    const bankInfo = { bankName: 'VCB', accountNumber: '0071000123456', accountName: 'NGUYEN VAN A' };
     for (const method of ['BANK', 'ZALOPAY']) {
-      expect(await errors(PayoutDto, { amount: 500_000, method })).not.toEqual([]);
-      expect(await errors(PayoutDto, { amount: 500_000, method, bankInfo: BANK })).toEqual([]);
+      expect(await errors(PayoutDto, { amount: 500_000, method })).toEqual([]);
+      expect(await errors(PayoutDto, { amount: 500_000, method, bankInfo })).toEqual([]);
     }
   });
 
-  it('rút về ví không cần bankInfo', async () => {
-    expect(await errors(PayoutDto, { amount: 500_000, method: 'WALLET_BALANCE' })).toEqual([]);
+  it('phương thức lạ bị DTO từ chối', async () => {
+    expect(await errors(PayoutDto, { amount: 500_000, method: 'PAYPAL' })).not.toEqual([]);
   });
 });
 

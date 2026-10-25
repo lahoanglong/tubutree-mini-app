@@ -1,40 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Page, Input, useSnackbar } from 'zmp-ui';
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, ChevronRight, Clock, Gift, History, Landmark, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
-import { getWallet, getWalletTransactions, withdraw, getReferral, getLoyalty, type BankInfo, type WalletTxn } from '../services/account-api';
-import { getErrorMessage, isOutcomeUnknown } from '../services/api';
-import { isHttpError } from '../services/http';
+import { Page } from 'zmp-ui';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { CheckCircle2, ChevronRight, Clock, Gift, History, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
+import { getWallet, getWalletTransactions, getReferral, getLoyalty } from '../services/account-api';
+import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { newIdempotencyKey } from '../utils/idempotency';
-import { canWithdraw as canWithdrawRule, walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
+import { walletTxLabel, formatWalletTxTime } from '../utils/wallet-rules';
 import { formatVnd, formatPoints } from '../utils/format';
 import { uniqueById } from '../utils/unique-by-id';
 import { convertedPointsNote, pointsSummary } from '../utils/points-lots';
 import { CASHBACK_ENABLED } from '../utils/features';
 import { Badge } from '../components/ui/badge';
-import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { ErrorState } from '../components/ui/empty-state';
-import { Field } from '../components/ui/form';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { vi } from '../i18n/vi';
-
-const KEEP_KEY_STATUSES = new Set([401, 403, 408, 429]);
-const httpStatus = (e: unknown) => (isHttpError(e) ? e.response?.status ?? 0 : 0);
-
-/** Dòng sổ cái của một lệnh rút đúng số tiền (delta âm = tiền gộp cả phí, bằng `amount` gửi lên). */
-const isWithdrawOf = (t: WalletTxn, amount: number) => t.type === 'WITHDRAW' && t.delta === -amount;
 
 const CARD: CSSProperties = {
   background: 'var(--color-bg-surface)',
@@ -46,10 +35,8 @@ const CARD: CSSProperties = {
 const CAPTION_BELOW: CSSProperties = { marginTop: 6, paddingLeft: 4 };
 
 export default function WalletPage() {
-  const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
   const navigate = useNavigate();
-  const qc = useQueryClient();
   // enabled theo trạng thái auth: nếu fetch trước khi restore() xong → 401 → (retry:false) kẹt
   // error vĩnh viễn dù login thành công ~200ms sau → màn Ví "trắng". Chờ authenticated rồi mới fetch.
   const phase = useAuthPhase();
@@ -62,72 +49,9 @@ export default function WalletPage() {
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
 
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [amount, setAmount] = useState('');
-  const [bank, setBank] = useState<BankInfo>({ bankName: '', accountNumber: '', accountName: '' });
-
-  const refreshAll = () => {
-    void qc.invalidateQueries({ queryKey: ['wallet'] });
-  };
-
-  // Idempotency-Key giữ nguyên qua các lần retry của CÙNG 1 lệnh rút (double-tap/timeout) →
-  // BE không trừ ví/ tạo payout 2 lần; regenerate sau khi rút thành công (lệnh sau là lệnh mới).
-  const withdrawKey = useRef(newIdempotencyKey());
-  // Có một lệnh rút chưa rõ kết quả: mở lại sheet vẫn dùng key đó cho tới khi máy chủ trả lời dứt khoát hoặc sao kê cho thấy
-  // lệnh đã được ghi. `knownIds` là các dòng rút cùng số tiền đã có trong sao kê lúc đó, để không nhận nhầm lệnh cũ là lệnh vừa gửi.
-  // `knownIds` null = lúc lỗi chưa có sao kê nào tải xong, không biết dòng nào là cũ → không tự gỡ cờ (giữ key như trước).
-  const withdrawUnresolved = useRef<{ amount: number; knownIds: Set<string> | null } | null>(null);
-  const firstPageRows = useRef<WalletTxn[] | null>(null);
-  const onHistoryRows = useCallback((rows: WalletTxn[]) => {
-    firstPageRows.current = rows;
-    const pending = withdrawUnresolved.current;
-    const knownIds = pending?.knownIds;
-    if (pending && knownIds && rows.some((t) => isWithdrawOf(t, pending.amount) && !knownIds.has(t.id))) {
-      // Chỉ bỏ cờ, chưa đổi key: sheet còn mở mà khách bấm lại thì máy chủ trả đúng lệnh đã ghi thay vì rút thêm lần nữa.
-      // Key mới được cấp ở lần mở sheet kế tiếp.
-      withdrawUnresolved.current = null;
-    }
-  }, []);
-  const withdrawMut = useMutation({
-    mutationFn: () => withdraw(Number(amount), bank, withdrawKey.current),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã gửi yêu cầu rút. Thực nhận ${formatVnd(r.net)} trong 1-3 ngày làm việc.`, type: 'success' });
-      withdrawKey.current = newIdempotencyKey();
-      withdrawUnresolved.current = null;
-      setWithdrawOpen(false);
-      setAmount('');
-      refreshAll();
-    },
-    // Quá thời gian/mất mạng/5xx: máy chủ có thể đã trừ ví và tạo lệnh rút. GIỮ key để bấm lại trả đúng lệnh đó thay vì rút thêm
-    // lần nữa; chỉ đổi key khi máy chủ đã từ chối rõ ràng (4xx, kể cả "key đã dùng với số tiền khác") nên không có gì được ghi.
-    onError: (e) => {
-      if (isOutcomeUnknown(e)) {
-        const amountSent = Number(amount);
-        withdrawUnresolved.current = {
-          amount: amountSent,
-          knownIds: firstPageRows.current && new Set(firstPageRows.current.filter((t) => isWithdrawOf(t, amountSent)).map((t) => t.id)),
-        };
-        refreshAll();
-        openSnackbar({ text: vi.wallet.withdrawUnknown, type: 'error' });
-        return;
-      }
-      // 401/403/408/429: request NÀY chưa được xử lý, nhưng lệnh trước (nếu chưa rõ kết quả) có thể đã trừ ví; đổi key lúc này là mở đường rút lần hai.
-      if (!KEEP_KEY_STATUSES.has(httpStatus(e))) {
-        withdrawKey.current = newIdempotencyKey();
-        withdrawUnresolved.current = null;
-      }
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    },
-  });
-
   const w = walletQ.data;
   const referral = referralQ.data;
   const loyalty = loyaltyQ.data;
-  const amountNum = Number(amount) || 0;
-  const fee = w?.withdrawFee ?? 3000;
-  const min = w?.withdrawMin ?? 100000;
-
-  const canWithdraw = canWithdrawRule(amountNum, w, min, bank);
 
   const shareReferral = () => {
     if (!referral) return;
@@ -144,7 +68,6 @@ export default function WalletPage() {
   // Khách thường không có hoa hồng: hai thẻ 0đ chỉ khiến tiền hoàn bị hiểu thành hoa hồng.
   // Vẫn hiện khi còn khoản hoa hồng thật dù role chưa khớp (tiền của khách không được giấu).
   const showCommission = isCommissionRole || (w?.commissionPending ?? 0) > 0 || (w?.commissionApproved ?? 0) > 0;
-  const balance = w?.walletBalance ?? 0;
   const points = loyalty ? pointsSummary(loyalty) : null;
   const convertedNote = convertedPointsNote(points?.converted);
 
@@ -190,26 +113,11 @@ export default function WalletPage() {
               >
                 {formatVnd(w.walletBalance)}
               </Text>
-              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                <Button
-                  variant="secondary"
-                  icon={Landmark}
-                  fullWidth
-                  onPress={() => {
-                    // Mỗi lần MỞ Sheet = 1 lệnh rút mới → key mới (double-tap trong cùng phiên giữ
-                    // nguyên key = idempotent; mở lại với số khác = key khác, không bị BE trả payout cũ). Trừ khi lệnh trước chưa rõ kết quả.
-                    if (!withdrawUnresolved.current) withdrawKey.current = newIdempotencyKey();
-                    setWithdrawOpen(true);
-                  }}
-                >
-                  Rút ngân hàng
-                </Button>
-              </div>
             </div>
             <Text variant="caption" tone="tertiary" as="div" style={CAPTION_BELOW}>
               {showCommission
-                ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — rút về ngân hàng hoặc trả đơn hàng.`
-                : 'Số dư dùng để thanh toán đơn'}
+                ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — dùng để trả tiền hàng.`
+                : 'Dùng để trả tiền hàng ở bước thanh toán'}
             </Text>
           </div>
 
@@ -310,14 +218,12 @@ export default function WalletPage() {
           {showCommission && (
             <div style={{ margin: '0 16px 12px', display: 'flex', gap: 10 }}>
               <SourceCard label="Hoa hồng chờ duyệt" value={w.commissionPending} Icon={Clock} />
-              {/* Hoa hồng APPROVED KHÔNG tự vào Ví — phải bấm "Nhận về ví" ở trang Cộng tác viên.
-                  Trước đây thẻ này chỉ để đọc, nên CTV thấy "có thể rút 520.000đ" ngay cạnh
-                  "Ví: 0đ", bấm Rút thì bị báo chưa đủ mốc, và không có chỉ dẫn nào. */}
+              {/* Hoa hồng APPROVED KHÔNG tự vào Ví: CTV bấm "Chuyển vào Ví" ở trang Cộng tác viên. */}
               <SourceCard
-                label="Hoa hồng có thể rút"
+                label="Hoa hồng có thể chuyển vào Ví"
                 value={w.commissionApproved}
                 Icon={CheckCircle2}
-                hint={w.commissionApproved > 0 ? 'Nhận về Ví →' : undefined}
+                hint={w.commissionApproved > 0 ? 'Chuyển vào Ví →' : undefined}
                 onClick={w.commissionApproved > 0 ? () => navigate('/affiliate') : undefined}
               />
             </div>
@@ -344,64 +250,14 @@ export default function WalletPage() {
           >
             <Icon icon={Wallet} size="md" style={{ flex: '0 0 auto', color: 'var(--color-promo-fg)' }} />
             <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
-              Mẹo: dùng Ví Tubu để <b>trả đơn hàng</b> — <b>miễn phí</b>, thay vì rút về ngân hàng (phí chuyển
-              khoản {formatVnd(fee)}/lần).
+              Mẹo: tiền hoàn đơn và hoa hồng CTV vào Ví Tubu, dùng <b>trả đơn sau</b> ở bước thanh toán.
             </Text>
           </div>
 
-          <WalletHistory enabled={authed} onFirstPage={onHistoryRows} />
+          <WalletHistory enabled={authed} />
         </>
       ) : null}
 
-      {/* Sheet rút tiền */}
-      <BottomSheet
-        open={withdrawOpen}
-        onClose={() => {
-          setWithdrawOpen(false);
-          setAmount('');
-        }}
-        title="Rút tiền về ngân hàng"
-        description={`Khả dụng: ${formatVnd(balance)} • Tối thiểu: ${formatVnd(min)}`}
-        footer={
-          <Button fullWidth disabled={!canWithdraw || withdrawMut.isPending} onPress={() => withdrawMut.mutate()}>
-            {withdrawMut.isPending ? 'Đang gửi...' : `Rút ${amountNum > 0 ? formatVnd(amountNum) : ''}`}
-          </Button>
-        }
-      >
-        {balance < min && (
-          <Notice icon={AlertTriangle}>
-            Số dư Ví Tubu của bạn ({formatVnd(balance)}) chưa đủ mốc tối thiểu {formatVnd(min)} để rút về ngân hàng.
-          </Notice>
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Số tiền rút">
-            <Input
-              type="number"
-              placeholder={`Tối thiểu ${formatVnd(min)}`}
-              value={amount}
-              disabled={balance < min}
-              onChange={(e) => setAmount(e.target.value)}
-            />
-          </Field>
-          <Field label="Tên ngân hàng">
-            <Input placeholder="VD: Techcombank" maxLength={120} value={bank.bankName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))} />
-          </Field>
-          <Field label="Số tài khoản">
-            <Input inputMode="numeric" maxLength={24} value={bank.accountNumber} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))} />
-          </Field>
-          <Field label="Chủ tài khoản">
-            <Input placeholder="Tên in trên thẻ" maxLength={120} value={bank.accountName} disabled={balance < min} onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))} />
-          </Field>
-        </div>
-        {amountNum >= min && (
-          <div style={{ marginTop: 8, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}>
-            <Text variant="caption" tone="secondary" as="div">
-              Phí chuyển khoản ngân hàng: {formatVnd(fee)} • Thực nhận: <b>{formatVnd(Math.max(0, amountNum - fee))}</b>
-            </Text>
-          </div>
-        )}
-      </BottomSheet>
     </Page>
   );
 }
@@ -425,32 +281,9 @@ function IconBubble({ children }: { children: ReactNode }) {
   );
 }
 
-/** Khung cảnh báo trong sheet — biểu tượng + chữ cùng màu khuyến mãi/đất sét, thay emoji ⚠️ cũ. */
-function Notice({ icon, children }: { icon: LucideIcon; children: ReactNode }) {
-  return (
-    <div
-      style={{
-        marginBottom: 12,
-        padding: 12,
-        display: 'flex',
-        gap: 8,
-        alignItems: 'flex-start',
-        background: 'var(--color-promo-bg)',
-        borderRadius: 'var(--radius-control)',
-        border: '1px solid var(--clay-100)',
-      }}
-    >
-      <Icon icon={icon} size="sm" style={{ flex: '0 0 auto', marginTop: 2, color: 'var(--color-promo-fg)' }} />
-      <Text variant="caption" as="div" style={{ color: 'var(--color-promo-fg)' }}>
-        {children}
-      </Text>
-    </div>
-  );
-}
-
 /** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
-function WalletHistory({ enabled, onFirstPage }: { enabled: boolean; onFirstPage: (rows: WalletTxn[]) => void }) {
-  // Khoá con của ['wallet'] → refreshAll() sau khi rút tiền làm mới luôn sao kê.
+function WalletHistory({ enabled }: { enabled: boolean }) {
+  // Khoá con của ['wallet'] → làm mới ['wallet'] cũng làm mới sao kê.
   const q = useInfiniteQuery({
     queryKey: ['wallet', 'transactions'],
     queryFn: ({ pageParam }) => getWalletTransactions(pageParam),
@@ -459,10 +292,6 @@ function WalletHistory({ enabled, onFirstPage }: { enabled: boolean; onFirstPage
     enabled,
   });
   const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
-  const firstPage = q.data?.pages[0]?.data;
-  useEffect(() => {
-    if (firstPage) onFirstPage(firstPage);
-  }, [firstPage, onFirstPage]);
 
   return (
     <div style={{ ...CARD, margin: '0 16px 24px', padding: 16 }}>

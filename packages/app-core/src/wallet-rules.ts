@@ -1,30 +1,3 @@
-export interface WalletBalance {
-  walletBalance: number;
-}
-
-export interface WithdrawBankInfo {
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
-/** Điều kiện được phép gửi lệnh rút ví: đủ số tiền tối thiểu, không vượt số dư, đủ thông tin ngân hàng. */
-export function canWithdraw(
-  amount: number,
-  wallet: WalletBalance | undefined,
-  min: number,
-  bank: WithdrawBankInfo,
-): boolean {
-  return (
-    amount >= min &&
-    wallet != null &&
-    amount <= wallet.walletBalance &&
-    bank.bankName.trim().length > 0 &&
-    bank.accountNumber.trim().length >= 6 &&
-    bank.accountName.trim().length > 0
-  );
-}
-
 const WALLET_TX_LABELS: Record<string, string> = {
   OPENING: 'Số dư đầu kỳ',
   ORDER_PAY: 'Thanh toán đơn',

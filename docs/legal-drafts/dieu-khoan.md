@@ -58,7 +58,7 @@ Hãy đối chiếu thông tin trên màn hình thanh toán với thông tin nà
 ## 6. Ví Tubu
 
 - Ví Tubu là số dư trên tài khoản Tubu Tree của bạn. Số dư đến từ tiền hoàn đơn hàng, hoa hồng hoặc các khoản Tubu Tree trả cho bạn.
-- Bạn dùng số dư để thanh toán đơn hàng. Bạn cũng có thể rút về tài khoản ngân hàng của chính mình. Số tiền rút tối thiểu và phí chuyển khoản mỗi lần rút được hiển thị ở màn hình rút tiền (hiện là 100.000đ tối thiểu và 3.000đ mỗi lần).
+- Bạn chỉ dùng số dư để thanh toán đơn hàng. Ví Tubu không rút được về tài khoản ngân hàng hay ví điện tử. Hoa hồng của bạn chỉ chuyển vào Ví Tubu, theo tỷ lệ 1:1.
 - Ví Tubu không sinh lãi và không thể nạp tiền mặt vào.
 - Ví Tubu không phải là ví điện tử hay tài khoản thanh toán do ngân hàng hoặc tổ chức được cấp phép cung cấp. [cần luật sư kiểm]
 
@@ -86,8 +86,8 @@ Phần này chỉ áp dụng nếu bạn tham gia làm cộng tác viên (CTV), 
 
 - Chỉ CTV và đại lý được hưởng hoa hồng giới thiệu. Tỷ lệ hoa hồng của từng sản phẩm hiển thị trong trang CTV.
 - Hoa hồng được tính trên đơn do link hoặc gian hàng của bạn giới thiệu. Một số sản phẩm không áp dụng hoa hồng. Bạn không nhận hoa hồng khi tự mua hàng bằng link của mình, hoặc với hàng do gian hàng đối tác giao.
-- Hoa hồng được giữ sau khi đơn giao thành công (hiện là 10 ngày) để chờ hết thời hạn đổi trả, rồi mới được rút. Nếu đơn bị huỷ hoặc trả thì hoa hồng của phần đó bị trừ.
-- Khi bạn rút hoa hồng, Tubu Tree khấu trừ thuế thu nhập cá nhân 10% theo quy định hiện hành và cấp chứng từ khấu trừ cho bạn. Mức và ngưỡng áp dụng hiển thị ở màn hình rút tiền. Bạn cần cung cấp mã số thuế cá nhân hoặc số căn cước công dân khi được yêu cầu. [cần luật sư kiểm]
+- Hoa hồng được giữ sau khi đơn giao thành công (hiện là 10 ngày) để chờ hết thời hạn đổi trả, rồi mới được chuyển vào Ví Tubu. Nếu đơn bị huỷ hoặc trả thì hoa hồng của phần đó bị trừ.
+- Khi bạn chuyển hoa hồng vào Ví Tubu, Tubu Tree khấu trừ thuế thu nhập cá nhân 10% theo quy định hiện hành và cấp chứng từ khấu trừ cho bạn. Mức và ngưỡng áp dụng hiển thị ở màn hình chuyển hoa hồng vào Ví. Bạn cần cung cấp mã số thuế cá nhân hoặc số căn cước công dân khi được yêu cầu. [cần luật sư kiểm]
 - Gian hàng của CTV phải được Tubu Tree duyệt trước khi hiển thị lần đầu. Chúng tôi có thể ẩn gian hàng nếu nội dung vi phạm điều khoản này.
 - Nếu vai trò của bạn bị thay đổi hoặc bị thu hồi, bạn vẫn nhận hoa hồng của những đơn đã đặt trước thời điểm đó. Gian hàng của bạn sẽ bị ẩn.
 - Chúng tôi có thể dừng chi trả và thu hồi hoa hồng nhận được do gian lận, tạo đơn ảo hoặc vi phạm điều khoản.

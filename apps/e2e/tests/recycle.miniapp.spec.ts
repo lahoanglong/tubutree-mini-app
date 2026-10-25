@@ -231,7 +231,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
       ],
     });
     api.get('/me/notifications', []);
-    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 50000, withdrawFee: 0 });
+    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
     api.get('/me/coupons', []);
     api.get('/dealer/me', { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 });
     api.get('/brand/owner/me', null);

@@ -892,7 +892,7 @@ function MerchantConfigSheet({
             Khách luôn thanh toán cho Tubu Tree.{' '}
             {selfFulfils
               ? 'Tiền hàng của bạn được đối soát và chuyển theo kỳ trên cổng người bán.'
-              : 'Hoa hồng của bạn được trả qua mục Rút tiền trong Cộng tác viên.'}
+              : 'Hoa hồng của bạn chuyển vào Ví Tubu ngay trong mục Cộng tác viên.'}
           </Text>
           {sf.bankAccountNo && (
             <div style={{ marginTop: 8 }}>

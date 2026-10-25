@@ -14,5 +14,5 @@ export function GameSkeleton() {
 }
 
 export function GameLoginGate({ onLogin }: { onLogin: () => void }) {
-  return <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
+  return <EmptyState art="sprout" heading={vi.game.newbie.loginToView} ctaLabel={vi.auth.loginCta} onCta={onLogin} />;
 }

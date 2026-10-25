@@ -228,7 +228,7 @@ model User {
   fullName               String?
   /// Tên đã gấp dấu (vn_search_fold), trigger users_full_name_search_sync giữ đồng bộ với fullName — admin tìm tên không dấu.
   fullNameSearch         String          @default("")
-  /// Mã số thuế cá nhân (10 số) hoặc số CCCD 12 số dùng làm MST, CTV khai khi lần rút hoa hồng đầu tiên bị khấu trừ thuế TNCN.
+  /// Mã số thuế cá nhân (10 số) hoặc số CCCD 12 số dùng làm MST, CTV khai khi lần chuyển hoa hồng vào Ví đầu tiên bị khấu trừ thuế TNCN.
   personalTaxId          String?
   dob                    DateTime?
   avatarUrl              String?
@@ -250,7 +250,7 @@ model User {
   // == SUM(delta) lot CONVERTED; CHECK users_points_converted_nonneg (>= 0) chỉ có trong migration SQL.
   pointsConvertedBalance Int             @default(0)
   walletBalance          Int             @default(0)
-  coinsBalance           Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không rút được)
+  coinsBalance           Int             @default(0) // TubuXu — tiền tệ tiêu trong app (không phải tiền VND thật)
   cashbackPending        Int             @default(0)
   isBlocked              Boolean         @default(false)
   // Khoá do admin (POST /admin/users/:id/block): ai khoá, lúc nào, vì sao. Xoá tài khoản (ẩn danh) chỉ đặt isBlocked.
@@ -1294,7 +1294,7 @@ model CoinTransaction {
   @@map("coin_transactions")
 }
 
-// Sổ cái Ví Tubu (walletBalance — VND thật, rút được). Bất biến: users.walletBalance ==
+// Sổ cái Ví Tubu (walletBalance — VND thật, chỉ dùng trả tiền hàng). Bất biến: users.walletBalance ==
 // SUM(delta) theo userId; mọi biến động đi qua WalletLedgerService.applyDelta trong cùng
 // transaction với thay đổi số dư. Ghi từ ngày triển khai: mỗi user có số dư <> 0 lúc migrate có
 // đúng 1 dòng OPENING (Q-04, migration 20261010041004_wallet_ledger) — không dựng lại lịch sử cũ.
@@ -1304,7 +1304,7 @@ enum WalletTxType {
   ORDER_REFUND // hoàn tiền đơn huỷ/trả về ví
   COMMISSION_PAYOUT // hoa hồng CTV chuyển vào ví
   CASHBACK // cashback hết hold chuyển vào ví
-  WITHDRAW // rút về ngân hàng (gross = tiền chuyển + phí)
+  WITHDRAW // rút về ngân hàng: dòng cũ, không còn tạo mới (gross = tiền chuyển + phí)
   WITHDRAW_REFUND // admin từ chối lệnh rút → hoàn gross
   XU_CONVERT // đổi ví sang TubuXu
   MERGE_IN // nhận số dư từ tài khoản khách bị gộp
@@ -1374,6 +1374,8 @@ model Coupon {
   newCustomerOnly Boolean            @default(false)
   // Lô mã in thẻ do admin sinh cùng cấu hình: gom số đã nhận/đã dùng và xuất lại CSV theo lô.
   batch           String?
+  /// Cách dựng link QR của lô ({ page: 'home'|'scan', src?, card? }), cùng giá trị trên mọi mã của lô; null = lô tạo trước khi có cột (link `/?claim=`).
+  batchLink       Json?
   claims          CouponClaim[]
   /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
   /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.
@@ -1633,7 +1635,7 @@ model Payout {
   method          String
   bankInfo        Json?
   status          PayoutStatus @default(REQUESTED)
-  idempotencyKey  String?      @unique // chống double-submit rút tiền (double-tap/retry timeout)
+  idempotencyKey  String?      @unique // chống double-submit khi chuyển hoa hồng vào Ví (double-tap/retry timeout)
   requestedAt     DateTime     @default(now())
   paidAt          DateTime?
   // Hàng đợi xử lý admin (P0 A5-08=A6-05, 2026-09-27): duyệt/từ chối/đã trả — mirror
@@ -2633,14 +2635,17 @@ enum ReturnStatus {
 // lỗi này) — chỉ là một YÊU CẦU được ghi nhận thật + báo admin xử lý qua CSKH, mirror cấu trúc tối
 // giản của ReturnRequest (không FK cứng, chỉ userId + index để admin truy vấn).
 model AccountDeletionRequest {
-  id         String                       @id @default(cuid())
-  userId     String
-  reason     String?
-  status     AccountDeletionRequestStatus @default(PENDING)
-  adminNote  String?
-  reviewedBy String?
-  reviewedAt DateTime?
-  createdAt  DateTime                     @default(now())
+  id                     String                       @id @default(cuid())
+  userId                 String
+  reason                 String?
+  status                 AccountDeletionRequestStatus @default(PENDING)
+  adminNote              String?
+  reviewedBy             String?
+  reviewedAt             DateTime?
+  createdAt              DateTime                     @default(now())
+  /// Số dư Ví Tubu (VND) khách đã thấy và đồng ý bỏ khi xoá tài khoản; chỉ có khi lúc gửi Ví còn tiền.
+  walletForfeitAmount    Int?
+  walletForfeitConsentAt DateTime?
 
   @@index([userId])
   @@index([status])

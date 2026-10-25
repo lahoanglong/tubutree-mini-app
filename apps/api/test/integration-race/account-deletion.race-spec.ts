@@ -174,6 +174,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     const order = await createOrder(prisma, {
       userId: user.id,
       status: 'DELIVERED',
+      deliveredAt: new Date(Date.now() - 30 * 864e5),
       total: 250_000,
       note: 'gọi trước số 0912345678',
     });
@@ -300,6 +301,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     const order = await createOrder(prisma, {
       userId: user.id,
       status: 'DELIVERED',
+      deliveredAt: new Date(Date.now() - 30 * 864e5),
       invoiceRequest: { taxCode: '0101234567', companyName: 'Công ty IT', address: '1 Phố IT', email: 'that@example.com' },
       invoiceStatus: 'ISSUED',
     });
@@ -383,7 +385,7 @@ describe('Xử lý yêu cầu xoá tài khoản (real Postgres)', () => {
     await prisma.returnRequest.create({ data: { orderId: mine.id, userId: user.id, reason: 'hỏng' } });
     await prisma.dealerCreditLedger.create({ data: { userId: user.id, delta: -200_000, refType: 'ORDER', refId: mine.id } });
     const body = await expectBlocked(request.id, user.id, /hoa hồng/);
-    expect(body.blockers.map((b) => b.code).sort()).toEqual(['COMMISSION_UNPAID', 'DEALER_CREDIT', 'RETURN_PENDING'].sort());
+    expect(body.blockers.map((b) => b.code).sort()).toEqual(['COMMISSION_UNPAID', 'DEALER_CREDIT', 'ORDER_RETURN_WINDOW', 'RETURN_PENDING'].sort());
   });
 
   it('chặn tài khoản quản trị/nhân viên', async () => {

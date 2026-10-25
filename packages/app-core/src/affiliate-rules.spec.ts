@@ -68,32 +68,21 @@ describe('isSuggestable', () => {
 describe('withdrawView', () => {
   const base = {
     max: 80_000,
-    method: 'WALLET_BALANCE' as const,
     pit: undefined,
     taxIdOnFile: null,
     taxId: '',
-    minBank: 50_000,
     cfgLoaded: true,
     knownMax: true,
-    bank: { bankName: '', accountNumber: '', accountName: '' },
   };
-  it('ví: hợp lệ khi có số dư, không cần ngân hàng', () => {
+  it('hợp lệ khi có số dư', () => {
     expect(withdrawView(base)).toMatchObject({ valid: true, tax: 0, net: 80_000, askTaxId: false });
   });
-  it('chờ config thật cho cả ví: chưa biết thuế thì số nhận trên nút có thể sai', () => {
+  it('chờ config thật: chưa biết thuế thì số nhận trên nút có thể sai', () => {
     expect(withdrawView({ ...base, cfgLoaded: false }).valid).toBe(false);
   });
   it('không biết số dư thật (dashboard lỗi) hoặc số dư 0: không gửi được', () => {
     expect(withdrawView({ ...base, knownMax: false }).valid).toBe(false);
     expect(withdrawView({ ...base, max: 0 }).valid).toBe(false);
-  });
-  it('ngân hàng: chờ config thật, đủ mức tối thiểu, đủ thông tin', () => {
-    const bank = { bankName: 'VCB', accountNumber: '123456', accountName: 'A' };
-    expect(withdrawView({ ...base, method: 'BANK', bank, cfgLoaded: false }).valid).toBe(false);
-    expect(withdrawView({ ...base, method: 'BANK', bank, minBank: 90_000 }).valid).toBe(false);
-    expect(withdrawView({ ...base, method: 'BANK', bank }).valid).toBe(true);
-    expect(withdrawView({ ...base, method: 'BANK', bank: { ...bank, accountNumber: '12345' } }).valid).toBe(false);
-    expect(withdrawView({ ...base, method: 'BANK', bank: { ...bank, bankName: '  ' } }).valid).toBe(false);
   });
   it('có thuế và chưa khai MST: hỏi MST và chặn tới khi đúng mẫu', () => {
     const pit = { pct: 0.1, threshold: 50_000 };
@@ -103,8 +92,8 @@ describe('withdrawView', () => {
   });
   describe('thuế cộng dồn tháng (taxPreview của máy chủ)', () => {
     const pit = { pct: 0.1, threshold: 2_000_000 };
-    it('có taxPreview: dùng đúng số máy chủ tính (cộng dồn các lần rút trong tháng), không tính riêng lần này', () => {
-      // Lần này chỉ 1.000.000đ (dưới ngưỡng nếu tính riêng) nhưng tháng đã rút 1.500.000đ: máy chủ truy thu 250.000đ.
+    it('có taxPreview: dùng đúng số máy chủ tính (cộng dồn các lần chuyển trong tháng), không tính riêng lần này', () => {
+      // Lần này chỉ 1.000.000đ (dưới ngưỡng nếu tính riêng) nhưng tháng đã chuyển 1.500.000đ: máy chủ truy thu 250.000đ.
       const v = withdrawView({ ...base, max: 1_000_000, pit, taxPreview: 250_000, taxIdOnFile: '0123456789' });
       expect(v).toMatchObject({ tax: 250_000, net: 750_000, askTaxId: false, valid: true });
     });
@@ -115,7 +104,7 @@ describe('withdrawView', () => {
     it('có thuế theo taxPreview mà chưa khai MST: hỏi MST', () => {
       expect(withdrawView({ ...base, max: 1_000_000, pit, taxPreview: 250_000 })).toMatchObject({ askTaxId: true, valid: false });
     });
-    it('API cũ chưa trả taxPreview: dự phòng theo từng lần rút', () => {
+    it('API cũ chưa trả taxPreview: dự phòng theo từng lần chuyển', () => {
       expect(withdrawView({ ...base, max: 3_000_000, pit, taxPreview: undefined })).toMatchObject({ tax: 300_000, net: 2_700_000 });
     });
   });

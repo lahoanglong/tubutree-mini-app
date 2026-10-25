@@ -20,7 +20,7 @@ import { homeBlockOrder } from './home-blocks';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
 
 const CONFIG = {
-  freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, affiliateMinWithdrawBank: 50_000, cashbackHoldDays: 30,
+  freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30,
   loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 }, homeNewCustomerLayout: false,
 };
 const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true });

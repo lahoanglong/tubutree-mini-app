@@ -58,6 +58,13 @@ describe('cardCode / claimUrl', () => {
     expect(claimUrl('https://zalo.me/s/123', 'SHOPEE-AB')).toBe('https://zalo.me/s/123/?claim=SHOPEE-AB');
     expect(claimUrl('', 'SHOPEE-AB')).toBe('/?claim=SHOPEE-AB');
   });
+  it('trang đích scan kèm src, card: mở thẳng màn tích điểm đơn sàn và giữ nhãn nguồn', () => {
+    expect(claimUrl('https://zalo.me/s/123', 'SHOPEE-AB', { page: 'scan', src: 'shopee', card: '2611' })).toBe(
+      'https://zalo.me/s/123/points/scan?src=shopee&card=2611&claim=SHOPEE-AB',
+    );
+    expect(claimUrl('https://zalo.me/s/123', 'A-B', { page: 'home', src: 'lazada' })).toBe('https://zalo.me/s/123/?src=lazada&claim=A-B');
+    expect(claimUrl('', 'A-B', { page: 'scan' })).toBe('/points/scan?claim=A-B');
+  });
 });
 
 describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)', () => {
@@ -79,12 +86,34 @@ describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)',
         scope: 'CLAIM',
         newCustomerOnly: true,
         batch: 'SHOPEE',
+        batchLink: { page: 'home' },
       });
     }
     expect(out).toMatchObject({ batch: 'SHOPEE', created: 3, claimUrlBase: 'https://zalo.me/s/123' });
     expect(out.codes.map((c) => c.code).sort()).toEqual(rows.map((r) => r.code as string).sort());
     const first = out.codes[0]!;
     expect(first.url).toBe(`https://zalo.me/s/123/?claim=${first.code}`);
+  });
+
+  it('link trong kết quả tạo lô mang trang đích, src, card theo lựa chọn', async () => {
+    const { svc } = make();
+    const out = await svc.create({ ...INPUT, link: { page: 'scan', src: 'tiktok', card: '2611' } });
+    expect(out.codes[0]!.url).toBe(`https://zalo.me/s/123/points/scan?src=tiktok&card=2611&claim=${out.codes[0]!.code}`);
+  });
+
+  it('không truyền link: lưu và dùng trang chủ (tương thích web cũ, script)', async () => {
+    const { svc } = make();
+    const out = await svc.create(INPUT);
+    expect(out.link).toEqual({ page: 'home' });
+  });
+
+  it('link được lưu cùng mọi mã của lô để tải lại CSV ra đúng link', async () => {
+    const { svc, createMany } = make();
+    const out = await svc.create({ ...INPUT, link: { page: 'home', src: 'lazada', card: '2611' } });
+    for (const call of createMany.mock.calls) {
+      for (const row of call[0].data) expect(row.batchLink).toEqual({ page: 'home', src: 'lazada', card: '2611' });
+    }
+    expect(out.link).toEqual({ page: 'home', src: 'lazada', card: '2611' });
   });
 
   it('mã sinh ra trùng mã đã có (ON CONFLICT bỏ qua) → sinh bù đúng số thiếu', async () => {
@@ -140,15 +169,27 @@ describe('AdminCouponBatchService.codes / setActive', () => {
   it('codes: mỗi mã kèm link nhận, đã nhận/đã dùng (để xuất lại CSV và soát thẻ)', async () => {
     const { svc, findMany } = make();
     findMany.mockResolvedValue([
-      { code: 'SHOPEE-AAAA2222', isActive: true, _count: { claims: 1, redemptions: 1 } },
-      { code: 'SHOPEE-BBBB3333', isActive: true, _count: { claims: 0, redemptions: 0 } },
+      { code: 'SHOPEE-AAAA2222', isActive: true, batchLink: null, _count: { claims: 1, redemptions: 1 } },
+      { code: 'SHOPEE-BBBB3333', isActive: true, batchLink: null, _count: { claims: 0, redemptions: 0 } },
     ]);
     const out = await svc.codes('shopee');
+    expect(out.link).toBeNull();
     expect(findMany.mock.calls[0][0].where).toEqual({ batch: 'SHOPEE' });
     expect(out.codes).toEqual([
       { code: 'SHOPEE-AAAA2222', url: 'https://zalo.me/s/123/?claim=SHOPEE-AAAA2222', claimed: true, used: true, isActive: true },
       { code: 'SHOPEE-BBBB3333', url: 'https://zalo.me/s/123/?claim=SHOPEE-BBBB3333', claimed: false, used: false, isActive: true },
     ]);
+  });
+
+  it('codes: lô có link đã lưu thì mọi mã dùng link đó; link hỏng bị lọc', async () => {
+    const { svc, findMany } = make();
+    const saved = { page: 'scan', src: 'shopee', card: '2611' };
+    findMany.mockResolvedValue([{ code: 'SHOPEE-AAAA2222', isActive: true, batchLink: saved, _count: { claims: 0, redemptions: 0 } }]);
+    const out = await svc.codes('shopee');
+    expect(out.link).toEqual(saved);
+    expect(out.codes[0]!.url).toBe('https://zalo.me/s/123/points/scan?src=shopee&card=2611&claim=SHOPEE-AAAA2222');
+    findMany.mockResolvedValue([{ code: 'SHOPEE-AAAA2222', isActive: true, batchLink: { page: 'scan', src: 'A B&x=1', card: 5 }, _count: { claims: 0, redemptions: 0 } }]);
+    expect((await svc.codes('shopee')).codes[0]!.url).toBe('https://zalo.me/s/123/points/scan?claim=SHOPEE-AAAA2222');
   });
 
   describe('codes: nhân viên chỉ xem mã lô do chính mình tạo (chặn gom mã đem nhận bằng tài khoản khác)', () => {

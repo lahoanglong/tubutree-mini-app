@@ -6,7 +6,7 @@ vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { CheckInStreak } from './checkin-streak';
 
-const PROFILE = { streakDays: 12, streakFreezes: 1, lastDewAt: null, lastCheckInAt: null } as unknown as GameProfile;
+const PROFILE = { streakDays: 12, totalSeeds: 500, streakFreezes: 1, lastDewAt: null, lastCheckInAt: null } as unknown as GameProfile;
 
 function renderStreak(profile: GameProfile = PROFILE) {
   return render(
@@ -18,6 +18,7 @@ function renderStreak(profile: GameProfile = PROFILE) {
       freezePending={false}
       onCollectDew={() => {}}
       dewPending={false}
+      onNeedWater={() => {}}
     />,
   );
 }

@@ -1154,6 +1154,14 @@ describe('CommunityFeedService.createAchievementPost', () => {
     const data = (prisma.feedPost.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', kind: 'SPECIES', body: 'Sưu tập loài Lim 🌳', meta: { species: 'Lim' } });
   });
+
+  it('có client (giao dịch của người gọi) thì tạo bài bằng client đó, không dùng this.prisma', async () => {
+    const prisma = makePrisma();
+    const client = { feedPost: { create: jest.fn().mockResolvedValue({ id: 'p1' }) } };
+    await makeSvc(prisma).createAchievementPost('u1', 'HARVEST', 'x', { treesPlanted: 2 }, client as never);
+    expect(client.feedPost.create).toHaveBeenCalledTimes(1);
+    expect(prisma.feedPost.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('CommunityFeedService.createPost (mở rộng)', () => {

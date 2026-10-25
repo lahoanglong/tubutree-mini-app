@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import {
@@ -11,9 +11,6 @@ import {
   Max,
   MaxLength,
   Min,
-  MinLength,
-  ValidateIf,
-  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -22,31 +19,22 @@ import { clientIp } from '../../common/throttle/throttle.config';
 import { CursorPageQuery } from '../../common/cursor-page-query.dto';
 import { vnDateParts } from '../../common/vn-time';
 import { clampTake } from '../../common/pagination';
-import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN } from './affiliate.service';
+import { AffiliateService, PERSONAL_TAX_ID_FORMAT_MESSAGE, PERSONAL_TAX_ID_PATTERN, WALLET_ONLY_MESSAGE } from './affiliate.service';
 import { PlaceOrderForCustomerDto, QuoteOrderForCustomerDto } from './dto/place-order-for-customer.dto';
 import { RegisterAffiliateDto } from './dto/register-affiliate.dto';
+
 
 class CreateLinkDto {
   @IsIn(['PRODUCT', 'CATEGORY', 'HOMEPAGE', 'DEAL']) targetType!: string;
   @IsOptional() @IsString() targetId?: string;
 }
 
-class PayoutBankInfoDto {
-  @IsString() @MinLength(2) @MaxLength(100) bankName!: string;
-  @IsString() @Matches(/^\d{6,20}$/, { message: 'Số tài khoản phải gồm 6–20 chữ số.' }) accountNumber!: string;
-  @IsString() @MinLength(2) @MaxLength(100) accountName!: string;
-}
-
 export class PayoutDto {
   @IsInt() @Min(1) amount!: number;
   @IsIn(['BANK', 'WALLET_BALANCE', 'ZALOPAY']) method!: string;
-  // SELLER-10: rút ngân hàng bắt buộc đủ thông tin tài khoản; trước đây `{}` cũng qua và admin không biết chuyển vào đâu.
-  @ValidateIf((o: PayoutDto) => o.method !== 'WALLET_BALANCE')
-  @IsObject()
-  @ValidateNested()
-  @Type(() => PayoutBankInfoDto)
-  bankInfo?: PayoutBankInfoDto;
-  /** MST cá nhân hoặc số CCCD, bắt buộc khi lần rút bị khấu trừ thuế TNCN mà hồ sơ chưa có (SELLER-11). */
+  // Client cũ vẫn gửi bankInfo kèm method BANK: nhận để trả đúng câu "chỉ chuyển vào Ví" thay vì lỗi định dạng tài khoản.
+  @IsOptional() @IsObject() bankInfo?: Record<string, unknown>;
+  /** MST cá nhân hoặc số CCCD, bắt buộc khi lần chuyển bị khấu trừ thuế TNCN mà hồ sơ chưa có (SELLER-11). */
   @IsOptional() @IsString() @Matches(PERSONAL_TAX_ID_PATTERN, { message: PERSONAL_TAX_ID_FORMAT_MESSAGE }) taxId?: string;
 }
 
@@ -126,14 +114,15 @@ export class AffiliateController {
     return this.affiliate.listMyPayouts(userId);
   }
 
-  // Idempotency-Key: mirror wallet.withdraw / affiliate.orders — chống double-tap/retry rút tiền
-  // trùng lần (header optional ở tầng type, nhưng client thực tế BẮT BUỘC gửi khi rút tiền thật).
+  // Chính sách Zalo 4.5 cấm rút tiền/trả thưởng: hoa hồng chỉ đi một đường, vào Ví Tubu 1:1 (controller và service cùng chặn method khác).
+  // Idempotency-Key: chống double-tap/retry chuyển trùng lần.
   @Post('payouts')
   payout(
     @CurrentUser('sub') userId: string,
     @Body() dto: PayoutDto,
     @Headers('idempotency-key') idempotencyKey?: string,
   ) {
+    if (dto.method !== 'WALLET_BALANCE') throw new BadRequestException(WALLET_ONLY_MESSAGE);
     return this.affiliate.requestPayout(userId, dto.amount, dto.method, dto.bankInfo, idempotencyKey, dto.taxId);
   }
 

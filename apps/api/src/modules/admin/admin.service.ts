@@ -696,7 +696,7 @@ export class AdminService {
       }),
       // STOREFRONT_PARTNER lấy riêng (partnerHistory) để không chiếm 100 dòng của lịch sử vai trò/khoá.
       this.prisma.userAdminEvent.findMany({
-        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK'] } },
+        where: { userId, kind: { in: ['ROLE', 'STAFF_PERMISSIONS', 'BLOCK', 'UNBLOCK', 'WALLET_FORFEIT'] } },
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),

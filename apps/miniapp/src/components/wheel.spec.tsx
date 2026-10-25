@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SpinResult } from '../services/game-api';
 import { useWheelPrize } from './game/use-wheel-prize';
 import { WheelPrizeSheet } from './game/wheel-prize-sheet';
+import { WHEEL_SLOTS, slotUnderPointer } from '@tubutree/app-core/game-wheel';
 
 /**
  * Đặc tả hành vi vòng quay may mắn (C-076, PC-10a): nút quay khoá đúng lúc, kết quả chỉ hiện khi CẢ
@@ -104,13 +105,46 @@ describe('WheelOfFortune — nút quay', () => {
     await advance(SPIN_MS);
   });
 
-  it('bánh xe quay ≥ 5 vòng và dừng ở ô đã chọn (ô 0 → 2160 độ)', async () => {
-    const onSpin = vi.fn().mockResolvedValue(POINTS_PRIZE);
-    const { container } = render(<WheelOfFortune cost={20} onSpin={onSpin} />);
-    expect(container.querySelector('[style*="rotate(0deg)"]')).not.toBeNull();
+  const wheelAngle = (container: HTMLElement) => {
+    const el = [...container.querySelectorAll<HTMLElement>('[style*="rotate("]')].find((e) => e.style.transition !== undefined && /^rotate\(/.test(e.style.transform));
+    return Number(/^rotate\((-?[\d.]+)deg\)/.exec(el?.style.transform ?? '')?.[1] ?? NaN);
+  };
+  const prizeOf = (rewardType: string, value: number): SpinResult => ({ prize: { id: 'x', name: 'Giải', rewardType, value } });
+
+  it('bánh xe quay ≥ 5 vòng và kim dừng ở ô đúng loại giải API trả về', async () => {
+    for (const [result, kind] of [
+      [POINTS_PRIZE, 'POINTS'],
+      [prizeOf('SEEDS', 30), 'SEEDS'],
+      [prizeOf('NONE', 0), 'NONE'],
+      [prizeOf('LẠ', 9), 'NONE'],
+    ] as const) {
+      const { container, unmount } = render(<WheelOfFortune cost={20} onSpin={vi.fn().mockResolvedValue(result)} />);
+      expect(wheelAngle(container)).toBe(0);
+      fireEvent.click(spinButton());
+      await advance(0);
+      const angle = wheelAngle(container);
+      expect(angle).toBeGreaterThanOrEqual(1800);
+      expect(WHEEL_SLOTS[slotUnderPointer(angle)]!.kind).toBe(kind);
+      await advance(SPIN_MS);
+      unmount();
+    }
+  });
+
+  it('lỗi từ API: bánh xe đứng yên, không có hộp kết quả, nút quay mở lại', async () => {
+    const { container } = render(<WheelOfFortune cost={20} onSpin={vi.fn().mockRejectedValue(new Error('nope'))} />);
     fireEvent.click(spinButton());
+    await advance(SPIN_MS);
+    expect(wheelAngle(container)).toBe(0);
+    expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();
+    expect(spinButton()).toBeEnabled();
+  });
+
+  it('chạm vào chữ QUAY ở giữa bánh xe quay như nút chính', async () => {
+    const onSpin = vi.fn().mockResolvedValue(POINTS_PRIZE);
+    render(<WheelOfFortune cost={20} onSpin={onSpin} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Quay vòng quay' }));
     await advance(0);
-    expect(container.querySelector('[style*="rotate(2160deg)"]')).not.toBeNull();
+    expect(onSpin).toHaveBeenCalledTimes(1);
     await advance(SPIN_MS);
   });
 
@@ -146,7 +180,7 @@ describe('WheelOfFortune — hộp kết quả', () => {
     expect(screen.queryByText('Chúc mừng!')).not.toBeInTheDocument();
     expect(spinButton()).toBeDisabled();
     resolveSpin(POINTS_PRIZE);
-    await advance(0);
+    await advance(SPIN_MS);
     expect(screen.getByText('Chúc mừng!')).toBeInTheDocument();
   });
 

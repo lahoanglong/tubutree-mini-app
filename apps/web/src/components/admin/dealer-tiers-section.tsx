@@ -47,7 +47,7 @@ const INPUT = `${INPUT_CLASS} ${TOUCH_H}`;
  */
 export function DealerTiersSection() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['admin-dealer-tiers'], queryFn: listDealerTiersForEdit });
+  const q = useQuery({ queryKey: ['admin-dealer-tiers', 'manage'], queryFn: listDealerTiersForEdit });
   const [mode, setMode] = useState<Mode | null>(null);
   const [form, setForm] = useState<TierFormInput>(emptyTierForm);
   const [errors, setErrors] = useState<string[]>([]);

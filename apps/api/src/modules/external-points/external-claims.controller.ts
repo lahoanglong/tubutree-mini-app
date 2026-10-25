@@ -10,6 +10,8 @@ import { ExternalClaimService } from './external-claim.service';
 export class SubmitExternalClaimDto {
   /** Giới hạn dài để chặn chuỗi rác trước khi chuẩn hoá; mã hợp lệ sau chuẩn hoá chỉ 8 đến 30 ký tự. */
   @Trim() @IsString() @MinLength(1) @MaxLength(100) code!: string;
+  /** Mã do khách quét nhãn hay gõ tay; chỉ để đo phễu. */
+  @IsOptional() @IsIn(['scan', 'typed']) via?: 'scan' | 'typed';
 }
 
 export class MyClaimsQuery extends PaginationQuery {
@@ -25,7 +27,7 @@ export class ExternalClaimsController {
   @Post('claims')
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   submit(@CurrentUser('sub') userId: string, @Body() dto: SubmitExternalClaimDto): Promise<SubmitExternalClaimResponse> {
-    return this.claims.submit(userId, dto.code);
+    return this.claims.submit(userId, dto.code, dto.via);
   }
 
   @Get('claims')

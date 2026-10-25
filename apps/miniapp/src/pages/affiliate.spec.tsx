@@ -56,7 +56,6 @@ vi.mock('../services/affiliate-api', () => ({
 }));
 vi.mock('../hooks/use-public-config', () => ({
   usePublicConfig: () => ({
-    affiliateMinWithdrawBank: 50_000,
     affiliatePitWithhold: { pct: 0.1, threshold: 2_000_000 },
     isLoaded: true,
   }),
@@ -196,10 +195,10 @@ describe('Dashboard CTV — lối tắt Lên đơn hộ ở đầu trang (C-064)
     mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
   });
 
-  it('nút Lên đơn hộ khách nằm trước nút Rút tiền và trước lịch sử hoa hồng, đủ cao 44px', async () => {
+  it('nút Lên đơn hộ khách nằm trước nút Chuyển vào Ví và trước lịch sử hoa hồng, đủ cao 44px', async () => {
     renderPage();
     const entry = await screen.findByRole('button', { name: /Lên đơn hộ khách/ });
-    const withdraw = screen.getByRole('button', { name: 'Rút tiền hoa hồng' });
+    const withdraw = screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' });
     const history = screen.getByText('Lịch sử hoa hồng');
     expect(entry.compareDocumentPosition(withdraw) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(entry.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -287,7 +286,7 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     ] as Awaited<ReturnType<typeof getCommissions>>);
   });
 
-  it('thẻ hoa hồng tháng, số đang chờ, số có thể rút và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
+  it('thẻ hoa hồng tháng, số đang chờ, số có thể chuyển vào Ví và từng dòng lịch sử đúng số và đúng nhãn trạng thái', async () => {
     renderPage();
     expect(await screen.findByText('125.000đ')).toBeInTheDocument();
     expect(screen.getByText('15.000đ')).toBeInTheDocument();
@@ -298,27 +297,27 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     for (const label of ['Đang chờ · đơn chưa giao', 'Đang chờ · đang giữ', 'Đã trả', 'Từ chối']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getAllByText('Có thể rút')).toHaveLength(2);
+    expect(screen.getAllByText('Có thể chuyển vào Ví')).toHaveLength(2);
   });
 
-  it('dòng hoa hồng kèm mã đơn và trạng thái đơn; khoản đang nằm trong lệnh rút hiện "Đang rút", không phải "Đã trả" (SELLER-10)', async () => {
+  it('dòng hoa hồng kèm mã đơn và trạng thái đơn; khoản nằm trong lệnh rút cũ hiện "Lệnh rút cũ đang xử lý", không phải "Đã trả" (SELLER-10)', async () => {
     vi.mocked(getCommissions).mockResolvedValue([
       { id: 'c1', amount: 25_000, orderTotal: 500_000, status: 'APPROVED', withdrawing: true, orderCode: 'TB123', orderStatus: 'DELIVERED', createdAt: '2026-10-01T03:00:00.000Z' },
     ] as Awaited<ReturnType<typeof getCommissions>>);
     renderPage();
-    expect(await screen.findByText('Đang rút')).toBeInTheDocument();
+    expect(await screen.findByText('Lệnh rút cũ đang xử lý')).toBeInTheDocument();
     expect(screen.getByText('Đơn TB123 ·', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Giao thành công')).toBeInTheDocument();
     expect(screen.queryByText('Đã trả')).toBeNull();
   });
 
-  it('mục Lệnh rút: trạng thái, lý do từ chối, mã giao dịch và thuế TNCN đã khấu trừ', async () => {
+  it('mục Lịch sử chuyển vào Ví: trạng thái, lý do từ chối, mã giao dịch và thuế TNCN đã khấu trừ', async () => {
     vi.mocked(getMyPayouts).mockResolvedValue([
       { id: 'p1', amount: 2_700_000, grossAmount: 3_000_000, taxWithheld: 300_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: 'FT2610', requestedAt: '2026-10-01T03:00:00.000Z', reviewedAt: null, paidAt: '2026-10-02T03:00:00.000Z' },
       { id: 'p2', amount: 60_000, grossAmount: 60_000, taxWithheld: 0, fee: 0, method: 'BANK', status: 'REJECTED', rejectionReason: 'Thiếu số tài khoản', bankRef: null, requestedAt: '2026-10-03T03:00:00.000Z', reviewedAt: '2026-10-04T03:00:00.000Z', paidAt: null },
     ]);
     renderPage();
-    expect(await screen.findByRole('heading', { level: 2, name: 'Lệnh rút' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Lịch sử chuyển vào Ví' })).toBeInTheDocument();
     expect(await screen.findByText('Đã chuyển')).toBeInTheDocument();
     expect(screen.getByText('Mã giao dịch: FT2610')).toBeInTheDocument();
     expect(screen.getByText(/đã khấu trừ thuế TNCN 300\.000đ/)).toBeInTheDocument();
@@ -346,18 +345,18 @@ describe('Dashboard CTV — số tiền hiển thị giữ nguyên khi đổi gi
     expect(screen.getByText(/chứng từ khấu trừ thuế TNCN/)).toBeInTheDocument();
   });
 
-  it('có hoa hồng đang rút: báo số đang chờ Tubu Tree chuyển khoản', async () => {
+  it('còn hoa hồng trong lệnh rút ngân hàng cũ: báo số đang chờ Tubu Tree xử lý', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0, withdrawingCommission: 80_000,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    expect(await screen.findByText(/Đang rút 80\.000đ về ngân hàng/)).toBeInTheDocument();
+    expect(await screen.findByText(/Còn 80\.000đ nằm trong lệnh rút ngân hàng cũ/)).toBeInTheDocument();
   });
 });
 
-describe('Dashboard CTV — rút hoa hồng', () => {
+describe('Dashboard CTV — chuyển hoa hồng vào Ví', () => {
   /** zmp-ui Input vẽ nhãn là phần tử riêng (không htmlFor) nên tìm ô nhập đi kèm nhãn hiển thị. */
   const inputNear = (labelText: string): HTMLInputElement => {
     let node: HTMLElement | null = screen.getByText(labelText);
@@ -367,9 +366,9 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     return input;
   };
 
-  /** Nút Rút khoá tới khi số dư về, nên chờ nó mở rồi mới bấm. */
-  const openWithdraw = async () => {
-    const btn = await screen.findByRole('button', { name: 'Rút tiền hoa hồng' });
+  /** Nút Chuyển vào Ví khoá tới khi số dư về, nên chờ nó mở rồi mới bấm. */
+  const openTransfer = async () => {
+    const btn = await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
     await waitFor(() => expect(btn).toBeEnabled());
     fireEvent.click(btn);
   };
@@ -382,97 +381,97 @@ describe('Dashboard CTV — rút hoa hồng', () => {
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
-    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã gửi yêu cầu rút.' } as Awaited<ReturnType<typeof requestPayout>>);
+    vi.mocked(requestPayout).mockResolvedValue({ note: 'Đã chuyển hoa hồng vào Ví Tubu.' } as Awaited<ReturnType<typeof requestPayout>>);
   });
 
-  it('mở sheet: tiêu đề h2, mặc định chọn Ví Tubu và điền sẵn toàn bộ số có thể rút, gửi đúng lệnh rút về Ví', async () => {
+  it('mở sheet: tiêu đề h2, điền sẵn toàn bộ số có thể chuyển, không có lựa chọn ngân hàng, gửi đúng lệnh chuyển vào Ví', async () => {
     renderPage();
-    await openWithdraw();
-    expect(await screen.findByRole('heading', { level: 2, name: 'Rút hoa hồng' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Ví Tubu/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /Ngân hàng/ })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText('Mỗi lần rút là toàn bộ hoa hồng có thể rút.')).toBeInTheDocument();
+    await openTransfer();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Chuyển hoa hồng vào Ví' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Ngân hàng|ZaloPay/ })).toBeNull();
+    expect(screen.queryByText(/Tên ngân hàng|Số tài khoản|Chủ tài khoản/)).toBeNull();
+    expect(screen.getByText('Mỗi lần chuyển là toàn bộ hoa hồng có thể chuyển.')).toBeInTheDocument();
     expect(screen.queryByText('Số tiền')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Nhận 200.000đ vào Ví' }));
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
-    expect(requestPayout).toHaveBeenCalledWith(200000, 'WALLET_BALANCE', undefined, expect.any(String));
+    expect(requestPayout).toHaveBeenCalledWith(200000, expect.any(String));
   });
 
-  it('gửi lại sau lỗi dùng cùng Idempotency-Key (không tạo lệnh rút thứ hai)', async () => {
+  it('gửi lại sau lỗi dùng cùng Idempotency-Key (không tạo lệnh thứ hai)', async () => {
     vi.mocked(requestPayout).mockRejectedValueOnce(new Error('Network Error'));
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     const submit = await screen.findByRole('button', { name: 'Nhận 200.000đ vào Ví' });
     fireEvent.click(submit);
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(2));
-    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[3]);
+    const keys = vi.mocked(requestPayout).mock.calls.map((c) => c[1]);
     expect(keys[0]).toBeTruthy();
     expect(keys[1]).toBe(keys[0]);
   });
 
-  it('từ ngưỡng thuế TNCN: hiện số khấu trừ và thực nhận trước khi bấm rút (SELLER-11)', async () => {
+  it('từ ngưỡng thuế TNCN: hiện số khấu trừ và thực nhận trước khi bấm chuyển (SELLER-11)', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 2.700.000đ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nhận 2.700.000đ vào Ví' })).toBeInTheDocument();
   });
 
-  it('Q2: thuế tính cộng dồn trong tháng — rút 1.500.000đ dưới ngưỡng nhưng tháng này đã rút trước đó → hiện số khấu trừ máy chủ báo, bắt khai MST', async () => {
+  it('Q2: thuế tính cộng dồn trong tháng — chuyển 1.500.000đ dưới ngưỡng nhưng tháng này đã chuyển trước đó → hiện số khấu trừ máy chủ báo, bắt khai MST', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 1_500_000, withdrawTaxPreview: 300_000,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     expect(await screen.findByText('Khấu trừ thuế TNCN 300.000đ · thực nhận 1.200.000đ')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nhận 1.200.000đ vào Ví' })).toBeDisabled();
     expect(inputNear('Mã số thuế cá nhân hoặc số CCCD')).toBeInTheDocument();
   });
 
-  it('Q2: máy chủ báo chưa khấu trừ (tổng tháng chưa tới ngưỡng) → không hiện số khấu trừ dù số rút lần này lớn', async () => {
+  it('Q2: máy chủ báo chưa khấu trừ (tổng tháng chưa tới ngưỡng) → không hiện số khấu trừ dù số chuyển lần này lớn', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 1_900_000, withdrawTaxPreview: 0,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     expect(await screen.findByRole('button', { name: 'Nhận 1.900.000đ vào Ví' })).toBeEnabled();
     expect(screen.queryByText(/Khấu trừ thuế TNCN/)).toBeNull();
   });
 
-  it('Q2: màn rút giải thích đúng cách tính thuế: cộng dồn các lần rút trong tháng, từ ngưỡng thì khấu trừ', async () => {
+  it('Q2: màn chuyển giải thích đúng cách tính thuế: cộng dồn các lần chuyển trong tháng, từ ngưỡng thì khấu trừ', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 500_000,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     expect(
       await screen.findByText(
-        'Thuế TNCN 10% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi tổng từ 2.000.000đ trở lên, thuế của các lần rút trước trong tháng chưa bị trừ sẽ được trừ bù vào lần rút này (tối đa bằng số tiền lần này).',
+        'Thuế TNCN 10% tính trên tổng hoa hồng bạn chuyển trong tháng (giờ Việt Nam). Khi tổng từ 2.000.000đ trở lên, thuế của các lần chuyển trước trong tháng chưa bị trừ sẽ được trừ bù vào lần chuyển này (tối đa bằng số tiền lần này).',
       ),
     ).toBeInTheDocument();
   });
 
-  it('SELLER-11: lần rút bị khấu trừ mà chưa khai MST/CCCD → bắt nhập (10 hoặc 12 số) rồi gửi kèm', async () => {
+  it('SELLER-11: lần chuyển bị khấu trừ mà chưa khai MST/CCCD → bắt nhập (10 hoặc 12 số) rồi gửi kèm', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 3_000_000,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     const submit = await screen.findByRole('button', { name: 'Nhận 2.700.000đ vào Ví' });
     expect(submit).toBeDisabled();
     fireEvent.change(inputNear('Mã số thuế cá nhân hoặc số CCCD'), { target: { value: '07920100' } });
@@ -482,7 +481,7 @@ describe('Dashboard CTV — rút hoa hồng', () => {
     expect(submit).toBeEnabled();
     fireEvent.click(submit);
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
-    expect(requestPayout).toHaveBeenCalledWith(3_000_000, 'WALLET_BALANCE', undefined, expect.any(String), '079201001234');
+    expect(requestPayout).toHaveBeenCalledWith(3_000_000, expect.any(String), '079201001234');
   });
 
   it('SELLER-11: đã khai MST/CCCD → không hỏi lại, ghi rõ số dùng để kê khai', async () => {
@@ -493,36 +492,16 @@ describe('Dashboard CTV — rút hoa hồng', () => {
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    await openWithdraw();
+    await openTransfer();
     const submit = await screen.findByRole('button', { name: 'Nhận 2.700.000đ vào Ví' });
     expect(screen.queryByText('Mã số thuế cá nhân hoặc số CCCD')).toBeNull();
     expect(screen.getByText('Kê khai khấu trừ theo MST/CCCD 079201001234')).toBeInTheDocument();
     expect(submit).toBeEnabled();
     fireEvent.click(submit);
     await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
-    expect(requestPayout).toHaveBeenCalledWith(3_000_000, 'WALLET_BALANCE', undefined, expect.any(String));
+    expect(requestPayout).toHaveBeenCalledWith(3_000_000, expect.any(String));
   });
 
-  it('chọn Ngân hàng: khoá nút tới khi nhập đủ thông tin tài khoản, rồi gửi kèm thông tin ngân hàng', async () => {
-    renderPage();
-    await openWithdraw();
-    fireEvent.click(await screen.findByRole('button', { name: /Ngân hàng/ }));
-    expect(screen.getByRole('button', { name: /Ngân hàng/ })).toHaveAttribute('aria-pressed', 'true');
-    const submit = screen.getByRole('button', { name: 'Rút 200.000đ' });
-    expect(submit).toBeDisabled();
-    fireEvent.change(inputNear('Tên ngân hàng'), { target: { value: 'Vietcombank' } });
-    fireEvent.change(inputNear('Số tài khoản'), { target: { value: '0123456789' } });
-    fireEvent.change(inputNear('Chủ tài khoản'), { target: { value: 'NGUYEN VAN A' } });
-    expect(submit).toBeEnabled();
-    fireEvent.click(submit);
-    await waitFor(() => expect(requestPayout).toHaveBeenCalledTimes(1));
-    expect(requestPayout).toHaveBeenCalledWith(
-      200000,
-      'BANK',
-      { bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN VAN A' },
-      expect.any(String),
-    );
-  });
 });
 
 describe('Dashboard CTV — thưởng mốc là Điểm Xanh (PD-3)', () => {
@@ -588,7 +567,7 @@ describe('Trang CTV — đại lý (D3-03)', () => {
       isAffiliate: true, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
     });
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Rút tiền hoa hồng' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Đăng ký miễn phí ngay' })).toBeNull();
   });
 
@@ -597,7 +576,7 @@ describe('Trang CTV — đại lý (D3-03)', () => {
       isAffiliate: true, canRegister: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0,
     });
     renderPage();
-    await screen.findByRole('button', { name: 'Rút tiền hoa hồng' });
+    await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' });
     expect(screen.queryByRole('button', { name: /Lên đơn hộ khách/ })).toBeNull();
   });
 
@@ -644,7 +623,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     renderPage();
     const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
     const names = Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
-    expect(names).toEqual(['Chia sẻ link và mã giới thiệu', 'Gian hàng của tôi', 'Lên đơn hộ khách', 'Rút tiền hoa hồng']);
+    expect(names).toEqual(['Chia sẻ link và mã giới thiệu', 'Gian hàng của tôi', 'Lên đơn hộ khách', 'Chuyển vào Ví Tubu']);
     expect(before(screen.getByText('Hoa hồng tháng này'), group)).toBe(true);
     expect(before(group, await screen.findByText('200.000đ'))).toBe(true);
     expect(before(group, await screen.findByRole('button', { name: /Bảng 5 bậc CTV/ }))).toBe(true);
@@ -660,7 +639,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(group.style.gridTemplateColumns).toBe('repeat(3, minmax(0, 1fr))');
   });
 
-  it('đại lý chưa có gian hàng CTV (canOpenStorefront=false): không có lối tắt Gian hàng vì builder trả 400, vẫn có Chia sẻ và Rút', async () => {
+  it('đại lý chưa có gian hàng CTV (canOpenStorefront=false): không có lối tắt Gian hàng vì builder trả 400, vẫn có Chia sẻ và Chuyển vào Ví', async () => {
     mocks.getAffiliateMe.mockResolvedValue({
       isAffiliate: true, canOrderForCustomer: false, canOpenStorefront: false, referralCode: 'TUBU88', walletBalance: 0,
     });
@@ -668,7 +647,7 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     const group = await screen.findByRole('group', { name: 'Lối tắt của CTV' });
     expect(Array.from(group.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'))).toEqual([
       'Chia sẻ link và mã giới thiệu',
-      'Rút tiền hoa hồng',
+      'Chuyển vào Ví Tubu',
     ]);
     expect(group.style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
   });
@@ -695,17 +674,17 @@ describe('Trang CTV — bố cục mới: lối tắt dưới thẻ hoa hồng (
     expect(mocks.navigate).toHaveBeenCalledWith('/storefront');
   });
 
-  it('Rút tiền khoá khi chưa có hoa hồng rút được, mở form khi có', async () => {
+  it('Chuyển vào Ví khoá khi chưa có hoa hồng chuyển được, mở form khi có', async () => {
     vi.mocked(getAffiliateDashboard).mockResolvedValue({
       todayCommission: 0, monthCommission: 0, pendingCommission: 0, withdrawableCommission: 0,
       totalClicks: 0, totalConversions: 0, monthRevenue: 0,
       tier: { name: 'Hạt Giống', emoji: '🌱', nextName: null, nextThreshold: null, toNext: 0 },
     } as Awaited<ReturnType<typeof getAffiliateDashboard>>);
     renderPage();
-    expect(await screen.findByRole('button', { name: 'Rút tiền hoa hồng' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Chuyển vào Ví Tubu' })).toBeDisabled();
   });
 
-  it('hai ô Đang chờ và Có thể rút cùng một kiểu thẻ (cùng nền và bóng), chỉ khác màu số', async () => {
+  it('hai ô Đang chờ và Có thể chuyển vào Ví cùng một kiểu thẻ (cùng nền và bóng), chỉ khác màu số', async () => {
     renderPage();
     await screen.findByText('200.000đ');
     const cardOf = (value: string) => screen.getByText(value).closest<HTMLElement>('[style*="--elevation-1"]')!;

@@ -1,4 +1,4 @@
-import { BadRequestException, GoneException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, GoneException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -9,11 +9,29 @@ import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
-import { DEFAULT_TREE_TYPE, harvestCouponMinOrder, spinVoucherMinOrder } from './game.constants';
+import {
+  DAILY_LOGIN_SEEDS_DEFAULT,
+  DEFAULT_TREE_TYPE,
+  DEW_SEEDS_DEFAULT,
+  FIRST_CHECKIN_BONUS_DEFAULT,
+  FIRST_HARVEST_POINTS_DEFAULT,
+  HARVEST_COUPON_DAILY_CAP_DEFAULT,
+  HARVEST_COUPON_MONTHLY_CAP_DEFAULT,
+  QUIZ_WRONG_SEEDS_DEFAULT,
+  configInt,
+  harvestCouponMinOrder,
+  HARVEST_COUPON_PREFIX,
+  HARVEST_COUPON_CODE_PREFIXES,
+  ladderTarget,
+  spinVoucherMinOrder,
+  streak7Seeds,
+  treeTargetLadder,
+} from './game.constants';
 import { countReferralSuccesses } from '../wallet/referral-reward';
-import { ensureGameProfile } from './game-profile';
+import { ensureGameProfile, initialEcoImpact, sproutAlreadyRewarded } from './game-profile';
+import { isRealUser } from '../../common/real-user';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
-import { startOfVnDay } from '../../common/vn-time';
+import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
@@ -32,6 +50,8 @@ interface EcoImpact {
   target: number;
   treeType: string;
   treesPlanted: number;
+  /** Đã cấp điểm cây mầm chưa. Thiếu = hồ sơ cũ, suy từ treesPlanted (xem sproutAlreadyRewarded). */
+  sproutRewarded?: boolean;
 }
 
 /** Thêm vào mô tả thẻ nhiệm vụ khi đơn đã giao nhưng chưa tính vì còn trong hạn đổi/trả. */
@@ -68,18 +88,35 @@ export class GameService {
   async getProfile(userId: string) {
     const profile = await this.ensureProfile(userId);
     const wiltDays = await this.config.get<number>('game.wilt_days', 3);
-    const deathDays = await this.config.get<number>('game.death_days', 7);
     const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', 150);
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
     // Giá các món — FE trước đây chép cứng (80💧 đóng băng chuỗi, giá góp quỹ trồng cây): admin đổi
     // config thì nhãn trên nút vẫn hiện giá cũ, bấm xong mới biết trừ khác.
-    const [streakFreezeCost, treePointsPrice, tankCapacity, spinCostPoints] = await Promise.all([
+    const [
+      streakFreezeCost,
+      treePointsPrice,
+      tankCapacity,
+      spinCostPoints,
+      dailyLoginSeeds,
+      dewSeeds,
+      streak7SeedsValue,
+      quizWrongSeeds,
+      firstCheckinBonusConfig,
+      ladder,
+    ] = await Promise.all([
       this.config.get<number>('game.streak_freeze_cost', 80),
       this.config.get<number>('game.tree_points_price', 50_000),
       this.config.get<number>('game.tank_capacity', 500),
       this.config.get<number>('game.spin_buy_cost_points', 10_000),
+      configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT),
+      configInt(this.config, 'game.dew_seeds', DEW_SEEDS_DEFAULT),
+      streak7Seeds(this.config),
+      configInt(this.config, 'game.quiz_wrong_seeds', QUIZ_WRONG_SEEDS_DEFAULT),
+      configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT),
+      treeTargetLadder(this.config),
     ]);
+    const eco = this.eco(profile.ecoImpact, ladder);
     const streakRepairable =
       !!profile.brokenStreakAt &&
       profile.brokenStreakDays > 0 &&
@@ -87,7 +124,8 @@ export class GameService {
       (!profile.lastStreakRepairAt || Date.now() - new Date(profile.lastStreakRepairAt).getTime() >= cooldownD * 86400 * 1000);
     return {
       ...profile,
-      treeHealth: this.treeHealth(profile, wiltDays, deathDays),
+      ecoImpact: eco,
+      treeHealth: this.treeHealth(profile, wiltDays),
       brokenStreakDays: profile.brokenStreakDays,
       streakRepairCost,
       streakRepairable,
@@ -95,6 +133,14 @@ export class GameService {
       treePointsPrice,
       tankCapacity,
       spinCostPoints,
+      // Lượng 💧 hiện trước khi khách bấm (cùng nguồn với checkIn/collectDew/answerQuiz).
+      dailyLoginSeeds,
+      dewSeeds,
+      streak7Seeds: streak7SeedsValue,
+      firstCheckinBonus: profile.lastCheckInAt === null ? firstCheckinBonusConfig : 0,
+      quizWrongSeeds,
+      currentTreeTarget: eco.target,
+      nextTreeTarget: ladderTarget(ladder, eco.treesPlanted + 1),
     };
   }
 
@@ -102,11 +148,10 @@ export class GameService {
   private treeHealth(
     profile: { lastWateredAt: Date | null; ecoImpact: unknown },
     wiltDays: number,
-    deathDays: number,
   ): 'HEALTHY' | 'WILTED' | 'DEAD' {
     if (!profile.lastWateredAt || this.eco(profile.ecoImpact).progress <= 0) return 'HEALTHY';
     const days = (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5;
-    if (days >= deathDays) return 'DEAD';
+    // Cây không còn chết hay mất tiến độ nên không bao giờ trả 'DEAD' (giữ kiểu enum cho FE cũ).
     if (days >= wiltDays) return 'WILTED';
     return 'HEALTHY';
   }
@@ -139,7 +184,7 @@ export class GameService {
     // Trần bình nước của giải SEEDS: cùng lý do, không đọc cấu hình trong tx. Mặc định khớp với các call site khác
     // (buySeeds/checkIn/collectDew/quiz/gift) và giá trị SystemConfig thật (500) — tránh clamp sai xuống 200 khi config thiếu.
     const tankCap = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tank_capacity', 500) : 0;
-    const treeTarget = prize.rewardType === 'SEEDS' ? await this.config.get<number>('game.tree_default_target', 600) : 0;
+    const seedsEcoImpact = prize.rewardType === 'SEEDS' ? await initialEcoImpact(this.config) : null;
     const voucherMinOrder = prize.rewardType === 'COUPON' ? await spinVoucherMinOrder(this.config, prize.value) : 0;
 
     return this.prisma.$transaction(async (tx) => {
@@ -189,7 +234,7 @@ export class GameService {
           create: {
             userId,
             totalSeeds: prize.value,
-            ecoImpact: { progress: 0, target: treeTarget, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
+            ecoImpact: seedsEcoImpact ?? {},
           },
         });
         await tx.gameProfile.updateMany({
@@ -252,20 +297,44 @@ export class GameService {
 
     const harvestAmount = await this.config.get<number>('game.harvest_coupon_amount', 30000);
     const harvestMinOrder = await harvestCouponMinOrder(this.config, harvestAmount);
-    const deathDays = await this.config.get<number>('game.death_days', 7);
-    // Trần cứng số coupon thu hoạch/ngày — ĐỘC LẬP với giá giọt nước trong config.
+    // Trần cứng số coupon thu hoạch/ngày và /tháng — ĐỘC LẬP với giá giọt nước trong config.
     // Nước rẻ hơn nhiều lần giá trị coupon (mặc định 30.000đ): không có trần thì vòng
     // kiếm-nước→tưới→thu-hoạch in coupon vô hạn (P0-1, docs/2026-09-08-review-progress.md; lúc đó nước
     // còn mua được bằng xu, nay đã ngừng). Đặt trần bằng CODE thay vì chỉ dựa vào admin cấu hình đúng
     // giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
-    const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
+    const dailyCap = await configInt(this.config, 'game.harvest_coupon_daily_cap', HARVEST_COUPON_DAILY_CAP_DEFAULT);
+    const monthlyCap = await configInt(this.config, 'game.harvest_coupon_monthly_cap', HARVEST_COUPON_MONTHLY_CAP_DEFAULT);
     const dayStart = startOfVnDay();
+    const monthStart = startOfVnMonth();
+    // Thang target và điểm cây mầm đọc NGOÀI giao dịch Serializable (đọc cấu hình trong tx xin thêm một kết nối pool).
+    const ladder = await treeTargetLadder(this.config);
+    const firstHarvestPoints = await configInt(this.config, 'game.first_harvest_points', FIRST_HARVEST_POINTS_DEFAULT);
+    // Chỉ khách thật (isRealUser: có SĐT hoặc zaloId Zalo thật) nhận mã thu hoạch và điểm cây mầm; guest_ tạo vô hạn
+    // bằng deviceId nên không được nhận. Guest đã xác thực SĐT vẫn là khách thật.
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { zaloId: true, phone: true } });
+    const realUser = isRealUser(owner);
+    // Cây mầm (lần thu hoạch đầu của khách thật chưa nhận điểm cây mầm) thưởng điểm thay mã; hạn điểm tính trước tx như
+    // `spin`. Đọc trước tx chỉ để quyết định có cần tính hạn điểm; cờ thật được đọc lại trong tx.
+    let sproutEligible = false;
+    let sproutExpiresAt: Date | null = null;
+    if (firstHarvestPoints > 0 && realUser) {
+      const pre = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { ecoImpact: true } });
+      if (pre && !sproutAlreadyRewarded(this.eco(pre.ecoImpact, ladder))) {
+        sproutEligible = true;
+        if (this.loyalty) sproutExpiresAt = await this.rewardPointsExpiresAt();
+      }
+    }
 
     let harvestCount = 0;
-    let couponCode: string | undefined;
+    let harvestedDrops = 0;
+    const couponCodes: string[] = [];
     let certificateCode: string | undefined;
-    let revivedFromDead = false;
-    let eco: EcoImpact = { progress: 0, target: 600, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
+    let couponCapped: 'DAY' | 'MONTH' | undefined;
+    let rewardBlocked: 'GUEST' | undefined;
+    let sproutPoints = 0;
+    let sproutHarvested = false;
+    const revivedFromDead = false;
+    let eco: EcoImpact = { progress: 0, target: ladderTarget(ladder, 0), treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
 
     try {
       await this.prisma.$transaction(
@@ -281,31 +350,22 @@ export class GameService {
           // Coupon không có createdAt — grantCoupon() luôn set startAt=new Date() lúc cấp
           // (game.service.ts grantCoupon), nên startAt chính là mốc "được cấp lúc nào" cho
           // đúng loại coupon GAME*/GARDEN* này.
-          // DÙNG CHUNG trần với waterPlot (lô phụ, game-garden.service.ts): đếm cả coupon
-          // 'GAME'-prefix (lô nhà) lẫn 'GARDEN'-prefix (lô phụ) trong CÙNG 1 trần/user/ngày —
-          // nếu không, user có thể lách trần bằng cách tưới lô nhà + lô phụ song song.
-          let couponsToday = await tx.coupon.count({
-            where: {
-              OR: [{ code: { startsWith: 'GAME' } }, { code: { startsWith: 'GARDEN' } }],
-              scopeMeta: { path: ['userId'], equals: userId },
-              startAt: { gte: dayStart },
-            },
-          });
+          // DÙNG CHUNG trần với waterPlot (lô phụ, game-garden.service.ts): đếm mã 'HARVEST' (lô nhà) lẫn
+          // 'GARDEN' (lô phụ) trong CÙNG 1 trần/user/ngày và /tháng — nếu không, user có thể lách trần bằng cách
+          // tưới lô nhà + lô phụ song song. Mã 'GAME' của vòng quay/nhiệm vụ không thuộc trần này.
+          const harvestCouponWhere = {
+            OR: HARVEST_COUPON_CODE_PREFIXES.map((prefix) => ({ code: { startsWith: prefix } })),
+            scopeMeta: { path: ['userId'], equals: userId },
+          };
+          let couponsToday = await tx.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: dayStart } } });
+          let couponsMonth = await tx.coupon.count({ where: { ...harvestCouponWhere, startAt: { gte: monthStart } } });
 
-          eco = this.eco(profile.ecoImpact);
-
-          // §6.7.3: cây CHẾT (≥ death_days không tưới) → mất tiến trình, trồng lại từ đầu.
-          if (
-            profile.lastWateredAt &&
-            eco.progress > 0 &&
-            (Date.now() - new Date(profile.lastWateredAt).getTime()) / 864e5 >= deathDays
-          ) {
-            eco.progress = 0;
-            revivedFromDead = true;
-          }
+          eco = this.eco(profile.ecoImpact, ladder);
+          let sproutDue = sproutEligible && !sproutAlreadyRewarded(eco);
+          // Cây bỏ lâu chỉ héo (treeHealth), KHÔNG mất tiến độ.
           eco.progress += drops;
 
-          // Chặn target<=0 (config game.tree_default_target sai, hoặc dữ liệu cũ hỏng) TRƯỚC
+          // Chặn target<=0 (config game.tree_target_ladder sai, hoặc dữ liệu cũ hỏng) TRƯỚC
           // vòng lặp thu hoạch — nếu không, while (progress>=target) không bao giờ thoát, giữ
           // lock trong transaction Serializable tới khi pool timeout (P2-4, mirror guard đã có
           // ở game-garden.service.ts).
@@ -316,13 +376,45 @@ export class GameService {
           // Thu hoạch khi đủ target; phần dư được CARRY-OVER sang cây mới (không mất nước).
           while (eco.progress >= eco.target) {
             eco.progress -= eco.target;
+            harvestedDrops += eco.target;
+            const isSprout = eco.treesPlanted === 0;
+            if (isSprout) sproutHarvested = true;
             eco.treesPlanted += 1;
             harvestCount += 1;
-            // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn/ngày.
+            // Cây kế tiếp theo thang; cây đang trồng của hồ sơ cũ giữ target đã lưu cho tới lần thu hoạch này.
+            eco.target = ladderTarget(ladder, eco.treesPlanted);
+            await this.analytics.record(tx, {
+              eventName: 'engagement_action',
+              userId,
+              platform: 'miniapp',
+              props: { action: 'harvest', treeNo: eco.treesPlanted },
+            });
+            if (sproutDue) {
+              sproutDue = false;
+              // Hồ sơ cũ chưa có cờ mà đã nhận điểm cây mầm (sổ điểm có dòng GAME_FIRST_HARVEST): chỉ bật cờ, không cộng lại.
+              const paid = await tx.pointsTransaction.findFirst({ where: { userId, reason: 'GAME_FIRST_HARVEST' }, select: { id: true } });
+              if (!paid) {
+                // Thiếu hạn điểm (không có LoyaltyService) thì dừng và rollback cả lần tưới, không để lọt dòng điểm không hạn.
+                if (!sproutExpiresAt) throw new Error('GameService cần LoyaltyService để tính hạn điểm cây mầm');
+                await this.creditPoints(userId, firstHarvestPoints, 'GAME_FIRST_HARVEST', tx, sproutExpiresAt);
+                sproutPoints += firstHarvestPoints;
+              }
+              eco.sproutRewarded = true;
+            }
+            if (!realUser) rewardBlocked = 'GUEST';
+            // Cây mầm thật sự (cây đầu tiên): điểm, không mã, không ghi góp quỹ cây.
+            if (isSprout) continue;
+            // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn.
             certificateCode = await this.plantTree(userId, eco.treeType, tx);
-            if (couponsToday < dailyCap) {
-              couponCode = await this.grantCoupon(userId, harvestAmount, tx, harvestMinOrder);
+            if (!realUser) continue;
+            if (couponsMonth >= monthlyCap) {
+              couponCapped = 'MONTH';
+            } else if (couponsToday >= dailyCap) {
+              couponCapped = 'DAY';
+            } else {
+              couponCodes.push(await this.grantCoupon(userId, harvestAmount, tx, harvestMinOrder, HARVEST_COUPON_PREFIX));
               couponsToday += 1;
+              couponsMonth += 1;
             }
           }
 
@@ -371,37 +463,59 @@ export class GameService {
 
     const reward: {
       coupon?: string;
+      coupons?: string[];
       certificate?: string;
       species?: { name: string; emoji: string; rarity: string; ecoFact: string | null };
+      points?: number;
+      sprout?: boolean;
     } = {
-      ...(couponCode ? { coupon: couponCode } : {}),
+      ...(sproutHarvested ? { sprout: true } : {}),
+      ...(couponCodes.length > 0 ? { coupon: couponCodes[0], coupons: couponCodes } : {}),
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
+      ...(sproutPoints > 0 ? { points: sproutPoints } : {}),
     };
 
     // Phase 2: thu hoạch → 💧 đã nuôi cây góp vào hồ cộng đồng (Ant Forest gom batch).
     // Lỗi góp hồ không được chặn thu hoạch của user.
     if (harvested && this.community) {
-      await this.community.contribute(userId, harvestCount * eco.target).catch(() => undefined);
+      await this.community.contribute(userId, harvestedDrops).catch(() => undefined);
     }
 
-    // §6.14.12: auto-post thành tích lên bảng tin. Lỗi post không chặn thu hoạch.
-    if (harvested && this.feed) {
-      const body = species
-        ? `Vừa thu hoạch cây và sưu tập loài ${species.emoji} ${species.name}! 🌳`
-        : `Vừa thu hoạch 1 cây trong Vườn Xanh 🌳`;
-      await this.feed
-        .createAchievementPost(userId, species ? 'SPECIES' : 'HARVEST', body, { treesPlanted: eco.treesPlanted })
-        .catch(() => undefined);
-    }
     return {
       progress: eco.progress,
       target: eco.target,
       harvested,
       treesPlanted: eco.treesPlanted,
       revivedFromDead,
+      ...(couponCapped ? { couponCapped } : {}),
+      ...(rewardBlocked ? { rewardBlocked } : {}),
       reward,
     };
+  }
+
+  /**
+   * Khách tự bấm chia sẻ thành tích thu hoạch lên Cộng đồng. Nội dung do server dựng từ số cây của chính người đó, không
+   * nhận gì từ client. Mỗi mức `treesPlanted` chỉ có một bài: khoá tư vấn theo user giữ hai request song song nối đuôi nhau.
+   */
+  async shareHarvest(userId: string): Promise<{ shared: true; alreadyShared: boolean }> {
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(owner)) throw new ForbiddenException('Chỉ tài khoản đã đăng nhập Zalo mới chia sẻ được lên Cộng đồng.');
+    const profile = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { ecoImpact: true } });
+    const treesPlanted = profile ? this.eco(profile.ecoImpact).treesPlanted : 0;
+    if (treesPlanted < 1) throw new BadRequestException('Bạn chưa thu hoạch cây nào để chia sẻ.');
+    if (!this.feed) throw new BadRequestException('Cộng đồng đang tạm đóng.');
+    const feed = this.feed;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`harvest-share:${userId}`}))`;
+      const existing = await tx.feedPost.findFirst({
+        where: { userId, kind: 'HARVEST', meta: { path: ['treesPlanted'], equals: treesPlanted } },
+        select: { id: true },
+      });
+      if (existing) return { shared: true as const, alreadyShared: true };
+      await feed.createAchievementPost(userId, 'HARVEST', 'Vừa thu hoạch 1 cây trong Vườn Xanh 🌳', { treesPlanted }, tx);
+      return { shared: true as const, alreadyShared: false };
+    });
   }
 
   /** Tạo bản ghi góp quỹ trồng cây (PLEDGED) + mã ghi nhận. Trả mã. */
@@ -795,8 +909,9 @@ export class GameService {
     amount: number,
     tx?: Prisma.TransactionClient,
     minOrder: number = amount,
+    prefix: string = 'GAME',
   ): Promise<string> {
-    return (await this.grantCouponWithTerms(userId, amount, tx, minOrder)).code;
+    return (await this.grantCouponWithTerms(userId, amount, tx, minOrder, prefix)).code;
   }
 
   private async grantCouponWithTerms(
@@ -804,8 +919,9 @@ export class GameService {
     amount: number,
     tx?: Prisma.TransactionClient,
     minOrder: number = amount,
+    prefix: string = 'GAME',
   ): Promise<{ code: string; minOrder: number; expiresAt: Date }> {
-    const code = `GAME${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
+    const code = `${prefix}${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
     const effectiveMinOrder = Math.max(amount, minOrder);
@@ -836,13 +952,21 @@ export class GameService {
     return prizes[prizes.length - 1]!;
   }
 
-  private eco(json: unknown): EcoImpact {
+  private eco(json: unknown, ladder?: readonly number[]): EcoImpact {
     const e = (json ?? {}) as Partial<EcoImpact>;
+    const treesPlanted = e.treesPlanted ?? 0;
+    const progress = e.progress ?? 0;
+    let target = e.target ?? (ladder ? ladderTarget(ladder, treesPlanted) : 600);
+    // Hồ sơ chưa có cây và chưa nhận cây mầm (target 600 của thang cũ): luôn hạ về bậc đầu, nước đã tưới chảy sang cây sau.
+    // Cờ ghi rõ false để guest cũ nhận điểm hoãn khi nâng cấp (không có cờ thì treesPlanted > 0 bị coi là đã nhận).
+    const unsprouted = !!ladder && treesPlanted === 0 && e.sproutRewarded !== true;
+    if (unsprouted) target = Math.min(target, ladderTarget(ladder, 0));
     return {
-      progress: e.progress ?? 0,
-      target: e.target ?? 600,
+      progress,
+      target,
       treeType: e.treeType ?? DEFAULT_TREE_TYPE,
-      treesPlanted: e.treesPlanted ?? 0,
+      treesPlanted,
+      ...(unsprouted ? { sproutRewarded: false } : e.sproutRewarded !== undefined ? { sproutRewarded: e.sproutRewarded } : {}),
     };
   }
 

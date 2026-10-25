@@ -233,7 +233,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true }: { meId?: string; is
             title: 'Xác nhận tiền trả dư',
             message:
               `Sao kê có khoản khách chuyển dư ${formatVnd(amount)} cho đơn ${r.orderCode}?\n\n` +
-              'Khoản chuyển sang "Chờ chuyển khoản" và khách được báo để chọn nhận về Ví Tubu (cộng ngay, rút được) hay tài khoản ' +
+              'Khoản chuyển sang "Chờ chuyển khoản" và khách được báo để chọn nhận về Ví Tubu (cộng ngay, dùng trả đơn sau) hay tài khoản ' +
               'ngân hàng. Chỉ bấm khi sao kê có khoản này.',
             confirmLabel: VERIFY_LABEL,
             cancelLabel: 'Đóng',

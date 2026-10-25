@@ -48,11 +48,36 @@ describe('GameQuizService', () => {
     expect(upd.totalSeeds).toEqual({ increment: 12 });
   });
 
-  it('answer sai → 0 💧, vẫn trả explanation + correct', async () => {
-    const r = await new GameQuizService(prisma(), cfg()).answerQuiz('u1', 'q1', 0);
+  it('answer sai → +2 💧 (game.quiz_wrong_seeds), vẫn trả explanation + correct', async () => {
+    const p = prisma();
+    const r = await new GameQuizService(p, cfg()).answerQuiz('u1', 'q1', 0);
     expect(r.isCorrect).toBe(false);
-    expect(r.waterEarned).toBe(0);
+    expect(r.waterEarned).toBe(2);
     expect(r.correct).toBe(1);
+    expect(r.explanation).toBe(QUIZ.explanation);
+    expect((p.gameProfile.upsert as jest.Mock).mock.calls[0][0].update.totalSeeds).toEqual({ increment: 2 });
+  });
+
+  it('answer sai theo config game.quiz_wrong_seeds', async () => {
+    const p = prisma();
+    const r = await new GameQuizService(p, cfg({ 'game.quiz_wrong_seeds': 5 })).answerQuiz('u1', 'q1', 0);
+    expect(r.waterEarned).toBe(5);
+    expect((p.gameProfile.upsert as jest.Mock).mock.calls[0][0].update.totalSeeds).toEqual({ increment: 5 });
+  });
+
+  it('game.quiz_wrong_seeds = 0 → câu sai không cộng gì, không ghi hồ sơ', async () => {
+    const p = prisma();
+    const r = await new GameQuizService(p, cfg({ 'game.quiz_wrong_seeds': 0 })).answerQuiz('u1', 'q1', 0);
+    expect(r.waterEarned).toBe(0);
+    expect(p.gameProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('hồ sơ tạo từ upsert của câu đố có ecoImpact theo thang (target cây đầu 60)', async () => {
+    const p = prisma();
+    await new GameQuizService(p, cfg()).answerQuiz('u1', 'q1', 1);
+    expect((p.gameProfile.upsert as jest.Mock).mock.calls[0][0].create.ecoImpact).toEqual(
+      expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }),
+    );
   });
 
   it('trả lời lại trong ngày → BadRequest (unique constraint DB-level, race-safe)', async () => {

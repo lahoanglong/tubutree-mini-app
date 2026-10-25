@@ -61,7 +61,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
         { icon: Leaf, label: 'Hạng thành viên & Điểm Xanh', to: '/tai-khoan/diem-xanh' },
         { icon: Wallet, label: 'Ví Tubu', to: '/tai-khoan/vi-tubu' },
         ...(c.claimEnabled
-          ? [{ icon: ScanLine, label: 'Tích điểm đơn sàn', to: '/points/scan', hint: 'Nhập mã vận đơn Shopee, Lazada, TikTok', miniAppOnly: true }]
+          ? [{ icon: ScanLine, label: 'Tích điểm đơn sàn', to: '/points/scan', hint: 'Quét mã trên phiếu giao hàng', miniAppOnly: true }]
           : []),
       ],
     },

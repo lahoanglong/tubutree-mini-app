@@ -18,7 +18,6 @@ import {
   affiliateTaxStatementQuery,
 } from '@tubutree/app-core/queries/affiliate';
 import { academyCoursesQuery } from '@tubutree/app-core/queries/academy';
-import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
@@ -27,7 +26,6 @@ import { SITE_URL } from '@/lib/site';
 import { invalidateBalances } from '@/lib/balances';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
-import { formatVndShort } from '@/components/affiliate/vnd-short';
 import { ui } from '@/lib/guest-ui';
 import { phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -38,7 +36,7 @@ import { CtvShortcuts, type CtvShortcut } from '@/components/affiliate/ctv-short
 import { MilestoneRewards } from '@/components/affiliate/milestone-rewards';
 import { TierCard } from '@/components/affiliate/tier-card';
 import { CtvOrderSheet } from '@/components/affiliate/ctv-order-sheet';
-import { WithdrawSheet } from '@/components/affiliate/withdraw-sheet';
+import { TransferSheet } from '@/components/affiliate/transfer-sheet';
 import {
   COMMISSION_META,
   COMMISSION_ORDER_STATUS,
@@ -51,7 +49,6 @@ import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
 
 const TITLE = 'Cộng tác viên';
-const DEFAULT_MIN_WITHDRAW_BANK = 50_000;
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -146,8 +143,6 @@ function RegisterGate() {
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
   const busy = useRef(false);
-  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
-  const minBank = cfgQ.data?.affiliateMinWithdrawBank ?? DEFAULT_MIN_WITHDRAW_BANK;
 
   const reg = useMutation({
     mutationFn: () => registerAffiliate(coreHttp, CTV_TERMS.version),
@@ -171,7 +166,7 @@ function RegisterGate() {
     { Icon: Store, text: 'Gian hàng riêng với đường dẫn mang tên bạn để gửi cho khách' },
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
     { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
-    { Icon: Landmark, text: `Rút về ngân hàng (tối thiểu ${formatVndShort(minBank)}) hoặc quy đổi 1:1 vào Ví Tubu` },
+    { Icon: Landmark, text: 'Hoa hồng vào Ví Tubu 1:1, dùng trả tiền hàng' },
     { Icon: TrendingUp, text: 'Bảng hoa hồng cập nhật liên tục, minh bạch' },
   ];
 
@@ -286,7 +281,7 @@ function PayoutRow({ p }: { p: AffiliatePayout }) {
       )}
       {p.status === 'REJECTED' && (
         <div className="text-xs text-danger-fg">
-          Lý do: {p.rejectionReason ?? 'không ghi lý do'}. Hoa hồng đã trở lại mục Có thể rút.
+          Lý do: {p.rejectionReason ?? 'không ghi lý do'}. Hoa hồng đã trở lại mục Có thể chuyển vào Ví.
         </div>
       )}
       {p.bankRef && <div className="text-xs text-stone-600">Mã giao dịch: {p.bankRef}</div>}
@@ -328,7 +323,7 @@ function Dashboard() {
   const hasCourses = (academyQ.data?.length ?? 0) > 0;
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const linkBusy = useRef(false);
-  const [withdrawing, setWithdrawing] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
 
   const createLink = useMutation({
@@ -377,23 +372,23 @@ function Dashboard() {
       ? [{ key: 'order', label: 'Lên đơn hộ', ariaLabel: 'Lên đơn hộ khách', icon: Receipt, onPress: () => setCtvOrdering(true) }]
       : []),
     {
-      key: 'withdraw',
-      label: 'Rút tiền',
-      ariaLabel: 'Rút tiền hoa hồng',
+      key: 'transfer',
+      label: 'Chuyển vào Ví',
+      ariaLabel: 'Chuyển vào Ví Tubu',
       icon: Wallet,
       // Khi dashboard lỗi vẫn cho bấm để máy chủ tự kiểm số dư, CTV không bị kẹt vì lỗi tạm thời.
       disabled: !dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0,
-      onPress: () => setWithdrawing(true),
+      onPress: () => setTransferring(true),
     },
   ];
 
-  const withdrawDone = (message: string) => {
-    setWithdrawing(false);
+  const transferDone = (message: string) => {
+    setTransferring(false);
     setNotice({ text: message, error: false });
     for (const q of [affiliateDashboardQuery, affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery]) {
       void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
     }
-    // Rút về Ví Tubu cộng thẳng vào ví: số dư đang cache ở trang Ví đã cũ.
+    // Chuyển vào Ví Tubu cộng thẳng vào ví: số dư đang cache ở trang Ví đã cũ.
     invalidateBalances(qc);
   };
 
@@ -429,11 +424,11 @@ function Dashboard() {
 
           <div className="flex gap-2.5">
             <Kpi label="Đang chờ" hint="đơn chưa giao hoặc đang giữ" value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)} />
-            <Kpi label="Có thể rút" value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)} highlight />
+            <Kpi label="Có thể chuyển vào Ví" value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)} highlight />
           </div>
           {(d?.withdrawingCommission ?? 0) > 0 && (
             <p className="text-xs text-stone-700">
-              Đang rút {formatVnd(d!.withdrawingCommission!)} về ngân hàng — chờ Tubu Tree duyệt và chuyển khoản.
+              Còn {formatVnd(d!.withdrawingCommission!)} nằm trong lệnh rút ngân hàng cũ, đang chờ Tubu Tree xử lý.
             </p>
           )}
 
@@ -546,7 +541,7 @@ function Dashboard() {
             )}
           </Section>
 
-          <Section title="Lệnh rút">
+          <Section title="Lịch sử chuyển vào Ví">
             {taxQ.data && taxQ.data.totals.taxWithheld > 0 && (
               <div className="mb-2">
                 <div className="text-sm text-stone-900">
@@ -569,7 +564,7 @@ function Dashboard() {
             ) : payoutsQ.isLoading ? (
               <SectionSkeleton />
             ) : (
-              <p className="text-sm text-stone-600">Chưa có lệnh rút nào.</p>
+              <p className="text-sm text-stone-600">Chưa có lần chuyển nào.</p>
             )}
           </Section>
 
@@ -627,14 +622,14 @@ function Dashboard() {
         </div>
       </div>
       <CtvOrderSheet open={ctvOrdering} onClose={() => setCtvOrdering(false)} />
-      <WithdrawSheet
-        open={withdrawing}
-        onClose={() => setWithdrawing(false)}
+      <TransferSheet
+        open={transferring}
+        onClose={() => setTransferring(false)}
         max={d?.withdrawableCommission ?? 0}
         knownMax={!dashQ.isError}
         taxIdOnFile={me?.personalTaxId ?? null}
         taxPreview={d?.withdrawTaxPreview}
-        onDone={withdrawDone}
+        onDone={transferDone}
       />
     </Shell>
   );

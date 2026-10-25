@@ -30,13 +30,10 @@ const PINNED_GAME_FILES = [
   'src/components/game/season-pass.tsx',
   'src/components/game/community-goal.tsx',
   'src/components/game/species-codex.tsx',
-  'src/components/game/friend-gifts.tsx',
   'src/components/game/eco-impact.tsx',
   'src/components/game/lucky-wheel-card.tsx',
   'src/components/game/quiz-card.tsx',
   'src/components/game/missions-card.tsx',
-  'src/components/game/season-leaderboard.tsx',
-  'src/components/game/weekly-leaderboard.tsx',
   'src/components/game/harvest-celebration.tsx',
 ];
 // Hợp danh sách ghim ở trên với thư mục thật: file mới thêm vào components/game/ tự vào guard, khỏi phải nhớ sửa tay.
@@ -61,11 +58,8 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/garden-plots.tsx': ['🌱', '🌿', '🌳', '🥀', '🍂'],
   'src/components/game/community-goal.tsx': ['💧', '🌿'],
   'src/components/game/species-codex.tsx': ['❔'],
-  'src/components/game/friend-gifts.tsx': ['💧', '🌿'],
   'src/components/game/eco-impact.tsx': ['🌿'],
   'src/components/game/quiz-card.tsx': ['🌿', '🎉'],
-  'src/components/game/season-leaderboard.tsx': ['🥇', '🥈', '🥉'],
-  'src/components/game/weekly-leaderboard.tsx': ['🥇', '🥈', '🥉', '🌳', '🔥'],
   'src/components/game/harvest-celebration.tsx': ['🌳', '🌿'],
   // Vòng quay: 8 ô minh họa trên bánh xe và 🎉 (trúng giải) / 🍀 (không trúng) trong hộp kết quả là nội dung trình bày; kết quả thật do backend trả về.
   'src/components/wheel.tsx': ['🌿', '🎁', '💧', '⭐', '🪴', '🏷', '💚', '🍀'],

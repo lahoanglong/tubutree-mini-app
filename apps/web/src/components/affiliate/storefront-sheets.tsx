@@ -324,7 +324,7 @@ function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () 
         <h3 className="mb-1 text-sm font-semibold text-stone-900">Thanh toán</h3>
         <p className="text-xs text-stone-700">
           Khách luôn thanh toán cho Tubu Tree.{' '}
-          {selfFulfils ? 'Tiền hàng của bạn được đối soát và chuyển theo kỳ trên cổng người bán.' : 'Hoa hồng của bạn được trả qua mục Rút tiền trong Cộng tác viên.'}
+          {selfFulfils ? 'Tiền hàng của bạn được đối soát và chuyển theo kỳ trên cổng người bán.' : 'Hoa hồng của bạn chuyển vào Ví Tubu ngay trong mục Cộng tác viên.'}
         </p>
         {sf.bankAccountNo && (
           <div className="mt-2">

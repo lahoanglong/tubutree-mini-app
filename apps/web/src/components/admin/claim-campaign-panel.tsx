@@ -9,6 +9,7 @@ import {
   getCouponClaimUrlBase,
   listCouponBatches,
   setCouponBatchActive,
+  type ClaimLinkOptions,
   type CouponBatchSummary,
 } from '@/lib/admin-client';
 import { downloadCsvFile, generateClaimCodesCsv } from '@/lib/export-csv';
@@ -41,9 +42,24 @@ export function offerLabel(c: { type: CouponType; value: number; minOrder?: numb
   return c.minOrder ? `${head} · đơn từ ${formatVnd(c.minOrder)}` : head;
 }
 
-export function claimLink(base: string, code: string): string {
-  return `${base.trim().replace(/\/+$/, '')}/?claim=${encodeURIComponent(code)}`;
+const LINK_TOKEN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+
+/** Cùng khuôn với `claimUrl` ở API (admin-coupon-batch.service.ts): trang đích, nhãn nguồn, đợt thẻ, rồi mã. */
+export function claimLink(base: string, code: string, link: ClaimLinkOptions = {}): string {
+  const params = new URLSearchParams();
+  if (link.src) params.set('src', link.src);
+  if (link.card) params.set('card', link.card);
+  params.set('claim', code);
+  return `${base.trim().replace(/\/+$/, '')}${link.page === 'scan' ? '/points/scan' : '/'}?${params.toString()}`;
 }
+
+const SRC_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Không ghi nguồn' },
+  { value: 'shopee', label: 'Shopee' },
+  { value: 'lazada', label: 'Lazada' },
+  { value: 'tiktok', label: 'TikTok Shop' },
+  { value: 'san', label: 'Thẻ chung nhiều sàn' },
+];
 
 /**
  * Thẻ QR bỏ hộp hàng giao từ sàn (D2-03): tạo mã ẩn (chỉ vào ví khách quét thẻ), thường kèm "chỉ khách mới".
@@ -66,6 +82,9 @@ export function ClaimCampaignPanel() {
     startAt: '',
     endAt: '',
     newCustomerOnly: true,
+    linkPage: 'scan' as 'home' | 'scan',
+    linkSrc: '',
+    linkCard: '',
   });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const num = (v: string) => (v.trim() === '' ? undefined : Number(v));
@@ -73,6 +92,13 @@ export function ClaimCampaignPanel() {
   const configQ = useQuery({ queryKey: ['admin-coupon-claim-url-base'], queryFn: getCouponClaimUrlBase });
   const base = configQ.data?.claimUrlBase?.trim() ?? '';
   const batchesQ = useQuery({ queryKey: ['admin-coupon-batches'], queryFn: listCouponBatches });
+
+  const cardOk = f.linkCard === '' || LINK_TOKEN.test(f.linkCard);
+  const link = (): ClaimLinkOptions => ({
+    page: f.linkPage,
+    ...(f.linkSrc ? { src: f.linkSrc } : {}),
+    ...(f.linkCard ? { card: f.linkCard } : {}),
+  });
 
   const money = () => ({
     type: f.type,
@@ -85,7 +111,7 @@ export function ClaimCampaignPanel() {
   });
 
   const createBatch = useMutation({
-    mutationFn: () => createCouponBatch({ prefix: f.prefix, quantity: Number(f.quantity), ...money() }),
+    mutationFn: () => createCouponBatch({ prefix: f.prefix, quantity: Number(f.quantity), ...money(), link: link() }),
     onSuccess: (res) => {
       downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`);
       setMsg({ ok: true, text: `Đã tạo ${res.created} mã lô ${res.batch} và tải file CSV để in QR.` });
@@ -100,7 +126,7 @@ export function ClaimCampaignPanel() {
     onSuccess: () => {
       setMsg({
         ok: true,
-        text: base ? `Đã tạo mã ${f.code}. Link in QR: ${claimLink(base, f.code)}` : `Đã tạo mã ${f.code}. Đặt link Mini App để có link in QR.`,
+        text: base ? `Đã tạo mã ${f.code}. Link in QR: ${claimLink(base, f.code, link())}` : `Đã tạo mã ${f.code}. Đặt link Mini App để có link in QR.`,
       });
       void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
     },
@@ -109,7 +135,10 @@ export function ClaimCampaignPanel() {
 
   const exportBatch = useMutation({
     mutationFn: (batch: string) => getCouponBatchCodes(batch),
-    onSuccess: (res) => downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`),
+    onSuccess: (res) => {
+      downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`);
+      if (!res.link) setMsg({ ok: true, text: `Lô ${res.batch} tạo trước khi lưu link: file CSV dùng link mở trang chủ (/?claim=), không có nguồn và đợt thẻ.` });
+    },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tải được file mã.' }),
   });
 
@@ -146,9 +175,9 @@ export function ClaimCampaignPanel() {
 
   const valueMissing = f.type !== 'FREESHIP' && !(Number(f.value) > 0);
   const quantity = Number(f.quantity);
-  const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing;
+  const batchReady = /^[A-Z0-9]{2,16}$/.test(f.prefix) && Number.isInteger(quantity) && quantity >= 1 && quantity <= BATCH_MAX && !valueMissing && cardOk;
   const claimLimit = Number(f.claimLimit);
-  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing;
+  const sharedReady = /^[A-Z0-9_-]{3,40}$/.test(f.code) && Number.isInteger(claimLimit) && claimLimit >= 1 && !valueMissing && cardOk;
   const field = `${FIELD_CLASS} ${TOUCH_H} w-full`;
 
   return (
@@ -166,6 +195,46 @@ export function ClaimCampaignPanel() {
         </Notice>
       )}
 
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-stone-900">Các lô đã tạo</h3>
+        {batchesQ.isLoading && <p className="text-sm text-stone-500">Đang tải các lô...</p>}
+        {batchesQ.isError && <LoadError onRetry={() => void batchesQ.refetch()} retrying={batchesQ.isFetching}>Không tải được các lô mã.</LoadError>}
+        {batchesQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có lô nào.</p>}
+        <ul className="space-y-2">
+          {batchesQ.data?.map((b) => (
+            <li key={b.batch} className="rounded-control border border-stone-200 p-3 text-sm" data-testid={`claim-batch-${b.batch}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono font-semibold text-stone-900">{b.batch}</span>
+                <div className="flex flex-wrap gap-1">
+                  {b.newCustomerOnly && <ToneBadge tone="info">Chỉ khách mới</ToneBadge>}
+                  {b.active === 0 ? <ToneBadge tone="danger">Đã tắt</ToneBadge> : <ToneBadge tone="success">Đang bật</ToneBadge>}
+                </div>
+              </div>
+              <p className="mt-1 text-stone-700">{offerLabel(b)}</p>
+              <p className="mt-0.5 text-xs text-stone-500">
+                {formatDate(b.startAt)} – {formatDate(b.endAt)} · {b.total} thẻ · Đã nhận {b.claimed} · Đã dùng {b.used}
+              </p>
+              <p className="mt-0.5 text-xs text-stone-500" data-testid="batch-link">
+                {b.link ? `Link: ${b.link.page === 'scan' ? 'Tích điểm đơn sàn' : 'Trang chủ'}${b.link.src ? ` · nguồn ${b.link.src}` : ''}${b.link.card ? ` · đợt ${b.link.card}` : ''}` : 'Lô cũ: link mở trang chủ, không ghi nguồn và đợt thẻ.'}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {b.mine ? (
+                  <button type="button" className={BTN_XS_SECONDARY} disabled={exportBatch.isPending} onClick={() => exportBatch.mutate(b.batch)}>
+                    Tải lại CSV
+                  </button>
+                ) : (
+                  <span className="self-center text-xs text-stone-500">Lô do người khác tạo</span>
+                )}
+                <button type="button" className={BTN_XS_SECONDARY} disabled={toggleBatch.isPending} onClick={() => void askToggle(b)}>
+                  {b.active > 0 ? 'Tắt lô' : 'Bật lại lô'}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <h3 className="text-sm font-semibold text-stone-900">Tạo đợt mới</h3>
       <div className="flex flex-wrap gap-1" role="group" aria-label="Kiểu đợt thẻ">
         <button type="button" aria-pressed={mode === 'batch'} className={chipClass(mode === 'batch')} onClick={() => setMode('batch')}>
           Lô mã riêng (mỗi thẻ một mã)
@@ -231,7 +300,33 @@ export function ClaimCampaignPanel() {
         <Field label="Hết hạn ngày" hint={`Bỏ trống = ${CLAIM_CARD_DEFAULT_DAYS} ngày. Nên tính cả thời gian thẻ nằm trong kho.`}>
           <input type="date" aria-label="Thẻ hết hạn ngày" value={f.endAt} onChange={(e) => setF({ ...f, endAt: e.target.value })} className={field} />
         </Field>
+        <Field label="Quét thẻ mở trang" hint="Tích điểm đơn sàn nếu thẻ in mã quà kèm lời mời tích điểm.">
+          <select aria-label="Trang mở khi quét" value={f.linkPage} onChange={(e) => setF({ ...f, linkPage: e.target.value as 'home' | 'scan' })} className={field}>
+            <option value="scan">Tích điểm đơn sàn</option>
+            <option value="home">Trang chủ</option>
+          </select>
+        </Field>
+        <Field label="Nguồn trên link" hint="Ghi vào báo cáo nguồn khách.">
+          <select aria-label="Nguồn trên link" value={f.linkSrc} onChange={(e) => setF({ ...f, linkSrc: e.target.value })} className={field}>
+            {SRC_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Đợt thẻ trên link" hint={cardOk ? 'Vd 2611. Bỏ trống = không ghi đợt.' : 'Chỉ chữ thường không dấu, số, gạch ngang hoặc gạch dưới, tối đa 40 ký tự.'}>
+          <input
+            aria-label="Đợt thẻ trên link"
+            value={f.linkCard}
+            onChange={(e) => setF({ ...f, linkCard: e.target.value.toLowerCase().trim() })}
+            className={field}
+          />
+        </Field>
       </div>
+      <p className="break-all rounded-lg bg-stone-50 p-2 text-xs text-stone-600" data-testid="link-preview">
+        Link mẫu trên thẻ: {claimLink(base || 'https://zalo.me/s/<appId>', mode === 'batch' ? `${f.prefix || 'MA'}-XXXXXXXX` : f.code || 'MACHUNG', link())}
+      </p>
       <label className={`flex items-center gap-2 text-sm text-stone-800 ${TOUCH_H}`}>
         <input type="checkbox" checked={f.newCustomerOnly} onChange={(e) => setF({ ...f, newCustomerOnly: e.target.checked })} className="h-5 w-5" />
         Chỉ khách mới (chưa có đơn nào tại Tubu Tree, trừ đơn huỷ)
@@ -252,41 +347,6 @@ export function ClaimCampaignPanel() {
         </p>
       )}
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-stone-900">Các lô đã tạo</h3>
-        {batchesQ.isLoading && <p className="text-sm text-stone-500">Đang tải các lô...</p>}
-        {batchesQ.isError && <LoadError onRetry={() => void batchesQ.refetch()} retrying={batchesQ.isFetching}>Không tải được các lô mã.</LoadError>}
-        {batchesQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có lô nào.</p>}
-        <ul className="space-y-2">
-          {batchesQ.data?.map((b) => (
-            <li key={b.batch} className="rounded-control border border-stone-200 p-3 text-sm" data-testid={`claim-batch-${b.batch}`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-mono font-semibold text-stone-900">{b.batch}</span>
-                <div className="flex flex-wrap gap-1">
-                  {b.newCustomerOnly && <ToneBadge tone="info">Chỉ khách mới</ToneBadge>}
-                  {b.active === 0 ? <ToneBadge tone="danger">Đã tắt</ToneBadge> : <ToneBadge tone="success">Đang bật</ToneBadge>}
-                </div>
-              </div>
-              <p className="mt-1 text-stone-700">{offerLabel(b)}</p>
-              <p className="mt-0.5 text-xs text-stone-500">
-                {formatDate(b.startAt)} – {formatDate(b.endAt)} · {b.total} thẻ · Đã nhận {b.claimed} · Đã dùng {b.used}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {b.mine ? (
-                  <button type="button" className={BTN_XS_SECONDARY} disabled={exportBatch.isPending} onClick={() => exportBatch.mutate(b.batch)}>
-                    Tải lại CSV
-                  </button>
-                ) : (
-                  <span className="self-center text-xs text-stone-500">Lô do người khác tạo</span>
-                )}
-                <button type="button" className={BTN_XS_SECONDARY} disabled={toggleBatch.isPending} onClick={() => void askToggle(b)}>
-                  {b.active > 0 ? 'Tắt lô' : 'Bật lại lô'}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
       {dialog}
     </section>
   );

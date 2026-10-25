@@ -1,4 +1,5 @@
 import { Check, Target } from 'lucide-react';
+import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import type { MissionItem } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
@@ -15,12 +16,15 @@ export function MissionsCard({
   claimPending,
   claimVariables,
   onClaim,
+  onGo,
 }: {
   missions: MissionItem[] | undefined;
   streakDays: number | undefined;
   claimPending: boolean;
   claimVariables: string | undefined;
   onClaim: (code: string) => void;
+  /** Bấm "Làm ngay" trên nhiệm vụ chưa xong; thiếu thì không hiện nút. */
+  onGo?: (target: MissionTarget) => void;
 }) {
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
@@ -41,6 +45,7 @@ export function MissionsCard({
           // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
           const canClaim = isDone && !m.claimed;
           const claiming = claimPending && claimVariables === m.code;
+          const target = !isDone && onGo ? missionTarget(m.code) : null;
 
           return (
             <div
@@ -67,11 +72,26 @@ export function MissionsCard({
                 </Text>
               )}
               <div style={{ marginTop: 8 }}>
-                <ProgressBar value={Math.round((progress / Math.max(1, goal)) * 100)} max={100} />
+                <ProgressBar
+                  value={Math.round((progress / Math.max(1, goal)) * 100)}
+                  max={100}
+                  ariaLabel={gameNewbieCopy.missions.progressLabel(m.title, progress, goal)}
+                />
               </div>
               <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                 {progress}/{goal}
               </Text>
+              {target && (
+                <Button
+                  fullWidth
+                  variant="secondary"
+                  aria-label={gameNewbieCopy.missions.doNowFor(m.title)}
+                  onPress={() => onGo?.(target)}
+                  style={{ marginTop: 8 }}
+                >
+                  {gameNewbieCopy.missions.doNow}
+                </Button>
+              )}
               {canClaim && (
                 <Button fullWidth loading={claiming} disabled={claiming} onPress={() => onClaim(m.code)} style={{ marginTop: 8 }}>
                   {vi.game.missions.claim}

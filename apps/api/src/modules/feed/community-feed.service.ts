@@ -751,8 +751,8 @@ export class CommunityFeedService {
   }
 
   /** Tạo bài thành tích (auto-post). Không validate độ dài người-dùng-nhập. */
-  async createAchievementPost(userId: string, kind: FeedPostKind, body: string, meta?: object) {
-    return this.prisma.feedPost.create({ data: { userId, kind, body, meta: meta as object } });
+  async createAchievementPost(userId: string, kind: FeedPostKind, body: string, meta?: object, client: Pick<Prisma.TransactionClient, 'feedPost'> = this.prisma) {
+    return client.feedPost.create({ data: { userId, kind, body, meta: meta as object } });
   }
 
   /** Thả/bỏ tim — toggle. Trả trạng thái sau toggle. */

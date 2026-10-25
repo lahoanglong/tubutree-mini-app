@@ -27,8 +27,6 @@ const WALLET: WalletSummary = {
   cashbackPending: 0,
   commissionApproved: 0,
   commissionPending: 0,
-  withdrawMin: 50000,
-  withdrawFee: 0,
 };
 
 const NOT_DEALER: DealerMe = { isDealer: false, status: 'NONE', tier: null, currentDebt: 0 };
