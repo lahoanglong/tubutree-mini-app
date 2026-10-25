@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { extraPlotsVisible, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { Page, useNavigate } from 'zmp-ui';
 import type { HarvestSpecies } from '../services/game-api';
 import { useAuthStore } from '../store/auth';
@@ -12,6 +12,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage } from '../services/api';
 import { getLoyalty } from '../services/account-api';
+import { shareLink } from '../services/zmp-bridge';
 import { pointsSummary } from '../utils/points-lots';
 import { dismissGameTutorial, isGameTutorialDismissed } from '../utils/game-tutorial';
 import { MessagesSquare, Recycle } from 'lucide-react';
@@ -47,6 +48,12 @@ import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestMeta, type HarvestReward } from '../components/game/use-game-actions';
 import { SEASON_PASS_ENABLED } from '../utils/features';
+
+const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
+  catalog: '/browse',
+  'delivered-orders': '/orders?tab=delivered',
+  invite: '/wallet',
+};
 
 export default function GamePage() {
   const phase = useAuthPhase();
@@ -103,6 +110,14 @@ export default function GamePage() {
   };
   const claimDaily = (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) =>
     checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
+  const goMission = (target: MissionTarget) => {
+    if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
+    else navigate(MISSION_PATHS[target]);
+  };
+  const shareHarvest = () => {
+    const t = vi.game.newbie.harvest;
+    void shareLink({ title: t.shareTitle, description: t.shareDescription, path: '/game' }).catch(() => undefined);
+  };
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
@@ -189,6 +204,7 @@ export default function GamePage() {
           />
 
           {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
+          <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
             onCheckIn={() => checkInM.mutate()}
@@ -199,6 +215,7 @@ export default function GamePage() {
             dewPending={dewM.isPending}
             onNeedWater={openEarn}
           />
+          </div>
 
           <MissionsCard
             missions={missions}
@@ -206,6 +223,7 @@ export default function GamePage() {
             claimPending={claimMissionM.isPending}
             claimVariables={claimMissionM.variables}
             onClaim={(code) => claimMissionM.mutate(code)}
+            onGo={goMission}
           />
 
           <div id="game-quiz">
@@ -310,8 +328,8 @@ export default function GamePage() {
           {/* Bảng tin cộng đồng (§6.14.12) */}
           <GameLinkRow
             icon={MessagesSquare}
-            title="Bảng tin cộng đồng"
-            hint="Khoe thành tích xanh & cổ vũ nhau trồng cây"
+            title={vi.game.newbie.community.feedTitle}
+            hint={vi.game.newbie.community.feedHintReadOnly}
             onClick={() => navigate('/feed')}
           />
         </GameTabPanel>
@@ -360,6 +378,7 @@ export default function GamePage() {
           setHarvested(false);
           navigate('/browse');
         }}
+        onShare={shareHarvest}
       />
     </>,
   );

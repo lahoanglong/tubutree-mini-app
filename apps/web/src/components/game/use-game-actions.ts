@@ -11,6 +11,7 @@ import {
   collectDew,
   giftWater,
   repairStreak,
+  shareHarvest,
   spin,
   unlockPlot,
   waterPlot,
@@ -19,6 +20,7 @@ import {
   type HarvestCouponCap,
   type HarvestReward,
 } from '@tubutree/app-core/api/game';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { coreHttp } from '@/lib/core-http';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { useLockedMutation } from './use-locked-mutation';
@@ -205,11 +207,21 @@ export function useGameActions({
         notify(`Đã nhận +${formatNumber(r.rewardPoints)} Điểm Xanh! 🌿`, 'success');
         void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
         void queryClient.invalidateQueries({ queryKey: ['me'] });
+        // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
+        void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       },
       onError,
     },
     (code) => code,
   );
+  const shareHarvestM = useLockedMutation({
+    mutationFn: () => shareHarvest(coreHttp),
+    onSuccess: () => {
+      notify(gameNewbieCopy.harvest.shareCommunityOk, 'success');
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
+    onError,
+  });
   const answerM = useLockedMutation(
     {
       mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(coreHttp, id, choice),
@@ -224,5 +236,5 @@ export function useGameActions({
     ({ id }) => id,
   );
 
-  return { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM };
+  return { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM, shareHarvestM };
 }

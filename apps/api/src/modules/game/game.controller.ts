@@ -66,6 +66,9 @@ export class GameController {
     return this.quiz.answerQuiz(userId, id, dto.choice);
   }
 
+  @Post('harvest/share')
+  shareHarvest(@CurrentUser('sub') userId: string) { return this.game.shareHarvest(userId); }
+
   @Post('tree/water')
   water(@CurrentUser('sub') userId: string, @Body() dto: WaterDto) { return this.game.waterTree(userId, dto.drops); }
 

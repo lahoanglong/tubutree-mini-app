@@ -96,7 +96,7 @@ function QuizBlock({
       <Text variant="body-sm" as="div" style={{ marginBottom: 8 }}>
         {q.question}
       </Text>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
         {q.options.map((opt, i) => {
           // Sau khi reveal: tô xanh đáp án đúng, tô đỏ lựa chọn sai của user.
           let tone: { background: string; color: string } | undefined;

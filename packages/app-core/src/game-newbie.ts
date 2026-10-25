@@ -140,6 +140,15 @@ export const gameNewbieCopy = {
     have: (have: number, cost: number) => `Bạn có ${n(have)} / ${n(cost)} Điểm Xanh cho 1 lượt quay`,
     howToEarn: 'Cách kiếm Điểm Xanh',
   },
+  community: {
+    feedTitle: 'Bảng tin cộng đồng',
+    feedHintReadOnly: 'Xem mẹo sống xanh từ mọi người',
+  },
+  missions: {
+    doNow: 'Làm ngay',
+    doNowFor: (title: string) => `Làm ngay: ${title}`,
+    progressLabel: (title: string, progress: number, goal: number) => `${title}: ${progress}/${goal}`,
+  },
   plots: {
     locked: 'Thu hoạch cây thứ 2 để mở thêm lô đất.',
   },
@@ -150,9 +159,34 @@ export const gameNewbieCopy = {
     guest: 'Đăng nhập Zalo để nhận quà khi thu hoạch.',
     guestCta: 'Đăng nhập Zalo',
     nextTree: (target: number) => `Cây tiếp theo cần ${drops(target)}`,
+    shareCommunity: 'Chia sẻ lên Cộng đồng',
+    shareCommunityBusy: 'Đang chia sẻ...',
+    shareCommunityDone: 'Đã chia sẻ',
+    shareCommunityOk: 'Đã chia sẻ lên Cộng đồng 🌳',
+    shareFriends: 'Chia sẻ với bạn bè',
+    shareTitle: 'Tôi vừa thu hoạch một cây ở Vườn Xanh 🌳',
+    shareDescription: 'Vào Vườn Xanh của Tubu Tree trồng cây cùng tôi nhé!',
     capped: {
       DAY: 'Hôm nay bạn đã nhận đủ mã giảm giá. Cây vẫn được tính, mã sẽ có lại ở lần thu hoạch sau.',
       MONTH: 'Tháng này bạn đã nhận đủ mã giảm giá. Cây vẫn được tính, sang tháng bạn nhận mã tiếp nhé.',
     },
   },
 } as const;
+
+/** Đích của nút "Làm ngay" trên thẻ nhiệm vụ; mỗi app tự đổi sang đường dẫn của mình. */
+export type MissionTarget = 'catalog' | 'delivered-orders' | 'invite' | 'checkin';
+
+const MISSION_TARGETS: Record<string, MissionTarget> = {
+  FIRST_ORDER: 'catalog',
+  REVIEW_3: 'delivered-orders',
+  INVITE_3: 'invite',
+  CHECKIN_7: 'checkin',
+};
+
+/** Đích của nhiệm vụ theo `code`; mã lạ trả null để không hiện nút. */
+export function missionTarget(code: string): MissionTarget | null {
+  return Object.prototype.hasOwnProperty.call(MISSION_TARGETS, code) ? MISSION_TARGETS[code]! : null;
+}
+
+/** Mã khối điểm danh trong trang game, đích cuộn của nhiệm vụ "Chăm chỉ 7 ngày". */
+export const GAME_CHECKIN_ANCHOR = 'game-checkin';

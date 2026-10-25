@@ -1,4 +1,4 @@
-import { BadRequestException, GoneException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, GoneException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -332,7 +332,6 @@ export class GameService {
     let couponCapped: 'DAY' | 'MONTH' | undefined;
     let rewardBlocked: 'GUEST' | undefined;
     let sproutPoints = 0;
-    let sproutHarvested = false;
     const revivedFromDead = false;
     let eco: EcoImpact = { progress: 0, target: ladderTarget(ladder, 0), treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
 
@@ -378,7 +377,6 @@ export class GameService {
             eco.progress -= eco.target;
             harvestedDrops += eco.target;
             const isSprout = eco.treesPlanted === 0;
-            if (isSprout) sproutHarvested = true;
             eco.treesPlanted += 1;
             harvestCount += 1;
             // Cây kế tiếp theo thang; cây đang trồng của hồ sơ cũ giữ target đã lưu cho tới lần thu hoạch này.
@@ -480,17 +478,6 @@ export class GameService {
       await this.community.contribute(userId, harvestedDrops).catch(() => undefined);
     }
 
-    // §6.14.12: auto-post thành tích lên bảng tin. Lỗi post không chặn thu hoạch.
-    // Không tự đăng bài cho cây mầm (khách mới thu hoạch ngay phút đầu) và cho người chưa là khách thật:
-    // bài công khai mang tên họ mà chưa được hỏi.
-    if (this.feed && realUser && harvestCount > (sproutHarvested ? 1 : 0)) {
-      const body = species
-        ? `Vừa thu hoạch cây và sưu tập loài ${species.emoji} ${species.name}! 🌳`
-        : `Vừa thu hoạch 1 cây trong Vườn Xanh 🌳`;
-      await this.feed
-        .createAchievementPost(userId, species ? 'SPECIES' : 'HARVEST', body, { treesPlanted: eco.treesPlanted })
-        .catch(() => undefined);
-    }
     return {
       progress: eco.progress,
       target: eco.target,
@@ -501,6 +488,30 @@ export class GameService {
       ...(rewardBlocked ? { rewardBlocked } : {}),
       reward,
     };
+  }
+
+  /**
+   * Khách tự bấm chia sẻ thành tích thu hoạch lên Cộng đồng. Nội dung do server dựng từ số cây của chính người đó, không
+   * nhận gì từ client. Mỗi mức `treesPlanted` chỉ có một bài: khoá tư vấn theo user giữ hai request song song nối đuôi nhau.
+   */
+  async shareHarvest(userId: string): Promise<{ shared: true; alreadyShared: boolean }> {
+    const owner = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
+    if (!isRealUser(owner)) throw new ForbiddenException('Chỉ tài khoản đã đăng nhập Zalo mới chia sẻ được lên Cộng đồng.');
+    const profile = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { ecoImpact: true } });
+    const treesPlanted = profile ? this.eco(profile.ecoImpact).treesPlanted : 0;
+    if (treesPlanted < 1) throw new BadRequestException('Bạn chưa thu hoạch cây nào để chia sẻ.');
+    if (!this.feed) throw new BadRequestException('Cộng đồng đang tạm đóng.');
+    const feed = this.feed;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`harvest-share:${userId}`}))`;
+      const existing = await tx.feedPost.findFirst({
+        where: { userId, kind: 'HARVEST', meta: { path: ['treesPlanted'], equals: treesPlanted } },
+        select: { id: true },
+      });
+      if (existing) return { shared: true as const, alreadyShared: true };
+      await feed.createAchievementPost(userId, 'HARVEST', 'Vừa thu hoạch 1 cây trong Vườn Xanh 🌳', { treesPlanted });
+      return { shared: true as const, alreadyShared: false };
+    });
   }
 
   /** Tạo bản ghi góp quỹ trồng cây (PLEDGED) + mã ghi nhận. Trả mã. */

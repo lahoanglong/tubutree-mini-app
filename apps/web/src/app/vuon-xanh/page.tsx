@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
-import { extraPlotsVisible, gameNewbieCopy, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, gameNewbieCopy, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
 import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -55,6 +55,11 @@ const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
 const FEED_PATH = '/cong-dong';
 const POINTS_PATH = '/tai-khoan/diem-xanh';
+const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
+  catalog: '/san-pham',
+  'delivered-orders': '/tai-khoan/don-hang?tab=delivered',
+  invite: '/tai-khoan/vi-tubu',
+};
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -73,7 +78,7 @@ function GameBody() {
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
 
-  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null }>({ open: false, reward: undefined, meta: null });
+  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null; shared: boolean }>({ open: false, reward: undefined, meta: null, shared: false });
   // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
   const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
   const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
@@ -83,9 +88,9 @@ function GameBody() {
   const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
   const fundPoints = loyalty ? (loyalty.redeemableTotal ?? pointsSummary(loyalty).total) : null;
 
-  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } = useGameActions({
+  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM, shareHarvestM } = useGameActions({
     notify,
-    onHarvest: (reward, meta) => setHarvest({ open: true, reward, meta }),
+    onHarvest: (reward, meta) => setHarvest({ open: true, reward, meta, shared: false }),
     onAnswered: (r: AnswerResult, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
   });
   const wheelPrize = useWheelPrize();
@@ -98,6 +103,12 @@ function GameBody() {
   };
   const claimDaily = (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) =>
     checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
+  const goMission = (target: MissionTarget) => {
+    if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
+    else router.push(MISSION_PATHS[target]);
+  };
+  const shareToCommunity = () =>
+    shareHarvestM.mutate(undefined, { onSuccess: () => setHarvest((h) => ({ ...h, shared: true })) });
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
@@ -176,6 +187,7 @@ function GameBody() {
             onEarn={() => openEarn()}
           />
 
+          <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
             onCheckIn={() => checkInM.mutate()}
@@ -186,6 +198,7 @@ function GameBody() {
             dewPending={dewM.isPending}
             onNeedWater={openEarn}
           />
+          </div>
 
           <MissionsCard
             missions={missions}
@@ -193,6 +206,7 @@ function GameBody() {
             claimPending={claimMissionM.isPending}
             claimVariables={claimMissionM.variables}
             onClaim={(code) => claimMissionM.mutate(code)}
+            onGo={goMission}
           />
 
           <div id="game-quiz">
@@ -322,6 +336,9 @@ function GameBody() {
         certificate={harvest.reward?.certificate ?? null}
         species={harvestSpecies}
         onClose={closeHarvest}
+        shared={harvest.shared}
+        sharing={shareHarvestM.isPending}
+        onShare={shareToCommunity}
         onCopyCoupon={(code) => void copyCoupon(code)}
         onUseCoupon={() => {
           closeHarvest();

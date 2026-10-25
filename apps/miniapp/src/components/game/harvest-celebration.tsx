@@ -24,6 +24,7 @@ export function HarvestCelebration({
   nextTarget,
   onClose,
   onUseCoupon,
+  onShare,
 }: {
   open: boolean;
   coupons: string[];
@@ -39,6 +40,8 @@ export function HarvestCelebration({
   nextTarget: number | null;
   onClose: () => void;
   onUseCoupon: () => void;
+  /** Mở hộp chia sẻ Zalo gốc. Cộng đồng trong Mini App chỉ đọc nên không đăng bài ở đây. */
+  onShare: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
   const t = vi.game.newbie.harvest;
@@ -58,6 +61,11 @@ export function HarvestCelebration({
           {guest && (
             <Button fullWidth onPress={onLogin}>
               {t.guestCta}
+            </Button>
+          )}
+          {!guest && (
+            <Button fullWidth variant="secondary" onPress={onShare}>
+              {t.shareFriends}
             </Button>
           )}
           <Button fullWidth variant={guest ? 'secondary' : 'primary'} onPress={onClose}>

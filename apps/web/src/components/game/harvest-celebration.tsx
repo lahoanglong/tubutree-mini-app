@@ -20,6 +20,9 @@ export function HarvestCelebration({
   onClose,
   onCopyCoupon,
   onUseCoupon,
+  shared,
+  sharing,
+  onShare,
 }: {
   open: boolean;
   coupons: string[];
@@ -36,6 +39,10 @@ export function HarvestCelebration({
   onClose: () => void;
   onCopyCoupon: (code: string) => void;
   onUseCoupon: () => void;
+  /** Đã đăng thành tích lần thu hoạch này lên Cộng đồng. */
+  shared: boolean;
+  sharing: boolean;
+  onShare: () => void;
 }) {
   const t = gameNewbieCopy.harvest;
   const seedling = points != null && points > 0;
@@ -54,6 +61,11 @@ export function HarvestCelebration({
           {guest && (
             <button type="button" onClick={onLogin} className={`${ui.btnPrimary} w-full`}>
               {t.guestCta}
+            </button>
+          )}
+          {!guest && (
+            <button type="button" disabled={shared || sharing} onClick={onShare} className={`${miniBtnSecondary} w-full`}>
+              {shared ? t.shareCommunityDone : sharing ? t.shareCommunityBusy : t.shareCommunity}
             </button>
           )}
           <button type="button" onClick={onClose} className={`${guest ? miniBtnSecondary : ui.btnPrimary} w-full`}>

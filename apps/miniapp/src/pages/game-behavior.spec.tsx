@@ -239,6 +239,8 @@ describe('GamePage — vườn và lối tắt', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     expect(screen.queryByText('Đổi vỏ chai lấy nước')).toBeNull();
     await openTab('Cộng đồng');
+    expect(screen.getByText('Xem mẹo sống xanh từ mọi người')).toBeInTheDocument();
+    expect(screen.queryByText(/Khoe thành tích/)).toBeNull();
     fireEvent.click(screen.getByText('Bảng tin cộng đồng'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
   });
@@ -1068,7 +1070,7 @@ describe('GamePage — nhiệm vụ', () => {
     expect(await screen.findByText('Chưa có nhiệm vụ.')).toBeInTheDocument();
   });
 
-  it('đạt điều kiện chưa nhận: có nút "Nhận thưởng" gọi claimMission(code), báo + haptic, làm mới nhiệm vụ + me', async () => {
+  it('đạt điều kiện chưa nhận: có nút "Nhận thưởng" gọi claimMission(code), báo + haptic, làm mới nhiệm vụ + me + loyalty', async () => {
     mocks.api.getMissions.mockResolvedValue([mission({ code: 'REVIEW_3', title: 'Viết 3 đánh giá', progress: 3, goal: 3, completed: true })]);
     const { invalidated } = renderPage();
     const btn = await screen.findByRole('button', { name: viText.game.missions.claim });
@@ -1084,7 +1086,7 @@ describe('GamePage — nhiệm vụ', () => {
     const keys = invalidated();
     expect(keys).toContainEqual(['game', 'missions']);
     expect(keys).toContainEqual(['me']);
-    expect(keys).not.toContainEqual(['loyalty']);
+    expect(keys).toContainEqual(['loyalty']);
   });
 
   it('đã nhận: có dấu tích ở tên và không còn nút; chưa đạt: hiện tiến độ và không có nút', async () => {
@@ -1097,6 +1099,41 @@ describe('GamePage — nhiệm vụ', () => {
     expect(screen.getByText('Đang làm')).toBeInTheDocument();
     expect(screen.getByText('1/3')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: viText.game.missions.claim })).not.toBeInTheDocument();
+  });
+
+  it('nhiệm vụ chưa xong có nút "Làm ngay" dẫn đúng chỗ; mã lạ và nhiệm vụ đã xong không có nút', async () => {
+    mocks.api.getMissions.mockResolvedValue([
+      mission({ code: 'FIRST_ORDER', title: 'Đơn đầu tiên', progress: 0, goal: 1 }),
+      mission({ code: 'REVIEW_3', title: 'Viết 3 đánh giá', progress: 0, goal: 3 }),
+      mission({ code: 'INVITE_3', title: 'Mời 3 bạn', progress: 0, goal: 3 }),
+      mission({ code: 'MYSTERY', title: 'Nhiệm vụ lạ', progress: 0, goal: 1 }),
+      mission({ code: 'DONE_ONE', title: 'Đã xong', progress: 1, goal: 1, completed: true, claimed: true }),
+    ]);
+    renderPage();
+    await screen.findByText('Đơn đầu tiên');
+    expect(screen.getAllByRole('button', { name: /^Làm ngay: / })).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Đơn đầu tiên' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
+    fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Viết 3 đánh giá' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=delivered');
+    fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Mời 3 bạn' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/wallet');
+  });
+
+  it('nhiệm vụ Chăm chỉ 7 ngày: "Làm ngay" cuộn tới khối điểm danh', async () => {
+    mocks.api.getMissions.mockResolvedValue([mission({ code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', progress: 0, goal: 7 })]);
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Làm ngay: Chăm chỉ 7 ngày' }));
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    expect(document.getElementById('game-checkin')).not.toBeNull();
+  });
+
+  it('thanh tiến độ nhiệm vụ có tên đọc màn hình', async () => {
+    mocks.api.getMissions.mockResolvedValue([mission({ code: 'REVIEW_3', title: 'Viết 3 đánh giá', progress: 1, goal: 3 })]);
+    renderPage();
+    expect(await screen.findByRole('progressbar', { name: 'Viết 3 đánh giá: 1/3' })).toBeInTheDocument();
   });
 
   it('nhiệm vụ điểm danh 7 ngày lấy tiến độ từ chuỗi ngày của hồ sơ (tối đa bằng mục tiêu)', async () => {

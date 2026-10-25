@@ -297,16 +297,6 @@ export class GameGardenService {
       await this.community.contribute(userId, harvestCount * target).catch(() => undefined);
     }
 
-    // §6.14.12: auto-post thành tích lên bảng tin. Lỗi post không chặn thu hoạch.
-    if (harvested && this.feed) {
-      const body = species
-        ? `Vừa thu hoạch cây ở lô đất và sưu tập loài ${species.emoji} ${species.name}! 🌳`
-        : `Vừa thu hoạch 1 cây ở lô đất trong Vườn Xanh 🌳`;
-      await this.feed
-        .createAchievementPost(userId, species ? 'SPECIES' : 'HARVEST', body, { treesPlanted })
-        .catch(() => undefined);
-    }
-
     const reward: {
       coupon?: string;
       coupons?: string[];

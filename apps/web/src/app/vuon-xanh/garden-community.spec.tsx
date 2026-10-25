@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
@@ -512,6 +513,31 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     expect(dlg.textContent).toContain('🌴 Sao đen');
     expect(dlg.textContent).toContain('Sống hàng trăm năm.');
     expect(c.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('"Chia sẻ lên Cộng đồng": gọi /game/harvest/share một lần, báo đã chia sẻ và khoá nút', async () => {
+    state.posts['/game/tree/water'] = () => harvest;
+    state.posts['/game/harvest/share'] = () => ({ shared: true, alreadyShared: false });
+    const c = await mount();
+    await water(c);
+    const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
+    const share = btn(dlg, 'Chia sẻ lên Cộng đồng');
+    act(() => {
+      share.click();
+      share.click();
+    });
+    await flush(8);
+    expect(postsOf('/game/harvest/share')).toHaveLength(1);
+    expect(btn(dlg, 'Đã chia sẻ').disabled).toBe(true);
+    expect(document.body.textContent).toContain('Đã chia sẻ lên Cộng đồng');
+  });
+
+  it('khách vãng lai: hộp thu hoạch không có nút chia sẻ', async () => {
+    state.posts['/game/tree/water'] = () => ({ progress: 50, target: 50, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST' });
+    const c = await mount();
+    await water(c);
+    const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dlg.textContent).not.toContain('Chia sẻ lên Cộng đồng');
   });
 
   it('thu hoạch không có quà: không có mã, không có "Dùng mã giảm giá ngay"; "Tuyệt vời!" đóng hộp', async () => {

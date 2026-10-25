@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extraPlotsVisible, gameNewbieCopy, missingDrops, primaryWaterAction, tutorialState } from './game-newbie';
+import { extraPlotsVisible, gameNewbieCopy, missingDrops, missionTarget, primaryWaterAction, tutorialState } from './game-newbie';
 
 const BASE = { totalSeeds: 0, checkedInToday: false, dewToday: false, dailyLoginSeeds: 15, dewSeeds: 15, firstCheckinBonus: 0 };
 
@@ -48,5 +48,16 @@ describe('chữ dùng chung', () => {
     expect(gameNewbieCopy.primary.claim(30)).toBe('Nhận nước hôm nay (+30💧)');
     expect(gameNewbieCopy.primary.claimFirst(65)).toBe('Điểm danh nhận 65💧');
     expect(gameNewbieCopy.primary.water(1250)).toBe('Tưới hết (1.250💧)');
+  });
+});
+
+describe('missionTarget', () => {
+  it('map theo code, mã lạ không có đích', () => {
+    expect(missionTarget('FIRST_ORDER')).toBe('catalog');
+    expect(missionTarget('REVIEW_3')).toBe('delivered-orders');
+    expect(missionTarget('INVITE_3')).toBe('invite');
+    expect(missionTarget('CHECKIN_7')).toBe('checkin');
+    expect(missionTarget('UNKNOWN')).toBeNull();
+    expect(missionTarget('toString')).toBeNull();
   });
 });

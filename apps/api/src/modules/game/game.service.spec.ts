@@ -1,4 +1,4 @@
-import { BadRequestException, GoneException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, GoneException, Logger, NotFoundException } from '@nestjs/common';
 import { GameService } from './game.service';
 import { treeCertificateCodeFor } from './tree-purchase-key';
 import type { PrismaService } from '../../prisma/prisma.service';
@@ -847,38 +847,58 @@ describe('GameService.waterTree', () => {
   });
 });
 
-describe('GameService.waterTree — auto-post Community Feed (§6.14.12)', () => {
-  it('thu hoạch + feed injected → createAchievementPost (HARVEST)', async () => {
+describe('GameService.waterTree — không tự đăng bài bảng tin', () => {
+  it('thu hoạch dù có feed injected → KHÔNG createAchievementPost; khách tự bấm chia sẻ', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
       profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 1 } }),
     );
     const feed = { createAchievementPost: jest.fn().mockResolvedValue({}) };
     const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never);
-    await svc.waterTree('u1', 20);
-    expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
+    const r = await svc.waterTree('u1', 20);
+    expect(r.harvested).toBe(true);
+    expect(feed.createAchievementPost).not.toHaveBeenCalled();
   });
+});
 
-  it('chưa thu hoạch → KHÔNG post', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
-    );
-    const feed = { createAchievementPost: jest.fn() };
-    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never);
-    await svc.waterTree('u1', 20);
+describe('GameService.shareHarvest', () => {
+  const build = (o: { user?: unknown; eco?: unknown; existing?: unknown }) => {
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      feedPost: { findFirst: jest.fn().mockResolvedValue(o.existing ?? null) },
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(o.user ?? { zaloId: 'zalo-u1', phone: null }) },
+      gameProfile: { findUnique: jest.fn().mockResolvedValue(o.eco === undefined ? null : { ecoImpact: o.eco }) },
+      $transaction: jest.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    } as unknown as PrismaService;
+    const feed = { createAchievementPost: jest.fn().mockResolvedValue({}) };
+    return { svc: new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never), feed, tx };
+  };
+  const ecoOf = (treesPlanted: number) => ({ progress: 0, target: 60, treeType: 't', treesPlanted });
+
+  it('guest → 403, không đăng', async () => {
+    const { svc, feed } = build({ user: { zaloId: 'guest_x', phone: null }, eco: ecoOf(2) });
+    await expect(svc.shareHarvest('u1')).rejects.toBeInstanceOf(ForbiddenException);
     expect(feed.createAchievementPost).not.toHaveBeenCalled();
   });
 
-  it('lỗi auto-post KHÔNG chặn thu hoạch', async () => {
-    const prisma = makePrisma();
-    (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ totalSeeds: 100, ecoImpact: { progress: 590, target: 600, treeType: 't', treesPlanted: 1 } }),
-    );
-    const feed = { createAchievementPost: jest.fn().mockRejectedValue(new Error('feed down')) };
-    const svc = new GameService(prisma, makeConfig(), analytics, undefined, undefined, feed as never);
-    const r = await svc.waterTree('u1', 20);
-    expect(r.harvested).toBe(true);
+  it('chưa thu hoạch cây nào → 400', async () => {
+    const { svc, feed } = build({ eco: ecoOf(0) });
+    await expect(svc.shareHarvest('u1')).rejects.toBeInstanceOf(BadRequestException);
+    expect(feed.createAchievementPost).not.toHaveBeenCalled();
+  });
+
+  it('khách thật đã thu hoạch → đăng một bài HARVEST với số cây của chính mình', async () => {
+    const { svc, feed } = build({ eco: ecoOf(3) });
+    await expect(svc.shareHarvest('u1')).resolves.toEqual({ shared: true, alreadyShared: false });
+    expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), { treesPlanted: 3 });
+  });
+
+  it('mức cây này đã có bài → không đăng thêm', async () => {
+    const { svc, feed } = build({ eco: ecoOf(3), existing: { id: 'p1' } });
+    await expect(svc.shareHarvest('u1')).resolves.toEqual({ shared: true, alreadyShared: true });
+    expect(feed.createAchievementPost).not.toHaveBeenCalled();
   });
 });
 
@@ -2213,35 +2233,24 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
       expect(r.reward.points).toBe(2000);
     });
 
-    it('thu hoạch cây mầm KHÔNG tự đăng bài bảng tin', async () => {
-      const prisma = makePrisma();
-      setProfile(prisma, eco({ sproutRewarded: false }));
-      const feed = feedMock();
-      await withFeed(prisma, feed).waterTree('u1', 60);
-      expect(feed.createAchievementPost).not.toHaveBeenCalled();
-    });
-
-    it('người chưa là khách thật thu hoạch cây thứ hai: KHÔNG đăng bài', async () => {
-      const prisma = makePrisma();
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({ zaloId: 'guest_x', phone: null });
-      setProfile(prisma, eco({ target: 300, treesPlanted: 1 }));
-      const feed = feedMock();
-      await withFeed(prisma, feed).waterTree('u1', 300);
-      expect(feed.createAchievementPost).not.toHaveBeenCalled();
-    });
-
-    it('khách thật thu hoạch cây thứ hai: vẫn đăng bài như cũ; tưới 360 từ hồ sơ mới (cây mầm + cây 2) cũng đăng vì có cây không phải cây mầm', async () => {
-      const prisma = makePrisma();
-      setProfile(prisma, eco({ target: 300, treesPlanted: 1, sproutRewarded: true }));
-      const feed = feedMock();
-      await withFeed(prisma, feed).waterTree('u1', 300);
-      expect(feed.createAchievementPost).toHaveBeenCalledTimes(1);
+    it('thu hoạch (cây mầm, khách guest, khách thật cây thứ hai) không bao giờ tự đăng bài bảng tin', async () => {
+      const p1 = makePrisma();
+      setProfile(p1, eco({ sproutRewarded: false }));
+      const f1 = feedMock();
+      await withFeed(p1, f1).waterTree('u1', 60);
 
       const p2 = makePrisma();
-      setProfile(p2, eco({ sproutRewarded: false }));
+      (p2.user.findUnique as jest.Mock).mockResolvedValue({ zaloId: 'guest_x', phone: null });
+      setProfile(p2, eco({ target: 300, treesPlanted: 1 }));
       const f2 = feedMock();
-      await withFeed(p2, f2).waterTree('u1', 360);
-      expect(f2.createAchievementPost).toHaveBeenCalledTimes(1);
+      await withFeed(p2, f2).waterTree('u1', 300);
+
+      const p3 = makePrisma();
+      setProfile(p3, eco({ target: 300, treesPlanted: 1, sproutRewarded: true }));
+      const f3 = feedMock();
+      await withFeed(p3, f3).waterTree('u1', 300);
+
+      for (const f of [f1, f2, f3]) expect(f.createAchievementPost).not.toHaveBeenCalled();
     });
   });
 

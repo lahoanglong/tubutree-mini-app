@@ -194,6 +194,8 @@ export function useGameActions({
       openSnackbar({ text: vi.game.missions.claimOk(r.rewardPoints), type: 'success' });
       void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
+      // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
+      void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
     },
     onError,
   }, (code) => code);

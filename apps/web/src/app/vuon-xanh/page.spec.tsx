@@ -498,6 +498,26 @@ describe('Vườn Xanh: nhiệm vụ', () => {
     expect(c.textContent).toContain('1/3');
   });
 
+  it('nhiệm vụ chưa xong có "Làm ngay" dẫn đúng chỗ; mã lạ và nhiệm vụ đã nhận không có nút; thanh tiến độ có tên', async () => {
+    state.data['/game/missions'] = [
+      { code: 'FIRST_ORDER', title: 'Đơn đầu', rewardPoints: 5, progress: 0, goal: 1, completed: false, claimed: false },
+      { code: 'REVIEW_3', title: 'Viết đánh giá', rewardPoints: 5, progress: 0, goal: 3, completed: false, claimed: false },
+      { code: 'INVITE_3', title: 'Mời bạn', rewardPoints: 5, progress: 0, goal: 3, completed: false, claimed: false },
+      { code: 'MYSTERY', title: 'Lạ', rewardPoints: 5, progress: 0, goal: 1, completed: false, claimed: false },
+      { code: 'ZZ', title: 'Xong', rewardPoints: 5, progress: 1, goal: 1, completed: true, claimed: true },
+    ];
+    const c = await mount();
+    const goButtons = Array.from(c.querySelectorAll('button')).filter((b) => b.textContent === 'Làm ngay');
+    expect(goButtons).toHaveLength(3);
+    click(btn(c, 'Làm ngay').closest('div')!.querySelector('button')!);
+    expect(state.push).toHaveBeenLastCalledWith('/san-pham');
+    click(goButtons[1]!);
+    expect(state.push).toHaveBeenLastCalledWith('/tai-khoan/don-hang?tab=delivered');
+    click(goButtons[2]!);
+    expect(state.push).toHaveBeenLastCalledWith('/tai-khoan/vi-tubu');
+    expect(c.querySelector('[role="progressbar"][aria-label="Viết đánh giá: 0/3"]')).not.toBeNull();
+  });
+
   it('đạt theo tiến độ dù server chưa đánh dấu completed vẫn cho nhận', async () => {
     state.data['/game/missions'] = [{ code: 'INVITE_3', title: 'Mời 3 bạn', rewardPoints: 5, progress: 3, goal: 3, completed: false, claimed: false }];
     const c = await mount();
@@ -746,14 +766,13 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
     expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
   });
 
-  it('nhận nhiệm vụ làm mới nhiệm vụ và me, không đụng loyalty', async () => {
+  it('nhận nhiệm vụ làm mới nhiệm vụ, me và loyalty (số dư Điểm Xanh ở Thanh toán)', async () => {
     state.posts['/game/missions/REVIEW_3/claim'] = () => ({ claimed: true, rewardPoints: 30, couponCode: null });
     const c = await mount();
     arm();
     click(btn(c, 'Nhận thưởng'));
     await flush(6);
-    expect(keys()).toEqual(expect.arrayContaining(['["game","missions"]', '["me"]']));
-    expect(keys()).not.toContain('["loyalty"]');
+    expect(keys()).toEqual(expect.arrayContaining(['["game","missions"]', '["me"]', '["loyalty"]']));
   });
 });
 

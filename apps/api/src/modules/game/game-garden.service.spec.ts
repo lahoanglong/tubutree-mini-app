@@ -383,13 +383,13 @@ describe('GameGardenService.waterPlot', () => {
     expect(r.reward.species).toMatchObject({ name: 'Lim' });
   });
 
-  it('thu hoạch → auto-post Community Feed (§6.14.12); lỗi post không chặn', async () => {
+  it('thu hoạch lô phụ KHÔNG tự đăng bài Community Feed', async () => {
     const prisma = makePrisma();
     (prisma.gardenPlot.findFirst as jest.Mock).mockResolvedValue(plotRow({ progress: 590, target: 600 }));
     const feed = { createAchievementPost: jest.fn().mockRejectedValue(new Error('down')) };
     const svc = new GameGardenService(prisma, makeConfig(), undefined, undefined, feed as never);
     const r = await svc.waterPlot('u1', 'p1', 20);
-    expect(feed.createAchievementPost).toHaveBeenCalledWith('u1', 'HARVEST', expect.any(String), expect.any(Object));
+    expect(feed.createAchievementPost).not.toHaveBeenCalled();
     expect(r.harvested).toBe(true);
   });
 

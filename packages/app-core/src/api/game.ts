@@ -127,6 +127,12 @@ export interface HarvestReward {
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
   points?: number;
 }
+export interface ShareHarvestResult {
+  shared: true;
+  alreadyShared: boolean;
+}
+/** Khách tự chia sẻ thành tích thu hoạch lên Cộng đồng (chỉ web); nội dung do máy chủ dựng. */
+export const shareHarvest = (http: HttpClient) => http.post<ShareHarvestResult>('/game/harvest/share');
 export const waterTree = (http: HttpClient, drops: number) =>
   http.post<{
     progress: number;

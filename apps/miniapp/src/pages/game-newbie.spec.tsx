@@ -55,6 +55,8 @@ vi.mock('../store/auth', () => ({
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/features', () => ({ SEASON_PASS_ENABLED: false }));
+const bridge = vi.hoisted(() => ({ shareLink: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../services/zmp-bridge', () => bridge);
 vi.mock('../services/game-api', () => mocks.api);
 vi.mock('../services/account-api', () => ({ getLoyalty: () => mocks.getLoyalty() }));
 
@@ -387,6 +389,23 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
     expect(await screen.findByText('Đăng nhập Zalo để nhận quà khi thu hoạch.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeInTheDocument();
+  });
+
+  it('"Chia sẻ với bạn bè" mở hộp chia sẻ Zalo gốc tới /game, không đăng bài Cộng đồng', async () => {
+    mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 2, reward: { certificate: 'C2' } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ với bạn bè' }));
+    expect(bridge.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/game', title: expect.any(String) }));
+    expect(screen.queryByRole('button', { name: /Chia sẻ lên Cộng đồng/ })).not.toBeInTheDocument();
+  });
+
+  it('khách vãng lai không có nút chia sẻ', async () => {
+    mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    await screen.findByText('Thu hoạch thành công!');
+    expect(screen.queryByRole('button', { name: 'Chia sẻ với bạn bè' })).not.toBeInTheDocument();
   });
 
   it('thu hoạch thường vẫn nói Tubu góp 1 cây và không có khung điểm', async () => {
