@@ -555,7 +555,7 @@ export default function AdminPage() {
           badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
-          <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={() => setTab('inbox')}>
+          <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>
           {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
@@ -600,7 +600,7 @@ export default function AdminPage() {
           {active === 'reviews' && <ReviewsTab />}
           {active === 'subscriptions' && <SubscriptionsTab />}
           {active === 'waste' && <WasteTab key={wasteSeed?.n ?? 0} isAdmin={isAdmin} seed={wasteSeed} />}
-          {active === 'config' && <ConfigTab />}
+          {active === 'config' && <ConfigTab onOpenSupportChat={allowed.has('supportChat') ? () => setTab('supportChat') : undefined} />}
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'attendance' && <AttendanceTab />}
           {active === 'staffRoster' && <StaffRosterTab />}
@@ -2048,7 +2048,7 @@ function groupConfigRows(rows: ConfigRow[]): { name: string; rows: ConfigRow[] }
   return [...groups.filter((g) => g.name !== CONFIG_OTHER_GROUP), ...groups.filter((g) => g.name === CONFIG_OTHER_GROUP)];
 }
 
-function ConfigTab() {
+function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-config'], queryFn: () => getConfig() });
   const [search, setSearch] = useState('');
@@ -2059,7 +2059,7 @@ function ConfigTab() {
   if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => void q.refetch()} />;
   return (
     <div className="space-y-4">
-      <FeatureFlagsCard rows={q.data} />
+      <FeatureFlagsCard rows={q.data} onOpenSupportChat={onOpenSupportChat} />
       <ShopInfoCard rows={q.data} />
       <GomdonConfigCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { FeatureFlagsCard } from './feature-flags-card';
-import { answerConfirm, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { ConfigRow } from '@/lib/admin-client';
 import { FEATURE_FLAGS } from '@/lib/admin-feature-flags';
 
@@ -36,8 +36,8 @@ function setup(configRows: ConfigRow[], put?: { status?: number; body: unknown }
 describe('FeatureFlagsCard', () => {
   it('liệt kê đủ các cờ với trạng thái; khoá chưa có dòng dùng giá trị mặc định', () => {
     const { container } = setup(rows({ 'chat.enabled': true }));
-    expect(container.querySelectorAll('button[role="switch"]')).toHaveLength(FEATURE_FLAGS.length);
-    expect(sw(container, 'Cho khách chat với cửa hàng').getAttribute('aria-checked')).toBe('true');
+    expect(container.querySelectorAll('button[role="switch"]')).toHaveLength(FEATURE_FLAGS.length - 1);
+    expect(container.querySelector('[data-flag="chat.enabled"]')!.textContent).toContain('Đang bật');
     expect(sw(container, 'Đổi rác lấy quà').getAttribute('aria-checked')).toBe('false');
     expect(sw(container, 'Bắt duyệt gian hàng CTV trước khi hiện').getAttribute('aria-checked')).toBe('true');
     for (const k of ['loyalty.marketplace_claim_enabled', 'pancake.external_lookup_enabled', 'pancake.external_poll_enabled', 'loyalty.chat_order_points_enabled', 'loyalty.pos_credit_enabled', 'waste.enabled', 'chat.enabled', 'storefront.require_approval', 'community.public_preview']) {
@@ -68,11 +68,59 @@ describe('FeatureFlagsCard', () => {
   });
 
   it('API từ chối: hiện lỗi của API ngay dưới cờ đó', async () => {
-    const { container } = setup([], { status: 400, body: { message: 'Cầu nối Zalo chưa kết nối.' } });
-    click(sw(container, 'Cho khách chat với cửa hàng'));
+    const { container } = setup([], { status: 400, body: { message: 'Không lưu được cờ này.' } });
+    click(sw(container, 'Đổi rác lấy quà'));
     await flush();
     answerConfirm(true);
     await flush();
-    expect(container.querySelector('[data-flag="chat.enabled"] [role="alert"]')!.textContent).toContain('Cầu nối Zalo chưa kết nối.');
+    expect(container.querySelector('[data-flag="waste.enabled"] [role="alert"]')!.textContent).toContain('Không lưu được cờ này.');
+  });
+
+  it('cờ chat không có công tắc: hiện trạng thái và nút mở tab Chat CSKH', () => {
+    const onOpen = vi.fn();
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<FeatureFlagsCard rows={rows({ 'chat.enabled': false })} onOpenSupportChat={onOpen} />);
+    const li = container.querySelector('[data-flag="chat.enabled"]')!;
+    expect(li.querySelector('[role="switch"]')).toBeNull();
+    expect(li.textContent).toContain('Đang tắt');
+    click(byText(li, 'button', 'Bật/tắt ở Chat CSKH'));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('hộp xác nhận cờ đảo nói đúng hệ quả từng chiều', async () => {
+    const on = setup(rows({ 'storefront.require_approval': true }));
+    click(sw(on.container, 'Bắt duyệt gian hàng CTV trước khi hiện'));
+    await flush();
+    const off = confirmDialog()!.textContent!;
+    expect(off).toContain('chưa duyệt sẽ hiện công khai ngay');
+    expect(off).not.toContain('ngừng với khách');
+    answerConfirm(false);
+    await flush();
+    on.unmount();
+
+    const back = setup(rows({ 'storefront.require_approval': false }));
+    click(sw(back.container, 'Bắt duyệt gian hàng CTV trước khi hiện'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('chưa được duyệt sẽ bị ẩn khỏi khách ngay');
+    answerConfirm(false);
+  });
+
+  it('bật cờ Pancake/đơn sàn có cảnh báo điều kiện và không hứa nhận điểm ngay; tắt cờ đơn sàn nói rõ yêu cầu đang chờ', async () => {
+    const a = setup(rows({ 'pancake.external_poll_enabled': false }));
+    click(sw(a.container, 'Tự kéo đơn sàn từ Pancake định kỳ'));
+    await flush();
+    const t = confirmDialog()!.textContent!;
+    expect(t).toContain('Pancake đã gửi đơn về Tubu thành công');
+    expect(t).not.toContain('nhận điểm ngay');
+    answerConfirm(false);
+    await flush();
+    a.unmount();
+
+    const b = setup(rows({ 'loyalty.marketplace_claim_enabled': true }));
+    click(sw(b.container, 'Khách nhập mã đơn sàn để nhận điểm'));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('đang chờ cộng điểm sẽ đứng yên');
+    answerConfirm(false);
   });
 });

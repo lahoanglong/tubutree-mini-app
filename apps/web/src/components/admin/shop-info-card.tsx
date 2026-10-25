@@ -16,6 +16,21 @@ const COMPANY_FIELDS = [
 ] as const;
 
 const LEGAL_MAX = 50_000;
+const BCT_URL_MAX = 500;
+
+/** Cùng luật với `httpsUrl` ở API (company-config.ts): link API sẽ bỏ thì không cho lưu. */
+function bctLinkProblem(value: string): string | null {
+  if (value.length > BCT_URL_MAX) return `Link dài quá ${BCT_URL_MAX} ký tự.`;
+  let u: URL;
+  try {
+    u = new URL(value);
+  } catch {
+    return 'Link phải bắt đầu bằng https:// và không có khoảng trắng.';
+  }
+  if (u.protocol !== 'https:') return 'Link phải bắt đầu bằng https:// và không có khoảng trắng.';
+  if (u.username || u.password) return 'Link không được chứa tên đăng nhập hay mật khẩu.';
+  return null;
+}
 
 const textOf = (rows: ConfigRow[] | undefined, key: string): string => {
   const v = rows?.find((r) => r.key === key)?.value;
@@ -51,7 +66,7 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const companyKeys = COMPANY_FIELDS.map((f) => f.key as string);
   const companyDirty = companyKeys.some(dirty);
   const bct = valueOf('company.bct_notice_url').trim();
-  const bctProblem = bct !== '' && !/^https:\/\/\S+$/.test(bct) ? 'Link phải bắt đầu bằng https:// và không có khoảng trắng.' : null;
+  const bctProblem = bct === '' ? null : bctLinkProblem(bct);
 
   return (
     <section aria-labelledby="shop-info-title" data-shop-info className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -79,6 +94,7 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
             <span role={msg.ok ? 'status' : 'alert'} className={`text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</span>
           )}
         </div>
+        <p className="text-xs text-stone-500">Trang khách cập nhật sau tối đa 5 phút, chân trang tối đa 1 giờ.</p>
       </div>
 
       <div className="mt-6 space-y-5">

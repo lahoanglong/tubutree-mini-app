@@ -4,12 +4,12 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
 import { configValue } from '@/lib/admin-config-forms';
-import { FEATURE_FLAGS, type FeatureFlag } from '@/lib/admin-feature-flags';
+import { DEFAULT_OFF_WARNING, FEATURE_FLAGS, type FeatureFlag } from '@/lib/admin-feature-flags';
 import { useConfirm } from './confirm-dialog';
 import { Notice, ToneBadge } from './ui';
 
 /** Khoá nào chưa có dòng trong DB vẫn lưu được: API tự tạo dòng cho các khoá có luật ghi riêng. */
-export function FeatureFlagsCard({ rows }: { rows: ConfigRow[] | undefined }) {
+export function FeatureFlagsCard({ rows, onOpenSupportChat }: { rows: ConfigRow[] | undefined; onOpenSupportChat?: () => void }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [failure, setFailure] = useState<{ key: string; text: string } | null>(null);
@@ -19,7 +19,7 @@ export function FeatureFlagsCard({ rows }: { rows: ConfigRow[] | undefined }) {
     mutationFn: async ({ flag, next }: { flag: FeatureFlag; next: boolean }) => {
       const ok = await confirm({
         title: next ? `Bật "${flag.label}"?` : `Tắt "${flag.label}"?`,
-        message: `${flag.description}\n\n${next ? flag.onWarning ?? 'Có hiệu lực ngay.' : 'Tính năng ngừng với khách ngay. Dữ liệu đã có được giữ nguyên.'}`,
+        message: `${flag.description}\n\n${next ? flag.onWarning ?? 'Có hiệu lực ngay.' : flag.offWarning ?? DEFAULT_OFF_WARNING}`,
         confirmLabel: next ? 'Bật' : 'Tắt',
         tone: next ? 'default' : 'danger',
       });
@@ -49,6 +49,9 @@ export function FeatureFlagsCard({ rows }: { rows: ConfigRow[] | undefined }) {
           const busy = toggle.isPending && toggle.variables?.flag.key === flag.key;
           return (
             <li key={flag.key} data-flag={flag.key} className="flex items-start gap-3 py-3">
+              {flag.manageIn ? (
+                <span aria-hidden="true" className="mt-0.5 inline-block h-6 w-11 shrink-0" />
+              ) : (
               <button
                 type="button"
                 role="switch"
@@ -62,12 +65,22 @@ export function FeatureFlagsCard({ rows }: { rows: ConfigRow[] | undefined }) {
                   <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-stone-0 transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} />
                 </span>
               </button>
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-medium text-stone-900">{flag.label}</p>
                   <ToneBadge tone={on ? 'success' : 'neutral'}>{on ? 'Đang bật' : 'Đang tắt'}</ToneBadge>
                 </div>
                 <p className="mt-0.5 text-xs leading-relaxed text-stone-600">{flag.description}</p>
+                {flag.manageIn && (
+                  onOpenSupportChat ? (
+                    <button type="button" onClick={onOpenSupportChat} className="mt-1 inline-flex min-h-[44px] items-center text-xs font-medium text-forest-700 underline sm:min-h-[36px]">
+                      {flag.manageIn.label}
+                    </button>
+                  ) : (
+                    <p className="mt-1 text-xs text-stone-600">Bật/tắt ở mục Chat CSKH (Khách hàng, Chat CSKH).</p>
+                  )
+                )}
                 {failure?.key === flag.key && <div className="mt-1.5"><Notice tone="danger" role="alert">{failure.text}</Notice></div>}
                 {savedKey === flag.key && !failure && <p role="status" className="mt-1 text-xs text-success-fg">Đã lưu.</p>}
               </div>

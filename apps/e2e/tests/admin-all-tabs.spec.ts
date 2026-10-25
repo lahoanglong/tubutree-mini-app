@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { createHmac } from 'crypto';
 import { test, expect, type Page } from '@playwright/test';
@@ -16,6 +17,19 @@ const dbUrl = process.env.DATABASE_URL ?? '';
 const secret = process.env.JWT_ACCESS_SECRET ?? '';
 const runnable = process.env.E2E_SCOPE === 'web' && GATE_DB.test(dbUrl) && secret.length >= 16;
 const SCREENS = process.env.A1_SCREENS_DIR;
+
+/** Mục menu ADMIN phải thấy: đếm thẳng từ NAV_GROUPS trong mã trang (trang Next không export được), để thêm hay bớt mục mà test không biết thì đỏ. */
+function navLabelsFromSource(): string[] {
+  const src = fs.readFileSync(path.resolve(__dirname, '../../web/src/app/admin/page.tsx'), 'utf8');
+  const start = src.indexOf('const NAV_GROUPS');
+  const end = src.indexOf('const TABS = NAV_GROUPS', start);
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return [...src.slice(start, end).matchAll(/\{ k: '[A-Za-z]+', label: '([^']+)' \}/g)].map((m) => m[1]!);
+}
+
+/** Phản hồi 4xx/5xx của /api/admin/* được chấp nhận khi mở tab. Mỗi dòng phải có lý do; để trống = mọi lỗi đều làm test đỏ. */
+const EXPECTED_ADMIN_ERRORS: { urlPart: string; status: number; reason: string }[] = [];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function prismaClient(): any {
@@ -72,6 +86,13 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const pageErrors: string[] = [];
     const consoleErrors: string[] = [];
+    const apiErrors: string[] = [];
+    page.on('response', (r) => {
+      const url = r.url();
+      if (!url.includes('/api/admin/') || r.status() < 400) return;
+      if (EXPECTED_ADMIN_ERRORS.some((e) => url.includes(e.urlPart) && r.status() === e.status)) return;
+      apiErrors.push(`${r.status()} ${new URL(url).pathname}`);
+    });
     page.on('pageerror', (e) => pageErrors.push(e.message));
     page.on('console', (m) => {
       if (m.type() === 'error' && /TypeError|is not a function|Cannot read prop|undefined \(reading/.test(m.text())) consoleErrors.push(m.text());
@@ -80,21 +101,25 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     await openAdmin(page);
     const nav = page.getByRole('navigation', { name: 'Mục quản trị' });
     const labels = await nav.locator('button').allInnerTexts();
-    expect(labels.length).toBeGreaterThan(30);
+    const expectedLabels = navLabelsFromSource();
+    expect(expectedLabels.length).toBeGreaterThan(30);
+    expect(labels.map((l) => l.trim()).sort()).toEqual([...expectedLabels].sort());
 
     const failures: string[] = [];
     for (const raw of labels) {
       const label = raw.trim();
       pageErrors.length = 0;
       consoleErrors.length = 0;
+      apiErrors.length = 0;
       await nav.locator('button', { hasText: label }).first().click();
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(250);
       const boundary = await page.locator('[data-tab-error]').count();
       const rootError = await page.getByText('Có chút trục trặc').count();
       const navStill = await nav.count();
-      if (boundary || rootError || !navStill || pageErrors.length || consoleErrors.length) {
-        failures.push(`${label}: boundary=${boundary} root=${rootError} nav=${navStill} pageErrors=${pageErrors.join('|')} console=${consoleErrors.join('|')}`);
+      const loadError = (await page.getByText(/Không tải được|Không lưu được/).count()) + (await page.getByRole('button', { name: 'Thử lại', exact: true }).count());
+      if (boundary || rootError || !navStill || loadError || apiErrors.length || pageErrors.length || consoleErrors.length) {
+        failures.push(`${label}: boundary=${boundary} root=${rootError} nav=${navStill} loadError=${loadError} api=${apiErrors.join(',')} pageErrors=${pageErrors.join('|')} console=${consoleErrors.join('|')}`);
       }
     }
     expect(failures, failures.join('\n')).toEqual([]);

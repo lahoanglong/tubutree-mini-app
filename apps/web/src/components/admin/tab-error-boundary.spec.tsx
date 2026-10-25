@@ -51,4 +51,13 @@ describe('TabErrorBoundary', () => {
     click(byText(r.container, 'button', 'đổi'));
     expect(r.container.textContent).toContain('Nội dung ổn');
   });
+
+  it('không truyền onGoHome thì ẩn nút Về Việc cần xử lý', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    shouldThrow = true;
+    const r = render(<TabErrorBoundary tabLabel="Việc"><Bomb /></TabErrorBoundary>);
+    mounted.push(r);
+    expect(byText(r.container, 'button', 'Về Việc cần xử lý')).toBeFalsy();
+    expect(byText(r.container, 'button', 'Thử lại')).toBeTruthy();
+  });
 });

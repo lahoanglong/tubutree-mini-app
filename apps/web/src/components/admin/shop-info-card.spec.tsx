@@ -56,6 +56,22 @@ describe('ShopInfoCard', () => {
     expect(byText(container, 'button', 'Lưu thông tin cửa hàng')!.hasAttribute('disabled')).toBe(true);
   });
 
+  it.each([
+    ['https://user:pass@online.gov.vn/x', 'tên đăng nhập'],
+    [`https://online.gov.vn/${'a'.repeat(500)}`, 'dài quá'],
+    ['http://online.gov.vn', 'https://'],
+  ])('link Bộ Công Thương bị API bỏ (%#) thì chặn lưu', (url, hint) => {
+    const { container } = setup();
+    typeInto(container.querySelector('input[type="url"]'), url);
+    expect(container.textContent).toContain(hint);
+    expect(byText(container, 'button', 'Lưu thông tin cửa hàng')!.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('nói rõ trang khách cập nhật chậm', () => {
+    const { container } = setup();
+    expect(container.textContent).toContain('Trang khách cập nhật sau tối đa 5 phút, chân trang tối đa 1 giờ.');
+  });
+
   it('chính sách: Xem trước dựng markdown, link trang khách đúng đường dẫn, Lưu gửi đúng khoá', async () => {
     const { container, puts } = setup();
     const doc = container.querySelector('[data-legal="doi-tra"]') as HTMLElement;

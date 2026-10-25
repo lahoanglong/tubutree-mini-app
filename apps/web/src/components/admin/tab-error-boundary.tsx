@@ -8,7 +8,8 @@ import { ui } from '@/lib/guest-ui';
 interface Props {
   children: ReactNode;
   tabLabel: string;
-  onGoHome: () => void;
+  /** Không truyền thì ẩn nút (đang ở Việc cần xử lý, hoặc tài khoản không được vào mục đó). */
+  onGoHome?: () => void;
 }
 
 /**
@@ -39,9 +40,11 @@ export class TabErrorBoundary extends Component<Props, { failed: boolean }> {
           <button type="button" onClick={() => this.setState({ failed: false })} className={ui.btnPrimary}>
             Thử lại
           </button>
-          <button type="button" onClick={this.props.onGoHome} className={ui.btnSecondary}>
-            Về Việc cần xử lý
-          </button>
+          {this.props.onGoHome && (
+            <button type="button" onClick={this.props.onGoHome} className={ui.btnSecondary}>
+              Về Việc cần xử lý
+            </button>
+          )}
         </div>
       </div>
     );
