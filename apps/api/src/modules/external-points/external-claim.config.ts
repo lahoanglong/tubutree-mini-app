@@ -41,6 +41,11 @@ export const CLAIM_CONFIG_DEFAULTS: ClaimConfig = {
 
 const MAX_AGE_DAYS_CEILING = 365;
 
+/** Số ngày tuổi tối đa của đơn được tích, đã chuẩn hoá như `loadClaimConfig` (dùng cho public config). */
+export function normalizeClaimMaxAgeDays(raw: unknown): number {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 ? Math.min(raw, MAX_AGE_DAYS_CEILING) : CLAIM_CONFIG_DEFAULTS.maxAgeDays;
+}
+
 function intIn(raw: unknown, fallback: number, min: number, max: number): number {
   return typeof raw === 'number' && Number.isInteger(raw) && raw >= min ? Math.min(raw, max) : fallback;
 }

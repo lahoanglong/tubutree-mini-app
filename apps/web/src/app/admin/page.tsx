@@ -2149,6 +2149,7 @@ function CouponsTab() {
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
   return (
     <div className="space-y-6">
+    <ClaimCampaignPanel />
     <div className="max-w-md space-y-2" data-testid="coupon-create-form">
       <Field label="Mã giảm giá">
         <input
@@ -2214,7 +2215,6 @@ function CouponsTab() {
       <button onClick={() => create.mutate()} disabled={!f.code} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
       {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
-    <ClaimCampaignPanel />
     <CouponList />
     </div>
   );

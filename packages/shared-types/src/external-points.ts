@@ -44,6 +44,8 @@ export type ExternalClaimAdminErrorCode =
 export interface SubmitExternalClaimRequest {
   /** Mã vận đơn hoặc mã đơn sàn, nhập tay hoặc quét. Server chuẩn hoá (chữ hoa, bỏ khoảng trắng và gạch). */
   code: string;
+  /** Khách quét nhãn hay gõ tay; chỉ để đo phễu. */
+  via?: 'scan' | 'typed';
 }
 
 export interface SubmitExternalClaimResponse {

@@ -15,6 +15,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { loadClaimConfig, type ClaimConfig } from './external-claim.config';
 import { recordClaimEvent } from './external-claim-audit';
+import { recordExtClaimEvent } from './external-claim-events';
 import { ExternalClaimLookupService } from './external-claim-lookup.service';
 import { evaluateClaimRules, lockedUntil, type ClaimDecision, type ClaimFacts } from './external-claim.rules';
 import { normalizeTrackingCode } from './external-order.mapper';
@@ -94,6 +95,24 @@ export type Persisted =
   | { kind: 'OWN'; own: OwnClaim }
   | { kind: 'CLAIM'; created: CreatedClaim };
 
+function submittedProps(out: Persisted, orderChannel: string | null, via?: 'scan' | 'typed'): Record<string, unknown> {
+  const base = { ...(via ? { via } : {}) };
+  switch (out.kind) {
+    case 'REJECT':
+      return { ...base, result: `REJECT_${out.code}`, channel: orderChannel };
+    case 'CLAIM':
+      return { ...base, result: out.created.state === 'REVIEW' ? 'REVIEW' : 'CLAIMED', channel: out.created.channel, points: out.created.points };
+    case 'OWN':
+      return { ...base, result: 'OWN', channel: out.own.channel, points: out.own.points };
+    case 'UNKNOWN_SOURCE':
+      return { ...base, result: 'REVIEW', channel: orderChannel };
+    case 'WAITING_OTHER':
+      return { ...base, result: 'CLAIMED_BY_OTHER' };
+    default:
+      return { ...base, result: 'SEARCHING' };
+  }
+}
+
 /** Claim sẵn có của chính khách gửi mã: trả lại trạng thái, không ghi lần thử. */
 export interface OwnClaim {
   claimId: string;
@@ -130,7 +149,7 @@ export class ExternalClaimService {
   ) {}
 
   /** Khách gửi mã. Toàn bộ luật chạy trong một transaction giữ khoá advisory theo khách nên gửi song song nhiều mã không vượt trần. */
-  async submit(userId: string, rawCode: unknown): Promise<SubmitExternalClaimResponse> {
+  async submit(userId: string, rawCode: unknown, via?: 'scan' | 'typed'): Promise<SubmitExternalClaimResponse> {
     const cfg = await loadClaimConfig(this.config);
     if (!cfg.enabled) throw rejectionOf('DISABLED');
     const code = normalizeTrackingCode(rawCode);
@@ -147,7 +166,9 @@ export class ExternalClaimService {
         await advisoryUserLock(tx, userId);
         const user = await tx.user.findUnique({ where: { id: userId }, select: USER_SELECT });
         const g = await this.gatherFacts(tx, user, code, cfg, now);
-        return this.persist(tx, { userId, code, cfg, now, decision: evaluateClaimRules(g.facts), order: g.order, existingClaimId: g.existingClaimId, existingClaimOwnerId: g.existingClaimOwnerId, attemptId: null });
+        const out = await this.persist(tx, { userId, code, cfg, now, decision: evaluateClaimRules(g.facts), order: g.order, existingClaimId: g.existingClaimId, existingClaimOwnerId: g.existingClaimOwnerId, attemptId: null });
+        await recordExtClaimEvent(tx, { name: 'ext_claim_submitted', userId, at: now, props: submittedProps(out, g.order?.channel ?? null, via) });
+        return out;
       },
       { timeout: 15_000, maxWait: 10_000 },
     );

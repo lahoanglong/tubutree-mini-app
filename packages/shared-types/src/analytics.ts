@@ -16,6 +16,9 @@ export const CLIENT_EVENT_NAMES = [
   'search_performed',
   'search_result_clicked',
   'filter_applied',
+  'ext_claim_scan',
+  'ext_claim_phone',
+  'oa_follow_result',
 ] as const;
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
@@ -24,6 +27,8 @@ export const SERVER_EVENT_NAMES = [
   'add_to_cart',
   'coupon_applied',
   'engagement_action',
+  'ext_claim_credited',
+  'ext_claim_submitted',
   'notification_sent',
   'order_paid',
   'order_place_failed',

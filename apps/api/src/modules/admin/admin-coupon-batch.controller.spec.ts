@@ -29,6 +29,20 @@ describe('AdminCouponBatchController (D2-03: lô mã thẻ hộp hàng)', () => 
     expect(plainToInstance(CreateCouponBatchDto, VALID).prefix).toBe('SHOPEE11');
   });
 
+  it('nhận link đích: trang scan, src, card (chữ thường)', () => {
+    const body = { ...VALID, link: { page: 'scan', src: ' Shopee ', card: '2611' } };
+    expect(errors(body)).toEqual([]);
+    expect(plainToInstance(CreateCouponBatchDto, body).link).toMatchObject({ page: 'scan', src: 'shopee', card: '2611' });
+  });
+
+  it.each([
+    ['trang đích lạ', { page: 'cart' }],
+    ['src có dấu cách giữa chữ', { src: 'shop ee' }],
+    ['card quá 40 ký tự', { card: 'a'.repeat(41) }],
+  ])('từ chối link: %s', (_label, link) => {
+    expect(errors({ ...VALID, link }).length).toBeGreaterThan(0);
+  });
+
   it.each([
     ['tiền tố có dấu/ký tự lạ', { prefix: 'SHÔPEE' }],
     ['tiền tố có gạch (gạch dành cho phần ngẫu nhiên)', { prefix: 'SHOP-EE' }],

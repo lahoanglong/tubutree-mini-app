@@ -170,6 +170,7 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
     expect(out.loyalty).toEqual({
       earnPct: 2,
       marketplaceClaimEnabled: false,
+      marketplaceClaimMaxAgeDays: 60,
       marketplaceEarnPct: 1,
       vndPerPoint: 50,
       vndPerPointRedeem: 1,
@@ -219,6 +220,11 @@ describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)'
     const off = await new SystemConfigController(makeConfig()).publicConfig();
     expect(off.loyalty.marketplaceClaimEnabled).toBe(false);
     expect(off.loyalty.marketplaceEarnPct).toBe(1);
+    expect(off.loyalty.marketplaceClaimMaxAgeDays).toBe(60);
+    const age = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 30 })).publicConfig();
+    expect(age.loyalty.marketplaceClaimMaxAgeDays).toBe(30);
+    const ageJunk = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 'x' })).publicConfig();
+    expect(ageJunk.loyalty.marketplaceClaimMaxAgeDays).toBe(60);
     const on = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_enabled': true, 'loyalty.marketplace_earn_pct': 1.5 })).publicConfig();
     expect(on.loyalty).toMatchObject({ marketplaceClaimEnabled: true, marketplaceEarnPct: 1.5 });
     const high = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 25 })).publicConfig();

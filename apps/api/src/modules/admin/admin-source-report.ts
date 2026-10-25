@@ -18,6 +18,9 @@ export const SOURCE_REPORT_WINDOW_DAYS = 30;
 /** Số nguồn tối đa hiện riêng; phần đuôi gộp vào "Nguồn khác". Mã nguồn do máy khách khai nên số nguồn không có trần. */
 export const SOURCE_REPORT_MAX_SOURCES = 40;
 export const OTHER_SOURCE = '__other';
+/** Chiều chiến dịch: khoá có tiền tố để tên chiến dịch do máy khách khai (vd "shopee", "unknown") không đụng nhãn nguồn hay dòng "không có chiến dịch". */
+export const NO_CAMPAIGN = '__nocampaign';
+export const CAMPAIGN_PREFIX = 'c:';
 
 const SOURCE_LABEL: Record<string, string> = {
   shopee: 'Shopee',
@@ -30,10 +33,16 @@ const SOURCE_LABEL: Record<string, string> = {
   ref: 'Giới thiệu (mã ref)',
   organic: 'Tự nhiên (không có link)',
   unknown: 'Không rõ',
+  [NO_CAMPAIGN]: 'Không thuộc chiến dịch nào',
   [OTHER_SOURCE]: 'Nguồn khác',
 };
 
 export function sourceLabel(source: string): string {
+  if (source.startsWith(CAMPAIGN_PREFIX)) {
+    const campaign = source.slice(CAMPAIGN_PREFIX.length);
+    const card = /^card-(.+)$/.exec(campaign);
+    return card ? `Thẻ hộp hàng ${card[1]}` : campaign;
+  }
   const known = SOURCE_LABEL[source];
   if (known) return known;
   const card = /^card-(.+)$/.exec(source);

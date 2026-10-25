@@ -22,6 +22,11 @@ describe('sourceLabel', () => {
     ['unknown', 'Không rõ'],
     ['abc-xyz', 'abc-xyz'],
     ['__other', 'Nguồn khác'],
+    ['__nocampaign', 'Không thuộc chiến dịch nào'],
+    ['c:card-2611', 'Thẻ hộp hàng 2611'],
+    ['c:shopee', 'shopee'],
+    ['c:unknown', 'unknown'],
+    ['c:__nocampaign', '__nocampaign'],
   ])('%s → %s', (key, label) => {
     expect(sourceLabel(key)).toBe(label);
   });
