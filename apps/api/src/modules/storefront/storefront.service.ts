@@ -13,7 +13,7 @@ import { isPartnerStore } from '../merchant/partner-store';
 import { decodeServedImage } from '../../common/served-image';
 import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
-import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
+import { isStorefrontApproved, ownerStorefrontState, publicStorefrontWhere } from './storefront-visibility';
 import { assertCanPublish, isLostToTakeDown, PUBLISH_WHERE_NOT_TAKEN_DOWN, takenDownError } from './storefront-publish';
 
 // Chặn CTV tạo vô hạn bộ sưu tập/sản phẩm trong 1 gian hàng (không ai cần vượt số này để
@@ -134,14 +134,17 @@ export class StorefrontService {
     if (!sf) throw new NotFoundException('Chưa có gian hàng.');
     const { owner, ...rest } = sf;
     const subdomainEnabled = await isStorefrontSubdomainEnabled(this.config);
+    const ownerState = ownerStorefrontState(sf, owner, await this.visibilityOptions());
     // SELLER-15: builder đánh dấu món khách không thấy (cùng điều kiện lọc của trang công khai) thay vì hiện như bình thường.
     return {
       ...withSubdomainFlag(rest, subdomainEnabled),
       // Nút Chia sẻ của builder dựng link /s/<slug>?ref=<mã> từ đây, cùng cách trang công khai trả mã (SELLER-4).
       referralCode: owner?.referralCode ?? null,
       approved: isStorefrontApproved(sf),
+      // Màn không tự suy trạng thái từ isPublished: đã đăng chưa chắc khách đã thấy (còn chờ duyệt lần đầu).
+      status: ownerState.status,
       // Chủ vẫn xem và sửa được gian hàng đang ẩn với khách; dòng này nói vì sao.
-      publicHiddenReason: ownerHiddenReason(sf, owner, await this.visibilityOptions()),
+      publicHiddenReason: ownerState.reason,
       collections: sf.collections.map((c) => ({
         ...c,
         items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
@@ -299,6 +302,7 @@ export class StorefrontService {
       ...withSubdomainFlag({ subdomain: sf.subdomain, customDomain: sf.customDomain }, await isStorefrontSubdomainEnabled(this.config)),
       type: sf.type,
       isPartner: isPartnerStore(sf),
+      isSample: sf.isSample,
       // Tick xanh và nhãn "CTV tuyển chọn" chỉ dành cho gian hàng admin đã duyệt, dù cờ duyệt lần đầu bật hay tắt.
       approved: isStorefrontApproved(sf),
       title: sf.title,
@@ -355,7 +359,7 @@ export class StorefrontService {
    */
   async getPublicList() {
     const stores = await this.prisma.storefront.findMany({
-      where: publicStorefrontWhere(await this.visibilityOptions()),
+      where: { ...publicStorefrontWhere(await this.visibilityOptions()), isSample: false },
       select: { slug: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 500,

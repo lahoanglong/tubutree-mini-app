@@ -49,8 +49,8 @@ export const QUESTS: QuestDef[] = [
   },
   {
     code: 'publish',
-    title: 'Đăng gian hàng',
-    hint: 'Bấm Lưu & Đăng để khách xem được.',
+    title: 'Gửi gian hàng đi duyệt',
+    hint: 'Tubu duyệt trong 1 ngày làm việc, sau đó khách mới xem được.',
     goal: 1,
     rewardPoints: 1_000,
     measure: (s) => (s.isPublished ? 1 : 0),

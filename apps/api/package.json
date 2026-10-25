@@ -16,6 +16,8 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "prisma:seed:reference": "tsx prisma/seed-reference.ts",
     "prisma:cleanup-demo": "tsx prisma/cleanup-demo-data.ts",
+    "seed:sample-storefronts": "tsx scripts/sample-storefronts.ts",
+    "unseed:sample-storefronts": "tsx scripts/sample-storefronts.ts --remove",
     "prisma:studio": "prisma studio",
     "reconcile:points": "tsx scripts/reconcile-points.ts",
     "reconcile:wallet": "tsx scripts/reconcile-wallet.ts",

@@ -99,6 +99,9 @@ const PIT_MONTH_LOCK = 'affiliate.pit_month';
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 export const PERSONAL_TAX_ID_FORMAT_MESSAGE = 'Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.';
 
+/** Chủ gian hàng mẫu (Storefront.isSample): không ghi công đơn, không sinh hoa hồng. */
+const SAMPLE_STOREFRONT_SELECT = { where: { isSample: true }, select: { id: true }, take: 1 } as const;
+
 @Injectable()
 export class AffiliateService {
   private readonly logger = new Logger(AffiliateService.name);
@@ -218,17 +221,17 @@ export class AffiliateService {
   async findEligibleReferrer(referralCode: string, buyerId: string): Promise<string | null> {
     const ref = await this.prisma.user.findUnique({
       where: { referralCode: referralCode.toUpperCase() },
-      select: { id: true, role: true, isBlocked: true },
+      select: { id: true, role: true, isBlocked: true, storefronts: SAMPLE_STOREFRONT_SELECT },
     });
-    // Tài khoản bị khoá không ghi công đơn mới; hoa hồng đã tạo cho đơn cũ giữ nguyên.
-    if (!ref || ref.id === buyerId || ref.isBlocked) return null;
+    // Tài khoản bị khoá không ghi công đơn mới; hoa hồng đã tạo cho đơn cũ giữ nguyên. Chủ gian hàng mẫu không nhận hoa hồng.
+    if (!ref || ref.id === buyerId || ref.isBlocked || ref.storefronts.length > 0) return null;
     return (await this.commissionEligibleRoles()).has(ref.role) ? ref.id : null;
   }
 
   /** Người dùng (chủ gian hàng CTV, người của "chạm") có thuộc vai trò được ghi công đơn không — checkout/attribution.ts. */
   async isCommissionEligible(userId: string): Promise<boolean> {
-    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true } });
-    return !!u && !u.isBlocked && (await this.commissionEligibleRoles()).has(u.role);
+    const u = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true, isBlocked: true, storefronts: SAMPLE_STOREFRONT_SELECT } });
+    return !!u && !u.isBlocked && u.storefronts.length === 0 && (await this.commissionEligibleRoles()).has(u.role);
   }
 
   /** Điều kiện khách thấy một gian hàng (storefront/storefront-visibility.ts) tính từ cấu hình hiện hành. */
@@ -993,8 +996,8 @@ export class AffiliateService {
     // Chỉ CTV/đại lý (affiliate.commission_eligible_roles) hưởng hoa hồng: khách thường chia sẻ link chỉ được thưởng điểm giới
     // thiệu (theo User.referredById, không theo đơn). Xét vai trò lúc đặt đơn — CTV lên đại lý (D3-03) vẫn hưởng. Đơn lên hộ
     // khách cũng xét: route lên đơn hộ cho cả ADMIN dùng, admin lên hộ không ăn hoa hồng.
-    const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true } });
-    if (!referrer || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
+    const referrer = await db.user.findUnique({ where: { id: order.referrerUserId }, select: { role: true, storefronts: SAMPLE_STOREFRONT_SELECT } });
+    if (!referrer || referrer.storefronts.length > 0 || !(await this.commissionEligibleRoles()).has(referrer.role)) return;
 
     const variationIds = order.items.map((i) => i.variationId);
     const variations = await db.variation.findMany({

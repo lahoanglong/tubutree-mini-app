@@ -20,7 +20,7 @@ describe('resolveAttribution với gian hàng bị ẩn và người giới thi�
   it('tra gian hàng bằng bộ lọc công khai (gỡ, chủ khoá, mất vai trò CTV, chưa duyệt khi cờ bật)', async () => {
     const { prisma, affiliate, findFirst } = setup();
     await resolveAttribution(prisma, affiliate, 'buyer', { storefrontSlug: 'Linh' });
-    expect(findFirst.mock.calls[0][0].where).toEqual({ ...publicStorefrontWhere(VISIBILITY), OR: [{ slug: 'linh' }, { subdomain: 'linh' }, { customDomain: 'linh' }] });
+    expect(findFirst.mock.calls[0][0].where).toEqual({ ...publicStorefrontWhere(VISIBILITY), isSample: false, OR: [{ slug: 'linh' }, { subdomain: 'linh' }, { customDomain: 'linh' }] });
   });
 
   it('không có slug nào để tra thì không đọc điều kiện hiển thị và không truy vấn gian hàng', async () => {

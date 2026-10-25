@@ -37,23 +37,41 @@ export function publicStorefrontWhere(opts: PublicVisibilityOptions): Prisma.Sto
   return { isPublished: true, takenDownAt: null, AND: and };
 }
 
+export type OwnerStorefrontStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'LIVE' | 'TAKEN_DOWN' | 'HIDDEN';
+
+type OwnerStorefrontFacts = { type: StorefrontType; isPartner: boolean; isPublished: boolean; approvedAt: Date | null; takenDownAt: Date | null; takenDownReason: string | null };
+
 /**
- * Vì sao gian hàng ĐANG ĐĂNG mà khách không thấy, nói cho chính chủ trong trình dựng (null = khách thấy, hoặc là bản nháp do
- * chủ tự chưa đăng). Cùng luật với `publicStorefrontWhere`.
+ * Trạng thái của gian hàng với chính chủ, kèm lý do khi khách chưa thấy dù chủ đã đăng. DRAFT = chủ chưa đăng (hoặc đã tự gỡ);
+ * PENDING_APPROVAL = đã gửi duyệt, chờ Tubu Tree duyệt lần đầu; LIVE = khách thấy; TAKEN_DOWN = admin gỡ; HIDDEN = đang ẩn vì
+ * chủ bị khoá hoặc không còn thuộc nhóm CTV. Cùng luật với `publicStorefrontWhere`.
  */
-export function ownerHiddenReason(
-  sf: { type: StorefrontType; isPartner: boolean; isPublished: boolean; approvedAt: Date | null; takenDownAt: Date | null; takenDownReason: string | null },
+export function ownerStorefrontState(
+  sf: OwnerStorefrontFacts,
   owner: { role: UserRole; isBlocked: boolean } | null,
   opts: PublicVisibilityOptions,
-): string | null {
+): { status: OwnerStorefrontStatus; reason: string | null } {
   if (sf.takenDownAt) {
-    return `Tubu Tree đã gỡ gian hàng này khỏi trang công khai${sf.takenDownReason ? `: ${sf.takenDownReason}` : ''}. Liên hệ CSKH nếu bạn cần được xem xét lại.`;
+    return {
+      status: 'TAKEN_DOWN',
+      reason: `Tubu Tree đã gỡ gian hàng này khỏi trang công khai${sf.takenDownReason ? `: ${sf.takenDownReason}` : ''}. Liên hệ CSKH nếu bạn cần được xem xét lại.`,
+    };
   }
-  if (!sf.isPublished) return null;
-  if (owner?.isBlocked) return 'Tài khoản của bạn đang bị khoá nên gian hàng không hiện với khách.';
+  if (!sf.isPublished) return { status: 'DRAFT', reason: null };
+  if (owner?.isBlocked) return { status: 'HIDDEN', reason: 'Tài khoản của bạn đang bị khoá nên gian hàng không hiện với khách.' };
   if (sf.type === 'CTV' && !(owner && visibleOwnerRoles(opts).includes(owner.role))) {
-    return 'Tài khoản của bạn hiện không thuộc nhóm CTV nên gian hàng đang ẩn với khách. Đăng ký lại CTV để gian hàng hiện trở lại.';
+    return {
+      status: 'HIDDEN',
+      reason: 'Tài khoản của bạn hiện không thuộc nhóm CTV nên gian hàng đang ẩn với khách. Đăng ký lại CTV để gian hàng hiện trở lại.',
+    };
   }
-  if (opts.requireApproval && !isStorefrontApproved(sf)) return 'Gian hàng đang chờ Tubu Tree duyệt lần đầu; khi được duyệt sẽ hiện với khách.';
-  return null;
+  if (opts.requireApproval && !isStorefrontApproved(sf)) {
+    return { status: 'PENDING_APPROVAL', reason: 'Gian hàng đang chờ Tubu Tree duyệt lần đầu; khi được duyệt sẽ hiện với khách.' };
+  }
+  return { status: 'LIVE', reason: null };
+}
+
+/** Vì sao gian hàng ĐANG ĐĂNG mà khách không thấy, nói cho chính chủ trong trình dựng (null = khách thấy, hoặc là bản nháp do chủ tự chưa đăng). */
+export function ownerHiddenReason(sf: OwnerStorefrontFacts, owner: { role: UserRole; isBlocked: boolean } | null, opts: PublicVisibilityOptions): string | null {
+  return ownerStorefrontState(sf, owner, opts).reason;
 }
