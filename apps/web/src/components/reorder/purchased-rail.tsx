@@ -21,6 +21,11 @@ import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
 
 /** Dùng CHUNG query key ['purchased-items', 10] với Trang chủ khi quyết định thứ tự khối. */
+/** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
+/** Tên luôn chiếm đủ 2 dòng (14px x 1.57) để thẻ cao như nhau với tên ngắn hay dài và khung chờ khớp thẻ thật. */
+const NAME_MIN_HEIGHT = 44;
+const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
+
 export const PURCHASED_RAIL_LIMIT = 10;
 
 function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void }) {
@@ -64,7 +69,7 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
 
 /** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
 export const COMPACT_MAX_ITEMS = 2;
-const COMPACT_CARD_HEIGHT = 146;
+const COMPACT_CARD_HEIGHT = 168;
 
 /** Thẻ ngang thấp cho kệ Mua lại khi chỉ có 1–2 món (bản web của `CompactRebuyCard` ở Mini App): ảnh nhỏ, tên, phân loại, giá, nút mua lại và đặt định kỳ. */
 function CompactRebuyCard({
@@ -94,7 +99,7 @@ function CompactRebuyCard({
       >
         <ProductThumb src={item.thumbnail} alt="" size={64} />
         <span style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: NAME_MIN_HEIGHT }}>
             {item.productName}
           </Text>
           {item.variationName && (
@@ -110,15 +115,13 @@ function CompactRebuyCard({
       </button>
       {available ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <Button variant="secondary" onPress={onRebuy} style={{ flex: 1, minWidth: 0 }}>
+          <Button variant="secondary" onPress={onRebuy} style={ACTION_STYLE}>
             {homeCopy.reorder.buy}
           </Button>
           {subscribable && (
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Button variant="ghost" fullWidth onPress={onSubscribe}>
-                {homeCopy.reorder.subscribe(discountPct)}
-              </Button>
-            </div>
+            <Button variant="ghost" onPress={onSubscribe} style={ACTION_STYLE}>
+              {homeCopy.reorder.subscribe(discountPct)}
+            </Button>
           )}
         </div>
       ) : (

@@ -12,9 +12,9 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
-import { ui } from '@/lib/guest-ui';
 import { homeText } from '@/lib/home-text';
 import { earnPctOf, percentLabel } from '@/lib/points-boost';
+import { Card, Heading, Icon, Text } from '@/components/mini';
 
 interface Benefit {
   icon: LucideIcon;
@@ -79,33 +79,55 @@ export function NewCustomerGift() {
     : null;
 
   return (
-    <section aria-label={homeText.newGift.title} className="py-2">
-      <div className="rounded-card bg-forest-50 p-4">
-        <h2 className="font-display text-lg font-semibold text-stone-900">{homeText.newGift.title}</h2>
+    <section aria-label={homeText.newGift.title} style={{ padding: '8px 0 12px' }}>
+      <Card variant="flat" padding={16}>
+        <Heading variant="title-sm" as="h2">
+          {homeText.newGift.title}
+        </Heading>
         {voucher && (
-          <div className="mt-3 flex items-center gap-3">
-            <Ticket className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-stone-900">{voucherTitle(voucher)}</p>
-              <p className="text-xs text-stone-600">{voucherDetail}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+            <Icon icon={Ticket} tone="brand" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text variant="label" as="div">
+                {voucherTitle(voucher)}
+              </Text>
+              <Text variant="caption" tone="secondary" as="div">
+                {voucherDetail}
+              </Text>
             </div>
           </div>
         )}
-        <p className="mt-3 text-xs text-stone-600">{homeText.newGift.benefitsTitle}</p>
-        <ul className="mt-2 flex flex-col gap-2">
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 12 }}>
+          {homeText.newGift.benefitsTitle}
+        </Text>
+        <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {benefits.map((b) => (
-            <li key={b.text} className="flex items-start gap-2">
-              <b.icon className="mt-0.5 h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
-              <span className="text-sm text-stone-700">{b.text}</span>
+            <li key={b.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <Icon icon={b.icon} size="sm" tone="brand" style={{ flex: '0 0 auto', marginTop: 3 }} />
+              <Text variant="body-sm" tone="secondary">
+                {b.text}
+              </Text>
             </li>
           ))}
         </ul>
-        <div className="mt-3">
-          <Link href="/san-pham" className={ui.btnSecondary}>
-            {homeText.newGift.cta}
+        <div style={{ marginTop: 12 }}>
+          <Link href="/san-pham" className="zaui-btn zaui-btn-secondary tubu-btn" style={CTA_STYLE}>
+            <span>{homeText.newGift.cta}</span>
           </Link>
         </div>
-      </div>
+      </Card>
     </section>
   );
 }
+
+/** Link dựng như Button secondary của Mini App (cùng lớp zaui-btn, cao 44, bo theo token) để mở thẳng /san-pham như một liên kết thật. */
+const CTA_STYLE = {
+  minWidth: 0,
+  minHeight: 44,
+  borderRadius: 'var(--radius-control)',
+  fontWeight: 600,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textDecoration: 'none',
+} as const;
