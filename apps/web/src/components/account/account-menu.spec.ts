@@ -82,7 +82,7 @@ describe('mục theo cờ', () => {
     expect(labels(buildAccountMenu(ctx()), 'Tài sản')).not.toContain('Tích điểm đơn sàn');
     const item = all(buildAccountMenu(ctx({ claimEnabled: true }))).find((i) => i.label === 'Tích điểm đơn sàn')!;
     expect(item.miniAppOnly).toBe(true);
-    expect(item.hint).toBe('Nhập mã vận đơn Shopee, Lazada, TikTok');
+    expect(item.hint).toBe('Quét mã trên phiếu giao hàng');
     expect(labels(buildAccountMenu(ctx({ claimEnabled: true })), 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu', 'Tích điểm đơn sàn']);
   });
 
