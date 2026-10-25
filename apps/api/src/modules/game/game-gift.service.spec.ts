@@ -58,6 +58,8 @@ describe('GameGiftService.giftWater', () => {
     // KHÔNG set giá trị tuyệt đối đọc-ngoài-tx như trước.
     const upsertArg = gameProfile.upsert.mock.calls[0][0];
     expect(upsertArg.update.totalSeeds).toEqual({ increment: 10 });
+    // Hồ sơ người nhận tạo từ quà bạn bè cũng có ecoImpact theo thang (trước đây thiếu hẳn).
+    expect(upsertArg.create.ecoImpact).toEqual(expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }));
     expect(notify).toHaveBeenCalledWith('friend1', 'GAME_WATER_GIFT', expect.any(Object));
   });
 

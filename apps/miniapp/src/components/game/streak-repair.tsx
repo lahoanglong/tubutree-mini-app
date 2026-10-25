@@ -1,4 +1,5 @@
 import { Flame } from 'lucide-react';
+import { missingDrops } from '@tubutree/app-core/game-newbie';
 import { vi } from '../../i18n/vi';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
@@ -8,14 +9,20 @@ import { Text } from '../ui/text';
 export function StreakRepair({
   brokenStreakDays,
   cost,
+  totalSeeds,
   pending,
   onRepair,
+  onNeedWater,
 }: {
   brokenStreakDays: number | undefined;
   cost: number | undefined;
+  totalSeeds: number | undefined;
   pending: boolean;
   onRepair: () => void;
+  /** Thiếu nước: mở sheet "Kiếm nước" với số giọt còn thiếu. */
+  onNeedWater: (missing: number) => void;
 }) {
+  const short = cost != null && totalSeeds != null ? missingDrops(totalSeeds, cost) : 0;
   return (
     <div
       style={{
@@ -36,8 +43,8 @@ export function StreakRepair({
       <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }}>
         {vi.game.streakRepair.body}
       </Text>
-      <Button variant="flash" fullWidth loading={pending} disabled={pending} onPress={() => onRepair()} style={{ marginTop: 10 }}>
-        {vi.game.streakRepair.cta(cost ?? 0)}
+      <Button variant="flash" fullWidth loading={pending} disabled={pending} onPress={() => (short > 0 ? onNeedWater(short) : onRepair())} style={{ marginTop: 10 }}>
+        {short > 0 ? vi.game.newbie.short(short) : vi.game.streakRepair.cta(cost ?? 0)}
       </Button>
     </div>
   );

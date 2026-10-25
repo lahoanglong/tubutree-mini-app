@@ -11,29 +11,58 @@ import {
   collectDew,
   giftWater,
   repairStreak,
+  shareHarvest,
   spin,
   unlockPlot,
   waterPlot,
   waterTree,
   type AnswerResult,
-  type HarvestSpecies,
+  type HarvestCouponCap,
+  type HarvestReward,
 } from '@tubutree/app-core/api/game';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { coreHttp } from '@/lib/core-http';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { useLockedMutation } from './use-locked-mutation';
 
-export interface HarvestReward {
-  coupon?: string;
-  certificate?: string;
-  species?: HarvestSpecies;
+export type { HarvestReward };
+
+/** Phần của phản hồi tưới mà hộp chúc mừng cần ngoài `reward`. */
+export interface HarvestMeta {
+  couponCapped: HarvestCouponCap | null;
+  /** Khách vãng lai: API không cấp mã và điểm cây mầm (`couponCapped` hoặc `rewardBlocked` = 'GUEST'). */
+  guest: boolean;
+  /** Mọi mã của lần thu hoạch: `coupons` nếu có, không thì `coupon` cũ. */
+  coupons: string[];
+  /** 💧 cần cho cây kế tiếp (target sau thu hoạch). */
+  nextTarget: number;
+  /** Lần thu hoạch có cây mầm (nhận điểm, không góp quỹ). */
+  sprout: boolean;
+  /** Chỉ cây ở lô nhà mới chia sẻ được; lô phụ thì ẩn nút. */
+  canShare: boolean;
 }
 
 interface WateringResult {
   harvested: boolean;
   progress: number;
   target: number;
+  couponCapped?: HarvestCouponCap | 'GUEST';
+  rewardBlocked?: 'GUEST' | string;
   reward?: HarvestReward;
 }
+
+const harvestMeta = (r: WateringResult, home: boolean): HarvestMeta => {
+  const list = (r.reward?.coupons ?? []).filter(Boolean);
+  const coupons = list.length > 0 ? list : r.reward?.coupon ? [r.reward.coupon] : [];
+  return {
+    couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' ? r.couponCapped : null,
+    guest: r.couponCapped === 'GUEST' || r.rewardBlocked === 'GUEST',
+    coupons,
+    nextTarget: r.target,
+    sprout: r.reward?.sprout === true,
+    canShare: home,
+  };
+};
 
 type Notify = (text: string, tone: 'success' | 'error') => void;
 
@@ -50,7 +79,7 @@ export function useGameActions({
   onAnswered,
 }: {
   notify: Notify;
-  onHarvest: (reward: HarvestReward | undefined) => void;
+  onHarvest: (reward: HarvestReward | undefined, meta: HarvestMeta) => void;
   onAnswered: (result: AnswerResult, vars: { id: string; choice: number }) => void;
 }) {
   const queryClient = useQueryClient();
@@ -121,9 +150,9 @@ export function useGameActions({
     }
   };
 
-  const afterWatering = (label: string, r: WateringResult) => {
+  const afterWatering = (label: string, r: WateringResult, home: boolean) => {
     if (r.harvested) {
-      onHarvest(r.reward);
+      onHarvest(r.reward, harvestMeta(r, home));
     } else {
       notify(`${label} · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, 'success');
     }
@@ -132,8 +161,8 @@ export function useGameActions({
   };
 
   const waterM = useLockedMutation({
-    mutationFn: () => waterTree(coreHttp, 20),
-    onSuccess: (r) => afterWatering('Đã tưới', r),
+    mutationFn: (drops: number) => waterTree(coreHttp, drops),
+    onSuccess: (r) => afterWatering('Đã tưới', r, true),
     onError,
   });
   // Khoá chống bấm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
@@ -158,7 +187,7 @@ export function useGameActions({
   const waterPlotM = useLockedMutation(
     {
       mutationFn: (plotId: string) => waterPlot(coreHttp, plotId, 20),
-      onSuccess: (r) => afterWatering('Đã tưới lô', r),
+      onSuccess: (r) => afterWatering('Đã tưới lô', r, false),
       onError,
     },
     (plotId) => plotId,
@@ -184,11 +213,21 @@ export function useGameActions({
         notify(`Đã nhận +${formatNumber(r.rewardPoints)} Điểm Xanh! 🌿`, 'success');
         void queryClient.invalidateQueries({ queryKey: ['game', 'missions'] });
         void queryClient.invalidateQueries({ queryKey: ['me'] });
+        // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
+        void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
       },
       onError,
     },
     (code) => code,
   );
+  const shareHarvestM = useLockedMutation({
+    mutationFn: () => shareHarvest(coreHttp),
+    onSuccess: (r) => {
+      notify(r.alreadyShared ? gameNewbieCopy.harvest.shareCommunityAlready : gameNewbieCopy.harvest.shareCommunityOk, 'success');
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
+    onError,
+  });
   const answerM = useLockedMutation(
     {
       mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(coreHttp, id, choice),
@@ -203,5 +242,5 @@ export function useGameActions({
     ({ id }) => id,
   );
 
-  return { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM };
+  return { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM, shareHarvestM };
 }

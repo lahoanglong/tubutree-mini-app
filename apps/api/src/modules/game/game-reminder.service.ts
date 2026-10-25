@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { THIRSTY_REMINDER_MAX_DAYS } from './game.constants';
 import { CRON_TZ } from '../../common/cron-tz';
 import { TrackCron } from '../../common/cron-run/track-cron';
 
@@ -106,10 +107,10 @@ export class GameReminderService {
 
   async sendThirstyTreeReminders(): Promise<number> {
     const wiltDays = await this.config.get<number>('game.wilt_days', 3);
-    const deathDays = await this.config.get<number>('game.death_days', 7);
     const now = Date.now();
     const warnAfter = new Date(now - (wiltDays - 1) * DAY); // chưa tưới ≥ (wilt-1) ngày
-    const deadBefore = new Date(now - deathDays * DAY); // nhưng chưa quá ngày chết
+    // Cây bỏ lâu không còn "chết": chỉ nhắc trong THIRSTY_REMINDER_MAX_DAYS ngày sau lần tưới cuối, không nhắc mãi người đã bỏ.
+    const remindUntil = new Date(now - THIRSTY_REMINDER_MAX_DAYS * DAY);
     // Cửa sổ "sắp héo" rộng tới (death − wilt + 1) ngày, mặc định là 5 — không có cờ chống lặp
     // nghĩa là CÙNG một người nhận đúng thông báo này 5 ngày liên tiếp. Dò lại nhật ký thông báo
     // trong 3 ngày gần nhất thay vì thêm cột mới: một truy vấn cho cả lô.
@@ -130,7 +131,7 @@ export class GameReminderService {
     let sent = 0;
     for await (const batch of this.pageProfiles({
       // đã từng tưới (cây đang lớn) + rơi vào cửa sổ sắp héo, chưa chết
-      lastWateredAt: { lte: warnAfter, gt: deadBefore },
+      lastWateredAt: { lte: warnAfter, gt: remindUntil },
     })) {
       for (const p of batch) {
         if (recentlyReminded.has(p.userId)) continue;

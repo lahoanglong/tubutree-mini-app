@@ -3,6 +3,7 @@
  * ngôi "Bạn"/"Tubu", câu ≤ 12 từ, Việt thuần, tích cực, không đổ lỗi user.
  * KHÔNG hard-code chuỗi trong JSX — mọi copy đi qua file này.
  */
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
 
 export const vi = {
@@ -886,6 +887,8 @@ export const vi = {
   },
 
   game: {
+    /** Chữ nhịp người mới, dùng chung với web (packages/app-core/src/game-newbie.ts). */
+    newbie: gameNewbieCopy,
     streakRepair: {
       title: (n: number) => `Bạn vừa mất chuỗi ${formatNumber(n)} ngày`,
       body: 'Hồi sinh ngay để giữ lại thành tích trước khi hết hạn.',

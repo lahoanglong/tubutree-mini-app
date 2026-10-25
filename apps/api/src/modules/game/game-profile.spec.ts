@@ -10,7 +10,7 @@ function setup(overrides: Partial<{ findUnique: jest.Mock; create: jest.Mock; fi
     findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'gp-winner' }),
     ...overrides,
   };
-  const config = { get: jest.fn().mockResolvedValue(600) };
+  const config = { get: jest.fn().mockImplementation(async (_k: string, fb?: unknown) => fb) };
   return { prisma: { gameProfile } as never, gameProfile, config };
 }
 
@@ -22,11 +22,30 @@ describe('ensureGameProfile', () => {
     expect(config.get).not.toHaveBeenCalled();
   });
 
-  it('chưa có → tạo với mục tiêu cây mặc định từ config', async () => {
+  it('chưa có → tạo với target cây đầu = bậc đầu của thang mặc định [60, 300, 600]', async () => {
     const { prisma, gameProfile, config } = setup();
     await expect(ensureGameProfile(prisma, config, 'u1')).resolves.toEqual({ id: 'gp-new' });
+    expect(config.get).toHaveBeenCalledWith('game.tree_target_ladder', [60, 300, 600]);
     expect(gameProfile.create).toHaveBeenCalledWith({
-      data: { userId: 'u1', ecoImpact: expect.objectContaining({ progress: 0, target: 600, treesPlanted: 0 }) },
+      data: { userId: 'u1', ecoImpact: expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }) },
+    });
+  });
+
+  it('thang theo config: bậc đầu của game.tree_target_ladder', async () => {
+    const { prisma, gameProfile } = setup();
+    const config = { get: jest.fn().mockResolvedValue([40, 200]) };
+    await ensureGameProfile(prisma, config, 'u1');
+    expect(gameProfile.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', ecoImpact: expect.objectContaining({ target: 40 }) },
+    });
+  });
+
+  it.each([[[]], [[0, 5]], [['60']], ['abc'], [null]])('thang hỏng (%j) → rơi về mặc định, không bao giờ target <= 0', async (bad) => {
+    const { prisma, gameProfile } = setup();
+    const config = { get: jest.fn().mockResolvedValue(bad) };
+    await ensureGameProfile(prisma, config, 'u1');
+    expect(gameProfile.create).toHaveBeenCalledWith({
+      data: { userId: 'u1', ecoImpact: expect.objectContaining({ target: 60 }) },
     });
   });
 

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { initialEcoImpact } from './game-profile';
 import { NotificationsService } from '../notifications/notifications.service';
 import { vnDateKey } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
@@ -101,9 +102,10 @@ export class GameGiftService {
     // 2 người tặng cùng lúc / người nhận đồng thời tự cộng nước qua spin/checkin/quiz (pattern cũ
     // đọc-rồi-ghi-tuyệt-đối sẽ đè mất phần cộng của thao tác kia dù bên gửi đã bị trừ nước thật).
     const cap = await this.config.get<number>('game.tank_capacity', 500);
+    const ecoImpact = await initialEcoImpact(this.config);
     const upserted = await this.prisma.gameProfile.upsert({
       where: { userId: recipientId },
-      create: { userId: recipientId, totalSeeds: Math.min(cap, amount) },
+      create: { userId: recipientId, totalSeeds: Math.min(cap, amount), ecoImpact },
       update: { totalSeeds: { increment: amount } },
     });
     if (upserted.totalSeeds > cap) {

@@ -1,7 +1,9 @@
 import { Check, Target } from 'lucide-react';
 import type { MissionItem } from '@tubutree/app-core/api/game';
+import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatNumber } from './format';
 import { GameCard } from './game-card';
 
@@ -13,12 +15,15 @@ export function MissionsCard({
   claimPending,
   claimVariables,
   onClaim,
+  onGo,
 }: {
   missions: MissionItem[] | undefined;
   streakDays: number | undefined;
   claimPending: boolean;
   claimVariables: string | undefined;
   onClaim: (code: string) => void;
+  /** Bấm "Làm ngay" trên nhiệm vụ chưa xong; thiếu thì không hiện nút. */
+  onGo?: (target: MissionTarget) => void;
 }) {
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
@@ -33,6 +38,7 @@ export function MissionsCard({
           // đạt mà chưa nhận thì hiện nút "Nhận thưởng".
           const canClaim = isDone && !m.claimed;
           const claiming = claimPending && claimVariables === m.code;
+          const target = !isDone && onGo ? missionTarget(m.code) : null;
 
           return (
             <div key={m.code} className={`py-3 ${idx > 0 ? 'border-t border-stone-200' : ''}`}>
@@ -46,11 +52,25 @@ export function MissionsCard({
               </div>
               {m.description && <div className="text-xs text-stone-600">{m.description}</div>}
               <div className="mt-2">
-                <ProgressBar value={Math.round((progress / Math.max(1, goal)) * 100)} max={100} />
+                <ProgressBar
+                  value={Math.round((progress / Math.max(1, goal)) * 100)}
+                  max={100}
+                  ariaLabel={gameNewbieCopy.missions.progressLabel(m.title, progress, goal)}
+                />
               </div>
               <div className="mt-0.5 text-xs text-stone-600">
                 {progress}/{goal}
               </div>
+              {target && (
+                <button
+                  type="button"
+                  aria-label={gameNewbieCopy.missions.doNowFor(m.title)}
+                  onClick={() => onGo?.(target)}
+                  className={`${miniBtnSecondary} mt-2 w-full`}
+                >
+                  {gameNewbieCopy.missions.doNow}
+                </button>
+              )}
               {canClaim && (
                 <button type="button" disabled={claiming} onClick={() => onClaim(m.code)} className={`${ui.btnPrimary} mt-2 w-full`}>
                   Nhận thưởng

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { initialEcoImpact } from './game-profile';
 import { RewardPointsService } from '../wallet/reward-points.service';
 
 /**
@@ -129,9 +130,10 @@ export class SeasonPassService {
     }
 
     // Config đọc TRƯỚC tx: cache nguội mà đọc trong tx thì mỗi tx giữ 1 kết nối và xin thêm 1 nữa (cạn pool).
-    const [tankCap, expiresAt] = await Promise.all([
+    const [tankCap, expiresAt, ecoImpact] = await Promise.all([
       reward.type === 'SEEDS' ? this.config.get<number>('game.tank_capacity', 500) : Promise.resolve(0),
       reward.type === 'POINTS' && reward.amount > 0 ? this.rewards.expiresAt() : Promise.resolve(undefined),
+      reward.type === 'SEEDS' ? initialEcoImpact(this.config) : Promise.resolve(undefined),
     ]);
 
     await this.prisma.$transaction(async (tx) => {
@@ -153,7 +155,7 @@ export class SeasonPassService {
         const gp = await tx.gameProfile.upsert({
           where: { userId },
           update: { totalSeeds: { increment: reward.amount } },
-          create: { userId, totalSeeds: Math.min(cap, reward.amount) },
+          create: { userId, totalSeeds: Math.min(cap, reward.amount), ...(ecoImpact ? { ecoImpact } : {}) },
         });
         if (gp.totalSeeds > cap) {
           await tx.gameProfile.updateMany({
