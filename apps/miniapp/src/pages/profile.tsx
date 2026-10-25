@@ -1,3 +1,4 @@
+import { OPEN_STOREFRONT_MENU_HINT, OPEN_STOREFRONT_MENU_LABEL } from '@tubutree/app-core/storefront-signup';
 import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -65,7 +66,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     // "Hoàn tiền sàn ngoài" chỉ hiện khi bật cờ (kéo khách sang sàn khác, ngược north-star mua lại).
     group: 'Hợp tác',
     items: [
-      { Icon: Users, label: 'Cộng tác viên', to: '/affiliate', hint: 'Chia sẻ — nhận hoa hồng' },
+      { Icon: Users, label: OPEN_STOREFRONT_MENU_LABEL, to: '/affiliate', hint: OPEN_STOREFRONT_MENU_HINT },
       ...(CASHBACK_ENABLED ? [{ Icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/cashback' }] : []),
       { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
     ],

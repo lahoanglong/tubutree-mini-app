@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import type { StorefrontStatusCode } from '../storefront-signup';
 
 export interface StorefrontItem {
   id: string;
@@ -45,6 +46,8 @@ export interface Storefront {
   customDomain?: string | null;
   type: 'CTV' | 'BRAND' | 'MERCHANT';
   isPartner?: boolean;
+  /** Gian hàng mẫu (chỉ có trên máy thử): hiện nhãn "Gian hàng mẫu". */
+  isSample?: boolean;
   title: string;
   headerNote: string | null;
   /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
@@ -73,6 +76,8 @@ export interface Storefront {
 // loại field này khỏi view chỉnh sửa để type khớp đúng response thật.
 export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> {
   isPublished: boolean;
+  /** Trạng thái do API tính cho chủ (DRAFT, PENDING_APPROVAL, LIVE, TAKEN_DOWN, HIDDEN); API cũ có thể chưa trả. */
+  status?: StorefrontStatusCode;
   /** Lý do khách không thấy gian hàng dù đã đăng (bị gỡ, chủ không còn là CTV…); null khi khách thấy bình thường. */
   publicHiddenReason?: string | null;
   collections: StorefrontCollectionEdit[];

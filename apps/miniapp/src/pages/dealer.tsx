@@ -45,6 +45,16 @@ import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { ImageUpload } from '../components/image-upload';
+import {
+  DEALER_BENEFITS,
+  DEALER_BENEFITS_TITLE,
+  DEALER_REQUIREMENTS,
+  DEALER_REQUIREMENTS_TITLE,
+  PARTNER_STOREFRONT_TITLE,
+  PARTNER_STOREFRONT_WEB_HINT,
+  dealerReviewLine,
+} from '@tubutree/app-core/dealer-apply-copy';
+import { Field } from '../components/ui/form';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -159,6 +169,22 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
           </Text>
         </div>
 
+        <div style={{ marginTop: 12, padding: 12, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)' }} data-testid="dealer-conditions">
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{DEALER_REQUIREMENTS_TITLE}</Text>
+          <ul style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+            {DEALER_REQUIREMENTS.map((t) => (
+              <li key={t}><Text variant="body-sm" tone="secondary">{t}</Text></li>
+            ))}
+          </ul>
+          <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{DEALER_BENEFITS_TITLE}</Text>
+          <ul style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+            {DEALER_BENEFITS.map((t) => (
+              <li key={t}><Text variant="body-sm" tone="secondary">{t}</Text></li>
+            ))}
+          </ul>
+          <Text variant="caption" tone="secondary" as="p">{dealerReviewLine(config.isLoaded ? config.dealer?.reviewHours : null)}</Text>
+        </div>
+
         {rejected && (
           <div
             style={{ marginTop: 12, padding: 12, background: 'var(--color-status-danger-bg)', borderRadius: 'var(--radius-control)' }}
@@ -175,11 +201,21 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
         )}
 
         <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Input label="Tên doanh nghiệp / cửa hàng *" value={form.businessName} onChange={set('businessName')} />
-          <Input label="Mã số thuế" value={form.taxCode ?? ''} onChange={set('taxCode')} />
-          <Input label="Người đại diện *" value={form.ownerName} onChange={set('ownerName')} />
-          <Input label="Số điện thoại *" value={form.phone} onChange={set('phone')} />
-          <Input label="Địa chỉ kinh doanh *" value={form.address} onChange={set('address')} />
+          <Field label="Tên doanh nghiệp / cửa hàng *">
+            <Input value={form.businessName} onChange={set('businessName')} />
+          </Field>
+          <Field label="Mã số thuế">
+            <Input value={form.taxCode ?? ''} onChange={set('taxCode')} />
+          </Field>
+          <Field label="Người đại diện *">
+            <Input value={form.ownerName} onChange={set('ownerName')} />
+          </Field>
+          <Field label="Số điện thoại *">
+            <Input value={form.phone} onChange={set('phone')} />
+          </Field>
+          <Field label="Địa chỉ kinh doanh *">
+            <Input value={form.address} onChange={set('address')} />
+          </Field>
           <ImageUpload
             label="Ảnh CCCD mặt trước *"
             value={form.cccdFrontUrl}
@@ -268,6 +304,11 @@ function DealerHub() {
             </Text>
           )}
         </div>
+      </div>
+
+      <div style={{ margin: '0 16px 12px', padding: 12, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)' }} data-testid="partner-storefront-note">
+        <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{PARTNER_STOREFRONT_TITLE}</Text>
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 2 }}>{PARTNER_STOREFRONT_WEB_HINT}</Text>
       </div>
 
       <div style={{ margin: '0 16px 12px' }}>

@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { StorefrontStatusCode } from '@tubutree/app-core/storefront-signup';
 
 export interface StorefrontItem {
   id: string;
@@ -22,7 +23,10 @@ export interface StorefrontCollection {
 export interface StorefrontCollectionEdit extends Omit<StorefrontCollection, 'items'> { sortOrder: number; items: StorefrontItemEdit[]; }
 export interface Storefront {
   id: string; slug: string; subdomain?: string | null; customDomain?: string | null;
-  type: 'CTV' | 'BRAND' | 'MERCHANT'; isPartner?: boolean; title: string; headerNote: string | null;
+  type: 'CTV' | 'BRAND' | 'MERCHANT'; isPartner?: boolean;
+  /** Gian hàng mẫu (chỉ có trên máy thử): hiện nhãn "Gian hàng mẫu". */
+  isSample?: boolean;
+  title: string; headerNote: string | null;
   /** Mã giới thiệu của chủ gian hàng CTV (API trả ở trang công khai; null với gian hàng khác). */
   referralCode?: string | null;
   ownerTier: { name: string; emoji: string } | null;
@@ -39,6 +43,8 @@ export interface Storefront {
 // loại field này khỏi view chỉnh sửa để type khớp đúng response thật.
 export interface StorefrontEdit extends Omit<Storefront, 'collections' | 'ownerTier'> {
   isPublished: boolean;
+  /** Trạng thái do API tính cho chủ; API cũ chưa trả thì màn suy từ isPublished. */
+  status?: StorefrontStatusCode;
   /** Lý do khách không thấy gian hàng dù đã đăng (bị gỡ, chủ không còn là CTV…); null khi khách thấy bình thường. */
   publicHiddenReason?: string | null;
   collections: StorefrontCollectionEdit[];

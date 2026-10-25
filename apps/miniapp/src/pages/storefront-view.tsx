@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Box, Page, useParams, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2 } from 'lucide-react';
+import { Share2, Sprout, MessageSquare, MapPin, CheckCircle2, Sparkles } from 'lucide-react';
+import {
+  OPEN_STOREFRONT_CTA,
+  OPEN_STOREFRONT_PROMPT,
+  SAMPLE_STOREFRONT_LABEL,
+  SAMPLE_STOREFRONT_NOTE,
+} from '@tubutree/app-core/storefront-signup';
 import { getPublicStorefront } from '../services/storefront-api';
 import { apiMediaUrl, getErrorMessage, isNotFoundError } from '../services/api';
 import { vi } from '../i18n/vi';
@@ -17,6 +23,7 @@ import { StorePageShell } from '../components/store-page-shell';
 import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import { ProductTile } from '../components/ui/product-tile';
 
 /** Nhãn tin cậy chỉ cho gian hàng admin đã duyệt: tick và "CTV tuyển chọn" là lời cam kết của Tubu Tree, không phải của chủ shop tự gắn. */
@@ -70,15 +77,17 @@ export default function StorefrontViewPage() {
         avatarUrl={sf.avatarUrl ? apiMediaUrl(sf.avatarUrl) : sf.avatarUrl}
         avatarFallback={<Sprout size={28} color="var(--color-text-inverse)" />}
         avatarSize={58}
+        avatarMark={badgeLabel ? <CheckCircle2 size={20} color="var(--color-action-primary-bg)" aria-label="Đã được Tubu Tree duyệt" role="img" /> : undefined}
         title={sf.title}
         badges={
           <>
             {/* Huy hiệu xác thực — pill đặc (không phải soft-tone chuẩn của Badge) để giữ đúng
              * trọng lượng thị giác "đã xác minh" như bản cũ (leaf-600 đặc/chữ trắng); override
              * background/color sang token ngữ nghĩa DS v2 thay vì hex/--leaf-* cũ. */}
+            {sf.isSample && <Badge tone="promo">{SAMPLE_STOREFRONT_LABEL}</Badge>}
             {badgeLabel && (
               <Badge tone="success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--color-action-primary-bg)', color: 'var(--color-text-inverse)' }}>
-                <CheckCircle2 size={12} />
+                <Sparkles size={12} />
                 {badgeLabel}
               </Badge>
             )}
@@ -106,6 +115,11 @@ export default function StorefrontViewPage() {
           )
         }
       >
+        {sf.isSample && (
+          <Box px={4} mt={2}>
+            <Text variant="caption" tone="tertiary" as="div" data-testid="sample-note">{SAMPLE_STOREFRONT_NOTE}</Text>
+          </Box>
+        )}
         {sf.headerNote && (
           <Box px={4}>
             <Text variant="body-sm" tone="secondary">{sf.headerNote}</Text>
@@ -145,6 +159,16 @@ export default function StorefrontViewPage() {
             </Box>
           </Box>
         ))}
+        {!isOwner && sf.type === 'CTV' && (
+          <Box mt={6} px={4}>
+            <Card padding={16}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{OPEN_STOREFRONT_PROMPT}</Text>
+              <Button variant="secondary" fullWidth style={{ marginTop: 10 }} onPress={() => navigate('/storefront')}>
+                {OPEN_STOREFRONT_CTA}
+              </Button>
+            </Card>
+          </Box>
+        )}
       </StorePageShell>
 
       <ShareSheet

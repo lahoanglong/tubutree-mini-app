@@ -567,3 +567,32 @@ describe('DealerPage — báo trước phí giao và mức tối thiểu của �
     expect(screen.getByRole('button', { name: 'Trả trước' })).not.toBeDisabled();
   });
 });
+
+describe('DealerPage — điều kiện, nhãn, gian hàng đối tác (B-86, B-41)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getTemplates.mockResolvedValue([]);
+    mocks.getPricelist.mockResolvedValue([]);
+    mocks.getDealerOrders.mockResolvedValue([]);
+  });
+
+  it('form đăng ký có điều kiện, quyền lợi, số giờ duyệt và mọi ô nhập có nhãn', async () => {
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false, status: 'NONE' });
+    renderPage();
+    const box = await screen.findByTestId('dealer-conditions');
+    expect(box).toHaveTextContent('Điều kiện đăng ký');
+    expect(box).toHaveTextContent('Quyền lợi');
+    expect(box).toHaveTextContent('24 giờ');
+    for (const name of ['Tên doanh nghiệp / cửa hàng *', 'Mã số thuế', 'Người đại diện *', 'Số điện thoại *', 'Địa chỉ kinh doanh *']) {
+      expect(screen.getByLabelText(name)).toBeInTheDocument();
+    }
+  });
+
+  it('hub đại lý có ghi chú quản lý gian hàng đối tác trên web, không có đường dẫn', async () => {
+    mocks.getDealerMe.mockResolvedValue(APPROVED_ME);
+    renderPage();
+    const note = await screen.findByTestId('partner-storefront-note');
+    expect(note).toHaveTextContent('Gian hàng đối tác');
+    expect(note.querySelector('a')).toBeNull();
+  });
+});

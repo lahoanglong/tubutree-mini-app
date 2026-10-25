@@ -116,6 +116,8 @@ describe('AcademyPage — danh sách khoá học, hành vi giữ nguyên khi chu
     renderPage();
     expect(await screen.findByText(viText.academy.empty)).toBeInTheDocument();
     expect(screen.getByText(viText.academy.emptyBody)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: viText.academy.backToCtv }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
   });
 
   it('lỗi tải: báo lỗi và Thử lại tải lại', async () => {
@@ -209,10 +211,10 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     expect(mocks.completeLesson).toHaveBeenCalledTimes(1);
   });
 
-  it('"Danh sách khoá học" quay về /academy (thay thế lịch sử)', async () => {
+  it('chi tiết khoá chỉ có một nút quay lại (của tiêu đề trang), không thêm nút "Danh sách khoá học"', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText(viText.academy.backToList));
-    expect(mocks.navigate).toHaveBeenCalledWith('/academy', { replace: true });
+    await screen.findByText('Khoá bán hàng');
+    expect(screen.queryByText('Danh sách khoá học')).not.toBeInTheDocument();
   });
 
   it('lỗi tải khoá: báo lỗi và Thử lại tải lại', async () => {
@@ -292,12 +294,11 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
     expect(mocks.navigate).toHaveBeenCalledWith('/academy/a');
   });
 
-  it('nút quay lại và nút đánh dấu có vùng chạm >= 44px', async () => {
+  it('nút đánh dấu có vùng chạm >= 44px', async () => {
     mocks.params = { courseId: 'c1' };
     renderPage();
     await screen.findByText('Khoá bán hàng');
     const targets = [
-      screen.getByRole('button', { name: viText.academy.backToList }),
       ...screen.getAllByRole('button', { name: viText.academy.markDone }),
       screen.getByRole('button', { name: viText.academy.alreadyDone }),
     ];
