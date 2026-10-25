@@ -184,3 +184,163 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     expect(tx.supportConversation.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý bỏ số dư', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function withWallet(balance: number, forfeit: number | null) {
+    const ctx = build([]);
+    const { tx } = ctx;
+    (tx.accountDeletionRequest.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'req-1',
+      userId: 'u1',
+      status: 'PENDING',
+      walletForfeitAmount: forfeit,
+      walletForfeitConsentAt: forfeit === null ? null : new Date('2026-10-25T01:00:00Z'),
+    });
+    (tx.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'CUSTOMER', walletBalance: balance, pointsConvertedBalance: 0, cashbackPending: 0 });
+    (tx.$queryRaw as jest.Mock).mockResolvedValue([{ id: 'req-1', walletBalance: balance }]);
+    const extra = tx as unknown as Record<string, unknown>;
+    extra.walletTransaction = { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'wt1' }) };
+    extra.userAdminEvent = { create: jest.fn() };
+    (tx.user.update as jest.Mock).mockResolvedValue({ walletBalance: 0 });
+    return { ...ctx, extra };
+  }
+  const blockersOf = async (p: Promise<unknown>) => {
+    const err = await p.then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    return ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers;
+  };
+
+  it('chưa có đồng ý (yêu cầu cũ) → chặn, nhắc khách gửi lại và đồng ý, không trừ Ví', async () => {
+    const { svc, anonymize, extra } = withWallet(20_000, null);
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers).toEqual([{ code: 'WALLET_BALANCE', message: expect.stringContaining('chưa đồng ý bỏ số dư') }]);
+    expect((extra.walletTransaction as { create: jest.Mock }).create).not.toHaveBeenCalled();
+    expect(anonymize).not.toHaveBeenCalled();
+  });
+
+  it('số dư đã đổi so với số khách đồng ý → chặn, nêu cả hai số', async () => {
+    const { svc, anonymize } = withWallet(30_000, 20_000);
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers[0]?.message).toBe('Ví Tubu đã đổi từ 20.000đ (số khách đồng ý bỏ) thành 30.000đ, khách cần xác nhận lại khi gửi yêu cầu xoá');
+    expect(anonymize).not.toHaveBeenCalled();
+  });
+
+  it('đúng số khách đồng ý → trừ Ví về 0 bằng một dòng ADJUST có lý do, ghi sổ việc admin, rồi ẩn danh', async () => {
+    const { svc, anonymize, extra } = withWallet(20_000, 20_000);
+    await svc.process('req-1', 'admin-1');
+    const create = (extra.walletTransaction as { create: jest.Mock }).create;
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]![0].data).toMatchObject({
+      userId: 'u1',
+      delta: -20_000,
+      type: 'ADJUST',
+      refType: 'ACCOUNT_DELETION',
+      refId: 'req-1',
+      reason: expect.stringContaining('khách đã đồng ý bỏ số dư Ví 20.000đ'),
+    });
+    expect((extra.userAdminEvent as { create: jest.Mock }).create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', kind: 'WALLET_FORFEIT', fromValue: '20000', toValue: '0', actorId: 'admin-1' }),
+    });
+    expect(anonymize).toHaveBeenCalled();
+  });
+
+  it('Ví bằng 0 → không ghi dòng sổ Ví', async () => {
+    const { svc, extra } = withWallet(0, null);
+    await svc.process('req-1', 'admin-1');
+    expect((extra.walletTransaction as { create: jest.Mock }).create).not.toHaveBeenCalled();
+  });
+
+  it('Ví âm vẫn chặn như cũ dù có đồng ý', async () => {
+    const { svc } = withWallet(-5_000, 20_000);
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers[0]?.message).toContain('đang âm 5.000đ');
+  });
+
+  it('hoa hồng đã duyệt chưa chuyển → câu nhắc chuyển hoa hồng vào Ví trước', async () => {
+    const { svc, tx } = withWallet(0, null);
+    // `empty` dùng chung cho mọi bảng nên thay riêng bảng hoa hồng, không sửa mock chung.
+    (tx as unknown as { commission: unknown }).commission = { groupBy: jest.fn().mockResolvedValue([{ affiliateUserId: 'u1', _count: { _all: 2 } }]) };
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers).toEqual([{ code: 'COMMISSION_UNPAID', message: expect.stringContaining('chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước') }]);
+  });
+});
+
+describe('AccountDeletionService — đơn đã giao còn trong hạn đổi/trả', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const day = 864e5;
+  function withDelivered(orders: { userId: string; deliveredAt: Date | null; updatedAt: Date }[], windowDays?: number) {
+    const ctx = build([]);
+    (ctx.tx as unknown as { order: unknown }).order = {
+      groupBy: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue(orders),
+    };
+    const config = { get: jest.fn().mockResolvedValue(windowDays ?? 7) };
+    const svc = new AccountDeletionService(
+      { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(ctx.tx)) } as unknown as PrismaService,
+      undefined,
+      undefined,
+      config as never,
+    );
+    return { ...ctx, svc, config };
+  }
+
+  it('còn đơn DELIVERED trong hạn → chặn ORDER_RETURN_WINDOW, câu nêu ngày xoá được = hết hạn MUỘN nhất; đọc đúng returns.window_days', async () => {
+    const delivered = new Date(Date.now() - 2 * day);
+    const later = new Date(Date.now() - 1 * day);
+    const { svc, config, anonymize } = withDelivered(
+      [
+        { userId: 'u1', deliveredAt: later, updatedAt: later },
+        { userId: 'u1', deliveredAt: delivered, updatedAt: delivered },
+      ],
+      7,
+    );
+    const err = await svc.process('req-1', 'admin-1').then(() => null, (e: unknown) => e);
+    const blockers = ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers;
+    const expiry = new Date(later.getTime() + 7 * day + 7 * 3600 * 1000);
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    const label = `${p2(expiry.getUTCHours())}:${p2(expiry.getUTCMinutes())} ngày ${p2(expiry.getUTCDate())}/${p2(expiry.getUTCMonth() + 1)}/${expiry.getUTCFullYear()}`;
+    expect(blockers).toEqual([
+      { code: 'ORDER_RETURN_WINDOW', message: `khách còn đơn trong hạn đổi/trả, xoá được từ ${label}` },
+    ]);
+    expect(config.get).toHaveBeenCalledWith('returns.window_days', 7);
+    expect(anonymize).not.toHaveBeenCalled();
+  });
+
+  it('truy vấn đơn lọc theo mốc now − window_days (đơn quá hạn không bị tính), kể cả đơn cũ chưa có deliveredAt', async () => {
+    const { svc, tx } = withDelivered([], 3);
+    const before = Date.now();
+    await svc.process('req-1', 'admin-1');
+    const where = ((tx.order as unknown as { findMany: jest.Mock }).findMany.mock.calls[0]![0] as { where: Record<string, unknown> }).where as {
+      status: string;
+      OR: [{ deliveredAt: { gt: Date } }, { deliveredAt: null; updatedAt: { gt: Date } }];
+    };
+    expect(where.status).toBe('DELIVERED');
+    const cutoff = where.OR[0].deliveredAt.gt.getTime();
+    expect(cutoff).toBeGreaterThanOrEqual(before - 3 * day - 1000);
+    expect(cutoff).toBeLessThanOrEqual(Date.now() - 3 * day + 1000);
+    expect(where.OR[1].updatedAt.gt.getTime()).toBe(cutoff);
+  });
+
+  it('không còn đơn nào trong hạn → xử lý được', async () => {
+    const { svc, anonymize } = withDelivered([]);
+    await svc.process('req-1', 'admin-1');
+    expect(anonymize).toHaveBeenCalled();
+  });
+
+  it('list(): mỗi khách lấy đồng ý của yêu cầu PENDING MỚI NHẤT, bất kể thứ tự dòng', async () => {
+    const old = { id: 'r-old', userId: 'u1', status: 'PENDING', createdAt: new Date('2026-10-01'), walletForfeitAmount: 10_000 };
+    const fresh = { id: 'r-new', userId: 'u1', status: 'PENDING', createdAt: new Date('2026-10-20'), walletForfeitAmount: 20_000 };
+    for (const rows of [[old, fresh], [fresh, old]]) {
+      const prisma = {
+        accountDeletionRequest: { findMany: jest.fn().mockResolvedValue(rows) },
+        user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1', role: 'CUSTOMER', walletBalance: 20_000, pointsConvertedBalance: 0, cashbackPending: 0 }]) },
+        ...Object.fromEntries(['order', 'payout', 'returnRequest', 'orderCustomerRefund', 'subscription', 'commission', 'cashbackTransaction', 'dealerCreditLedger', 'wasteRequest', 'wasteUserFlags'].map((k) => [k, { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) }])),
+      };
+      const out = await new AccountDeletionService(prisma as unknown as PrismaService).list('PENDING');
+      expect(out.every((r) => r.blockers.length === 0)).toBe(true);
+    }
+  });
+});

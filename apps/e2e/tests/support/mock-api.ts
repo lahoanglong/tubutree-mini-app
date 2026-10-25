@@ -508,7 +508,6 @@ export function publicConfig(over: Partial<PublicConfig> = {}): PublicConfig {
     freeshipThreshold: 200000,
     subscribeDiscountPct: 0.12,
     affiliateWalletMultiplier: 1.5,
-    affiliateMinWithdrawBank: 50000,
     cashbackHoldDays: 30,
     waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
     ...over,

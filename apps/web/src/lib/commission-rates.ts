@@ -153,7 +153,7 @@ export const RATE_IMPORT_STATUS: Record<RateImportStatus, { label: string; tone:
 export const COMMISSION_STATUS: Record<CommissionStatus, { label: string; tone: Tone }> = {
   PENDING: { label: 'Đang chờ · đơn chưa giao', tone: 'info' },
   LOCKED: { label: 'Đang chờ · đang giữ', tone: 'warning' },
-  APPROVED: { label: 'Có thể rút', tone: 'success' },
+  APPROVED: { label: 'Có thể chuyển vào Ví', tone: 'success' },
   PAID: { label: 'Đã trả', tone: 'neutral' },
   REJECTED: { label: 'Từ chối', tone: 'danger' },
 };

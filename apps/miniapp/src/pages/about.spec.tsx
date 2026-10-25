@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
   getPublicConfig: vi.fn(),
   requestAccountDeletion: vi.fn(),
+  getWallet: vi.fn(),
   logout: vi.fn(),
   openSnackbar: vi.fn(),
   callPhone: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/api', () => ({ api: { get: mocks.apiGet }, getErrorMessage: () => 'lỗi' }));
 vi.mock('../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
-vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.requestAccountDeletion }));
+vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.requestAccountDeletion, getWallet: mocks.getWallet }));
 vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone, openExternal: mocks.openExternal }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -171,6 +172,7 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
       ],
     });
     mocks.requestAccountDeletion.mockResolvedValue({ message: 'Đã ghi nhận yêu cầu' });
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
   });
 
   it('đúng một h1 "Về Tubu Tree"; các khối nội dung là h2', async () => {
@@ -246,10 +248,47 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
     expect(mocks.requestAccountDeletion).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Xoá tài khoản' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' }));
     await waitFor(() => expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã ghi nhận yêu cầu', type: 'info' }));
     await waitFor(() => expect(screen.queryByText('Xoá tài khoản vĩnh viễn?')).toBeNull());
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledWith(undefined, undefined);
+  });
+
+  it('Ví còn tiền: hiện số dư mất, nút gửi bị khoá tới khi tick đồng ý, rồi gửi kèm đúng số dư đã thấy', async () => {
+    mocks.getWallet.mockResolvedValue({ walletBalance: 20000 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá tài khoản' }));
+    expect(await screen.findByText('Ví Tubu còn 20.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại.')).toBeInTheDocument();
+    const send = screen.getByRole('button', { name: 'Gửi yêu cầu xoá' });
+    expect(send).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Tôi đồng ý bỏ số dư Ví Tubu/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' }));
+    await waitFor(() => expect(mocks.requestAccountDeletion).toHaveBeenCalledTimes(1));
+    expect(mocks.requestAccountDeletion).toHaveBeenCalledWith(undefined, { acknowledgedWalletBalance: 20000, acceptWalletForfeit: true });
+  });
+
+  it('máy chủ từ chối vì số dư đã đổi: bỏ tick, tải lại số dư, khách phải đồng ý lại với số mới', async () => {
+    mocks.getWallet.mockResolvedValueOnce({ walletBalance: 20000 }).mockResolvedValue({ walletBalance: 30000 });
+    mocks.requestAccountDeletion.mockRejectedValueOnce(new Error('đổi'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá tài khoản' }));
+    await screen.findByText(/Ví Tubu còn 20\.000đ/);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Tôi đồng ý bỏ số dư Ví Tubu/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Gửi yêu cầu xoá' }));
+    expect(await screen.findByText(/Ví Tubu còn 30\.000đ/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' })).toBeDisabled());
+    expect(screen.getByRole('checkbox', { name: /Tôi đồng ý bỏ số dư Ví Tubu/ })).not.toBeChecked();
+  });
+
+  it('chưa biết số dư (tải lỗi): không cho gửi', async () => {
+    mocks.getWallet.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xoá tài khoản' }));
+    expect(await screen.findByText('Chưa tải được số dư Ví Tubu. Bạn thử lại sau khi tải xong.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gửi yêu cầu xoá' })).toBeDisabled();
   });
 
   it('nút Đăng xuất gọi logout', async () => {

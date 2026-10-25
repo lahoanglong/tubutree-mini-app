@@ -252,7 +252,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
       { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
       { k: 'productCategories', label: 'Danh mục sản phẩm' },
-      { k: 'payouts', label: 'Yêu cầu rút tiền' },
+      { k: 'payouts', label: 'Thuế TNCN hoa hồng' },
       { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
       { k: 'storefronts', label: 'Gian hàng' },
       { k: 'brands', label: 'Nhãn hàng' },
@@ -881,7 +881,7 @@ function DashboardTab({
         >
           <span>
             <Banknote aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-            <b>{pendingPayoutsQ.data}</b> lệnh rút tiền (hoa hồng CTV / Ví) đang chờ duyệt
+            <b>{pendingPayoutsQ.data}</b> lệnh rút ngân hàng cũ đang chờ duyệt
           </span>
           <span className="shrink-0 font-semibold">Xem →</span>
         </button>

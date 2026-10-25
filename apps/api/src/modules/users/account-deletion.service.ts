@@ -2,8 +2,12 @@ import { randomBytes } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { formatPoints } from '../../common/format-points';
+import { formatVndText as vnd } from '../../common/format-vnd';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
 
 /** Mã lỗi ổn định để admin UI nhận diện (message tiếng Việt có thể đổi câu chữ). */
@@ -16,6 +20,7 @@ export type DeletionBlockerCode =
   | 'CONVERTED_POINTS'
   | 'CASHBACK_PENDING'
   | 'ORDER_IN_PROGRESS'
+  | 'ORDER_RETURN_WINDOW'
   | 'PAYOUT_PENDING'
   | 'RETURN_PENDING'
   | 'CUSTOMER_REFUND_PENDING'
@@ -54,9 +59,14 @@ type BlockerUser = {
   cashbackPending: number;
 };
 
-const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] as const;
+/** "HH:mm ngày dd/MM/yyyy" theo giờ Việt Nam (không dùng toLocale*: định dạng đổi theo bản ICU). */
+function vnDateTimeLabel(d: Date): string {
+  const v = new Date(d.getTime() + 7 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(v.getUTCHours())}:${pad(v.getUTCMinutes())} ngày ${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
+}
 
-const vnd = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ`;
+const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] as const;
 
 /** Deadlock (40P01) / tuần tự hoá (40001, Prisma P2034): tx đã rollback, chạy lại an toàn. */
 function isRetryableTxError(err: unknown): boolean {
@@ -83,7 +93,14 @@ export class AccountDeletionService {
     private readonly prisma: PrismaService,
     @Optional() @Inject(PARTNER_STORE_BLOCKERS) private readonly partnerStores?: PartnerStoreBlockersPort,
     @Optional() private readonly sessions?: SessionStateService,
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
+
+  /** `returns.window_days` (cùng khoá, mặc định 7 và cách xử lý giá trị sai như OrdersReturns / LoyaltyService.returnWindowDays). */
+  private async returnWindowDays(): Promise<number> {
+    const v = Number((await this.config?.get<number>('returns.window_days', 7)) ?? 7);
+    return Number.isFinite(v) && v >= 0 ? v : 7;
+  }
 
   async list(status: DeletionListStatus = 'PENDING') {
     const requests = await this.prisma.accountDeletionRequest.findMany({
@@ -107,7 +124,16 @@ export class AccountDeletionService {
     const byId = new Map(users.map((u) => [u.id, u]));
     const pendingUsers = users.filter((u) => requests.some((r) => r.userId === u.id && r.status === 'PENDING'));
     const partnerCfg = pendingUsers.length > 0 ? await this.partnerStores?.settlementConfig() : undefined;
-    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, partnerCfg) : new Map();
+    // Yêu cầu PENDING mới nhất của mỗi khách (danh sách đã sắp theo thời gian, nên lấy dòng mới nhất bất kể chiều sắp).
+    const latestPending = new Map<string, (typeof requests)[number]>();
+    for (const r of requests) {
+      if (r.status !== 'PENDING') continue;
+      const cur = latestPending.get(r.userId);
+      if (!cur || r.createdAt > cur.createdAt) latestPending.set(r.userId, r);
+    }
+    const consents = new Map([...latestPending].map(([uid, r]) => [uid, r.walletForfeitAmount]));
+    const windowDays = pendingUsers.length > 0 ? await this.returnWindowDays() : 7;
+    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, consents, windowDays, partnerCfg) : new Map();
     return requests.map((r) => ({
       ...r,
       user: byId.get(r.userId) ?? null,
@@ -140,6 +166,7 @@ export class AccountDeletionService {
   private async processOnce(requestId: string, adminId: string, adminNote?: string) {
     // Đọc cấu hình đối soát trước khi mở tx (SystemConfigService đọc qua pool, không đọc trong lúc giữ tx), như setUserRole.
     const partnerCfg = await this.partnerStores?.settlementConfig();
+    const windowDays = await this.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "account_deletion_requests" WHERE "id" = ${requestId} FOR UPDATE`;
@@ -165,7 +192,8 @@ export class AccountDeletionService {
       const now = new Date();
 
       if (user) {
-        const blockers = (await this.collectBlockers(tx, [user], partnerCfg)).get(user.id) ?? [];
+        const consents = new Map([[user.id, request.walletForfeitAmount]]);
+        const blockers = (await this.collectBlockers(tx, [user], consents, windowDays, partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
           throw new BadRequestException({
             statusCode: 400,
@@ -175,6 +203,7 @@ export class AccountDeletionService {
             blockers,
           });
         }
+        if (user.walletBalance > 0) await this.forfeitWallet(tx, user.id, user.walletBalance, request, adminId);
         await this.anonymize(tx, user.id, requestId, now);
       } else {
         this.logger.warn(`Yêu cầu xoá ${requestId}: không còn user ${request.userId}, chỉ đóng yêu cầu.`);
@@ -190,7 +219,13 @@ export class AccountDeletionService {
   }
 
   /** Gom bằng groupBy (cố định 10 truy vấn) thay vì 10 truy vấn × mỗi dòng: danh sách admin tới 100 dòng. */
-  private async collectBlockers(db: Db, users: BlockerUser[], partnerCfg?: SettlementConfig): Promise<Map<string, DeletionBlocker[]>> {
+  private async collectBlockers(
+    db: Db,
+    users: BlockerUser[],
+    consents: Map<string, number | null>,
+    windowDays: number,
+    partnerCfg?: SettlementConfig,
+  ): Promise<Map<string, DeletionBlocker[]>> {
     const ids = users.map((u) => u.id);
     // Chủ gian hàng đối tác (MERCHANT, hoặc CTV có cờ) còn việc dở thì ẩn danh để lại đơn không ai xử lý và đối soát không có tài khoản nhận tiền.
     const partnerOpen = new Map<string, string[]>();
@@ -200,7 +235,9 @@ export class AccountDeletionService {
         if (open.length) partnerOpen.set(id, open);
       }
     }
-    const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit, wasteOpen, wasteFlags] = await Promise.all([
+    // Đơn đã giao còn trong hạn đổi/trả: Pancake báo RETURNED hay admin duyệt trả vẫn hoàn tiền về Ví khách sau khi tài khoản đã ẩn danh.
+    const windowCutoff = new Date(Date.now() - windowDays * 864e5);
+    const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit, wasteOpen, wasteFlags, deliveredInWindow] = await Promise.all([
       db.order.groupBy({
         by: ['userId'],
         where: { userId: { in: ids }, status: { in: [...OPEN_ORDER_STATUSES] } },
@@ -248,7 +285,21 @@ export class AccountDeletionService {
         where: { userId: { in: ids }, OR: [{ blockedAt: { not: null } }, { shipLockedAt: { not: null } }] },
         select: { userId: true },
       }),
+      db.order.findMany({
+        where: {
+          userId: { in: ids },
+          status: 'DELIVERED',
+          OR: [{ deliveredAt: { gt: windowCutoff } }, { deliveredAt: null, updatedAt: { gt: windowCutoff } }],
+        },
+        select: { userId: true, deliveredAt: true, updatedAt: true },
+      }),
     ]);
+    const returnWindow = new Map<string, { latestExpiry: Date }>();
+    for (const o of deliveredInWindow) {
+      const expiry = new Date((o.deliveredAt ?? o.updatedAt).getTime() + windowDays * 864e5);
+      const cur = returnWindow.get(o.userId);
+      returnWindow.set(o.userId, { latestExpiry: cur && cur.latestExpiry > expiry ? cur.latestExpiry : expiry });
+    }
 
     const countBy = <K extends string>(rows: ({ _count: { _all: number } } & Record<K, string>)[], key: K) =>
       new Map(rows.map((r) => [r[key], r._count._all]));
@@ -276,7 +327,17 @@ export class AccountDeletionService {
       if (user.role === 'ADMIN' || user.role === 'STAFF') {
         add('PRIVILEGED_ROLE', 'tài khoản đang có quyền quản trị/nhân viên, cần gỡ quyền trước');
       }
-      if (user.walletBalance > 0) add('WALLET_BALANCE', `Ví Tubu còn ${vnd(user.walletBalance)}, khách cần rút hết trước`);
+      if (user.walletBalance > 0) {
+        const agreed = consents.get(user.id) ?? null;
+        if (agreed === null) {
+          add('WALLET_BALANCE', `Ví Tubu còn ${vnd(user.walletBalance)} mà khách chưa đồng ý bỏ số dư, khách cần gửi lại yêu cầu xoá và đồng ý`);
+        } else if (agreed !== user.walletBalance) {
+          add(
+            'WALLET_BALANCE',
+            `Ví Tubu đã đổi từ ${vnd(agreed)} (số khách đồng ý bỏ) thành ${vnd(user.walletBalance)}, khách cần xác nhận lại khi gửi yêu cầu xoá`,
+          );
+        }
+      }
       if (user.walletBalance < 0) add('WALLET_BALANCE', `Ví Tubu đang âm ${vnd(-user.walletBalance)}, cần đối soát trước`);
       // Q-03a: lô quy đổi là tiền trả trước nhưng không quy ra tiền được, nên không có cách tất toán
       // nào khác ngoài để khách tiêu hết (OQ-14).
@@ -285,11 +346,18 @@ export class AccountDeletionService {
       }
       if (user.cashbackPending > 0 || n(cashbackN) > 0) add('CASHBACK_PENDING', 'còn khoản hoàn tiền mua sắm đang chờ');
       if (n(orderN) > 0) add('ORDER_IN_PROGRESS', `còn ${n(orderN)} đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)`);
+      const rw = returnWindow.get(user.id);
+      if (rw) {
+        add(
+          'ORDER_RETURN_WINDOW',
+          `khách còn đơn trong hạn đổi/trả, xoá được từ ${vnDateTimeLabel(rw.latestExpiry)}`,
+        );
+      }
       if (n(payoutN) > 0) add('PAYOUT_PENDING', `còn ${n(payoutN)} yêu cầu rút tiền chờ xử lý`);
       if (n(returnN) > 0) add('RETURN_PENDING', `còn ${n(returnN)} yêu cầu đổi trả chờ duyệt`);
       if (n(refundN) > 0) add('CUSTOMER_REFUND_PENDING', `còn ${n(refundN)} khoản hoàn tiền đơn chưa chuyển`);
       if (n(subN) > 0) add('SUBSCRIPTION_ACTIVE', `còn ${n(subN)} gói giao định kỳ đang chạy hoặc tạm dừng`);
-      if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa trả`);
+      if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước (khoản đang chờ duyệt thì đợi duyệt xong)`);
       if (n(wasteOpenN) > 0) add('WASTE_REQUEST_OPEN', `còn ${n(wasteOpenN)} yêu cầu Đổi rác chưa xong (đang chờ mang tới, đang gửi hoặc đang chờ đếm)`);
       if (wasteReview.has(user.id)) add('WASTE_UNDER_REVIEW', 'Tài khoản đang được Tubu xem xét, liên hệ CSKH');
       const credit = creditSum.get(user.id) ?? 0;
@@ -299,6 +367,30 @@ export class AccountDeletionService {
       result.set(user.id, out);
     }
     return result;
+  }
+
+  /**
+   * Số dư Ví khách đã thấy và đồng ý bỏ (blocker đã đảm bảo bằng đúng số khách đồng ý) bị trừ về 0 bằng một dòng ADJUST ngay trong
+   * giao dịch ẩn danh, kèm dòng sổ việc admin; refId = mã yêu cầu nên xử lý lặp không trừ lần hai.
+   */
+  private async forfeitWallet(
+    tx: Db,
+    userId: string,
+    balance: number,
+    request: { id: string; walletForfeitConsentAt: Date | null },
+    adminId: string,
+  ) {
+    const consentAt = request.walletForfeitConsentAt?.toISOString() ?? 'không rõ';
+    const reason = `Xoá tài khoản: khách đã đồng ý bỏ số dư Ví ${vnd(balance)} (đồng ý lúc ${consentAt}, yêu cầu ${request.id})`;
+    await applyWalletDelta(tx, {
+      userId,
+      delta: -balance,
+      type: 'ADJUST',
+      refType: 'ACCOUNT_DELETION',
+      refId: request.id,
+      reason,
+    });
+    await recordUserAdminEvent(tx, { userId, kind: 'WALLET_FORFEIT', from: String(balance), to: '0', reason, actorId: adminId });
   }
 
   private async anonymize(tx: Db, userId: string, requestId: string, now: Date) {

@@ -25,7 +25,7 @@ import { getErrorMessage } from '../services/api';
 import { useShareWithFallback } from '../components/share-sheet';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { formatDate, formatVnd, formatVndShort } from '../utils/format';
+import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { PERSONAL_TAX_ID_PATTERN } from '../utils/tax-id';
@@ -41,7 +41,6 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Heading, Text } from '../components/ui/text';
-import { ChoiceCard } from '../components/affiliate/choice-card';
 import { CtvOrderSheet } from '../components/affiliate/ctv-order-sheet';
 import { CtvShortcuts } from '../components/affiliate/ctv-shortcuts';
 import { MilestoneRewards } from '../components/affiliate/milestone-rewards';
@@ -64,11 +63,12 @@ const BOLD = { fontWeight: 600 } as const;
 const COMMISSION_META: Record<CommissionStatus, { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Đang chờ · đơn chưa giao', tone: 'promo' },
   LOCKED: { label: 'Đang chờ · đang giữ', tone: 'info' },
-  APPROVED: { label: 'Có thể rút', tone: 'success' },
+  APPROVED: { label: 'Có thể chuyển vào Ví', tone: 'success' },
   PAID: { label: 'Đã trả', tone: 'neutral' },
   REJECTED: { label: 'Từ chối', tone: 'danger' },
 };
-const WITHDRAWING_META = { label: 'Đang rút', tone: 'info' as BadgeTone };
+// Chỉ còn cho lệnh rút ngân hàng cũ (trước khi bỏ rút) chưa chuyển tiền.
+const WITHDRAWING_META = { label: 'Lệnh rút cũ đang xử lý', tone: 'info' as BadgeTone };
 
 const PAYOUT_META: Record<PayoutStatus, { label: string; tone: BadgeTone }> = {
   REQUESTED: { label: 'Chờ duyệt', tone: 'promo' },
@@ -82,7 +82,7 @@ const PAYOUT_METHOD: Record<AffiliatePayout['method'], string> = {
   ZALOPAY: 'Về ZaloPay',
 };
 
-/** Dự phòng khi API cũ chưa trả `withdrawTaxPreview`: chỉ xét riêng lần rút này, không biết các lần rút trước trong tháng. */
+/** Dự phòng khi API cũ chưa trả `withdrawTaxPreview`: chỉ xét riêng lần chuyển này, không biết các lần chuyển trước trong tháng. */
 function payoutTax(gross: number, pit: { pct: number; threshold: number } | undefined): number {
   if (!pit || !(pit.pct > 0) || gross < pit.threshold) return 0;
   return Math.round(gross * Math.min(pit.pct, 1));
@@ -153,16 +153,11 @@ function RegisterGate() {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  const cfg = usePublicConfig();
   const benefits = [
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
     { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
-    {
-      Icon: Landmark,
-      // P0 FIX (A5-07, 2026-09-27): bỏ quảng cáo "×hệ số" — rút về Ví Tubu giờ luôn là quy đổi 1:1
-      // (Ví là tiền VND rút được ra ngân hàng thật, không phải phần thưởng nội bộ).
-      text: `Rút về ngân hàng (tối thiểu ${formatVndShort(cfg.affiliateMinWithdrawBank)}) hoặc quy đổi 1:1 vào Ví Tubu`,
-    },
+    // Chuyển vào Ví luôn là 1:1, không nhân hệ số.
+    { Icon: Landmark, text: 'Hoa hồng vào Ví Tubu 1:1, dùng trả tiền hàng' },
     { Icon: TrendingUp, text: 'Bảng hoa hồng cập nhật liên tục, minh bạch' },
   ];
 
@@ -278,7 +273,7 @@ function Dashboard() {
   const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers });
   const milestonesQ = useQuery({ queryKey: ['affiliate-milestones'], queryFn: getCtvMilestones });
   const [showAllTiers, setShowAllTiers] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
 
   const createLink = useMutation({
@@ -370,20 +365,20 @@ function Dashboard() {
                 ]
               : []),
             {
-              key: 'withdraw',
-              label: 'Rút tiền',
-              ariaLabel: 'Rút tiền hoa hồng',
+              key: 'transfer',
+              label: 'Chuyển vào Ví',
+              ariaLabel: 'Chuyển vào Ví Tubu',
               icon: Wallet,
-              // Khi dashQ lỗi: cho phép mở WithdrawForm để BE tự validate số dư (CTV không bị kẹt
-              // do dashboard lỗi tạm thời mà không rút được commission đã APPROVED).
+              // Khi dashQ lỗi: cho phép mở form để BE tự validate số dư (CTV không bị kẹt
+              // do dashboard lỗi tạm thời mà không chuyển được commission đã APPROVED).
               disabled: !dashQ.isError && (d?.withdrawableCommission ?? 0) <= 0,
-              onPress: () => setWithdrawing(true),
+              onPress: () => setTransferring(true),
             },
           ]}
         />
       </div>
 
-      {/* Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để WithdrawForm tự query số dư riêng. */}
+      {/* Khi dashQ lỗi: hiển thị "—" thay vì giá trị giả, để form chuyển tự query số dư riêng. */}
       <div style={{ ...BLOCK_GAP, display: 'flex', gap: 10 }}>
         <KpiCard
           label="Đang chờ"
@@ -391,14 +386,14 @@ function Dashboard() {
           value={dashQ.isError ? '—' : formatVnd(d?.pendingCommission ?? 0)}
         />
         <KpiCard
-          label="Có thể rút"
+          label="Có thể chuyển vào Ví"
           value={dashQ.isError ? '—' : formatVnd(d?.withdrawableCommission ?? 0)}
           highlight
         />
       </div>
       {(d?.withdrawingCommission ?? 0) > 0 && (
         <Text variant="caption" tone="secondary" as="p" style={{ ...BLOCK_GAP, marginTop: -4 }}>
-          Đang rút {formatVnd(d!.withdrawingCommission!)} về ngân hàng — chờ Tubu Tree duyệt và chuyển khoản.
+          Còn {formatVnd(d!.withdrawingCommission!)} nằm trong lệnh rút ngân hàng cũ, đang chờ Tubu Tree xử lý.
         </Text>
       )}
 
@@ -707,7 +702,7 @@ function Dashboard() {
         )}
       </Section>
 
-      <Section title="Lệnh rút">
+      <Section title="Lịch sử chuyển vào Ví">
         {taxQ.data && taxQ.data.totals.taxWithheld > 0 && (
           <div style={{ marginBottom: 8 }}>
             <Text variant="body-sm" as="div">
@@ -731,7 +726,7 @@ function Dashboard() {
           <SectionSkeleton />
         ) : (
           <Text variant="body-sm" tone="tertiary" as="p" style={{ margin: 0 }}>
-            Chưa có lệnh rút nào.
+            Chưa có lần chuyển nào.
           </Text>
         )}
       </Section>
@@ -826,25 +821,25 @@ function Dashboard() {
 
       <div style={{ height: 24 }} />
 
-      <BottomSheet open={withdrawing} onClose={() => setWithdrawing(false)} title="Rút hoa hồng">
+      <BottomSheet open={transferring} onClose={() => setTransferring(false)} title="Chuyển hoa hồng vào Ví">
         {/* Mount khi mở để form lấy ĐÚNG max hiện tại (tránh kẹt amount="0" nếu data về sau lần mount đầu). */}
-        {withdrawing && (
-          <WithdrawForm
+        {transferring && (
+          <TransferForm
             max={d?.withdrawableCommission ?? 0}
             taxPreview={d?.withdrawTaxPreview}
             taxIdOnFile={meQ.data?.personalTaxId ?? null}
             // dashQ lỗi → max tạm =0 (không phải số dư thật) — đừng chặn theo max chưa xác thực,
-            // để BE tự validate số dư (đồng bộ với nút "Rút hoa hồng" phía trên vẫn cho mở sheet).
+            // để BE tự validate số dư (đồng bộ với nút "Chuyển vào Ví" phía trên vẫn cho mở sheet).
             knownMax={!dashQ.isError}
             onDone={() => {
-              setWithdrawing(false);
+              setTransferring(false);
               void qc.invalidateQueries({ queryKey: ['affiliate-dashboard'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-commissions'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-payouts'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-tax-statement'] });
               void qc.invalidateQueries({ queryKey: ['affiliate-me'] });
-              // Rút về WALLET_BALANCE cộng thẳng vào Ví Tubu — invalidate để trang Ví không
-              // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi rút.
+              // Chuyển vào Ví cộng thẳng vào Ví Tubu — invalidate để trang Ví không
+              // hiển thị số dư cũ (cache stale) nếu user chuyển sang đó ngay sau khi chuyển.
               void qc.invalidateQueries({ queryKey: ['wallet'] });
             }}
           />
@@ -859,7 +854,7 @@ function Dashboard() {
   );
 }
 
-function WithdrawForm({
+function TransferForm({
   max,
   taxPreview,
   knownMax,
@@ -867,30 +862,26 @@ function WithdrawForm({
   onDone,
 }: {
   max: number;
-  /** Thuế máy chủ sẽ khấu trừ nếu rút hết ngay (đã cộng dồn các lần rút trong tháng); thiếu khi API cũ. */
+  /** Thuế máy chủ sẽ khấu trừ nếu chuyển hết ngay (đã cộng dồn các lần chuyển trong tháng); thiếu khi API cũ. */
   taxPreview?: number;
   knownMax: boolean;
   taxIdOnFile: string | null;
   onDone: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
-  // P0 FIX (A5-07): KHÔNG còn đọc affiliateWalletMultiplier — rút về Ví Tubu là quy đổi 1:1.
-  const { affiliateMinWithdrawBank: minBank, affiliatePitWithhold: pit, isLoaded: cfgLoaded } = usePublicConfig();
-  const [method, setMethod] = useState<'BANK' | 'WALLET_BALANCE'>('WALLET_BALANCE');
-  const [bank, setBank] = useState({ bankName: '', accountNumber: '', accountName: '' });
+  // Không đọc affiliateWalletMultiplier: chuyển hoa hồng vào Ví Tubu là quy đổi 1:1.
+  const { affiliatePitWithhold: pit, isLoaded: cfgLoaded } = usePublicConfig();
   const [taxId, setTaxId] = useState('');
-  // Một khoá cho mỗi lần mở form: chạm đúp hay thử lại sau lỗi mạng gửi cùng khoá nên BE không tạo lệnh rút thứ hai.
+  // Một khoá cho mỗi lần mở form: chạm đúp hay thử lại sau lỗi mạng gửi cùng khoá nên BE không tạo lệnh thứ hai.
   const payKey = useRef(newIdempotencyKey());
 
   const mut = useMutation({
     mutationFn: () =>
-      askTaxId
-        ? requestPayout(max, method, method === 'BANK' ? bank : undefined, payKey.current, taxId.trim())
-        : requestPayout(max, method, method === 'BANK' ? bank : undefined, payKey.current),
+      askTaxId ? requestPayout(max, payKey.current, taxId.trim()) : requestPayout(max, payKey.current),
     onSuccess: (r) => {
       haptic('medium');
       openSnackbar({
-        text: r.note ?? (method === 'BANK' ? 'Đã gửi lệnh rút. Theo dõi trạng thái ở mục Lệnh rút.' : 'Đã gửi yêu cầu rút.'),
+        text: r.note ?? 'Đã chuyển hoa hồng vào Ví Tubu.',
         type: 'success',
       });
       onDone();
@@ -898,61 +889,40 @@ function WithdrawForm({
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  // BE chỉ nhận rút toàn bộ hoa hồng có thể rút (affiliate.service.requestPayout), nên số tiền không cho sửa.
+  // BE chỉ nhận chuyển toàn bộ hoa hồng có thể chuyển (affiliate.service.requestPayout), nên số tiền không cho sửa.
   const amountNum = max;
   const tax = taxPreview ?? payoutTax(amountNum, pit);
-  // Lần rút bị khấu trừ thuế TNCN cần MST/CCCD để Tubu Tree kê khai và cấp chứng từ (BE trả PIT_TAX_ID_REQUIRED nếu thiếu).
+  // Lần chuyển bị khấu trừ thuế TNCN cần MST/CCCD để Tubu Tree kê khai và cấp chứng từ (BE trả PIT_TAX_ID_REQUIRED nếu thiếu).
   const askTaxId = tax > 0 && !taxIdOnFile;
   const taxIdValid = !askTaxId || PERSONAL_TAX_ID_PATTERN.test(taxId.trim());
-  const bankValid =
-    method !== 'BANK' ||
-    (bank.bankName.trim() && bank.accountNumber.trim().length >= 6 && bank.accountName.trim());
   // knownMax=false khi dashboard lỗi (max truyền vào tạm =0, KHÔNG phải số dư thật) — bỏ qua so
   // sánh với max để không khoá chết nút Gửi; BE vẫn tự validate số dư thật khi submit.
   // !mut.isPending chặn double-submit (Button.loading của zmp-ui KHÔNG tự set thuộc tính disabled).
   const valid =
     knownMax &&
     amountNum > 0 &&
-    // Chờ config THẬT trước khi cho gửi lệnh rút về ngân hàng: mốc mặc định (50k) có thể khác
-    // config đang chạy, nên trong ~200ms đầu CTV gõ 60k sẽ thấy nút hợp lệ rồi bị BE từ chối,
-    // và nhãn "Tối thiểu 50k" cũng hiện sai trong khoảng đó.
-    (method !== 'BANK' || (cfgLoaded && amountNum >= minBank)) &&
-    bankValid &&
+    // Chờ config THẬT: mức thuế TNCN lấy từ config, chưa có thì số nhận trên nút có thể lệch số được cộng.
+    cfgLoaded &&
     taxIdValid &&
     !mut.isPending;
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <ChoiceCard
-          active={method === 'WALLET_BALANCE'}
-          title="Ví Tubu"
-          sub="Quy đổi 1:1, nhận ngay"
-          onPress={() => setMethod('WALLET_BALANCE')}
-        />
-        <ChoiceCard
-          active={method === 'BANK'}
-          title="Ngân hàng"
-          sub={cfgLoaded ? `Tối thiểu ${formatVndShort(minBank)}` : 'Đang tải mốc tối thiểu…'}
-          onPress={() => setMethod('BANK')}
-        />
-      </div>
-
       {knownMax ? (
         <div>
           <Text variant="caption" tone="secondary" as="div">
-            Số tiền rút
+            Số tiền chuyển vào Ví
           </Text>
           <Text variant="price-md" as="div">
             {formatVnd(amountNum)}
           </Text>
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-            Mỗi lần rút là toàn bộ hoa hồng có thể rút.
+            Mỗi lần chuyển là toàn bộ hoa hồng có thể chuyển.
           </Text>
           {pit && pit.pct > 0 && (
             <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 2 }}>
-              Thuế TNCN {Math.round(Math.min(pit.pct, 1) * 100)}% tính trên tổng hoa hồng bạn rút trong tháng (giờ Việt Nam). Khi
-              tổng từ {formatVnd(pit.threshold)} trở lên, thuế của các lần rút trước trong tháng chưa bị trừ sẽ được trừ bù vào lần rút này (tối đa bằng số tiền lần này).
+              Thuế TNCN {Math.round(Math.min(pit.pct, 1) * 100)}% tính trên tổng hoa hồng bạn chuyển trong tháng (giờ Việt Nam). Khi
+              tổng từ {formatVnd(pit.threshold)} trở lên, thuế của các lần chuyển trước trong tháng chưa bị trừ sẽ được trừ bù vào lần chuyển này (tối đa bằng số tiền lần này).
             </Text>
           )}
           {tax > 0 && (
@@ -969,7 +939,7 @@ function WithdrawForm({
       ) : (
         <div role="alert">
           <Text variant="caption" tone="danger" as="p" style={{ margin: 0 }}>
-            Chưa tải được số hoa hồng có thể rút. Đóng lại rồi thử lại sau ít phút.
+            Chưa tải được số hoa hồng có thể chuyển. Đóng lại rồi thử lại sau ít phút.
           </Text>
         </div>
       )}
@@ -995,26 +965,6 @@ function WithdrawForm({
         </div>
       )}
 
-      {method === 'BANK' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-          <Input
-            label="Tên ngân hàng"
-            value={bank.bankName}
-            onChange={(e) => setBank((b) => ({ ...b, bankName: e.target.value }))}
-          />
-          <Input
-            label="Số tài khoản"
-            value={bank.accountNumber}
-            onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))}
-          />
-          <Input
-            label="Chủ tài khoản"
-            value={bank.accountName}
-            onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))}
-          />
-        </div>
-      )}
-
       <Button
         fullWidth
         loading={mut.isPending}
@@ -1022,9 +972,7 @@ function WithdrawForm({
         onPress={() => mut.mutate()}
         style={{ marginTop: 20 }}
       >
-        {method === 'WALLET_BALANCE'
-          ? `Nhận ${formatVnd(amountNum - tax)} vào Ví`
-          : `Rút ${formatVnd(amountNum)}`}
+        {`Nhận ${formatVnd(amountNum - tax)} vào Ví`}
       </Button>
     </div>
   );
@@ -1054,7 +1002,7 @@ function PayoutRow({ p }: { p: AffiliatePayout }) {
       )}
       {p.status === 'REJECTED' && (
         <Text variant="caption" tone="danger" as="div">
-          Lý do: {p.rejectionReason ?? 'không ghi lý do'}. Hoa hồng đã trở lại mục Có thể rút.
+          Lý do: {p.rejectionReason ?? 'không ghi lý do'}. Hoa hồng đã trở lại mục Có thể chuyển vào Ví.
         </Text>
       )}
       {p.bankRef && (

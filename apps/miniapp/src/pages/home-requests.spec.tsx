@@ -43,7 +43,6 @@ const PUBLIC_FEED = {
     freeshipThreshold: 350_000,
     subscribeDiscountPct: 0.17,
     affiliateWalletMultiplier: 1,
-    affiliateMinWithdrawBank: 50_000,
     cashbackHoldDays: 30,
     newCustomer: { welcomeVoucher: { amount: 25_000, minOrder: 150_000 }, firstOrderFreeShip: { enabled: false, minSubtotal: 0 } },
     loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },

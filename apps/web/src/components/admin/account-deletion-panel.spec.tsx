@@ -46,6 +46,16 @@ const req = (over: Partial<AdminDeletionRequest> = {}): AdminDeletionRequest => 
 });
 
 describe('AccountDeletionPanel (C-016)', () => {
+  it('khách đã đồng ý bỏ số dư Ví: admin thấy số tiền và thời điểm đồng ý', async () => {
+    const api = mockFetch({
+      '/admin/account-deletion-requests': { body: [req({ walletForfeitAmount: 42000, walletForfeitConsentAt: '2026-10-25T03:00:00.000Z' })] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<AccountDeletionPanel />);
+    await flush();
+    expect(container.textContent).toContain('Khách đã đồng ý bỏ số dư Ví 42.000đ');
+  });
+
   it('liệt kê yêu cầu chờ xử lý kèm tên, SĐT, lý do', async () => {
     const api = mockFetch({ '/admin/account-deletion-requests': { body: [req()] } });
     vi.stubGlobal('fetch', vi.fn(api.fn));

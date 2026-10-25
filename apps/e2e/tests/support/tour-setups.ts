@@ -135,7 +135,7 @@ function wasteCustomer(api: MockApi) {
 export const SETUPS: Record<string, (api: MockApi) => void> = {
   '/checkout': (api) => {
     api.post('/checkout/quote', { subtotal: tourCart().subtotal, discount: 0, comboDiscount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 0, total: tourCart().subtotal, pointsEarned: 11, pointsBalance: 1800 });
-    api.get('/me/wallet', { walletBalance: 350_000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 100_000, withdrawFee: 3_000 });
+    api.get('/me/wallet', { walletBalance: 350_000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
   },
   '/bank-payment/:code': (api) => {
     api.get('/payments/bank-qr/:code', { ...BANK_QR, orderCode: BANK_CODE, memo: BANK_CODE, amount: 578_000 });

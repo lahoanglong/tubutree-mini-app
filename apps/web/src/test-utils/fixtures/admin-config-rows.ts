@@ -8,7 +8,6 @@ import type { ConfigRow } from '@/lib/admin-client';
 export const ADMIN_CONFIG_ROWS: ConfigRow[] = [
   {"key": "affiliate.attribution_days", "value": 7, "description": "Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó", "category": "affiliate"},
   {"key": "affiliate.hold_days", "value": 10, "description": "Hold ngày sau DELIVERED trước khi APPROVED", "category": "affiliate"},
-  {"key": "affiliate.min_withdraw_bank", "value": 50000, "description": "Min rút STK", "category": "affiliate"},
   {"key": "attendance.cancel_notice_days", "value": 3, "description": "Huỷ ca báo trước X ngày", "category": "attendance"},
   {"key": "attendance.checkin_early_min", "value": 60, "description": "Cho checkin sớm nhất X phút trước giờ vào ca (chặn checkin vào ca của ngày khác)", "category": "attendance"},
   {"key": "attendance.emergency_cap_month", "value": 3, "description": "Số lần huỷ đột xuất miễn phạt/tháng", "category": "attendance"},
@@ -109,6 +108,4 @@ export const ADMIN_CONFIG_ROWS: ConfigRow[] = [
   {"key": "voucher.welcome_min_order", "value": 199000, "description": "Đơn tối thiểu (đ) để dùng mã giảm giá chào mừng", "category": "voucher"},
   {"key": "voucher.winback_amount", "value": 50000, "description": "Mã giảm giá quay lại (đ)", "category": "voucher"},
   {"key": "voucher.winback_days", "value": 60, "description": "Khách từng mua nhưng quá số ngày này chưa đặt lại thì nhận mã giảm giá quay lại", "category": "voucher"},
-  {"key": "wallet.withdraw_fee", "value": 3000, "description": "Phí chuyển khoản ngân hàng/lần", "category": "wallet"},
-  {"key": "wallet.withdraw_min", "value": 100000, "description": "Rút Ví về ngân hàng tối thiểu", "category": "wallet"},
 ];

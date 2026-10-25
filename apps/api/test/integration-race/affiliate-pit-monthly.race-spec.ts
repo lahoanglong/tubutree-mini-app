@@ -7,7 +7,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
-import { createOrder, createUser, randCode, setConfig, sleep, warmPool } from './helpers';
+import { createOrder, createUser, legacyBankCommissionPayout, randCode, setConfig, sleep, warmPool } from './helpers';
 
 /**
  * Q2: thuế TNCN 10% xét trên TỔNG các lần rút hoa hồng trong tháng VN (ngưỡng 2.000.000đ), truy thu phần các lần nhỏ trước.
@@ -18,7 +18,6 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
   let prisma: PrismaService;
   let affiliate: AffiliateService;
   const MST = '079201001234';
-  const bank = { bankName: 'VCB', accountNumber: '0123456789', accountName: 'CTV IT' };
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -36,7 +35,6 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
-    await setConfig(prisma, 'affiliate.min_withdraw_bank', 50_000);
     await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
     await setConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000);
   });
@@ -81,7 +79,7 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
     await approvedCommission(u.id, 1_500_000);
     await affiliate.requestPayout(u.id, 1_500_000, 'WALLET_BALANCE');
     await approvedCommission(u.id, 1_500_000);
-    await affiliate.requestPayout(u.id, 1_500_000, 'BANK', bank, undefined, MST);
+    await legacyBankCommissionPayout(prisma, affiliate, u.id, MST);
 
     const { rows, gross, tax } = await monthTotals(u.id);
     expect(rows.map((r) => r.taxWithheld)).toEqual([0, 300_000]);
@@ -206,7 +204,8 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
           if (row.status === 'PAID' || row.payoutBatchId) return;
           const { withdrawableCommission } = await affiliate.dashboard(u.id);
           try {
-            await affiliate.requestPayout(u.id, withdrawableCommission, i % 2 ? 'BANK' : 'WALLET_BALANCE', i % 2 ? bank : undefined, `pit-${randCode(10)}`);
+            if (i % 2) await legacyBankCommissionPayout(prisma, affiliate, u.id);
+            else await affiliate.requestPayout(u.id, withdrawableCommission, 'WALLET_BALANCE', undefined, `pit-${randCode(10)}`);
           } catch {
             await sleep(30);
           }
@@ -234,7 +233,8 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
 
     async function payoutVia(userId: string, amount: number, method: 'BANK' | 'WALLET_BALANCE') {
       await approvedCommission(userId, amount);
-      await affiliate.requestPayout(userId, amount, method, method === 'BANK' ? bank : undefined, undefined, MST);
+      if (method === 'BANK') await legacyBankCommissionPayout(prisma, affiliate, userId, MST);
+      else await affiliate.requestPayout(userId, amount, method, undefined, undefined, MST);
       return prisma.payout.findFirstOrThrow({ where: { userId, method }, orderBy: { requestedAt: 'desc' } });
     }
 
@@ -260,7 +260,7 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
       const u = await ctv();
       const a = await payoutVia(u.id, 1_500_000, 'BANK');
       await approvedCommission(u.id, 1_000_000);
-      await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+      await legacyBankCommissionPayout(prisma, affiliate, u.id, MST);
       const b = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a.id } } });
       expect(b).toMatchObject({ taxWithheld: 250_000, amount: 750_000 });
 
@@ -276,7 +276,7 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
       const u = await ctv();
       const a1 = await payoutVia(u.id, 1_000_000, 'BANK');
       await approvedCommission(u.id, 1_000_000);
-      await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+      await legacyBankCommissionPayout(prisma, affiliate, u.id, MST);
       const a2 = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a1.id } } });
       expect(a2.taxWithheld).toBe(200_000);
       const p = await payoutVia(u.id, 1_000_000, 'WALLET_BALANCE');
@@ -296,7 +296,7 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
       const u = await ctv();
       const a = await payoutVia(u.id, 1_500_000, 'BANK');
       await approvedCommission(u.id, 1_000_000);
-      await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+      await legacyBankCommissionPayout(prisma, affiliate, u.id, MST);
       const b = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a.id } } });
       expect(b.amount).toBe(750_000);
       await affiliate.rejectPayout('admin-it', a.id, 'Sai STK');
@@ -314,7 +314,7 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
         const u = await ctv();
         const a = await payoutVia(u.id, 1_500_000, 'BANK');
         await approvedCommission(u.id, 1_000_000);
-        await affiliate.requestPayout(u.id, 1_000_000, 'BANK', bank, undefined, MST);
+        await legacyBankCommissionPayout(prisma, affiliate, u.id, MST);
         const b = await prisma.payout.findFirstOrThrow({ where: { userId: u.id, status: 'REQUESTED', id: { not: a.id } } });
 
         const [, approved] = await Promise.all([

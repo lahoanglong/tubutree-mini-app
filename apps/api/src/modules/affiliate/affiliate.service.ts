@@ -92,7 +92,9 @@ function blockedCtvPaymentMethods(total: number): Partial<Record<'COD' | 'BANK_T
  * PENDING (đặt) → LOCKED (DELIVERED) → APPROVED (sau hold_days) → PAID (payout).
  */
 export const DEFAULT_PIT_WITHHOLD_PCT = 0.1;
-export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 2_000_000;
+export const DEFAULT_PIT_WITHHOLD_THRESHOLD = 5_000_000;
+/** Chính sách Zalo 4.5 cấm rút tiền/trả thưởng: hoa hồng chỉ đi một đường, vào Ví Tubu 1:1. */
+export const WALLET_ONLY_MESSAGE = 'Hoa hồng chỉ chuyển vào Ví Tubu để mua hàng.';
 export const PIT_TAX_ID_REQUIRED = 'PIT_TAX_ID_REQUIRED';
 const PIT_MONTH_LOCK = 'affiliate.pit_month';
 /** MST cá nhân 10 số (hoặc 10-3 của MST phụ thuộc), hoặc số CCCD 12 số (dùng làm MST cá nhân từ 1/7/2025). */
@@ -552,7 +554,7 @@ export class AffiliateService {
       statusCode: 400,
       error: 'Bad Request',
       code: PIT_TAX_ID_REQUIRED,
-      message: `Lần rút này được khấu trừ thuế TNCN ${vnd(taxWithheld)}. Nhập mã số thuế cá nhân hoặc số CCCD để Tubu Tree kê khai và cấp chứng từ khấu trừ thuế cho bạn.`,
+      message: `Lần chuyển này được khấu trừ thuế TNCN ${vnd(taxWithheld)}. Nhập mã số thuế cá nhân hoặc số CCCD để Tubu Tree kê khai và cấp chứng từ khấu trừ thuế cho bạn.`,
     });
   }
 
@@ -580,10 +582,14 @@ export class AffiliateService {
 
   /**
    * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động (`affiliate.pit_withhold_pct`, mặc định 10% từ
-   * 2.000.000đ, theo Thông tư 111/2013/TT-BTC; 0% = tắt). Ngưỡng xét trên TỔNG các lệnh rút hoa hồng trong tháng VN, kể cả lần này:
+   * 5.000.000đ; 0% = tắt). Hoa hồng là thù lao bằng tiền nên chuyển vào Ví vẫn là thu nhập tiền công theo Luật Thuế TNCN 2025. LUẬT
+   * (khoản 2 Điều 50 Nghị định 253/2026/NĐ-CP, hiệu lực 01/07/2026, thay ngưỡng 2.000.000đ của Thông tư 111/2013/TT-BTC): khấu trừ
+   * 10% khi trả từ 5.000.000đ MỖI LẦN; dưới mức đó chỉ khấu trừ khi cá nhân yêu cầu. MÃ này cộng dồn theo tháng VN nên CHẶT HƠN luật,
+   * cố ý để không chia nhỏ lần chuyển né thuế (lấy cùng con số 5.000.000đ làm ngưỡng cho TỔNG tháng). Ngưỡng xét trên TỔNG các lệnh
+   * chuyển hoa hồng trong tháng VN, kể cả lần này:
    * từ ngưỡng trở lên thì khấu trừ pct × tổng tháng trừ phần thuế thực giữ ở các lệnh trước (taxWithheld − taxRefunded; truy thu
    * các lần nhỏ trước đó). Phần truy thu vượt số tiền lần này thì chỉ trừ tối đa bằng lần này, phần còn thiếu dồn sang lần sau.
-   * Lệnh bị từ chối và lệnh rút Ví về ngân hàng (không có grossAmount) không tính. Phải gọi sau `lockPitMonth` trong cùng transaction.
+   * Lệnh bị từ chối và lệnh rút Ví về ngân hàng cũ (không có grossAmount) không tính. Phải gọi sau `lockPitMonth` trong cùng transaction.
    */
   async personalIncomeTax(tx: Prisma.TransactionClient, userId: string, gross: number, now: Date = new Date()): Promise<number> {
     const cfg = await this.pitConfig();
@@ -1115,20 +1121,16 @@ export class AffiliateService {
     userId: string,
     amount: number,
     method: string,
-    bankInfo?: object,
+    _bankInfo?: object,
     idempotencyKey?: string,
     taxIdInput?: string,
   ) {
-    const minWithdraw = await this.config.get<number>('affiliate.min_withdraw_bank', 50000);
-    // P0 FIX (audit A5-07, 2026-09-27): KHÔNG đọc `affiliate.tubu_wallet_multiplier` ở đây nữa —
-    // walletBalance là tiền VND rút được 1:1 ra ngân hàng thật (wallet.service.ts:withdraw, trừ phí
-    // cố định), nên nhân hệ số ở đường quy đổi hoa hồng→Ví là in tiền thật (1.000.000đ hoa hồng →
-    // 1.497.000đ rút được ở hệ số mặc định cũ 1.5). Rút về Ví giờ LUÔN là quy đổi 1:1 (credited =
-    // total), bất kể SystemConfig còn seed giá trị gì cho key này. Key này vẫn tồn tại/được đọc bởi
-    // `system-config` (public config — ngoài phạm vi sửa của bản vá này) và miniapp đã ngừng hiển
-    // thị "×hệ số" (affiliate.tsx); nếu tương lai thật sự cần một khoản "bonus" khi đổi hoa hồng
-    // sang Ví, khoản đó PHẢI trả bằng Điểm Xanh (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
-    // walletBalance bằng hệ số nhân > 1.
+    if (method !== 'WALLET_BALANCE') throw new BadRequestException(WALLET_ONLY_MESSAGE);
+    // Không đọc `affiliate.tubu_wallet_multiplier` ở đây: walletBalance là VND thật (Ví dùng trả tiền hàng), nên nhân hệ
+    // số ở đường chuyển hoa hồng vào Ví là in tiền thật (1.000.000đ hoa hồng thành 1.497.000đ ở hệ số cũ 1.5). Chuyển
+    // vào Ví luôn 1:1 (credited = total), bất kể SystemConfig còn giá trị gì cho key này. Key vẫn được `system-config`
+    // (public config) đọc. Nếu cần một khoản "bonus" khi chuyển hoa hồng sang Ví, khoản đó PHẢI trả bằng Điểm Xanh,
+    // KHÔNG BAO GIỜ cộng thẳng vào walletBalance bằng hệ số nhân > 1.
 
     // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder /
     // placeOrderForCustomer ở trên) — tránh ghi '' vào payouts.idempotencyKey (unique) rồi lần
@@ -1160,7 +1162,7 @@ export class AffiliateService {
       _sum: { amount: true },
     });
     const available = approved._sum.amount ?? 0;
-    if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
+    if (available <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để chuyển vào Ví.');
     if (amount > available) throw new BadRequestException('Số dư hoa hồng khả dụng không đủ.');
     // Bug đã sửa: trước đây 'amount' chỉ được VALIDATE (amount > available → throw ở trên) nhưng
     // KHÔNG ĐƯỢC DÙNG để giới hạn số tiền rút thực — code luôn rút/cộng HẾT toàn bộ available bất
@@ -1173,106 +1175,17 @@ export class AffiliateService {
     // amount" (bug cũ) lẫn 1 thuật toán chọn row phức tạp khó review.
     if (amount < available) {
       throw new BadRequestException(
-        `Chỉ hỗ trợ rút toàn bộ số dư hoa hồng khả dụng (${available.toLocaleString('vi-VN')}đ), không hỗ trợ rút một phần.`,
+        `Chỉ chuyển được toàn bộ hoa hồng khả dụng (${available.toLocaleString('vi-VN')}đ) vào Ví, không chuyển một phần.`,
       );
     }
 
     // Rút = cash-out TOÀN BỘ hoa hồng khả dụng (commission là bản ghi rời rạc, không
     // tách lẻ theo số tiền tùy ý). credited tính theo tổng THỰC trong transaction →
     // không mất tiền; gate theo updateMany.count → không double-spend khi chạy đồng thời.
-    if (method === 'WALLET_BALANCE') {
-      let result: { credited: number };
-      try {
-        result = await this.prisma.$transaction(async (tx) => {
-          // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
-          const now = new Date();
-          await this.lockPitMonth(tx, userId, now);
-          const rows = await tx.commission.findMany({
-            where: { affiliateUserId: userId, status: 'APPROVED', payoutBatchId: null },
-            select: { id: true, amount: true },
-          });
-          const total = rows.reduce((s, c) => s + c.amount, 0);
-          // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
-          const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
-          const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
-          const marked = await tx.commission.updateMany({
-            where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-            data: { status: 'PAID', paidAt: new Date() },
-          });
-          if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
-          // marked.count !== rows.length nghĩa là 1 phần row đã bị thay đổi (status/payoutBatchId)
-          // GIỮA lúc đọc (rows/total) và lúc updateMany — total tính từ rows cũ không còn khớp với
-          // số row thực sự vừa bị đánh dấu PAID. Trước đây chỉ check marked.count===0 nên vẫn coi
-          // là thành công với total có thể SAI (thừa/thiếu tiền cộng vào ví) — throw rõ ràng để
-          // client thử lại thay vì tiếp tục với số liệu không nhất quán.
-          if (marked.count !== rows.length) {
-            throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
-          }
-          const credited = total - taxWithheld;
-          const payout = await tx.payout.create({
-            data: {
-              userId,
-              amount: credited,
-              grossAmount: total,
-              taxWithheld,
-              taxId,
-              method,
-              status: 'PAID',
-              requestedAt: now,
-              paidAt: new Date(),
-              idempotencyKey: key,
-            },
-          });
-          // Phần truy thu có thể ăn hết số tiền lần này (net 0): sổ ví không nhận dòng 0đ.
-          if (credited > 0) {
-            await applyWalletDelta(tx, {
-              userId,
-              delta: credited,
-              type: 'COMMISSION_PAYOUT',
-              refType: 'PAYOUT',
-              refId: payout.id,
-              reason: taxWithheld
-                ? `Rút ${rows.length} khoản hoa hồng về Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
-                : `Rút ${rows.length} khoản hoa hồng về Ví`,
-            });
-          }
-          return { credited };
-        });
-      } catch (err) {
-        // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn P2002 trên
-        // idempotencyKey khi payout.create (toàn bộ transaction rollback, KHÔNG double-credit).
-        // Trả lại kết quả của request thắng (mirror wallet.withdraw).
-        if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
-          const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
-          if (existing && existing.userId === userId) {
-            return {
-              ok: true,
-              method: existing.method,
-              credited: existing.amount,
-              note: `Đã cộng ${existing.amount}đ vào Ví Tubu.`,
-            };
-          }
-        }
-        throw err;
-      }
-      return {
-        ok: true,
-        method,
-        credited: result.credited,
-        note:
-          result.credited > 0
-            ? `Đã cộng ${result.credited}đ vào Ví Tubu.`
-            : 'Toàn bộ số rút lần này được khấu trừ thuế TNCN (truy thu các lần rút trước trong tháng), chưa có tiền cộng vào Ví.',
-      };
-    }
-
-    // Rút về STK ngân hàng.
-    if (amount < minWithdraw) {
-      throw new BadRequestException(`Số tiền rút tối thiểu ${minWithdraw.toLocaleString('vi-VN')}đ.`);
-    }
-    let payout: { id: string; status: string };
+    let result: { credited: number };
     try {
-      payout = await this.prisma.$transaction(async (tx) => {
+      result = await this.prisma.$transaction(async (tx) => {
+        // Một mốc giờ cho khoá, khung tháng cộng dồn và requestedAt: lệch nhau quanh nửa đêm cuối tháng thì lệnh rơi sang tháng khác.
         const now = new Date();
         await this.lockPitMonth(tx, userId, now);
         const rows = await tx.commission.findMany({
@@ -1280,46 +1193,78 @@ export class AffiliateService {
           select: { id: true, amount: true },
         });
         const total = rows.reduce((s, c) => s + c.amount, 0);
-        if (total <= 0) throw new BadRequestException('Không có hoa hồng khả dụng để rút.');
+        // P0 FIX (A5-07): quy đổi 1:1, KHÔNG nhân hệ số — xem giải thích ở đầu hàm. Trừ thuế TNCN khấu trừ (SELLER-11).
         const taxWithheld = await this.personalIncomeTax(tx, userId, total, now);
         const taxId = await this.taxIdForPayout(tx, userId, taxWithheld, taxIdInput);
-        const p = await tx.payout.create({
-          data: {
-            userId,
-            amount: total - taxWithheld,
-            grossAmount: total,
-            taxWithheld,
-            taxId,
-            method: 'BANK',
-            bankInfo: bankInfo ?? {},
-            status: 'REQUESTED',
-            requestedAt: now,
-            idempotencyKey: key,
-          },
-        });
-        // Gán batch để loại khỏi "khả dụng" → chống rút trùng (gate theo count). Vẫn APPROVED ("Đang rút") cho tới khi admin
-        // xác nhận đã chuyển tiền (SELLER-10): trước đây set PAID ngay lúc CTV bấm rút.
         const marked = await tx.commission.updateMany({
           where: { id: { in: rows.map((r) => r.id) }, status: 'APPROVED', payoutBatchId: null },
-          data: { payoutBatchId: p.id },
+          data: { status: 'PAID', paidAt: new Date() },
         });
-        if (marked.count === 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
-        // Xem giải thích ở nhánh WALLET_BALANCE phía trên — cùng 1 kiểu race hiếm cần chặn.
+        if (marked.count === 0 || total <= 0) throw new BadRequestException('Hoa hồng đã được xử lý.');
+        // marked.count !== rows.length nghĩa là 1 phần row đã bị thay đổi (status/payoutBatchId)
+        // GIỮA lúc đọc (rows/total) và lúc updateMany — total tính từ rows cũ không còn khớp với
+        // số row thực sự vừa bị đánh dấu PAID. Trước đây chỉ check marked.count===0 nên vẫn coi
+        // là thành công với total có thể SAI (thừa/thiếu tiền cộng vào ví) — throw rõ ràng để
+        // client thử lại thay vì tiếp tục với số liệu không nhất quán.
         if (marked.count !== rows.length) {
           throw new ConflictException('Dữ liệu hoa hồng đã thay đổi, vui lòng thử lại.');
         }
-        return p;
+        const credited = total - taxWithheld;
+        const payout = await tx.payout.create({
+          data: {
+            userId,
+            amount: credited,
+            grossAmount: total,
+            taxWithheld,
+            taxId,
+            method,
+            status: 'PAID',
+            requestedAt: now,
+            paidAt: new Date(),
+            idempotencyKey: key,
+          },
+        });
+        // Phần truy thu có thể ăn hết số tiền lần này (net 0): sổ ví không nhận dòng 0đ.
+        if (credited > 0) {
+          await applyWalletDelta(tx, {
+            userId,
+            delta: credited,
+            type: 'COMMISSION_PAYOUT',
+            refType: 'PAYOUT',
+            refId: payout.id,
+            reason: taxWithheld
+              ? `Chuyển ${rows.length} khoản hoa hồng vào Ví (đã khấu trừ thuế TNCN ${vnd(taxWithheld)})`
+              : `Chuyển ${rows.length} khoản hoa hồng vào Ví`,
+          });
+        }
+        return { credited };
       });
     } catch (err) {
+      // Race idempotency: 2 request cùng key chạy đồng thời — request thua ăn P2002 trên
+      // idempotencyKey khi payout.create (toàn bộ transaction rollback, KHÔNG double-credit).
+      // Trả lại kết quả của request thắng (mirror wallet.withdraw).
       if (key && typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002') {
         const existing = await this.prisma.payout.findUnique({ where: { idempotencyKey: key } });
         if (existing && existing.userId === userId) {
-          return { ok: true, payoutId: existing.id, status: existing.status };
+          return {
+            ok: true,
+            method: existing.method,
+            credited: existing.amount,
+            note: `Đã cộng ${existing.amount}đ vào Ví Tubu.`,
+          };
         }
       }
       throw err;
     }
-    return { ok: true, payoutId: payout.id, status: 'REQUESTED' };
+    return {
+      ok: true,
+      method,
+      credited: result.credited,
+      note:
+        result.credited > 0
+          ? `Đã cộng ${result.credited}đ vào Ví Tubu.`
+          : 'Toàn bộ số chuyển lần này được khấu trừ thuế TNCN (truy thu các lần chuyển trước trong tháng), chưa có tiền cộng vào Ví.',
+    };
   }
 
   /**
@@ -1369,7 +1314,7 @@ export class AffiliateService {
   }
 
   /**
-   * Báo CTV hoa hồng vừa được duyệt (có thể rút), gộp theo người: một lượt cron có thể chốt nhiều
+   * Báo CTV hoa hồng vừa được duyệt (có thể chuyển vào Ví), gộp theo người: một lượt cron có thể chốt nhiều
    * khoản của cùng CTV, mỗi khoản một tin là spam. Lọc đúng lượt này bằng `approvedAt` trùng
    * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Mọi lỗi chỉ log: tiền
    * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
@@ -1579,7 +1524,7 @@ export class AffiliateService {
   /**
    * A5-11 (audit 2026-09): "Hoa hồng tháng này/Hôm nay" trên dashboard CTV — trước đây cộng CẢ
    * commission đã REJECTED (đơn huỷ/trả), nên con số lớn nhất màn hình không bao giờ giảm khi đơn
-   * bị huỷ dù "Đang chờ"/"Có thể rút" vẫn giảm đúng, gây lệch không giải thích được. Loại REJECTED
+   * bị huỷ dù "Đang chờ"/"Có thể chuyển vào Ví" vẫn giảm đúng, gây lệch không giải thích được. Loại REJECTED
    * — nhưng KHÔNG chỉ còn APPROVED/PAID như confirmedRevenue() (đó là "đã chốt" dùng cho bậc/mốc):
    * ở đây PENDING/LOCKED vẫn phải cộng như cũ, vì CTV cần thấy hoa hồng mới phát sinh ngay cả khi
    * đơn chưa giao xong. Mirror filter đã dùng ở productCommissionBreakdown() — định nghĩa DUY NHẤT
@@ -1658,13 +1603,13 @@ export class AffiliateService {
   }
 
   /**
-   * Nhận thưởng mốc doanh số tháng → cộng Điểm Xanh lô STANDARD (KHÔNG rút được, PD-3).
+   * Nhận thưởng mốc doanh số tháng → cộng Điểm Xanh lô STANDARD (không phải tiền, PD-3).
    * MONEY-CRITICAL:
    *  - Điều kiện đọc doanh số ĐÃ CHỐT trong CÙNG tx (không đếm đơn còn huỷ/trả được).
    *  - Idempotent dưới đồng thời: insert ctv_milestone_claims (unique userId+milestoneId+monthKey)
    *    TRƯỚC khi cấp điểm; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
    *  - Cấp qua RewardPointsService.grant(tx) — dòng sổ điểm + pointsBalance cùng tx (giữ bất biến
-   *    pointsBalance == SUM(delta) lô STANDARD). Không bao giờ cộng walletBalance (tiền rút được).
+   *    pointsBalance == SUM(delta) lô STANDARD). Không bao giờ cộng walletBalance (tiền VND thật).
    *  - `monthKey` chỉ nhận tháng này hoặc tháng trước (VN).
    */
   async claimMilestone(userId: string, milestoneId: string, monthKey?: string, now: Date = new Date()) {

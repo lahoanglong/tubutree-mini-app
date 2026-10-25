@@ -2,9 +2,18 @@
 
 import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, TreePine } from 'lucide-react';
 import { requestAccountDeletion } from '@tubutree/app-core/api/account';
+import { walletQuery } from '@tubutree/app-core/queries/wallet';
+import {
+  WALLET_FORFEIT_AGREE,
+  WALLET_FORFEIT_LOADING,
+  WALLET_FORFEIT_UNKNOWN,
+  canSubmitDeletion,
+  walletForfeitConsent,
+  walletForfeitNotice,
+} from '@tubutree/app-core/account-deletion-copy';
 import type { FaqItem, PublicConfig, SupportContact } from '@tubutree/app-core/api/config';
 import { faqsQuery, publicConfigQuery, supportContactQuery } from '@tubutree/app-core/queries/config';
 import { mini } from '@/components/order-mobile/mobile-ui';
@@ -16,6 +25,7 @@ import { coreHttp } from '@/lib/core-http';
 import { fallbackFaq } from '@/lib/faq-fallback';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { formatVnd } from '@/lib/format-vnd';
 import { platformBridge } from '@/lib/platform-bridge';
 
 const ALL_CATS = 'Tất cả';
@@ -227,7 +237,17 @@ function SupportSection({ initialSupport }: { initialSupport?: SupportContact })
 function AccountSection() {
   const { logout } = useAuth();
   const [confirming, setConfirming] = useState(false);
-  const del = useMutation({ mutationFn: () => requestAccountDeletion(coreHttp) });
+  const qc = useQueryClient();
+  const [agreed, setAgreed] = useState(false);
+  const walletQ = useQuery({ ...walletQuery(coreHttp), enabled: confirming });
+  const balance = walletQ.data?.walletBalance;
+  const del = useMutation({
+    mutationFn: () => requestAccountDeletion(coreHttp, undefined, walletForfeitConsent(balance, agreed)),
+    onError: () => {
+      setAgreed(false);
+      void qc.invalidateQueries({ queryKey: ['wallet'] });
+    },
+  });
   const oa = platformBridge.oa.available;
 
   return (
@@ -252,13 +272,35 @@ function AccountSection() {
               {del.error instanceof Error && del.error.message ? del.error.message : DELETE_FAILED}
             </p>
           )}
+          {walletQ.isLoading && <p className="mt-2 text-xs text-stone-600">{WALLET_FORFEIT_LOADING}</p>}
+          {walletQ.isError && (
+            <p role="alert" className={`mt-2 ${ui.error}`}>
+              {WALLET_FORFEIT_UNKNOWN}
+            </p>
+          )}
+          {balance !== undefined && balance > 0 && (
+            <div className="mt-3">
+              <p className="text-sm font-bold text-stone-900">{walletForfeitNotice(formatVnd(balance))}</p>
+              <label className="mt-2 flex min-h-11 items-start gap-2 text-xs text-stone-700">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5 size-5 shrink-0" style={{ accentColor: 'var(--color-action-primary-bg)' }} />
+                <span>{WALLET_FORFEIT_AGREE}</span>
+              </label>
+            </div>
+          )}
           <div className="mt-3 flex gap-2">
-            <button type="button" onClick={() => setConfirming(false)} className={`${ui.btnSecondary} flex-1`}>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                setAgreed(false);
+              }}
+              className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary}`}
+            >
               Huỷ
             </button>
             <button
               type="button"
-              disabled={del.isPending}
+              disabled={del.isPending || !canSubmitDeletion(balance, agreed)}
               onClick={() => del.mutate()}
               className="inline-flex min-h-11 flex-1 items-center justify-center rounded-control bg-danger-fg px-5 text-sm font-semibold text-stone-0 transition active:scale-95 disabled:opacity-60"
             >

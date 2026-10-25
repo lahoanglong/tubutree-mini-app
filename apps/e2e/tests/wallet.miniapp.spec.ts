@@ -21,8 +21,6 @@ const WALLET: WalletSummary = {
   cashbackPending: 0,
   commissionApproved: 0,
   commissionPending: 0,
-  withdrawMin: 100000,
-  withdrawFee: 3000,
 };
 
 const LOYALTY: LoyaltyOverview = {
@@ -61,7 +59,7 @@ test.describe('Zalo Mini App E2E - Ví Tubu (không còn TubuXu)', () => {
 
     await expect(page.getByText('Ví Tubu (số dư khả dụng)')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('350.000đ').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Rút ngân hàng' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Rút/ })).toHaveCount(0);
 
     await expect(page.getByText(/tubu ?xu/i)).toHaveCount(0);
     await expect(page.getByText(/(?<![\p{L}])xu(?![\p{L}])/iu)).toHaveCount(0);

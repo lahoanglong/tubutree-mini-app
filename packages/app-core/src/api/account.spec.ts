@@ -22,12 +22,14 @@ describe('account — hợp đồng gọi API', () => {
     await completeOnboarding(http, ['mom']);
     await requestAccountDeletion(http, 'lý do');
     await requestAccountDeletion(http);
+    await requestAccountDeletion(http, undefined, { acknowledgedWalletBalance: 20000, acceptWalletForfeit: true });
     expect(calls).toEqual([
       { method: 'get', path: '/me' },
       { method: 'patch', path: '/me', body: { fullName: 'A', dob: '2000-01-01' } },
       { method: 'post', path: '/me/onboarding', body: { segments: ['mom'] } },
       { method: 'post', path: '/me/deletion-request', body: { reason: 'lý do' } },
       { method: 'post', path: '/me/deletion-request', body: { reason: undefined } },
+      { method: 'post', path: '/me/deletion-request', body: { reason: undefined, acknowledgedWalletBalance: 20000, acceptWalletForfeit: true } },
     ]);
   });
 

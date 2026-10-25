@@ -15,7 +15,7 @@ const DASH = {
 function mockSession(api: MockApi) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
-  api.get('/config/public', { freeshipThreshold: 500000, affiliateMinWithdrawBank: 50000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+  api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
 }
 
 const EMPTY_TAX = { year: 2026, fullName: null, taxId: null, items: [], totals: { grossAmount: 0, taxWithheld: 0, netAmount: 0 } };
@@ -115,52 +115,44 @@ test.describe('Web khách: CTV', () => {
     expect(calls[0]!.body).toEqual({ targetType: 'HOMEPAGE' });
   });
 
-  test('rút về Ví Tubu: gửi đúng một POST /affiliate/payouts kèm Idempotency-Key dù bấm đúp, rồi đóng sheet và báo đã gửi', async ({ page, api }) => {
+  test('chuyển vào Ví Tubu: gửi đúng một POST /affiliate/payouts kèm Idempotency-Key dù bấm đúp, rồi đóng sheet và báo đã gửi', async ({ page, api }) => {
     mockSession(api);
     mockDashboard(api, []);
     api.post('/affiliate/payouts', () => ({ ok: true, method: 'WALLET_BALANCE', credited: 80_000, payoutId: 'p1' }));
     await page.goto('/ctv');
-    await page.getByRole('button', { name: 'Rút tiền hoa hồng' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Rút hoa hồng' });
+    await page.getByRole('button', { name: 'Chuyển vào Ví Tubu' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chuyển hoa hồng vào Ví' });
     await expect(dialog.getByText('80.000đ').first()).toBeVisible();
+    await expect(dialog.getByText(/Ngân hàng|ZaloPay|tài khoản/)).toHaveCount(0);
     await dialog.getByRole('button', { name: 'Nhận 80.000đ vào Ví' }).dblclick();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByText('Đã gửi yêu cầu rút.')).toBeVisible();
+    await expect(page.getByText('Đã chuyển hoa hồng vào Ví Tubu.')).toBeVisible();
     const calls = api.callsTo('POST', '/affiliate/payouts');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ amount: 80_000, method: 'WALLET_BALANCE' });
     expect(calls[0]!.headers['idempotency-key']).toBeTruthy();
   });
 
-  test('rút về ngân hàng có khấu trừ thuế TNCN: hỏi MST, chặn tới khi đúng mẫu, gửi kèm bankInfo và taxId', async ({ page, api }) => {
+  test('chuyển vào Ví có khấu trừ thuế TNCN: hỏi MST, chặn tới khi đúng mẫu, gửi kèm taxId', async ({ page, api }) => {
     mockSession(api);
-    api.get('/config/public', { freeshipThreshold: 500000, affiliateMinWithdrawBank: 50000, affiliatePitWithhold: { pct: 0.1, threshold: 50000 }, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+    api.get('/config/public', { freeshipThreshold: 500000, affiliatePitWithhold: { pct: 0.1, threshold: 50000 }, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     mockDashboard(api, []);
-    api.post('/affiliate/payouts', () => ({ ok: true, method: 'BANK', payoutId: 'p2', status: 'REQUESTED' }));
+    api.post('/affiliate/payouts', () => ({ ok: true, method: 'WALLET_BALANCE', credited: 72_000, payoutId: 'p2' }));
     await page.goto('/ctv');
-    await page.getByRole('button', { name: 'Rút tiền hoa hồng' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Rút hoa hồng' });
-    await dialog.getByRole('button', { name: /Ngân hàng/ }).click();
+    await page.getByRole('button', { name: 'Chuyển vào Ví Tubu' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Chuyển hoa hồng vào Ví' });
     await expect(dialog.getByText('Khấu trừ thuế TNCN 8.000đ · thực nhận 72.000đ')).toBeVisible();
-    await dialog.getByLabel('Tên ngân hàng').fill('Vietcombank');
-    await dialog.getByLabel('Số tài khoản').fill('0123456789');
-    await dialog.getByLabel('Chủ tài khoản').fill('NGUYEN VAN AN');
-    const send = dialog.getByRole('button', { name: 'Rút 80.000đ' });
+    const send = dialog.getByRole('button', { name: 'Nhận 72.000đ vào Ví' });
     await expect(send).toBeDisabled();
     await dialog.getByLabel('Mã số thuế cá nhân hoặc số CCCD').fill('123');
     await expect(dialog.getByText('Mã số thuế cá nhân gồm 10 chữ số, hoặc số CCCD 12 chữ số.')).toBeVisible();
     await expect(send).toBeDisabled();
     await dialog.getByLabel('Mã số thuế cá nhân hoặc số CCCD').fill('0123456789');
     await send.click();
-    await expect(page.getByText('Đã gửi lệnh rút. Theo dõi trạng thái ở mục Lệnh rút.')).toBeVisible();
+    await expect(page.getByText('Đã chuyển hoa hồng vào Ví Tubu.')).toBeVisible();
     const calls = api.callsTo('POST', '/affiliate/payouts');
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.body).toEqual({
-      amount: 80_000,
-      method: 'BANK',
-      bankInfo: { bankName: 'Vietcombank', accountNumber: '0123456789', accountName: 'NGUYEN VAN AN' },
-      taxId: '0123456789',
-    });
+    expect(calls[0]!.body).toEqual({ amount: 80_000, method: 'WALLET_BALANCE', taxId: '0123456789' });
   });
 
   test('thưởng mốc: nhận một mốc gọi POST claim kèm tháng và hiện lời của máy chủ', async ({ page, api }) => {

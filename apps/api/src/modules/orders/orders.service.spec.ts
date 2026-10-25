@@ -91,7 +91,7 @@ function makeService(
       $queryRaw: lockRow,
       order: { updateMany, findUnique: txFindUnique },
       orderStatusHistory: { create: historyCreate },
-      user: { update: userUpdate },
+      user: { update: userUpdate, findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
       $executeRaw: executeRaw,
       coinTransaction: { create: coinCreate },
       pointsTransaction: { createManyAndReturn: pointsInsert },
@@ -100,7 +100,7 @@ function makeService(
   );
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(order), updateMany },
-    user: { update: userUpdate },
+    user: { update: userUpdate, findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
     $executeRaw: executeRaw,
     coinTransaction: { create: coinCreate },
     $transaction,

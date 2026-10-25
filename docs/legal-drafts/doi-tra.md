@@ -59,10 +59,10 @@ Tubu Tree phản hồi trong 24 giờ. Nếu cần thêm thông tin, chúng tôi
 - Phí vận chuyển được hoàn khi bạn trả cả đơn, hoặc khi lỗi thuộc về Tubu Tree, nhà sản xuất hoặc đơn vị vận chuyển. Nếu bạn chỉ trả một phần của đơn vì lý do khác, phí vận chuyển không được hoàn.
 
 **Nơi nhận tiền**
-- Ví Tubu: tiền vào ví ngay khi yêu cầu được duyệt. Bạn dùng số dư để mua hàng, hoặc rút về ngân hàng theo điều kiện ở [Điều khoản sử dụng](/chinh-sach/dieu-khoan).
-- Tài khoản ngân hàng: Tubu Tree chuyển khoản trong 1 đến 3 ngày làm việc kể từ khi duyệt, miễn phí, không giới hạn số tiền. Bạn nhập tên ngân hàng, số tài khoản và tên chủ tài khoản khi gửi yêu cầu.
+- Ví Tubu: tiền vào ví ngay khi yêu cầu được duyệt. Số dư Ví chỉ dùng để mua hàng, không rút về ngân hàng (xem [Điều khoản sử dụng](/chinh-sach/dieu-khoan)).
+- Tài khoản ngân hàng (chỉ với đơn bạn đã trả bằng chuyển khoản, ZaloPay, VNPAY hoặc tiền mặt khi nhận hàng): Tubu Tree chuyển khoản trong 1 đến 3 ngày làm việc kể từ khi duyệt, miễn phí, không giới hạn số tiền. Bạn nhập tên ngân hàng, số tài khoản và tên chủ tài khoản khi gửi yêu cầu.
 - Đơn đã thanh toán bằng Ví Tubu luôn được hoàn về Ví Tubu.
-- Bạn đổi được nơi nhận giữa Ví Tubu và ngân hàng cho đến khi Tubu Tree bắt đầu chuyển khoản. Sau đó nơi nhận đã chốt.
+- Với đơn được chọn nơi nhận, bạn đổi được giữa Ví Tubu và ngân hàng cho đến khi Tubu Tree bắt đầu chuyển khoản. Sau đó nơi nhận đã chốt.
 
 **Điểm Xanh và ưu đãi**
 - Điểm Xanh bạn đã dùng cho phần hàng được trả sẽ được hoàn lại.

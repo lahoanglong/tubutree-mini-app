@@ -7,11 +7,12 @@ import { DealerService } from '../dealer/dealer.service';
 import { lockVariationsInIdOrder, releaseVariationStock } from '../catalog/variation-stock';
 import { revokeReferralRewardForOrder, revokeReferralRewardPartially } from '../wallet/referral-reward';
 import type { ReferralNotice } from '../wallet/referral-notify';
-import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import type { WalletDeltaInput } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from '../loyalty/loyalty-expiry.service';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
-import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund-queue';
+import { createBankRefund, endCustomerPayee, holdRefundForDeletedAccount, recordWalletRefund } from './refund-queue';
+import { creditWalletUnlessAnonymized } from '../wallet/wallet-anonymized-guard';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
@@ -41,7 +42,8 @@ export interface ReversalOptions {
 /** Tiền lần đảo này trả khách và trả về đâu (để báo khách đúng số tiền, đúng nơi nhận). */
 export interface RefundOutcome {
   amount: number;
-  to: 'WALLET' | 'BANK' | 'END_CUSTOMER';
+  /** DELETED_ACCOUNT: chủ đơn đã xoá tài khoản, khoản hoàn chờ kế toán chuyển tay (không cộng Ví). */
+  to: 'WALLET' | 'BANK' | 'END_CUSTOMER' | 'DELETED_ACCOUNT';
   /** Khoản chờ chuyển khoản vừa ghi (to = BANK). */
   refundId?: string;
 }
@@ -227,10 +229,15 @@ export class OrderReversalService {
         refund = { amount: refundable, to: 'BANK', refundId: row.id };
       } else if (refunded.count === 1) {
         // Mặc định và mọi đơn trả bằng Ví: hoàn về Ví Tubu ngay.
-        moneyRefunded = await this.refundToWallet(tx, order.userId, order, refundable);
-        if (moneyRefunded) {
+        const returned = order.status === 'DELIVERED';
+        const outcome = await this.refundToWallet(tx, order.userId, order, refundable, {
+          kind: returned ? 'RETURN' : 'CANCEL',
+          refKey: opts.returnRequestId,
+          reason: returned ? 'RETURNED' : 'CANCELLED',
+        });
+        moneyRefunded = outcome === 'CREDITED';
+        if (outcome === 'CREDITED') {
           refund = { amount: refundable, to: 'WALLET' };
-          const returned = order.status === 'DELIVERED';
           await recordWalletRefund(tx, {
             order,
             kind: returned ? 'RETURN' : 'CANCEL',
@@ -238,6 +245,8 @@ export class OrderReversalService {
             amount: refundable,
             reason: returned ? 'RETURNED' : 'CANCELLED',
           });
+        } else if (outcome === 'HELD') {
+          refund = { amount: refundable, to: 'DELETED_ACCOUNT' };
         }
       }
     }
@@ -413,9 +422,13 @@ export class OrderReversalService {
         });
         result.refund = { amount, to: 'BANK', refundId: row.id };
       } else {
-        await this.creditReturnToWallet(tx, order.userId, order, amount, requestId);
-        await recordWalletRefund(tx, { order, kind: 'RETURN', refKey: requestId, amount, reason: 'RETURNED' });
-        result.refund = { amount, to: 'WALLET' };
+        if (await this.creditReturnToWallet(tx, order.userId, order, amount, requestId)) {
+          await recordWalletRefund(tx, { order, kind: 'RETURN', refKey: requestId, amount, reason: 'RETURNED' });
+          result.refund = { amount, to: 'WALLET' };
+        } else {
+          await holdRefundForDeletedAccount(tx, order, { kind: 'RETURN', refKey: requestId, amount, reason: 'RETURNED' });
+          result.refund = { amount, to: 'DELETED_ACCOUNT' };
+        }
       }
     } else if (amount > 0) {
       this.logger.warn(`Trả một phần đơn ${order.code} (${order.paymentMethod}/${order.paymentStatus}): không có khoản đã thu để hoàn ${amount}đ.`);
@@ -639,16 +652,19 @@ export class OrderReversalService {
     return restocked;
   }
 
-  /** Mỗi yêu cầu trả một dòng sổ Ví riêng (refId = yêu cầu): trả nhiều lần cùng đơn không đụng khoá (userId, type, refId). */
+  /**
+   * Mỗi yêu cầu trả một dòng sổ Ví riêng (refId = yêu cầu): trả nhiều lần cùng đơn không đụng khoá (userId, type, refId).
+   * false khi không cộng (số tiền 0 hoặc tài khoản đã ẩn danh): caller phải ghi khoản hoàn chờ chuyển tay cho trường hợp sau.
+   */
   private async creditReturnToWallet(
     tx: Prisma.TransactionClient,
     userId: string,
     order: OrderWithItems,
     amount: number,
     requestId: string,
-  ): Promise<void> {
-    if (amount <= 0) return;
-    await applyWalletDelta(tx, {
+  ): Promise<boolean> {
+    if (amount <= 0) return false;
+    return this.creditUnlessAnonymized(tx, order, {
       userId,
       delta: amount,
       type: 'ORDER_REFUND',
@@ -656,6 +672,16 @@ export class OrderReversalService {
       refId: requestId,
       reason: `Hoàn tiền trả hàng đơn ${order.code}`,
     });
+  }
+
+  private async creditUnlessAnonymized(tx: Prisma.TransactionClient, order: OrderWithItems, input: WalletDeltaInput): Promise<boolean> {
+    const res = await creditWalletUnlessAnonymized(tx, input);
+    if (!res.credited) {
+      this.logger.error(
+        `Đơn ${order.code} (orderId=${order.id}) hoàn ${input.delta}đ nhưng tài khoản ${input.userId} đã ẩn danh từ ${res.anonymizedAt}: KHÔNG cộng Ví, đã ghi khoản hoàn chờ chuyển tay.`,
+      );
+    }
+    return res.credited;
   }
 
   /**
@@ -758,15 +784,19 @@ export class OrderReversalService {
     return points;
   }
 
-  /** true khi thực sự cộng tiền vào Ví (đơn 0đ không có gì để hoàn). */
+  /**
+   * CREDITED: đã cộng Ví. HELD: chủ đơn đã xoá tài khoản (đơn đã giao chuyển RETURNED sau hạn đổi/trả vẫn tới được đây), không
+   * cộng và đã ghi khoản hoàn chờ kế toán chuyển tay. NONE: số tiền 0đ.
+   */
   private async refundToWallet(
     tx: Prisma.TransactionClient,
     userId: string,
     order: OrderWithItems,
-    amount: number = order.total,
-  ): Promise<boolean> {
-    if (amount <= 0) return false;
-    await applyWalletDelta(tx, {
+    amount: number,
+    hold: { kind: 'CANCEL' | 'RETURN'; refKey?: string; reason: string },
+  ): Promise<'CREDITED' | 'HELD' | 'NONE'> {
+    if (amount <= 0) return 'NONE';
+    const credited = await this.creditUnlessAnonymized(tx, order, {
       userId,
       delta: amount,
       type: 'ORDER_REFUND',
@@ -774,7 +804,9 @@ export class OrderReversalService {
       refId: order.id,
       reason: `Hoàn tiền đơn ${order.code}`,
     });
-    return true;
+    if (credited) return 'CREDITED';
+    await holdRefundForDeletedAccount(tx, order, { ...hold, amount });
+    return 'HELD';
   }
 
   /**
@@ -808,8 +840,19 @@ export class OrderReversalService {
 
     const reason = order.status === 'DELIVERED' ? 'RETURNED' : 'CANCELLED';
     if (customerUserId) {
-      if (ref.kind === 'RETURN') await this.creditReturnToWallet(tx, customerUserId, order, amount, ref.refKey);
-      else await this.refundToWallet(tx, customerUserId, order, amount);
+      // Khách cuối vừa xoá tài khoản giữa lúc kiểm và lúc cộng: đi đường chuyển tay như khách không có tài khoản.
+      const credited =
+        ref.kind === 'RETURN'
+          ? await this.creditReturnToWallet(tx, customerUserId, order, amount, ref.refKey)
+          : await this.creditUnlessAnonymized(tx, order, {
+              userId: customerUserId,
+              delta: amount,
+              type: 'ORDER_REFUND',
+              refType: 'ORDER',
+              refId: order.id,
+              reason: `Hoàn tiền đơn ${order.code}`,
+            });
+      if (!credited && amount > 0) customerUserId = null;
     }
     await tx.orderCustomerRefund.create({
       data: {

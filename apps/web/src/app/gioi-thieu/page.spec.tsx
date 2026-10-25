@@ -45,11 +45,15 @@ const mount = async () => {
   await flush(6);
   return r;
 };
-const button = (c: HTMLElement, name: string | RegExp) => byText(c, 'button', name)!;
+const button = (c: HTMLElement, name: string | RegExp) => byText(c, 'button', name) as HTMLButtonElement;
 
-type Setup = { faqs?: unknown; config?: unknown };
-function setup({ faqs = FAQS, config = { support: SUPPORT } }: Setup = {}) {
+type Setup = { faqs?: unknown; config?: unknown; wallet?: unknown };
+function setup({ faqs = FAQS, config = { support: SUPPORT }, wallet = { walletBalance: 0 } }: Setup = {}) {
   mocks.get.mockImplementation(async (path: string) => {
+    if (path === '/me/wallet') {
+      if (wallet instanceof Error) throw wallet;
+      return wallet;
+    }
     if (path === '/faqs') {
       if (faqs instanceof Error) throw faqs;
       return faqs;
@@ -289,6 +293,7 @@ describe('/gioi-thieu: tài khoản', () => {
     expect(mocks.post).not.toHaveBeenCalled();
 
     click(button(container, 'Xoá tài khoản'));
+    await flush();
     click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
     expect(mocks.post).toHaveBeenCalledTimes(1);
@@ -297,10 +302,56 @@ describe('/gioi-thieu: tài khoản', () => {
     expect(byText(container, 'button', 'Gửi yêu cầu xoá')).toBeNull();
   });
 
+  it('Ví còn tiền: hiện số dư mất, nút gửi bị khoá tới khi tick đồng ý, rồi gửi kèm đúng số dư đã thấy', async () => {
+    setup({ wallet: { walletBalance: 20000 } });
+    const { container } = await mount();
+    click(button(container, 'Xoá tài khoản'));
+    await flush();
+    expect(container.textContent).toContain('Ví Tubu còn 20.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại.');
+    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(true);
+    click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(false);
+    click(button(container, 'Gửi yêu cầu xoá'));
+    await flush();
+    expect(mocks.post).toHaveBeenCalledWith('/me/deletion-request', { reason: undefined, acknowledgedWalletBalance: 20000, acceptWalletForfeit: true });
+  });
+
+  it('máy chủ từ chối vì số dư đã đổi: bỏ tick, tải lại số dư, khách phải đồng ý lại với số mới', async () => {
+    let calls = 0;
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/faqs') return FAQS;
+      if (path === '/config/public') return { support: SUPPORT };
+      if (path === '/me/wallet') return { walletBalance: ++calls === 1 ? 20000 : 30000 };
+      throw new Error(`unexpected ${path}`);
+    });
+    mocks.post.mockRejectedValueOnce(new Error('Số dư Ví Tubu vừa đổi'));
+    const { container } = await mount();
+    click(button(container, 'Xoá tài khoản'));
+    await flush();
+    click(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
+    await flush();
+    click(button(container, 'Gửi yêu cầu xoá'));
+    await flush(8);
+    expect(container.textContent).toContain('Ví Tubu còn 30.000đ');
+    expect(container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(true);
+  });
+
+  it('chưa biết số dư (tải lỗi): không cho gửi', async () => {
+    setup({ wallet: new Error('mạng') });
+    const { container } = await mount();
+    click(button(container, 'Xoá tài khoản'));
+    await flush(8);
+    expect(container.textContent).toContain('Chưa tải được số dư Ví Tubu');
+    expect(button(container, 'Gửi yêu cầu xoá').disabled).toBe(true);
+  });
+
   it('gửi yêu cầu lỗi: báo lỗi và cho gửi lại', async () => {
     mocks.post.mockRejectedValueOnce(new Error('Máy chủ bận'));
     const { container } = await mount();
     click(button(container, 'Xoá tài khoản'));
+    await flush();
     click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
@@ -313,6 +364,7 @@ describe('/gioi-thieu: tài khoản', () => {
     mocks.oaAvailable = true;
     const { container } = await mount();
     click(button(container, 'Xoá tài khoản'));
+    await flush();
     click(button(container, 'Gửi yêu cầu xoá'));
     await flush();
     click(button(container, 'Nhắn Zalo OA về việc xoá tài khoản'));

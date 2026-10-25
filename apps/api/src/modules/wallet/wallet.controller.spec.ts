@@ -14,6 +14,18 @@ describe('WalletController — route TubuXu đã ngừng (PD-3)', () => {
     expect(wallet.convertToXu).toHaveBeenCalledTimes(1);
   });
 
+  it('POST /wallet/withdraw → 410 (chính sách Zalo 4.5), không đụng service', () => {
+    let err: unknown;
+    try {
+      ctl.withdraw();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(GoneException);
+    expect((err as GoneException).getStatus()).toBe(410);
+    expect((err as Error).message).toMatch(/không rút ra ngoài/);
+  });
+
   it('GET /me/coins → 410, chỉ dẫn sang /me/referral và Điểm Xanh', () => {
     let err: unknown;
     try {

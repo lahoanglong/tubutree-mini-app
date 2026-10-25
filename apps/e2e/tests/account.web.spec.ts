@@ -211,14 +211,37 @@ test.describe('Web khách: tài khoản', () => {
     api.get('/faqs', []);
     api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
     api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xoá tài khoản' });
+    api.get('/me/wallet', { walletBalance: 0, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
     await page.goto('/gioi-thieu');
 
     await expect(page.getByText('Tubu Tree bán những gì?')).toBeVisible();
     await page.getByRole('button', { name: 'Xoá tài khoản' }).click();
     await expect(page.getByText('Xoá tài khoản vĩnh viễn?')).toBeVisible();
+    await expect(page.getByText(/Ví Tubu còn/)).toHaveCount(0);
     const sent = api.waitForCall('POST', '/me/deletion-request');
     await page.getByRole('button', { name: 'Gửi yêu cầu xoá' }).click();
-    await sent;
+    expect((await sent).body).toEqual({});
+    await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xoá tài khoản' })).toBeVisible();
+  });
+
+  test('giới thiệu: Ví còn tiền phải tick đồng ý bỏ số dư; gửi kèm đúng số dư đã thấy', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    api.get('/cart', { items: [], itemCount: 0, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, couponCode: null });
+    api.get('/faqs', []);
+    api.get('/config/public', { support: { hotline: null, email: null, zaloOaName: null } });
+    api.get('/me/wallet', { walletBalance: 50000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
+    api.post('/me/deletion-request', { message: 'Đã ghi nhận yêu cầu xoá tài khoản' });
+    await page.goto('/gioi-thieu');
+
+    await page.getByRole('button', { name: 'Xoá tài khoản' }).click();
+    await expect(page.getByText('Ví Tubu còn 50.000đ. Xoá tài khoản thì số dư này mất và không hoàn lại.')).toBeVisible();
+    const send = page.getByRole('button', { name: 'Gửi yêu cầu xoá' });
+    await expect(send).toBeDisabled();
+    await page.getByRole('checkbox', { name: /Tôi đồng ý bỏ số dư Ví Tubu/ }).check();
+    await expect(send).toBeEnabled();
+    const sent = api.waitForCall('POST', '/me/deletion-request');
+    await send.click();
+    expect((await sent).body).toEqual({ acknowledgedWalletBalance: 50000, acceptWalletForfeit: true });
     await expect(page.getByRole('status').filter({ hasText: 'Đã ghi nhận yêu cầu xoá tài khoản' })).toBeVisible();
   });
 

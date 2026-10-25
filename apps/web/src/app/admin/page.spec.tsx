@@ -548,7 +548,7 @@ describe('admin/page — tab Tổng quan', () => {
     for (const b of banners) expect(b.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     expect(banners[0]!.textContent).toContain('2 đơn thu kèm Gomdon cần xử lý');
     expect(banners[1]!.textContent).toContain('3 yêu cầu nhận thưởng đại lý đang chờ duyệt');
-    expect(banners[2]!.textContent).toContain('4 lệnh rút tiền');
+    expect(banners[2]!.textContent).toContain('4 lệnh rút ngân hàng cũ');
   });
 });
 
@@ -2389,7 +2389,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Hoàn tiền khách',
       'Thưởng đại lý',
       'Đại lý & công nợ',
-      'Yêu cầu rút tiền',
+      'Thuế TNCN hoa hồng',
       'Đổi rác',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
@@ -2811,10 +2811,10 @@ describe('admin/page — trạng thái hoàn tiền thật của đơn', () => {
 });
 
 describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần xử lý" (launch review D1-08, D1-17)', () => {
-  it('thẻ rút tiền đã duyệt chờ "Đã chi" mở tab Yêu cầu rút tiền', async () => {
+  it('thẻ lệnh rút cũ đã duyệt chờ "Đã chi" mở tab Thuế TNCN hoa hồng', async () => {
     const { container } = await mount();
     const card = container.querySelector('[data-inbox="payoutsToPay"]')!;
-    expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
+    expect(card.textContent).toContain('Lệnh rút ngân hàng cũ chờ chi');
     expect(card.textContent).toContain('2');
 
     click(card);
@@ -3182,10 +3182,11 @@ describe('admin/page — UAT ui-admin-2', () => {
   });
 
   describe('D7-23: tên tab đúng chức năng', () => {
-    it('hàng đợi rút tiền gồm cả lệnh rút Ví Tubu nên tên là "Yêu cầu rút tiền", không "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
+    it('tab thuế và lệnh rút cũ tên là "Thuế TNCN hoa hồng", không "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
       const { container } = await mount();
       const items = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
-      expect(items).toContain('Yêu cầu rút tiền');
+      expect(items).toContain('Thuế TNCN hoa hồng');
+      expect(items).not.toContain('Yêu cầu rút tiền');
       expect(items).not.toContain('Rút tiền CTV');
       expect(items).toContain('Nhiệm vụ');
       expect(items).not.toContain('Duyệt yêu cầu rút tiền');

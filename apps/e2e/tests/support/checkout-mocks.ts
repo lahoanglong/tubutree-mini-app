@@ -81,8 +81,6 @@ export const CHECKOUT_WALLET: WalletSummary = {
   cashbackPending: 0,
   commissionApproved: 0,
   commissionPending: 0,
-  withdrawMin: 100000,
-  withdrawFee: 3000,
 };
 
 /**

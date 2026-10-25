@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeHttp } from './fake-http';
-import { getWallet, getWalletTransactions, withdraw } from './wallet';
+import * as wallet from './wallet';
+import { getWallet, getWalletTransactions } from './wallet';
 
 describe('wallet — hợp đồng gọi API', () => {
   it('số dư và sao kê (limit mặc định 20)', async () => {
@@ -15,17 +16,7 @@ describe('wallet — hợp đồng gọi API', () => {
     ]);
   });
 
-  it('rút tiền: cùng endpoint, body { amount, bankInfo }, Idempotency-Key ở header', async () => {
-    const { http, calls } = fakeHttp();
-    const bankInfo = { bankName: 'VCB', accountNumber: '1', accountName: 'A' };
-    await withdraw(http, 500000, bankInfo, 'key-w');
-    expect(calls).toEqual([
-      {
-        method: 'post',
-        path: '/wallet/withdraw',
-        body: { amount: 500000, bankInfo },
-        opts: { headers: { 'Idempotency-Key': 'key-w' } },
-      },
-    ]);
+  it('không còn hàm rút tiền (API trả 410)', () => {
+    expect(wallet).not.toHaveProperty('withdraw');
   });
 });

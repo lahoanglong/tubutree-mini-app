@@ -90,7 +90,7 @@ export class SystemConfigService {
    * Biên hợp lệ cho những khoá mà ĐƠN VỊ dễ gõ nhầm. Kiểm tra kiểu (số vẫn là số) không cứu
    * được trường hợp gõ "80" cho một khoá lưu PHÂN SỐ: mô tả trong seed ghi "User nhận 70%"
    * nhưng giá trị thật là 0.7, nên nâng lên 80% rất dễ thành 80 — hoa hồng 50.000đ biến thành
-   * 4.000.000đ cộng thẳng vào ví rút được, và sau khi đã trả thì không đòi lại được.
+   * 4.000.000đ cộng thẳng vào Ví Tubu, và sau khi đã trả thì không đòi lại được.
    *
    * Cố ý liệt kê TỪNG KHOÁ chứ không suy theo hậu tố: `subscribe.discount_pct` là phân số
    * (0.12) còn `groupbuy.discount_pct` là phần trăm nguyên (15) — cùng hậu tố, khác đơn vị.
@@ -167,9 +167,6 @@ export class SystemConfigService {
     'loyalty.chat_phone_verified_max_days': { min: 1, max: 3650, note: 'số ngày SĐT thành viên còn được coi là đã xác minh để tự liên kết điểm đơn chat', integer: true },
     'loyalty.chat_order_creator_monthly_points': { min: 1, max: 1_000_000_000, note: 'Điểm Xanh tự cộng tối đa mỗi tháng cho đơn chat của một nhân viên tạo đơn trên Pancake', integer: true },
     'loyalty.external_pending_days': { min: 1, max: 60, note: 'số ngày sau khi đơn giao xong mới cộng điểm', integer: true },
-    'wallet.withdraw_fee': { min: 0, max: 100_000, note: 'đồng phí mỗi lần rút', integer: true },
-    'wallet.withdraw_min': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
-    'affiliate.min_withdraw_bank': { min: 0, max: 100_000_000, note: 'đồng', integer: true },
     'referral.min_order_amount': { min: 0, max: 50_000_000, note: 'đồng', integer: true },
     'groupbuy.max_open_per_user': { min: 1, max: 100, note: 'số nhóm', integer: true },
     'game.max_plots': { min: 1, max: 50, note: 'số lô đất', integer: true },

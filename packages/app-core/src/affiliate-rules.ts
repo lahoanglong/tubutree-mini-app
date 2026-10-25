@@ -2,8 +2,8 @@
 export const PERSONAL_TAX_ID_PATTERN = /^(\d{10}|\d{10}-\d{3}|\d{12})$/;
 
 /**
- * Thuế TNCN nếu chỉ xét RIÊNG một lần rút: dự phòng khi API chưa trả `withdrawTaxPreview`. Máy chủ cộng dồn các lần rút trong tháng
- * VN (affiliate.service.personalIncomeTax) nên số thật có thể khác, nhất là lần rút nhỏ sau các lần rút trước trong tháng.
+ * Thuế TNCN nếu chỉ xét RIÊNG một lần chuyển: dự phòng khi API chưa trả `withdrawTaxPreview`. Máy chủ cộng dồn các lần chuyển trong tháng
+ * VN (affiliate.service.personalIncomeTax) nên số thật có thể khác, nhất là lần chuyển nhỏ sau các lần chuyển trước trong tháng.
  */
 export function payoutTax(gross: number, pit: { pct: number; threshold: number } | undefined): number {
   if (!pit || !(pit.pct > 0) || gross < pit.threshold) return 0;
@@ -40,19 +40,16 @@ export const isSuggestable = (s: string): boolean =>
     .trim().length >= SUGGEST_MIN_CHARS;
 
 export interface WithdrawInput {
-  /** Toàn bộ hoa hồng có thể rút: máy chủ chỉ nhận rút trọn số này. */
+  /** Toàn bộ hoa hồng có thể chuyển vào Ví: máy chủ chỉ nhận chuyển trọn số này. */
   max: number;
-  method: 'BANK' | 'WALLET_BALANCE';
   pit: { pct: number; threshold: number } | undefined;
   taxIdOnFile: string | null;
   taxId: string;
-  minBank: number;
   cfgLoaded: boolean;
   /** false khi dashboard lỗi: `max` tạm bằng 0, không phải số dư thật. */
   knownMax: boolean;
-  bank: { bankName: string; accountNumber: string; accountName: string };
   pending?: boolean;
-  /** Thuế máy chủ sẽ khấu trừ nếu rút hết ngay (cộng dồn tháng VN, dashboard.withdrawTaxPreview); thiếu khi API cũ. */
+  /** Thuế máy chủ sẽ khấu trừ nếu chuyển hết ngay (cộng dồn tháng VN, dashboard.withdrawTaxPreview); thiếu khi API cũ. */
   taxPreview?: number;
 }
 
@@ -62,28 +59,17 @@ export interface WithdrawView {
   net: number;
   askTaxId: boolean;
   taxIdValid: boolean;
-  bankValid: boolean;
   valid: boolean;
 }
 
-/** Điều kiện gửi lệnh rút hoa hồng: cùng luật nút "Rút" của Mini App, để web và Mini App chặn đúng chỗ máy chủ chặn. */
+/** Điều kiện gửi lệnh chuyển hoa hồng vào Ví: cùng luật nút của Mini App, để web và Mini App chặn đúng chỗ máy chủ chặn. */
 export function withdrawView(i: WithdrawInput): WithdrawView {
   const amount = i.max;
   const tax = i.taxPreview ?? payoutTax(amount, i.pit);
-  // Lần rút bị khấu trừ thuế TNCN cần MST/CCCD để kê khai và cấp chứng từ (máy chủ trả PIT_TAX_ID_REQUIRED nếu thiếu).
+  // Lần chuyển bị khấu trừ thuế TNCN cần MST/CCCD để kê khai và cấp chứng từ (máy chủ trả PIT_TAX_ID_REQUIRED nếu thiếu).
   const askTaxId = tax > 0 && !i.taxIdOnFile;
   const taxIdValid = !askTaxId || PERSONAL_TAX_ID_PATTERN.test(i.taxId.trim());
-  const bankValid =
-    i.method !== 'BANK' ||
-    (i.bank.bankName.trim().length > 0 && i.bank.accountNumber.trim().length >= 6 && i.bank.accountName.trim().length > 0);
-  // Chờ config thật: mức tối thiểu mặc định và thuế TNCN đều lấy từ config, chưa có thì số nhận trên nút có thể lệch số được cộng.
-  const valid =
-    i.knownMax &&
-    i.cfgLoaded &&
-    amount > 0 &&
-    (i.method !== 'BANK' || amount >= i.minBank) &&
-    bankValid &&
-    taxIdValid &&
-    !i.pending;
-  return { amount, tax, net: amount - tax, askTaxId, taxIdValid, bankValid, valid };
+  // Chờ config thật: thuế TNCN lấy từ config, chưa có thì số nhận trên nút có thể lệch số được cộng.
+  const valid = i.knownMax && i.cfgLoaded && amount > 0 && taxIdValid && !i.pending;
+  return { amount, tax, net: amount - tax, askTaxId, taxIdValid, valid };
 }

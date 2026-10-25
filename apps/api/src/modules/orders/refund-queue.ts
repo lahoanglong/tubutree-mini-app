@@ -135,6 +135,56 @@ export async function createBankRefund(
 }
 
 /**
+ * Chủ đơn đã xoá (ẩn danh) tài khoản nên không cộng Ví được: ghi khoản chờ kế toán chuyển tay, giống khách cuối không có tài
+ * khoản (không userId/customerUserId để khách không phải chọn nơi nhận, SĐT và tên lấy từ đơn nếu còn). Hàng "Hoàn tiền khách"
+ * hiện khoản này và CSV/báo cáo ghi đơn là "Đang hoàn tiền" cho tới khi chuyển xong.
+ */
+export async function holdRefundForDeletedAccount(
+  tx: Prisma.TransactionClient,
+  order: Pick<Order, 'id' | 'code'> & RefundOwnerFacts,
+  input: { kind: 'CANCEL' | 'RETURN'; refKey?: string; amount: number; reason: string },
+): Promise<void> {
+  const { phone, recipientName } = endCustomerPayee(order);
+  await tx.orderCustomerRefund.createMany({
+    data: [
+      {
+        orderId: order.id,
+        orderCode: order.code,
+        kind: input.kind,
+        refKey: input.refKey ?? '',
+        amount: input.amount,
+        phone: phone || null,
+        recipientName: recipientName || null,
+        customerUserId: null,
+        method: 'MANUAL_TRANSFER',
+        status: 'PENDING',
+        reason: input.reason,
+      },
+    ],
+    skipDuplicates: true,
+  });
+}
+
+/** Báo admin sau khi commit: khoản hoàn của tài khoản đã xoá đang chờ chuyển tay. Best-effort, không ném lỗi. */
+export async function announceDeletedAccountRefund(
+  ctx: { prisma: Pick<PrismaClient, 'user'>; notifications?: RefundNotifier; logger: Pick<Logger, 'warn'> },
+  refund: { orderCode: string; amount: number },
+): Promise<void> {
+  const amount = formatVnd(refund.amount);
+  await notifyAdmins(
+    { prisma: ctx.prisma, notifications: ctx.notifications, logger: ctx.logger },
+    {
+      template: OPS_REFUND_TEMPLATE,
+      subject: `khoản hoàn ${amount} đơn ${refund.orderCode} của tài khoản đã xoá`,
+      data: () => ({
+        order_code: refund.orderCode,
+        message: `Tài khoản đã xoá, không còn thông tin liên hệ. Chờ khách liên hệ CSKH; khi khách cung cấp tài khoản ngân hàng thì quản trị viên nhập và xác nhận chuyển khoản ${amount}.`,
+      }),
+    },
+  ).catch((err) => ctx.logger.warn(`Không báo được admin khoản hoàn đơn ${refund.orderCode}: ${err instanceof Error ? err.message : err}`));
+}
+
+/**
  * Dòng vết của khoản đã hoàn thẳng vào Ví khi huỷ/trả (R2-LIFECYCLE-5): chi tiết đơn của khách (web, mini app) đọc hàng
  * này để nói "đã hoàn X vào Ví Tubu" như với khoản chuyển khoản. Không phải việc của admin (method WALLET, COMPLETED).
  */

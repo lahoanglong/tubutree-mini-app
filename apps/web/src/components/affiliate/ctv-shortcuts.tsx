@@ -17,7 +17,7 @@ export interface CtvShortcut {
 const BASE =
   'flex min-h-11 flex-col items-center justify-center gap-1.5 rounded-card bg-stone-0 px-1 py-2.5 text-center text-xs font-semibold shadow-card transition';
 
-/** Hàng lối tắt ngay dưới thẻ hoa hồng: việc CTV làm hằng ngày (chia sẻ, gian hàng, lên đơn hộ, rút) không phải cuộn tới cuối trang dài. */
+/** Hàng lối tắt ngay dưới thẻ hoa hồng: việc CTV làm hằng ngày (chia sẻ, gian hàng, lên đơn hộ, chuyển hoa hồng vào Ví) không phải cuộn tới cuối trang dài. */
 export function CtvShortcuts({ items }: { items: CtvShortcut[] }) {
   return (
     <div role="group" aria-label="Lối tắt của CTV" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>

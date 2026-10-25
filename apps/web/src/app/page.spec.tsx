@@ -43,7 +43,7 @@ beforeEach(() => {
     }
     if (path === '/categories') return CATEGORIES;
     if (path === '/brands') return [{ brand: 'Tubu', count: 3 }];
-    if (path === '/config/public') return { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, affiliateMinWithdrawBank: 50000, cashbackHoldDays: 30 };
+    if (path === '/config/public') return { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30 };
     throw new Error(`đường dẫn lạ ${path}`);
   });
 });
