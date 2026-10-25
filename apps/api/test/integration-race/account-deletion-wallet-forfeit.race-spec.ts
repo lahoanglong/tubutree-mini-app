@@ -12,6 +12,7 @@ import { AffiliateService } from '../../src/modules/affiliate/affiliate.service'
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
 import { PricingService } from '../../src/modules/pricing/pricing.service';
 import { PancakeOrderService } from '../../src/modules/integrations/pancake/pancake-order.service';
+import { OrderReversalService } from '../../src/modules/orders/order-reversal.service';
 import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
 import { createOrder, createUser, randCode, setConfig, sleep, warmPool } from './helpers';
 
@@ -186,10 +187,36 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     const label = [expiry.getUTCDate(), expiry.getUTCMonth() + 1, expiry.getUTCFullYear()]
       .map((n, i) => String(n).padStart(i === 2 ? 4 : 2, '0'))
       .join('/');
-    await expect(deletion.process(req.id, admin.id)).rejects.toThrow(new RegExp(`còn 1 đơn đã giao còn trong hạn đổi/trả \\(7 ngày\\), sớm nhất hết hạn ngày ${label}`));
+    await expect(deletion.process(req.id, admin.id)).rejects.toThrow(`Bạn còn đơn trong hạn đổi trả. Bạn xoá được tài khoản từ ngày ${label}.`);
     await prisma.order.update({ where: { id: order.id }, data: { deliveredAt: new Date(Date.now() - 9 * 864e5) } });
     const done = await deletion.process(req.id, admin.id);
     expect(done.alreadyProcessed).toBe(false);
+  });
+
+  it('đơn đã giao trả muộn sau khi khách xoá tài khoản: không cộng Ví vào tài khoản đã ẩn danh, đơn vào "cần xử lý"', async () => {
+    const u = await walletUser(0);
+    const order = await createOrder(prisma, {
+      userId: u.id,
+      status: 'DELIVERED',
+      total: 120_000,
+      paymentMethod: 'WALLET',
+      paymentStatus: 'PAID',
+      deliveredAt: new Date(Date.now() - 30 * 864e5),
+    });
+    const req = await prisma.accountDeletionRequest.create({ data: { userId: u.id } });
+    await deletion.process(req.id, admin.id);
+
+    const reversal = new OrderReversalService({ restore: jest.fn() } as never, { release: jest.fn() } as never);
+    const full = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
+    const result = await prisma.$transaction((tx) => reversal.reverseFinancials(tx, full));
+
+    expect(result.moneyRefunded).toBe(false);
+    const l = await ledger(u.id);
+    expect(l.user.walletBalance).toBe(0);
+    expect(l.rows.filter((r) => r.type === 'ORDER_REFUND')).toHaveLength(0);
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(after.paymentStatus).toBe('REFUNDED');
+    expect(after.pancakeAttention).toContain('đã xoá tài khoản');
   });
 
   it('hai admin cùng bấm xử lý một yêu cầu: Ví chỉ bị trừ một lần', async () => {

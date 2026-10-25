@@ -287,7 +287,7 @@ describe('AccountDeletionService — đơn đã giao còn trong hạn đổi/tr�
     return { ...ctx, svc, config };
   }
 
-  it('còn đơn DELIVERED trong hạn → chặn ORDER_RETURN_WINDOW, câu nêu ngày hết hạn sớm nhất; đọc đúng returns.window_days', async () => {
+  it('còn đơn DELIVERED trong hạn → chặn ORDER_RETURN_WINDOW, câu nêu ngày xoá được = hết hạn MUỘN nhất; đọc đúng returns.window_days', async () => {
     const delivered = new Date(Date.now() - 2 * day);
     const later = new Date(Date.now() - 1 * day);
     const { svc, config, anonymize } = withDelivered(
@@ -299,10 +299,10 @@ describe('AccountDeletionService — đơn đã giao còn trong hạn đổi/tr�
     );
     const err = await svc.process('req-1', 'admin-1').then(() => null, (e: unknown) => e);
     const blockers = ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers;
-    const expiry = new Date(delivered.getTime() + 7 * day + 7 * 3600 * 1000);
+    const expiry = new Date(later.getTime() + 7 * day + 7 * 3600 * 1000);
     const label = `${String(expiry.getUTCDate()).padStart(2, '0')}/${String(expiry.getUTCMonth() + 1).padStart(2, '0')}/${expiry.getUTCFullYear()}`;
     expect(blockers).toEqual([
-      { code: 'ORDER_RETURN_WINDOW', message: `còn 2 đơn đã giao còn trong hạn đổi/trả (7 ngày), sớm nhất hết hạn ngày ${label}; tiền hoàn nếu có sẽ về Ví` },
+      { code: 'ORDER_RETURN_WINDOW', message: `Bạn còn đơn trong hạn đổi trả. Bạn xoá được tài khoản từ ngày ${label}.` },
     ]);
     expect(config.get).toHaveBeenCalledWith('returns.window_days', 7);
     expect(anonymize).not.toHaveBeenCalled();

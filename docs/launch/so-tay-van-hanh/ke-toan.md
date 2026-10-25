@@ -81,7 +81,7 @@ Thời gian từ lúc đơn giao đến lúc CTV có tiền ngân hàng thườn
 
 **CTV hỏi vì sao rút chưa về.** Xem lệnh cũ: "Đang chờ duyệt", "Đã duyệt, chờ chuyển khoản" nghĩa là bạn chưa chuyển. Trả lời theo trạng thái. Hoa hồng mới vào Ví Tubu có ngay, không rút ngân hàng.
 
-**Xoá tài khoản khi Ví còn tiền.** Khách phải đồng ý bỏ số dư; hệ thống trừ Ví về 0 bằng bút toán ADJUST (nguồn "Xoá tài khoản") trong giao dịch xoá, có sự kiện "WALLET_FORFEIT" trong lịch sử người dùng. Không hoàn tiền mặt cho số dư này. Chưa đồng ý hoặc lệch số thì yêu cầu bị chặn, CSKH gọi khách.
+**Xoá tài khoản khi Ví còn tiền.** Khách phải đồng ý bỏ số dư; hệ thống trừ Ví về 0 bằng bút toán ADJUST (nguồn "Xoá tài khoản") trong giao dịch xoá, có sự kiện "WALLET_FORFEIT" trong lịch sử người dùng. Không hoàn tiền mặt cho số dư này. Khách dùng Mini App bản cũ gửi yêu cầu khi Ví còn tiền thì admin bị chặn "khách chưa đồng ý bỏ số dư": CSKH gọi khách, hướng dẫn gửi lại trên web hoặc Mini App bản mới. Lệch số thì cũng đồng ý lại. Đơn đã giao trả sau khi khách xoá tài khoản: hệ thống không cộng Ví đã ẩn danh, đơn nằm ở "Cần xử lý" (kèm cảnh báo OPS_REFUND_ALERT), kế toán xử lý tay.
 
 **Đối tác hỏi bao giờ nhận tiền đối soát.** Khoản vào bảng kê 7 ngày sau khi giao. Phiếu do quản lý đại lý–CTV lập. Bạn chuyển khi phiếu "Đang chờ".
 

@@ -28,7 +28,7 @@ type MockTx = {
   /** Dòng `orders` đang nằm trong "DB" — updateMany chỉ sửa khi `where` khớp nó (như Postgres). */
   row: { paymentStatus: string };
   order: { updateMany: jest.Mock };
-  user: { update: jest.Mock };
+  user: { update: jest.Mock; findUnique: jest.Mock };
   coinTransaction: { create: jest.Mock; findMany: jest.Mock };
   pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
   orderCustomerRefund: { create: jest.Mock; createMany: jest.Mock };
@@ -61,7 +61,7 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
         },
       ),
     },
-    user: { update: jest.fn().mockResolvedValue({}) },
+    user: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
     // Không có thưởng giới thiệu nào gắn với đơn → nhánh thu hồi không làm gì.
     coinTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     // PD-3: thưởng giới thiệu sau gộp nằm ở sổ điểm; thu hồi đọc cả hai sổ.
@@ -171,6 +171,26 @@ describe('OrderReversalService', () => {
       ],
       skipDuplicates: true,
     });
+  });
+
+  it('đơn đã giao trả muộn mà chủ đơn đã xoá (ẩn danh) tài khoản → KHÔNG cộng Ví, báo lỗi kèm orderId/userId/số tiền, đưa vào "cần xử lý"; kho vẫn hoàn', async () => {
+    const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID' });
+    const tx = makeTx(order);
+    tx.user.findUnique.mockResolvedValue({ metadata: { anonymizedAt: '2026-10-20T03:00:00.000Z', deletionRequestId: 'r1' } });
+    const err = jest.spyOn((service as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+
+    const result = await service.reverseFinancials(tx as never, order);
+
+    expect(result.moneyRefunded).toBe(false);
+    expect(result.refund).toBeNull();
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(applyWalletDelta).not.toHaveBeenCalledWith(tx, expect.anything());
+    expect(tx.orderCustomerRefund.createMany).not.toHaveBeenCalled();
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/orderId=o1.*150000đ.*u1.*đã ẩn danh/));
+    expect(tx.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.stringContaining('đã xoá tài khoản') }) }),
+    );
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
   it('đơn chưa trả tiền → không ghi dòng vết khoản hoàn nào', async () => {

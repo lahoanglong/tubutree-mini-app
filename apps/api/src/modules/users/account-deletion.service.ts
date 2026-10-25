@@ -294,11 +294,11 @@ export class AccountDeletionService {
         select: { userId: true, deliveredAt: true, updatedAt: true },
       }),
     ]);
-    const returnWindow = new Map<string, { n: number; earliestExpiry: Date }>();
+    const returnWindow = new Map<string, { latestExpiry: Date }>();
     for (const o of deliveredInWindow) {
       const expiry = new Date((o.deliveredAt ?? o.updatedAt).getTime() + windowDays * 864e5);
       const cur = returnWindow.get(o.userId);
-      returnWindow.set(o.userId, { n: (cur?.n ?? 0) + 1, earliestExpiry: cur && cur.earliestExpiry < expiry ? cur.earliestExpiry : expiry });
+      returnWindow.set(o.userId, { latestExpiry: cur && cur.latestExpiry > expiry ? cur.latestExpiry : expiry });
     }
 
     const countBy = <K extends string>(rows: ({ _count: { _all: number } } & Record<K, string>)[], key: K) =>
@@ -350,7 +350,7 @@ export class AccountDeletionService {
       if (rw) {
         add(
           'ORDER_RETURN_WINDOW',
-          `còn ${rw.n} đơn đã giao còn trong hạn đổi/trả (${windowDays} ngày), sớm nhất hết hạn ngày ${vnDateLabel(rw.earliestExpiry)}; tiền hoàn nếu có sẽ về Ví`,
+          `Bạn còn đơn trong hạn đổi trả. Bạn xoá được tài khoản từ ngày ${vnDateLabel(rw.latestExpiry)}.`,
         );
       }
       if (n(payoutN) > 0) add('PAYOUT_PENDING', `còn ${n(payoutN)} yêu cầu rút tiền chờ xử lý`);

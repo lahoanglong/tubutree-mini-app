@@ -11,7 +11,8 @@ import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { loadPointExpiryTxns, lotRecoverable, orderLotKey } from '../loyalty/loyalty-expiry.service';
 import { canRefundToBank, WALLET_DESTINATION, type RefundDestination } from './refund-destination';
-import { createBankRefund, endCustomerPayee, recordWalletRefund } from './refund-queue';
+import { createBankRefund, endCustomerPayee, flagRefundAttention, recordWalletRefund } from './refund-queue';
+import { NotificationsService } from '../notifications/notifications.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals, type PartialReturnTotals } from './return-ledger';
 import { distributeByWeight, remainingPointsBack, returnedGoods, shareOf, type ReturnShares } from './refund-allocation';
 import { maskPhone } from '../../common/mask-pii';
@@ -766,6 +767,22 @@ export class OrderReversalService {
     amount: number = order.total,
   ): Promise<boolean> {
     if (amount <= 0) return false;
+    // Tài khoản đã ẩn danh (khách đã xoá): Ví đã bị trừ về 0 và khách không còn đăng nhập, cộng tiền vào đó là mất tiền.
+    // Đơn đã giao có thể chuyển RETURNED sau hạn đổi/trả, nên vẫn tới được đây; để kế toán xử lý tay.
+    const owner = await tx.user.findUnique({ where: { id: userId }, select: { metadata: true } });
+    const anonymizedAt = (owner?.metadata as { anonymizedAt?: unknown } | null | undefined)?.anonymizedAt;
+    if (typeof anonymizedAt === 'string') {
+      this.logger.error(
+        `Đơn ${order.code} (orderId=${order.id}) hoàn ${amount}đ nhưng tài khoản ${userId} đã ẩn danh từ ${anonymizedAt}: KHÔNG cộng Ví, kế toán xử lý tay.`,
+      );
+      await flagRefundAttention(
+        { prisma: tx, notifications: this.resolveNotifications(), logger: this.logger },
+        order,
+        `Hoàn ${amount.toLocaleString('vi-VN')}đ cho khách đã xoá tài khoản (${userId}): không cộng Ví, kế toán xử lý tay.`,
+        `hoàn tiền đơn ${order.code} cho tài khoản đã xoá`,
+      ).catch((e) => this.logger.warn(`Không ghi cảnh báo hoàn tiền đơn ${order.code}: ${e instanceof Error ? e.message : e}`));
+      return false;
+    }
     await applyWalletDelta(tx, {
       userId,
       delta: amount,
@@ -831,6 +848,14 @@ export class OrderReversalService {
       this.logger.warn(`Đơn hộ ${order.code} cần admin chuyển khoản hoàn ${amount}đ cho khách ${maskPhone(phone)}.`);
     }
     return customerUserId;
+  }
+
+  private resolveNotifications(): NotificationsService | undefined {
+    try {
+      return this.moduleRef?.get(NotificationsService, { strict: false });
+    } catch {
+      return undefined;
+    }
   }
 
   private resolveDealer(): DealerService | undefined {
