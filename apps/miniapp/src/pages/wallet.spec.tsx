@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -96,17 +95,6 @@ function stubLoaded(wallet: object = WALLET, firstPage: object = TXN_PAGE_1) {
   mocks.getReferral.mockResolvedValue(REFERRAL);
   mocks.getLoyalty.mockResolvedValue(LOYALTY);
   mocks.getWalletTransactions.mockImplementation((page: number) => Promise.resolve(page === 1 ? firstPage : TXN_PAGE_2));
-}
-
-/** Ô nhập theo nhãn hiển thị: ưu tiên liên kết <label for> (DS v2 `Field`), rơi về ô nhập gần nhất
- * trong cùng khối với chữ nhãn, để các ca hành vi không phụ thuộc cách gắn nhãn. Việc nhãn PHẢI gắn
- * với control được khẳng định riêng ở ca a11y bên dưới. */
-function inputOf(label: string | RegExp): HTMLInputElement {
-  const linked = screen.queryByLabelText(label);
-  if (linked) return linked as HTMLInputElement;
-  let el: HTMLElement | null = screen.getByText(label);
-  while (el && !el.querySelector('input')) el = el.parentElement;
-  return el!.querySelector('input')!;
 }
 
 beforeEach(() => {
