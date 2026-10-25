@@ -21,7 +21,6 @@ export function HarvestCelebration({
   species,
   points,
   sprout,
-  canShare,
   couponCapped,
   nextTarget,
   onClose,
@@ -39,8 +38,6 @@ export function HarvestCelebration({
   points: number | null;
   /** Lần tưới có thu hoạch cây mầm (xem `HarvestReward.sprout`). */
   sprout: boolean;
-  /** Chỉ cây ở lô nhà mới chia sẻ được. */
-  canShare: boolean;
   couponCapped: HarvestCouponCap | null;
   /** 💧 cần cho cây kế tiếp. */
   nextTarget: number | null;
@@ -70,7 +67,7 @@ export function HarvestCelebration({
               {t.guestCta}
             </Button>
           )}
-          {!guest && canShare && (
+          {!guest && (
             <Button fullWidth variant="secondary" onPress={onShare}>
               {t.shareFriends}
             </Button>

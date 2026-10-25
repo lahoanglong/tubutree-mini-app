@@ -354,7 +354,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
   });
 
   it.each([
-    ['DAY', 'Hôm nay bạn đã nhận đủ mã giảm giá'],
+    ['DAY', 'Hôm nay bạn đã nhận mã giảm giá'],
     ['MONTH', 'Tháng này bạn đã nhận đủ mã giảm giá'],
   ] as const)('chạm trần mã theo %s: hộp giải thích, cây vẫn được tính', async (cap, text) => {
     mocks.api.waterTree.mockResolvedValue({

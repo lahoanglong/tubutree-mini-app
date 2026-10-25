@@ -682,12 +682,12 @@ describe('GameService.waterTree', () => {
   it('tưới chưa đủ → tăng progress, chưa thu hoạch', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
+      profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 1 } }),
     );
     const r = await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20);
     expect(r.harvested).toBe(false);
     expect(r.progress).toBe(120);
-    expect(r.treesPlanted).toBe(0);
+    expect(r.treesPlanted).toBe(1);
     expect(prisma.coupon.create).not.toHaveBeenCalled();
   });
 
@@ -825,7 +825,7 @@ describe('GameService.waterTree', () => {
     const tx = {
       gameProfile: {
         findUnique: jest.fn().mockResolvedValue(
-          profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } }),
+          profile({ totalSeeds: 100, ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 1 } }),
         ),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
@@ -1007,7 +1007,7 @@ describe('GameService.waterTree — cây bỏ lâu chỉ héo, không mất ti�
   it('tưới cây còn sống → giữ tiến trình', async () => {
     const prisma = makePrisma();
     (prisma.gameProfile.findUnique as jest.Mock).mockResolvedValue(
-      profile({ totalSeeds: 100, lastWateredAt: new Date(Date.now() - 1 * 86400000), ecoImpact: { progress: 500, target: 600, treeType: 't', treesPlanted: 0 } }),
+      profile({ totalSeeds: 100, lastWateredAt: new Date(Date.now() - 1 * 86400000), ecoImpact: { progress: 500, target: 600, treeType: 't', treesPlanted: 1 } }),
     );
     const r = (await new GameService(prisma, makeConfig(), analytics).waterTree('u1', 20)) as { progress: number; revivedFromDead: boolean };
     expect(r.revivedFromDead).toBe(false);
@@ -2019,31 +2019,38 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
     expect(r.target).toBe(20);
   });
 
-  it('hồ sơ cũ target 600 có tiến độ, chưa có cây: giữ 600, thu hoạch ở 600 là cây thường (mã + góp quỹ, không điểm cây mầm)', async () => {
+  it('hồ sơ cũ 400/600 chưa có cây, khách thật: hạ về 60, thu hoạch cây mầm 2.000 điểm không mã, nước dư chảy sang cây 2 (target 300)', async () => {
     const prisma = makePrisma();
     setProfile(prisma, eco({ target: 600, progress: 400 }));
-    const a = await svcWith(prisma).waterTree('u1', 100); // 500 < 600: chưa thu hoạch, giữ 600
-    expect(a.harvested).toBe(false);
-    expect(a.target).toBe(600);
-    expect(savedEco(prisma).target).toBe(600);
-
-    const prisma2 = makePrisma();
-    setProfile(prisma2, eco({ target: 600, progress: 400 }));
+    (prisma.coupon.count as jest.Mock).mockResolvedValue(0);
     const { loyalty } = loyaltyWithExpiry();
-    const b = await svcWith(prisma2, makeConfig(), loyalty).waterTree('u1', 250); // 650 → thu hoạch ở 600, dư 50, cây sau theo thang
-    expect(b.harvested).toBe(true);
-    expect(b.progress).toBe(50);
-    expect(b.target).toBe(300);
-    expect(b.reward.sprout).toBeUndefined();
-    expect(b.reward.points).toBeUndefined();
-    expect(b.reward.certificate).toBeTruthy();
-    expect(b.reward.coupon).toBeTruthy();
-    expect(prisma2.plantedTree.create).toHaveBeenCalledTimes(1);
-    expect(prisma2.pointsTransaction.create).not.toHaveBeenCalled();
-    expect(savedEco(prisma2).sproutRewarded).toBe(true);
+    const r = await svcWith(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 3 }), loyalty).waterTree('u1', 20); // 420: cây mầm ở 60, còn 360 → cây 2 ở 300, dư 60
+    expect(r.treesPlanted).toBe(2);
+    expect(r.progress).toBe(60);
+    expect(r.target).toBe(600);
+    expect(r.reward.sprout).toBe(true);
+    expect(r.reward.points).toBe(2000);
+    expect(prisma.pointsTransaction.create).toHaveBeenCalledTimes(1);
+    expect(prisma.coupon.create).toHaveBeenCalledTimes(1); // chỉ cây 2 có mã, cây mầm không
+    expect(prisma.plantedTree.create).toHaveBeenCalledTimes(1);
+    expect(savedEco(prisma).sproutRewarded).toBe(true);
   });
 
-  it('hồ sơ cũ target 600, chưa có tiến độ: vẫn hạ về bậc đầu (60) và thu hoạch là cây mầm', async () => {
+  it('hồ sơ cũ 400/600 + nước vừa đủ cho cây mầm (dư chưa tới 300): cây mầm, không mã, dư sang cây 2 target 300', async () => {
+    const prisma = makePrisma();
+    setProfile(prisma, eco({ target: 600, progress: 20 }));
+    const { loyalty } = loyaltyWithExpiry();
+    const r = await svcWith(prisma, makeConfig(), loyalty).waterTree('u1', 100); // 120: cây mầm ở 60, dư 60
+    expect(r.treesPlanted).toBe(1);
+    expect(r.progress).toBe(60);
+    expect(r.target).toBe(300);
+    expect(r.reward.points).toBe(2000);
+    expect(r.reward.coupon).toBeUndefined();
+    expect(r.reward.certificate).toBeUndefined();
+    expect(prisma.plantedTree.create).not.toHaveBeenCalled();
+  });
+
+  it('hồ sơ cũ 0/600 không tiến độ: vẫn hạ về 60 và là cây mầm', async () => {
     const prisma = makePrisma();
     setProfile(prisma, eco({ target: 600, progress: 0 }));
     const { loyalty } = loyaltyWithExpiry();
@@ -2053,6 +2060,39 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
     expect(r.reward.points).toBe(2000);
     expect(r.reward.certificate).toBeUndefined();
     expect(prisma.plantedTree.create).not.toHaveBeenCalled();
+  });
+
+  it('guest cũ 400/600: cây mầm guest (không điểm, không mã), cờ ghi false; nâng cấp xong nhận điểm hoãn đúng một lần', async () => {
+    const prisma = makePrisma();
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ zaloId: 'guest_x', phone: null });
+    setProfile(prisma, eco({ target: 600, progress: 400 }));
+    const r = await svcWith(prisma).waterTree('u1', 20);
+    expect(r.rewardBlocked).toBe('GUEST');
+    expect(r.reward.sprout).toBe(true);
+    expect(r.reward.points).toBeUndefined();
+    expect(r.reward.coupon).toBeUndefined();
+    expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    const after = savedEco(prisma);
+    expect(after.treesPlanted).toBeGreaterThanOrEqual(1);
+    expect(after.sproutRewarded).toBe(false);
+
+    const prisma2 = makePrisma();
+    setProfile(prisma2, eco({ target: 300, progress: 100, treesPlanted: 1, sproutRewarded: false }));
+    const { loyalty } = loyaltyWithExpiry();
+    const up = await svcWith(prisma2, makeConfig(), loyalty).waterTree('u1', 200);
+    expect(up.reward.points).toBe(2000);
+    expect(prisma2.pointsTransaction.create).toHaveBeenCalledTimes(1);
+    expect(savedEco(prisma2).sproutRewarded).toBe(true);
+  });
+
+  it('hồ sơ cũ đã có ≥1 cây giữ nguyên target đã lưu (600), không hạ', async () => {
+    const prisma = makePrisma();
+    setProfile(prisma, eco({ target: 600, progress: 400, treesPlanted: 1 }));
+    const r = await svcWith(prisma).waterTree('u1', 100);
+    expect(r.harvested).toBe(false);
+    expect(r.target).toBe(600);
+    expect(r.progress).toBe(500);
+    expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
   });
 
   describe('cây mầm (thu hoạch đầu tiên)', () => {
@@ -2339,12 +2379,24 @@ describe('GameService.waterTree — nhịp người mới (thang cây, cây mầ
       expect(r).not.toHaveProperty('couponCapped');
     });
 
-    it('đủ trần ngày (1/ngày) → couponCapped = DAY, kể cả khi tháng cũng đã đủ', async () => {
+    it('đủ trần ngày (1/ngày), tháng còn suất → couponCapped = DAY', async () => {
+      const prisma = makePrisma();
+      setProfile(prisma, secondTree());
+      const monthStart = startOfVnMonth().getTime();
+      (prisma.coupon.count as jest.Mock).mockImplementation(async ({ where }: { where: { startAt: { gte: Date } } }) =>
+        where.startAt.gte.getTime() === monthStart ? 0 : 1,
+      );
+      const r = await svcWith(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterTree('u1', 300);
+      expect(r.couponCapped).toBe('DAY');
+      expect(prisma.coupon.create).not.toHaveBeenCalled();
+    });
+
+    it('đủ cả trần ngày lẫn trần tháng → báo MONTH (tháng được xét trước ngày)', async () => {
       const prisma = makePrisma();
       setProfile(prisma, secondTree());
       (prisma.coupon.count as jest.Mock).mockResolvedValue(9);
       const r = await svcWith(prisma, makeConfig({ 'game.harvest_coupon_daily_cap': 1 })).waterTree('u1', 300);
-      expect(r.couponCapped).toBe('DAY');
+      expect(r.couponCapped).toBe('MONTH');
       expect(prisma.coupon.create).not.toHaveBeenCalled();
     });
 
@@ -2458,17 +2510,19 @@ describe('GameService.getProfile — số hiện trước khi bấm', () => {
     expect(r.nextTreeTarget).toBe(600);
   });
 
-  it('hồ sơ cũ target 600, 0 cây: currentTreeTarget giữ 600, nextTreeTarget = 300 (bậc 2)', async () => {
+  it('hồ sơ cũ target 600, chưa có cây: currentTreeTarget hạ về 60, nextTreeTarget = 300 (bậc 2)', async () => {
     const r = await run({ ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } });
-    expect(r.currentTreeTarget).toBe(600);
+    expect(r.currentTreeTarget).toBe(60);
     expect(r.nextTreeTarget).toBe(300);
   });
 
-  it('ecoImpact trả về dùng cùng target đã chuẩn hoá với lúc tưới: hồ sơ cũ 0/600 chưa tưới → 60; đã có tiến độ → giữ 600', async () => {
+  it('ecoImpact trả về dùng cùng target đã chuẩn hoá với lúc tưới: chưa có cây → 60 (kể cả có tiến độ); đã có cây → giữ nguyên', async () => {
     const fresh = await run({ ecoImpact: { progress: 0, target: 600, treeType: 't', treesPlanted: 0 } });
     expect(fresh.ecoImpact).toEqual(expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }));
     const watered = await run({ ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 0 } });
-    expect(watered.ecoImpact).toEqual(expect.objectContaining({ progress: 100, target: 600 }));
+    expect(watered.ecoImpact).toEqual(expect.objectContaining({ progress: 100, target: 60 }));
+    const planted = await run({ ecoImpact: { progress: 100, target: 600, treeType: 't', treesPlanted: 1 } });
+    expect(planted.ecoImpact).toEqual(expect.objectContaining({ progress: 100, target: 600, treesPlanted: 1 }));
   });
 
   it('khoá thiếu → mặc định mã khớp hành vi các nút (đủ để FE hiện trước khi bấm)', async () => {

@@ -377,13 +377,7 @@ export class GameService {
           while (eco.progress >= eco.target) {
             eco.progress -= eco.target;
             harvestedDrops += eco.target;
-            // Hồ sơ cũ đã tưới dở ở target lớn hơn bậc đầu của thang: lần thu hoạch này là cây thường (mã + góp quỹ), không phải cây mầm.
-            const firstTree = eco.treesPlanted === 0;
-            const isSprout = firstTree && eco.target <= ladderTarget(ladder, 0);
-            if (firstTree && !isSprout) {
-              sproutDue = false;
-              eco.sproutRewarded = true;
-            }
+            const isSprout = eco.treesPlanted === 0;
             if (isSprout) sproutHarvested = true;
             eco.treesPlanted += 1;
             harvestCount += 1;
@@ -413,10 +407,10 @@ export class GameService {
             // Khoản góp quỹ trồng cây + mã ghi nhận KHÔNG bị cap — chỉ coupon (giá trị tiền) mới giới hạn.
             certificateCode = await this.plantTree(userId, eco.treeType, tx);
             if (!realUser) continue;
-            if (couponsToday >= dailyCap) {
-              couponCapped = 'DAY';
-            } else if (couponsMonth >= monthlyCap) {
+            if (couponsMonth >= monthlyCap) {
               couponCapped = 'MONTH';
+            } else if (couponsToday >= dailyCap) {
+              couponCapped = 'DAY';
             } else {
               couponCodes.push(await this.grantCoupon(userId, harvestAmount, tx, harvestMinOrder, HARVEST_COUPON_PREFIX));
               couponsToday += 1;
@@ -963,14 +957,16 @@ export class GameService {
     const treesPlanted = e.treesPlanted ?? 0;
     const progress = e.progress ?? 0;
     let target = e.target ?? (ladder ? ladderTarget(ladder, treesPlanted) : 600);
-    // Hồ sơ cũ chưa tưới giọt nào (target 600 của thang cũ): hạ về bậc đầu để có cây mầm. Cây đang có tiến độ giữ nguyên.
-    if (ladder && treesPlanted === 0 && progress === 0) target = Math.min(target, ladderTarget(ladder, 0));
+    // Hồ sơ chưa có cây và chưa nhận cây mầm (target 600 của thang cũ): luôn hạ về bậc đầu, nước đã tưới chảy sang cây sau.
+    // Cờ ghi rõ false để guest cũ nhận điểm hoãn khi nâng cấp (không có cờ thì treesPlanted > 0 bị coi là đã nhận).
+    const unsprouted = !!ladder && treesPlanted === 0 && e.sproutRewarded !== true;
+    if (unsprouted) target = Math.min(target, ladderTarget(ladder, 0));
     return {
       progress,
       target,
       treeType: e.treeType ?? DEFAULT_TREE_TYPE,
       treesPlanted,
-      ...(e.sproutRewarded !== undefined ? { sproutRewarded: e.sproutRewarded } : {}),
+      ...(unsprouted ? { sproutRewarded: false } : e.sproutRewarded !== undefined ? { sproutRewarded: e.sproutRewarded } : {}),
     };
   }
 

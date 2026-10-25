@@ -320,7 +320,7 @@ describe('Vườn Xanh người mới (web): hộp chúc mừng', () => {
   });
 
   it.each([
-    ['DAY', 'Hôm nay bạn đã nhận đủ mã giảm giá'],
+    ['DAY', 'Hôm nay bạn đã nhận mã giảm giá'],
     ['MONTH', 'Tháng này bạn đã nhận đủ mã giảm giá'],
   ])('chạm trần mã %s: hộp giải thích, cây vẫn được tính', async (cap, text) => {
     const d = await harvest({ progress: 0, target: 600, harvested: true, treesPlanted: 5, couponCapped: cap, reward: { certificate: 'CERT-1' } });

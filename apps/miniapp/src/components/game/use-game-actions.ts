@@ -36,8 +36,6 @@ export interface HarvestMeta {
   nextTarget: number;
   /** Lần thu hoạch có cây mầm (nhận điểm, không góp quỹ). */
   sprout: boolean;
-  /** Chỉ cây ở lô nhà mới chia sẻ được; lô phụ thì ẩn nút. */
-  canShare: boolean;
 }
 
 interface WateringResult {
@@ -49,7 +47,7 @@ interface WateringResult {
   reward?: HarvestReward & { coupons?: (string | { code: string })[] };
 }
 
-const harvestMeta = (r: WateringResult, home: boolean): HarvestMeta => {
+const harvestMeta = (r: WateringResult): HarvestMeta => {
   const list = (r.reward?.coupons ?? []).map((c) => (typeof c === 'string' ? c : c.code)).filter(Boolean);
   const coupons = list.length > 0 ? list : r.reward?.coupon ? [r.reward.coupon] : [];
   return {
@@ -58,7 +56,6 @@ const harvestMeta = (r: WateringResult, home: boolean): HarvestMeta => {
     coupons,
     nextTarget: r.target,
     sprout: r.reward?.sprout === true,
-    canShare: home,
   };
 };
 
@@ -133,9 +130,9 @@ export function useGameActions({
     }
   };
 
-  const afterWatering = (label: string, r: WateringResult, home: boolean) => {
+  const afterWatering = (label: string, r: WateringResult) => {
     if (r.harvested) {
-      onHarvest(r.reward, harvestMeta(r, home));
+      onHarvest(r.reward, harvestMeta(r));
     } else {
       openSnackbar({ text: `${label} · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
     }
@@ -145,7 +142,7 @@ export function useGameActions({
 
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(drops),
-    onSuccess: (r) => afterWatering('Đã tưới', r, true),
+    onSuccess: (r) => afterWatering('Đã tưới', r),
     onError,
   });
   // Khoá chống chạm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
@@ -169,7 +166,7 @@ export function useGameActions({
   });
   const waterPlotM = useLockedMutation({
     mutationFn: (plotId: string) => waterPlot(plotId, 20),
-    onSuccess: (r) => afterWatering('Đã tưới lô', r, false),
+    onSuccess: (r) => afterWatering('Đã tưới lô', r),
     onError,
   }, (plotId) => plotId);
   const claimPassM = useLockedMutation({

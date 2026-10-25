@@ -80,7 +80,7 @@ export const BUSINESS_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'game.tank_capacity': 'mã mặc định 500; seed 1000 (bình 500 nhỏ hơn cây thứ ba 600)',
   'game.streak_freeze_cost': 'mã mặc định 80; seed 40',
   'game.streak_repair_cost': 'mã mặc định 150; seed 50',
-  'game.harvest_coupon_daily_cap': 'mã mặc định 3; seed 1 (kèm trần 4 mã/tháng game.harvest_coupon_monthly_cap)',
+  'game.harvest_coupon_daily_cap': 'mã mặc định 1; seed 1, giữ trong nhóm này để chủ duyệt cùng trần 4 mã/tháng game.harvest_coupon_monthly_cap (mã mặc định cũng 4)',
   'seasonpass.tiers': 'mã mặc định [] ; seed 5 bậc thưởng (Season Pass đang ẩn, SEASON_PASS_ENABLED=false)',
 };
 

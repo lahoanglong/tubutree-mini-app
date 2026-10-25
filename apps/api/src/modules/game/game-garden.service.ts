@@ -42,6 +42,7 @@ interface EcoImpact {
   target: number;
   treeType: string;
   treesPlanted: number;
+  sproutRewarded?: boolean;
 }
 
 /**
@@ -237,10 +238,10 @@ export class GameGardenService {
             certificate = await this.plantTree(userId, plot.treeType, db);
             if (!realUser) {
               blocked = 'GUEST';
-            } else if (couponsToday >= dailyCap) {
-              capped = 'DAY';
             } else if (couponsMonth >= monthlyCap) {
               capped = 'MONTH';
+            } else if (couponsToday >= dailyCap) {
+              capped = 'DAY';
             } else {
               coupons.push(await this.grantCoupon(userId, harvestAmount, harvestMinOrder, db));
               couponsToday += 1;
@@ -388,7 +389,7 @@ export class GameGardenService {
     const treesPlanted = e.treesPlanted ?? 0;
     const progress = e.progress ?? 0;
     let target = e.target ?? ladderTarget(ladder, treesPlanted);
-    if (treesPlanted === 0 && progress === 0) target = Math.min(target, ladderTarget(ladder, 0));
+    if (treesPlanted === 0 && e.sproutRewarded !== true) target = Math.min(target, ladderTarget(ladder, 0));
     return { progress, target, treeType: e.treeType ?? DEFAULT_TREE_TYPE, treesPlanted };
   }
 }

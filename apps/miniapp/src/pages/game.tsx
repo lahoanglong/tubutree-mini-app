@@ -353,7 +353,6 @@ export default function GamePage() {
         species={harvestSpecies}
         points={harvestPoints}
         sprout={harvestMeta?.sprout ?? false}
-        canShare={harvestMeta?.canShare ?? true}
         couponCapped={harvestMeta?.couponCapped ?? null}
         nextTarget={harvestMeta?.nextTarget ?? null}
         onClose={() => setHarvested(false)}

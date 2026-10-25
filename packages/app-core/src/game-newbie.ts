@@ -171,7 +171,7 @@ export const gameNewbieCopy = {
     shareTitle: 'Tôi vừa thu hoạch một cây ở Vườn Xanh 🌳',
     shareDescription: 'Vào Vườn Xanh của Tubu Tree trồng cây cùng tôi nhé!',
     capped: {
-      DAY: 'Hôm nay bạn đã nhận đủ mã giảm giá. Cây vẫn được tính, mã sẽ có lại ở lần thu hoạch sau.',
+      DAY: 'Hôm nay bạn đã nhận mã giảm giá. Cây vẫn được tính, mai thu hoạch tiếp bạn sẽ có mã.',
       MONTH: 'Tháng này bạn đã nhận đủ mã giảm giá. Cây vẫn được tính, sang tháng bạn nhận mã tiếp nhé.',
     },
   },

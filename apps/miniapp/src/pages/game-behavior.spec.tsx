@@ -643,14 +643,14 @@ describe('GamePage — lô đất', () => {
     expect(screen.queryByRole('button', { name: 'Tưới' })).not.toBeInTheDocument();
   });
 
-  it('thu hoạch ở lô phụ: hộp chúc mừng không có nút chia sẻ', async () => {
+  it('thu hoạch ở lô phụ: hộp chúc mừng vẫn có nút "Chia sẻ với bạn bè" (Zalo)', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: NEXT });
     mocks.api.waterPlot.mockResolvedValue({ progress: 0, target: 20, harvested: true, treesPlanted: 2, revivedFromDead: false, reward: { certificate: 'C9' } });
     renderPage();
     await openTab('Vườn');
     fireEvent.click((await screen.findAllByRole('button', { name: 'Tưới' }))[0]!);
     expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Chia sẻ với bạn bè' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chia sẻ với bạn bè' })).toBeInTheDocument();
   });
 
   it('mỗi lô có nút Tưới gọi waterPlot(id, 20) đúng lô; báo tiến độ lô; hiện tình trạng héo (lô DEAD cũ cũng chỉ héo)', async () => {
