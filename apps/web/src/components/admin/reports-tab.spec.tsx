@@ -192,12 +192,12 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(mocks.downloadPitCsv).toHaveBeenCalledWith(range);
       expect(container.textContent).toContain('Đã tải thue.csv');
 
-      click(btn(container, 'Xuất CSV lệnh rút tiền'));
+      click(btn(container, 'Xuất CSV lệnh chuyển hoa hồng'));
       await flush();
       expect(mocks.downloadPayoutsCsv).toHaveBeenLastCalledWith(range, undefined);
       const selects = container.querySelectorAll('select');
       selectValue(selects[0]!, 'PAID');
-      click(btn(container, 'Xuất CSV lệnh rút tiền'));
+      click(btn(container, 'Xuất CSV lệnh chuyển hoa hồng'));
       await flush();
       expect(mocks.downloadPayoutsCsv).toHaveBeenLastCalledWith(range, 'PAID');
 
@@ -207,10 +207,10 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       expect(mocks.downloadRefundsCsv).toHaveBeenCalledWith(range, 'OPEN');
     });
 
-    it('câu chỉ sang tab rút tiền dùng đúng tên mục trên thanh bên ("Yêu cầu rút tiền")', async () => {
+    it('câu chỉ sang tab thuế dùng đúng tên mục trên thanh bên ("Thuế TNCN hoa hồng")', async () => {
       const { container } = mount(<ReportsTab />);
       await flush();
-      expect(container.textContent).toContain('mục Yêu cầu rút tiền');
+      expect(container.textContent).toContain('mục Thuế TNCN hoa hồng');
       expect(container.textContent).not.toContain('Duyệt yêu cầu rút tiền');
     });
 

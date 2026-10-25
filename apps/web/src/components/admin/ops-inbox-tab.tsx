@@ -23,8 +23,8 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   dealerApplications: { title: 'Hồ sơ đại lý chờ duyệt', hint: 'Đăng ký đại lý mới' },
   dealerClaims: { title: 'Thưởng đại lý chờ duyệt', hint: 'Đại lý đã đạt mốc, chờ xác nhận' },
   dealerClaimsToPay: { title: 'Thưởng đại lý chờ chi', hint: 'Admin đã duyệt, chờ kế toán trao thưởng và bấm "Đã chi"' },
-  payouts: { title: 'Lệnh rút tiền chờ duyệt', hint: 'Hoa hồng CTV / Ví' },
-  payoutsToPay: { title: 'Lệnh rút tiền chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
+  payouts: { title: 'Lệnh rút ngân hàng cũ chờ duyệt', hint: 'Lệnh tạo trước khi bỏ rút tiền' },
+  payoutsToPay: { title: 'Lệnh rút ngân hàng cũ chờ chi', hint: 'Admin đã duyệt, chờ kế toán chuyển khoản và bấm "Đã chi"' },
   wasteToCount: { title: 'Kiện đổi rác chờ đếm', hint: 'Kiện gửi kho hoặc thu kèm đơn đã nhận, chưa đếm' },
   wasteUnmatched: { title: 'Kiện không rõ chủ', hint: 'Kiện về kho chưa khớp yêu cầu nào' },
   wasteBlockedPending: { title: 'Yêu cầu đổi rác của khách bị khoá', hint: 'Yêu cầu đang mở, đang gửi hoặc kho đã nhận của khách bị khoá' },
@@ -41,8 +41,9 @@ export const INBOX_LABELS: Record<InboxKey, { title: string; hint: string }> = {
   externalPoints: { title: 'Tích điểm đơn sàn cần xử lý', hint: 'Yêu cầu cần duyệt, mã chưa ghép được đơn, đơn đã cộng điểm bị hoàn một phần hoặc đã đóng' },
 };
 
-/** Hai thẻ rút tiền cùng mở tab "Yêu cầu rút tiền": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
+/** Hai thẻ lệnh rút cũ cùng mở tab "Thuế TNCN hoa hồng": mỗi thẻ phải mở đúng hàng nó đếm, ADMIN mặc định đứng ở hàng chờ duyệt. */
 const PAYOUT_FILTER: Partial<Record<InboxKey, AdminPayoutStatus>> = { payouts: 'REQUESTED', payoutsToPay: 'APPROVED' };
+const LEGACY_ONLY: ReadonlySet<InboxKey> = new Set<InboxKey>(['payouts', 'payoutsToPay']);
 /** Cùng lý do với hai thẻ thưởng đại lý: thẻ chờ chi phải mở hàng đã duyệt, không phải hàng chờ duyệt. */
 const CLAIM_FILTER: Partial<Record<InboxKey, DealerRewardClaimStatus>> = { dealerClaims: 'PENDING', dealerClaimsToPay: 'APPROVED' };
 
@@ -59,7 +60,8 @@ export function OpsInboxTab({ onOpen: openTab }: { onOpen: (key: InboxKey) => vo
   // API mới hơn web (đang triển khai dở) có thể trả khoá web chưa biết: bỏ qua thay vì làm sập cả trang chủ.
   const items = q.data.items.filter((i) => i.key in INBOX_LABELS);
   const open = items.filter((i) => i.count > 0);
-  const done = items.filter((i) => i.count === 0);
+  // Rút ngân hàng đã bỏ: hai thẻ lệnh rút cũ chỉ hiện khi còn lệnh đang mở, không nằm trong danh sách "Đang trống".
+  const done = items.filter((i) => i.count === 0 && !LEGACY_ONLY.has(i.key));
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">

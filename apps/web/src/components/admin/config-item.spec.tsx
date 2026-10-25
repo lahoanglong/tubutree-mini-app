@@ -120,7 +120,6 @@ describe('ConfigItem (tab Cấu hình)', () => {
 
     // U5-B04: nhóm khoá hoa hồng/mã giảm/hoàn tiền/đại lý/điểm thưởng từng lưu thẳng, không hộp xác nhận.
     it.each([
-      ['affiliate.min_withdraw_bank', 50_000, '60000'],
       ['affiliate.pit_withhold_pct', 10, '1'],
       ['coupon.staff_max_percent', 30, '90'],
       ['cashback.merchant_user_share', 0.5, '0.9'],

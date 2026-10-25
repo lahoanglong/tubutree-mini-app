@@ -20,7 +20,7 @@ const OPTIONS = [
     value: 'WALLET',
     Icon: Wallet,
     title: 'Ví Tubu',
-    hint: 'Cộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng.',
+    hint: 'Cộng ngay, dùng mua đơn tiếp theo.',
   },
   {
     value: 'BANK',

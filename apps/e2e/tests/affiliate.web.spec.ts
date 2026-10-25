@@ -15,7 +15,7 @@ const DASH = {
 function mockSession(api: MockApi) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
-  api.get('/config/public', { freeshipThreshold: 500000, affiliateMinWithdrawBank: 50000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+  api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
 }
 
 const EMPTY_TAX = { year: 2026, fullName: null, taxId: null, items: [], totals: { grossAmount: 0, taxWithheld: 0, netAmount: 0 } };
@@ -134,7 +134,7 @@ test.describe('Web khách: CTV', () => {
 
   test('rút về ngân hàng có khấu trừ thuế TNCN: hỏi MST, chặn tới khi đúng mẫu, gửi kèm bankInfo và taxId', async ({ page, api }) => {
     mockSession(api);
-    api.get('/config/public', { freeshipThreshold: 500000, affiliateMinWithdrawBank: 50000, affiliatePitWithhold: { pct: 0.1, threshold: 50000 }, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+    api.get('/config/public', { freeshipThreshold: 500000, affiliatePitWithhold: { pct: 0.1, threshold: 50000 }, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     mockDashboard(api, []);
     api.post('/affiliate/payouts', () => ({ ok: true, method: 'BANK', payoutId: 'p2', status: 'REQUESTED' }));
     await page.goto('/ctv');

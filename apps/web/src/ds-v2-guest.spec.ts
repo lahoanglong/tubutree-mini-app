@@ -138,7 +138,7 @@ const AFFILIATE: string[] = [
   'components/affiliate/ctv-shortcuts.tsx',
   'components/affiliate/ctv-copy.ts',
   'components/affiliate/choice-card.tsx',
-  'components/affiliate/withdraw-sheet.tsx',
+  'components/affiliate/transfer-sheet.tsx',
   'components/affiliate/tier-card.tsx',
   'components/affiliate/milestone-rewards.tsx',
   'components/affiliate/ctv-order-sheet.tsx',

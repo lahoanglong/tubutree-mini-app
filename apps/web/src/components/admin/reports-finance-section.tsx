@@ -32,7 +32,7 @@ const REFUND_STATUS_OPTIONS: { value: '' | RefundExportStatus; label: string }[]
 
 type Kind = 'tax' | 'payouts' | 'refunds';
 
-/** Ba file CSV cho kế toán: khấu trừ TNCN của CTV, lệnh rút tiền, hoàn tiền khách. Dùng khoảng ngày chung của tab Báo cáo. */
+/** Ba file CSV cho kế toán: khấu trừ TNCN của CTV, lệnh chuyển hoa hồng, hoàn tiền khách. Dùng khoảng ngày chung của tab Báo cáo. */
 export function ReportsFinanceSection({ range }: { range: ReportRange }) {
   const error = rangeError(range.from, range.to, REVENUE_MAX_DAYS);
   const [payoutStatus, setPayoutStatus] = useState<'' | PayoutExportStatus>('');
@@ -68,14 +68,14 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
       <div className="grid gap-3 md:grid-cols-3">
         <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
           <h4 className="text-sm font-medium text-stone-900">Khấu trừ thuế TNCN của CTV</h4>
-          <p className="text-xs text-stone-500">Mỗi người nhận một dòng, gồm các lệnh đã chi hoa hồng trong khoảng ngày chi (giờ Việt Nam). Cùng số với bảng theo tháng ở mục Yêu cầu rút tiền.</p>
+          <p className="text-xs text-stone-500">Mỗi người nhận một dòng, gồm các lệnh đã chi hoa hồng trong khoảng ngày chi (giờ Việt Nam). Cùng số với bảng theo tháng ở mục Thuế TNCN hoa hồng.</p>
           <button type="button" disabled={disabled} onClick={() => void run('tax')} className={BTN_SECONDARY}>
             {busy === 'tax' ? 'Đang xuất…' : 'Xuất CSV thuế TNCN'}
           </button>
         </div>
         <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-          <h4 className="text-sm font-medium text-stone-900">Lệnh rút tiền</h4>
-          <p className="text-xs text-stone-500">Hoa hồng CTV và rút Ví Tubu, theo ngày yêu cầu, kèm tài khoản nhận và mã giao dịch ngân hàng.</p>
+          <h4 className="text-sm font-medium text-stone-900">Lệnh chuyển hoa hồng vào Ví và lệnh rút cũ</h4>
+          <p className="text-xs text-stone-500">Chuyển hoa hồng CTV vào Ví Tubu và lệnh rút ngân hàng cũ, theo ngày yêu cầu, kèm tài khoản nhận và mã giao dịch ngân hàng nếu có.</p>
           <label className="block text-xs text-stone-600">
             Trạng thái
             <select value={payoutStatus} onChange={(e) => setPayoutStatus(e.target.value as '' | PayoutExportStatus)} className={`${FIELD_XS} mt-1 block w-full`}>
@@ -87,7 +87,7 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
             </select>
           </label>
           <button type="button" disabled={disabled} onClick={() => void run('payouts')} className={BTN_SECONDARY}>
-            {busy === 'payouts' ? 'Đang xuất…' : 'Xuất CSV lệnh rút tiền'}
+            {busy === 'payouts' ? 'Đang xuất…' : 'Xuất CSV lệnh chuyển hoa hồng'}
           </button>
         </div>
         <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">

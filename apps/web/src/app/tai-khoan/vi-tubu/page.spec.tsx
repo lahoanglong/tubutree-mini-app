@@ -17,7 +17,6 @@ const state = vi.hoisted(() => ({
   pages: [] as { data: Record<string, unknown>[]; total: number; limit?: number }[],
   fail: new Set<string>(),
   calls: [] as Call[],
-  withdraw: null as null | (() => Promise<unknown>),
   share: null as null | (() => Promise<string>),
   shared: [] as unknown[],
   hold: new Set<string>(),
@@ -56,14 +55,14 @@ vi.mock('@/lib/core-http', () => ({
     },
     post: async (path: string, body?: unknown, opts?: { headers?: Record<string, string> }) => {
       state.calls.push({ method: 'post', path, body, headers: opts?.headers });
-      return state.withdraw!();
+      throw new Error(`POST không được gọi ở trang Ví: ${path}`);
     },
   },
 }));
 
 import WalletPage from './page';
 
-const WALLET = { walletBalance: 1_250_000, cashbackPending: 45_000, commissionApproved: 520_000, commissionPending: 30_000, withdrawMin: 100_000, withdrawFee: 3_000 };
+const WALLET = { walletBalance: 1_250_000, cashbackPending: 45_000, commissionApproved: 520_000, commissionPending: 30_000 };
 const REFERRAL = { referralCode: 'TUBU1234', successCount: 2, earnedPoints: 20, milestones: [{ count: 5, bonusPoints: 50 }], nextMilestone: { count: 5, bonusPoints: 50 } };
 const LOYALTY = { pointsBalance: 48_000, pointsConvertedBalance: 2_000, tier: { name: 'Bạc' } };
 const PAGE_1 = {
@@ -83,24 +82,6 @@ const mount = async () => {
   await flush(8);
   return r.container;
 };
-const postsOf = (path: string) => state.calls.filter((c) => c.method === 'post' && c.path === path);
-const input = (c: HTMLElement, label: string) => {
-  const l = Array.from(document.querySelectorAll('label')).find((x) => x.textContent === label);
-  return document.getElementById(l!.getAttribute('for')!) as HTMLInputElement;
-};
-async function openSheet(c: HTMLElement) {
-  click(byText(c, 'button', 'Rút ngân hàng'));
-  await flush(3);
-}
-async function fillBank(c: HTMLElement, amount = '200000') {
-  typeInto(input(c, 'Số tiền rút'), amount);
-  typeInto(input(c, 'Tên ngân hàng'), 'Techcombank');
-  typeInto(input(c, 'Số tài khoản'), '19031234567');
-  typeInto(input(c, 'Chủ tài khoản'), 'LA HOANG LONG');
-  await flush(2);
-}
-const submitBtn = () => Array.from(document.querySelectorAll('button')).find((b) => /^Rút( [\d.]+đ)?$/.test(b.textContent?.trim() ?? '')) as HTMLButtonElement;
-
 beforeEach(() => {
   state.phase = 'authenticated';
   state.role = 'CUSTOMER';
@@ -113,7 +94,6 @@ beforeEach(() => {
   state.fail = new Set();
   state.calls = [];
   state.shared = [];
-  state.withdraw = async () => ({ ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 200_000, fee: 3_000, net: 197_000 });
   state.share = async () => 'shared';
 });
 afterEach(() => {
@@ -133,7 +113,7 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).toContain('Bạc');
     expect(c.textContent).toContain('Hoa hồng chờ duyệt');
     expect(c.textContent).toContain('30.000đ');
-    expect(c.textContent).toContain('Hoa hồng có thể rút');
+    expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
     expect(c.textContent).toContain('520.000đ');
     expect(c.textContent).toContain('Hoàn tiền đã duyệt, chờ về Ví');
     expect(c.textContent).toContain('45.000đ');
@@ -156,34 +136,34 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).not.toContain('không hết hạn');
   });
 
-  it('/ctv chưa có trên web: thẻ hoa hồng không thành link 404 và không gợi ý "Nhận về Ví →"', async () => {
+  it('/ctv chưa có trên web: thẻ hoa hồng không thành link 404 và không gợi ý "Chuyển vào Ví →"', async () => {
     state.ctvReady = false;
     const c = await mount();
     expect(c.querySelector('a[href="/ctv"]')).toBeNull();
-    expect(c.textContent).not.toContain('Nhận về Ví →');
-    expect(c.textContent).toContain('Hoa hồng có thể rút');
+    expect(c.textContent).not.toContain('Chuyển vào Ví →');
+    expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
   });
 
-  it('hoa hồng đã duyệt > 0: thẻ dẫn sang /ctv kèm "Nhận về Ví →"; bằng 0 thì không bấm được, không gợi ý', async () => {
+  it('hoa hồng đã duyệt > 0: thẻ dẫn sang /ctv kèm "Chuyển vào Ví →"; bằng 0 thì không bấm được, không gợi ý', async () => {
     let c = await mount();
     const a = c.querySelector<HTMLAnchorElement>('a[href="/ctv"]');
     expect(a).not.toBeNull();
-    expect(a!.textContent).toContain('Nhận về Ví →');
+    expect(a!.textContent).toContain('Chuyển vào Ví →');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.wallet = { ...WALLET, commissionApproved: 0 };
     c = await mount();
     expect(c.querySelector('a[href="/ctv"]')).toBeNull();
-    expect(c.textContent).not.toContain('Nhận về Ví →');
-    expect(c.textContent).toContain('Hoa hồng có thể rút');
+    expect(c.textContent).not.toContain('Chuyển vào Ví →');
+    expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
   });
 
   it('khách thường chưa có hoa hồng: ẩn hai thẻ hoa hồng, chú thích nói về thanh toán đơn', async () => {
     state.wallet = { ...WALLET, commissionApproved: 0, commissionPending: 0, cashbackPending: 0 };
     const c = await mount();
-    expect(c.textContent).toContain('Số dư dùng để thanh toán đơn');
+    expect(c.textContent).toContain('Dùng để trả tiền hàng ở bước thanh toán');
     expect(c.textContent).not.toContain('Hoa hồng chờ duyệt');
-    expect(c.textContent).not.toContain('Hoa hồng có thể rút');
+    expect(c.textContent).not.toContain('Hoa hồng có thể chuyển vào Ví');
     expect(c.textContent).not.toContain('Tiền thật từ hoa hồng');
     expect(c.textContent).not.toContain('Hoàn tiền đã duyệt, chờ về Ví');
   });
@@ -194,8 +174,8 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
       state.wallet = { ...WALLET, commissionApproved: 0, commissionPending: 0, cashbackPending: 0 };
       const c = await mount();
       expect(c.textContent).toContain('Hoa hồng chờ duyệt');
-      expect(c.textContent).toContain('Hoa hồng có thể rút');
-      expect(c.textContent).toContain('Tiền thật từ hoa hồng — rút về ngân hàng hoặc trả đơn hàng.');
+      expect(c.textContent).toContain('Hoa hồng có thể chuyển vào Ví');
+      expect(c.textContent).toContain('Tiền thật từ hoa hồng — dùng để trả tiền hàng.');
       expect(c.textContent).not.toContain('hoàn tiền sàn ngoài');
       mounted.forEach((m) => m.unmount());
       mounted = [];
@@ -211,10 +191,16 @@ describe('/tai-khoan/vi-tubu — thẻ số dư và nguồn tiền', () => {
     expect(c.textContent).toContain('Hoàn tiền đã duyệt, chờ về Ví');
   });
 
-  it('mẹo dưới ví: dùng Ví trả đơn miễn phí thay vì rút có phí (phí lấy từ API)', async () => {
-    state.wallet = { ...WALLET, withdrawFee: 5_000 };
+  it('mẹo dưới ví nói tiền hoàn đơn và hoa hồng vào Ví để trả đơn sau, không nhắc rút ngân hàng', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Mẹo: dùng Ví Tubu để trả đơn hàng — miễn phí, thay vì rút về ngân hàng (phí chuyển khoản 5.000đ/lần).');
+    expect(c.textContent).toContain('Mẹo: tiền hoàn đơn và hoa hồng CTV vào Ví Tubu, dùng trả đơn sau ở bước thanh toán.');
+  });
+
+  it('không còn nút hay sheet rút về ngân hàng, không gọi POST nào (chính sách Zalo 4.5)', async () => {
+    const c = await mount();
+    expect(byText(c, 'button', 'Rút ngân hàng')).toBeNull();
+    expect(c.textContent).not.toMatch(/Rút ngân hàng|Tên ngân hàng|Số tài khoản/);
+    expect(state.calls.filter((x) => x.method === 'post')).toEqual([]);
   });
 });
 
@@ -316,136 +302,6 @@ describe('/tai-khoan/vi-tubu — giới thiệu bạn bè', () => {
   });
 });
 
-describe('/tai-khoan/vi-tubu — rút tiền về ngân hàng', () => {
-  it('nút Rút khoá tới khi đủ số tiền + ngân hàng; gửi đúng POST /wallet/withdraw, body và Idempotency-Key', async () => {
-    const c = await mount();
-    await openSheet(c);
-    expect(document.body.textContent).toContain('Khả dụng: 1.250.000đ • Tối thiểu: 100.000đ');
-    expect(submitBtn().disabled).toBe(true);
-    typeInto(input(c, 'Số tiền rút'), '200000');
-    typeInto(input(c, 'Tên ngân hàng'), 'Techcombank');
-    typeInto(input(c, 'Số tài khoản'), '19031234567');
-    await flush(2);
-    expect(submitBtn().disabled).toBe(true);
-    typeInto(input(c, 'Chủ tài khoản'), 'LA HOANG LONG');
-    await flush(2);
-    expect(document.body.textContent).toContain('Phí chuyển khoản ngân hàng: 3.000đ • Thực nhận: 197.000đ');
-    expect(submitBtn().textContent?.trim()).toBe('Rút 200.000đ');
-    click(submitBtn());
-    await flush(6);
-    const posts = postsOf('/wallet/withdraw');
-    expect(posts).toHaveLength(1);
-    expect(posts[0]!.body).toEqual({ amount: 200_000, bankInfo: { bankName: 'Techcombank', accountNumber: '19031234567', accountName: 'LA HOANG LONG' } });
-    expect(posts[0]!.headers?.['Idempotency-Key']).toMatch(/\S{8,}/);
-    expect(c.textContent).toContain('Đã gửi yêu cầu rút. Thực nhận 197.000đ trong 1-3 ngày làm việc.');
-    expect(document.body.textContent).not.toContain('Phí chuyển khoản ngân hàng');
-  });
-
-  it('rút xong làm mới số dư và sao kê', async () => {
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c);
-    const walletBefore = state.calls.filter((x) => x.path === '/me/wallet').length;
-    const txnBefore = state.calls.filter((x) => x.path === '/me/wallet/transactions').length;
-    click(submitBtn());
-    await flush(8);
-    expect(state.calls.filter((x) => x.path === '/me/wallet').length).toBeGreaterThan(walletBefore);
-    expect(state.calls.filter((x) => x.path === '/me/wallet/transactions').length).toBeGreaterThan(txnBefore);
-  });
-
-  it('số tiền dưới mức tối thiểu, vượt số dư, số TK dưới 6 ký tự: nút khoá (canWithdraw như Mini App)', async () => {
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '99999');
-    expect(submitBtn().disabled).toBe(true);
-    typeInto(input(c, 'Số tiền rút'), '1250001');
-    await flush(2);
-    expect(submitBtn().disabled).toBe(true);
-    typeInto(input(c, 'Số tiền rút'), '1250000');
-    typeInto(input(c, 'Số tài khoản'), '12345');
-    await flush(2);
-    expect(submitBtn().disabled).toBe(true);
-    typeInto(input(c, 'Số tài khoản'), '123456');
-    await flush(2);
-    expect(submitBtn().disabled).toBe(false);
-  });
-
-  it('mức tối thiểu và phí lấy từ API; API không trả thì mặc định 100.000đ và 3.000đ', async () => {
-    state.wallet = { ...WALLET, withdrawMin: undefined, withdrawFee: undefined };
-    const c = await mount();
-    await openSheet(c);
-    expect(document.body.textContent).toContain('Tối thiểu: 100.000đ');
-    await fillBank(c);
-    expect(document.body.textContent).toContain('Phí chuyển khoản ngân hàng: 3.000đ • Thực nhận: 197.000đ');
-  });
-
-  it('số dư dưới mức tối thiểu: báo chưa đủ mốc và khoá cả bốn ô nhập', async () => {
-    state.wallet = { ...WALLET, walletBalance: 50_000 };
-    const c = await mount();
-    await openSheet(c);
-    expect(document.body.textContent).toContain('chưa đủ mốc tối thiểu 100.000đ');
-    for (const label of ['Số tiền rút', 'Tên ngân hàng', 'Số tài khoản', 'Chủ tài khoản']) {
-      expect(input(c, label).disabled).toBe(true);
-    }
-  });
-
-  it('bấm đúp không gửi hai lệnh', async () => {
-    let release!: () => void;
-    state.withdraw = () => new Promise((res) => {
-      release = () => res({ ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 200_000, fee: 3_000, net: 197_000 });
-    });
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c);
-    const btn = submitBtn();
-    click(btn);
-    click(btn);
-    await flush(2);
-    expect(postsOf('/wallet/withdraw')).toHaveLength(1);
-    expect(btn.textContent).toContain('Đang gửi...');
-    release();
-    await flush(4);
-  });
-
-  it('mỗi lần mở sheet và sau mỗi lỗi là một lệnh mới: Idempotency-Key khác nhau', async () => {
-    state.withdraw = async () => {
-      throw new ApiError('Ngân hàng từ chối', 400);
-    };
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '150000');
-    click(submitBtn());
-    await flush(6);
-    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toBe('Ngân hàng từ chối');
-    expect(c.querySelector('[role="status"]')?.textContent).not.toContain('Ngân hàng từ chối');
-    click(submitBtn());
-    await flush(6);
-    const keys = postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);
-    expect(keys).toHaveLength(2);
-    expect(keys[1]).not.toBe(keys[0]);
-  });
-
-  it('mở lại sheet sau khi đóng cho key mới và xoá số tiền cũ', async () => {
-    state.withdraw = async () => {
-      throw new ApiError('lỗi', 400);
-    };
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '150000');
-    click(submitBtn());
-    await flush(6);
-    click(byText(document.body, 'button', 'Đóng') ?? (document.querySelector('[aria-label="Đóng"]') as HTMLElement));
-    await flush(2);
-    await openSheet(c);
-    expect(input(c, 'Số tiền rút').value).toBe('');
-    await fillBank(c, '150000');
-    click(submitBtn());
-    await flush(6);
-    const keys = postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);
-    expect(keys[1]).not.toBe(keys[0]);
-  });
-});
-
 describe('/tai-khoan/vi-tubu — lịch sử Ví', () => {
   it('từng dòng: nhãn loại, giờ, lý do, tiền có dấu, số dư sau biến động', async () => {
     const c = await mount();
@@ -508,15 +364,12 @@ describe('/tai-khoan/vi-tubu — lịch sử Ví', () => {
 });
 
 describe('/tai-khoan/vi-tubu — truy cập', () => {
-  it('tiêu đề, nút, nhãn ô nhập và vùng chạm đạt kiểm tra tối thiểu (kể cả khi mở sheet rút)', async () => {
+  it('tiêu đề, nút và vùng chạm đạt kiểm tra tối thiểu', async () => {
     const c = await mount();
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
-    await openSheet(c);
     expect(unlabeledFields(document.body)).toEqual([]);
-    expect(unnamedControls(document.body)).toEqual([]);
-    expect(smallTouchTargets(document.body)).toEqual([]);
   });
 });
 
@@ -533,8 +386,8 @@ describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () 
     expect(at('Điểm Xanh (đổi giảm giá)')).toBeLessThan(at('Mời bạn bè'));
     expect(at('Mời bạn bè')).toBeLessThan(at('Hoa hồng chờ duyệt'));
     expect(at('Hoa hồng chờ duyệt')).toBeLessThan(at('Hoàn tiền đã duyệt'));
-    expect(at('Hoàn tiền đã duyệt')).toBeLessThan(at('Mẹo: dùng Ví Tubu'));
-    expect(at('Mẹo: dùng Ví Tubu')).toBeLessThan(at('Lịch sử Ví'));
+    expect(at('Hoàn tiền đã duyệt')).toBeLessThan(at('Mẹo: tiền hoàn đơn'));
+    expect(at('Mẹo: tiền hoàn đơn')).toBeLessThan(at('Lịch sử Ví'));
   });
 
   it('hai cột giữ nguyên ở máy tính: DOM vẫn là cột trái rồi cột phải', async () => {
@@ -544,9 +397,8 @@ describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () 
     expect(heads.indexOf('Mời bạn bè')).toBeLessThan(heads.indexOf('Lịch sử Ví'));
   });
 
-  it('nút Rút ngân hàng là nút phụ ZaUI; các thẻ không viền ở điện thoại', async () => {
+  it('các thẻ không viền ở điện thoại', async () => {
     const c = await mount();
-    expect(byText(c, 'button', 'Rút ngân hàng')!.className).toContain('max-md:bg-forest-50');
     expect(Array.from(c.querySelectorAll('section')).filter((s) => s.classList.contains('border'))).toEqual([]);
   });
 
@@ -557,197 +409,6 @@ describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () 
   });
 });
 
-
-describe('/tai-khoan/vi-tubu — rút gặp lỗi chưa rõ kết quả (95d6a687, 9dcc431b)', () => {
-  const OK = { ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 400_000, fee: 3_000, net: 397_000 };
-  const keys = () => postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);
-  const walletGets = () => state.calls.filter((c) => c.method === 'get' && c.path === '/me/wallet').length;
-  const closeSheet = async () => {
-    click(byText(document.body, 'button', 'Đóng') ?? (document.querySelector('[aria-label="Đóng"]') as HTMLElement));
-    await flush(2);
-  };
-  /** Lần gọi thứ n ném `errors[n]`, hết danh sách thì thành công. */
-  const failWith = (...errors: unknown[]) => {
-    let n = 0;
-    state.withdraw = async () => {
-      const e = errors[n++];
-      if (e) throw e;
-      return OK;
-    };
-  };
-
-  it.each([
-    ['mất mạng giữa chừng', () => new NetworkError(false)],
-    ['hết thời gian chờ', () => new NetworkError(true)],
-    ['máy chủ 502', () => new ApiError('Bad gateway', 502)],
-  ])('%s: bấm lại gửi đúng Idempotency-Key cũ, tải lại số dư và nhắc kiểm tra lịch sử', async (_n, make) => {
-    failWith(make());
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    const before = walletGets();
-    click(submitBtn());
-    await flush(6);
-    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toBe(
-      'Chưa nhận được phản hồi từ máy chủ nên chưa rõ lệnh rút đã được ghi nhận chưa. Bạn kiểm tra lịch sử giao dịch của Ví trước khi rút lại nhé.',
-    );
-    expect(walletGets()).toBeGreaterThan(before);
-    click(submitBtn());
-    await flush(6);
-    expect(keys()).toHaveLength(2);
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it('chưa rõ kết quả rồi đóng sheet và mở lại: vẫn dùng key của lệnh chưa rõ, không rút lần hai', async () => {
-    failWith(new NetworkError(true));
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    await closeSheet();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    expect(keys()).toHaveLength(2);
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it.each([[401], [403], [408], [429]])('chưa rõ kết quả rồi lần sau gặp %i (request này chưa được xử lý): vẫn gửi key của lệnh chưa rõ', async (status) => {
-    failWith(new NetworkError(true), new ApiError('x', status));
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    click(submitBtn());
-    await flush(6);
-    click(submitBtn());
-    await flush(6);
-    expect(keys()).toHaveLength(3);
-    expect(keys()[1]).toBe(keys()[0]);
-    expect(keys()[2]).toBe(keys()[0]);
-  });
-
-  it('2xx nhưng thân không phải JSON (proxy cắt cụt): coi là chưa rõ kết quả, bấm lại vẫn key cũ', async () => {
-    failWith(new SyntaxError("Unexpected token '<'"));
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toContain('chưa rõ lệnh rút');
-    click(submitBtn());
-    await flush(6);
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it('máy chủ từ chối rõ ràng (400): lần bấm sau dùng key mới', async () => {
-    failWith(new ApiError('Số dư ví không đủ.', 400), new ApiError('Số dư ví không đủ.', 400));
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    expect(document.querySelector('[role="dialog"]')!.querySelector('[role="alert"]')?.textContent).toBe('Số dư ví không đủ.');
-    click(submitBtn());
-    await flush(6);
-    expect(keys()[1]).not.toBe(keys()[0]);
-  });
-
-  it('401 ở lần rút đầu tiên (chưa có lệnh nào chưa rõ): lần bấm sau vẫn key cũ vì request này chưa được xử lý', async () => {
-    failWith(new ApiError('Unauthorized', 401));
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    click(submitBtn());
-    await flush(6);
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it('khách rời màn Ví rồi vào lại: lệnh rút mới không mang key của lệnh chưa rõ kết quả trước đó', async () => {
-    failWith(new NetworkError(true));
-    const first = await mount();
-    await openSheet(first);
-    await fillBank(first, '400000');
-    click(submitBtn());
-    await flush(6);
-    mounted.pop()!.unmount();
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-    expect(keys()[1]).not.toBe(keys()[0]);
-  });
-});
-
-describe('/tai-khoan/vi-tubu — cờ "rút chưa rõ kết quả" tự gỡ khi sao kê đã ghi lệnh (9968242c, 4ee6b81d)', () => {
-  const keys = () => postsOf('/wallet/withdraw').map((p) => p.headers?.['Idempotency-Key']);
-  const RECORDED = { id: 't0', delta: -400_000, balanceAfter: 850_000, type: 'WITHDRAW', reason: 'Rút về ngân hàng (phí 3000đ)', orderId: null, createdAt: '2026-10-06T07:04:00Z' };
-  const withRows = (...rows: Record<string, unknown>[]) => [{ ...PAGE_1, data: [...rows, ...PAGE_1.data] }, PAGE_2];
-  const closeSheet = async () => {
-    click(byText(document.body, 'button', 'Đóng') ?? (document.querySelector('[aria-label="Đóng"]') as HTMLElement));
-    await flush(2);
-  };
-  /** Rút hết thời gian chờ ở lần đầu; `after` chạy ngay trước khi bấm để dựng sao kê sẽ tải lại. */
-  async function timeoutThenReopen(after: () => void = () => {}) {
-    let n = 0;
-    state.withdraw = async () => {
-      if (n++ === 0) throw new NetworkError(true);
-      return { ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 400_000, fee: 3_000, net: 397_000 };
-    };
-    const c = await mount();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    after();
-    click(submitBtn());
-    await flush(8);
-    await closeSheet();
-    await openSheet(c);
-    await fillBank(c, '400000');
-    click(submitBtn());
-    await flush(6);
-  }
-
-  it('sao kê tải lại đã thấy đúng lệnh vừa chưa rõ: lần rút sau đúng số tiền ấy là lệnh mới, key mới', async () => {
-    await timeoutThenReopen(() => {
-      state.pages = withRows(RECORDED);
-    });
-    expect(keys()).toHaveLength(2);
-    expect(keys()[1]).not.toBe(keys()[0]);
-  });
-
-  it('sao kê tải lại vẫn chưa có lệnh: giữ key cũ để bấm lại không rút hai lần', async () => {
-    await timeoutThenReopen();
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it('lệnh rút cùng số tiền đã nằm trong sao kê từ trước: không coi là lệnh vừa chưa rõ, vẫn giữ key cũ', async () => {
-    state.pages = withRows({ ...RECORDED, id: 'old', createdAt: '2026-09-01T07:04:00Z' });
-    await timeoutThenReopen();
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it('số tiền khác trong sao kê mới: không gỡ cờ', async () => {
-    await timeoutThenReopen(() => {
-      state.pages = withRows({ ...RECORDED, id: 'other', delta: -250_000 });
-    });
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-
-  it('sao kê chưa tải được lúc rút chưa rõ kết quả: lệnh cũ cùng số tiền không bị nhận nhầm là lệnh vừa gửi, key cũ vẫn giữ', async () => {
-    state.fail = new Set(['/me/wallet/transactions']);
-    state.pages = withRows({ ...RECORDED, id: 'old', createdAt: '2026-09-01T07:04:00Z' });
-    await timeoutThenReopen(() => {
-      state.fail = new Set();
-    });
-    expect(keys()[1]).toBe(keys()[0]);
-  });
-});
 
 describe('/tai-khoan/vi-tubu — số Điểm Xanh không gãy dòng (9968242c)', () => {
   it('số điểm không xuống dòng và hạng thành viên nằm dưới số, không chen vào hàng làm cột số hẹp lại', async () => {

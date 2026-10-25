@@ -7,7 +7,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
 import { PointsBoostStrip } from './points-boost-strip';
 
-const BASE = { freeshipThreshold: 1, subscribeDiscountPct: 0.1, affiliateWalletMultiplier: 1, affiliateMinWithdrawBank: 1, cashbackHoldDays: 1 };
+const BASE = { freeshipThreshold: 1, subscribeDiscountPct: 0.1, affiliateWalletMultiplier: 1, cashbackHoldDays: 1 };
 let loyalty: unknown;
 let mounted: Rendered | null = null;
 const mount = async (omitPlain = false) => {
