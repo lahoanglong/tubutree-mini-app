@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   config: { communityPublicPreview: false } as { communityPublicPreview?: boolean; community?: Record<string, string | null> },
   haptic: vi.fn(),
   openExternal: vi.fn(),
+  openOAChat: vi.fn(),
+  hasOA: true,
   search: '',
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
 }));
@@ -33,12 +35,15 @@ vi.mock('../store/auth', () => ({
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
-vi.mock('../services/zmp-bridge', () => ({ openExternal: mocks.openExternal }));
+vi.mock('../services/zmp-bridge', () => ({
+  openExternal: mocks.openExternal,
+  openOAChat: mocks.openOAChat,
+  get hasOA() {
+    return mocks.hasOA;
+  },
+}));
 vi.mock('../utils/use-debounced', () => ({ useDebounced: <T,>(v: T) => v }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
-vi.mock('../components/community/post-composer', () => ({
-  default: ({ visible }: { visible: boolean }) => (visible ? <div data-testid="composer" /> : null),
-}));
 
 import FeedPage from './feed';
 
@@ -86,36 +91,57 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.search = '';
   mocks.auth.status = 'authenticated';
+  mocks.hasOA = true;
   mocks.config = { communityPublicPreview: false };
   mocks.getCategories.mockResolvedValue(CATS);
   mocks.getFeed.mockResolvedValue({ posts: [POST('p1', 'Lan Anh'), POST('p2', 'Minh Tâm')], nextCursor: null });
   mocks.getPreview.mockResolvedValue({ posts: [] });
 });
 
-describe('FeedPage — kênh cộng đồng của chủ shop', () => {
-  it('chưa cấu hình link: không vẽ nhóm kênh', async () => {
+describe('FeedPage — chỉ đọc theo chính sách Zalo (4.1, 4.6)', () => {
+  it('không có nút Đăng bài, Xếp hạng, ô soạn bài', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
+    expect(screen.queryByRole('button', { name: 'Đăng bài' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Xếp hạng/ })).toBeNull();
+    expect(screen.queryByTestId('composer')).toBeNull();
+    expect(screen.queryByRole('button', { name: /thích/i })).toBeNull();
+  });
+
+  it('thẻ bài không hiện số thích, vẫn hiện số trả lời', async () => {
+    mocks.getFeed.mockResolvedValue({ posts: [{ ...POST('p1', 'Lan Anh'), likeCount: 37, commentCount: 5 }], nextCursor: null });
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.queryByText('37')).toBeNull();
+    expect(screen.getByText('5')).toBeInTheDocument();
+  });
+
+  it('không vẽ chip Facebook, TikTok, nhóm Zalo dù admin đã cấu hình link', async () => {
+    mocks.config = { community: { zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: 'https://facebook.com/x', tiktokUrl: 'https://tiktok.com/x' } };
+    renderPage();
+    await screen.findByText('Lan Anh');
+    for (const name of ['Nhóm Zalo', 'Facebook', 'TikTok']) expect(screen.queryByRole('button', { name })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Kênh cộng đồng của Tubu Tree' })).toBeNull();
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
-  it('chỉ hiện kênh có link https và mở bằng webview Zalo khi bấm', async () => {
-    mocks.config = {
-      community: { zaloGroupUrl: 'https://zalo.me/g/abc', facebookUrl: null, tiktokUrl: 'http://tiktok.com/x' },
-    };
-    renderPage();
-    await screen.findByText('Lan Anh');
-    expect(screen.queryByRole('button', { name: 'Facebook' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'TikTok' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Nhóm Zalo' }));
-    expect(mocks.openExternal).toHaveBeenCalledWith('https://zalo.me/g/abc');
-  });
-
-  it('khách chưa đăng nhập vẫn thấy kênh ở màn cổng đăng nhập', () => {
+  it('khách chưa đăng nhập cũng không thấy kênh ngoài', () => {
     mocks.auth.status = 'anonymous';
     mocks.config = { community: { facebookUrl: 'https://facebook.com/tubutree' } };
     renderPage();
-    expect(screen.getByRole('button', { name: 'Facebook' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Facebook' })).toBeNull();
+  });
+
+  it('nút "Hỏi Tubu" mở chat OA; không có OA thì không vẽ nút', async () => {
+    const view = renderPage();
+    await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getByRole('button', { name: 'Hỏi Tubu' }));
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+    view.unmount();
+    mocks.hasOA = false;
+    renderPage();
+    await screen.findByText('Lan Anh');
+    expect(screen.queryByRole('button', { name: 'Hỏi Tubu' })).toBeNull();
   });
 });
 
@@ -172,16 +198,11 @@ describe('FeedPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     await waitFor(() => expect(lastFeedArgs()).toMatchObject({ q: 'sen đá' }));
   });
 
-  it('nút bảng xếp hạng, sự kiện điều hướng; nút Đăng bài mở khung soạn', async () => {
+  it('nút Sự kiện điều hướng', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
-    fireEvent.click(screen.getByRole('button', { name: 'Bảng xếp hạng' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/feed/leaderboard');
     fireEvent.click(screen.getByRole('button', { name: 'Sự kiện' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/feed/events');
-    expect(screen.queryByTestId('composer')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng bài' }));
-    expect(screen.getByTestId('composer')).toBeInTheDocument();
   });
 
   it('mở từ thẻ hashtag (?tag=…&tagName=…): lọc theo thẻ, hiện nhãn, bấm nhãn để bỏ lọc', async () => {
@@ -249,22 +270,20 @@ describe('FeedPage — tiêu đề, vùng chạm, biểu tượng (C-076, C-113,
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Cộng đồng Vườn Tubu');
   });
 
-  it('nút bảng xếp hạng, sự kiện, Đăng bài và chip có vùng chạm >= 44px', async () => {
+  it('nút Sự kiện, Hỏi Tubu và chip có vùng chạm >= 44px', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
-    for (const name of ['Bảng xếp hạng', 'Sự kiện']) {
+    for (const name of ['Sự kiện', 'Hỏi Tubu']) {
       const btn = screen.getByRole('button', { name });
       expect(Number.parseFloat(btn.style.minWidth)).toBeGreaterThanOrEqual(44);
       expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
     }
-    expect(Number.parseFloat(screen.getByRole('button', { name: 'Đăng bài' }).style.minHeight)).toBeGreaterThanOrEqual(44);
     expect(screen.getByRole('button', { name: 'Nổi bật' }).className).toContain('tubu-hit-44');
   });
 
-  it('nút Bảng xếp hạng và Sự kiện có chữ nhìn thấy, không chỉ là biểu tượng (D6-05)', async () => {
+  it('nút Sự kiện có chữ nhìn thấy, không chỉ là biểu tượng (D6-05)', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
-    expect(screen.getByRole('button', { name: 'Bảng xếp hạng' }).textContent?.trim()).toBe('Xếp hạng');
     expect(screen.getByRole('button', { name: 'Sự kiện' }).textContent?.trim()).toBe('Sự kiện');
   });
 
@@ -290,23 +309,21 @@ describe('FeedPage — tiêu đề, vùng chạm, biểu tượng (C-076, C-113,
   });
 });
 
-describe('FeedPage — bảng tin trống có lối đăng bài đầu tiên (D5-07)', () => {
-  it('chưa có bài nào, không lọc: nút "Đăng bài đầu tiên" mở khung soạn', async () => {
+describe('FeedPage — bảng tin trống không mời đăng bài', () => {
+  it('chưa có bài nào, không lọc: không có nút đăng bài đầu tiên', async () => {
     mocks.getFeed.mockResolvedValue({ posts: [], nextCursor: null });
     renderPage();
     expect(await screen.findByText('Chưa có bài viết nào')).toBeInTheDocument();
-    expect(screen.queryByTestId('composer')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng bài đầu tiên' }));
-    expect(screen.getByTestId('composer')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đăng bài đầu tiên' })).toBeNull();
+    expect(screen.queryByText(/người đầu tiên/)).toBeNull();
   });
 
-  it('đang lọc/tìm mà không có kết quả: không mời đăng bài đầu tiên (feed không trống thật)', async () => {
+  it('đang lọc/tìm mà không có kết quả: hiện "Không tìm thấy bài phù hợp"', async () => {
     mocks.getFeed.mockResolvedValue({ posts: [], nextCursor: null });
     renderPage();
     await screen.findByText('Chưa có bài viết nào');
     fireEvent.click(screen.getByRole('button', { name: 'Chưa trả lời' }));
     expect(await screen.findByText('Không tìm thấy bài phù hợp')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Đăng bài đầu tiên' })).toBeNull();
   });
 });
 
@@ -339,7 +356,7 @@ describe('FeedPage — xem trước công khai khi chưa đăng nhập (D5-07, c
     expect(mocks.getFeed).not.toHaveBeenCalled();
   });
 
-  it('cờ bật: hiện vài bài (tên gọi, đoạn đầu, số tim/bình luận), chỉ đọc; nút đăng nhập gọi login; không tải feed đầy đủ', async () => {
+  it('cờ bật: hiện vài bài (tên gọi, đoạn đầu), chỉ đọc; nút đăng nhập gọi login; không tải feed đầy đủ', async () => {
     mocks.config = { communityPublicPreview: true };
     mocks.getPreview.mockResolvedValue({ posts: [PREVIEW_POST('p1'), PREVIEW_POST('p2', { title: null, snippet: 'Cây trầu bà lên lá rất nhanh', author: 'Minh' })] });
     const view = renderPage();

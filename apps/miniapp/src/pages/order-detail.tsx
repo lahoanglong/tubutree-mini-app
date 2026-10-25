@@ -31,7 +31,6 @@ import {
   discountRows,
 } from '../utils/order-status';
 import {
-  openExternal,
   hasOA,
   followOA,
   requestNotifyPermission,
@@ -471,7 +470,7 @@ export default function OrderDetailPage() {
 
       {showsRefundPanel(o) && <OrderRefunds orderId={o.id} />}
 
-      {/* ── Vận chuyển (hãng VC + mã vận đơn + tra cứu + hành trình) §6.4 ── */}
+      {/* ── Vận chuyển (hãng VC + mã vận đơn + hành trình) §6.4 ── */}
       {(o.shippingCode || journey.length > 0) && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 6 }}>
@@ -505,26 +504,10 @@ export default function OrderDetailPage() {
                   );
                 }}
               >
-                Sao chép
+                Chép mã
               </Button>
             )}
           </Box>
-
-          {o.trackingLink && (
-            <Button
-              variant="secondary"
-              fullWidth
-              style={{ marginTop: 10 }}
-              onPress={() => {
-                haptic('light');
-                void openExternal(o.trackingLink!).catch(() =>
-                  openSnackbar({ text: 'Không mở được liên kết tra cứu.', type: 'error' }),
-                );
-              }}
-            >
-              Tra cứu hành trình
-            </Button>
-          )}
 
           {journey.length > 0 && (
             <Box mt={3}>
@@ -585,8 +568,20 @@ export default function OrderDetailPage() {
                   : 'Phát hành lỗi — vui lòng liên hệ hỗ trợ'}
             </Text>
             {o.invoiceUrl && (
-              <Button variant="secondary" onPress={() => void openExternal(o.invoiceUrl!)}>
-                Tải PDF
+              <Button
+                variant="secondary"
+                onPress={() => {
+                  haptic('light');
+                  void copyText(o.invoiceUrl!).then((ok) =>
+                    openSnackbar(
+                      ok
+                        ? { text: 'Đã sao chép đường dẫn hoá đơn. Dán vào trình duyệt để tải.', type: 'success' }
+                        : { text: 'Không sao chép được đường dẫn hoá đơn.', type: 'error' },
+                    ),
+                  );
+                }}
+              >
+                Chép đường dẫn
               </Button>
             )}
           </Box>

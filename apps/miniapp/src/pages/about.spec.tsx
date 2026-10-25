@@ -273,7 +273,7 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
   });
 });
 
-describe('Điều khoản & Chính sách mở bản đầy đủ trên web (D5-01)', () => {
+describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo 4.1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT });
@@ -284,22 +284,46 @@ describe('Điều khoản & Chính sách mở bản đầy đủ trên web (D5-0
     ['Điều khoản sử dụng', 'dieu-khoan'],
     ['Chính sách bảo mật', 'bao-mat'],
     ['Chính sách đổi trả', 'doi-tra'],
-  ])('"%s": sheet có nút "Xem bản đầy đủ trên web" mở /chinh-sach/%s', async (label, slug) => {
+    ['Chính sách vận chuyển', 'van-chuyen'],
+  ])('"%s": sheet gọi /config/legal/%s, hiện nội dung đã duyệt, không có nút mở web', async (label, slug) => {
+    mocks.apiGet.mockImplementation(async (url: string) => {
+      if (url === `/config/legal/${slug}`) return { data: { content: `## Mục 1\nNội dung đã duyệt của ${slug}` } };
+      return { data: [] };
+    });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(label) }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Xem bản đầy đủ trên web' }));
-    expect(mocks.openExternal).toHaveBeenCalledTimes(1);
-    expect(mocks.openExternal).toHaveBeenCalledWith(`https://app.tubutree.com/chinh-sach/${slug}`);
+    expect(await screen.findByText(`Nội dung đã duyệt của ${slug}`)).toBeInTheDocument();
+    expect(screen.getByText('Mục 1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /trên web/ })).toBeNull();
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
-  it('có thêm dòng "Chính sách vận chuyển" mở thẳng trang web (chưa có bản tóm tắt trong app)', async () => {
+  it('admin chưa nhập nội dung: hiện bản tóm tắt trong app', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
-    expect(mocks.openExternal).toHaveBeenCalledWith('https://app.tubutree.com/chinh-sach/van-chuyen');
-    expect(screen.queryByRole('button', { name: 'Đã hiểu' })).toBeNull();
+    expect(await screen.findByText(/Tubu Tree giao hàng toàn quốc/)).toBeInTheDocument();
   });
 
-  it('nút "Đã hiểu" vẫn đóng sheet và không mở web', async () => {
+  it('đang tải hiện khung chờ', async () => {
+    mocks.apiGet.mockImplementation((url: string) =>
+      url.startsWith('/config/legal/') ? new Promise(() => {}) : Promise.resolve({ data: [] }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
+    expect(await screen.findByTestId('policy-loading')).toBeInTheDocument();
+  });
+
+  it('lỗi mạng: báo lỗi và có nút Thử lại', async () => {
+    mocks.apiGet.mockImplementation(async (url: string) => {
+      if (url.startsWith('/config/legal/')) throw new Error('x');
+      return { data: [] };
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
+    expect(await screen.findByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+  });
+
+  it('nút "Đã hiểu" đóng sheet và không mở web', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Đã hiểu' }));
@@ -327,12 +351,14 @@ describe('Đơn vị vận hành trên trang Về Tubu Tree', () => {
     expect(await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678 · 1 Đường A, Quận B')).toBeInTheDocument();
   });
 
-  it('ẩn phần còn trống; link Bộ Công Thương mở bằng openExternal', async () => {
+  it('ẩn phần còn trống; Bộ Công Thương chỉ là chữ, không bấm được và không mở link', async () => {
     mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: 'https://online.gov.vn/x' } });
     renderPage();
     expect(await screen.findByText('Đơn vị vận hành: MST 0312345678')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Đã thông báo Bộ Công Thương'));
-    expect(mocks.openExternal).toHaveBeenCalledWith('https://online.gov.vn/x');
+    const bct = screen.getByText('Đã thông báo Bộ Công Thương');
+    expect(bct.closest('a, button, [role="button"]')).toBeNull();
+    fireEvent.click(bct);
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 });
 

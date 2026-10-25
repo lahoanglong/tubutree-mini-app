@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, HelpCircle, Hash, X } from 'lucide-react';
+import { HelpCircle, Hash, MessageCircle, X } from 'lucide-react';
 import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -16,12 +16,11 @@ import { Button } from '../components/ui/button';
 import { Chip } from '../components/ui/chip';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
-import { CommunityChannels } from '../components/community/community-channels';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { SearchField } from '../components/ui/search-field';
 import PostCard from '../components/community/post-card';
-import PostComposer from '../components/community/post-composer';
 import { PublicPreviewList } from '../components/community/public-preview-list';
+import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 
@@ -38,7 +37,6 @@ export default function FeedPage() {
   const location = useLocation();
   const [category, setCategory] = useState<string | undefined>(undefined);
   const [sort, setSort] = useState<FeedSort>('new');
-  const [composing, setComposing] = useState(false);
   const [q, setQ] = useState('');
   const [unanswered, setUnanswered] = useState(false);
   const initialTag = useMemo(
@@ -131,7 +129,6 @@ export default function FeedPage() {
       return (
         <Page style={{ background: 'var(--color-bg-canvas)' }}>
           <PageHeader title={vi.community.title} subtitle={vi.community.subtitle} />
-          <CommunityChannels />
           <PublicPreviewList posts={preview.data.posts} onLogin={() => void login()} />
         </Page>
       );
@@ -139,7 +136,6 @@ export default function FeedPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
-        <CommunityChannels />
         <EmptyState art="sprout" heading={vi.community.loginToView} ctaLabel={vi.auth.loginCta} onCta={() => void login()} />
       </Page>
     );
@@ -150,20 +146,8 @@ export default function FeedPage() {
       <PullToRefresh onRefresh={() => feed.refetch()} />
 
       <PageHeader title={vi.community.title} />
-      <CommunityChannels />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
-        <Button
-          variant="secondary"
-          aria-label={vi.community.leaderboard}
-          style={{ flex: '0 0 auto', minWidth: 44, padding: '0 14px' }}
-          onPress={() => {
-            haptic('light');
-            navigate('/feed/leaderboard');
-          }}
-        >
-          Xếp hạng
-        </Button>
         <Button
           variant="secondary"
           style={{ flex: '0 0 auto', minWidth: 44, padding: '0 14px' }}
@@ -174,16 +158,18 @@ export default function FeedPage() {
         >
           {vi.community.events}
         </Button>
-        <Button
-          icon={Plus}
-          style={{ flex: '1 1 0', minWidth: 44, padding: '0 8px' }}
-          onPress={() => {
-            haptic('light');
-            setComposing(true);
-          }}
-        >
-          {vi.community.compose}
-        </Button>
+        {hasOA && (
+          <Button
+            icon={MessageCircle}
+            style={{ flex: '1 1 0', minWidth: 44, padding: '0 8px' }}
+            onPress={() => {
+              haptic('light');
+              void openOAChat(vi.community.askTubuMessage);
+            }}
+          >
+            {vi.community.askTubu}
+          </Button>
+        )}
       </div>
 
       <div style={{ padding: '0 12px 4px', background: 'var(--color-bg-surface)' }}>
@@ -268,11 +254,6 @@ export default function FeedPage() {
             art="leaf"
             heading={vi.community.emptyHeading}
             body={vi.community.emptyBody}
-            ctaLabel={vi.community.emptyCta}
-            onCta={() => {
-              haptic('light');
-              setComposing(true);
-            }}
           />
         )
       ) : (
@@ -295,15 +276,6 @@ export default function FeedPage() {
         </>
       )}
 
-      <PostComposer
-        visible={composing}
-        onClose={() => setComposing(false)}
-        categories={cats.data ?? []}
-        onPosted={() => {
-          setComposing(false);
-          void feed.refetch();
-        }}
-      />
     </Page>
   );
 }

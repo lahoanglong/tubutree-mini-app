@@ -6,8 +6,8 @@ import { test, expect, makeOrder, makeUser, mockSession, reply } from './support
  *
  * Kiểm tra:
  * 1. Đơn có thông tin vận chuyển đồng bộ từ Pancake: hãng VC, mã vận đơn, trạng thái VC,
- *    nút "Sao chép", nút "Tra cứu hành trình", các chặng hành trình (shippingHistory).
- * 2. Bấm "Sao chép" → mã vận đơn THẬT vào clipboard + snackbar thành công.
+ *    nút "Chép mã" (không còn nút tra cứu trang hãng), các chặng hành trình (shippingHistory).
+ * 2. Bấm "Chép mã" → mã vận đơn THẬT vào clipboard + snackbar thành công.
  * 3. Đơn chưa gán vận chuyển → không hiện khối vận chuyển rỗng.
  */
 test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake POS Sync)', () => {
@@ -102,8 +102,8 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     // Trạng thái VC hiện ở dòng tóm tắt VÀ ở chặng mới nhất của hành trình.
     await expect(page.getByText('Đang vận chuyển tới người nhận', { exact: true })).toHaveCount(2);
 
-    await expect(page.getByRole('button', { name: 'Sao chép' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Chép mã' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);
 
     await expect(page.getByText('Lấy hàng thành công')).toBeVisible();
     await expect(page.getByText('Đang luân chuyển qua kho trung chuyển')).toBeVisible();
@@ -111,7 +111,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     await page.screenshot({ path: testInfo.outputPath('shipping-order-detail-view.png'), fullPage: true });
   });
 
-  test('Bấm nút "Sao chép" mã vận đơn: chép đúng mã và báo thành công', async ({ page }) => {
+  test('Bấm nút "Chép mã" mã vận đơn: chép đúng mã và báo thành công', async ({ page }) => {
     // navigator.clipboard là getter chỉ-đọc → Object.assign ném lỗi (mock cũ không bao giờ cài được).
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', {
@@ -126,7 +126,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
     });
 
     await page.goto(`/order/${ORDER_SHIPPING.code}`);
-    const copyBtn = page.getByRole('button', { name: 'Sao chép' });
+    const copyBtn = page.getByRole('button', { name: 'Chép mã' });
     await expect(copyBtn).toBeVisible({ timeout: 15_000 });
     await copyBtn.click();
 
@@ -143,7 +143,7 @@ test.describe('Zalo Mini App E2E - Luồng Đối tác Vận chuyển (Pancake P
 
     await expect(page.getByText('Vận chuyển', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Mã vận đơn:')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Sao chép' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Chép mã' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Tra cứu hành trình' })).toHaveCount(0);
   });
 });

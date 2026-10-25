@@ -3,7 +3,6 @@ import type {
   WasteFeeEstimate,
   WasteItemDTO,
   WasteMethod,
-  WastePointContactDTO,
   WastePreviewBlockDTO,
   WastePreviewDTO,
   WasteOpeningHours,
@@ -293,10 +292,4 @@ export function isOpenNow(hours: WasteOpeningHours, now: Date): boolean {
   return (hours[WEEKDAYS[v.getUTCDay()]!] ?? []).some((w) => w.open <= t && t < w.close);
 }
 
-type PointAddress = Pick<WastePointContactDTO, 'addressLine' | 'communeName' | 'provinceName'>;
-
 export { pointAddress };
-
-export function mapsUrl(p: PointAddress): string {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pointAddress(p))}`;
-}

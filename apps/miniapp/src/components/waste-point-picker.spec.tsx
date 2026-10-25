@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeWastePoint } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from './ui/nested-interactive';
 
-const mocks = vi.hoisted(() => ({ callPhone: vi.fn(), openExternal: vi.fn() }));
+const mocks = vi.hoisted(() => ({ callPhone: vi.fn(), openExternal: vi.fn(), copyText: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ callPhone: mocks.callPhone, openExternal: mocks.openExternal }));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 import { WastePointPicker, sortWastePoints } from './waste-point-picker';
 
 const ITEMS = [{ id: 'item-carton', name: 'Thùng carton' }, { id: 'item-milk', name: 'Vỏ hộp sữa' }];
@@ -97,10 +98,14 @@ describe('WastePointPicker (§4.4, §16.1)', () => {
     expect(screen.getAllByText('12 Lê Lợi, Phường Bến Thành, TP.HCM').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Đang mở').length).toBe(4);
   });
-  it('Chỉ đường mở Google Maps theo địa chỉ; Gọi gọi số của điểm', () => {
+  it('Chép địa chỉ chép địa chỉ điểm, không mở Google Maps; Gọi gọi số của điểm', async () => {
+    mocks.copyText.mockResolvedValue(true);
     renderPicker({ points: [NEAR] });
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉ đường' }));
-    expect(mocks.openExternal).toHaveBeenCalledWith(expect.stringMatching(/^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/));
+    expect(screen.queryByRole('button', { name: 'Chỉ đường' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Chép địa chỉ' }));
+    expect(mocks.copyText).toHaveBeenCalledWith('12 Lê Lợi, Phường Bến Thành, TP.HCM');
+    expect(await screen.findByRole('button', { name: 'Đã chép địa chỉ' })).toBeInTheDocument();
+    expect(mocks.openExternal).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Gọi/ }));
     expect(mocks.callPhone).toHaveBeenCalledWith('0901234567');
   });

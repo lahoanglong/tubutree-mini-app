@@ -155,8 +155,25 @@ export async function scanCode(): Promise<ScanCodeResult> {
   }
 }
 
-/** Mở URL ngoài (deeplink sàn cashback) trong webview Zalo. */
+/** Chỉ link thuộc Zalo mới được mở: chính sách Zalo cấm Mini App điều hướng ra trang ngoài. */
+const ALLOWED_EXTERNAL_HOSTS = new Set(['zalo.me', 'oa.zalo.me']);
+
+export function isAllowedExternalUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && ALLOWED_EXTERNAL_HOSTS.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function blockedExternal(url: string): void {
+  if (import.meta.env.DEV) console.warn(`[zmp-bridge] Chặn mở link ngoài Zalo: ${url}`);
+}
+
+/** Mở URL trong webview Zalo, chỉ cho tên miền Zalo; URL khác bị chặn (không mở, không ném lỗi). */
 export async function openExternal(url: string) {
+  if (!isAllowedExternalUrl(url)) return blockedExternal(url);
   try {
     await openWebview({ url });
   } catch {
@@ -166,6 +183,7 @@ export async function openExternal(url: string) {
 
 /** Mở link hoàn tiền sàn ngoài (Shopee, Lazada...) trực tiếp sang native app / trình duyệt ngoài. */
 export async function openAffiliateLink(url: string) {
+  if (!isAllowedExternalUrl(url)) return blockedExternal(url);
   // Chép link sang clipboard là tiện ích phụ (khách dán lại nếu app sàn không tự mở) — hỏng
   // thì im lặng, KHÔNG chặn việc mở link.
   await copyText(url).catch(() => false);

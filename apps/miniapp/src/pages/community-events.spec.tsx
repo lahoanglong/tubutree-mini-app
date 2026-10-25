@@ -10,8 +10,6 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   listEvents: vi.fn(),
   eventPosts: vi.fn(),
-  getCategories: vi.fn(),
-  composerProps: { current: null as null | Record<string, unknown> },
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous' },
 }));
 
@@ -24,7 +22,6 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/feed-api', () => ({
   listEvents: mocks.listEvents,
   eventPosts: mocks.eventPosts,
-  getCategories: mocks.getCategories,
 }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
@@ -39,17 +36,6 @@ vi.mock('../components/community/post-card', () => ({
     <button type="button" onClick={onClick}>{`Bài ${post.id}`}</button>
   ),
 }));
-vi.mock('../components/community/post-composer', () => ({
-  default: (props: { visible: boolean; onPosted: () => void; onClose: () => void }) => {
-    mocks.composerProps.current = props as unknown as Record<string, unknown>;
-    return props.visible ? (
-      <div data-testid="composer">
-        <button type="button" onClick={props.onPosted}>đã đăng</button>
-      </div>
-    ) : null;
-  },
-}));
-
 import CommunityEventsPage from './community-events';
 
 const DAY = 24 * 3600 * 1000;
@@ -81,14 +67,12 @@ function renderPage() {
 
 const openEvent = async (title: string) => {
   fireEvent.click(await screen.findByText(title));
-  await screen.findByRole('button', { name: 'Đăng bài dự thi' });
+  await screen.findByText('Bài dự thi');
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
-  mocks.composerProps.current = null;
-  mocks.getCategories.mockResolvedValue([{ id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null }]);
   mocks.listEvents.mockResolvedValue([EVENT('e1'), EVENT('e2', { rewardPoints: 0 })]);
   mocks.eventPosts.mockResolvedValue({ posts: [POST('p1'), POST('p2')], nextCursor: null });
 });
@@ -167,29 +151,11 @@ describe('CommunityEventsPage — chi tiết sự kiện', () => {
     expect(await screen.findByText('Sự kiện e2')).toBeInTheDocument();
   });
 
-  it('"Đăng bài dự thi" mở khung soạn kèm id + tên sự kiện; đăng xong đóng khung và tải lại bài', async () => {
+  it('chỉ đọc: không có nút "Đăng bài dự thi" kể cả khi sự kiện còn hạn, không có khung soạn', async () => {
     renderPage();
     await openEvent('Sự kiện e1');
     await screen.findByRole('button', { name: 'Bài p1' });
-    mocks.haptic.mockClear();
-    expect(screen.queryByTestId('composer')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Đăng bài dự thi' }));
-    expect(mocks.haptic).toHaveBeenCalledWith('light');
-    expect(screen.getByTestId('composer')).toBeInTheDocument();
-    expect(mocks.composerProps.current).toMatchObject({ eventId: 'e1', eventTitle: 'Sự kiện e1' });
-    const before = mocks.eventPosts.mock.calls.length;
-    fireEvent.click(screen.getByRole('button', { name: 'đã đăng' }));
-    expect(screen.queryByTestId('composer')).toBeNull();
-    await waitFor(() => expect(mocks.eventPosts.mock.calls.length).toBeGreaterThan(before));
-  });
-
-  it('sự kiện đã kết thúc: nút "Đăng bài dự thi" bị khoá', async () => {
-    mocks.listEvents.mockResolvedValue([EVENT('e1', { endAt: new Date(Date.now() - DAY).toISOString() })]);
-    renderPage();
-    await openEvent('Sự kiện e1');
-    const join = screen.getByRole('button', { name: 'Đăng bài dự thi' });
-    expect(join).toBeDisabled();
-    fireEvent.click(join);
+    expect(screen.queryByRole('button', { name: 'Đăng bài dự thi' })).toBeNull();
     expect(screen.queryByTestId('composer')).toBeNull();
   });
 
@@ -197,7 +163,7 @@ describe('CommunityEventsPage — chi tiết sự kiện', () => {
     mocks.eventPosts.mockResolvedValueOnce({ posts: [], nextCursor: null });
     renderPage();
     await openEvent('Sự kiện e1');
-    expect(await screen.findByText('Chưa có bài viết nào')).toBeInTheDocument();
+    expect(await screen.findByText('Chưa có bài dự thi nào.')).toBeInTheDocument();
   });
 
   it('lỗi tải bài dự thi: báo lỗi và Thử lại tải lại', async () => {
@@ -256,16 +222,14 @@ describe('CommunityEventsPage — tiêu đề, vùng chạm, biểu tượng (C-
     expect(card).not.toBeNull();
     expect(card!.tabIndex).toBe(0);
     fireEvent.keyDown(card!, { key: 'Enter' });
-    await screen.findByRole('button', { name: 'Đăng bài dự thi' });
+    await screen.findByText('Bài dự thi');
   });
 
-  it('nút "Sự kiện" quay lại và nút tham gia cao >= 44px', async () => {
+  it('nút "Sự kiện" quay lại cao >= 44px', async () => {
     renderPage();
     await openEvent('Sự kiện e1');
     const back = screen.getByRole('button', { name: 'Sự kiện' });
     expect(Number.parseFloat(back.style.minHeight)).toBeGreaterThanOrEqual(44);
-    const join = screen.getByRole('button', { name: 'Đăng bài dự thi' });
-    expect(Number.parseFloat(join.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 
   it('không dùng emoji 🎁 / 🎉 làm biểu tượng', async () => {

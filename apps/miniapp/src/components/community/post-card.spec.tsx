@@ -84,13 +84,13 @@ describe('PostCard — ảnh bìa (ENGAGE-7)', () => {
 });
 
 describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {
-  it('hiện tác giả, tiêu đề, nội dung, thời gian, danh mục, số like/bình luận', () => {
+  it('hiện tác giả, tiêu đề, nội dung, thời gian, danh mục, số bình luận (không hiện số thích)', () => {
     renderCard();
     expect(screen.getByText('Lan Anh')).toBeInTheDocument();
     expect(screen.getByText('Nước rửa chén dùng được cho bình sữa không?')).toBeInTheDocument();
     expect(screen.getByText(/muốn hỏi có rửa được bình sữa/)).toBeInTheDocument();
     expect(screen.getByText(/3 giờ trước · .*Nhà bếp/)).toBeInTheDocument();
-    expect(screen.getByText(byPlain('12'))).toBeInTheDocument();
+    expect(screen.queryByText(byPlain('12'))).toBeNull();
     expect(screen.getByText(byPlain('3'))).toBeInTheDocument();
   });
 

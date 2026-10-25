@@ -46,7 +46,8 @@ import {
 import { convertedPointsNote } from '../utils/points-lots';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
-import { openWebPolicyPage } from '../utils/web-policy';
+import { PolicySheet } from '../components/policy-sheet';
+import type { WebPolicySlug } from '../utils/web-policy';
 import { formatLineQty } from '../utils/waste-labels';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductThumb } from '../components/ui/product-thumb';
@@ -72,6 +73,7 @@ export function attachablePickup(me: WasteMeDTO | undefined, pickupFlag: boolean
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
+  const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -1065,9 +1067,11 @@ export default function CheckoutPage() {
       )}
 
       <Text size="xSmall" data-testid="order-consent" style={{ display: 'block', padding: '12px 16px 0', color: 'var(--color-text-secondary)' }}>
-        Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => openWebPolicyPage('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}
-        <ConsentLink onPress={() => openWebPolicyPage('doi-tra')}>Chính sách đổi trả</ConsentLink>.
+        Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => setPolicy('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}
+        <ConsentLink onPress={() => setPolicy('doi-tra')}>Chính sách đổi trả</ConsentLink>.
       </Text>
+
+      <PolicySheet slug={policy} onClose={() => setPolicy(null)} />
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar

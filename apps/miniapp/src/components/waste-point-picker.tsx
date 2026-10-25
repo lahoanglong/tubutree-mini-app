@@ -1,10 +1,12 @@
-import { Clock, MapPin, Navigation, Phone } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, Copy, MapPin, Phone } from 'lucide-react';
 import type { WastePointDTO } from '@tubutree/shared-types';
-import { callPhone, openExternal } from '../services/zmp-bridge';
+import { callPhone } from '../services/zmp-bridge';
+import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
 import { formatNumber } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
-import { isOpenNow, mapsUrl, pointAddress } from '../utils/waste-labels';
+import { isOpenNow, pointAddress } from '../utils/waste-labels';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Icon } from './ui/icon';
@@ -47,6 +49,7 @@ export function sortWastePoints(points: readonly WastePointDTO[], selectedItemId
  * nằm NGOÀI ô chọn vì trình đọc màn hình gộp phần tử con vào radio và bỏ rơi nút.
  */
 export function WastePointPicker({ points, value, onChange, items, selectedItemIds, showDistance, now }: WastePointPickerProps) {
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const sorted = sortWastePoints(points, selectedItemIds);
   const clock = now ?? new Date();
   const isLocked = (p: WastePointDTO) => p.quotaFull || missingItemIds(p, selectedItemIds).length > 0;
@@ -174,8 +177,15 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 </Text>
               )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                <Button variant="secondary" icon={Navigation} onPress={() => void openExternal(mapsUrl(p))}>
-                  Chỉ đường
+                <Button
+                  variant="secondary"
+                  icon={Copy}
+                  onPress={() => {
+                    haptic('light');
+                    void copyText(pointAddress(p)).then((ok) => setCopiedId(ok ? p.id : null));
+                  }}
+                >
+                  {copiedId === p.id ? 'Đã chép địa chỉ' : 'Chép địa chỉ'}
                 </Button>
                 {p.phone && (
                   <Button variant="secondary" icon={Phone} onPress={() => void callPhone(p.phone as string)}>
