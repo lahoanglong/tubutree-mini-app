@@ -54,7 +54,7 @@ const DETAIL = (over: Partial<AcademyCourseDetail> = {}): AcademyCourseDetail =>
   coverUrl: null,
   isPublished: true,
   lessons: [
-    { id: 'l1', courseId: 'c1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://video.test/1', body: null, sortOrder: 1 },
+    { id: 'l1', courseId: 'c1', title: 'Giới thiệu', contentType: 'VIDEO', videoUrl: 'https://video.test/1.mp4', body: null, sortOrder: 1 },
     { id: 'l2', courseId: 'c1', title: 'Kịch bản chốt đơn', contentType: 'ARTICLE', videoUrl: null, body: 'Bước 1\nBước 2', sortOrder: 2 },
     { id: 'l3', courseId: 'c1', title: 'Tổng kết', contentType: 'ARTICLE', videoUrl: null, body: null, sortOrder: 3 },
   ],
@@ -143,14 +143,23 @@ describe('AcademyPage — chi tiết khoá học, hành vi giữ nguyên khi chu
     expect(screen.getByText('3. Tổng kết')).toBeInTheDocument();
   });
 
-  it('bài video có liên kết mở video ở tab mới; bài viết hiện nội dung (giữ xuống dòng)', async () => {
+  it('video là file trực tiếp: phát bằng thẻ video trong app, không có liên kết ra ngoài; bài viết giữ xuống dòng', async () => {
     renderPage();
-    const link = await screen.findByRole('link', { name: viText.academy.openVideo });
-    expect(link).toHaveAttribute('href', 'https://video.test/1');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noreferrer');
+    const video = await screen.findByLabelText('Giới thiệu');
+    expect(video.tagName).toBe('VIDEO');
+    expect(video).toHaveAttribute('src', 'https://video.test/1.mp4');
     expect(screen.getByText(/Bước 1/).textContent).toBe('Bước 1\nBước 2');
-    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(screen.queryByText(viText.academy.videoOnWeb)).toBeNull();
+  });
+
+  it('video không phải file trực tiếp: chỉ ghi chữ xem trên web, không link', async () => {
+    const d = DETAIL();
+    mocks.fetchCourse.mockResolvedValue({ ...d, lessons: [{ ...d.lessons[0]!, videoUrl: 'https://youtube.com/watch?v=x' }] });
+    renderPage();
+    expect(await screen.findByText(viText.academy.videoOnWeb)).toBeInTheDocument();
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(document.querySelector('video')).toBeNull();
   });
 
   it('bài đã học: nút "✓ Đã học xong" bị khoá; bài chưa học: "Đánh dấu đã học" bấm được', async () => {
@@ -283,7 +292,7 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
     expect(mocks.navigate).toHaveBeenCalledWith('/academy/a');
   });
 
-  it('nút quay lại, nút đánh dấu và liên kết video có vùng chạm >= 44px', async () => {
+  it('nút quay lại và nút đánh dấu có vùng chạm >= 44px', async () => {
     mocks.params = { courseId: 'c1' };
     renderPage();
     await screen.findByText('Khoá bán hàng');
@@ -291,7 +300,6 @@ describe('AcademyPage — tiêu đề, tiến độ, vùng chạm, bàn phím (C
       screen.getByRole('button', { name: viText.academy.backToList }),
       ...screen.getAllByRole('button', { name: viText.academy.markDone }),
       screen.getByRole('button', { name: viText.academy.alreadyDone }),
-      screen.getByRole('link', { name: viText.academy.openVideo }),
     ];
     for (const t of targets) {
       expect(Number.parseFloat(t.style.minHeight), t.outerHTML.slice(0, 80)).toBeGreaterThanOrEqual(44);

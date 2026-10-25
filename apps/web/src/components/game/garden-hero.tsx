@@ -29,7 +29,7 @@ export function GardenHero({
         <div className="h-2 rounded-full bg-stone-0 transition-[width]" style={{ width: `${pct}%` }} />
       </div>
       <p className="text-xs text-stone-0">
-        {formatNumber(eco?.progress)}/{formatDrops(eco?.target)} · 💧 {formatNumber(totalSeeds)} · 🔥 {formatNumber(streakDays)} ngày · 🌳 góp quỹ:{' '}
+        {formatNumber(eco?.progress)}/{formatDrops(eco?.target)} · 💧 {formatNumber(totalSeeds)} · 🔥 {formatNumber(streakDays)} ngày · 🌳 cây đã trồng:{' '}
         {formatNumber(eco?.treesPlanted)}
       </p>
     </div>

@@ -12,6 +12,7 @@ import { loadChatConfig, type ChatConfig } from './external-chat.config';
 import { holdUntilOf, PHONE_STALE_REASON, phoneVerifiedFresh, releaseAtOf, STALE_APPROVE_MARK } from './external-chat.rules';
 import { startOfNextVnMonth, startOfVnMonth } from '../../common/vn-time';
 import { decidedAtPartialReturn, recordClaimEvent } from './external-claim-audit';
+import { recordExtClaimEvent } from './external-claim-events';
 import { advisoryUserLock } from './external-claim.service';
 import { lockOrderThenClaim } from './external-claim-status';
 import { settlePoints } from './external-claim.rules';
@@ -71,7 +72,7 @@ export async function releaseClaim(
     if (!row || (!row.userId && !chat)) return skipped;
     const order = await tx.externalOrder.findUniqueOrThrow({
       where: { id: row.externalOrderId },
-      select: { pancakeOrderId: true, source: true, status: true, deliveredAt: true, goodsValue: true, trackingCode: true, phone: true },
+      select: { pancakeOrderId: true, source: true, status: true, deliveredAt: true, goodsValue: true, trackingCode: true, phone: true, channel: true },
     });
     // SĐT trên đơn khác SĐT lúc tạo claim (nhân viên sửa đơn): không cộng theo số nào, người kiểm quyết. Claim đã có người duyệt thì thôi.
     if (chat && row.decidedById === null && phoneDiffers(row.orderPhone, order.phone)) {
@@ -195,6 +196,14 @@ export async function releaseClaim(
     if (!res.applied) throw new Error(`releaseClaim ${row.id}: đã có dòng sổ ${prefix}:${order.pancakeOrderId}`);
     await tx.externalPointsClaim.update({ where: { id: row.id }, data: { pointsTxId: res.entryId } });
     await recordClaimEvent(tx, { claimId: row.id, action: 'CREDIT', fromState: 'PENDING', toState: 'CREDITED', userIdBefore: row.userId, userIdAfter: row.userId, note: settleNote ?? `${finalPoints} điểm` });
+    if (!chat) {
+      await recordExtClaimEvent(tx, {
+        name: 'ext_claim_credited',
+        userId,
+        at: now,
+        props: { points: finalPoints, channel: order.channel ?? null, daysFromClaim: Math.max(0, Math.floor((now.getTime() - row.createdAt.getTime()) / 864e5)) },
+      });
+    }
     return { outcome: 'CREDITED' as const, userId, points: finalPoints, code, kind, countsForTier: row.countsForTier };
   });
 }

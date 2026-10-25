@@ -61,6 +61,7 @@ vi.mock('../utils/features', () => ({
 }));
 vi.mock('../components/wheel', () => ({ WheelOfFortune: () => <div data-testid="wheel" /> }));
 vi.mock('../services/game-api', () => mocks.api);
+vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -83,10 +84,6 @@ const PROFILE = {
 const HOME = { id: null, slot: 1, isHome: true, treeType: 'Sồi', speciesId: null, progress: 10, target: 50, treeStage: 1, treesPlanted: 3, treeHealth: 'HEALTHY' };
 const PLOT_A = { id: 'pa', slot: 2, isHome: false, treeType: 'Mận', speciesId: 's1', progress: 5, target: 20, treeStage: 1, treesPlanted: 1, treeHealth: 'HEALTHY' };
 const PLOT_B = { id: 'pb', slot: 3, isHome: false, treeType: 'Xoài', speciesId: 's2', progress: 8, target: 20, treeStage: 1, treesPlanted: 0, treeHealth: 'HEALTHY' };
-const FRIENDS = [
-  { id: 'f1', nickname: 'Lan', giftedToday: false },
-  { id: 'f2', nickname: 'Minh', giftedToday: false },
-];
 const MISSION = { code: 'REVIEW_3', title: 'Viết 3 đánh giá', rewardPoints: 50, progress: 3, goal: 3, completed: true, claimed: false };
 const Q1 = { id: 'q1', question: 'Cây nào hấp thụ CO2?', options: ['Đá', 'Cây', 'Gạch'], category: 'cay', difficulty: 1, waterReward: 20 };
 const TIERS = [
@@ -119,7 +116,7 @@ async function tapTogether(...targets: HTMLElement[]) {
   });
 }
 
-async function openTab(name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') {
+async function openTab(name: 'Hôm nay' | 'Vườn') {
   fireEvent.click(await screen.findByRole('tab', { name }));
 }
 
@@ -157,7 +154,7 @@ interface Case {
   label: string;
   api: () => ReturnType<typeof vi.fn>;
   setup?: () => void;
-  tab?: 'Vườn' | 'Cộng đồng';
+  tab?: 'Vườn';
   /** Danh sách cú chạm theo thứ tự: cùng một nút hai lần, hoặc hai nút khác nhau của cùng một thao tác. */
   targets: () => Promise<HTMLElement[]>;
 }
@@ -169,7 +166,12 @@ const twice = async (name: string | RegExp) => {
 const byName = (name: string | RegExp) => () => twice(name);
 
 const CASES: Case[] = [
-  { label: 'tưới cây', api: () => mocks.api.waterTree, targets: byName(/Tưới cây/) },
+  {
+    label: 'tưới hết',
+    api: () => mocks.api.waterTree,
+    setup: () => mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() }),
+    targets: byName(/Tưới hết/),
+  },
   { label: 'điểm danh', api: () => mocks.api.checkIn, targets: byName('Điểm danh') },
   { label: 'hứng giọt sương', api: () => mocks.api.collectDew, targets: byName('Hứng giọt sương') },
   { label: 'mua vé giữ lửa', api: () => mocks.api.buyStreakFreeze, targets: byName('Mua (80💧)') },
@@ -210,16 +212,9 @@ const CASES: Case[] = [
     targets: byName('Mở lô (1.200💧)'),
   },
   {
-    label: 'tặng nước bạn bè',
-    api: () => mocks.api.giftWater,
-    tab: 'Cộng đồng',
-    setup: () => mocks.api.getFriends.mockResolvedValue(FRIENDS.slice(0, 1)),
-    targets: byName('Tặng 💧'),
-  },
-  {
     label: 'nhận thưởng Chặng Mùa',
     api: () => mocks.api.claimSeasonPass,
-    tab: 'Cộng đồng',
+    tab: 'Vườn',
     setup: () => {
       mocks.features.seasonPass = true;
       mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: TIERS });
@@ -242,6 +237,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
   it('góp quỹ trồng cây: xác nhận hai lần trong cùng khung hình chỉ gọi buyTree một lần', async () => {
     mocks.api.buyTree.mockReturnValue(pending<unknown>().promise);
     renderPage();
+    await openTab('Vườn');
     fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
     const ok = await screen.findByRole('button', { name: 'Xác nhận' });
     await tapTogether(ok, ok);
@@ -263,18 +259,6 @@ describe('GamePage — khoá chỉ theo đích của thao tác', () => {
     expect(mocks.api.waterPlot).toHaveBeenCalledWith('pb', 20);
   });
 
-  it('tặng nước hai bạn khác nhau cùng lúc: mỗi bạn được gọi một lần', async () => {
-    mocks.api.getFriends.mockResolvedValue(FRIENDS);
-    mocks.api.giftWater.mockReturnValue(pending<unknown>().promise);
-    renderPage();
-    await openTab('Cộng đồng');
-    await screen.findByText('Lan');
-    const [a, b] = screen.getAllByRole('button', { name: 'Tặng 💧' }) as [HTMLElement, HTMLElement];
-    await tapTogether(a, a, b, b);
-    expect(mocks.api.giftWater).toHaveBeenCalledTimes(2);
-    expect(mocks.api.giftWater).toHaveBeenCalledWith('f1');
-    expect(mocks.api.giftWater).toHaveBeenCalledWith('f2');
-  });
 });
 
 describe('GamePage — nhả khoá để bấm lại được', () => {
@@ -304,8 +288,9 @@ describe('GamePage — nhả khoá để bấm lại được', () => {
   });
 
   it('thành công: nhả khoá, lần tưới sau gọi API bình thường', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() });
     renderPage();
-    const btn = await screen.findByRole('button', { name: /Tưới cây/ });
+    const btn = await screen.findByRole('button', { name: /Tưới hết/ });
     await tapTogether(btn, btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
     await waitFor(() => expect(btn).toBeEnabled());

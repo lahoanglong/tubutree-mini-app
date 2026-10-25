@@ -7,7 +7,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Sheet: ({ visible, children }: { visible: boolean; children: ReactNode }) => (visible ? <div role="dialog">{children}</div> : null),
 }));
 
-import { TreeActions } from './tree-actions';
+import { TreeFund } from './tree-fund';
 
 /** Hợp đồng BE của Idempotency-Key: chuỗi 8–128 ký tự [A-Za-z0-9_-]. */
 const KEY_CONTRACT = /^[A-Za-z0-9_-]{8,128}$/;
@@ -21,9 +21,9 @@ function pending<T>() {
   return { promise, resolve };
 }
 
-function setup(props: Partial<Parameters<typeof TreeActions>[0]> = {}) {
+function setup(props: Partial<Parameters<typeof TreeFund>[0]> = {}) {
   const onBuy = vi.fn<(key: string) => Promise<boolean>>().mockResolvedValue(true);
-  render(<TreeActions treePointsPrice={50} waterPending={false} onWater={vi.fn()} buyPending={false} onBuy={onBuy} {...props} />);
+  render(<TreeFund treePointsPrice={50} points={null} onEarnPoints={vi.fn()} buyPending={false} onBuy={onBuy} {...props} />);
   return { onBuy };
 }
 
@@ -35,7 +35,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('TreeActions — xác nhận góp quỹ trồng cây', () => {
+describe('TreeFund — xác nhận góp quỹ trồng cây', () => {
   it('bấm nút chỉ mở hộp xác nhận, chưa gọi API; hộp nêu số điểm và thứ tự lô bị trừ', () => {
     const { onBuy } = setup();
     openBox();
@@ -71,7 +71,7 @@ describe('TreeActions — xác nhận góp quỹ trồng cây', () => {
   });
 });
 
-describe('TreeActions — Idempotency-Key của hộp xác nhận', () => {
+describe('TreeFund — Idempotency-Key của hộp xác nhận', () => {
   it('gửi một key theo đúng hợp đồng BE; có crypto.randomUUID thì là UUID v4 nguyên dạng', async () => {
     const { onBuy } = setup();
     openBox();

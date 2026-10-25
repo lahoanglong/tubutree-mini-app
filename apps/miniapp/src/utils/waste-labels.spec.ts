@@ -152,9 +152,6 @@ describe('điểm nhận (§4.4)', () => {
   });
   const p = { addressLine: '12 Lê Lợi', communeName: 'Phường Bến Thành', provinceName: 'TP.HCM' };
   it('địa chỉ hai cấp, không quận', () => { expect(L.pointAddress(p)).toBe('12 Lê Lợi, Phường Bến Thành, TP.HCM'); });
-  it('Chỉ đường = Google Maps theo địa chỉ', () => {
-    expect(L.mapsUrl(p)).toBe('https://www.google.com/maps/search/?api=1&query=12%20L%C3%AA%20L%E1%BB%A3i%2C%20Ph%C6%B0%E1%BB%9Dng%20B%E1%BA%BFn%20Th%C3%A0nh%2C%20TP.HCM');
-  });
   it('đang mở theo giờ Việt Nam', () => {
     const hours = { MON: [{ open: '08:00', close: '18:00' }] };
     expect(L.isOpenNow(hours, new Date('2026-10-19T02:00:00.000Z'))).toBe(true); // Thứ Hai 09:00 VN

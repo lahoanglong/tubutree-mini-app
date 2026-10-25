@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { BookMarked, CheckCircle2, Globe, Hash, Heart, HelpCircle, Leaf, Lightbulb, MessageCircle, PenLine, Sprout, TreeDeciduous } from 'lucide-react';
+import { BookMarked, CheckCircle2, Globe, Hash, HelpCircle, Leaf, Lightbulb, MessageCircle, PenLine, Sprout, TreeDeciduous } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiMediaUrl } from '../../services/api';
 import type { FeedItem } from '../../services/feed-api';
@@ -182,10 +182,6 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
         </div>
       )}
       <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-        <Text variant="body-sm" tone={post.liked ? 'brand' : 'secondary'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Icon icon={Heart} size="sm" tone={post.liked ? 'brand' : 'muted'} style={post.liked ? { fill: 'var(--color-text-brand)' } : undefined} />
-          {post.likeCount}
-        </Text>
         <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <Icon icon={MessageCircle} size="sm" tone="muted" />
           {post.commentCount}

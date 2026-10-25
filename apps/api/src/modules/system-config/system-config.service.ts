@@ -222,12 +222,19 @@ export class SystemConfigService {
     'game.spin_buy_daily_limit': { min: 0, max: 100, note: 'số lượt mua mỗi ngày (0 = khoá mua lượt quay)', integer: true },
     'game.quiz_daily_count': { min: 1, max: 50, note: 'số câu hỏi mỗi ngày', integer: true },
     'game.tank_capacity': { min: 1, max: 100_000, note: '💧 sức chứa bình nước', integer: true },
-    'game.tree_default_target': { min: 1, max: 100_000, note: '💧 cần để thu hoạch cây mặc định', integer: true },
     'game.harvest_coupon_daily_cap': { min: 0, max: 100, note: 'số coupon thu hoạch mỗi ngày/người (0 = không phát)', integer: true },
     'game.streak_repair_window_hours': { min: 1, max: 720, note: 'số giờ được hồi sinh chuỗi sau khi mất', integer: true },
     'game.streak_repair_cooldown_days': { min: 0, max: 365, note: 'số ngày giữa hai lần hồi sinh chuỗi (0 = không chờ)', integer: true },
     'game.plot_unlock_seed_base': { min: 1, max: 100_000, note: '💧 mở lô đất (giá = số này × số thứ tự lô)', integer: true },
     'game.plot_target': { min: 1, max: 100_000, note: '💧 cần để thu hoạch cây ở lô phụ', integer: true },
+    // Thưởng cây mầm là Điểm Xanh (1 điểm = 1đ) cộng thẳng vào ví: gõ nhầm đơn vị cấp điểm cho mọi khách mới.
+    'game.first_harvest_points': { min: 0, max: 10_000, note: 'Điểm Xanh (1 điểm = 1đ) thưởng lần thu hoạch cây đầu tiên (0 = không thưởng)', integer: true },
+    'game.first_checkin_bonus': { min: 0, max: 10_000, note: '💧 quà một lần cho lần điểm danh đầu tiên (0 = không tặng)', integer: true },
+    // Dưới 3 ngày thì khách điểm danh cách ngày cũng được quà quay lại mỗi lần, có lời hơn điểm danh đều.
+    'game.comeback_gap_days': { min: 3, max: 365, note: 'số ngày vắng tối thiểu để nhận quà quay lại', integer: true },
+    'game.comeback_seeds': { min: 0, max: 10_000, note: '💧 quà quay lại (0 = không tặng)', integer: true },
+    'game.harvest_coupon_monthly_cap': { min: 0, max: 100, note: 'số mã thu hoạch mỗi tháng/người, tính cả lô nhà và lô phụ (0 = không phát)', integer: true },
+    'game.quiz_wrong_seeds': { min: 0, max: 1_000, note: '💧 khi trả lời sai câu đố (0 = không tặng)', integer: true },
     'seasonpass.checkin_xp': { min: 0, max: 1000, note: 'XP mỗi lần điểm danh', integer: true },
     'groupbuy.window_hours': { min: 1, max: 720, note: 'số giờ nhóm mua chung mở', integer: true },
     'notifications.zns_quiet_start_hour': { min: 0, max: 23, note: 'giờ VN bắt đầu giờ yên tĩnh của ZNS', integer: true },
@@ -380,6 +387,16 @@ export class SystemConfigService {
       if (value[0] !== 0) return 'mốc đầu phải là 0 (ai cũng ít nhất cấp 1)';
       for (let i = 1; i < value.length; i++) {
         if ((value[i] as number) <= (value[i - 1] as number)) return 'các mốc phải tăng dần';
+      }
+      return null;
+    },
+    // Cây nhà thứ n (từ 1) cần phần tử n 💧 để thu hoạch, quá độ dài thì dùng phần tử cuối. Target <= 0 làm vòng thu hoạch
+    // không thoát, và thang giảm dần làm cây sau dễ hơn cây trước.
+    'game.tree_target_ladder': (value) => {
+      if (!Array.isArray(value) || value.length < 1 || value.length > 10) return 'phải là mảng 1 đến 10 số 💧, vd [60, 300, 600]';
+      if (!value.every((n) => Number.isInteger(n) && n >= 1 && n <= 100_000)) return 'mỗi phần tử phải là số 💧 nguyên 1–100.000';
+      for (let i = 1; i < value.length; i++) {
+        if ((value[i] as number) <= (value[i - 1] as number)) return 'các phần tử phải tăng dần';
       }
       return null;
     },

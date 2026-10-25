@@ -1,7 +1,22 @@
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
-import { DEFAULT_TREE_TYPE } from './game.constants';
+import { DEFAULT_TREE_TYPE, ladderTarget, treeTargetLadder } from './game.constants';
+
+/** ecoImpact của hồ sơ mới: cây đầu dùng bậc đầu của thang. Gọi NGOÀI giao dịch (đọc cấu hình). */
+export async function initialEcoImpact(config: Pick<SystemConfigService, 'get'>): Promise<Prisma.InputJsonObject> {
+  const ladder = await treeTargetLadder(config);
+  return { progress: 0, target: ladderTarget(ladder, 0), treeType: DEFAULT_TREE_TYPE, treesPlanted: 0, sproutRewarded: false };
+}
+
+/**
+ * Đã cấp (hoặc coi như đã cấp) điểm cây mầm chưa. Có cờ thì theo cờ. Hồ sơ cũ không có cờ: đã có cây thu hoạch
+ * (treesPlanted > 0) thì coi như xong để không cộng bù cho người đã qua mốc này trước khi có cờ; chưa thu hoạch thì còn nhận.
+ */
+export function sproutAlreadyRewarded(eco: { sproutRewarded?: boolean; treesPlanted: number }): boolean {
+  if (eco.sproutRewarded !== undefined) return eco.sproutRewarded;
+  return eco.treesPlanted > 0;
+}
 
 /**
  * Bảo đảm user có gameProfile. Mini App mở Vườn Xanh bắn song song nhiều endpoint game nên với user mới
@@ -15,12 +30,12 @@ export async function ensureGameProfile(
 ) {
   const existing = await prisma.gameProfile.findUnique({ where: { userId } });
   if (existing) return existing;
-  const target = await config.get<number>('game.tree_default_target', 600);
+  const ecoImpact = await initialEcoImpact(config);
   try {
     return await prisma.gameProfile.create({
       data: {
         userId,
-        ecoImpact: { progress: 0, target, treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 } as object,
+        ecoImpact,
       },
     });
   } catch (e) {

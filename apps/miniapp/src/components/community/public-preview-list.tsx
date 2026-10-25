@@ -1,4 +1,4 @@
-import { Heart, MessageCircle, Sprout } from 'lucide-react';
+import { MessageCircle, Sprout } from 'lucide-react';
 import { apiMediaUrl } from '../../services/api';
 import type { FeedPreviewItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
@@ -82,10 +82,6 @@ export function PublicPreviewList({ posts, onLogin }: { posts: FeedPreviewItem[]
               />
             )}
             <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-              <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon icon={Heart} size="sm" tone="muted" />
-                {post.likeCount}
-              </Text>
               <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon icon={MessageCircle} size="sm" tone="muted" />
                 {post.commentCount}

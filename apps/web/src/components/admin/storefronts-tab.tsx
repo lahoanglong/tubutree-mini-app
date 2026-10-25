@@ -61,6 +61,16 @@ export function StorefrontsTab() {
   const [draft, setDraft] = useState('');
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const [quickFailure, setQuickFailure] = useState<string | null>(null);
+  const quickApprove = useMutation({
+    mutationFn: (id: string) => approveStorefront(id, true),
+    onSuccess: () => {
+      setQuickFailure(null);
+      return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
+    },
+    onError: (e) => setQuickFailure(errorText(e)),
+  });
 
   const list = useInfiniteQuery({
     queryKey: ['admin-storefronts', status, type, q],
@@ -116,6 +126,7 @@ export function StorefrontsTab() {
       </form>
 
       <div className="mt-4 space-y-3">
+        {quickFailure && <Notice tone="danger" role="alert">{quickFailure}</Notice>}
         {list.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
         {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
         {list.data && view.items.length === 0 && (
@@ -131,9 +142,16 @@ export function StorefrontsTab() {
                 </p>
                 <p className="mt-0.5 text-xs text-stone-600">Chủ: {ownerLine(row)}</p>
               </div>
-              <button type="button" onClick={() => setOpenId(row.id)} className={BTN_SECONDARY}>
-                Xem
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {!row.approved && !row.takenDownAt && row.type === 'CTV' && !row.isPartner && (
+                  <button type="button" onClick={() => quickApprove.mutate(row.id)} disabled={quickApprove.isPending} className={BTN_PRIMARY}>
+                    Duyệt
+                  </button>
+                )}
+                <button type="button" onClick={() => setOpenId(row.id)} className={BTN_SECONDARY}>
+                  Xem
+                </button>
+              </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <StatusBadges row={row} />
@@ -198,6 +216,19 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
       takeDown.mutate(reason);
     }
   };
+  const onUnapprove = async () => {
+    if (!sf) return;
+    const ok = await confirm({
+      title: 'Bỏ duyệt gian hàng',
+      message: `"${sf.title}" mất dấu tick xanh và nhãn "CTV tuyển chọn". Nếu hệ thống đang bắt duyệt trước khi đăng, gian hàng sẽ ẩn khỏi trang công khai.`,
+      confirmLabel: 'Bỏ duyệt',
+      tone: 'danger',
+    });
+    if (ok) {
+      setFailure(null);
+      approve.mutate(false);
+    }
+  };
   const onReinstate = async () => {
     if (!sf) return;
     const ok = await confirm({
@@ -243,7 +274,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             )}
             {canToggleApproval &&
               (sf.approved ? (
-                <button type="button" onClick={() => approve.mutate(false)} disabled={busy} className={BTN_SECONDARY}>
+                <button type="button" onClick={() => void onUnapprove()} disabled={busy} className={BTN_SECONDARY}>
                   Bỏ duyệt
                 </button>
               ) : (

@@ -1371,6 +1371,8 @@ model Coupon {
   newCustomerOnly Boolean            @default(false)
   // Lô mã in thẻ do admin sinh cùng cấu hình: gom số đã nhận/đã dùng và xuất lại CSV theo lô.
   batch           String?
+  /// Cách dựng link QR của lô ({ page: 'home'|'scan', src?, card? }), cùng giá trị trên mọi mã của lô; null = lô tạo trước khi có cột (link `/?claim=`).
+  batchLink       Json?
   claims          CouponClaim[]
   /// Người tạo / sửa gần nhất qua trang quản trị (null = mã hệ thống hoặc tạo trước khi có cột). Nhân viên chỉ sửa được
   /// mã do nhân viên tạo và không dùng được mã do chính mình tạo.

@@ -711,3 +711,64 @@ describe('SystemConfigService.set — khoá chat CSKH (chat.*)', () => {
     }
   });
 });
+
+describe('SystemConfigService.set — khoá nhịp chơi người mới của Vườn Xanh', () => {
+  function mk() {
+    const tx = {
+      systemConfig: { findUnique: jest.fn().mockResolvedValue(null), upsert: jest.fn().mockResolvedValue({}) },
+      systemConfigHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = { $transaction: jest.fn().mockImplementation((cb: (t: unknown) => unknown) => cb(tx)) } as unknown as PrismaService;
+    return { svc: new SystemConfigService(prisma), tx };
+  }
+
+  it.each([
+    ['game.first_harvest_points', [2000, 0, 10_000], [-1, 10_001, 2.5, 2_000_000]],
+    ['game.first_checkin_bonus', [50, 0, 10_000], [-1, 10_001, 0.5]],
+    ['game.comeback_gap_days', [7, 3, 365], [0, 1, 2, 366, 7.5]],
+    ['game.comeback_seeds', [60, 0], [-1, 10_001, 1.5]],
+    ['game.harvest_coupon_monthly_cap', [4, 0, 100], [-1, 101, 4.5]],
+    ['game.quiz_wrong_seeds', [2, 0, 1000], [-1, 1001, 0.5]],
+  ] as const)('%s: nhận %j, từ chối %j', async (key, goods, bads) => {
+    for (const ok of goods) {
+      const m = mk();
+      await m.svc.set(key, ok, 'admin1');
+      expect(m.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set(key, bad, 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+
+  it('game.tree_target_ladder: nhận mảng số nguyên dương tăng dần (1 đến 10 phần tử)', async () => {
+    for (const ok of [[60, 300, 600], [600], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]) {
+      const m = mk();
+      await m.svc.set('game.tree_target_ladder', ok, 'admin1');
+      expect(m.tx.systemConfig.upsert).toHaveBeenCalled();
+    }
+  });
+
+  it('game.tree_target_ladder: từ chối rỗng, quá 10 phần tử, 0/âm/lẻ/chuỗi/quá lớn, không tăng dần hoặc trùng, không phải mảng', async () => {
+    const bads: unknown[] = [
+      [],
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+      [0, 300],
+      [-60, 300],
+      [60.5, 300],
+      ['60', 300],
+      [60, 100_001],
+      [300, 60, 600],
+      [60, 60, 600],
+      600,
+      { 0: 60 },
+      null,
+    ];
+    for (const bad of bads) {
+      const m = mk();
+      await expect(m.svc.set('game.tree_target_ladder', bad as number[], 'admin1')).rejects.toBeInstanceOf(BadRequestException);
+      expect(m.tx.systemConfig.upsert).not.toHaveBeenCalled();
+    }
+  });
+});

@@ -20,6 +20,7 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
+import { isDirectVideoUrl } from '../utils/video-url';
 import { isHttpError } from '../services/http';
 
 /** API chỉ mở cho CTV/đại lý/nhân viên: khách thường vào thẳng link thì được chỉ đường, Thử lại không đổi được kết quả. */
@@ -210,23 +211,21 @@ function CourseDetailBody({
               </div>
 
               {lesson.contentType === 'VIDEO' && lesson.videoUrl && (
-                <div style={{ marginTop: 4 }}>
-                  <a
-                    href={lesson.videoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      minHeight: 44,
-                      color: 'var(--color-text-brand)',
-                      fontFamily: 'var(--font-ui)',
-                      fontSize: 'var(--type-body-sm-size)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {vi.academy.openVideo}
-                  </a>
+                <div style={{ marginTop: 8 }}>
+                  {isDirectVideoUrl(lesson.videoUrl) ? (
+                    <video
+                      src={lesson.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      aria-label={lesson.title}
+                      style={{ width: '100%', borderRadius: 'var(--radius-media)', background: 'var(--stone-900)' }}
+                    />
+                  ) : (
+                    <Text variant="body-sm" tone="secondary" as="div">
+                      {vi.academy.videoOnWeb}
+                    </Text>
+                  )}
                 </div>
               )}
               {lesson.contentType === 'ARTICLE' && lesson.body && (

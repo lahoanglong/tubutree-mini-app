@@ -35,6 +35,7 @@ export const DEAD_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'game.tree_xu_price': 'Đã gộp vào Điểm Xanh: góp quỹ trồng cây đọc "game.tree_points_price" (điểm, không phải xu).',
   'game.plot_unlock_xu_base': 'Mở lô đất bằng xu đã ngừng (PD-3), chỉ còn giọt nước ("game.plot_unlock_seed_base").',
   'game.xu_per_seed': 'Mua giọt nước bằng xu đã ngừng (C-009).',
+  'game.tree_default_target': 'Target cây nhà theo thang "game.tree_target_ladder" (cây 1, 2, 3+); lô phụ dùng "game.plot_target".',
   'wallet.xu_convert_multiplier': 'Đổi Ví sang xu đã ngừng (PD-3, Q-03): tiền Ví chỉ dùng trả đơn.',
   'dealer.kyc_required': 'Chưa có luồng xác minh KYC đại lý đọc khoá này.',
   'game.daily_checkin_seeds': 'Giọt nước khi mở app/điểm danh dùng "game.daily_login_seeds".',

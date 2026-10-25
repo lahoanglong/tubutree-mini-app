@@ -8,6 +8,7 @@ import BottomNav from './bottom-nav';
 import BackButton from './back-button';
 import { OnboardingGate } from './onboarding';
 import { CouponClaimGate } from './coupon-claim-gate';
+import { OpenAppRouter } from './open-app-router';
 import { MainLandmark } from './ui/main-landmark';
 import ErrorBoundary, { hashMessage } from './error-boundary';
 import { useAuthStore, setLogoutCleanup } from '../store/auth';
@@ -22,6 +23,7 @@ import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/a
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
+import { CASHBACK_ENABLED } from '../utils/features';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
@@ -49,7 +51,6 @@ const OrdersPage = lazy(() => import('../pages/orders'));
 const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
 const FeedPage = lazy(() => import('../pages/feed'));
-const CommunityLeaderboardPage = lazy(() => import('../pages/community-leaderboard'));
 const CommunityEventsPage = lazy(() => import('../pages/community-events'));
 const PostDetailPage = lazy(() => import('../pages/post-detail'));
 const AiAdvisorPage = lazy(() => import('../pages/ai-advisor'));
@@ -198,7 +199,7 @@ export default function MyApp() {
                     <Route path="/order/:code" element={<OrderDetailPage />} />
                     <Route path="/game" element={<GamePage />} />
                     <Route path="/feed" element={<FeedPage />} />
-                    <Route path="/feed/leaderboard" element={<CommunityLeaderboardPage />} />
+                    <Route path="/feed/leaderboard" element={<Navigate to="/feed" replace />} />
                     <Route path="/feed/events" element={<CommunityEventsPage />} />
                     <Route path="/feed/:id" element={<PostDetailPage />} />
                     <Route path="/ai-advisor" element={<AiAdvisorPage />} />
@@ -227,7 +228,7 @@ export default function MyApp() {
                     {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
                         hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
                     <Route path="/academy/:courseId" element={<AcademyPage />} />
-                    <Route path="/cashback" element={<CashbackPage />} />
+                    <Route path="/cashback" element={CASHBACK_ENABLED ? <CashbackPage /> : <Navigate to="/" replace />} />
                     <Route path="/dealer" element={<DealerPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/wishlist" element={<WishlistPage />} />
@@ -255,6 +256,7 @@ export default function MyApp() {
               <BackButton />
               <OnboardingGate />
               <CouponClaimGate />
+              <OpenAppRouter />
             </ZMPRouter>
           </SnackbarProvider>
         </App>

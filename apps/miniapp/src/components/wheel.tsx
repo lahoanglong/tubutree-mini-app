@@ -1,21 +1,25 @@
 import { useRef, useState } from 'react';
+import { WHEEL_SEG as SEG, WHEEL_SLOTS as SLOTS, pickWheelSlot, wheelRotationFor } from '@tubutree/app-core/game-wheel';
 import type { SpinResult } from '../services/game-api';
+import { vi } from '../i18n/vi';
 import { formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Button } from './ui/button';
 import { Text } from './ui/text';
 
-/** 8 ô hiển thị (nhãn minh họa) — phần thưởng THẬT lấy từ backend spin(). */
-const SLOTS = ['🌿', '🎁', '💧', '⭐', '🪴', '🏷️', '💚', '🍀'];
-const SEG = 360 / SLOTS.length;
 const SPIN_MS = 3600;
 
 export function WheelOfFortune({
   cost,
+  points = null,
+  onEarnPoints,
   onSpin,
   onResult,
 }: {
   cost: number;
+  /** Điểm Xanh dùng được; thiếu thì thay nút quay bằng số dư và lối "Cách kiếm Điểm Xanh". null = chưa biết, vẫn cho quay. */
+  points?: number | null;
+  onEarnPoints?: () => void;
   onSpin: () => Promise<SpinResult>;
   /** `null` = vừa bắt đầu lượt quay mới; có `prize` = kết quả thật của backend. Hộp kết quả do cấp trang dựng (xem WheelPrizeSheet). */
   onResult: (prize: SpinResult['prize'] | null) => void;
@@ -31,16 +35,12 @@ export function WheelOfFortune({
     onResult(null);
     haptic('medium');
 
-    // Quay tối thiểu 5 vòng + dừng ở 1 ô ngẫu nhiên (chỉ là hiệu ứng).
-    const landSlot = Math.floor(Math.random() * SLOTS.length);
-    const target = rotation + 360 * 5 + (360 - landSlot * SEG);
-    setRotation(target);
-
     try {
-      const [result] = await Promise.all([
-        onSpin(),
-        new Promise((r) => setTimeout(r, SPIN_MS)),
-      ]);
+      // Chờ giải thật của máy chủ rồi mới quay, để kim dừng đúng ô trúng. Lỗi thì bánh xe đứng yên.
+      const result = await onSpin();
+      const slot = pickWheelSlot(result.prize);
+      setRotation((r) => wheelRotationFor(r, slot, 5, Math.random() - 0.5));
+      await new Promise((r) => setTimeout(r, SPIN_MS));
       haptic('medium');
       onResult(result.prize);
     } catch {
@@ -50,6 +50,8 @@ export function WheelOfFortune({
       lockRef.current = false;
     }
   };
+
+  const short = points != null && points < cost && !!onEarnPoints;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
@@ -99,42 +101,63 @@ export function WheelOfFortune({
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
-                fontSize: 22,
-                transform: `rotate(${i * SEG + SEG / 2}deg) translate(0, -88px) rotate(-${
-                  i * SEG + SEG / 2
-                }deg)`,
-                transformOrigin: '0 0',
+                width: 72,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+                lineHeight: 1.15,
+                transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -80px) rotate(-${i * SEG + SEG / 2}deg)`,
               }}
             >
-              {s}
+              <span style={{ fontSize: 20 }}>{s.emoji}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)' }}>{s.label}</span>
             </span>
           ))}
         </div>
-        {/* Trục giữa */}
-        <div
-          aria-hidden
+        {/* Trục giữa: nút thật, cùng việc với nút "Quay ngay" bên dưới */}
+        <button
+          type="button"
+          aria-label="Quay vòng quay"
+          disabled={spinning || short}
+          onClick={() => void handleSpin()}
+          className="tubu-press"
           style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
+            padding: 0,
+            border: 'none',
             borderRadius: '50%',
             background: 'var(--color-action-primary-bg)',
+            color: 'var(--color-action-primary-fg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: 'var(--elevation-1)',
+            opacity: spinning || short ? 0.7 : 1,
             zIndex: 2,
           }}
         >
           <Text variant="label" tone="inverse">
             QUAY
           </Text>
-        </div>
+        </button>
       </div>
 
+      {short ? (
+        <>
+          <Text variant="body-sm" tone="secondary" as="div" style={{ textAlign: 'center' }}>
+            {vi.game.newbie.wheel.have(points, cost)}
+          </Text>
+          <Button size="lg" variant="secondary" onPress={onEarnPoints} style={{ minWidth: 200 }}>
+            {vi.game.newbie.wheel.howToEarn}
+          </Button>
+        </>
+      ) : (
       <Button
         size="lg"
         loading={spinning}
@@ -144,6 +167,7 @@ export function WheelOfFortune({
       >
         {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
       </Button>
+      )}
     </div>
   );
 }

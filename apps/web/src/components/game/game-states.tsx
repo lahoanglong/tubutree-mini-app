@@ -1,3 +1,4 @@
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoginRequired } from '@/components/login-required';
 
@@ -13,5 +14,5 @@ export function GameSkeleton() {
 }
 
 export function GameLoginGate({ returnTo }: { returnTo: string }) {
-  return <LoginRequired message="Đăng nhập để xem cộng đồng" returnTo={returnTo} />;
+  return <LoginRequired message={gameNewbieCopy.loginToView} returnTo={returnTo} />;
 }

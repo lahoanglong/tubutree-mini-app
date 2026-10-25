@@ -148,7 +148,7 @@ describe('GamePage — hộp kết quả vòng quay không phụ thuộc tab đa
     expect(screen.queryByText('GAME20000-ABCDE-1234')).not.toBeInTheDocument();
   });
 
-  it.each(['Vườn', 'Cộng đồng'])('đổi sang tab %s trong lúc quay: hộp kết quả vẫn nhìn thấy được', async (tabName) => {
+  it.each(['Vườn'])('đổi sang tab %s trong lúc quay: hộp kết quả vẫn nhìn thấy được', async (tabName) => {
     const spinBtn = await openToday();
     fireEvent.click(spinBtn);
     await advance(1000);

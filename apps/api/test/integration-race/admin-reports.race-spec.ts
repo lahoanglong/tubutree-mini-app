@@ -352,6 +352,27 @@ describe('Báo cáo admin (real Postgres)', () => {
     });
   });
 
+  describe('báo cáo theo chiến dịch (by=campaign)', () => {
+    it('khoá có tiền tố: chiến dịch tên trùng nguồn/"unknown" không lẫn với dòng "không có chiến dịch"', async () => {
+      // 2019-08-07 là thứ Tư, tuần bắt đầu thứ Hai 2019-08-05
+      const born = new Date('2019-08-07T05:00:00Z');
+      await mkUser({ createdAt: born, firstTouchSource: 'shopee', firstTouchCampaign: 'card-2611' });
+      await mkUser({ createdAt: born, firstTouchSource: 'shopee', firstTouchCampaign: 'card-2611' });
+      await mkUser({ createdAt: born, firstTouchSource: 'shopee', firstTouchCampaign: 'shopee' });
+      await mkUser({ createdAt: born, firstTouchSource: 'fb', firstTouchCampaign: 'unknown' });
+      await mkUser({ createdAt: born, firstTouchSource: 'fb', firstTouchCampaign: '' });
+      await mkUser({ createdAt: born, firstTouchSource: 'fb' });
+      const r = await new AdminReportsService(prisma).sourceReport({ from: '2019-08-05', to: '2019-08-11', by: 'campaign' }, new Date('2019-08-20T00:00:00Z'));
+      const n = (source: string) => r.rows.find((c) => c.week === '2019-08-05' && c.source === source)?.newUsers;
+      expect(n('c:card-2611')).toBe(2);
+      expect(n('c:shopee')).toBe(1);
+      expect(n('c:unknown')).toBe(1);
+      expect(n('__nocampaign')).toBe(2);
+      expect(r.rows.find((c) => c.source === 'c:card-2611')?.label).toBe('Thẻ hộp hàng 2611');
+      expect(r.rows.find((c) => c.source === '__nocampaign')?.label).toBe('Không thuộc chiến dịch nào');
+    });
+  });
+
   describe('D1-14: xuất TNCN, lệnh rút tiền, hoàn tiền khách', () => {
     // Tháng 05/2019 giờ VN: [2019-04-30T17:00Z, 2019-05-31T17:00Z)
     const range = resolveReportRange('2019-05-01', '2019-05-31', { maxDays: 366 });

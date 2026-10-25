@@ -28,6 +28,11 @@ const PAYOUT_STATUSES = ['REQUESTED', 'APPROVED', 'PAID', 'REJECTED'] as const;
 const REFUND_STATUSES = ['OPEN', 'UNVERIFIED', 'PENDING', 'PROCESSING', 'COMPLETED', 'DISMISSED'] as const;
 const REFUND_KINDS = ['END_CUSTOMER', 'CANCEL', 'RETURN', 'LATE_PAYMENT', 'OVERPAYMENT'] as const;
 
+export class SourceReportQuery extends ReportRangeQuery {
+  /** Chiều nhóm: nguồn chạm đầu (mặc định) hoặc chiến dịch chạm đầu (thẻ hộp hàng theo đợt). */
+  @IsOptional() @IsIn(['source', 'campaign']) by?: 'source' | 'campaign';
+}
+
 export class PayoutExportQuery extends ReportRangeQuery {
   @IsOptional() @IsIn(PAYOUT_STATUSES) status?: PayoutStatus;
 }
@@ -62,7 +67,7 @@ export class AdminReportsController {
   /** Khách mới theo nguồn chạm đầu × tuần: đơn đầu, đơn hai trong 30 ngày, doanh thu (tối đa 180 ngày, mặc định 30 ngày). */
   @AllowStaff('MARKETING')
   @Get('sources')
-  sources(@Query() q: ReportRangeQuery) {
+  sources(@Query() q: SourceReportQuery) {
     return this.reports.sourceReport(q);
   }
 

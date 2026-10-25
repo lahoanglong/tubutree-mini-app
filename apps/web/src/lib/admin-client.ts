@@ -714,8 +714,15 @@ export const updateOrderStatus = (id: string, status: string, note?: string) =>
     method: 'PUT',
     body: { status, note },
   });
-export const getConfig = (category?: string) =>
-  apiFetch<ConfigRow[]>(`/admin/config${category ? `?category=${category}` : ''}`);
+/**
+ * Không lọc: API trả mảng dòng. Có `category`: API trả object `{khoá: giá trị}` — đổi về cùng dạng mảng để mọi nơi
+ * gọi dùng chung một kiểu (trước đây coi object là mảng nên `.find` ném TypeError và sập tab).
+ */
+export async function getConfig(category?: string): Promise<ConfigRow[]> {
+  const data = await apiFetch<ConfigRow[] | Record<string, unknown>>(`/admin/config${category ? `?category=${encodeURIComponent(category)}` : ''}`);
+  if (Array.isArray(data)) return data;
+  return Object.entries(data ?? {}).map(([key, value]) => ({ key, value, description: null, category: category ?? key.split('.')[0] ?? '' }));
+}
 export const setConfig = (key: string, value: unknown) =>
   apiFetch<{ ok: boolean }>('/admin/config', { method: 'PUT', body: { key, value } });
 export interface CreateCouponInput {
@@ -789,6 +796,8 @@ export interface CouponBatchCodes {
   batch: string;
   /** null = chưa đặt `app.miniapp_base_url`: link trong file là đường dẫn tương đối, chưa in được. */
   claimUrlBase: string | null;
+  /** Link đã lưu cùng lô; null = lô tạo trước khi lưu link, file dùng `/?claim=`. */
+  link: ClaimLinkOptions | null;
   codes: CouponBatchCode[];
 }
 export interface CouponBatchSummary {
@@ -806,14 +815,20 @@ export interface CouponBatchSummary {
   newCustomerOnly: boolean;
   startAt: string;
   endAt: string;
+  link: ClaimLinkOptions | null;
 }
-export const createCouponBatch = (input: CouponBatchInput) =>
+/** Trang đích và nhãn nguồn của link trong file CSV (cùng khuôn với ClaimLinkDto ở API). */
+export interface ClaimLinkOptions {
+  page?: 'home' | 'scan';
+  src?: string;
+  card?: string;
+}
+export const createCouponBatch = (input: CouponBatchInput & { link?: ClaimLinkOptions }) =>
   apiFetch<CouponBatchCodes & { created: number }>('/admin/coupon-batches', { method: 'POST', body: input });
 export const listCouponBatches = () => apiFetch<CouponBatchSummary[]>('/admin/coupon-batches');
 /** Link gốc Mini App (app.miniapp_base_url) để in QR mã chung; null = chưa đặt. */
 export const getCouponClaimUrlBase = () => apiFetch<{ claimUrlBase: string | null }>('/admin/coupon-batches/claim-url-base');
-export const getCouponBatchCodes = (batch: string) =>
-  apiFetch<CouponBatchCodes>(`/admin/coupon-batches/${encodeURIComponent(batch)}/codes`);
+export const getCouponBatchCodes = (batch: string) => apiFetch<CouponBatchCodes>(`/admin/coupon-batches/${encodeURIComponent(batch)}/codes`);
 export const setCouponBatchActive = (batch: string, isActive: boolean) =>
   apiFetch<{ batch: string; updated: number }>(`/admin/coupon-batches/${encodeURIComponent(batch)}`, { method: 'PATCH', body: { isActive } });
 
