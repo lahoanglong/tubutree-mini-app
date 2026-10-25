@@ -21,7 +21,7 @@ export interface HomePublicDTO {
   newest: Block<PageResponse<ProductCard>>;
   flashActive: Block<FlashSaleActiveItem[]>;
   categories: Block<CategoryDTO[]>;
-  brands: Block<{ brand: string; count: number }[]>;
+  brands: Block<{ brand: string; count: number; slug?: string | null }[]>;
   /** Cùng nội dung GET /config/public: khối "Quà khách mới" cần số công khai mà không tốn thêm request khi mở Trang chủ. */
   publicConfig: Block<PublicConfig>;
 }

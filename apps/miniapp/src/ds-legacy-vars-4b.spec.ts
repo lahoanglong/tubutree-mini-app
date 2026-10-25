@@ -30,7 +30,7 @@ const FILES_4B = [
   'src/components/catalog/recently-viewed-rail.tsx',
   'src/components/home/home-header.tsx',
   'src/components/home/home-section.tsx',
-  'src/components/home/order-strip.tsx',
+  'src/components/home/todo-strip.tsx',
   'src/components/home/home-extras.tsx',
   'src/components/reorder/purchased-rail.tsx',
 ];
@@ -51,7 +51,7 @@ const FILES_NO_ZAUI_LAYOUT = [
   'src/components/catalog/recently-viewed-rail.tsx',
   'src/components/home/home-header.tsx',
   'src/components/home/home-section.tsx',
-  'src/components/home/order-strip.tsx',
+  'src/components/home/todo-strip.tsx',
   'src/components/home/home-extras.tsx',
 ];
 

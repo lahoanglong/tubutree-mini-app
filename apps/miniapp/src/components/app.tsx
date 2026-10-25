@@ -66,6 +66,7 @@ const RewardsPage = lazy(() => import('../pages/rewards'));
 const RewardsMinePage = lazy(() => import('../pages/rewards-mine'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
+const OffersPage = lazy(() => import('../pages/offers'));
 const WalletPage = lazy(() => import('../pages/wallet'));
 const ExternalPointsPage = lazy(() => import('../pages/external-points'));
 const AddressesPage = lazy(() => import('../pages/addresses'));
@@ -217,6 +218,7 @@ export default function MyApp() {
                     <Route path="/rewards/mine" element={<RewardsMinePage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/loyalty" element={<LoyaltyPage />} />
+                    <Route path="/offers" element={<OffersPage />} />
                     <Route path="/wallet" element={<WalletPage />} />
                     <Route path="/points/scan" element={<ExternalPointsPage />} />
                     <Route path="/addresses" element={<AddressesPage />} />

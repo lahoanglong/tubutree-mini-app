@@ -1,13 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), pathname: '/', count: 0 }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), pathname: '/', count: 0, dot: null as null | 'check-in' | 'coupon-expiring' }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
   useLocation: () => ({ pathname: mocks.pathname, search: '', state: null }),
 }));
 vi.mock('../hooks/use-active-order-count', () => ({ useActiveOrderCount: (enabled: boolean) => (enabled ? mocks.count : 0) }));
+vi.mock('../hooks/use-offers-dot', () => ({ useOffersDot: (enabled: boolean) => (enabled ? mocks.dot : null) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import BottomNav from './bottom-nav';
@@ -17,14 +18,16 @@ describe('BottomNav', () => {
     vi.clearAllMocks();
     mocks.pathname = '/';
     mocks.count = 0;
+    mocks.dot = null;
     localStorage.clear();
   });
 
-  it('5 tab trong <nav>, có "Đơn hàng", không còn "Ví & HH"', () => {
+  it('5 tab trong <nav>, có "Ưu đãi", không còn "Đơn hàng" và "Ví & HH"', () => {
     render(<BottomNav />);
     const nav = screen.getByRole('navigation', { name: 'Điều hướng chính' });
     expect(screen.getAllByRole('button')).toHaveLength(5);
-    expect(nav).toHaveTextContent('Đơn hàng');
+    expect(nav).toHaveTextContent('Ưu đãi');
+    expect(nav).not.toHaveTextContent('Đơn hàng');
     expect(nav).not.toHaveTextContent('Ví & HH');
     expect(nav).toHaveStyle({ height: 'calc(60px + var(--safe-bottom))' });
   });
@@ -40,23 +43,34 @@ describe('BottomNav', () => {
     }
   });
 
-  it('badge số đơn đang xử lý trên tab Đơn hàng + nhãn a11y', () => {
+  it('badge số đơn đang xử lý nằm trên tab Cá nhân + nhãn a11y', () => {
     mocks.count = 2;
     render(<BottomNav />);
-    const tab = screen.getByRole('button', { name: 'Đơn hàng, 2 đơn đang xử lý' });
+    const tab = screen.getByRole('button', { name: 'Cá nhân, 2 đơn đang xử lý' });
     expect(tab).toHaveTextContent('2');
   });
 
-  it('bấm tab khác → navigate; tab đang mở có aria-current=page', () => {
-    mocks.pathname = '/orders';
+  it('chấm đỏ tab Ưu đãi chỉ hiện khi có việc (chưa điểm danh / mã sắp hết hạn)', () => {
+    const none = render(<BottomNav />);
+    expect(screen.queryByTestId('offers-dot')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ưu đãi' })).toBeInTheDocument();
+    none.unmount();
+    mocks.dot = 'check-in';
     render(<BottomNav />);
-    expect(screen.getByRole('button', { name: 'Đơn hàng' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('offers-dot')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ưu đãi, có việc cần làm' })).toBeInTheDocument();
+  });
+
+  it('bấm tab khác → navigate; tab đang mở có aria-current=page', () => {
+    mocks.pathname = '/offers';
+    render(<BottomNav />);
+    expect(screen.getByRole('button', { name: 'Ưu đãi' })).toHaveAttribute('aria-current', 'page');
     fireEvent.click(screen.getByRole('button', { name: 'Cá nhân' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/profile');
   });
 
-  it('ẩn ở trang con (vd /wallet đã thành trang con)', () => {
-    mocks.pathname = '/wallet';
+  it('ẩn ở trang con (vd /orders và /wallet đã thành trang con)', () => {
+    mocks.pathname = '/orders';
     const { container } = render(<BottomNav />);
     expect(container).toBeEmptyDOMElement();
   });

@@ -17,11 +17,14 @@ vi.mock('../services/account-api', () => ({
   getNotifications: vi.fn().mockResolvedValue([]),
   getWallet: vi.fn().mockResolvedValue({ walletBalance: 0 }),
   getCoupons: vi.fn().mockResolvedValue([]),
+  getReferral: vi.fn().mockResolvedValue({ referralCode: 'LAN1', minOrderAmount: 200000, windowDays: 30 }),
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getPublicConfig: vi.fn().mockResolvedValue({}),
+  fetchOrders: vi.fn().mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } }),
 }));
+vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: mocks.getOwnedBrand, getOwnsBrand: mocks.getOwnsBrand }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -30,9 +33,10 @@ vi.mock('../store/auth', () => {
   const state = () => ({
     status: 'authenticated',
     error: null,
-    user: { fullName: 'Lan', role: 'CUSTOMER', referralCode: 'LAN1', pointsBalance: 1, walletBalance: 0, avatarUrl: null },
+    user: { fullName: 'Lan', role: 'CUSTOMER', referralCode: 'LAN1', pointsBalance: 1, walletBalance: 0, avatarUrl: null, phone: '0901234567', zaloId: 'z1' },
     logout: vi.fn(),
     restore: vi.fn(),
+    ensurePhone: vi.fn(),
   });
   const useAuthStore = Object.assign((sel?: (s: unknown) => unknown) => (sel ? sel(state()) : state()), {
     getState: () => state(),

@@ -66,8 +66,8 @@ export default function OrdersPage() {
       : undefined;
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(76px + var(--safe-bottom))' }}>
-      <PageHeader title={vi.orders.tabTitle} back={false} />
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(24px + var(--safe-bottom))' }}>
+      <PageHeader title={vi.orders.tabTitle} />
 
       <AuthGate>
         <div style={{ padding: '8px 12px' }}>

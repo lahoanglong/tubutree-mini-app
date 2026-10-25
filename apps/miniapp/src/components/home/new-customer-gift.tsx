@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { CalendarClock, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
+import { homeCopy } from '@tubutree/app-core/home-copy';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
 import { getPublicConfig, type PublicConfig } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
+import { isGuestUser } from '../coupon-claim-gate';
 import { vi } from '../../i18n/vi';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
@@ -59,21 +61,39 @@ export function NewCustomerGift() {
   const navigate = useNavigate();
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const userId = useAuthStore((s) => s.user?.id);
+  const user = useAuthStore((s) => s.user);
+  const ensurePhone = useAuthStore((s) => s.ensurePhone);
+  // Tài khoản khách (vào bằng thiết bị, chưa liên kết Zalo): máy chủ cố ý trả isNewCustomer=false để không hứa quà nó không phát.
+  // Đây lại là nhóm cần mồi nhất, nên vẫn hiện lợi ích và mời liên kết Zalo để nhận quà; quà chỉ vào ví sau khi liên kết.
+  const guestAccount = authed && user ? isGuestUser(user) : false;
+  const [linking, setLinking] = useState<'idle' | 'busy' | 'failed'>('idle');
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
   const offerQ = useQuery({
     queryKey: ['new-customer-offer', userId],
     queryFn: getNewCustomerOffer,
-    enabled: authed,
+    enabled: authed && !guestAccount,
     retry: false,
   });
 
   // Chưa biết có phải khách mới thì không chiếm chỗ: khung chờ cố định sẽ làm trang nhảy với mọi khách đã có đơn rồi mới biến mất.
-  if (cfgQ.isError || cfgQ.isPending || (authed && (offerQ.isError || offerQ.isPending))) return null;
-  if (authed && offerQ.data?.isNewCustomer !== true) return null;
+  if (cfgQ.isError || cfgQ.isPending || (authed && !guestAccount && (offerQ.isError || offerQ.isPending))) return null;
+  if (authed && !guestAccount && offerQ.data?.isNewCustomer !== true) return null;
 
-  const voucher = authed ? (offerQ.data?.welcomeVoucher ?? null) : null;
+  const voucher = authed && !guestAccount ? (offerQ.data?.welcomeVoucher ?? null) : null;
+  // Khách chưa có mã riêng: nói mệnh giá mã chào mừng từ cấu hình công khai (thiếu thì không hứa số).
+  const promised = guestAccount ? (cfgQ.data!.newCustomer?.welcomeVoucher ?? null) : null;
   const benefits = directBenefits(cfgQ.data!);
+
+  const linkZalo = async () => {
+    setLinking('busy');
+    try {
+      const phone = await ensurePhone();
+      setLinking(phone ? 'idle' : 'failed');
+    } catch {
+      setLinking('failed');
+    }
+  };
 
   const voucherDetail: ReactNode = voucher
     ? [voucher.minOrder ? vi.home.newGift.voucherMinOrder(formatVnd(voucher.minOrder)) : null, vi.home.newGift.voucherExpires(formatDate(voucher.endAt))]
@@ -100,6 +120,21 @@ export function NewCustomerGift() {
             </div>
           </div>
         )}
+        {promised && promised.amount > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+            <Icon icon={Ticket} tone="brand" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text variant="label" as="div">
+                {vi.home.newGift.voucherAmount(formatVnd(promised.amount))}
+              </Text>
+              <Text variant="caption" tone="secondary" as="div">
+                {[promised.minOrder ? vi.home.newGift.voucherMinOrder(formatVnd(promised.minOrder)) : null, guestAccount ? homeCopy.guestGift.ctaHint : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            </div>
+          </div>
+        )}
         <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 12 }}>
           {vi.home.newGift.benefitsTitle}
         </Text>
@@ -114,16 +149,36 @@ export function NewCustomerGift() {
           ))}
         </ul>
         <div style={{ marginTop: 12 }}>
-          <Button
-            variant="secondary"
-            onPress={() => {
-              haptic('light');
-              navigate('/browse');
-            }}
-            style={{ minWidth: 0 }}
-          >
-            {vi.home.newGift.cta}
-          </Button>
+          {guestAccount ? (
+            <>
+              <Button
+                loading={linking === 'busy'}
+                onPress={() => {
+                  haptic('light');
+                  return linkZalo();
+                }}
+                style={{ minWidth: 0 }}
+              >
+                {homeCopy.guestGift.cta}
+              </Button>
+              {linking === 'failed' && (
+                <Text variant="caption" tone="danger" as="p" style={{ marginTop: 6 }}>
+                  {homeCopy.guestGift.failed}
+                </Text>
+              )}
+            </>
+          ) : (
+            <Button
+              variant="secondary"
+              onPress={() => {
+                haptic('light');
+                navigate('/browse');
+              }}
+              style={{ minWidth: 0 }}
+            >
+              {vi.home.newGift.cta}
+            </Button>
+          )}
         </div>
       </Card>
     </section>
