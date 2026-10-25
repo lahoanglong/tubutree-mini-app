@@ -75,7 +75,12 @@ export const BUSINESS_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'referral.milestones_points': 'mã mặc định [] (không thưởng mốc); seed thưởng 20.000/40.000/100.000 điểm Xanh ở mốc 3/5/10 bạn',
   'subscribe.discount_tiers': 'mã mặc định một bậc bằng subscribe.discount_pct (12%); seed thêm 14% (3 gói) và 15% (5 gói)',
   'shipping.tier_freeship_overrides': 'mã mặc định {} (không hạng nào freeship sớm); seed cho Lộc Biếc freeship từ 99k, Đại Thụ và Cổ Thụ freeship hết',
-  'game.streak_7_bonus': 'mã mặc định { seeds: 20 }; seed { seeds: 10, free_spins: 1 } (free_spins không code nào đọc)',
+  'game.streak_7_bonus': 'mã mặc định { seeds: 20 }; seed { seeds: 30 } (nhịp chơi người mới)',
+  'game.daily_login_seeds': 'mã mặc định 10; seed 15 (nhịp chơi người mới)',
+  'game.tank_capacity': 'mã mặc định 500; seed 1000 (bình 500 nhỏ hơn cây thứ ba 600)',
+  'game.streak_freeze_cost': 'mã mặc định 80; seed 40',
+  'game.streak_repair_cost': 'mã mặc định 150; seed 50',
+  'game.harvest_coupon_daily_cap': 'mã mặc định 3; seed 1 (kèm trần 4 mã/tháng game.harvest_coupon_monthly_cap)',
   'seasonpass.tiers': 'mã mặc định [] ; seed 5 bậc thưởng (Season Pass đang ẩn, SEASON_PASS_ENABLED=false)',
 };
 
