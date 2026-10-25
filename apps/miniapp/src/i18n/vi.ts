@@ -536,7 +536,6 @@ export const vi = {
   externalPoints: {
     title: 'Tích điểm đơn sàn',
     menuLabel: 'Tích điểm đơn sàn',
-    menuHint: 'Quét mã trên phiếu giao hàng',
     closedTitle: 'Chưa mở',
     closedBody: 'Tính năng tích điểm đơn sàn chưa mở. Bạn quay lại sau nhé.',
     soonTitle: 'Tích điểm đơn sàn sắp mở',
