@@ -23,8 +23,13 @@ export interface AccountDeletionRequestResult {
   createdAt: string;
   message: string;
 }
-export const requestAccountDeletion = (http: HttpClient, reason?: string) =>
-  http.post<AccountDeletionRequestResult>('/me/deletion-request', { reason });
+/** `walletConsent`: khách đã thấy số dư Ví và đồng ý bỏ (bắt buộc khi Ví còn tiền; máy chủ so với số dư hiện tại). */
+export interface WalletForfeitConsent {
+  acknowledgedWalletBalance: number;
+  acceptWalletForfeit: true;
+}
+export const requestAccountDeletion = (http: HttpClient, reason?: string, walletConsent?: WalletForfeitConsent) =>
+  http.post<AccountDeletionRequestResult>('/me/deletion-request', { reason, ...walletConsent });
 
 // Notifications
 export interface NotificationDTO {

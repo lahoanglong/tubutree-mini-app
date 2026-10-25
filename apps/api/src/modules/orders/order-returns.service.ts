@@ -19,7 +19,7 @@ import {
   WALLET_DESTINATION,
   type RefundDestination,
 } from './refund-destination';
-import { announceBankRefund } from './refund-queue';
+import { announceBankRefund, announceDeletedAccountRefund } from './refund-queue';
 import { partialReturnTotals } from './return-ledger';
 import { defaultShopFault, RETURN_REASONS, type ReturnReasonCode } from './return-reasons';
 import type { ReturnEstimateDto, ReturnRequestDto } from './dto/return-request.dto';
@@ -155,7 +155,7 @@ export function refundNote(refund: RefundOutcome | null, bank: { bankName?: stri
     if (refund.to === 'WALLET') parts.push(`Đã hoàn ${formatVnd(refund.amount)} vào Ví Tubu.`);
     else if (refund.to === 'BANK') {
       parts.push(`Tubu sẽ chuyển khoản ${formatVnd(refund.amount)} về ${bank ? maskedBank(bank) : 'tài khoản của bạn'} trong 1-3 ngày làm việc, miễn phí.`);
-    } else parts.push(`Khoản hoàn ${formatVnd(refund.amount)} được trả cho người nhận hàng.`);
+    } else if (refund.to === 'END_CUSTOMER') parts.push(`Khoản hoàn ${formatVnd(refund.amount)} được trả cho người nhận hàng.`);
   }
   if (pointsBack > 0) parts.push(`Đã hoàn ${formatPoints(pointsBack)} Điểm Xanh.`);
   return parts.length ? ` ${parts.join(' ')}` : '';
@@ -474,6 +474,12 @@ export class OrderReturnsService {
         { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
         { orderCode: order.code, amount: money.amount, userId: order.userId, bankName: req.bankName, bankAccountNo: req.bankAccountNo },
         { notifyCustomer: false },
+      );
+    }
+    if (money?.to === 'DELETED_ACCOUNT') {
+      await announceDeletedAccountRefund(
+        { prisma: this.prisma, notifications: this.notifications, logger: this.logger },
+        { orderCode: order.code, amount: money.amount },
       );
     }
     await this.flagPancakeReturn(order, shares);

@@ -60,9 +60,11 @@ function EventLine({ e }: { e: AdminUserEvent }) {
         ? `Nhóm việc ${permLabel(e.fromValue)} → ${permLabel(e.toValue)}`
         : e.kind === 'STOREFRONT_PARTNER'
           ? `Gian hàng đối tác: ${onOff(e.fromValue)} → ${onOff(e.toValue)}`
-          : e.kind === 'BLOCK'
-            ? 'Khoá tài khoản'
-            : 'Mở khoá';
+          : e.kind === 'WALLET_FORFEIT'
+            ? `Xoá tài khoản: bỏ số dư Ví ${formatVnd(Number(e.fromValue ?? 0))}`
+            : e.kind === 'BLOCK'
+              ? 'Khoá tài khoản'
+              : 'Mở khoá';
   return (
     <li className="py-1.5">
       <div className="font-medium text-stone-900">{what}</div>

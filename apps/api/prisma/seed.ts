@@ -63,7 +63,6 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'affiliate.hold_days', value: 10, category: 'affiliate', description: 'Hold ngày sau DELIVERED trước khi APPROVED' },
   // Q-31: cửa sổ ghi nhận "chạm" giới thiệu CTV (AffiliateService.recordTouch). createOnly: admin chỉnh rồi thì seed không reset.
   { key: 'affiliate.attribution_days', value: 7, category: 'affiliate', description: 'Số ngày giữ ghi nhận giới thiệu (chạm link CTV/nhãn) cho đơn đặt sau đó', createOnly: true },
-  { key: 'affiliate.min_withdraw_bank', value: 50000, category: 'affiliate', description: 'Min rút STK' },
 
   // Cashback
   { key: 'cashback.merchant_user_share', value: 0.7, category: 'cashback', description: 'User nhận 70% commission' },
@@ -71,9 +70,6 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'cashback.click_rate_limit_seconds', value: 30, category: 'cashback', description: '1 click/merchant/user/30s' },
   { key: 'cashback.reconcile_lookback_days', value: 45, category: 'cashback', description: 'Reconcile cron kéo giao dịch từ provider trong N ngày gần nhất (phủ hold window + biên)' },
 
-  // Rút Ví về ngân hàng: tối thiểu 100k, phí 3k (xu đã gộp vào Điểm Xanh, Ví không còn đổi sang xu).
-  { key: 'wallet.withdraw_min', value: 100000, category: 'wallet', description: 'Rút Ví về ngân hàng tối thiểu' },
-  { key: 'wallet.withdraw_fee', value: 3000, category: 'wallet', description: 'Phí chuyển khoản ngân hàng/lần' },
   // PD-3: thưởng giới thiệu bằng Điểm Xanh (khoá xu coins.* đã chết). createOnly: migration
   // pd3_points_config_keys chép giá trị DB cũ bằng CEIL(xu/1000); seed không đè.
   { key: 'referral.referrer_reward_points', value: 5000, category: 'referral', description: 'Điểm Xanh thưởng người giới thiệu khi bạn được mời có đơn thứ 2 giao thành công trong referral.window_days ngày (thu hồi nếu trả hàng; CTV không nhận)', createOnly: true },
@@ -157,7 +153,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'storefront.identifier_cooldown_days', value: 90, category: 'storefront', description: 'Subdomain/tên miền gian hàng vừa đổi hoặc gỡ chỉ gian hàng khác dùng lại sau chừng này ngày', createOnly: true },
   { key: 'orders.dealer_pending_payment_ttl_hours', value: 72, category: 'orders', description: 'Đơn đại lý trả trước chờ chuyển khoản quá số giờ này thì tự huỷ (hoàn kho). Tối thiểu 1, tối đa 720', createOnly: true },
   { key: 'affiliate.pit_withhold_pct', value: 0.1, category: 'affiliate', description: 'Thuế TNCN khấu trừ khi trả hoa hồng CTV (phân số, 0.1 = 10%; 0 = tắt)', createOnly: true },
-  { key: 'affiliate.pit_withhold_threshold', value: 2000000, category: 'affiliate', description: 'Tổng hoa hồng rút trong tháng (giờ VN) từ số tiền này trở lên thì khấu trừ thuế TNCN (đồng)', createOnly: true },
+  { key: 'affiliate.pit_withhold_threshold', value: 5000000, category: 'affiliate', description: 'Tổng hoa hồng chuyển vào Ví trong tháng (giờ VN) từ số tiền này trở lên thì khấu trừ thuế TNCN (đồng)', createOnly: true },
 
   // Dealer
   { key: 'dealer.max_discount_pct', value: 0.45, category: 'dealer', description: 'Chiết khấu tối đa hard cap' },
@@ -874,11 +870,11 @@ export const NOTIFICATION_TEMPLATES = [
   // C-029: CTV biết kết quả công việc — đơn mới từ link của mình, hoa hồng được duyệt, lệnh rút đã chi.
   // Không dùng {{order_code}} ở COMMISSION_NEW: đó là đơn của khách, app sẽ hiện nút "Xem đơn" mà CTV không xem được.
   { id: 'nt-ctv-commission-new', code: 'COMMISSION_NEW', channel: 'INAPP', bodyTemplate: '💰 Có đơn mới từ link của bạn! Hoa hồng dự kiến {{amount}}. Khoản này được chốt sau khi khách nhận hàng và hết thời gian đổi/trả.', createOnly: true },
-  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Bạn có thể rút ngay trong mục CTV.', createOnly: true },
+  { id: 'nt-ctv-commission-approved', code: 'COMMISSION_APPROVED', channel: 'INAPP', bodyTemplate: '✅ {{count}} khoản hoa hồng (tổng {{amount}}) đã được duyệt. Bạn có thể chuyển vào Ví Tubu ngay trong mục CTV.', createOnly: true },
   { id: 'nt-ctv-payout-paid', code: 'COMMISSION_PAYOUT_PAID', channel: 'INAPP', bodyTemplate: '🏦 Lệnh rút {{amount}} của bạn đã được chuyển khoản{{ref}}. Kiểm tra tài khoản ngân hàng nhé!', createOnly: true },
   // Gói p8-seller: rút hoa hồng (SELLER-10), đối tác tự giao (D4), duyệt hồ sơ/sản phẩm (SELLER-12). Cùng nội dung với migration p8_seller_config_templates.
   { id: 'nt-ctv-payout-approved', code: 'COMMISSION_PAYOUT_APPROVED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} của bạn đã được duyệt, Tubu Tree sẽ chuyển khoản trong thời gian sớm nhất.', createOnly: true },
-  { id: 'nt-ctv-payout-rejected', code: 'COMMISSION_PAYOUT_REJECTED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} chưa được duyệt: {{reason}}. Hoa hồng đã trả lại số dư khả dụng, bạn kiểm tra rồi gửi lệnh mới nhé.', createOnly: true },
+  { id: 'nt-ctv-payout-rejected', code: 'COMMISSION_PAYOUT_REJECTED', channel: 'INAPP', bodyTemplate: 'Lệnh rút {{amount}} chưa được duyệt: {{reason}}. Hoa hồng đã trả lại số dư khả dụng, bạn có thể chuyển vào Ví Tubu trong mục CTV.', createOnly: true },
   { id: 'nt-ctv-commission-reversed', code: 'COMMISSION_REVERSED', channel: 'INAPP', bodyTemplate: 'Khoản hoa hồng dự kiến {{amount}} đã bị thu hồi vì đơn của khách bị huỷ hoặc trả hàng.', createOnly: true },
   { id: 'nt-merchant-order-new', code: 'MERCHANT_ORDER_NEW', channel: 'INAPP', bodyTemplate: '🛒 Gian hàng của bạn có đơn mới {{order_code}} ({{total}}đ). Vào Cổng người bán → Đơn cần giao để xác nhận và gửi hàng.', createOnly: true },
   { id: 'nt-merchant-return-approved', code: 'MERCHANT_RETURN_APPROVED', channel: 'INAPP', bodyTemplate: 'Khách trả hàng đơn {{order_code}} ({{items}}) đã được duyệt. Khi nhận được hàng, hãy bấm "Đã nhận hàng trả" trong Cổng người bán để cộng lại tồn kho.', createOnly: true },

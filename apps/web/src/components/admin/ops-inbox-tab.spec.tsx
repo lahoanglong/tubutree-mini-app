@@ -102,7 +102,7 @@ describe('OpsInboxTab — việc với đối tác (R4-ADMIN-7)', () => {
     await flush();
 
     const card = r.container.querySelector<HTMLButtonElement>('[data-inbox="payoutsToPay"]')!;
-    expect(card.textContent).toContain('Lệnh rút tiền chờ chi');
+    expect(card.textContent).toContain('Lệnh rút ngân hàng cũ chờ chi');
     expect(card.textContent).toContain('3');
     click(card);
     expect(onOpen).toHaveBeenCalledWith('payoutsToPay');

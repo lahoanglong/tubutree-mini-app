@@ -45,7 +45,7 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/affiliate/milestones') return state.milestones;
       if (path === '/affiliate/analytics/storefronts') return { storefronts: state.storefronts };
       if (path === '/affiliate/analytics/products') return state.products;
-      if (path === '/config/public') return { affiliateMinWithdrawBank: 70_000 };
+      if (path === '/config/public') return {};
       return state.tax;
     },
     post: async (path: string, body?: unknown) => {
@@ -155,12 +155,13 @@ describe('/ctv — đăng ký CTV (điều khoản hoa hồng & thuế)', () => 
     state.me = { isAffiliate: false, referralCode: '', walletBalance: 0 };
   });
 
-  it('hiện điều khoản, mức rút tối thiểu lấy từ cấu hình, nút bị khoá tới khi tick đồng ý, không gọi API', async () => {
+  it('hiện điều khoản, lợi ích hoa hồng vào Ví 1:1 (không nhắc rút ngân hàng), nút bị khoá tới khi tick đồng ý, không gọi API', async () => {
     const { container } = mount();
     await flush();
     expect(container.textContent).toContain('Điều khoản hoa hồng & thuế');
     expect(container.textContent).toContain('hết thời gian đổi/trả');
-    expect(container.textContent).toContain('tối thiểu 70k');
+    expect(container.textContent).toContain('Hoa hồng vào Ví Tubu 1:1, dùng trả tiền hàng');
+    expect(container.textContent).not.toMatch(/Rút về ngân hàng|tối thiểu/);
     const btn = byText(container, 'button', 'Đăng ký miễn phí ngay') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(container.textContent).toContain('Chọn ô đồng ý điều khoản để đăng ký');
@@ -206,14 +207,14 @@ describe('/ctv — đăng ký CTV (điều khoản hoa hồng & thuế)', () => 
 });
 
 describe('/ctv — bảng điều khiển', () => {
-  it('thẻ hoa hồng tháng, số đang chờ, có thể rút và dòng đang rút đúng số', async () => {
+  it('thẻ hoa hồng tháng, số đang chờ, có thể chuyển vào Ví và dòng lệnh rút cũ đúng số', async () => {
     const { container } = mount();
     await flush();
     const t = container.textContent ?? '';
     expect(t).toContain('125.000đ');
     expect(t).toContain('30.000đ');
     expect(t).toContain('80.000đ');
-    expect(t).toContain('Đang rút 20.000đ về ngân hàng');
+    expect(t).toContain('Còn 20.000đ nằm trong lệnh rút ngân hàng cũ');
   });
 
   it('lỗi tải dashboard: không hiện 0đ giả, thẻ số liệu hiện — và có Thử lại', async () => {
@@ -225,21 +226,21 @@ describe('/ctv — bảng điều khiển', () => {
     expect(byText(container, 'button', 'Thử lại')).not.toBeNull();
   });
 
-  it('lối tắt: Chia sẻ, Gian hàng (link /ctv/gian-hang), Lên đơn hộ, Rút tiền theo cờ của /affiliate/me', async () => {
+  it('lối tắt: Chia sẻ, Gian hàng (link /ctv/gian-hang), Lên đơn hộ, Chuyển vào Ví theo cờ của /affiliate/me', async () => {
     const { container } = mount();
     await flush();
     const group = container.querySelector('[role="group"]')!;
-    expect(Array.from(group.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Chia sẻ', 'Lên đơn hộ', 'Rút tiền']);
+    expect(Array.from(group.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Chia sẻ', 'Lên đơn hộ', 'Chuyển vào Ví']);
     expect(group.querySelector('a[href="/ctv/gian-hang"]')?.textContent).toContain('Gian hàng');
   });
 
-  it('đại lý chưa có gian hàng và chưa được lên đơn hộ: chỉ còn Chia sẻ và Rút tiền', async () => {
+  it('đại lý chưa có gian hàng và chưa được lên đơn hộ: chỉ còn Chia sẻ và Chuyển vào Ví', async () => {
     state.me = { isAffiliate: true, canOpenStorefront: false, canOrderForCustomer: false, referralCode: 'TUBU88', walletBalance: 0 };
     const { container } = mount();
     await flush();
     const group = container.querySelector('[role="group"]')!;
     expect(group.querySelector('a')).toBeNull();
-    expect(Array.from(group.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Chia sẻ', 'Rút tiền']);
+    expect(Array.from(group.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['Chia sẻ', 'Chuyển vào Ví']);
   });
 
   it('trang Gian hàng web chưa làm xong thì không có lối tắt Gian hàng', async () => {
@@ -249,27 +250,28 @@ describe('/ctv — bảng điều khiển', () => {
     expect(container.querySelector('a[href="/ctv/gian-hang"]')).toBeNull();
   });
 
-  it('Rút tiền khoá khi chưa có hoa hồng rút được', async () => {
+  it('Chuyển vào Ví khoá khi chưa có hoa hồng chuyển được', async () => {
     state.dash = { ...DASH, withdrawableCommission: 0 };
     const { container } = mount();
     await flush();
-    expect((byText(container, '[role="group"] button', 'Rút tiền') as HTMLButtonElement).disabled).toBe(true);
+    expect((byText(container, '[role="group"] button', 'Chuyển vào Ví') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('Rút tiền mở sheet "Rút hoa hồng" với số rút được của dashboard', async () => {
+  it('Chuyển vào Ví mở sheet "Chuyển hoa hồng vào Ví" với số chuyển được của dashboard, không có lựa chọn ngân hàng', async () => {
     const { container } = mount();
     await flush();
-    click(byText(container, '[role="group"] button', 'Rút tiền'));
+    click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
     await flush();
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain('Rút hoa hồng');
+    expect(dialog?.textContent).toContain('Chuyển hoa hồng vào Ví');
+    expect(dialog?.textContent).not.toMatch(/Ngân hàng|ZaloPay|tài khoản/);
     expect(dialog?.textContent).toContain('80.000đ');
   });
 
-  it('rút xong: đóng sheet, báo đã gửi, tải lại dashboard, lệnh rút và bảng kê thuế', async () => {
+  it('chuyển xong: đóng sheet, báo đã chuyển, tải lại dashboard, lịch sử chuyển và bảng kê thuế', async () => {
     const { container } = mount();
     await flush();
-    click(byText(container, '[role="group"] button', 'Rút tiền'));
+    click(byText(container, '[role="group"] button', 'Chuyển vào Ví'));
     await flush();
     const before = (path: string) => state.calls.filter((c) => c.method === 'get' && c.path === path).length;
     const dashBefore = before('/affiliate/dashboard');
@@ -278,7 +280,7 @@ describe('/ctv — bảng điều khiển', () => {
     await flush();
     expect(posts().find((c) => c.path === '/affiliate/payouts')?.body).toMatchObject({ amount: 80_000, method: 'WALLET_BALANCE' });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(container.textContent).toContain('Đã gửi yêu cầu rút.');
+    expect(container.textContent).toContain('Đã chuyển hoa hồng vào Ví Tubu.');
     expect(before('/affiliate/dashboard')).toBeGreaterThan(dashBefore);
     expect(before('/affiliate/payouts')).toBeGreaterThan(payoutsBefore);
   });
@@ -334,7 +336,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(posts()).toEqual([{ method: 'post', path: '/affiliate/links', body: { targetType: 'HOMEPAGE', targetId: undefined } }]);
   });
 
-  it('lịch sử hoa hồng: số, mã đơn, trạng thái đơn và nhãn như Mini App; khoản đang rút không bị ghi "Đã trả"', async () => {
+  it('lịch sử hoa hồng: số, mã đơn, trạng thái đơn và nhãn như Mini App; khoản trong lệnh rút cũ không bị ghi "Đã trả"', async () => {
     state.commissions = [
       { id: 'c1', orderId: 'o1', orderCode: 'TB1', orderTotal: 500_000, rate: '0.1', amount: 50_000, status: 'APPROVED', createdAt: '2026-10-02T03:00:00Z', orderStatus: 'DELIVERED' },
       { id: 'c2', orderId: 'o2', orderTotal: 100_000, rate: '0.1', amount: 10_000, status: 'APPROVED', createdAt: '2026-10-03T03:00:00Z', withdrawing: true },
@@ -346,8 +348,8 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('+50.000đ');
     expect(t).toContain('Đơn TB1 · 500.000đ');
     expect(t).toContain('Giao thành công');
-    expect(t).toContain('Có thể rút');
-    expect(t).toContain('Đang rút');
+    expect(t).toContain('Có thể chuyển vào Ví');
+    expect(t).toContain('Lệnh rút cũ đang xử lý');
     expect(t).toContain('Đang chờ · đang giữ');
   });
 
@@ -361,7 +363,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(b.container.textContent).toContain('mất mạng');
   });
 
-  it('lệnh rút: trạng thái, phương thức, thuế đã khấu trừ, lý do từ chối, mã giao dịch; năm có khấu trừ thì có tổng thuế', async () => {
+  it('lịch sử chuyển vào Ví: trạng thái, phương thức, thuế đã khấu trừ, lý do từ chối, mã giao dịch; năm có khấu trừ thì có tổng thuế', async () => {
     state.payouts = [
       { id: 'p1', amount: 90_000, grossAmount: 100_000, taxWithheld: 10_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: 'FT123', requestedAt: '2026-10-01T03:00:00Z', reviewedAt: null, paidAt: null },
       { id: 'p2', amount: 50_000, grossAmount: 50_000, taxWithheld: 0, fee: 0, method: 'WALLET_BALANCE', status: 'REJECTED', rejectionReason: 'Sai tài khoản', bankRef: null, requestedAt: '2026-10-02T03:00:00Z', reviewedAt: null, paidAt: null },
@@ -380,7 +382,7 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).toContain('Năm 2026: thu nhập hoa hồng 100.000đ');
   });
 
-  it('lệnh rút được hoàn thuế giữ dư (Q2b): hiện số đã hoàn vào Ví như Mini App', async () => {
+  it('lệnh được hoàn thuế giữ dư (Q2b): hiện số đã hoàn vào Ví như Mini App', async () => {
     state.payouts = [
       { id: 'p1', amount: 750_000, grossAmount: 1_000_000, taxWithheld: 0, taxRefunded: 250_000, fee: 0, method: 'BANK', status: 'PAID', rejectionReason: null, bankRef: null, requestedAt: '2026-10-01T03:00:00Z', reviewedAt: null, paidAt: null },
     ];
@@ -392,10 +394,10 @@ describe('/ctv — bảng điều khiển', () => {
     expect(t).not.toContain('đã khấu trừ thuế TNCN 0');
   });
 
-  it('lệnh rút rỗng: "Chưa có lệnh rút nào."', async () => {
+  it('lịch sử chuyển rỗng: "Chưa có lần chuyển nào."', async () => {
     const { container } = mount();
     await flush();
-    expect(container.textContent).toContain('Chưa có lệnh rút nào.');
+    expect(container.textContent).toContain('Chưa có lần chuyển nào.');
   });
 
   it('lối sang /hoc-vien chỉ hiện khi route web đã sẵn sàng', async () => {

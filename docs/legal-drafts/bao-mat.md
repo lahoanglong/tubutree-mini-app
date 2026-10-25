@@ -26,7 +26,7 @@ Khi bạn đăng nhập hoặc đặt hàng, bạn đồng ý để chúng tôi 
 - Họ tên người nhận, số điện thoại, địa chỉ nhận hàng.
 - Sản phẩm đã mua, giá trị đơn, cách thanh toán, trạng thái thanh toán và giao hàng, ghi chú bạn để lại cho đơn.
 - Thông tin xuất hoá đơn (mã số thuế, tên công ty, địa chỉ, email nhận hoá đơn), khi bạn yêu cầu.
-- Tài khoản ngân hàng nhận tiền hoàn hoặc tiền rút từ Ví Tubu (tên ngân hàng, số tài khoản, tên chủ tài khoản), khi bạn nhập.
+- Tài khoản ngân hàng nhận tiền hoàn đơn hàng (tên ngân hàng, số tài khoản, tên chủ tài khoản), khi bạn nhập.
 - Chúng tôi không lưu số thẻ ngân hàng của bạn.
 
 **Điểm, Ví và ưu đãi**
@@ -95,7 +95,7 @@ Bạn có thể xoá hoặc chặn cookie trong cài đặt trình duyệt, như
 
 - Thông tin tài khoản: lưu trong thời gian bạn còn dùng dịch vụ.
 - Sau khi bạn yêu cầu xoá tài khoản và chúng tôi xử lý xong: thông tin nhận diện bạn bị xoá hoặc ẩn danh (mục 8).
-- Chứng từ đơn hàng, thanh toán, hoàn tiền, hoá đơn, hoa hồng, lệnh rút tiền và sổ Ví: chúng tôi phải giữ theo thời hạn pháp luật về kế toán và thuế quy định, ngay cả sau khi xoá tài khoản. Phần thông tin nhận diện cá nhân trong các chứng từ này đã được ẩn danh, trừ những thông tin pháp luật bắt buộc phải giữ (ví dụ mã số thuế, tên công ty, địa chỉ trên hoá đơn đã xuất). [cần luật sư kiểm]
+- Chứng từ đơn hàng, thanh toán, hoàn tiền, hoá đơn, hoa hồng, các lệnh rút tiền tạo trước đây và sổ Ví: chúng tôi phải giữ theo thời hạn pháp luật về kế toán và thuế quy định, ngay cả sau khi xoá tài khoản. Phần thông tin nhận diện cá nhân trong các chứng từ này đã được ẩn danh, trừ những thông tin pháp luật bắt buộc phải giữ (ví dụ mã số thuế, tên công ty, địa chỉ trên hoá đơn đã xuất). [cần luật sư kiểm]
 - Nhật ký thao tác trong ứng dụng: giữ khoảng 13 tháng.
 - Lịch sử thông báo: giữ khoảng 6 tháng.
 - Nhật ký đồng bộ với các hệ thống bên ngoài và tin nhắn Zalo OA: giữ khoảng 3 tháng.
@@ -113,9 +113,9 @@ Trên website, bạn gửi yêu cầu qua email tubutree@gmail.com hoặc hotlin
 
 Chúng tôi chỉ xử lý xoá khi tài khoản không còn việc dở dang, để bảo vệ tiền và quyền lợi của bạn. Cụ thể:
 
-- Ví Tubu không còn số dư (bạn rút hết trước).
-- Không còn đơn hàng đang chờ thanh toán, đang xử lý hoặc đang giao.
-- Không còn yêu cầu đổi trả, hoàn tiền hoặc rút tiền chờ xử lý.
+- Ví Tubu không còn số dư, hoặc bạn tick đồng ý bỏ số dư còn lại khi gửi yêu cầu xoá (số dư này mất và không hoàn lại; Ví không rút được về ngân hàng).
+- Không còn đơn hàng đang chờ thanh toán, đang xử lý hoặc đang giao, và không còn đơn đã giao còn trong hạn đổi trả (chúng tôi báo ngày bạn xoá được).
+- Không còn yêu cầu đổi trả, hoàn tiền hoặc lệnh rút tiền cũ chờ xử lý.
 - Không còn gói giao định kỳ đang chạy, hoa hồng chưa chi, công nợ đại lý hay gian hàng đối tác chưa tất toán.
 
 Nếu còn việc dở dang, chúng tôi sẽ báo bạn cần làm gì trước. Khi xử lý xong:

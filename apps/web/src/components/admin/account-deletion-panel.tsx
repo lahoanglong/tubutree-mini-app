@@ -20,6 +20,8 @@ export interface AdminDeletionRequest {
   reviewedBy: string | null;
   reviewedAt: string | null;
   createdAt: string;
+  walletForfeitAmount?: number | null;
+  walletForfeitConsentAt?: string | null;
   user: {
     id: string;
     fullName: string | null;
@@ -148,6 +150,12 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           {r.user && pending && (
             <div className="mt-0.5 text-xs text-stone-600">
               Ví Tubu {formatVnd(r.user.walletBalance)} · {r.user.pointsConvertedBalance.toLocaleString('vi-VN')} Điểm Xanh không hết hạn
+            </div>
+          )}
+          {r.walletForfeitAmount != null && (
+            <div className="mt-0.5 text-xs text-stone-600">
+              Khách đã đồng ý bỏ số dư Ví {formatVnd(r.walletForfeitAmount)}
+              {r.walletForfeitConsentAt && ` (lúc ${formatDateTime(r.walletForfeitConsentAt)})`}
             </div>
           )}
           <div className="mt-0.5 text-sm text-stone-600">

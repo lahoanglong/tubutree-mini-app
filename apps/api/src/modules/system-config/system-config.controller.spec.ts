@@ -19,33 +19,31 @@ describe('SystemConfigController.publicConfig', () => {
   // FE đang hardcode các con số này ở nhiều màn (tiết kiệm 12% đặt định kỳ, rút tối thiểu 50k).
   // Admin đổi config là FE hiển thị SAI SỐ TIỀN mà không ai biết (P2-5/P2-15 audit mạch lạc) →
   // đưa hết vào endpoint public để FE đọc.
-  it('trả kèm tham số FE đang hardcode: % đặt định kỳ, mốc rút tối thiểu', async () => {
+  it('trả kèm tham số FE đang hardcode: % đặt định kỳ', async () => {
     const config = makeConfig({
       'subscribe.discount_pct': 0.15,
-      'affiliate.min_withdraw_bank': 80000,
     });
     const out = await new SystemConfigController(config).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.15);
-    expect(out.affiliateMinWithdrawBank).toBe(80000);
+    expect(out.affiliateMinWithdrawBank).toBe(50000);
   });
 
   // SELLER-11: CTV cần thấy số thực nhận sau thuế TNCN trước khi bấm rút; số phải là số service dùng để khấu trừ.
-  it('trả mức khấu trừ thuế TNCN khi rút hoa hồng (cùng khoá và mặc định với affiliate.service)', async () => {
+  it('trả mức khấu trừ thuế TNCN khi chuyển hoa hồng vào Ví (cùng khoá và mặc định với affiliate.service)', async () => {
     expect((await new SystemConfigController(makeConfig()).publicConfig()).affiliatePitWithhold).toEqual({
       pct: 0.1,
-      threshold: 2_000_000,
+      threshold: 5_000_000,
     });
-    const config = makeConfig({ 'affiliate.pit_withhold_pct': 0, 'affiliate.pit_withhold_threshold': 5_000_000 });
+    const config = makeConfig({ 'affiliate.pit_withhold_pct': 0, 'affiliate.pit_withhold_threshold': 2_000_000 });
     expect((await new SystemConfigController(config).publicConfig()).affiliatePitWithhold).toEqual({
       pct: 0,
-      threshold: 5_000_000,
+      threshold: 2_000_000,
     });
   });
 
   it('chưa cấu hình → trả đúng mặc định hiện hành (12%, 50k)', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.12);
-    expect(out.affiliateMinWithdrawBank).toBe(50000);
   });
 
   // C-054 (A1-043): luật Ví ×1,5 đã bỏ (rút hoa hồng về Ví Tubu là 1:1, affiliate.service P0 A5-07). Config công

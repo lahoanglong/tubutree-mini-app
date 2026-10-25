@@ -309,14 +309,14 @@ describe('PayoutAdminTab — nhân viên kế toán (canReview=false)', () => {
   });
 });
 
-// Q20: hàng đợi gồm cả lệnh rút Ví Tubu của khách thường, nên tiêu đề phải khớp tên mục "Yêu cầu rút tiền" trên thanh bên.
+// Q20: tiêu đề phải khớp tên mục "Thuế TNCN hoa hồng" trên thanh bên (rút ngân hàng đã bỏ, tab còn báo cáo thuế và lệnh rút cũ).
 describe('PayoutAdminTab — tiêu đề khớp tên tab', () => {
-  it('tiêu đề là "Yêu cầu rút tiền"', async () => {
+  it('tiêu đề là "Thuế TNCN hoa hồng"', async () => {
     const api = mockFetch(LIST);
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<PayoutAdminTab canReview />);
     await flush();
-    expect(container.querySelector('h2')?.textContent).toBe('Yêu cầu rút tiền');
+    expect(container.querySelector('h2')?.textContent).toBe('Thuế TNCN hoa hồng');
   });
 });
 
@@ -337,11 +337,11 @@ describe('PayoutAdminTab — mở từ thẻ ở Việc cần xử lý (ADMIN)',
     return api;
   }
 
-  it('thẻ "Lệnh rút tiền chờ chi" mở danh sách lọc APPROVED', async () => {
+  it('thẻ "Lệnh rút ngân hàng cũ chờ chi" mở danh sách lọc APPROVED', async () => {
     expect(listUrl(await openFromCard('payoutsToPay'))).toContain('status=APPROVED');
   });
 
-  it('thẻ "Lệnh rút tiền chờ duyệt" vẫn mở danh sách lọc REQUESTED', async () => {
+  it('thẻ "Lệnh rút ngân hàng cũ chờ duyệt" vẫn mở danh sách lọc REQUESTED', async () => {
     expect(listUrl(await openFromCard('payouts'))).toContain('status=REQUESTED');
   });
 

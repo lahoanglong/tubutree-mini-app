@@ -277,12 +277,23 @@ describe('CashbackService.settleConfirmed', () => {
     const prisma = {
       cashbackTransaction: { findMany: jest.fn().mockResolvedValue(due), updateMany },
       user: { update: userUpdate },
+      $queryRaw: jest.fn().mockResolvedValue([{ metadata: null }]),
     } as unknown as PrismaService;
     (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
       .fn()
       .mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma));
-    return { prisma, updateMany, userUpdate };
+    return { prisma, updateMany, userUpdate, queryRaw: (prisma as unknown as { $queryRaw: jest.Mock }).$queryRaw };
   }
+
+  it('tài khoản đã ẩn danh → không cộng Ví, không báo CASHBACK_PAID, vẫn chốt PAID', async () => {
+    const { prisma, updateMany, queryRaw } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);
+    queryRaw.mockResolvedValue([{ metadata: { anonymizedAt: '2026-10-20T03:00:00.000Z' } }]);
+    ledger.mockClear();
+    await new CashbackService(prisma, config, notifications, registry).settleConfirmed();
+    expect(updateMany).toHaveBeenCalled();
+    expect(ledger).not.toHaveBeenCalled();
+    expect(notifications.notify).not.toHaveBeenCalledWith('u1', 'CASHBACK_PAID', expect.anything());
+  });
 
   it('CONFIRMED quá hold → set PAID atomic + chuyển pending→Ví + bắn CASHBACK_PAID', async () => {
     const { prisma, updateMany, userUpdate } = settlePrisma([{ id: 'tx1', userId: 'u1', userReward: 35000 }]);

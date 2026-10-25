@@ -25,7 +25,6 @@ const APPROVED_LOADED_KEYS = [
     'affiliate.default_rate_pct',
     'affiliate.hold_days',
     'affiliate.max_rate_pct',
-    'affiliate.min_withdraw_bank',
     'affiliate.pit_withhold_pct',
     'affiliate.pit_withhold_threshold',
     'attendance.cancel_notice_days',
@@ -196,8 +195,6 @@ const APPROVED_LOADED_KEYS = [
     'voucher.welcome_min_order',
     'voucher.winback_amount',
     'voucher.winback_days',
-    'wallet.withdraw_fee',
-    'wallet.withdraw_min',
     'wishlist.price_drop_cooldown_days',
     'wishlist.price_drop_min_pct',
 ];

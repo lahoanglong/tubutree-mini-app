@@ -28,7 +28,7 @@ type MockTx = {
   /** Dòng `orders` đang nằm trong "DB" — updateMany chỉ sửa khi `where` khớp nó (như Postgres). */
   row: { paymentStatus: string };
   order: { updateMany: jest.Mock };
-  user: { update: jest.Mock };
+  user: { update: jest.Mock; findUnique: jest.Mock };
   coinTransaction: { create: jest.Mock; findMany: jest.Mock };
   pointsTransaction: { findMany: jest.Mock; createManyAndReturn: jest.Mock };
   orderCustomerRefund: { create: jest.Mock; createMany: jest.Mock };
@@ -61,7 +61,7 @@ function makeTx(order: unknown, dbPaymentStatus?: string): MockTx {
         },
       ),
     },
-    user: { update: jest.fn().mockResolvedValue({}) },
+    user: { update: jest.fn().mockResolvedValue({}), findUnique: jest.fn().mockResolvedValue({ metadata: null }) },
     // Không có thưởng giới thiệu nào gắn với đơn → nhánh thu hồi không làm gì.
     coinTransaction: { create: jest.fn().mockResolvedValue({}), findMany: jest.fn().mockResolvedValue([]) },
     // PD-3: thưởng giới thiệu sau gộp nằm ở sổ điểm; thu hồi đọc cả hai sổ.
@@ -171,6 +171,38 @@ describe('OrderReversalService', () => {
       ],
       skipDuplicates: true,
     });
+  });
+
+  it('đơn đã giao trả muộn mà chủ đơn đã xoá (ẩn danh) tài khoản → KHÔNG cộng Ví, ghi khoản hoàn PENDING chờ chuyển tay (MANUAL_TRANSFER, không chủ tài khoản), báo lỗi kèm orderId/userId/số tiền; kho vẫn hoàn', async () => {
+    const order = makeOrder({ paymentMethod: 'WALLET', paymentStatus: 'PAID', shippingAddress: { recipient: 'Người dùng đã xoá', phone: '', street: '' } });
+    const tx = makeTx(order);
+    tx.$queryRaw.mockResolvedValue([{ metadata: { anonymizedAt: '2026-10-20T03:00:00.000Z', deletionRequestId: 'r1' } }]);
+    const err = jest.spyOn((service as unknown as { logger: { error: () => void } }).logger, 'error').mockImplementation(() => undefined);
+
+    const result = await service.reverseFinancials(tx as never, order);
+
+    expect(result.moneyRefunded).toBe(false);
+    expect(result.refund).toEqual({ amount: 150000, to: 'DELETED_ACCOUNT' });
+    expect(tx.user.update).not.toHaveBeenCalled();
+    expect(applyWalletDelta).not.toHaveBeenCalledWith(tx, expect.anything());
+    expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.orderCustomerRefund.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          orderId: 'o1',
+          kind: 'RETURN',
+          amount: 150000,
+          method: 'MANUAL_TRANSFER',
+          status: 'PENDING',
+          reason: 'RETURNED',
+          customerUserId: null,
+        }),
+      ],
+      skipDuplicates: true,
+    });
+    expect(err).toHaveBeenCalledWith(expect.stringMatching(/orderId=o1.*150000đ.*u1.*đã ẩn danh/));
+    expect(tx.order.updateMany).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ pancakeAttention: expect.anything() }) }));
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
   });
 
   it('đơn chưa trả tiền → không ghi dòng vết khoản hoàn nào', async () => {
@@ -744,11 +776,12 @@ describe('OrderReversalService — huỷ đơn có backorder', () => {
 
     expect(tx.orderItem.update).not.toHaveBeenCalled();
     // Đơn thường: không khoá/đọc lại dòng đặt trước; câu duy nhất là khoá hai biến thể theo id trước khi cộng kho.
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
-    const sql = (tx.$queryRaw.mock.calls[0]![0] as string[]).join('?');
-    expect(sql).toContain('FROM "variations"');
-    expect(sql).not.toContain('order_items');
-    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(tx.$executeRaw.mock.invocationCallOrder[0]!);
+    const queries = tx.$queryRaw.mock.calls.map((c, i) => ({ sql: (c[0] as string[]).join('?'), at: tx.$queryRaw.mock.invocationCallOrder[i]! }));
+    const others = queries.filter((q) => !q.sql.includes('FROM "users"')); // khoá users của lần hoàn Ví không tính
+    expect(others).toHaveLength(1);
+    expect(others[0]!.sql).toContain('FROM "variations"');
+    expect(others[0]!.sql).not.toContain('order_items');
+    expect(others[0]!.at).toBeLessThan(tx.$executeRaw.mock.invocationCallOrder[0]!);
   });
 });
 
@@ -1291,7 +1324,8 @@ describe('OrderReversalService — kho và suất giờ vàng trước mọi ghi
     });
     expect(flashSale.restore).toHaveBeenCalledWith(tx, 'fs1', 'u1', 1);
     // Ca này phải đi qua cả hai đường: khoá users trước khi thu điểm tích, và dòng sổ trả điểm đã dùng.
-    expect(rawOn(tx.$queryRaw, 'users')).toHaveLength(1);
+    // Hai câu khoá users: lần hoàn Ví (creditWalletUnlessAnonymized) và lần khoá để thu điểm tích.
+    expect(rawOn(tx.$queryRaw, 'users')).toHaveLength(2);
     expect(tx.pointsTransaction.createManyAndReturn).toHaveBeenCalled();
     expectStockAndFlashFirst(tx);
   });

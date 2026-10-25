@@ -480,10 +480,10 @@ Hoàn tiền: Tubu KHÔNG gọi API hoàn tiền của cổng nào. Tiền hoàn
 ### 4.2 Huỷ đơn đã trả, chọn hoàn về Ví Tubu: T5
 
 - **Ai**: Người thử. **Ở đâu**: Mini App, Đơn hàng, đơn T5 (còn trước bàn giao).
-- **Làm**: bấm "Hủy đơn". Ở "Nhận lại <số tiền> về" chọn "Ví Tubu" (dòng ghi "Cộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng"). Xác nhận.
+- **Làm**: bấm "Hủy đơn". Ở "Nhận lại <số tiền> về" chọn "Ví Tubu" (dòng ghi "Cộng ngay, dùng mua đơn tiếp theo"). Xác nhận.
 - **Đúng là**: đơn "Đã huỷ". Mini App, Ví Tubu: số dư tăng đúng bằng tổng đơn, có dòng lịch sử. Quản trị, Hoàn tiền khách: dòng loại "huỷ", nơi nhận Ví, trạng thái đã xong.
 - **Bằng chứng**: Phụ lục P8 (ví) và P9 (hoàn tiền): `kind = CANCEL`, `method = WALLET`, `status = COMPLETED`; `paymentStatus = REFUNDED`. Tồn Tubu tăng lại; Pancake huỷ như 2.4.
-- **Hoàn tác / lấy tiền ra**: dùng Ví Tubu trả đơn T10 (miễn phí). Muốn rút về ngân hàng: Mini App, Ví Tubu, "Rút ngân hàng"; tối thiểu 100.000đ và phí chuyển 3.000đ mỗi lần (khoá `wallet.withdraw_min`, `wallet.withdraw_fee`), nên số nhỏ nên để trả đơn. Muốn tiền về ngân hàng MIỄN PHÍ thì chọn "Tài khoản ngân hàng" lúc huỷ (bước 4.3).
+- **Hoàn tác / lấy tiền ra**: dùng Ví Tubu trả đơn T10 (miễn phí). Ví Tubu chỉ dùng trả tiền hàng, không rút về ngân hàng. Muốn tiền về ngân hàng thì chọn "Tài khoản ngân hàng" lúc huỷ đơn (bước 4.3), đó là hoàn tiền đơn chứ không phải rút Ví.
 
 > **Giả định cần xác nhận:** số tiền về Ví đúng bằng tổng đơn đã trả (gồm phí giao).
 

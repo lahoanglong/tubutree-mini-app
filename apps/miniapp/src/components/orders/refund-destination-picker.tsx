@@ -32,7 +32,7 @@ export function RefundDestinationPicker({ method, onMethod, bank, onBank, showBa
         onSelect={() => onMethod('WALLET')}
         icon={<Icon icon={Wallet} size="sm" tone="brand" />}
         title="Ví Tubu"
-        hint="Cộng ngay, dùng mua đơn tiếp theo hoặc rút về ngân hàng."
+        hint="Cộng ngay, dùng mua đơn tiếp theo."
       />
       <OptionRow
         checked={method === 'BANK'}

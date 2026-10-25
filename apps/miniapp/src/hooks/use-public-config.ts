@@ -9,7 +9,6 @@ export const PUBLIC_CONFIG_FALLBACK: PublicConfig = {
   freeshipThreshold: 199_000,
   subscribeDiscountPct: 0.12,
   affiliateWalletMultiplier: 1.5,
-  affiliateMinWithdrawBank: 50_000,
   cashbackHoldDays: 30,
   waste: { enabled: false, dropoff: false, mailin: false, pickup: false },
   // Không hứa ngày giao khi server chưa xác nhận cấu hình (dự án 4a, Ruling 9).

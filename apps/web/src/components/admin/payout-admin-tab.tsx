@@ -33,7 +33,7 @@ export const seedPayoutFilter = (status: AdminPayoutStatus | null) => {
 };
 
 /**
- * Yêu cầu rút tiền (hoa hồng CTV / Ví Tubu → ngân hàng). Trước đây (P0 A5-08 = A6-05) Payout
+ * Thuế TNCN hoa hồng và các lệnh rút ngân hàng cũ (hoa hồng CTV / Ví Tubu → ngân hàng; rút đã bỏ, chỉ còn lệnh tạo trước đó). Trước đây (P0 A5-08 = A6-05) Payout
  * REQUESTED không có màn nào xử lý — tiền bị trừ khỏi số dư CTV (hoặc commission bị khoá) rồi
  * "biến mất" khỏi mọi hàng đợi. Từ chối BẮT BUỘC lý do và TỰ ĐỘNG hoàn tiền/commission (BE:
  * AffiliateService.rejectPayout) — không cần thao tác hoàn tiền thủ công nào thêm ở đây.
@@ -52,76 +52,81 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
   const totalPages = q.data ? Math.max(1, Math.ceil(q.data.meta.total / q.data.meta.limit)) : 1;
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold text-stone-900">Yêu cầu rút tiền</h2>
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
-          {[...PAYOUT_STATUS_ORDER, ''].map((s) => (
-            <button
-              key={s || 'all'}
-              type="button"
-              role="tab"
-              aria-selected={filter === s}
-              onClick={() => {
-                setFilter(s as AdminPayoutStatus | '');
-                setPage(1);
-              }}
-              className={chipClass(filter === s)}
-            >
-              {s ? PAYOUT_STATUS_LABEL[s as AdminPayoutStatus] : 'Tất cả'}
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="space-y-4">
+      <h2 className="text-base font-semibold text-stone-900">Thuế TNCN hoa hồng</h2>
+      <PitReportSection />
 
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && (
-        <p className="text-sm text-danger-fg">
-          Không tải được danh sách lệnh rút.{' '}
-          <button type="button" className={`${BTN_LINK} text-sm`} onClick={() => void q.refetch()}>
-            Thử lại
-          </button>
-        </p>
-      )}
-      <div className="space-y-2">
-        {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} canReview={canReview} />)}
-        {q.data?.data.length === 0 && (
-          <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
-            Không có lệnh rút nào{filter ? ` ở trạng thái "${PAYOUT_STATUS_LABEL[filter]}"` : ''}.
-          </p>
-        )}
-      </div>
-
-      {q.data && totalPages > 1 && (
-        <div className="flex items-center justify-between px-2 text-sm text-stone-600">
-          <span>
-            Tổng: <b className="text-stone-900">{q.data.meta.total}</b> lệnh rút
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className={BTN_SMALL}
-            >
-              ← Trước
-            </button>
-            <span className="text-xs">
-              Trang {page}/{totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className={BTN_SMALL}
-            >
-              Sau →
-            </button>
+      <section className="space-y-3 border-t border-stone-200 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold text-stone-900">Lệnh rút ngân hàng cũ</h3>
+          <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Lọc theo trạng thái">
+            {[...PAYOUT_STATUS_ORDER, ''].map((s) => (
+              <button
+                key={s || 'all'}
+                type="button"
+                role="tab"
+                aria-selected={filter === s}
+                onClick={() => {
+                  setFilter(s as AdminPayoutStatus | '');
+                  setPage(1);
+                }}
+                className={chipClass(filter === s)}
+              >
+                {s ? PAYOUT_STATUS_LABEL[s as AdminPayoutStatus] : 'Tất cả'}
+              </button>
+            ))}
           </div>
         </div>
-      )}
 
-      <PitReportSection />
+        <Notice>Tubu Tree đã bỏ rút tiền về ngân hàng: hoa hồng chuyển thẳng vào Ví Tubu. Mục này chỉ còn để xử lý các lệnh rút tạo trước đó.</Notice>
+        {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {q.isError && (
+          <p className="text-sm text-danger-fg">
+            Không tải được danh sách lệnh rút.{' '}
+            <button type="button" className={`${BTN_LINK} text-sm`} onClick={() => void q.refetch()}>
+              Thử lại
+            </button>
+          </p>
+        )}
+        <div className="space-y-2">
+          {q.data?.data.map((p) => <PayoutRow key={p.id} payout={p} canReview={canReview} />)}
+          {q.data?.data.length === 0 && (
+            <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
+              Không có lệnh rút nào{filter ? ` ở trạng thái "${PAYOUT_STATUS_LABEL[filter]}"` : ''}.
+            </p>
+          )}
+        </div>
+
+        {q.data && totalPages > 1 && (
+          <div className="flex items-center justify-between px-2 text-sm text-stone-600">
+            <span>
+              Tổng: <b className="text-stone-900">{q.data.meta.total}</b> lệnh rút
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className={BTN_SMALL}
+              >
+                ← Trước
+              </button>
+              <span className="text-xs">
+                Trang {page}/{totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className={BTN_SMALL}
+              >
+                Sau →
+              </button>
+            </div>
+          </div>
+        )}
+
+      </section>
     </div>
   );
 }
@@ -139,7 +144,7 @@ function PitReportSection() {
   const [y, m] = month.split('-');
 
   return (
-    <section className="space-y-2 border-t border-stone-200 pt-4">
+    <section className="space-y-2">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h3 className="text-base font-semibold text-stone-900">Khấu trừ thuế TNCN theo tháng</h3>
         <input
@@ -152,7 +157,7 @@ function PitReportSection() {
       </div>
       <Notice>
         Mọi lần chi hoa hồng cho CTV trong tháng (giờ Việt Nam), gộp theo người nhận, để kế toán kê khai thuế TNCN đã khấu trừ và
-        cấp chứng từ khấu trừ khi CTV yêu cầu. MST/CCCD là số CTV khai lúc rút.
+        cấp chứng từ khấu trừ khi CTV yêu cầu. MST/CCCD là số CTV khai lúc chuyển hoa hồng vào Ví.
       </Notice>
       {q.isLoading && valid && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo thuế TNCN.</LoadError>}

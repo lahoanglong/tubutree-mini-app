@@ -273,8 +273,6 @@ export interface WalletSummary {
   cashbackPending: number;
   commissionApproved: number;
   commissionPending: number;
-  withdrawMin: number;
-  withdrawFee: number;
 }
 export const getWallet = () => apiFetch<WalletSummary>('/me/wallet');
 
