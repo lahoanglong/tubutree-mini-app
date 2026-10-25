@@ -90,7 +90,23 @@ test.describe('Zalo Mini App - Cộng đồng chỉ đọc, không link ngoài',
     await expect(page.getByText('Sản phẩm còn nguyên tem')).toBeVisible();
     await expect(page.getByRole('button', { name: /trên web/ })).toHaveCount(0);
     expect(new URL(page.url()).pathname).toBe('/about');
+    await shot(page, 'policy-sheet-approved');
+  });
+
+  test('chính sách chưa duyệt: popup hiện bản nháp đầy đủ kèm biển, link nội bộ mở popup khác', async ({ page, api }) => {
+    mockSession(api, makeUser({ id: 'u-zalo', fullName: 'Khách Zalo' }));
+    api.get('/faqs', []);
+    api.get('/config/legal/doi-tra', { loai: 'doi-tra', content: null, vars: { returnWindowDays: 7, freeshipThreshold: 199000, legalName: 'Công ty TNHH Tubu Tree' } });
+    api.get('/config/legal/van-chuyen', { loai: 'van-chuyen', content: null, vars: { returnWindowDays: 7, freeshipThreshold: 199000 } });
+    await page.goto('/about');
+    await page.getByRole('button', { name: /Chính sách đổi trả/ }).click();
+    await expect(page.getByTestId('legal-draft-banner')).toContainText('BẢN NHÁP', { timeout: 15_000 });
+    await expect(page.getByText('hư hỏng, đổ vỡ', { exact: false })).toBeVisible();
+    await expect(page.getByText('Đơn vị vận hành: Công ty TNHH Tubu Tree')).toBeVisible();
     await shot(page, 'policy-sheet');
+    await page.getByTestId('legal-markdown').getByRole('button', { name: 'Chính sách vận chuyển' }).click();
+    await expect(page.getByRole('heading', { name: 'Chính sách vận chuyển' })).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/about');
   });
 
   test('chi tiết đơn có vận đơn: hãng, mã, hành trình, nút Chép mã; không có nút tra cứu trang hãng', async ({ page, api }) => {

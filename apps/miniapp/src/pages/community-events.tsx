@@ -44,18 +44,23 @@ function CardSkeletons({ height, gap }: { height: number; gap: number }) {
 }
 
 /** Hạn kết thúc + thưởng + nhãn đã kết thúc, dùng chung cho thẻ danh sách và trang chi tiết. */
-function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefix?: string }) {
+function EventMeta({ event, joinOnWeb }: { event: CommunityEvent; joinOnWeb?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
       <Text variant="caption" tone="tertiary">
         {vi.community.eventEnds}: {formatDate(event.endAt)}
       </Text>
-      {event.rewardPoints > 0 && (
-        <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {rewardPrefix}
-          <Icon icon={Gift} size="sm" tone="brand" />
-          {formatPoints(event.rewardPoints)}
+      {joinOnWeb ? (
+        <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
+          {vi.community.eventJoinOnWeb}
         </Text>
+      ) : (
+        event.rewardPoints > 0 && (
+          <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Icon icon={Gift} size="sm" tone="brand" />
+            {formatPoints(event.rewardPoints)}
+          </Text>
+        )
       )}
       {isEventEnded(event) && (
         <Badge tone="neutral" size="sm">
@@ -259,7 +264,7 @@ function EventEntries({
                 {event.description}
               </Text>
             )}
-            <EventMeta event={event} rewardPrefix={`${vi.community.eventReward}: `} />
+            <EventMeta event={event} joinOnWeb />
           </div>
         </div>
 
