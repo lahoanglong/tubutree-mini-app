@@ -61,17 +61,11 @@ export function SubscribeSheet({
   const dateOk = startMode === 'now' || isStartDateAllowed(startDate);
   const dateError = startMode === 'date' && startDate !== '' && !dateOk ? t.startDateInvalid(MAX_START_DAYS_AHEAD) : undefined;
 
+  // Payload dựng ở onPress (closure của lần render vừa commit) rồi truyền vào mutate: mutationFn trong options chỉ
+  // được cập nhật ở effect, chạm ngay khi địa chỉ mặc định vừa hiện có thể gửi addressId cũ (undefined).
   const create = useMutation({
-    mutationFn: () =>
-      createSubscription({
-        variationId,
-        quantity,
-        intervalWeeks: weeks,
-        addressId: addressId!,
-        paymentMethod: payment,
-        ...(startMode === 'date' ? { startDate } : {}),
-      }),
-    onSuccess: (sub) => {
+    mutationFn: (input: Parameters<typeof createSubscription>[0]) => createSubscription(input),
+    onSuccess: (sub, input) => {
       haptic('medium');
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       const first = sub.firstOrder;
@@ -88,9 +82,9 @@ export function SubscribeSheet({
       // Giao ngay mà không có đơn đầu = API trả lại gói y hệt đã có (bấm đúp/thử lại).
       const text = first
         ? t.createdNow(first.code)
-        : startMode === 'now'
+        : !input.startDate
           ? t.createdExisting
-          : t.createdScheduled(formatVnDate(startDate));
+          : t.createdScheduled(formatVnDate(input.startDate));
       openSnackbar({ text, type: 'success' });
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
@@ -111,7 +105,17 @@ export function SubscribeSheet({
             fullWidth
             loading={create.isPending}
             disabled={!addressId || !dateOk}
-            onPress={() => create.mutate()}
+            onPress={() => {
+              if (!addressId) return;
+              create.mutate({
+                variationId,
+                quantity,
+                intervalWeeks: weeks,
+                addressId,
+                paymentMethod: payment,
+                ...(startMode === 'date' ? { startDate } : {}),
+              });
+            }}
           >
             {t.createCta}
           </Button>
