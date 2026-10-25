@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
+import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import { VARIATION_ID_RE } from './variation-id';
 
 export interface PurchasedItem {
@@ -105,6 +106,7 @@ export class PurchasedItemsService {
         retailPrice: true,
         salePrice: true,
         stock: true,
+        pancakeId: true,
         product: { select: { id: true, slug: true, name: true, brand: true, thumbnail: true, images: true, fulfilment: true, storefrontId: true } },
       },
     });
@@ -127,7 +129,7 @@ export class PurchasedItemsService {
         inStock: v.stock > 0,
         timesBought: Number(r.timesBought),
         lastPurchasedAt: new Date(r.lastPurchasedAt).toISOString(),
-        retailOnly: v.product.fulfilment === 'MERCHANT' || isPartnerOwnedProduct(v.product),
+        retailOnly: !isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product.fulfilment }) || isPartnerOwnedProduct(v.product),
       });
     }
     const last = page[page.length - 1]!;

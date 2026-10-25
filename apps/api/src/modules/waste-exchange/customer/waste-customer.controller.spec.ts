@@ -27,7 +27,7 @@ const users: Record<string, unknown> = {
 };
 const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k, jest.fn().mockResolvedValue({ ok: k })])) as Record<T, jest.Mock>;
 async function build(enabled: boolean) {
-  const me = svc('me', 'rules');
+  const me = svc('me', 'rules', 'openCount');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
   const requests = svc('list', 'detail', 'byOrder', 'create', 'edit', 'setTracking', 'cancel');
   const preview = svc('preview');
@@ -60,6 +60,13 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     await expect(c.rules()).resolves.toEqual({ ok: 'rules' });
     expect(me.me).toHaveBeenCalledWith('guest');
   });
+  it('/me/open-count: cần đăng nhập (không công khai), chạy cả khi chương trình tắt, truyền đúng userId', async () => {
+    const proto = WasteCustomerController.prototype as unknown as Record<string, object>;
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.openCount!)).toBeUndefined();
+    const { c, me } = await build(false);
+    await expect(c.openCount('blocked')).resolves.toEqual({ ok: 'openCount' });
+    expect(me.openCount).toHaveBeenCalledWith('blocked');
+  });
   it('items, points, nearby are FULL: programme off, guest, blocked -> 403, service not called', async () => {
     const off = await build(false);
     await expect(off.c.items('real')).rejects.toThrow(new ForbiddenException(OFF));
@@ -84,7 +91,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteCustomerController)).toBe('waste');
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
-      ['me', 0, 'me'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
+      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);
