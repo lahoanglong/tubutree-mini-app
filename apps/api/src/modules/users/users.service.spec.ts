@@ -377,12 +377,33 @@ describe('UsersService.requestAccountDeletion — số dư Ví và đồng ý b�
     return (err as BadRequestException).getResponse() as { code: string; walletBalance: number; message: string };
   };
 
-  it('Ví còn tiền, khách chưa đồng ý → lỗi WALLET_FORFEIT_CONSENT kèm số dư, không tạo yêu cầu', async () => {
+  it('client cũ chỉ gửi { reason } mà Ví còn tiền → vẫn tạo yêu cầu như trước, không ghi đồng ý', async () => {
     const { svc, create } = build(20_000);
-    const body = await blocked(svc.requestAccountDeletion('u1'));
+    const res = await svc.requestAccountDeletion('u1', 'Không dùng nữa');
+    expect(res.alreadyRequested).toBe(false);
+    expect(create).toHaveBeenCalledWith({ data: { userId: 'u1', reason: 'Không dùng nữa' } });
+  });
+
+  it('client cũ gửi lại khi đã có yêu cầu PENDING → giữ yêu cầu, không ghi đồng ý', async () => {
+    const existing = { id: 'req0', createdAt: new Date('2026-10-01T00:00:00Z'), status: 'PENDING' };
+    const { svc, create, update } = build(20_000, existing);
+    const res = await svc.requestAccountDeletion('u1');
+    expect(res.alreadyRequested).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('có trường đồng ý nhưng chưa tick (accepted=false) → lỗi WALLET_FORFEIT_CONSENT kèm số dư, không tạo yêu cầu', async () => {
+    const { svc, create } = build(20_000);
+    const body = await blocked(svc.requestAccountDeletion('u1', undefined, { accepted: false, acknowledgedWalletBalance: 20_000 }));
     expect(body).toMatchObject({ code: 'WALLET_FORFEIT_CONSENT', walletBalance: 20_000 });
     expect(body.message).toContain('Ví Tubu còn 20.000đ');
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it('chỉ có số dư mà thiếu accepted → lỗi', async () => {
+    const { svc } = build(20_000);
+    await blocked(svc.requestAccountDeletion('u1', undefined, { acknowledgedWalletBalance: 20_000 }));
   });
 
   it('tick đồng ý nhưng số khách thấy khác số dư hiện tại → lỗi kèm số mới, không tạo yêu cầu', async () => {
@@ -391,11 +412,6 @@ describe('UsersService.requestAccountDeletion — số dư Ví và đồng ý b�
     expect(body).toMatchObject({ code: 'WALLET_FORFEIT_CONSENT', walletBalance: 30_000 });
     expect(body.message).toContain('vừa đổi');
     expect(create).not.toHaveBeenCalled();
-  });
-
-  it('có số dư số đúng nhưng chưa tick đồng ý → vẫn chặn', async () => {
-    const { svc } = build(20_000);
-    await blocked(svc.requestAccountDeletion('u1', undefined, { accepted: false, acknowledgedWalletBalance: 20_000 }));
   });
 
   it('đồng ý đúng số dư → lưu số tiền và thời điểm đồng ý vào yêu cầu', async () => {

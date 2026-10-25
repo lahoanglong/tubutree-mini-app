@@ -294,7 +294,7 @@ function AccountSection() {
                 setConfirming(false);
                 setAgreed(false);
               }}
-              className={`${ui.btnSecondary} flex-1`}
+              className={`${ui.btnSecondary} w-24 shrink-0 ${mini.secondary}`}
             >
               Huỷ
             </button>

@@ -266,3 +266,80 @@ describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý b�
     expect(blockers).toEqual([{ code: 'COMMISSION_UNPAID', message: expect.stringContaining('chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước') }]);
   });
 });
+
+describe('AccountDeletionService — đơn đã giao còn trong hạn đổi/trả', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  const day = 864e5;
+  function withDelivered(orders: { userId: string; deliveredAt: Date | null; updatedAt: Date }[], windowDays?: number) {
+    const ctx = build([]);
+    (ctx.tx as unknown as { order: unknown }).order = {
+      groupBy: jest.fn().mockResolvedValue([]),
+      findMany: jest.fn().mockResolvedValue(orders),
+    };
+    const config = { get: jest.fn().mockResolvedValue(windowDays ?? 7) };
+    const svc = new AccountDeletionService(
+      { $transaction: jest.fn().mockImplementation((fn: (t: unknown) => unknown) => fn(ctx.tx)) } as unknown as PrismaService,
+      undefined,
+      undefined,
+      config as never,
+    );
+    return { ...ctx, svc, config };
+  }
+
+  it('còn đơn DELIVERED trong hạn → chặn ORDER_RETURN_WINDOW, câu nêu ngày hết hạn sớm nhất; đọc đúng returns.window_days', async () => {
+    const delivered = new Date(Date.now() - 2 * day);
+    const later = new Date(Date.now() - 1 * day);
+    const { svc, config, anonymize } = withDelivered(
+      [
+        { userId: 'u1', deliveredAt: later, updatedAt: later },
+        { userId: 'u1', deliveredAt: delivered, updatedAt: delivered },
+      ],
+      7,
+    );
+    const err = await svc.process('req-1', 'admin-1').then(() => null, (e: unknown) => e);
+    const blockers = ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers;
+    const expiry = new Date(delivered.getTime() + 7 * day + 7 * 3600 * 1000);
+    const label = `${String(expiry.getUTCDate()).padStart(2, '0')}/${String(expiry.getUTCMonth() + 1).padStart(2, '0')}/${expiry.getUTCFullYear()}`;
+    expect(blockers).toEqual([
+      { code: 'ORDER_RETURN_WINDOW', message: `còn 2 đơn đã giao còn trong hạn đổi/trả (7 ngày), sớm nhất hết hạn ngày ${label}; tiền hoàn nếu có sẽ về Ví` },
+    ]);
+    expect(config.get).toHaveBeenCalledWith('returns.window_days', 7);
+    expect(anonymize).not.toHaveBeenCalled();
+  });
+
+  it('truy vấn đơn lọc theo mốc now − window_days (đơn quá hạn không bị tính), kể cả đơn cũ chưa có deliveredAt', async () => {
+    const { svc, tx } = withDelivered([], 3);
+    const before = Date.now();
+    await svc.process('req-1', 'admin-1');
+    const where = ((tx.order as unknown as { findMany: jest.Mock }).findMany.mock.calls[0]![0] as { where: Record<string, unknown> }).where as {
+      status: string;
+      OR: [{ deliveredAt: { gt: Date } }, { deliveredAt: null; updatedAt: { gt: Date } }];
+    };
+    expect(where.status).toBe('DELIVERED');
+    const cutoff = where.OR[0].deliveredAt.gt.getTime();
+    expect(cutoff).toBeGreaterThanOrEqual(before - 3 * day - 1000);
+    expect(cutoff).toBeLessThanOrEqual(Date.now() - 3 * day + 1000);
+    expect(where.OR[1].updatedAt.gt.getTime()).toBe(cutoff);
+  });
+
+  it('không còn đơn nào trong hạn → xử lý được', async () => {
+    const { svc, anonymize } = withDelivered([]);
+    await svc.process('req-1', 'admin-1');
+    expect(anonymize).toHaveBeenCalled();
+  });
+
+  it('list(): mỗi khách lấy đồng ý của yêu cầu PENDING MỚI NHẤT, bất kể thứ tự dòng', async () => {
+    const old = { id: 'r-old', userId: 'u1', status: 'PENDING', createdAt: new Date('2026-10-01'), walletForfeitAmount: 10_000 };
+    const fresh = { id: 'r-new', userId: 'u1', status: 'PENDING', createdAt: new Date('2026-10-20'), walletForfeitAmount: 20_000 };
+    for (const rows of [[old, fresh], [fresh, old]]) {
+      const prisma = {
+        accountDeletionRequest: { findMany: jest.fn().mockResolvedValue(rows) },
+        user: { findMany: jest.fn().mockResolvedValue([{ id: 'u1', role: 'CUSTOMER', walletBalance: 20_000, pointsConvertedBalance: 0, cashbackPending: 0 }]) },
+        ...Object.fromEntries(['order', 'payout', 'returnRequest', 'orderCustomerRefund', 'subscription', 'commission', 'cashbackTransaction', 'dealerCreditLedger', 'wasteRequest', 'wasteUserFlags'].map((k) => [k, { groupBy: jest.fn().mockResolvedValue([]), findMany: jest.fn().mockResolvedValue([]) }])),
+      };
+      const out = await new AccountDeletionService(prisma as unknown as PrismaService).list('PENDING');
+      expect(out.every((r) => r.blockers.length === 0)).toBe(true);
+    }
+  });
+});

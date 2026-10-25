@@ -123,14 +123,21 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     expect(events[0]).toMatchObject({ fromValue: '42000', toValue: '0', actorId: admin.id });
   });
 
-  it('số khách thấy khác số dư hiện tại → lỗi kèm số mới, không tạo yêu cầu; không đồng ý → lỗi, không tạo yêu cầu', async () => {
+  it('số khách thấy khác số dư hiện tại hoặc chưa tick → lỗi, không tạo yêu cầu; bản cũ chỉ gửi lý do thì vẫn tạo yêu cầu nhưng không ghi đồng ý', async () => {
     const u = await walletUser(30_000);
     const stale = await users.requestAccountDeletion(u.id, undefined, consentFor(20_000)).catch((e: unknown) => e);
     expect(stale).toBeInstanceOf(BadRequestException);
     expect((stale as BadRequestException).getResponse()).toMatchObject({ code: 'WALLET_FORFEIT_CONSENT', walletBalance: 30_000 });
-    const none = await users.requestAccountDeletion(u.id).catch((e: unknown) => e);
-    expect(none).toBeInstanceOf(BadRequestException);
+    const unticked = await users.requestAccountDeletion(u.id, undefined, { accepted: false, acknowledgedWalletBalance: 30_000 }).catch((e: unknown) => e);
+    expect(unticked).toBeInstanceOf(BadRequestException);
+    expect((unticked as BadRequestException).getResponse()).toMatchObject({ code: 'WALLET_FORFEIT_CONSENT' });
     expect(await prisma.accountDeletionRequest.count({ where: { userId: u.id } })).toBe(0);
+
+    await users.requestAccountDeletion(u.id, 'bản cũ');
+    const req = await prisma.accountDeletionRequest.findFirstOrThrow({ where: { userId: u.id } });
+    expect(req.walletForfeitConsentAt).toBeNull();
+    expect(req.walletForfeitAmount).toBeNull();
+    await expect(deletion.process(req.id, admin.id)).rejects.toThrow(/Ví Tubu còn 30\.000đ mà khách chưa đồng ý bỏ số dư/);
   });
 
   it('yêu cầu cũ chưa có đồng ý mà Ví còn tiền: xử lý bị chặn; khách đồng ý lại trên chính yêu cầu đó thì xử lý được', async () => {
@@ -166,6 +173,23 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
     await approvedCommission(u.id, 700_000);
     const req = await prisma.accountDeletionRequest.create({ data: { userId: u.id } });
     await expect(deletion.process(req.id, admin.id)).rejects.toThrow(/chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước/);
+  });
+
+  it('đơn đã giao còn trong hạn đổi/trả: xử lý bị chặn, câu chặn có ngày hết hạn sớm nhất; quá hạn thì xử lý được', async () => {
+    await setConfig(prisma, 'returns.window_days', 7);
+    const u = await walletUser(0);
+    const order = await createOrder(prisma, { userId: u.id, status: 'DELIVERED' });
+    const deliveredAt = new Date(Date.now() - 2 * 864e5);
+    await prisma.order.update({ where: { id: order.id }, data: { deliveredAt } });
+    const req = await prisma.accountDeletionRequest.create({ data: { userId: u.id } });
+    const expiry = new Date(deliveredAt.getTime() + 7 * 864e5 + 7 * 3600e3);
+    const label = [expiry.getUTCDate(), expiry.getUTCMonth() + 1, expiry.getUTCFullYear()]
+      .map((n, i) => String(n).padStart(i === 2 ? 4 : 2, '0'))
+      .join('/');
+    await expect(deletion.process(req.id, admin.id)).rejects.toThrow(new RegExp(`còn 1 đơn đã giao còn trong hạn đổi/trả \\(7 ngày\\), sớm nhất hết hạn ngày ${label}`));
+    await prisma.order.update({ where: { id: order.id }, data: { deliveredAt: new Date(Date.now() - 9 * 864e5) } });
+    const done = await deletion.process(req.id, admin.id);
+    expect(done.alreadyProcessed).toBe(false);
   });
 
   it('hai admin cùng bấm xử lý một yêu cầu: Ví chỉ bị trừ một lần', async () => {
@@ -312,6 +336,20 @@ describe('Xoá tài khoản khi Ví còn tiền (real Postgres)', () => {
       await prisma.systemConfig.update({ where: { key: KEY }, data: { value: 7_000_000 } });
       await run();
       expect((await row()).value).toBe(7_000_000);
+    });
+
+    it('chỉ ghi một dòng lịch sử khi UPDATE thật sự đổi số; chạy lại hoặc admin đã đặt số khác thì không ghi thêm', async () => {
+      const count = () => prisma.systemConfigHistory.count({ where: { key: KEY, changedBy: 'migration:pit_threshold_5m' } });
+      await prisma.systemConfigHistory.deleteMany({ where: { key: KEY, changedBy: 'migration:pit_threshold_5m' } });
+      await prisma.systemConfig.update({ where: { key: KEY }, data: { value: 2_000_000 } });
+      await run();
+      expect(await count()).toBe(1);
+      await run();
+      expect(await count()).toBe(1);
+      await prisma.systemConfigHistory.deleteMany({ where: { key: KEY, changedBy: 'migration:pit_threshold_5m' } });
+      await prisma.systemConfig.update({ where: { key: KEY }, data: { value: 5_000_000 } });
+      await run();
+      expect(await count()).toBe(0);
     });
 
     it('admin đã đặt số khác thì giữ nguyên số; mô tả admin tự sửa không bị đè', async () => {

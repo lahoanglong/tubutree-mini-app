@@ -222,7 +222,10 @@ export class UsersService {
       if (!locked[0]) throw new NotFoundException('Không tìm thấy tài khoản.');
       const balance = locked[0].walletBalance;
       const consented = balance > 0 && consent.accepted === true && consent.acknowledgedWalletBalance === balance;
-      if (balance > 0 && !consented) {
+      // Mini App bản đã phát hành chỉ gửi { reason }: không có trường đồng ý nào thì vẫn ghi yêu cầu như trước (không lưu đồng ý);
+      // lúc xử lý admin thấy "khách chưa đồng ý bỏ số dư". Có trường mà sai/thiếu tick/lệch số thì từ chối.
+      const sentConsentFields = consent.accepted !== undefined || consent.acknowledgedWalletBalance !== undefined;
+      if (balance > 0 && !consented && sentConsentFields) {
         throw new BadRequestException({
           statusCode: 400,
           error: 'Bad Request',

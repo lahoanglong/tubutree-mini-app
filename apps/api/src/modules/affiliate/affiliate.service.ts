@@ -582,10 +582,11 @@ export class AffiliateService {
 
   /**
    * Thuế TNCN khấu trừ khi trả hoa hồng cho cá nhân không ký hợp đồng lao động (`affiliate.pit_withhold_pct`, mặc định 10% từ
-   * 5.000.000đ; 0% = tắt). Hoa hồng là thù lao bằng tiền nên chuyển vào Ví vẫn là thu nhập tiền công theo Luật Thuế TNCN 2025; mức 10%
-   * và ngưỡng 5.000.000đ/lần theo khoản 2 Điều 50 Nghị định 253/2026/NĐ-CP (hiệu lực 01/07/2026, thay ngưỡng 2.000.000đ của Thông tư
-   * 111/2013/TT-BTC); dưới ngưỡng luật chỉ khấu trừ khi cá nhân yêu cầu. Cộng dồn theo tháng VN là chặt hơn luật, để không chia nhỏ
-   * lần chuyển né thuế. Ngưỡng xét trên TỔNG các lệnh chuyển hoa hồng trong tháng VN, kể cả lần này:
+   * 5.000.000đ; 0% = tắt). Hoa hồng là thù lao bằng tiền nên chuyển vào Ví vẫn là thu nhập tiền công theo Luật Thuế TNCN 2025. LUẬT
+   * (khoản 2 Điều 50 Nghị định 253/2026/NĐ-CP, hiệu lực 01/07/2026, thay ngưỡng 2.000.000đ của Thông tư 111/2013/TT-BTC): khấu trừ
+   * 10% khi trả từ 5.000.000đ MỖI LẦN; dưới mức đó chỉ khấu trừ khi cá nhân yêu cầu. MÃ này cộng dồn theo tháng VN nên CHẶT HƠN luật,
+   * cố ý để không chia nhỏ lần chuyển né thuế (lấy cùng con số 5.000.000đ làm ngưỡng cho TỔNG tháng). Ngưỡng xét trên TỔNG các lệnh
+   * chuyển hoa hồng trong tháng VN, kể cả lần này:
    * từ ngưỡng trở lên thì khấu trừ pct × tổng tháng trừ phần thuế thực giữ ở các lệnh trước (taxWithheld − taxRefunded; truy thu
    * các lần nhỏ trước đó). Phần truy thu vượt số tiền lần này thì chỉ trừ tối đa bằng lần này, phần còn thiếu dồn sang lần sau.
    * Lệnh bị từ chối và lệnh rút Ví về ngân hàng cũ (không có grossAmount) không tính. Phải gọi sau `lockPitMonth` trong cùng transaction.

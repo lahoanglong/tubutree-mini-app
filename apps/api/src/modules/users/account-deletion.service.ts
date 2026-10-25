@@ -7,6 +7,7 @@ import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
 
 /** Mã lỗi ổn định để admin UI nhận diện (message tiếng Việt có thể đổi câu chữ). */
@@ -19,6 +20,7 @@ export type DeletionBlockerCode =
   | 'CONVERTED_POINTS'
   | 'CASHBACK_PENDING'
   | 'ORDER_IN_PROGRESS'
+  | 'ORDER_RETURN_WINDOW'
   | 'PAYOUT_PENDING'
   | 'RETURN_PENDING'
   | 'CUSTOMER_REFUND_PENDING'
@@ -57,6 +59,13 @@ type BlockerUser = {
   cashbackPending: number;
 };
 
+/** dd/mm/yyyy theo giờ Việt Nam (không dùng toLocale*: định dạng đổi theo bản ICU). */
+function vnDateLabel(d: Date): string {
+  const v = new Date(d.getTime() + 7 * 3600 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(v.getUTCDate())}/${pad(v.getUTCMonth() + 1)}/${v.getUTCFullYear()}`;
+}
+
 const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] as const;
 
 /** Deadlock (40P01) / tuần tự hoá (40001, Prisma P2034): tx đã rollback, chạy lại an toàn. */
@@ -84,7 +93,14 @@ export class AccountDeletionService {
     private readonly prisma: PrismaService,
     @Optional() @Inject(PARTNER_STORE_BLOCKERS) private readonly partnerStores?: PartnerStoreBlockersPort,
     @Optional() private readonly sessions?: SessionStateService,
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
+
+  /** `returns.window_days` (cùng khoá, mặc định 7 và cách xử lý giá trị sai như OrdersReturns / LoyaltyService.returnWindowDays). */
+  private async returnWindowDays(): Promise<number> {
+    const v = Number((await this.config?.get<number>('returns.window_days', 7)) ?? 7);
+    return Number.isFinite(v) && v >= 0 ? v : 7;
+  }
 
   async list(status: DeletionListStatus = 'PENDING') {
     const requests = await this.prisma.accountDeletionRequest.findMany({
@@ -108,8 +124,16 @@ export class AccountDeletionService {
     const byId = new Map(users.map((u) => [u.id, u]));
     const pendingUsers = users.filter((u) => requests.some((r) => r.userId === u.id && r.status === 'PENDING'));
     const partnerCfg = pendingUsers.length > 0 ? await this.partnerStores?.settlementConfig() : undefined;
-    const consents = new Map(requests.filter((r) => r.status === 'PENDING').map((r) => [r.userId, r.walletForfeitAmount]));
-    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, consents, partnerCfg) : new Map();
+    // Yêu cầu PENDING mới nhất của mỗi khách (danh sách đã sắp theo thời gian, nên lấy dòng mới nhất bất kể chiều sắp).
+    const latestPending = new Map<string, (typeof requests)[number]>();
+    for (const r of requests) {
+      if (r.status !== 'PENDING') continue;
+      const cur = latestPending.get(r.userId);
+      if (!cur || r.createdAt > cur.createdAt) latestPending.set(r.userId, r);
+    }
+    const consents = new Map([...latestPending].map(([uid, r]) => [uid, r.walletForfeitAmount]));
+    const windowDays = pendingUsers.length > 0 ? await this.returnWindowDays() : 7;
+    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, consents, windowDays, partnerCfg) : new Map();
     return requests.map((r) => ({
       ...r,
       user: byId.get(r.userId) ?? null,
@@ -142,6 +166,7 @@ export class AccountDeletionService {
   private async processOnce(requestId: string, adminId: string, adminNote?: string) {
     // Đọc cấu hình đối soát trước khi mở tx (SystemConfigService đọc qua pool, không đọc trong lúc giữ tx), như setUserRole.
     const partnerCfg = await this.partnerStores?.settlementConfig();
+    const windowDays = await this.returnWindowDays();
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "account_deletion_requests" WHERE "id" = ${requestId} FOR UPDATE`;
@@ -168,7 +193,7 @@ export class AccountDeletionService {
 
       if (user) {
         const consents = new Map([[user.id, request.walletForfeitAmount]]);
-        const blockers = (await this.collectBlockers(tx, [user], consents, partnerCfg)).get(user.id) ?? [];
+        const blockers = (await this.collectBlockers(tx, [user], consents, windowDays, partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
           throw new BadRequestException({
             statusCode: 400,
@@ -198,6 +223,7 @@ export class AccountDeletionService {
     db: Db,
     users: BlockerUser[],
     consents: Map<string, number | null>,
+    windowDays: number,
     partnerCfg?: SettlementConfig,
   ): Promise<Map<string, DeletionBlocker[]>> {
     const ids = users.map((u) => u.id);
@@ -209,7 +235,9 @@ export class AccountDeletionService {
         if (open.length) partnerOpen.set(id, open);
       }
     }
-    const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit, wasteOpen, wasteFlags] = await Promise.all([
+    // Đơn đã giao còn trong hạn đổi/trả: Pancake báo RETURNED hay admin duyệt trả vẫn hoàn tiền về Ví khách sau khi tài khoản đã ẩn danh.
+    const windowCutoff = new Date(Date.now() - windowDays * 864e5);
+    const [orders, payouts, returns, refunds, subs, commissions, cashbackTxns, dealerCredit, wasteOpen, wasteFlags, deliveredInWindow] = await Promise.all([
       db.order.groupBy({
         by: ['userId'],
         where: { userId: { in: ids }, status: { in: [...OPEN_ORDER_STATUSES] } },
@@ -257,7 +285,21 @@ export class AccountDeletionService {
         where: { userId: { in: ids }, OR: [{ blockedAt: { not: null } }, { shipLockedAt: { not: null } }] },
         select: { userId: true },
       }),
+      db.order.findMany({
+        where: {
+          userId: { in: ids },
+          status: 'DELIVERED',
+          OR: [{ deliveredAt: { gt: windowCutoff } }, { deliveredAt: null, updatedAt: { gt: windowCutoff } }],
+        },
+        select: { userId: true, deliveredAt: true, updatedAt: true },
+      }),
     ]);
+    const returnWindow = new Map<string, { n: number; earliestExpiry: Date }>();
+    for (const o of deliveredInWindow) {
+      const expiry = new Date((o.deliveredAt ?? o.updatedAt).getTime() + windowDays * 864e5);
+      const cur = returnWindow.get(o.userId);
+      returnWindow.set(o.userId, { n: (cur?.n ?? 0) + 1, earliestExpiry: cur && cur.earliestExpiry < expiry ? cur.earliestExpiry : expiry });
+    }
 
     const countBy = <K extends string>(rows: ({ _count: { _all: number } } & Record<K, string>)[], key: K) =>
       new Map(rows.map((r) => [r[key], r._count._all]));
@@ -304,6 +346,13 @@ export class AccountDeletionService {
       }
       if (user.cashbackPending > 0 || n(cashbackN) > 0) add('CASHBACK_PENDING', 'còn khoản hoàn tiền mua sắm đang chờ');
       if (n(orderN) > 0) add('ORDER_IN_PROGRESS', `còn ${n(orderN)} đơn hàng chưa hoàn tất (chờ thanh toán/đang xử lý/đang giao)`);
+      const rw = returnWindow.get(user.id);
+      if (rw) {
+        add(
+          'ORDER_RETURN_WINDOW',
+          `còn ${rw.n} đơn đã giao còn trong hạn đổi/trả (${windowDays} ngày), sớm nhất hết hạn ngày ${vnDateLabel(rw.earliestExpiry)}; tiền hoàn nếu có sẽ về Ví`,
+        );
+      }
       if (n(payoutN) > 0) add('PAYOUT_PENDING', `còn ${n(payoutN)} yêu cầu rút tiền chờ xử lý`);
       if (n(returnN) > 0) add('RETURN_PENDING', `còn ${n(returnN)} yêu cầu đổi trả chờ duyệt`);
       if (n(refundN) > 0) add('CUSTOMER_REFUND_PENDING', `còn ${n(refundN)} khoản hoàn tiền đơn chưa chuyển`);

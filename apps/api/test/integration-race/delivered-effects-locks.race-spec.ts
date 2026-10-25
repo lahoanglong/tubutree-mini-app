@@ -78,7 +78,7 @@ describe('Cộng điểm giao hàng ‖ xoá tài khoản / gộp khách: cùng 
   }
 
   const deliveredOrder = (userId: string) =>
-    createOrder(prisma, { userId, status: 'DELIVERED', pointsEarned: EARNED, deliveredAt: new Date(), deliveredEffectsAt: null });
+    createOrder(prisma, { userId, status: 'DELIVERED', pointsEarned: EARNED, deliveredAt: new Date(Date.now() - 30 * 864e5), deliveredEffectsAt: null });
 
   async function balanceOf(userId: string) {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true } });

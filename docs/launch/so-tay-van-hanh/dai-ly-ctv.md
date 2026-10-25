@@ -56,7 +56,7 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 - Hoa hồng tính theo từng sản phẩm. Hiện **chưa nhập được %** (**⏳ đang làm**) nên mọi sản phẩm thật cho 0đ. Xem "Xử lý tình huống".
 - Ghi công đơn theo thứ tự: mã giới thiệu khách nhập, rồi gian hàng CTV khách đang xem, rồi lần bấm link CTV trong 7 ngày gần nhất.
 - Đơn "Đã giao hàng" thì hoa hồng ở trạng thái "Đang chờ · đang giữ" trong 10 ngày (hoặc hết hạn đổi/trả nếu dài hơn). Sau đó thành "Có thể rút". Khách trả hàng thì hoa hồng bị thu hồi.
-- Rút về **Ví Tubu**: có ngay. Rút về **ngân hàng**: tối thiểu 50.000đ, rút hết số dư, nhập số tài khoản mỗi lần. Lệnh đi qua "Chờ duyệt", "Đã duyệt · chờ chuyển", "Đã chuyển" (kế toán xử lý).
+- Hoa hồng chỉ chuyển vào **Ví Tubu**: có ngay. Ví Tubu chỉ dùng để trả tiền hàng, không rút về ngân hàng. Lệnh rút ngân hàng tạo từ trước vẫn đi qua "Chờ duyệt", "Đã duyệt · chờ chuyển", "Đã chuyển" (kế toán xử lý cho xong), không tạo lệnh mới.
 - Các lần chuyển hoa hồng vào Ví trong cùng một tháng (giờ Việt Nam) được cộng dồn. Khi tổng từ 5.000.000đ trở lên (Nghị định 253/2026/NĐ-CP), thuế TNCN 10% tính trên tổng tháng; thuế của các lần chuyển trước trong tháng chưa bị trừ sẽ được trừ bù vào lần chuyển sau (tối đa bằng số tiền lần chuyển đó, phần còn thiếu dồn sang lần kế tiếp). Nếu một lệnh rút trong tháng bị từ chối làm tổng tháng giảm, phần thuế đã giữ dư ở các lệnh khác được tự hoàn: lệnh đang chờ duyệt tăng số thực nhận, lệnh đã duyệt hoặc đã chi được cộng vào Ví Tubu (dòng "Hoàn thuế TNCN giữ dư"). CTV khai mã số thuế hoặc CCCD một lần.
 
 **Danh sách CTV và doanh số.** Chưa có màn "CTV" (**⏳ đang làm**). Đường tạm: **Khách hàng › Người dùng › Xuất CSV người dùng**, lọc cột "Vai trò". Doanh số từng CTV chưa có. Hỏi kỹ thuật khi cần.
@@ -82,11 +82,13 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 
 **CTV hỏi "hoa hồng sao bằng 0đ".** Đúng: hệ thống chưa nhập % hoa hồng (**⏳ đang làm**). Không hứa số tiền. Không tự bù đơn đã giao trước đó (cần xác nhận khi có % thì có bù không). Báo chủ shop. Chưa mời thêm CTV khi chưa sửa xong.
 
-**CTV hỏi vì sao chưa rút được.** Mở **Cá nhân › Hợp tác › Cộng tác viên**. "Đang chờ · đơn chưa giao": khách chưa nhận hàng. "Đang giữ": chờ đủ 10 ngày. "Có thể rút": rút được. Đơn bị trả thì hoa hồng mất.
+**CTV hỏi vì sao chưa rút được.** Mở **Cá nhân › Hợp tác › Cộng tác viên**. "Đang chờ · đơn chưa giao": khách chưa nhận hàng. "Đang giữ": chờ đủ 10 ngày. "Có thể rút": chuyển được vào Ví Tubu. Đơn bị trả thì hoa hồng mất.
 
 **CTV nói khách mua nhưng không có hoa hồng.** Hỏi khách có nhập mã không, có mở link của CTV trong 7 ngày không. Chưa có công cụ tra người giới thiệu của một đơn hay gán lại (**⏳ đang làm**). Ghi mã đơn và tên CTV, gửi kỹ thuật.
 
-**CTV rút ngân hàng chưa nhận.** Hỏi trạng thái lệnh: "Chờ duyệt" hoặc "Đã duyệt · chờ chuyển" nghĩa là kế toán chưa chuyển. Từ lúc đơn giao đến lúc có tiền ngân hàng thường hơn 3 tuần. Báo kế toán theo tên CTV và số tiền. Rút về Ví Tubu thì có ngay để mua hàng. Từ ví ra ngân hàng vẫn qua kế toán (tối thiểu 100.000đ, phí 3.000đ).
+**CTV hỏi lệnh rút ngân hàng cũ chưa nhận.** Chỉ còn lệnh tạo trước khi bỏ rút ngân hàng. Hỏi trạng thái: "Chờ duyệt" hoặc "Đã duyệt · chờ chuyển" nghĩa là kế toán chưa chuyển. Báo kế toán theo tên CTV và số tiền. CTV muốn rút tiền mới về ngân hàng: không có, hoa hồng chỉ vào Ví Tubu để trả tiền hàng.
+
+**Khách có tiền trong Ví xin xoá tài khoản.** Khách phải đồng ý bỏ số dư Ví (tick đồng ý, số dư hiển thị đúng lúc gửi). Hệ thống trừ Ví về 0 bằng bút toán điều chỉnh khi xoá. Khách chưa đồng ý hoặc lệch số: quản trị báo "khách chưa đồng ý bỏ số dư Ví", CSKH gọi khách xin đồng ý rồi khách gửi lại yêu cầu. Còn đơn đã giao trong hạn đổi/trả cũng bị chặn xoá, quản trị ghi ngày hết hạn sớm nhất.
 
 **CTV hỏi thuế.** TNCN 10% tính trên tổng hoa hồng chuyển vào Ví trong tháng khi tổng từ 5.000.000đ. Số này hiện sẵn trên màn chuyển vào Ví. Chứng từ khấu trừ: hỏi kế toán (cần xác nhận).
 

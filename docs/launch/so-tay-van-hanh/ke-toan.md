@@ -31,7 +31,7 @@ Khách hứa được nhận tiền sau 1 đến 3 ngày làm việc. Giữ đú
 
 **Xác nhận đã nhận chuyển khoản.** Dự phòng khi Pancake chưa tự báo. **Đơn hàng** › mở đơn "Chờ thanh toán" › "Đã nhận tiền" (mã giao dịch tuỳ chọn). **Chỉ bấm khi thấy tiền về tài khoản.** Không hoàn tác được. Khách chuyển thiếu: đơn hiện cảnh báo "Khách chuyển thiếu", không bấm.
 
-**Duyệt rút tiền.** **Quản trị › Người bán › Duyệt yêu cầu rút tiền.** Mặc định "Đang chờ duyệt". Lệnh gồm hoa hồng CTV và rút từ Ví Tubu (tối thiểu 100.000đ, phí 3.000đ, số chuyển là số thực nhận đã trừ phí).
+**Duyệt rút tiền.** **Quản trị › Người bán › Duyệt yêu cầu rút tiền.** Mặc định "Đang chờ duyệt". Chỉ còn lệnh rút ngân hàng tạo trước khi bỏ tính năng này (hoa hồng CTV và rút từ Ví Tubu, phí 3.000đ, số chuyển là số thực nhận đã trừ phí). Không còn lệnh mới: hoa hồng chỉ vào Ví Tubu và Ví chỉ dùng trả tiền hàng. Duyệt và chuyển cho xong các lệnh cũ.
 1. Đọc người nhận, ngân hàng, số tài khoản, chủ tài khoản. Dòng "Hoa hồng … · khấu trừ thuế TNCN …" cho biết thuế đã trừ.
 2. Bấm "Duyệt" (ghi chú tuỳ chọn). Lệnh thành "Đã duyệt, chờ chuyển khoản".
 3. Chuyển đúng **số tiền hiện trên lệnh**. Nếu màn báo "Số thực nhận của lệnh đã đổi từ … thành …" (một lệnh khác cùng tháng vừa bị từ chối, thuế giữ dư được hoàn ngay trên lệnh này), chưa duyệt hoặc chưa chi: màn tự tải lại, đọc số mới rồi làm lại, không chuyển theo số cũ. Rồi nhập "Mã giao dịch NH", bấm "Đã chuyển khoản".
@@ -79,7 +79,9 @@ Thời gian từ lúc đơn giao đến lúc CTV có tiền ngân hàng thườn
 
 **Khách hỏi bao giờ nhận tiền hoàn.** Về Ví Tubu: ngay. Về ngân hàng: 1 đến 3 ngày làm việc từ lúc khoản vào "Chờ chuyển khoản". Tra theo mã đơn trong "Hoàn tiền khách" (bộ lọc "Tất cả" hoặc "Đã chuyển").
 
-**CTV hỏi vì sao rút chưa về.** Xem lệnh: "Đang chờ duyệt", "Đã duyệt, chờ chuyển khoản" nghĩa là bạn chưa chuyển. Trả lời theo trạng thái. Rút về Ví Tubu thì có ngay.
+**CTV hỏi vì sao rút chưa về.** Xem lệnh cũ: "Đang chờ duyệt", "Đã duyệt, chờ chuyển khoản" nghĩa là bạn chưa chuyển. Trả lời theo trạng thái. Hoa hồng mới vào Ví Tubu có ngay, không rút ngân hàng.
+
+**Xoá tài khoản khi Ví còn tiền.** Khách phải đồng ý bỏ số dư; hệ thống trừ Ví về 0 bằng bút toán ADJUST (nguồn "Xoá tài khoản") trong giao dịch xoá, có sự kiện "WALLET_FORFEIT" trong lịch sử người dùng. Không hoàn tiền mặt cho số dư này. Chưa đồng ý hoặc lệch số thì yêu cầu bị chặn, CSKH gọi khách.
 
 **Đối tác hỏi bao giờ nhận tiền đối soát.** Khoản vào bảng kê 7 ngày sau khi giao. Phiếu do quản lý đại lý–CTV lập. Bạn chuyển khi phiếu "Đang chờ".
 
