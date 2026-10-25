@@ -1,4 +1,4 @@
-import { Droplets, HelpCircle, Users } from 'lucide-react';
+import { Droplets, HelpCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { vi } from '../../i18n/vi';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -58,8 +58,6 @@ export function EarnWaterSheet({
   quiz,
   onRetryQuiz,
   onGoQuiz,
-  hasFriends,
-  onGoFriends,
   error,
 }: {
   open: boolean;
@@ -78,8 +76,6 @@ export function EarnWaterSheet({
   quiz: EarnQuizState;
   onRetryQuiz: () => void;
   onGoQuiz: () => void;
-  hasFriends: boolean;
-  onGoFriends: () => void;
   /** Lỗi của lần điểm danh/hứng sương vừa rồi. */
   error: string | null;
 }) {
@@ -135,13 +131,6 @@ export function EarnWaterSheet({
           <Row title={t.quiz(quizLeft)} hint={t.quizHint}>
             <Button variant="secondary" icon={HelpCircle} onPress={onGoQuiz}>
               {t.quizCta}
-            </Button>
-          </Row>
-        )}
-        {hasFriends && (
-          <Row title={t.friends} hint={t.friendsHint}>
-            <Button variant="secondary" icon={Users} onPress={onGoFriends}>
-              {t.friendsCta}
             </Button>
           </Row>
         )}

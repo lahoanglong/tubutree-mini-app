@@ -13,7 +13,6 @@ import {
   unlockPlot,
   waterPlot,
   claimSeasonPass,
-  giftWater,
   type AnswerResult,
   type HarvestCouponCap,
   type HarvestReward,
@@ -117,14 +116,6 @@ export function useGameActions({
     },
     onError,
   });
-  const giftM = useLockedMutation({
-    mutationFn: (recipientId: string) => giftWater(recipientId),
-    onSuccess: (r) => {
-      openSnackbar({ text: `Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, type: 'success' });
-      refresh();
-    },
-    onError,
-  }, (recipientId) => recipientId);
   const handleSpin = async () => {
     try {
       const r = await spin();
@@ -215,7 +206,6 @@ export function useGameActions({
     dewM,
     freezeM,
     repairM,
-    giftM,
     handleSpin,
     waterM,
     buyTreeM,

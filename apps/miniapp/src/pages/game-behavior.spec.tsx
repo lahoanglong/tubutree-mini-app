@@ -123,7 +123,7 @@ function renderPage() {
 }
 
 /** Chuyển tab của trang Vườn Xanh. Khối ở tab khác vẫn được dựng nhưng ẩn, nên truy vấn theo role phải mở tab trước. */
-async function openTab(name: 'Hôm nay' | 'Vườn' | 'Cộng đồng') {
+async function openTab(name: 'Hôm nay' | 'Vườn') {
   fireEvent.click(await screen.findByRole('tab', { name }));
 }
 
@@ -168,7 +168,7 @@ describe('GamePage — trạng thái trang', () => {
   it('đang khôi phục phiên: không hiện cổng đăng nhập, không hiện hành động, không tải hồ sơ', async () => {
     mocks.auth.status = 'loading';
     renderPage();
-    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.api.getSeason).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: viText.auth.loginCta })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
@@ -238,7 +238,7 @@ describe('GamePage — vườn và lối tắt', () => {
     fireEvent.click(row);
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     expect(screen.queryByText('Đổi vỏ chai lấy nước')).toBeNull();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     expect(screen.getByText('Xem mẹo sống xanh từ mọi người')).toBeInTheDocument();
     expect(screen.queryByText(/Khoe thành tích/)).toBeNull();
     fireEvent.click(screen.getByText('Bảng tin cộng đồng'));
@@ -730,9 +730,9 @@ describe('GamePage — Chặng Mùa (Season Pass) đã ẩn (C-044, Q-16)', () =
   it('không gọi API season-pass và không dựng khối dù server trả mùa đang chạy', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue(activePass);
     renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     await screen.findByText('Sồi');
-    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.api.getSeason).toHaveBeenCalled());
     expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
     expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
     expect(screen.queryByText(/Season Pass|Chặng Mùa/)).not.toBeInTheDocument();
@@ -741,7 +741,7 @@ describe('GamePage — Chặng Mùa (Season Pass) đã ẩn (C-044, Q-16)', () =
   it('chưa đăng nhập cũng không gọi API season-pass', async () => {
     mocks.auth.status = 'unauthenticated';
     renderPage();
-    await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.api.getSeason).toHaveBeenCalled());
     expect(mocks.api.fetchSeasonPass).not.toHaveBeenCalled();
   });
 });
@@ -759,7 +759,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
   it('không có mùa đang chạy hoặc không có bậc: ẩn khối', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 0, premiumEligible: false, tiers: [] });
     renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     await screen.findByText('Sồi');
     expect(screen.queryByText(viText.game.seasonPass.title)).not.toBeInTheDocument();
   });
@@ -767,7 +767,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
   it('hiện tiêu đề, XP hiện có / mốc cuối, gợi ý Premium khi chưa đủ điều kiện', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { container } = renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     expect(await screen.findByText(viText.game.seasonPass.title)).toBeInTheDocument();
     expect(screen.getByText(viText.game.seasonPass.subtitle('Xuân'))).toBeInTheDocument();
     expect(screen.getByText('150 điểm kinh nghiệm')).toBeInTheDocument();
@@ -780,7 +780,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
   it('bậc đã mở + chưa đủ điều kiện Premium: nhánh miễn phí nhận được, Premium và bậc khoá đều tắt', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     await screen.findByText(viText.game.seasonPass.title);
     expect(screen.getByRole('button', { name: viText.game.seasonPass.claim })).toBeEnabled();
     const locked = screen.getAllByRole('button', { name: viText.game.seasonPass.locked });
@@ -792,7 +792,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
   it('nhận nhánh miễn phí: gọi claimSeasonPass(tier, "free") một lần, báo + haptic, làm mới mùa/hồ sơ/Điểm Xanh', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: false, tiers: tiers() });
     const { invalidated } = renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     const btn = await screen.findByRole('button', { name: viText.game.seasonPass.claim });
     fireEvent.click(btn);
     await waitFor(() =>
@@ -811,7 +811,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
   it('đủ điều kiện Premium: nhánh Premium nhận được qua claimSeasonPass(tier, "premium")', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: true, tiers: tiers() });
     renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     await screen.findByText(viText.game.seasonPass.title);
     expect(screen.queryByText(viText.game.seasonPass.premiumHint)).not.toBeInTheDocument();
     const claims = screen.getAllByRole('button', { name: viText.game.seasonPass.claim });
@@ -823,7 +823,7 @@ describe('GamePage — Chặng Mùa (Season Pass) khi bật cờ SEASON_PASS_ENA
   it('phần đã nhận hiện "✓ Đã nhận" thay cho nút', async () => {
     mocks.api.fetchSeasonPass.mockResolvedValue({ active: true, seasonTitle: 'Xuân', xp: 150, premiumEligible: true, tiers: tiers({ claimedFree: true }) });
     renderPage();
-    await openTab('Cộng đồng');
+    await openTab('Vườn');
     await screen.findByText(viText.game.seasonPass.title);
     expect(screen.getByText(viText.game.seasonPass.claimed)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: viText.game.seasonPass.claim })).toHaveLength(1);
@@ -867,39 +867,21 @@ describe('GamePage — cộng đồng, sổ tay, tặng nước, tác động xa
     expect(screen.queryByText('Đào')).not.toBeInTheDocument();
   });
 
-  it('tặng nước: chỉ khoá nút của bạn đang gửi hoặc đã tặng hôm nay; gọi giftWater đúng id', async () => {
-    const gate = pending<unknown>();
-    mocks.api.getFriends.mockResolvedValue([
-      { id: 'f1', nickname: 'Lan', giftedToday: false },
-      { id: 'f2', nickname: 'Minh', giftedToday: false },
-      { id: 'f3', nickname: 'Hà', giftedToday: true },
-    ]);
-    mocks.api.giftWater.mockReturnValue(gate.promise);
-    renderPage();
-    await openTab('Cộng đồng');
-    expect(await screen.findByText('Lan')).toBeInTheDocument();
-    const gifts = screen.getAllByRole('button', { name: 'Tặng 💧' });
-    expect(gifts).toHaveLength(2);
-    const done = screen.getByRole('button', { name: 'Đã tặng hôm nay' });
-    expect(done).toBeDisabled();
-    fireEvent.click(done);
-    expect(mocks.api.giftWater).not.toHaveBeenCalled();
-
-    fireEvent.click(gifts[0]!);
-    await waitFor(() => expect(gifts[0]).toBeDisabled());
-    expect(gifts[1]).toBeEnabled();
-    expect(mocks.api.giftWater).toHaveBeenCalledTimes(1);
-    expect(mocks.api.giftWater).toHaveBeenCalledWith('f1');
-    await act(async () => {
-      gate.resolve({ amount: 50, recipientId: 'f1' });
-    });
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã tặng 50💧 cho bạn 🎁', type: 'success' }));
-  });
-
-  it('không có bạn bè: ẩn khối tặng nước', async () => {
+  it('Mini App chỉ đọc (Zalo 4.6): có bạn bè và dữ liệu xếp hạng vẫn không hiện tặng nước, không hiện bảng xếp hạng, không gọi API tương ứng', async () => {
+    mocks.api.getFriends.mockResolvedValue([{ id: 'f1', nickname: 'Lan', giftedToday: false }]);
+    mocks.api.getLeaderboard.mockResolvedValue([{ rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 }]);
+    mocks.api.getSeasonLeaderboard.mockResolvedValue([{ rank: 1, nickname: 'Lan', drops: 1_250 }]);
     renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText('Tặng nước cho bạn bè')).not.toBeInTheDocument();
+    await openTab('Vườn');
+    expect(screen.queryByRole('tab', { name: 'Cộng đồng' })).not.toBeInTheDocument();
+    for (const t of ['Tặng nước cho bạn bè', 'Chuỗi điểm danh dài nhất', 'Xếp hạng góp nước mùa này', 'Lan', 'Nhất']) {
+      expect(screen.queryByText(t)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Tặng 💧' })).not.toBeInTheDocument();
+    expect(mocks.api.getFriends).not.toHaveBeenCalled();
+    expect(mocks.api.getLeaderboard).not.toHaveBeenCalled();
+    expect(mocks.api.getSeasonLeaderboard).not.toHaveBeenCalled();
   });
 
   it('tác động xanh: số cây góp quỹ, giọt nước đã góp, không gán số CO₂ cho cây của khách; chưa góp cây nào thì hiện lời mời', async () => {
@@ -1159,60 +1141,8 @@ describe('GamePage — nhiệm vụ', () => {
   });
 });
 
-describe('GamePage — bảng xếp hạng', () => {
-  it('top góp nước mùa này: huy chương cho top 3, #hạng từ 4', async () => {
-    mocks.api.getSeasonLeaderboard.mockResolvedValue([
-      { rank: 1, nickname: 'Lan', drops: 1_250 },
-      { rank: 2, nickname: 'Minh', drops: 900 },
-      { rank: 3, nickname: 'Hà', drops: 800 },
-      { rank: 4, nickname: 'Quân', drops: 700 },
-    ]);
-    renderPage();
-    expect(await screen.findByText('Xếp hạng góp nước mùa này')).toBeInTheDocument();
-    expect(screen.getByText('🥇 Lan')).toBeInTheDocument();
-    expect(screen.getByText('🥈 Minh')).toBeInTheDocument();
-    expect(screen.getByText('🥉 Hà')).toBeInTheDocument();
-    expect(screen.getByText('#4 Quân')).toBeInTheDocument();
-    expect(screen.getByText('1.250💧')).toBeInTheDocument();
-  });
-
-  it('không có dữ liệu mùa: ẩn khối', async () => {
-    renderPage();
-    await screen.findByText('Sồi');
-    expect(screen.queryByText('Xếp hạng góp nước mùa này')).not.toBeInTheDocument();
-  });
-
-  it('bảng chuỗi điểm danh dài nhất trống: hiện "Chưa có dữ liệu xếp hạng."', async () => {
-    renderPage();
-    expect(await screen.findByText('Chưa có dữ liệu xếp hạng.')).toBeInTheDocument();
-  });
-
-  it('bảng chuỗi dài nhất: gọi đúng tên, bục top 3 xếp thứ 2-1-3 và hiện số ngày chuỗi (chính là số dùng để xếp hạng), hạng 4+ hiện chuỗi và cây', async () => {
-    mocks.api.getLeaderboard.mockResolvedValue([
-      { rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 },
-      { rank: 2, nickname: 'Nhì', streak: 20, treesPlanted: 7 },
-      { rank: 3, nickname: 'Ba', streak: 10, treesPlanted: 5 },
-      { rank: 4, nickname: 'Tư', streak: 5, treesPlanted: 2 },
-    ]);
-    const { container } = renderPage();
-    const second = await screen.findByText('Nhì');
-    const first = screen.getByText('Nhất');
-    const third = screen.getByText('Ba');
-    expect(second.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(first.compareDocumentPosition(third) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText('Chuỗi điểm danh dài nhất')).toBeInTheDocument();
-    expect(screen.queryByText('Bảng xếp hạng tuần')).not.toBeInTheDocument();
-    expect(container.textContent).toContain('🔥30');
-    expect(container.textContent).toContain('🔥20');
-    expect(container.textContent).toContain('🔥10');
-    expect(container.textContent).not.toContain('🌳9');
-    expect(screen.getByText('#4 Tư')).toBeInTheDocument();
-    expect(container.textContent).toContain('🔥5 · 🌳2');
-  });
-});
-
 describe('GamePage — cảnh báo React trùng key', () => {
-  it('mọi danh sách dựng từ dữ liệu đúng hình của API (kể cả bảng chuỗi dài nhất chỉ có 2 người) không phát cảnh báo key', async () => {
+  it('mọi danh sách dựng từ dữ liệu đúng hình của API không phát cảnh báo key', async () => {
     mocks.features.seasonPass = true;
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const HOME = { id: null, slot: 1, isHome: true, treeType: 'Sồi', speciesId: null, progress: 10, target: 50, treeStage: 1, treesPlanted: 3, treeHealth: 'HEALTHY' };
@@ -1245,8 +1175,6 @@ describe('GamePage — cảnh báo React trùng key', () => {
       await screen.findByText('Nhiệm vụ 3');
       await openTab('Vườn');
       await screen.findByText('Lô 3 · Mận');
-      await openTab('Cộng đồng');
-      await screen.findByText('Nhì');
       expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
     } finally {
       errors.mockRestore();

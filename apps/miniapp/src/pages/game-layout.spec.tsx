@@ -163,10 +163,10 @@ describe('GamePage — một h1 ở mọi trạng thái (C-114)', () => {
 });
 
 describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
-  it('có ba tab Hôm nay / Vườn / Cộng đồng, mở sẵn Hôm nay', async () => {
+  it('chỉ có hai tab Hôm nay / Vườn (Cộng đồng chỉ đọc nên không có tab), mở sẵn Hôm nay', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
-    expect(tabs().map((t) => t.textContent)).toEqual(['Hôm nay', 'Vườn', 'Cộng đồng']);
+    expect(tabs().map((t) => t.textContent)).toEqual(['Hôm nay', 'Vườn']);
     expect(screen.getByRole('tab', { name: 'Hôm nay' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'false');
   });
@@ -187,21 +187,28 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     await screen.findByText('Lô 2 · Mận');
     expect(tabPanel('Hôm nay')).toBeVisible();
     expect(tabPanel('Vườn')).not.toBeVisible();
-    expect(tabPanel('Cộng đồng')).not.toBeVisible();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
     expect(tabPanel('Vườn')).toBeVisible();
     expect(tabPanel('Hôm nay')).not.toBeVisible();
     expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'true');
     expect(within(tabPanel('Vườn')).getByText('Lô 2 · Mận')).toBeVisible();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Cộng đồng' }));
-    expect(tabPanel('Cộng đồng')).toBeVisible();
-    expect(within(tabPanel('Cộng đồng')).getByText('Chuỗi điểm danh dài nhất')).toBeVisible();
-    expect(within(tabPanel('Cộng đồng')).getByRole('button', { name: 'Tặng 💧' })).toBeVisible();
   });
 
-  it('mỗi khối đặt vào đúng tab: nút chính/điểm danh/nhiệm vụ/quiz/vòng quay ở Hôm nay, lô đất ở Vườn, xếp hạng ở Cộng đồng', async () => {
+  it('Mini App không có bảng xếp hạng người chơi và tặng nước bạn bè (Zalo 4.6); lối đọc bảng tin nằm ở tab Vườn', async () => {
+    renderPage();
+    await screen.findByText('Lô 2 · Mận');
+    expect(screen.queryByRole('tab', { name: 'Cộng đồng' })).toBeNull();
+    expect(screen.queryByText('Chuỗi điểm danh dài nhất')).toBeNull();
+    expect(screen.queryByText('Top góp nước mùa này')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Tặng 💧' })).toBeNull();
+    expect(mocks.api.getFriends).not.toHaveBeenCalled();
+    expect(mocks.api.getLeaderboard).not.toHaveBeenCalled();
+    expect(mocks.api.getSeasonLeaderboard).not.toHaveBeenCalled();
+    expect(within(tabPanel('Vườn')).getByText('Bảng tin cộng đồng')).toBeInTheDocument();
+  });
+
+  it('mỗi khối đặt vào đúng tab: nút chính/điểm danh/nhiệm vụ/quiz/vòng quay ở Hôm nay, lô đất ở Vườn', async () => {
     renderPage();
     await screen.findByText('Lô 2 · Mận');
     const today = within(tabPanel('Hôm nay'));
@@ -213,14 +220,12 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     // Khối ở tab đang ẩn không vào cây accessibility nên kiểm theo chữ + thẻ h2.
     expect(within(tabPanel('Vườn')).getByText(/Lô đất của bạn/).tagName).toBe('H2');
     expect(within(tabPanel('Vườn')).getByText('Tác động xanh của bạn').tagName).toBe('H2');
-    expect(within(tabPanel('Cộng đồng')).getByText('Chuỗi điểm danh dài nhất').tagName).toBe('H2');
   });
 
   it('đổi tab không dựng lại khối: vòng quay chỉ mount một lần', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
     fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Cộng đồng' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Hôm nay' }));
     expect(mocks.wheel.mounts).toBe(1);
     expect(mocks.wheel.unmounts).toBe(0);
@@ -241,7 +246,7 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     for (let i = 0; i + 1 < order.length; i += 1) expect(follows(order[i]!, order[i + 1]!)).toBe(true);
     // 3 hành động chính đứng trước mọi khối phụ của tab (vòng quay, đổi vỏ chai).
     expect(follows(missions, screen.getByTestId('wheel'))).toBe(true);
-    expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(3);
+    expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
   });
 
   it('chỉ có một nút "Điểm danh" trên trang Vườn, kèm dòng nói rõ nhận giọt nước', async () => {
@@ -256,7 +261,7 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     await screen.findByText('Lô 2 · Mận');
     const h2 = [...container.querySelectorAll('h2')].map((h) => h.textContent);
     expect(h2).toEqual(
-      expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn', 'Chuỗi điểm danh dài nhất']),
+      expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn']),
     );
   });
 });

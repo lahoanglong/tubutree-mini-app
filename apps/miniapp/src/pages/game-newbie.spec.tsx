@@ -224,7 +224,7 @@ describe('Vườn Xanh người mới — nút chính và không ngõ cụt', ()
     const checkin = rowOf('Điểm danh hôm nay');
     expect(checkin.getByText('+15💧')).toBeInTheDocument();
     expect(screen.getByText('Làm câu đố (còn 2 câu)')).toBeInTheDocument();
-    expect(screen.getByText('Nước từ bạn bè')).toBeInTheDocument();
+    expect(screen.queryByText('Nước từ bạn bè')).not.toBeInTheDocument();
     fireEvent.click(checkin.getByRole('button', { name: 'Điểm danh' }));
     await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
   });

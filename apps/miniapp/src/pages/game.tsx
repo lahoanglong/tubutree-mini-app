@@ -34,13 +34,10 @@ import { GardenPlots } from '../components/game/garden-plots';
 import { SeasonPass } from '../components/game/season-pass';
 import { CommunityGoal } from '../components/game/community-goal';
 import { SpeciesCodex } from '../components/game/species-codex';
-import { FriendGifts } from '../components/game/friend-gifts';
 import { EcoImpact } from '../components/game/eco-impact';
 import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
 import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
 import { MissionsCard } from '../components/game/missions-card';
-import { SeasonLeaderboard } from '../components/game/season-leaderboard';
-import { WeeklyLeaderboard } from '../components/game/weekly-leaderboard';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
 import { WheelPrizeSheet } from '../components/game/wheel-prize-sheet';
 import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
@@ -62,7 +59,7 @@ export default function GamePage() {
   const publicConfig = usePublicConfig();
   const authed = phase === 'authenticated';
 
-  const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } =
+  const { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, seasonPass } =
     useGameData(authed);
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
@@ -88,7 +85,7 @@ export default function GamePage() {
   const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
   const fundPoints = loyalty ? (loyalty.redeemableTotal ?? pointsSummary(loyalty).total) : null;
 
-  const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
+  const { checkInM, dewM, freezeM, repairM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } =
     useGameActions({
       onHarvest: (reward: HarvestReward | undefined, meta: HarvestMeta) => {
         setHarvestCoupons(meta.coupons);
@@ -295,9 +292,7 @@ export default function GamePage() {
 
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
-        </GameTabPanel>
 
-        <GameTabPanel tab="community" active={tab === 'community'}>
           {/* Banner mùa/sự kiện (Phase 4) */}
           {season && <SeasonBanner season={season} />}
 
@@ -311,20 +306,7 @@ export default function GamePage() {
             />
           )}
 
-          {/* Tặng nước bạn bè (social) */}
-          {friends && friends.length > 0 && (
-            <FriendGifts
-              friends={friends}
-              giftPending={giftM.isPending}
-              giftVariables={giftM.variables}
-              onGift={(recipientId) => giftM.mutate(recipientId)}
-            />
-          )}
-
-          <WeeklyLeaderboard board={board} />
-
-          {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
-
+          {/* Cộng đồng trong Mini App chỉ đọc (chính sách Zalo 4.6): không tặng nước bạn bè, không bảng xếp hạng người chơi, nên không có tab riêng. */}
           {/* Bảng tin cộng đồng (§6.14.12) */}
           <GameLinkRow
             icon={MessagesSquare}
@@ -333,6 +315,7 @@ export default function GamePage() {
             onClick={() => navigate('/feed')}
           />
         </GameTabPanel>
+
       </div>
 
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
@@ -354,8 +337,6 @@ export default function GamePage() {
         quiz={quizState}
         onRetryQuiz={() => void quizQ.refetch()}
         onGoQuiz={() => goTab('today', 'game-quiz')}
-        hasFriends={(friends?.length ?? 0) > 0}
-        onGoFriends={() => goTab('community')}
         error={earnError}
       />
 
