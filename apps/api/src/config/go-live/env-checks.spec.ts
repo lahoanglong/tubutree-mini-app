@@ -226,6 +226,17 @@ describe('evaluateEnv', () => {
       expect(status({ ZALO_APP_ID: undefined }, 'env.zalo.login')).toBe('FAIL');
       expect(status({}, 'env.zalo.login')).toBe('PASS');
     });
+    it('ZALO_APP_ID trùng ID Mini App thì FAIL, thiếu ID Mini App thì WARN, hai ID khác nhau thì PASS', () => {
+      expect(status({ ZALO_APP_ID: '2070857098114207963', ZALO_MINIAPP_ID: '2070857098114207963' }, 'env.zalo.ids')).toBe('FAIL');
+      expect(status({ ZALO_MINIAPP_ID: '' }, 'env.zalo.ids')).toBe('WARN');
+      expect(status({ ZALO_MINIAPP_ID: undefined }, 'env.zalo.ids')).toBe('WARN');
+      expect(status({}, 'env.zalo.ids')).toBe('PASS');
+    });
+    it('đăng nhập: gợi ý nói rõ Mini App vẫn đăng nhập được khi thiếu secret', () => {
+      const r = byId(evaluateEnv(envWith({ ZALO_APP_SECRET: '' })), 'env.zalo.login');
+      expect(r.hint).toContain('Mini App');
+      expect(r.hint).not.toContain('khách không đăng nhập được bằng Zalo');
+    });
     it('OA: không có thì WARN, thiếu một phần thì WARN, đủ thì PASS', () => {
       expect(status({ ZALO_OA_ID: '', ZALO_OA_ACCESS_TOKEN: '', ZALO_OA_REFRESH_TOKEN: '' }, 'env.zalo.oa')).toBe('WARN');
       expect(status({ ZALO_OA_REFRESH_TOKEN: '' }, 'env.zalo.oa')).toBe('WARN');

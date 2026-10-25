@@ -98,7 +98,7 @@ Web khách chỉ đăng nhập bằng Zalo OAuth, nên mục này chặn ngày m
 - [ ] Đóng hẳn tab/trình duyệt rồi mở lại `app.tubutree.com`: vẫn đăng nhập.
 - [ ] Đặt một đơn COD hoàn chỉnh trên web bằng tài khoản vừa đăng nhập (chọn địa chỉ, ghi chú đơn, đặt hàng). Kỳ vọng: đơn hiện ở `/tai-khoan`, mở chi tiết đơn thấy hành trình, nút Hủy đơn khi đơn còn Chờ thanh toán/Đã xác nhận.
 - [ ] **Gian hàng CTV (subdomain):** mở `https://<ten-gian-hang>.tubutree.com/` (một gian hàng đã đăng), thêm sản phẩm rồi bấm đăng nhập. Ghi lại một trong hai: (a) đăng nhập xong về lại đúng subdomain; (b) Zalo báo lỗi `redirect_uri`/callback không hợp lệ. Trường hợp (b) thì gửi mình ảnh màn lỗi: cần chốt phương án trước khi phát link gian hàng CTV cho khách (xem Bước E, mục 8).
-- [ ] Kiểm tra bản dựng: sau lần deploy kế tiếp, xác nhận bước build web **không** báo lỗi về `NEXT_PUBLIC_ZALO_APP_ID`. (Nếu quên đặt `ZALO_APP_ID`, build dừng ngay với dòng "LOI: NEXT_PUBLIC_ZALO_APP_ID rong".)
+- [ ] Kiểm tra bản dựng: sau lần deploy kế tiếp, xác nhận bước build web **không** báo lỗi về `NEXT_PUBLIC_ZALO_APP_ID`. (Nếu quên đặt `ZALO_APP_ID` hoặc `ZALO_MINIAPP_ID`, hoặc đặt hai giá trị trùng nhau, build dừng ngay với dòng "LOI: ...".)
 
 ## Kết quả
 

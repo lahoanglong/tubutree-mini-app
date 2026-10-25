@@ -271,11 +271,28 @@ function zalopayChecks(env: Env): CheckResult[] {
 function zaloChecks(env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const loginMissing = ['ZALO_APP_ID', 'ZALO_APP_SECRET'].filter((k) => !envValue(env, k));
+  const loginTitle = 'Zalo App (app id và secret)';
   out.push(
     loginMissing.length === 0
-      ? pass(G_ZALO, 'env.zalo.login', 'Đăng nhập Zalo (app id và secret)', 'ZALO_APP_ID và ZALO_APP_SECRET đã đặt')
-      : fail(G_ZALO, 'env.zalo.login', 'Đăng nhập Zalo (app id và secret)', `thiếu ${loginMissing.join(', ')}`, 'Lấy ở developers.zalo.me, mục Ứng dụng. Thiếu thì khách không đăng nhập được bằng Zalo.'),
+      ? pass(G_ZALO, 'env.zalo.login', loginTitle, 'ZALO_APP_ID và ZALO_APP_SECRET đã đặt')
+      : fail(
+          G_ZALO,
+          'env.zalo.login',
+          loginTitle,
+          `thiếu ${loginMissing.join(', ')}`,
+          'Lấy ở developers.zalo.me, mục Ứng dụng. Đăng nhập trong Mini App chỉ dùng token của khách nên vẫn chạy khi thiếu; secret cần cho lấy số điện thoại (/me/info), vị trí, đăng nhập Zalo trên web (đổi mã OAuth) và làm mới token OA.',
+        ),
   );
+  const appId = envValue(env, 'ZALO_APP_ID');
+  const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
+  const idsTitle = 'ZALO_APP_ID khác ID Mini App';
+  if (!miniAppId) {
+    out.push(warn(G_ZALO, 'env.zalo.ids', idsTitle, 'chưa đặt ZALO_MINIAPP_ID nên không so được', 'Đặt ZALO_MINIAPP_ID là ID Mini App (apps/miniapp/app-config.json) để build web dựng được link zalo.me/s/<id> và để kiểm tra này chạy.'));
+  } else if (appId && appId === miniAppId) {
+    out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, 'ZALO_APP_ID trùng ZALO_MINIAPP_ID', 'ZALO_APP_ID phải là App ID của ứng dụng trên developers.zalo.me (đăng nhập web, làm mới token OA). ID Mini App chỉ dùng cho link zalo.me/s/<id>; để chung thì Zalo trả "Invalid appId".'));
+  } else {
+    out.push(pass(G_ZALO, 'env.zalo.ids', idsTitle, 'ZALO_APP_ID và ZALO_MINIAPP_ID là hai giá trị khác nhau'));
+  }
   const oa = ['ZALO_OA_ACCESS_TOKEN', 'ZALO_OA_REFRESH_TOKEN', 'ZALO_OA_ID'].filter((k) => envValue(env, k));
   const zns = 'Zalo OA cho tin ZNS';
   if (oa.length === 0) {

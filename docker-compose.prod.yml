@@ -88,14 +88,16 @@ services:
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
         NEXT_PUBLIC_SITE_URL: https://app.${WEB_DOMAIN}
         NEXT_PUBLIC_TENANT_ROOT_DOMAIN: ${WEB_DOMAIN}
+        # ZALO_APP_ID = App ID của Zalo App trên developers.zalo.me (đăng nhập web OAuth). ZALO_MINIAPP_ID = ID của Mini App, chỉ dùng cho link zalo.me/s/<id>. Hai giá trị khác nhau.
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}
+        NEXT_PUBLIC_ZALO_MINIAPP_ID: ${ZALO_MINIAPP_ID:-}
         NEXT_PUBLIC_ZALO_OA_ID: ${ZALO_OA_ID:-}
         NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
         NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET: ${CLOUDINARY_UPLOAD_PRESET:-}
         # Rỗng = web không nạp SDK lỗi. DSN phía trình duyệt nằm trong bundle nên là DSN công khai theo thiết kế của Sentry.
         NEXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
-        # Để trống ở production: build web dừng nếu ZALO_APP_ID rỗng. Chỉ đặt 1 cho bản thử không dùng Zalo.
+        # Để trống ở production: build web dừng nếu ZALO_APP_ID hoặc ZALO_MINIAPP_ID rỗng, hoặc hai giá trị trùng nhau. Chỉ đặt 1 cho bản thử không dùng Zalo.
         ALLOW_EMPTY_ZALO_APP_ID: ${ALLOW_EMPTY_ZALO_APP_ID:-}
     restart: unless-stopped
     logging: *default-logging
