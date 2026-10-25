@@ -204,9 +204,7 @@ export interface PublicConfig {
   subscribeDiscountPct: number;
   /** Hệ số khi CTV nhận hoa hồng về Ví Tubu (×1.5). */
   affiliateWalletMultiplier: number;
-  /** Mốc tối thiểu rút hoa hồng về ngân hàng. */
-  affiliateMinWithdrawBank: number;
-  /** Thuế TNCN khấu trừ khi rút hoa hồng: `pct` (phân số) áp cho tổng hoa hồng rút trong tháng VN khi tổng từ `threshold`; thiếu khi API cũ. */
+  /** Thuế TNCN khấu trừ khi chuyển hoa hồng vào Ví: `pct` (phân số) áp cho tổng hoa hồng chuyển trong tháng VN khi tổng từ `threshold`; thiếu khi API cũ. */
   affiliatePitWithhold?: { pct: number; threshold: number };
   /** Số ngày giữ trước khi hoàn tiền sàn ngoài về Ví. */
   cashbackHoldDays: number;

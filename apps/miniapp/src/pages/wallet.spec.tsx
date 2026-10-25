@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   getReferral: vi.fn(),
   getLoyalty: vi.fn(),
   getWalletTransactions: vi.fn(),
-  withdraw: vi.fn(),
   shareLink: vi.fn(),
   copyText: vi.fn(),
   features: { cashback: false },
@@ -34,7 +33,6 @@ vi.mock('../services/account-api', () => ({
   getReferral: mocks.getReferral,
   getLoyalty: mocks.getLoyalty,
   getWalletTransactions: mocks.getWalletTransactions,
-  withdraw: mocks.withdraw,
 }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
@@ -63,8 +61,6 @@ const WALLET = {
   cashbackPending: 45_000,
   commissionApproved: 520_000,
   commissionPending: 30_000,
-  withdrawMin: 100_000,
-  withdrawFee: 3_000,
 };
 const REFERRAL = {
   referralCode: 'TUBU1234',
@@ -155,7 +151,7 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('Bạc')).toBeInTheDocument();
     expect(screen.getByText('Hoa hồng chờ duyệt')).toBeInTheDocument();
     expect(screen.getByText('30.000đ')).toBeInTheDocument();
-    expect(screen.getByText('Hoa hồng có thể rút')).toBeInTheDocument();
+    expect(screen.getByText('Hoa hồng có thể chuyển vào Ví')).toBeInTheDocument();
     expect(screen.getByText('520.000đ')).toBeInTheDocument();
     expect(screen.getByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
     expect(screen.getByText('45.000đ')).toBeInTheDocument();
@@ -235,21 +231,21 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
 });
 
 describe('WalletPage — điều hướng', () => {
-  it('thẻ Điểm Xanh mở /loyalty; "Nhận về Ví" mở /affiliate khi hoa hồng đã duyệt > 0', async () => {
+  it('thẻ Điểm Xanh mở /loyalty; "Chuyển vào Ví" mở /affiliate khi hoa hồng đã duyệt > 0', async () => {
     stubLoaded();
     renderPage();
     fireEvent.click(await screen.findByText('Điểm Xanh (đổi giảm giá)'));
     expect(mocks.navigate).toHaveBeenCalledWith('/loyalty');
-    fireEvent.click(screen.getByText('Hoa hồng có thể rút'));
+    fireEvent.click(screen.getByText('Hoa hồng có thể chuyển vào Ví'));
     expect(mocks.navigate).toHaveBeenCalledWith('/affiliate');
   });
 
-  it('hoa hồng đã duyệt = 0 → thẻ không bấm được, không có gợi ý "Nhận về Ví"', async () => {
+  it('hoa hồng đã duyệt = 0 → thẻ không bấm được, không có gợi ý "Chuyển vào Ví"', async () => {
     stubLoaded({ ...WALLET, commissionApproved: 0 });
     renderPage();
-    await screen.findByText('Hoa hồng có thể rút');
-    expect(screen.queryByText(/Nhận về Ví/)).toBeNull();
-    fireEvent.click(screen.getByText('Hoa hồng có thể rút'));
+    await screen.findByText('Hoa hồng có thể chuyển vào Ví');
+    expect(screen.queryByText(/Chuyển vào Ví/)).toBeNull();
+    fireEvent.click(screen.getByText('Hoa hồng có thể chuyển vào Ví'));
     expect(mocks.navigate).not.toHaveBeenCalledWith('/affiliate');
   });
 
@@ -275,288 +271,6 @@ describe('WalletPage — điều hướng', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
     expect(mocks.copyText).not.toHaveBeenCalled();
-  });
-});
-
-describe('WalletPage — rút tiền', () => {
-  it('nút Rút khoá tới khi đủ số tiền + thông tin ngân hàng; gửi đúng số tiền, bank và Idempotency-Key', async () => {
-    stubLoaded();
-    mocks.withdraw.mockResolvedValue({ ok: true, payoutId: 'p1', status: 'PENDING', withdrawn: 200_000, fee: 3_000, net: 197_000 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    expect(await screen.findByText('Rút tiền về ngân hàng')).toBeInTheDocument();
-
-    const submit = screen.getByRole('button', { name: /^Rút\s*$/ });
-    expect(submit).toBeDisabled();
-    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '200000' } });
-    fireEvent.change(inputOf('Tên ngân hàng'), { target: { value: 'Techcombank' } });
-    fireEvent.change(inputOf('Số tài khoản'), { target: { value: '19031234567' } });
-    expect(screen.getByRole('button', { name: /^Rút 200\.000đ$/ })).toBeDisabled();
-    fireEvent.change(inputOf('Chủ tài khoản'), { target: { value: 'LA HOANG LONG' } });
-    expect(screen.getByText(/Thực nhận:/).textContent).toContain('197.000đ');
-
-    const go = screen.getByRole('button', { name: 'Rút 200.000đ' });
-    expect(go).toBeEnabled();
-    fireEvent.click(go);
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    const [amount, bank, key] = mocks.withdraw.mock.calls[0]!;
-    expect(amount).toBe(200_000);
-    expect(bank).toEqual({ bankName: 'Techcombank', accountNumber: '19031234567', accountName: 'LA HOANG LONG' });
-    expect(key).toMatch(/^key-/);
-    await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({
-        text: 'Đã gửi yêu cầu rút. Thực nhận 197.000đ trong 1-3 ngày làm việc.',
-        type: 'success',
-      }),
-    );
-  });
-
-  it('số dư dưới mức tối thiểu → báo chưa đủ mốc và khoá cả bốn ô nhập', async () => {
-    stubLoaded({ ...WALLET, walletBalance: 50_000 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    expect(await screen.findByText(/chưa đủ mốc tối thiểu 100\.000đ/)).toBeInTheDocument();
-    for (const label of ['Số tiền rút', 'Tên ngân hàng', 'Số tài khoản', 'Chủ tài khoản']) {
-      expect(inputOf(label)).toBeDisabled();
-    }
-  });
-
-  it('mỗi lần mở sheet là một lệnh rút mới → Idempotency-Key khác nhau', async () => {
-    stubLoaded();
-    mocks.withdraw.mockRejectedValue(new Error('lỗi'));
-    renderPage();
-    const fill = () => {
-      fireEvent.change(inputOf('Số tiền rút'), { target: { value: '150000' } });
-      fireEvent.change(inputOf('Tên ngân hàng'), { target: { value: 'VCB' } });
-      fireEvent.change(inputOf('Số tài khoản'), { target: { value: '123456' } });
-      fireEvent.change(inputOf('Chủ tài khoản'), { target: { value: 'A' } });
-    };
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    await screen.findByText('Rút tiền về ngân hàng');
-    fill();
-    fireEvent.click(screen.getByRole('button', { name: 'Rút 150.000đ' }));
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
-    fireEvent.click(screen.getByRole('button', { name: 'Rút 150.000đ' }));
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-});
-
-describe('WalletPage — rút tiền gặp lỗi chưa rõ kết quả (D14-03)', () => {
-  const failure = (status: number | undefined, code?: string) =>
-    new HttpError(
-      'x',
-      code,
-      status ? { status, data: { message: 'Số dư ví không đủ.' } } : undefined,
-    );
-
-  async function openAndFill() {
-    stubLoaded();
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    await screen.findByText('Rút tiền về ngân hàng');
-    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
-    fireEvent.change(inputOf('Tên ngân hàng'), { target: { value: 'VCB' } });
-    fireEvent.change(inputOf('Số tài khoản'), { target: { value: '123456' } });
-    fireEvent.change(inputOf('Chủ tài khoản'), { target: { value: 'A' } });
-  }
-  const press = () => fireEvent.click(screen.getByRole('button', { name: 'Rút 400.000đ' }));
-
-  it.each([
-    ['quá thời gian (ECONNABORTED)', undefined, 'ECONNABORTED'],
-    ['mất mạng giữa chừng', undefined, 'ERR_NETWORK'],
-    ['máy chủ 502', 502, 'ERR_BAD_RESPONSE'],
-  ])('%s: bấm lại gửi đúng Idempotency-Key cũ, tải lại số dư và nhắc kiểm tra lịch sử', async (_name, status, code) => {
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(failure(status, code)).mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
-    await openAndFill();
-    const walletCalls = mocks.getWallet.mock.calls.length;
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: expect.stringContaining('lịch sử') })));
-    await waitFor(() => expect(mocks.getWallet.mock.calls.length).toBeGreaterThan(walletCalls));
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it('chưa rõ kết quả rồi đóng sheet và mở lại: vẫn dùng key của lệnh chưa rõ, không rút lần hai', async () => {
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(failure(undefined, 'ECONNABORTED')).mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
-    await openAndFill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
-    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    await screen.findByText('Rút tiền về ngân hàng');
-    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it.each([[401], [403], [408], [429]])('chưa rõ kết quả rồi lần sau gặp %i (request này không được xử lý): vẫn gửi key của lệnh chưa rõ', async (status) => {
-    mocks.withdraw.mockReset();
-    mocks.withdraw
-      .mockRejectedValueOnce(failure(undefined, 'ECONNABORTED'))
-      .mockRejectedValueOnce(failure(status, 'ERR_BAD_REQUEST'))
-      .mockResolvedValue({ ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 });
-    await openAndFill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(2));
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(3));
-    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-    expect(mocks.withdraw.mock.calls[2]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it('máy chủ từ chối rõ ràng (400): lần bấm sau dùng key mới', async () => {
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValue(failure(400, 'ERR_BAD_REQUEST'));
-    await openAndFill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Số dư ví không đủ.', type: 'error' }));
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-});
-
-describe('WalletPage — cờ "lệnh rút chưa rõ kết quả" tự gỡ (P3 miniapp-logic)', () => {
-  const timeout = () => new HttpError('x', 'ECONNABORTED');
-  const OK = { ok: true, payoutId: 'p1', status: 'REQUESTED', withdrawn: 400_000, fee: 3_000, net: 397_000 };
-  const RECORDED_TX = { id: 't0', delta: -400_000, balanceAfter: 850_000, type: 'WITHDRAW', reason: 'Rút về ngân hàng (phí 3000đ)', orderId: null, createdAt: '2026-10-06T07:04:00.000Z' };
-
-  /** Sao kê trả `rows` thêm vào đầu trang 1 khi `history.extra` đã bật. */
-  function stubHistory(history: { extra: object[] }) {
-    mocks.getWallet.mockResolvedValue(WALLET);
-    mocks.getReferral.mockResolvedValue(REFERRAL);
-    mocks.getLoyalty.mockResolvedValue(LOYALTY);
-    mocks.getWalletTransactions.mockImplementation((page: number) =>
-      Promise.resolve(page === 1 ? { ...TXN_PAGE_1, data: [...history.extra, ...TXN_PAGE_1.data] } : TXN_PAGE_2),
-    );
-  }
-  async function fill() {
-    fireEvent.change(inputOf('Số tiền rút'), { target: { value: '400000' } });
-    fireEvent.change(inputOf('Tên ngân hàng'), { target: { value: 'VCB' } });
-    fireEvent.change(inputOf('Số tài khoản'), { target: { value: '123456' } });
-    fireEvent.change(inputOf('Chủ tài khoản'), { target: { value: 'A' } });
-  }
-  const press = () => fireEvent.click(screen.getByRole('button', { name: 'Rút 400.000đ' }));
-  async function openSheet() {
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    await screen.findByText('Rút tiền về ngân hàng');
-  }
-  async function closeSheet() {
-    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
-    await waitFor(() => expect(screen.queryByText('Rút tiền về ngân hàng')).toBeNull());
-  }
-
-  it('sao kê tải lại đã thấy đúng lệnh vừa hết thời gian chờ: lần rút sau đúng số tiền ấy là lệnh mới, key mới', async () => {
-    const history = { extra: [] as object[] };
-    stubHistory(history);
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
-    renderPage();
-    await openSheet();
-    await fill();
-    history.extra = [RECORDED_TX];
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('−400.000đ')).toBeInTheDocument();
-    await closeSheet();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it('sao kê tải lại vẫn chưa có lệnh: giữ key cũ để bấm lại không rút hai lần', async () => {
-    stubHistory({ extra: [] });
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
-    renderPage();
-    await openSheet();
-    await fill();
-    const historyCalls = mocks.getWalletTransactions.mock.calls.length;
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.getWalletTransactions.mock.calls.length).toBeGreaterThan(historyCalls));
-    await closeSheet();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it('lệnh rút cùng số tiền đã nằm trong sao kê từ trước: không coi là lệnh vừa chưa rõ, vẫn giữ key cũ', async () => {
-    stubHistory({ extra: [{ ...RECORDED_TX, id: 'old', createdAt: '2026-09-01T07:04:00.000Z' }] });
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
-    renderPage();
-    await openSheet();
-    await fill();
-    const historyCalls = mocks.getWalletTransactions.mock.calls.length;
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.getWalletTransactions.mock.calls.length).toBeGreaterThan(historyCalls));
-    await closeSheet();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it('sao kê chưa tải được lúc rút hết thời gian chờ: lệnh rút cũ cùng số tiền không được coi là lệnh vừa gửi, key cũ vẫn giữ', async () => {
-    mocks.getWallet.mockResolvedValue(WALLET);
-    mocks.getReferral.mockResolvedValue(REFERRAL);
-    mocks.getLoyalty.mockResolvedValue(LOYALTY);
-    const OLD_TX = { ...RECORDED_TX, id: 'old', createdAt: '2026-09-01T07:04:00.000Z' };
-    mocks.getWalletTransactions
-      .mockRejectedValueOnce(new Error('history down'))
-      .mockImplementation((page: number) => Promise.resolve(page === 1 ? { ...TXN_PAGE_1, data: [OLD_TX, ...TXN_PAGE_1.data] } : TXN_PAGE_2));
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
-    renderPage();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText('−400.000đ')).toBeInTheDocument();
-    await closeSheet();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).toBe(mocks.withdraw.mock.calls[0]![2]);
-  });
-
-  it('khách rời màn Ví rồi vào lại: lệnh rút mới không mang key của lệnh chưa rõ kết quả trước đó', async () => {
-    stubHistory({ extra: [] });
-    mocks.withdraw.mockReset();
-    mocks.withdraw.mockRejectedValueOnce(timeout()).mockResolvedValue(OK);
-    const first = renderPage();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(1));
-    first.unmount();
-    renderPage();
-    await openSheet();
-    await fill();
-    press();
-    await waitFor(() => expect(mocks.withdraw).toHaveBeenCalledTimes(2));
-    expect(mocks.withdraw.mock.calls[1]![2]).not.toBe(mocks.withdraw.mock.calls[0]![2]);
   });
 });
 
@@ -601,12 +315,20 @@ describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường 
     expect(screen.queryByText(/Mời thêm/)).toBeNull();
   });
 
-  it('mẹo dưới ví nói đúng việc Ví làm được: trả cả đơn hàng, miễn phí, thay vì rút có phí', async () => {
+  it('mẹo dưới ví nói đúng việc Ví làm được: trả đơn, không nhắc rút ra ngân hàng', async () => {
     stubLoaded();
     renderPage();
     const tip = await screen.findByText(/Mẹo:/);
-    expect(tip.textContent).toMatch(/trả đơn hàng/);
-    expect(tip.textContent).toMatch(/3\.000đ/);
+    expect(tip.textContent).toMatch(/trả đơn sau/);
+    expect(tip.textContent).not.toMatch(/rút|ngân hàng|3\.000đ/i);
+  });
+
+  it('không còn nút hay sheet rút về ngân hàng (chính sách Zalo 4.5)', async () => {
+    stubLoaded();
+    renderPage();
+    await screen.findByText('Ví Tubu (số dư khả dụng)');
+    expect(screen.queryByRole('button', { name: /Rút/ })).toBeNull();
+    expect(screen.queryByText(/ngân hàng/i)).toBeNull();
   });
 
   it('lời mời bạn: thưởng là Điểm Xanh, chia sẻ không hứa "cả hai nhận xu"', async () => {
@@ -656,20 +378,10 @@ describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường 
 });
 
 describe('WalletPage — vùng chạm >= 44px, nhãn form và biểu tượng (C-076, C-113)', () => {
-  it('nhãn của các ô nhập gắn với control (trình đọc màn hình đọc được)', async () => {
+  it('nút Chia sẻ cao tối thiểu 44px', async () => {
     stubLoaded();
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    await screen.findByText('Rút tiền về ngân hàng');
-    for (const label of ['Số tiền rút', 'Tên ngân hàng', 'Số tài khoản', 'Chủ tài khoản']) {
-      expect(screen.getByLabelText(label)).toBeInstanceOf(HTMLInputElement);
-    }
-  });
-
-  it('nút Rút và nút Chia sẻ cao tối thiểu 44px', async () => {
-    stubLoaded();
-    renderPage();
-    for (const name of ['Rút ngân hàng', 'Chia sẻ']) {
+    for (const name of ['Chia sẻ']) {
       const btn = await screen.findByRole('button', { name });
       expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
     }
@@ -685,12 +397,6 @@ describe('WalletPage — vùng chạm >= 44px, nhãn form và biểu tượng (C
     expect(within(row!).getByText('Bạc')).toBeInTheDocument();
   });
 
-  it('cảnh báo trong sheet rút không dùng emoji làm biểu tượng (⚠️ thay bằng Icon)', async () => {
-    stubLoaded({ ...WALLET, walletBalance: 0 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Rút ngân hàng' }));
-    expect((await screen.findByText(/chưa đủ mốc tối thiểu/)).textContent).not.toMatch(/⚠/);
-  });
 });
 
 describe('WalletPage — ẩn lối vào Hoàn tiền sàn ngoài (C-086, Q-15)', () => {
@@ -749,9 +455,9 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
   it('không phải CTV và chưa có hoa hồng: ẩn hai thẻ hoa hồng, mô tả nói về thanh toán đơn', async () => {
     stubLoaded(PLAIN_WALLET, REFUND_TXNS);
     renderPage();
-    expect(await screen.findByText('Số dư dùng để thanh toán đơn')).toBeInTheDocument();
+    expect(await screen.findByText('Dùng để trả tiền hàng ở bước thanh toán')).toBeInTheDocument();
     expect(screen.queryByText('Hoa hồng chờ duyệt')).toBeNull();
-    expect(screen.queryByText('Hoa hồng có thể rút')).toBeNull();
+    expect(screen.queryByText('Hoa hồng có thể chuyển vào Ví')).toBeNull();
     expect(screen.queryByText(/Tiền thật từ hoa hồng/)).toBeNull();
   });
 
@@ -761,7 +467,7 @@ describe('WalletPage — khách thường (R6-BUYER-13)', () => {
       stubLoaded(PLAIN_WALLET, REFUND_TXNS);
       const view = renderPage();
       expect(await screen.findByText('Hoa hồng chờ duyệt')).toBeInTheDocument();
-      expect(screen.getByText('Hoa hồng có thể rút')).toBeInTheDocument();
+      expect(screen.getByText('Hoa hồng có thể chuyển vào Ví')).toBeInTheDocument();
       view.unmount();
     }
   });

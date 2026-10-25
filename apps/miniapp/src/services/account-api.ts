@@ -90,8 +90,6 @@ export interface WalletSummary {
   cashbackPending: number;
   commissionApproved: number;
   commissionPending: number;
-  withdrawMin: number;
-  withdrawFee: number;
 }
 
 /** Một dòng sao kê Ví Tubu (sổ cái wallet_transactions). delta có dấu: + vào ví, − ra khỏi ví. */
@@ -125,12 +123,6 @@ export interface ReferralOverview {
   /** Optional: API cũ chưa trả. */
   windowDays?: number;
   minOrderAmount?: number;
-}
-
-export interface BankInfo {
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
 }
 
 // Me / onboarding
@@ -301,14 +293,6 @@ export function tierProgressPercent(ov: LoyaltyOverview): number {
 export const getWallet = () => api.get<WalletSummary>('/me/wallet').then((r) => r.data);
 export const getWalletTransactions = (page: number, limit = 20) =>
   api.get<WalletTxnPage>('/me/wallet/transactions', { params: { page, limit } }).then((r) => r.data);
-export const withdraw = (amount: number, bankInfo: BankInfo, idempotencyKey: string) =>
-  api
-    .post<{ ok: boolean; payoutId: string; status: string; withdrawn: number; fee: number; net: number }>(
-      '/wallet/withdraw',
-      { amount, bankInfo },
-      { headers: { 'Idempotency-Key': idempotencyKey } },
-    )
-    .then((r) => r.data);
 
 // Notifications
 export interface NotificationDTO {

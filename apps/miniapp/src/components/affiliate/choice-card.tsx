@@ -10,7 +10,7 @@ export interface ChoiceCardProps {
   describedBy?: string;
 }
 
-/** Thẻ chọn một trong vài phương án (rút tiền về đâu, thu tiền kiểu nào): hai dòng chữ, là nút thật
+/** Thẻ chọn một trong vài phương án (thu tiền kiểu nào): hai dòng chữ, là nút thật
  * để dùng được bằng bàn phím và trình đọc màn hình (`aria-pressed`), vùng chạm cao >= 44px. */
 export function ChoiceCard({ active, title, sub, onPress, disabled = false, describedBy }: ChoiceCardProps) {
   return (

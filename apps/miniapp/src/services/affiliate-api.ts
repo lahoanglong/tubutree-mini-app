@@ -34,9 +34,9 @@ export interface AffiliateDashboard {
   monthCommission: number;
   pendingCommission: number;
   withdrawableCommission: number;
-  /** Thuế TNCN bị khấu trừ nếu rút hết số khả dụng ngay bây giờ (cộng dồn tháng VN); thiếu khi API cũ. */
+  /** Thuế TNCN bị khấu trừ nếu chuyển hết số khả dụng ngay bây giờ (cộng dồn tháng VN); thiếu khi API cũ. */
   withdrawTaxPreview?: number;
-  /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng chưa chuyển tiền; thiếu khi API cũ. */
+  /** Đã duyệt nhưng nằm trong lệnh rút ngân hàng cũ chưa chuyển tiền (chỉ còn dữ liệu trước khi bỏ rút); thiếu khi API cũ. */
   withdrawingCommission?: number;
   totalClicks: number;
   totalConversions: number;
@@ -99,7 +99,7 @@ export interface Commission {
   createdAt: string;
   orderCode?: string | null;
   orderStatus?: string | null;
-  /** APPROVED nhưng đã nằm trong một lệnh rút ngân hàng chưa chuyển tiền. */
+  /** APPROVED nhưng đã nằm trong một lệnh rút ngân hàng cũ chưa chuyển tiền. */
   withdrawing?: boolean;
 }
 
@@ -155,20 +155,14 @@ export interface PayoutResult {
 }
 export const getMyPayouts = () => api.get<AffiliatePayout[]>('/affiliate/payouts').then((r) => r.data);
 /**
- * Gửi lại cùng Idempotency-Key (chạm đúp, thử lại sau lỗi mạng) không tạo lệnh rút thứ hai. `taxId`: MST/CCCD khai lần đầu khi
- * lần rút bị khấu trừ thuế TNCN.
+ * Chuyển toàn bộ hoa hồng khả dụng vào Ví Tubu (rút về ngân hàng/ZaloPay đã bỏ). Gửi lại cùng Idempotency-Key (chạm đúp, thử lại
+ * sau lỗi mạng) không tạo lệnh thứ hai. `taxId`: MST/CCCD khai lần đầu khi lần chuyển bị khấu trừ thuế TNCN.
  */
-export const requestPayout = (
-  amount: number,
-  method: 'BANK' | 'WALLET_BALANCE' | 'ZALOPAY',
-  bankInfo: { bankName: string; accountNumber: string; accountName: string } | undefined,
-  idempotencyKey: string,
-  taxId?: string,
-) =>
+export const requestPayout = (amount: number, idempotencyKey: string, taxId?: string) =>
   api
     .post<PayoutResult>(
       '/affiliate/payouts',
-      { amount, method, bankInfo, ...(taxId ? { taxId } : {}) },
+      { amount, method: 'WALLET_BALANCE', ...(taxId ? { taxId } : {}) },
       { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     .then((r) => r.data);

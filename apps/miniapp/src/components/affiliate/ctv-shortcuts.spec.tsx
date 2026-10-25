@@ -8,7 +8,7 @@ function items(over: Partial<Record<string, Partial<CtvShortcut>>> = {}): CtvSho
     { key: 'share', label: 'Chia sẻ', ariaLabel: 'Chia sẻ link và mã giới thiệu', icon: Link2, onPress: vi.fn(), ...over.share },
     { key: 'store', label: 'Gian hàng', ariaLabel: 'Gian hàng của tôi', icon: Store, onPress: vi.fn(), ...over.store },
     { key: 'order', label: 'Lên đơn hộ', ariaLabel: 'Lên đơn hộ khách', icon: Receipt, onPress: vi.fn(), ...over.order },
-    { key: 'withdraw', label: 'Rút tiền', ariaLabel: 'Rút tiền hoa hồng', icon: Wallet, onPress: vi.fn(), ...over.withdraw },
+    { key: 'transfer', label: 'Chuyển vào Ví', ariaLabel: 'Chuyển vào Ví Tubu', icon: Wallet, onPress: vi.fn(), ...over.transfer },
   ];
 }
 
@@ -20,9 +20,9 @@ describe('CtvShortcuts — hàng lối tắt dưới thẻ hoa hồng', () => {
       'Chia sẻ link và mã giới thiệu',
       'Gian hàng của tôi',
       'Lên đơn hộ khách',
-      'Rút tiền hoa hồng',
+      'Chuyển vào Ví Tubu',
     ]);
-    expect(buttons.map((b) => b.textContent)).toEqual(['Chia sẻ', 'Gian hàng', 'Lên đơn hộ', 'Rút tiền']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['Chia sẻ', 'Gian hàng', 'Lên đơn hộ', 'Chuyển vào Ví']);
     for (const b of buttons) expect(b.getAttribute('aria-label')).toContain(b.textContent);
   });
 
@@ -43,9 +43,9 @@ describe('CtvShortcuts — hàng lối tắt dưới thẻ hoa hồng', () => {
   });
 
   it('nút bị khoá: disabled thật, chạm không gọi onPress', () => {
-    const list = items({ withdraw: { disabled: true } });
+    const list = items({ transfer: { disabled: true } });
     render(<CtvShortcuts items={list} />);
-    const btn = screen.getByRole('button', { name: 'Rút tiền hoa hồng' });
+    const btn = screen.getByRole('button', { name: 'Chuyển vào Ví Tubu' });
     expect(btn).toBeDisabled();
     fireEvent.click(btn);
     expect(list[3]!.onPress).not.toHaveBeenCalled();
