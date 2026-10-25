@@ -12,12 +12,12 @@ export interface WheelSlot {
 
 export const WHEEL_SLOTS: readonly WheelSlot[] = [
   { kind: 'SEEDS', emoji: '💧', label: 'Giọt nước' },
-  { kind: 'COUPON', emoji: '🎁', label: 'Mã giảm giá' },
-  { kind: 'POINTS', emoji: '⭐', label: 'Điểm thưởng' },
+  { kind: 'COUPON', emoji: '🎁', label: 'Mã giảm' },
+  { kind: 'POINTS', emoji: '⭐', label: 'Điểm' },
   { kind: 'NONE', emoji: '🍀', label: 'Chúc may mắn' },
   { kind: 'SEEDS', emoji: '💧', label: 'Giọt nước' },
-  { kind: 'COUPON', emoji: '🎁', label: 'Mã giảm giá' },
-  { kind: 'POINTS', emoji: '⭐', label: 'Điểm thưởng' },
+  { kind: 'COUPON', emoji: '🎁', label: 'Mã giảm' },
+  { kind: 'POINTS', emoji: '⭐', label: 'Điểm' },
   { kind: 'NONE', emoji: '🍀', label: 'Chúc may mắn' },
 ];
 

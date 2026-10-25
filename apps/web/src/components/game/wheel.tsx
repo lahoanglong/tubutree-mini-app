@@ -77,7 +77,7 @@ export function WheelOfFortune({
               key={i}
               className="absolute left-1/2 top-1/2 flex w-[72px] flex-col items-center text-center leading-tight"
               style={{
-                transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -86px) rotate(-${i * SEG + SEG / 2}deg)`,
+                transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -80px) rotate(-${i * SEG + SEG / 2}deg)`,
               }}
             >
               <span className="text-xl">{s.emoji}</span>

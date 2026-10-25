@@ -107,7 +107,7 @@ export function WheelOfFortune({
                 alignItems: 'center',
                 textAlign: 'center',
                 lineHeight: 1.15,
-                transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -86px) rotate(-${i * SEG + SEG / 2}deg)`,
+                transform: `translate(-50%, -50%) rotate(${i * SEG + SEG / 2}deg) translate(0, -80px) rotate(-${i * SEG + SEG / 2}deg)`,
               }}
             >
               <span style={{ fontSize: 20 }}>{s.emoji}</span>
