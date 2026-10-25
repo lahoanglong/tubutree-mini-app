@@ -498,10 +498,6 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   api.fallback('GET', '/cart', emptyCart);
   const offer: NewCustomerOffer = { isNewCustomer: false, welcomeVoucher: null };
   api.fallback('GET', '/me/new-customer-offer', offer);
-  // Trang chủ hỏi yêu cầu đổi rác chỉ khi chương trình tạm dừng (để giữ lối vào cho yêu cầu đang mở); thẻ Mua lại gọn đọc chi tiết
-  // sản phẩm để biết có mời "Định kỳ" không (hàng của đối tác chỉ bán lẻ). Mặc định: không yêu cầu mở, hàng Tubu thường.
-  api.fallback('GET', '/waste/me', wasteMe());
-  api.fallback('GET', '/products/:slug', { partnerOwned: false, fulfillment: 'TUBU', fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } });
   return user;
 }
 

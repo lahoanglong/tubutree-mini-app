@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
+import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
 import { mockHomeEngagement } from './support/discovery-mocks';
 
 /**
@@ -134,7 +134,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
 
 const PURCHASED = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
 };
 
 function mockHome(api: MockApi) {
@@ -199,8 +199,6 @@ test.describe('Web khách: Trang chủ /', () => {
     mockHome(api);
     mockCustomer(api);
     api.get('/me/wishlist/ids', []);
-    api.get('/waste/me', { programmeEnabled: false, eligibility: 'OK', blocked: false, shipLockedAt: null, openRequests: [] });
-    api.get('/products/nuoc-rua-chen', { slug: 'nuoc-rua-chen', partnerOwned: false, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } });
     api.post('/cart/items', { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 1 });
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
 
@@ -563,8 +561,6 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     mockHome(api);
     mockCustomer(api);
     api.get('/me/wishlist/ids', []);
-    api.get('/waste/me', { programmeEnabled: false, eligibility: 'OK', blocked: false, shipLockedAt: null, openRequests: [] });
-    api.get('/products/nuoc-rua-chen', { slug: 'nuoc-rua-chen', partnerOwned: false, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } });
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
   };
 
@@ -611,5 +607,65 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       );
       expect(hit).toEqual({ above3: true, below3: true, inside: true });
     }
+  });
+
+  test('khách cũ đã nhớ "returning", /auth/refresh chậm 3s: Danh mục không xê dịch từ lúc đầu tới sau đăng nhập (≤ 2px)', async ({ page, api }) => {
+    await login(page, api);
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'u1', kind: 'returning' }));
+        localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u1', rows: 1 }));
+      } catch {
+        // không có localStorage: spec vẫn chạy
+      }
+    });
+    api.get('/orders/active-count', { count: 1 });
+    api.get('/orders', ({ call }) => ({
+      data: call.query.get('status') === 'SHIPPING' ? [makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' })] : [],
+      meta: { page: 1, limit: 1, total: call.query.get('status') === 'SHIPPING' ? 1 : 0 },
+    }));
+    const user = {
+      id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
+      pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
+    };
+    api.post('/auth/refresh', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return { accessToken: 'e2e-token', user };
+    });
+    await page.goto('/');
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(categories).toBeVisible();
+    await expect(page.getByTestId('member-card-loading')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toHaveCount(0);
+    const before = (await categories.boundingBox())!.y;
+    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    const after = (await categories.boundingBox())!.y;
+    expect(Math.abs(after - before), `Danh mục ${before}px → ${after}px`).toBeLessThanOrEqual(2);
+  });
+
+  test('thẻ thành viên: tên rất dài cắt "…" trên một dòng, thẻ cao bằng thẻ tên ngắn (≤ 2px), không tràn ngang', async ({ page, api }) => {
+    await login(page, api);
+    api.get('/me/loyalty', {
+      tier: { id: 't1', name: 'Hạt Giống', multiplier: 1, perks: null }, pointsBalance: 1800, pointsConvertedBalance: 0, tierPoints: 1800,
+      tiers: [{ id: 't1', name: 'Hạt Giống', minPoints: 0, multiplier: 1 }, { id: 't2', name: 'Mầm Xanh', minPoints: 3000, multiplier: 1.2 }],
+      nextTier: { id: 't2', name: 'Mầm Xanh', minPoints: 3000, pointsToGo: 1200 },
+    });
+    const heights: number[] = [];
+    for (const name of ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo']) {
+      api.post('/auth/refresh', {
+        accessToken: 'e2e-token',
+        user: { id: 'u1', fullName: name, referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER', pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0 },
+      });
+      await page.goto('/');
+      const card = page.getByRole('region', { name: 'Thẻ thành viên' });
+      await expect(card).toContainText('1.800', { timeout: 15_000 });
+      await expect(card).toContainText('Còn 1.200');
+      await expect(card).toContainText(name);
+      heights.push((await card.boundingBox())!.height);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    }
+    expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
   });
 });

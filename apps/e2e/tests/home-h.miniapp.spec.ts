@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect } from './support/mock-api';
+import { test, expect, E2E_TOKENS, makeUser } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { BINH_SUA, mockDiscovery, mockHomeEngagement, toCard } from './support/discovery-mocks';
 
@@ -100,6 +100,63 @@ test.describe('Trang chủ — không nhảy bố cục', () => {
     await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
     const cardH = (await card.boundingBox())!.height;
     expect(Math.abs(skelH - cardH), `khung chờ ${skelH}px vs thẻ ${cardH}px`).toBeLessThanOrEqual(4);
+  });
+});
+
+test.describe('Trang chủ — thẻ thành viên tên dài', () => {
+  test('tên rất dài cắt "…" trên một dòng: thẻ cao bằng thẻ tên ngắn (≤ 2px) và không tràn ngang', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockDiscovery(api, { returning: true });
+    api.get('/me/loyalty', {
+      tier: { id: 't1', name: 'Hạt Giống', multiplier: 1, perks: null }, pointsBalance: 1800, pointsConvertedBalance: 0, tierPoints: 1800,
+      tiers: [{ id: 't1', name: 'Hạt Giống', minPoints: 0, multiplier: 1 }, { id: 't2', name: 'Mầm Xanh', minPoints: 3000, multiplier: 1.2 }],
+      nextTier: { id: 't2', name: 'Mầm Xanh', minPoints: 3000, pointsToGo: 1200 },
+    });
+    const heights: number[] = [];
+    for (const name of ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo']) {
+      api.post('/auth/refresh', { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: name }) });
+      api.post('/auth/guest', { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: name }) });
+      api.post('/auth/zalo-mini-app', { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: name }) });
+      api.get('/me', { id: 'user-4b', fullName: name, email: null, avatarUrl: null, dob: null, onboarded: true, segments: [] });
+      await page.goto('/');
+      const card = page.getByRole('region', { name: 'Thẻ thành viên' });
+      await expect(card).toContainText('1.800', { timeout: 15_000 });
+      await expect(card).toContainText('Còn 1.200');
+      await expect(card).toContainText(name);
+      heights.push((await card.boundingBox())!.height);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    }
+    expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
+  });
+});
+
+test.describe('Trang chủ — khôi phục phiên chậm', () => {
+  test('khách cũ đã nhớ "returning", /auth/* chậm 3s: Danh mục không xê dịch từ lúc đầu tới sau đăng nhập (≤ 2px)', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockDiscovery(api, { returning: true, shipping: true });
+    const login = { ...E2E_TOKENS, user: makeUser({ id: 'user-4b', fullName: 'Khách Khám Phá' }) };
+    for (const path of ['/auth/guest', '/auth/zalo-mini-app', '/auth/refresh']) {
+      api.post(path, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return login;
+      });
+    }
+    await page.addInitScript(() => {
+      localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'user-4b', kind: 'returning' }));
+      localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'user-4b', rows: 1 }));
+    });
+    await page.goto('/');
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(categories).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('member-card-loading')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toHaveCount(0);
+    const before = (await categories.boundingBox())!.y;
+    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    const after = (await categories.boundingBox())!.y;
+    expect(Math.abs(after - before), `Danh mục ${before}px → ${after}px`).toBeLessThanOrEqual(2);
   });
 });
 
