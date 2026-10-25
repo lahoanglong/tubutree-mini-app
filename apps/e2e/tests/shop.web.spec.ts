@@ -217,6 +217,27 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page).toHaveURL(/\/gio-hang/);
   });
 
+  test('khách vãng lai không cookie, JS bị giữ: HTML đầu đã có khối Quà khách mới; Danh mục không xê dịch từ HTML đầu tới sau hydrate (≤ 2px)', async ({ page, api }) => {
+    mockHome(api);
+    let openJs!: () => void;
+    const jsHeld = new Promise<void>((resolve) => { openJs = resolve; });
+    await page.route(/\/_next\/static\/.*\.js/, async (route) => {
+      await jsHeld;
+      await route.continue();
+    });
+    await page.goto('/', { waitUntil: 'commit' });
+    await expect(page.getByRole('region', { name: 'Quà khách mới' })).toBeVisible();
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(categories).toBeVisible();
+    const firstHtml = (await categories.boundingBox())!.y;
+    openJs();
+    await page.waitForLoadState('networkidle');
+    await refetchStale(page, api, 'GET', '/products');
+    await expect(page.getByRole('region', { name: 'Quà khách mới' })).toBeVisible();
+    const hydrated = (await categories.boundingBox())!.y;
+    expect(Math.abs(hydrated - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${hydrated}px (sau hydrate)`).toBeLessThanOrEqual(2);
+  });
+
   test('API sản phẩm sập sau khi server đã có dữ liệu: lưới giữ nguyên, không hiện dải lỗi cấp trang', async ({ page, api }) => {
     // Dải lỗi cấp trang chỉ hiện khi Bán chạy chưa từng có dữ liệu (home-view pageDown); trang SSR luôn mang sẵn dữ liệu thật của DB e2e nên
     // trường hợp "sập hẳn từ đầu" chỉ kiểm được ở vitest (home-parts.spec), không dựng lại được qua mock phía trình duyệt.
@@ -675,6 +696,30 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
         heights.push((await card.boundingBox())!.height);
       }
       expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(1);
+    });
+  }
+
+  for (const withCookie of [true, false]) {
+    test(`${withCookie ? 'có' : 'không có'} cookie phiên: HTML server đã có thanh đáy, hydrate không lỗi (không pageerror, không "hydrat")`, async ({ page, api, request, baseURL }) => {
+      await login(page, api);
+      const problems: string[] = [];
+      page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+      page.on('console', (m) => {
+        if (/hydrat|Minified React error/i.test(m.text())) problems.push(`console ${m.type()}: ${m.text()}`);
+      });
+      const cookie = withCookie ? 'tubu_web_session=1; tubu_home_hint=returning-1' : '';
+      const html = await (await request.get('/', { headers: cookie ? { cookie } : {} })).text();
+      expect(html, 'HTML server thiếu thanh đáy').toContain('aria-label="Thanh điều hướng dưới"');
+      if (withCookie) {
+        await page.context().addCookies([
+          { name: 'tubu_web_session', value: '1', url: baseURL! },
+          { name: 'tubu_home_hint', value: 'returning-1', url: baseURL! },
+        ]);
+      }
+      await page.goto('/');
+      await expect(page.getByRole('navigation', { name: 'Thanh điều hướng dưới' })).toBeVisible({ timeout: 15_000 });
+      await page.waitForLoadState('networkidle');
+      expect(problems).toEqual([]);
     });
   }
 
