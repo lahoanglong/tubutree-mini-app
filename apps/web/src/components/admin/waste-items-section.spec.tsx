@@ -16,12 +16,9 @@ const ITEMS = [
   wasteItem({ id: 'i2', code: 'MILK', name: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, dailyCapQty: 50, monthlyCapQty: 300, sortOrder: 1 }),
   wasteItem({ id: 'i5', code: 'BATTERY', name: 'Pin đã dùng', unitLabel: 'viên', dailyCapQty: null, monthlyCapQty: null, status: 'COMING_SOON', hazardous: true, sortOrder: 4, prepInstructions: null }),
 ];
-const LOYALTY = [
-  { key: 'loyalty.vnd_per_point_redeem', value: 1, description: null, category: 'loyalty' },
-  { key: 'loyalty.point_expire_months', value: 12, description: null, category: 'loyalty' },
-  { key: 'loyalty.max_redeem_pct', value: 0.2, description: null, category: 'loyalty' },
-];
-const WASTE = [{ key: 'waste.mailin_min_points', value: 15000, description: null, category: 'waste' }];
+// Dạng thật của GET /admin/config?category=: object {khoá: giá trị}, không phải mảng dòng.
+const LOYALTY = { 'loyalty.vnd_per_point_redeem': 1, 'loyalty.point_expire_months': 12, 'loyalty.max_redeem_pct': 0.2 };
+const WASTE = { 'waste.mailin_min_points': 15000 };
 
 type Route = { status?: number; body: unknown };
 async function mount(patch?: Route) {
