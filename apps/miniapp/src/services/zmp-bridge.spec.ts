@@ -24,6 +24,7 @@ import {
   followOA as zmpFollowOA,
   openShareSheet,
   openPhone,
+  openWebview,
   requestSendNotification as zmpRequestSendNotification,
   getStorage,
   setStorage,
@@ -40,6 +41,9 @@ import {
   shareLink,
   scanCode,
   isCancelMessage,
+  openExternal,
+  openAffiliateLink,
+  isAllowedExternalUrl,
 } from './zmp-bridge';
 
 const mockedZmpFollowOA = vi.mocked(zmpFollowOA);
@@ -259,5 +263,27 @@ describe('scanCode — phân biệt khách tự đóng camera với lỗi thật
   it('isCancelMessage chịu được message dạng mảng và dấu câu', () => {
     expect(isCancelMessage('Error: cancelled.')).toBe(true);
     expect(isCancelMessage('chuyển khoản lỗi')).toBe(false);
+  });
+});
+
+describe('openExternal — Mini App không điều hướng ra link ngoài Zalo (chính sách 4.1)', () => {
+  it.each(['https://shopee.vn/x', 'https://www.google.com/maps/search/?api=1&query=a', 'https://facebook.com/tubutree', 'http://zalo.me/g/abc', 'https://zalo.me.evil.com/x', 'javascript:alert(1)', 'không phải url'])(
+    'chặn %s: không mở webview, không ném lỗi',
+    async (url) => {
+      await expect(openExternal(url)).resolves.toBeUndefined();
+      expect(openWebview).not.toHaveBeenCalled();
+      expect(isAllowedExternalUrl(url)).toBe(false);
+    },
+  );
+
+  it.each(['https://zalo.me/g/abc', 'https://oa.zalo.me/123'])('cho mở %s bằng webview Zalo', async (url) => {
+    vi.mocked(openWebview).mockResolvedValue(undefined as never);
+    await openExternal(url);
+    expect(openWebview).toHaveBeenCalledWith({ url });
+  });
+
+  it('openAffiliateLink cũng bị chặn với link sàn ngoài', async () => {
+    await openAffiliateLink('https://shopee.vn/deeplink');
+    expect(openWebview).not.toHaveBeenCalled();
   });
 });

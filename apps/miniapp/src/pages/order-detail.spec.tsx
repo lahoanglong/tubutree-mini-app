@@ -16,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   fetchMyRefunds: vi.fn(),
   fetchRefundBank: vi.fn(),
   getWasteRequestByOrder: vi.fn(),
+  copyText: vi.fn(),
 }));
+
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -58,6 +60,7 @@ vi.mock('../store/auth', () => {
 });
 vi.mock('../components/image-upload', () => ({ MultiImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 
 import OrderDetailPage from './order-detail';
 import { STATUS_COLOR } from '../utils/order-status';
@@ -649,5 +652,44 @@ describe('OrderDetailPage — dòng yêu cầu thu rác (§12.2)', () => {
     expect(container.querySelector('#order-recycling')).toBeNull();
     expect(container.textContent).not.toMatch(/tài trợ 100% phí thu gom|Vật dụng gửi|tái chế/);
     expect(screen.getByText('BE123456')).toBeInTheDocument();
+  });
+});
+
+describe('OrderDetailPage — không mở trang ngoài (Zalo 4.1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.copyText.mockResolvedValue(true);
+  });
+
+  const shipped = (extra: Record<string, unknown> = {}) => ({
+    ...ORDER,
+    status: 'SHIPPING',
+    shippingPartner: 'GHN',
+    shippingCode: 'GHN001',
+    trackingLink: 'https://ghn.vn/tra-cuu?code=GHN001',
+    shippingHistory: [{ at: '2026-10-02T03:00:00.000Z', status: 'delivering', carrier: 'GHN', code: 'GHN001' }],
+    ...extra,
+  });
+
+  it('vận đơn: hiện hãng, mã, hành trình và nút "Chép mã"; không có nút/link tra cứu trang hãng', async () => {
+    mocks.fetchOrder.mockResolvedValue(shipped());
+    renderPage();
+    expect(await screen.findByText('GHN')).toBeInTheDocument();
+    expect(screen.getByText('GHN001')).toBeInTheDocument();
+    expect(screen.getAllByText('Đang giao hàng').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('button', { name: 'Tra cứu hành trình' })).toBeNull();
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Chép mã' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('GHN001'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã vận đơn', type: 'success' }));
+  });
+
+  it('hoá đơn điện tử: chỉ chép đường dẫn, không mở ngoài', async () => {
+    mocks.fetchOrder.mockResolvedValue(shipped({ invoiceStatus: 'ISSUED', invoiceUrl: 'https://hoadon.test/abc.pdf' }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chép đường dẫn' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('https://hoadon.test/abc.pdf'));
+    expect(screen.queryByRole('button', { name: 'Tải PDF' })).toBeNull();
   });
 });

@@ -1,20 +1,8 @@
 import { useState } from 'react';
 import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Clock, Flag, Heart, MessageCircle, Pencil, Pin, Sprout, Trash2 } from 'lucide-react';
-import {
-  getPost,
-  getComments,
-  addComment,
-  setBestAnswer,
-  deletePost,
-  editPost,
-  reactPost,
-  reportContent,
-  removeComment,
-  adminPin,
-  type FeedComment,
-} from '../services/feed-api';
+import { useQuery, useInfiniteQuery, useMutation } from '@tanstack/react-query';
+import { CheckCircle2, Clock, Flag, MessageCircle, Pin, Sprout } from 'lucide-react';
+import { getPost, getComments, reportContent, type FeedComment } from '../services/feed-api';
 import { apiMediaUrl, getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -39,17 +27,10 @@ export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
-  const qc = useQueryClient();
   const phase = useAuthPhase();
-  const role = useAuthStore((s) => s.user?.role);
   const login = useAuthStore((s) => s.login);
   const authed = phase === 'authenticated';
 
-  const [commentText, setCommentText] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editBody, setEditBody] = useState('');
   const [reportTarget, setReportTarget] = useState<{ targetType: 'POST' | 'COMMENT'; targetId?: string } | null>(null);
   const [reportReason, setReportReason] = useState('');
 
@@ -66,56 +47,6 @@ export default function PostDetailPage() {
     enabled: authed && !!id,
   });
 
-  // Root ['community'] là prefix của detail ['community', id], comments ['community', id, 'comments']
-  // VÀ list ['community', category, sort] → 1 lần invalidate làm mới cả trang chi tiết lẫn thẻ ở /feed
-  // (badge best-answer, tiêu đề sửa, số like/comment, bài đã xoá). Invalidation của React Query là
-  // theo prefix nên ['community', id] KHÔNG khớp key list — bắt buộc invalidate ở gốc.
-  const invalidateCommunity = () => qc.invalidateQueries({ queryKey: ['community'] });
-
-  const react = useMutation({
-    mutationFn: () => reactPost(id!),
-    onSuccess: () => void invalidateCommunity(),
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const addCommentMut = useMutation({
-    mutationFn: (body: string) => addComment(id!, body),
-    onSuccess: () => {
-      setCommentText('');
-      void invalidateCommunity();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const markBest = useMutation({
-    mutationFn: (commentId: string) => setBestAnswer(id!, commentId),
-    onSuccess: () => {
-      haptic('medium');
-      void invalidateCommunity();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  // Tự gỡ bình luận của mình — trước đây không có đường nào (kể cả tác giả) để gỡ 1 bình luận.
-  const removeCommentMut = useMutation({
-    mutationFn: (commentId: string) => removeComment(commentId),
-    onSuccess: () => {
-      haptic('medium');
-      void invalidateCommunity();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const editMut = useMutation({
-    mutationFn: (patch: { title?: string; body: string }) => editPost(id!, patch),
-    onSuccess: () => {
-      setEditing(false);
-      openSnackbar({ text: vi.common.save, type: 'success' });
-      void invalidateCommunity();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
   const reportMut = useMutation({
     mutationFn: (target: { targetType: 'POST' | 'COMMENT'; targetId?: string }) =>
       reportContent(id!, { ...target, reason: reportReason.trim() }),
@@ -126,29 +57,6 @@ export default function PostDetailPage() {
       openSnackbar({ text: vi.community.reported, type: 'success' });
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const pinMut = useMutation({
-    mutationFn: () => adminPin(id!, !(post.data?.isPinned ?? false)),
-    onSuccess: () => {
-      haptic('medium');
-      void invalidateCommunity();
-    },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-
-  const deleteMut = useMutation({
-    mutationFn: () => deletePost(id!),
-    onSuccess: () => {
-      // Invalidate TRƯỚC khi rời trang để list /feed refetch (bỏ bài đã xoá) ngay.
-      void invalidateCommunity();
-      openSnackbar({ text: vi.community.deleted, type: 'success' });
-      navigate('/feed');
-    },
-    onError: (e: unknown) => {
-      setConfirmDelete(false);
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    },
   });
 
   // Đang silent-login lúc mở app (restore chưa xong) → skeleton thay vì chớp cổng đăng nhập.
@@ -193,7 +101,6 @@ export default function PostDetailPage() {
   const p = post.data;
   const kindLabel = KIND_LABEL[p.kind];
   const KindIcon = KIND_ICON[p.kind];
-  const canMarkBest = p.kind === 'QUESTION' && (p.isOwner || role === 'ADMIN');
   // BE sắp thuần theo thời gian để cursor phân trang ổn định (isAccepted là khoá THAY ĐỔI ĐƯỢC,
   // để trong orderBy sẽ khiến trang 2 lặp lại trang 1 khi chủ bài chọn best-answer giữa chừng).
   // Ghim câu trả lời hay nhất lên đầu ở đây.
@@ -202,16 +109,8 @@ export default function PostDetailPage() {
     ...allComments.filter((c) => c.isAccepted),
     ...allComments.filter((c) => !c.isAccepted),
   ];
-  const needsEditTitle = p.kind === 'QUESTION' && editTitle.trim().length === 0;
-
-  const openEdit = () => {
-    setEditTitle(p.title ?? '');
-    setEditBody(p.body);
-    setEditing(true);
-  };
-
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 24 }}>
       <PageHeader title={vi.community.title} />
 
       <div style={{ padding: 16, background: 'var(--color-bg-surface)' }}>
@@ -252,20 +151,6 @@ export default function PostDetailPage() {
             </Text>
           </div>
         )}
-        {role === 'ADMIN' && (
-          <Button
-            variant="secondary"
-            icon={Pin}
-            loading={pinMut.isPending}
-            onPress={() => {
-              haptic('light');
-              pinMut.mutate();
-            }}
-            style={{ marginBottom: 10 }}
-          >
-            {p.isPinned ? vi.community.unpin : vi.community.pin}
-          </Button>
-        )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
             {p.avatar ? (
@@ -293,26 +178,7 @@ export default function PostDetailPage() {
               meta={`${timeAgo(p.createdAt)}${p.category ? ` · ${p.category.icon ?? ''} ${p.category.name}` : ''}`}
             />
           </div>
-          {p.isOwner ? (
-            <div style={{ display: 'flex', gap: 4 }}>
-              <IconButton
-                icon={Pencil}
-                label={vi.community.edit}
-                onPress={() => {
-                  haptic('light');
-                  openEdit();
-                }}
-              />
-              <IconButton
-                icon={Trash2}
-                label={vi.community.delete}
-                onPress={() => {
-                  haptic('light');
-                  setConfirmDelete(true);
-                }}
-              />
-            </div>
-          ) : (
+          {!p.isOwner && (
             <IconButton
               icon={Flag}
               label={vi.community.report}
@@ -403,36 +269,6 @@ export default function PostDetailPage() {
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 14 }}>
-          <button
-            type="button"
-            aria-pressed={p.liked}
-            aria-disabled={react.isPending || undefined}
-            className="tubu-press"
-            onClick={() => {
-              // react.mutate() không có ô "loading"/"disabled" như Button — chặn double-tap thủ công,
-              // nếu không mỗi lần chạm nhanh sẽ bắn nhiều request toggle like/unlike chồng nhau.
-              if (react.isPending) return;
-              haptic('light');
-              react.mutate();
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              minHeight: 44,
-              minWidth: 44,
-              padding: 0,
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              opacity: react.isPending ? 0.6 : 1,
-            }}
-          >
-            <Icon icon={Heart} size="md" tone={p.liked ? 'brand' : 'muted'} style={p.liked ? { fill: 'var(--color-text-brand)' } : undefined} />
-            <Text variant="body-lg" tone={p.liked ? 'brand' : 'secondary'}>
-              {p.likeCount}
-            </Text>
-          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon icon={MessageCircle} size="md" tone="muted" />
             <Text variant="body-lg" tone="secondary">{p.commentCount}</Text>
@@ -465,25 +301,17 @@ export default function PostDetailPage() {
           <ErrorState message={getErrorMessage(comments.error)} onRetry={() => void comments.refetch()} />
         ) : sortedComments.length === 0 ? (
           <Text variant="body-sm" tone="tertiary" as="div">
-            {vi.community.emptyBody}
+            {vi.community.noAnswers}
           </Text>
         ) : (
           sortedComments.map((c) => (
             <CommentRow
               key={c.id}
               comment={c}
-              canMarkBest={canMarkBest}
-              onMarkBest={() => markBest.mutate(c.id)}
-              markingPending={markBest.isPending && markBest.variables === c.id}
               onReport={() => {
                 haptic('light');
                 setReportTarget({ targetType: 'COMMENT', targetId: c.id });
               }}
-              onRemove={() => {
-                haptic('light');
-                removeCommentMut.mutate(c.id);
-              }}
-              removing={removeCommentMut.isPending && removeCommentMut.variables === c.id}
             />
           ))
         )}
@@ -498,98 +326,6 @@ export default function PostDetailPage() {
           </Button>
         )}
       </div>
-
-      {/* Ô thêm trả lời — cố định đáy màn hình */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          background: 'var(--color-bg-surface)',
-          boxShadow: 'var(--elevation-3)',
-          padding: '10px 16px calc(10px + var(--safe-bottom))',
-          display: 'flex',
-          gap: 8,
-        }}
-      >
-        <Input
-          aria-label={vi.community.commentPlaceholder}
-          placeholder={vi.community.commentPlaceholder}
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-          style={{ flex: 1 }}
-        />
-        <Button
-          loading={addCommentMut.isPending}
-          disabled={commentText.trim().length === 0}
-          onPress={() => addCommentMut.mutate(commentText.trim())}
-          style={{ flex: '0 0 auto' }}
-        >
-          {vi.community.send}
-        </Button>
-      </div>
-
-      {/* Sheet sửa bài (chủ bài) */}
-      <BottomSheet
-        open={editing}
-        onClose={() => setEditing(false)}
-        title={vi.community.edit}
-        footer={
-          <Button
-            fullWidth
-            loading={editMut.isPending}
-            disabled={needsEditTitle || editBody.trim().length === 0}
-            onPress={() =>
-              editMut.mutate({
-                title: p.kind === 'QUESTION' ? editTitle.trim() : undefined,
-                body: editBody.trim(),
-              })
-            }
-          >
-            {vi.common.save}
-          </Button>
-        }
-      >
-        {p.kind === 'QUESTION' && (
-          <div style={{ marginTop: 12 }}>
-            <Input
-              aria-label={vi.community.titlePlaceholder}
-              placeholder={vi.community.titlePlaceholder}
-              value={editTitle}
-              maxLength={160}
-              onChange={(e) => setEditTitle(e.target.value)}
-            />
-            {needsEditTitle && (
-              <Text variant="caption" tone="danger" as="div" style={{ marginTop: 4 }}>
-                {vi.community.needTitle}
-              </Text>
-            )}
-          </div>
-        )}
-        <div style={{ marginTop: 12 }}>
-          <Input.TextArea
-            aria-label={vi.community.bodyPlaceholder}
-            placeholder={vi.community.bodyPlaceholder}
-            value={editBody}
-            maxLength={5000}
-            rows={5}
-            onChange={(e) => setEditBody(e.target.value)}
-          />
-        </div>
-      </BottomSheet>
-
-      {/* Xác nhận xoá (thao tác không hoàn tác) */}
-      <BottomSheet open={confirmDelete} onClose={() => setConfirmDelete(false)} title={vi.community.confirmDelete}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
-          <Button fullWidth variant="secondary" onPress={() => setConfirmDelete(false)}>
-            {vi.common.cancel}
-          </Button>
-          <Button fullWidth variant="danger" loading={deleteMut.isPending} onPress={() => deleteMut.mutate()}>
-            {vi.community.delete}
-          </Button>
-        </div>
-      </BottomSheet>
 
       {/* Sheet báo cáo bài/bình luận vi phạm */}
       <BottomSheet
@@ -645,23 +381,7 @@ function PostSkeleton() {
   );
 }
 
-function CommentRow({
-  comment,
-  canMarkBest,
-  onMarkBest,
-  markingPending,
-  onReport,
-  onRemove,
-  removing,
-}: {
-  comment: FeedComment;
-  canMarkBest: boolean;
-  onMarkBest: () => void;
-  markingPending: boolean;
-  onReport: () => void;
-  onRemove: () => void;
-  removing: boolean;
-}) {
+function CommentRow({ comment, onReport }: { comment: FeedComment; onReport: () => void }) {
   return (
     <div
       style={{
@@ -699,26 +419,11 @@ function CommentRow({
           )}
           <AuthorLine name={comment.author} badge={comment.badge} level={comment.authorLevel} meta={timeAgo(comment.createdAt)} />
         </div>
-        {comment.isOwner ? (
-          <IconButton
-            icon={Trash2}
-            size="sm"
-            label={vi.community.hideContent}
-            style={{ opacity: removing ? 0.5 : 1 }}
-            onPress={removing ? undefined : onRemove}
-          />
-        ) : (
-          <IconButton icon={Flag} size="sm" label={vi.community.report} onPress={onReport} />
-        )}
+        {!comment.isOwner && <IconButton icon={Flag} size="sm" label={vi.community.report} onPress={onReport} />}
       </div>
       <Text variant="body-sm" as="div" style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>
         {comment.body}
       </Text>
-      {canMarkBest && !comment.isAccepted && (
-        <Button variant="secondary" loading={markingPending} onPress={onMarkBest} style={{ marginTop: 8 }}>
-          {vi.community.markBest}
-        </Button>
-      )}
     </div>
   );
 }

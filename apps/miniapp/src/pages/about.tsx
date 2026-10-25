@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronDown, ExternalLink, TreePine } from 'lucide-react';
+import { ChevronDown, TreePine } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { haptic } from '../utils/haptic';
@@ -9,9 +9,9 @@ import { formatPhoneDisplay } from '../utils/phone';
 import { requestAccountDeletion } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import type { PublicConfig } from '../services/shop-api';
-import { openOAChat, hasOA, callPhone, openExternal } from '../services/zmp-bridge';
-import { openWebPolicyPage, type WebPolicySlug } from '../utils/web-policy';
-import { BottomSheet } from '../components/ui/bottom-sheet';
+import { openOAChat, hasOA, callPhone } from '../services/zmp-bridge';
+import type { WebPolicySlug } from '../utils/web-policy';
+import { PolicySheet } from '../components/policy-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Chip } from '../components/ui/chip';
@@ -26,42 +26,11 @@ import { DEFAULT_SUPPORT, fallbackFaq, fetchFaqs, fetchSupportContact } from './
 
 const ALL_CATS = 'Tất cả';
 
-const POLICIES = {
-  terms: {
-    title: 'Điều khoản sử dụng',
-    body: 'Khi sử dụng Tubu Tree, bạn đồng ý mua sắm đúng mục đích cá nhân, cung cấp thông tin chính xác và không lạm dụng ưu đãi/điểm thưởng. Tubu Tree có quyền tạm khoá tài khoản có dấu hiệu gian lận. Giá và khuyến mãi có thể thay đổi theo thời điểm; đơn hàng chỉ được xác nhận sau khi thanh toán/được duyệt.',
-  },
-  privacy: {
-    title: 'Chính sách bảo mật',
-    body: 'Tubu Tree thu thập tên, số điện thoại và địa chỉ nhận hàng để xử lý đơn và chăm sóc khách hàng. Chúng tôi KHÔNG bán hay chia sẻ dữ liệu cho bên thứ ba ngoài đối tác vận chuyển/thanh toán cần thiết. Bạn có thể yêu cầu xoá tài khoản & dữ liệu bất kỳ lúc nào trong mục Tài khoản.',
-  },
-} as const;
 /** "Đơn vị vận hành: tên · MST mã · địa chỉ"; ẩn phần chưa nhập, null khi không còn gì. */
 function operatorLine(company: PublicConfig['company']): string | null {
   const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(Boolean);
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
 }
-type PolicyKey = keyof typeof POLICIES | 'returns';
-
-/** Số ngày đổi trả đọc từ cấu hình công khai (cùng nguồn với FAQ ở about-data); chưa có thì không nêu con số. */
-function returnsPolicy(returnWindowDays: unknown): { title: string; body: string } {
-  const days = typeof returnWindowDays === 'number' && Number.isFinite(returnWindowDays) && returnWindowDays > 0 ? returnWindowDays : null;
-  const window = days ? `trong ${days} ngày kể từ khi nhận` : 'trong thời hạn đổi/trả kể từ khi nhận';
-  return {
-    title: 'Chính sách đổi trả',
-    body: `Đổi/trả áp dụng ${window}, với sản phẩm lỗi nhà sản xuất (hỏng bao bì, sai HSD, sai mã, không đúng mô tả). Gửi yêu cầu kèm ảnh minh chứng trong chi tiết đơn hàng. Tubu chịu phí ship 2 chiều cho lỗi từ nhà sản xuất; hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt.`,
-  };
-}
-
-// Bản đầy đủ do admin quản lý nằm ở web (/chinh-sach/[loai]); bản tóm tắt trong app chỉ để đọc nhanh.
-const WEB_POLICY_SLUG: Record<PolicyKey | 'shipping', WebPolicySlug> = {
-  terms: 'dieu-khoan',
-  privacy: 'bao-mat',
-  returns: 'doi-tra',
-  shipping: 'van-chuyen',
-};
-const openWebPolicy = (key: PolicyKey | 'shipping') => openWebPolicyPage(WEB_POLICY_SLUG[key]);
-
 const FAQ_SKELETON_ROWS = 4;
 
 function HotlineButton({ phone }: { phone: string }) {
@@ -119,14 +88,7 @@ export default function AboutPage() {
     },
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
-  // Giữ policy sau khi đóng để nội dung sheet còn nguyên trong lúc trượt xuống (BottomSheet gỡ sau animation).
-  const [policy, setPolicy] = useState<PolicyKey>('terms');
-  const [policyOpen, setPolicyOpen] = useState(false);
-  const showPolicy = (key: PolicyKey) => {
-    setPolicy(key);
-    setPolicyOpen(true);
-  };
-  const policyContent = policy === 'returns' ? returnsPolicy(publicConfig.returnWindowDays) : POLICIES[policy];
+  const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const operator = operatorLine(publicConfig.company);
   const bctUrl = publicConfig.company?.bctNoticeUrl ?? null;
   const shownFaq = faq.filter((f) => faqCat === ALL_CATS || f.cat === faqCat);
@@ -259,11 +221,15 @@ export default function AboutPage() {
 
       {/* Pháp lý */}
       <Section title="Điều khoản & Chính sách">
-        <LinkRow label="Điều khoản sử dụng" onClick={() => showPolicy('terms')} />
-        <LinkRow label="Chính sách bảo mật" onClick={() => showPolicy('privacy')} />
-        <LinkRow label="Chính sách đổi trả" onClick={() => showPolicy('returns')} />
-        <LinkRow label="Chính sách vận chuyển" onClick={() => openWebPolicy('shipping')} external last={!operator && !bctUrl} />
-        {bctUrl && <LinkRow label="Đã thông báo Bộ Công Thương" onClick={() => void openExternal(bctUrl)} external last={!operator} />}
+        <LinkRow label="Điều khoản sử dụng" onClick={() => setPolicy('dieu-khoan')} />
+        <LinkRow label="Chính sách bảo mật" onClick={() => setPolicy('bao-mat')} />
+        <LinkRow label="Chính sách đổi trả" onClick={() => setPolicy('doi-tra')} />
+        <LinkRow label="Chính sách vận chuyển" onClick={() => setPolicy('van-chuyen')} last={!operator && !bctUrl} />
+        {bctUrl && (
+          <Text variant="body-sm" tone="secondary" as="p" style={{ margin: '12px 0 0' }}>
+            Đã thông báo Bộ Công Thương
+          </Text>
+        )}
         {operator && (
           <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
             {operator}
@@ -272,25 +238,7 @@ export default function AboutPage() {
       </Section>
 
       {/* Nội dung điều khoản hiển thị ngay trong app (không rời mini app) */}
-      <BottomSheet
-        open={policyOpen}
-        onClose={() => setPolicyOpen(false)}
-        title={policyContent.title}
-        footer={
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <Button fullWidth variant="secondary" onPress={() => openWebPolicy(policy)}>
-              Xem bản đầy đủ trên web
-            </Button>
-            <Button fullWidth onPress={() => setPolicyOpen(false)}>
-              Đã hiểu
-            </Button>
-          </div>
-        }
-      >
-        <Text variant="body-sm" tone="secondary" as="p">
-          {policyContent.body}
-        </Text>
-      </BottomSheet>
+      <PolicySheet slug={policy} onClose={() => setPolicy(null)} />
 
       {/* Xoá tài khoản */}
       <div style={{ margin: '12px 16px 0' }}>
@@ -343,11 +291,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function LinkRow({ label, onClick, last, external }: { label: string; onClick: () => void; last?: boolean; external?: boolean }) {
+function LinkRow({ label, onClick, last }: { label: string; onClick: () => void; last?: boolean }) {
   return (
     <ListRow
       title={label}
-      trailing={external ? <Icon icon={ExternalLink} size="sm" tone="muted" /> : 'chevron'}
+      trailing="chevron"
       onPress={onClick}
       style={{ borderBottom: last ? 'none' : '1px solid var(--color-border-subtle)' }}
     />

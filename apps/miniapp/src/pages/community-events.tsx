@@ -8,7 +8,7 @@ import {
   type InfiniteData,
 } from '@tanstack/react-query';
 import { ChevronLeft, Gift } from 'lucide-react';
-import { listEvents, eventPosts, getCategories, type CommunityEvent, type FeedPage } from '../services/feed-api';
+import { listEvents, eventPosts, type CommunityEvent, type FeedPage } from '../services/feed-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -23,7 +23,6 @@ import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Heading, Text } from '../components/ui/text';
 import PostCard from '../components/community/post-card';
-import PostComposer from '../components/community/post-composer';
 import { formatDate, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
 
@@ -45,18 +44,23 @@ function CardSkeletons({ height, gap }: { height: number; gap: number }) {
 }
 
 /** Hạn kết thúc + thưởng + nhãn đã kết thúc, dùng chung cho thẻ danh sách và trang chi tiết. */
-function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefix?: string }) {
+function EventMeta({ event, joinOnWeb }: { event: CommunityEvent; joinOnWeb?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
       <Text variant="caption" tone="tertiary">
         {vi.community.eventEnds}: {formatDate(event.endAt)}
       </Text>
-      {event.rewardPoints > 0 && (
-        <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          {rewardPrefix}
-          <Icon icon={Gift} size="sm" tone="brand" />
-          {formatPoints(event.rewardPoints)}
+      {joinOnWeb ? (
+        <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>
+          {vi.community.eventJoinOnWeb}
         </Text>
+      ) : (
+        event.rewardPoints > 0 && (
+          <Text variant="caption" tone="brand" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Icon icon={Gift} size="sm" tone="brand" />
+            {formatPoints(event.rewardPoints)}
+          </Text>
+        )
       )}
       {isEventEnded(event) && (
         <Badge tone="neutral" size="sm">
@@ -72,9 +76,7 @@ export default function CommunityEventsPage() {
   const login = useAuthStore((s) => s.login);
   const authed = phase === 'authenticated';
   const [selected, setSelected] = useState<CommunityEvent | null>(null);
-  const [composing, setComposing] = useState(false);
 
-  const cats = useQuery({ queryKey: ['community', 'categories'], queryFn: getCategories, enabled: authed, staleTime: 60_000 });
   const eventsQ = useQuery({ queryKey: ['community', 'events'], queryFn: listEvents, enabled: authed });
   const entriesQ = useInfiniteQuery({
     queryKey: ['community', 'event-posts', selected?.id],
@@ -123,26 +125,11 @@ export default function CommunityEventsPage() {
           event={selected}
           entriesQ={entriesQ}
           onBack={() => setSelected(null)}
-          onJoin={() => {
-            haptic('light');
-            setComposing(true);
-          }}
         />
       ) : (
         <EventsList eventsQ={eventsQ} onSelect={setSelected} />
       )}
 
-      <PostComposer
-        visible={composing}
-        onClose={() => setComposing(false)}
-        categories={cats.data ?? []}
-        eventId={selected?.id}
-        eventTitle={selected?.title}
-        onPosted={() => {
-          setComposing(false);
-          void entriesQ.refetch();
-        }}
-      />
     </Page>
   );
 }
@@ -232,15 +219,12 @@ function EventEntries({
   event,
   entriesQ,
   onBack,
-  onJoin,
 }: {
   event: CommunityEvent;
   entriesQ: UseInfiniteQueryResult<InfiniteData<FeedPage>>;
   onBack: () => void;
-  onJoin: () => void;
 }) {
   const navigate = useNavigate();
-  const ended = isEventEnded(event);
   const entries = entriesQ.data?.pages.flatMap((pg) => pg.posts) ?? [];
   return (
     <div>
@@ -280,10 +264,7 @@ function EventEntries({
                 {event.description}
               </Text>
             )}
-            <EventMeta event={event} rewardPrefix={`${vi.community.eventReward}: `} />
-            <Button fullWidth disabled={ended} onPress={onJoin} style={{ marginTop: 14 }}>
-              {vi.community.joinEvent}
-            </Button>
+            <EventMeta event={event} joinOnWeb />
           </div>
         </div>
 
@@ -301,7 +282,7 @@ function EventEntries({
       ) : entriesQ.isError ? (
         <ErrorState message={getErrorMessage(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
       ) : entries.length === 0 ? (
-        <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.emptyBody} />
+        <EmptyState art="leaf" heading={vi.community.emptyHeading} body={vi.community.eventNoEntries} />
       ) : (
         <>
           {entries.map((post) => (

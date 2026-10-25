@@ -74,7 +74,6 @@ const PAGES: PageCase[] = [
   { name: 'Hoàn tiền sàn ngoài', load: () => import('./cashback'), forbidden: [/Chưa có giao dịch hoàn tiền/] },
   { name: 'Cộng đồng', load: () => import('./feed'), forbidden: [/Chưa có bài viết nào/, new RegExp(copy.community.loginToView)] },
   { name: 'Sự kiện cộng đồng', load: () => import('./community-events'), forbidden: [new RegExp(copy.community.loginToView)] },
-  { name: 'Bảng xếp hạng', load: () => import('./community-leaderboard'), forbidden: [new RegExp(copy.community.loginToView)] },
   { name: 'Bài viết', load: () => import('./post-detail'), forbidden: [new RegExp(copy.community.loginToView)] },
   { name: 'Vườn Xanh', load: () => import('./game'), forbidden: [new RegExp(copy.community.loginToView)] },
   { name: 'Cá nhân', load: () => import('./profile'), forbidden: [/Đã đăng xuất/, /network error/i] },

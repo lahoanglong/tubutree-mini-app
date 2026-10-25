@@ -110,6 +110,7 @@ function stub(post: FeedItem = POST(), comments: FeedComment[] = COMMENTS) {
   mocks.getComments.mockResolvedValue({ items: comments, nextCursor: null });
 }
 
+
 const btn = (name: string | RegExp) => screen.getByRole('button', { name });
 
 beforeEach(() => {
@@ -133,7 +134,8 @@ describe('PostDetailPage — hiển thị (hành vi giữ nguyên khi chuyển D
     expect(await screen.findByText('Mẹo rửa bình sữa bằng nước rửa chén sinh học.')).toBeInTheDocument();
     expect(screen.getByText('Lan Anh')).toBeInTheDocument();
     expect(screen.getByText(/2 giờ trước · .*Nhà bếp/)).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('5')).toBeNull();
     expect(screen.getByText('Trả lời (3)')).toBeInTheDocument();
     const bodies = (await screen.findAllByText(/^Trả lời của /)).map((el) => el.textContent);
     expect(bodies).toEqual(['Trả lời của Hạnh', 'Trả lời của Bình', 'Trả lời của Tôi']);
@@ -180,10 +182,11 @@ describe('PostDetailPage — hiển thị (hành vi giữ nguyên khi chuyển D
     expect(await screen.findByText('Lan Anh')).toBeInTheDocument();
   });
 
-  it('không có câu trả lời → câu mời chia sẻ đầu tiên', async () => {
+  it('không có câu trả lời → chữ trống, không mời chia sẻ', async () => {
     stub(POST(), []);
     renderPage();
-    expect(await screen.findByText('Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!')).toBeInTheDocument();
+    expect(await screen.findByText('Chưa có trả lời')).toBeInTheDocument();
+    expect(screen.queryByText(/người đầu tiên/)).toBeNull();
   });
 
   it('có trang kế → "Xem thêm trả lời" nạp bằng cursor', async () => {
@@ -213,83 +216,18 @@ describe('PostDetailPage — hiển thị (hành vi giữ nguyên khi chuyển D
   });
 });
 
-describe('PostDetailPage — thao tác (hành vi giữ nguyên khi chuyển DS v2)', () => {
-  const likeBtn = () => screen.getByText('5').closest('button, [role="button"]') as HTMLElement;
-
-  it('bấm tim gọi reactPost; trong lúc đang gửi bấm tiếp không gửi thêm', async () => {
-    let resolve!: (v: { liked: boolean }) => void;
-    mocks.reactPost.mockReturnValue(new Promise((r) => (resolve = r)));
+describe('PostDetailPage — chỉ đọc theo chính sách Zalo (4.6)', () => {
+  it('không có nút thích, ô trả lời, Gửi, sửa, xoá, ghim, chọn hay nhất, ẩn bình luận, kể cả chủ bài và quản trị', async () => {
+    mocks.auth.role = 'ADMIN';
+    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
     renderPage();
-    await screen.findByText('Lan Anh');
-    fireEvent.click(likeBtn());
-    await waitFor(() => expect(likeBtn()).toHaveAttribute('aria-disabled', 'true'));
-    fireEvent.click(likeBtn());
-    expect(mocks.reactPost).toHaveBeenCalledTimes(1);
-    expect(mocks.reactPost).toHaveBeenCalledWith('p1');
-    resolve({ liked: true });
-  });
-
-  it('gửi trả lời: nút Gửi khoá khi ô trống, gửi nội dung đã trim, xoá ô sau khi gửi', async () => {
-    renderPage();
-    await screen.findByText('Lan Anh');
-    expect(btn('Gửi')).toBeDisabled();
-    const input = screen.getByPlaceholderText('Viết trả lời…');
-    fireEvent.change(input, { target: { value: '  Cảm ơn bạn  ' } });
-    expect(btn('Gửi')).not.toBeDisabled();
-    fireEvent.click(btn('Gửi'));
-    await waitFor(() => expect(mocks.addComment).toHaveBeenCalledWith('p1', 'Cảm ơn bạn'));
-    await waitFor(() => expect(input).toHaveValue(''));
-  });
-
-  it('chủ bài sửa bài: mở sheet Sửa, đổi nội dung, Lưu gọi editPost', async () => {
-    stub(POST({ isOwner: true }));
-    renderPage();
-    await screen.findByText('Lan Anh');
-    fireEvent.click(btn('Sửa'));
-    const area = await screen.findByPlaceholderText('Chia sẻ chi tiết…');
-    expect(area).toHaveValue('Mẹo rửa bình sữa bằng nước rửa chén sinh học.');
-    fireEvent.change(area, { target: { value: '  Nội dung mới  ' } });
-    fireEvent.click(btn('Lưu'));
-    await waitFor(() => expect(mocks.editPost).toHaveBeenCalledWith('p1', { title: undefined, body: 'Nội dung mới' }));
-    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Lưu', type: 'success' });
-  });
-
-  it('chủ câu hỏi sửa bài: bắt buộc tiêu đề, gửi kèm tiêu đề đã trim', async () => {
-    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Tiêu đề cũ' }));
-    renderPage();
-    await screen.findByText('Lan Anh');
-    fireEvent.click(btn('Sửa'));
-    const titleInput = await screen.findByPlaceholderText(/Tiêu đề câu hỏi/);
-    fireEvent.change(titleInput, { target: { value: '   ' } });
-    expect(screen.getByText('Câu hỏi cần có tiêu đề')).toBeInTheDocument();
-    expect(btn('Lưu')).toBeDisabled();
-    fireEvent.change(titleInput, { target: { value: ' Tiêu đề mới ' } });
-    fireEvent.click(btn('Lưu'));
-    await waitFor(() =>
-      expect(mocks.editPost).toHaveBeenCalledWith('p1', { title: 'Tiêu đề mới', body: 'Mẹo rửa bình sữa bằng nước rửa chén sinh học.' }),
-    );
-  });
-
-  it('chủ bài bấm Huỷ ở hộp xác nhận xoá thì không xoá', async () => {
-    stub(POST({ isOwner: true }));
-    renderPage();
-    await screen.findByText('Lan Anh');
-    fireEvent.click(btn('Xoá'));
-    expect(await screen.findByText('Xoá bài viết này?')).toBeInTheDocument();
-    fireEvent.click(btn('Huỷ'));
-    expect(mocks.deletePost).not.toHaveBeenCalled();
-  });
-
-  it('chủ bài xoá: hộp xác nhận → Xoá gọi deletePost rồi về /feed', async () => {
-    stub(POST({ isOwner: true }));
-    renderPage();
-    await screen.findByText('Lan Anh');
-    fireEvent.click(btn('Xoá'));
-    expect(await screen.findByText('Xoá bài viết này?')).toBeInTheDocument();
-    const deletes = screen.getAllByRole('button', { name: 'Xoá' });
-    fireEvent.click(deletes[deletes.length - 1]!);
-    await waitFor(() => expect(mocks.deletePost).toHaveBeenCalledWith('p1'));
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/feed'));
+    await screen.findByText('Trả lời của Bình');
+    expect(screen.queryByPlaceholderText('Viết trả lời…')).toBeNull();
+    for (const name of ['Gửi', 'Sửa', 'Xoá', 'Ghim', 'Bỏ ghim', 'Chọn hay nhất', 'Ẩn nội dung']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    }
+    expect(screen.queryByText('5')).toBeNull();
+    expect(screen.queryByRole('button', { name: /thích/i })).toBeNull();
   });
 
   it('người khác báo cáo bài: sheet Báo cáo gửi targetType POST kèm lý do đã trim', async () => {
@@ -306,9 +244,8 @@ describe('PostDetailPage — thao tác (hành vi giữ nguyên khi chuyển DS v
   it('báo cáo một bình luận gửi targetType COMMENT kèm targetId', async () => {
     renderPage();
     await screen.findByText('Trả lời của Bình');
-    const row = screen.getByText('Trả lời của Bình').closest('[data-testid="comment-row"]') ?? screen.getByText('Trả lời của Bình').parentElement!;
-    const flag = Array.from(row.querySelectorAll('[aria-label="Báo cáo"]'))[0] as HTMLElement;
-    fireEvent.click(flag);
+    const row = screen.getByText('Trả lời của Bình').parentElement!;
+    fireEvent.click(row.querySelector('[aria-label="Báo cáo"]') as HTMLElement);
     await screen.findByPlaceholderText('Lý do báo cáo…');
     const submit = screen.getAllByRole('button', { name: 'Báo cáo' });
     fireEvent.click(submit[submit.length - 1]!);
@@ -317,35 +254,11 @@ describe('PostDetailPage — thao tác (hành vi giữ nguyên khi chuyển DS v
     );
   });
 
-  it('chủ câu hỏi chọn câu trả lời hay nhất; câu đã được chọn không còn nút', async () => {
-    stub(POST({ isOwner: true, kind: 'QUESTION', title: 'Hỏi' }));
-    renderPage();
-    await screen.findByText('Trả lời của Bình');
-    const buttons = screen.getAllByRole('button', { name: 'Chọn hay nhất' });
-    expect(buttons).toHaveLength(2);
-    fireEvent.click(buttons[0]!);
-    await waitFor(() => expect(mocks.setBestAnswer).toHaveBeenCalledWith('p1', 'c1'));
-  });
-
-  it('người không phải chủ câu hỏi không thấy nút "Chọn hay nhất"', async () => {
-    stub(POST({ kind: 'QUESTION', title: 'Hỏi' }));
-    renderPage();
-    await screen.findByText('Trả lời của Bình');
-    expect(screen.queryByRole('button', { name: 'Chọn hay nhất' })).toBeNull();
-  });
-
-  it('quản trị: nút Ghim gọi adminPin(true); bài đã ghim → Bỏ ghim gọi adminPin(false)', async () => {
-    mocks.auth.role = 'ADMIN';
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Ghim' }));
-    await waitFor(() => expect(mocks.adminPin).toHaveBeenCalledWith('p1', true));
-  });
-
-  it('chủ bình luận gỡ bình luận của mình', async () => {
+  it('bài và bình luận của chính mình không có nút Báo cáo', async () => {
+    stub(POST({ isOwner: true }), [COMMENT('c3', 'Tôi', { isOwner: true })]);
     renderPage();
     await screen.findByText('Trả lời của Tôi');
-    fireEvent.click(btn('Ẩn nội dung'));
-    await waitFor(() => expect(mocks.removeComment).toHaveBeenCalledWith('c3'));
+    expect(screen.queryByRole('button', { name: 'Báo cáo' })).toBeNull();
   });
 });
 
@@ -379,17 +292,10 @@ describe('PostDetailPage — tiêu đề, vùng chạm, biểu tượng (C-076, 
     expect(e.container.querySelectorAll('h1')).toHaveLength(1);
   });
 
-  it('nút sửa, xoá, báo cáo, tim, gửi và nút trên bình luận có vùng chạm >= 44px', async () => {
-    stub(POST({ isOwner: true }));
+  it('nút báo cáo có vùng chạm >= 44px', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
-    const tall = (el: HTMLElement) => Number.parseFloat(el.style.minHeight) >= 44;
-    expect(tall(btn('Sửa'))).toBe(true);
-    expect(tall(btn('Xoá'))).toBe(true);
-    expect(tall(btn('Gửi'))).toBe(true);
-    expect(tall(screen.getByText('5').closest('button, [role="button"]') as HTMLElement)).toBe(true);
-    for (const el of screen.getAllByRole('button', { name: 'Báo cáo' })) expect(tall(el)).toBe(true);
-    expect(tall(btn('Ẩn nội dung'))).toBe(true);
+    for (const el of screen.getAllByRole('button', { name: 'Báo cáo' })) expect(Number.parseFloat(el.style.minHeight) >= 44).toBe(true);
   });
 
   it('không dùng emoji làm biểu tượng: avatar, chuyên gia, ghim, câu trả lời hay nhất', async () => {
@@ -400,18 +306,12 @@ describe('PostDetailPage — tiêu đề, vùng chạm, biểu tượng (C-076, 
     expect(container.textContent).not.toMatch(/[🌱🌿📌✅]/u);
   });
 
-  it('các sheet có tiêu đề heading; nút xác nhận nằm ngoài vùng cuộn', async () => {
-    stub(POST({ isOwner: true }));
+  it('sheet Báo cáo có tiêu đề heading; nút xác nhận nằm ngoài vùng cuộn', async () => {
     renderPage();
     await screen.findByText('Lan Anh');
-    fireEvent.click(btn('Sửa'));
-    expect(await screen.findByRole('heading', { name: 'Sửa' })).toBeInTheDocument();
-    expect(screen.getByTestId('bottom-sheet-body').contains(btn('Lưu'))).toBe(false);
-  });
-
-  it('ô trả lời và các ô nhập có tên truy cập', async () => {
-    renderPage();
-    await screen.findByText('Lan Anh');
-    expect(screen.getByLabelText('Viết trả lời…')).toBe(screen.getByPlaceholderText('Viết trả lời…'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    expect(await screen.findByRole('heading', { name: 'Báo cáo' })).toBeInTheDocument();
+    const submit = screen.getAllByRole('button', { name: 'Báo cáo' });
+    expect(screen.getByTestId('bottom-sheet-body').contains(submit[submit.length - 1]!)).toBe(false);
   });
 });
