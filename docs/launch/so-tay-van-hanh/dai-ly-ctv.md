@@ -92,7 +92,7 @@ Sau khi duyệt, nhắn đại lý: mở **Kênh đại lý**, xem bảng giá s
 
 **CTV hỏi thuế.** TNCN 10% tính trên tổng hoa hồng chuyển vào Ví trong tháng khi tổng từ 5.000.000đ. Số này hiện sẵn trên màn chuyển vào Ví. Chứng từ khấu trừ: hỏi kế toán (cần xác nhận).
 
-**Đại lý lên đại lý rồi không thấy màn hoa hồng.** Lỗi đã biết (**⏳ đang làm**). Hoa hồng vẫn cộng nhưng chưa xem và rút được. Ghi tên đại lý, gửi kỹ thuật.
+**Đại lý lên đại lý rồi không thấy màn hoa hồng.** Lỗi đã biết (**⏳ đang làm**). Hoa hồng vẫn cộng nhưng chưa xem và chuyển vào Ví được. Ghi tên đại lý, gửi kỹ thuật.
 
 **Đại lý nói "đã chuyển khoản trả nợ".** Nút "Báo đã CK" của đại lý chỉ gửi thông báo, **không trừ nợ**. Nợ chỉ giảm khi kế toán đối chiếu sao kê và bấm "Xác nhận đã nhận, giảm nợ" ở khối "Công nợ đại lý". Báo kế toán.
 

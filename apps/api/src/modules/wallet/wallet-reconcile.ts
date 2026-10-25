@@ -9,7 +9,7 @@ import { Prisma } from '@prisma/client';
  *     walletBalance  ==  SUM(wallet_transactions.delta)  của user đó.
  *
  * Lệch nghĩa là có chỗ ghi số dư bỏ qua sổ (code cũ còn chạy sau migration, SQL tay, bug mới).
- * Khác với reconcile:points, KHÔNG tự sửa: đây là tiền thật rút được, phải tra nguyên nhân rồi mới
+ * Khác với reconcile:points, KHÔNG tự sửa: đây là tiền VND thật của khách, phải tra nguyên nhân rồi mới
  * ghi dòng ADJUST qua applyWalletDelta — đặt thẳng số dư = tổng sổ có thể xoá mất tiền của khách.
  */
 export type WalletBalanceRow = { userId: string; walletBalance: number; ledgerSum: number; entries: number };

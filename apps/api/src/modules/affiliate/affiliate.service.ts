@@ -1126,15 +1126,11 @@ export class AffiliateService {
     taxIdInput?: string,
   ) {
     if (method !== 'WALLET_BALANCE') throw new BadRequestException(WALLET_ONLY_MESSAGE);
-    // P0 FIX (audit A5-07, 2026-09-27): KHÔNG đọc `affiliate.tubu_wallet_multiplier` ở đây nữa —
-    // walletBalance là tiền VND rút được 1:1 ra ngân hàng thật (wallet.service.ts:withdraw, trừ phí
-    // cố định), nên nhân hệ số ở đường quy đổi hoa hồng→Ví là in tiền thật (1.000.000đ hoa hồng →
-    // 1.497.000đ rút được ở hệ số mặc định cũ 1.5). Rút về Ví giờ LUÔN là quy đổi 1:1 (credited =
-    // total), bất kể SystemConfig còn seed giá trị gì cho key này. Key này vẫn tồn tại/được đọc bởi
-    // `system-config` (public config — ngoài phạm vi sửa của bản vá này) và miniapp đã ngừng hiển
-    // thị "×hệ số" (affiliate.tsx); nếu tương lai thật sự cần một khoản "bonus" khi đổi hoa hồng
-    // sang Ví, khoản đó PHẢI trả bằng Điểm Xanh (không rút được), KHÔNG BAO GIỜ cộng thẳng vào
-    // walletBalance bằng hệ số nhân > 1.
+    // Không đọc `affiliate.tubu_wallet_multiplier` ở đây: walletBalance là VND thật (Ví dùng trả tiền hàng), nên nhân hệ
+    // số ở đường chuyển hoa hồng vào Ví là in tiền thật (1.000.000đ hoa hồng thành 1.497.000đ ở hệ số cũ 1.5). Chuyển
+    // vào Ví luôn 1:1 (credited = total), bất kể SystemConfig còn giá trị gì cho key này. Key vẫn được `system-config`
+    // (public config) đọc. Nếu cần một khoản "bonus" khi chuyển hoa hồng sang Ví, khoản đó PHẢI trả bằng Điểm Xanh,
+    // KHÔNG BAO GIỜ cộng thẳng vào walletBalance bằng hệ số nhân > 1.
 
     // Chuẩn hoá '' / khoảng trắng → undefined (mirror wallet.withdraw / checkout.placeOrder /
     // placeOrderForCustomer ở trên) — tránh ghi '' vào payouts.idempotencyKey (unique) rồi lần
@@ -1318,7 +1314,7 @@ export class AffiliateService {
   }
 
   /**
-   * Báo CTV hoa hồng vừa được duyệt (có thể rút), gộp theo người: một lượt cron có thể chốt nhiều
+   * Báo CTV hoa hồng vừa được duyệt (có thể chuyển vào Ví), gộp theo người: một lượt cron có thể chốt nhiều
    * khoản của cùng CTV, mỗi khoản một tin là spam. Lọc đúng lượt này bằng `approvedAt` trùng
    * mốc đã ghi ở câu UPDATE (không cần thêm cột/đổi câu UPDATE đang có test). Mọi lỗi chỉ log: tiền
    * đã chốt xong, thông báo hỏng không được làm cron báo thất bại.
@@ -1528,7 +1524,7 @@ export class AffiliateService {
   /**
    * A5-11 (audit 2026-09): "Hoa hồng tháng này/Hôm nay" trên dashboard CTV — trước đây cộng CẢ
    * commission đã REJECTED (đơn huỷ/trả), nên con số lớn nhất màn hình không bao giờ giảm khi đơn
-   * bị huỷ dù "Đang chờ"/"Có thể rút" vẫn giảm đúng, gây lệch không giải thích được. Loại REJECTED
+   * bị huỷ dù "Đang chờ"/"Có thể chuyển vào Ví" vẫn giảm đúng, gây lệch không giải thích được. Loại REJECTED
    * — nhưng KHÔNG chỉ còn APPROVED/PAID như confirmedRevenue() (đó là "đã chốt" dùng cho bậc/mốc):
    * ở đây PENDING/LOCKED vẫn phải cộng như cũ, vì CTV cần thấy hoa hồng mới phát sinh ngay cả khi
    * đơn chưa giao xong. Mirror filter đã dùng ở productCommissionBreakdown() — định nghĩa DUY NHẤT
@@ -1607,13 +1603,13 @@ export class AffiliateService {
   }
 
   /**
-   * Nhận thưởng mốc doanh số tháng → cộng Điểm Xanh lô STANDARD (KHÔNG rút được, PD-3).
+   * Nhận thưởng mốc doanh số tháng → cộng Điểm Xanh lô STANDARD (không phải tiền, PD-3).
    * MONEY-CRITICAL:
    *  - Điều kiện đọc doanh số ĐÃ CHỐT trong CÙNG tx (không đếm đơn còn huỷ/trả được).
    *  - Idempotent dưới đồng thời: insert ctv_milestone_claims (unique userId+milestoneId+monthKey)
    *    TRƯỚC khi cấp điểm; request thua ăn P2002 → rollback cả tx → không cộng 2 lần.
    *  - Cấp qua RewardPointsService.grant(tx) — dòng sổ điểm + pointsBalance cùng tx (giữ bất biến
-   *    pointsBalance == SUM(delta) lô STANDARD). Không bao giờ cộng walletBalance (tiền rút được).
+   *    pointsBalance == SUM(delta) lô STANDARD). Không bao giờ cộng walletBalance (tiền VND thật).
    *  - `monthKey` chỉ nhận tháng này hoặc tháng trước (VN).
    */
   async claimMilestone(userId: string, milestoneId: string, monthKey?: string, now: Date = new Date()) {

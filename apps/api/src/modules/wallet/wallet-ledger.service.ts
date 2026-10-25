@@ -22,7 +22,7 @@ export interface WalletDeltaResult {
 }
 
 /**
- * Điểm DUY NHẤT được thay đổi users.walletBalance (Ví Tubu — VND thật, rút được). Mỗi biến động
+ * Điểm DUY NHẤT được thay đổi users.walletBalance (Ví Tubu — VND thật, chỉ dùng trả tiền hàng). Mỗi biến động
  * ghi đúng 1 dòng wallet_transactions trong transaction của caller, nên số dư và sổ cùng commit
  * hoặc cùng rollback với nghiệp vụ gây ra nó (bất biến walletBalance == SUM(delta), C-060).
  *

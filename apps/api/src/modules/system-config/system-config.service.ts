@@ -90,7 +90,7 @@ export class SystemConfigService {
    * Biên hợp lệ cho những khoá mà ĐƠN VỊ dễ gõ nhầm. Kiểm tra kiểu (số vẫn là số) không cứu
    * được trường hợp gõ "80" cho một khoá lưu PHÂN SỐ: mô tả trong seed ghi "User nhận 70%"
    * nhưng giá trị thật là 0.7, nên nâng lên 80% rất dễ thành 80 — hoa hồng 50.000đ biến thành
-   * 4.000.000đ cộng thẳng vào ví rút được, và sau khi đã trả thì không đòi lại được.
+   * 4.000.000đ cộng thẳng vào Ví Tubu, và sau khi đã trả thì không đòi lại được.
    *
    * Cố ý liệt kê TỪNG KHOÁ chứ không suy theo hậu tố: `subscribe.discount_pct` là phân số
    * (0.12) còn `groupbuy.discount_pct` là phần trăm nguyên (15) — cùng hậu tố, khác đơn vị.
