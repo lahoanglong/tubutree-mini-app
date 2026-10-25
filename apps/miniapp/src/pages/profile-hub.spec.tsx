@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   authStatus: 'authenticated' as 'authenticated' | 'idle' | 'error' | 'loading',
   notifications: [] as { status: string }[],
   role: 'CUSTOMER',
+  affiliateMe: { isAffiliate: false, canRegister: false } as { isAffiliate: boolean; canRegister: boolean },
   getPublicConfig: vi.fn(async () => ({})),
   chatSummary: vi.fn(),
 }));
@@ -36,6 +37,7 @@ vi.mock('../services/account-api', () => ({
   getCoupons: vi.fn().mockResolvedValue([{ code: 'A' }, { code: 'B' }]),
 }));
 vi.mock('../services/brand-owner-api', () => ({ getOwnedBrand: vi.fn().mockResolvedValue(null), getOwnsBrand: vi.fn().mockResolvedValue(null) }));
+vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn(async () => mocks.affiliateMe) }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: vi.fn().mockResolvedValue({ isDealer: false, status: null }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
@@ -88,6 +90,19 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     renderPage();
     expect(await screen.findByText('Cộng tác viên')).toBeInTheDocument();
     expect(screen.queryByText('Mở gian hàng Cộng tác viên')).toBeNull();
+  });
+
+  it('đại lý thuần không thấy mục Cộng tác viên; đại lý còn quyền CTV thì thấy', async () => {
+    mocks.role = 'DEALER';
+    mocks.affiliateMe = { isAffiliate: false, canRegister: false };
+    const { unmount } = renderPage();
+    await screen.findByText('Câu chuyện thương hiệu');
+    await waitFor(() => expect(screen.queryByText('Cộng tác viên')).toBeNull());
+    expect(screen.queryByText('Mở gian hàng Cộng tác viên')).toBeNull();
+    unmount();
+    mocks.affiliateMe = { isAffiliate: true, canRegister: false };
+    renderPage();
+    expect(await screen.findByText('Cộng tác viên')).toBeInTheDocument();
   });
 
   it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {

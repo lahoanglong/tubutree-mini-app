@@ -8,8 +8,20 @@ import type { PrismaClient, StorefrontType, UserRole } from '@prisma/client';
 
 export const PROD_FLAG = '--i-know-this-is-prod';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-/** Tên DB máy thử đang dùng trong repo: dev compose (`tubutree`), race test (`tubutree_it`), và hai tên dành cho môi trường dev/UAT. */
-export const ALLOWED_DB_NAMES: ReadonlySet<string> = new Set(['tubutree', 'tubutree_it', 'tubutree_dev', 'tubutree_uat_tpl']);
+/** Tên DB máy thử: race test (`tubutree_it`) và hai tên dành cho môi trường dev/UAT. Không có `tubutree` vì đó cũng là tên DB PROD (docker-compose.vietnix.yml), nên qua tunnel SSH về localhost sẽ lọt. */
+export const ALLOWED_DB_NAMES: ReadonlySet<string> = new Set(['tubutree_it', 'tubutree_dev', 'tubutree_uat_tpl']);
+/** DB dev cục bộ trong `.env.example` tên `tubutree`: phải xin đích danh bằng `--allow-db=tubutree`, khác hẳn cờ PROD. */
+export const ALLOW_DB_FLAG_PREFIX = '--allow-db=';
+
+/** Nơi script sẽ ghi, để in ra trước khi chạy (không có mật khẩu). */
+export function describeDatabaseTarget(databaseUrl: string | undefined): string {
+  try {
+    const u = new URL(databaseUrl ?? '');
+    return `${u.hostname}${u.port ? `:${u.port}` : ''}/${decodeURIComponent(u.pathname.replace(/^\//, ''))}`;
+  } catch {
+    return '(không đọc được DATABASE_URL)';
+  }
+}
 
 export interface SampleStorefrontDef {
   slug: string;
@@ -147,8 +159,9 @@ export function assertSampleSeedAllowed(opts: { env: NodeJS.ProcessEnv; database
     throw new SampleSeedRefusal(`Từ chối chạy: DATABASE_URL trỏ tới "${host}", không phải localhost hoặc 127.0.0.1. Gian hàng mẫu chỉ dành cho máy thử; muốn đưa lên PROD thì thêm cờ ${PROD_FLAG}.`);
   }
   const dbName = decodeURIComponent(url.pathname.replace(/^\//, ''));
-  if (!ALLOWED_DB_NAMES.has(dbName)) {
-    throw new SampleSeedRefusal(`Từ chối chạy: tên DB "${dbName}" không nằm trong danh sách máy thử (${[...ALLOWED_DB_NAMES].join(', ')}). Muốn đưa lên PROD thì thêm cờ ${PROD_FLAG}.`);
+  const allowed = opts.argv.filter((a) => a.startsWith(ALLOW_DB_FLAG_PREFIX)).map((a) => a.slice(ALLOW_DB_FLAG_PREFIX.length));
+  if (!ALLOWED_DB_NAMES.has(dbName) && !allowed.includes(dbName)) {
+    throw new SampleSeedRefusal(`Từ chối chạy: tên DB "${dbName}" không nằm trong danh sách máy thử (${[...ALLOWED_DB_NAMES].join(', ')}). DB dev cục bộ thật sự tên "${dbName}" thì thêm ${ALLOW_DB_FLAG_PREFIX}${dbName}; PROD thì cờ ${PROD_FLAG}.`);
   }
 }
 
@@ -242,7 +255,8 @@ export interface SampleRemoveResult {
 /**
  * Gỡ mọi gian hàng đánh dấu mẫu và tài khoản chủ do script tạo. Phần xoá gian hàng + hạ chủ về khách nằm trong một giao dịch: nếu
  * dừng giữa chừng thì không còn chủ mẫu nào giữ vai CTV/đại lý với mã giới thiệu cũ. Sau đó mới thử xoá tài khoản; tài khoản đã
- * phát sinh dữ liệu khác (khoá ngoại) được giữ lại ở vai khách, mã giới thiệu đã đổi, và báo ra.
+ * phát sinh dữ liệu khác (khoá ngoại) được giữ lại ở vai khách, bị khoá (không nhận thưởng giới thiệu), mã giới thiệu đổi theo
+ * nguyên id (cuid tạo liền nhau chung 8 ký tự đầu nên không cắt ngắn), và báo ra.
  */
 export async function removeSampleStorefronts(db: Pick<PrismaClient, 'user' | 'storefront' | '$transaction'>): Promise<SampleRemoveResult> {
   const { storefronts, ownerIds } = await db.$transaction(async (tx) => {
@@ -250,7 +264,7 @@ export async function removeSampleStorefronts(db: Pick<PrismaClient, 'user' | 's
     for (const sf of samples) await tx.storefront.delete({ where: { id: sf.id } });
     const owners = await tx.user.findMany({ where: { metadata: { path: ['sampleStorefront'], equals: true } }, select: { id: true } });
     for (const u of owners) {
-      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', referralCode: `SAMPLE-GONE-${u.id.slice(0, 8).toUpperCase()}` } });
+      await tx.user.update({ where: { id: u.id }, data: { role: 'CUSTOMER', isBlocked: true, referralCode: `SAMPLE-GONE-${u.id.toUpperCase()}` } });
     }
     return { storefronts: samples.length, ownerIds: owners.map((u) => u.id) };
   });

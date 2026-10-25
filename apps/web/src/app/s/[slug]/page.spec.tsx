@@ -238,6 +238,16 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
     expect((await meta()).robots).toBeUndefined();
   });
 
+  it('gian hàng mẫu: tiêu đề và mô tả chia sẻ có tiền tố "Gian hàng mẫu · "; gian hàng thật thì không', async () => {
+    mocks.sf = { ...SF, isSample: true };
+    const m = await meta();
+    expect(m.title).toBe('Gian hàng mẫu · Shop của Linh — Tubu Tree');
+    expect(m.description).toBe('Gian hàng mẫu · Hàng sống xanh');
+    expect((m.openGraph as { title?: string }).title).toBe('Gian hàng mẫu · Shop của Linh — Tubu Tree');
+    mocks.sf = { ...SF };
+    expect((await meta()).title).toBe('Shop của Linh — Tubu Tree');
+  });
+
   it('ảnh chia sẻ do opengraph-image của trang dựng: metadata không nhét ảnh gốc (kể cả base64) vào og:image', async () => {
     mocks.sf = {
       ...SF, coverUrl: 'data:image/png;base64,AAAA',

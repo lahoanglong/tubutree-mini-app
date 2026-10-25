@@ -7,6 +7,7 @@ import {
   OPEN_STOREFRONT_PROMPT,
   SAMPLE_STOREFRONT_LABEL,
   SAMPLE_STOREFRONT_NOTE,
+  sampleShareText,
 } from '@tubutree/app-core/storefront-signup';
 import { getPublicStorefront } from '../services/storefront-api';
 import { apiMediaUrl, getErrorMessage, isNotFoundError } from '../services/api';
@@ -175,7 +176,7 @@ export default function StorefrontViewPage() {
         visible={shareOpen}
         onClose={() => setShareOpen(false)}
         slug={sf.slug}
-        title={sf.title}
+        title={sampleShareText(sf.title, sf.isSample)}
         referralCode={sf.referralCode ?? null}
         thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
       />

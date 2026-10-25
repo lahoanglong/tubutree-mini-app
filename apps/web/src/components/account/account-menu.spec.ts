@@ -21,13 +21,17 @@ const labels = (menu: AccountMenuGroup[], group: string) => menu.find((g) => g.g
 const all = (menu: AccountMenuGroup[]) => menu.flatMap((g) => g.items);
 
 describe('nhóm menu hub tài khoản', () => {
-  it('CTV và đại lý thấy "Cộng tác viên" (bảng điều khiển), không còn lời mời mở gian hàng', () => {
-    for (const role of ['AFFILIATE', 'DEALER']) {
-      const items = buildAccountMenu(ctx({ role })).find((g) => g.group === 'Hợp tác')!.items;
-      const entry = items.find((i) => i.to === '/ctv')!;
-      expect(entry.label).toBe('Cộng tác viên');
-      expect(items.map((i) => i.label)).not.toContain('Mở gian hàng Cộng tác viên');
-    }
+  it('CTV thấy "Cộng tác viên" (bảng điều khiển), không còn lời mời mở gian hàng', () => {
+    const items = buildAccountMenu(ctx({ role: 'AFFILIATE' })).find((g) => g.group === 'Hợp tác')!.items;
+    expect(items.find((i) => i.to === '/ctv')!.label).toBe('Cộng tác viên');
+    expect(items.map((i) => i.label)).not.toContain('Mở gian hàng Cộng tác viên');
+  });
+
+  it('đại lý chỉ thấy mục Cộng tác viên khi còn quyền CTV; đại lý thuần hoặc chưa biết quyền thì không có mục này', () => {
+    const find = (over: Partial<AccountMenuContext>) => buildAccountMenu(ctx(over)).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/ctv');
+    expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: true, canRegister: false } })?.label).toBe('Cộng tác viên');
+    expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: false, canRegister: false } })).toBeUndefined();
+    expect(find({ role: 'DEALER' })).toBeUndefined();
   });
 
   it('lời mời mở gian hàng không nhắc hoa hồng (chính sách Zalo)', () => {

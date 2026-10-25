@@ -53,6 +53,7 @@ import {
   PARTNER_STOREFRONT_TITLE,
   PARTNER_STOREFRONT_WEB_HINT,
   dealerReviewLine,
+  dealerApplyPitch,
 } from '@tubutree/app-core/dealer-apply-copy';
 import { Field } from '../components/ui/form';
 import { Badge, type BadgeTone } from '../components/ui/badge';
@@ -165,19 +166,19 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
             Trở thành đại lý Tubu
           </Heading>
           <Text variant="body-sm" tone="inverse" as="p" style={{ marginTop: 4, opacity: 0.8 }}>
-            {maxDiscountPct ? vi.dealerApply.pitch(formatRatePct(maxDiscountPct)) : vi.dealerApply.pitchGeneric}
+            {dealerApplyPitch(maxDiscountPct ? formatRatePct(maxDiscountPct) : null)}
           </Text>
         </div>
 
         <div style={{ marginTop: 12, padding: 12, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)' }} data-testid="dealer-conditions">
           <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{DEALER_REQUIREMENTS_TITLE}</Text>
-          <ul style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+          <ul style={{ margin: '4px 0 8px', paddingLeft: 18, listStyleType: 'disc' }}>
             {DEALER_REQUIREMENTS.map((t) => (
               <li key={t}><Text variant="body-sm" tone="secondary">{t}</Text></li>
             ))}
           </ul>
           <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{DEALER_BENEFITS_TITLE}</Text>
-          <ul style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
+          <ul style={{ margin: '4px 0 8px', paddingLeft: 18, listStyleType: 'disc' }}>
             {DEALER_BENEFITS.map((t) => (
               <li key={t}><Text variant="body-sm" tone="secondary">{t}</Text></li>
             ))}

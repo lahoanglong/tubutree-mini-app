@@ -13,7 +13,7 @@ import {
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
-import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE } from '@tubutree/app-core/storefront-signup';
+import { SAMPLE_STOREFRONT_LABEL, SAMPLE_STOREFRONT_NOTE, sampleShareText } from '@tubutree/app-core/storefront-signup';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { getReturnWindowDays, getStorefront, type ProductCard as ProductCardData } from '@/lib/api';
 import { SITE_URL } from '@/lib/site';
@@ -36,8 +36,8 @@ export async function generateMetadata({
   if (!sf) return { title: 'Gian hàng — Tubu Tree' };
   // Ảnh chia sẻ do opengraph-image.tsx của trang này dựng: ảnh gốc có thể là base64 nên không đưa thẳng vào og:image.
   const canonical = `${SITE_URL}/s/${sf.slug}`;
-  const title = `${sf.title} — Tubu Tree`;
-  const description = sf.headerNote ?? 'Gian hàng sống xanh trên Tubu Tree';
+  const title = sampleShareText(`${sf.title} — Tubu Tree`, sf.isSample);
+  const description = sampleShareText(sf.headerNote ?? 'Gian hàng sống xanh trên Tubu Tree', sf.isSample);
   return {
     title,
     description,

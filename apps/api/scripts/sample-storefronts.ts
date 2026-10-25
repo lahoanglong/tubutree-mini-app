@@ -2,11 +2,13 @@
 // Tạo:  cd apps/api && pnpm seed:sample-storefronts
 // Gỡ:   cd apps/api && pnpm unseed:sample-storefronts
 // Chỉ chạy được khi DATABASE_URL trỏ localhost/127.0.0.1 và NODE_ENV khác production, trừ khi thêm --i-know-this-is-prod.
+// DB dev cục bộ tên `tubutree` phải thêm --allow-db=tubutree (tên này cũng là DB PROD nên không nằm trong danh sách mặc định).
 import { readFileSync } from 'fs';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import {
   assertSampleSeedAllowed,
+  describeDatabaseTarget,
   effectiveDatabaseUrl,
   removeSampleStorefronts,
   seedSampleStorefronts,
@@ -23,6 +25,7 @@ async function main() {
   }
   const databaseUrl = effectiveDatabaseUrl(process.env, dotenvText);
   assertSampleSeedAllowed({ env: process.env, databaseUrl, argv });
+  console.log(`Ghi vào: ${describeDatabaseTarget(databaseUrl)}`);
   if (databaseUrl && !process.env.DATABASE_URL) process.env.DATABASE_URL = databaseUrl;
 
   const prisma = new PrismaClient();

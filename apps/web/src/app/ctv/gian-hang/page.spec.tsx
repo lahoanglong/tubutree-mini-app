@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { id: 'ctv1' } }) }));
+vi.mock('@/components/product-card', () => ({ default: ({ product }: { product: { name: string } }) => <div data-testid="product-card">{product.name}</div> }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
 vi.mock('@/components/account/cloudinary-upload', () => ({ uploadToCloudinary: async () => null }));
 
@@ -482,12 +483,12 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     await flush();
     const create = btn('Tạo bộ sưu tập') as HTMLButtonElement;
     expect(create.disabled).toBe(true);
-    typeInto(inputByLabel('Tên bộ sưu tập (khách sẽ thấy)'), '  Mới  ');
+    typeInto(inputByLabel('Tên bộ sưu tập'), '  Mới  ');
     expect((btn('Tạo bộ sưu tập') as HTMLButtonElement).disabled).toBe(false);
     click(btn('Tạo bộ sưu tập'));
     await flush();
     expect(writes().map((c) => [c.method, c.path, c.body])).toEqual([['post', '/storefront/me/collections', { title: 'Mới' }]]);
-    expect((inputByLabel('Tên bộ sưu tập (khách sẽ thấy)') as HTMLInputElement).value).toBe('');
+    expect((inputByLabel('Tên bộ sưu tập') as HTMLInputElement).value).toBe('');
   });
 
   it('form tạo bộ sưu tập chỉ có ô tên, không có chọn loại, bố cục hay % giảm', async () => {
@@ -634,6 +635,7 @@ describe('đăng gian hàng và xem trước', () => {
     await flush();
     expect(dialog()?.textContent).toContain('Gian hàng chưa gửi duyệt nên khách chưa thấy');
     expect(dialog()?.querySelector('[data-testid="storefront-preview"]')).not.toBeNull();
+    expect(dialog()?.querySelectorAll('[data-testid="product-card"]').length).toBeGreaterThan(0);
   });
 
   it('xem trước khi đã đăng: liên kết tới /s/<slug>', async () => {

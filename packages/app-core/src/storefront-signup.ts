@@ -8,6 +8,10 @@ export const STOREFRONT_NOTE_MAX = 200;
 export const STOREFRONT_REVIEW_PROMISE = 'Tubu duyệt trong 1 ngày làm việc, rồi khách mới xem được gian hàng của bạn.';
 
 export const SAMPLE_STOREFRONT_LABEL = 'Gian hàng mẫu';
+/** Chữ chia sẻ/OG của gian hàng mẫu mang tiền tố, để người nhận link không tưởng là người bán thật. */
+export function sampleShareText(text: string, isSample: boolean | undefined): string {
+  return isSample ? `${SAMPLE_STOREFRONT_LABEL} · ${text}` : text;
+}
 export const SAMPLE_STOREFRONT_NOTE = 'Đây là gian hàng mẫu để giới thiệu cách hoạt động, không phải người bán thật.';
 
 export const OPEN_STOREFRONT_MENU_LABEL = 'Mở gian hàng Cộng tác viên';
@@ -15,11 +19,23 @@ export const OPEN_STOREFRONT_MENU_HINT = 'Gian hàng riêng, chia sẻ link cho 
 export const CTV_MENU_LABEL = 'Cộng tác viên';
 export const CTV_MENU_HINT = 'Bảng điều khiển, gian hàng, ví';
 
-/** Mục menu Cá nhân cho CTV: người đang là CTV/đại lý vào bảng điều khiển của họ; người chưa là CTV thấy lối đăng ký và mở gian hàng. */
-export function ctvMenuEntry(role: string | null | undefined): { label: string; hint: string } {
-  return role === 'AFFILIATE' || role === 'DEALER'
-    ? { label: CTV_MENU_LABEL, hint: CTV_MENU_HINT }
-    : { label: OPEN_STOREFRONT_MENU_LABEL, hint: OPEN_STOREFRONT_MENU_HINT };
+/** Dấu hiệu quyền CTV lấy từ GET /affiliate/me (cùng điều kiện màn /affiliate dùng). */
+export interface CtvAccessHint {
+  isAffiliate?: boolean;
+  canRegister?: boolean;
+}
+
+/**
+ * Mục menu Cá nhân cho CTV. CTV vào bảng điều khiển; đại lý chỉ thấy mục này khi còn quyền CTV (gian hàng CTV hoặc hoa hồng cũ), vì
+ * không có quyền thì màn /affiliate chỉ báo "không đăng ký được". Người chưa là CTV thấy lời mời mở gian hàng. Trả null khi không có
+ * lối nào hợp lệ để hiện (đại lý thuần, nhân viên không đăng ký được) hoặc chưa biết quyền của đại lý.
+ */
+export function ctvMenuEntry(role: string | null | undefined, access?: CtvAccessHint | null): { label: string; hint: string } | null {
+  const ctv = { label: CTV_MENU_LABEL, hint: CTV_MENU_HINT };
+  if (role === 'AFFILIATE' || access?.isAffiliate === true) return ctv;
+  if (role === 'DEALER') return null;
+  if (access?.canRegister === false) return null;
+  return { label: OPEN_STOREFRONT_MENU_LABEL, hint: OPEN_STOREFRONT_MENU_HINT };
 }
 export const OPEN_STOREFRONT_PROMPT = 'Bạn cũng muốn có gian hàng như này?';
 export const OPEN_STOREFRONT_CTA = 'Mở gian hàng';
@@ -123,6 +139,16 @@ export function storefrontPublishCopy(sf: { needsApproval?: boolean; approved?: 
     done: republish ? 'Đã đăng lại gian hàng. Khách xem được ngay.' : SIGNUP_COPY.published,
     previewHint: 'Gian hàng chưa đăng nên khách chưa thấy. Đây là bản xem trước của bạn.',
   };
+}
+
+/**
+ * Lời báo sau khi bấm Đăng, theo trạng thái máy chủ vừa trả (LIVE: khách xem được ngay; PENDING_APPROVAL: đã gửi duyệt), không theo
+ * cờ đã tải từ trước: cờ duyệt có thể đổi giữa lúc mở màn và lúc bấm. Máy chủ cũ chưa trả `status` thì dùng chữ theo trạng thái trước đó.
+ */
+export function storefrontPublishedMessage(result: { status?: StorefrontStatusCode } | null | undefined, before: { needsApproval?: boolean; approved?: boolean }): string {
+  if (result?.status === 'PENDING_APPROVAL') return SIGNUP_COPY.submitted;
+  if (result?.status === 'LIVE') return before.approved === true ? 'Đã đăng lại gian hàng. Khách xem được ngay.' : SIGNUP_COPY.published;
+  return storefrontPublishCopy(before).done;
 }
 
 export interface StorefrontStatusView {

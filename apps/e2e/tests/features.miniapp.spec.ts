@@ -48,6 +48,7 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     // thiếu walletBalance làm ProfilePage crash ở formatVnd(user.walletBalance).
     mockSession(api, makeUser({ id: 'brand-1', role: 'ADMIN', fullName: 'Brand Owner 1', referralCode: 'BRAND1' }));
     mockProfile(api);
+    api.get('/affiliate/me', { isAffiliate: true, canRegister: false, canOpenStorefront: true });
     api.get('/auth/me', { ownsBrand: true });
 
     const brand: OwnedBrand = {

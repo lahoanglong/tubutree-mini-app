@@ -1,6 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RewardPointsService } from '../wallet/reward-points.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { isStorefrontApprovalRequired } from './storefront-config';
 
 interface QuestStats {
   itemsTotal: number;
@@ -70,7 +72,15 @@ export class StorefrontQuestService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rewards: RewardPointsService,
+    // @Optional: các test dựng service trực tiếp không có config; thiếu thì coi như cờ duyệt theo mặc định.
+    @Optional() private readonly config?: SystemConfigService,
   ) {}
+
+  /** Lời hứa duyệt chỉ đúng khi cờ storefront.require_approval bật. */
+  private async publishHint(): Promise<string> {
+    const required = this.config ? await isStorefrontApprovalRequired(this.config) : true;
+    return required ? 'Gian hàng mới được Tubu duyệt trong 1 ngày làm việc, sau đó khách mới xem được.' : 'Đăng gian hàng để khách xem được ngay.';
+  }
 
   private async stats(userId: string): Promise<{ sfId: string; stats: QuestStats }> {
     const sf = await this.prisma.storefront.findFirst({
@@ -94,6 +104,7 @@ export class StorefrontQuestService {
 
   async listQuests(userId: string) {
     const { stats } = await this.stats(userId);
+    const publishHint = await this.publishHint();
     // Nhiệm vụ đã nhận bằng xu trước PD-3 nằm ở sổ xu cũ; chỉ đọc sổ điểm thì CTV thấy "chưa nhận"
     // và bấm nhận được lần hai.
     const where = { userId, refType: 'QUEST' };
@@ -108,7 +119,7 @@ export class StorefrontQuestService {
       const done = progress >= q.goal;
       const claimed = claimedSet.has(`STOREFRONT_QUEST:${q.code}`);
       if (claimed) totalEarnedPoints += q.rewardPoints;
-      return { code: q.code, title: q.title, hint: q.hint, goal: q.goal, rewardPoints: q.rewardPoints, progress, done, claimed };
+      return { code: q.code, title: q.title, hint: q.code === 'publish' ? publishHint : q.hint, goal: q.goal, rewardPoints: q.rewardPoints, progress, done, claimed };
     });
     const level = quests.filter((q) => q.claimed).length;
     return { quests, totalEarnedPoints, level, levelMax: QUESTS.length };

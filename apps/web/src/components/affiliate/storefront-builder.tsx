@@ -13,7 +13,7 @@ import {
   type PickerProduct,
   type StorefrontEdit,
 } from '@tubutree/app-core/api/storefront';
-import { STOREFRONT_REVIEW_PROMISE, storefrontPublishCopy, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
+import { STOREFRONT_REVIEW_PROMISE, storefrontPublishCopy, storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { pickerQuery, storefrontQuestsQuery } from '@tubutree/app-core/queries/storefront';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
@@ -115,8 +115,8 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
-    onSuccess: () => {
-      notify(publishCopy.done);
+    onSuccess: (res) => {
+      notify(storefrontPublishedMessage(res, sf));
       void refresh();
     },
     onError: fail,

@@ -143,6 +143,18 @@ describe('StorefrontViewPage — nhãn tin cậy, nút đáy và trạng thái r
     expect(screen.queryByText('Gian hàng mẫu')).not.toBeInTheDocument();
   });
 
+  it('chia sẻ gian hàng mẫu: tiêu đề có tiền tố "Gian hàng mẫu · "; gian hàng thật giữ nguyên', async () => {
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ isSample: true, title: 'Góc Mẹ Bỉm Lá', ...withItems }));
+    const view = renderPage('mebimla');
+    await screen.findByText('Gian hàng mẫu');
+    expect(mocks.shareSheetProps).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Gian hàng mẫu · Góc Mẹ Bỉm Lá' }));
+    view.unmount();
+    mocks.getPublicStorefront.mockResolvedValue(storefront({ isSample: false, title: 'Shop An', ...withItems }));
+    renderPage('abcd1234');
+    await screen.findByRole('button', { name: 'Xem sản phẩm' });
+    expect(mocks.shareSheetProps).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Shop An' }));
+  });
+
   it('khách xem gian hàng CTV của người khác: cuối trang có lối "Mở gian hàng" dẫn tới /storefront; chủ gian hàng và gian hàng nhãn thì không', async () => {
     mocks.getPublicStorefront.mockResolvedValue(storefront(withItems));
     const view = renderPage('abcd1234');

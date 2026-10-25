@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { dealerReviewLine, DEALER_BENEFITS, DEALER_REQUIREMENTS } from './dealer-apply-copy';
+import { dealerApplyPitch, dealerReviewLine, DEALER_BENEFITS, DEALER_REQUIREMENTS } from './dealer-apply-copy';
+
+describe('dealerApplyPitch', () => {
+  it('nêu con số khi cấu hình đã về, không thì dùng câu chung không có số', () => {
+    expect(dealerApplyPitch('45%')).toBe('Giá sỉ đến 45% · công nợ · đặt hàng nhanh số lượng lớn.');
+    expect(dealerApplyPitch(null)).toBe('Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.');
+    expect(dealerApplyPitch(undefined)).not.toMatch(/\d/);
+  });
+});
 
 describe('dealer-apply-copy', () => {
   it('nêu số giờ khi có cấu hình', () => {

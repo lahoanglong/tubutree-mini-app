@@ -12,6 +12,11 @@ export const DEALER_BENEFITS: readonly string[] = [
   'Đặt hàng nhanh số lượng lớn',
 ];
 
+/** Câu mời đăng ký đại lý: chỉ nêu con số khi cấu hình thật đã về (pctText đã định dạng, ví dụ "45%"), không hứa con số mặc định. Web và Mini App dùng chung. */
+export function dealerApplyPitch(pctText: string | null | undefined): string {
+  return pctText ? `Giá sỉ đến ${pctText} · công nợ · đặt hàng nhanh số lượng lớn.` : 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.';
+}
+
 export const DEALER_REQUIREMENTS_TITLE = 'Điều kiện đăng ký';
 export const DEALER_BENEFITS_TITLE = 'Quyền lợi';
 

@@ -15,6 +15,22 @@ function makeDeps(over: any = {}) {
   return { prisma, coins };
 }
 
+describe('StorefrontQuestService.listQuests: lời hứa duyệt theo cờ', () => {
+  const run = async (flag: boolean | undefined) => {
+    const { prisma, coins } = makeDeps();
+    prisma.storefront.findFirst.mockResolvedValue({ id: 'sf1', isPublished: false, collections: [] });
+    const config = { get: async <T>(_k: string, fb?: T) => (flag === undefined ? fb : flag) as T } as any;
+    const out = await new StorefrontQuestService(prisma, coins, config).listQuests('u1');
+    return out.quests.find((q: { code: string }) => q.code === 'publish')!.hint as string;
+  };
+
+  it('cờ duyệt bật: hứa Tubu duyệt; cờ tắt: không nhắc duyệt', async () => {
+    expect(await run(true)).toContain('Tubu duyệt');
+    expect(await run(false)).not.toMatch(/duyệt/);
+    expect(await run(false)).toContain('xem được ngay');
+  });
+});
+
 describe('StorefrontQuestService.listQuests', () => {
   it('ném NotFound nếu CTV chưa có gian hàng', async () => {
     const { prisma, coins } = makeDeps();

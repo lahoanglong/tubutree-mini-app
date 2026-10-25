@@ -224,7 +224,7 @@ test.describe('Web khách: CTV', () => {
         status: state.submitted ? 'PENDING_APPROVAL' : 'DRAFT',
         isPublished: state.submitted,
         collections: state.templated
-          ? [{ id: 'c1', title: 'Chăm sóc da', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [{ id: 'i1', productId: 'p1', note: null, isPinned: false, isHidden: false, sortOrder: 0, product: { id: 'p1', name: 'Kem dưỡng', slug: 'kem', basePrice: 120_000, salePrice: null } }] }]
+          ? [{ id: 'c1', title: 'Chăm sóc da', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [{ id: 'i1', productId: 'p1', note: null, isPinned: false, isHidden: false, sortOrder: 0, product: { id: 'p1', name: 'Kem dưỡng', slug: 'kem', brand: 'Tubu', basePrice: 120_000, salePrice: null } }] }]
           : [],
       });
     api.get('/affiliate/me', { isAffiliate: true, canRegister: true, canOpenStorefront: true, referralCode: 'AN123', walletBalance: 0 });
@@ -233,6 +233,8 @@ test.describe('Web khách: CTV', () => {
     api.get('/storefront/me/products', []);
     api.get('/storefront/me/stats', EMPTY_STATS);
     api.get('/storefront/me/quests', { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 });
+    api.get('/me/wishlist/ids', []);
+    api.get('/flash-sales/active', []);
     api.post('/storefront', () => {
       state.created = true;
       return draft();
@@ -295,7 +297,7 @@ test.describe('Web khách: CTV', () => {
     });
     api.post('/storefront/me/publish', SF({ isPublished: true }));
     await page.goto('/ctv/gian-hang');
-    await page.getByLabel('Tên bộ sưu tập (khách sẽ thấy)').fill('Combo Tết');
+    await page.getByLabel('Tên bộ sưu tập').fill('Combo Tết');
     await expect(page.getByLabel('Loại bộ sưu tập')).toHaveCount(0);
     await expect(page.getByLabel('Giảm giá combo (%)')).toHaveCount(0);
     await page.getByRole('button', { name: 'Tạo bộ sưu tập' }).click();

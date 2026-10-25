@@ -10,6 +10,7 @@ import {
   signupGate,
   storefrontNeedsReview,
   storefrontPublishCopy,
+  storefrontPublishedMessage,
   validateStorefrontInfo,
 } from '@tubutree/app-core/storefront-signup';
 import {
@@ -317,9 +318,9 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
   const needsReview = storefrontNeedsReview(sf);
   const submitMut = useMutation({
     mutationFn: () => publishStorefront(true),
-    onSuccess: async () => {
+    onSuccess: async (res) => {
       haptic('medium');
-      openSnackbar({ text: copy.done, type: 'success' });
+      openSnackbar({ text: storefrontPublishedMessage(res, sf), type: 'success' });
       void qc.invalidateQueries({ queryKey: ['storefront-quests'] });
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
     },

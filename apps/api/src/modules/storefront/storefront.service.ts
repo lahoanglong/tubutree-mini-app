@@ -207,10 +207,13 @@ export class StorefrontService {
     const sf = await this.assertOwnedStorefront(userId);
     if (isPublished) await assertCanPublish(this.prisma, sf);
     try {
-      return await this.prisma.storefront.update({
+      await this.prisma.storefront.update({
         where: { id: sf.id, ...(isPublished ? PUBLISH_WHERE_NOT_TAKEN_DOWN : {}) },
         data: { isPublished, publishedAt: isPublished ? new Date() : null },
       });
+      // Trả đúng dạng getMine (kèm status/needsApproval) để màn báo "khách xem được ngay" hay "đã gửi duyệt" theo kết quả thật
+      // máy chủ vừa tính, không theo cờ đã tải từ trước.
+      return await this.getMine(userId);
     } catch (err) {
       if (isPublished && isLostToTakeDown(err)) throw takenDownError(null);
       throw err;

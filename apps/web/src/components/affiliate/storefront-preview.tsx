@@ -1,11 +1,12 @@
 import { Sprout } from 'lucide-react';
 import type { StorefrontEdit } from '@tubutree/app-core/api/storefront';
-import { formatVnd } from '@/lib/format-vnd';
+import ProductCard from '@/components/product-card';
+import type { ProductCard as ProductCardData } from '@/lib/api';
 import { cssUrl } from '@/lib/safe-color';
 
 const MAX_TILES = 4;
 
-/** Bản xem trước cho chính chủ khi khách chưa xem được (nháp, chờ duyệt): cùng bố cục rút gọn với trang công khai /s/[slug]. */
+/** Bản xem trước cho chính chủ khi khách chưa xem được (nháp, chờ duyệt): cùng bố cục rút gọn và cùng thẻ sản phẩm với trang công khai /s/[slug]. */
 export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
   const items = sf.collections.flatMap((c) => c.items).filter((it) => !it.isHidden && !it.hiddenReason);
   const shown = items.slice(0, MAX_TILES);
@@ -31,11 +32,9 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         ) : (
           <div className="mt-2.5 grid grid-cols-2 gap-2">
             {shown.map((it) => (
-              <div key={it.id} className="rounded-control border border-stone-200 bg-stone-0 p-2">
-                <div className="line-clamp-2 text-sm text-stone-900">{it.product?.name ?? 'Sản phẩm'}</div>
-                <div className="mt-0.5 text-sm font-semibold tabular-nums text-stone-900">
-                  {formatVnd(it.product?.salePrice ?? it.product?.basePrice ?? 0)}
-                </div>
+              // Cùng thẻ sản phẩm với trang công khai; chủ chỉ xem, nên chặn bấm để không rời màn đăng ký giữa chừng.
+              <div key={it.id} className="pointer-events-none">
+                <ProductCard product={{ brand: '', isFeatured: false, inStock: true, ...(it.product as unknown as Partial<ProductCardData>) } as ProductCardData} />
               </div>
             ))}
           </div>

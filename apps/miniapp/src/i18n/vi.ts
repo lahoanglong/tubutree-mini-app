@@ -737,8 +737,6 @@ export const vi = {
   },
 
   dealerApply: {
-    pitch: (pct: string) => `Giá sỉ đến ${pct} · công nợ · đặt hàng nhanh số lượng lớn.`,
-    pitchGeneric: 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.',
     pendingBody: (hours: number) => `Đội ngũ Tubu sẽ xét duyệt trong vòng ${hours} giờ và liên hệ lại với bạn qua Zalo.`,
     pendingBodyGeneric: 'Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.',
   },

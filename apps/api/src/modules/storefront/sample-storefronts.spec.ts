@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { ALLOWED_DB_NAMES, assertSampleSeedAllowed, effectiveDatabaseUrl, PROD_FLAG, SAMPLE_STOREFRONTS, SampleSeedRefusal } from './sample-storefronts';
+import { ALLOWED_DB_NAMES, ALLOW_DB_FLAG_PREFIX, describeDatabaseTarget, assertSampleSeedAllowed, effectiveDatabaseUrl, PROD_FLAG, SAMPLE_STOREFRONTS, SampleSeedRefusal } from './sample-storefronts';
 import { normalizeSubdomain } from './identifier-validation';
 
 const local = 'postgresql://tubu@127.0.0.1:35880/tubutree_it?schema=public';
@@ -10,7 +10,7 @@ describe('assertSampleSeedAllowed', () => {
 
   it('cho chạy khi DATABASE_URL trỏ 127.0.0.1 hoặc localhost và không phải production', () => {
     expect(run(local)).not.toThrow();
-    expect(run('postgresql://u:p@localhost:5434/tubutree')).not.toThrow();
+    expect(run('postgresql://u:p@localhost:5434/tubutree_dev')).not.toThrow();
   });
 
   it('từ chối khi NODE_ENV=production dù DB là localhost', () => {
@@ -38,15 +38,33 @@ describe('assertSampleSeedAllowed', () => {
   });
 
   it('cho chạy với [::1] và mọi tên DB máy thử trong danh sách', () => {
-    expect(run('postgresql://u:p@[::1]:5432/tubutree')).not.toThrow();
+    expect(run('postgresql://u:p@[::1]:5432/tubutree_it')).not.toThrow();
     for (const db of ALLOWED_DB_NAMES) expect(run(`postgresql://u:p@127.0.0.1:5432/${db}?schema=public`)).not.toThrow();
-    expect([...ALLOWED_DB_NAMES].sort()).toEqual(['tubutree', 'tubutree_dev', 'tubutree_it', 'tubutree_uat_tpl']);
+    expect([...ALLOWED_DB_NAMES].sort()).toEqual(['tubutree_dev', 'tubutree_it', 'tubutree_uat_tpl']);
   });
 
   it('NODE_ENV rỗng hoặc test vẫn bị chặn bởi URL; NODE_ENV=production chặn cả URL tốt', () => {
     expect(run(local, { NODE_ENV: '' })).not.toThrow();
     expect(run('postgresql://u:p@db.example.com/tubutree', { NODE_ENV: '' })).toThrow(SampleSeedRefusal);
     expect(run(local, { NODE_ENV: 'production' })).toThrow(/NODE_ENV=production/);
+  });
+
+  it('DB tên tubutree (trùng tên PROD, kể cả qua tunnel về localhost) bị chặn nếu không có --allow-db=tubutree', () => {
+    const url = 'postgresql://u:p@localhost:5434/tubutree';
+    expect(run(url)).toThrow(SampleSeedRefusal);
+    expect(run(url)).toThrow(/--allow-db=tubutree/);
+    expect(run(url, {}, [`${ALLOW_DB_FLAG_PREFIX}tubutree`])).not.toThrow();
+  });
+
+  it('--allow-db chỉ mở đúng tên DB đã ghi và vẫn bắt buộc máy chủ là localhost', () => {
+    expect(run('postgresql://u:p@localhost/khac', {}, [`${ALLOW_DB_FLAG_PREFIX}tubutree`])).toThrow(SampleSeedRefusal);
+    expect(run('postgresql://u:p@db.example.com/tubutree', {}, [`${ALLOW_DB_FLAG_PREFIX}tubutree`])).toThrow(/db\.example\.com/);
+    expect(run('postgresql://u:p@localhost/tubutree', { NODE_ENV: 'production' }, [`${ALLOW_DB_FLAG_PREFIX}tubutree`])).toThrow(/NODE_ENV=production/);
+  });
+
+  it('describeDatabaseTarget in máy chủ:cổng/DB, không lộ mật khẩu', () => {
+    expect(describeDatabaseTarget('postgresql://tubu:matkhau@127.0.0.1:5434/tubutree?schema=public')).toBe('127.0.0.1:5434/tubutree');
+    expect(describeDatabaseTarget(undefined)).toContain('không đọc được');
   });
 
   it('chỉ cờ --i-know-this-is-prod mới vượt được', () => {

@@ -415,8 +415,8 @@ export function NewCollectionForm({ onCreate, pending }: { onCreate: (dto: { tit
       <div className="flex items-start gap-2">
         <input
           className={`${ui.field} flex-1`}
-          aria-label="Tên bộ sưu tập (khách sẽ thấy)"
-          placeholder="Tên bộ sưu tập (khách sẽ thấy)"
+          aria-label="Tên bộ sưu tập"
+          placeholder="Tên bộ sưu tập"
           maxLength={80}
           value={title}
           onChange={(e) => setTitle(e.target.value)}

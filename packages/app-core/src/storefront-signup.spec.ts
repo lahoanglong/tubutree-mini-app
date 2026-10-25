@@ -4,6 +4,8 @@ import {
   STOREFRONT_NOTE_MAX,
   STOREFRONT_REVIEW_PROMISE,
   SIGNUP_COPY,
+  sampleShareText,
+  storefrontPublishedMessage,
   ctvMenuEntry,
   shouldStartSignupWizard,
   signupGate,
@@ -119,13 +121,49 @@ describe('3 trường hợp đăng gian hàng: cần duyệt, đã duyệt, cờ
 });
 
 describe('ctvMenuEntry', () => {
-  it('CTV và đại lý vào bảng điều khiển; người khác thấy lời mời mở gian hàng, không nhắc hoa hồng', () => {
-    expect(ctvMenuEntry('AFFILIATE').label).toBe('Cộng tác viên');
-    expect(ctvMenuEntry('DEALER').label).toBe('Cộng tác viên');
+  it('CTV vào bảng điều khiển; khách thường thấy lời mời mở gian hàng, không nhắc hoa hồng', () => {
+    expect(ctvMenuEntry('AFFILIATE')?.label).toBe('Cộng tác viên');
     for (const r of ['CUSTOMER', undefined, null]) {
-      const e = ctvMenuEntry(r);
+      const e = ctvMenuEntry(r)!;
       expect(e.label).toBe('Mở gian hàng Cộng tác viên');
       expect(`${e.label} ${e.hint}`).not.toMatch(/hoa hồng/i);
     }
+  });
+
+  it('đại lý chỉ thấy mục Cộng tác viên khi còn quyền CTV (isAffiliate); đại lý thuần hoặc chưa biết quyền thì ẩn', () => {
+    expect(ctvMenuEntry('DEALER', { isAffiliate: true, canRegister: false })?.label).toBe('Cộng tác viên');
+    expect(ctvMenuEntry('DEALER', { isAffiliate: false, canRegister: false })).toBeNull();
+    expect(ctvMenuEntry('DEALER')).toBeNull();
+    expect(ctvMenuEntry('DEALER', null)).toBeNull();
+  });
+
+  it('nhân viên không đăng ký CTV được thì ẩn; admin có quyền CTV thì vào bảng điều khiển', () => {
+    expect(ctvMenuEntry('STAFF', { isAffiliate: false, canRegister: false })).toBeNull();
+    expect(ctvMenuEntry('ADMIN', { isAffiliate: true })?.label).toBe('Cộng tác viên');
+    expect(ctvMenuEntry('STAFF')?.label).toBe('Mở gian hàng Cộng tác viên');
+  });
+});
+
+describe('storefrontPublishedMessage: lời báo theo kết quả máy chủ trả về', () => {
+  it('PENDING_APPROVAL → đã gửi duyệt, kể cả khi bản đã tải trước nói không cần duyệt', () => {
+    expect(storefrontPublishedMessage({ status: 'PENDING_APPROVAL' }, { needsApproval: false, approved: false })).toBe(SIGNUP_COPY.submitted);
+  });
+
+  it('LIVE → khách xem được ngay, kể cả khi bản đã tải trước nói cần duyệt', () => {
+    expect(storefrontPublishedMessage({ status: 'LIVE' }, { needsApproval: true, approved: false })).toBe(SIGNUP_COPY.published);
+    expect(storefrontPublishedMessage({ status: 'LIVE' }, { needsApproval: false, approved: true })).toContain('đăng lại');
+  });
+
+  it('máy chủ cũ chưa trả status: theo trạng thái trước đó', () => {
+    expect(storefrontPublishedMessage({}, { needsApproval: true })).toBe(SIGNUP_COPY.submitted);
+    expect(storefrontPublishedMessage(null, { needsApproval: false, approved: true })).toBe(storefrontPublishCopy({ needsApproval: false, approved: true }).done);
+  });
+});
+
+describe('sampleShareText', () => {
+  it('gian hàng mẫu có tiền tố "Gian hàng mẫu · ", gian hàng thật giữ nguyên', () => {
+    expect(sampleShareText('Góc Mẹ Bỉm Lá', true)).toBe('Gian hàng mẫu · Góc Mẹ Bỉm Lá');
+    expect(sampleShareText('Shop An', false)).toBe('Shop An');
+    expect(sampleShareText('Shop An', undefined)).toBe('Shop An');
   });
 });

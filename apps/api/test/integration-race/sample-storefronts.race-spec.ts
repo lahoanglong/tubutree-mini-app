@@ -80,11 +80,52 @@ describe('sample storefronts (real Postgres)', () => {
       const r = await removeSampleStorefronts(prisma);
       const after = await prisma.user.findUnique({ where: { id: owner.id }, select: { role: true, referralCode: true } });
       expect(after?.role).toBe('CUSTOMER');
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id }, select: { isBlocked: true } })).isBlocked).toBe(true);
       expect(after?.referralCode).not.toBe(slug.toUpperCase());
+      expect(after?.referralCode).toBe(`SAMPLE-GONE-${owner.id.toUpperCase()}`);
       expect(r.keptOwners).toContain(owner.id);
       expect(await prisma.storefront.count({ where: { slug } })).toBe(0);
     } finally {
       await cleanup(slug, product.id);
+    }
+  });
+
+  it('3 chủ tạo liền nhau (cuid chung 8 ký tự đầu) vẫn gỡ hết trong một lần', async () => {
+    const a = await setup({ type: 'CTV', ownerRole: 'AFFILIATE', isPartner: false });
+    const b = await setup({ type: 'CTV', ownerRole: 'AFFILIATE', isPartner: false });
+    const c = await setup({ type: 'CTV', ownerRole: 'AFFILIATE', isPartner: false });
+    try {
+      await Promise.all([a, b, c].map((x) => seedSampleStorefronts(prisma, [x.def])));
+      const r = await removeSampleStorefronts(prisma);
+      expect(r.storefronts).toBeGreaterThanOrEqual(3);
+      expect(r.keptOwners).toEqual([]);
+      for (const x of [a, b, c]) expect(await prisma.storefront.count({ where: { slug: x.slug } })).toBe(0);
+      expect(await prisma.user.count({ where: { metadata: { path: ['sampleStorefront'], equals: true } } })).toBe(0);
+    } finally {
+      for (const x of [a, b, c]) await cleanup(x.slug, x.product.id);
+    }
+  });
+
+  it('chủ bị giữ lại (có đơn) và có người được mời: bị khoá, người được mời không mất, các chủ khác vẫn gỡ được', async () => {
+    const a = await setup({ type: 'CTV', ownerRole: 'AFFILIATE', isPartner: false });
+    const b = await setup({ type: 'CTV', ownerRole: 'AFFILIATE', isPartner: false });
+    let refereeId: string | undefined;
+    try {
+      await seedSampleStorefronts(prisma, [a.def]);
+      await seedSampleStorefronts(prisma, [b.def]);
+      const ownerA = await prisma.user.findUniqueOrThrow({ where: { referralCode: a.slug.toUpperCase() }, select: { id: true } });
+      await createOrder(prisma, { userId: ownerA.id, status: 'CANCELLED' });
+      const referee = await prisma.user.create({ data: { referralCode: randCode(10), role: 'CUSTOMER', referredById: ownerA.id } });
+      refereeId = referee.id;
+      const r = await removeSampleStorefronts(prisma);
+      expect(r.keptOwners).toEqual([ownerA.id]);
+      const kept = await prisma.user.findUniqueOrThrow({ where: { id: ownerA.id }, select: { role: true, isBlocked: true } });
+      expect(kept).toEqual({ role: 'CUSTOMER', isBlocked: true });
+      expect(await prisma.user.count({ where: { referralCode: b.slug.toUpperCase() } })).toBe(0);
+      expect(await prisma.user.count({ where: { id: refereeId } })).toBe(1);
+    } finally {
+      if (refereeId) await prisma.user.delete({ where: { id: refereeId } }).catch(() => undefined);
+      for (const x of [a, b]) await cleanup(x.slug, x.product.id);
     }
   });
 });

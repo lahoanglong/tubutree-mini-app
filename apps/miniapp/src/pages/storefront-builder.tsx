@@ -12,7 +12,8 @@ import {
   getQuests, claimQuest, getStorefrontStats,
   type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
-import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
+import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
+  storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { getErrorMessage } from '../services/api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -145,7 +146,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(true),
-    onSuccess: () => { haptic('medium'); openSnackbar({ text: publishCopy.done, type: 'success' }); void refresh(); },
+    onSuccess: (res) => { haptic('medium'); openSnackbar({ text: storefrontPublishedMessage(res, sf), type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const unpublishMut = useMutation({

@@ -12,6 +12,7 @@ import {
   signupGate,
   storefrontNeedsReview,
   storefrontPublishCopy,
+  storefrontPublishedMessage,
   validateStorefrontInfo,
 } from '@tubutree/app-core/storefront-signup';
 import {
@@ -377,13 +378,13 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
 function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
   const copy = storefrontPublishCopy(sf);
   const needsReview = storefrontNeedsReview(sf);
   const submitMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),
-    onSuccess: async () => {
-      setDone(true);
+    onSuccess: async (res) => {
+      setDone(storefrontPublishedMessage(res, sf));
       void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
       await qc.invalidateQueries({ queryKey: ['my-storefront'] });
     },
@@ -400,7 +401,7 @@ function ReviewStep({ sf, onBack }: { sf: StorefrontEdit; onBack: () => void }) 
         </Card>
       )}
       <div role="status" aria-live="polite">
-        {done && <p className="text-sm font-medium text-success-fg">{copy.done}</p>}
+        {done && <p className="text-sm font-medium text-success-fg">{done}</p>}
       </div>
       {error && (
         <p role="alert" className={ui.error}>
