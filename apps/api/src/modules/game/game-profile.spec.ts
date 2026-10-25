@@ -10,7 +10,7 @@ function setup(overrides: Partial<{ findUnique: jest.Mock; create: jest.Mock; fi
     findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'gp-winner' }),
     ...overrides,
   };
-  const config = { get: jest.fn(async (_k: string, fb?: unknown) => fb) };
+  const config = { get: jest.fn().mockImplementation(async (_k: string, fb?: unknown) => fb) };
   return { prisma: { gameProfile } as never, gameProfile, config };
 }
 
