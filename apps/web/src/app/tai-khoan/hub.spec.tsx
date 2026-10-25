@@ -98,7 +98,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     mocks.meName = null;
     const c = await mount();
     expect(link(c, '/tai-khoan/ho-so')!.textContent).toContain('Mầm Xanh');
-    expect(c.querySelector('section[aria-label="Thông tin tài khoản"]')!.textContent).toContain('Khách Tubu');
+    expect(link(c, '/tai-khoan/ho-so')!.textContent).toContain('Khách Tubu');
   });
 
   it('hiện ảnh đại diện khi có', async () => {
@@ -111,8 +111,8 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const c = await mount();
-    const btn = byText(c, 'button', 'Mã giới thiệu: AN1')!;
-    expect(btn.textContent).toContain('Sao chép');
+    const btn = byText(c, 'button', 'Mã của bạn: AN1')!;
+    expect(btn.getAttribute('aria-label')).toBe('Sao chép mã AN1');
     click(btn);
     await flush(3);
     expect(writeText).toHaveBeenCalledWith('AN1');
@@ -122,7 +122,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
   it('không chép được thì nói mã để khách tự chép', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
     const c = await mount();
-    click(byText(c, 'button', 'Mã giới thiệu: AN1'));
+    click(byText(c, 'button', 'Mã của bạn: AN1'));
     await flush(3);
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được — mã của bạn: AN1');
   });
@@ -130,17 +130,21 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
   it('chưa có mã giới thiệu: không có nút', async () => {
     mocks.auth.user = { ...mocks.auth.user, referralCode: '' };
     const c = await mount();
-    expect(byText(c, 'button', 'Mã giới thiệu')).toBeNull();
+    expect(byText(c, 'button', 'Mã của bạn')).toBeNull();
+    expect(c.textContent).not.toContain('Mời bạn bè mua hàng');
   });
 });
 
-describe('hub /tai-khoan — ba số dư', () => {
-  it('Điểm Xanh, Ví Tubu, Mã giảm giá; Mã giảm giá đếm số mã và dẫn tới trang Điểm Xanh như Mini App', async () => {
+describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
+  const stat = (c: HTMLElement, label: string) => Array.from(c.querySelectorAll('a')).find((a) => a.getAttribute('aria-label')?.startsWith(`${label}:`))!;
+
+  it('Điểm Xanh, Ví Tubu, Mã giảm giá; Mã giảm giá đếm số mã và mở mục mã của trang Ưu đãi', async () => {
     const c = await mount();
-    const tiles = Array.from(c.querySelectorAll('a')).filter((a) => /Điểm Xanh|Ví Tubu|Mã giảm giá/.test(a.textContent ?? '') && a.closest('section[aria-label="Thông tin tài khoản"]'));
-    expect(tiles.map((a) => a.getAttribute('href'))).toEqual(['/tai-khoan/diem-xanh', '/tai-khoan/vi-tubu', '/tai-khoan/diem-xanh']);
-    expect(tiles[2]!.textContent).toContain('2 mã');
-    expect(tiles[2]!.textContent).toContain('Mã giảm giá');
+    expect(stat(c, 'Điểm Xanh').getAttribute('href')).toBe('/tai-khoan/diem-xanh');
+    expect(stat(c, 'Ví Tubu').getAttribute('href')).toBe('/tai-khoan/vi-tubu');
+    const coupons = stat(c, 'Mã giảm giá');
+    expect(coupons.getAttribute('href')).toBe('/uu-dai?section=coupons');
+    expect(coupons.textContent).toContain('2 mã');
   });
 
   it('chưa tải được mã giảm giá: dấu "—", không đoán số', async () => {
@@ -148,15 +152,30 @@ describe('hub /tai-khoan — ba số dư', () => {
       throw new Error('offline');
     };
     const c = await mount();
-    const tile = Array.from(c.querySelectorAll('a')).find((a) => a.textContent?.includes('Mã giảm giá'))!;
-    expect(tile.textContent).toContain('—');
+    expect(stat(c, 'Mã giảm giá').textContent).toContain('—');
+  });
+
+  it('hàng trạng thái đơn: năm ô mở danh sách đã lọc, có số đếm; Đã giao không đếm', async () => {
+    const c = await mount();
+    const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
+    const hrefs = Array.from(row.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual([
+      '/tai-khoan/don-hang',
+      '/tai-khoan/don-hang?tab=pending_payment',
+      '/tai-khoan/don-hang?tab=processing',
+      '/tai-khoan/don-hang?tab=shipping',
+      '/tai-khoan/don-hang?tab=delivered',
+      '/tai-khoan/don-hang?tab=subscriptions',
+    ]);
+    expect(row.textContent).toContain('Chờ thanh toán');
+    expect(row.textContent).toContain('Định kỳ');
   });
 });
 
 describe('hub /tai-khoan — menu theo nhóm', () => {
   it('các nhóm là h2, vẫn đúng một h1, OrdersSection còn nguyên', async () => {
     const c = await mount();
-    expect(headings2(c)).toEqual(expect.arrayContaining(['Mua sắm', 'Tài sản', 'Hợp tác', 'Khác']));
+    expect(headings2(c)).toEqual(expect.arrayContaining(['Đơn của tôi', 'Mời bạn bè mua hàng', 'Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']));
     expect(headingProblems(c)).toEqual([]);
     expect(c.textContent).toContain('Đơn hàng của tôi');
   });
@@ -164,7 +183,7 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
   it('mỗi nhóm menu là vùng có tên đúng bằng h2 của nó', async () => {
     const c = await mount();
     const sections = Array.from(c.querySelectorAll('section[aria-labelledby]'));
-    expect(sections.length).toBeGreaterThanOrEqual(4);
+    expect(sections.length).toBeGreaterThanOrEqual(3);
     for (const sec of sections) {
       const ids = sec.getAttribute('aria-labelledby')!.split(/\s+/);
       expect(ids).toHaveLength(1);
@@ -172,11 +191,11 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
     }
   });
 
-  it('Sổ địa chỉ, Ví Tubu, Điểm Xanh là liên kết; mục trỏ route pending thì ẩn', async () => {
-    mocks.notReady = new Set(['/mua-chung', '/tai-khoan/thong-bao']);
+  it('Sổ địa chỉ là liên kết; mục trỏ route pending thì ẩn', async () => {
+    mocks.notReady = new Set(['/hoc-vien', '/tai-khoan/thong-bao']);
     const c = await mount();
     expect(link(c, '/tai-khoan/dia-chi')).not.toBeNull();
-    expect(link(c, '/mua-chung')).toBeNull();
+    expect(link(c, '/hoc-vien')).toBeNull();
     expect(link(c, '/tai-khoan/thong-bao')).toBeNull();
   });
 
@@ -240,30 +259,11 @@ describe('hub /tai-khoan — mục theo vai trò và cờ', () => {
     expect(row.querySelector('[data-testid="chat-unread-dot"]')).not.toBeNull();
     expect(row.getAttribute('aria-label')).toBe('Chat với Tubu Tree, có tin mới');
   });
-
-  it('Tích điểm đơn sàn (marketplaceClaimEnabled): là nút mở thông báo "cần mở trên Zalo", không phải liên kết', async () => {
-    mocks.routes['/config/public'] = () => ({ loyalty: { marketplaceClaimEnabled: true } });
-    const c = await mount();
-    const btn = byText(c, 'button', 'Tích điểm đơn sàn')!;
-    expect(btn).not.toBeNull();
-    expect(btn.getAttribute('aria-expanded')).toBe('false');
-    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo');
-    click(btn);
-    expect(btn.getAttribute('aria-expanded')).toBe('true');
-    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo');
-    click(btn);
-    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo');
-  });
-
-  it('cờ tích điểm tắt hoặc API cũ chưa trả: không có mục', async () => {
-    mocks.routes['/config/public'] = () => ({ loyalty: {} });
-    expect(byText(await mount(), 'button', 'Tích điểm đơn sàn')).toBeNull();
-  });
 });
 
 describe('hub /tai-khoan — đại lý và chủ nhãn', () => {
-  it('đại lý đã duyệt: "Kênh đại lý" kèm hạng; đang chờ: "Hồ sơ đại lý"; chưa có: "Đăng ký đại lý"', async () => {
-    expect(link(await mount(), '/dai-ly')!.textContent).toContain('Đăng ký đại lý');
+  it('đại lý đã duyệt: "Kênh đại lý" kèm hạng; đang chờ: "Hồ sơ đại lý"; chưa có: "Đại lý"', async () => {
+    expect(link(await mount(), '/dai-ly')!.textContent).toContain('Đại lý');
     mocks.routes['/dealer/me'] = () => ({ status: 'APPROVED', isDealer: true, tier: { name: 'Bạc' } });
     const approved = link(await mount(), '/dai-ly')!;
     expect(approved.textContent).toContain('Kênh đại lý');
@@ -378,7 +378,7 @@ describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
     mocks.auth.status = 'idle';
     const c = await mount();
     mocks.auth.status = 'authenticated';
-    expect(c.textContent).toContain('Đăng nhập để xem tài khoản');
+    expect(c.textContent).toContain('Đăng nhập để xem tích điểm');
     expect(mocks.calls).toEqual([]);
   });
 });
