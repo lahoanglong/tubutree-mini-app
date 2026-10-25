@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 import { LegalMarkdown } from './legal-markdown';
 
 describe('LegalMarkdown', () => {
@@ -16,5 +16,17 @@ describe('LegalMarkdown', () => {
     expect(container.querySelector('script')).toBeNull();
     expect(container.textContent).toContain('Xem Chính sách');
     expect(container.textContent).toContain('<script>alert(1)</script>');
+  });
+
+  it('liên kết nội bộ /chinh-sach/<loại> là nút gọi onPolicy; liên kết ngoài và loại lạ vẫn chỉ là chữ', () => {
+    const onPolicy = vi.fn();
+    const { container } = render(
+      <LegalMarkdown source={'Xem [Đổi trả](/chinh-sach/doi-tra), [Ngoài](https://x.vn), [Lạ](/chinh-sach/constructor)'} onPolicy={onPolicy} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Đổi trả' }));
+    expect(onPolicy).toHaveBeenCalledWith('doi-tra');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).toContain('Ngoài');
   });
 });

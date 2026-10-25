@@ -209,38 +209,32 @@ describe('Trang Về Tubu Tree — DS v2 (C-076, C-114)', () => {
   });
 
   it('dòng chính sách mở nội dung ngay trong app, "Đã hiểu" đóng lại', async () => {
-    mocks.getPublicConfig.mockResolvedValue({ freeshipThreshold: 200000, support: SUPPORT, returnWindowDays: 7 });
     renderPage();
-    const row = await screen.findByRole('button', { name: /Chính sách đổi trả/ });
-    fireEvent.click(row);
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
     expect(await screen.findByRole('heading', { level: 2, name: 'Chính sách đổi trả' })).toBeInTheDocument();
-    await screen.findByText(/Đổi\/trả áp dụng trong 7 ngày/);
+    await screen.findByText(/Thời hạn đổi trả/);
     fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
-    await waitFor(() => expect(screen.queryByText(/Đổi\/trả áp dụng trong 7 ngày/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/Thời hạn đổi trả/)).toBeNull());
   });
 
-  it('tóm tắt đổi trả đọc số ngày từ cấu hình công khai: 14 ngày thì không còn chữ "7 ngày" (D8-4)', async () => {
-    mocks.getPublicConfig.mockResolvedValue({ freeshipThreshold: 200000, support: SUPPORT, returnWindowDays: 14 });
+  it('chưa duyệt: bản nháp đọc số ngày từ vars của endpoint, có biển BẢN NHÁP (D8-4)', async () => {
+    mocks.apiGet.mockImplementation(async (url: string) =>
+      url === '/config/legal/doi-tra' ? { data: { content: null, vars: { returnWindowDays: 14, legalName: 'Công ty Tubu' } } } : { data: [] },
+    );
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
-    const body = await screen.findByText(/Đổi\/trả áp dụng/);
-    await waitFor(() => expect(body.textContent).toContain('14 ngày'));
-    expect(body.textContent).not.toContain('7 ngày');
+    expect(await screen.findByTestId('legal-draft-banner')).toHaveTextContent('BẢN NHÁP — chờ Tubu Tree duyệt');
+    const body = screen.getByTestId('legal-markdown');
+    expect(body.textContent).toContain('trong vòng 14 ngày');
+    expect(body.textContent).toContain('Đơn vị vận hành: Công ty Tubu');
+    expect(body.textContent).toContain('hư hỏng, đổ vỡ');
+    expect(body.textContent).toContain('Tubu Tree chịu phí vận chuyển đổi trả');
   });
 
-  it('cấu hình chưa tải/không có số ngày: nói chung chung, không bịa số (D8-4)', async () => {
-    mocks.getPublicConfig.mockRejectedValue(new Error('offline'));
+  it('bản nháp đổi trả nói đúng kênh hoàn: Ví Tubu hoặc tài khoản ngân hàng khách chọn (D8-4)', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
-    const body = await screen.findByText(/Đổi\/trả áp dụng/);
-    expect(body.textContent).not.toMatch(/\d+ ngày/);
-  });
-
-  it('tóm tắt đổi trả nói đúng kênh hoàn: Ví Tubu hoặc tài khoản ngân hàng khách chọn (D8-4)', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Chính sách đổi trả/ }));
-    const body = await screen.findByText(/Đổi\/trả áp dụng/);
-    expect(body.textContent).toMatch(/Ví Tubu hoặc tài khoản ngân hàng/);
+    expect((await screen.findByTestId('legal-markdown')).textContent).toMatch(/Ví Tubu hoặc tài khoản ngân hàng/);
   });
 
   it('Xoá tài khoản: bấm → hỏi lại → "Gửi yêu cầu xoá" gọi API đúng một lần, "Huỷ" quay về', async () => {
@@ -298,10 +292,19 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
-  it('admin chưa nhập nội dung: hiện bản tóm tắt trong app', async () => {
+  it('admin chưa nhập nội dung: hiện bản nháp đầy đủ kèm biển BẢN NHÁP', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
-    expect(await screen.findByText(/Tubu Tree giao hàng toàn quốc/)).toBeInTheDocument();
+    expect(await screen.findByTestId('legal-draft-banner')).toBeInTheDocument();
+    expect(screen.getByText('1. Phạm vi giao hàng')).toBeInTheDocument();
+  });
+
+  it('liên kết nội bộ /chinh-sach/<loại> trong bản nháp mở popup chính sách đó, không mở web', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Điều khoản sử dụng/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chính sách vận chuyển' }));
+    expect(await screen.findByRole('heading', { level: 2, name: 'Chính sách vận chuyển' })).toBeInTheDocument();
+    expect(mocks.openExternal).not.toHaveBeenCalled();
   });
 
   it('đang tải hiện khung chờ', async () => {

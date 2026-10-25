@@ -133,10 +133,9 @@ describe('CommunityEventsPage — danh sách sự kiện', () => {
 });
 
 describe('CommunityEventsPage — chi tiết sự kiện', () => {
-  it('hiện thưởng, bài dự thi; bấm bài mở /feed/:id', async () => {
+  it('hiện bài dự thi; bấm bài mở /feed/:id', async () => {
     renderPage();
     await openEvent('Sự kiện e1');
-    expect(screen.getByText(/Thưởng:.*5 điểm/)).toBeInTheDocument();
     expect(screen.getByText('Bài dự thi')).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Bài p1' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/feed/p1');
@@ -157,6 +156,14 @@ describe('CommunityEventsPage — chi tiết sự kiện', () => {
     await screen.findByRole('button', { name: 'Bài p1' });
     expect(screen.queryByRole('button', { name: 'Đăng bài dự thi' })).toBeNull();
     expect(screen.queryByTestId('composer')).toBeNull();
+  });
+
+  it('chi tiết sự kiện: không hứa thưởng, chỉ nói tham gia trên web', async () => {
+    renderPage();
+    await openEvent('Sự kiện e1');
+    await screen.findByRole('button', { name: 'Bài p1' });
+    expect(screen.getByText('Tham gia trên web Tubu Tree')).toBeInTheDocument();
+    expect(screen.queryByText(/Thưởng/)).toBeNull();
   });
 
   it('chưa có bài dự thi: hiện trạng thái trống', async () => {

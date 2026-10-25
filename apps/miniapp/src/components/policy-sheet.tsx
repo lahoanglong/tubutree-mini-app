@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { DEFAULT_LEGAL_SUPPORT, LEGAL_DRAFT_NOTICE, LEGAL_PAGES, defaultLegalContent } from '@tubutree/app-core/legal';
 import { fetchLegalDoc, type LegalSlug } from '../services/legal-api';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -11,28 +12,11 @@ import { LegalMarkdown } from './legal-markdown';
 import { getErrorMessage } from '../services/api';
 
 export const POLICY_TITLES: Record<LegalSlug, string> = {
-  'dieu-khoan': 'Điều khoản sử dụng',
-  'bao-mat': 'Chính sách bảo mật',
-  'doi-tra': 'Chính sách đổi trả',
-  'van-chuyen': 'Chính sách vận chuyển',
+  'dieu-khoan': LEGAL_PAGES['dieu-khoan'].title,
+  'bao-mat': LEGAL_PAGES['bao-mat'].title,
+  'doi-tra': LEGAL_PAGES['doi-tra'].title,
+  'van-chuyen': LEGAL_PAGES['van-chuyen'].title,
 };
-
-/** Bản tóm tắt dùng khi admin chưa nhập nội dung đã duyệt. */
-function fallbackBody(slug: LegalSlug, returnWindowDays: unknown): string {
-  switch (slug) {
-    case 'dieu-khoan':
-      return 'Khi sử dụng Tubu Tree, bạn đồng ý mua sắm đúng mục đích cá nhân, cung cấp thông tin chính xác và không lạm dụng ưu đãi/điểm thưởng. Tubu Tree có quyền tạm khoá tài khoản có dấu hiệu gian lận. Giá và khuyến mãi có thể thay đổi theo thời điểm; đơn hàng chỉ được xác nhận sau khi thanh toán/được duyệt.';
-    case 'bao-mat':
-      return 'Tubu Tree thu thập tên, số điện thoại và địa chỉ nhận hàng để xử lý đơn và chăm sóc khách hàng. Chúng tôi KHÔNG bán hay chia sẻ dữ liệu cho bên thứ ba ngoài đối tác vận chuyển/thanh toán cần thiết. Bạn có thể yêu cầu xoá tài khoản & dữ liệu bất kỳ lúc nào trong mục Tài khoản.';
-    case 'doi-tra': {
-      const days = typeof returnWindowDays === 'number' && Number.isFinite(returnWindowDays) && returnWindowDays > 0 ? returnWindowDays : null;
-      const window = days ? `trong ${days} ngày kể từ khi nhận` : 'trong thời hạn đổi/trả kể từ khi nhận';
-      return `Đổi/trả áp dụng ${window}, với sản phẩm lỗi nhà sản xuất (hỏng bao bì, sai HSD, sai mã, không đúng mô tả). Gửi yêu cầu kèm ảnh minh chứng trong chi tiết đơn hàng. Tubu chịu phí ship 2 chiều cho lỗi từ nhà sản xuất; hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt.`;
-    }
-    case 'van-chuyen':
-      return 'Tubu Tree giao hàng toàn quốc qua đối tác vận chuyển. Phí và mức miễn phí vận chuyển hiển thị ở giỏ hàng trước khi bạn đặt. Bạn xem trạng thái và mã vận đơn trong mục Đơn hàng của tài khoản.';
-  }
-}
 
 /** Chính sách hiện ngay trong app (popup), không mở trang ngoài. `slug` null = đóng. */
 export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose: () => void }) {
@@ -41,9 +25,13 @@ export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose
   useEffect(() => {
     if (slug) setShown(slug);
   }, [slug]);
-  const active = slug ?? shown;
+  const [linked, setLinked] = useState<LegalSlug | null>(null);
+  useEffect(() => {
+    setLinked(null);
+  }, [slug]);
+  const active = linked ?? slug ?? shown;
   const cfg = usePublicConfig();
-  const q = useQuery({ queryKey: ['legal-doc', active], queryFn: () => fetchLegalDoc(active), enabled: slug !== null, staleTime: 10 * 60_000 });
+  const q = useQuery({ queryKey: ['legal-doc', active], queryFn: () => fetchLegalDoc(active), enabled: slug !== null || linked !== null, staleTime: 10 * 60_000 });
 
   return (
     <BottomSheet
@@ -66,12 +54,23 @@ export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose
       ) : q.isError ? (
         <ErrorState variant="inline" message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data?.content ? (
-        <LegalMarkdown source={q.data.content} />
-      ) : (
-        <Text variant="body-sm" tone="secondary" as="p">
-          {fallbackBody(active, cfg.returnWindowDays)}
-        </Text>
-      )}
+        <LegalMarkdown source={q.data.content} onPolicy={setLinked} />
+      ) : q.data ? (
+        <>
+          <div role="note" data-testid="legal-draft-banner" style={{ marginBottom: 12, padding: '10px 12px', borderRadius: 12, background: 'var(--color-status-warning-bg)', color: 'var(--color-status-warning-fg)' }}>
+            <Text variant="body-sm" as="p" style={{ margin: 0, fontWeight: 600, color: 'inherit' }}>
+              {LEGAL_DRAFT_NOTICE}. Nội dung dưới đây là bản soạn sẵn, các chỗ trong dấu [ ] sẽ được điền khi Tubu Tree duyệt.
+            </Text>
+          </div>
+          <LegalMarkdown
+            onPolicy={setLinked}
+            source={defaultLegalContent(active, q.data.vars, {
+              hotline: cfg.support?.hotline?.trim() || DEFAULT_LEGAL_SUPPORT.hotline,
+              email: cfg.support?.email?.trim() || DEFAULT_LEGAL_SUPPORT.email,
+            })}
+          />
+        </>
+      ) : null}
     </BottomSheet>
   );
 }

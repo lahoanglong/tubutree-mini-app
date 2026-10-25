@@ -22,6 +22,7 @@ import { trackEvent, trackAppOpened, flushEventQueueOnHide } from '../services/a
 import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 
 import { applyFontScale } from '../utils/font-scale';
+import { CASHBACK_ENABLED } from '../utils/features';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
@@ -228,7 +229,7 @@ export default function MyApp() {
                     {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
                         hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
                     <Route path="/academy/:courseId" element={<AcademyPage />} />
-                    <Route path="/cashback" element={<CashbackPage />} />
+                    <Route path="/cashback" element={CASHBACK_ENABLED ? <CashbackPage /> : <Navigate to="/" replace />} />
                     <Route path="/dealer" element={<DealerPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/wishlist" element={<WishlistPage />} />
