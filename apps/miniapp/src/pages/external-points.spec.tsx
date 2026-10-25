@@ -300,14 +300,50 @@ describe('Trang Tích điểm đơn sàn', () => {
       ['có gạch nối', 'spx-vn-999999999', 'SPXVN999999999'],
       ['URL chứa mã', 'https://spx.vn/track?tracking_number=SPXVN999999999', 'SPXVN999999999'],
       ['JSON', '{"tracking":"SPXVN999999999"}', 'SPXVN999999999'],
-    ])('quét %s: tách mã rồi gửi luôn với via=scan', async (_n, content, code) => {
+    ])('quét %s: điền mã vào ô, chưa gửi; bấm Tích điểm một lần mới gửi với via=scan', async (_n, content, code) => {
       mocks.scanCode.mockResolvedValue({ kind: 'ok', content });
       mocks.submitExternalClaim.mockResolvedValue(SEARCHING);
       renderPage();
       await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
       fireEvent.click(scanBtn());
+      await waitFor(() => expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe(code));
+      expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
+      const submitBtn = screen.getByRole('button', { name: 'Tích điểm' });
+      expect(submitBtn.className).not.toMatch(/secondary/);
+      await waitFor(() => expect(document.activeElement).toBe(submitBtn));
+      fireEvent.click(submitBtn);
       await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledWith(code, 'scan'));
       expect(mocks.trackEvent).toHaveBeenCalledWith('ext_claim_scan', 'miniapp', { result: 'ok', parsed: 'code' });
+    });
+
+    it('sửa mã sau khi quét thì gửi với via=typed', async () => {
+      mocks.scanCode.mockResolvedValue({ kind: 'ok', content: 'SPXVN999999999' });
+      mocks.submitExternalClaim.mockResolvedValue(SEARCHING);
+      renderPage();
+      await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
+      fireEvent.click(scanBtn());
+      const input = (await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement;
+      await waitFor(() => expect(input.value).toBe('SPXVN999999999'));
+      fireEvent.change(input, { target: { value: 'SPXVN888888888' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN888888888', 'typed'));
+    });
+
+    it('link thẻ Tubu có kèm code=: điền sẵn mã, không gửi', async () => {
+      mocks.scanCode.mockResolvedValue({ kind: 'ok', content: 'https://zalo.me/s/2070857098114207963/points/scan?src=shopee&card=2611&code=SPXVN999999999' });
+      renderPage();
+      await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
+      fireEvent.click(scanBtn());
+      await waitFor(() => expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('SPXVN999999999'));
+      expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
+    });
+
+    it('scanCode ném lỗi: báo gợi ý nhập tay, không văng', async () => {
+      mocks.scanCode.mockRejectedValue(new Error('boom'));
+      renderPage();
+      await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
+      fireEvent.click(scanBtn());
+      expect(await screen.findByRole('alert')).toHaveTextContent('Bạn nhập mã bằng tay');
     });
 
     it('quét phải link của chính thẻ Tubu: báo quét mã vạch trên nhãn, không gửi', async () => {
@@ -352,6 +388,8 @@ describe('Trang Tích điểm đơn sàn', () => {
       renderPage();
       await screen.findByRole('button', { name: 'Quét mã trên nhãn' });
       fireEvent.click(scanBtn());
+      await waitFor(() => expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('SPXVN999999999'));
+      fireEvent.click(screen.getByRole('button', { name: 'Tích điểm' }));
       expect(await screen.findByTestId('phone-declined')).toBeInTheDocument();
       expect((screen.getByLabelText('Hoặc nhập mã vận đơn') as HTMLInputElement).value).toBe('SPXVN999999999');
       expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
@@ -371,7 +409,8 @@ describe('Trang Tích điểm đơn sàn', () => {
       expect(welcome).toHaveTextContent('Cảm ơn bạn đã mua Tubu Tree trên Shopee');
       expect(welcome).toHaveTextContent('Quét mã trên nhãn dán ngoài hộp');
       expect(welcome).toHaveTextContent('Nhận Điểm Xanh sau khi đơn giao thành công');
-      expect(welcome.querySelectorAll('li')).toHaveLength(3);
+      expect(welcome).toHaveTextContent('1. Quét mã trên nhãn dán ngoài hộp');
+      expect(welcome).toHaveTextContent('3. Nhận Điểm Xanh');
       expect(screen.getByRole('button', { name: 'Quét mã trên nhãn' })).toBeInTheDocument();
     });
 
@@ -393,8 +432,31 @@ describe('Trang Tích điểm đơn sàn', () => {
       renderPage();
       const input = (await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement;
       expect(input.value).toBe('SPXVN123456789');
+      const btn = screen.getByRole('button', { name: 'Tích điểm' });
+      expect(btn.className).not.toMatch(/secondary/);
       await new Promise((r) => setTimeout(r, 30));
       expect(mocks.submitExternalClaim).not.toHaveBeenCalled();
+      mocks.submitExternalClaim.mockResolvedValue({ status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x' });
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledWith('SPXVN123456789', 'scan'));
+    });
+
+    it.each(['%ZZ', '%E0%A4%A', '%'])('?code=%s hỏng mã hoá %%: trang vẫn dựng, ô để trống', async (bad) => {
+      mocks.search = `?src=shopee&card=2611&code=${bad}`;
+      renderPage();
+      expect(((await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement).value).toBe('');
+    });
+
+    it('?code= đổi khi vẫn ở trang này (OpenApp cùng route): ô nhập theo mã mới', async () => {
+      mocks.search = '?code=SPXVN111111111';
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const tree = <QueryClientProvider client={qc}><ExternalPointsPage /></QueryClientProvider>;
+      const { rerender } = render(tree);
+      const input = (await screen.findByLabelText('Hoặc nhập mã vận đơn')) as HTMLInputElement;
+      expect(input.value).toBe('SPXVN111111111');
+      mocks.search = '?code=SPXVN222222222';
+      rerender(<QueryClientProvider client={qc}><ExternalPointsPage /></QueryClientProvider>);
+      await waitFor(() => expect(input.value).toBe('SPXVN222222222'));
     });
 
     it('?code= sai dạng: bỏ qua, ô để trống', async () => {
@@ -408,7 +470,7 @@ describe('Trang Tích điểm đơn sàn', () => {
       mocks.getPublicConfig.mockResolvedValue({ loyalty: { ...LOYALTY, marketplaceClaimEnabled: false } });
       renderPage();
       expect(await screen.findByText('Tích điểm đơn sàn sắp mở')).toBeInTheDocument();
-      expect(screen.getByTestId('claim-soon')).toHaveTextContent('giữ lại thẻ');
+      expect(screen.getByTestId('claim-soon')).toHaveTextContent('trong vòng 60 ngày');
       expect(screen.queryByLabelText('Hoặc nhập mã vận đơn')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Xem sản phẩm' }));
       expect(mocks.navigate).toHaveBeenCalledWith('/browse');

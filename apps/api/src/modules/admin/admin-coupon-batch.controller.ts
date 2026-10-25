@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, Matches, Max, Min, ValidateNested } from 'class-validator';
@@ -63,8 +63,8 @@ export class AdminCouponBatchController {
   }
 
   @Get(':batch/codes')
-  codes(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Param('batch') batch: string, @Query() link: ClaimLinkDto) {
-    return this.batches.codes(batch, { id: actorId, staff: role !== 'ADMIN' }, link);
+  codes(@CurrentUser('sub') actorId: string, @CurrentUser('role') role: string, @Param('batch') batch: string) {
+    return this.batches.codes(batch, { id: actorId, staff: role !== 'ADMIN' });
   }
 
   @Patch(':batch')

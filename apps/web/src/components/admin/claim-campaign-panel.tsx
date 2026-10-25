@@ -134,8 +134,11 @@ export function ClaimCampaignPanel() {
   });
 
   const exportBatch = useMutation({
-    mutationFn: (batch: string) => getCouponBatchCodes(batch, link()),
-    onSuccess: (res) => downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`),
+    mutationFn: (batch: string) => getCouponBatchCodes(batch),
+    onSuccess: (res) => {
+      downloadCsvFile(generateClaimCodesCsv(res.codes), `the-hop-hang-${res.batch}.csv`);
+      if (!res.link) setMsg({ ok: true, text: `Lô ${res.batch} tạo trước khi lưu link: file CSV dùng link mở trang chủ (/?claim=), không có nguồn và đợt thẻ.` });
+    },
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không tải được file mã.' }),
   });
 
@@ -210,6 +213,9 @@ export function ClaimCampaignPanel() {
               <p className="mt-1 text-stone-700">{offerLabel(b)}</p>
               <p className="mt-0.5 text-xs text-stone-500">
                 {formatDate(b.startAt)} – {formatDate(b.endAt)} · {b.total} thẻ · Đã nhận {b.claimed} · Đã dùng {b.used}
+              </p>
+              <p className="mt-0.5 text-xs text-stone-500" data-testid="batch-link">
+                {b.link ? `Link: ${b.link.page === 'scan' ? 'Tích điểm đơn sàn' : 'Trang chủ'}${b.link.src ? ` · nguồn ${b.link.src}` : ''}${b.link.card ? ` · đợt ${b.link.card}` : ''}` : 'Lô cũ: link mở trang chủ, không ghi nguồn và đợt thẻ.'}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {b.mine ? (
@@ -318,6 +324,9 @@ export function ClaimCampaignPanel() {
           />
         </Field>
       </div>
+      <p className="break-all rounded-lg bg-stone-50 p-2 text-xs text-stone-600" data-testid="link-preview">
+        Link mẫu trên thẻ: {claimLink(base || 'https://zalo.me/s/<appId>', mode === 'batch' ? `${f.prefix || 'MA'}-XXXXXXXX` : f.code || 'MACHUNG', link())}
+      </p>
       <label className={`flex items-center gap-2 text-sm text-stone-800 ${TOUCH_H}`}>
         <input type="checkbox" checked={f.newCustomerOnly} onChange={(e) => setF({ ...f, newCustomerOnly: e.target.checked })} className="h-5 w-5" />
         Chỉ khách mới (chưa có đơn nào tại Tubu Tree, trừ đơn huỷ)

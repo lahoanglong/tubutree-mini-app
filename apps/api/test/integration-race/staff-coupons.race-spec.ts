@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
@@ -58,6 +59,25 @@ describe('Mã giảm giá do nhân viên tạo (real Postgres)', () => {
 
   afterAll(async () => {
     await moduleRef?.close();
+  });
+
+  it('cột batchLink (migration 20261025120000): link lưu cùng lô, tải lại dùng đúng link; lô cũ (null) ra /?claim=', async () => {
+    const admin = await realUser('ADMIN');
+    const input = batchInput({ link: { page: 'scan', src: 'shopee', card: '2611' } });
+    await batches.create(input, { id: admin.id, staff: false });
+    const again = await batches.codes(input.prefix, { id: admin.id, staff: false });
+    expect(again.link).toEqual({ page: 'scan', src: 'shopee', card: '2611' });
+    expect(again.codes[0]!.url).toContain('/points/scan?src=shopee&card=2611&claim=');
+    const raw = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM coupons WHERE batch = ${input.prefix} AND "batchLink" = '{"page":"scan","src":"shopee","card":"2611"}'::jsonb`;
+    expect(raw[0]!.n).toBe(2);
+
+    const old = batchInput();
+    await batches.create(old, { id: admin.id, staff: false });
+    await prisma.coupon.updateMany({ where: { batch: old.prefix }, data: { batchLink: Prisma.DbNull } });
+    const legacy = await batches.codes(old.prefix, { id: admin.id, staff: false });
+    expect(legacy.link).toBeNull();
+    expect(legacy.codes[0]!.url).toMatch(/\/\?claim=/);
+    expect(legacy.codes[0]!.url).not.toContain('/points/scan');
   });
 
   it('nhân viên tạo lô vượt trần mặc định (200.000đ mỗi thẻ) → 403, không có mã nào vào bảng', async () => {

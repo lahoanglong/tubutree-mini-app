@@ -132,10 +132,10 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
     expect(container.textContent).toContain('Không có đơn nào trong khoảng ngày này');
   });
 
-  it('chuyển sang "Theo đợt thẻ, chiến dịch": gọi báo cáo theo chiến dịch, cột đổi tên', async () => {
+  it('chuyển sang "Khách mới theo đợt thẻ": gọi báo cáo theo chiến dịch, cột đổi tên', async () => {
     const { container } = mount(<ReportsTab sections={['sources']} />);
     await flush();
-    const chip = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Theo đợt thẻ, chiến dịch')!;
+    const chip = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Khách mới theo đợt thẻ')!;
     expect(chip.getAttribute('aria-pressed')).toBe('false');
     click(chip);
     await flush();

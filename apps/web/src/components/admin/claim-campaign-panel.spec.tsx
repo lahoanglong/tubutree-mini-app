@@ -35,6 +35,7 @@ const batch = (over: Partial<CouponBatchSummary> = {}): CouponBatchSummary => ({
   mine: true,
   startAt: '2026-11-01T00:00:00.000Z',
   endAt: '2026-12-31T16:59:59.000Z',
+  link: { page: 'scan', src: 'shopee', card: '2611' },
   ...over,
 });
 const configRoute = (value: string) => ({ body: { claimUrlBase: value.replace(/\/+$/, '') || null } });
@@ -220,11 +221,11 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     expect(bodyOf(api.calls.find((c) => c.init?.method === 'POST'))).toMatchObject({ scope: 'CLAIM', usageLimit: 1 });
   });
 
-  it('link trong CSV: chọn trang đích, nguồn, đợt thẻ; gửi kèm khi tạo lô và khi tải lại', async () => {
-    const created = { batch: 'HOA', created: 1, claimUrlBase: BASE, codes: [] };
+  it('link trong CSV: chọn trang đích, nguồn, đợt thẻ; gửi khi tạo lô, xem trước link mẫu; tải lại không gửi tham số (API dùng link đã lưu)', async () => {
+    const created = { batch: 'HOA', created: 1, claimUrlBase: BASE, link: null, codes: [] };
     const { r, api } = mount({
       '/admin/coupon-batches/claim-url-base': configRoute(BASE),
-      '/admin/coupon-batches/SHOPEE11/codes': { body: { batch: 'SHOPEE11', claimUrlBase: BASE, codes: [] } },
+      '/admin/coupon-batches/SHOPEE11/codes': { body: { batch: 'SHOPEE11', claimUrlBase: BASE, link: batch().link, codes: [] } },
       '/admin/coupon-batches': (init) => (init?.method === 'POST' ? { body: created } : { body: [batch()] }),
     });
     await flush();
@@ -236,13 +237,28 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     typeInto(input(r, 'Tiền tố lô'), 'hoa');
     typeInto(input(r, 'Số thẻ'), '1');
     typeInto(input(r, 'Mức giảm'), '30000');
+    expect(r.container.querySelector('[data-testid="link-preview"]')!.textContent).toContain(`${BASE}/?src=shopee&card=2611&claim=HOA-XXXXXXXX`);
     click(byText(r.container, 'button', 'Tạo lô và tải CSV'));
     await flush();
     const post = api.calls.find((c) => c.init?.method === 'POST');
     expect(bodyOf(post).link).toEqual({ page: 'home', src: 'shopee', card: '2611' });
     click(byText(r.container.querySelector('[data-testid="claim-batch-SHOPEE11"]')!, 'button', 'Tải lại CSV'));
     await flush();
-    expect(api.calls.some((c) => c.url.includes('/SHOPEE11/codes?page=home&src=shopee&card=2611'))).toBe(true);
+    expect(api.calls.some((c) => c.url.endsWith('/SHOPEE11/codes'))).toBe(true);
+    expect(r.container.querySelector('[data-testid="claim-batch-SHOPEE11"] [data-testid="batch-link"]')!.textContent).toBe('Link: Tích điểm đơn sàn · nguồn shopee · đợt 2611');
+  });
+
+  it('lô cũ chưa lưu link: ghi chú trong danh sách và khi tải lại CSV', async () => {
+    const { r } = mount({
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
+      '/admin/coupon-batches/SHOPEE11/codes': { body: { batch: 'SHOPEE11', claimUrlBase: BASE, link: null, codes: [] } },
+      '/admin/coupon-batches': { body: [batch({ link: null })] },
+    });
+    await flush();
+    expect(r.container.querySelector('[data-testid="batch-link"]')!.textContent).toContain('Lô cũ');
+    click(byText(r.container.querySelector('[data-testid="claim-batch-SHOPEE11"]')!, 'button', 'Tải lại CSV'));
+    await flush();
+    expect(r.container.textContent).toContain('tạo trước khi lưu link');
   });
 
   it('đợt thẻ sai khuôn: báo và chặn nút tạo', async () => {

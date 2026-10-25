@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
 import type { AuthUser } from '@tubutree/shared-types';
 import { useAuthStore } from '../store/auth';
 import { useCartCount } from '../hooks/use-cart-count';
 import { getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { getPublicConfig } from '../services/shop-api';
 import { isHttpError } from '../services/http';
 import {
   claimCoupon,
@@ -52,6 +53,11 @@ export function CouponClaimGate() {
   const user = useAuthStore((s) => s.user);
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const queryClient = useQueryClient();
+  const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: onScanRoute() });
+  // Cờ tắt thì màn Tích điểm chỉ là "sắp mở": nút chính của sheet không được hứa việc chưa làm được.
+  const scanFlowOn = onScanRoute() && cfgQ.data?.loyalty?.marketplaceClaimEnabled !== false;
+  const scanFlowOnRef = useRef(scanFlowOn);
+  scanFlowOnRef.current = scanFlowOn;
   const navigate = useNavigate();
   const cartCount = useCartCount();
   const [pending, setPending] = useState<string | null>(null);
@@ -95,7 +101,7 @@ export function CouponClaimGate() {
         const message = getErrorMessage(err);
         if (needsZaloLogin(message)) {
           setPhase({ kind: 'needLogin' });
-        } else if (isNewCustomerOnlyRefusal(message) && onScanRoute()) {
+        } else if (isNewCustomerOnlyRefusal(message) && scanFlowOnRef.current) {
           await forget();
           setCardGiftNote('new-customers-only');
           setPhase({ kind: 'closed' });
@@ -146,7 +152,7 @@ export function CouponClaimGate() {
   };
 
   const view = describe(phase);
-  const scanning = onScanRoute();
+  const scanning = scanFlowOn;
   const footer =
     phase.kind === 'done' ? (
       <div style={{ display: 'grid', gap: 8 }}>

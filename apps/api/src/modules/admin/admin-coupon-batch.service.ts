@@ -53,6 +53,21 @@ export function claimUrl(base: string, code: string, opts: ClaimLinkOptions = {}
   return `${base.trim().replace(/\/+$/, '')}${path}?${params.toString()}`;
 }
 
+/** Link lưu cùng lô: lô mới luôn có (mặc định mở màn quét); lô tạo trước khi có cột không có, link của chúng là `/?claim=`. */
+export function normalizeLink(link: ClaimLinkOptions | undefined): Required<Pick<ClaimLinkOptions, 'page'>> & ClaimLinkOptions {
+  return { page: link?.page ?? 'scan', ...(link?.src ? { src: link.src } : {}), ...(link?.card ? { card: link.card } : {}) };
+}
+
+function savedLink(raw: unknown): ClaimLinkOptions | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    page: o.page === 'scan' ? 'scan' : 'home',
+    ...(typeof o.src === 'string' && LINK_TOKEN_RE.test(o.src) ? { src: o.src } : {}),
+    ...(typeof o.card === 'string' && LINK_TOKEN_RE.test(o.card) ? { card: o.card } : {}),
+  };
+}
+
 export interface CouponBatchInput {
   prefix: string;
   quantity: number;
@@ -89,6 +104,8 @@ export interface BatchSummary {
   newCustomerOnly: boolean;
   startAt: Date;
   endAt: Date;
+  /** Cách dựng link QR đã lưu cùng lô; null = lô cũ, link là `/?claim=`. */
+  link: ClaimLinkOptions | null;
 }
 
 /**
@@ -107,6 +124,7 @@ export class AdminCouponBatchService {
 
   async create(input: CouponBatchInput, actor: CouponActor = SYSTEM_ACTOR) {
     const batch = input.prefix.trim().toUpperCase();
+    const link = normalizeLink(input.link);
     const startAt = new Date(input.startAt);
     const endAt = new Date(input.endAt);
     assertCouponInput({ ...input, startAt, endAt });
@@ -137,6 +155,7 @@ export class AdminCouponBatchService {
           scope: 'CLAIM',
           newCustomerOnly: input.newCustomerOnly ?? false,
           batch,
+          batchLink: { ...link },
           createdById: actorUserId(actor),
           updatedById: actorUserId(actor),
         });
@@ -158,7 +177,8 @@ export class AdminCouponBatchService {
       batch,
       created: codes.length,
       claimUrlBase: base || null,
-      codes: codes.map((c): BatchCode => ({ code: c.code, url: claimUrl(base, c.code, input.link), claimed: false, used: false, isActive: true })),
+      link,
+      codes: codes.map((c): BatchCode => ({ code: c.code, url: claimUrl(base, c.code, link), claimed: false, used: false, isActive: true })),
     };
   }
 
@@ -177,23 +197,25 @@ export class AdminCouponBatchService {
              (array_agg(c."maxDiscount"))[1] AS "maxDiscount",
              bool_or(c."newCustomerOnly") AS "newCustomerOnly",
              MIN(c."startAt") AS "startAt",
-             MAX(c."endAt") AS "endAt"
+             MAX(c."endAt") AS "endAt",
+             (array_agg(c."batchLink"))[1] AS "link"
         FROM coupons c
        WHERE c.batch IS NOT NULL
        GROUP BY c.batch
        ORDER BY MIN(c."startAt") DESC, c.batch
        LIMIT 200`;
-    return actor.staff ? rows : rows.map((r) => ({ ...r, mine: true }));
+    const clean = rows.map((r) => ({ ...r, link: savedLink(r.link) }));
+    return actor.staff ? clean : clean.map((r) => ({ ...r, mine: true }));
   }
 
   /** Nhân viên chỉ xem mã lô do chính mình tạo: lộ mã lô khác là đem đi nhận bằng tài khoản khác, lách trần B19. */
-  async codes(rawBatch: string, actor: CouponActor = SYSTEM_ACTOR, link: ClaimLinkOptions = {}) {
+  async codes(rawBatch: string, actor: CouponActor = SYSTEM_ACTOR) {
     const batch = rawBatch.trim().toUpperCase();
     const [rows, base] = await Promise.all([
       this.prisma.coupon.findMany({
         where: { batch },
         orderBy: { code: 'asc' },
-        select: { code: true, isActive: true, createdById: true, _count: { select: { claims: true, redemptions: true } } },
+        select: { code: true, isActive: true, createdById: true, batchLink: true, _count: { select: { claims: true, redemptions: true } } },
       }),
       this.claimUrlBase(),
     ]);
@@ -201,13 +223,15 @@ export class AdminCouponBatchService {
     if (actor.staff && rows.some((r) => r.createdById !== actor.id)) {
       throw new ForbiddenException('Lô này do người khác tạo, chỉ ADMIN xem được mã.');
     }
+    const link = savedLink(rows[0]?.batchLink);
     return {
       batch,
       claimUrlBase: base || null,
+      link,
       codes: rows.map(
         (r): BatchCode => ({
           code: r.code,
-          url: claimUrl(base, r.code, link),
+          url: claimUrl(base, r.code, link ?? {}),
           claimed: r._count.claims > 0,
           used: r._count.redemptions > 0,
           isActive: r.isActive,

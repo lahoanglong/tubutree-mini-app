@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GMV_ORDER_SQL, REVENUE_ORDER_SQL, foldRevenueRows, type RevenueRow } from './admin-revenue';
 import { orderPlatformLabel, orderSourceLabel } from './order-channel';
 import { resolveReportRange } from './report-range';
-import { NEW_CUSTOMER_SQL, SOURCE_REPORT_MAX_SOURCES, SOURCE_REPORT_WINDOW_DAYS, foldSourceRows, type SourceRow } from './admin-source-report';
+import { CAMPAIGN_PREFIX, NEW_CUSTOMER_SQL, NO_CAMPAIGN, SOURCE_REPORT_MAX_SOURCES, SOURCE_REPORT_WINDOW_DAYS, foldSourceRows, type SourceRow } from './admin-source-report';
 import { vnDateKey } from '../../common/vn-time';
 
 /** Báo cáo theo ngày × kênh là một nhóm nhỏ mỗi ngày; một năm là đủ cho kế toán và vẫn bị chặn trên. */
@@ -101,7 +101,7 @@ export class AdminReportsService {
    * xem impl/source.md mục 3), cùng định nghĩa với thẻ "Khách mới" của revenueReport. Khách chưa có nguồn (tài khoản trước khi có cột) vào "Không rõ".
    */
   async sourceReport(q: { from?: string; to?: string; by?: 'source' | 'campaign' }, now = new Date()) {
-    const dimension = q.by === 'campaign' ? Prisma.sql`COALESCE(u."firstTouchCampaign", 'none')` : Prisma.sql`COALESCE(u."firstTouchSource", ${UNKNOWN})`;
+    const dimension = q.by === 'campaign' ? Prisma.sql`CASE WHEN NULLIF(u."firstTouchCampaign", '') IS NULL THEN ${NO_CAMPAIGN} ELSE ${CAMPAIGN_PREFIX} || u."firstTouchCampaign" END` : Prisma.sql`COALESCE(u."firstTouchSource", ${UNKNOWN})`;
     const range = resolveReportRange(q.from, q.to, { maxDays: SOURCE_REPORT_MAX_DAYS, now });
     const window = Prisma.raw(`interval '${SOURCE_REPORT_WINDOW_DAYS} days'`);
     const window2 = Prisma.raw(`interval '${SOURCE_REPORT_WINDOW_DAYS * 2} days'`);

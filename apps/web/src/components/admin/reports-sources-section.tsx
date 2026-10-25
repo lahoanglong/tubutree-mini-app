@@ -31,7 +31,7 @@ export function ReportsSourcesSection({ range }: { range: ReportRange }) {
           Theo nguồn
         </button>
         <button type="button" aria-pressed={by === 'campaign'} className={chipClass(by === 'campaign')} onClick={() => setBy('campaign')}>
-          Theo đợt thẻ, chiến dịch
+          Khách mới theo đợt thẻ
         </button>
       </div>
       {error && (

@@ -538,7 +538,7 @@ export const vi = {
     closedTitle: 'Chưa mở',
     closedBody: 'Tính năng tích điểm đơn sàn chưa mở. Bạn quay lại sau nhé.',
     soonTitle: 'Tích điểm đơn sàn sắp mở',
-    soonBody: 'Bạn cứ giữ lại thẻ trong hộp. Khi tính năng mở, bạn quét lại thẻ là tích được điểm cho đơn này.',
+    soonBody: 'Bạn cứ giữ lại thẻ trong hộp. Khi tính năng mở, hãy quét lại thẻ trong vòng 60 ngày kể từ ngày đặt đơn để tích điểm cho đơn này.',
     soonShop: 'Xem sản phẩm',
     soonHome: 'Về trang chủ',
     greeting: (channel: string | null) => `Cảm ơn bạn đã mua Tubu Tree${channel ? ` trên ${channel}` : ''}`,

@@ -245,6 +245,26 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
   const [oaState, setOaState] = useState<'unknown' | 'ask' | 'done'>(hasOA ? 'unknown' : 'done');
   const [oaNote, setOaNote] = useState<string | null>(null);
   const scanning = useRef(false);
+  // Mã tới từ QR (quét trong app hoặc link trên nhãn riêng từng đơn): nút Tích điểm thành nút chính, gửi với via=scan.
+  const [scanned, setScanned] = useState<string | null>(initialCode || null);
+  const submitWrap = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (initialCode) {
+      setCode(initialCode);
+      setScanned(initialCode);
+    }
+  }, [initialCode]);
+
+  useEffect(() => {
+    if (scanned === null) return;
+    submitWrap.current?.querySelector('button')?.focus();
+  }, [scanned]);
+
+  useEffect(() => {
+    if (result) resultRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [result]);
 
   useEffect(() => {
     if (!hasOA) return;
@@ -268,6 +288,7 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
       setNeedPhone(false);
       setPhoneDeclined(false);
       setCode('');
+      setScanned(null);
       void qc.invalidateQueries({ queryKey: ['external-claims'] });
     },
     onError: (e, v) => {
@@ -315,7 +336,7 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
     setNeedPhone(false);
     setPhoneDeclined(false);
     setError(null);
-    if (trimmed) submit.mutate({ code: trimmed, via: 'typed' });
+    if (trimmed) submit.mutate({ code: trimmed, via: scanned === trimmed ? 'scan' : 'typed' });
   };
 
   const scan = async () => {
@@ -337,15 +358,23 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
         setCode(parsed.code);
         setError(null);
         setNotice(null);
-        await send(parsed.code, 'scan');
+        setScanned(parsed.code);
+      } else if (parsed.kind === 'card_link' && parsed.code) {
+        setCode(parsed.code);
+        setError(null);
+        setNotice(null);
+        setScanned(parsed.code);
       } else if (parsed.kind === 'card_link') {
         setNotice(null);
         setError(t.scanCardLink);
       } else {
+        setScanned(null);
         setCode(res.content.slice(0, 100));
         setNotice(null);
         setError(t.scanNoCode);
       }
+    } catch {
+      setError(t.scanFailed);
     } finally {
       scanning.current = false;
     }
@@ -364,13 +393,11 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
         {fromCard && (
           <div data-testid="card-welcome" style={{ marginBottom: 14 }}>
             <Text variant="body-lg" as="h2" style={{ fontWeight: 600 }}>{t.greeting(channel)}</Text>
-            <ol style={{ margin: '8px 0 0', paddingLeft: 20, display: 'grid', gap: 4 }}>
-              {t.steps.map((step) => (
-                <li key={step}>
-                  <Text variant="body-sm" tone="secondary">{step}</Text>
-                </li>
+            <div style={{ margin: '8px 0 0', display: 'grid', gap: 4 }}>
+              {t.steps.map((step, i) => (
+                <Text key={step} variant="body-sm" tone="secondary" as="div">{`${i + 1}. ${step}`}</Text>
               ))}
-            </ol>
+            </div>
           </div>
         )}
         <Button fullWidth size="lg" icon={ScanLine} onPress={scan}>{t.scanMain}</Button>
@@ -389,7 +416,10 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
             <Input
               placeholder={t.inputPlaceholder}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setScanned(null);
+              }}
               autoCapitalize="characters"
               autoComplete="off"
             />
@@ -417,10 +447,19 @@ function ClaimForm({ fromCard, channel, initialCode }: { fromCard: boolean; chan
         {needPhone && !hasPhone && (
           <Button fullWidth variant="secondary" onPress={sharePhone} style={{ marginTop: 8 }}>{t.sharePhone}</Button>
         )}
-        <Button fullWidth variant="secondary" loading={submit.isPending} onPress={() => send(code, 'typed')} style={{ marginTop: 12 }}>
-          {t.submit}
-        </Button>
+        <div ref={submitWrap} style={{ marginTop: 12 }}>
+          <Button
+            fullWidth
+            size={scanned !== null ? 'lg' : undefined}
+            variant={scanned !== null ? 'primary' : 'secondary'}
+            loading={submit.isPending}
+            onPress={() => send(code, scanned !== null && scanned === code.trim() ? 'scan' : 'typed')}
+          >
+            {t.submit}
+          </Button>
+        </div>
       </Card>
+      <div ref={resultRef} />
       {result && (
         <ResultCard result={result}>
           {result.status === 'CLAIMED_BY_OTHER' && <SupportButton maskedCode={result.maskedCode} />}
