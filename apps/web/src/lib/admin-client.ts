@@ -721,7 +721,7 @@ export const updateOrderStatus = (id: string, status: string, note?: string) =>
 export async function getConfig(category?: string): Promise<ConfigRow[]> {
   const data = await apiFetch<ConfigRow[] | Record<string, unknown>>(`/admin/config${category ? `?category=${encodeURIComponent(category)}` : ''}`);
   if (Array.isArray(data)) return data;
-  return Object.entries(data ?? {}).map(([key, value]) => ({ key, value, description: null, category: category ?? key.split('.')[0] }));
+  return Object.entries(data ?? {}).map(([key, value]) => ({ key, value, description: null, category: category ?? key.split('.')[0] ?? '' }));
 }
 export const setConfig = (key: string, value: unknown) =>
   apiFetch<{ ok: boolean }>('/admin/config', { method: 'PUT', body: { key, value } });

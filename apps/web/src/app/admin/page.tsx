@@ -100,6 +100,8 @@ import { OrderStatusActions } from '@/components/admin/order-status-actions';
 import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
+import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { CashbackTab } from '@/components/admin/cashback-tab';
 import { CustomerRefundsPendingBadge, CustomerRefundsTab } from '@/components/admin/customer-refunds-tab';
@@ -236,7 +238,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'returns', label: 'Đổi / Trả' },
       { k: 'customerRefunds', label: 'Hoàn tiền khách' },
-      { k: 'cashback', label: 'Hoàn tiền sàn ngoài' },
+      ...(CASHBACK_ENABLED ? [{ k: 'cashback' as const, label: 'Hoàn tiền sàn ngoài' }] : []),
     ],
   },
   {
@@ -551,6 +553,7 @@ export default function AdminPage() {
           badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : null)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
+          <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={() => setTab('inbox')}>
           {active === 'inbox' && <OpsInboxTab onOpen={openInbox} />}
           {active === 'dashboard' && <DashboardTab onSelectTab={setTab} onOpenRecyclingQueue={openRecyclingQueue} onOpenPancakeQueue={openPancakeQueue} />}
           {active === 'dealers' && <DealersTab />}
@@ -614,6 +617,7 @@ export default function AdminPage() {
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab />}
           {active === 'reports' && <ReportsTab sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
+          </TabErrorBoundary>
         </div>
       </div>
     </main>
