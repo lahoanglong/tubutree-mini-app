@@ -37,9 +37,11 @@ cd /opt/tubutree
 chmod +x tools/backup/backup-db.sh tools/backup/restore-db.sh
 
 # Thư mục backup + log
+# Dump chứa SĐT, địa chỉ, tài khoản ngân hàng của khách: thư mục 700, file 600 (script tự đặt umask 077 cho file nó tạo).
 sudo mkdir -p /var/backups/tubutree
 sudo touch /var/log/tubutree-backup.log
 sudo chown "$USER" /var/backups/tubutree /var/log/tubutree-backup.log
+sudo chmod 700 /var/backups/tubutree
 
 # Bản ngoài máy: cài rclone rồi tạo remote. Đã chốt dùng Google Drive (cách tạo remote từng bước ở mục dưới);
 # S3 hay Cloudflare R2 vẫn dùng được, chỉ đổi tên remote trong RCLONE_REMOTE.
@@ -121,14 +123,14 @@ rclone config create tubucrypt crypt remote gdrive:tubutree-backups-enc \
   filename_encryption standard directory_name_encryption true \
   password "$(rclone obscure '<password>')" password2 "$(rclone obscure '<password2>')"
 RF=$(rclone lsf tubucrypt: --files-only | sort | tail -1); echo "$RF"
-rclone copy "tubucrypt:$RF" /tmp/ && gunzip -t "/tmp/$RF" && echo "giải mã + gunzip OK"
+(umask 077; rclone copy "tubucrypt:$RF" /tmp/) && gunzip -t "/tmp/$RF" && echo "giải mã + gunzip OK"
 ```
 
 ## Restore
 
 ```bash
 ./tools/backup/restore-db.sh /var/backups/tubutree/tubutree_YYYYMMDD_HHMMSS.sql.gz
-# bản ngoài máy: rclone copy tubucrypt:tubutree_YYYYMMDD_HHMMSS.sql.gz /tmp/ rồi restore file đó
+# bản ngoài máy: (umask 077; rclone copy tubucrypt:tubutree_YYYYMMDD_HHMMSS.sql.gz /tmp/) rồi restore file đó
 ```
 
 Script làm theo thứ tự:
@@ -150,7 +152,7 @@ Backup mà chưa restore thử thì coi như không có backup. Diễn tập kh�
 DC="docker compose -f docker-compose.vietnix.yml"
 # 1. Bản mới nhất TỪ REMOTE (không dùng remote thì bỏ hai dòng này, bước 2 tự lấy bản local)
 RF=$(rclone lsf tubucrypt: --files-only | sort | tail -1); echo "$RF"
-rclone copy "tubucrypt:$RF" /tmp/ && F=/tmp/$RF
+(umask 077; rclone copy "tubucrypt:$RF" /tmp/) && F=/tmp/$RF
 # 2. Nạp vào DB tạm rồi đếm vài bảng, so với DB thật
 F=${F:-$(ls -t /var/backups/tubutree/tubutree_*.sql.gz | head -1)}; echo "$F"; gunzip -t "$F" && echo "gunzip OK"
 time (

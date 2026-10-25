@@ -184,6 +184,7 @@ jobs:
                 # /var/backups thuộc root → tạo + chown cho user SSH trước (như deploy.yml).
                 sudo mkdir -p /var/backups/tubutree
                 sudo chown "$(id -u):$(id -g)" /var/backups/tubutree
+                sudo chmod 700 /var/backups/tubutree
                 COMPOSE_FILE="$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" bash tools/backup/backup-db.sh
                 echo "=== Danh sách backup ==="
                 ls -lh /var/backups/tubutree/
@@ -338,6 +339,7 @@ jobs:
                 sudo mkdir -p /var/backups/tubutree
                 sudo touch /var/log/tubutree-backup.log
                 sudo chown "$(id -u):$(id -g)" /var/backups/tubutree /var/log/tubutree-backup.log
+                sudo chmod 700 /var/backups/tubutree
                 # Bản ngoài máy (RCLONE_REMOTE, biến repo BACKUP_RCLONE_REMOTE) cần `rclone config` sẵn trên máy
                 # chủ — xem tools/backup/README.md. Trống thì chỉ giữ bản local (cảnh báo bên dưới); chỉ hạ
                 # BACKUP_KEEP_COUNT khi đã có remote, vì bản local là bản duy nhất.

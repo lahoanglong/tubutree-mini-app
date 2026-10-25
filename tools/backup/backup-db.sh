@@ -11,6 +11,9 @@
 # (file tubutree_<giờ>_<nhãn>.sql.gz) và BACKUP_KEEP_COUNT (giữ N bản mới nhất của cùng nhãn).
 # Mẫu: ops/crontab.backup.example, ops/backup-predeploy.sh.
 set -euo pipefail
+# Dump chứa SĐT, địa chỉ, tài khoản ngân hàng hoàn tiền của khách và VPS dùng chung với app khác: mọi file/thư mục
+# script này tạo ra (kể cả file dở dang khi lỗi) chỉ chủ sở hữu đọc được.
+umask 077
 
 # ----- Config (override qua env) -----
 POSTGRES_USER="${POSTGRES_USER:-tubu}"
@@ -86,12 +89,24 @@ if [ -z "$HEALTHCHECK_URL" ] && [ "$HEALTHCHECK_OPTIONAL" != 1 ]; then
   log "WARN: HEALTHCHECK_URL chưa đặt — backup lỗi hoặc cron ngừng chạy sẽ không ai được báo."
 fi
 
-mkdir -p "$BACKUP_DIR"
+# Thư mục do script tạo thì 700. Thư mục đã có là của người vận hành chọn (có thể là mount dùng chung): không chmod, chỉ cảnh báo.
+if [ ! -d "$BACKUP_DIR" ]; then
+  mkdir -p -m 700 "$BACKUP_DIR"
+else
+  # GNU stat dùng -c, BSD/macOS dùng -f.
+  DIR_MODE="$(stat -c %a "$BACKUP_DIR" 2>/dev/null || stat -f %Lp "$BACKUP_DIR" 2>/dev/null || echo 700)"
+  case "$DIR_MODE" in
+    *[1-7][0-7] | *[0-7][1-7]) log "WARN: ${BACKUP_DIR} đang mode ${DIR_MODE}, người khác trên máy đọc được thư mục chứa dump. Khuyến nghị: chmod 700 ${BACKUP_DIR}" ;;
+  esac
+fi
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   log "ERROR: Không tìm thấy compose file: $COMPOSE_FILE"
   exit 1
 fi
+
+# WHY: tạo file 600 trước khi ghi (kể cả khi trùng tên file cũ mode rộng); `>` bên dưới giữ nguyên mode này.
+install -m 600 /dev/null "$BACKUP_FILE"
 
 # WHY: -T để tắt TTY allocation (cron không có TTY), pipe gzip ngay để tiết kiệm I/O.
 log "Đang dump DB sang ${BACKUP_FILE} ..."
