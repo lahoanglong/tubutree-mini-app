@@ -376,7 +376,7 @@ Sau mỗi lần go-live 1 dịch vụ: kiểm lại bằng lệnh `grep` ở m�
 
 **Việc của chủ khi sửa lỗi nhầm hai ID:** trong `/opt/tubutree/.env` đặt `ZALO_APP_ID=565779011239360460` và `ZALO_MINIAPP_ID=2070857098114207963`, rồi build lại web và tạo lại api cùng web (api cần `ZALO_APP_ID` mới để đổi mã OAuth và làm mới token OA):
 ```bash
-cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps --build web && docker compose -f docker-compose.vietnix.yml up -d --no-deps --force-recreate api web
+cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml build web && docker compose -f docker-compose.vietnix.yml up -d --no-build --no-deps api web
 ```
 Trước khi đăng ký Callback URL (Bước E) nhớ chọn đúng Zalo App `565779011239360460` trên developers.zalo.me. Kiểm sau cùng: `go-live` báo `env.zalo.ids` PASS.
 

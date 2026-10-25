@@ -146,6 +146,8 @@ jobs:
                 envstate GOMDON_PHONE
                 envstate GOMDON_PASSWORD
                 envstate GOMDON_WEBHOOK_SECRET
+                envstate ZALO_APP_ID
+                envstate ZALO_MINIAPP_ID
                 envstate ZALO_APP_SECRET
                 envstate ZALO_OA_ACCESS_TOKEN
                 envstate ZALO_OA_WEBHOOK_SECRET

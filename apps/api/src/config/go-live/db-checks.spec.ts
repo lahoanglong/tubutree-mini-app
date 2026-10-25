@@ -644,9 +644,45 @@ describe('evaluateDb: phần DB không đọc được vì schema cũ', () => {
     for (const id of ['db.shipping_rates', 'db.zns_templates', 'db.demo_coupons']) expect(byId(r, id).status).toBe('FAIL');
   });
 
+  it('trước deploy nhưng hết migration chờ áp: cùng lỗi cột/bảng thiếu là FAIL (lệch schema hoặc lỗi mã)', () => {
+    const noPending = dbWith({ degraded: { configs: 'P2022', zns: 'P2021', demoData: 'P2022' } });
+    const r = run(noPending, 'pre-deploy');
+    for (const id of ['db.shipping_rates', 'db.zns_templates', 'db.demo_coupons']) {
+      expect(byId(r, id).status).toBe('FAIL');
+      expect(byId(r, id).detail).toContain('schema DB chưa khớp mã');
+    }
+  });
+
   it('phần không hỏng giữ nguyên kết quả', () => {
-    const r = run(dbWith({ degraded: { zns: 'P2021' } }), 'pre-deploy');
+    const r = run(dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { zns: 'P2021' } }), 'pre-deploy');
     expect(byId(r, 'db.shipping_rates').status).toBe('PASS');
     expect(byId(r, 'db.zns_templates').status).toBe('WARN');
+  });
+});
+
+describe('evaluateDb: db.miniapp_base_url khớp ZALO_MINIAPP_ID', () => {
+  const MINI = '2070857098114207963';
+  const withUrl = (url: string, phase: GoLivePhase = 'post-deploy', env: Env = GOOD_ENV) => byId(run(dbWith({ configs: { 'app.miniapp_base_url': url } }), phase, env), 'db.miniapp_base_url');
+
+  it('link chứa /s/<ZALO_MINIAPP_ID>: PASS', () => {
+    expect(withUrl(`https://zalo.me/s/${MINI}`).status).toBe('PASS');
+    expect(withUrl(`https://zalo.me/s/${MINI}/`).status).toBe('PASS');
+  });
+  it('link mang ID khác (vd App ID): WARN, nêu cả hai giá trị', () => {
+    const r = withUrl('https://zalo.me/s/565779011239360460');
+    expect(r.status).toBe('WARN');
+    expect(r.detail).toContain('565779011239360460');
+    expect(r.detail).toContain(MINI);
+  });
+  it('ID Mini App chỉ là tiền tố của ID trong link: WARN', () => {
+    expect(withUrl(`https://zalo.me/s/${MINI}9`).status).toBe('WARN');
+  });
+  it('link rỗng hoặc ZALO_MINIAPP_ID rỗng: PASS (không có gì để so)', () => {
+    expect(withUrl('').status).toBe('PASS');
+    expect(withUrl('https://zalo.me/s/1', 'post-deploy', envWith({ ZALO_MINIAPP_ID: '' })).status).toBe('PASS');
+  });
+  it('phần cấu hình không đọc được: theo logic degraded.configs', () => {
+    const s = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { configs: 'P2022' } });
+    expect(byId(run(s, 'pre-deploy'), 'db.miniapp_base_url').status).toBe('WARN');
   });
 });

@@ -8,7 +8,7 @@ const dockerfile = readFileSync(join(REPO, 'apps/web/Dockerfile'), 'utf8');
 // Lấy đúng đoạn RUN kiểm Zalo ID trong Dockerfile (nối dòng bằng "\") để chạy bằng sh, không cần docker.
 function guardScript(): string {
   const lines = dockerfile.split('\n');
-  const start = lines.findIndex((l) => l.startsWith('RUN if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ]'));
+  const start = lines.findIndex((l) => l.startsWith('RUN case "$NEXT_PUBLIC_ZALO_APP_ID"'));
   if (start < 0) throw new Error('không thấy đoạn kiểm Zalo ID trong apps/web/Dockerfile');
   const body: string[] = [];
   for (let i = start; i < lines.length; i++) {
@@ -55,6 +55,21 @@ describe('apps/web/Dockerfile: kiểm ZALO_APP_ID và ZALO_MINIAPP_ID lúc build
     const r = run({ NEXT_PUBLIC_ZALO_APP_ID: '', NEXT_PUBLIC_ZALO_MINIAPP_ID: '', ALLOW_EMPTY_ZALO_APP_ID: '1' });
     expect(r.code).toBe(0);
     expect(r.err).toContain('CANH BAO');
+  });
+
+  it.each([
+    ['App ID', { NEXT_PUBLIC_ZALO_APP_ID: '56577x', NEXT_PUBLIC_ZALO_MINIAPP_ID: '2070857098114207963' }],
+    ['Mini App ID', { NEXT_PUBLIC_ZALO_APP_ID: '565779011239360460', NEXT_PUBLIC_ZALO_MINIAPP_ID: '"2070857098114207963"' }],
+    ['Mini App ID có khoảng trắng', { NEXT_PUBLIC_ZALO_APP_ID: '565779011239360460', NEXT_PUBLIC_ZALO_MINIAPP_ID: '2070857098114207963 ' }],
+  ])('%s không phải chuỗi số: dừng build', (_n, env) => {
+    const r = run(env);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('khong phai chuoi so');
+  });
+
+  it('ALLOW_EMPTY_ZALO_APP_ID=1 không cho phép ID không phải số (kể cả khi ID kia rỗng)', () => {
+    expect(run({ NEXT_PUBLIC_ZALO_APP_ID: 'abc', NEXT_PUBLIC_ZALO_MINIAPP_ID: '2070857098114207963', ALLOW_EMPTY_ZALO_APP_ID: '1' }).code).toBe(1);
+    expect(run({ NEXT_PUBLIC_ZALO_APP_ID: 'abc', NEXT_PUBLIC_ZALO_MINIAPP_ID: '', ALLOW_EMPTY_ZALO_APP_ID: '1' }).code).toBe(1);
   });
 
   it('ALLOW_EMPTY_ZALO_APP_ID=1 không cho phép hai ID trùng nhau', () => {

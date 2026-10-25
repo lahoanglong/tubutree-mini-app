@@ -268,6 +268,9 @@ function zalopayChecks(env: Env): CheckResult[] {
   return [pass(G_ZALOPAY, 'env.zalopay', title, 'khoá đã đặt, endpoint không phải sandbox')];
 }
 
+/** Bằng `appId` trong apps/miniapp/app-config.json (spec so khớp); image api không có apps/miniapp nên phải có hằng số. */
+export const PRODUCTION_MINIAPP_ID = '2070857098114207963';
+
 function zaloChecks(env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const loginMissing = ['ZALO_APP_ID', 'ZALO_APP_SECRET'].filter((k) => !envValue(env, k));
@@ -286,10 +289,16 @@ function zaloChecks(env: Env): CheckResult[] {
   const appId = envValue(env, 'ZALO_APP_ID');
   const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
   const idsTitle = 'ZALO_APP_ID khác ID Mini App';
-  if (!miniAppId) {
+  const idsHint = 'ZALO_APP_ID phải là App ID của Zalo App trên developers.zalo.me (đăng nhập web, làm mới token OA). ID Mini App chỉ dùng cho link zalo.me/s/<id>; để chung thì Zalo trả "Invalid appId".';
+  const nonNumeric = [['ZALO_APP_ID', appId], ['ZALO_MINIAPP_ID', miniAppId]].filter(([, v]) => v && !/^[0-9]+$/.test(v)).map(([k]) => k);
+  if (nonNumeric.length > 0) {
+    out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, `${nonNumeric.join(', ')} không phải chuỗi số`, 'ID của Zalo chỉ gồm chữ số; kiểm tra lỗi gõ nhầm hoặc dán thừa khoảng trắng, dấu nháy.'));
+  } else if (appId && (appId === miniAppId || appId === PRODUCTION_MINIAPP_ID)) {
+    out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, appId === miniAppId ? 'ZALO_APP_ID trùng ZALO_MINIAPP_ID' : 'ZALO_APP_ID đang là Mini App ID', idsHint));
+  } else if (!miniAppId) {
     out.push(warn(G_ZALO, 'env.zalo.ids', idsTitle, 'chưa đặt ZALO_MINIAPP_ID nên không so được', 'Đặt ZALO_MINIAPP_ID là ID Mini App (apps/miniapp/app-config.json) để build web dựng được link zalo.me/s/<id> và để kiểm tra này chạy.'));
-  } else if (appId && appId === miniAppId) {
-    out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, 'ZALO_APP_ID trùng ZALO_MINIAPP_ID', 'ZALO_APP_ID phải là App ID của ứng dụng trên developers.zalo.me (đăng nhập web, làm mới token OA). ID Mini App chỉ dùng cho link zalo.me/s/<id>; để chung thì Zalo trả "Invalid appId".'));
+  } else if (miniAppId !== PRODUCTION_MINIAPP_ID) {
+    out.push(warn(G_ZALO, 'env.zalo.ids', idsTitle, `ZALO_MINIAPP_ID (${miniAppId}) khác Mini App production (${PRODUCTION_MINIAPP_ID})`, 'Đúng nếu đây là môi trường thử dùng Mini App riêng; ở production phải là ID trong apps/miniapp/app-config.json.'));
   } else {
     out.push(pass(G_ZALO, 'env.zalo.ids', idsTitle, 'ZALO_APP_ID và ZALO_MINIAPP_ID là hai giá trị khác nhau'));
   }

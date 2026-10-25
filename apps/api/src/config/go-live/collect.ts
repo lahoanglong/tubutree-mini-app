@@ -22,11 +22,6 @@ export async function listExpectedMigrations(migrationsDir: string): Promise<str
     .sort();
 }
 
-/**
- * Đọc DB trong MỘT transaction READ ONLY: lệnh ghi nào lọt vào cũng bị Postgres từ chối.
- * Bảng chưa có (DB trước khi áp migration mới) được bỏ qua thay vì làm hỏng cả lượt kiểm; phần nào đụng cột chưa có thì ghi vào
- * `degraded` (kèm mã lỗi) để evaluateDb hạ riêng các dòng của phần đó, còn phần migration và số đơn chỉ dựa vào bảng luôn có.
- */
 /** Lỗi do schema DB cũ hơn mã: cột/bảng chưa có (P2021, P2022; câu raw báo P2010 kèm mã Postgres 42703/42P01). */
 export function isSchemaMismatch(err: unknown): boolean {
   const { code, meta } = (err ?? {}) as { code?: unknown; meta?: { code?: unknown } };
@@ -34,6 +29,11 @@ export function isSchemaMismatch(err: unknown): boolean {
   return code === 'P2010' && (meta?.code === '42703' || meta?.code === '42P01');
 }
 
+/**
+ * Đọc DB trong MỘT transaction READ ONLY: lệnh ghi nào lọt vào cũng bị Postgres từ chối.
+ * Bảng chưa có (DB trước khi áp migration mới) được bỏ qua thay vì làm hỏng cả lượt kiểm; phần nào đụng cột chưa có thì ghi vào
+ * `degraded` (kèm mã lỗi) để evaluateDb hạ riêng các dòng của phần đó, còn phần migration và số đơn chỉ dựa vào bảng luôn có.
+ */
 export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations: string[]): Promise<DbSnapshot> {
   return prisma.$transaction(
     async (tx) => {
