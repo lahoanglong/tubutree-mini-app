@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  customerKind, HOME_SHORTCUTS, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
+  customerKind, HOME_SHORTCUTS, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
@@ -54,8 +54,9 @@ describe('offersDotReason', () => {
   const now = Date.parse('2026-10-25T05:00:00Z');
   const day = 24 * 3_600_000;
   const at = (code: string, days: number) => ({ code, endAt: new Date(now + days * day).toISOString() });
+  const key = (code: string, days: number) => `${code}@${at(code, days).endAt}`;
   it('chưa điểm danh hôm nay thì chấm, kể cả khi đã xem mã sắp hết hạn', () => {
-    expect(offersDotReason({ checkIn: { checkedInToday: false }, coupons: [at('A', 1)], seenExpiringIds: ['A'] }, now)).toBe('check-in');
+    expect(offersDotReason({ checkIn: { checkedInToday: false }, coupons: [at('A', 1)], seenExpiringIds: [key('A', 1)] }, now)).toBe('check-in');
   });
   it('đã điểm danh, mã còn xa thì không chấm', () => {
     expect(offersDotReason({ checkIn: { checkedInToday: true }, coupons: [at('A', 10)] }, now)).toBeNull();
@@ -64,13 +65,43 @@ describe('offersDotReason', () => {
     expect(offersDotReason({ checkIn: { checkedInToday: true }, coupons: [at('A', 2)] }, now)).toBe('coupon-expiring');
   });
   it('khách đã mở Ưu đãi với mã đó thì tắt, có mã mới sắp hết hạn thì bật lại', () => {
-    const input = { checkIn: { checkedInToday: true }, seenExpiringIds: ['A'] };
+    const input = { checkIn: { checkedInToday: true }, seenExpiringIds: [key('A', 2)] };
     expect(offersDotReason({ ...input, coupons: [at('A', 2)] }, now)).toBeNull();
     expect(offersDotReason({ ...input, coupons: [at('A', 2), at('B', 1)] }, now)).toBe('coupon-expiring');
+  });
+  it('gia hạn mã (endAt đổi) thì chấm bật lại khi mã sắp hết hạn', () => {
+    const input = { checkIn: { checkedInToday: true }, seenExpiringIds: [key('A', 2)] };
+    expect(offersDotReason({ ...input, coupons: [at('A', 2.5)] }, now)).toBe('coupon-expiring');
   });
   it('mã đã quá hạn không tính; dữ liệu chưa về thì không chấm', () => {
     expect(offersDotReason({ coupons: [at('A', -1)] }, now)).toBeNull();
     expect(offersDotReason({}, now)).toBeNull();
+  });
+});
+
+describe('kho mã đã xem theo tài khoản', () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it('chỉ đọc lại của chính tài khoản đã ghi; khác tài khoản, định dạng cũ hay hỏng thì rỗng', () => {
+    const st = mem();
+    writeSeenCoupons(st, 'u1', ['A@x']);
+    expect(readSeenCoupons(st, 'u1')).toEqual(['A@x']);
+    expect(readSeenCoupons(st, 'u2')).toEqual([]);
+    expect(readSeenCoupons(st, undefined)).toEqual([]);
+    st.setItem(OFFERS_SEEN_KEY, JSON.stringify(['A']));
+    expect(readSeenCoupons(st, 'u1')).toEqual([]);
+    st.setItem(OFFERS_SEEN_KEY, '{hỏng');
+    expect(readSeenCoupons(st, 'u1')).toEqual([]);
+    expect(readSeenCoupons(null, 'u1')).toEqual([]);
+  });
+  it('readLastTodoRows: số dòng của tài khoản dùng gần nhất, bất kể là ai', () => {
+    const st = mem();
+    expect(readLastTodoRows(st)).toBe(0);
+    st.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u9', rows: 2 }));
+    expect(readLastTodoRows(st)).toBe(2);
+    expect(readLastTodoRows(null)).toBe(0);
   });
 });
 
@@ -107,6 +138,12 @@ describe('resolveHomeKind', () => {
   it('chưa nhớ gì: đang tải là chưa biết, lỗi là khách mới', () => {
     expect(resolveHomeKind(base)).toBe('unknown');
     expect(resolveHomeKind({ ...base, pending: false })).toBe('new');
+  });
+  it('đang khôi phục phiên: theo loại của tài khoản dùng gần nhất, chưa nhớ thì chưa biết, không bao giờ là khách mới', () => {
+    const pendingAuth = { ...base, authed: false, authPending: true } as const;
+    expect(resolveHomeKind({ ...pendingAuth, stored: 'returning' })).toBe('returning');
+    expect(resolveHomeKind({ ...pendingAuth, stored: 'new' })).toBe('new');
+    expect(resolveHomeKind(pendingAuth)).toBe('unknown');
   });
   it('thứ tự khối của "chưa biết" giữ chỗ thẻ thành viên và không có khối riêng của một loại', () => {
     const order = homeBlockOrder('unknown');

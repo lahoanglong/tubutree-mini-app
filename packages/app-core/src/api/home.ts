@@ -33,6 +33,8 @@ export interface HomeMeDTO {
   subscriptions: Block<SubscriptionDTO[]>;
   notifications: Block<NotificationDTO[]>;
   newCustomerOffer: Block<NewCustomerOffer>;
+  /** Số yêu cầu đổi rác đang mở của khách (một câu đếm phía API). API cũ không có trường này: coi là 0. */
+  wasteOpenRequestCount?: Block<number>;
   purchasedLimit?: number;
 }
 

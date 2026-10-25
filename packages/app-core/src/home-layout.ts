@@ -31,17 +31,23 @@ export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
 }
 
 /**
- * Loại khách để chọn thứ tự khối. Khách chưa đăng nhập luôn là mới. Có số liệu đã mua (kể cả cũ, sau một lần tải lại lỗi) thì theo
- * số liệu. Chưa có thì theo loại đã nhớ của chính tài khoản này, kể cả khi tải lỗi: khách cũ không bị đẩy về bố cục khách mới vì
- * một lần API chập chờn. Chưa nhớ gì: đang tải là "chưa biết", lỗi là khách mới.
+ * Loại khách để chọn thứ tự khối. Đang khôi phục phiên (`authPending`) chưa biết là ai: dùng loại đã nhớ của tài khoản dùng gần nhất
+ * trên máy (`stored`), chưa nhớ thì "chưa biết"; không bao giờ dựng bố cục khách mới ở bước này (Danh mục sẽ bị đẩy cả một khối khi phiên về).
+ * Khách chưa đăng nhập hẳn luôn là mới. Có số liệu đã mua (kể cả cũ, sau một lần tải lại lỗi) thì theo số liệu. Chưa có thì theo loại đã
+ * nhớ của chính tài khoản này, kể cả khi tải lỗi: khách cũ không bị đẩy về bố cục khách mới vì một lần API chập chờn. Chưa nhớ gì:
+ * đang tải là "chưa biết", lỗi là khách mới.
  */
 export function resolveHomeKind(opts: {
   authed: boolean;
+  /** Đang khôi phục phiên (chưa biết đăng nhập hay chưa). */
+  authPending?: boolean;
+  /** Loại đã nhớ: của chính tài khoản khi đã đăng nhập, của tài khoản dùng gần nhất khi đang khôi phục phiên. */
   stored: HomeCustomerKind | null;
   /** Số sản phẩm đã mua trong dữ liệu đang có; undefined = chưa có dữ liệu. */
   purchasedCount: number | undefined;
   pending: boolean;
 }): HomeKindState {
+  if (opts.authPending && !opts.authed) return opts.stored ?? 'unknown';
   if (!opts.authed) return 'new';
   if (opts.purchasedCount !== undefined) return customerKind(opts.purchasedCount);
   if (opts.stored) return opts.stored;
@@ -134,14 +140,36 @@ export function isCouponExpiring(c: Pick<CouponDTO, 'endAt'>, now: number): bool
   return Number.isFinite(end) && end >= now && end <= now + COUPON_EXPIRING_DAYS * 24 * 3_600_000;
 }
 
-/** Mã (code) các phiếu sắp hết hạn, để nhớ khách đã xem trang Ưu đãi với những mã nào. */
+/** Khoá `code@endAt` của các phiếu sắp hết hạn, để nhớ khách đã xem trang Ưu đãi với những mã nào; gia hạn (endAt đổi) là một khoá mới. */
 export function expiringCouponIds(coupons: readonly Pick<CouponDTO, 'code' | 'endAt'>[] | null | undefined, now: number): string[] {
-  return (coupons ?? []).filter((c) => isCouponExpiring(c, now)).map((c) => c.code);
+  return (coupons ?? []).filter((c) => isCouponExpiring(c, now)).map((c) => `${c.code}@${c.endAt}`);
 }
 
 /** Danh sách đã xem sau khi khách mở Ưu đãi: giữ cái cũ, thêm cái mới, bỏ trùng, chỉ nhớ 50 mã gần nhất. */
 export function mergeSeenCouponIds(seen: readonly string[], current: readonly string[]): string[] {
   return [...new Set([...seen, ...current])].slice(-50);
+}
+
+export const OFFERS_SEEN_KEY = 'tubu_offers_seen_coupons';
+
+/** Khoá mã sắp hết hạn đã xem của CHÍNH tài khoản này (`{ userId, items }`). Sai dạng, định dạng cũ hay khác tài khoản → rỗng. */
+export function readSeenCoupons(storage: MemoryStorage | null, userId: string | null | undefined): string[] {
+  if (!storage || !userId) return [];
+  try {
+    const v = JSON.parse(storage.getItem(OFFERS_SEEN_KEY) ?? 'null') as { userId?: unknown; items?: unknown } | null;
+    if (!v || v.userId !== userId || !Array.isArray(v.items)) return [];
+    return v.items.filter((x): x is string => typeof x === 'string');
+  } catch {
+    return [];
+  }
+}
+
+export function writeSeenCoupons(storage: MemoryStorage | null, userId: string, items: readonly string[]): void {
+  try {
+    storage?.setItem(OFFERS_SEEN_KEY, JSON.stringify({ userId, items }));
+  } catch {
+    /* kho bị chặn: chấm tắt trong phiên này, lần mở sau có thể bật lại */
+  }
 }
 
 /**
@@ -290,6 +318,17 @@ export function writeTodoRows(storage: MemoryStorage | null, userId: string, row
     storage?.setItem(TODO_ROWS_KEY, JSON.stringify({ userId, rows: Math.min(2, Math.max(0, rows)) }));
   } catch {
     /* hết quota / bị chặn: lần sau không có khung chờ, khối vẫn đúng */
+  }
+}
+
+/** Số dòng đã nhớ của tài khoản dùng gần nhất (bất kể là ai): để dựng khung chờ trong lúc còn khôi phục phiên. */
+export function readLastTodoRows(storage: MemoryStorage | null): number {
+  if (!storage) return 0;
+  try {
+    const v = JSON.parse(storage.getItem(TODO_ROWS_KEY) ?? 'null') as { rows?: unknown } | null;
+    return v && (v.rows === 1 || v.rows === 2) ? v.rows : 0;
+  } catch {
+    return 0;
   }
 }
 
