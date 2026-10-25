@@ -23,7 +23,7 @@ import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 const TILE_WIDTH = 148;
 /** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
 export const COMPACT_MAX_ITEMS = 2;
-const COMPACT_CARD_HEIGHT = 136;
+const COMPACT_CARD_HEIGHT = 168;
 const HEADING_HEIGHT = 24;
 const HEADING_PAD_TOP = 4;
 const HEADING_PAD_BOTTOM = 8;

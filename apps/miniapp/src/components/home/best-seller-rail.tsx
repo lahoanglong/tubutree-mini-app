@@ -12,6 +12,8 @@ import { HomeBlockError } from './home-block-error';
 
 export const BEST_SELLER_LIMIT = 6;
 const TILE_WIDTH = 156;
+/** Thẻ hẹp hơn lưới 2 cột nên tên xuống dòng nhiều hơn: đo trên trình duyệt thật ở 375px, thẻ thật cao hơn khung chờ lưới ~20px. */
+const RAIL_TILE_EXTRA = 20;
 
 /** "Bán chạy" một hàng cuộn ngang cho khách mới (khách cũ đã có tab "Bán chạy" trong lưới gợi ý cuối trang). */
 export function BestSellerRail() {
@@ -32,6 +34,7 @@ export function BestSellerRail() {
         <button
           type="button"
           className="tubu-press"
+          aria-label={`${homeCopy.bestSellers.seeAll} ${homeCopy.bestSellers.title}`}
           onClick={() => {
             haptic('light');
             navigate('/browse?sort=best_seller');
@@ -53,7 +56,7 @@ export function BestSellerRail() {
                 style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH, background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)', overflow: 'hidden' }}
               >
                 <Skeleton height="auto" radius="0" style={{ aspectRatio: '1 / 1' }} />
-                <div style={{ height: TILE_BODY_HEIGHT }} />
+                <div style={{ height: TILE_BODY_HEIGHT + RAIL_TILE_EXTRA }} />
               </div>
             ))
           : items.map((p) => (

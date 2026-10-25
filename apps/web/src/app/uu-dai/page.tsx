@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarCheck, Check, ChevronRight, Gift, Leaf, PackageOpen, Recycle, Sprout, Users, type LucideIcon } from 'lucide-react';
@@ -72,7 +72,7 @@ function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
  * Trang Ưu đãi (phương án A), bản web của `pages/offers.tsx` ở Mini App: thẻ Điểm Xanh và hạng, Điểm danh, Đổi quà và tiện ích,
  * Mã giảm giá của tôi. `?section=coupons` cuộn tới danh sách mã. Web không có "tích điểm đơn sàn" (chưa có route) nên dòng đó ẩn.
  */
-export default function OffersPage() {
+function OffersContent() {
   const router = useRouter();
   const params = useSearchParams();
   const phase = useAuthPhase();
@@ -269,5 +269,14 @@ export default function OffersPage() {
       <PageHeader title={homeCopy.offers.title} />
       <div className="mt-3">{body}</div>
     </main>
+  );
+}
+
+// Trang đọc useSearchParams (?section=coupons): build tĩnh bắt buộc có Suspense bao ngoài.
+export default function OffersPage() {
+  return (
+    <Suspense fallback={<AuthLoading />}>
+      <OffersContent />
+    </Suspense>
   );
 }
