@@ -15,7 +15,8 @@ import {
   claimSeasonPass,
   giftWater,
   type AnswerResult,
-  type HarvestSpecies,
+  type HarvestCouponCap,
+  type HarvestReward,
 } from '../../services/game-api';
 import { haptic } from '../../utils/haptic';
 import { getErrorMessage } from '../../services/api';
@@ -23,18 +24,38 @@ import { vi } from '../../i18n/vi';
 import { formatDrops, formatNumber, formatPoints } from '../../utils/format';
 import { useLockedMutation } from './use-locked-mutation';
 
-export interface HarvestReward {
-  coupon?: string;
-  certificate?: string;
-  species?: HarvestSpecies;
+export type { HarvestReward };
+
+/** Phần của phản hồi tưới mà hộp chúc mừng cần ngoài `reward`. */
+export interface HarvestMeta {
+  couponCapped: HarvestCouponCap | null;
+  /** Khách vãng lai: API không cấp mã và điểm cây mầm (`couponCapped` hoặc `rewardBlocked` = 'GUEST'). */
+  guest: boolean;
+  /** Mọi mã của lần thu hoạch: `coupons` nếu có, không thì `coupon` cũ. */
+  coupons: string[];
+  /** 💧 cần cho cây kế tiếp (target sau thu hoạch). */
+  nextTarget: number;
 }
 
 interface WateringResult {
   harvested: boolean;
   progress: number;
   target: number;
-  reward?: HarvestReward;
+  couponCapped?: HarvestCouponCap | 'GUEST';
+  rewardBlocked?: 'GUEST' | string;
+  reward?: HarvestReward & { coupons?: (string | { code: string })[] };
 }
+
+const harvestMeta = (r: WateringResult): HarvestMeta => {
+  const list = (r.reward?.coupons ?? []).map((c) => (typeof c === 'string' ? c : c.code)).filter(Boolean);
+  const coupons = list.length > 0 ? list : r.reward?.coupon ? [r.reward.coupon] : [];
+  return {
+    couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' ? r.couponCapped : null,
+    guest: r.couponCapped === 'GUEST' || r.rewardBlocked === 'GUEST',
+    coupons,
+    nextTarget: r.target,
+  };
+};
 
 /**
  * Mọi lệnh ghi của trang Vườn Xanh. Trạng thái giao diện (hộp thu hoạch, đáp án quiz) ở lại trang và
@@ -45,7 +66,7 @@ export function useGameActions({
   onHarvest,
   onAnswered,
 }: {
-  onHarvest: (reward: HarvestReward | undefined) => void;
+  onHarvest: (reward: HarvestReward | undefined, meta: HarvestMeta) => void;
   onAnswered: (result: AnswerResult, vars: { id: string; choice: number }) => void;
 }) {
   const { openSnackbar } = useSnackbar();
@@ -117,7 +138,7 @@ export function useGameActions({
 
   const afterWatering = (label: string, r: WateringResult) => {
     if (r.harvested) {
-      onHarvest(r.reward);
+      onHarvest(r.reward, harvestMeta(r));
     } else {
       openSnackbar({ text: `${label} · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, type: 'success' });
     }
@@ -126,7 +147,7 @@ export function useGameActions({
   };
 
   const waterM = useLockedMutation({
-    mutationFn: () => waterTree(20),
+    mutationFn: (drops: number) => waterTree(drops),
     onSuccess: (r) => afterWatering('Đã tưới', r),
     onError,
   });

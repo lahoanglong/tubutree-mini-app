@@ -1,5 +1,7 @@
 import { Check, Droplets, Flame, Snowflake } from 'lucide-react';
+import { STREAK_3_SEEDS, missingDrops } from '@tubutree/app-core/game-newbie';
 import type { GameProfile } from '../../services/game-api';
+import { vi } from '../../i18n/vi';
 import { formatDrops } from '../../utils/format';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -16,6 +18,7 @@ export function CheckInStreak({
   freezePending,
   onCollectDew,
   dewPending,
+  onNeedWater,
 }: {
   profile: GameProfile | undefined;
   onCheckIn: () => void;
@@ -24,10 +27,17 @@ export function CheckInStreak({
   freezePending: boolean;
   onCollectDew: () => void;
   dewPending: boolean;
+  /** Thiếu nước cho vé giữ lửa: mở sheet "Kiếm nước" với số giọt còn thiếu. */
+  onNeedWater: (missing: number) => void;
 }) {
   const streakDays = profile?.streakDays;
   const dewCollectedToday = isSameVNDay(profile?.lastDewAt ?? null);
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
+  const t = vi.game.newbie.checkin;
+  const freezeCost = profile?.streakFreezeCost ?? 80;
+  const freezeShort = profile ? missingDrops(profile.totalSeeds, freezeCost) : 0;
+  const dayReward = (day: number): number | null =>
+    day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null;
   return (
     <Card padding={16}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -37,7 +47,7 @@ export function CheckInStreak({
             Điểm danh chuỗi {streakDays ?? 0} ngày
           </Heading>
           <Text variant="caption" tone="tertiary" as="div">
-            Nhận giọt nước tưới cây mỗi ngày
+            {t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}
           </Text>
         </div>
         {/* flexShrink 0: cạnh tiêu đề dài, nhãn nút bị rút gọn thành "Điểm d…" nếu để nút co lại. */}
@@ -56,6 +66,7 @@ export function CheckInStreak({
           const day = i + 1;
           const done = (streakDays ?? 0) % 7 === 0 && (streakDays ?? 0) > 0 ? true : day <= ((streakDays ?? 0) % 7);
           const bonus = day === 3 || day === 7;
+          const reward = dayReward(day);
           return (
             <div key={i} style={{ flex: 1, textAlign: 'center' }}>
               <div
@@ -75,6 +86,11 @@ export function CheckInStreak({
               <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
                 N{day}
               </Text>
+              {bonus && reward != null && (
+                <Text variant="label" tone="secondary" as="div" style={{ fontWeight: 700 }}>
+                  {t.dayReward(reward)}💧
+                </Text>
+              )}
             </div>
           );
         })}
@@ -87,8 +103,14 @@ export function CheckInStreak({
             <Icon icon={Snowflake} size="sm" tone="muted" />
             Vé giữ lửa: <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{profile?.streakFreezes ?? 0}</span>
           </Text>
-          <Button variant="secondary" disabled={freezePending} loading={freezePending} onPress={() => onBuyFreeze()} style={{ flexShrink: 0 }}>
-            Mua ({formatDrops(profile?.streakFreezeCost ?? 80)})
+          <Button
+            variant="secondary"
+            disabled={freezePending}
+            loading={freezePending}
+            onPress={() => (freezeShort > 0 ? onNeedWater(freezeShort) : onBuyFreeze())}
+            style={{ flexShrink: 0 }}
+          >
+            {freezeShort > 0 ? vi.game.newbie.short(freezeShort) : `Mua (${formatDrops(freezeCost)})`}
           </Button>
         </div>
         <Button
@@ -100,7 +122,7 @@ export function CheckInStreak({
           onPress={() => onCollectDew()}
           style={{ marginTop: 8 }}
         >
-          {dewCollectedToday ? 'Đã hứng sương' : 'Hứng giọt sương'}
+          {dewCollectedToday ? 'Đã hứng sương' : t.dew(profile?.dewSeeds ?? null)}
         </Button>
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
           Vé giữ lửa giúp chuỗi không đứt khi bạn lỡ 1 ngày. Giọt sương sáng tặng 💧 mỗi ngày.

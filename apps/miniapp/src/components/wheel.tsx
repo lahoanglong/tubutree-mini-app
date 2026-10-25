@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { SpinResult } from '../services/game-api';
+import { vi } from '../i18n/vi';
 import { formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Button } from './ui/button';
@@ -12,10 +13,15 @@ const SPIN_MS = 3600;
 
 export function WheelOfFortune({
   cost,
+  points = null,
+  onEarnPoints,
   onSpin,
   onResult,
 }: {
   cost: number;
+  /** Điểm Xanh dùng được; thiếu thì thay nút quay bằng số dư và lối "Cách kiếm Điểm Xanh". null = chưa biết, vẫn cho quay. */
+  points?: number | null;
+  onEarnPoints?: () => void;
   onSpin: () => Promise<SpinResult>;
   /** `null` = vừa bắt đầu lượt quay mới; có `prize` = kết quả thật của backend. Hộp kết quả do cấp trang dựng (xem WheelPrizeSheet). */
   onResult: (prize: SpinResult['prize'] | null) => void;
@@ -135,6 +141,16 @@ export function WheelOfFortune({
         </div>
       </div>
 
+      {points != null && points < cost && onEarnPoints ? (
+        <>
+          <Text variant="body-sm" tone="secondary" as="div" style={{ textAlign: 'center' }}>
+            {vi.game.newbie.wheel.have(points, cost)}
+          </Text>
+          <Button size="lg" variant="secondary" onPress={onEarnPoints} style={{ minWidth: 200 }}>
+            {vi.game.newbie.wheel.howToEarn}
+          </Button>
+        </>
+      ) : (
       <Button
         size="lg"
         loading={spinning}
@@ -144,6 +160,7 @@ export function WheelOfFortune({
       >
         {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
       </Button>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as string },
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   features: { seasonPass: false },
+  getLoyalty: vi.fn(),
   wheel: { cost: undefined as number | undefined, onSpin: undefined as (() => Promise<unknown>) | undefined },
   api: {
     getGameProfile: vi.fn(),
@@ -76,6 +77,7 @@ vi.mock('../components/wheel', () => ({
   },
 }));
 vi.mock('../services/game-api', () => mocks.api);
+vi.mock('../services/account-api', () => ({ getLoyalty: (...a: unknown[]) => mocks.getLoyalty(...a) }));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -133,6 +135,7 @@ beforeEach(() => {
   mocks.wheel.cost = undefined;
   mocks.wheel.onSpin = undefined;
   const a = mocks.api;
+  mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 });
   a.getGameProfile.mockResolvedValue({ ...PROFILE });
   a.getTodayQuiz.mockResolvedValue([]);
   a.getLeaderboard.mockResolvedValue([]);
@@ -167,17 +170,17 @@ describe('GamePage — trạng thái trang', () => {
     renderPage();
     await waitFor(() => expect(mocks.api.getLeaderboard).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: viText.auth.loginCta })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Tưới cây/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
   });
 
   it('chưa đăng nhập: hiện cổng đăng nhập, bấm gọi login(), không tải hồ sơ/nhiệm vụ', async () => {
     mocks.auth.status = 'unauthenticated';
     renderPage();
-    expect(screen.getByText(viText.community.loginToView)).toBeInTheDocument();
+    expect(screen.getByText(viText.game.newbie.loginToView)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: viText.auth.loginCta }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: /Tưới cây/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
     expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
     expect(mocks.api.getMissions).not.toHaveBeenCalled();
   });
@@ -186,9 +189,9 @@ describe('GamePage — trạng thái trang', () => {
     mocks.api.getGameProfile.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ ...PROFILE });
     renderPage();
     const retry = await screen.findByRole('button', { name: /Thử lại/ });
-    expect(screen.queryByRole('button', { name: /Tưới cây/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Nhận nước hôm nay/ })).not.toBeInTheDocument();
     fireEvent.click(retry);
-    expect(await screen.findByRole('button', { name: /Tưới cây/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Nhận nước hôm nay/ })).toBeInTheDocument();
     expect(mocks.api.getGameProfile).toHaveBeenCalledTimes(2);
   });
 });
@@ -427,33 +430,39 @@ describe('GamePage — hồi sinh chuỗi và cảnh báo cây', () => {
   it('cây héo/chết hiện đúng cảnh báo; khoẻ thì không có', async () => {
     const view = renderPage();
     await screen.findByText('Sồi');
-    expect(screen.queryByText(/Cây đang héo/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Cây đã héo úa/)).not.toBeInTheDocument();
+    expect(screen.queryByText(viText.game.newbie.treeWilted)).not.toBeInTheDocument();
     view.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treeHealth: 'WILTED' });
     const wilted = renderPage();
-    expect(await screen.findByText(/Cây đang héo vì lâu chưa tưới/)).toBeInTheDocument();
+    expect(await screen.findByText(viText.game.newbie.treeWilted)).toBeInTheDocument();
     wilted.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treeHealth: 'DEAD' });
     renderPage();
-    expect(await screen.findByText(/Cây đã héo úa do quá 7 ngày không tưới/)).toBeInTheDocument();
+    // Hồ sơ cũ còn DEAD: hiện như héo, không nói chuyện mất tiến độ.
+    expect(await screen.findByText(viText.game.newbie.treeWilted)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('trồng cây mới từ đầu');
   });
 });
 
 describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () => {
-  it('tưới cây: gọi waterTree(20) một lần dù chạm lúc đang gửi, báo tiến độ, làm mới cả rừng', async () => {
+  beforeEach(() => {
+    // Đã nhận nước hôm nay: nút chính là "Tưới hết" với toàn bộ 1.250💧.
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+  });
+
+  it('tưới hết: gọi waterTree(1250) một lần dù chạm lúc đang gửi, báo tiến độ, làm mới cả rừng', async () => {
     const gate = pending<unknown>();
     mocks.api.waterTree.mockReturnValue(gate.promise);
     const { invalidated } = renderPage();
-    const btn = await screen.findByRole('button', { name: 'Tưới cây (20💧)' });
+    const btn = await screen.findByRole('button', { name: 'Tưới hết (1.250💧)' });
     expect(btn).toBeEnabled();
     fireEvent.click(btn);
     await waitFor(() => expect(btn).toBeDisabled());
     fireEvent.click(btn);
     expect(mocks.api.waterTree).toHaveBeenCalledTimes(1);
-    expect(mocks.api.waterTree).toHaveBeenCalledWith(20);
+    expect(mocks.api.waterTree).toHaveBeenCalledWith(1250);
     await act(async () => {
       gate.resolve({ progress: 30, target: 50, harvested: false, treesPlanted: 3 });
     });
@@ -468,7 +477,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('lỗi tưới cây: báo lỗi, nút bật lại', async () => {
     mocks.api.waterTree.mockRejectedValue(new Error('boom'));
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Tưới cây (20💧)' });
+    const btn = await screen.findByRole('button', { name: 'Tưới hết (1.250💧)' });
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     await waitFor(() => expect(btn).toBeEnabled());
@@ -487,7 +496,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
       },
     });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (1.250💧)' }));
     expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
     expect(document.body.textContent).toContain('Tubu sẽ góp 1 cây vào quỹ trồng cây');
     expect(screen.getByText('GIAM10')).toBeInTheDocument();
@@ -502,7 +511,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('thu hoạch không có quà: không có mã giảm giá, không có nút "Dùng mã giảm giá ngay"; "Tuyệt vời!" đóng hộp', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 50, target: 50, harvested: true, treesPlanted: 4 });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (1.250💧)' }));
     await screen.findByText('Thu hoạch thành công!');
     expect(screen.queryByRole('button', { name: 'Dùng mã giảm giá ngay' })).not.toBeInTheDocument();
     expect(screen.queryByText('Mã đóng góp quỹ trồng cây')).not.toBeInTheDocument();
@@ -513,7 +522,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('hộp thu hoạch có mã: chạm mã để chép (thành công/thất bại), "Dùng mã giảm giá ngay" đóng hộp và sang /browse', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 50, target: 50, harvested: true, treesPlanted: 4, reward: { coupon: 'GIAM10' } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (1.250💧)' }));
     fireEvent.click(await screen.findByText('GIAM10'));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giảm giá', type: 'success' }));
     expect(mocks.copyText).toHaveBeenCalledWith('GIAM10');
@@ -532,7 +541,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('ô mã giảm giá là nút bàn phím được: Enter và Space chép mã như chạm', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 50, target: 50, harvested: true, treesPlanted: 4, reward: { coupon: 'GIAM10' } });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tưới cây (20💧)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (1.250💧)' }));
     const box = (await screen.findByText('GIAM10')).closest<HTMLElement>('[role="button"]')!;
     expect(box).toHaveAttribute('tabindex', '0');
     fireEvent.keyDown(box, { key: 'Enter' });
@@ -546,6 +555,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
 
   it('góp quỹ trồng cây: nút kèm giá Điểm Xanh, gọi API 1 lần, báo mã đóng góp, làm mới quỹ + số dư điểm', async () => {
     const { invalidated } = renderPage();
+    await openTab('Vườn');
     const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây \(50 điểm\)/ });
     fireEvent.click(btn);
     expect(mocks.api.buyTree).not.toHaveBeenCalled();
@@ -562,6 +572,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
 
   it('góp quỹ trồng cây: gửi Idempotency-Key theo hợp đồng BE (8–128 ký tự A-Za-z0-9_-) cho mỗi hộp xác nhận', async () => {
     renderPage();
+    await openTab('Vườn');
     fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
     await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(1));
@@ -571,6 +582,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('góp quỹ trồng cây lỗi mạng: hộp ở lại, thử lại gửi đúng key cũ; thành công thì đóng hộp, mở lại ra key mới', async () => {
     mocks.api.buyTree.mockRejectedValueOnce(new Error('Network Error'));
     renderPage();
+    await openTab('Vườn');
     fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
@@ -601,6 +613,7 @@ describe('GamePage — tưới cây, thu hoạch, góp quỹ trồng cây', () =
   it('hồ sơ không có giá cây: nút "Góp quỹ trồng cây" không kèm giá', async () => {
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, treePointsPrice: undefined });
     renderPage();
+    await openTab('Vườn');
     const btn = await screen.findByRole('button', { name: /Góp quỹ trồng cây/ });
     expect(btn).toHaveTextContent(/^Góp quỹ trồng cây$/);
   });
@@ -628,7 +641,7 @@ describe('GamePage — lô đất', () => {
     expect(screen.queryByRole('button', { name: 'Tưới' })).not.toBeInTheDocument();
   });
 
-  it('mỗi lô có nút Tưới gọi waterPlot(id, 20) đúng lô; báo tiến độ lô; hiện tình trạng héo/chết', async () => {
+  it('mỗi lô có nút Tưới gọi waterPlot(id, 20) đúng lô; báo tiến độ lô; hiện tình trạng héo (lô DEAD cũ cũng chỉ héo)', async () => {
     mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: NEXT });
     const { container, invalidated } = renderPage();
     await openTab('Vườn');
@@ -636,7 +649,7 @@ describe('GamePage — lô đất', () => {
     expect(screen.getByText('Lô 3 · Xoài')).toBeInTheDocument();
     expect(screen.queryByText('Lô 1 · Sồi')).not.toBeInTheDocument();
     expect(container.textContent).toContain('5/20💧 · 🌳 1 · 🥀 héo');
-    expect(container.textContent).toContain('20/20💧 · 🌳 0 · 🍂 chết');
+    expect(container.textContent).toContain('20/20💧 · 🌳 0 · 🥀 héo');
     const buttons = screen.getAllByRole('button', { name: 'Tưới' });
     expect(buttons).toHaveLength(2);
     fireEvent.click(buttons[1]!);
@@ -1205,10 +1218,10 @@ describe('GamePage — cảnh báo React trùng key', () => {
 });
 
 describe('GamePage — nút khoá trong lúc đang gửi', () => {
-  const cases: { label: string; name: string | RegExp; fn: () => ReturnType<typeof vi.fn>; setup?: () => void; confirmName?: string }[] = [
+  const cases: { label: string; name: string | RegExp; fn: () => ReturnType<typeof vi.fn>; setup?: () => void; confirmName?: string; tab?: 'Vườn' }[] = [
     { label: 'hứng giọt sương', name: 'Hứng giọt sương', fn: () => mocks.api.collectDew },
     { label: 'mua vé giữ lửa', name: 'Mua (80💧)', fn: () => mocks.api.buyStreakFreeze },
-    { label: 'góp quỹ trồng cây', name: /Góp quỹ trồng cây/, fn: () => mocks.api.buyTree, confirmName: 'Xác nhận' },
+    { label: 'góp quỹ trồng cây', name: /Góp quỹ trồng cây/, fn: () => mocks.api.buyTree, confirmName: 'Xác nhận', tab: 'Vườn' },
     {
       label: 'hồi sinh chuỗi',
       name: 'Hồi sinh (300💧)',
@@ -1216,10 +1229,11 @@ describe('GamePage — nút khoá trong lúc đang gửi', () => {
       setup: () => mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, streakRepairable: true, brokenStreakDays: 5, streakRepairCost: 300 }),
     },
   ];
-  it.each(cases)('$label: chạm lần 2 khi chưa phản hồi không gọi API lần nữa', async ({ name, fn, setup, confirmName }) => {
+  it.each(cases)('$label: chạm lần 2 khi chưa phản hồi không gọi API lần nữa', async ({ name, fn, setup, confirmName, tab }) => {
     setup?.();
     fn().mockReturnValue(pending<unknown>().promise);
     renderPage();
+    if (tab) await openTab(tab);
     const btn = await screen.findByRole('button', { name });
     fireEvent.click(btn);
     if (confirmName) fireEvent.click(await screen.findByRole('button', { name: confirmName }));

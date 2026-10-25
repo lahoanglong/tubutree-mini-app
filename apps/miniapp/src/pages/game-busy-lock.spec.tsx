@@ -61,6 +61,7 @@ vi.mock('../utils/features', () => ({
 }));
 vi.mock('../components/wheel', () => ({ WheelOfFortune: () => <div data-testid="wheel" /> }));
 vi.mock('../services/game-api', () => mocks.api);
+vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -169,7 +170,12 @@ const twice = async (name: string | RegExp) => {
 const byName = (name: string | RegExp) => () => twice(name);
 
 const CASES: Case[] = [
-  { label: 'tưới cây', api: () => mocks.api.waterTree, targets: byName(/Tưới cây/) },
+  {
+    label: 'tưới hết',
+    api: () => mocks.api.waterTree,
+    setup: () => mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() }),
+    targets: byName(/Tưới hết/),
+  },
   { label: 'điểm danh', api: () => mocks.api.checkIn, targets: byName('Điểm danh') },
   { label: 'hứng giọt sương', api: () => mocks.api.collectDew, targets: byName('Hứng giọt sương') },
   { label: 'mua vé giữ lửa', api: () => mocks.api.buyStreakFreeze, targets: byName('Mua (80💧)') },
@@ -242,6 +248,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
   it('góp quỹ trồng cây: xác nhận hai lần trong cùng khung hình chỉ gọi buyTree một lần', async () => {
     mocks.api.buyTree.mockReturnValue(pending<unknown>().promise);
     renderPage();
+    await openTab('Vườn');
     fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
     const ok = await screen.findByRole('button', { name: 'Xác nhận' });
     await tapTogether(ok, ok);
@@ -304,8 +311,9 @@ describe('GamePage — nhả khoá để bấm lại được', () => {
   });
 
   it('thành công: nhả khoá, lần tưới sau gọi API bình thường', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: new Date().toISOString() });
     renderPage();
-    const btn = await screen.findByRole('button', { name: /Tưới cây/ });
+    const btn = await screen.findByRole('button', { name: /Tưới hết/ });
     await tapTogether(btn, btn);
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
     await waitFor(() => expect(btn).toBeEnabled());

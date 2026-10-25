@@ -55,6 +55,7 @@ vi.mock('../components/wheel', () => ({
     return <div data-testid="wheel" />;
   },
 }));
+vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
 vi.mock('../services/game-api', () => ({
   ...mocks.api,
   checkIn: vi.fn(),
@@ -200,11 +201,11 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
     expect(within(tabPanel('Cộng đồng')).getByRole('button', { name: 'Tặng 💧' })).toBeVisible();
   });
 
-  it('mỗi khối đặt vào đúng tab: tưới/điểm danh/nhiệm vụ/quiz/vòng quay ở Hôm nay, lô đất ở Vườn, xếp hạng ở Cộng đồng', async () => {
+  it('mỗi khối đặt vào đúng tab: nút chính/điểm danh/nhiệm vụ/quiz/vòng quay ở Hôm nay, lô đất ở Vườn, xếp hạng ở Cộng đồng', async () => {
     renderPage();
     await screen.findByText('Lô 2 · Mận');
     const today = within(tabPanel('Hôm nay'));
-    expect(today.getByRole('button', { name: 'Tưới cây (20💧)' })).toBeInTheDocument();
+    expect(today.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
     expect(today.getByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
     expect(today.getByRole('heading', { name: 'Nhiệm vụ' })).toBeInTheDocument();
     expect(today.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' })).toBeInTheDocument();
@@ -227,12 +228,12 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 });
 
 describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
-  it('trong tab Hôm nay: thẻ vườn → tab → tưới cây → điểm danh → nhiệm vụ → quiz', async () => {
+  it('trong tab Hôm nay: thẻ vườn → tab → nút chính → điểm danh → nhiệm vụ → quiz', async () => {
     const { container } = renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
     const hero = screen.getByText('Sồi');
     const tabList = screen.getByRole('tablist');
-    const water = screen.getByRole('button', { name: 'Tưới cây (20💧)' });
+    const water = screen.getByRole('button', { name: 'Nhận nước hôm nay' });
     const checkIn = screen.getByRole('button', { name: 'Điểm danh' });
     const missions = screen.getByRole('heading', { name: 'Nhiệm vụ' });
     const quiz = screen.getByRole('heading', { name: 'Câu đố Sống Xanh hôm nay' });

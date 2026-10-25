@@ -22,7 +22,8 @@ import { SEASON_PASS_ENABLED } from '../../utils/features';
  */
 export function useGameData(authed: boolean) {
   const profileQ = useQuery({ queryKey: ['game', 'profile'], queryFn: getGameProfile, enabled: authed });
-  const { data: quiz } = useQuery({ queryKey: ['game', 'quiz'], queryFn: getTodayQuiz, enabled: authed });
+  const quizQ = useQuery({ queryKey: ['game', 'quiz'], queryFn: getTodayQuiz, enabled: authed });
+  const quiz = quizQ.data;
   const { data: board } = useQuery({ queryKey: ['game', 'board'], queryFn: getLeaderboard });
   const { data: missions } = useQuery({ queryKey: ['game', 'missions'], queryFn: getMissions, enabled: authed });
   const { data: forest } = useQuery({ queryKey: ['game', 'forest'], queryFn: getForest, enabled: authed });
@@ -34,5 +35,5 @@ export function useGameData(authed: boolean) {
   const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed });
   const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed && SEASON_PASS_ENABLED });
 
-  return { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass };
+  return { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass };
 }
