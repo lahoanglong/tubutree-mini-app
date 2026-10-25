@@ -34,6 +34,11 @@ describe('cardPricing (giá thẻ sản phẩm: Giờ vàng thắng khi rẻ hơ
   it('đợt của sản phẩm khác không ảnh hưởng', () => {
     expect(cardPricing(product, [flash({ productSlug: 'khac' })])).toMatchObject({ price: 120000, isFlash: false });
   });
+
+  it('Giờ vàng thắng trên sản phẩm đang giảm giá: gạch giá đang bán và % tính trên giá đó, cùng quy tắc Mini App', () => {
+    const r = cardPricing({ ...product, salePrice: 100000 }, [flash()]);
+    expect(r).toMatchObject({ price: 79000, isFlash: true, compareAt: 100000, originalPrice: 100000, salePct: 21, hasSale: true });
+  });
 });
 
 describe('variationPricing (giá từng phân loại ở trang chi tiết)', () => {

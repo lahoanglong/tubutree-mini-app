@@ -39,11 +39,13 @@ export default function ProductCard({ product, priority = false }: { product: P;
               decoding="async"
             />
           ) : (
-            <div data-testid="card-placeholder" className="flex h-full w-full items-center justify-center text-forest-600 md:bg-forest-50">
-              <svg className="max-md:hidden" width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-                <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="currentColor" fillOpacity="0.3" />
-                <path d="M24 37c-1-8 4-15 14-16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <div data-testid="card-placeholder" aria-hidden="true" className="relative flex h-full w-full flex-col items-center justify-center gap-1.5 overflow-hidden">
+              <div className="absolute inset-0 opacity-[0.12]" style={{ background: brandAccent(product.brand) }} />
+              <svg className="relative" width="36" height="36" viewBox="0 0 48 48" fill="none">
+                <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--forest-300)" />
+                <path d="M12 38c5-9 11-15 20-20" stroke="var(--forest-600)" strokeWidth="2" strokeLinecap="round" />
               </svg>
+              {product.brand && <span className="relative max-w-[80%] truncate text-xs font-bold text-forest-700">{product.brand}</span>}
             </div>
           )}
 
