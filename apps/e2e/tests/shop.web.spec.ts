@@ -164,13 +164,12 @@ function mockCustomer(api: MockApi) {
 }
 
 test.describe('Web khách: Trang chủ /', () => {
-  test('khách vãng lai: ba lưới công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
+  test('khách vãng lai: kệ Bán chạy và lưới gợi ý công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
     mockHome(api);
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
-    await expect(page.getByRole('region', { name: 'Bán chạy' }).getByText('Bán chạy nhất')).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Mới về vườn' }).getByText('Hàng mới nhất')).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Dành cho bạn' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true }).getByText('Bán chạy nhất')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByText('Sản phẩm nổi bật')).toBeVisible();
     // Điện thoại: chuông hiện cả với khách như Mini App (trang Thông báo tự đòi đăng nhập); máy tính không có chuông cho khách.
     const phone = (page.viewportSize()?.width ?? 1280) < 768;
     await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(phone ? 1 : 0);
@@ -205,9 +204,9 @@ test.describe('Web khách: Trang chủ /', () => {
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByRole('link', { name: 'Thông báo, 2 chưa đọc' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Dành cho bạn' }).getByText('Gợi ý riêng')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByText('Gợi ý riêng')).toBeVisible();
     const rail = page.getByRole('region', { name: 'Mua lại' });
-    await expect(rail.getByText('Đã mua 2 lần')).toBeVisible();
+    await expect(rail.getByText('Nước rửa chén')).toBeVisible();
 
     await rail.getByRole('button', { name: 'Mua lại' }).click();
     const addedCall = api.waitForCall('POST', '/cart/items');
@@ -218,17 +217,17 @@ test.describe('Web khách: Trang chủ /', () => {
   });
 
   test('API sản phẩm sập sau khi server đã có dữ liệu: lưới giữ nguyên, không hiện dải lỗi cấp trang', async ({ page, api }) => {
-    // Dải lỗi cấp trang chỉ hiện khi cả ba lưới chưa từng có dữ liệu (home-view pageDown); trang SSR luôn mang sẵn dữ liệu thật của DB e2e nên
+    // Dải lỗi cấp trang chỉ hiện khi Bán chạy chưa từng có dữ liệu (home-view pageDown); trang SSR luôn mang sẵn dữ liệu thật của DB e2e nên
     // trường hợp "sập hẳn từ đầu" chỉ kiểm được ở vitest (home-parts.spec), không dựng lại được qua mock phía trình duyệt.
     mockCatalog(api);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
     api.get('/products', () => reply(503, { message: 'Máy chủ đang bận' }));
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toBeVisible();
     await refetchStale(page, api, 'GET', '/products');
-    await expect.poll(() => api.callsTo('GET', '/products').length).toBeGreaterThanOrEqual(6);
+    await expect.poll(() => api.callsTo('GET', '/products').length).toBeGreaterThanOrEqual(2);
     await expect(page.getByRole('region', { name: 'Chưa tải được Trang chủ' })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toBeVisible();
   });
 
   test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {

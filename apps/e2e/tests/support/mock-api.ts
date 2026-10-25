@@ -389,10 +389,29 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
 export { expect };
 
 /**
+ * Mặc định cho thẻ thành viên, tab Ưu đãi (chấm đỏ) và Cộng đồng ở Trang chủ: điểm 0, đã điểm danh hôm nay, không có mã giảm giá,
+ * không có bài. Dùng fallback nên spec đã mock riêng thì thắng.
+ */
+export function loyaltyDefaults(api: MockApi): void {
+  api.fallback('GET', '/me/loyalty', { tier: { name: 'Mầm Xanh' }, pointsBalance: 0, pointsConvertedBalance: 0, nextTier: null });
+  api.fallback('GET', '/me/loyalty/check-in', {
+    checkedInToday: true,
+    streakDays: 1,
+    currentCycleDay: 1,
+    rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day, claimed: day === 1, isToday: day === 1 })),
+  });
+  api.fallback('GET', '/me/coupons', []);
+  api.fallback('GET', '/me/referral', { referralCode: 'E2EREF', successCount: 0, earnedPoints: 0, milestones: [], nextMilestone: null });
+  api.fallback('GET', '/feed', { posts: [], nextCursor: null });
+  api.fallback('GET', '/feed/public-preview', { posts: [] });
+}
+
+/**
  * Mặc định cho lời gọi của vỏ web (AppGates, huy hiệu đơn) chạy ở MỌI trang khi đã đăng nhập, kể cả /admin — Mini App cũng gọi
  * đúng ba endpoint này (CouponClaimGate/useCartCount, OnboardingGate, BottomNav). Dùng fallback: spec đã mock thì thắng.
  */
 function shellDefaults(api: MockApi): void {
+  loyaltyDefaults(api);
   api.fallback('GET', '/cart', {
     items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 0,
   });
@@ -400,6 +419,7 @@ function shellDefaults(api: MockApi): void {
     id: 'e2e-shell-user', fullName: null, email: null, avatarUrl: null, dob: null, onboarded: true, segments: [],
   });
   api.fallback('GET', '/orders/active-count', { count: 0 });
+  api.fallback('GET', '/me/subscriptions', []);
 }
 
 // ─────────────────────────── Dữ liệu mẫu dùng chung ───────────────────────────
@@ -458,6 +478,7 @@ export function mockSession(api: MockApi, user: AuthUser): AuthUser {
   // (literal) không đè '/orders/:code' hay '/orders/active-count' — router ưu tiên mẫu cụ thể hơn.
   api.get('/orders', { data: [], meta: { page: 1, limit: 1, total: 0 } });
   api.get('/me/subscriptions', []);
+  loyaltyDefaults(api);
   // Chi tiết đơn (dự án 4a/D2): usePublicConfig (cửa sổ đổi/trả, hotline) và khối "Hoàn tiền" (OrderRefunds)
   // chạy ở MỌI đơn. Mặc định: config công khai chuẩn, đơn không có khoản hoàn nào.
   api.get('/config/public', publicConfig());

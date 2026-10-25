@@ -103,6 +103,7 @@ test.describe('Giới thiệu bạn bè', () => {
     mockSession(api, makeUser({ id: 'user-ref', referralCode: 'BANBE77' }));
     api.get('/me/loyalty', LOYALTY);
     api.get('/me/wallet', WALLET);
+    api.get('/me/referral', { ...REFERRAL, referralCode: 'BANBE77' });
     api.get('/auth/me', { ownsBrand: false });
     api.allowUnmocked('GET /me/coupons', 'GET /me/notifications', 'GET /notifications', 'GET /brand/owner/me', 'GET /dealer/me');
     await page.addInitScript(() => {
@@ -120,7 +121,7 @@ test.describe('Giới thiệu bạn bè', () => {
     });
     await page.goto('/profile');
 
-    const copy = page.getByRole('button', { name: /Mã giới thiệu: BANBE77/ });
+    const copy = page.getByRole('button', { name: /Sao chép mã BANBE77/ });
     await copy.click({ timeout: 15_000 });
     await expect(page.getByText('Đã sao chép mã giới thiệu')).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toBe('BANBE77');

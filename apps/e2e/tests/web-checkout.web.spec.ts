@@ -143,6 +143,6 @@ test.describe('Web khách: thanh toán', () => {
 
     down = false;
     await page.getByRole('button', { name: 'Thử lại' }).click();
-    await expect(page.getByRole('heading', { name: 'Tài khoản', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Cá nhân', level: 1 })).toBeVisible();
   });
 });
