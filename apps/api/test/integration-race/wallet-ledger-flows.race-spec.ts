@@ -28,7 +28,7 @@ import { AuthService } from '../../src/modules/auth/auth.service';
 import type { ZaloService } from '../../src/modules/auth/zalo.service';
 import type { RbacService } from '../../src/modules/staff/rbac/rbac.service';
 import type { Env } from '../../src/config/env.validation';
-import { createOrder, createUser, randCode, setConfig, summarize, warmPool } from './helpers';
+import { createOrder, createUser, randCode, setConfig, summarize, warmPool, legacyBankWithdraw } from './helpers';
 
 /**
  * C-060: mọi luồng nghiệp vụ đổi Ví Tubu (rút, hoàn lệnh rút, đổi xu, rút hoa hồng về ví, cashback,
@@ -113,10 +113,6 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
     } as unknown as ZaloService;
     const rbac = { applyGrants: async <T>(u: T) => u } as unknown as RbacService;
     auth = new AuthService(prisma, new JwtService(), config, zalo, rbac);
-
-    await setConfig(prisma, 'wallet.withdraw_min', 100_000);
-    await setConfig(prisma, 'wallet.withdraw_fee', 3_000);
-    await setConfig(prisma, 'affiliate.min_withdraw_bank', 50_000);
     await setConfig(prisma, 'cashback.hold_days', 30);
   });
 
@@ -154,9 +150,9 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
   it('rút tiền song song vượt số dư + đổi xu (đã ngừng, PD-3) song song → mỗi lần rút đúng 1 dòng sổ, không dòng XU_CONVERT, số dư == tổng sổ, không âm', async () => {
     const u = await newWallet(250_000);
     const res = await Promise.allSettled([
-      wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
-      wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
-      wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
+      legacyBankWithdraw(prisma, u.id, 100_000),
+      legacyBankWithdraw(prisma, u.id, 100_000),
+      legacyBankWithdraw(prisma, u.id, 100_000),
       wallet.convertToXu(),
       wallet.convertToXu(),
     ]);
@@ -184,7 +180,7 @@ describe('Sổ cái ví qua các luồng nghiệp vụ (real Postgres)', () => {
 
   it('admin từ chối lệnh rút 2 lần song song → hoàn gross đúng 1 lần, 1 dòng WITHDRAW_REFUND theo payout', async () => {
     const u = await newWallet(150_000);
-    const r = await wallet.withdraw(u.id, 120_000, { bank: 'VCB' }, `wd-${randCode(8)}`);
+    const r = await legacyBankWithdraw(prisma, u.id, 120_000);
     const admin = await createUser(prisma, { role: 'ADMIN' });
     await Promise.allSettled([
       affiliate.rejectPayout(admin.id, r.payoutId, 'Sai STK'),

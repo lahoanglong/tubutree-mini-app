@@ -42,7 +42,6 @@ describe('Đại lý có gian hàng CTV hoặc hoa hồng: vào được công c
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
     storefront = moduleRef.get(StorefrontService);
-    await setConfig(prisma, 'affiliate.min_withdraw_bank', 50_000);
     await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
     await setConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000);
   });

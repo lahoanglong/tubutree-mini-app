@@ -13,7 +13,7 @@ import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service
 import { findWalletLedgerDrift } from '../../src/modules/wallet/wallet-reconcile';
 import { CashbackService } from '../../src/modules/cashback/cashback.service';
 import { CashbackProviderRegistry } from '../../src/modules/cashback/providers/cashback-provider.registry';
-import { createUser, randCode, setConfig, warmPool } from './helpers';
+import { createUser, randCode, setConfig, warmPool, legacyBankWithdraw } from './helpers';
 
 /**
  * C-060 yêu cầu 4+5: rút tiền, hoàn lệnh rút, đổi xu và cashback chạy SONG SONG trên cùng một ví
@@ -49,9 +49,6 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
     wallet = moduleRef.get(WalletService);
     affiliate = moduleRef.get(AffiliateService);
     cashback = moduleRef.get(CashbackService);
-
-    await setConfig(prisma, 'wallet.withdraw_min', 100_000);
-    await setConfig(prisma, 'wallet.withdraw_fee', 3_000);
     await setConfig(prisma, 'cashback.hold_days', 30);
   });
 
@@ -72,7 +69,7 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
   it('rút + hoàn lệnh rút ×2 + đổi xu + cashback song song → đối soát không lệch, không âm, mỗi tham chiếu 1 dòng, sao kê đủ dòng', async () => {
     const u = await newWallet(300_000, { cashbackPending: 35_000 });
     const admin = await createUser(prisma, { role: 'ADMIN' });
-    const first = await wallet.withdraw(u.id, 150_000, { bank: 'VCB' }, `wd-${randCode(8)}`);
+    const first = await legacyBankWithdraw(prisma, u.id, 150_000);
     const cb = await prisma.cashbackTransaction.create({
       data: {
         userId: u.id,
@@ -93,9 +90,9 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
     await Promise.allSettled([
       affiliate.rejectPayout(admin.id, first.payoutId, 'Sai STK'),
       affiliate.rejectPayout(admin.id, first.payoutId, 'Sai STK'),
-      wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
-      wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
-      wallet.withdraw(u.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`),
+      legacyBankWithdraw(prisma, u.id, 100_000),
+      legacyBankWithdraw(prisma, u.id, 100_000),
+      legacyBankWithdraw(prisma, u.id, 100_000),
       // PD-3: đổi Ví → xu đã ngừng (410), vẫn bắn song song để chắc không ghi gì vào sổ.
       wallet.convertToXu(),
       wallet.convertToXu(),
@@ -137,7 +134,7 @@ describe('Đối soát + sao kê Ví Tubu (real Postgres)', () => {
 
   it('đối soát bắt được số dư ví bị ghi bỏ qua sổ; ví khớp sổ không bị báo', async () => {
     const ok = await newWallet(80_000);
-    await wallet.withdraw(ok.id, 100_000, { bank: 'VCB' }, `wd-${randCode(8)}`).catch(() => undefined);
+    await legacyBankWithdraw(prisma, ok.id, 100_000).catch(() => undefined);
     const tampered = await newWallet(50_000);
     await prisma.$executeRaw`UPDATE "users" SET "walletBalance" = "walletBalance" + 7000 WHERE "id" = ${tampered.id}`;
     const noLedger = await createUser(prisma, { walletBalance: 12_000 });

@@ -36,7 +36,6 @@ describe('Thuế TNCN cộng dồn theo tháng VN (real Postgres)', () => {
     prisma = moduleRef.get(PrismaService);
     await warmPool(prisma);
     affiliate = moduleRef.get(AffiliateService);
-    await setConfig(prisma, 'affiliate.min_withdraw_bank', 50_000);
     await setConfig(prisma, 'affiliate.pit_withhold_pct', 0.1);
     await setConfig(prisma, 'affiliate.pit_withhold_threshold', 2_000_000);
   });

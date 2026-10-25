@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { Prisma, type UserRole } from '@prisma/client';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import { applyWalletDelta } from '../../src/modules/wallet/wallet-ledger.service';
 
 // Giữ log lỗi/cảnh báo của service (hữu ích khi điều tra), bỏ log/debug ồn ào.
 Logger.overrideLogger(['error', 'warn']);
@@ -272,4 +273,23 @@ export async function deleteItData(
   await prisma.$executeRaw`DELETE FROM "storefront_items" WHERE "productId" = ANY(${productIds}::text[])`;
   await prisma.$executeRaw`DELETE FROM "users" WHERE "id" = ANY(${userIds}::text[])`;
   await prisma.$executeRaw`DELETE FROM "products" WHERE "id" = ANY(${productIds}::text[])`;
+}
+
+/** Dựng lại lệnh rút ngân hàng REQUESTED như dữ liệu cũ trước khi bỏ rút tiền (trừ ví gross, Payout net + phí 3.000đ). */
+export async function legacyBankWithdraw(prisma: PrismaService, userId: string, amount: number) {
+  const fee = 3_000;
+  return prisma.$transaction(async (tx) => {
+    const created = await tx.payout.create({
+      data: { userId, amount: amount - fee, fee, method: 'BANK', bankInfo: { bank: 'VCB' }, status: 'REQUESTED' },
+    });
+    await applyWalletDelta(tx, {
+      userId,
+      delta: -amount,
+      type: 'WITHDRAW',
+      refType: 'PAYOUT',
+      refId: created.id,
+      reason: `Rút về ngân hàng (phí ${fee}đ)`,
+    });
+    return { payoutId: created.id };
+  });
 }
