@@ -303,7 +303,7 @@ describe('đăng ký gian hàng: các bước sau khi có bản nháp', () => {
     await flush();
     click(btn('Mở trình chỉnh sửa đầy đủ'));
     await flush();
-    expect(text()).toContain('Cài đặt bán hàng');
+    expect(text()).toContain('Cài đặt');
   });
 });
 
@@ -728,7 +728,7 @@ describe('link subdomain theo cờ', () => {
     await flush();
     expect(text()).toContain('/s/shop-aff-1');
     expect(text()).not.toContain('brand1.tubutree.com');
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).not.toContain('Subdomain riêng');
     click(btn('Lưu cấu hình gian hàng'));
@@ -741,7 +741,7 @@ describe('link subdomain theo cờ', () => {
     mount();
     await flush();
     expect(text()).toContain('brand1.tubutree.com');
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     typeInto(dialog()!.querySelectorAll('input')[1] as HTMLInputElement, 'Brand2');
     click(btn('Lưu cấu hình gian hàng'));
@@ -753,7 +753,7 @@ describe('link subdomain theo cờ', () => {
     state.sf = storefront({ subdomain: 'brand1', subdomainEnabled: true });
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     click(btn('Lưu cấu hình gian hàng'));
     await flush();
@@ -806,7 +806,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
   it('cấu hình CTV: gửi màu mặc định xanh lá, không gửi tài khoản ngân hàng hay kho', async () => {
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).toContain('Khách luôn thanh toán cho Tubu Tree.');
     expect(dialog()?.textContent).not.toContain('Kho gửi hàng');
@@ -820,7 +820,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ themeColor: '#7c3aed' });
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(btn('Tím').getAttribute('aria-pressed')).toBe('true');
     click(btn('Xanh dương'));
@@ -832,7 +832,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
   it('mỗi ô màu có vùng chạm >= 44px', async () => {
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     for (const n of ['Xanh lá', 'Ngọc', 'Xanh dương', 'Tím', 'Đất nung']) {
       expect(btn(n).className).toContain('min-h-11');
@@ -844,7 +844,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ type: 'MERCHANT', warehouseAddress: '1 Lê Lợi', warehouseCity: 'HCM', warehousePhone: '0912345678' });
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).toContain('Kho gửi hàng');
     expect(dialog()?.textContent).toContain('Tiền hàng của bạn được đối soát');
@@ -859,14 +859,14 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ isPartner: true });
     const a = mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(inputByLabel('Hotline kho liên hệ')).not.toBeNull();
     a.unmount();
     state.sf = storefront({ isPartner: false });
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(inputByLabel('Hotline kho liên hệ')).toBeNull();
   });
@@ -875,7 +875,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ bankName: 'VCB', bankAccountNo: '0011223344' });
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).toContain('****3344');
     click(btn('Gỡ tài khoản đã lưu'));
@@ -886,12 +886,12 @@ describe('hồ sơ và cấu hình gian hàng', () => {
   it('cấu hình: đóng rồi mở lại thì form về dữ liệu đã lưu', async () => {
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     typeInto(dialog()!.querySelector('input'), 'Đã sửa');
     click(btn('Đóng', dialog()!));
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()!.querySelector('input')!.value).toBe('Cửa hàng Xanh');
   });
@@ -900,7 +900,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ type: 'MERCHANT', subdomainEnabled: true });
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     for (const el of Array.from(dialog()!.querySelectorAll('input'))) {
       const named = el.getAttribute('aria-label') || (el.id && dialog()!.querySelector(`label[for="${el.id}"]`));
@@ -912,7 +912,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.fail.add('patch /storefront/me');
     mount();
     await flush();
-    click(btn('Cài đặt bán hàng'));
+    click(btn('Cài đặt'));
     await flush();
     click(btn('Lưu cấu hình gian hàng'));
     await flush();
@@ -988,11 +988,11 @@ describe('không vỡ ở màn hẹp', () => {
 
 // Kiểu Mini App ở điện thoại (pages/storefront-builder.tsx): nút phụ nền nhạt không viền, ảnh bìa gradient, không nhãn bố cục, thẻ phẳng.
 describe('kiểu Mini App ở điện thoại', () => {
-  it('Sửa hồ sơ / Cài đặt bán hàng nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
+  it('Sửa hồ sơ / Cài đặt nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
-    for (const name of ['Sửa hồ sơ', 'Cài đặt bán hàng', 'Gỡ đăng']) {
+    for (const name of ['Sửa hồ sơ', 'Cài đặt', 'Gỡ đăng']) {
       expect(btn(name).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
       expect(btn(name).className).toContain('max-md:border-0');
     }

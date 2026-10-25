@@ -480,7 +480,7 @@ describe('Link subdomain theo cờ (D3-11)', () => {
     renderPage();
     expect(await screen.findByText('/s/shop-aff-1')).toBeInTheDocument();
     expect(screen.queryByText(/tubutree\.com/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).queryByPlaceholderText('vd: brand1')).not.toBeInTheDocument();
     expect(sheet.textContent).not.toMatch(/tubutree\.com/);
@@ -493,7 +493,7 @@ describe('Link subdomain theo cờ (D3-11)', () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
     renderPage();
     expect(await screen.findByText('lan-xanh.tubutree.com')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByPlaceholderText('vd: brand1')).toBeInTheDocument();
   });
@@ -503,7 +503,7 @@ describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
   it('cờ bật, subdomain đang lưu không đổi: lưu cấu hình không gửi lại subdomain', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByPlaceholderText('vd: brand1')).toHaveValue('lan-xanh');
     fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
@@ -514,7 +514,7 @@ describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
   it('cờ bật, đổi subdomain: gửi giá trị mới viết thường', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     fireEvent.change(within(sheet).getByPlaceholderText('vd: brand1'), { target: { value: ' Lan-Do ' } });
     fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
@@ -552,13 +552,13 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
 
   it('cấu hình: đóng rồi mở lại thì form về dữ liệu đã lưu, chỉnh sửa chưa lưu bị bỏ (BottomSheet gỡ nội dung khi đóng)', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const first = await screen.findByTestId('sheet');
     fireEvent.change(within(first).getByDisplayValue('Cửa hàng Xanh'), { target: { value: 'Tên gõ dở' } });
     expect(within(first).getByDisplayValue('Tên gõ dở')).toBeInTheDocument();
     fireEvent.click(within(first).getByRole('button', { name: 'Đóng' }));
     await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
     const again = await screen.findByTestId('sheet');
     expect(within(again).getByDisplayValue('Cửa hàng Xanh')).toBeInTheDocument();
     expect(mocks.updateStorefront).not.toHaveBeenCalled();
@@ -566,7 +566,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
 
   it('cấu hình CTV: gửi màu mặc định xanh lá, không gửi tài khoản ngân hàng hay kho (Tubu thu tiền và giao hàng)', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(sheet.textContent).not.toMatch(/VietQR/);
     expect(within(sheet).queryByRole('textbox', { name: 'Số tài khoản ngân hàng' })).toBeNull();
@@ -582,7 +582,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
       storefront({ type: 'MERCHANT', warehouseAddress: '12 Lê Lợi', warehouseCity: 'Huế', warehousePhone: '0912000111' }),
     );
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     fireEvent.change(within(sheet).getByRole('textbox', { name: 'Địa chỉ kho xuất hàng' }), { target: { value: '' } });
     fireEvent.change(within(sheet).getByRole('textbox', { name: 'Hotline kho liên hệ' }), { target: { value: ' 0912999888 ' } });
@@ -597,14 +597,14 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('CTV của đại lý (isPartner=true): có ô kho xuất hàng và hotline; isPartner=false thì không', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'CTV', isPartner: true }));
     const first = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     let sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeInTheDocument();
     expect(within(sheet).getByRole('textbox', { name: 'Hotline kho liên hệ' })).toBeInTheDocument();
     first.unmount();
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'CTV', isPartner: false }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     sheet = await screen.findByTestId('sheet');
     expect(within(sheet).queryByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeNull();
   });
@@ -612,7 +612,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('tài khoản ngân hàng cũ: báo không dùng để thu tiền và cho gỡ (gửi chuỗi rỗng)', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ bankName: 'Vietcombank', bankAccountNo: '0123456789' }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(sheet.textContent).toContain('Vietcombank ****6789');
     fireEvent.click(within(sheet).getByRole('button', { name: 'Gỡ tài khoản đã lưu' }));
@@ -624,7 +624,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('cấu hình: chọn màu "Xanh dương" gửi #2563eb; subdomain được viết thường', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     const swatch = within(sheet).getByRole('button', { name: 'Xanh dương' });
     expect(swatch).toHaveAttribute('aria-pressed', 'false');
@@ -640,7 +640,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('màu đã lưu của gian hàng được chọn sẵn', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ themeColor: '#7c3aed' }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByRole('button', { name: 'Tím' })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -648,7 +648,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('ô nhập trong cấu hình đều có tên truy cập (nhãn hoặc aria-label)', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT', subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     for (const name of [
       'Tên gian hàng', 'Subdomain riêng', 'Địa chỉ kho xuất hàng', 'Tỉnh / Thành phố', 'Hotline kho liên hệ',
@@ -659,7 +659,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
 
   it('mỗi ô màu có vùng chạm >= 44px', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt bán hàng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     for (const name of ['Xanh lá', 'Ngọc', 'Xanh dương', 'Tím', 'Đất nung']) {
       const btn = within(sheet).getByRole('button', { name });

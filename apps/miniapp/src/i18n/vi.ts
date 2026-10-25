@@ -616,7 +616,7 @@ export const vi = {
     statusPublished: 'Đang hiển thị',
     statusDraft: 'Bản nháp, chưa gửi duyệt',
     previewDraftHint: 'Khách chưa xem được gian hàng cho tới khi bạn gửi duyệt và được duyệt.',
-    settings: 'Cài đặt bán hàng',
+    settings: 'Cài đặt',
     shareShort: 'Chia sẻ',
     shareAfterApproval: 'Chia sẻ được sau khi duyệt',
     shareAfterApprovalShort: 'Chia sẻ sau',

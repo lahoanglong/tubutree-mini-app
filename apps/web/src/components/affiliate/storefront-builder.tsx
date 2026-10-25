@@ -208,7 +208,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
               </button>
               <button type="button" className={`${ui.btnSecondary} ${phoneSecondary} flex-1`} onClick={() => setConfigOpen(true)}>
                 <Settings className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Cài đặt bán hàng
+                Cài đặt
               </button>
             </div>
             {sf.isPublished && (
