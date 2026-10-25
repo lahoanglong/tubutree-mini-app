@@ -103,6 +103,8 @@ export interface DbSnapshot {
   /** COD_MAX_PER_ORDER trong code (checkout-split.ts). */
   codMaxPerOrder: number;
   demoData?: DemoDataSnapshot;
+  /** Phần collector không đọc được vì schema DB cũ hơn mã (P2021/P2022): mã lỗi theo từng phần. Vắng nghĩa là đọc đủ. */
+  degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'demoData', string>>;
 }
 
 export const CONFIG_KEYS_OF_INTEREST = [
@@ -128,6 +130,7 @@ export const CONFIG_KEYS_OF_INTEREST = [
   'company.legal_name',
   'company.tax_code',
   'company.address',
+  'app.miniapp_base_url',
   ...Object.values(OPS_THRESHOLD_KEYS).map((t) => t.key),
 ] as const;
 
@@ -417,6 +420,39 @@ function companyIdentityCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   return pass(G_DB, 'db.company_identity', title, `đã có ${Object.values(labels).join(', ')}`);
 }
 
+/** Host phải là zalo.me và đoạn ngay sau `/s/` phải đúng bằng ID (so chuỗi, không dựng regex từ env). */
+function urlPointsToMiniApp(url: string, miniAppId: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== 'zalo.me') return false;
+    const segs = u.pathname.split('/');
+    const i = segs.indexOf('s');
+    return i >= 0 && segs[i + 1] === miniAppId;
+  } catch {
+    return false;
+  }
+}
+
+function miniappBaseUrlCheck(s: DbSnapshot, env: Env): CheckResult {
+  const title = 'Link Mini App trong cấu hình khớp ZALO_MINIAPP_ID';
+  const url = typeof s.configs['app.miniapp_base_url'] === 'string' ? (s.configs['app.miniapp_base_url'] as string).trim() : '';
+  const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
+  if (!url || !miniAppId) return pass(G_DB, 'db.miniapp_base_url', title, 'chưa có link hoặc chưa có ZALO_MINIAPP_ID nên không so');
+  if (!/^[0-9]+$/.test(miniAppId)) {
+    return pass(G_DB, 'db.miniapp_base_url', title, 'không so được: ZALO_MINIAPP_ID sai dạng, xem env.zalo.ids');
+  }
+  if (!urlPointsToMiniApp(url, miniAppId)) {
+    return warn(
+      G_DB,
+      'db.miniapp_base_url',
+      title,
+      `app.miniapp_base_url (${url}) không chứa /s/${miniAppId} của ZALO_MINIAPP_ID`,
+      'QR thẻ hộp hàng và link chia sẻ của CTV dựng từ app.miniapp_base_url; sai ID thì mở ra Mini App khác hoặc trang lỗi. Sửa ở Quản trị, Cấu hình, nhóm app (hoặc đổi ZALO_MINIAPP_ID nếu cấu hình mới đúng).',
+    );
+  }
+  return pass(G_DB, 'db.miniapp_base_url', title, `link chứa /s/${miniAppId}`);
+}
+
 function codCapCheck(s: DbSnapshot): CheckResult {
   const title = 'Trần COD mỗi đơn con';
   if (s.codMaxPerOrder !== COD_CAP_VND) {
@@ -521,26 +557,58 @@ function znsCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.zns_templates', title, `${zns.length} mẫu ZNS đều có mã số`);
 }
 
+/**
+ * Dòng của phần DB không đọc được vì schema cũ: trước deploy VÀ còn migration chờ áp thì chỉ WARN (sẽ kiểm lại ở bước 10 sau migrate).
+ * Sau deploy, hoặc hết migration chờ mà vẫn thiếu cột/bảng, là FAIL: schema phải đã khớp mã, nên đó là lệch schema hay lỗi mã.
+ */
+function degradeResults(results: CheckResult[], code: string, phase: GoLivePhase, pendingCount: number): CheckResult[] {
+  if (phase === 'pre-deploy' && pendingCount > 0) {
+    return results.map((r) =>
+      warn(G_DB, r.id, r.title, `chưa kiểm được trước khi migrate (schema cũ: ${code}), sẽ kiểm lại ở bước 10 sau migrate`, 'Bình thường khi DB còn ở bản cũ; chạy lại với giai đoạn post-deploy sau khi migrate.'),
+    );
+  }
+  return results.map((r) => fail(G_DB, r.id, r.title, `không đọc được (${code}): schema DB chưa khớp mã`, 'Áp migration theo runbook (prisma migrate deploy bằng image mới) rồi chạy lại kiểm tra.'));
+}
+
+function pendingMigrationCount(s: DbSnapshot): number {
+  const applied = new Set(s.appliedMigrations);
+  return s.expectedMigrations.filter((m) => !applied.has(m)).length;
+}
+
 /** Phân tích ảnh chụp DB thành các dòng kiểm tra. Hàm thuần: không chạm DB. */
 export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
+  const d = s.degraded ?? {};
+  const pendingCount = pendingMigrationCount(s);
+  const part = (key: keyof NonNullable<DbSnapshot['degraded']>, results: CheckResult[], extraKey?: keyof NonNullable<DbSnapshot['degraded']>): CheckResult[] => {
+    const code = d[key] ?? (extraKey ? d[extraKey] : undefined);
+    return code ? degradeResults(results, code, ctx.phase, pendingCount) : results;
+  };
+  const configPart = (results: CheckResult[]) => part('configs', results);
+  const demo = evaluateDemoData(d.demoData ? EMPTY_DEMO : s.demoData, ctx.env, ctx.phase);
+
   return [
     ...migrationChecks(s, ctx.phase),
     ordersLockCheck(s),
-    wastePointCheck(s, ctx.env),
-    opsThresholdCheck(s),
-    shippingRateCheck(s),
-    shippingEtaCheck(s),
-    commissionCheck(s),
-    holdCheck(s),
-    consignmentFromCheck(s),
-    bankCheck(s),
-    companyIdentityCheck(s, ctx.phase),
+    ...part('waste', [wastePointCheck(s, ctx.env)], 'configs'),
+    ...configPart([
+      opsThresholdCheck(s),
+      shippingRateCheck(s),
+      shippingEtaCheck(s),
+      commissionCheck(s),
+      holdCheck(s),
+      consignmentFromCheck(s),
+      bankCheck(s),
+      companyIdentityCheck(s, ctx.phase),
+      miniappBaseUrlCheck(s, ctx.env),
+    ]),
     codCapCheck(s),
-    ...gomdonToggleChecks(s, ctx.env),
-    membershipTierCheck(s, ctx.phase),
-    dealerTierCheck(s),
-    adminCheck(s),
-    znsCheck(s),
-    ...evaluateDemoData(s.demoData, ctx.env, ctx.phase),
+    ...configPart(gomdonToggleChecks(s, ctx.env)),
+    ...part('membershipTiers', [membershipTierCheck(s, ctx.phase)]),
+    ...part('dealerTiers', [dealerTierCheck(s)]),
+    ...part('admin', [adminCheck(s)]),
+    ...part('zns', [znsCheck(s)]),
+    ...(d.demoData ? degradeResults(demo, d.demoData, ctx.phase, pendingCount) : demo),
   ];
 }
+
+const EMPTY_DEMO: DemoDataSnapshot = { products: { found: 0, active: 0 }, activeVariations: 0, liveCoupons: [] };

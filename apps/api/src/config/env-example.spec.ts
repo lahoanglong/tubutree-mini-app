@@ -61,6 +61,7 @@ describe('file mẫu của các app khớp mã (D10-10)', () => {
 
   it('apps/web/.env.example có NEXT_PUBLIC_ZALO_APP_ID (Dockerfile dừng build khi rỗng, build tay không có gì nhắc)', () => {
     expect(fileHasKey('apps/web/.env.example', 'NEXT_PUBLIC_ZALO_APP_ID')).toBe(true);
+    expect(fileHasKey('apps/web/.env.example', 'NEXT_PUBLIC_ZALO_MINIAPP_ID')).toBe(true);
   });
 
   it('Mini App có file mẫu cho mọi khoá VITE_* mà mã đọc', () => {

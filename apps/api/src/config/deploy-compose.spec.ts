@@ -223,6 +223,15 @@ describe('tài liệu chủ làm theo dùng đúng file compose của VPS thật
   });
 });
 
+describe('lệnh go-live:check có mount thư mục backup phải chạy bằng uid:gid chủ thư mục backup', () => {
+  // Thư mục backup mode 700 thuộc người vận hành; image api chạy uid 1000 và service api cap_drop ALL nên uid:gid phải đúng chủ thư mục; thiếu --user thì backup.recent báo "không đọc được thư mục".
+  it.each(['docs/launch/deploy-rollback-runbook.md', 'ops/README-vietnix-deploy.md'])('%s', (file) => {
+    const cmds = repoFile(file).split('\n').filter((l) => l.includes('go-live:check') && l.includes('/var/backups/tubutree'));
+    expect(cmds.length).toBeGreaterThan(0);
+    for (const c of cmds) expect({ c, user: c.includes('--user "$(stat -c %u:%g /var/backups/tubutree)"') }).toEqual({ c, user: true });
+  });
+});
+
 describe('docker-compose.vietnix.yml — trần heap Node theo mem_limit', () => {
   const svc = services(repoFile('docker-compose.vietnix.yml'));
   const heap = (name: string) => /\n {6}NODE_OPTIONS: '--max-old-space-size=(\d+)'/.exec(svc[name] ?? '')?.[1];

@@ -15,7 +15,7 @@ import { copyText } from '../utils/clipboard';
 import { WEB_BASE_URL } from '../utils/web-base-url';
 
 /**
- * `app.miniapp_base_url` (URL gốc Mini App, vd https://zalo.me/s/<appId>) chưa cấu hình thì API trả đường dẫn tương
+ * `app.miniapp_base_url` (URL gốc Mini App, vd https://zalo.me/s/<Mini App ID>) chưa cấu hình thì API trả đường dẫn tương
  * đối của Mini App ('/product/<slug>?ref=..'): dán vào Zalo/Facebook không mở được, nên ghép domain WEB (cùng nguồn
  * với share-sheet/affiliate). Trên web trang sản phẩm là /san-pham/<slug>; route /product/<slug> của web chỉ là
  * redirect 307 cho link đã chia sẻ trước đây, nên link mới đi thẳng tới đường thật. URL tuyệt đối do API dựng từ

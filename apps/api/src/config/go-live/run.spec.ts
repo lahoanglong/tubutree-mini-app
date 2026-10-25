@@ -84,6 +84,26 @@ describe('runGoLiveCheck', () => {
     expect(exitCodeFor(results)).toBe(1);
   });
 
+  it('DB schema cũ (P2022 ở một phần): trước deploy vẫn có db.migrations_pending, không có db.connect; sau deploy là FAIL', async () => {
+    const snap = { ...GOOD_DB, appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { configs: 'P2022' } };
+    const c = { ...good, db: async () => snap };
+    const pre = await runGoLiveCheck({ env: GOOD_ENV, phase: 'pre-deploy' }, c);
+    expect(pre.some((x) => x.id === 'db.connect')).toBe(false);
+    expect(byId(pre, 'db.migrations_pending').status).toBe('WARN');
+    expect(byId(pre, 'db.shipping_rates').status).toBe('WARN');
+    const post = await runGoLiveCheck({ env: GOOD_ENV, phase: 'post-deploy' }, c);
+    expect(byId(post, 'db.shipping_rates').status).toBe('FAIL');
+  });
+
+  it('P1001 (không nối được) là một dòng db.connect FAIL ở cả hai giai đoạn', async () => {
+    const c = { ...good, db: async () => Promise.reject(Object.assign(new Error('x'), { code: 'P1001' })) };
+    for (const phase of ['pre-deploy', 'post-deploy'] as const) {
+      const r = await runGoLiveCheck({ env: GOOD_ENV, phase }, c);
+      expect(byId(r, 'db.connect').status).toBe('FAIL');
+      expect(r.filter((x) => x.group === 'Cơ sở dữ liệu')).toHaveLength(1);
+    }
+  });
+
   it('Redis ném lỗi: một dòng FAIL', async () => {
     const c = { ...good, redis: async () => Promise.reject(new Error('boom')) };
     const results = await runGoLiveCheck({ env: GOOD_ENV, phase: 'post-deploy' }, c);

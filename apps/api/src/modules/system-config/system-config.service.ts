@@ -326,7 +326,7 @@ export class SystemConfigService {
     'app.miniapp_base_url': (value) =>
       value === '' || (typeof value === 'string' && /^https:\/\/[^\s/?#]+(\/[^\s?#]*)?$/.test(value))
         ? null
-        : 'phải để trống hoặc là link https của Mini App, vd "https://zalo.me/s/1234567890"',
+        : 'phải để trống hoặc là link https của Mini App, vd "https://zalo.me/s/<Mini App ID>" (ID Mini App, không phải App ID của Zalo App)',
     'shipping.tier_freeship_overrides': (value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return 'phải là object { HẠNG: ngưỡng freeship (đồng) }';
       for (const [tier, threshold] of Object.entries(value as Record<string, unknown>)) {

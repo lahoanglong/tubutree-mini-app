@@ -32,7 +32,8 @@ export const envSchema = z.object({
   JWT_REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().min(0).max(300).default(30),
 
   // Zalo Mini App / OA
-  ZALO_APP_ID: z.string().default(''),
+  ZALO_APP_ID: z.string().default(''), // App ID của Zalo App (developers.zalo.me), không phải ID Mini App
+  ZALO_MINIAPP_ID: z.string().default(''), // chỉ để go-live check so với ZALO_APP_ID; link zalo.me/s do web dựng
   ZALO_APP_SECRET: z.string().default(''),
   ZALO_OA_ACCESS_TOKEN: z.string().default(''),
   ZALO_OA_REFRESH_TOKEN: z.string().default(''), // bootstrap; sau đó token mới lưu DB (xoay vòng)

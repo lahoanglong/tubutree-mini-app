@@ -11,7 +11,7 @@ Tóm tắt việc cần làm (theo độ ưu tiên):
 | Dịch vụ | Dùng để | Lead time | Biến env |
 |---|---|---|---|
 | **ZaloPay Merchant** | Thanh toán online trong app | ~1–2 tuần duyệt | `ZALOPAY_APP_ID`, `ZALOPAY_KEY1`, `ZALOPAY_KEY2` |
-| **Zalo OA + ZNS** | Gửi thông báo ZNS (đơn hàng, voucher) + đăng nhập web | OA ~3–5 ngày, **template ZNS ~7–14 ngày** | `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN` |
+| **Zalo OA + ZNS** | Gửi thông báo ZNS (đơn hàng, voucher) + đăng nhập web | OA ~3–5 ngày, **template ZNS ~7–14 ngày** | `ZALO_APP_ID`, `ZALO_MINIAPP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN` |
 | **Accesstrade** | Hoàn tiền (cashback) mua sàn ngoài | ~3–7 ngày duyệt publisher | `ACCESSTRADE_TOKEN`, `ACCESSTRADE_PUBLISHER_ID`, `ACCESSTRADE_WEBHOOK_SECRET` |
 | **Pancake POS** (bắt buộc) | Nguồn chân lý catalog, tồn kho, đơn và vận chuyển | Có ngay (tài khoản shop) | `PANCAKE_API_KEY`, `PANCAKE_SHOP_ID`, `PANCAKE_WEBHOOK_SECRET` — mục 6 |
 | **Gomdon** (nếu bật Thu kèm đơn) | Vận đơn đổi hàng BestExpress | Liên hệ quản trị Gomdon | `GOMDON_PHONE`, `GOMDON_PASSWORD`, `GOMDON_WEBHOOK_SECRET` — mục 7 |
@@ -57,7 +57,7 @@ ZALOPAY_KEY2=<key2>
 
 ## 2) Zalo Official Account (OA) + ZNS (thông báo)
 
-**Mục tiêu:** lấy `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN`.
+**Mục tiêu:** lấy `ZALO_APP_ID`, `ZALO_MINIAPP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID`, `ZALO_OA_ACCESS_TOKEN`.
 Dùng cho: gửi **ZNS** (mời đánh giá, mua chung thành công/thất bại; voucher khi admin bật) và **đăng nhập web bằng Zalo** (cần thêm Bước E: đăng ký Callback URL).
 
 ### Bước A — Tạo OA
@@ -68,6 +68,7 @@ Dùng cho: gửi **ZNS** (mời đánh giá, mua chung thành công/thất bại
 3. Vào https://developers.zalo.me → **Tạo ứng dụng** → loại có **Official Account API**.
    - `App ID` → `ZALO_APP_ID`
    - `App Secret` (mục Thông tin ứng dụng) → `ZALO_APP_SECRET`
+   - **Hai ID khác nhau, đừng nhầm.** App ID của **Zalo App** (trang quản lý ứng dụng trên developers.zalo.me, hiện là `565779011239360460`, "Tubu Tree Mini App") là chủ của `ZALO_APP_SECRET`: dùng cho đăng nhập web (OAuth v4) và làm mới token OA, nên là `ZALO_APP_ID`. **Mini App ID** (`2070857098114207963`, cũng là `appId` trong `apps/miniapp/app-config.json`) chỉ dùng dựng link `https://zalo.me/s/<id>/` (nút "Mở trên Zalo" của web), nên là `ZALO_MINIAPP_ID`. Một Zalo App có thể chứa nhiều Mini App. Đặt Mini App ID vào `ZALO_APP_ID` thì Zalo trả `Invalid appId` và đăng nhập web hỏng.
 4. **Liên kết OA với ứng dụng** (Quản lý ứng dụng → Official Account → liên kết OA đã tạo ở bước A).
    - `OA ID` (ID của Official Account) → `ZALO_OA_ID`
 
@@ -113,12 +114,12 @@ Dùng cho: gửi **ZNS** (mời đánh giá, mua chung thành công/thất bại
 ### Bước E — Đăng nhập web bằng Zalo (BẮT BUỘC để khách mua được trên web)
 Web khách (`https://app.tubutree.com`) chỉ có **một** cách đăng nhập là Zalo OAuth. Thiếu bước này thì mọi khách web không đặt được hàng, dù Mini App vẫn chạy bình thường.
 
-8. Trên https://developers.zalo.me → ứng dụng ở Bước B → **Đăng nhập (Zalo Login)** → bật sản phẩm và thêm **Callback URL**:
+8. Trên https://developers.zalo.me → Zalo App ở Bước B (App ID `565779011239360460`, không phải trang Mini App) → **Đăng nhập (Zalo Login)** → bật sản phẩm và thêm **Callback URL**:
    - `https://app.tubutree.com/dang-nhap/callback`
    - Web tự dựng `redirect_uri = <origin của trang đang mở>/dang-nhap/callback`, nên **mỗi origin có nút đăng nhập phải khớp một Callback URL đã đăng ký**. Origin chính là `https://app.tubutree.com`.
    - Gian hàng CTV chạy ở subdomain (`https://<ten-gian-hang>.tubutree.com`) cũng dùng chính mã đăng nhập này. Mình **chưa có bằng chứng** Zalo chấp nhận wildcard hay subdomain tuỳ ý (chưa chạy với Zalo thật). Kiểm ở `docs/2026-10-review/UAT-ZALO.md` mục 12: nếu Zalo từ chối `redirect_uri` ở subdomain thì phải chốt phương án (đăng ký từng subdomain đang bán hàng, hoặc chuyển khách sang `app.tubutree.com` để đăng nhập) trước khi mở link gian hàng CTV cho khách.
 9. Kiểm **trạng thái ứng dụng**: nếu ứng dụng còn ở chế độ phát triển thì thường chỉ tài khoản Zalo đã thêm làm người phát triển/thử nghiệm mới đăng nhập được. Chuyển sang trạng thái công khai trước khi mở cho khách.
-10. `ZALO_APP_ID` phải có **trước khi build web**: web nhúng `NEXT_PUBLIC_ZALO_APP_ID` vào bản dựng (không đọc lúc chạy). Docker build của web **dừng với lỗi** nếu giá trị này rỗng (chỉ bản thử không dùng Zalo mới đặt `ALLOW_EMPTY_ZALO_APP_ID=1` trong `.env` để bỏ qua; khi đó trang đăng nhập hiện thông báo "chưa cấu hình" thay cho nút). Đổi App ID thì phải **build lại web**:
+10. `ZALO_APP_ID` và `ZALO_MINIAPP_ID` phải có **trước khi build web**: web nhúng `NEXT_PUBLIC_ZALO_APP_ID` (đăng nhập) và `NEXT_PUBLIC_ZALO_MINIAPP_ID` (link Mini App) vào bản dựng (không đọc lúc chạy). Docker build của web **dừng với lỗi** nếu một trong hai rỗng, hoặc nếu hai giá trị **trùng nhau** (chỉ bản thử không dùng Zalo mới đặt `ALLOW_EMPTY_ZALO_APP_ID=1` trong `.env` để bỏ qua việc rỗng; khi đó trang đăng nhập hiện thông báo "chưa cấu hình" và nút "Mở trên Zalo" ẩn; trùng nhau thì không bỏ qua được). Đổi một trong hai ID thì phải **build lại web**:
    ```bash
    cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml up -d --no-deps --build web
    ```
@@ -126,7 +127,8 @@ Web khách (`https://app.tubutree.com`) chỉ có **một** cách đăng nhập 
 
 ### Đặt vào hệ thống
 ```bash
-ZALO_APP_ID=<app_id>
+ZALO_APP_ID=565779011239360460        # App ID của Zalo App trên developers.zalo.me (không phải ID Mini App)
+ZALO_MINIAPP_ID=2070857098114207963   # ID Mini App, chỉ cho link zalo.me/s/<id>
 ZALO_APP_SECRET=<app_secret>
 ZALO_OA_ID=<oa_id>
 ZALO_OA_ACCESS_TOKEN=<oa_access_token>
@@ -371,6 +373,12 @@ Lỗi vĩnh viễn hiện rõ trên thẻ, vd "Lỗi xác thực SMTP — kiểm
 5. **Kênh báo động vận hành** (mục 8) trước ngày mở bán, để sự cố Pancake/Gomdon không chỉ nằm trong app.
 
 Sau mỗi lần go-live 1 dịch vụ: kiểm lại bằng lệnh `grep` ở mục 4, rồi test 1 giao dịch thật nhỏ.
+
+**Việc của chủ khi sửa lỗi nhầm hai ID:** trong `/opt/tubutree/.env` đặt `ZALO_APP_ID=565779011239360460` và `ZALO_MINIAPP_ID=2070857098114207963`, rồi build lại web và tạo lại api cùng web (api cần `ZALO_APP_ID` mới để đổi mã OAuth và làm mới token OA):
+```bash
+cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml build web && docker compose -f docker-compose.vietnix.yml up -d --no-build --no-deps api web
+```
+Trước khi đăng ký Callback URL (Bước E) nhớ chọn đúng Zalo App `565779011239360460` trên developers.zalo.me. Kiểm sau cùng: `go-live` báo `env.zalo.ids` PASS.
 
 ---
 

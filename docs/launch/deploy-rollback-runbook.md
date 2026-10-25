@@ -40,6 +40,8 @@ psqlq() { $DC exec -T postgres psql -U "$PGUSER" -d "$PGDB" "$@"; }
 
 Từ đây `$DC` thay cho `docker compose -f docker-compose.vietnix.yml`, và `psqlq` mở psql vào đúng DB của Tubu Tree.
 
+Nếu đưa lệnh lên máy chủ dưới dạng một script đọc từ stdin (`ssh host 'bash -s' < script.sh`), thì `docker compose exec -T` và `run -T` đọc luôn stdin và nuốt phần còn lại của script. Ở chế độ này, thêm `</dev/null` vào cuối mỗi lệnh `$DC exec -T` / `$DC run -T` không cần stdin. KHÔNG thêm vào trong hàm `psqlq`: các bước 7.1 và 7c đẩy SQL vào `psqlq` qua stdin.
+
 ### 0.5 Ai làm gì
 
 | Vai | Việc |
@@ -154,6 +156,7 @@ Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "C�
 
 - `rclone config` đã tạo remote Google Drive tên `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop; từng bước ở mục "Remote Google Drive" của README trên), thử được: `rclone lsd gdrive:`. Rồi bọc nó bằng remote **crypt** `tubucrypt` (mục "Mã hoá bản ngoài máy" của README trên): `backup-db.sh` từ chối đẩy lên remote không mã hoá. `BACKUP_ALLOW_PLAIN_REMOTE=1` chỉ là ngoại lệ tạm thời có chủ ý.
 - Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
+- Quyền file: `backup-db.sh` tạo thư mục 700 và dump 600, và tự siết 600 mọi dump cũ do chính người chạy sở hữu. Thư mục có sẵn thì script không chmod, chỉ cảnh báo; chủ chạy một lần: `sudo chmod 700 /var/backups/tubutree && sudo find /var/backups/tubutree -maxdepth 1 -name 'tubutree_*.sql.gz' -type f -exec chmod 600 {} +` (dùng find vì glob sẽ do shell không đặc quyền bung ra, không đọc được thư mục 700). Production đã được siết tay như vậy ngày 2026-10-25.
 - Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
 
@@ -170,7 +173,7 @@ $DC exec -T postgres psql -U "$PGUSER" -d postgres -c 'DROP DATABASE tubutree_dr
 
 Kỳ vọng: hai dòng số khớp nhau (chênh vài đơn mới nếu đang có khách). Ghi lại thời gian chạy `backup-db.sh` (dùng `time` đứng trước lệnh): cần cho mục 3.
 
-Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`rclone copy tubucrypt:<file> /tmp/`, rồi nạp file đó thay cho `$F`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
+Diễn tập lần đầu nên lấy bản về TỪ NGOÀI MÁY (`(umask 077; rclone copy tubucrypt:<file> /tmp/)`, rồi nạp file đó thay cho `$F`; `umask 077` để bản tải về chỉ mình bạn đọc được, xong thì `rm` file trong `/tmp`) và bấm giờ cả bước nạp: số đó là thời gian khôi phục thật (RTO). Khối lệnh có sẵn bấm giờ nằm ở mục "Diễn tập restore" của [tools/backup/README.md](../../tools/backup/README.md). Lặp lại mỗi tháng.
 
 Về quyền chạy: hai script `tools/backup/backup-db.sh` và `restore-db.sh` đã được commit với quyền chạy (mode 755), nhưng bản mã đang nằm trên máy chủ có thể còn là bản cũ (644). Vì vậy mọi lệnh trong tài liệu này gọi chúng bằng `bash tools/backup/...`. KHÔNG `chmod` trên máy chủ: nó làm `git status` bẩn và bước 1 của mục 5 dừng. Dòng cron backup do `ops.yml` (hành động `crontab`, nay cài lịch 6 giờ/lần) hoặc `crontab -e` cài gọi thẳng đường dẫn script, không qua `bash`: nó chạy được từ khi máy chủ đã nhận bản mã mới ở bước 1 (mục 5). Nếu cron đã cài từ trước và đêm đó chưa có bản mã mới, xem `tail /var/log/tubutree-backup.log`: thấy `Permission denied` thì sửa tạm dòng cron thành `bash <đường dẫn script>` (`crontab -e`).
 
@@ -216,7 +219,7 @@ Tất cả tương thích ngược: không đổi cổng, tên service, volume h
 | Trần CPU `cpus` cho api (1.0) và web (1.0) | `docker-compose.vietnix.yml` | web: bước 8, api: bước 9 (mỗi service nhận khi được tạo lại ở bước đó) | `docker inspect -f '{{.HostConfig.NanoCpus}}' "$($DC ps -q api)"` ra `1000000000` |
 | Vhost Apache: `ProxyPass ... ttl=30` và `mod_deflate` (nén JSON/HTML/JS/CSS) | `ops/vietnix-vhost-*.conf.phase2` | khi dán lại hai file này (xem dưới), độc lập với deploy | `bash ops/check-edge.sh` dòng `nén:` có `content-encoding=gzip` |
 
-Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`. VPS của Tubu Tree có từ 8 vCPU nên khuyến nghị `API_CPUS=2` (và `WEB_CPUS=1`); máy ít lõi hơn thì đặt nhỏ hơn. Đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=2`, `WEB_CPUS=1` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
+Chỉnh CPU theo số vCPU thật của máy: chạy `nproc`. VPS hiện có 4 vCPU (đo 2026-10-25) và dùng chung với ChoDeli, nên giữ mặc định 1 lõi mỗi service (`API_CPUS=1`, `WEB_CPUS=1`). Chỉ nâng sau khi đo tải thật (ví dụ `docker stats` lúc đông khách) và còn dư lõi cho ChoDeli. Muốn đổi thì đặt trong `.env` (KHÔNG sửa compose: `git status` bẩn làm bước 1 dừng) `API_CPUS=<số>`, `WEB_CPUS=<số>` rồi tạo lại container tương ứng (`$DC up -d --no-deps <service>`). Mặc định cố ý không vượt 1 lõi vì Docker từ chối khởi động container có `cpus` lớn hơn số vCPU (lỗi `Range of CPUs is from 0.01 to 1.00` ở bước 8 hoặc 9: đặt `*_CPUS` nhỏ hơn rồi chạy lại lệnh `up -d`).
 
 **Không đổi cấu hình `postgres` hoặc `redis` trong `docker-compose.vietnix.yml` kèm một bản deploy.** `tools/deploy/deploy.sh` bước 4 chạy `dc up -d --no-build api` KHÔNG có `--no-deps`; compose v2 hội tụ luôn các service phụ thuộc, nên mọi thay đổi cấu hình của postgres hoặc redis (`cpus`, `shm_size`, `command`, `healthcheck`...) khiến chúng bị tạo lại ngay giữa deploy: DB ngắt khoảng 10 giây, 5xx, BullMQ mất kết nối. Vì vậy bản này cố ý không đổi hai service đó. Khi thực sự cần đổi, tạo lại chủ động NGOÀI giờ cao điểm, TRƯỚC khi chạy deploy: `$DC up -d --no-deps postgres redis` (dữ liệu ở volume, không mất); sau đó deploy bình thường sẽ không còn gì để tạo lại.
 
@@ -286,7 +289,7 @@ Hệ thống chỉ có MỘT đường đưa sản phẩm từ Pancake sang: `Pa
 3. Bọc Drive bằng remote crypt (bản trần bị `backup-db.sh` từ chối; lệnh y như README, mục "Mã hoá bản ngoài máy", trỏ vào thư mục MỚI `tubutree-backups-enc`, không dùng lại thư mục có bản trần): `PASS1=$(openssl rand -base64 32); PASS2=$(openssl rand -base64 32); rclone config create tubucrypt crypt remote gdrive:tubutree-backups-enc filename_encryption standard directory_name_encryption true password "$(rclone obscure "$PASS1")" password2 "$(rclone obscure "$PASS2")"; echo "$PASS1"; echo "$PASS2"; unset PASS1 PASS2`. Chép cả hai mật khẩu vào password manager của chủ (ngoài VPS, thêm một bản ở nơi thứ hai) ngay lúc này: mất là mọi bản backup ngoài máy không đọc lại được. Rồi `chmod 600 ~/.config/rclone/rclone.conf`, thử `rclone listremotes --long` (có dòng `tubucrypt:  crypt`) và `echo test | rclone rcat tubucrypt:thu.txt && rclone cat tubucrypt:thu.txt && rclone delete tubucrypt:thu.txt`.
 4. Cron mỗi 6 giờ, một dòng, có `RCLONE_REMOTE=tubucrypt:` và `REMOTE_KEEP_DAYS=90` (mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)): `17 */6 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: REMOTE_KEEP_DAYS=90 HEALTHCHECK_URL=<url> /opt/tubutree/tools/backup/backup-db.sh >> /var/log/tubutree-backup.log 2>&1`.
 5. Trước mỗi deploy: `cd /opt/tubutree && COMPOSE_FILE=docker-compose.vietnix.yml RCLONE_REMOTE=tubucrypt: bash ops/backup-predeploy.sh`.
-6. Diễn tập khôi phục MỘT lần trước ra mắt với bản lấy từ `tubucrypt:` (`rclone copy tubucrypt:<file> /tmp/`), khối lệnh ở mục 1.2 và README, ghi thời gian vào ô RTO.
+6. Diễn tập khôi phục MỘT lần trước ra mắt với bản lấy từ `tubucrypt:` (`(umask 077; rclone copy tubucrypt:<file> /tmp/)`), khối lệnh ở mục 1.2 và README, ghi thời gian vào ô RTO.
 7. Sau khi bản mã hoá đầu tiên đã kiểm (`rclone ls tubucrypt:` thấy file, diễn tập bước 6 qua): xoá bản trần cũ nếu có, `rclone purge gdrive:tubutree-backups` rồi dọn thùng rác Drive. Việc dọn bản cũ theo `REMOTE_KEEP_DAYS` chỉ chạy trên `tubucrypt:` nên không tự xoá chúng.
 
 #### 1.6.3 Đợt thẻ hộp hàng sàn đầu tiên (A12)
@@ -401,6 +404,17 @@ Cách diễn tập: Postgres 16 tạm, `prisma migrate deploy` rồi `prisma:see
 - Quay lại: lần này có migration không đảo được (`points_1d` nhân 1.000 mọi số điểm), nên ở mục 7.0 chỉ còn đường 7.3 (khôi phục bản backup của bước 6). Không dùng 7.2.
 
 Chưa diễn tập được (cần SSH và bản backup PROD): thời gian migrate trên dữ liệu thật, PD-3 và p4 trên `users`, `orders` thật, go-live check `--phase=pre-deploy`, các kiểm `backup.*`, cấu hình Redis thật, cấp quyền admin.
+
+#### Kết quả lần deploy thật 2026-10-25 (main 310d7e11)
+
+- Trạng thái trước deploy: PROD đang ở `cb92dc8` (image và DB cùng 115 migration đã xong), còn 109 migration chờ áp (tổng 224). PD-3 ra 0, 0, 1000. DB chưa có khách: 0 users, 0 orders, dung lượng 14 MB.
+- Bước 7: `migrate deploy` mất 3,4 giây thật. API ngừng phục vụ từ 09:40:18 đến 09:41:45 (khoảng 1,5 phút).
+- Bước 7b in: `system_configs: +75 mới, 104 đã có`, `notification_templates: +3 mới, 122 đã có`, `community_categories: +5 mới, 2 đã có`, các bảng còn lại `đủ sẵn`. Truy vấn kiểm chứng: chu_de 11, quiz 49, loai_cay 10, mau_tin 127, moc_quy 1, hang 4, bac_dai_ly 4, nhiem_vu 4, system_configs 259. Bốn nhóm cây cũ đã ẩn (`UPDATE 4`).
+- Bước 7c: bản xem trước gắn `KIỂM TAY` cho cả 44 sản phẩm, vì `updatedAt` của tất cả đều là 2026-10-10 08:55 (lúc seed bản thử) và có 0 users. Đã chọn phương án (c): 44 sản phẩm và 48 biến thể bị tắt, giữ 3 coupon.
+- Pancake: lần đồng bộ đầy đủ đầu tiên được 112 sản phẩm (111 đang bán, 1 biến thể bị giữ lại vì `NO_PRICE`).
+- Go-live check sau deploy: các FAIL còn lại đều là việc của chủ (`ZALO_APP_SECRET`, thông tin pháp nhân công ty, chưa có user ADMIN).
+- Chưa có remote ngoài máy `tubucrypt` nên backup chỉ nằm local trên VPS.
+- Với công cụ cũ, `go-live:check --phase=pre-deploy` in `[FAIL] db.connect ... (P2022)` vì Prisma client mới không đọc được schema cũ. Công cụ hiện tại đã sửa: các kiểm bị ảnh hưởng báo WARN "chưa kiểm được trước khi migrate (schema cũ: ...)" và được kiểm lại ở bước 10. Lưu ý: chỉ khi còn migration chờ áp; hết migration chờ mà vẫn gặp lỗi cột/bảng thiếu thì là FAIL thật (lệch schema hoặc lỗi mã).
 
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
@@ -545,7 +559,7 @@ Mất vài phút và ăn RAM máy chủ dùng chung; nên chạy ngoài cửa s�
 
 ```bash
 $DC run --rm --no-deps api node dist/config/check-env.js
-$DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check -- --phase=pre-deploy
+$DC run --rm --no-deps --user "$(stat -c %u:%g /var/backups/tubutree)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check -- --phase=pre-deploy
 ```
 
 (`npm run go-live:check -- --phase=pre-deploy` cũng chạy được; lệnh `go-live:check` nằm trong `apps/api/package.json`.)
@@ -558,12 +572,12 @@ $DC run --rm --no-deps -T api pnpm exec prisma migrate status 2>&1 | tr -d '\r' 
 
 Kỳ vọng:
 - `check-env` in `Cấu hình môi trường hợp lệ.` và thoát 0.
-- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.shipping_eta`, `db.company_identity`, `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài sáu cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); `db.membership_tiers` và `db.dealer_tiers` khi DB còn mới (hạng và bậc đại lý nạp ở bước 7b); và các dòng backup `không kiểm được` (xem ghi chú). `db.waste_point` là PASS khi `waste.enabled` chưa có (trước deploy; bảng `waste_points` do migration `20261020000000_waste_exchange` tạo) và không nằm trong các WARN được phép. Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
+- `go-live:check` thoát 0 (không FAIL). Các dòng WARN được phép ở bước này, đều là việc deploy sẽ làm: `db.shipping_eta`, `db.company_identity`, `db.migrations_pending`, `db.pending_scope` (nếu danh sách có migration ngoài sáu cái của đợt) và `db.required_migrations` ("sẽ được áp khi deploy"); `db.orders_lock` (nếu từ 50.000 đơn); `redis.policy` ("đang là allkeys-lru") nếu chưa đổi nóng ở mục 1.1, vì compose cũ còn đặt `allkeys-lru` tới bước 5 bên dưới; `db.demo_products`, `db.demo_coupons` ("sẽ dọn ở runbook mục 5, bước 7c"); `db.membership_tiers` và `db.dealer_tiers` khi DB còn mới (hạng và bậc đại lý nạp ở bước 7b); các dòng WARN "chưa kiểm được trước khi migrate (schema cũ: ...)" (schema còn cũ hơn mã; kiểm lại ở bước 10, và chỉ được phép khi còn migration chờ áp); và các dòng backup `không kiểm được` (xem ghi chú). `env.zalo.ids` WARN vì `ZALO_MINIAPP_ID` rỗng KHÔNG được phép: chủ phải đặt giá trị trước khi tiếp tục (xem `docs/GO-LIVE-KEYS.md`). `db.waste_point` là PASS khi `waste.enabled` chưa có (trước deploy; bảng `waste_points` do migration `20261020000000_waste_exchange` tạo) và không nằm trong các WARN được phép. Mọi WARN khác phải đọc và chốt "chấp nhận" hoặc sửa trước.
 - Số dòng in ra của lệnh `migrate status` ở trên PHẢI bằng số "migration chờ áp" ghi ở mục 1.0, và bằng số trong dòng `db.migrations_pending` (`N cái sẽ được áp khi deploy`). Khác nhau: DỪNG (bảng điểm dừng, mục 4). `.pending-migrations` giờ là danh sách chính thức mà bước 7 sẽ áp; nó có sáu migration của đợt, và có thể còn nhiều cái khác. Ghi lại số lượng: ______.
 - Dòng `db.pending_scope` (chỉ có khi có migration ngoài sáu cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
 
-Ghi chú về các dòng backup: lệnh này chạy BÊN TRONG container nên không nhìn thấy crontab và rclone của máy chủ (kết quả là WARN "không kiểm được", không phải FAIL). Gắn thêm `-v ...:ro` như trên cho dòng `backup.recent` (tuổi bản backup gần nhất) kiểm được. Hai việc còn lại kiểm tay trên máy chủ:
+Ghi chú về các dòng backup: lệnh này chạy BÊN TRONG container nên không nhìn thấy crontab và rclone của máy chủ (kết quả là WARN "không kiểm được", không phải FAIL). Gắn thêm `-v ...:ro` như trên cho dòng `backup.recent` (tuổi bản backup gần nhất) kiểm được. `--user "$(stat -c %u:%g /var/backups/tubutree)"` cũng bắt buộc: thư mục backup mode 700 và thuộc người vận hành, còn image api chạy bằng uid 1000 (`node`) nên không vào được; uid:gid phải đúng chủ thư mục (không phải của shell hiện tại) vì service api bỏ hết capability (cap_drop ALL), root trong container cũng không vượt được quyền đọc; thiếu cờ này `backup.recent` báo WARN "không đọc được thư mục /var/backups/tubutree từ nơi đang chạy". Hai việc còn lại kiểm tay trên máy chủ:
 
 ```bash
 crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
@@ -774,7 +788,7 @@ Ghi giờ kết thúc: khách đã đặt hàng được lại từ lúc này. T
 ### Bước 10. Go-live check sau deploy
 
 ```bash
-$DC run --rm --no-deps -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
+$DC run --rm --no-deps --user "$(stat -c %u:%g /var/backups/tubutree)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 ```
 
 Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (ba mã `WELCOME30`, `FREESHIP`, `XANH10` luôn được tính là đã duyệt vì chủ dự án giữ chúng cho đợt ra mắt, không cần đặt gì; mã demo khác mà chủ shop duyệt giữ thì chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.

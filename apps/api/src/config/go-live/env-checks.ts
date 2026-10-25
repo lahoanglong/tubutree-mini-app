@@ -268,14 +268,44 @@ function zalopayChecks(env: Env): CheckResult[] {
   return [pass(G_ZALOPAY, 'env.zalopay', title, 'khoá đã đặt, endpoint không phải sandbox')];
 }
 
+/** Bằng `appId` trong apps/miniapp/app-config.json (spec so khớp); image api không có apps/miniapp nên phải có hằng số. */
+export const PRODUCTION_MINIAPP_ID = '2070857098114207963';
+
 function zaloChecks(env: Env): CheckResult[] {
   const out: CheckResult[] = [];
   const loginMissing = ['ZALO_APP_ID', 'ZALO_APP_SECRET'].filter((k) => !envValue(env, k));
+  const loginTitle = 'Zalo App (app id và secret)';
   out.push(
     loginMissing.length === 0
-      ? pass(G_ZALO, 'env.zalo.login', 'Đăng nhập Zalo (app id và secret)', 'ZALO_APP_ID và ZALO_APP_SECRET đã đặt')
-      : fail(G_ZALO, 'env.zalo.login', 'Đăng nhập Zalo (app id và secret)', `thiếu ${loginMissing.join(', ')}`, 'Lấy ở developers.zalo.me, mục Ứng dụng. Thiếu thì khách không đăng nhập được bằng Zalo.'),
+      ? pass(G_ZALO, 'env.zalo.login', loginTitle, 'ZALO_APP_ID và ZALO_APP_SECRET đã đặt')
+      : fail(
+          G_ZALO,
+          'env.zalo.login',
+          loginTitle,
+          `thiếu ${loginMissing.join(', ')}`,
+          'Lấy ở developers.zalo.me, mục Ứng dụng. Đăng nhập trong Mini App chỉ dùng token của khách nên vẫn chạy khi thiếu; secret cần cho lấy số điện thoại (/me/info), vị trí, đăng nhập Zalo trên web (đổi mã OAuth) và làm mới token OA.',
+        ),
   );
+  const appId = envValue(env, 'ZALO_APP_ID');
+  const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
+  const idsTitle = 'ZALO_APP_ID khác ID Mini App';
+  const idsHint = 'ZALO_APP_ID phải là App ID của Zalo App trên developers.zalo.me (đăng nhập web, làm mới token OA). ID Mini App chỉ dùng cho link zalo.me/s/<id>; để chung thì Zalo trả "Invalid appId".';
+  // Thử trên giá trị thô: API đọc env nguyên văn (không trim), nên khoảng trắng thừa làm Zalo từ chối dù envValue đã cắt.
+  const nonNumeric = ['ZALO_APP_ID', 'ZALO_MINIAPP_ID'].filter((k) => {
+    const raw = env[k] ?? '';
+    return raw !== '' && !/^[0-9]+$/.test(raw);
+  });
+  if (nonNumeric.length > 0) {
+    out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, `${nonNumeric.join(', ')} không phải chuỗi số`, 'ID của Zalo chỉ gồm chữ số; kiểm tra lỗi gõ nhầm hoặc dán thừa khoảng trắng, dấu nháy.'));
+  } else if (appId && (appId === miniAppId || appId === PRODUCTION_MINIAPP_ID)) {
+    out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, appId === miniAppId ? 'ZALO_APP_ID trùng ZALO_MINIAPP_ID' : 'ZALO_APP_ID đang là Mini App ID', idsHint));
+  } else if (!miniAppId) {
+    out.push(warn(G_ZALO, 'env.zalo.ids', idsTitle, 'chưa đặt ZALO_MINIAPP_ID nên không so được', 'Đặt ZALO_MINIAPP_ID là ID Mini App (apps/miniapp/app-config.json) để build web dựng được link zalo.me/s/<id> và để kiểm tra này chạy.'));
+  } else if (miniAppId !== PRODUCTION_MINIAPP_ID) {
+    out.push(warn(G_ZALO, 'env.zalo.ids', idsTitle, `ZALO_MINIAPP_ID (${miniAppId}) khác Mini App production (${PRODUCTION_MINIAPP_ID})`, 'Đúng nếu đây là môi trường thử dùng Mini App riêng; ở production phải là ID trong apps/miniapp/app-config.json.'));
+  } else {
+    out.push(pass(G_ZALO, 'env.zalo.ids', idsTitle, 'ZALO_APP_ID và ZALO_MINIAPP_ID là hai giá trị khác nhau'));
+  }
   const oa = ['ZALO_OA_ACCESS_TOKEN', 'ZALO_OA_REFRESH_TOKEN', 'ZALO_OA_ID'].filter((k) => envValue(env, k));
   const zns = 'Zalo OA cho tin ZNS';
   if (oa.length === 0) {

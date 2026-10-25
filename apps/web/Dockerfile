@@ -4,8 +4,8 @@
 # Build context = ROOT monorepo:
 #   docker build -f apps/web/Dockerfile -t tubutree-web \
 #     --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.<domain>/api \
-#     --build-arg NEXT_PUBLIC_ZALO_APP_ID=<id> .
-# NEXT_PUBLIC_ZALO_APP_ID bắt buộc: build dừng nếu rỗng (xem bước kiểm tra bên dưới).
+#     --build-arg NEXT_PUBLIC_ZALO_APP_ID=<app id> --build-arg NEXT_PUBLIC_ZALO_MINIAPP_ID=<mini app id> .
+# NEXT_PUBLIC_ZALO_APP_ID và NEXT_PUBLIC_ZALO_MINIAPP_ID bắt buộc, khác nhau, chỉ gồm chữ số: build dừng nếu rỗng, trùng hoặc không phải số (xem bước kiểm tra bên dưới).
 # ──────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
@@ -21,6 +21,7 @@ RUN pnpm --filter @tubutree/shared-types build
 # NEXT_PUBLIC_* phải có lúc BUILD (nhúng vào client bundle).
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG NEXT_PUBLIC_ZALO_APP_ID
+ARG NEXT_PUBLIC_ZALO_MINIAPP_ID
 ARG NEXT_PUBLIC_ZALO_OA_ID
 ARG NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
 ARG NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
@@ -30,6 +31,7 @@ ARG NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_ZALO_APP_ID=$NEXT_PUBLIC_ZALO_APP_ID
+ENV NEXT_PUBLIC_ZALO_MINIAPP_ID=$NEXT_PUBLIC_ZALO_MINIAPP_ID
 ENV NEXT_PUBLIC_ZALO_OA_ID=$NEXT_PUBLIC_ZALO_OA_ID
 ENV NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=$NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
 ENV NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=$NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET
@@ -41,13 +43,30 @@ ENV NEXT_STANDALONE=1
 
 # Thiếu App ID thì bundle bị nhúng chuỗi rỗng: build vẫn xanh nhưng mọi nút đăng nhập Zalo trên web đều hỏng. Dừng ở đây
 # để lỗi hiện lúc deploy, không đợi tới khi khách không đăng nhập được. Bản thử không dùng Zalo mới đặt
-# ALLOW_EMPTY_ZALO_APP_ID=1 (khi đó web hiện thông báo "chưa cấu hình" thay cho nút đăng nhập).
+# ALLOW_EMPTY_ZALO_APP_ID=1 (khi đó web hiện thông báo "chưa cấu hình" thay cho nút đăng nhập, và ẩn nút "Mở trên Zalo").
+# Hai ID là hai thứ khác nhau: App ID (developers.zalo.me, OAuth) và Mini App ID (link zalo.me/s/<id>). Trùng nhau nghĩa là
+# một trong hai đang sai, nên dừng luôn.
 ARG ALLOW_EMPTY_ZALO_APP_ID
-RUN if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ]; then \
+# Kiểm dạng số và trùng nhau chạy TRƯỚC kiểm rỗng, để ALLOW_EMPTY_ZALO_APP_ID=1 (chỉ bỏ qua việc rỗng) không che được ID sai.
+RUN case "$NEXT_PUBLIC_ZALO_APP_ID" in *[!0-9]*) \
+      echo "LOI: NEXT_PUBLIC_ZALO_APP_ID khong phai chuoi so. ID Zalo chi gom chu so; kiem tra ZALO_APP_ID trong .env (loi go nham, dau nhay, khoang trang)." >&2; exit 1;; \
+    esac; \
+    case "$NEXT_PUBLIC_ZALO_MINIAPP_ID" in *[!0-9]*) \
+      echo "LOI: NEXT_PUBLIC_ZALO_MINIAPP_ID khong phai chuoi so. ID Zalo chi gom chu so; kiem tra ZALO_MINIAPP_ID trong .env (loi go nham, dau nhay, khoang trang)." >&2; exit 1;; \
+    esac; \
+    if [ -n "$NEXT_PUBLIC_ZALO_APP_ID" ] && [ "$NEXT_PUBLIC_ZALO_APP_ID" = "$NEXT_PUBLIC_ZALO_MINIAPP_ID" ]; then \
+      echo "LOI: ZALO_APP_ID trung ZALO_MINIAPP_ID. ZALO_APP_ID phai la App ID cua ung dung tren developers.zalo.me (dang nhap web, lam moi token OA); ZALO_MINIAPP_ID la ID cua Mini App, chi dung cho link zalo.me/s/<id>. Doi mot trong hai (docs/GO-LIVE-KEYS.md muc 2, buoc B)." >&2; \
+      exit 1; \
+    fi; \
+    if [ "$NEXT_PUBLIC_ZALO_APP_ID" = "2070857098114207963" ]; then \
+      echo "LOI: NEXT_PUBLIC_ZALO_APP_ID dang la ID Mini App production (2070857098114207963). Dat ZALO_APP_ID la App ID cua ung dung tren developers.zalo.me (docs/GO-LIVE-KEYS.md muc 2, buoc B)." >&2; \
+      exit 1; \
+    fi; \
+    if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ] || [ -z "$NEXT_PUBLIC_ZALO_MINIAPP_ID" ]; then \
       if [ "$ALLOW_EMPTY_ZALO_APP_ID" = "1" ]; then \
-        echo "CANH BAO: NEXT_PUBLIC_ZALO_APP_ID rong - web se khong dang nhap duoc bang Zalo." >&2; \
+        echo "CANH BAO: NEXT_PUBLIC_ZALO_APP_ID hoac NEXT_PUBLIC_ZALO_MINIAPP_ID rong - web se khong dang nhap duoc bang Zalo hoac khong co nut Mo tren Zalo." >&2; \
       else \
-        echo "LOI: NEXT_PUBLIC_ZALO_APP_ID rong. Dat secret ZALO_APP_ID (docs/GO-LIVE-KEYS.md muc 2, buoc E) roi build lai; chi bo qua bang ALLOW_EMPTY_ZALO_APP_ID=1 cho ban thu khong dung Zalo." >&2; \
+        echo "LOI: NEXT_PUBLIC_ZALO_APP_ID hoac NEXT_PUBLIC_ZALO_MINIAPP_ID rong. Dat ZALO_APP_ID (App ID cua ung dung tren developers.zalo.me, dung cho dang nhap) va ZALO_MINIAPP_ID (ID cua Mini App, chi dung cho link zalo.me/s) trong .env (docs/GO-LIVE-KEYS.md muc 2) roi build lai; chi bo qua bang ALLOW_EMPTY_ZALO_APP_ID=1 cho ban thu khong dung Zalo." >&2; \
         exit 1; \
       fi; \
     fi

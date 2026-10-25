@@ -621,3 +621,79 @@ describe('evaluateDb', () => {
     });
   });
 });
+
+describe('evaluateDb: phần DB không đọc được vì schema cũ', () => {
+  const old = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { configs: 'P2022', zns: 'P2022', demoData: 'P2022' } });
+
+  it('trước deploy: các dòng của phần hỏng là WARN, id giữ nguyên, dòng migration vẫn tính từ _prisma_migrations', () => {
+    const r = run(old, 'pre-deploy');
+    for (const id of ['db.shipping_rates', 'db.bank_account', 'db.gomdon_toggle', 'db.waste_point', 'db.zns_templates', 'db.demo_products', 'db.demo_coupons']) {
+      expect(byId(r, id).status).toBe('WARN');
+      expect(byId(r, id).detail).toContain('schema cũ: P2022');
+      expect(byId(r, id).detail).toContain('bước 10');
+    }
+    expect(byId(r, 'db.migrations_pending').status).toBe('WARN');
+    expect(byId(r, 'db.migrations_pending').detail).toContain('cái sẽ được áp khi deploy');
+    expect(byId(r, 'db.orders_lock')).toBeDefined();
+    expect(byId(r, 'db.required_migrations')).toBeDefined();
+    expect(r.filter((x) => x.status === 'FAIL')).toEqual([]);
+  });
+
+  it('sau deploy: cùng lỗi là FAIL', () => {
+    const r = run(old, 'post-deploy');
+    for (const id of ['db.shipping_rates', 'db.zns_templates', 'db.demo_coupons']) expect(byId(r, id).status).toBe('FAIL');
+  });
+
+  it('trước deploy nhưng hết migration chờ áp: cùng lỗi cột/bảng thiếu là FAIL (lệch schema hoặc lỗi mã)', () => {
+    const noPending = dbWith({ degraded: { configs: 'P2022', zns: 'P2021', demoData: 'P2022' } });
+    const r = run(noPending, 'pre-deploy');
+    for (const id of ['db.shipping_rates', 'db.zns_templates', 'db.demo_coupons']) {
+      expect(byId(r, id).status).toBe('FAIL');
+      expect(byId(r, id).detail).toContain('schema DB chưa khớp mã');
+    }
+  });
+
+  it('phần không hỏng giữ nguyên kết quả', () => {
+    const r = run(dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { zns: 'P2021' } }), 'pre-deploy');
+    expect(byId(r, 'db.shipping_rates').status).toBe('PASS');
+    expect(byId(r, 'db.zns_templates').status).toBe('WARN');
+  });
+});
+
+describe('evaluateDb: db.miniapp_base_url khớp ZALO_MINIAPP_ID', () => {
+  const MINI = '2070857098114207963';
+  const withUrl = (url: string, phase: GoLivePhase = 'post-deploy', env: Env = GOOD_ENV) => byId(run(dbWith({ configs: { 'app.miniapp_base_url': url } }), phase, env), 'db.miniapp_base_url');
+
+  it('link chứa /s/<ZALO_MINIAPP_ID>: PASS', () => {
+    expect(withUrl(`https://zalo.me/s/${MINI}`).status).toBe('PASS');
+    expect(withUrl(`https://zalo.me/s/${MINI}/`).status).toBe('PASS');
+  });
+  it('link mang ID khác (vd App ID): WARN, nêu cả hai giá trị', () => {
+    const r = withUrl('https://zalo.me/s/565779011239360460');
+    expect(r.status).toBe('WARN');
+    expect(r.detail).toContain('565779011239360460');
+    expect(r.detail).toContain(MINI);
+  });
+  it('ID Mini App chỉ là tiền tố của ID trong link: WARN', () => {
+    expect(withUrl(`https://zalo.me/s/${MINI}9`).status).toBe('WARN');
+  });
+  it('ID đúng kèm / hoặc /?x: PASS; ID dài hơn: WARN; host khác zalo.me: WARN', () => {
+    expect(withUrl(`https://zalo.me/s/${MINI}/`).status).toBe('PASS');
+    expect(withUrl(`https://zalo.me/s/${MINI}/?x=1`).status).toBe('PASS');
+    expect(withUrl(`https://zalo.me/s/${MINI}0`).status).toBe('WARN');
+    expect(withUrl(`https://example.com/s/${MINI}`).status).toBe('WARN');
+  });
+  it.each(['1)', '1[', '1\\', '(?', '*'])('ZALO_MINIAPP_ID sai dạng %s: không ném lỗi, bỏ qua so sánh', (bad) => {
+    const r = withUrl('https://zalo.me/s/1', 'post-deploy', envWith({ ZALO_MINIAPP_ID: bad }));
+    expect(r.status).toBe('PASS');
+    expect(r.detail).toContain('env.zalo.ids');
+  });
+  it('link rỗng hoặc ZALO_MINIAPP_ID rỗng: PASS (không có gì để so)', () => {
+    expect(withUrl('').status).toBe('PASS');
+    expect(withUrl('https://zalo.me/s/1', 'post-deploy', envWith({ ZALO_MINIAPP_ID: '' })).status).toBe('PASS');
+  });
+  it('phần cấu hình không đọc được: theo logic degraded.configs', () => {
+    const s = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { configs: 'P2022' } });
+    expect(byId(run(s, 'pre-deploy'), 'db.miniapp_base_url').status).toBe('WARN');
+  });
+});

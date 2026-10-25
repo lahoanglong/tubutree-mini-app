@@ -196,8 +196,8 @@ describe('/dang-nhap — Mở trên Zalo', () => {
   afterEach(() => vi.unstubAllEnvs());
   const openLink = (c: HTMLElement) => Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Mở trên Zalo');
 
-  it('có app id: hiện nút dẫn tới Mini App, vùng chạm 44px', async () => {
-    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '2070857098114207963');
+  it('có id Mini App: hiện nút dẫn tới Mini App, vùng chạm 44px', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '2070857098114207963');
     const { container } = mount(<LoginPage />);
     await flush();
     const a = openLink(container)!;
@@ -206,22 +206,31 @@ describe('/dang-nhap — Mở trên Zalo', () => {
   });
 
   it('khách tới từ trang sản phẩm: mở đúng sản phẩm đó trong Mini App', async () => {
-    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '123');
     mocks.search = new URLSearchParams({ returnTo: '/san-pham/dau-goi' });
     const { container } = mount(<LoginPage />);
     await flush();
     expect(openLink(container)!.getAttribute('href')).toBe('https://zalo.me/s/123/product/dau-goi');
   });
 
-  it('chưa cấu hình app id: ẩn nút', async () => {
-    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '');
+  it('chưa cấu hình id Mini App: ẩn nút', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
     const { container } = mount(<LoginPage />);
     await flush();
     expect(openLink(container)).toBeUndefined();
   });
 
+  it('chỉ có App ID của Zalo App, thiếu id Mini App: ẩn nút, không dựng link tới App ID', async () => {
+    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '565779011239360460');
+    vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
+    const { container } = mount(<LoginPage />);
+    await flush();
+    expect(openLink(container)).toBeUndefined();
+    expect(container.innerHTML).not.toContain('zalo.me/s/565779011239360460');
+  });
+
   it('bấm nút này không chạm vào luồng đăng nhập: không ghi returnTo, không gọi startZaloLogin', async () => {
-    vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '123');
+    vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '123');
     mocks.search = new URLSearchParams({ returnTo: '/gio-hang' });
     const { container } = mount(<LoginPage />);
     await flush();

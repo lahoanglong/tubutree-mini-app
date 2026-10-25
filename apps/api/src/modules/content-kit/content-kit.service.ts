@@ -46,7 +46,7 @@ export class ContentKitService {
       }),
     ]);
 
-    // URL gốc Mini App (zalo.me/s/<appId>): /product/:slug là route của Mini App. Bỏ "/" cuối để admin gõ thừa không sinh "//product".
+    // URL gốc Mini App (zalo.me/s/<Mini App ID>): /product/:slug là route của Mini App. Bỏ "/" cuối để admin gõ thừa không sinh "//product".
     const rawBase: unknown = await this.config.get<string>('app.miniapp_base_url', '');
     const baseUrl = typeof rawBase === 'string' ? rawBase.trim().replace(/\/+$/, '') : '';
     const link = `${baseUrl}/product/${productSlug}?ref=${user.referralCode}`;

@@ -48,6 +48,7 @@ jobs:
           ZALOPAY_KEY2: ${{ secrets.ZALOPAY_KEY2 }}
           ZALOPAY_ENDPOINT: ${{ secrets.ZALOPAY_ENDPOINT }}
           ZALO_APP_ID: ${{ secrets.ZALO_APP_ID }}
+          ZALO_MINIAPP_ID: ${{ secrets.ZALO_MINIAPP_ID }}
           ZALO_APP_SECRET: ${{ secrets.ZALO_APP_SECRET }}
           ZALO_OA_ID: ${{ secrets.ZALO_OA_ID }}
           ZALO_OA_ACCESS_TOKEN: ${{ secrets.ZALO_OA_ACCESS_TOKEN }}
@@ -85,7 +86,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           command_timeout: 15m
-          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ZALO_OA_WEBHOOK_SECRET,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,OPS_ALERT_ENV_LABEL,BACKUP_HEALTHCHECK_URL
+          envs: ACTION,DEEPSEEK_API_KEY,GEMINI_API_KEY,ZALOPAY_APP_ID,ZALOPAY_KEY1,ZALOPAY_KEY2,ZALOPAY_ENDPOINT,ZALO_APP_ID,ZALO_MINIAPP_ID,ZALO_APP_SECRET,ZALO_OA_ID,ZALO_OA_ACCESS_TOKEN,ZALO_OA_REFRESH_TOKEN,ZALO_OA_WEBHOOK_SECRET,ACCESSTRADE_TOKEN,ACCESSTRADE_PUBLISHER_ID,ACCESSTRADE_WEBHOOK_SECRET_GH,ADMIN_PHONE,PANCAKE_API_KEY,PANCAKE_SHOP_ID,PANCAKE_WEBHOOK_SECRET,GOMDON_PHONE,GOMDON_PASSWORD,GOMDON_WEBHOOK_SECRET,OPS_ALERT_WEBHOOK_URL,OPS_ALERT_EMAIL_TO,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASS,SMTP_FROM,OPS_ALERT_ENV_LABEL,BACKUP_HEALTHCHECK_URL
           script: |
             # -e: một lệnh con trong action (grant-admin.js, backup-db.sh,
             # create-gin-indexes-concurrently.sh...) lỗi phải làm JOB FAIL, không được
@@ -145,6 +146,8 @@ jobs:
                 envstate GOMDON_PHONE
                 envstate GOMDON_PASSWORD
                 envstate GOMDON_WEBHOOK_SECRET
+                envstate ZALO_APP_ID
+                envstate ZALO_MINIAPP_ID
                 envstate ZALO_APP_SECRET
                 envstate ZALO_OA_ACCESS_TOKEN
                 envstate ZALO_OA_WEBHOOK_SECRET
@@ -183,6 +186,7 @@ jobs:
                 # /var/backups thuộc root → tạo + chown cho user SSH trước (như deploy.yml).
                 sudo mkdir -p /var/backups/tubutree
                 sudo chown "$(id -u):$(id -g)" /var/backups/tubutree
+                sudo chmod 700 /var/backups/tubutree
                 COMPOSE_FILE="$COMPOSE_FILE" POSTGRES_USER="$PGUSER" POSTGRES_DB="$PGDB" bash tools/backup/backup-db.sh
                 echo "=== Danh sách backup ==="
                 ls -lh /var/backups/tubutree/
@@ -234,6 +238,7 @@ jobs:
                 set_if ZALOPAY_KEY2 "${ZALOPAY_KEY2:-}"
                 set_if ZALOPAY_ENDPOINT "${ZALOPAY_ENDPOINT:-}"
                 set_if ZALO_APP_ID "${ZALO_APP_ID:-}"
+                set_if ZALO_MINIAPP_ID "${ZALO_MINIAPP_ID:-}"
                 set_if ZALO_APP_SECRET "${ZALO_APP_SECRET:-}"
                 set_if ZALO_OA_ID "${ZALO_OA_ID:-}"
                 set_if ZALO_OA_ACCESS_TOKEN "${ZALO_OA_ACCESS_TOKEN:-}"
@@ -336,6 +341,7 @@ jobs:
                 sudo mkdir -p /var/backups/tubutree
                 sudo touch /var/log/tubutree-backup.log
                 sudo chown "$(id -u):$(id -g)" /var/backups/tubutree /var/log/tubutree-backup.log
+                sudo chmod 700 /var/backups/tubutree
                 # Bản ngoài máy (RCLONE_REMOTE, biến repo BACKUP_RCLONE_REMOTE) cần `rclone config` sẵn trên máy
                 # chủ — xem tools/backup/README.md. Trống thì chỉ giữ bản local (cảnh báo bên dưới); chỉ hạ
                 # BACKUP_KEEP_COUNT khi đã có remote, vì bản local là bản duy nhất.

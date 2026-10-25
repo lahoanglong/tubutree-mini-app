@@ -51,13 +51,14 @@ jobs:
           -e "require('express'); require('helmet'); require('@nestjs/core'); require('@nestjs/platform-express'); require('@sentry/node'); require('@prisma/client'); require('./dist/bootstrap.js'); console.log('api modules ok')"
 
       - name: Build image web
-        # ZALO_APP_ID giả: Dockerfile dừng khi rỗng. NEXT_PUBLIC_* chỉ nhúng vào bundle, không có giá trị thật nào ở đây.
+        # ZALO_APP_ID và ZALO_MINIAPP_ID giả (phải là số và khác nhau): Dockerfile dừng khi rỗng, trùng hoặc không phải số. NEXT_PUBLIC_* chỉ nhúng vào bundle, không có giá trị thật nào ở đây.
         if: matrix.app == 'web'
         run: >-
           docker build -f apps/web/Dockerfile -t tubutree-web:ci
           --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.test/api
           --build-arg NEXT_PUBLIC_SITE_URL=https://app.example.test
-          --build-arg NEXT_PUBLIC_ZALO_APP_ID=ci-dummy-app-id
+          --build-arg NEXT_PUBLIC_ZALO_APP_ID=1111111111
+          --build-arg NEXT_PUBLIC_ZALO_MINIAPP_ID=2222222222
           .
 
       - name: Kiểm container web chạy bằng user node và ghi được .next/cache, .next/server/app
