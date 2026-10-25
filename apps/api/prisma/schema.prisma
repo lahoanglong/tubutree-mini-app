@@ -2630,14 +2630,17 @@ enum ReturnStatus {
 // lỗi này) — chỉ là một YÊU CẦU được ghi nhận thật + báo admin xử lý qua CSKH, mirror cấu trúc tối
 // giản của ReturnRequest (không FK cứng, chỉ userId + index để admin truy vấn).
 model AccountDeletionRequest {
-  id         String                       @id @default(cuid())
-  userId     String
-  reason     String?
-  status     AccountDeletionRequestStatus @default(PENDING)
-  adminNote  String?
-  reviewedBy String?
-  reviewedAt DateTime?
-  createdAt  DateTime                     @default(now())
+  id                     String                       @id @default(cuid())
+  userId                 String
+  reason                 String?
+  status                 AccountDeletionRequestStatus @default(PENDING)
+  adminNote              String?
+  reviewedBy             String?
+  reviewedAt             DateTime?
+  createdAt              DateTime                     @default(now())
+  /// Số dư Ví Tubu (VND) khách đã thấy và đồng ý bỏ khi xoá tài khoản; chỉ có khi lúc gửi Ví còn tiền.
+  walletForfeitAmount    Int?
+  walletForfeitConsentAt DateTime?
 
   @@index([userId])
   @@index([status])

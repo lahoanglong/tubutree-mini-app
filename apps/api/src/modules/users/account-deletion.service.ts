@@ -2,8 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { formatPoints } from '../../common/format-points';
+import { formatVndText as vnd } from '../../common/format-vnd';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SessionStateService } from '../auth/session-state.service';
+import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import type { SettlementConfig } from '../merchant/merchant-fulfilment.service';
 
 /** Mã lỗi ổn định để admin UI nhận diện (message tiếng Việt có thể đổi câu chữ). */
@@ -56,8 +59,6 @@ type BlockerUser = {
 
 const OPEN_ORDER_STATUSES = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'] as const;
 
-const vnd = (n: number) => `${String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.')}đ`;
-
 /** Deadlock (40P01) / tuần tự hoá (40001, Prisma P2034): tx đã rollback, chạy lại an toàn. */
 function isRetryableTxError(err: unknown): boolean {
   const e = err as { code?: string; meta?: { code?: string } } | null;
@@ -107,7 +108,8 @@ export class AccountDeletionService {
     const byId = new Map(users.map((u) => [u.id, u]));
     const pendingUsers = users.filter((u) => requests.some((r) => r.userId === u.id && r.status === 'PENDING'));
     const partnerCfg = pendingUsers.length > 0 ? await this.partnerStores?.settlementConfig() : undefined;
-    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, partnerCfg) : new Map();
+    const consents = new Map(requests.filter((r) => r.status === 'PENDING').map((r) => [r.userId, r.walletForfeitAmount]));
+    const blockers = pendingUsers.length > 0 ? await this.collectBlockers(this.prisma, pendingUsers, consents, partnerCfg) : new Map();
     return requests.map((r) => ({
       ...r,
       user: byId.get(r.userId) ?? null,
@@ -165,7 +167,8 @@ export class AccountDeletionService {
       const now = new Date();
 
       if (user) {
-        const blockers = (await this.collectBlockers(tx, [user], partnerCfg)).get(user.id) ?? [];
+        const consents = new Map([[user.id, request.walletForfeitAmount]]);
+        const blockers = (await this.collectBlockers(tx, [user], consents, partnerCfg)).get(user.id) ?? [];
         if (blockers.length > 0) {
           throw new BadRequestException({
             statusCode: 400,
@@ -175,6 +178,7 @@ export class AccountDeletionService {
             blockers,
           });
         }
+        if (user.walletBalance > 0) await this.forfeitWallet(tx, user.id, user.walletBalance, request, adminId);
         await this.anonymize(tx, user.id, requestId, now);
       } else {
         this.logger.warn(`Yêu cầu xoá ${requestId}: không còn user ${request.userId}, chỉ đóng yêu cầu.`);
@@ -190,7 +194,12 @@ export class AccountDeletionService {
   }
 
   /** Gom bằng groupBy (cố định 10 truy vấn) thay vì 10 truy vấn × mỗi dòng: danh sách admin tới 100 dòng. */
-  private async collectBlockers(db: Db, users: BlockerUser[], partnerCfg?: SettlementConfig): Promise<Map<string, DeletionBlocker[]>> {
+  private async collectBlockers(
+    db: Db,
+    users: BlockerUser[],
+    consents: Map<string, number | null>,
+    partnerCfg?: SettlementConfig,
+  ): Promise<Map<string, DeletionBlocker[]>> {
     const ids = users.map((u) => u.id);
     // Chủ gian hàng đối tác (MERCHANT, hoặc CTV có cờ) còn việc dở thì ẩn danh để lại đơn không ai xử lý và đối soát không có tài khoản nhận tiền.
     const partnerOpen = new Map<string, string[]>();
@@ -276,7 +285,17 @@ export class AccountDeletionService {
       if (user.role === 'ADMIN' || user.role === 'STAFF') {
         add('PRIVILEGED_ROLE', 'tài khoản đang có quyền quản trị/nhân viên, cần gỡ quyền trước');
       }
-      if (user.walletBalance > 0) add('WALLET_BALANCE', `Ví Tubu còn ${vnd(user.walletBalance)}, khách cần rút hết trước`);
+      if (user.walletBalance > 0) {
+        const agreed = consents.get(user.id) ?? null;
+        if (agreed === null) {
+          add('WALLET_BALANCE', `Ví Tubu còn ${vnd(user.walletBalance)} mà khách chưa đồng ý bỏ số dư, khách cần gửi lại yêu cầu xoá và đồng ý`);
+        } else if (agreed !== user.walletBalance) {
+          add(
+            'WALLET_BALANCE',
+            `Ví Tubu đã đổi từ ${vnd(agreed)} (số khách đồng ý bỏ) thành ${vnd(user.walletBalance)}, khách cần xác nhận lại khi gửi yêu cầu xoá`,
+          );
+        }
+      }
       if (user.walletBalance < 0) add('WALLET_BALANCE', `Ví Tubu đang âm ${vnd(-user.walletBalance)}, cần đối soát trước`);
       // Q-03a: lô quy đổi là tiền trả trước nhưng không quy ra tiền được, nên không có cách tất toán
       // nào khác ngoài để khách tiêu hết (OQ-14).
@@ -289,7 +308,7 @@ export class AccountDeletionService {
       if (n(returnN) > 0) add('RETURN_PENDING', `còn ${n(returnN)} yêu cầu đổi trả chờ duyệt`);
       if (n(refundN) > 0) add('CUSTOMER_REFUND_PENDING', `còn ${n(refundN)} khoản hoàn tiền đơn chưa chuyển`);
       if (n(subN) > 0) add('SUBSCRIPTION_ACTIVE', `còn ${n(subN)} gói giao định kỳ đang chạy hoặc tạm dừng`);
-      if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa trả`);
+      if (n(commissionN) > 0) add('COMMISSION_UNPAID', `còn ${n(commissionN)} khoản hoa hồng chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước (khoản đang chờ duyệt thì đợi duyệt xong)`);
       if (n(wasteOpenN) > 0) add('WASTE_REQUEST_OPEN', `còn ${n(wasteOpenN)} yêu cầu Đổi rác chưa xong (đang chờ mang tới, đang gửi hoặc đang chờ đếm)`);
       if (wasteReview.has(user.id)) add('WASTE_UNDER_REVIEW', 'Tài khoản đang được Tubu xem xét, liên hệ CSKH');
       const credit = creditSum.get(user.id) ?? 0;
@@ -299,6 +318,30 @@ export class AccountDeletionService {
       result.set(user.id, out);
     }
     return result;
+  }
+
+  /**
+   * Số dư Ví khách đã thấy và đồng ý bỏ (blocker đã đảm bảo bằng đúng số khách đồng ý) bị trừ về 0 bằng một dòng ADJUST ngay trong
+   * giao dịch ẩn danh, kèm dòng sổ việc admin; refId = mã yêu cầu nên xử lý lặp không trừ lần hai.
+   */
+  private async forfeitWallet(
+    tx: Db,
+    userId: string,
+    balance: number,
+    request: { id: string; walletForfeitConsentAt: Date | null },
+    adminId: string,
+  ) {
+    const consentAt = request.walletForfeitConsentAt?.toISOString() ?? 'không rõ';
+    const reason = `Xoá tài khoản: khách đã đồng ý bỏ số dư Ví ${vnd(balance)} (đồng ý lúc ${consentAt}, yêu cầu ${request.id})`;
+    await applyWalletDelta(tx, {
+      userId,
+      delta: -balance,
+      type: 'ADJUST',
+      refType: 'ACCOUNT_DELETION',
+      refId: request.id,
+      reason,
+    });
+    await recordUserAdminEvent(tx, { userId, kind: 'WALLET_FORFEIT', from: String(balance), to: '0', reason, actorId: adminId });
   }
 
   private async anonymize(tx: Db, userId: string, requestId: string, now: Date) {

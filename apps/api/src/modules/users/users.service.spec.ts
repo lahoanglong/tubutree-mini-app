@@ -284,17 +284,21 @@ describe('Sổ địa chỉ chỉ nhận địa chỉ gửi được sang Pancak
 // hiện snackbar giả, không gọi API nào. Giờ ghi nhận YÊU CẦU thật (KHÔNG xoá thật) + báo admin.
 describe('UsersService.requestAccountDeletion', () => {
   function makePrisma(over: Record<string, unknown> = {}) {
-    return {
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ walletBalance: 0 }]),
       accountDeletionRequest: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'req1', createdAt: new Date('2026-09-27T00:00:00Z') }),
+        update: jest.fn(),
       },
       user: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', fullName: 'Nguyễn Văn A', phone: '0900000000' }),
         findMany: jest.fn().mockResolvedValue([{ id: 'admin1' }]),
       },
       ...over,
-    } as unknown as PrismaService;
+    } as Record<string, unknown>;
+    prisma.$transaction = (fn: (tx: unknown) => unknown) => fn(prisma);
+    return prisma as unknown as PrismaService;
   }
 
   it('chưa từng gửi yêu cầu → tạo mới, báo TẤT CẢ admin, message KHÔNG hứa "đã xoá"', async () => {
@@ -352,6 +356,83 @@ describe('UsersService.requestAccountDeletion', () => {
   });
 });
 
+describe('UsersService.requestAccountDeletion — số dư Ví và đồng ý bỏ số dư', () => {
+  function build(balance: number, existing: unknown = null) {
+    const update = jest.fn();
+    const create = jest.fn().mockResolvedValue({ id: 'req1', createdAt: new Date('2026-10-25T00:00:00Z') });
+    const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ walletBalance: balance }]),
+      accountDeletionRequest: { findFirst: jest.fn().mockResolvedValue(existing), create, update },
+      user: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', fullName: 'A', phone: '0900000000' }),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    } as Record<string, unknown>;
+    prisma.$transaction = (fn: (tx: unknown) => unknown) => fn(prisma);
+    return { svc: new UsersService(prisma as unknown as PrismaService), create, update };
+  }
+  const blocked = async (p: Promise<unknown>) => {
+    const err = await p.then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    return (err as BadRequestException).getResponse() as { code: string; walletBalance: number; message: string };
+  };
+
+  it('Ví còn tiền, khách chưa đồng ý → lỗi WALLET_FORFEIT_CONSENT kèm số dư, không tạo yêu cầu', async () => {
+    const { svc, create } = build(20_000);
+    const body = await blocked(svc.requestAccountDeletion('u1'));
+    expect(body).toMatchObject({ code: 'WALLET_FORFEIT_CONSENT', walletBalance: 20_000 });
+    expect(body.message).toContain('Ví Tubu còn 20.000đ');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('tick đồng ý nhưng số khách thấy khác số dư hiện tại → lỗi kèm số mới, không tạo yêu cầu', async () => {
+    const { svc, create } = build(30_000);
+    const body = await blocked(svc.requestAccountDeletion('u1', undefined, { accepted: true, acknowledgedWalletBalance: 20_000 }));
+    expect(body).toMatchObject({ code: 'WALLET_FORFEIT_CONSENT', walletBalance: 30_000 });
+    expect(body.message).toContain('vừa đổi');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('có số dư số đúng nhưng chưa tick đồng ý → vẫn chặn', async () => {
+    const { svc } = build(20_000);
+    await blocked(svc.requestAccountDeletion('u1', undefined, { accepted: false, acknowledgedWalletBalance: 20_000 }));
+  });
+
+  it('đồng ý đúng số dư → lưu số tiền và thời điểm đồng ý vào yêu cầu', async () => {
+    const { svc, create } = build(20_000);
+    await svc.requestAccountDeletion('u1', undefined, { accepted: true, acknowledgedWalletBalance: 20_000 });
+    expect(create).toHaveBeenCalledWith({
+      data: { userId: 'u1', reason: null, walletForfeitAmount: 20_000, walletForfeitConsentAt: expect.any(Date) },
+    });
+  });
+
+  it('Ví bằng 0 → không cần đồng ý, không lưu số tiền', async () => {
+    const { svc, create } = build(0);
+    await svc.requestAccountDeletion('u1');
+    expect(create).toHaveBeenCalledWith({ data: { userId: 'u1', reason: null } });
+  });
+
+  it('đã có yêu cầu PENDING mà khách đồng ý lại với số dư mới → cập nhật đồng ý trên yêu cầu cũ, không tạo dòng mới', async () => {
+    const existing = { id: 'req0', createdAt: new Date('2026-10-01T00:00:00Z'), status: 'PENDING' };
+    const { svc, create, update } = build(35_000, existing);
+    const res = await svc.requestAccountDeletion('u1', undefined, { accepted: true, acknowledgedWalletBalance: 35_000 });
+    expect(res.alreadyRequested).toBe(true);
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'req0' },
+      data: { walletForfeitAmount: 35_000, walletForfeitConsentAt: expect.any(Date) },
+    });
+  });
+
+  it('khoá dòng user trước khi đọc số dư', async () => {
+    const { svc } = build(0);
+    await svc.requestAccountDeletion('u1');
+    // $queryRaw là tagged template: phần chuỗi đầu có FOR NO KEY UPDATE
+    const strings = ((svc as unknown as { prisma: { $queryRaw: jest.Mock } }).prisma.$queryRaw.mock.calls[0] ?? [])[0] as TemplateStringsArray;
+    expect(strings.join('?')).toContain('FOR NO KEY UPDATE');
+  });
+});
+
 // C-040: đặc tả bản chép tay `notifyAdminsOfDeletionRequest` (qua requestAccountDeletion) trước khi
 // gom cùng hai bản của dealer về một helper chung.
 describe('UsersService.requestAccountDeletion — báo admin (đặc tả notifyAdminsOfDeletionRequest, C-040)', () => {
@@ -373,13 +454,15 @@ describe('UsersService.requestAccountDeletion — báo admin (đặc tả notify
       findMany: jest.fn().mockResolvedValue(opts.admins ?? [{ id: 'admin1' }]),
     };
     const prisma = {
+      $queryRaw: jest.fn().mockResolvedValue([{ walletBalance: 0 }]),
       accountDeletionRequest: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'req1', createdAt: new Date('2026-09-27T00:00:00Z') }),
       },
       user,
-    } as unknown as PrismaService;
-    const svc = new UsersService(prisma, opts.wired === false ? undefined : ({ notify } as unknown as NotificationsService));
+    } as Record<string, unknown>;
+    prisma.$transaction = (fn: (tx: unknown) => unknown) => fn(prisma);
+    const svc = new UsersService(prisma as unknown as PrismaService, opts.wired === false ? undefined : ({ notify } as unknown as NotificationsService));
     return { svc, user, notify };
   }
 

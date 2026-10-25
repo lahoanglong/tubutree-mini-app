@@ -147,8 +147,8 @@ export interface AccountDeletionRequestResult {
   createdAt: string;
   message: string;
 }
-export const requestAccountDeletion = (reason?: string) =>
-  api.post<AccountDeletionRequestResult>('/me/deletion-request', { reason }).then((r) => r.data);
+export const requestAccountDeletion = (reason?: string, walletConsent?: { acknowledgedWalletBalance: number; acceptWalletForfeit: true }) =>
+  api.post<AccountDeletionRequestResult>('/me/deletion-request', { reason, ...walletConsent }).then((r) => r.data);
 
 // Loyalty
 export type RewardItem = RewardItemDTO;

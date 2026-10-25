@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notifyAdmins } from '../../common/notify-admins';
+import { formatVndText as vnd } from '../../common/format-vnd';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
@@ -10,6 +11,15 @@ import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
 
 /** Mã lỗi ổn định để FE nhận diện (message tiếng Việt có thể đổi câu chữ). */
 export const ADDRESS_IN_USE_BY_SUBSCRIPTION = 'ADDRESS_IN_USE_BY_SUBSCRIPTION';
+
+/** Mã lỗi khi Ví còn tiền mà khách chưa đồng ý bỏ số dư, hoặc số dư đã đổi so với số khách đã thấy. */
+export const WALLET_FORFEIT_CONSENT = 'WALLET_FORFEIT_CONSENT';
+
+export interface WalletForfeitConsentInput {
+  /** Số dư Ví khách đã thấy trên màn hình lúc bấm gửi. */
+  acknowledgedWalletBalance?: number;
+  accepted?: boolean;
+}
 
 function addressInUseError(productNames: string[]): BadRequestException {
   const which = productNames.length > 0 ? ` "${[...new Set(productNames)].join('", "')}"` : '';
@@ -203,23 +213,51 @@ export class UsersService {
    * yêu cầu PENDING thì trả lại chính yêu cầu đó, không tạo dòng mới (khách bấm nhiều lần không
    * tạo hàng đợi vô hạn cho CSKH).
    */
-  async requestAccountDeletion(userId: string, reason?: string) {
-    const existing = await this.prisma.accountDeletionRequest.findFirst({
-      where: { userId, status: 'PENDING' },
-      orderBy: { createdAt: 'desc' },
+  async requestAccountDeletion(userId: string, reason?: string, consent: WalletForfeitConsentInput = {}) {
+    // Khoá dòng user (cùng mức khoá với sổ Ví) để số dư đọc ở đây và dòng đồng ý ghi xuống cùng một thời điểm; ghi Ví đến sau
+    // vẫn bị chặn ở lúc xử lý vì AccountDeletionService so lại số dư với số khách đã đồng ý.
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ walletBalance: number }[]>`
+        SELECT "walletBalance" FROM "users" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
+      if (!locked[0]) throw new NotFoundException('Không tìm thấy tài khoản.');
+      const balance = locked[0].walletBalance;
+      const consented = balance > 0 && consent.accepted === true && consent.acknowledgedWalletBalance === balance;
+      if (balance > 0 && !consented) {
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: WALLET_FORFEIT_CONSENT,
+          walletBalance: balance,
+          message:
+            consent.accepted === true && consent.acknowledgedWalletBalance !== balance
+              ? `Số dư Ví Tubu vừa đổi, hiện còn ${vnd(balance)}. Bạn xem lại và đồng ý lần nữa để gửi yêu cầu xoá.`
+              : `Ví Tubu còn ${vnd(balance)}. Xoá tài khoản thì số dư này mất và không hoàn lại. Bạn cần đồng ý để gửi yêu cầu xoá.`,
+        });
+      }
+      const consentData = consented ? { walletForfeitAmount: balance, walletForfeitConsentAt: new Date() } : {};
+      const existing = await tx.accountDeletionRequest.findFirst({
+        where: { userId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) {
+        if (consented) await tx.accountDeletionRequest.update({ where: { id: existing.id }, data: consentData });
+        return { existing, user: null, request: null };
+      }
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      const request = await tx.accountDeletionRequest.create({
+        data: { userId, reason: reason?.trim() || null, ...consentData },
+      });
+      return { existing: null, user, request };
     });
-    if (existing) {
+    if (outcome.existing) {
       return {
         alreadyRequested: true,
-        createdAt: existing.createdAt,
+        createdAt: outcome.existing.createdAt,
         message: 'Bạn đã gửi yêu cầu xoá tài khoản trước đó. CSKH sẽ liên hệ xử lý trong vòng 3 ngày làm việc.',
       };
     }
-
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const request = await this.prisma.accountDeletionRequest.create({
-      data: { userId, reason: reason?.trim() || null },
-    });
+    const { user, request } = outcome;
+    if (!user || !request) throw new NotFoundException('Không tìm thấy tài khoản.');
 
     await notifyAdmins(
       { prisma: this.prisma, notifications: this.notifications, logger: this.logger },

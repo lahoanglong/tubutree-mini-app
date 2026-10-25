@@ -184,3 +184,85 @@ describe('AccountDeletionService.anonymize — chat CSKH', () => {
     expect(tx.supportConversation.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('AccountDeletionService — Ví còn tiền: khách đã đồng ý bỏ số dư', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function withWallet(balance: number, forfeit: number | null) {
+    const ctx = build([]);
+    const { tx } = ctx;
+    (tx.accountDeletionRequest.findUniqueOrThrow as jest.Mock).mockResolvedValue({
+      id: 'req-1',
+      userId: 'u1',
+      status: 'PENDING',
+      walletForfeitAmount: forfeit,
+      walletForfeitConsentAt: forfeit === null ? null : new Date('2026-10-25T01:00:00Z'),
+    });
+    (tx.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'CUSTOMER', walletBalance: balance, pointsConvertedBalance: 0, cashbackPending: 0 });
+    (tx.$queryRaw as jest.Mock).mockResolvedValue([{ id: 'req-1', walletBalance: balance }]);
+    const extra = tx as unknown as Record<string, unknown>;
+    extra.walletTransaction = { findUnique: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'wt1' }) };
+    extra.userAdminEvent = { create: jest.fn() };
+    (tx.user.update as jest.Mock).mockResolvedValue({ walletBalance: 0 });
+    return { ...ctx, extra };
+  }
+  const blockersOf = async (p: Promise<unknown>) => {
+    const err = await p.then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    return ((err as BadRequestException).getResponse() as { blockers: DeletionBlocker[] }).blockers;
+  };
+
+  it('chưa có đồng ý (yêu cầu cũ) → chặn, nhắc khách gửi lại và đồng ý, không trừ Ví', async () => {
+    const { svc, anonymize, extra } = withWallet(20_000, null);
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers).toEqual([{ code: 'WALLET_BALANCE', message: expect.stringContaining('chưa đồng ý bỏ số dư') }]);
+    expect((extra.walletTransaction as { create: jest.Mock }).create).not.toHaveBeenCalled();
+    expect(anonymize).not.toHaveBeenCalled();
+  });
+
+  it('số dư đã đổi so với số khách đồng ý → chặn, nêu cả hai số', async () => {
+    const { svc, anonymize } = withWallet(30_000, 20_000);
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers[0]?.message).toBe('Ví Tubu đã đổi từ 20.000đ (số khách đồng ý bỏ) thành 30.000đ, khách cần xác nhận lại khi gửi yêu cầu xoá');
+    expect(anonymize).not.toHaveBeenCalled();
+  });
+
+  it('đúng số khách đồng ý → trừ Ví về 0 bằng một dòng ADJUST có lý do, ghi sổ việc admin, rồi ẩn danh', async () => {
+    const { svc, anonymize, extra } = withWallet(20_000, 20_000);
+    await svc.process('req-1', 'admin-1');
+    const create = (extra.walletTransaction as { create: jest.Mock }).create;
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]![0].data).toMatchObject({
+      userId: 'u1',
+      delta: -20_000,
+      type: 'ADJUST',
+      refType: 'ACCOUNT_DELETION',
+      refId: 'req-1',
+      reason: expect.stringContaining('khách đã đồng ý bỏ số dư Ví 20.000đ'),
+    });
+    expect((extra.userAdminEvent as { create: jest.Mock }).create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 'u1', kind: 'WALLET_FORFEIT', fromValue: '20000', toValue: '0', actorId: 'admin-1' }),
+    });
+    expect(anonymize).toHaveBeenCalled();
+  });
+
+  it('Ví bằng 0 → không ghi dòng sổ Ví', async () => {
+    const { svc, extra } = withWallet(0, null);
+    await svc.process('req-1', 'admin-1');
+    expect((extra.walletTransaction as { create: jest.Mock }).create).not.toHaveBeenCalled();
+  });
+
+  it('Ví âm vẫn chặn như cũ dù có đồng ý', async () => {
+    const { svc } = withWallet(-5_000, 20_000);
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers[0]?.message).toContain('đang âm 5.000đ');
+  });
+
+  it('hoa hồng đã duyệt chưa chuyển → câu nhắc chuyển hoa hồng vào Ví trước', async () => {
+    const { svc, tx } = withWallet(0, null);
+    // `empty` dùng chung cho mọi bảng nên thay riêng bảng hoa hồng, không sửa mock chung.
+    (tx as unknown as { commission: unknown }).commission = { groupBy: jest.fn().mockResolvedValue([{ affiliateUserId: 'u1', _count: { _all: 2 } }]) };
+    const blockers = await blockersOf(svc.process('req-1', 'admin-1'));
+    expect(blockers).toEqual([{ code: 'COMMISSION_UNPAID', message: expect.stringContaining('chưa chuyển vào Ví Tubu, khách cần chuyển hoa hồng vào Ví trước') }]);
+  });
+});

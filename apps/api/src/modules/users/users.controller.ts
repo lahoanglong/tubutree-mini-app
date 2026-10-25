@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { ArrayMaxSize, IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
 import { UpdateMeDto } from './dto/update-me.dto';
@@ -11,6 +11,8 @@ class OnboardingDto {
 
 class DeletionRequestDto {
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
+  @IsOptional() @IsInt() @Min(0) acknowledgedWalletBalance?: number;
+  @IsOptional() @IsBoolean() acceptWalletForfeit?: boolean;
 }
 
 @Controller()
@@ -34,7 +36,10 @@ export class UsersController {
 
   @Post('me/deletion-request')
   requestDeletion(@CurrentUser('sub') userId: string, @Body() dto: DeletionRequestDto) {
-    return this.users.requestAccountDeletion(userId, dto.reason);
+    return this.users.requestAccountDeletion(userId, dto.reason, {
+      acknowledgedWalletBalance: dto.acknowledgedWalletBalance,
+      accepted: dto.acceptWalletForfeit,
+    });
   }
 
   @Get('me/addresses')
