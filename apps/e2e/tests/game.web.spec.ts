@@ -30,6 +30,7 @@ function mockGame(api: MockApi, state: { checkedIn: boolean }) {
     { code: 'REVIEW_3', title: 'Đánh giá 3 sản phẩm', rewardPoints: 30, progress: 3, goal: 3, completed: true, claimed: false },
   ]);
   api.get('/game/forest', { count: 0, plantedCount: 0, trees: [] });
+  api.get('/me/loyalty', { pointsBalance: 100000, redeemablePoints: 100000, redeemableTotal: 100000, tier: null, nextTier: null, tiers: [] });
   api.get('/game/season', null);
   api.get('/game/garden', {
     plots: [
@@ -87,12 +88,13 @@ test.describe('Web khách: Vườn Xanh', () => {
     await expect(page.getByRole('heading', { name: 'Vườn Xanh', level: 1 })).toBeVisible();
     await expect(page.getByText('600/1.000💧 · 💧 1.250 · 🔥 3 ngày · 🌳 góp quỹ: 2')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Hôm nay' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('button', { name: 'Tưới cây (20💧)' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Điểm danh chuỗi 3 ngày' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(20\.000 điểm\)/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Góp quỹ trồng cây/ })).toBeHidden();
     await page.getByRole('tab', { name: 'Vườn' }).click();
     await expect(page).toHaveURL(/tab=garden/);
-    await expect(page.getByRole('button', { name: 'Tưới cây (20💧)' })).toBeHidden();
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeHidden();
+    await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(20\.000 điểm\)/ })).toBeVisible();
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
@@ -104,19 +106,28 @@ test.describe('Web khách: Vườn Xanh', () => {
     expect(api.callsTo('POST', '/game/check-in')).toHaveLength(1);
   });
 
-  test('tưới cây: gửi {drops: 20} một lần dù bấm đúp', async ({ page, api }) => {
-    mockGame(api, { checkedIn: false });
+  test('tưới hết: gửi {drops: 1250} một lần dù bấm đúp', async ({ page, api }) => {
+    mockGame(api, { checkedIn: true });
     await page.goto('/vuon-xanh');
-    await page.getByRole('button', { name: 'Tưới cây (20💧)' }).dblclick();
+    await page.getByRole('button', { name: 'Tưới hết (1.250💧)' }).dblclick();
     await expect(page.getByText('Đã tưới · 620/1.000💧')).toBeVisible();
     const calls = api.callsTo('POST', '/game/tree/water');
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.body).toEqual({ drops: 20 });
+    expect(calls[0]!.body).toEqual({ drops: 1250 });
+  });
+
+  test('hết nước: nút chính mở sheet "Kiếm nước", không gọi tưới', async ({ page, api }) => {
+    mockGame(api, { checkedIn: true });
+    api.get('/game/profile', () => profile({ totalSeeds: 0, lastCheckInAt: new Date().toISOString(), lastDewAt: new Date().toISOString() }));
+    await page.goto('/vuon-xanh');
+    await page.getByRole('button', { name: 'Kiếm thêm nước' }).click();
+    await expect(page.getByRole('dialog', { name: 'Kiếm nước' })).toBeVisible();
+    expect(api.callsTo('POST', '/game/tree/water')).toHaveLength(0);
   });
 
   test('góp quỹ trồng cây: xác nhận hai lần chỉ gửi một POST kèm Idempotency-Key', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
-    await page.goto('/vuon-xanh');
+    await page.goto('/vuon-xanh?tab=garden');
     await page.getByRole('button', { name: /Góp quỹ trồng cây/ }).click();
     const dialog = page.getByRole('dialog', { name: 'Góp quỹ trồng cây?' });
     await expect(dialog.getByText('Góp quỹ trồng cây sẽ trừ 20.000 điểm từ Điểm Xanh của bạn.')).toBeVisible();
