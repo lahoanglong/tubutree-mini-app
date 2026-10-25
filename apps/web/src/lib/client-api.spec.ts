@@ -44,6 +44,15 @@ describe('client-api — refresh token nằm ở cookie HttpOnly', () => {
     expect(Object.keys(localStorage)).toEqual(['tubu_web_session']);
   });
 
+  it('cờ phiên cũng được ghi thành cookie thường của web để server dựng sẵn Trang chủ, và xoá cùng lúc (cả cookie gợi ý bố cục)', () => {
+    document.cookie = 'tubu_home_hint=returning-1; Path=/';
+    setSessionMarker();
+    expect(document.cookie).toContain('tubu_web_session=1');
+    clearSessionMarker();
+    expect(document.cookie).not.toContain('tubu_web_session');
+    expect(document.cookie).not.toContain('tubu_home_hint');
+  });
+
   it('cờ phiên bật/tắt được, và storage bị chặn thì coi như không có cờ', () => {
     expect(hasSessionMarker()).toBe(false);
     setSessionMarker();

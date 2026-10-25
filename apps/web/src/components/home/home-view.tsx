@@ -14,6 +14,8 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { homeText } from '@/lib/home-text';
+import { HomeRestoreHintContext } from '@/lib/home-restore-context';
+import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { isWebRouteReady } from '@/lib/route-map';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
@@ -53,7 +55,15 @@ const withInitial = <T,>(data: T | undefined) => (data !== undefined ? { initial
  * cuộn vô tận. Khách mới/vãng lai: "Quà khách mới" thay thẻ thành viên, không có Mua lại, thêm kệ Bán chạy. Thứ tự khối ở app-core
  * (`homeBlockOrder`). Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ, độc lập từng khối; Bán chạy lỗi hẳn thì một dải lỗi cấp trang.
  */
-export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
+export default function HomeView({ initial = {}, restoreHint = null }: { initial?: HomeInitial; /** Bản dựng sẵn cho khách đã có cookie phiên: HTML đầu mang khung chờ của loại khách này. */ restoreHint?: HomeRestoreHint | null }) {
+  return (
+    <HomeRestoreHintContext.Provider value={restoreHint}>
+      <HomeViewBody initial={initial} />
+    </HomeRestoreHintContext.Provider>
+  );
+}
+
+function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const qc = useQueryClient();
   const router = useRouter();
   const authed = useAuthPhase() === 'authenticated';

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
 import { tenantSubdomain } from './lib/tenant-subdomain';
 
 export function middleware(request: NextRequest) {
@@ -38,6 +39,17 @@ export function middleware(request: NextRequest) {
         headers: requestHeaders,
       },
     });
+  }
+
+  // Khách đã có cookie phiên: Trang chủ dựng sẵn khung chờ đúng loại khách (xem app/khoi-phuc/[hint]/page.tsx), URL vẫn là "/".
+  // Hai bản khác nhau theo cookie nên báo Vary cho bộ nhớ đệm phía trước.
+  if (pathname === '/') {
+    const restoring = request.cookies.get(SESSION_COOKIE)?.value === '1';
+    const response = restoring
+      ? NextResponse.rewrite(new URL(`/khoi-phuc/${parseHintSlug(request.cookies.get(HOME_HINT_COOKIE)?.value)}`, request.url))
+      : NextResponse.next();
+    response.headers.append('Vary', 'Cookie');
+    return response;
   }
 
   return NextResponse.next();

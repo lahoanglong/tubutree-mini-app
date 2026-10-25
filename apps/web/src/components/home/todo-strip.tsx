@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Truck } from 'lucide-react';
@@ -10,8 +10,10 @@ import { fetchOrders } from '@tubutree/app-core/api/orders';
 import { activeOrderCountQuery } from '@tubutree/app-core/queries/orders';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { syncHomeHintCookie } from './use-home-customer-kind';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
+import { HomeRestoreHintContext, subscribeStorageEvent } from '@/lib/home-restore-context';
 import { browserStorage } from '@/lib/recently-viewed';
 import { useRemaining } from '@/lib/use-remaining';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
@@ -81,6 +83,9 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   });
   const userId = useAuth().user?.id;
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
+  // Số dòng của lần mở trước (bất kể tài khoản) cho khung chờ lúc khôi phục phiên; lần hydrate đầu dùng gợi ý của bản server.
+  const prebuilt = useContext(HomeRestoreHintContext);
+  const lastRows = useSyncExternalStore(subscribeStorageEvent, () => readLastTodoRows(browserStorage()), () => prebuilt?.rows ?? 0);
   const loading = authed && (count.isPending || (enabled && (pending.isLoading || shipping.isLoading)));
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
@@ -88,12 +93,12 @@ export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const rows = (payOrder ? 1 : 0) + (shipOrder ? 1 : 0);
   const settled = authed && (enabled ? !pending.isLoading && !shipping.isLoading && !pending.isError && !shipping.isError : count.isSuccess);
   useEffect(() => {
-    if (settled && userId) writeTodoRows(browserStorage(), userId, rows);
+    if (settled && userId) {
+      writeTodoRows(browserStorage(), userId, rows);
+      syncHomeHintCookie();
+    }
   }, [settled, userId, rows]);
-  if (restoring) {
-    const rows = readLastTodoRows(browserStorage());
-    return rows > 0 ? <TodoSkeleton rows={rows} /> : null;
-  }
+  if (restoring) return lastRows > 0 ? <TodoSkeleton rows={lastRows} /> : null;
   if (!authed) return null;
 
   // Khung chờ chỉ khi lần mở trước có việc thật (chắc chắn sẽ có dòng); không thì chờ im lặng, khối hiện khi có việc.
