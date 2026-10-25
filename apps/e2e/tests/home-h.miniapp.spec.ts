@@ -202,3 +202,54 @@ test.describe('Trang chủ — vùng chạm 44px', () => {
     await expectChipHitArea44(tab);
   });
 });
+
+test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () => {
+  test('Trang chủ và Ưu đãi giữ lối vào "Yêu cầu của tôi" nhờ endpoint đếm nhẹ, không gọi /waste/me', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockDiscovery(api, { returning: true });
+    mockHomeEngagement(api);
+    api.get('/waste/me/open-count', { count: 2 });
+    await page.goto('/');
+    await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await page.goto('/offers');
+    await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    expect(api.callsTo('GET', '/waste/me/open-count').length).toBeGreaterThan(0);
+    expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);
+  });
+
+  test('không còn yêu cầu nào: không có lối vào', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockDiscovery(api, { returning: true });
+    mockHomeEngagement(api);
+    api.get('/waste/me/open-count', { count: 0 });
+    await page.goto('/');
+    await expect.poll(() => api.callsTo('GET', '/waste/me/open-count').length).toBeGreaterThan(0);
+    await expect(page.getByText('Yêu cầu của tôi', { exact: true })).toHaveCount(0);
+  });
+});
+
+test.describe('Kệ Mua lại: nhãn Định kỳ đủ chữ, thẻ cao như nhau', () => {
+  for (const width of [375, 320]) {
+    test(`${width}px: "Định kỳ -17%" không bị cắt; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
+      await page.setViewportSize({ width, height: 812 });
+      const heights: number[] = [];
+      for (const name of ['An', 'Nước Rửa Chén Sinh Học Tubu Hương Chanh Gừng Loại Đậm Đặc 500ml Chai Lớn']) {
+        mockDiscovery(api, { returning: true });
+        api.get('/config/public', { freeshipThreshold: 200000, subscribeDiscountPct: 0.17, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } } as never);
+        api.get('/me/purchased-items', { items: [{ ...PURCHASED_PAGE.items[0]!, productName: name }], nextCursor: null });
+        await page.goto('/');
+        const card = page.getByRole('region', { name: 'Mua lại' });
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        const subscribe = card.getByRole('button', { name: 'Định kỳ -17%' });
+        await expect(subscribe).toBeVisible();
+        const clipped = await subscribe.evaluate((el) => {
+          const label = el.querySelector('.zaui-btn-container > span') as HTMLElement | null;
+          return label ? label.scrollWidth > label.clientWidth : true;
+        });
+        expect(clipped, `nhãn Định kỳ bị cắt ở ${width}px`).toBe(false);
+        heights.push((await card.boundingBox())!.height);
+      }
+      expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(1);
+    });
+  }
+});

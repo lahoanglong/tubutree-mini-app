@@ -353,6 +353,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Trang chủ thử GET /home + /home/me trước; 404 (như API cũ) làm nó lùi về từng request lẻ — đúng
       // luồng mà các spec Home/Browse hiện có đã mock. Spec muốn kiểm đường gộp thì api.get('/home', ...).
       api.allowUnmocked('GET /home', 'GET /home/me');
+      // Mọi khách đăng nhập hỏi số yêu cầu đổi rác đang mở khi chương trình tạm dừng (mặc định của publicConfig); mặc định không còn yêu cầu nào.
+      api.fallback('GET', '/waste/me/open-count', { count: 0 });
       if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(
