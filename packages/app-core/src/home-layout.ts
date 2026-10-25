@@ -7,6 +7,8 @@ import { decimalVi, tierProgressPercent } from './loyalty-copy';
  */
 
 export type HomeCustomerKind = 'returning' | 'new';
+/** Lần mở đầu của khách đã đăng nhập mà app chưa nhớ loại và danh sách đã mua còn đang tải: chưa biết cũ hay mới. */
+export type HomeKindState = HomeCustomerKind | 'unknown';
 
 export type HomeBlockId =
   | 'search' | 'member' | 'todo' | 'welcome' | 'shortcuts' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'journey'
@@ -20,8 +22,30 @@ const NEW: readonly HomeBlockId[] = [
   'search', 'todo', 'welcome', 'shortcuts', 'flash', 'categories', 'bestSellers', 'journey', 'community', 'suggest',
 ];
 
-export function homeBlockOrder(kind: HomeCustomerKind): readonly HomeBlockId[] {
-  return kind === 'returning' ? RETURNING : NEW;
+// Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới,
+// Bán chạy), để phần đầu trang không đổi hình dạng khi loại khách được xác định.
+const UNKNOWN: readonly HomeBlockId[] = ['search', 'member', 'todo', 'shortcuts', 'flash', 'categories', 'journey', 'community', 'suggest'];
+
+export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
+  return kind === 'returning' ? RETURNING : kind === 'new' ? NEW : UNKNOWN;
+}
+
+/**
+ * Loại khách để chọn thứ tự khối. Khách chưa đăng nhập luôn là mới. Có số liệu đã mua (kể cả cũ, sau một lần tải lại lỗi) thì theo
+ * số liệu. Chưa có thì theo loại đã nhớ của chính tài khoản này, kể cả khi tải lỗi: khách cũ không bị đẩy về bố cục khách mới vì
+ * một lần API chập chờn. Chưa nhớ gì: đang tải là "chưa biết", lỗi là khách mới.
+ */
+export function resolveHomeKind(opts: {
+  authed: boolean;
+  stored: HomeCustomerKind | null;
+  /** Số sản phẩm đã mua trong dữ liệu đang có; undefined = chưa có dữ liệu. */
+  purchasedCount: number | undefined;
+  pending: boolean;
+}): HomeKindState {
+  if (!opts.authed) return 'new';
+  if (opts.purchasedCount !== undefined) return customerKind(opts.purchasedCount);
+  if (opts.stored) return opts.stored;
+  return opts.pending ? 'unknown' : 'new';
 }
 
 /** Khách cũ = đã nhận ít nhất một sản phẩm (kệ Mua lại có hàng). Đang tải hoặc API cũ 404 thì coi là khách mới. */
@@ -47,22 +71,36 @@ export interface HomeShortcutSpec {
 export interface HomeFlags {
   wasteEnabled: boolean;
   claimEnabled: boolean;
+  /** Khách còn yêu cầu đổi rác đang mở: mục Đổi rác vẫn hiện (ghi "Yêu cầu của tôi") dù chương trình tạm dừng. */
+  recycleOpenRequests?: boolean;
 }
+
+export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
 
 export const HOME_SHORTCUTS: readonly HomeShortcutSpec[] = [
   { id: 'rewards', label: 'Đổi quà', ariaLabel: 'Đổi quà bằng Điểm Xanh', tint: 'clay' },
   { id: 'garden', label: 'Vườn Xanh', ariaLabel: 'Vườn Xanh, chăm cây nhận quà', tint: 'forest' },
   { id: 'recycle', label: 'Đổi rác', ariaLabel: 'Đổi rác lấy quà', tint: 'sage', flag: 'waste' },
   { id: 'groupBuy', label: 'Mua chung', ariaLabel: 'Mua chung giá tốt', tint: 'amber' },
-  { id: 'coupons', label: 'Mã của tôi', ariaLabel: 'Mã giảm giá của tôi', tint: 'rose' },
-  { id: 'claim', label: 'Tích điểm đơn sàn', ariaLabel: 'Tích điểm đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
+  { id: 'coupons', label: 'Mã của tôi', ariaLabel: 'Mã của tôi, mã giảm giá của bạn', tint: 'rose' },
+  { id: 'claim', label: 'Tích điểm đơn sàn', ariaLabel: 'Tích điểm đơn sàn, đơn mua trên sàn khác', tint: 'sky', flag: 'claim' },
   { id: 'earn', label: 'Kiếm tiền', ariaLabel: 'Kiếm tiền cùng Tubu', tint: 'amber' },
   { id: 'community', label: 'Cộng đồng', ariaLabel: 'Cộng đồng hỏi đáp', tint: 'sky' },
 ];
 
-/** Mục có cờ tắt bị bỏ, hàng tự dồn. */
+/**
+ * Mục có cờ tắt bị bỏ, hàng tự dồn. Riêng Đổi rác: chương trình tạm dừng mà khách còn yêu cầu đang mở thì vẫn hiện,
+ * đổi nhãn thành "Yêu cầu của tôi" để khách còn vào theo dõi, không hứa tính năng đang tạm dừng.
+ */
 export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
-  return HOME_SHORTCUTS.filter((s) => (s.flag === 'waste' ? flags.wasteEnabled : s.flag === 'claim' ? flags.claimEnabled : true));
+  return HOME_SHORTCUTS.flatMap((s): HomeShortcutSpec[] => {
+    if (s.flag === 'waste') {
+      if (flags.wasteEnabled) return [s];
+      return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
+    }
+    if (s.flag === 'claim') return flags.claimEnabled ? [s] : [];
+    return [s];
+  });
 }
 
 // ---- Thanh đáy ----
@@ -90,21 +128,38 @@ export const COUPON_EXPIRING_DAYS = 3;
 
 export type OffersDotReason = 'check-in' | 'coupon-expiring';
 
+/** Mã còn hạn và hết hạn trong vòng `COUPON_EXPIRING_DAYS` ngày tới. */
+export function isCouponExpiring(c: Pick<CouponDTO, 'endAt'>, now: number): boolean {
+  const end = Date.parse(c.endAt);
+  return Number.isFinite(end) && end >= now && end <= now + COUPON_EXPIRING_DAYS * 24 * 3_600_000;
+}
+
+/** Mã (code) các phiếu sắp hết hạn, để nhớ khách đã xem trang Ưu đãi với những mã nào. */
+export function expiringCouponIds(coupons: readonly Pick<CouponDTO, 'code' | 'endAt'>[] | null | undefined, now: number): string[] {
+  return (coupons ?? []).filter((c) => isCouponExpiring(c, now)).map((c) => c.code);
+}
+
+/** Danh sách đã xem sau khi khách mở Ưu đãi: giữ cái cũ, thêm cái mới, bỏ trùng, chỉ nhớ 50 mã gần nhất. */
+export function mergeSeenCouponIds(seen: readonly string[], current: readonly string[]): string[] {
+  return [...new Set([...seen, ...current])].slice(-50);
+}
+
 /**
- * Chấm đỏ trên tab Ưu đãi: chưa điểm danh hôm nay, hoặc có mã sắp hết hạn. Dữ liệu chưa về (undefined) thì không chấm,
- * để chấm không nháy lên rồi tắt.
+ * Chấm đỏ trên tab Ưu đãi. Lý do 1: chưa điểm danh hôm nay, giữ đến khi điểm danh. Lý do 2: có mã sắp hết hạn mà khách chưa thấy
+ * khi mở trang Ưu đãi (`seenExpiringIds`); đã xem rồi thì tắt, chỉ bật lại khi có mã mới sắp hết hạn. Dữ liệu chưa về (undefined)
+ * thì không chấm, để chấm không nháy lên rồi tắt.
  */
 export function offersDotReason(
-  input: { checkIn?: Pick<CheckInStatusResponse, 'checkedInToday'> | null; coupons?: readonly Pick<CouponDTO, 'endAt'>[] | null },
+  input: {
+    checkIn?: Pick<CheckInStatusResponse, 'checkedInToday'> | null;
+    coupons?: readonly Pick<CouponDTO, 'code' | 'endAt'>[] | null;
+    seenExpiringIds?: readonly string[] | null;
+  },
   now: number,
 ): OffersDotReason | null {
   if (input.checkIn && !input.checkIn.checkedInToday) return 'check-in';
-  const limit = now + COUPON_EXPIRING_DAYS * 24 * 3_600_000;
-  const expiring = (input.coupons ?? []).some((c) => {
-    const end = Date.parse(c.endAt);
-    return Number.isFinite(end) && end >= now && end <= limit;
-  });
-  return expiring ? 'coupon-expiring' : null;
+  const seen = new Set(input.seenExpiringIds ?? []);
+  return expiringCouponIds(input.coupons, now).some((id) => !seen.has(id)) ? 'coupon-expiring' : null;
 }
 
 // ---- Hàng trạng thái đơn ở trang Cá nhân ----
@@ -132,7 +187,7 @@ export const ORDER_STATUS_ROW: readonly OrderStatusSpec[] = [
 const num = (n: number) => n.toLocaleString('vi-VN');
 
 export interface MemberCardView {
-  tierName: string;
+  tierName: string | null;
   pointsLabel: string;
   /** "≈ 45.400đ"; null khi chưa biết giá trị một điểm. */
   valueLabel: string | null;
@@ -158,12 +213,21 @@ export function memberCardView(opts: {
     else toGoLine = `Còn ${num(next.pointsToGo)} điểm lên ${next.name}`;
   }
   return {
-    tierName: overview?.tier?.name ?? 'Mầm Xanh',
+    tierName: overview?.tier?.name ?? null,
     pointsLabel: `${num(pointsTotal)} điểm`,
     valueLabel: vndPerPointRedeem && vndPerPointRedeem > 0 ? `≈ ${num(Math.round(pointsTotal * vndPerPointRedeem))}đ` : null,
     progressPct: overview ? tierProgressPercent(overview) : 0,
     toGoLine,
   };
+}
+
+/**
+ * Tên đọc cho vùng chạm của thẻ thành viên / thẻ Điểm Xanh. Chứa đủ chữ đang hiển thị (tên, hạng, điểm, giá trị quy đổi) rồi mới tới
+ * hành động, để trình đọc màn hình và lệnh giọng nói khớp với những gì khách thấy.
+ */
+export function memberCardAriaLabel(card: Pick<MemberCardView, 'tierName' | 'pointsLabel' | 'valueLabel'>, action: string, greeting?: string): string {
+  const who = [greeting, card.tierName].filter(Boolean).join(' · ');
+  return [who, card.pointsLabel, card.valueLabel].filter(Boolean).join(', ') + `. ${action}`;
 }
 
 // ---- Gợi ý cuộn vô tận ----
@@ -200,3 +264,34 @@ export const SHORTCUT_TINT_VARS: Record<ShortcutTint, { bg: string; fg: string }
   sky: { bg: 'var(--blue-50)', fg: 'var(--blue-600)' },
   rose: { bg: 'var(--red-50)', fg: 'var(--red-600)' },
 };
+
+// ---- Nhớ số dòng "Việc cần làm" ----
+
+export interface MemoryStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+export const TODO_ROWS_KEY = 'tubu_home_todo_rows';
+
+/** Số dòng "Việc cần làm" lần mở trước của CHÍNH tài khoản này (0, 1 hoặc 2). Sai dạng, khác tài khoản hay không có kho → 0. */
+export function readTodoRows(storage: MemoryStorage | null, userId: string | null | undefined): number {
+  if (!storage || !userId) return 0;
+  try {
+    const v = JSON.parse(storage.getItem(TODO_ROWS_KEY) ?? 'null') as { userId?: unknown; rows?: unknown } | null;
+    return v && v.userId === userId && (v.rows === 1 || v.rows === 2) ? v.rows : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function writeTodoRows(storage: MemoryStorage | null, userId: string, rows: number): void {
+  try {
+    storage?.setItem(TODO_ROWS_KEY, JSON.stringify({ userId, rows: Math.min(2, Math.max(0, rows)) }));
+  } catch {
+    /* hết quota / bị chặn: lần sau không có khung chờ, khối vẫn đúng */
+  }
+}
+
+/** Chiều cao khung chờ của "Việc cần làm" cho số dòng đã nhớ: mỗi dòng 60px cộng phần đệm của thẻ. */
+export const todoSkeletonHeight = (rows: number): number => rows * 60 + 18;

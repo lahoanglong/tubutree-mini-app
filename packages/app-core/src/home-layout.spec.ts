@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  customerKind, HOME_SHORTCUTS, homeBlockOrder, memberCardView, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
+  customerKind, HOME_SHORTCUTS, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
@@ -53,18 +53,65 @@ describe('thanh đáy', () => {
 describe('offersDotReason', () => {
   const now = Date.parse('2026-10-25T05:00:00Z');
   const day = 24 * 3_600_000;
-  it('chưa điểm danh hôm nay thì chấm', () => {
-    expect(offersDotReason({ checkIn: { checkedInToday: false } }, now)).toBe('check-in');
+  const at = (code: string, days: number) => ({ code, endAt: new Date(now + days * day).toISOString() });
+  it('chưa điểm danh hôm nay thì chấm, kể cả khi đã xem mã sắp hết hạn', () => {
+    expect(offersDotReason({ checkIn: { checkedInToday: false }, coupons: [at('A', 1)], seenExpiringIds: ['A'] }, now)).toBe('check-in');
   });
   it('đã điểm danh, mã còn xa thì không chấm', () => {
-    expect(offersDotReason({ checkIn: { checkedInToday: true }, coupons: [{ endAt: new Date(now + 10 * day).toISOString() }] }, now)).toBeNull();
+    expect(offersDotReason({ checkIn: { checkedInToday: true }, coupons: [at('A', 10)] }, now)).toBeNull();
   });
-  it('mã hết hạn trong 3 ngày thì chấm', () => {
-    expect(offersDotReason({ checkIn: { checkedInToday: true }, coupons: [{ endAt: new Date(now + 2 * day).toISOString() }] }, now)).toBe('coupon-expiring');
+  it('mã hết hạn trong 3 ngày mà khách chưa xem thì chấm', () => {
+    expect(offersDotReason({ checkIn: { checkedInToday: true }, coupons: [at('A', 2)] }, now)).toBe('coupon-expiring');
+  });
+  it('khách đã mở Ưu đãi với mã đó thì tắt, có mã mới sắp hết hạn thì bật lại', () => {
+    const input = { checkIn: { checkedInToday: true }, seenExpiringIds: ['A'] };
+    expect(offersDotReason({ ...input, coupons: [at('A', 2)] }, now)).toBeNull();
+    expect(offersDotReason({ ...input, coupons: [at('A', 2), at('B', 1)] }, now)).toBe('coupon-expiring');
   });
   it('mã đã quá hạn không tính; dữ liệu chưa về thì không chấm', () => {
-    expect(offersDotReason({ coupons: [{ endAt: new Date(now - day).toISOString() }] }, now)).toBeNull();
+    expect(offersDotReason({ coupons: [at('A', -1)] }, now)).toBeNull();
     expect(offersDotReason({}, now)).toBeNull();
+  });
+});
+
+describe('mã sắp hết hạn và danh sách đã xem', () => {
+  const now = Date.parse('2026-10-25T05:00:00Z');
+  const day = 24 * 3_600_000;
+  it('isCouponExpiring: trong 3 ngày tới, không tính mã đã hết hạn hay ngày không hợp lệ', () => {
+    expect(isCouponExpiring({ endAt: new Date(now + 3 * day).toISOString() }, now)).toBe(true);
+    expect(isCouponExpiring({ endAt: new Date(now + 4 * day).toISOString() }, now)).toBe(false);
+    expect(isCouponExpiring({ endAt: new Date(now - 1).toISOString() }, now)).toBe(false);
+    expect(isCouponExpiring({ endAt: 'không phải ngày' }, now)).toBe(false);
+  });
+  it('mergeSeenCouponIds: bỏ trùng, giữ thứ tự, nhớ tối đa 50', () => {
+    expect(mergeSeenCouponIds(['A', 'B'], ['B', 'C'])).toEqual(['A', 'B', 'C']);
+    const many = Array.from({ length: 60 }, (_, i) => `M${i}`);
+    expect(mergeSeenCouponIds([], many)).toHaveLength(50);
+    expect(mergeSeenCouponIds([], many).at(-1)).toBe('M59');
+  });
+});
+
+describe('resolveHomeKind', () => {
+  const base = { authed: true, stored: null, purchasedCount: undefined, pending: true } as const;
+  it('khách chưa đăng nhập luôn là mới', () => {
+    expect(resolveHomeKind({ ...base, authed: false, stored: 'returning' })).toBe('new');
+  });
+  it('có số liệu thì theo số liệu, kể cả khi loại đã nhớ khác', () => {
+    expect(resolveHomeKind({ ...base, purchasedCount: 2, stored: 'new', pending: false })).toBe('returning');
+    expect(resolveHomeKind({ ...base, purchasedCount: 0, stored: 'returning', pending: false })).toBe('new');
+  });
+  it('chưa có số liệu: theo loại đã nhớ, cả khi đang tải lẫn khi tải lỗi', () => {
+    expect(resolveHomeKind({ ...base, stored: 'returning' })).toBe('returning');
+    expect(resolveHomeKind({ ...base, stored: 'returning', pending: false })).toBe('returning');
+  });
+  it('chưa nhớ gì: đang tải là chưa biết, lỗi là khách mới', () => {
+    expect(resolveHomeKind(base)).toBe('unknown');
+    expect(resolveHomeKind({ ...base, pending: false })).toBe('new');
+  });
+  it('thứ tự khối của "chưa biết" giữ chỗ thẻ thành viên và không có khối riêng của một loại', () => {
+    const order = homeBlockOrder('unknown');
+    expect(order).toContain('member');
+    for (const id of ['purchased', 'welcome', 'bestSellers'] as const) expect(order).not.toContain(id);
   });
 });
 
@@ -90,9 +137,9 @@ describe('memberCardView', () => {
     expect(v.toGoLine).toBe('Còn 18,3 triệu mua hàng lên Đại Thụ');
     expect(v.progressPct).toBe(9);
   });
-  it('chưa có tổng quan: hạng thấp nhất, không hứa số', () => {
+  it('chưa có tổng quan: không đoán hạng, không hứa số', () => {
     const v = memberCardView({ overview: undefined, pointsTotal: 0, vndPerPointRedeem: undefined });
-    expect(v).toMatchObject({ tierName: 'Mầm Xanh', valueLabel: null, toGoLine: null, progressPct: 0 });
+    expect(v).toMatchObject({ tierName: null, valueLabel: null, toGoLine: null, progressPct: 0 });
   });
 });
 
