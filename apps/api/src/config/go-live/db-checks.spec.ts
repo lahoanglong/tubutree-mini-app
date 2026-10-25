@@ -621,3 +621,32 @@ describe('evaluateDb', () => {
     });
   });
 });
+
+describe('evaluateDb: phần DB không đọc được vì schema cũ', () => {
+  const old = dbWith({ appliedMigrations: GOOD_DB.appliedMigrations.slice(0, 1), degraded: { configs: 'P2022', zns: 'P2022', demoData: 'P2022' } });
+
+  it('trước deploy: các dòng của phần hỏng là WARN, id giữ nguyên, dòng migration vẫn tính từ _prisma_migrations', () => {
+    const r = run(old, 'pre-deploy');
+    for (const id of ['db.shipping_rates', 'db.bank_account', 'db.gomdon_toggle', 'db.waste_point', 'db.zns_templates', 'db.demo_products', 'db.demo_coupons']) {
+      expect(byId(r, id).status).toBe('WARN');
+      expect(byId(r, id).detail).toContain('schema cũ: P2022');
+      expect(byId(r, id).detail).toContain('bước 10');
+    }
+    expect(byId(r, 'db.migrations_pending').status).toBe('WARN');
+    expect(byId(r, 'db.migrations_pending').detail).toContain('cái sẽ được áp khi deploy');
+    expect(byId(r, 'db.orders_lock')).toBeDefined();
+    expect(byId(r, 'db.required_migrations')).toBeDefined();
+    expect(r.filter((x) => x.status === 'FAIL')).toEqual([]);
+  });
+
+  it('sau deploy: cùng lỗi là FAIL', () => {
+    const r = run(old, 'post-deploy');
+    for (const id of ['db.shipping_rates', 'db.zns_templates', 'db.demo_coupons']) expect(byId(r, id).status).toBe('FAIL');
+  });
+
+  it('phần không hỏng giữ nguyên kết quả', () => {
+    const r = run(dbWith({ degraded: { zns: 'P2021' } }), 'pre-deploy');
+    expect(byId(r, 'db.shipping_rates').status).toBe('PASS');
+    expect(byId(r, 'db.zns_templates').status).toBe('WARN');
+  });
+});

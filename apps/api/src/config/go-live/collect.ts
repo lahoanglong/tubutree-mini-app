@@ -24,8 +24,16 @@ export async function listExpectedMigrations(migrationsDir: string): Promise<str
 
 /**
  * Đọc DB trong MỘT transaction READ ONLY: lệnh ghi nào lọt vào cũng bị Postgres từ chối.
- * Bảng chưa có (DB trước khi áp migration mới) được bỏ qua thay vì làm hỏng cả lượt kiểm.
+ * Bảng chưa có (DB trước khi áp migration mới) được bỏ qua thay vì làm hỏng cả lượt kiểm; phần nào đụng cột chưa có thì ghi vào
+ * `degraded` (kèm mã lỗi) để evaluateDb hạ riêng các dòng của phần đó, còn phần migration và số đơn chỉ dựa vào bảng luôn có.
  */
+/** Lỗi do schema DB cũ hơn mã: cột/bảng chưa có (P2021, P2022; câu raw báo P2010 kèm mã Postgres 42703/42P01). */
+export function isSchemaMismatch(err: unknown): boolean {
+  const { code, meta } = (err ?? {}) as { code?: unknown; meta?: { code?: unknown } };
+  if (code === 'P2021' || code === 'P2022') return true;
+  return code === 'P2010' && (meta?.code === '42703' || meta?.code === '42P01');
+}
+
 export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations: string[]): Promise<DbSnapshot> {
   return prisma.$transaction(
     async (tx) => {
@@ -51,39 +59,73 @@ export async function collectDbSnapshot(prisma: PrismaClient, expectedMigrations
         return Number(rows[0]?.n ?? 0);
       };
 
-      const configs: Record<string, unknown> = {};
-      if (await exists('system_configs')) {
-        const rows = await tx.systemConfig.findMany({ where: { key: { in: [...CONFIG_KEYS_OF_INTEREST] } }, select: { key: true, value: true } });
-        for (const r of rows) configs[r.key] = r.value;
-      }
+      // Mỗi phần chạy trong một SAVEPOINT: Postgres huỷ cả transaction sau một câu lệnh lỗi, nên không có savepoint thì một
+      // cột chưa có (schema cũ hơn mã) làm các phần sau đều hỏng theo.
+      const degraded: DbSnapshot['degraded'] = {};
+      const guarded = async <T>(part: keyof NonNullable<DbSnapshot['degraded']>, fallback: T, read: () => Promise<T>): Promise<T> => {
+        await tx.$executeRawUnsafe('SAVEPOINT golive_part');
+        try {
+          const value = await read();
+          await tx.$executeRawUnsafe('RELEASE SAVEPOINT golive_part');
+          return value;
+        } catch (err) {
+          if (!isSchemaMismatch(err)) throw err;
+          await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT golive_part');
+          degraded[part] = describeError(err);
+          return fallback;
+        }
+      };
 
-      const znsTemplates = (await exists('notification_templates'))
-        ? await tx.notificationTemplate.findMany({ select: { code: true, channel: true, zaloTemplateId: true }, orderBy: { code: 'asc' } })
-        : [];
+      const configs = await guarded<Record<string, unknown>>('configs', {}, async () => {
+        const out: Record<string, unknown> = {};
+        if (await exists('system_configs')) {
+          const rows = await tx.systemConfig.findMany({ where: { key: { in: [...CONFIG_KEYS_OF_INTEREST] } }, select: { key: true, value: true } });
+          for (const r of rows) out[r.key] = r.value;
+        }
+        return out;
+      });
 
-      const membershipTiers = (await exists('membership_tiers'))
-        ? (await tx.membershipTier.findMany({ select: { pointMultiplier: true } })).map((t) => Number(t.pointMultiplier))
-        : [];
+      const znsTemplates = await guarded('zns', [], async () =>
+        (await exists('notification_templates'))
+          ? await tx.notificationTemplate.findMany({ select: { code: true, channel: true, zaloTemplateId: true }, orderBy: { code: 'asc' } })
+          : [],
+      );
+
+      const membershipTiers = await guarded('membershipTiers', [], async () =>
+        (await exists('membership_tiers')) ? (await tx.membershipTier.findMany({ select: { pointMultiplier: true } })).map((t) => Number(t.pointMultiplier)) : [],
+      );
+
+      const orderCount = await count('orders');
+      const waste = await guarded('waste', { tableExists: false, totalPoints: 0, activeWarehouses: 0, activeWarehousesWithPhone: 0 }, async () => ({
+        tableExists: await exists('waste_points'),
+        totalPoints: await count('waste_points'),
+        activeWarehouses: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`),
+        activeWarehousesWithPhone: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`),
+      }));
+      const dealerTierCount = await guarded('dealerTiers', 0, () => count('dealer_tiers'));
+      const admin = await guarded('admin', { adminCount: 0, pendingAdminGrants: 0 }, async () => ({
+        adminCount: await count('users', `"role" = 'ADMIN'`),
+        pendingAdminGrants: await count('role_grants', `"role" = 'ADMIN' AND "revokedAt" IS NULL`),
+      }));
+      const demoData = await guarded<DbSnapshot['demoData']>('demoData', undefined, async () =>
+        (await exists('products')) && (await exists('coupons')) ? await collectDemoData(tx) : undefined,
+      );
 
       return {
         appliedMigrations,
         unfinishedMigrations,
         expectedMigrations,
-        orderCount: await count('orders'),
-        waste: {
-          tableExists: await exists('waste_points'),
-          totalPoints: await count('waste_points'),
-          activeWarehouses: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE'`),
-          activeWarehousesWithPhone: await count('waste_points', `"kind" = 'WAREHOUSE' AND "status" = 'ACTIVE' AND trim(coalesce("phone", '')) <> ''`),
-        },
+        orderCount,
+        waste,
         configs,
         membershipTiers,
-        dealerTierCount: await count('dealer_tiers'),
-        adminCount: await count('users', `"role" = 'ADMIN'`),
-        pendingAdminGrants: await count('role_grants', `"role" = 'ADMIN' AND "revokedAt" IS NULL`),
+        dealerTierCount,
+        adminCount: admin.adminCount,
+        pendingAdminGrants: admin.pendingAdminGrants,
         znsTemplates,
         codMaxPerOrder: COD_MAX_PER_ORDER,
-        demoData: (await exists('products')) && (await exists('coupons')) ? await collectDemoData(tx) : undefined,
+        demoData,
+        ...(Object.keys(degraded).length > 0 ? { degraded } : {}),
       } satisfies DbSnapshot;
     },
     { timeout: 30_000, maxWait: 10_000 },

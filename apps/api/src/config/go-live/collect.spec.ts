@@ -13,7 +13,7 @@ interface FakeDemo {
   coupons: Row[];
 }
 
-function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; migrations?: Row[]; demo?: FakeDemo }) {
+function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; migrations?: Row[]; demo?: FakeDemo; failing?: Record<string, unknown> }) {
   const demo = opts.demo ?? { found: 0, active: 0, activeVariations: 0, coupons: [] };
   const sql: string[] = [];
   const tables = new Set(opts.tables);
@@ -32,11 +32,15 @@ function fakePrisma(opts: { tables: string[]; counts?: Record<string, number>; m
     $queryRawUnsafe: jest.fn(async (q: string) => {
       sql.push(q);
       const table = /FROM "(\w+)"/.exec(q)?.[1] ?? '';
+      if (opts.failing && table in opts.failing) throw opts.failing[table];
       return [{ n: BigInt(opts.counts?.[table] ?? 0) }];
     }),
     systemConfig: { findMany: jest.fn(async () => [{ key: 'merchant.commission_pct', value: 0.15 }]) },
     membershipTier: { findMany: jest.fn(async () => [{ pointMultiplier: 1 }, { pointMultiplier: 1.2 }, { pointMultiplier: 1.5 }, { pointMultiplier: 2 }]) },
-    notificationTemplate: { findMany: jest.fn(async () => [{ code: 'ORDER_CONFIRMED', channel: 'ZNS', zaloTemplateId: null }]) },
+    notificationTemplate: { findMany: jest.fn(async () => {
+      if (opts.failing && 'notification_templates' in opts.failing) throw opts.failing['notification_templates'];
+      return [{ code: 'ORDER_CONFIRMED', channel: 'ZNS', zaloTemplateId: null }];
+    }) },
     product: { count: jest.fn(async (a: { where: Row }) => ('isActive' in a.where ? demo.active : demo.found)) },
     variation: { count: jest.fn(async () => demo.activeVariations) },
     coupon: { findMany: jest.fn(async () => demo.coupons) },
@@ -52,7 +56,7 @@ describe('collectDbSnapshot', () => {
     const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, counts: { orders: 321 } });
     await collectDbSnapshot(prisma, ['m1']);
     expect(sql[0]).toBe('SET TRANSACTION READ ONLY');
-    for (const q of sql.slice(1)) expect(q.trim()).toMatch(/^SELECT/i);
+    for (const q of sql.slice(1)) expect(q.trim()).toMatch(/^(SELECT|SAVEPOINT|RELEASE SAVEPOINT)/i);
   });
 
   it('gom đúng số liệu từ các bảng', async () => {
@@ -157,6 +161,40 @@ describe('collectDbSnapshot: dữ liệu demo của migration', () => {
       expect(tx.product.count).not.toHaveBeenCalled();
       expect(tx.coupon.findMany).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('collectDbSnapshot: schema cũ hơn mã', () => {
+  const p2022 = Object.assign(new Error('The column does not exist'), { code: 'P2022' });
+
+  it('một phần đụng cột chưa có (P2022) bị hạ riêng, các phần khác và migration vẫn đọc được', async () => {
+    const migrations = [{ migration_name: 'm1', finished_at: new Date(), rolled_back_at: null }];
+    const { prisma, sql } = fakePrisma({ tables: ALL_TABLES, migrations, counts: { orders: 7, users: 2 }, failing: { notification_templates: p2022 } });
+    const snap = await collectDbSnapshot(prisma, ['m1', 'm2']);
+    expect(snap.degraded).toEqual({ zns: 'P2022' });
+    expect(snap.znsTemplates).toEqual([]);
+    expect(snap.appliedMigrations).toEqual(['m1']);
+    expect(snap.orderCount).toBe(7);
+    expect(snap.adminCount).toBe(2);
+    expect(sql).toContain('ROLLBACK TO SAVEPOINT golive_part');
+  });
+
+  it('câu raw báo P2010 kèm 42703 (cột chưa có) cũng là schema cũ', async () => {
+    const raw = Object.assign(new Error('raw'), { code: 'P2010', meta: { code: '42703' } });
+    const { prisma } = fakePrisma({ tables: ALL_TABLES, failing: { role_grants: raw } });
+    const snap = await collectDbSnapshot(prisma, ['m1']);
+    expect(snap.degraded).toEqual({ admin: 'P2010' });
+  });
+
+  it('lỗi kết nối vẫn ném ra, không bị coi là schema cũ', async () => {
+    const down = Object.assign(new Error('unreachable'), { code: 'P1001' });
+    const { prisma } = fakePrisma({ tables: ALL_TABLES, failing: { role_grants: down } });
+    await expect(collectDbSnapshot(prisma, ['m1'])).rejects.toMatchObject({ code: 'P1001' });
+  });
+
+  it('đọc đủ thì không có khoá degraded', async () => {
+    const { prisma } = fakePrisma({ tables: ALL_TABLES });
+    expect(await collectDbSnapshot(prisma, ['m1'])).not.toHaveProperty('degraded');
   });
 });
 

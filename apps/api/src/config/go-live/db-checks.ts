@@ -103,6 +103,8 @@ export interface DbSnapshot {
   /** COD_MAX_PER_ORDER trong code (checkout-split.ts). */
   codMaxPerOrder: number;
   demoData?: DemoDataSnapshot;
+  /** Phần collector không đọc được vì schema DB cũ hơn mã (P2021/P2022): mã lỗi theo từng phần. Vắng nghĩa là đọc đủ. */
+  degraded?: Partial<Record<'configs' | 'waste' | 'membershipTiers' | 'dealerTiers' | 'admin' | 'zns' | 'demoData', string>>;
 }
 
 export const CONFIG_KEYS_OF_INTEREST = [
@@ -521,26 +523,51 @@ function znsCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.zns_templates', title, `${zns.length} mẫu ZNS đều có mã số`);
 }
 
+/**
+ * Dòng của phần DB không đọc được vì schema cũ: trước deploy chỉ WARN (sẽ kiểm lại ở bước 10 sau migrate), sau deploy là FAIL
+ * vì lúc đó schema phải đã khớp mã.
+ */
+function degradeResults(results: CheckResult[], code: string, phase: GoLivePhase): CheckResult[] {
+  if (phase === 'pre-deploy') {
+    return results.map((r) =>
+      warn(G_DB, r.id, r.title, `chưa kiểm được trước khi migrate (schema cũ: ${code}), sẽ kiểm lại ở bước 10 sau migrate`, 'Bình thường khi DB còn ở bản cũ; chạy lại với giai đoạn post-deploy sau khi migrate.'),
+    );
+  }
+  return results.map((r) => fail(G_DB, r.id, r.title, `không đọc được (${code}): schema DB chưa khớp mã`, 'Áp migration theo runbook (prisma migrate deploy bằng image mới) rồi chạy lại kiểm tra.'));
+}
+
 /** Phân tích ảnh chụp DB thành các dòng kiểm tra. Hàm thuần: không chạm DB. */
 export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
+  const d = s.degraded ?? {};
+  const part = (key: keyof NonNullable<DbSnapshot['degraded']>, results: CheckResult[], extraKey?: keyof NonNullable<DbSnapshot['degraded']>): CheckResult[] => {
+    const code = d[key] ?? (extraKey ? d[extraKey] : undefined);
+    return code ? degradeResults(results, code, ctx.phase) : results;
+  };
+  const configPart = (results: CheckResult[]) => part('configs', results);
+  const demo = evaluateDemoData(d.demoData ? EMPTY_DEMO : s.demoData, ctx.env, ctx.phase);
+
   return [
     ...migrationChecks(s, ctx.phase),
     ordersLockCheck(s),
-    wastePointCheck(s, ctx.env),
-    opsThresholdCheck(s),
-    shippingRateCheck(s),
-    shippingEtaCheck(s),
-    commissionCheck(s),
-    holdCheck(s),
-    consignmentFromCheck(s),
-    bankCheck(s),
-    companyIdentityCheck(s, ctx.phase),
+    ...part('waste', [wastePointCheck(s, ctx.env)], 'configs'),
+    ...configPart([
+      opsThresholdCheck(s),
+      shippingRateCheck(s),
+      shippingEtaCheck(s),
+      commissionCheck(s),
+      holdCheck(s),
+      consignmentFromCheck(s),
+      bankCheck(s),
+      companyIdentityCheck(s, ctx.phase),
+    ]),
     codCapCheck(s),
-    ...gomdonToggleChecks(s, ctx.env),
-    membershipTierCheck(s, ctx.phase),
-    dealerTierCheck(s),
-    adminCheck(s),
-    znsCheck(s),
-    ...evaluateDemoData(s.demoData, ctx.env, ctx.phase),
+    ...configPart(gomdonToggleChecks(s, ctx.env)),
+    ...part('membershipTiers', [membershipTierCheck(s, ctx.phase)]),
+    ...part('dealerTiers', [dealerTierCheck(s)]),
+    ...part('admin', [adminCheck(s)]),
+    ...part('zns', [znsCheck(s)]),
+    ...(d.demoData ? degradeResults(demo, d.demoData, ctx.phase) : demo),
   ];
 }
+
+const EMPTY_DEMO: DemoDataSnapshot = { products: { found: 0, active: 0 }, activeVariations: 0, liveCoupons: [] };
