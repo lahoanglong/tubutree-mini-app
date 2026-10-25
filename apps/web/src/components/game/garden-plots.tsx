@@ -1,4 +1,5 @@
 import { LockOpen, ShowerHead, Sprout } from 'lucide-react';
+import { WATER_STEP, gameNewbieCopy, missingDrops } from '@tubutree/app-core/game-newbie';
 import type { Garden } from '@tubutree/app-core/api/game';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui } from '@/lib/guest-ui';
@@ -7,9 +8,11 @@ import { formatDrops, formatNumber } from './format';
 import { GameCard } from './game-card';
 
 // Lô đất / mở rộng vườn (§6.7) — nhiều cây song song.
-// Giai đoạn cây (🌱🌿🌳) và tình trạng héo/chết (🥀🍂) là nội dung game, không phải icon chức năng.
+// Giai đoạn cây (🌱🌿🌳) và tình trạng héo (🥀) là nội dung game, không phải icon chức năng.
 export function GardenPlots({
   garden,
+  totalSeeds,
+  onNeedWater,
   waterPlotPending,
   waterPlotVariables,
   onWaterPlot,
@@ -17,6 +20,9 @@ export function GardenPlots({
   onUnlock,
 }: {
   garden: Garden;
+  totalSeeds: number;
+  /** Thiếu nước: mở sheet "Kiếm nước" với số giọt còn thiếu. */
+  onNeedWater: (missing: number) => void;
   waterPlotPending: boolean;
   waterPlotVariables: string | undefined;
   onWaterPlot: (plotId: string) => void;
@@ -24,6 +30,8 @@ export function GardenPlots({
   onUnlock: (slot: number) => void;
 }) {
   const extraPlots = garden.plots.filter((p) => !p.isHome);
+  const waterShort = missingDrops(totalSeeds, WATER_STEP);
+  const unlockShort = garden.nextUnlock ? missingDrops(totalSeeds, garden.nextUnlock.seedCost) : 0;
   return (
     <GameCard title={`Lô đất của bạn (${garden.plots.length}/${garden.maxPlots})`} icon={Sprout}>
       {extraPlots.length === 0 && (
@@ -40,7 +48,7 @@ export function GardenPlots({
             <div key={p.id ?? p.slot} className="rounded-control bg-stone-50 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className={`text-2xl leading-none ${p.treeHealth === 'DEAD' ? 'grayscale' : ''}`} aria-hidden="true">
+                  <span className={`text-2xl leading-none`} aria-hidden="true">
                     {stageEmoji}
                   </span>
                   <div className="min-w-0">
@@ -49,14 +57,14 @@ export function GardenPlots({
                     </div>
                     <div className="text-xs text-stone-700">
                       {formatNumber(p.progress)}/{formatDrops(p.target)} · 🌳 {formatNumber(p.treesPlanted)}
-                      {p.treeHealth === 'WILTED' ? ' · 🥀 héo' : p.treeHealth === 'DEAD' ? ' · 🍂 chết' : ''}
+                      {p.treeHealth === 'WILTED' || p.treeHealth === 'DEAD' ? ' · 🥀 héo' : ''}
                     </div>
                   </div>
                 </div>
                 <button
                   type="button"
                   disabled={watering}
-                  onClick={() => p.id && onWaterPlot(p.id)}
+                  onClick={() => p.id && (waterShort > 0 ? onNeedWater(waterShort) : onWaterPlot(p.id))}
                   className={`${miniBtnSecondary} flex-none gap-1.5`}
                 >
                   <ShowerHead className="h-4 w-4" aria-hidden="true" />
@@ -71,9 +79,9 @@ export function GardenPlots({
         })}
       </div>
       {garden.nextUnlock ? (
-        <button type="button" disabled={unlockPending} onClick={() => onUnlock(garden.nextUnlock!.slot)} className={`${ui.btnPrimary} mt-3 w-full gap-2`}>
+        <button type="button" disabled={unlockPending} onClick={() => (unlockShort > 0 ? onNeedWater(unlockShort) : onUnlock(garden.nextUnlock!.slot))} className={`${ui.btnPrimary} mt-3 w-full gap-2`}>
           <LockOpen className="h-4 w-4" aria-hidden="true" />
-          Mở lô ({formatDrops(garden.nextUnlock.seedCost)})
+          {unlockShort > 0 ? gameNewbieCopy.short(unlockShort) : `Mở lô (${formatDrops(garden.nextUnlock.seedCost)})`}
         </button>
       ) : (
         <p className="mt-2 text-xs text-stone-600">Bạn đã mở tối đa số lô đất 🌳</p>

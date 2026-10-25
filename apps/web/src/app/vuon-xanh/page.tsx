@@ -1,11 +1,18 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
+import { extraPlotsVisible, gameNewbieCopy, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
+import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { loginHref } from '@/lib/return-to';
+import { coreHttp } from '@/lib/core-http';
+import { pointsSummary } from '@/lib/checkout-points';
+import { dismissGameTutorial, isGameTutorialDismissed } from '@/lib/game-tutorial';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
@@ -32,8 +39,12 @@ import { SeasonPass } from '@/components/game/season-pass';
 import { SpeciesCodex } from '@/components/game/species-codex';
 import { StreakRepair } from '@/components/game/streak-repair';
 import { TreeActions } from '@/components/game/tree-actions';
+import { TreeFund } from '@/components/game/tree-fund';
+import { EarnWaterSheet, type EarnQuizState } from '@/components/game/earn-water-sheet';
+import { NewbieGuide } from '@/components/game/newbie-guide';
+import { isSameVNDay } from '@/components/game/game-utils';
 import { TreeHealthAlert } from '@/components/game/tree-health-alert';
-import { useGameActions, type HarvestReward } from '@/components/game/use-game-actions';
+import { useGameActions, type HarvestMeta, type HarvestReward } from '@/components/game/use-game-actions';
 import { useGameData } from '@/components/game/use-game-data';
 import { useHeaderOffset } from '@/components/game/use-header-offset';
 import { useWheelPrize } from '@/components/game/use-wheel-prize';
@@ -43,6 +54,7 @@ import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
 const FEED_PATH = '/cong-dong';
+const POINTS_PATH = '/tai-khoan/diem-xanh';
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -52,7 +64,7 @@ function GameBody() {
   const { notice, notify } = useGameNotice();
   const headerOffset = useHeaderOffset();
   const [tab, setTab] = useTabParam(GAME_TAB_KEYS, 'today');
-  const { profileQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true);
+  const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true);
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời phía trình duyệt để hiện câu kế tiếp (§6.7.8).
@@ -61,14 +73,31 @@ function GameBody() {
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
 
-  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined }>({ open: false, reward: undefined });
+  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null }>({ open: false, reward: undefined, meta: null });
+  // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
+  const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
+  const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
+  const { data: loyalty } = useQuery(loyaltyQuery(coreHttp));
+  // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null để
+  // nút vẫn bấm được (API là lưới an toàn).
+  const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
+  const fundPoints = loyalty ? (loyalty.redeemableTotal ?? pointsSummary(loyalty).total) : null;
 
   const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM } = useGameActions({
     notify,
-    onHarvest: (reward) => setHarvest({ open: true, reward }),
+    onHarvest: (reward, meta) => setHarvest({ open: true, reward, meta }),
     onAnswered: (r: AnswerResult, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
   });
   const wheelPrize = useWheelPrize();
+  const openEarn = (missing: number | null = null) => setEarn({ open: true, missing });
+  const closeEarn = () => setEarn((e) => ({ ...e, open: false }));
+  const goTab = (key: GameTabKey, scrollToId?: string) => {
+    closeEarn();
+    setTab(key);
+    if (scrollToId) setTimeout(() => document.getElementById(scrollToId)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 60);
+  };
+  const claimDaily = (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) =>
+    checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);
@@ -79,6 +108,18 @@ function GameBody() {
   if (isError && !profile) return <ErrorState message={errText(profileError)} onRetry={() => void refetch()} />;
 
   const eco = profile?.ecoImpact;
+  const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
+  const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
+  const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
+  const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
+  const quizState: EarnQuizState = quiz
+    ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
+    : quizQ.isError
+      ? { status: 'error' }
+      : { status: 'loading' };
+  const quizTotal = quiz ? quiz.reduce((sum, q) => sum + (q.waterReward ?? 0), 0) : null;
+  const earnError = checkInM.isError ? errText(checkInM.error) : dewM.isError ? errText(dewM.error) : null;
+  const plotsOpen = garden ? extraPlotsVisible(eco?.treesPlanted, garden.plots.some((p) => !p.isHome)) : false;
   const wasteLink = publicConfig.waste.enabled && isWebRouteReady(WASTE_PATH);
   const feedLink = isWebRouteReady(FEED_PATH);
   const harvestSpecies: HarvestSpecies | null = harvest.reward?.species ?? null;
@@ -108,15 +149,31 @@ function GameBody() {
 
           {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
           {profile?.streakRepairable && (
-            <StreakRepair brokenStreakDays={profile.brokenStreakDays} cost={profile.streakRepairCost} pending={repairM.isPending} onRepair={() => repairM.mutate()} />
+            <StreakRepair brokenStreakDays={profile.brokenStreakDays} cost={profile.streakRepairCost}
+              totalSeeds={profile.totalSeeds}
+              pending={repairM.isPending}
+              onRepair={() => repairM.mutate()}
+              onNeedWater={openEarn}
+            />
           )}
 
+          <NewbieGuide
+            profile={profile}
+            dismissed={tutorialDismissed}
+            quizTotal={quizTotal}
+            tomorrowGain={tomorrowGain}
+            onDismiss={() => {
+              dismissGameTutorial();
+              setTutorialDismissed(true);
+            }}
+          />
+
           <TreeActions
-            treePointsPrice={profile?.treePointsPrice}
-            waterPending={waterM.isPending}
-            onWater={() => waterM.mutate()}
-            buyPending={buyTreeM.isPending}
-            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
+            profile={profile}
+            pending={waterM.isPending || checkInM.isPending || dewM.isPending}
+            onClaim={claimDaily}
+            onWater={(drops) => waterM.mutate(drops)}
+            onEarn={() => openEarn()}
           />
 
           <CheckInStreak
@@ -127,6 +184,7 @@ function GameBody() {
             freezePending={freezeM.isPending}
             onCollectDew={() => dewM.mutate()}
             dewPending={dewM.isPending}
+            onNeedWater={openEarn}
           />
 
           <MissionsCard
@@ -137,17 +195,25 @@ function GameBody() {
             onClaim={(code) => claimMissionM.mutate(code)}
           />
 
-          <QuizCard
-            quiz={quiz}
-            currentQuiz={currentQuiz}
-            answeredCount={answeredIds.size}
-            reveal={reveal}
-            pending={answerM.isPending}
-            onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-            onNext={nextQuiz}
-          />
+          <div id="game-quiz">
+            <QuizCard
+              quiz={quiz}
+              currentQuiz={currentQuiz}
+              answeredCount={answeredIds.size}
+              reveal={reveal}
+              pending={answerM.isPending}
+              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+              onNext={nextQuiz}
+            />
+          </div>
 
-          <LuckyWheelCard cost={profile?.spinCostPoints ?? 10_000} onSpin={handleSpin} onResult={wheelPrize.onResult} />
+          <LuckyWheelCard
+            cost={profile?.spinCostPoints ?? 10_000}
+            points={wheelPoints}
+            onEarnPoints={() => router.push(POINTS_PATH)}
+            onSpin={handleSpin}
+            onResult={wheelPrize.onResult}
+          />
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
           {wasteLink && (
@@ -157,9 +223,11 @@ function GameBody() {
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
-          {garden && (
+          {garden && plotsOpen && (
             <GardenPlots
               garden={garden}
+              totalSeeds={profile?.totalSeeds ?? 0}
+              onNeedWater={openEarn}
               waterPlotPending={waterPlotM.isPending}
               waterPlotVariables={waterPlotM.variables}
               onWaterPlot={(plotId) => waterPlotM.mutate(plotId)}
@@ -168,11 +236,21 @@ function GameBody() {
             />
           )}
 
+          {garden && !plotsOpen && <p className="text-xs text-stone-700">{gameNewbieCopy.plots.locked}</p>}
+
           {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
           {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
 
           {/* Tác động xanh (§6.7.7 — phần khả thi từ treesPlanted) */}
           <EcoImpact eco={eco} totalSeeds={profile?.totalSeeds} forest={forest} />
+
+          <TreeFund
+            treePointsPrice={profile?.treePointsPrice}
+            points={fundPoints}
+            onEarnPoints={() => router.push(POINTS_PATH)}
+            buyPending={buyTreeM.isPending}
+            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
+          />
 
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
           {community?.goal && <CommunityGoal goal={community.goal} myDrops={community.myDrops} pct={community.pct} />}
@@ -209,9 +287,38 @@ function GameBody() {
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi khách đã đổi tab trong lúc quay. */}
       <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => router.push('/san-pham')} />
 
+      <EarnWaterSheet
+        open={earn.open}
+        onClose={closeEarn}
+        totalSeeds={profile?.totalSeeds ?? 0}
+        missing={earn.missing}
+        checkedInToday={checkedInToday}
+        dewToday={dewToday}
+        checkInGain={dailyGain}
+        dewGain={profile?.dewSeeds ?? null}
+        checkInPending={checkInM.isPending}
+        dewPending={dewM.isPending}
+        onCheckIn={() => checkInM.mutate()}
+        onDew={() => dewM.mutate()}
+        quiz={quizState}
+        onRetryQuiz={() => void quizQ.refetch()}
+        onGoQuiz={() => goTab('today', 'game-quiz')}
+        hasFriends={(friends?.length ?? 0) > 0}
+        onGoFriends={() => goTab('community')}
+        error={earnError}
+      />
+
       <HarvestCelebration
         open={harvest.open}
-        coupon={harvest.reward?.coupon ?? null}
+        coupons={harvest.meta?.coupons ?? []}
+        guest={harvest.meta?.guest ?? false}
+        onLogin={() => {
+          closeHarvest();
+          router.push(loginHref('/vuon-xanh'));
+        }}
+        points={harvest.reward?.points ?? null}
+        couponCapped={harvest.meta?.couponCapped ?? null}
+        nextTarget={harvest.meta?.nextTarget ?? null}
         certificate={harvest.reward?.certificate ?? null}
         species={harvestSpecies}
         onClose={closeHarvest}

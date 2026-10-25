@@ -125,6 +125,7 @@ describe('Vườn Xanh: trạng thái trang', () => {
     state.phase = 'guest';
     const c = await mount();
     expect(c.textContent).toContain('Vườn Xanh');
+    expect(c.textContent).toContain('Đăng nhập để trồng cây, nhận nước và quà');
     expect(c.querySelector('a[href="/dang-nhap?returnTo=%2Fvuon-xanh"]')).not.toBeNull();
     expect(getsOf('/game/profile')).toHaveLength(0);
   });
@@ -250,7 +251,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
   it('khối nào ở tab nào: tưới, điểm danh, nhiệm vụ, quiz, vòng quay thuộc Hôm nay, mỗi khối có h2; tác động xanh ở tab Vườn', async () => {
     const c = await mount();
     const today = panel(c, 'Hôm nay');
-    for (const t of ['Tưới cây', 'Điểm danh chuỗi']) expect(today.textContent).toContain(t);
+    for (const t of ['Nhận nước hôm nay', 'Điểm danh chuỗi']) expect(today.textContent).toContain(t);
     expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
       expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn']),
     );
@@ -364,38 +365,42 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(c.querySelector('[data-testid="tree-health"]')).toBeNull();
     state.data['/game/profile'] = PROFILE({ treeHealth: 'WILTED' });
     c = await mount();
-    expect(c.textContent).toContain('Cây đang héo vì lâu chưa tưới — tưới ngay để hồi phục nhé!');
+    expect(c.textContent).toContain('Cây đang héo, tưới để cây xanh lại.');
     state.data['/game/profile'] = PROFILE({ treeHealth: 'DEAD' });
     c = await mount();
-    expect(c.textContent).toContain('Cây đã héo úa do quá 7 ngày không tưới. Tưới lại sẽ trồng cây mới từ đầu.');
+    // Hồ sơ cũ còn DEAD: hiện như héo, không nói chuyện mất tiến độ.
+    expect(c.textContent).toContain('Cây đang héo, tưới để cây xanh lại.');
+    expect(c.textContent).not.toContain('trồng cây mới từ đầu');
   });
 });
 
 describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
-  it('tưới cây: POST /game/tree/water {drops:20} đúng một lần dù chạm đúp, báo tiến độ, tải lại hồ sơ và rừng', async () => {
+  it('tưới hết: POST /game/tree/water {drops:1250} đúng một lần dù chạm đúp, báo tiến độ, tải lại hồ sơ và rừng', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
     state.posts['/game/tree/water'] = () => ({ progress: 620, target: 1000, harvested: false, treesPlanted: 2 });
     const c = await mount();
-    const b = btn(c, 'Tưới cây (20💧)');
+    const b = btn(c, 'Tưới hết (1.250💧)');
     act(() => {
       b.click();
       b.click();
     });
     await flush(8);
     expect(postsOf('/game/tree/water')).toHaveLength(1);
-    expect(postsOf('/game/tree/water')[0]!.body).toEqual({ drops: 20 });
+    expect(postsOf('/game/tree/water')[0]!.body).toEqual({ drops: 1250 });
     expect(document.body.textContent).toContain('Đã tưới · 620/1.000💧');
     expect(getsOf('/game/forest').length).toBeGreaterThanOrEqual(2);
   });
 
   it('tưới lỗi: báo lỗi và nút bật lại', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
     state.posts['/game/tree/water'] = () => {
       throw new Error('Không đủ giọt nước');
     };
     const c = await mount();
-    click(btn(c, 'Tưới cây (20💧)'));
+    click(btn(c, 'Tưới hết (1.250💧)'));
     await flush(6);
     expect(document.querySelector('[role="alert"]')!.textContent).toContain('Không đủ giọt nước');
-    expect(btn(c, 'Tưới cây (20💧)').disabled).toBe(false);
+    expect(btn(c, 'Tưới hết (1.250💧)').disabled).toBe(false);
   });
 
   it('nút góp quỹ kèm giá Điểm Xanh từ hồ sơ; không có giá thì không kèm', async () => {
@@ -708,10 +713,11 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
   });
 
   it('tưới cây làm mới game, me và loyalty', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
     state.posts['/game/tree/water'] = () => ({ progress: 620, target: 1000, harvested: false, treesPlanted: 2 });
     const c = await mount();
     arm();
-    click(btn(c, 'Tưới cây (20💧)'));
+    click(btn(c, 'Tưới hết (1.250💧)'));
     await flush(6);
     expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
   });

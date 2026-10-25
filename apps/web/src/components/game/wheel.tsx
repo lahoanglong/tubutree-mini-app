@@ -2,7 +2,9 @@
 
 import { useRef, useState } from 'react';
 import type { SpinResult } from '@tubutree/app-core/api/game';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { ui } from '@/lib/guest-ui';
+import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatNumber } from './format';
 
 /** 8 ô hiển thị (nhãn minh họa) — phần thưởng THẬT lấy từ backend spin(). */
@@ -14,10 +16,15 @@ const WHEEL_BG = `conic-gradient(${SLOTS.map((_, i) => `${i % 2 === 0 ? 'var(--s
 
 export function WheelOfFortune({
   cost,
+  points = null,
+  onEarnPoints,
   onSpin,
   onResult,
 }: {
   cost: number;
+  /** Điểm Xanh dùng được; thiếu thì thay nút quay bằng số dư và lối "Cách kiếm Điểm Xanh". null = chưa biết, vẫn cho quay. */
+  points?: number | null;
+  onEarnPoints?: () => void;
   onSpin: () => Promise<SpinResult>;
   /** `null` = vừa bắt đầu lượt quay mới; có `prize` = kết quả thật của backend. Hộp kết quả do cấp trang dựng (xem WheelPrizeSheet). */
   onResult: (prize: SpinResult['prize'] | null) => void;
@@ -87,9 +94,18 @@ export function WheelOfFortune({
         </div>
       </div>
 
-      <button type="button" disabled={spinning} onClick={() => void handleSpin()} className={`${ui.btnPrimary} min-h-12 min-w-[200px]`}>
-        {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
-      </button>
+      {points != null && points < cost && onEarnPoints ? (
+        <>
+          <p className="text-center text-sm text-stone-700">{gameNewbieCopy.wheel.have(points, cost)}</p>
+          <button type="button" onClick={onEarnPoints} className={`${miniBtnSecondary} min-h-12 min-w-[200px]`}>
+            {gameNewbieCopy.wheel.howToEarn}
+          </button>
+        </>
+      ) : (
+        <button type="button" disabled={spinning} onClick={() => void handleSpin()} className={`${ui.btnPrimary} min-h-12 min-w-[200px]`}>
+          {spinning ? 'Đang quay...' : `Quay ngay (${formatNumber(cost)} Điểm Xanh)`}
+        </button>
+      )}
     </div>
   );
 }

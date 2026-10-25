@@ -97,7 +97,7 @@ const PASS = {
   })),
 };
 const profile = () => ({
-  totalSeeds: 1_250, streakDays: 3, treeStage: 1, treeHealth: 'HEALTHY', streakFreezes: 1, lastDewAt: null, lastCheckInAt: null,
+  totalSeeds: 1_250, streakDays: 3, treeStage: 1, treeHealth: 'HEALTHY', streakFreezes: 1, lastDewAt: null, lastCheckInAt: new Date().toISOString(),
   ecoImpact: { progress: 600, target: 1_000, treeType: 'Cây Sưa', treesPlanted: 2 }, streakFreezeCost: 80, treePointsPrice: 20_000, spinCostPoints: 10,
 });
 
@@ -182,7 +182,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(c2.textContent).toContain('Mở thêm lô đất để trồng nhiều cây cùng lúc');
   });
 
-  it('mỗi lô: tiến độ có dấu nghìn, héo/chết có nhãn, giai đoạn cây theo phần trăm', async () => {
+  it('mỗi lô: tiến độ có dấu nghìn, héo có nhãn (lô DEAD cũ cũng chỉ héo), giai đoạn cây theo phần trăm', async () => {
     state.data['/game/garden'] = GARDEN({
       plots: [HOME, plot(2, { progress: 1_250, target: 2_500, treeHealth: 'WILTED' }), plot(3, { progress: 20, target: 20, treeHealth: 'DEAD' }), plot(4, { progress: 2, target: 20 })],
     });
@@ -190,7 +190,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     const plots = panel(c, 'Vườn');
     expect(plots.textContent).toContain('1.250/2.500💧');
     expect(plots.textContent).toContain('héo');
-    expect(plots.textContent).toContain('chết');
+    expect(plots.textContent).not.toContain('chết');
     expect(plots.textContent).toContain('🌿');
     expect(plots.textContent).toContain('🌳');
     expect(plots.textContent).toContain('🌱');
@@ -495,7 +495,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     reward: { coupon: 'XANH-123', certificate: 'TT-77', species: { id: 's', name: 'Sao đen', emoji: '🌴', rarity: 'LEGENDARY', ecoFact: 'Sống hàng trăm năm.' } },
   };
   const water = async (c: HTMLElement) => {
-    click(btn(c, 'Tưới cây'));
+    click(btn(c, /Tưới hết/));
     await flush(8);
   };
 
@@ -585,7 +585,7 @@ describe('Vườn Xanh: hộp thu hoạch khi trình duyệt không có clipboar
     });
     Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
     const c = await mount();
-    click(btn(c, 'Tưới cây'));
+    click(btn(c, /Tưới hết/));
     await flush(8);
     click(document.querySelector<HTMLElement>('[role="dialog"] [data-coupon]'));
     await flush();
