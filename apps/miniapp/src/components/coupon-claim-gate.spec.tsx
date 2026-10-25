@@ -171,6 +171,22 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     expect(getCardGiftNote()).toBeNull();
   });
 
+  it.each([
+    ['cờ tích điểm đơn sàn tắt', { enabled: false, configFails: false }],
+    ['config lỗi', { enabled: true, configFails: true }],
+  ])('trên /points/scan khi %s: "chỉ khách mới" vẫn hiện sheet lỗi, không lặng lẽ đóng và không để ghi chú', async (_n, state) => {
+    mocks.enabled = state.enabled;
+    mocks.configFails = state.configFails;
+    window.history.replaceState({}, '', '/points/scan?claim=SHOPEE-AB12CD34');
+    mocks.post.mockRejectedValue(httpError(400, 'Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.'));
+    setAuth(REAL);
+    renderGate();
+    expect(await screen.findByText('Chưa nhận được ưu đãi')).toBeInTheDocument();
+    expect(getCardGiftNote()).toBeNull();
+    mocks.enabled = true;
+    mocks.configFails = false;
+  });
+
   it('giỏ đã có hàng: "Dùng ngay" mở giỏ', async () => {
     window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
     mocks.cartCount = 2;

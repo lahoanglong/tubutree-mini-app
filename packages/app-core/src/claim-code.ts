@@ -23,8 +23,8 @@ const CARD_LINK = /(^|[/.])zalo\.me\/s\/\d+/i;
 const URL_START = /^[a-z][a-z0-9+.-]*:\/\//i;
 const WIFI = /^WIFI:/i;
 const PREFERRED_KEY = /code|track|waybill|bill|^sn$|order|ma$/i;
-/** Tham số theo dõi quảng cáo, phiên, id nội bộ: không bao giờ là mã vận đơn. */
-const IGNORED_KEY = /^(utm_.*|ref|id|session.*|fbclid|gclid)$/i;
+/** Tham số theo dõi quảng cáo, phiên, và khoá mã sản phẩm (barcode, EAN, GTIN, SKU, UPC): không bao giờ là mã vận đơn. `id` không nằm ở đây vì link tra cứu của hãng hay dùng `?id=`. */
+const IGNORED_KEY = /^(utm_.*|ref|session.*|fbclid|gclid)$|barcode|gtin|sku|upc|(^|[_-])ean($|[_-]|\d)/i;
 /** Khoá ưu tiên phải thắng mọi ứng viên không có khoá: chữ+số (2) cộng tiền tố hãng (1) tối đa 3. */
 const PREFERRED_BOOST = 5;
 const TOKEN = /[A-Za-z0-9][A-Za-z0-9_-]{6,}/g;
@@ -65,7 +65,8 @@ function best(cands: Candidate[]): string | null {
     let score = c.boost;
     if (/[A-Z]/.test(c.code) && /\d/.test(c.code)) score += 2;
     if (CARRIER_PREFIX.test(c.code)) score += 1;
-    if (isGtin(c.code)) score -= 3;
+    // EAN-13 là khuôn mã vạch bán lẻ nên trừ nặng hơn các GTIN khác (nhiều mã vận đơn toàn số trùng số kiểm do ngẫu nhiên).
+    if (isGtin(c.code)) score -= c.code.length === 13 ? 3 : 1;
     if (!top || score > top.score) top = { code: c.code, score };
   }
   return top?.code ?? null;
@@ -132,23 +133,50 @@ function codeParamOfCardLink(text: string): string | null {
 }
 
 /** Nội dung quét hoặc dán vào ô: ra mã đã chuẩn hoá, hoặc cho biết đó là link của thẻ Tubu, một URL không có mã, hay không đọc được. */
+const looksLikePhoneOrVnBarcode = (digits: string): boolean => isPhoneLike(digits) || isVnProductBarcode(digits);
+
+/** Gộp các mảnh thành một mã in chia nhóm ("SPX VN 0123456789"); null nếu gộp không hợp lệ hoặc thực chất là SĐT/mã vạch kèm chữ. */
+function mergePieces(pieces: string[], requireCarrier: boolean): string | null {
+  const first = pieces[0]!.toUpperCase();
+  const carrierFirst = CARRIER_PREFIX.test(first);
+  if (requireCarrier ? !carrierFirst : !carrierFirst && !pieces.every((p) => p.length <= 6)) return null;
+  const merged = normalizeClaimCode(pieces.join(''));
+  if (!merged || !/\d/.test(merged)) return null;
+  if (!CARRIER_PREFIX.test(merged) && looksLikePhoneOrVnBarcode(merged.replace(/\D/g, ''))) return null;
+  return merged;
+}
+
+function bestOfPieces(pieces: string[]): string | null {
+  const singles = pieces.flatMap((piece) => {
+    const c = acceptable(piece, true);
+    return c ? [{ code: c, boost: 0 }] : [];
+  });
+  const single = best(singles);
+  if (!single) return mergePieces(pieces, false);
+  // Mã chia nhóm bị tách ("SPXVN0123 456789"): mảnh đầu là tiền tố hãng, các mảnh sau ngắn; bản gộp dài hơn thì thắng.
+  const rest = pieces.slice(1).filter((p) => !looksLikePhoneOrVnBarcode(p.replace(/\D/g, '')));
+  if (rest.length > 0 && rest.length === pieces.length - 1 && rest.every((p) => p.length <= 6)) {
+    const merged = mergePieces(pieces, true);
+    if (merged && merged.length > single.length && merged.startsWith(single)) return merged;
+  }
+  return single;
+}
+
 export function extractClaimCode(content: unknown): ClaimScanResult {
   const text = typeof content === 'string' ? content.trim() : typeof content === 'number' ? String(content) : '';
   if (!text || WIFI.test(text)) return { kind: 'none', code: null };
   if (CARD_LINK.test(text)) return { kind: 'card_link', code: codeParamOfCardLink(text) };
 
-  // Nhiều mảnh cách nhau bởi khoảng trắng: chấm từng mảnh, không gộp (gộp "MÃ SĐT" thành một chuỗi 25 ký tự lách bộ lọc SĐT).
-  // Không mảnh nào đứng riêng được thì mới thử gộp, cho mã in chia nhóm như "SPX VN 0123456789".
+  // Nhiều mảnh cách nhau bởi khoảng trắng: chấm từng mảnh, không gộp bừa ("Tel 0912345678" không được thành mã TEL0912345678).
   const pieces = text.split(/\s+/).filter(Boolean);
-  if (pieces.length > 1 && !text.startsWith('{') && !text.startsWith('[') && !URL_START.test(text)) {
-    const code = best(pieces.flatMap((piece) => {
-      const c = acceptable(piece, true);
-      return c ? [{ code: c, boost: 0 }] : [];
-    }));
+  const multi = pieces.length > 1 && !text.startsWith('{') && !text.startsWith('[') && !URL_START.test(text);
+  if (multi) {
+    const code = bestOfPieces(pieces);
     if (code) return { kind: 'code', code };
+  } else {
+    const plain = acceptable(text, false);
+    if (plain) return { kind: 'code', code: plain };
   }
-  const plain = acceptable(text, false);
-  if (plain) return { kind: 'code', code: plain };
 
   if (text.startsWith('{') || text.startsWith('[')) {
     try {
