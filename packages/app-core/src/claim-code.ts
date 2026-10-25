@@ -60,14 +60,20 @@ interface Candidate {
 
 /** Mã vận đơn thường có cả chữ lẫn số và tiền tố hãng; chuỗi chỉ toàn số xếp sau. Ngang điểm thì lấy cái xuất hiện trước. */
 function best(cands: Candidate[]): string | null {
-  let top: { code: string; score: number } | null = null;
+  let top: { code: string; score: number; gtin: boolean } | null = null;
   for (const c of cands) {
     let score = c.boost;
     if (/[A-Z]/.test(c.code) && /\d/.test(c.code)) score += 2;
     if (CARRIER_PREFIX.test(c.code)) score += 1;
-    // EAN-13 là khuôn mã vạch bán lẻ nên trừ nặng hơn các GTIN khác (nhiều mã vận đơn toàn số trùng số kiểm do ngẫu nhiên).
-    if (isGtin(c.code)) score -= c.code.length === 13 ? 3 : 1;
-    if (!top || score > top.score) top = { code: c.code, score };
+    // Mã sản phẩm GTIN có số kiểm đúng: trừ đều cho mọi độ dài (nhiều mã vận đơn toàn số cũng trùng số kiểm do ngẫu nhiên).
+    const gtin = isGtin(c.code);
+    if (gtin) score -= 3;
+    // Hoà điểm: mã dài hơn, rồi mã không có số kiểm GTIN hợp lệ, rồi mã đứng trước.
+    const better =
+      !top ||
+      score > top.score ||
+      (score === top.score && (c.code.length > top.code.length || (c.code.length === top.code.length && top.gtin && !gtin)));
+    if (better) top = { code: c.code, score, gtin };
   }
   return top?.code ?? null;
 }
@@ -135,15 +141,45 @@ function codeParamOfCardLink(text: string): string | null {
 /** Nội dung quét hoặc dán vào ô: ra mã đã chuẩn hoá, hoặc cho biết đó là link của thẻ Tubu, một URL không có mã, hay không đọc được. */
 const looksLikePhoneOrVnBarcode = (digits: string): boolean => isPhoneLike(digits) || isVnProductBarcode(digits);
 
+const isLetters = (p: string): boolean => /^[A-Za-z]+$/.test(p);
+const isDigits = (p: string): boolean => /^\d+$/.test(p);
+const digitsOf = (pieces: string[]): string => pieces.join('').replace(/\D/g, '');
+
+/** Hình dạng chấp nhận được khi mảnh đầu không phải tiền tố hãng: toàn số, hoặc một nhãn chữ ngắn trước/sau dãy số ("EB 123 456 789 VN"). */
+function labelledDigits(pieces: string[]): boolean {
+  const inner = pieces.slice(isLetters(pieces[0]!) ? 1 : 0, isLetters(pieces[pieces.length - 1]!) && pieces.length > 1 ? -1 : undefined);
+  if (inner.length === 0 || !inner.every(isDigits)) return false;
+  const labels = pieces.filter(isLetters);
+  return labels.length <= 2 && labels.every((l) => l.length <= 4) && inner.length + labels.length === pieces.length;
+}
+
 /** Gộp các mảnh thành một mã in chia nhóm ("SPX VN 0123456789"); null nếu gộp không hợp lệ hoặc thực chất là SĐT/mã vạch kèm chữ. */
 function mergePieces(pieces: string[], requireCarrier: boolean): string | null {
-  const first = pieces[0]!.toUpperCase();
-  const carrierFirst = CARRIER_PREFIX.test(first);
-  if (requireCarrier ? !carrierFirst : !carrierFirst && !pieces.every((p) => p.length <= 6)) return null;
+  const carrierFirst = CARRIER_PREFIX.test(pieces[0]!.toUpperCase());
+  if (requireCarrier ? !carrierFirst : !carrierFirst && !pieces.every(isDigits) && !labelledDigits(pieces)) return null;
   const merged = normalizeClaimCode(pieces.join(''));
   if (!merged || !/\d/.test(merged)) return null;
-  if (!CARRIER_PREFIX.test(merged) && looksLikePhoneOrVnBarcode(merged.replace(/\D/g, ''))) return null;
+  if (carrierFirst) {
+    // Tiền tố hãng đứng một mình trước dãy số ("VN 0912345678", "SPX 8934673123457"): vẫn là SĐT/mã vạch kèm chữ.
+    const rest = pieces.slice(1);
+    if (isLetters(pieces[0]!) && rest.length > 0 && rest.every(isDigits) && looksLikePhoneOrVnBarcode(digitsOf(rest))) return null;
+  } else if (!CARRIER_PREFIX.test(merged) && looksLikePhoneOrVnBarcode(merged.replace(/\D/g, ''))) {
+    return null;
+  }
   return merged;
+}
+
+/** Nhãn chữ đứng trước mã chia nhóm ("Mã vận đơn 8400 1234 5678"): thử gộp đoạn đuôi bắt đầu ở mảnh tiền tố hãng đầu tiên, rồi ở dãy mảnh toàn số liền nhau cuối cùng. */
+function mergeTail(pieces: string[]): string | null {
+  const carrierAt = pieces.findIndex((p, i) => i > 0 && CARRIER_PREFIX.test(p.toUpperCase()));
+  if (carrierAt > 0) {
+    const m = mergePieces(pieces.slice(carrierAt), true);
+    if (m) return m;
+  }
+  let start = pieces.length;
+  while (start > 0 && isDigits(pieces[start - 1]!)) start--;
+  if (start < pieces.length && start > 0) return mergePieces(pieces.slice(start), false);
+  return null;
 }
 
 function bestOfPieces(pieces: string[]): string | null {
@@ -152,7 +188,7 @@ function bestOfPieces(pieces: string[]): string | null {
     return c ? [{ code: c, boost: 0 }] : [];
   });
   const single = best(singles);
-  if (!single) return mergePieces(pieces, false);
+  if (!single) return mergePieces(pieces, false) ?? mergeTail(pieces);
   // Mã chia nhóm bị tách ("SPXVN0123 456789"): mảnh đầu là tiền tố hãng, các mảnh sau ngắn; bản gộp dài hơn thì thắng.
   const rest = pieces.slice(1).filter((p) => !looksLikePhoneOrVnBarcode(p.replace(/\D/g, '')));
   if (rest.length > 0 && rest.length === pieces.length - 1 && rest.every((p) => p.length <= 6)) {
