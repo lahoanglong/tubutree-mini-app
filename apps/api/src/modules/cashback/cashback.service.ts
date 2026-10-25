@@ -345,6 +345,7 @@ export class CashbackService {
               refId: tx.id,
               reason: 'Cashback hết thời gian giữ',
             });
+            // Tài khoản đã xoá thì khách đã đồng ý bỏ số dư Ví khi xoá; cashback chốt PAID mà không cộng để cron không quét lại mãi.
             if (!res.credited) {
               credited = false;
               this.logger.error(

@@ -178,7 +178,7 @@ export async function announceDeletedAccountRefund(
       subject: `khoản hoàn ${amount} đơn ${refund.orderCode} của tài khoản đã xoá`,
       data: () => ({
         order_code: refund.orderCode,
-        message: `khách đã xoá tài khoản nên không hoàn vào Ví được: ở mục Hoàn tiền, liên hệ khách theo thông tin đơn còn lại để chuyển ${amount}, hoặc ghi nhận công nợ.`,
+        message: `Tài khoản đã xoá, không còn thông tin liên hệ. Chờ khách liên hệ CSKH; khi khách cung cấp tài khoản ngân hàng thì quản trị viên nhập và xác nhận chuyển khoản ${amount}.`,
       }),
     },
   ).catch((err) => ctx.logger.warn(`Không báo được admin khoản hoàn đơn ${refund.orderCode}: ${err instanceof Error ? err.message : err}`));
