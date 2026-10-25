@@ -58,6 +58,13 @@ describe('cardCode / claimUrl', () => {
     expect(claimUrl('https://zalo.me/s/123', 'SHOPEE-AB')).toBe('https://zalo.me/s/123/?claim=SHOPEE-AB');
     expect(claimUrl('', 'SHOPEE-AB')).toBe('/?claim=SHOPEE-AB');
   });
+  it('trang đích scan kèm src, card: mở thẳng màn tích điểm đơn sàn và giữ nhãn nguồn', () => {
+    expect(claimUrl('https://zalo.me/s/123', 'SHOPEE-AB', { page: 'scan', src: 'shopee', card: '2611' })).toBe(
+      'https://zalo.me/s/123/points/scan?src=shopee&card=2611&claim=SHOPEE-AB',
+    );
+    expect(claimUrl('https://zalo.me/s/123', 'A-B', { page: 'home', src: 'lazada' })).toBe('https://zalo.me/s/123/?src=lazada&claim=A-B');
+    expect(claimUrl('', 'A-B', { page: 'scan' })).toBe('/points/scan?claim=A-B');
+  });
 });
 
 describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)', () => {
@@ -85,6 +92,12 @@ describe('AdminCouponBatchService.create (D2-03: lô mã in thẻ hộp hàng)',
     expect(out.codes.map((c) => c.code).sort()).toEqual(rows.map((r) => r.code as string).sort());
     const first = out.codes[0]!;
     expect(first.url).toBe(`https://zalo.me/s/123/?claim=${first.code}`);
+  });
+
+  it('link trong kết quả tạo lô mang trang đích, src, card theo lựa chọn', async () => {
+    const { svc } = make();
+    const out = await svc.create({ ...INPUT, link: { page: 'scan', src: 'tiktok', card: '2611' } });
+    expect(out.codes[0]!.url).toBe(`https://zalo.me/s/123/points/scan?src=tiktok&card=2611&claim=${out.codes[0]!.code}`);
   });
 
   it('mã sinh ra trùng mã đã có (ON CONFLICT bỏ qua) → sinh bù đúng số thiếu', async () => {

@@ -33,9 +33,24 @@ export function cardCode(prefix: string): string {
   return `${prefix}-${tail}`;
 }
 
+/** Khuôn nhãn `src`, `card` của link mở Mini App; khớp ENTRY_TOKEN_PATTERN của miniapp/utils/entry-source. */
+export const LINK_TOKEN_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
+
+export interface ClaimLinkOptions {
+  /** `scan` mở thẳng màn tích điểm đơn sàn; mặc định `home` mở trang chủ. */
+  page?: 'home' | 'scan';
+  src?: string;
+  card?: string;
+}
+
 /** Link in vào QR: mở Mini App với `?claim=` (miniapp/hooks/use-coupon-claim). Chưa có URL gốc thì đường dẫn tương đối. */
-export function claimUrl(base: string, code: string): string {
-  return `${base.trim().replace(/\/+$/, '')}/?claim=${encodeURIComponent(code)}`;
+export function claimUrl(base: string, code: string, opts: ClaimLinkOptions = {}): string {
+  const params = new URLSearchParams();
+  if (opts.src) params.set('src', opts.src);
+  if (opts.card) params.set('card', opts.card);
+  params.set('claim', code);
+  const path = opts.page === 'scan' ? '/points/scan' : '/';
+  return `${base.trim().replace(/\/+$/, '')}${path}?${params.toString()}`;
 }
 
 export interface CouponBatchInput {
@@ -48,6 +63,7 @@ export interface CouponBatchInput {
   startAt: string;
   endAt: string;
   newCustomerOnly?: boolean;
+  link?: ClaimLinkOptions;
 }
 
 export interface BatchCode {
@@ -142,7 +158,7 @@ export class AdminCouponBatchService {
       batch,
       created: codes.length,
       claimUrlBase: base || null,
-      codes: codes.map((c): BatchCode => ({ code: c.code, url: claimUrl(base, c.code), claimed: false, used: false, isActive: true })),
+      codes: codes.map((c): BatchCode => ({ code: c.code, url: claimUrl(base, c.code, input.link), claimed: false, used: false, isActive: true })),
     };
   }
 
@@ -171,7 +187,7 @@ export class AdminCouponBatchService {
   }
 
   /** Nhân viên chỉ xem mã lô do chính mình tạo: lộ mã lô khác là đem đi nhận bằng tài khoản khác, lách trần B19. */
-  async codes(rawBatch: string, actor: CouponActor = SYSTEM_ACTOR) {
+  async codes(rawBatch: string, actor: CouponActor = SYSTEM_ACTOR, link: ClaimLinkOptions = {}) {
     const batch = rawBatch.trim().toUpperCase();
     const [rows, base] = await Promise.all([
       this.prisma.coupon.findMany({
@@ -191,7 +207,7 @@ export class AdminCouponBatchService {
       codes: rows.map(
         (r): BatchCode => ({
           code: r.code,
-          url: claimUrl(base, r.code),
+          url: claimUrl(base, r.code, link),
           claimed: r._count.claims > 0,
           used: r._count.redemptions > 0,
           isActive: r.isActive,

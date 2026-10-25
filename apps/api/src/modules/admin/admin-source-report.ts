@@ -30,6 +30,7 @@ const SOURCE_LABEL: Record<string, string> = {
   ref: 'Giới thiệu (mã ref)',
   organic: 'Tự nhiên (không có link)',
   unknown: 'Không rõ',
+  none: 'Không thuộc chiến dịch nào',
   [OTHER_SOURCE]: 'Nguồn khác',
 };
 

@@ -1,0 +1,32 @@
+{
+  "normalize": [
+    ["SPXVN0123456789", "SPXVN0123456789"],
+    ["  spx-vn_0123456789 ", "SPXVN0123456789"],
+    ["SPX VN 0123 456789", "SPXVN0123456789"],
+    ["12345678", "12345678"],
+    ["1234567", null],
+    ["1234567890123456789012345678901", null],
+    ["123456789012345678901234567890", "123456789012345678901234567890"],
+    ["SPXVN0123456789!", null],
+    ["https://zalo.me/s/2070857098114207963", null],
+    ["", null]
+  ],
+  "extract": [
+    ["SPXVN0123456789", "code", "SPXVN0123456789"],
+    ["spx-vn-0123456789", "code", "SPXVN0123456789"],
+    ["  SPX_VN_0123456789\n", "code", "SPXVN0123456789"],
+    ["https://spx.vn/track?tracking_number=SPXVN0123456789&lang=vi", "code", "SPXVN0123456789"],
+    ["https://tracking.example.com/SPXVN0123456789", "code", "SPXVN0123456789"],
+    ["https://example.com/t?utm_campaign=trackingwave&code=GHN12345AB", "code", "GHN12345AB"],
+    ["{\"tracking\":\"SPXVN0123456789\",\"ts\":1}", "code", "SPXVN0123456789"],
+    ["{\"order\":{\"sn\":\"2610AB12CD34EF\"}}", "code", "2610AB12CD34EF"],
+    ["Mã vận đơn: SPXVN0123456789", "code", "SPXVN0123456789"],
+    ["Tracking: 84012345678901", "code", "84012345678901"],
+    ["https://zalo.me/s/2070857098114207963/points/scan?src=shopee&card=2611", "card_link", null],
+    ["zalo.me/s/2070857098114207963", "card_link", null],
+    ["https://example.com/about", "url", null],
+    ["abc 123", "none", null],
+    ["", "none", null],
+    ["{\"a\":1}", "none", null]
+  ]
+}

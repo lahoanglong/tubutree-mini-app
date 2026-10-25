@@ -94,13 +94,14 @@ export class AdminReportsService {
   /**
    * Khách mới theo nguồn chạm đầu (User.firstTouchSource) × tuần tạo tài khoản (thứ Hai đầu tuần, giờ VN): bao nhiêu khách có đơn
    * đầu trong 30 ngày sau khi tạo, bao nhiêu có đơn hai trong 30 ngày sau đơn đầu, và doanh thu 30 ngày đầu của nhóm (cùng định nghĩa
-   * doanh thu với KPI: admin-revenue.ts). "Đơn" là đơn còn hiệu lực (đã xác nhận trở đi, không huỷ/trả, không còn chờ thanh toán);
+   * doanh thu với KPI: admin-revenue.ts). `by=campaign` nhóm theo chiến dịch chạm đầu (User.firstTouchCampaign, vd card-2611) thay cho nguồn. "Đơn" là đơn còn hiệu lực (đã xác nhận trở đi, không huỷ/trả, không còn chờ thanh toán);
    * các đơn cùng checkoutGroup (một lần thanh toán tách theo nơi giao) tính là một lần mua, còn doanh thu vẫn cộng từng đơn.
    *
    * "Khách mới" theo NEW_CUSTOMER_SQL (không tính tài khoản ADMIN/STAFF, dòng khách vãng lai đã gộp, khách cũ được gắn nguồn lúc gộp;
    * xem impl/source.md mục 3), cùng định nghĩa với thẻ "Khách mới" của revenueReport. Khách chưa có nguồn (tài khoản trước khi có cột) vào "Không rõ".
    */
-  async sourceReport(q: { from?: string; to?: string }, now = new Date()) {
+  async sourceReport(q: { from?: string; to?: string; by?: 'source' | 'campaign' }, now = new Date()) {
+    const dimension = q.by === 'campaign' ? Prisma.sql`COALESCE(u."firstTouchCampaign", 'none')` : Prisma.sql`COALESCE(u."firstTouchSource", ${UNKNOWN})`;
     const range = resolveReportRange(q.from, q.to, { maxDays: SOURCE_REPORT_MAX_DAYS, now });
     const window = Prisma.raw(`interval '${SOURCE_REPORT_WINDOW_DAYS} days'`);
     const window2 = Prisma.raw(`interval '${SOURCE_REPORT_WINDOW_DAYS * 2} days'`);
@@ -110,7 +111,7 @@ export class AdminReportsService {
       WITH cohort AS (
         SELECT u.id,
                u."createdAt" AS created_at,
-               COALESCE(u."firstTouchSource", ${UNKNOWN}) AS source,
+               ${dimension} AS source,
                to_char(date_trunc('week', u."createdAt" + interval '7 hours'), 'YYYY-MM-DD') AS week
         FROM users u
         WHERE u."createdAt" >= ${range.start} AND u."createdAt" < ${range.end}
