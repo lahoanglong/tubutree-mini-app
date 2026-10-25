@@ -714,8 +714,15 @@ export const updateOrderStatus = (id: string, status: string, note?: string) =>
     method: 'PUT',
     body: { status, note },
   });
-export const getConfig = (category?: string) =>
-  apiFetch<ConfigRow[]>(`/admin/config${category ? `?category=${category}` : ''}`);
+/**
+ * Không lọc: API trả mảng dòng. Có `category`: API trả object `{khoá: giá trị}` — đổi về cùng dạng mảng để mọi nơi
+ * gọi dùng chung một kiểu (trước đây coi object là mảng nên `.find` ném TypeError và sập tab).
+ */
+export async function getConfig(category?: string): Promise<ConfigRow[]> {
+  const data = await apiFetch<ConfigRow[] | Record<string, unknown>>(`/admin/config${category ? `?category=${encodeURIComponent(category)}` : ''}`);
+  if (Array.isArray(data)) return data;
+  return Object.entries(data ?? {}).map(([key, value]) => ({ key, value, description: null, category: category ?? key.split('.')[0] ?? '' }));
+}
 export const setConfig = (key: string, value: unknown) =>
   apiFetch<{ ok: boolean }>('/admin/config', { method: 'PUT', body: { key, value } });
 export interface CreateCouponInput {

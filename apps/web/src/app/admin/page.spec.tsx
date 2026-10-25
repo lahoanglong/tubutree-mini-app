@@ -386,7 +386,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cấu hình & tích hợp',
     ]);
     const items = [...nav.querySelectorAll('button')];
-    expect(items).toHaveLength(42);
+    expect(items).toHaveLength(41);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
@@ -2387,7 +2387,6 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Tích điểm đơn sàn',
       'Đơn đối tác & đối soát',
       'Hoàn tiền khách',
-      'Hoàn tiền sàn ngoài',
       'Thưởng đại lý',
       'Đại lý & công nợ',
       'Yêu cầu rút tiền',

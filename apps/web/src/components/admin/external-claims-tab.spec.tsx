@@ -52,6 +52,32 @@ const buttons = (root: ParentNode) => [...root.querySelectorAll('button')].map((
 const btn = (root: ParentNode, text: string) => [...root.querySelectorAll('button')].find((b) => b.textContent === text) ?? null;
 
 describe('ExternalClaimsTab', () => {
+  it('cờ tích điểm đơn sàn tắt: admin thấy băng vàng; bật thì không; nhân viên không gọi cấu hình', async () => {
+    const m = stub();
+    const off = mockFetch({ '/admin/config?category=loyalty': { body: { 'loyalty.marketplace_claim_enabled': false } } });
+    const base = m.fn;
+    vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (u.includes('/admin/config') ? off.fn(u, i) : base(u, i))));
+    const a = mount(<ExternalClaimsTab isAdmin canAct meId="admin1" />);
+    await flush();
+    expect(a.container.textContent).toContain('Tính năng đang tắt với khách. Bật ở Bật/tắt tính năng.');
+    a.unmount();
+    mounted = [];
+
+    const on = mockFetch({ '/admin/config?category=loyalty': { body: { 'loyalty.marketplace_claim_enabled': true } } });
+    vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (u.includes('/admin/config') ? on.fn(u, i) : base(u, i))));
+    const b = mount(<ExternalClaimsTab isAdmin canAct meId="admin1" />);
+    await flush();
+    expect(b.container.textContent).not.toContain('Tính năng đang tắt với khách');
+    b.unmount();
+    mounted = [];
+
+    const staffCalls = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn((u: string, i?: RequestInit) => (u.includes('/admin/config') ? staffCalls.fn(u, i) : base(u, i))));
+    mount(<ExternalClaimsTab isAdmin={false} canAct meId="s1" />);
+    await flush();
+    expect(staffCalls.calls).toHaveLength(0);
+  });
+
   it('ADMIN thấy đủ nút với claim REVIEW; KE_TOAN không có nút thao tác nào', async () => {
     stub();
     const admin = mount(<ExternalClaimsTab isAdmin canAct meId="admin1" />);
