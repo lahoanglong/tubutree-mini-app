@@ -138,7 +138,7 @@ export function mayExistOnPancake(order: Pick<Order, 'pancakeOrderId' | 'pancake
 }
 
 function isTagsRejection(err: unknown): boolean {
-  return err instanceof PancakeApiError && !err.transient && /Pancake trả 4\d\d\b.*\btags\b/is.test(err.message);
+  return err instanceof PancakeApiError && !err.transient && /Pancake (?:trả 4\d\d\b|từ chối\b).*\btags\b/is.test(err.message);
 }
 
 /**
@@ -466,8 +466,14 @@ export class PancakeOrderService {
    * trạng thái thanh toán của ta khi không còn đúng. Không đọc được đơn thì bỏ hẳn `tags` — thà không đổi thẻ còn hơn xoá thẻ tay.
    */
   private async mergedTags(order: OrderWithItems, tagNames: string[]): Promise<PancakeOrderTagRef[] | undefined> {
-    const wanted = await this.client.resolveOrderTags(tagNames);
-    const ownPaymentIds = new Set((await this.client.resolveOrderTags(Object.values(PANCAKE_PAYMENT_TAG))).map((t) => t.id));
+    // Một lần gọi cho cả hai nhóm: hai lần gọi có thể cho kết quả lệch nhau khi lần đọc danh sách thẻ đầu lỗi (trả [] không cache).
+    const paymentNames = Object.values(PANCAKE_PAYMENT_TAG);
+    const resolved = await this.client.resolveOrderTags([...new Set([...tagNames, ...paymentNames])]);
+    const norm = (n: string | undefined) => (n ?? '').trim().toLowerCase();
+    const wantedKeys = new Set(tagNames.map(norm));
+    const paymentKeys = new Set(paymentNames.map(norm));
+    const wanted = resolved.filter((t) => wantedKeys.has(norm(t.name)));
+    const ownPaymentIds = new Set(resolved.filter((t) => paymentKeys.has(norm(t.name))).map((t) => t.id));
     if (wanted.length === 0 && ownPaymentIds.size === 0) return undefined;
     let current: PancakeOrderDTO | null;
     try {
@@ -477,6 +483,7 @@ export class PancakeOrderService {
     }
     if (!current) return undefined;
     const existing = current.tags ?? [];
+    if (!Array.isArray(existing)) return undefined;
     // Thẻ không đọc được dạng {id: số} thì không dựng lại danh sách được: PUT sẽ xoá nhầm thẻ tay.
     if (!existing.every((t): t is PancakeOrderTagRef => typeof t === 'object' && t !== null && typeof t.id === 'number')) return undefined;
     const wantedIds = new Set(wanted.map((t) => t.id));

@@ -971,4 +971,32 @@ describe('PancakeOrderService — thẻ: lùi về không thẻ, gỡ thẻ cũ,
     await t.svc.syncPayment('o1');
     expect(t.client.updateOrder.mock.calls[0]![1]).not.toHaveProperty('tags');
   });
+
+  it('PUT: lần đọc danh sách thẻ đầu lỗi (resolve trả []) → không gửi tags, thẻ thanh toán đang có trên Pancake được giữ', async () => {
+    const resolveOrderTags = jest.fn().mockResolvedValueOnce([]).mockResolvedValue([{ id: 4, name: 'DA_THANH_TOAN' }]);
+    const t = setup(paidBank, { client: { resolveOrderTags } });
+    await t.svc.syncPayment('o1');
+    expect(resolveOrderTags).toHaveBeenCalledTimes(1);
+    expect(t.client.updateOrder.mock.calls[0]![1]).not.toHaveProperty('tags');
+  });
+
+  it('PUT: tags của đơn không phải mảng → không ném, vẫn PUT tiền, không đụng tags', async () => {
+    const t = setup(paidBank, { client: { getOrder: jest.fn().mockResolvedValue({ id: 'pk-1', tags: 'Hẹn gọi' }) } });
+    await t.svc.syncPayment('o1');
+    expect(t.client.updateOrder.mock.calls[0]![1]).toMatchObject({ transfer_money: 230_000, cod: 0 });
+    expect(t.client.updateOrder.mock.calls[0]![1]).not.toHaveProperty('tags');
+  });
+
+  it('tags null → coi như đơn chưa có thẻ', async () => {
+    const t = setup(paidBank, { client: { getOrder: jest.fn().mockResolvedValue({ id: 'pk-1', tags: null }) } });
+    await t.svc.syncPayment('o1');
+    expect(t.client.updateOrder.mock.calls[0]![1].tags).toHaveLength(3);
+  });
+
+  it('POST: HTTP 200 success:false nhắc tags ("Pancake từ chối tạo đơn: …") cũng lùi về không thẻ', async () => {
+    const createOrder = jest.fn().mockRejectedValueOnce(new PancakeApiError('Pancake từ chối tạo đơn: [tags]: is invalid', false)).mockResolvedValue({ id: 'pk-new' });
+    const t = setup({}, { client: { createOrder, invalidateOrderTags: jest.fn() } });
+    expect(await t.svc.pushOrder('o1')).toBe('pk-new');
+    expect(createOrder.mock.calls[1]![0]).not.toHaveProperty('tags');
+  });
 });
