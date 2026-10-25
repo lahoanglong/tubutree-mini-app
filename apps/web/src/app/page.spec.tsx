@@ -13,6 +13,8 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
+import { homeCopy } from '@tubutree/app-core/home-copy';
+import { SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import HomePage, { metadata } from './page';
 
 const card = (id: string, name: string) => ({
@@ -56,20 +58,20 @@ describe('HomePage — server render phần công khai', () => {
     expect(metadata.alternates?.canonical).toBe('/');
   });
 
-  it('hỏi API đúng như Mini App: bán chạy 6 theo best_seller, nổi bật 12, mới về 6 theo newest', async () => {
+  it('hỏi API đúng như Mini App: bán chạy 6 theo best_seller và trang 1 của lưới gợi ý; không còn nổi bật/mới về riêng', async () => {
     await render();
     const queries = mocks.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o?.query);
-    expect(queries).toEqual(expect.arrayContaining([{ limit: 6, sort: 'best_seller' }, { limit: 12 }, { limit: 6, sort: 'newest' }]));
+    expect(queries).toHaveLength(2);
+    expect(queries).toEqual(expect.arrayContaining([{ limit: 6, sort: 'best_seller' }, { limit: SUGGEST_PAGE_SIZE, page: 1 }]));
   });
 
-  it('HTML đầu đã có sản phẩm của ba lưới, lưới danh mục (ẩn danh mục rỗng) và dải thương hiệu', async () => {
+  it('HTML đầu đã có sản phẩm của kệ Bán chạy và lưới gợi ý, hàng danh mục (ẩn danh mục rỗng) và dải thương hiệu', async () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).toContain('Dầu gội bồ kết');
-    expect(out).toContain('Hàng mới nhất');
     expect(out).toContain('Dầu gội');
     expect(out).not.toContain('Danh mục trống');
-    expect(out).toContain('Thương hiệu Việt');
+    expect(out).toContain(homeCopy.journey.title);
   });
 
   it('khối khách vãng lai: có ô tìm sang /san-pham?focus=search, chuông không huy hiệu như Mini App, không có Dành cho bạn', async () => {
@@ -93,7 +95,8 @@ describe('HomePage — server render phần công khai', () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).not.toContain('brand=Tubu');
-    expect(out).toContain('data-testid="brand-chip-skeleton"');
+    expect(out).toContain(homeCopy.journey.title);
+    expect(out).not.toContain('Dải thương hiệu');
   });
 
   it('cả ba lưới sản phẩm lỗi lúc Next dựng lại trang: ném để Next giữ bản đã render, không lưu trang rỗng', async () => {

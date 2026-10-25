@@ -5,7 +5,7 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 import { ApiError } from '@/lib/client-api';
 
-// Chép ý nghĩa pages/home.spec của Mini App: thứ tự khối theo khách cũ/mới, cờ bố cục, bỏ trùng, khối lỗi + Thử lại, lỗi cấp trang, khách vãng lai, chuông.
+// Chép ý nghĩa pages/home.spec của Mini App (phương án A, 9 khối): thứ tự khối theo khách cũ/mới, một lưới gợi ý, khối lỗi + Thử lại, lỗi cấp trang, khách vãng lai, chuông.
 const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'authenticated', user: { id: 'u1', fullName: 'Lan', pointsBalance: 0 } as unknown }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
@@ -21,7 +21,7 @@ import { HOME_KIND_KEY } from './use-home-customer-kind';
 
 const CONFIG = {
   freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, affiliateMinWithdrawBank: 50_000, cashbackHoldDays: 30,
-  loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 }, homeNewCustomerLayout: false,
+  loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 }, 
 };
 const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true });
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
@@ -59,6 +59,10 @@ beforeEach(() => {
     '/me/new-customer-offer': () => ({ isNewCustomer: true, welcomeVoucher: null }),
     '/orders/active-count': () => ({ count: 0 }),
     '/me/subscriptions': () => [],
+    '/me/loyalty': () => ({ tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0 }),
+    '/me/coupons': () => [],
+    '/me/loyalty/check-in-status': () => ({ checkedInToday: true, streakDays: 1, rewards: [] }),
+    '/feed': () => ({ posts: [] }),
     '/flash-sales/active': () => [],
     '/flash-sales/upcoming': () => [],
   };
@@ -73,21 +77,22 @@ afterEach(() => {
   mounted = null;
 });
 
-describe('HomeView — thứ tự khối', () => {
-  it('khách mới: thứ tự khối "new" (Bán chạy + Danh mục trước Dành cho bạn), Mua lại + dải đơn giữ ô 2-3', async () => {
+describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', () => {
+  it('khách mới: Quà khách mới thay thẻ thành viên, có kệ Bán chạy, không có Mua lại; thứ tự đúng homeBlockOrder("new")', async () => {
     const c = await mount();
     expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
-    expect(blockOrder(c).slice(1, 3)).toEqual(['purchased', 'orderStrip']);
+    expect(block(c, 'member')).toBeNull();
+    expect(region(c, 'Bán chạy')).not.toBeNull();
     expect(calls('/me/purchased-items')[0]![1]).toEqual({ query: { limit: 10 } });
   });
 
-  it('khách cũ: thứ tự khối "returning" sau khi purchased-items có hàng, có dải tăng điểm sau dải đơn', async () => {
+  it('khách cũ: thứ tự "returning" sau khi purchased-items có hàng; thẻ thành viên có mặt, Quà khách mới không', async () => {
     routes['/me/purchased-items'] = () => ({ items: [{ variationId: 'v1', productId: 'p1', slug: 's', productName: 'Nước rửa chén', variationName: '', brand: 'Tubu', thumbnail: null, price: 1000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-01-01' }], nextCursor: null });
-    routes['/config/public'] = () => ({ ...CONFIG, loyalty: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000 } });
     const c = await mount();
     expect(blockOrder(c)).toEqual([...homeBlockOrder('returning')]);
-    expect(block(c, 'orderStrip').querySelector('[data-testid="points-boost"]')).not.toBeNull();
-    expect(block(c, 'welcome')).toBeNull();
+    expect(region(c, 'Thẻ thành viên')).not.toBeNull();
+    expect(region(c, 'Quà khách mới')).toBeNull();
+    expect(region(c, 'Mua lại')).not.toBeNull();
   });
 
   it('khách cũ đã được nhớ: ngay từ khung hình đầu đã theo thứ tự returning, dù purchased-items còn tải', async () => {
@@ -98,14 +103,6 @@ describe('HomeView — thứ tự khối', () => {
     expect(calls('/me/new-customer-offer')).toHaveLength(0);
   });
 
-  it('cờ home.new_customer_layout bật: Quà khách mới + Danh mục lên trước giờ vàng; cờ tắt hoặc cấu hình lỗi → bố cục cũ', async () => {
-    routes['/config/public'] = () => ({ ...CONFIG, homeNewCustomerLayout: true });
-    expect(blockOrder(await mount())).toEqual([...homeBlockOrder('new', true)]);
-    mounted!.unmount();
-    routes['/config/public'] = () => Promise.reject(new Error('mạng'));
-    expect(blockOrder(await mount())).toEqual([...homeBlockOrder('new')]);
-  });
-
   it('khách mới nhưng API báo không còn là khách mới → không hiện Quà khách mới', async () => {
     routes['/me/new-customer-offer'] = () => ({ isNewCustomer: false, welcomeVoucher: null });
     const c = await mount();
@@ -114,36 +111,38 @@ describe('HomeView — thứ tự khối', () => {
 });
 
 describe('HomeView — nội dung các khối', () => {
-  it('"Bán chạy" dùng sort=best_seller; "Tubu chọn cho bạn" xin 12 rồi bỏ SP đã có ở "Dành cho bạn"', async () => {
+  it('"Bán chạy" dùng sort=best_seller; lưới gợi ý xin trang đầu mặc định và không còn gọi newest/nổi bật riêng', async () => {
     const c = await mount();
-    expect(productCalls()).toEqual(expect.arrayContaining([{ limit: 6, sort: 'best_seller' }, { limit: 12 }, { limit: 6, sort: 'newest' }]));
-    expect(region(c, 'Dành cho bạn')!.textContent).toContain('Trùng gợi ý');
-    const featured = region(c, 'Tubu chọn cho bạn')!;
-    expect(featured.textContent).toContain('Chỉ nổi bật');
-    expect(featured.textContent).not.toContain('Trùng gợi ý');
+    const calledSorts = productCalls().map((q) => q.sort);
+    expect(calledSorts).toEqual(expect.arrayContaining(['best_seller', undefined]));
+    expect(calledSorts).not.toContain('newest');
+    expect(region(c, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
   });
 
-  it('"Xem tất cả" dẫn tới /san-pham đúng bộ sắp xếp; "Dành cho bạn" không có nút này', async () => {
+  it('chỉ MỘT lưới gợi ý: "Gợi ý cho bạn" có chip Cho bạn, Bán chạy, Mới; Dành cho bạn đứng đầu và không trùng sản phẩm', async () => {
     const c = await mount();
-    const seeAll = (name: string) => c.querySelector<HTMLAnchorElement>(`a[aria-label="Xem tất cả ${name}"]`)?.getAttribute('href');
-    expect(seeAll('Bán chạy')).toBe('/san-pham?sort=best_seller');
-    expect(seeAll('Mới về vườn')).toBe('/san-pham?sort=newest');
-    expect(seeAll('Tubu chọn cho bạn')).toBe('/san-pham');
-    expect(seeAll('Dành cho bạn')).toBeUndefined();
+    const feed = region(c, 'Gợi ý cho bạn')!;
+    expect(feed).not.toBeNull();
+    expect(feed.querySelectorAll('ul[aria-hidden="true"]')).toHaveLength(0);
+    const chips = Array.from(feed.querySelectorAll('button')).map((b) => b.textContent);
+    expect(chips).toEqual(expect.arrayContaining(['Cho bạn', 'Bán chạy', 'Mới']));
+    const names = Array.from(feed.querySelectorAll('li')).map((li) => li.textContent ?? '');
+    expect(names.filter((t) => t.includes('Trùng gợi ý'))).toHaveLength(1);
+    expect(names[0]).toContain('Trùng gợi ý');
   });
 
-  it('"Tubu chọn cho bạn" chờ "Dành cho bạn" xong mới hiện (khung chờ 6 ô, tránh 6 → 5 ô khi bỏ trùng)', async () => {
-    routes['/products/for-you'] = () => new Promise(() => undefined);
+  it('đổi chip sang Mới tải lưới theo sort=newest', async () => {
     const c = await mount();
-    const featured = region(c, 'Tubu chọn cho bạn')!;
-    expect(featured.querySelectorAll('li')).toHaveLength(6);
-    expect(featured.textContent).not.toContain('Chỉ nổi bật');
+    click(byText(region(c, 'Gợi ý cho bạn')!, 'button', 'Mới'));
+    await flush(8);
+    expect(productCalls().some((q) => q.sort === 'newest')).toBe(true);
+    expect(region(c, 'Gợi ý cho bạn')!.textContent).toContain('Mới nhất');
   });
 
-  it('"Dành cho bạn" lỗi: không kẹt ở khung chờ, vẫn hiện SP nổi bật', async () => {
-    routes['/products/for-you'] = () => Promise.reject(new ApiError('Lỗi', 500));
+  it('"Bán chạy" có nút Xem tất cả sang /san-pham?sort=best_seller', async () => {
     const c = await mount();
-    expect(region(c, 'Tubu chọn cho bạn')!.textContent).toContain('Trùng gợi ý');
+    const seeAll = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem tất cả Bán chạy"], button[aria-label="Xem tất cả Bán chạy"]');
+    expect(seeAll).not.toBeNull();
   });
 
   it('ô tìm là vỏ: dẫn sang /san-pham?focus=search; chạm danh mục sang /san-pham lọc theo danh mục', async () => {
@@ -173,12 +172,6 @@ describe('HomeView — chuông và khách vãng lai', () => {
     expect(bell.querySelector('[aria-label="2 thông báo chưa đọc"]')?.textContent).toBe('2');
   });
 
-  it('"Xem tất cả" không gạch chân như Mini App', async () => {
-    const c = await mount();
-    const link = c.querySelector<HTMLAnchorElement>('a[aria-label^="Xem tất cả"]')!;
-    expect(link.className).not.toContain('underline');
-  });
-
   it('trang Thông báo chưa xong (pending) → ẩn chuông', async () => {
     routeState.pending = new Set(['/tai-khoan/thong-bao']);
     const c = await mount();
@@ -191,40 +184,39 @@ describe('HomeView — chuông và khách vãng lai', () => {
     expect(c.querySelector('[aria-label$="thông báo chưa đọc"]')).toBeNull();
   });
 
-  it('khách chưa đăng nhập: không gọi for-you/notifications/purchased-items, chuông không huy hiệu, không có "Dành cho bạn"; vẫn thấy Quà khách mới (chỉ lợi ích)', async () => {
+  it('khách chưa đăng nhập: không gọi for-you/notifications/purchased-items/loyalty, không có thẻ thành viên; vẫn thấy Quà khách mới (chỉ lợi ích)', async () => {
     mocks.phase = 'guest';
     const c = await mount();
-    for (const p of ['/products/for-you', '/me/notifications', '/me/purchased-items', '/me/new-customer-offer', '/orders/active-count']) {
+    for (const p of ['/products/for-you', '/me/notifications', '/me/purchased-items', '/me/new-customer-offer', '/orders/active-count', '/me/loyalty']) {
       expect(calls(p)).toHaveLength(0);
     }
     expect(c.querySelector('a[aria-label="Thông báo"]')!.getAttribute('href')).toBe('/tai-khoan/thong-bao');
-    expect(c.querySelector('[aria-label$="thông báo chưa đọc"]')).toBeNull();
-    expect(region(c, 'Dành cho bạn')).toBeNull();
+    expect(region(c, 'Thẻ thành viên')).toBeNull();
     expect(region(c, 'Quà khách mới')).not.toBeNull();
   });
 });
 
 describe('HomeView — lỗi từng khối và lỗi cấp trang', () => {
-  it('một khối lỗi hiện thông báo + "Thử lại" ngay tại chỗ, khối khác vẫn hiện; thử lại chỉ tải lại khối đó', async () => {
+  it('lưới gợi ý lỗi hiện thông báo + "Thử lại" ngay tại chỗ, khối khác vẫn hiện; thử lại chỉ tải lại lưới đó', async () => {
     let fail = true;
     routes['/products'] = (q) => {
-      if (q?.sort === 'newest' && fail) throw new ApiError('Máy chủ đang bận', 503);
+      if (!q?.sort && fail) throw new ApiError('Máy chủ đang bận', 503);
       return q?.sort === 'best_seller' ? PAGE([card('bs', 'Bán chạy nhất')]) : PAGE([card('f2', 'Chỉ nổi bật')]);
     };
+    routes['/products/for-you'] = () => [];
     const c = await mount();
-    const err = region(c, 'Mới về vườn')!;
+    const err = region(c, 'Gợi ý cho bạn')!;
     expect(err.textContent).toContain('Máy chủ đang bận');
     expect(region(c, 'Bán chạy')!.textContent).toContain('Bán chạy nhất');
     expect(c.querySelector('[data-testid="home-page-error"]')).toBeNull();
-    const before = productCalls().length;
     fail = false;
-    click(err.querySelector('button[aria-label="Thử lại Mới về vườn"]'));
+    click(err.querySelector('button[aria-label="Thử lại Gợi ý cho bạn"]'));
     await flush(8);
-    expect(productCalls().slice(before)).toEqual([{ limit: 6, sort: 'newest' }]);
-    expect(region(c, 'Mới về vườn')!.textContent).not.toContain('Máy chủ đang bận');
+    expect(region(c, 'Gợi ý cho bạn')!.textContent).not.toContain('Máy chủ đang bận');
+    expect(region(c, 'Gợi ý cho bạn')!.textContent).toContain('Chỉ nổi bật');
   });
 
-  it('API sập hẳn (cả 3 lưới lỗi) → MỘT dải lỗi cấp trang + một nút "Thử lại", không còn thẻ lỗi từng khối; thử lại xong thì dải biến mất', async () => {
+  it('API sập hẳn (Bán chạy lỗi, chưa có dữ liệu) → MỘT dải lỗi cấp trang ngay dưới ô tìm, không thẻ lỗi từng khối; thử lại xong thì dải biến mất', async () => {
     let down = true;
     routes['/products'] = (q) => {
       if (down) throw new ApiError('Mất kết nối', 503);
@@ -241,15 +233,11 @@ describe('HomeView — lỗi từng khối và lỗi cấp trang', () => {
     expect(c.textContent).toContain('Bán chạy nhất');
   });
 
-  it('kệ "Mua lại" lỗi thật (không phải 404) → khối lỗi + "Thử lại"; 404 của API cũ vẫn ẩn lặng lẽ', async () => {
+  it('kệ "Mua lại" lỗi: trang rơi về bố cục khách mới, không có thẻ lỗi cấp trang', async () => {
     routes['/me/purchased-items'] = () => Promise.reject(new ApiError('Máy chủ đang bận', 503));
     const c = await mount();
-    expect(block(c, 'purchased').textContent).toContain('Máy chủ đang bận');
-    expect(block(c, 'purchased').querySelector('button[aria-label="Thử lại Mua lại"]')).not.toBeNull();
-    mounted!.unmount();
-    routes['/me/purchased-items'] = () => Promise.reject(new ApiError('Không tìm thấy', 404));
-    const c2 = await mount();
-    expect(block(c2, 'purchased').textContent).toBe('');
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
+    expect(c.querySelector('[data-testid="home-page-error"]')).toBeNull();
   });
 });
 
@@ -259,16 +247,14 @@ describe('HomeView — dữ liệu server tải sẵn', () => {
       <HomeView
         initial={{
           bestSellers: PAGE([card('bs', 'Bán chạy từ server')]),
-          featured: PAGE([card('f2', 'Nổi bật từ server')]),
-          newest: PAGE([card('nw', 'Mới từ server')]),
+          suggest: PAGE([card('f2', 'Gợi ý từ server')]),
           categories: CATEGORIES,
         }}
       />,
     );
     expect(c.textContent).toContain('Bán chạy từ server');
-    expect(c.textContent).toContain('Mới từ server');
+    expect(c.textContent).toContain('Gợi ý từ server');
     expect(productCalls()).toEqual([]);
     expect(calls('/categories')).toHaveLength(0);
   });
 });
-
