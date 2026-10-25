@@ -10,8 +10,6 @@ import { applyPointsDelta } from '../loyalty/points-ledger';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
 import {
-  COMEBACK_GAP_DAYS_DEFAULT,
-  COMEBACK_SEEDS_DEFAULT,
   DAILY_LOGIN_SEEDS_DEFAULT,
   DEFAULT_TREE_TYPE,
   DEW_SEEDS_DEFAULT,
