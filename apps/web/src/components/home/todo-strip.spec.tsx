@@ -4,6 +4,7 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({ push: vi.fn(), get: vi.fn(), phase: 'authenticated', active: 2 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
@@ -24,6 +25,7 @@ const mount = async () => {
 const orderCalls = () => mocks.get.mock.calls.filter(([p]) => p === '/orders');
 
 beforeEach(() => {
+  window.localStorage.clear();
   mocks.phase = 'authenticated';
   mocks.active = 2;
   mocks.push.mockReset();
@@ -80,5 +82,39 @@ describe('TodoStrip web — Việc cần làm', () => {
       throw new Error('boom');
     });
     expect((await mount()).textContent).toBe('');
+  });
+
+  describe('trí nhớ số dòng (không chớp khung chờ rồi sụp)', () => {
+    const KEY = 'tubu_home_todo_rows';
+    const hold = () => {
+      let release: (v: unknown) => void = () => {};
+      mocks.get.mockImplementation(async (path: string, opts?: { query?: { status?: string } }) => {
+        if (path === '/orders/active-count') return { count: 2 };
+        await new Promise((r) => { release = r; });
+        return ordersFor(opts?.query?.status);
+      });
+      return () => release(undefined);
+    };
+
+    it('lần đầu chưa nhớ gì: chờ đơn thì im lặng, không khung chờ', async () => {
+      hold();
+      const c = await mount();
+      expect(c.querySelector('[data-testid="todo-strip-loading"]')).toBeNull();
+      expect(c.textContent).toBe('');
+    });
+
+    it('lần trước có hai dòng: khung chờ đúng chiều cao 2 dòng; xong thì ghi lại số dòng thật', async () => {
+      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+      const c = await mount();
+      expect(c.querySelectorAll('[role="button"], button').length).toBeGreaterThan(0);
+      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 2 });
+    });
+
+    it('không còn việc: ghi 0 để lần sau không dựng khung chờ', async () => {
+      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+      mocks.active = 0;
+      await mount();
+      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 0 });
+    });
   });
 });

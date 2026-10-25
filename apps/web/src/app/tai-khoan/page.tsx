@@ -24,7 +24,7 @@ import { pointsSummary } from '@/lib/checkout-points';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
 import { ORDERS_TABS } from '@/components/orders/orders-tabs';
-import { Card, Heading, Text } from '@/components/mini';
+import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
 import BackLink from '@/components/back-link';
 
@@ -141,7 +141,8 @@ export default function AccountPage() {
   const balances = meQ.data ?? user;
   const points = pointsSummary(balances);
   const fullName = meQ.data?.fullName !== undefined ? meQ.data.fullName : user.fullName;
-  const tierName = loyaltyQ.data?.tier?.name ?? 'Mầm Xanh';
+  const tierName = loyaltyQ.data?.tier?.name ?? null;
+  const tierFailed = loyaltyQ.isError && !loyaltyQ.data;
   const unread = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
   const referral = referralQ.data;
   const code = referral?.referralCode ?? user.referralCode;
@@ -214,10 +215,14 @@ export default function AccountPage() {
                 {fullName ?? 'Khách Tubu'}
               </Heading>
               <span className="mt-1.5 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-xs font-semibold text-forest-800">
-                  <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
-                  {tierName}
-                </span>
+                {tierName ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-xs font-semibold text-forest-800">
+                    <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
+                    {tierName}
+                  </span>
+                ) : !tierFailed ? (
+                  <span aria-hidden="true" className="inline-block h-6 w-[76px] rounded-full" style={{ background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
+                ) : null}
                 <span className="inline-flex items-center gap-1 rounded-full border border-stone-0 px-2 py-0.5 text-xs font-semibold">
                   <Pencil className="h-3 w-3" aria-hidden="true" />
                   {homeCopy.profile.editProfile}
@@ -226,10 +231,22 @@ export default function AccountPage() {
               </span>
             </span>
           </Link>
+          {tierFailed && (
+            <div role="alert" className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-xs">{homeCopy.member.tierFailed}</span>
+              <button
+                type="button"
+                onClick={() => void loyaltyQ.refetch()}
+                className="tubu-press -my-3 -mx-1.5 min-h-11 px-1.5 text-xs font-bold underline"
+              >
+                {homeCopy.member.retry}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="relative -mt-5 grid grid-cols-3 gap-2 px-3">
-          <Stat label={homeCopy.profile.statPoints} value={points.total.toLocaleString('vi-VN')} href="/tai-khoan/diem-xanh" />
+          <Stat label={homeCopy.profile.statPoints} value={`${points.total.toLocaleString('vi-VN')} điểm`} href="/tai-khoan/diem-xanh" />
           <Stat label={homeCopy.profile.statWallet} value={formatVnd(balances.walletBalance)} href="/tai-khoan/vi-tubu" />
           <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} href="/uu-dai?section=coupons" />
         </div>
@@ -332,9 +349,9 @@ export default function AccountPage() {
         </div>
 
         <div className="p-4">
-          <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full`}>
+          <Button fullWidth variant="secondary" onPress={() => void logout()}>
             Đăng xuất
-          </button>
+          </Button>
         </div>
       </div>
     </main>

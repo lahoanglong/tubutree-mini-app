@@ -359,12 +359,12 @@ describe('/san-pham/[slug] — giá Giờ vàng khớp giỏ và đơn (R4-BUYER
     expect(c.querySelector('[data-testid="pdp-flash-badge"]')).toBeNull();
   });
 
-  it('có đợt Giờ vàng: giá Giờ vàng, giá gốc gạch ngang và nhãn "Giờ vàng -40%"', async () => {
+  it('có đợt Giờ vàng: giá Giờ vàng, giá đang bán gạch ngang và nhãn "Giờ vàng -20%"', async () => {
     api.flash = [FLASH];
     const c = await mount();
     expect(c.querySelector('[data-testid="pdp-price"]')!.textContent).toBe('120.000đ');
-    expect(c.querySelector('[data-testid="pdp-flash-badge"]')!.textContent).toContain('Giờ vàng -40%');
-    expect(Array.from(c.querySelectorAll('.line-through')).map((e) => e.textContent)).toContain('200.000đ');
+    expect(c.querySelector('[data-testid="pdp-flash-badge"]')!.textContent).toContain('Giờ vàng -20%');
+    expect(Array.from(c.querySelectorAll('.line-through')).map((e) => e.textContent)).toContain('150.000đ');
   });
 });
 

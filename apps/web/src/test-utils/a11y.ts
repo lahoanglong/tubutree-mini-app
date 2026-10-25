@@ -78,7 +78,7 @@ export function smallTouchTargets(root: ParentNode): string[] {
   return Array.from(
     root.querySelectorAll<HTMLElement>('button, input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]), select, textarea'),
   )
-    .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className))
+    .filter((el) => !/\b(?:min-h-11|h-11)\b/.test(el.className) && !(parseFloat(el.style.minHeight) >= 44))
     .map((el) => el.outerHTML.slice(0, 120));
 }
 

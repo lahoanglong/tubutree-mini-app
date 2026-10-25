@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { PurchasedItemsPage } from '@tubutree/app-core/api/orders';
 import { browserStorage } from '@/lib/recently-viewed';
-import { customerKind, type HomeCustomerKind } from './home-blocks';
+import { customerKind, resolveHomeKind, type HomeCustomerKind, type HomeKindState } from './home-blocks';
 
 export const HOME_KIND_KEY = 'tubu_home_kind';
 
@@ -37,20 +37,19 @@ function writeStoredHomeKind(userId: string, kind: HomeCustomerKind): void {
  * Trong lúc `purchased-items` còn tải, dùng loại đã nhớ lần trước của CHÍNH tài khoản này (nếu có) để khách cũ
  * thấy đúng thứ tự ngay từ khung hình đầu — nếu không, "Dành cho bạn" nhảy từ khối 7 lên khối 5 lúc dữ liệu về
  * và đẩy "Bán chạy" xuống cả một khối lưới. Truy vấn xong → loại thật, được ghi lại cho lần mở sau.
- * Khách chưa đăng nhập luôn là "new", không đọc/ghi gì. Lỗi (vd API cũ 404) → "new", không ghi đè giá trị đã nhớ.
+ * Khách chưa đăng nhập luôn là "new", không đọc/ghi gì. Lỗi tải: vẫn giữ loại đã nhớ (khách cũ không bị đẩy về bố cục khách mới
+ * vì một lần API chập chờn) và không ghi đè giá trị đã nhớ. Chưa nhớ gì và đang tải: "unknown" (xem `resolveHomeKind`).
  */
 export function useHomeCustomerKind(
   authed: boolean,
   userId: string | null | undefined,
   purchased: Pick<UseQueryResult<PurchasedItemsPage>, 'isPending' | 'isSuccess' | 'data'>,
-): HomeCustomerKind {
+): HomeKindState {
   const stored = useMemo(() => (authed ? readStoredHomeKind(userId) : null), [authed, userId]);
   const settledKind = purchased.isSuccess ? customerKind(purchased.data?.items.length) : null;
   useEffect(() => {
     if (authed && userId && settledKind) writeStoredHomeKind(userId, settledKind);
   }, [authed, userId, settledKind]);
 
-  if (!authed) return 'new';
-  if (settledKind) return settledKind;
-  return purchased.isPending ? (stored ?? 'new') : 'new';
+  return resolveHomeKind({ authed, stored, purchasedCount: purchased.data?.items.length, pending: purchased.isPending });
 }

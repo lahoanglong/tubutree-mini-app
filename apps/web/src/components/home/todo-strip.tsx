@@ -1,20 +1,23 @@
 'use client';
 
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
 import { fetchOrders } from '@tubutree/app-core/api/orders';
 import { activeOrderCountQuery } from '@tubutree/app-core/queries/orders';
+import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
+import { browserStorage } from '@/lib/recently-viewed';
 import { useRemaining } from '@/lib/use-remaining';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
 import { Button, Card, Icon, ListRow, Skeleton } from '@/components/mini';
 
 const ROW_PADDING = '8px 4px';
-const PLACEHOLDER_ROW_HEIGHT = 60;
 
 type TodoOrder = Awaited<ReturnType<typeof fetchOrders>>['data'][number];
 
@@ -47,7 +50,7 @@ function PendingPaymentRow({ order }: { order: TodoOrder }) {
 /**
  * "Việc cần làm" ở Trang chủ (bản web của `todo-strip.tsx` ở Mini App): đơn chờ chuyển khoản (giờ hết hạn, nút Thanh toán ngay) rồi
  * tới đơn đang giao, tối đa hai dòng. Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy)
- * lớn hơn 0; chưa đăng nhập, không có việc hay lỗi thì ẩn.
+ * lớn hơn 0; chưa đăng nhập, không có việc hay lỗi thì ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng).
  */
 export function TodoStrip() {
   const router = useRouter();
@@ -68,19 +71,27 @@ export function TodoStrip() {
     staleTime: 30_000,
     retry: false,
   });
-  if (!authed) return null;
-
-  if (enabled && (pending.isLoading || shipping.isLoading)) {
-    return (
-      <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: '0 0 12px' }}>
-        <Skeleton height={PLACEHOLDER_ROW_HEIGHT + 18} radius="var(--radius-card)" />
-      </div>
-    );
-  }
-
+  const userId = useAuth().user?.id;
+  const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
+  const loading = enabled && (pending.isLoading || shipping.isLoading);
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
   const shipTotal = shipping.data?.meta.total ?? 0;
+  const rows = (payOrder ? 1 : 0) + (shipOrder ? 1 : 0);
+  const settled = authed && (enabled ? !pending.isLoading && !shipping.isLoading && !pending.isError && !shipping.isError : count.isSuccess);
+  useEffect(() => {
+    if (settled && userId) writeTodoRows(browserStorage(), userId, rows);
+  }, [settled, userId, rows]);
+  if (!authed) return null;
+
+  // Khung chờ chỉ khi lần mở trước có việc thật (chắc chắn sẽ có dòng); không thì chờ im lặng, khối hiện khi có việc.
+  if (loading) {
+    return rememberedRows > 0 ? (
+      <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: '0 0 12px' }}>
+        <Skeleton height={todoSkeletonHeight(rememberedRows)} radius="var(--radius-card)" />
+      </div>
+    ) : null;
+  }
   if (!payOrder && !shipOrder) return null;
 
   return (

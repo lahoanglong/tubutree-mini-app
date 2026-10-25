@@ -100,7 +100,8 @@ describe('/uu-dai — trang Ưu đãi', () => {
 
   it('thẻ Điểm Xanh mở trang hạng và lịch sử điểm', async () => {
     const c = await mount();
-    click(c.querySelector('button[aria-label="Hạng và lịch sử điểm"]'));
+    await flush(6);
+    click(c.querySelector('button[aria-label$="Hạng và lịch sử điểm"]'));
     expect(state.push).toHaveBeenCalledWith('/tai-khoan/diem-xanh');
   });
 

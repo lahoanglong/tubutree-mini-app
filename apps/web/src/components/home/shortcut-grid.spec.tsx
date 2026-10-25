@@ -7,6 +7,16 @@ const mocks = vi.hoisted(() => ({
   cfg: { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } } as Record<string, unknown>,
   // Route map thật không có đích web cho /points/scan (chỉ Mini App).
   pending: new Set<string>(['/points/scan']),
+  phase: 'authenticated' as string,
+  recycleOpen: false,
+  recycleArgs: [] as unknown[],
+}));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/use-recycle-open-requests', () => ({
+  useRecycleOpenRequests: (...a: unknown[]) => {
+    mocks.recycleArgs = a;
+    return mocks.recycleOpen;
+  },
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
@@ -24,6 +34,8 @@ const mount = () => {
 beforeEach(() => {
   mocks.push.mockReset();
   mocks.pending = new Set(['/points/scan']);
+  mocks.phase = 'authenticated';
+  mocks.recycleOpen = false;
   mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
 });
 afterEach(() => {
@@ -58,7 +70,7 @@ describe('ShortcutGrid web — lối tắt', () => {
     const press = (re: RegExp) => click(Array.from(c.querySelectorAll('button')).find((b) => re.test(b.getAttribute('aria-label') ?? b.textContent ?? '')) ?? null);
     press(/Đổi quà/);
     expect(mocks.push).toHaveBeenLastCalledWith('/kho-qua');
-    press(/Mã giảm giá/);
+    press(/Mã của tôi/);
     expect(mocks.push).toHaveBeenLastCalledWith('/uu-dai?section=coupons');
     press(/Đổi rác/);
     expect(mocks.push).toHaveBeenLastCalledWith('/doi-rac');
@@ -66,5 +78,23 @@ describe('ShortcutGrid web — lối tắt', () => {
     press(/Kiếm tiền/);
     expect(mocks.push).not.toHaveBeenCalled();
     expect(document.querySelector('[role="dialog"][aria-label="Kiếm tiền cùng Tubu"]')).not.toBeNull();
+  });
+
+  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: lối tắt vẫn hiện, ghi "Yêu cầu của tôi"', () => {
+    mocks.cfg = { isLoaded: true, waste: { enabled: false } };
+    mocks.recycleOpen = true;
+    const c = mount();
+    expect(c.querySelectorAll('button')).toHaveLength(7);
+    expect(byText(c, 'button', 'Yêu cầu của tôi')).not.toBeNull();
+    expect(byText(c, 'button', 'Đổi rác')).toBeNull();
+    expect(mocks.recycleArgs).toEqual([true, true]);
+  });
+
+  it('tên truy cập của lối tắt chứa chữ nhìn thấy (WCAG 2.5.3)', () => {
+    const c = mount();
+    for (const b of Array.from(c.querySelectorAll('button'))) {
+      const visible = (b.textContent ?? '').trim().toLowerCase();
+      expect((b.getAttribute('aria-label') ?? '').toLowerCase()).toContain(visible);
+    }
   });
 });

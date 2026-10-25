@@ -90,15 +90,17 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     expect(head.textContent).toContain('Sửa hồ sơ');
   });
 
-  it('chưa tải được hạng: hiện "Mầm Xanh" như Mini App; khách chưa có tên: "Khách Tubu"', async () => {
+  it('chưa tải được hạng: không đoán hạng "Mầm Xanh", báo lỗi và có "Thử lại"; khách chưa có tên: "Khách Tubu"', async () => {
     mocks.routes['/me/loyalty'] = () => {
       throw new Error('offline');
     };
     mocks.auth.user = { ...mocks.auth.user, fullName: null };
     mocks.meName = null;
     const c = await mount();
-    expect(link(c, '/tai-khoan/ho-so')!.textContent).toContain('Mầm Xanh');
+    expect(link(c, '/tai-khoan/ho-so')!.textContent).not.toContain('Mầm Xanh');
     expect(link(c, '/tai-khoan/ho-so')!.textContent).toContain('Khách Tubu');
+    expect(c.textContent).toContain('Chưa tải được hạng và điểm');
+    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(true);
   });
 
   it('hiện ảnh đại diện khi có', async () => {

@@ -23,7 +23,6 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
         <button
           type="button"
-          aria-label={homeCopy.journey.ctaLabel}
           className="tubu-press"
           onClick={() => router.push('/cau-chuyen')}
           style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
@@ -47,7 +46,7 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
           </span>
         </button>
         {list.length > 0 && (
-          <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 0' }}>
+          <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
             {list.map((b) => (
               <Chip key={b.brand} onPress={() => router.push(b.slug ? `/brand/${encodeURIComponent(b.slug)}` : browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] }))}>
                 {b.brand}

@@ -1,4 +1,4 @@
-import { cardPricing as sharedCardPricing } from '@tubutree/app-core/flash-price';
+import { cardPricing as sharedCardPricing, variationPricing as sharedVariationPricing } from '@tubutree/app-core/flash-price';
 
 /**
  * Giá Giờ vàng (flash sale) cho web shop, cùng quy tắc với giỏ hàng và đơn: giá Giờ vàng chỉ thắng khi RẺ HƠN giá đang bán
@@ -56,6 +56,7 @@ export function cardPricing(
 
 export interface VariationPricing {
   price: number;
+  /** Giá để gạch; chỉ có nghĩa khi `hasSale`. */
   originalPrice: number;
   hasSale: boolean;
   isFlash: boolean;
@@ -64,22 +65,18 @@ export interface VariationPricing {
   endAt?: string;
 }
 
-/** Giá một phân loại ở trang chi tiết: đợt Giờ vàng gắn đúng phân loại đó, nếu rẻ hơn giá đang bán. */
+/** Giá một phân loại ở trang chi tiết: cùng quy tắc gạch với thẻ (app-core), Giờ vàng chỉ thắng khi rẻ hơn giá đang bán. */
 export function variationPricing(
   v: { id: string; retailPrice: number; salePrice?: number | null },
   flash: readonly FlashItem[],
 ): VariationPricing {
-  const item = flash.find((f) => f.variationId === v.id);
-  const standing = v.salePrice ?? v.retailPrice;
-  const isFlash = !!item && item.flashPrice < standing;
-  const price = isFlash ? item!.flashPrice : standing;
-  const hasSale = price < v.retailPrice;
+  const r = sharedVariationPricing(v, flash);
   return {
-    price,
-    originalPrice: v.retailPrice,
-    hasSale,
-    isFlash,
-    salePct: hasSale ? pct(price, v.retailPrice) : 0,
-    ...(isFlash ? { endAt: item!.endAt } : {}),
+    price: r.price,
+    originalPrice: r.compareAt ?? v.retailPrice,
+    hasSale: r.compareAt !== null,
+    isFlash: r.isFlash,
+    salePct: r.salePct,
+    ...(r.endAt ? { endAt: r.endAt } : {}),
   };
 }

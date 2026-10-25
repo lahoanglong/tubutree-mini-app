@@ -27,7 +27,7 @@ import { homeBlockOrder, refreshHomeQueries, type HomeBlockId } from './home-blo
 import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
-import { MemberCard } from './member-card';
+import { MemberCard, MemberCardSkeleton } from './member-card';
 import { NewCustomerGift } from './new-customer-gift';
 import { ShortcutGrid } from './shortcut-grid';
 import { SuggestFeed } from './suggest-feed';
@@ -68,14 +68,15 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
   const kind = useHomeCustomerKind(authed, userId, purchasedRaw);
 
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
-  const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers) }));
+  const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
   const categories = useQuery({ ...categoriesQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.categories ? { initialData: initial.categories } : {}) });
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
-  const pageDown = bestSellers.isError && bestSellers.data === undefined;
+  // Chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới); khách cũ không nhận dải lỗi vì kệ họ không thấy.
+  const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchRow unreadCount={unreadCount} authed={authed} />,
-    member: kind === 'returning' ? <MemberCard /> : null,
+    member: kind === 'returning' ? <MemberCard /> : kind === 'unknown' ? <MemberCardSkeleton /> : null,
     todo: <TodoStrip />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift /> : null,

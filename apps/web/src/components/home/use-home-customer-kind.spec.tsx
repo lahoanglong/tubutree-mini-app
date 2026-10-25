@@ -17,12 +17,12 @@ describe('useHomeCustomerKind', () => {
     expect(readStoredHomeKind(undefined)).toBeNull();
   });
 
-  it('đang tải: dùng loại đã nhớ của CHÍNH tài khoản này; tài khoản khác hoặc dữ liệu hỏng → "new"', () => {
+  it('đang tải: dùng loại đã nhớ của CHÍNH tài khoản này; tài khoản khác hoặc dữ liệu hỏng → "unknown" (khung chờ trung tính)', () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     expect(renderHook(() => useHomeCustomerKind(true, 'u1', pending)).result.current).toBe('returning');
-    expect(renderHook(() => useHomeCustomerKind(true, 'u2', pending)).result.current).toBe('new');
+    expect(renderHook(() => useHomeCustomerKind(true, 'u2', pending)).result.current).toBe('unknown');
     localStorage.setItem(HOME_KIND_KEY, '{không phải json');
-    expect(renderHook(() => useHomeCustomerKind(true, 'u1', pending)).result.current).toBe('new');
+    expect(renderHook(() => useHomeCustomerKind(true, 'u1', pending)).result.current).toBe('unknown');
   });
 
   it('tải xong: lấy loại thật và ghi lại cho lần mở sau', () => {
@@ -32,9 +32,12 @@ describe('useHomeCustomerKind', () => {
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY)!)).toEqual({ userId: 'u1', kind: 'new' });
   });
 
-  it('lỗi (vd API cũ 404): "new", không ghi đè giá trị đã nhớ', () => {
+  it('lỗi: khách đã nhớ là "returning" vẫn giữ "returning" và không ghi đè; chưa nhớ gì thì "new"', () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
-    expect(renderHook(() => useHomeCustomerKind(true, 'u1', failed)).result.current).toBe('new');
+    expect(renderHook(() => useHomeCustomerKind(true, 'u1', failed)).result.current).toBe('returning');
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY)!).kind).toBe('returning');
+    localStorage.clear();
+    expect(renderHook(() => useHomeCustomerKind(true, 'u1', failed)).result.current).toBe('new');
+    expect(localStorage.getItem(HOME_KIND_KEY)).toBeNull();
   });
 });

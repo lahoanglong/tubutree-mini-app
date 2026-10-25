@@ -7,7 +7,8 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 
 // Chép ý nghĩa purchased-rail.spec của Mini App: kệ "Mua lại" cho khách cũ, ẩn khi rỗng/404/khách, sheet → thêm giỏ → sang giỏ, lỗi làm mới.
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated' }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated', product: vi.fn() }));
+vi.mock('@/lib/client-api', async (orig) => ({ ...(await orig<typeof import('@/lib/client-api')>()), apiFetch: (...a: unknown[]) => mocks.product(...a) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
@@ -35,6 +36,7 @@ beforeEach(() => {
   mocks.get.mockReset().mockImplementation(() => rail());
   mocks.post.mockReset().mockResolvedValue(CART);
   mocks.push.mockReset();
+  mocks.product.mockReset().mockResolvedValue({ slug: 'nuoc-rua-chen', fulfiller: { kind: 'TUBU' }, partnerOwned: false });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -158,11 +160,50 @@ describe('PurchasedRail', () => {
       expect(mounted.container.textContent).toContain('Nước rửa chén');
     });
 
-    it('lỗi ở lần tải đầu (chưa có gì để giữ) → ẩn như cũ', async () => {
+    it('lỗi ở lần tải đầu (chưa có gì để giữ): hiện khối lỗi "Thử lại"; API cũ 404 thì vẫn ẩn', async () => {
       rail = async () => {
         throw new ApiError('Máy chủ đang bận', 503);
       };
+      const c = await mount();
+      expect(c.textContent).toContain('Mua lại');
+      expect(c.textContent).toContain('Máy chủ đang bận');
+      expect(c.querySelector('button[aria-label="Thử lại Mua lại"]')).not.toBeNull();
+      mounted!.unmount();
+      rail = async () => {
+        throw new ApiError('Không tìm thấy', 404);
+      };
       expect((await mount()).textContent).toBe('');
+    });
+  });
+
+  describe('thẻ gọn (1–2 món)', () => {
+    const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent ?? '');
+    it('hàng của đối tác (chỉ bán lẻ): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
+      mocks.product.mockResolvedValue({ slug: 'nuoc-rua-chen', partnerOwned: true });
+      const c = await mount();
+      expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
+      expect(byText(c, 'button', 'Mua lại')).not.toBeNull();
+    });
+
+    it('lỗi tải chi tiết sản phẩm: không mời "Định kỳ"', async () => {
+      mocks.product.mockRejectedValue(new Error('boom'));
+      const c = await mount();
+      expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
+    });
+
+    it('hết hàng: ghi "Tạm hết hàng", không có nút Mua lại / Định kỳ', async () => {
+      rail = async () => ({ items: [{ ...ITEM, stock: 0, inStock: false }], nextCursor: null });
+      const c = await mount();
+      expect(c.textContent).toContain('Tạm hết hàng');
+      expect(byText(c, 'button', 'Mua lại')).toBeNull();
+      expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
+    });
+
+    it('"Đã mua N lần" chỉ khi mua từ 2 lần', async () => {
+      expect((await mount()).textContent).toContain('Đã mua 2 lần');
+      mounted!.unmount();
+      rail = async () => ({ items: [{ ...ITEM, timesBought: 1 }], nextCursor: null });
+      expect((await mount()).textContent).not.toMatch(/Đã mua \d+ lần/);
     });
   });
 });
