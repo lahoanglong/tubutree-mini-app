@@ -61,7 +61,7 @@ describe('Mã giảm giá do nhân viên tạo (real Postgres)', () => {
     await moduleRef?.close();
   });
 
-  it('cột batchLink (migration 20261025120000): link lưu cùng lô, tải lại dùng đúng link; lô cũ (null) ra /?claim=', async () => {
+  it('cột batchLink (migration 20261025150000): link lưu cùng lô, tải lại dùng đúng link; lô cũ (null) ra /?claim=', async () => {
     const admin = await realUser('ADMIN');
     const input = batchInput({ link: { page: 'scan', src: 'shopee', card: '2611' } });
     await batches.create(input, { id: admin.id, staff: false });
