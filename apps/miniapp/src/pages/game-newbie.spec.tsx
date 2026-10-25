@@ -408,6 +408,15 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
     expect(screen.queryByRole('button', { name: 'Chia sẻ với bạn bè' })).not.toBeInTheDocument();
   });
 
+  it('cây mầm của khách (không điểm, không mã): nói cây mầm, không nói Tubu góp 1 cây', async () => {
+    mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 300, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST', reward: { sprout: true } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
+    await screen.findByText('Thu hoạch thành công!');
+    expect(document.body.textContent).toContain('Cây mầm đầu tiên của bạn đã lớn');
+    expect(document.body.textContent).not.toContain('Tubu sẽ góp');
+  });
+
   it('thu hoạch thường vẫn nói Tubu góp 1 cây và không có khung điểm', async () => {
     mocks.api.waterTree.mockResolvedValue({ progress: 0, target: 600, harvested: true, treesPlanted: 2, reward: { coupon: 'GAME30000-X', certificate: 'C2' } });
     renderPage();

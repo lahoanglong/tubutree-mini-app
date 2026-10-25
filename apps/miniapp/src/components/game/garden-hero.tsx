@@ -48,7 +48,7 @@ export function GardenHero({
         />
       </div>
       <Text variant="caption" tone="inverse">
-        {formatNumber(eco?.progress)}/{formatDrops(eco?.target)} · 💧 {formatNumber(totalSeeds)} · 🔥 {formatNumber(streakDays)} ngày · 🌳 góp quỹ: {formatNumber(eco?.treesPlanted)}
+        {formatNumber(eco?.progress)}/{formatDrops(eco?.target)} · 💧 {formatNumber(totalSeeds)} · 🔥 {formatNumber(streakDays)} ngày · 🌳 cây đã trồng: {formatNumber(eco?.treesPlanted)}
       </Text>
     </div>
   );

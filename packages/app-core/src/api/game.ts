@@ -8,6 +8,7 @@ export interface GameProfile {
   streakFreezes: number;
   lastDewAt: string | null;
   lastCheckInAt: string | null;
+  /** Target đã chuẩn hoá như lúc tưới: hồ sơ cũ chưa tưới giọt nào hiện bậc đầu của thang, không phải 600. */
   ecoImpact: { progress: number; target: number; treeType: string; treesPlanted: number } | null;
   /** §streak-repair: chuỗi vừa mất, còn trong cửa sổ hồi sinh (xem streakRepairable). */
   brokenStreakDays?: number;
@@ -126,6 +127,8 @@ export interface HarvestReward {
   species?: HarvestSpecies;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
   points?: number;
+  /** Lần tưới có thu hoạch cây mầm (cây đầu tiên, nhận điểm thay mã, không góp quỹ cây). Cây có `certificate` là cây góp quỹ thật. */
+  sprout?: boolean;
 }
 export interface ShareHarvestResult {
   shared: true;

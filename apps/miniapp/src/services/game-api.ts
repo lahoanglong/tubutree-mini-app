@@ -122,6 +122,8 @@ export interface HarvestReward {
   species?: HarvestSpecies;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu tiên); lần đó không có mã và không ghi góp quỹ cây. */
   points?: number;
+  /** Lần tưới có thu hoạch cây mầm. Cây có `certificate` là cây góp quỹ thật. */
+  sprout?: boolean;
 }
 export const waterTree = (drops: number) =>
   api.post<{

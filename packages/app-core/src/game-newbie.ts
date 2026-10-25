@@ -154,6 +154,8 @@ export const gameNewbieCopy = {
   },
   harvest: {
     seedling: 'Cây mầm đầu tiên của bạn đã lớn! 🌱',
+    grown: 'Cây ảo của bạn đã lớn 🌿',
+    fund: 'Cây ảo của bạn đã lớn. Tubu sẽ góp 1 cây vào quỹ trồng cây 🌿',
     points: (v: number) => `+${n(v)} Điểm Xanh`,
     pointsCaption: 'Quà cây mầm, dùng khi mua hàng',
     guest: 'Đăng nhập Zalo để nhận quà khi thu hoạch.',
@@ -163,6 +165,8 @@ export const gameNewbieCopy = {
     shareCommunityBusy: 'Đang chia sẻ...',
     shareCommunityDone: 'Đã chia sẻ',
     shareCommunityOk: 'Đã chia sẻ lên Cộng đồng 🌳',
+    shareCommunityAlready: 'Bạn đã chia sẻ cây này rồi',
+    shareCommunityNote: 'Bài sẽ hiện tên của bạn trên Cộng đồng',
     shareFriends: 'Chia sẻ với bạn bè',
     shareTitle: 'Tôi vừa thu hoạch một cây ở Vườn Xanh 🌳',
     shareDescription: 'Vào Vườn Xanh của Tubu Tree trồng cây cùng tôi nhé!',

@@ -200,7 +200,7 @@ describe('GamePage — vườn và lối tắt', () => {
   it('thẻ vườn: tên loại cây và dòng tổng hợp giọt nước/chuỗi/cây góp quỹ', async () => {
     const { container } = renderPage();
     expect(await screen.findByText('Sồi')).toBeInTheDocument();
-    expect(container.textContent).toContain('10/50💧 · 💧 1.250 · 🔥 2 ngày · 🌳 góp quỹ: 3');
+    expect(container.textContent).toContain('10/50💧 · 💧 1.250 · 🔥 2 ngày · 🌳 cây đã trồng: 3');
   });
 
   it('chưa có ecoImpact: tên mặc định "Vườn của bạn" và số 0', async () => {
@@ -641,6 +641,16 @@ describe('GamePage — lô đất', () => {
     expect(await screen.findByText('Lô đất của bạn (1/3)')).toBeInTheDocument();
     expect(screen.getByText(/Mở thêm lô đất để trồng nhiều cây cùng lúc/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tưới' })).not.toBeInTheDocument();
+  });
+
+  it('thu hoạch ở lô phụ: hộp chúc mừng không có nút chia sẻ', async () => {
+    mocks.api.getGarden.mockResolvedValue({ plots: [HOME, PLOT_A, PLOT_B], maxPlots: 4, nextUnlock: NEXT });
+    mocks.api.waterPlot.mockResolvedValue({ progress: 0, target: 20, harvested: true, treesPlanted: 2, revivedFromDead: false, reward: { certificate: 'C9' } });
+    renderPage();
+    await openTab('Vườn');
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Tưới' }))[0]!);
+    expect(await screen.findByText('Thu hoạch thành công!')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Chia sẻ với bạn bè' })).not.toBeInTheDocument();
   });
 
   it('mỗi lô có nút Tưới gọi waterPlot(id, 20) đúng lô; báo tiến độ lô; hiện tình trạng héo (lô DEAD cũ cũng chỉ héo)', async () => {

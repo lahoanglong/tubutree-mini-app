@@ -20,6 +20,8 @@ export function HarvestCelebration({
   certificate,
   species,
   points,
+  sprout,
+  canShare,
   couponCapped,
   nextTarget,
   onClose,
@@ -35,6 +37,10 @@ export function HarvestCelebration({
   species: HarvestSpecies | null;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu); khi có thì không có mã và không nói chuyện góp quỹ cây. */
   points: number | null;
+  /** Lần tưới có thu hoạch cây mầm (xem `HarvestReward.sprout`). */
+  sprout: boolean;
+  /** Chỉ cây ở lô nhà mới chia sẻ được. */
+  canShare: boolean;
   couponCapped: HarvestCouponCap | null;
   /** 💧 cần cho cây kế tiếp. */
   nextTarget: number | null;
@@ -45,7 +51,8 @@ export function HarvestCelebration({
 }) {
   const { openSnackbar } = useSnackbar();
   const t = vi.game.newbie.harvest;
-  const seedling = points != null && points > 0;
+  const seedling = sprout || (points != null && points > 0);
+  const showPoints = points != null && points > 0;
   return (
     <BottomSheet
       open={open}
@@ -63,7 +70,7 @@ export function HarvestCelebration({
               {t.guestCta}
             </Button>
           )}
-          {!guest && (
+          {!guest && canShare && (
             <Button fullWidth variant="secondary" onPress={onShare}>
               {t.shareFriends}
             </Button>
@@ -77,15 +84,9 @@ export function HarvestCelebration({
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: 56, lineHeight: 1.2 }}>🌳</div>
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
-          {seedling ? (
-            t.seedling
-          ) : (
-            <>
-              Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây</b> vào quỹ trồng cây 🌿
-            </>
-          )}
+          {certificate ? t.fund : seedling ? t.seedling : t.grown}
         </Text>
-        {seedling && (
+        {showPoints && (
           <div style={{ marginTop: 12, padding: 12, background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)', border: '1px dashed var(--color-border-selected)' }}>
             <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700 }}>
               {t.points(points)}

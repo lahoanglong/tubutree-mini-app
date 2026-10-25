@@ -331,6 +331,8 @@ function GameBody() {
           router.push(loginHref('/vuon-xanh'));
         }}
         points={harvest.reward?.points ?? null}
+        sprout={harvest.meta?.sprout ?? false}
+        canShare={harvest.meta?.canShare ?? true}
         couponCapped={harvest.meta?.couponCapped ?? null}
         nextTarget={harvest.meta?.nextTarget ?? null}
         certificate={harvest.reward?.certificate ?? null}

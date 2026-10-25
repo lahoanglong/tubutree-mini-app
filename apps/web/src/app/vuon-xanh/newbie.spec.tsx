@@ -313,6 +313,12 @@ describe('Vườn Xanh người mới (web): hộp chúc mừng', () => {
     expect(maybeBtn(d, 'Dùng mã giảm giá ngay')).toBeUndefined();
   });
 
+  it('cây mầm của khách (không điểm, không mã): nói cây mầm, không nói Tubu góp 1 cây', async () => {
+    const d = await harvest({ progress: 0, target: 300, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST', reward: { sprout: true } });
+    expect(d.textContent).toContain('Cây mầm đầu tiên của bạn đã lớn');
+    expect(d.textContent).not.toContain('Tubu sẽ góp');
+  });
+
   it.each([
     ['DAY', 'Hôm nay bạn đã nhận đủ mã giảm giá'],
     ['MONTH', 'Tháng này bạn đã nhận đủ mã giảm giá'],

@@ -200,7 +200,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
   it('thẻ vườn: tên cây, tiến độ và dòng tổng hợp có dấu phân cách nghìn', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Cây Sưa');
-    expect(c.textContent).toContain('600/1.000💧 · 💧 1.250 · 🔥 3 ngày · 🌳 góp quỹ: 2');
+    expect(c.textContent).toContain('600/1.000💧 · 💧 1.250 · 🔥 3 ngày · 🌳 cây đã trồng: 2');
     expect(c.querySelector('[role="progressbar"][aria-label="Tiến độ cây"]')!.getAttribute('aria-valuenow')).toBe('60');
   });
 
@@ -208,7 +208,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     state.data['/game/profile'] = PROFILE({ ecoImpact: null, totalSeeds: undefined, streakDays: undefined });
     const c = await mount();
     expect(c.textContent).toContain('Vườn của bạn');
-    expect(c.textContent).toContain('0/0💧 · 💧 0 · 🔥 0 ngày · 🌳 góp quỹ: 0');
+    expect(c.textContent).toContain('0/0💧 · 💧 0 · 🔥 0 ngày · 🌳 cây đã trồng: 0');
   });
 
   it('giai đoạn cây: <=50% mầm, >50% cành, 100% cây', async () => {

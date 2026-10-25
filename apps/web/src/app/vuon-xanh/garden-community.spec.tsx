@@ -532,6 +532,36 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     expect(document.body.textContent).toContain('Đã chia sẻ lên Cộng đồng');
   });
 
+  it('nút chia sẻ có dòng báo bài sẽ hiện tên khách', async () => {
+    state.posts['/game/tree/water'] = () => harvest;
+    const c = await mount();
+    await water(c);
+    expect((document.querySelector('[role="dialog"]') as HTMLElement).textContent).toContain('Bài sẽ hiện tên của bạn trên Cộng đồng');
+  });
+
+  it('API báo alreadyShared: thông báo "Bạn đã chia sẻ cây này rồi"', async () => {
+    state.posts['/game/tree/water'] = () => harvest;
+    state.posts['/game/harvest/share'] = () => ({ shared: true, alreadyShared: true });
+    const c = await mount();
+    await water(c);
+    click(btn(document.querySelector('[role="dialog"]') as HTMLElement, 'Chia sẻ lên Cộng đồng'));
+    await flush(8);
+    expect(document.body.textContent).toContain('Bạn đã chia sẻ cây này rồi');
+    expect(document.body.textContent).not.toContain('Đã chia sẻ lên Cộng đồng');
+  });
+
+  it('thu hoạch ở lô phụ: hộp chúc mừng không có nút chia sẻ', async () => {
+    state.data['/game/garden'] = GARDEN();
+    state.posts['/game/garden/plot/p2/water'] = () => ({ progress: 0, target: 20, harvested: true, treesPlanted: 2, revivedFromDead: false, reward: { certificate: 'TT-9' } });
+    const c = await mount();
+    const waters = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
+    click(waters[0]!);
+    await flush(8);
+    const dlg = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dlg.textContent).toContain('Thu hoạch thành công!');
+    expect(dlg.textContent).not.toContain('Chia sẻ lên Cộng đồng');
+  });
+
   it('khách vãng lai: hộp thu hoạch không có nút chia sẻ', async () => {
     state.posts['/game/tree/water'] = () => ({ progress: 50, target: 50, harvested: true, treesPlanted: 1, rewardBlocked: 'GUEST' });
     const c = await mount();

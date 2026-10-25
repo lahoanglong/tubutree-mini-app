@@ -15,6 +15,8 @@ export function HarvestCelebration({
   certificate,
   species,
   points,
+  sprout,
+  canShare,
   couponCapped,
   nextTarget,
   onClose,
@@ -33,6 +35,10 @@ export function HarvestCelebration({
   species: HarvestSpecies | null;
   /** Điểm Xanh thưởng cây mầm (lần thu hoạch đầu); khi có thì không có mã và không nói chuyện góp quỹ cây. */
   points: number | null;
+  /** Lần tưới có thu hoạch cây mầm (xem `HarvestReward.sprout`). */
+  sprout: boolean;
+  /** Chỉ cây ở lô nhà mới chia sẻ được. */
+  canShare: boolean;
   couponCapped: HarvestCouponCap | null;
   /** 💧 cần cho cây kế tiếp. */
   nextTarget: number | null;
@@ -45,7 +51,8 @@ export function HarvestCelebration({
   onShare: () => void;
 }) {
   const t = gameNewbieCopy.harvest;
-  const seedling = points != null && points > 0;
+  const seedling = sprout || (points != null && points > 0);
+  const showPoints = points != null && points > 0;
   return (
     <Sheet
       open={open}
@@ -63,10 +70,13 @@ export function HarvestCelebration({
               {t.guestCta}
             </button>
           )}
-          {!guest && (
-            <button type="button" disabled={shared || sharing} onClick={onShare} className={`${miniBtnSecondary} w-full`}>
-              {shared ? t.shareCommunityDone : sharing ? t.shareCommunityBusy : t.shareCommunity}
-            </button>
+          {!guest && canShare && (
+            <>
+              <button type="button" disabled={shared || sharing} onClick={onShare} className={`${miniBtnSecondary} w-full`}>
+                {shared ? t.shareCommunityDone : sharing ? t.shareCommunityBusy : t.shareCommunity}
+              </button>
+              <p className="text-center text-xs text-stone-700">{t.shareCommunityNote}</p>
+            </>
           )}
           <button type="button" onClick={onClose} className={`${guest ? miniBtnSecondary : ui.btnPrimary} w-full`}>
             Tuyệt vời!
@@ -79,15 +89,9 @@ export function HarvestCelebration({
           🌳
         </div>
         <p className="mt-1 text-sm text-stone-700">
-          {seedling ? (
-            t.seedling
-          ) : (
-            <>
-              Cây ảo của bạn đã lớn — Tubu sẽ góp <b>1 cây</b> vào quỹ trồng cây 🌿
-            </>
-          )}
+          {certificate ? t.fund : seedling ? t.seedling : t.grown}
         </p>
-        {seedling && (
+        {showPoints && (
           <div className="mt-3 rounded-control border border-dashed border-stone-450 bg-stone-50 p-3">
             <div className="text-base font-bold text-forest-700">{t.points(points)}</div>
             <div className="text-xs text-stone-700">{t.pointsCaption}</div>
