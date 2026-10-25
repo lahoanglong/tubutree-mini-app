@@ -15,6 +15,7 @@ import {
   DEW_SEEDS_DEFAULT,
   FIRST_CHECKIN_BONUS_DEFAULT,
   FIRST_HARVEST_POINTS_DEFAULT,
+  HARVEST_COUPON_DAILY_CAP_DEFAULT,
   HARVEST_COUPON_MONTHLY_CAP_DEFAULT,
   QUIZ_WRONG_SEEDS_DEFAULT,
   configInt,
@@ -123,6 +124,7 @@ export class GameService {
       (!profile.lastStreakRepairAt || Date.now() - new Date(profile.lastStreakRepairAt).getTime() >= cooldownD * 86400 * 1000);
     return {
       ...profile,
+      ecoImpact: eco,
       treeHealth: this.treeHealth(profile, wiltDays),
       brokenStreakDays: profile.brokenStreakDays,
       streakRepairCost,
@@ -300,7 +302,7 @@ export class GameService {
     // kiếm-nước→tưới→thu-hoạch in coupon vô hạn (P0-1, docs/2026-09-08-review-progress.md; lúc đó nước
     // còn mua được bằng xu, nay đã ngừng). Đặt trần bằng CODE thay vì chỉ dựa vào admin cấu hình đúng
     // giá — admin sửa nhầm config không được vô tình tắt lưới an toàn.
-    const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
+    const dailyCap = await configInt(this.config, 'game.harvest_coupon_daily_cap', HARVEST_COUPON_DAILY_CAP_DEFAULT);
     const monthlyCap = await configInt(this.config, 'game.harvest_coupon_monthly_cap', HARVEST_COUPON_MONTHLY_CAP_DEFAULT);
     const dayStart = startOfVnDay();
     const monthStart = startOfVnMonth();
@@ -330,6 +332,7 @@ export class GameService {
     let couponCapped: 'DAY' | 'MONTH' | undefined;
     let rewardBlocked: 'GUEST' | undefined;
     let sproutPoints = 0;
+    let sproutHarvested = false;
     const revivedFromDead = false;
     let eco: EcoImpact = { progress: 0, target: ladderTarget(ladder, 0), treeType: DEFAULT_TREE_TYPE, treesPlanted: 0 };
 
@@ -374,7 +377,14 @@ export class GameService {
           while (eco.progress >= eco.target) {
             eco.progress -= eco.target;
             harvestedDrops += eco.target;
-            const isSprout = eco.treesPlanted === 0;
+            // Hồ sơ cũ đã tưới dở ở target lớn hơn bậc đầu của thang: lần thu hoạch này là cây thường (mã + góp quỹ), không phải cây mầm.
+            const firstTree = eco.treesPlanted === 0;
+            const isSprout = firstTree && eco.target <= ladderTarget(ladder, 0);
+            if (firstTree && !isSprout) {
+              sproutDue = false;
+              eco.sproutRewarded = true;
+            }
+            if (isSprout) sproutHarvested = true;
             eco.treesPlanted += 1;
             harvestCount += 1;
             // Cây kế tiếp theo thang; cây đang trồng của hồ sơ cũ giữ target đã lưu cho tới lần thu hoạch này.
@@ -463,7 +473,9 @@ export class GameService {
       certificate?: string;
       species?: { name: string; emoji: string; rarity: string; ecoFact: string | null };
       points?: number;
+      sprout?: boolean;
     } = {
+      ...(sproutHarvested ? { sprout: true } : {}),
       ...(couponCodes.length > 0 ? { coupon: couponCodes[0], coupons: couponCodes } : {}),
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
@@ -507,7 +519,7 @@ export class GameService {
         select: { id: true },
       });
       if (existing) return { shared: true as const, alreadyShared: true };
-      await feed.createAchievementPost(userId, 'HARVEST', 'Vừa thu hoạch 1 cây trong Vườn Xanh 🌳', { treesPlanted });
+      await feed.createAchievementPost(userId, 'HARVEST', 'Vừa thu hoạch 1 cây trong Vườn Xanh 🌳', { treesPlanted }, tx);
       return { shared: true as const, alreadyShared: false };
     });
   }

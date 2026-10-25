@@ -17,8 +17,8 @@ describe('GameService.shareHarvest (real Postgres)', () => {
 
   beforeAll(async () => {
     const feedStub = {
-      createAchievementPost: (userId: string, kind: 'HARVEST', body: string, meta?: object) =>
-        prisma.feedPost.create({ data: { userId, kind, body, meta: meta as object } }),
+      createAchievementPost: (userId: string, kind: 'HARVEST', body: string, meta?: object, client: Pick<PrismaService, 'feedPost'> = prisma) =>
+        client.feedPost.create({ data: { userId, kind, body, meta: meta as object } }),
     };
     moduleRef = await Test.createTestingModule({
       imports: [PrismaModule],
@@ -55,6 +55,13 @@ describe('GameService.shareHarvest (real Postgres)', () => {
     expect(results.filter((r) => !r.alreadyShared)).toHaveLength(1);
     expect(await posts(user.id)).toBe(1);
   });
+
+  it('25 lượt chia sẻ song song không treo (mỗi lượt chỉ giữ một kết nối) → đúng 1 bài', async () => {
+    const user = await withTrees(2);
+    const results = await Promise.all(Array.from({ length: 25 }, () => game.shareHarvest(user.id)));
+    expect(results.filter((r) => !r.alreadyShared)).toHaveLength(1);
+    expect(await posts(user.id)).toBe(1);
+  }, 30_000);
 
   it('thu hoạch thêm cây (mức mới) thì chia sẻ được thêm một bài', async () => {
     const user = await withTrees(1);

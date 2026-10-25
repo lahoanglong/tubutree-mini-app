@@ -10,6 +10,7 @@ import {
   DEFAULT_TREE_TYPE,
   GARDEN_COUPON_PREFIX,
   HARVEST_COUPON_CODE_PREFIXES,
+  HARVEST_COUPON_DAILY_CAP_DEFAULT,
   HARVEST_COUPON_MONTHLY_CAP_DEFAULT,
   configInt,
   harvestCouponMinOrder,
@@ -167,7 +168,7 @@ export class GameGardenService {
     // Trần cứng số coupon thu hoạch/ngày — mirror waterTree() ở game.service.ts (P0-1): nước rẻ hơn
     // nhiều giá trị coupon thu hoạch, không có trần thì vòng kiếm-nước→tưới→thu-hoạch in coupon vô hạn
     // ở LÔ PHỤ cũng như lô nhà.
-    const dailyCap = await this.config.get<number>('game.harvest_coupon_daily_cap', 3);
+    const dailyCap = await configInt(this.config, 'game.harvest_coupon_daily_cap', HARVEST_COUPON_DAILY_CAP_DEFAULT);
     const monthlyCap = await configInt(this.config, 'game.harvest_coupon_monthly_cap', HARVEST_COUPON_MONTHLY_CAP_DEFAULT);
     const dayStart = startOfVnDay();
     const monthStart = startOfVnMonth();

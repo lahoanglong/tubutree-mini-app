@@ -73,6 +73,7 @@ export const FIRST_CHECKIN_BONUS_DEFAULT = 50;
 export const COMEBACK_GAP_DAYS_DEFAULT = 7;
 export const COMEBACK_SEEDS_DEFAULT = 60;
 export const FIRST_HARVEST_POINTS_DEFAULT = 2000;
+export const HARVEST_COUPON_DAILY_CAP_DEFAULT = 1;
 export const HARVEST_COUPON_MONTHLY_CAP_DEFAULT = 4;
 /** Nhắc "cây khát" chỉ trong ngần ấy ngày sau lần tưới cuối: cây không còn "chết" nên không nhắc mãi người đã bỏ. */
 export const THIRSTY_REMINDER_MAX_DAYS = 7;
