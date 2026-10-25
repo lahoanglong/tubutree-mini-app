@@ -7,13 +7,14 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   getPublicConfig: vi.fn(),
   getNewCustomerOffer: vi.fn(),
+  fetchOrders: vi.fn(),
   status: 'authenticated' as string,
   userId: 'u1',
   guest: false,
   ensurePhone: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
-vi.mock('../../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
+vi.mock('../../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig, fetchOrders: mocks.fetchOrders }));
 vi.mock('../../services/account-api', () => ({ getNewCustomerOffer: mocks.getNewCustomerOffer }));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: unknown) => unknown) =>
@@ -58,6 +59,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     vi.clearAllMocks();
     mocks.status = 'authenticated';
     mocks.guest = false;
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
     mocks.getPublicConfig.mockResolvedValue(CONFIG);
     mocks.getNewCustomerOffer.mockResolvedValue(OFFER);
   });
@@ -178,6 +180,23 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('button', { name: 'Nhận quà bằng Zalo' }));
     expect(mocks.ensurePhone).toHaveBeenCalled();
+  });
+
+  it('tài khoản khách đã có đơn: không hứa quà chào mừng (khối ẩn hẳn)', async () => {
+    mocks.guest = true;
+    mocks.fetchOrders.mockResolvedValue({ data: [{ code: 'TUBU1' }], meta: { page: 1, limit: 1, total: 1 } });
+    const { container } = renderGift();
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+  });
+
+  it('tài khoản khách: chưa biết có đơn hay không thì chưa hứa gì', async () => {
+    mocks.guest = true;
+    mocks.fetchOrders.mockReturnValue(new Promise(() => {}));
+    const { container } = renderGift();
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('nút "Chọn sản phẩm" mở trang mua sắm', async () => {

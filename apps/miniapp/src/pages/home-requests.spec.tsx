@@ -103,7 +103,8 @@ describe('Trang chủ gộp request (C-037)', () => {
     // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
     expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/products']);
+    // Trang đầu của lưới gợi ý (không page, limit 12) lấy từ khối gộp; /waste/me chỉ để biết còn yêu cầu đổi rác đang mở khi chương trình tạm dừng.
+    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/waste/me']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
   });
 
@@ -113,7 +114,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('Đặt định kỳ giảm 17% mỗi đơn')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/home', '/products']);
+    expect(paths().sort()).toEqual(['/home']);
   });
 
   it('API gộp cũ chưa có khối cấu hình/ưu đãi khách mới: hai khối đó lùi về request lẻ, phần còn lại vẫn từ gộp', async () => {
@@ -126,7 +127,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/products']);
+    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/waste/me']);
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {
@@ -151,7 +152,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('LẻBrand')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/products']);
+    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/waste/me']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {

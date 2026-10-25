@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   cfg: { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true, vndPerPointRedeem: 1000 } } as Record<string, unknown>,
   getLoyalty: vi.fn(),
   getCoupons: vi.fn(),
+  recycleOpen: false,
   getCheckIn: vi.fn(),
   postCheckIn: vi.fn(),
   ensurePhone: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('../services/account-api', async (importOriginal) => ({
   postDailyCheckIn: mocks.postCheckIn,
 }));
 vi.mock('../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('../hooks/use-recycle-open-requests', () => ({ useRecycleOpenRequests: () => mocks.recycleOpen }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('../store/auth', () => {
   const state = () => ({
@@ -59,6 +61,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     vi.clearAllMocks();
     mocks.phase = 'authenticated';
     mocks.guest = false;
+    mocks.recycleOpen = false;
     mocks.search = '';
     mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true, vndPerPointRedeem: 1000 } };
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100, pointsConvertedBalance: 20, tier: { name: 'Mầm Xanh' }, nextTier: null });
@@ -95,7 +98,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     fireEvent.click(screen.getByText('Mua chung nhóm'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
-    fireEvent.click(screen.getByRole('button', { name: 'Hạng và lịch sử điểm' }));
+    fireEvent.click(screen.getByRole('button', { name: /Hạng và lịch sử điểm/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/loyalty');
   });
 
@@ -142,5 +145,45 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     expect(await screen.findByText('Đăng nhập để xem ưu đãi')).toBeInTheDocument();
     expect(mocks.getLoyalty).not.toHaveBeenCalled();
     expect(mocks.getCoupons).not.toHaveBeenCalled();
+  });
+
+  it('tên đọc của thẻ Điểm Xanh chứa hạng và số điểm đang hiển thị', async () => {
+    renderPage();
+    const card = await screen.findByRole('button', { name: /Hạng và lịch sử điểm/ });
+    await waitFor(() => expect(card).toHaveAccessibleName(/Mầm Xanh, 120 điểm/));
+  });
+
+  it('chưa có số hạng: không đoán "Mầm Xanh", giữ chỗ thanh tiến độ; lỗi thì báo và "Thử lại" gọi lại', async () => {
+    mocks.getLoyalty.mockRejectedValueOnce(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText('Chưa tải được hạng và điểm')).toBeInTheDocument();
+    expect(screen.queryByText('Mầm Xanh')).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Mầm Xanh')).toBeInTheDocument();
+    expect(screen.queryByText('Chưa tải được hạng và điểm')).toBeNull();
+  });
+
+  it('mã sắp hết hạn có nhãn "Sắp hết hạn"; mã còn xa thì không', async () => {
+    const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'SOON', endAt: soon }, COUPON]);
+    renderPage();
+    await screen.findAllByText(/HSD/);
+    expect(screen.getAllByText('Sắp hết hạn')).toHaveLength(1);
+  });
+
+  it('Đổi rác tạm dừng mà khách còn yêu cầu mở: dòng đổi thành "Yêu cầu của tôi"; hết yêu cầu thì ẩn', async () => {
+    mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
+    mocks.recycleOpen = true;
+    const first = renderPage();
+    expect(await screen.findByText('Yêu cầu của tôi')).toBeInTheDocument();
+    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+    fireEvent.click(screen.getByText('Yêu cầu của tôi'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+    first.unmount();
+    mocks.recycleOpen = false;
+    renderPage();
+    await screen.findByText('Quà của tôi');
+    expect(screen.queryByText('Yêu cầu của tôi')).toBeNull();
   });
 });

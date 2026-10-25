@@ -1,13 +1,16 @@
+import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { AlertTriangle, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { useActiveOrderCount } from '../../hooks/use-active-order-count';
+import { readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
+import { ACTIVE_ORDER_COUNT_KEY } from '../../hooks/use-active-order-count';
 import { useRemaining } from '../../hooks/use-remaining';
-import { fetchOrders, type OrderView } from '../../services/shop-api';
+import { fetchActiveOrderCount, fetchOrders, type OrderView } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { browserStorage } from '../../utils/recently-viewed';
 import { canPayOrderNow, showsPaymentDeadline } from '../../utils/refund-rules';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -17,7 +20,6 @@ import { Skeleton } from '../ui/skeleton';
 
 const SECTION_PAD = '0 16px 12px';
 const ROW_PADDING = '8px 4px';
-const PLACEHOLDER_ROW_HEIGHT = 60;
 
 /** Đơn chuyển khoản chờ tiền: giờ còn lại và nút "Thanh toán ngay" mở thẳng trang chuyển khoản. */
 function PendingPaymentRow({ order }: { order: OrderView }) {
@@ -55,13 +57,14 @@ function PendingPaymentRow({ order }: { order: OrderView }) {
 /**
  * "Việc cần làm" ở Trang chủ: đơn chờ chuyển khoản (có giờ hết hạn, nút Thanh toán ngay) rồi tới đơn đang giao, tối đa hai dòng.
  * Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy) lớn hơn 0; khách chưa đăng
- * nhập, không có việc hay lỗi → ẩn. Khung chờ giữ chỗ một dòng chỉ trong lúc tải đơn, vì lúc đó gần như chắc chắn có việc.
+ * nhập, không có việc hay lỗi → ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng), để khối không hiện khung rồi sụp mất.
  */
 export function TodoStrip() {
   const navigate = useNavigate();
   const authed = useAuthStore((s) => s.status === 'authenticated');
-  const activeCount = useActiveOrderCount(true);
-  const enabled = authed && activeCount > 0;
+  // Cùng khoá và hàm tải với useActiveOrderCount (thanh đáy) để dùng chung dữ liệu, nhưng cần cả trạng thái đã tải xong hay chưa.
+  const countQ = useQuery({ queryKey: ACTIVE_ORDER_COUNT_KEY, queryFn: fetchActiveOrderCount, enabled: authed, staleTime: 30_000, retry: false });
+  const enabled = authed && (countQ.data ?? 0) > 0;
   const pending = useQuery({
     queryKey: ['orders', 'home-todo-pending'],
     queryFn: () => fetchOrders({ status: 'PENDING_PAYMENT' }, 1, 1),
@@ -76,19 +79,27 @@ export function TodoStrip() {
     staleTime: 30_000,
     retry: false,
   });
-  if (!authed) return null;
-
-  if (enabled && (pending.isLoading || shipping.isLoading)) {
-    return (
-      <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
-        <Skeleton height={PLACEHOLDER_ROW_HEIGHT + 18} radius="var(--radius-card)" />
-      </div>
-    );
-  }
-
+  const userId = useAuthStore((s) => s.user?.id);
+  const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
+  const loading = enabled && (pending.isLoading || shipping.isLoading);
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
   const shipTotal = shipping.data?.meta.total ?? 0;
+  const rows = (payOrder ? 1 : 0) + (shipOrder ? 1 : 0);
+  const settled = authed && (enabled ? !pending.isLoading && !shipping.isLoading && !pending.isError && !shipping.isError : countQ.isSuccess);
+  useEffect(() => {
+    if (settled && userId) writeTodoRows(browserStorage(), userId, rows);
+  }, [settled, userId, rows]);
+  if (!authed) return null;
+
+  // Khung chờ chỉ khi lần mở trước có việc thật (chắc chắn sẽ có dòng); không thì chờ im lặng, khối hiện khi có việc.
+  if (loading) {
+    return rememberedRows > 0 ? (
+      <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
+        <Skeleton height={todoSkeletonHeight(rememberedRows)} radius="var(--radius-card)" />
+      </div>
+    ) : null;
+  }
   if (!payOrder && !shipOrder) return null;
 
   return (

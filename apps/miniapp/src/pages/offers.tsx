@@ -3,12 +3,14 @@ import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarCheck, Check, ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { memberCardView } from '@tubutree/app-core/home-layout';
+import { memberCardAriaLabel, memberCardView, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
 import { getCoupons, getLoyalty } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useCheckIn } from '../hooks/use-check-in';
+import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
+import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -72,11 +74,20 @@ export default function OffersPage() {
     ? memberCardView({ overview: loyaltyQ.data, pointsTotal: pointsSummary(loyaltyQ.data ?? user).total, vndPerPointRedeem: cfg.loyalty?.vndPerPointRedeem })
     : null;
   const coupons = couponsQ.data ?? [];
+  useMarkExpiringSeen(couponsQ.data);
+  const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
+  const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
 
   const shortcuts: { icon: LucideIcon; title: string; subtitle: string; to: string; show: boolean }[] = [
     { icon: Gift, title: homeCopy.offers.rewardsTitle, subtitle: homeCopy.offers.rewardsHint, to: '/rewards', show: true },
     { icon: PackageOpen, title: homeCopy.offers.myRewards, subtitle: homeCopy.offers.myRewardsHint, to: '/rewards/mine', show: true },
-    { icon: Recycle, title: 'Đổi rác lấy quà', subtitle: homeCopy.offers.recycleHint, to: '/recycle', show: cfg.isLoaded && cfg.waste.enabled },
+    {
+      icon: Recycle,
+      title: wasteEnabled ? 'Đổi rác lấy quà' : RECYCLE_REQUESTS_LABEL,
+      subtitle: wasteEnabled ? homeCopy.offers.recycleHint : homeCopy.offers.recyclePausedHint,
+      to: '/recycle',
+      show: wasteEnabled || recycleOpen,
+    },
     { icon: ScanLine, title: 'Tích điểm đơn sàn', subtitle: homeCopy.offers.claimHint, to: '/points/scan', show: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true },
     { icon: Users, title: 'Mua chung nhóm', subtitle: homeCopy.offers.groupBuyHint, to: '/group-buy', show: true },
   ];
@@ -96,57 +107,89 @@ export default function OffersPage() {
 
           {/* Thẻ Điểm Xanh và hạng */}
           <section aria-label={homeCopy.offers.pointsTitle} style={{ padding: '12px 16px 0' }}>
-            <button
-              type="button"
-              aria-label={homeCopy.offers.pointsDetail}
-              className="tubu-press"
-              onClick={() => go('/loyalty')}
+            <div
               style={{
-                display: 'block',
-                width: '100%',
                 padding: 16,
-                border: 'none',
-                textAlign: 'left',
-                fontFamily: 'inherit',
-                cursor: 'pointer',
                 color: 'var(--color-text-inverse)',
                 background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
                 borderRadius: 'var(--radius-card)',
                 boxShadow: 'var(--elevation-1)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                <Text variant="body-sm" tone="inverse" style={{ fontWeight: 600 }}>
-                  <Icon icon={Leaf} size="sm" tone="inverse" style={{ verticalAlign: '-3px' }} /> {card?.tierName}
-                </Text>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                  <Text variant="caption" tone="inverse">
-                    {homeCopy.offers.pointsDetail}
+              <button
+                type="button"
+                aria-label={card ? memberCardAriaLabel(card, homeCopy.offers.pointsDetail) : homeCopy.offers.pointsDetail}
+                className="tubu-press"
+                onClick={() => go('/loyalty')}
+                style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', minHeight: 44 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <Text variant="body-sm" tone="inverse" style={{ fontWeight: 600 }}>
+                    {card?.tierName ? (
+                      <>
+                        <Icon icon={Leaf} size="sm" tone="inverse" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
+                      </>
+                    ) : null}
                   </Text>
-                  <Icon icon={ChevronRight} size="sm" tone="inverse" />
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-                <Heading variant="title-lg" as="div" tone="inverse" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {card?.pointsLabel}
-                </Heading>
-                {card?.valueLabel && (
-                  <Text variant="body-sm" tone="inverse" style={{ opacity: 0.9, fontVariantNumeric: 'tabular-nums' }}>
-                    {card.valueLabel}
-                  </Text>
-                )}
-              </div>
-              {loyaltyQ.data && card && (
-                <div style={{ marginTop: 10 }}>
-                  <div role="progressbar" aria-label="Tiến độ lên hạng kế" aria-valuemin={0} aria-valuemax={100} aria-valuenow={card.progressPct} style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${card.progressPct}%`, background: 'var(--color-text-inverse)', borderRadius: 'var(--radius-pill)' }} />
-                  </div>
-                  <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 4, opacity: 0.9 }}>
-                    {card.toGoLine ?? homeCopy.member.topTier}
-                  </Text>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    <Text variant="caption" tone="inverse">
+                      {homeCopy.offers.pointsDetail}
+                    </Text>
+                    <Icon icon={ChevronRight} size="sm" tone="inverse" />
+                  </span>
                 </div>
-              )}
-            </button>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+                  <Heading variant="title-lg" as="div" tone="inverse" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {card?.pointsLabel}
+                  </Heading>
+                  {card?.valueLabel && (
+                    <Text variant="body-sm" tone="inverse" style={{ opacity: 0.9, fontVariantNumeric: 'tabular-nums' }}>
+                      {card.valueLabel}
+                    </Text>
+                  )}
+                </div>
+              </button>
+              <div style={{ marginTop: 10 }}>
+                <div
+                  role={loyaltyQ.data ? 'progressbar' : undefined}
+                  aria-label={loyaltyQ.data ? 'Tiến độ lên hạng kế' : undefined}
+                  aria-valuemin={loyaltyQ.data ? 0 : undefined}
+                  aria-valuemax={loyaltyQ.data ? 100 : undefined}
+                  aria-valuenow={loyaltyQ.data && card ? card.progressPct : undefined}
+                  aria-hidden={loyaltyQ.data ? undefined : true}
+                  style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)', overflow: 'hidden' }}
+                >
+                  <div style={{ height: '100%', width: `${loyaltyQ.data && card ? card.progressPct : 0}%`, background: 'var(--color-text-inverse)', borderRadius: 'var(--radius-pill)' }} />
+                </div>
+                <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  {loyaltyQ.data && card ? (
+                    <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9 }}>
+                      {card.toGoLine ?? homeCopy.member.topTier}
+                    </Text>
+                  ) : loyaltyQ.isError ? (
+                    <>
+                      <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, minWidth: 0 }}>
+                        {homeCopy.member.tierFailed}
+                      </Text>
+                      <button
+                        type="button"
+                        className="tubu-press"
+                        onClick={() => { haptic('light'); void loyaltyQ.refetch(); }}
+                        style={{ flex: '0 0 auto', minHeight: 44, margin: '-14px -6px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+                      >
+                        {homeCopy.member.retry}
+                      </button>
+                    </>
+                  ) : (
+                    <div aria-hidden="true" style={{ visibility: 'hidden' }}>
+                      <Text variant="caption" tone="inverse" as="div">
+                        {homeCopy.member.progressSpacer}
+                      </Text>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* Điểm danh */}

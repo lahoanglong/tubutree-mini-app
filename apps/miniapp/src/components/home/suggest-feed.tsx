@@ -25,7 +25,7 @@ export function SuggestFeed() {
   const forYou = useQuery({ queryKey: ['for-you'], queryFn: fetchForYou, enabled: authed && tab === 'for-you' });
   const pages = useInfiniteQuery({
     queryKey: ['products', 'home-suggest', sort ?? 'default'],
-    queryFn: ({ pageParam }) => fetchProducts({ limit: SUGGEST_PAGE_SIZE, page: pageParam, ...(sort ? { sort } : {}) }),
+    queryFn: ({ pageParam }) => fetchProducts({ limit: SUGGEST_PAGE_SIZE, ...(pageParam > 1 ? { page: pageParam } : {}), ...(sort ? { sort } : {}) }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
   });

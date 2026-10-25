@@ -15,7 +15,7 @@ import { BestSellerRail, BEST_SELLER_LIMIT } from '../components/home/best-selle
 import { BrandJourney } from '../components/home/brand-journey';
 import { CategoryRow } from '../components/home/category-row';
 import { CommunityPreview } from '../components/home/community-preview';
-import { MemberCard } from '../components/home/member-card';
+import { MemberCard, MemberCardSkeleton } from '../components/home/member-card';
 import { NewCustomerGift } from '../components/home/new-customer-gift';
 import { ShortcutGrid } from '../components/home/shortcut-grid';
 import { SuggestFeed } from '../components/home/suggest-feed';
@@ -58,16 +58,18 @@ export default function HomePage() {
     useQuery({
       queryKey: ['products', 'home-best-seller'],
       queryFn: () => fetchProducts({ limit: BEST_SELLER_LIMIT, sort: 'best_seller' }),
+      enabled: kind === 'new',
     }),
   );
   const categories = useCategories();
 
-  // API sập hẳn: danh sách bán chạy lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi của kệ.
-  const pageDown = bestSellers.isError && bestSellers.data === undefined;
+  // API sập hẳn: chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới) mà kệ lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay
+  // cho từng thẻ lỗi. Khách cũ không thấy kệ này nên không bao giờ nhận dải lỗi vì nó.
+  const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchShell />,
-    member: kind === 'returning' ? <MemberCard /> : null,
+    member: kind === 'returning' ? <MemberCard /> : kind === 'unknown' ? <MemberCardSkeleton /> : null,
     todo: <TodoStrip />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift /> : null,

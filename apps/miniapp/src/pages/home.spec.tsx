@@ -32,7 +32,10 @@ vi.mock('../store/auth', () => ({
 // Mỗi khối mới đã có test riêng; ở đây chỉ kiểm thứ tự, khối lỗi/khung chờ của Bán chạy và hành vi cấp trang.
 vi.mock('../components/flash-sale', () => ({ FlashSale: () => null, UpcomingFlashSales: () => null }));
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => <section aria-label="Mua lại" /> }));
-vi.mock('../components/home/member-card', () => ({ MemberCard: () => <section aria-label="Thẻ thành viên" /> }));
+vi.mock('../components/home/member-card', () => ({
+  MemberCard: () => <section aria-label="Thẻ thành viên" />,
+  MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
+}));
 vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => <section aria-label="Lối tắt" /> }));
 vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
@@ -75,6 +78,7 @@ const settled = (qc: QueryClient, key: unknown[]) => {
 };
 const RETURNING = [...homeBlockOrder('returning')];
 const NEW = [...homeBlockOrder('new')];
+const UNKNOWN = [...homeBlockOrder('unknown')];
 
 describe('HomePage (phương án A, 9 khối)', () => {
   beforeEach(() => {
@@ -149,13 +153,25 @@ describe('HomePage (phương án A, 9 khối)', () => {
     await waitFor(() => expect(screen.queryByTestId('home-page-error')).toBeNull());
   });
 
-  it('kệ "Mua lại" lỗi: trang rơi về bố cục khách mới, không thẻ lỗi cấp trang và không mất loại đã nhớ', async () => {
+  it('kệ "Mua lại" lỗi với khách cũ đã được nhớ: vẫn bố cục khách cũ, không dải lỗi cấp trang, không mất loại đã nhớ', async () => {
     localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.fetchPurchasedItems.mockRejectedValue(new Error('boom'));
     const { qc } = renderHome();
     await waitFor(() => expect(qc.getQueryState(['purchased-items', 10])?.status).toBe('error'));
-    await waitFor(() => expect(blockOrder()).toEqual(NEW));
+    expect(blockOrder()).toEqual(RETURNING);
     expect(screen.queryByTestId('home-page-error')).toBeNull();
+    expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY) ?? 'null')).toEqual({ userId: 'u1', kind: 'returning' });
+  });
+
+  it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {
+    localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1' }], nextCursor: null });
+    mocks.fetchProducts.mockRejectedValue(new Error('boom'));
+    const { qc } = renderHome();
+    await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
+    expect(mocks.fetchProducts).not.toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
+    expect(screen.queryByTestId('home-page-error')).toBeNull();
+    expect(blockOrder()).toEqual(RETURNING);
   });
 
   it('khung chờ Bán chạy có đúng 6 ô (bằng giới hạn thật) khi đang tải', async () => {
@@ -239,11 +255,13 @@ describe('HomePage (phương án A, 9 khối)', () => {
       expect([...seen]).toEqual([RETURNING.join('>')]);
     });
 
-    it('(b) lần đầu (chưa nhớ gì): "new" khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
+    it('(b) lần đầu (chưa nhớ gì): "unknown" (giữ chỗ thẻ thành viên, chưa có Mua lại/Quà/Bán chạy) khi đang tải, đổi sang "returning" khi có hàng, và nhớ lại', async () => {
       const d = deferred<{ items: object[]; nextCursor: null }>();
       mocks.fetchPurchasedItems.mockReturnValue(d.promise);
       renderHome();
-      expect(blockOrder()).toEqual(NEW);
+      expect(blockOrder()).toEqual(UNKNOWN);
+      expect(screen.getByTestId('member-card-loading')).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
       await act(async () => {
         d.resolve({ items: [{ variationId: 'v1' }], nextCursor: null });
       });
@@ -263,13 +281,21 @@ describe('HomePage (phương án A, 9 khối)', () => {
       await waitFor(() => expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' }));
     });
 
-    it('(c2) API cũ lỗi (404): thứ tự "new", KHÔNG ghi đè loại đã nhớ', async () => {
+    it('(c2) tải lỗi với khách đã nhớ "returning": giữ thứ tự returning, KHÔNG ghi đè loại đã nhớ', async () => {
       storeKind({ userId: 'u1', kind: 'returning' });
-      mocks.fetchPurchasedItems.mockRejectedValue(new Error('404'));
+      mocks.fetchPurchasedItems.mockRejectedValue(new Error('500'));
+      const { qc } = renderHome();
+      await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
+      expect(blockOrder()).toEqual(RETURNING);
+      expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' });
+    });
+
+    it('(c3) tải lỗi mà chưa nhớ gì: khách mới, không ghi gì', async () => {
+      mocks.fetchPurchasedItems.mockRejectedValue(new Error('500'));
       const { qc } = renderHome();
       await waitFor(() => expect(settled(qc, ['purchased-items', 10])).toBe(true));
       await waitFor(() => expect(blockOrder()).toEqual(NEW));
-      expect(storedKind()).toEqual({ userId: 'u1', kind: 'returning' });
+      expect(storedKind()).toBeNull();
     });
 
     it.each([
@@ -277,12 +303,12 @@ describe('HomePage (phương án A, 9 khối)', () => {
       ['kind lạ', JSON.stringify({ userId: 'u1', kind: 'vip' })],
       ['sai dạng', JSON.stringify(['returning'])],
       ['thiếu userId', JSON.stringify({ kind: 'returning' })],
-    ])('(d) giá trị lưu hỏng/lạ (%s) bị bỏ qua: đang tải -> "new"', async (_name, raw) => {
+    ])('(d) giá trị lưu hỏng/lạ (%s) bị bỏ qua: đang tải -> "unknown"', async (_name, raw) => {
       localStorage.setItem(HOME_KIND_KEY, raw);
       mocks.fetchPurchasedItems.mockReturnValue(new Promise(() => {}));
       renderHome();
       await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
-      expect(blockOrder()).toEqual(NEW);
+      expect(blockOrder()).toEqual(UNKNOWN);
     });
 
     it('(e) loại đã nhớ của TÀI KHOẢN KHÁC không được dùng', async () => {
@@ -290,7 +316,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
       mocks.fetchPurchasedItems.mockReturnValue(new Promise(() => {}));
       renderHome();
       await waitFor(() => expect(mocks.fetchPurchasedItems).toHaveBeenCalled());
-      expect(blockOrder()).toEqual(NEW);
+      expect(blockOrder()).toEqual(UNKNOWN);
     });
 
     it('khách chưa đăng nhập: luôn "new", không đọc loại đã nhớ và không ghi gì', async () => {

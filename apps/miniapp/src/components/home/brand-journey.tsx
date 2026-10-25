@@ -28,7 +28,6 @@ export function BrandJourney() {
       <div style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-card)', padding: 12 }}>
         <button
           type="button"
-          aria-label={homeCopy.journey.ctaLabel}
           className="tubu-press"
           onClick={() => go('/brand-story')}
           style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
@@ -52,7 +51,7 @@ export function BrandJourney() {
           </span>
         </button>
         {list.length > 0 && (
-          <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 0' }}>
+          <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
             {list.map((b) => (
               <Chip key={b.brand} onPress={() => go(b.slug ? `/brand/${encodeURIComponent(b.slug)}` : brandBrowsePath(b.brand))}>
                 {b.brand}

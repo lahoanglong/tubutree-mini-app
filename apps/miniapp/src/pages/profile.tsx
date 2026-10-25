@@ -172,7 +172,8 @@ export default function ProfilePage() {
     );
   }
 
-  const tierName = loyaltyQ.data?.tier?.name ?? 'Mầm Xanh';
+  const tierName = loyaltyQ.data?.tier?.name ?? null;
+  const tierFailed = loyaltyQ.isError && !loyaltyQ.data;
   const pointsTotal = pointsSummary(loyaltyQ.data ?? user).total;
   const referral = referralQ.data;
   const code = referral?.referralCode ?? user.referralCode;
@@ -231,10 +232,14 @@ export default function ProfilePage() {
               {user.fullName ?? 'Khách Tubu'}
             </Heading>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              <Badge tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon icon={Leaf} size="sm" tone="brand" />
-                {tierName}
-              </Badge>
+              {tierName ? (
+                <Badge tone="brand" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Icon icon={Leaf} size="sm" tone="brand" />
+                  {tierName}
+                </Badge>
+              ) : !tierFailed ? (
+                <span aria-hidden="true" style={{ display: 'inline-block', width: 76, height: 24, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
+              ) : null}
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--color-text-inverse)' }}>
                 <Icon icon={Pencil} size="sm" tone="inverse" />
                 <Text variant="label" tone="inverse">
@@ -245,6 +250,24 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+        {tierFailed && (
+          <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+            <Text variant="caption" tone="inverse">
+              {homeCopy.member.tierFailed}
+            </Text>
+            <button
+              type="button"
+              className="tubu-press"
+              onClick={() => {
+                haptic('light');
+                void loyaltyQ.refetch();
+              }}
+              style={{ minHeight: 44, margin: '-12px -6px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              {homeCopy.member.retry}
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20 }}>

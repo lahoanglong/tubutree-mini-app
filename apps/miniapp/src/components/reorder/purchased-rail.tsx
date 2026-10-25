@@ -1,13 +1,16 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { vi } from '../../i18n/vi';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
 import { getErrorMessage } from '../../services/api';
-import type { PurchasedItem } from '../../services/shop-api';
+import { fetchProduct, type PurchasedItem } from '../../services/shop-api';
+import { isRetailOnly } from '../../utils/retail-only';
 import { haptic } from '../../utils/haptic';
 import { SubscribeSheet } from '../subscribe-sheet';
+import { isEndpointMissing } from '../home/home-blocks';
 import { useBlockQuery } from '../home/use-block-query';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -79,7 +82,8 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
     );
   }
   const items = q.data?.items ?? [];
-  if (items.length === 0) return null;
+  // Chưa có món nào: lỗi thật (không phải API cũ 404) vẫn hiện khối lỗi kèm "Thử lại", khách cũ không thấy kệ biến mất im lặng.
+  if (items.length === 0 && !(q.isError && !isEndpointMissing(q.error))) return null;
 
   return (
     <section aria-label={vi.reorder.railTitle} style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
@@ -122,7 +126,7 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
           </Button>
         </div>
       )}
-      {items.length <= COMPACT_MAX_ITEMS ? (
+      {items.length === 0 ? null : items.length <= COMPACT_MAX_ITEMS ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 16px' }}>
           {items.map((p) => (
             <CompactRebuyCard
@@ -160,6 +164,17 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
   );
 }
 
+/**
+ * Có mời "Định kỳ" cho món này không: hàng chỉ bán lẻ (gian hàng đối tác, tự giao) bị máy chủ từ chối đặt định kỳ nên không mời.
+ * Dữ liệu đã mua không có thông tin này, nên đọc chi tiết sản phẩm (dùng chung khoá ['product', slug] với trang sản phẩm).
+ * `unknown` lúc đang tải: giữ chỗ nút để thẻ không đổi bố cục; lỗi tải thì không mời.
+ */
+function useSubscribable(slug: string): 'yes' | 'no' | 'unknown' {
+  const q = useQuery({ queryKey: ['product', slug], queryFn: () => fetchProduct(slug), staleTime: 60_000, retry: false });
+  if (q.isPending) return 'unknown';
+  return q.data && !isRetailOnly(q.data) ? 'yes' : 'no';
+}
+
 /** Thẻ ngang thấp cho kệ Mua lại khi chỉ có 1–2 món: ảnh nhỏ, tên, phân loại, giá, hai nút mua lại và đặt định kỳ. */
 function CompactRebuyCard({
   item,
@@ -176,6 +191,8 @@ function CompactRebuyCard({
 }) {
   const standing = item.salePrice ?? item.price;
   const hasSale = standing < item.price;
+  const available = item.inStock !== false && item.stock > 0;
+  const subscribable = useSubscribable(item.slug);
   return (
     <Card variant="raised" padding={12}>
       <button
@@ -195,19 +212,30 @@ function CompactRebuyCard({
               {item.variationName}
             </Text>
           )}
-          <span style={{ display: 'flex', marginTop: 2 }}>
+          <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
             <PriceTag value={standing} compareAt={hasSale ? item.price : undefined} size="sm" />
+            {item.timesBought > 1 && <Badge tone="brand" size="sm">{vi.reorder.timesBought(item.timesBought)}</Badge>}
           </span>
         </span>
       </button>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <Button variant="secondary" onPress={onRebuy} style={{ flex: 1, minWidth: 0 }}>
-          {homeCopy.reorder.buy}
-        </Button>
-        <Button variant="ghost" onPress={onSubscribe} style={{ flex: 1, minWidth: 0 }}>
-          {homeCopy.reorder.subscribe(discountPct)}
-        </Button>
-      </div>
+      {available ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Button variant="secondary" onPress={onRebuy} style={{ flex: 1, minWidth: 0 }}>
+            {homeCopy.reorder.buy}
+          </Button>
+          {subscribable !== 'no' && (
+            <div style={{ flex: 1, minWidth: 0, visibility: subscribable === 'yes' ? 'visible' : 'hidden' }} aria-hidden={subscribable === 'yes' ? undefined : true}>
+              <Button variant="ghost" fullWidth disabled={subscribable !== 'yes'} onPress={onSubscribe}>
+                {homeCopy.reorder.subscribe(discountPct)}
+              </Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 10 }}>
+          {vi.reorder.unavailable}
+        </Text>
+      )}
     </Card>
   );
 }

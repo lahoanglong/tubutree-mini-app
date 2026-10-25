@@ -4,6 +4,8 @@ import { Gift, HeartHandshake, MessagesSquare, Recycle, ScanLine, Sprout, Ticket
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutId } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
+import { useRecycleOpenRequests } from '../../hooks/use-recycle-open-requests';
+import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { Icon } from '../ui/icon';
 import { Text } from '../ui/text';
@@ -28,7 +30,10 @@ export function ShortcutGrid() {
   const navigate = useNavigate();
   const cfg = usePublicConfig();
   const [earnOpen, setEarnOpen] = useState(false);
+  const authed = useAuthStore((st) => st.status === 'authenticated');
+  const recycleOpenRequests = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
   const items = visibleHomeShortcuts({
+    recycleOpenRequests,
     wasteEnabled: cfg.isLoaded && cfg.waste.enabled,
     claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
   });

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { ChevronRight, Leaf } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { memberCardView } from '@tubutree/app-core/home-layout';
+import { memberCardAriaLabel, memberCardView } from '@tubutree/app-core/home-layout';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { vi } from '../../i18n/vi';
@@ -11,9 +11,21 @@ import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { pointsSummary } from '../../utils/points-lots';
 import { Icon } from '../ui/icon';
+import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 
 const SECTION_PAD = '0 16px 12px';
+
+/** Chiều cao thẻ thành viên thật ở khổ 375px (đo bằng e2e): giữ chỗ lúc app chưa biết khách cũ hay mới. */
+export const MEMBER_CARD_HEIGHT = 186;
+
+export function MemberCardSkeleton() {
+  return (
+    <div data-testid="member-card-loading" aria-hidden="true" style={{ padding: SECTION_PAD }}>
+      <Skeleton height={MEMBER_CARD_HEIGHT} radius="var(--radius-card)" />
+    </div>
+  );
+}
 
 /**
  * Thẻ thành viên ở đầu Trang chủ khách cũ: tên, hạng, Điểm Xanh thật, tiến độ lên hạng và hai việc làm mỗi ngày
@@ -37,6 +49,8 @@ export function MemberCard() {
     haptic('light');
     navigate(to);
   };
+  const greeting = homeCopy.member.greeting(user.fullName ?? vi.auth.greetingFallback);
+  const loyaltyFailed = loyaltyQ.isError && !loyaltyQ.data;
 
   return (
     <section aria-label={homeCopy.member.cardLabel} style={{ padding: SECTION_PAD }}>
@@ -51,15 +65,19 @@ export function MemberCard() {
       >
         <button
           type="button"
-          aria-label={homeCopy.member.openLabel}
+          aria-label={memberCardAriaLabel(card, homeCopy.member.openLabel, greeting)}
           className="tubu-press"
           onClick={() => go('/offers')}
           style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <Text variant="body-sm" tone="inverse" style={{ fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {`${homeCopy.member.greeting(user.fullName ?? vi.auth.greetingFallback)} · `}
-              <Icon icon={Leaf} size="sm" tone="inverse" style={{ verticalAlign: '-3px' }} /> {card.tierName}
+              {card.tierName ? `${greeting} · ` : greeting}
+              {card.tierName && (
+                <>
+                  <Icon icon={Leaf} size="sm" tone="inverse" style={{ verticalAlign: '-3px', display: 'inline' }} /> {card.tierName}
+                </>
+              )}
             </Text>
             <Icon icon={ChevronRight} size="sm" tone="inverse" />
           </div>
@@ -73,24 +91,50 @@ export function MemberCard() {
               </Text>
             )}
           </div>
-          {loyaltyQ.data && (
-            <div style={{ marginTop: 10 }}>
-              <div
-                role="progressbar"
-                aria-label="Tiến độ lên hạng kế"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={card.progressPct}
-                style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)', overflow: 'hidden' }}
-              >
-                <div style={{ height: '100%', width: `${card.progressPct}%`, background: 'var(--color-text-inverse)', borderRadius: 'var(--radius-pill)' }} />
-              </div>
-              <Text variant="caption" tone="inverse" as="div" style={{ marginTop: 4, opacity: 0.9 }}>
+        </button>
+        <div style={{ marginTop: 10 }}>
+          <div
+            role={loyaltyQ.data ? 'progressbar' : undefined}
+            aria-label={loyaltyQ.data ? 'Tiến độ lên hạng kế' : undefined}
+            aria-valuemin={loyaltyQ.data ? 0 : undefined}
+            aria-valuemax={loyaltyQ.data ? 100 : undefined}
+            aria-valuenow={loyaltyQ.data ? card.progressPct : undefined}
+            aria-hidden={loyaltyQ.data ? undefined : true}
+            style={{ height: 6, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)', overflow: 'hidden' }}
+          >
+            <div style={{ height: '100%', width: `${loyaltyQ.data ? card.progressPct : 0}%`, background: 'var(--color-text-inverse)', borderRadius: 'var(--radius-pill)' }} />
+          </div>
+          <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            {loyaltyQ.data ? (
+              <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9 }}>
                 {card.toGoLine ?? homeCopy.member.topTier}
               </Text>
-            </div>
-          )}
-        </button>
+            ) : loyaltyFailed ? (
+              <>
+                <Text variant="caption" tone="inverse" as="div" style={{ opacity: 0.9, minWidth: 0 }}>
+                  {homeCopy.member.tierFailed}
+                </Text>
+                <button
+                  type="button"
+                  className="tubu-press"
+                  onClick={() => {
+                    haptic('light');
+                    void loyaltyQ.refetch();
+                  }}
+                  style={{ flex: '0 0 auto', minHeight: 44, margin: '-14px -6px', padding: '0 6px', border: 'none', background: 'transparent', color: 'var(--color-text-inverse)', fontFamily: 'inherit', fontSize: 'var(--type-caption-size)', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+                >
+                  {homeCopy.member.retry}
+                </button>
+              </>
+            ) : (
+              <div aria-hidden="true" style={{ visibility: 'hidden' }}>
+                <Text variant="caption" tone="inverse" as="div">
+                  {homeCopy.member.progressSpacer}
+                </Text>
+              </div>
+            )}
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button
             type="button"

@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(),
+  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), fetchProduct: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(),
   status: 'authenticated',
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -13,7 +13,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../../services/shop-api', () => ({
-  fetchPurchasedItems: mocks.fetchPurchasedItems, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
+  fetchPurchasedItems: mocks.fetchPurchasedItems, fetchProduct: mocks.fetchProduct, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
 }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
@@ -38,6 +38,7 @@ describe('PurchasedRail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.status = 'authenticated';
+    mocks.fetchProduct.mockResolvedValue({ slug: 'nuoc-rua-chen', fulfiller: { kind: 'TUBU' }, partnerOwned: false });
   });
 
   it('khách cũ: vùng "Mua lại" với thẻ SP + nhãn số lần đã mua', async () => {
@@ -139,14 +140,16 @@ describe('PurchasedRail', () => {
       expect(screen.getByRole('region', { name: 'Mua lại' })).toHaveTextContent('Nước rửa chén');
     });
 
-    it('lỗi ở lần tải đầu (chưa có gì để giữ) → ẩn như cũ; tải lại sau lỗi không chớp khung chờ', async () => {
+    it('lỗi ở lần tải đầu (chưa có gì để giữ): hiện khối lỗi "Thử lại" thay vì ẩn im lặng; tải lại sau lỗi không chớp khung chờ', async () => {
       let release: (v: unknown) => void = () => {};
       mocks.fetchPurchasedItems
         .mockRejectedValueOnce(new Error('boom'))
         .mockImplementationOnce(() => new Promise((r) => { release = r; }));
-      const { qc, container } = renderRail();
+      const { qc } = renderRail();
       await waitFor(() => expect(qc.getQueryState(RAIL_KEY)?.status).toBe('error'));
-      expect(container).toBeEmptyDOMElement();
+      const errored = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(within(errored).getByText('Có chút trục trặc, thử lại nhé')).toBeInTheDocument();
+      expect(within(errored).getByRole('button', { name: 'Thử lại Mua lại' })).toBeInTheDocument();
 
       let refetching: Promise<unknown> = Promise.resolve();
       act(() => {
@@ -159,7 +162,56 @@ describe('PurchasedRail', () => {
         release({ items: [ITEM], nextCursor: null });
         await refetching;
       });
-      expect(await screen.findByRole('region', { name: 'Mua lại' })).toHaveTextContent('Nước rửa chén');
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(region).toHaveTextContent('Nước rửa chén');
+      expect(within(region).queryByText('Có chút trục trặc, thử lại nhé')).toBeNull();
+    });
+  });
+
+  describe('thẻ gọn (1–2 món)', () => {
+    it('hàng của đối tác (chỉ bán lẻ): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+      mocks.fetchProduct.mockResolvedValue({ slug: 'nuoc-rua-chen', partnerOwned: true });
+      renderRail();
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      await waitFor(() => expect(mocks.fetchProduct).toHaveBeenCalledWith('nuoc-rua-chen'));
+      await waitFor(() => expect(region).not.toHaveTextContent('Định kỳ'));
+      expect(within(region).getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
+    });
+
+    it('hàng thường: có "Định kỳ" bấm được sau khi biết chi tiết sản phẩm', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+      renderRail();
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(await within(region).findByRole('button', { name: 'Định kỳ -10%' })).toBeEnabled();
+    });
+
+    it('lỗi tải chi tiết sản phẩm: không mời "Định kỳ" (máy chủ có thể từ chối)', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+      mocks.fetchProduct.mockRejectedValue(new Error('boom'));
+      renderRail();
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      await waitFor(() => expect(region).not.toHaveTextContent('Định kỳ'));
+    });
+
+    it('hết hàng: ghi "Tạm hết hàng", không có nút Mua lại / Định kỳ', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, stock: 0, inStock: false }], nextCursor: null });
+      renderRail();
+      const region = await screen.findByRole('region', { name: 'Mua lại' });
+      expect(region).toHaveTextContent('Tạm hết hàng');
+      expect(within(region).queryByRole('button', { name: 'Mua lại' })).toBeNull();
+      expect(region).not.toHaveTextContent('Định kỳ');
+    });
+
+    it('món đã mua nhiều lần có nhãn "Đã mua N lần"; mua một lần thì không', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+      const first = renderRail();
+      expect(await screen.findByText('Đã mua 2 lần')).toBeInTheDocument();
+      first.unmount();
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, timesBought: 1 }], nextCursor: null });
+      renderRail();
+      await screen.findByRole('region', { name: 'Mua lại' });
+      expect(screen.queryByText(/Đã mua \d+ lần/)).toBeNull();
     });
   });
 });

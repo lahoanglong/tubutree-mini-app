@@ -1,3 +1,5 @@
+import { homeCopy } from '@tubutree/app-core/home-copy';
+import { isCouponExpiring } from '@tubutree/app-core/home-layout';
 import type { CouponDTO } from '../../services/account-api';
 import { autoCouponName } from '../../utils/coupon-name';
 import { formatDate, formatVnd } from '../../utils/format';
@@ -24,7 +26,7 @@ export function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
         border: '1px dashed var(--clay-100)',
       }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         <Text variant="body-sm" tone="primary" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
           {couponLabel(c)}
         </Text>
@@ -33,9 +35,16 @@ export function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
           {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
         </Text>
       </div>
-      <Text variant="caption" tone="tertiary">
-        HSD {formatDate(c.endAt)}
-      </Text>
+      <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+        <Text variant="caption" tone="tertiary" as="div">
+          HSD {formatDate(c.endAt)}
+        </Text>
+        {isCouponExpiring(c, Date.now()) && (
+          <Text variant="caption" as="div" style={{ color: 'var(--color-text-warning)', fontWeight: 700 }}>
+            {homeCopy.offers.couponExpiring}
+          </Text>
+        )}
+      </div>
     </div>
   );
 }

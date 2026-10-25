@@ -4,7 +4,7 @@ import { useNavigate } from 'zmp-ui';
 import { CalendarClock, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { getNewCustomerOffer, type NewCustomerOffer } from '../../services/account-api';
-import { getPublicConfig, type PublicConfig } from '../../services/shop-api';
+import { fetchOrders, getPublicConfig, type PublicConfig } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { isGuestUser } from '../coupon-claim-gate';
 import { vi } from '../../i18n/vi';
@@ -76,8 +76,14 @@ export function NewCustomerGift() {
     retry: false,
   });
 
+  // Máy chủ không phân biệt được tài khoản khách đã có đơn (luôn trả isNewCustomer=false), nên hỏi thẳng danh sách đơn: đã có đơn thì
+  // không hứa quà chào mừng dành cho khách chưa mua.
+  const ordersQ = useQuery({ queryKey: ['orders', 'home-has-any', userId], queryFn: () => fetchOrders({}, 1, 1), enabled: guestAccount, retry: false });
+  const guestHasOrders = guestAccount && (ordersQ.data?.meta.total ?? 0) > 0;
+
   // Chưa biết có phải khách mới thì không chiếm chỗ: khung chờ cố định sẽ làm trang nhảy với mọi khách đã có đơn rồi mới biến mất.
   if (cfgQ.isError || cfgQ.isPending || (authed && !guestAccount && (offerQ.isError || offerQ.isPending))) return null;
+  if (guestAccount && (ordersQ.isPending || ordersQ.isError || guestHasOrders)) return null;
   if (authed && !guestAccount && offerQ.data?.isNewCustomer !== true) return null;
 
   const voucher = authed && !guestAccount ? (offerQ.data?.welcomeVoucher ?? null) : null;

@@ -3,8 +3,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { resetHomeFeed } from '../../services/home-feed';
 
 // Thứ tự khối và loại khách dùng chung với web: xem packages/app-core/src/home-layout.ts.
-export { customerKind, homeBlockOrder } from '@tubutree/app-core/home-layout';
-export type { HomeBlockId, HomeCustomerKind } from '@tubutree/app-core/home-layout';
+export { customerKind, homeBlockOrder, resolveHomeKind } from '@tubutree/app-core/home-layout';
+export type { HomeBlockId, HomeCustomerKind, HomeKindState } from '@tubutree/app-core/home-layout';
 
 /** Mọi tiền tố query mà Trang chủ hiển thị — kéo để làm mới phải làm mới ĐỦ (A2-33). */
 export const HOME_QUERY_PREFIXES = [
