@@ -42,6 +42,7 @@ export default function HomePage() {
   const qc = useQueryClient();
   useHomeFeed();
   const authed = useAuthStore((s) => s.status === 'authenticated');
+  const restoring = useAuthStore((s) => s.status === 'loading');
   const userId = useAuthStore((s) => s.user?.id);
   // Chuông ở đây trước đây trơ, không báo gì — trong khi voucher sinh nhật, nhắc giỏ, hoa hồng
   // duyệt đều nằm trong Thông báo. Dùng chung queryKey với trang Thông báo (P1-8 audit mạch lạc).
@@ -51,7 +52,7 @@ export default function HomePage() {
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = useHomeCustomerKind(authed, userId, purchasedRaw);
+  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring);
 
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
   const bestSellers = useBlockQuery(
@@ -69,13 +70,13 @@ export default function HomePage() {
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchShell />,
-    member: kind === 'returning' ? <MemberCard /> : kind === 'unknown' ? <MemberCardSkeleton /> : null,
-    todo: <TodoStrip />,
+    member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
+    todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift /> : null,
     shortcuts: <ShortcutGrid />,
     // Lỗi tải Mua lại (kể cả 404 của API cũ) đưa trang về bố cục khách mới, nơi khối này không có mặt, nên khối tự có trạng thái lỗi riêng ở PurchasedRail.
-    purchased: <PurchasedRail source="home_rail" />,
+    purchased: <PurchasedRail source="home_rail" restoring={restoring} />,
     flash: (
       <>
         <FlashSale />

@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), fetchProduct: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(),
+  navigate: vi.fn(), openSnackbar: vi.fn(), fetchPurchasedItems: vi.fn(), addToCart: vi.fn(), repurchaseOrder: vi.fn(),
   status: 'authenticated',
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -13,7 +13,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../../services/shop-api', () => ({
-  fetchPurchasedItems: mocks.fetchPurchasedItems, fetchProduct: mocks.fetchProduct, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
+  fetchPurchasedItems: mocks.fetchPurchasedItems, addToCart: mocks.addToCart, repurchaseOrder: mocks.repurchaseOrder,
 }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.status }) }));
@@ -24,7 +24,7 @@ import { PurchasedRail } from './purchased-rail';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
 
@@ -38,7 +38,6 @@ describe('PurchasedRail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.status = 'authenticated';
-    mocks.fetchProduct.mockResolvedValue({ slug: 'nuoc-rua-chen', fulfiller: { kind: 'TUBU' }, partnerOwned: false });
   });
 
   it('khách cũ: vùng "Mua lại" với thẻ SP + nhãn số lần đã mua', async () => {
@@ -169,29 +168,27 @@ describe('PurchasedRail', () => {
   });
 
   describe('thẻ gọn (1–2 món)', () => {
-    it('hàng của đối tác (chỉ bán lẻ): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
-      mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
-      mocks.fetchProduct.mockResolvedValue({ slug: 'nuoc-rua-chen', partnerOwned: true });
+    it('API báo hàng chỉ bán lẻ (retailOnly): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, retailOnly: true }], nextCursor: null });
       renderRail();
       const region = await screen.findByRole('region', { name: 'Mua lại' });
-      await waitFor(() => expect(mocks.fetchProduct).toHaveBeenCalledWith('nuoc-rua-chen'));
-      await waitFor(() => expect(region).not.toHaveTextContent('Định kỳ'));
+      expect(region).not.toHaveTextContent('Định kỳ');
       expect(within(region).getByRole('button', { name: 'Mua lại' })).toBeInTheDocument();
     });
 
-    it('hàng thường: có "Định kỳ" bấm được sau khi biết chi tiết sản phẩm', async () => {
+    it('hàng thường (retailOnly=false): có "Định kỳ" bấm được ngay, không cần tải chi tiết sản phẩm', async () => {
       mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
       renderRail();
       const region = await screen.findByRole('region', { name: 'Mua lại' });
-      expect(await within(region).findByRole('button', { name: 'Định kỳ -10%' })).toBeEnabled();
+      expect(within(region).getByRole('button', { name: 'Định kỳ -10%' })).toBeEnabled();
     });
 
-    it('lỗi tải chi tiết sản phẩm: không mời "Định kỳ" (máy chủ có thể từ chối)', async () => {
-      mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
-      mocks.fetchProduct.mockRejectedValue(new Error('boom'));
+    it('API cũ chưa trả retailOnly: không mời "Định kỳ" (máy chủ có thể từ chối)', async () => {
+      const { retailOnly: _omit, ...old } = ITEM;
+      mocks.fetchPurchasedItems.mockResolvedValue({ items: [old], nextCursor: null });
       renderRail();
       const region = await screen.findByRole('region', { name: 'Mua lại' });
-      await waitFor(() => expect(region).not.toHaveTextContent('Định kỳ'));
+      expect(region).not.toHaveTextContent('Định kỳ');
     });
 
     it('hết hàng: ghi "Tạm hết hàng", không có nút Mua lại / Định kỳ', async () => {

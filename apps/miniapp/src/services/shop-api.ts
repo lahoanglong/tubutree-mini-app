@@ -672,6 +672,8 @@ export interface PurchasedItem {
   stock: number;
   inStock: boolean;
   timesBought: number;
+  /** Hàng chỉ bán lẻ (đối tác): không đặt định kỳ được. API cũ chưa trả: coi là chưa biết, không mời "Định kỳ". */
+  retailOnly?: boolean;
   lastPurchasedAt: string;
 }
 export interface PurchasedItemsPage {

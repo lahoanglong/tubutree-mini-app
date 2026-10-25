@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   fetchCategories: vi.fn(),
   fetchPurchasedItems: vi.fn(),
   getNotifications: vi.fn(),
-  auth: { status: 'authenticated' as 'authenticated' | 'guest', user: { id: 'u1' } as { id: string } | null },
+  auth: { status: 'authenticated' as 'authenticated' | 'guest' | 'loading', user: { id: 'u1' } as { id: string } | null },
   onRefresh: undefined as undefined | (() => Promise<unknown> | void),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -161,6 +161,19 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(blockOrder()).toEqual(RETURNING);
     expect(screen.queryByTestId('home-page-error')).toBeNull();
     expect(JSON.parse(localStorage.getItem(HOME_KIND_KEY) ?? 'null')).toEqual({ userId: 'u1', kind: 'returning' });
+  });
+
+  it('đang khôi phục phiên (status loading) + đã nhớ khách cũ: bố cục khách cũ, không Bán chạy; chưa nhớ thì bố cục "chưa biết"', async () => {
+    localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    mocks.auth.status = 'loading';
+    mocks.auth.user = null;
+    const first = renderHome();
+    expect(blockOrder()).toEqual(RETURNING);
+    expect(screen.queryByRole('region', { name: 'Bán chạy' })).toBeNull();
+    first.unmount();
+    localStorage.clear();
+    renderHome();
+    expect(blockOrder()).toEqual([...homeBlockOrder('unknown')]);
   });
 
   it('khách cũ không nhận dải lỗi cấp trang dù kệ Bán chạy (khách cũ không thấy) lỗi: kệ này không được tải', async () => {

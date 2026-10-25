@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { vi } from '../../i18n/vi';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { usePurchasedItems } from '../../hooks/use-purchased-items';
 import { getErrorMessage } from '../../services/api';
-import { fetchProduct, type PurchasedItem } from '../../services/shop-api';
-import { isRetailOnly } from '../../utils/retail-only';
+import type { PurchasedItem } from '../../services/shop-api';
 import { haptic } from '../../utils/haptic';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { isEndpointMissing } from '../home/home-blocks';
@@ -49,6 +47,8 @@ export function toTileProduct(p: PurchasedItem): ProductTileProduct {
 
 export interface PurchasedRailProps {
   source: 'home_rail' | 'orders_tab';
+  /** Đang khôi phục phiên: giữ chỗ kệ bằng khung chờ để khi phiên về nội dung bên dưới không bị đẩy. */
+  restoring?: boolean;
 }
 
 /**
@@ -61,14 +61,14 @@ export interface PurchasedRailProps {
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa
  * chọn theo danh tính `target`, không được dựng target inline trong JSX.
  */
-export function PurchasedRail({ source }: PurchasedRailProps) {
+export function PurchasedRail({ source, restoring = false }: PurchasedRailProps) {
   const navigate = useNavigate();
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
 
-  if (q.isLoading) {
+  if (restoring || q.isLoading) {
     // Khớp đúng khung kệ thật (tiêu đề + hàng tile + đệm dưới) để dữ liệu về không đẩy nội dung bên dưới.
     return (
       <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ paddingBottom: RAIL_PADDING_BOTTOM }}>
@@ -164,17 +164,6 @@ export function PurchasedRail({ source }: PurchasedRailProps) {
   );
 }
 
-/**
- * Có mời "Định kỳ" cho món này không: hàng chỉ bán lẻ (gian hàng đối tác, tự giao) bị máy chủ từ chối đặt định kỳ nên không mời.
- * Dữ liệu đã mua không có thông tin này, nên đọc chi tiết sản phẩm (dùng chung khoá ['product', slug] với trang sản phẩm).
- * `unknown` lúc đang tải: giữ chỗ nút để thẻ không đổi bố cục; lỗi tải thì không mời.
- */
-function useSubscribable(slug: string): 'yes' | 'no' | 'unknown' {
-  const q = useQuery({ queryKey: ['product', slug], queryFn: () => fetchProduct(slug), staleTime: 60_000, retry: false });
-  if (q.isPending) return 'unknown';
-  return q.data && !isRetailOnly(q.data) ? 'yes' : 'no';
-}
-
 /** Thẻ ngang thấp cho kệ Mua lại khi chỉ có 1–2 món: ảnh nhỏ, tên, phân loại, giá, hai nút mua lại và đặt định kỳ. */
 function CompactRebuyCard({
   item,
@@ -192,7 +181,8 @@ function CompactRebuyCard({
   const standing = item.salePrice ?? item.price;
   const hasSale = standing < item.price;
   const available = item.inStock !== false && item.stock > 0;
-  const subscribable = useSubscribable(item.slug);
+  // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
+  const subscribable = item.retailOnly === false;
   return (
     <Card variant="raised" padding={12}>
       <button
@@ -223,9 +213,9 @@ function CompactRebuyCard({
           <Button variant="secondary" onPress={onRebuy} style={{ flex: 1, minWidth: 0 }}>
             {homeCopy.reorder.buy}
           </Button>
-          {subscribable !== 'no' && (
-            <div style={{ flex: 1, minWidth: 0, visibility: subscribable === 'yes' ? 'visible' : 'hidden' }} aria-hidden={subscribable === 'yes' ? undefined : true}>
-              <Button variant="ghost" fullWidth disabled={subscribable !== 'yes'} onPress={onSubscribe}>
+          {subscribable && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Button variant="ghost" fullWidth onPress={onSubscribe}>
                 {homeCopy.reorder.subscribe(discountPct)}
               </Button>
             </div>

@@ -202,8 +202,8 @@ export default function OffersPage() {
               </Card>
             ) : checkInStatus && checkInView ? (
               <Card padding={16}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                     <IconTile icon={CalendarCheck} />
                     <div style={{ minWidth: 0 }}>
                       <Heading variant="title-sm" as="h2">
