@@ -30,6 +30,11 @@ const HEADING_PAD_TOP = 4;
 const HEADING_PAD_BOTTOM = 8;
 const RAIL_PADDING_BOTTOM = 12;
 /** Export để Trang chủ dùng CHUNG query key ['purchased-items', 10] khi quyết định thứ tự khối (plan 4b). */
+/** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
+/** Tên luôn chiếm đủ 2 dòng (14px x 1.57) để thẻ cao như nhau với tên ngắn hay dài và khung chờ khớp thẻ thật. */
+const NAME_MIN_HEIGHT = 44;
+const ACTION_STYLE = { flex: '1 1 0', minWidth: 0, paddingInline: 12 } as const;
+
 export const PURCHASED_RAIL_LIMIT = 10;
 
 export function toTileProduct(p: PurchasedItem): ProductTileProduct {
@@ -194,7 +199,7 @@ function CompactRebuyCard({
       >
         <ProductThumb src={item.thumbnail} alt="" size={64} />
         <span style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: NAME_MIN_HEIGHT }}>
             {item.productName}
           </Text>
           {item.variationName && (
@@ -210,15 +215,13 @@ function CompactRebuyCard({
       </button>
       {available ? (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <Button variant="secondary" onPress={onRebuy} style={{ flex: 1, minWidth: 0 }}>
+          <Button variant="secondary" onPress={onRebuy} style={ACTION_STYLE}>
             {homeCopy.reorder.buy}
           </Button>
           {subscribable && (
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Button variant="ghost" fullWidth onPress={onSubscribe}>
-                {homeCopy.reorder.subscribe(discountPct)}
-              </Button>
-            </div>
+            <Button variant="ghost" onPress={onSubscribe} style={ACTION_STYLE}>
+              {homeCopy.reorder.subscribe(discountPct)}
+            </Button>
           )}
         </div>
       ) : (

@@ -9,7 +9,7 @@ export type { HomeBlockId, HomeCustomerKind, HomeKindState } from '@tubutree/app
 /** Mọi tiền tố query mà Trang chủ hiển thị — kéo để làm mới phải làm mới ĐỦ (A2-33). */
 export const HOME_QUERY_PREFIXES = [
   'products', 'for-you', 'flash-sales', 'purchased-items', 'orders', 'subscriptions', 'categories', 'brands', 'cart', 'notifications',
-  'new-customer-offer', 'loyalty', 'loyalty-checkin', 'coupons', 'community',
+  'new-customer-offer', 'loyalty', 'loyalty-checkin', 'coupons', 'community', 'recycle-open-request-count',
 ] as const;
 
 export function refreshHomeQueries(qc: QueryClient): Promise<unknown> {

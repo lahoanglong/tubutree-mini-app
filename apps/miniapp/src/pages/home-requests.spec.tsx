@@ -62,6 +62,7 @@ const ME_FEED = {
     isNewCustomer: true,
     welcomeVoucher: { code: 'WELCOME-U1', type: 'AMOUNT', value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' },
   },
+  wasteOpenRequestCount: 0,
   purchasedLimit: 10,
 };
 
@@ -106,6 +107,17 @@ describe('Trang chủ gộp request (C-037)', () => {
     // Trang đầu của lưới gợi ý (không page, limit 12) lấy từ khối gộp; số yêu cầu đổi rác đang mở cũng lấy từ /home/me (không gọi /waste/me).
     expect(paths().sort()).toEqual(['/feed', '/home', '/home/me']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
+  });
+
+  it('API gộp cũ chưa có khối số yêu cầu đổi rác: hỏi endpoint nhẹ /waste/me/open-count một lần, không gọi /waste/me', async () => {
+    const { wasteOpenRequestCount: _dropped, ...oldMe } = ME_FEED;
+    mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
+    mocks.routes['/home/me'] = () => ({ data: oldMe });
+    mocks.routes['/waste/me/open-count'] = () => ({ data: { count: 0 } });
+    renderHome();
+    expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths().filter((p) => p.startsWith('/waste'))).toEqual(['/waste/me/open-count']);
   });
 
   it('khách chưa đăng nhập: chỉ /home, không gọi /home/me', async () => {
