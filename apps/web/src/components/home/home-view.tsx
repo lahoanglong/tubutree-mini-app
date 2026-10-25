@@ -11,7 +11,7 @@ import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { categoryEntries } from '@/lib/browse-categories';
 import { useAuth } from '@/lib/auth-context';
-import { useAuthPhase } from '@/lib/auth-phase';
+import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { homeText } from '@/lib/home-text';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -57,6 +57,7 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
   const qc = useQueryClient();
   const router = useRouter();
   const authed = useAuthPhase() === 'authenticated';
+  const restoring = useAuthRestoring();
   const userId = useAuth().user?.id;
 
   // Chuông ở đây dùng chung queryKey ['notifications'] với trang Thông báo.
@@ -65,7 +66,7 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const kind = useHomeCustomerKind(authed, userId, purchasedRaw);
+  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring);
 
   // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
   const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
@@ -76,12 +77,12 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchRow unreadCount={unreadCount} authed={authed} />,
-    member: kind === 'returning' ? <MemberCard /> : kind === 'unknown' ? <MemberCardSkeleton /> : null,
-    todo: <TodoStrip />,
+    member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
+    todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
     welcome: kind === 'new' ? <NewCustomerGift /> : null,
     shortcuts: <ShortcutGrid />,
-    purchased: <PurchasedRail />,
+    purchased: <PurchasedRail restoring={restoring} />,
     flash: (
       <>
         <FlashSale />

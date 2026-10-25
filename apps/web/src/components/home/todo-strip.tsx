@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
+import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
 import { fetchOrders } from '@tubutree/app-core/api/orders';
 import { activeOrderCountQuery } from '@tubutree/app-core/queries/orders';
 import { useAuth } from '@/lib/auth-context';
@@ -47,12 +47,20 @@ function PendingPaymentRow({ order }: { order: TodoOrder }) {
   );
 }
 
+function TodoSkeleton({ rows }: { rows: number }) {
+  return (
+    <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: '0 0 12px' }}>
+      <Skeleton height={todoSkeletonHeight(rows)} radius="var(--radius-card)" />
+    </div>
+  );
+}
+
 /**
  * "Việc cần làm" ở Trang chủ (bản web của `todo-strip.tsx` ở Mini App): đơn chờ chuyển khoản (giờ hết hạn, nút Thanh toán ngay) rồi
  * tới đơn đang giao, tối đa hai dòng. Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy)
  * lớn hơn 0; chưa đăng nhập, không có việc hay lỗi thì ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng).
  */
-export function TodoStrip() {
+export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
   const router = useRouter();
   const authed = useAuthPhase() === 'authenticated';
   const count = useQuery({ ...activeOrderCountQuery(coreHttp), enabled: authed, staleTime: 30_000, retry: false });
@@ -73,7 +81,7 @@ export function TodoStrip() {
   });
   const userId = useAuth().user?.id;
   const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
-  const loading = enabled && (pending.isLoading || shipping.isLoading);
+  const loading = authed && (count.isPending || (enabled && (pending.isLoading || shipping.isLoading)));
   const payOrder = pending.data?.data[0];
   const shipOrder = shipping.data?.data[0];
   const shipTotal = shipping.data?.meta.total ?? 0;
@@ -82,15 +90,15 @@ export function TodoStrip() {
   useEffect(() => {
     if (settled && userId) writeTodoRows(browserStorage(), userId, rows);
   }, [settled, userId, rows]);
+  if (restoring) {
+    const rows = readLastTodoRows(browserStorage());
+    return rows > 0 ? <TodoSkeleton rows={rows} /> : null;
+  }
   if (!authed) return null;
 
   // Khung chờ chỉ khi lần mở trước có việc thật (chắc chắn sẽ có dòng); không thì chờ im lặng, khối hiện khi có việc.
   if (loading) {
-    return rememberedRows > 0 ? (
-      <div data-testid="todo-strip-loading" aria-hidden="true" style={{ padding: '0 0 12px' }}>
-        <Skeleton height={todoSkeletonHeight(rememberedRows)} radius="var(--radius-card)" />
-      </div>
-    ) : null;
+    return rememberedRows > 0 ? <TodoSkeleton rows={rememberedRows} /> : null;
   }
   if (!payOrder && !shipOrder) return null;
 

@@ -3,23 +3,15 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
-import { expiringCouponIds, mergeSeenCouponIds, offersDotReason, type OffersDotReason } from '@tubutree/app-core/home-layout';
+import { expiringCouponIds, mergeSeenCouponIds, offersDotReason, readSeenCoupons, writeSeenCoupons, type OffersDotReason } from '@tubutree/app-core/home-layout';
 import { checkInQuery, couponsQuery } from '@tubutree/app-core/queries/loyalty';
+import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { browserStorage } from '@/lib/recently-viewed';
 
-const SEEN_KEY = 'tubu_offers_seen_coupons';
-const SEEN_QUERY_KEY = ['offers-seen-coupons'] as const;
-
-function readSeen(): string[] {
-  try {
-    const v = JSON.parse(browserStorage()?.getItem(SEEN_KEY) ?? '[]') as unknown;
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
+const seenQueryKey = (userId: string | null | undefined) => ['offers-seen-coupons', userId ?? null] as const;
+const readSeen = (userId: string | null | undefined) => readSeenCoupons(browserStorage(), userId);
 
 /**
  * Lý do tab "Ưu đãi" có chấm đỏ: chưa điểm danh hôm nay (giữ đến khi điểm danh), hoặc có mã sắp hết hạn mà khách chưa thấy khi mở
@@ -29,9 +21,10 @@ function readSeen(): string[] {
 export function useOffersDot(enabled: boolean): OffersDotReason | null {
   const authed = useAuthPhase() === 'authenticated';
   const on = enabled && authed;
+  const userId = useAuth().user?.id;
   const checkIn = useQuery({ ...checkInQuery(coreHttp), enabled: on, staleTime: 60_000, retry: false });
   const coupons = useQuery({ ...couponsQuery(coreHttp), enabled: on, staleTime: 60_000, retry: false });
-  const seen = useQuery({ queryKey: SEEN_QUERY_KEY, queryFn: async () => readSeen(), initialData: readSeen, staleTime: Infinity, gcTime: Infinity });
+  const seen = useQuery({ queryKey: seenQueryKey(userId), queryFn: async () => readSeen(userId), initialData: () => readSeen(userId), staleTime: Infinity, gcTime: Infinity });
   if (!on) return null;
   return offersDotReason({ checkIn: checkIn.data, coupons: coupons.data, seenExpiringIds: seen.data }, Date.now());
 }
@@ -39,18 +32,15 @@ export function useOffersDot(enabled: boolean): OffersDotReason | null {
 /** Khách mở trang Ưu đãi và thấy danh sách mã: nhớ các mã sắp hết hạn đã xem để chấm đỏ tắt, chỉ bật lại khi có mã mới sắp hết hạn. */
 export function useMarkExpiringSeen(coupons: readonly CouponDTO[] | undefined): void {
   const qc = useQueryClient();
+  const userId = useAuth().user?.id;
   useEffect(() => {
-    if (!coupons) return;
+    if (!coupons || !userId) return;
     const ids = expiringCouponIds(coupons, Date.now());
     if (ids.length === 0) return;
-    const seen = qc.getQueryData<string[]>(SEEN_QUERY_KEY) ?? readSeen();
+    const seen = qc.getQueryData<string[]>(seenQueryKey(userId)) ?? readSeen(userId);
     const next = mergeSeenCouponIds(seen, ids);
     if (next.length === seen.length && next.every((x, i) => x === seen[i])) return;
-    try {
-      browserStorage()?.setItem(SEEN_KEY, JSON.stringify(next));
-    } catch {
-      /* kho bị chặn: chấm tắt trong phiên này, lần mở sau có thể bật lại */
-    }
-    qc.setQueryData(SEEN_QUERY_KEY, next);
-  }, [coupons, qc]);
+    writeSeenCoupons(browserStorage(), userId, next);
+    qc.setQueryData(seenQueryKey(userId), next);
+  }, [coupons, qc, userId]);
 }

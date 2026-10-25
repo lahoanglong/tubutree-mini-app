@@ -2,14 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { apiFetch } from '@/lib/client-api';
-import type { ProductDetail } from '@/lib/api';
 import { formatVnd } from '@/lib/format-vnd';
-import { isRetailOnly } from '@/lib/pdp-logic';
 import { homeText, reorderText } from '@/lib/home-text';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -68,23 +64,7 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
 
 /** Từ chừng này món trở lên mới dùng kệ cuộn ngang; ít hơn thì thẻ ngang thấp để không để trống nửa màn hình. */
 export const COMPACT_MAX_ITEMS = 2;
-const COMPACT_CARD_HEIGHT = 168;
-
-/**
- * Có mời "Định kỳ" cho món này không: hàng chỉ bán lẻ (gian hàng đối tác, tự giao) bị máy chủ từ chối đặt định kỳ nên không mời.
- * Dữ liệu đã mua không có thông tin này, nên đọc chi tiết sản phẩm (dùng chung khoá ['product', slug] với màn đặt hàng thành công).
- * `unknown` lúc đang tải: giữ chỗ nút để thẻ không đổi bố cục; lỗi tải thì không mời.
- */
-function useSubscribable(slug: string): 'yes' | 'no' | 'unknown' {
-  const q = useQuery({
-    queryKey: ['product', slug],
-    queryFn: () => apiFetch<ProductDetail>(`/products/${encodeURIComponent(slug)}`, { auth: false, cache: 'no-store' }),
-    staleTime: 60_000,
-    retry: false,
-  });
-  if (q.isPending) return 'unknown';
-  return q.data && !isRetailOnly(q.data) ? 'yes' : 'no';
-}
+const COMPACT_CARD_HEIGHT = 146;
 
 /** Thẻ ngang thấp cho kệ Mua lại khi chỉ có 1–2 món (bản web của `CompactRebuyCard` ở Mini App): ảnh nhỏ, tên, phân loại, giá, nút mua lại và đặt định kỳ. */
 function CompactRebuyCard({
@@ -101,7 +81,8 @@ function CompactRebuyCard({
   const standing = item.salePrice ?? item.price;
   const hasSale = standing < item.price;
   const available = item.inStock !== false && item.stock > 0;
-  const subscribable = useSubscribable(item.slug);
+  // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
+  const subscribable = item.retailOnly === false;
   return (
     <Card variant="raised" padding={12}>
       <button
@@ -132,9 +113,9 @@ function CompactRebuyCard({
           <Button variant="secondary" onPress={onRebuy} style={{ flex: 1, minWidth: 0 }}>
             {homeCopy.reorder.buy}
           </Button>
-          {subscribable !== 'no' && (
-            <div style={{ flex: 1, minWidth: 0, visibility: subscribable === 'yes' ? 'visible' : 'hidden' }} aria-hidden={subscribable === 'yes' ? undefined : true}>
-              <Button variant="ghost" fullWidth disabled={subscribable !== 'yes'} onPress={onSubscribe}>
+          {subscribable && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Button variant="ghost" fullWidth onPress={onSubscribe}>
                 {homeCopy.reorder.subscribe(discountPct)}
               </Button>
             </div>
@@ -156,14 +137,14 @@ function CompactRebuyCard({
  *
  * `target` là state (chỉ đổi khi chạm nút) nên danh tính ổn định — ReorderSheet khởi tạo lại lựa chọn theo danh tính `target`.
  */
-export function PurchasedRail() {
+export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
   const router = useRouter();
   const q = useBlockQuery(usePurchasedItems(PURCHASED_RAIL_LIMIT));
   const [target, setTarget] = useState<ReorderTarget | null>(null);
   const [subscribeFor, setSubscribeFor] = useState<PurchasedItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  if (q.isLoading) {
+  if (restoring || q.isLoading) {
     // Khớp khung kệ thật (tiêu đề + hàng thẻ) để dữ liệu về không đẩy nội dung bên dưới.
     return (
       <div data-testid="purchased-rail-loading" aria-hidden="true" style={{ paddingBottom: 12 }}>

@@ -6,9 +6,9 @@ import { newTestClient } from '@/test-utils/render-hook';
 import { ApiError } from '@/lib/client-api';
 
 // Chép ý nghĩa pages/home.spec của Mini App (phương án A, 9 khối): thứ tự khối theo khách cũ/mới, một lưới gợi ý, khối lỗi + Thử lại, lỗi cấp trang, khách vãng lai, chuông.
-const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'authenticated', user: { id: 'u1', fullName: 'Lan', pointsBalance: 0 } as unknown }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'authenticated', restoring: false, user: { id: 'u1', fullName: 'Lan', pointsBalance: 0 } as unknown }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.phase === 'authenticated' ? mocks.user : null }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
@@ -46,6 +46,7 @@ beforeEach(() => {
   localStorage.clear();
   routeState.pending = new Set();
   mocks.phase = 'authenticated';
+  mocks.restoring = false;
   mocks.user = { id: 'u1', fullName: 'Lan', pointsBalance: 0 };
   mocks.push.mockReset();
   routes = {
@@ -101,6 +102,27 @@ describe('HomeView — thứ tự khối (9 khối, một lưới gợi ý)', ()
     const c = await mount();
     expect(blockOrder(c)).toEqual([...homeBlockOrder('returning')]);
     expect(calls('/me/new-customer-offer')).toHaveLength(0);
+  });
+
+  it('đang khôi phục phiên + đã nhớ khách cũ: bố cục khách cũ ngay (khung chờ thẻ thành viên và kệ Mua lại), không Bán chạy, không gọi API khách', async () => {
+    localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    const c = await mount();
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('returning')]);
+    expect(c.querySelector('[data-testid="member-card-loading"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="purchased-rail-loading"]')).not.toBeNull();
+    expect(region(c, 'Bán chạy')).toBeNull();
+    expect(calls('/me/purchased-items')).toHaveLength(0);
+  });
+
+  it('đang khôi phục phiên, chưa nhớ gì: chưa biết (khung chờ trung tính), không dựng bố cục khách mới', async () => {
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    const c = await mount();
+    expect(blockOrder(c)).toEqual([...homeBlockOrder('unknown')]);
+    expect(region(c, 'Bán chạy')).toBeNull();
+    expect(region(c, 'Quà khách mới')).toBeNull();
   });
 
   it('khách mới nhưng API báo không còn là khách mới → không hiện Quà khách mới', async () => {

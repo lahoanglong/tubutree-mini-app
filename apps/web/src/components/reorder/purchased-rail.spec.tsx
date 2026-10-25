@@ -7,8 +7,7 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 
 // Chép ý nghĩa purchased-rail.spec của Mini App: kệ "Mua lại" cho khách cũ, ẩn khi rỗng/404/khách, sheet → thêm giỏ → sang giỏ, lỗi làm mới.
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated', product: vi.fn() }));
-vi.mock('@/lib/client-api', async (orig) => ({ ...(await orig<typeof import('@/lib/client-api')>()), apiFetch: (...a: unknown[]) => mocks.product(...a) }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated' }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
@@ -18,7 +17,7 @@ import { PurchasedRail } from './purchased-rail';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 1 };
 
@@ -36,7 +35,6 @@ beforeEach(() => {
   mocks.get.mockReset().mockImplementation(() => rail());
   mocks.post.mockReset().mockResolvedValue(CART);
   mocks.push.mockReset();
-  mocks.product.mockReset().mockResolvedValue({ slug: 'nuoc-rua-chen', fulfiller: { kind: 'TUBU' }, partnerOwned: false });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -178,15 +176,16 @@ describe('PurchasedRail', () => {
 
   describe('thẻ gọn (1–2 món)', () => {
     const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent ?? '');
-    it('hàng của đối tác (chỉ bán lẻ): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
-      mocks.product.mockResolvedValue({ slug: 'nuoc-rua-chen', partnerOwned: true });
+    it('API báo hàng chỉ bán lẻ (retailOnly): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
+      rail = async () => ({ items: [{ ...ITEM, retailOnly: true }], nextCursor: null });
       const c = await mount();
       expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
       expect(byText(c, 'button', 'Mua lại')).not.toBeNull();
     });
 
-    it('lỗi tải chi tiết sản phẩm: không mời "Định kỳ"', async () => {
-      mocks.product.mockRejectedValue(new Error('boom'));
+    it('API cũ chưa trả retailOnly: không mời "Định kỳ"', async () => {
+      const { retailOnly: _omit, ...old } = ITEM;
+      rail = async () => ({ items: [old], nextCursor: null });
       const c = await mount();
       expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
     });

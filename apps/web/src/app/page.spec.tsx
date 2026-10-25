@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks.get }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn().mockResolvedValue([]) } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest', useAuthRestoring: () => false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));

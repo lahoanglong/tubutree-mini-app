@@ -40,4 +40,11 @@ describe('useHomeCustomerKind', () => {
     expect(renderHook(() => useHomeCustomerKind(true, 'u1', failed)).result.current).toBe('new');
     expect(localStorage.getItem(HOME_KIND_KEY)).toBeNull();
   });
+
+  it('đang khôi phục phiên: theo loại của tài khoản dùng gần nhất, chưa nhớ thì "unknown", không bao giờ "new" khi chưa nhớ', () => {
+    expect(renderHook(() => useHomeCustomerKind(false, undefined, pending, true)).result.current).toBe('unknown');
+    localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    expect(renderHook(() => useHomeCustomerKind(false, undefined, pending, true)).result.current).toBe('returning');
+    expect(renderHook(() => useHomeCustomerKind(false, undefined, pending, false)).result.current).toBe('new');
+  });
 });

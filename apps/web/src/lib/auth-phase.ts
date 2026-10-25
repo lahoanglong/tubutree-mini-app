@@ -1,6 +1,8 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { useAuth } from './auth-context';
+import { hasSessionMarker } from './client-api';
 
 export type AuthPhase = 'loading' | 'guest' | 'unavailable' | 'authenticated';
 
@@ -17,4 +19,19 @@ export function useAuthPhase(): AuthPhase {
   if (status === 'authenticated') return 'authenticated';
   if (initialized === false || status === 'loading') return 'loading';
   return sessionUnavailable ? 'unavailable' : 'guest';
+}
+
+const subscribeStorage = (cb: () => void) => {
+  window.addEventListener('storage', cb);
+  return () => window.removeEventListener('storage', cb);
+};
+
+/**
+ * Đang khôi phục một phiên đã có (cờ `tubu_web_session` còn và chưa biết kết quả). Khách vãng lai không có cờ nên không bao giờ "đang
+ * khôi phục" (không thấy khung chờ rồi mất). Đọc cờ bằng useSyncExternalStore với ảnh chụp phía server là `false` để hydrate không lệch.
+ */
+export function useAuthRestoring(): boolean {
+  const marker = useSyncExternalStore(subscribeStorage, hasSessionMarker, () => false);
+  const phase = useAuthPhase();
+  return marker && phase === 'loading';
 }
