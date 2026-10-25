@@ -114,7 +114,7 @@ describe('HomePage (phương án A, 9 khối)', () => {
     const best = await screen.findByRole('region', { name: 'Bán chạy' });
     expect(await within(best).findByText('Bán chạy nhất')).toBeInTheDocument();
     expect(mocks.fetchProducts).toHaveBeenCalledWith({ limit: 6, sort: 'best_seller' });
-    await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả' }));
+    await userEvent.setup().click(within(best).getByRole('button', { name: 'Xem tất cả Bán chạy' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?sort=best_seller');
   });
 
