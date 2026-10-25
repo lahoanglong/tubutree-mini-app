@@ -101,6 +101,8 @@ import { ReturnRow } from '@/components/admin/return-request-row';
 import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
+import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
+import { ShopInfoCard } from '@/components/admin/shop-info-card';
 import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
 import { CashbackTab } from '@/components/admin/cashback-tab';
@@ -2057,6 +2059,8 @@ function ConfigTab() {
   if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => void q.refetch()} />;
   return (
     <div className="space-y-4">
+      <FeatureFlagsCard rows={q.data} />
+      <ShopInfoCard rows={q.data} />
       <GomdonConfigCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
       <div>
