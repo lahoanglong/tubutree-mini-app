@@ -42,11 +42,11 @@ interface WateringResult {
   target: number;
   couponCapped?: HarvestCouponCap | 'GUEST';
   rewardBlocked?: 'GUEST' | string;
-  reward?: HarvestReward & { coupons?: (string | { code: string })[] };
+  reward?: HarvestReward;
 }
 
 const harvestMeta = (r: WateringResult): HarvestMeta => {
-  const list = (r.reward?.coupons ?? []).map((c) => (typeof c === 'string' ? c : c.code)).filter(Boolean);
+  const list = (r.reward?.coupons ?? []).filter(Boolean);
   const coupons = list.length > 0 ? list : r.reward?.coupon ? [r.reward.coupon] : [];
   return {
     couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' ? r.couponCapped : null,

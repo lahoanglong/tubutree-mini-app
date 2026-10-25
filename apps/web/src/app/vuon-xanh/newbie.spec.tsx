@@ -324,7 +324,7 @@ describe('Vườn Xanh người mới (web): hộp chúc mừng', () => {
   });
 
   it('nhiều mã trong một lần tưới: hiện tất cả', async () => {
-    const d = await harvest({ progress: 0, target: 600, harvested: true, treesPlanted: 3, reward: { coupon: 'A1', coupons: ['A1', { code: 'B2' }] } });
+    const d = await harvest({ progress: 0, target: 600, harvested: true, treesPlanted: 3, reward: { coupon: 'A1', coupons: ['A1', 'B2'] } });
     expect(d.textContent).toContain('A1');
     expect(d.textContent).toContain('B2');
     expect(maybeBtn(d, 'Dùng mã giảm giá ngay')).toBeDefined();
