@@ -252,6 +252,7 @@ describe('evaluateEnv', () => {
       expect(status({ ZALO_APP_ID: '5657790x' }, 'env.zalo.ids')).toBe('FAIL');
       expect(status({ ZALO_MINIAPP_ID: '"2070857098114207963"' }, 'env.zalo.ids')).toBe('FAIL');
       expect(status({ ZALO_APP_ID: '565 779' }, 'env.zalo.ids')).toBe('FAIL');
+      expect(status({ ZALO_APP_ID: '565779011239360460 ' }, 'env.zalo.ids')).toBe('FAIL');
     });
     it('đăng nhập: gợi ý nói rõ Mini App vẫn đăng nhập được khi thiếu secret', () => {
       const r = byId(evaluateEnv(envWith({ ZALO_APP_SECRET: '' })), 'env.zalo.login');

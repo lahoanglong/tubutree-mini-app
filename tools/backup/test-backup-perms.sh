@@ -54,6 +54,25 @@ D3B="$WORK/legacy"; mkdir "$D3B"; chmod 700 "$D3B"
 run_backup "$D3B" > "$WORK/out3b" || { echo "FAIL backup lỗi"; FAILED=1; }
 check "dump cũ" "$(mode_of "$D3B/tubutree_20200101_000000.sql.gz")" 600
 
+echo "--- 3c. symlink tubutree_*.sql.gz trỏ ra file ngoài thư mục: đích không bị chmod"
+D3C="$WORK/linkdir"; mkdir "$D3C"; chmod 700 "$D3C"
+: > "$WORK/outside.txt"; chmod 644 "$WORK/outside.txt"
+ln -s "$WORK/outside.txt" "$D3C/tubutree_link.sql.gz"
+run_backup "$D3C" > "$WORK/out3c" || { echo "FAIL backup lỗi"; cat "$WORK/out3c"; FAILED=1; }
+check "đích của symlink giữ nguyên" "$(mode_of "$WORK/outside.txt")" 644
+
+echo "--- 3d. chmod lỗi: backup vẫn chạy, dump tạo ra, có WARN"
+mkdir "$WORK/binfail"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$WORK/binfail/chmod"; chmod +x "$WORK/binfail/chmod"
+cp "$WORK/bin/docker" "$WORK/binfail/docker"
+D3D="$WORK/chmodfail"; mkdir "$D3D"; chmod 700 "$D3D"
+: > "$D3D/tubutree_20200101_000000.sql.gz"; chmod 644 "$D3D/tubutree_20200101_000000.sql.gz"
+( umask 000; PATH="$WORK/binfail:$PATH" COMPOSE_FILE="$WORK/compose.yml" BACKUP_DIR="$D3D" HEALTHCHECK_OPTIONAL=1 bash "$SCRIPT" ) > "$WORK/out3d" 2>&1; RC=$?
+check "exit code khi chmod lỗi" "$RC" 0
+NEWD="$(ls "$D3D"/tubutree_*.sql.gz | grep -v 20200101 | head -1)"
+if [ -n "$NEWD" ]; then check "dump mới vẫn 600" "$(mode_of "$NEWD")" 600; else echo "FAIL không có dump mới"; FAILED=1; fi
+if grep -q 'WARN: không siết được quyền' "$WORK/out3d"; then echo "ok   có WARN chmod"; else echo "FAIL thiếu WARN chmod"; FAILED=1; fi
+
 echo "--- 4. pg_dump lỗi: không để lại file dở dang"
 D4="$WORK/fail"
 FAKE_DOCKER_FAIL=1 run_backup "$D4" > "$WORK/out4"; RC=$?

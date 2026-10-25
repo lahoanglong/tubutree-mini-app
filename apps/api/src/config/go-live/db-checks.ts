@@ -420,12 +420,28 @@ function companyIdentityCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   return pass(G_DB, 'db.company_identity', title, `đã có ${Object.values(labels).join(', ')}`);
 }
 
+/** Host phải là zalo.me và đoạn ngay sau `/s/` phải đúng bằng ID (so chuỗi, không dựng regex từ env). */
+function urlPointsToMiniApp(url: string, miniAppId: string): boolean {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== 'zalo.me') return false;
+    const segs = u.pathname.split('/');
+    const i = segs.indexOf('s');
+    return i >= 0 && segs[i + 1] === miniAppId;
+  } catch {
+    return false;
+  }
+}
+
 function miniappBaseUrlCheck(s: DbSnapshot, env: Env): CheckResult {
   const title = 'Link Mini App trong cấu hình khớp ZALO_MINIAPP_ID';
   const url = typeof s.configs['app.miniapp_base_url'] === 'string' ? (s.configs['app.miniapp_base_url'] as string).trim() : '';
   const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
   if (!url || !miniAppId) return pass(G_DB, 'db.miniapp_base_url', title, 'chưa có link hoặc chưa có ZALO_MINIAPP_ID nên không so');
-  if (!new RegExp(`/s/${miniAppId}(?![0-9])`).test(url)) {
+  if (!/^[0-9]+$/.test(miniAppId)) {
+    return pass(G_DB, 'db.miniapp_base_url', title, 'không so được: ZALO_MINIAPP_ID sai dạng, xem env.zalo.ids');
+  }
+  if (!urlPointsToMiniApp(url, miniAppId)) {
     return warn(
       G_DB,
       'db.miniapp_base_url',
@@ -554,14 +570,19 @@ function degradeResults(results: CheckResult[], code: string, phase: GoLivePhase
   return results.map((r) => fail(G_DB, r.id, r.title, `không đọc được (${code}): schema DB chưa khớp mã`, 'Áp migration theo runbook (prisma migrate deploy bằng image mới) rồi chạy lại kiểm tra.'));
 }
 
+function pendingMigrationCount(s: DbSnapshot): number {
+  const applied = new Set(s.appliedMigrations);
+  return s.expectedMigrations.filter((m) => !applied.has(m)).length;
+}
+
 /** Phân tích ảnh chụp DB thành các dòng kiểm tra. Hàm thuần: không chạm DB. */
 export function evaluateDb(s: DbSnapshot, ctx: DbContext): CheckResult[] {
   const d = s.degraded ?? {};
+  const pendingCount = pendingMigrationCount(s);
   const part = (key: keyof NonNullable<DbSnapshot['degraded']>, results: CheckResult[], extraKey?: keyof NonNullable<DbSnapshot['degraded']>): CheckResult[] => {
     const code = d[key] ?? (extraKey ? d[extraKey] : undefined);
     return code ? degradeResults(results, code, ctx.phase, pendingCount) : results;
   };
-  const pendingCount = s.expectedMigrations.filter((m) => !new Set(s.appliedMigrations).has(m)).length;
   const configPart = (results: CheckResult[]) => part('configs', results);
   const demo = evaluateDemoData(d.demoData ? EMPTY_DEMO : s.demoData, ctx.env, ctx.phase);
 

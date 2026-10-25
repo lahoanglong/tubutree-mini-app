@@ -59,7 +59,7 @@ describe('ContentKitService.getForCtv', () => {
     expect(out.shareLink).toBe('https://zalo.me/s/123/product/tra-xanh?ref=CODE1');
   });
 
-  // app.miniapp_base_url là URL gốc MINI APP (zalo.me/s/<appId>), nơi /product/:slug là route thật (apps/miniapp
+  // app.miniapp_base_url là URL gốc MINI APP (zalo.me/s/<Mini App ID>), nơi /product/:slug là route thật (apps/miniapp
   // components/app.tsx). Link tuyệt đối do API dựng vì vậy đi vào Mini App và phải giữ /product/; chỉ khi base trống,
   // API trả đường dẫn tương đối của Mini App và Mini App tự ghép domain WEB (đổi sang /san-pham/<slug>).
   it('base URL là Mini App: {link} trong bài mẫu và shareLink cùng là URL tuyệt đối vào /product/<slug> của Mini App', async () => {

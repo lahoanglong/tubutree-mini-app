@@ -58,6 +58,10 @@ RUN case "$NEXT_PUBLIC_ZALO_APP_ID" in *[!0-9]*) \
       echo "LOI: ZALO_APP_ID trung ZALO_MINIAPP_ID. ZALO_APP_ID phai la App ID cua ung dung tren developers.zalo.me (dang nhap web, lam moi token OA); ZALO_MINIAPP_ID la ID cua Mini App, chi dung cho link zalo.me/s/<id>. Doi mot trong hai (docs/GO-LIVE-KEYS.md muc 2, buoc B)." >&2; \
       exit 1; \
     fi; \
+    if [ "$NEXT_PUBLIC_ZALO_APP_ID" = "2070857098114207963" ]; then \
+      echo "LOI: NEXT_PUBLIC_ZALO_APP_ID dang la ID Mini App production (2070857098114207963). Dat ZALO_APP_ID la App ID cua ung dung tren developers.zalo.me (docs/GO-LIVE-KEYS.md muc 2, buoc B)." >&2; \
+      exit 1; \
+    fi; \
     if [ -z "$NEXT_PUBLIC_ZALO_APP_ID" ] || [ -z "$NEXT_PUBLIC_ZALO_MINIAPP_ID" ]; then \
       if [ "$ALLOW_EMPTY_ZALO_APP_ID" = "1" ]; then \
         echo "CANH BAO: NEXT_PUBLIC_ZALO_APP_ID hoac NEXT_PUBLIC_ZALO_MINIAPP_ID rong - web se khong dang nhap duoc bang Zalo hoac khong co nut Mo tren Zalo." >&2; \

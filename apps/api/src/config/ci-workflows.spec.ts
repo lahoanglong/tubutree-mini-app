@@ -34,7 +34,7 @@ describe('.github/workflows/docker-build.yml (D6-09a)', () => {
     expect(c).not.toMatch(/docker push|docker login|docker\/login-action|push: true/);
   });
 
-  it('web build có ZALO_APP_ID giả (Dockerfile dừng nếu rỗng) và kiểm container chạy bằng user node ghi được .next/cache', () => {
+  it('web build có ZALO_APP_ID và ZALO_MINIAPP_ID giả (Dockerfile dừng nếu rỗng, không phải số hoặc trùng nhau) và kiểm container chạy bằng user node ghi được .next/cache', () => {
     const appId = /--build-arg NEXT_PUBLIC_ZALO_APP_ID=(\S+)/.exec(wf)?.[1];
     const miniAppId = /--build-arg NEXT_PUBLIC_ZALO_MINIAPP_ID=(\S+)/.exec(wf)?.[1];
     expect(appId).toMatch(/^[0-9]+$/);

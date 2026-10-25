@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PRODUCTION_MINIAPP_ID } from './go-live/env-checks';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
 const dockerfile = readFileSync(join(REPO, 'apps/web/Dockerfile'), 'utf8');
@@ -74,5 +75,18 @@ describe('apps/web/Dockerfile: kiểm ZALO_APP_ID và ZALO_MINIAPP_ID lúc build
 
   it('ALLOW_EMPTY_ZALO_APP_ID=1 không cho phép hai ID trùng nhau', () => {
     expect(run({ NEXT_PUBLIC_ZALO_APP_ID: '5', NEXT_PUBLIC_ZALO_MINIAPP_ID: '5', ALLOW_EMPTY_ZALO_APP_ID: '1' }).code).toBe(1);
+  });
+
+  it('App ID bằng Mini App ID production: dừng build, ALLOW_EMPTY_ZALO_APP_ID=1 cũng không cho qua', () => {
+    const env = { NEXT_PUBLIC_ZALO_APP_ID: '2070857098114207963', NEXT_PUBLIC_ZALO_MINIAPP_ID: '1234' };
+    expect(run(env).code).toBe(1);
+    expect(run({ ...env, ALLOW_EMPTY_ZALO_APP_ID: '1' }).code).toBe(1);
+  });
+
+  it('ID production trong Dockerfile khớp PRODUCTION_MINIAPP_ID và apps/miniapp/app-config.json', () => {
+    const literal = /"\$NEXT_PUBLIC_ZALO_APP_ID" = "([0-9]+)"/.exec(dockerfile)?.[1];
+    const appConfig = JSON.parse(readFileSync(join(REPO, 'apps/miniapp/app-config.json'), 'utf8')) as { app?: { appId?: string }; appId?: string };
+    expect(literal).toBe(PRODUCTION_MINIAPP_ID);
+    expect(literal).toBe(appConfig.appId ?? appConfig.app?.appId);
   });
 });

@@ -677,6 +677,17 @@ describe('evaluateDb: db.miniapp_base_url khớp ZALO_MINIAPP_ID', () => {
   it('ID Mini App chỉ là tiền tố của ID trong link: WARN', () => {
     expect(withUrl(`https://zalo.me/s/${MINI}9`).status).toBe('WARN');
   });
+  it('ID đúng kèm / hoặc /?x: PASS; ID dài hơn: WARN; host khác zalo.me: WARN', () => {
+    expect(withUrl(`https://zalo.me/s/${MINI}/`).status).toBe('PASS');
+    expect(withUrl(`https://zalo.me/s/${MINI}/?x=1`).status).toBe('PASS');
+    expect(withUrl(`https://zalo.me/s/${MINI}0`).status).toBe('WARN');
+    expect(withUrl(`https://example.com/s/${MINI}`).status).toBe('WARN');
+  });
+  it.each(['1)', '1[', '1\\', '(?', '*'])('ZALO_MINIAPP_ID sai dạng %s: không ném lỗi, bỏ qua so sánh', (bad) => {
+    const r = withUrl('https://zalo.me/s/1', 'post-deploy', envWith({ ZALO_MINIAPP_ID: bad }));
+    expect(r.status).toBe('PASS');
+    expect(r.detail).toContain('env.zalo.ids');
+  });
   it('link rỗng hoặc ZALO_MINIAPP_ID rỗng: PASS (không có gì để so)', () => {
     expect(withUrl('').status).toBe('PASS');
     expect(withUrl('https://zalo.me/s/1', 'post-deploy', envWith({ ZALO_MINIAPP_ID: '' })).status).toBe('PASS');

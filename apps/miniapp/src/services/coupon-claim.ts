@@ -18,7 +18,7 @@ export interface ClaimedCoupon {
   alreadyClaimed: boolean;
 }
 
-/** `?claim=CODE` ở search hoặc hash của URL (Mini App mở từ link zalo.me/s/<appId>/?claim=...). Mã sai dạng thì bỏ qua. */
+/** `?claim=CODE` ở search hoặc hash của URL (Mini App mở từ link zalo.me/s/<Mini App ID>/?claim=...). Mã sai dạng thì bỏ qua. */
 export function readClaimParam(...urlParts: string[]): string | null {
   for (const part of urlParts) {
     const query = part.includes('?') ? part.slice(part.indexOf('?') + 1) : part.replace(/^[#?]/, '');

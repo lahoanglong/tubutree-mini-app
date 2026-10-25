@@ -101,9 +101,10 @@ else
 fi
 
 # Dump cũ (tạo trước khi script biết siết 600) vẫn đọc được nếu thư mục mở; chỉ đụng file của chính người chạy, chạy lại nhiều lần vẫn như nhau.
-for old_dump in "$BACKUP_DIR"/tubutree_*.sql.gz; do
-  [ -f "$old_dump" ] && [ -O "$old_dump" ] && chmod 600 "$old_dump" 2>/dev/null
-done
+# find -type f không đi theo symlink (chmod/[ -f ] thì có), và việc siết chỉ là best-effort: lỗi chmod (EPERM, file immutable, vfat/FUSE) không được làm hỏng backup.
+while IFS= read -r -d '' old_dump; do
+  chmod 600 "$old_dump" 2>/dev/null || log "WARN: không siết được quyền ${old_dump}"
+done < <(find "$BACKUP_DIR" -maxdepth 1 -name 'tubutree_*.sql.gz' -type f -user "$(id -u)" -print0 2>/dev/null || true)
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   log "ERROR: Không tìm thấy compose file: $COMPOSE_FILE"

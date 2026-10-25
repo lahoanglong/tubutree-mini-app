@@ -290,7 +290,11 @@ function zaloChecks(env: Env): CheckResult[] {
   const miniAppId = envValue(env, 'ZALO_MINIAPP_ID');
   const idsTitle = 'ZALO_APP_ID khác ID Mini App';
   const idsHint = 'ZALO_APP_ID phải là App ID của Zalo App trên developers.zalo.me (đăng nhập web, làm mới token OA). ID Mini App chỉ dùng cho link zalo.me/s/<id>; để chung thì Zalo trả "Invalid appId".';
-  const nonNumeric = [['ZALO_APP_ID', appId], ['ZALO_MINIAPP_ID', miniAppId]].filter(([, v]) => v && !/^[0-9]+$/.test(v)).map(([k]) => k);
+  // Thử trên giá trị thô: API đọc env nguyên văn (không trim), nên khoảng trắng thừa làm Zalo từ chối dù envValue đã cắt.
+  const nonNumeric = ['ZALO_APP_ID', 'ZALO_MINIAPP_ID'].filter((k) => {
+    const raw = env[k] ?? '';
+    return raw !== '' && !/^[0-9]+$/.test(raw);
+  });
   if (nonNumeric.length > 0) {
     out.push(fail(G_ZALO, 'env.zalo.ids', idsTitle, `${nonNumeric.join(', ')} không phải chuỗi số`, 'ID của Zalo chỉ gồm chữ số; kiểm tra lỗi gõ nhầm hoặc dán thừa khoảng trắng, dấu nháy.'));
   } else if (appId && (appId === miniAppId || appId === PRODUCTION_MINIAPP_ID)) {

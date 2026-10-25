@@ -156,7 +156,7 @@ Làm theo [tools/backup/README.md](../../tools/backup/README.md), các mục "C�
 
 - `rclone config` đã tạo remote Google Drive tên `gdrive` (scope `drive.file`, xác thực bằng `rclone authorize` trên laptop; từng bước ở mục "Remote Google Drive" của README trên), thử được: `rclone lsd gdrive:`. Rồi bọc nó bằng remote **crypt** `tubucrypt` (mục "Mã hoá bản ngoài máy" của README trên): `backup-db.sh` từ chối đẩy lên remote không mã hoá. `BACKUP_ALLOW_PLAIN_REMOTE=1` chỉ là ngoại lệ tạm thời có chủ ý.
 - Cron **6 giờ/lần** (00:17, 06:17, 12:17, 18:17; mẫu ở [ops/crontab.backup.example](../../ops/crontab.backup.example)) có `BACKUP_LABEL=cron BACKUP_KEEP_COUNT=120 RCLONE_REMOTE=tubucrypt: HEALTHCHECK_URL=...` trên MỘT dòng. Mất tối đa 6 giờ dữ liệu khi phải khôi phục (cron 02:00 một lần/ngày cũ là 24 giờ); sổ Ví, Điểm Xanh và hoa hồng chỉ nằm trong DB này. Dòng 02:00 cũ phải xoá (README ở trên có lệnh thay). Kiểm: `crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'`; trên healthchecks.io đặt Period 6 giờ, Grace 1 giờ.
-- Quyền file: `backup-db.sh` tạo thư mục 700 và dump 600, và tự siết 600 mọi dump cũ do chính người chạy sở hữu. Thư mục có sẵn thì script không chmod, chỉ cảnh báo; chủ chạy một lần: `sudo chmod 700 /var/backups/tubutree && sudo chmod 600 /var/backups/tubutree/tubutree_*.sql.gz`. Production đã được siết tay như vậy ngày 2026-10-25.
+- Quyền file: `backup-db.sh` tạo thư mục 700 và dump 600, và tự siết 600 mọi dump cũ do chính người chạy sở hữu. Thư mục có sẵn thì script không chmod, chỉ cảnh báo; chủ chạy một lần: `sudo chmod 700 /var/backups/tubutree && sudo find /var/backups/tubutree -maxdepth 1 -name 'tubutree_*.sql.gz' -type f -exec chmod 600 {} +` (dùng find vì glob sẽ do shell không đặc quyền bung ra, không đọc được thư mục 700). Production đã được siết tay như vậy ngày 2026-10-25.
 - Bản trước mỗi deploy: `bash ops/backup-predeploy.sh` (nhãn `predeploy`, giữ 10 bản, không ping check của cron). Bước 6 mục 5 vẫn dùng `backup-db.sh` như cũ (bản cuối khi API đã dừng).
 - Một bản backup chạy tay thành công, và đã **diễn tập khôi phục** vào DB tạm rồi so số dòng:
 
@@ -559,7 +559,7 @@ Mất vài phút và ăn RAM máy chủ dùng chung; nên chạy ngoài cửa s�
 
 ```bash
 $DC run --rm --no-deps api node dist/config/check-env.js
-$DC run --rm --no-deps --user "$(id -u):$(id -g)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check -- --phase=pre-deploy
+$DC run --rm --no-deps --user "$(stat -c %u:%g /var/backups/tubutree)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check -- --phase=pre-deploy
 ```
 
 (`npm run go-live:check -- --phase=pre-deploy` cũng chạy được; lệnh `go-live:check` nằm trong `apps/api/package.json`.)
@@ -577,7 +577,7 @@ Kỳ vọng:
 - Dòng `db.pending_scope` (chỉ có khi có migration ngoài sáu cái của đợt) nêu tên các migration nặng: đối chiếu với bảng ở mục 1.0 và với cửa sổ đã xin.
 - Dòng `db.orders_lock` cho số đơn và ước tính (đã nhân theo số migration nặng trên `orders`). Đối chiếu với mục 3.
 
-Ghi chú về các dòng backup: lệnh này chạy BÊN TRONG container nên không nhìn thấy crontab và rclone của máy chủ (kết quả là WARN "không kiểm được", không phải FAIL). Gắn thêm `-v ...:ro` như trên cho dòng `backup.recent` (tuổi bản backup gần nhất) kiểm được. `--user "$(id -u):$(id -g)"` cũng bắt buộc: thư mục backup mode 700 và thuộc người vận hành, còn image api chạy bằng uid 1000 (`node`) nên không vào được; thiếu cờ này `backup.recent` báo WARN "không đọc được thư mục /var/backups/tubutree từ nơi đang chạy". Hai việc còn lại kiểm tay trên máy chủ:
+Ghi chú về các dòng backup: lệnh này chạy BÊN TRONG container nên không nhìn thấy crontab và rclone của máy chủ (kết quả là WARN "không kiểm được", không phải FAIL). Gắn thêm `-v ...:ro` như trên cho dòng `backup.recent` (tuổi bản backup gần nhất) kiểm được. `--user "$(stat -c %u:%g /var/backups/tubutree)"` cũng bắt buộc: thư mục backup mode 700 và thuộc người vận hành, còn image api chạy bằng uid 1000 (`node`) nên không vào được; uid:gid phải đúng chủ thư mục (không phải của shell hiện tại) vì service api bỏ hết capability (cap_drop ALL), root trong container cũng không vượt được quyền đọc; thiếu cờ này `backup.recent` báo WARN "không đọc được thư mục /var/backups/tubutree từ nơi đang chạy". Hai việc còn lại kiểm tay trên máy chủ:
 
 ```bash
 crontab -l | grep backup-db | sed -E 's#HEALTHCHECK_URL=[^ ]+#HEALTHCHECK_URL=***#'
@@ -788,7 +788,7 @@ Ghi giờ kết thúc: khách đã đặt hàng được lại từ lúc này. T
 ### Bước 10. Go-live check sau deploy
 
 ```bash
-$DC run --rm --no-deps --user "$(id -u):$(id -g)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
+$DC run --rm --no-deps --user "$(stat -c %u:%g /var/backups/tubutree)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 ```
 
 Kỳ vọng: thoát 0, không FAIL. Các dòng migration phải PASS (giai đoạn mặc định là `post-deploy`: migration thiếu là FAIL), và `redis.policy` phải PASS (`noeviction`). `db.demo_products` phải PASS; `db.demo_coupons` PASS, hoặc WARN. WARN chỉ chấp nhận được khi mọi mã nêu trong dòng đó thuộc một trong hai loại: `đã chấp nhận giữ` (ba mã `WELCOME30`, `FREESHIP`, `XANH10` luôn được tính là đã duyệt vì chủ dự án giữ chúng cho đợt ra mắt, không cần đặt gì; mã demo khác mà chủ shop duyệt giữ thì chạy lệnh trên với `-e GO_LIVE_ACCEPT_DEMO_COUPONS=<mã>` ngay sau `run --rm`), hoặc `điều kiện khác bản demo` (mã chủ shop tự tạo trùng tên, chủ shop xác nhận điều kiện ở Quản trị). Mã demo chưa duyệt, của migration hay do seed tạo, đều là FAIL. Còn FAIL ở hai dòng này: quay lại bước 7c (API đang chạy cũng làm được, lệnh không cần dừng API). Dán kết quả vào nhóm chat.

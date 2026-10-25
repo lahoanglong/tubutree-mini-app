@@ -120,12 +120,12 @@ COMPOSE_FILE=docker-compose.vietnix.yml bash tools/backup/backup-db.sh
 #    Backup lỗi thì API cũ được bật lại, chưa migrate gì.
 bash tools/deploy/deploy.sh
 # 4. Kiểm sau deploy (bằng image mới)
-docker compose -f docker-compose.vietnix.yml run --rm --no-deps --user "$(id -u):$(id -g)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
+docker compose -f docker-compose.vietnix.yml run --rm --no-deps --user "$(stat -c %u:%g /var/backups/tubutree)" -v /var/backups/tubutree:/var/backups/tubutree:ro api pnpm run go-live:check
 # 5. Kiểm biên và máy chủ: health, nén, cache, chứng chỉ, đĩa, container unhealthy, backup mới nhất
 bash ops/check-edge.sh --local
 ```
 
-(`-v /var/backups/tubutree:...:ro` để `go-live:check` thấy thư mục backup, `--user "$(id -u):$(id -g)"` vì thư mục đó mode 700 của người vận hành mà image api chạy bằng uid 1000 (`node`), thiếu thì dòng `backup.recent` báo "không đọc được thư mục"; trong container nó không đọc được crontab và rclone, nên 4 mục backup còn lại luôn là WARN "không kiểm được": kiểm tay bằng `crontab -l | grep backup-db` và `rclone listremotes`, xem [runbook](../docs/launch/deploy-rollback-runbook.md) mục 1.2.)
+(`-v /var/backups/tubutree:...:ro` để `go-live:check` thấy thư mục backup, `--user "$(stat -c %u:%g /var/backups/tubutree)"` vì thư mục đó mode 700 của người vận hành mà image api chạy bằng uid 1000 (`node`); uid:gid lấy từ chủ thư mục vì service api bỏ hết capability (cap_drop ALL) nên container phải đúng chủ mới vào được, thiếu thì dòng `backup.recent` báo "không đọc được thư mục"; trong container nó không đọc được crontab và rclone, nên 4 mục backup còn lại luôn là WARN "không kiểm được": kiểm tay bằng `crontab -l | grep backup-db` và `rclone listremotes`, xem [runbook](../docs/launch/deploy-rollback-runbook.md) mục 1.2.)
 
 **Lần deploy đầu (hoặc DB mới): sau bước migrate, chạy thêm
 `npx prisma migrate deploy && npm run prisma:seed:reference -- --with-business-defaults`** (trên VPS: `docker compose -f
