@@ -47,7 +47,10 @@ export interface SourceReport {
   totals: SourceTotals;
 }
 
-export const getSourceReport = (r: ReportRange) => apiFetch<SourceReport>(`/admin/reports/sources?${rangeQuery(r)}`);
+export type SourceReportBy = 'source' | 'campaign';
+
+export const getSourceReport = (r: ReportRange, by: SourceReportBy = 'source') =>
+  apiFetch<SourceReport>(`/admin/reports/sources?${rangeQuery(r)}${by === 'campaign' ? '&by=campaign' : ''}`);
 
 export type PayoutExportStatus = 'REQUESTED' | 'APPROVED' | 'PAID' | 'REJECTED';
 export type RefundExportStatus = 'OPEN' | 'UNVERIFIED' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'DISMISSED';

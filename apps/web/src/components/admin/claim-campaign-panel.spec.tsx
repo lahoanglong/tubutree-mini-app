@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { CouponBatchSummary } from '@/lib/admin-client';
 
 const mocks = vi.hoisted(() => ({ download: vi.fn() }));
@@ -193,7 +193,7 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     const post = api.calls.find((c) => c.init?.method === 'POST');
     expect(post?.url).toContain('/admin/coupons');
     expect(bodyOf(post)).toMatchObject({ code: 'SHOPEETHANG11', scope: 'CLAIM', usageLimit: 300, perUserLimit: 1, newCustomerOnly: true, value: 20000 });
-    expect(r.container.textContent).toContain(`Link in QR: ${BASE}/?claim=SHOPEETHANG11`);
+    expect(r.container.textContent).toContain(`Link in QR: ${BASE}/points/scan?claim=SHOPEETHANG11`);
   });
 
   it('mã chung: chưa nhập Tổng lượt nhận hoặc < 1 thì không tạo được (mã lộ ra ngoài không có trần)', async () => {
@@ -220,7 +220,52 @@ describe('ClaimCampaignPanel — đợt thẻ hộp hàng sàn (D2-03)', () => {
     expect(bodyOf(api.calls.find((c) => c.init?.method === 'POST'))).toMatchObject({ scope: 'CLAIM', usageLimit: 1 });
   });
 
+  it('link trong CSV: chọn trang đích, nguồn, đợt thẻ; gửi kèm khi tạo lô và khi tải lại', async () => {
+    const created = { batch: 'HOA', created: 1, claimUrlBase: BASE, codes: [] };
+    const { r, api } = mount({
+      '/admin/coupon-batches/claim-url-base': configRoute(BASE),
+      '/admin/coupon-batches/SHOPEE11/codes': { body: { batch: 'SHOPEE11', claimUrlBase: BASE, codes: [] } },
+      '/admin/coupon-batches': (init) => (init?.method === 'POST' ? { body: created } : { body: [batch()] }),
+    });
+    await flush();
+    const sel = (label: string) => input(r, label) as HTMLSelectElement;
+    expect(sel('Trang mở khi quét').value).toBe('scan');
+    selectValue(sel('Trang mở khi quét'), 'home');
+    selectValue(sel('Nguồn trên link'), 'shopee');
+    typeInto(input(r, 'Đợt thẻ trên link'), '2611');
+    typeInto(input(r, 'Tiền tố lô'), 'hoa');
+    typeInto(input(r, 'Số thẻ'), '1');
+    typeInto(input(r, 'Mức giảm'), '30000');
+    click(byText(r.container, 'button', 'Tạo lô và tải CSV'));
+    await flush();
+    const post = api.calls.find((c) => c.init?.method === 'POST');
+    expect(bodyOf(post).link).toEqual({ page: 'home', src: 'shopee', card: '2611' });
+    click(byText(r.container.querySelector('[data-testid="claim-batch-SHOPEE11"]')!, 'button', 'Tải lại CSV'));
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('/SHOPEE11/codes?page=home&src=shopee&card=2611'))).toBe(true);
+  });
+
+  it('đợt thẻ sai khuôn: báo và chặn nút tạo', async () => {
+    const { r } = mount({ '/admin/coupon-batches/claim-url-base': configRoute(BASE), '/admin/coupon-batches': { body: [] } });
+    await flush();
+    typeInto(input(r, 'Tiền tố lô'), 'hoa');
+    typeInto(input(r, 'Số thẻ'), '1');
+    typeInto(input(r, 'Mức giảm'), '30000');
+    typeInto(input(r, 'Đợt thẻ trên link'), '26 11');
+    expect((byText(r.container, 'button', 'Tạo lô và tải CSV') as HTMLButtonElement).disabled).toBe(true);
+    expect(r.container.textContent).toContain('Chỉ chữ thường không dấu');
+  });
+
+  it('danh sách lô nằm trước form tạo (không phải cuộn qua form mới thấy mã đang chạy)', async () => {
+    const { r } = mount({ '/admin/coupon-batches/claim-url-base': configRoute(BASE), '/admin/coupon-batches': { body: [batch()] } });
+    await flush();
+    const list = r.container.querySelector('[data-testid="claim-batch-SHOPEE11"]')!;
+    const form = input(r, 'Tiền tố lô')!;
+    expect(list.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('nhãn ưu đãi và link nhận dùng chung cho danh sách lô', () => {
+    expect(claimLink('https://zalo.me/s/1', 'A-B', { page: 'scan', src: 'shopee', card: '2611' })).toBe('https://zalo.me/s/1/points/scan?src=shopee&card=2611&claim=A-B');
     expect(offerLabel({ type: 'PERCENT', value: 10, maxDiscount: 50000, minOrder: null })).toBe('Giảm 10%, tối đa 50.000đ');
     expect(offerLabel({ type: 'FREESHIP', value: 0, minOrder: 150000 })).toBe('Miễn phí ship · đơn từ 150.000đ');
     expect(claimLink('https://zalo.me/s/1//', 'A-B')).toBe('https://zalo.me/s/1/?claim=A-B');

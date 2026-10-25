@@ -42,6 +42,7 @@ vi.mock('../hooks/use-cart-count', () => ({ useCartCount: () => mocks.cartCount 
 import { useAuthStore } from '../store/auth';
 import { CouponClaimGate, isGuestUser } from './coupon-claim-gate';
 import { PENDING_CLAIM_KEY } from '../services/coupon-claim';
+import { getCardGiftNote, setCardGiftNote } from '../services/card-gift-note';
 
 const REAL: AuthUser = { id: 'u1', zaloId: 'z1', phone: '0912345678', role: 'CUSTOMER', referralCode: 'R', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0 } as AuthUser;
 const GUEST: AuthUser = { ...REAL, zaloId: 'guest_dev1', phone: null };
@@ -94,6 +95,47 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     await waitFor(() => expect(mocks.storage[PENDING_CLAIM_KEY]).toBeUndefined());
     fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+  });
+
+  it('trên /points/scan: nút chính là "Tích điểm đơn này" (đóng sheet, không đi mua sắm); "Xem ưu đãi" mới đi mua sắm', async () => {
+    window.history.replaceState({}, '', '/points/scan?src=shopee&card=2611&claim=shopee-ab12cd34');
+    mocks.post.mockResolvedValue({ data: CLAIMED });
+    setAuth(REAL);
+    renderGate();
+    expect(await screen.findByText('Bạn nhận được ưu đãi')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Dùng ngay' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tích điểm đơn này' }));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it('trên /points/scan: "Xem ưu đãi" đi mua sắm', async () => {
+    window.history.replaceState({}, '', '/points/scan?claim=SHOPEE-AB12CD34');
+    mocks.post.mockResolvedValue({ data: CLAIMED });
+    setAuth(REAL);
+    renderGate();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem ưu đãi' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+  });
+
+  it('trên /points/scan: khách cũ gặp thẻ "chỉ khách mới" thì không mở sheet lỗi, để lại ghi chú nhẹ cho màn tích điểm', async () => {
+    window.history.replaceState({}, '', '/points/scan?claim=SHOPEE-AB12CD34');
+    mocks.post.mockRejectedValue(httpError(400, 'Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.'));
+    setAuth(REAL);
+    renderGate();
+    await waitFor(() => expect(getCardGiftNote()).toBe('new-customers-only'));
+    expect(screen.queryByTestId('sheet')).toBeNull();
+    await waitFor(() => expect(mocks.storage[PENDING_CLAIM_KEY]).toBeUndefined());
+    setCardGiftNote(null);
+  });
+
+  it('ngoài /points/scan: "chỉ khách mới" vẫn hiện sheet "Chưa nhận được ưu đãi"', async () => {
+    window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+    mocks.post.mockRejectedValue(httpError(400, 'Mã này chỉ dành cho khách đặt đơn đầu tiên tại Tubu Tree.'));
+    setAuth(REAL);
+    renderGate();
+    expect(await screen.findByText('Chưa nhận được ưu đãi')).toBeInTheDocument();
+    expect(getCardGiftNote()).toBeNull();
   });
 
   it('giỏ đã có hàng: "Dùng ngay" mở giỏ', async () => {

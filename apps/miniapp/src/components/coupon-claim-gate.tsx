@@ -16,6 +16,7 @@ import {
   savePendingClaim,
   type ClaimedCoupon,
 } from '../services/coupon-claim';
+import { setCardGiftNote } from '../services/card-gift-note';
 import { formatDate } from '../utils/format';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -37,6 +38,9 @@ export function isGuestUser(u: Pick<AuthUser, 'phone' | 'zaloId'>): boolean {
 
 const isRateLimited = (err: unknown) => isHttpError(err) && err.response?.status === 429;
 const needsZaloLogin = (message: string) => /đăng nhập Zalo/i.test(message);
+const isNewCustomerOnlyRefusal = (message: string) => /đơn đầu tiên/i.test(message);
+/** Khách đang ở màn tích điểm đơn sàn (vào từ thẻ): việc chính là tích điểm, quà thẻ không được kéo khách đi chỗ khác. */
+const onScanRoute = () => typeof window !== 'undefined' && /\/points\/scan\/?$/.test(window.location.pathname);
 
 /**
  * Nhận mã từ thẻ QR trong hộp hàng sàn (D2-03): link `?claim=CODE` mở Mini App → lưu mã trên máy → khi đã có tài khoản Zalo
@@ -91,6 +95,10 @@ export function CouponClaimGate() {
         const message = getErrorMessage(err);
         if (needsZaloLogin(message)) {
           setPhase({ kind: 'needLogin' });
+        } else if (isNewCustomerOnlyRefusal(message) && onScanRoute()) {
+          await forget();
+          setCardGiftNote('new-customers-only');
+          setPhase({ kind: 'closed' });
         } else {
           const retryable = isOutcomeUnknown(err) || isRateLimited(err);
           // Mã sai, hết hạn, đã có người nhận, khách đã có đơn: thử lại cũng vậy, không giữ trên máy nữa.
@@ -138,15 +146,29 @@ export function CouponClaimGate() {
   };
 
   const view = describe(phase);
+  const scanning = onScanRoute();
   const footer =
     phase.kind === 'done' ? (
       <div style={{ display: 'grid', gap: 8 }}>
-        <Button fullWidth onPress={useNow}>
-          Dùng ngay
-        </Button>
-        <Button fullWidth variant="ghost" onPress={close}>
-          Để sau
-        </Button>
+        {scanning ? (
+          <>
+            <Button fullWidth onPress={close}>
+              Tích điểm đơn này
+            </Button>
+            <Button fullWidth variant="ghost" onPress={useNow}>
+              Xem ưu đãi
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button fullWidth onPress={useNow}>
+              Dùng ngay
+            </Button>
+            <Button fullWidth variant="ghost" onPress={close}>
+              Để sau
+            </Button>
+          </>
+        )}
       </div>
     ) : phase.kind === 'needLogin' ? (
       <div style={{ display: 'grid', gap: 8 }}>

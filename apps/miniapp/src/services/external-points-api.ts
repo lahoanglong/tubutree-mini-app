@@ -14,8 +14,8 @@ export type {
   SubmitExternalClaimResponse,
 } from '@tubutree/shared-types';
 
-export const submitExternalClaim = (code: string) =>
-  api.post<SubmitExternalClaimResponse>('/me/external-points/claims', { code }).then((r) => r.data);
+export const submitExternalClaim = (code: string, via?: 'scan' | 'typed') =>
+  api.post<SubmitExternalClaimResponse>('/me/external-points/claims', via ? { code, via } : { code }).then((r) => r.data);
 
 export const getMyExternalClaims = (page = 1, limit = 10) =>
   api.get<MyExternalClaimsResponse>('/me/external-points/claims', { params: { page, limit } }).then((r) => r.data);
