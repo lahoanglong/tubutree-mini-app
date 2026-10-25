@@ -137,10 +137,23 @@ describe('ctvMenuEntry', () => {
     expect(ctvMenuEntry('DEALER', null)).toBeNull();
   });
 
-  it('nhân viên không đăng ký CTV được thì ẩn; admin có quyền CTV thì vào bảng điều khiển', () => {
-    expect(ctvMenuEntry('STAFF', { isAffiliate: false, canRegister: false })).toBeNull();
-    expect(ctvMenuEntry('ADMIN', { isAffiliate: true })?.label).toBe('Cộng tác viên');
-    expect(ctvMenuEntry('STAFF')?.label).toBe('Mở gian hàng Cộng tác viên');
+  it.each(['DEALER', 'STAFF', 'ADMIN'])('%s: chưa có access (đang tải, lỗi, 401) thì ẩn; có access thì theo isAffiliate', (role) => {
+    expect(ctvMenuEntry(role)).toBeNull();
+    expect(ctvMenuEntry(role, null)).toBeNull();
+    expect(ctvMenuEntry(role, { isAffiliate: false, canRegister: false })).toBeNull();
+    expect(ctvMenuEntry(role, { isAffiliate: false, canRegister: true })).toBeNull();
+    expect(ctvMenuEntry(role, { isAffiliate: true })?.label).toBe('Cộng tác viên');
+  });
+
+  it.each([
+    ['CUSTOMER', undefined, 'Mở gian hàng Cộng tác viên'],
+    ['CUSTOMER', { isAffiliate: false, canRegister: true }, 'Mở gian hàng Cộng tác viên'],
+    ['CUSTOMER', { isAffiliate: true }, 'Cộng tác viên'],
+    ['AFFILIATE', undefined, 'Cộng tác viên'],
+    ['AFFILIATE', { isAffiliate: false }, 'Cộng tác viên'],
+    [undefined, undefined, 'Mở gian hàng Cộng tác viên'],
+  ])('%s với access %j → %s', (role, access, label) => {
+    expect(ctvMenuEntry(role, access)?.label).toBe(label);
   });
 });
 

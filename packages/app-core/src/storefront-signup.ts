@@ -32,8 +32,15 @@ export interface CtvAccessHint {
  */
 export function ctvMenuEntry(role: string | null | undefined, access?: CtvAccessHint | null): { label: string; hint: string } | null {
   const ctv = { label: CTV_MENU_LABEL, hint: CTV_MENU_HINT };
-  if (role === 'AFFILIATE' || access?.isAffiliate === true) return ctv;
-  if (role === 'DEALER') return null;
+  if (role === 'AFFILIATE') return ctv;
+  // Vai khác khách thường (đại lý, nhân viên, admin) chỉ biết chắc quyền CTV khi /affiliate/me đã trả về; đang tải, lỗi mạng hoặc
+  // 401 thì ẩn mục, để chữ không đổi giữa chừng.
+  if (role && role !== 'CUSTOMER') {
+    if (!access) return null;
+    if (access.isAffiliate === true) return ctv;
+    return null;
+  }
+  if (access?.isAffiliate === true) return ctv;
   if (access?.canRegister === false) return null;
   return { label: OPEN_STOREFRONT_MENU_LABEL, hint: OPEN_STOREFRONT_MENU_HINT };
 }

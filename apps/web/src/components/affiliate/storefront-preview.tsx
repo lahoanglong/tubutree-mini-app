@@ -12,7 +12,7 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
   const shown = items.slice(0, MAX_TILES);
 
   return (
-    <div data-testid="storefront-preview" className="overflow-hidden rounded-card border border-stone-200 bg-stone-50">
+    <div data-testid="storefront-preview" inert className="overflow-hidden rounded-card border border-stone-200 bg-stone-50">
       <div
         className="h-[72px] bg-forest-700 bg-cover bg-center"
         style={sf.coverUrl ? { backgroundImage: cssUrl(sf.coverUrl) } : undefined}
@@ -32,8 +32,8 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
         ) : (
           <div className="mt-2.5 grid grid-cols-2 gap-2">
             {shown.map((it) => (
-              // Cùng thẻ sản phẩm với trang công khai; chủ chỉ xem, nên chặn bấm để không rời màn đăng ký giữa chừng.
-              <div key={it.id} className="pointer-events-none">
+              // Cùng thẻ sản phẩm với trang công khai. Cả khung preview là `inert`: Tab/Enter không vào link và tim, chủ không rời màn giữa chừng.
+              <div key={it.id}>
                 <ProductCard product={{ brand: '', isFeatured: false, inStock: true, ...(it.product as unknown as Partial<ProductCardData>) } as ProductCardData} />
               </div>
             ))}

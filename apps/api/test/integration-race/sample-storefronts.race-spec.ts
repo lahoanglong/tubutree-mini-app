@@ -113,14 +113,18 @@ describe('sample storefronts (real Postgres)', () => {
     try {
       await seedSampleStorefronts(prisma, [a.def]);
       await seedSampleStorefronts(prisma, [b.def]);
+      const before = await prisma.user.findUniqueOrThrow({ where: { referralCode: a.slug.toUpperCase() }, select: { metadata: true } });
+      expect((before.metadata as { sampleStorefront?: boolean }).sampleStorefront).toBe(true);
       const ownerA = await prisma.user.findUniqueOrThrow({ where: { referralCode: a.slug.toUpperCase() }, select: { id: true } });
       await createOrder(prisma, { userId: ownerA.id, status: 'CANCELLED' });
       const referee = await prisma.user.create({ data: { referralCode: randCode(10), role: 'CUSTOMER', referredById: ownerA.id } });
       refereeId = referee.id;
       const r = await removeSampleStorefronts(prisma);
       expect(r.keptOwners).toEqual([ownerA.id]);
-      const kept = await prisma.user.findUniqueOrThrow({ where: { id: ownerA.id }, select: { role: true, isBlocked: true } });
-      expect(kept).toEqual({ role: 'CUSTOMER', isBlocked: true });
+      const kept = await prisma.user.findUniqueOrThrow({ where: { id: ownerA.id }, select: { role: true, isBlocked: true, metadata: true } });
+      expect([kept.role, kept.isBlocked]).toEqual(['CUSTOMER', true]);
+      // Dấu mẫu nằm trên chính User nên còn sau khi gian hàng bị xoá: thưởng giới thiệu vẫn nhận ra chủ mẫu đã bị giữ lại.
+      expect((kept.metadata as { sampleStorefront?: boolean }).sampleStorefront).toBe(true);
       expect(await prisma.user.count({ where: { referralCode: b.slug.toUpperCase() } })).toBe(0);
       expect(await prisma.user.count({ where: { id: refereeId } })).toBe(1);
     } finally {

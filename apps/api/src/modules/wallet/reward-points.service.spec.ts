@@ -21,6 +21,7 @@ function makePrisma(opts: {
   referredById?: string | null;
   referrerRole?: string;
   referrerBlocked?: boolean;
+  referrerMetadata?: Record<string, unknown> | null;
   orders?: { id: string; createdAt: Date }[];
   coinFindFirst?: unknown;
   pointsFindFirst?: unknown;
@@ -37,7 +38,7 @@ function makePrisma(opts: {
   const findUnique = jest
     .fn()
     .mockImplementation(async ({ where }: { where: { id: string } }) =>
-      where.id === 'referee1' ? { referredById: opts.referredById ?? null } : { role: opts.referrerRole ?? 'CUSTOMER', isBlocked: opts.referrerBlocked ?? false },
+      where.id === 'referee1' ? { referredById: opts.referredById ?? null } : { role: opts.referrerRole ?? 'CUSTOMER', isBlocked: opts.referrerBlocked ?? false, metadata: opts.referrerMetadata ?? null },
     );
   const prisma = {
     user: { findUnique, update: userUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'ABC123' }) },
@@ -162,13 +163,17 @@ describe('RewardPointsService.grantReferralOrderReward (Q-05 + PD-3: thưởng n
     expect(createManyAndReturn).not.toHaveBeenCalled();
   });
 
-  it('người mời bị khoá → không thưởng; người mời thường vẫn thưởng như cũ', async () => {
-    const blocked = makePrisma({ referredById: 'referrer1', referrerBlocked: true, orders: twoOrders(5) });
-    expect(await new RewardPointsService(blocked.prisma, cfg()).grantReferralOrderReward('referee1')).toBe(false);
-    expect(blocked.createManyAndReturn).not.toHaveBeenCalled();
-    const normal = makePrisma({ referredById: 'referrer1', referrerBlocked: false, orders: twoOrders(5) });
+  it('chủ gian hàng mẫu (kể cả đã bị khoá) → không thưởng; người thật bị khoá vẫn thưởng như cũ; người thường → thưởng', async () => {
+    for (const blocked of [false, true]) {
+      const sample = makePrisma({ referredById: 'referrer1', referrerBlocked: blocked, referrerMetadata: { sampleStorefront: true }, orders: twoOrders(5) });
+      expect(await new RewardPointsService(sample.prisma, cfg()).grantReferralOrderReward('referee1')).toBe(false);
+      expect(sample.createManyAndReturn).not.toHaveBeenCalled();
+    }
+    const blockedReal = makePrisma({ referredById: 'referrer1', referrerBlocked: true, orders: twoOrders(5) });
+    expect(await new RewardPointsService(blockedReal.prisma, cfg()).grantReferralOrderReward('referee1')).toBe(true);
+    expect(blockedReal.createManyAndReturn).toHaveBeenCalled();
+    const normal = makePrisma({ referredById: 'referrer1', orders: twoOrders(5), referrerMetadata: { other: 1 } });
     expect(await new RewardPointsService(normal.prisma, cfg()).grantReferralOrderReward('referee1')).toBe(true);
-    expect(normal.createManyAndReturn).toHaveBeenCalled();
   });
 
   it('mới 1 đơn giao xong → chưa thưởng', async () => {

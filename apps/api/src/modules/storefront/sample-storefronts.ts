@@ -167,6 +167,35 @@ export function assertSampleSeedAllowed(opts: { env: NodeJS.ProcessEnv; database
 
 type Db = Pick<PrismaClient, 'user' | 'storefront' | 'storefrontCollection' | 'product' | '$transaction'>;
 
+/** Tên DB chỉ được qua nhờ `--allow-db=` (không nằm trong danh sách mặc định, không dùng cờ PROD): cần người chạy gõ lại tên để xác nhận. */
+export function dbNeedingConfirmation(databaseUrl: string | undefined, argv: readonly string[]): string | null {
+  if (argv.includes(PROD_FLAG) || !databaseUrl) return null;
+  let dbName: string;
+  try {
+    dbName = decodeURIComponent(new URL(databaseUrl).pathname.replace(/^\//, ''));
+  } catch {
+    return null;
+  }
+  if (ALLOWED_DB_NAMES.has(dbName)) return null;
+  return argv.includes(`${ALLOW_DB_FLAG_PREFIX}${dbName}`) ? dbName : null;
+}
+
+export const CONFIRM_DB_ENV = 'SEED_CONFIRM_DB';
+
+/**
+ * Xác nhận đích danh DB trước khi ghi. Có TTY: người chạy gõ lại đúng tên DB. Không có TTY (CI, pipe): từ chối, trừ khi biến môi trường
+ * SEED_CONFIRM_DB bằng đúng tên DB. `typed` là chuỗi người chạy gõ (chỉ dùng khi có TTY).
+ */
+export function assertDbConfirmed(opts: { dbName: string; isTTY: boolean; env: NodeJS.ProcessEnv; typed?: string }): void {
+  if (opts.env[CONFIRM_DB_ENV] === opts.dbName) return;
+  if (!opts.isTTY) {
+    throw new SampleSeedRefusal(`Từ chối chạy: không có terminal để xác nhận. Đặt ${CONFIRM_DB_ENV}=${opts.dbName} nếu chắc chắn muốn ghi vào DB "${opts.dbName}".`);
+  }
+  if ((opts.typed ?? '').trim() !== opts.dbName) {
+    throw new SampleSeedRefusal(`Từ chối chạy: tên DB gõ lại không khớp "${opts.dbName}".`);
+  }
+}
+
 export interface SampleSeedResult {
   slug: string;
   action: 'created' | 'updated';

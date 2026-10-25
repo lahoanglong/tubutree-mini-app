@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import { ALLOWED_DB_NAMES, ALLOW_DB_FLAG_PREFIX, describeDatabaseTarget, assertSampleSeedAllowed, effectiveDatabaseUrl, PROD_FLAG, SAMPLE_STOREFRONTS, SampleSeedRefusal } from './sample-storefronts';
+import { ALLOWED_DB_NAMES, assertDbConfirmed, dbNeedingConfirmation, ALLOW_DB_FLAG_PREFIX, describeDatabaseTarget, assertSampleSeedAllowed, effectiveDatabaseUrl, PROD_FLAG, SAMPLE_STOREFRONTS, SampleSeedRefusal } from './sample-storefronts';
 import { normalizeSubdomain } from './identifier-validation';
 
 const local = 'postgresql://tubu@127.0.0.1:35880/tubutree_it?schema=public';
@@ -70,6 +70,39 @@ describe('assertSampleSeedAllowed', () => {
   it('chỉ cờ --i-know-this-is-prod mới vượt được', () => {
     expect(run('postgresql://u:p@db.example.com/tubutree', { NODE_ENV: 'production' }, [PROD_FLAG])).not.toThrow();
     expect(run('postgresql://u:p@db.example.com/tubutree', { NODE_ENV: 'production', ALLOW_PROD_SEED: '1' })).toThrow(SampleSeedRefusal);
+  });
+});
+
+describe('xác nhận tên DB khi qua bằng --allow-db', () => {
+  const url = 'postgresql://u:p@localhost:5434/tubutree';
+  const flag = `${ALLOW_DB_FLAG_PREFIX}tubutree`;
+
+  it('chỉ đòi xác nhận khi DB được qua nhờ --allow-db; danh sách mặc định và cờ PROD không đổi', () => {
+    expect(dbNeedingConfirmation(url, [flag])).toBe('tubutree');
+    expect(dbNeedingConfirmation(local, [])).toBeNull();
+    expect(dbNeedingConfirmation(local, [`${ALLOW_DB_FLAG_PREFIX}tubutree_it`])).toBeNull();
+    expect(dbNeedingConfirmation(url, [flag, PROD_FLAG])).toBeNull();
+    expect(dbNeedingConfirmation(undefined, [flag])).toBeNull();
+  });
+
+  it('có TTY: gõ đúng tên thì qua, gõ sai hoặc bỏ trống thì từ chối', () => {
+    const base = { dbName: 'tubutree', isTTY: true, env: {} as NodeJS.ProcessEnv };
+    expect(() => assertDbConfirmed({ ...base, typed: 'tubutree' })).not.toThrow();
+    expect(() => assertDbConfirmed({ ...base, typed: ' tubutree \n' })).not.toThrow();
+    expect(() => assertDbConfirmed({ ...base, typed: 'tubutree_it' })).toThrow(SampleSeedRefusal);
+    expect(() => assertDbConfirmed({ ...base, typed: '' })).toThrow(SampleSeedRefusal);
+    expect(() => assertDbConfirmed(base)).toThrow(SampleSeedRefusal);
+  });
+
+  it('không có TTY: từ chối, trừ khi SEED_CONFIRM_DB đúng tên DB', () => {
+    const base = { dbName: 'tubutree', isTTY: false };
+    expect(() => assertDbConfirmed({ ...base, env: {} })).toThrow(/SEED_CONFIRM_DB=tubutree/);
+    expect(() => assertDbConfirmed({ ...base, env: { SEED_CONFIRM_DB: 'khac' } })).toThrow(SampleSeedRefusal);
+    expect(() => assertDbConfirmed({ ...base, env: { SEED_CONFIRM_DB: 'tubutree' } })).not.toThrow();
+  });
+
+  it('có TTY nhưng SEED_CONFIRM_DB đúng thì không cần gõ', () => {
+    expect(() => assertDbConfirmed({ dbName: 'tubutree', isTTY: true, env: { SEED_CONFIRM_DB: 'tubutree' } })).not.toThrow();
   });
 });
 

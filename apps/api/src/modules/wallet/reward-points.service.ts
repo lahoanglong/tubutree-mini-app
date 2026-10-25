@@ -216,9 +216,11 @@ export class RewardPointsService {
     // Người mời là khách đã gộp (người được mời tạo xen giữa lúc gộp) ⇒ thưởng cho tài khoản đích.
     const referrerId = referee?.referredById ? await resolveMergedUserId(this.prisma, referee.referredById) : null;
     if (!referrerId || referrerId === refereeId) return false;
-    const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true, isBlocked: true } });
-    // Người mời bị khoá (kể cả chủ gian hàng mẫu bị giữ lại sau khi gỡ mẫu) không nhận thưởng.
-    if (!referrer || referrer.role === 'AFFILIATE' || referrer.isBlocked) return false;
+    const referrer = await this.prisma.user.findUnique({ where: { id: referrerId }, select: { role: true, metadata: true } });
+    // Chủ gian hàng mẫu (tài khoản giả do script seed tạo, metadata.sampleStorefront) không nhận thưởng, kể cả khi bị giữ lại sau khi gỡ mẫu.
+    // Người mời thật bị khoá vẫn theo luật cũ.
+    const isSampleOwner = (referrer?.metadata as { sampleStorefront?: unknown } | null)?.sampleStorefront === true;
+    if (!referrer || referrer.role === 'AFFILIATE' || isSampleOwner) return false;
 
     const [reward, { windowDays, minOrderAmount: minOrder }, expiresAt] = await Promise.all([
       this.config.get<number>('referral.referrer_reward_points', 5000),

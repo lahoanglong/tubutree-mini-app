@@ -172,9 +172,15 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
   const real = { isReady: isWebRouteReady };
 
   it('đại lý, chủ nhãn, nhân viên và Đổi rác có lối vào như Mini App (profile.tsx)', () => {
-    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A' }));
+    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A', ctvAccess: { isAffiliate: true } }));
     const to = all(m).map((i) => i.to);
     expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/doi-rac']));
+  });
+
+  it('admin/nhân viên chưa có kết quả /affiliate/me (đang tải, lỗi, 401): mục Cộng tác viên ẩn, không đổi chữ', () => {
+    for (const role of ['ADMIN', 'STAFF', 'DEALER']) {
+      expect(all(buildAccountMenu(ctx({ ...real, role }))).map((i) => i.to)).not.toContain('/ctv');
+    }
   });
 
   it('khách thường chưa có nhãn: không thấy màn nội bộ', () => {
