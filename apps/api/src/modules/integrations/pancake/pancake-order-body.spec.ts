@@ -193,3 +193,11 @@ describe('pancakePaymentState', () => {
     expect(pancakePaymentState(o, credit)).toBe(state);
   });
 });
+
+describe('buildPancakeOrderBody — thẻ', () => {
+  it('body không mang tags; tagNames là tên thẻ logic', () => {
+    const r = buildPancakeOrderBody(order({ platform: 'web' }), { recipient, variations, onDealerCredit: false });
+    expect(r.body).not.toHaveProperty('tags');
+    expect(r.tagNames).toEqual(['WEB', 'RETAIL', 'COD']);
+  });
+});

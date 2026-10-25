@@ -4,7 +4,7 @@ import type { Queue } from 'bullmq';
 import type { Order, OrderItem } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
-import type { PancakeOrderDTO } from './pancake.types';
+import type { PancakeOrderDTO, PancakeOrderTagRef } from './pancake.types';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { loadGomdonConfig, DEFAULT_GOMDON_WEIGHT_FALLBACK } from '../gomdon/gomdon-config';
@@ -18,6 +18,7 @@ import { isMerchantFulfilledOrder, isPancakeFulfilledLine, TUBU_FULFILLED_ORDER_
 import {
   buildPancakeOrderBody,
   isPancakePrepaid,
+  PANCAKE_PAYMENT_TAG,
   pancakePaymentState,
   recyclingNoteDetail,
   type PancakeLinePredicate,
@@ -218,13 +219,15 @@ export class PancakeOrderService {
     if (skipped > 0) await this.flagUnpushableLines(order.id, order.code, skipped, pancakeLineCount === 0);
     if (pancakeLineCount === 0) return null;
 
-    const { body, paymentSynced } = buildPancakeOrderBody(order, {
+    const { body, paymentSynced, tagNames } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
       variations,
       onDealerCredit: await this.isOnDealerCredit(order),
       recyclingNote: await this.buildRecyclingNote(order),
       isPancakeLine,
     });
+    const tags = await this.client.resolveOrderTags(tagNames);
+    if (tags.length > 0) body.tags = tags;
 
     // Giữ quyền đẩy (một tiến trình một lúc): job push, job thanh toán và cron có thể cùng chạm một đơn. Tiến trình
     // chết giữa chừng để lại PUSHING — quá PUSH_LEASE_MS thì lần sau được vào lại (và tra cứu trước khi tạo).
@@ -438,19 +441,44 @@ export class PancakeOrderService {
   /** Nội dung PUT: note/tag (và số đã trả khi trả trước) dựng từ đơn hiện tại; amountDue = phần giao qua Pancake. */
   private async orderUpdate(order: OrderWithItems, onCredit: boolean) {
     const variations = await this.variationsOf(order);
-    const { body, amountDue, paymentState } = buildPancakeOrderBody(order, {
+    const { body, amountDue, paymentState, tagNames } = buildPancakeOrderBody(order, {
       recipient: await this.recipientOf(order),
       variations,
       onDealerCredit: onCredit,
       recyclingNote: await this.buildRecyclingNote(order),
       isPancakeLine: this.pancakeLinesOf(variations),
     });
+    const tags = await this.mergedTags(order, tagNames);
     const payload = {
       ...(isPancakePrepaid(paymentState) ? { transfer_money: body.transfer_money, cod: body.cod } : {}),
-      tags: body.tags,
+      ...(tags ? { tags } : {}),
       note: body.note,
     };
     return { payload, amountDue };
+  }
+
+  /**
+   * Thẻ cho PUT: PUT thay cả danh sách nên giữ thẻ nhân viên gắn tay trên Pancake (đọc đơn hiện tại), chỉ gỡ thẻ
+   * trạng thái thanh toán của ta khi không còn đúng. Không đọc được đơn thì bỏ hẳn `tags` — thà không đổi thẻ còn hơn xoá thẻ tay.
+   */
+  private async mergedTags(order: OrderWithItems, tagNames: string[]): Promise<PancakeOrderTagRef[] | undefined> {
+    const wanted = await this.client.resolveOrderTags(tagNames);
+    if (wanted.length === 0) return undefined;
+    let current: PancakeOrderDTO | null;
+    try {
+      current = await this.client.getOrder(order.pancakeOrderId!);
+    } catch {
+      return undefined;
+    }
+    if (!current) return undefined;
+    const ownPaymentIds = new Set((await this.client.resolveOrderTags(Object.values(PANCAKE_PAYMENT_TAG))).map((t) => t.id));
+    const wantedIds = new Set(wanted.map((t) => t.id));
+    const kept = (current.tags ?? []).filter(
+      (t): t is PancakeOrderTagRef => typeof t === 'object' && t !== null && typeof t.id === 'number' && (!ownPaymentIds.has(t.id) || wantedIds.has(t.id)),
+    );
+    const merged = new Map<number, PancakeOrderTagRef>();
+    for (const t of [...kept, ...wanted]) merged.set(t.id, { id: t.id, ...(t.name ? { name: t.name } : {}) });
+    return [...merged.values()];
   }
 
   /**

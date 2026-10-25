@@ -104,6 +104,8 @@ export interface PancakeBodyResult {
   /** Đơn Pancake đã mang thông tin không thu COD. */
   paymentSynced: boolean;
   paymentState: PancakePaymentState;
+  /** Tên thẻ logic (pancakeTags); service đổi sang id thẻ có trong shop trước khi gửi. */
+  tagNames: string[];
 }
 
 const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
@@ -322,7 +324,6 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
     transfer_money: prepaid,
     cod,
     custom_id: order.code,
-    tags: pancakeTags(order, state),
     note: pancakeOrderNote(order.code, ctx.recyclingNote, pancakePaymentNote(state, order.paymentMethod, amountDue, cod), order.note),
     extension: {
       external_order_id: order.code,
@@ -331,5 +332,5 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
         : undefined,
     },
   };
-  return { body, amountDue, paymentSynced: isPancakePrepaid(state), paymentState: state };
+  return { body, amountDue, paymentSynced: isPancakePrepaid(state), paymentState: state, tagNames: pancakeTags(order, state) };
 }

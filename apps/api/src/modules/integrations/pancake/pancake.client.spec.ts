@@ -148,3 +148,37 @@ describe('PancakeClient đọc danh mục/geo: lỗi HTTP thành câu tiếng Vi
     });
   });
 });
+
+describe('PancakeClient.resolveOrderTags', () => {
+  const shopTags = { data: { success: true, data: [{ id: 5000, name: 'Chờ cọc' }, { id: 12, name: ' Webb ' }, { id: 13, name: 'miniapp' }] } };
+
+  it('khớp tên trim + không phân biệt hoa thường, bỏ tên không có', async () => {
+    const client = makeClient(jest.fn().mockResolvedValue(shopTags));
+    await expect(client.resolveOrderTags(['MINIAPP', 'webb', 'KHONG_CO', 'miniapp'])).resolves.toEqual([
+      { id: 13, name: 'miniapp' },
+      { id: 12, name: ' Webb ' },
+    ]);
+  });
+
+  it('lần thứ hai dùng cache, không gọi GET lần nữa', async () => {
+    const get = jest.fn().mockResolvedValue(shopTags);
+    const client = makeClient(get);
+    await client.resolveOrderTags(['MINIAPP']);
+    await client.resolveOrderTags(['MINIAPP']);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('đọc danh sách lỗi → [] (không ném), lần sau thử lại', async () => {
+    const get = jest.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(shopTags);
+    const client = makeClient(get);
+    await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([]);
+    await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([{ id: 13, name: 'miniapp' }]);
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it('success:false trong HTTP 200 → [] và fetchOrderTags ném', async () => {
+    const client = makeClient(jest.fn().mockResolvedValue({ data: { success: false, message: 'x' } }));
+    await expect(client.fetchOrderTags()).rejects.toThrow();
+    await expect(client.resolveOrderTags(['MINIAPP'])).resolves.toEqual([]);
+  });
+});

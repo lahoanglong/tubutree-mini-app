@@ -13,8 +13,13 @@ import type {
   PancakeProvinceDTO,
   PancakeCommuneDTO,
   PancakeGeoResponse,
+  PancakeOrderTagRef,
 } from './pancake.types';
 import { PancakeApiError } from './pancake-outbound';
+
+/** Danh sách thẻ đơn của shop hầu như không đổi; giữ trong bộ nhớ để mỗi đơn đẩy không phải gọi thêm một lần. */
+export const PANCAKE_TAG_CACHE_TTL_MS = 60 * 60_000;
+const PANCAKE_TAG_FETCH_TIMEOUT_MS = 5_000;
 
 /** Thời gian chờ mặc định; huỷ đơn đồng bộ trên đường request của khách dùng mức ngắn hơn (PancakeSyncHooks). */
 export const PANCAKE_HTTP_TIMEOUT_MS = 15_000;
@@ -66,6 +71,7 @@ export class PancakeClient {
   private readonly http: AxiosInstance;
   private readonly apiKey: string;
   private readonly shopId: string;
+  private tagCache: { at: number; tags: Required<PancakeOrderTagRef>[] } | null = null;
 
   constructor(private readonly config: ConfigService<Env, true>) {
     this.apiKey = config.get('PANCAKE_API_KEY', { infer: true });
@@ -147,6 +153,47 @@ export class PancakeClient {
       'đọc danh sách phường/xã',
     );
     return geoList(data, 'phường/xã');
+  }
+
+  /** Thẻ đơn hàng của shop (`GET /shops/{SHOP_ID}/orders/tags`). */
+  async fetchOrderTags(): Promise<Required<PancakeOrderTagRef>[]> {
+    this.assertConfigured();
+    try {
+      const { data } = await this.http.get<{ success?: boolean; data?: Array<{ id?: unknown; name?: unknown }> }>(
+        `/shops/${this.shopId}/orders/tags`,
+        { params: { api_key: this.apiKey }, timeout: PANCAKE_TAG_FETCH_TIMEOUT_MS },
+      );
+      const body = assertSuccess(data, 'đọc thẻ đơn');
+      if (!body || !Array.isArray(body.data)) throw new PancakeApiError('Pancake không trả danh sách thẻ đơn.', true);
+      return body.data.filter((t): t is Required<PancakeOrderTagRef> => typeof t?.id === 'number' && typeof t.name === 'string');
+    } catch (err) {
+      throw toPancakeError(err, 'đọc thẻ đơn');
+    }
+  }
+
+  /**
+   * Tên thẻ → thẻ có trong shop (khớp tên đã trim, không phân biệt hoa thường). Tên không có trong shop bị bỏ; không
+   * đọc được danh sách thì trả [] — thẻ không bao giờ được làm hỏng việc đẩy đơn.
+   */
+  async resolveOrderTags(names: readonly string[]): Promise<Required<PancakeOrderTagRef>[]> {
+    let shopTags: Required<PancakeOrderTagRef>[] | null = this.tagCache && Date.now() - this.tagCache.at < PANCAKE_TAG_CACHE_TTL_MS ? this.tagCache.tags : null;
+    if (!shopTags) {
+      try {
+        shopTags = await this.fetchOrderTags();
+        this.tagCache = { at: Date.now(), tags: shopTags };
+      } catch (err) {
+        this.logger.warn(`Không đọc được thẻ đơn Pancake, đẩy đơn không kèm thẻ: ${err instanceof Error ? err.message : String(err)}`);
+        return [];
+      }
+    }
+    const byName = new Map(shopTags.map((t): [string, Required<PancakeOrderTagRef>] => [t.name.trim().toLowerCase(), t]));
+    const out = new Map<number, Required<PancakeOrderTagRef>>();
+    for (const n of names) {
+      const hit = byName.get(n.trim().toLowerCase());
+      if (hit) out.set(hit.id, hit);
+      else this.logger.debug(`Shop Pancake chưa có thẻ "${n}" — bỏ qua.`);
+    }
+    return [...out.values()];
   }
 
   async createOrder(body: PancakeCreateOrderBody): Promise<PancakeCreateOrderResponse> {

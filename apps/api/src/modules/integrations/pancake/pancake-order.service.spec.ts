@@ -7,8 +7,18 @@ import { PancakeApiError, PancakeCancelRefusedError, PancakeOrderDataError } fro
 import { QUEUE_COMMAND_TIMEOUT_MS, QueueTimeoutError } from '../../../jobs/queue-timeout';
 import { baseOrder, fakeOrderDb, fakeQueue } from '../../../../test/fakes/pancake-order.fake';
 
+const FAKE_TAG_IDS = new Map<string, number>();
+/** Shop giả có đủ mọi thẻ ta cần; id cấp theo thứ tự gặp tên. */
+const resolveAll = async (names: readonly string[]) =>
+  names.map((name) => {
+    if (!FAKE_TAG_IDS.has(name)) FAKE_TAG_IDS.set(name, 100 + FAKE_TAG_IDS.size);
+    return { id: FAKE_TAG_IDS.get(name)!, name };
+  });
+const tagNames = (tags?: { name?: string }[]) => tags?.map((t) => t.name);
+
 function fakeClient(overrides: Record<string, unknown> = {}) {
   return {
+    resolveOrderTags: jest.fn(resolveAll),
     isConfigured: jest.fn().mockReturnValue(true),
     createOrder: jest.fn().mockResolvedValue({ id: 'pk-new' }),
     searchOrders: jest.fn().mockResolvedValue([]),
@@ -47,7 +57,7 @@ describe('PancakeOrderService.pushOrder — tiền trong body (PANCAKE-1, PANCAK
     const b = t.body();
     expect(b.transfer_money).toBe(230_000);
     expect(b.cod).toBe(0);
-    expect(b.tags).toContain('DA_THANH_TOAN');
+    expect(tagNames(b.tags)).toContain('DA_THANH_TOAN');
     expect(b.note).toContain('[ĐÃ THANH TOÁN VÍ TUBU 230.000đ - KHÔNG THU COD]');
     expect(t.row().pancakePaymentSynced).toBe(true);
   });
@@ -103,7 +113,7 @@ describe('PancakeOrderService.pushOrder — tiền trong body (PANCAKE-1, PANCAK
   it('chuyển khoản chưa về tiền → VẪN đẩy (Pancake đối soát theo mã đơn) kèm "CHỜ CHUYỂN KHOẢN"', async () => {
     const t = setup({ paymentMethod: 'BANK_TRANSFER', status: 'PENDING_PAYMENT' });
     await t.svc.pushOrder('o1');
-    expect(t.body().tags).toContain('CHO_CHUYEN_KHOAN');
+    expect(tagNames(t.body().tags)).toContain('CHO_CHUYEN_KHOAN');
     expect(t.body().note).toContain('CHỜ CHUYỂN KHOẢN 230.000đ - CHƯA GIAO');
   });
 
@@ -119,7 +129,7 @@ describe('PancakeOrderService.pushOrder — người nhận, tag kênh (SELLER-2
   it('đơn web → tag WEB, không phải MINIAPP', async () => {
     const t = setup({ platform: 'web' });
     await t.svc.pushOrder('o1');
-    expect(t.body().tags).toEqual(['WEB', 'RETAIL', 'COD']);
+    expect(tagNames(t.body().tags)).toEqual(['WEB', 'RETAIL', 'COD']);
   });
 
   it('gửi tên/SĐT/địa chỉ ở bill_* + shipping_address; không gửi fb_id; hệ 2 cấp không gửi district_id', async () => {
@@ -175,7 +185,7 @@ describe('PancakeOrderService.pushOrder — người nhận, tag kênh (SELLER-2
     expect(b.items[0]).toMatchObject({ quantity: 10, discount_each_product: 30_000, variation_info: { retail_price: 100_000 } });
     expect(pancakeTotal(b)).toBe(700_000);
     expect(b).toMatchObject({ transfer_money: 700_000, cod: 0 });
-    expect(b.tags).toEqual(['MINIAPP', 'DEALER', 'CONG_NO']);
+    expect(tagNames(b.tags)).toEqual(['MINIAPP', 'DEALER', 'CONG_NO']);
   });
 
   it('thiếu SĐT người nhận → PancakeOrderDataError (thử lại không giúp), không gọi Pancake', async () => {
@@ -471,8 +481,9 @@ describe('PancakeOrderService.syncPayment', () => {
     await t.svc.syncPayment('o1');
     expect(t.client.updateOrder).toHaveBeenCalledWith(
       'pk-1',
-      expect.objectContaining({ transfer_money: 230_000, cod: 0, tags: ['MINIAPP', 'RETAIL', 'DA_THANH_TOAN'] }),
+      expect.objectContaining({ transfer_money: 230_000, cod: 0 }),
     );
+    expect(tagNames(t.client.updateOrder.mock.calls[0]![1].tags)).toEqual(['MINIAPP', 'RETAIL', 'DA_THANH_TOAN']);
     expect(t.row().pancakePaymentSynced).toBe(true);
   });
 
@@ -707,7 +718,7 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
     const client = fakeClient();
     const systemConfig = cfgValue === undefined ? undefined : ({ get: jest.fn().mockResolvedValue(cfgValue) } as never);
     await new PancakeOrderService(db.prisma as unknown as PrismaService, client as unknown as PancakeClient, fakeQueue() as never, systemConfig).pushOrder('o1');
-    return client.createOrder.mock.calls[0]![0] as { note: string; tags: string[] };
+    return client.createOrder.mock.calls[0]![0] as { note: string; tags: { id: number; name: string }[] };
   }
 
   it('có mã Gomdon → note có mã + "KHÔNG TẠO VẬN ĐƠN KHÁC", tag RECYCLING + GOMDON', async () => {
@@ -718,7 +729,7 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
     expect(body.note).toBe(
       'Order code: TUBU1 | [ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 2.4kg - Ghi chú: Vỏ hộp sữa + 4 viên pin] Mã VĐ Gomdon: BE-999 [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC] | [THU COD 230.000đ]',
     );
-    expect(body.tags).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'GOMDON', 'COD']);
+    expect(tagNames(body.tags)).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'GOMDON', 'COD']);
   });
 
   it('SYNC-4: ghi chú thu gom khách tự nhập không mạo được dấu thanh toán trên đơn COD', async () => {
@@ -737,7 +748,7 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
     for (const gomdonStatus of ['FAILED', 'NOT_CONFIGURED']) {
       const body = await pushed({ hasRecyclingPickup: true, recyclingNote: 'Áo quần cũ', gomdonStatus, items: [{ id: 'i1', variationId: 'v1', quantity: 1, unitPrice: 100_000 }] }, [{ id: 'v1', weight: 500 }]);
       expect(body.note).toContain('[ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 0.5kg - Ghi chú: Áo quần cũ] [LỖI TẠO GOMDON - CẦN TẠO VẬN ĐƠN BẰNG TAY]');
-      expect(body.tags).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'COD']);
+      expect(tagNames(body.tags)).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'COD']);
     }
   });
 
@@ -798,7 +809,7 @@ describe('PancakeOrderService — đơn thu gom: Pancake chờ vận đơn Gomdo
     expect(payload.note).toContain('Mã VĐ Gomdon: BE-9105 [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC]');
     expect(payload.note).toContain('[ĐÃ THANH TOÁN CHUYỂN KHOẢN');
     expect(payload.note).toContain('Khách dặn: Gọi trước');
-    expect(payload.tags).toContain('GOMDON');
+    expect(tagNames(payload.tags)).toContain('GOMDON');
     expect(payload).toMatchObject({ cod: 0, transfer_money: 230_000 });
     expect(t.row().pancakePaymentSynced).toBe(true);
     expect(t.alerts.resolveKinds).toHaveBeenCalledWith('o1', ['WAYBILL_NOTE']);
@@ -850,5 +861,45 @@ describe('PancakeOrderService — đơn thu gom: Pancake chờ vận đơn Gomdo
     await t.svc.pushOrder('o1');
     expect(t.body().note).toContain('KIỂM TRA GOMDON');
     expect(t.client.updateOrder).toHaveBeenCalledWith('pk-new', expect.objectContaining({ note: expect.stringContaining('Mã VĐ Gomdon: BE-3') }));
+  });
+});
+
+describe('PancakeOrderService — thẻ đơn (Pancake chỉ nhận thẻ đã có trong shop, theo id)', () => {
+  it('POST: tên thẻ → {id, name} của shop; thẻ shop không có bị bỏ', async () => {
+    const t = setup({}, { client: { resolveOrderTags: jest.fn().mockResolvedValue([{ id: 7, name: 'COD' }]) } });
+    await t.svc.pushOrder('o1');
+    expect(t.client.resolveOrderTags).toHaveBeenCalledWith(['MINIAPP', 'RETAIL', 'COD']);
+    expect(t.body().tags).toEqual([{ id: 7, name: 'COD' }]);
+  });
+
+  it('POST: không thẻ nào khớp → không có khoá tags trong body', async () => {
+    const t = setup({}, { client: { resolveOrderTags: jest.fn().mockResolvedValue([]) } });
+    await t.svc.pushOrder('o1');
+    expect(t.client.createOrder).toHaveBeenCalledTimes(1);
+    expect(t.body()).not.toHaveProperty('tags');
+  });
+
+  it('PUT: giữ thẻ nhân viên gắn tay, gỡ thẻ thanh toán cũ của ta, thêm thẻ mới', async () => {
+    const shop = [
+      { id: 1, name: 'MINIAPP' },
+      { id: 2, name: 'RETAIL' },
+      { id: 3, name: 'CHO_CHUYEN_KHOAN' },
+      { id: 4, name: 'DA_THANH_TOAN' },
+    ];
+    const resolveOrderTags = jest.fn(async (names: readonly string[]) => shop.filter((s) => names.includes(s.name)));
+    const getOrder = jest.fn().mockResolvedValue({ id: 'pk-1', tags: [{ id: 3, name: 'CHO_CHUYEN_KHOAN' }, { id: 9000, name: 'Hẹn gọi' }, { id: 1, name: 'MINIAPP' }] });
+    const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }, { client: { resolveOrderTags, getOrder } });
+    await t.svc.syncPayment('o1');
+    const sent = t.client.updateOrder.mock.calls[0]![1].tags as { id: number }[];
+    expect(sent.map((x) => x.id).sort((a, b) => a - b)).toEqual([1, 2, 4, 9000]);
+  });
+
+  it('PUT: không đọc được đơn hiện tại → bỏ tags, vẫn PUT note/tiền', async () => {
+    const getOrder = jest.fn().mockRejectedValue(new PancakeApiError('ECONNRESET', true));
+    const t = setup({ pancakeOrderId: 'pk-1', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID' }, { client: { getOrder } });
+    await t.svc.syncPayment('o1');
+    const payload = t.client.updateOrder.mock.calls[0]![1];
+    expect(payload).not.toHaveProperty('tags');
+    expect(payload).toMatchObject({ transfer_money: 230_000, cod: 0 });
   });
 });
