@@ -208,7 +208,7 @@ export function mockTourWorld(api: MockApi, user: AuthUser): void {
     { id: 'n2', templateCode: 'POINTS_EARNED', payload: { body: 'Bạn nhận +250 Điểm Xanh từ đơn hàng đã giao.', data: {} }, status: 'READ', sentAt: '2026-10-15T08:00:00.000Z' },
   ]);
   api.get('/me/notifications/prefs', { orderUpdates: true, promotions: true, reminders: true });
-  api.get('/me/wallet', { walletBalance: 350_000, cashbackPending: 42_000, commissionApproved: 0, commissionPending: 0, withdrawMin: 100_000, withdrawFee: 3_000 });
+  api.get('/me/wallet', { walletBalance: 350_000, cashbackPending: 42_000, commissionApproved: 0, commissionPending: 0 });
   api.get('/me/wallet/transactions', {
     data: [
       { id: 'w1', delta: 42_000, balanceAfter: 350_000, type: 'CASHBACK', reason: 'Hoàn tiền mua sắm', orderId: null, createdAt: '2026-10-12T05:00:00Z' },

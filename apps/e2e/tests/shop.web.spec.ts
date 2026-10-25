@@ -274,7 +274,7 @@ test.describe('Web khách: trang sản phẩm', () => {
     api.get('/me/addresses', [
       { id: 'a1', recipient: 'Nguyễn Văn An', phone: '0912345678', province: 'Hà Nội', district: '', ward: 'Phường Ba Đình', street: '12 Phố Huế', provinceCode: '84_VN01', districtCode: '', wardCode: '84_VN01_00004', isDefault: true },
     ]);
-    api.get('/me/wallet', { walletBalance: 300000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0, withdrawMin: 0, withdrawFee: 0 });
+    api.get('/me/wallet', { walletBalance: 300000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
   }
 
   const signIn = (page: import('@playwright/test').Page) =>
