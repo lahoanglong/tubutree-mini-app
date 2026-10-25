@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
+import { mockHomeEngagement } from './support/discovery-mocks';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
@@ -198,6 +199,8 @@ test.describe('Web khách: Trang chủ /', () => {
     mockHome(api);
     mockCustomer(api);
     api.get('/me/wishlist/ids', []);
+    api.get('/waste/me', { programmeEnabled: false, eligibility: 'OK', blocked: false, shipLockedAt: null, openRequests: [] });
+    api.get('/products/nuoc-rua-chen', { slug: 'nuoc-rua-chen', partnerOwned: false, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } });
     api.post('/cart/items', { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 1 });
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
 
@@ -544,5 +547,69 @@ test.describe('Web khách: Hành trình nguyên liệu /cau-chuyen', () => {
     await page.goto('/cau-chuyen');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồng, vùng chạm chip (điện thoại)', () => {
+  const login = async (page: Page, api: MockApi) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy
+      }
+    });
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockHome(api);
+    mockCustomer(api);
+    api.get('/me/wishlist/ids', []);
+    api.get('/waste/me', { programmeEnabled: false, eligibility: 'OK', blocked: false, shipLockedAt: null, openRequests: [] });
+    api.get('/products/nuoc-rua-chen', { slug: 'nuoc-rua-chen', partnerOwned: false, fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: null, freeShipFrom: null } });
+    api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
+  };
+
+  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở Ưu đãi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+    await page.getByRole('link', { name: /^Ưu đãi/ }).click();
+    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+  });
+
+  test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: true, expiringInDays: 2 });
+    await page.goto('/');
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+    await page.getByRole('link', { name: /^Ưu đãi/ }).click();
+    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toHaveCount(0);
+  });
+
+  test('chip dải thương hiệu và tab gợi ý có vùng chạm phủ đủ 44px', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
+    api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
+    await page.goto('/');
+    const chips = [
+      page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
+      page.getByRole('region', { name: 'Nguồn gợi ý' }).getByRole('button', { name: 'Bán chạy', exact: true }),
+    ];
+    for (const chip of chips) {
+      await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      const box = (await chip.boundingBox())!;
+      const hit = await chip.evaluate(
+        (el, b) => {
+          const x = b.x + b.width / 2;
+          const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
+          return { above3: at(b.y - 3), below3: at(b.y + b.height + 3), inside: at(b.y + b.height / 2) };
+        },
+        { x: box.x, y: box.y, width: box.width, height: box.height },
+      );
+      expect(hit).toEqual({ above3: true, below3: true, inside: true });
+    }
   });
 });

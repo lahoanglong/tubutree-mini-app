@@ -289,6 +289,10 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
       await gate.promise;
       return { data: [makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' })], meta: { page: 1, limit: 1, total: 1 } };
     });
+    // Khung chờ chỉ dựng khi lần mở trước của tài khoản này có việc (use-home-customer-kind / todo-strip nhớ số dòng).
+    await page.addInitScript(() => {
+      localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'user-4b', rows: 1 }));
+    });
     await page.goto('/');
     const skel = page.getByTestId('todo-strip-loading');
     await expect(skel).toBeVisible({ timeout: 15_000 });

@@ -176,3 +176,28 @@ export function mockDiscovery(
   // Fire-and-forget không liên quan nội dung test.
   api.allowUnmocked('POST /affiliate/touch', 'GET /products/:slug/reviews/can-review');
 }
+
+const ENGAGEMENT_NOW = '2026-10-18T08:00:00.000Z';
+
+/**
+ * Kịch bản "chưa điểm danh + có mã sắp hết hạn + Cộng đồng có bài": chạm chấm đỏ tab Ưu đãi (cả hai lý do) và khối Cộng đồng ở
+ * Trang chủ. Đăng ký SAU mockDiscovery/mockSession để thắng các mặc định.
+ */
+export function mockHomeEngagement(api: MockApi, opts: { checkedIn?: boolean; expiringInDays?: number | null } = {}): void {
+  const { checkedIn = false, expiringInDays = 2 } = opts;
+  api.get('/me/loyalty/check-in', {
+    checkedInToday: checkedIn,
+    streakDays: 1,
+    currentCycleDay: 1,
+    rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day, claimed: day === 1 && checkedIn, isToday: day === 1 })),
+  });
+  api.get('/me/coupons', expiringInDays === null ? [] : [
+    { code: 'SAPHET', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: null, endAt: new Date(Date.now() + expiringInDays * 24 * 3_600_000).toISOString() },
+  ]);
+  const post = (id: string, author: string) => ({
+    id, kind: 'TIP', status: 'APPROVED', title: `Mẹo của ${author}`, body: `Nội dung ${id}`, images: [], meta: null, createdAt: ENGAGEMENT_NOW,
+    author, avatar: null, badge: null, authorLevel: 1, category: null, productTags: [], tags: [], isPinned: false,
+    likeCount: 3, commentCount: 1, liked: false, bestCommentId: null, isOwner: false,
+  });
+  api.get('/feed', { posts: [post('p1', 'Lan Anh'), post('p2', 'Minh Tâm')], nextCursor: null });
+}

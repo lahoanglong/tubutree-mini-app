@@ -104,7 +104,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
     const after = await categories.boundingBox();
-    expect(Math.abs(after!.y - before!.y), 'Danh mục bị đẩy khi purchased-items về').toBeLessThanOrEqual(24);
+    expect(Math.abs(after!.y - before!.y), `Danh mục bị đẩy ${Math.abs(after!.y - before!.y)}px khi purchased-items về`).toBeLessThanOrEqual(2);
   });
 
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {
