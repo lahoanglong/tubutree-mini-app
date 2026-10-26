@@ -109,11 +109,24 @@ describe('Trợ lý AI: trạng thái trang', () => {
     expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
   });
 
-  it('server báo tắt AI: về Trang chủ, không dựng khung chat', async () => {
-    state.config = { aiAdvisorEnabled: false };
+  it('server báo tắt AI, chat bật: màn "Trợ lý AI đang tạm nghỉ" có Chat với Tubu và Về Trang chủ, không chuyển hướng', async () => {
+    state.config = { aiAdvisorEnabled: false, chat: { enabled: true }, support: { hotline: '0984 606 774' } };
     const c = await mount();
-    expect(state.replace).toHaveBeenCalledWith('/');
+    expect(c.textContent).toContain('Trợ lý AI đang tạm nghỉ');
     expect(c.querySelector('textarea')).toBeNull();
+    expect(state.replace).not.toHaveBeenCalled();
+    expect(c.querySelector('a[href="/ho-tro/chat"]')?.textContent).toContain('Chat với Tubu');
+    expect(c.querySelector('a[href="/"]')?.textContent).toContain('Về Trang chủ');
+    expect(c.querySelector('a[href^="tel:"]')).toBeNull();
+  });
+
+  it('server báo tắt AI, chat tắt: nút Gọi hotline (tel:) thay cho Chat', async () => {
+    state.config = { aiAdvisorEnabled: false, chat: { enabled: false }, support: { hotline: '0984 606 774' } };
+    const c = await mount();
+    const call = c.querySelector('a[href^="tel:"]');
+    expect(call?.getAttribute('href')).toBe('tel:0984606774');
+    expect(call?.textContent).toContain('Gọi 0984 606 774');
+    expect(c.querySelector('a[href="/ho-tro/chat"]')).toBeNull();
   });
 
   it('server chưa trả cấu hình: không chuyển hướng', async () => {

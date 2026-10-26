@@ -196,7 +196,7 @@ test.describe('Web khách: Vườn Xanh', () => {
 
 /**
  * Web khách: Trợ lý AI (/tu-van). Hỏi bằng câu gợi ý và bằng phím Enter, thẻ sản phẩm dẫn tới /san-pham/[slug],
- * lỗi thì có "Thử lại" gửi lại đúng câu cũ, công tắc tắt AI đưa về Trang chủ.
+ * lỗi thì có "Thử lại" gửi lại đúng câu cũ, công tắc tắt AI hiện màn trợ lý đang nghỉ.
  */
 test.describe('Trợ lý AI (/tu-van)', () => {
   test.beforeEach(async ({ page }) => {
@@ -273,15 +273,13 @@ test.describe('Trợ lý AI (/tu-van)', () => {
     await expect.poll(async () => (await reply.boundingBox())!.y + (await reply.boundingBox())!.height).toBeLessThanOrEqual(await barTop() + 1);
   });
 
-  test('server báo tắt AI: về Trang chủ, không gọi chat', async ({ page, api }) => {
+  test('server báo tắt AI: màn "Trợ lý AI đang tạm nghỉ" với đường về Trang chủ, không gọi chat', async ({ page, api }) => {
     mockAdvisor(api, false);
-    // Trang chủ mở sau khi chuyển hướng gọi nhiều khối không liên quan tới luồng này.
-    api.allowUnmocked(
-      'GET /me/purchased-items', 'GET /me/subscriptions', 'GET /flash-sales/active', 'GET /flash-sales/upcoming',
-      'GET /me/new-customer-offer', 'GET /me/notifications', 'GET /products/for-you', 'GET /me/wishlist/ids'
-    );
     await page.goto('/tu-van');
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByText('Trợ lý AI đang tạm nghỉ')).toBeVisible();
+    await expect(page).toHaveURL(/\/tu-van$/);
+    await expect(page.getByRole('link', { name: 'Về Trang chủ' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Gọi / })).toBeVisible();
     expect(api.callsTo('POST', '/ai-advisor/chat')).toHaveLength(0);
   });
 

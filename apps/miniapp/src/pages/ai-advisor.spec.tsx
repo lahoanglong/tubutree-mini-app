@@ -10,6 +10,11 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   aiChat: vi.fn(),
   getPublicConfig: vi.fn(async () => ({})),
+  callPhone: vi.fn(),
+}));
+vi.mock('../services/zmp-bridge', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  callPhone: mocks.callPhone,
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -368,10 +373,26 @@ describe('AiAdvisorPage — cuộn, phím Enter, lưu ý, thử lại (D5-12)', 
 });
 
 describe('Công tắc tắt AI', () => {
-  it('server báo tắt → link cũ vào trang được đưa về Trang chủ, không hiện khung chat lỗi', async () => {
-    mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: false });
+  it('server báo tắt, chat bật → màn "Trợ lý AI đang tạm nghỉ" có nút Chat với Tubu và Về Trang chủ, không tự chuyển hướng', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: false, chat: { enabled: true }, support: { hotline: '0984 606 774' } });
     renderPage();
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true }));
+    expect(await screen.findByText('Trợ lý AI đang tạm nghỉ')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Gọi/ })).toBeNull();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Chat với Tubu' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    fireEvent.click(screen.getByRole('button', { name: 'Về Trang chủ' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+
+  it('server báo tắt, chat tắt → nút Gọi hotline thay cho Chat', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: false, chat: { enabled: false }, support: { hotline: '0984 606 774' } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Gọi 0984 606 774' }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
+    expect(screen.queryByRole('button', { name: 'Chat với Tubu' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Về Trang chủ' })).toBeInTheDocument();
   });
 
   it('server báo bật hoặc chưa biết → không chuyển hướng', async () => {
