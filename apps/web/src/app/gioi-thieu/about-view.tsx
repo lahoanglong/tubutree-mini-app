@@ -35,7 +35,7 @@ const DELETE_FAILED = 'Chưa gửi được yêu cầu. Kiểm tra mạng rồi 
 const DELETE_OA_MESSAGE = 'Tôi muốn xoá tài khoản Tubu Tree';
 
 /** Khớp mặc định của API và web (DEFAULT_SUPPORT): khi không đọc được cấu hình vẫn còn đường liên hệ. */
-const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null };
+const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: null };
 
 const POLICY_LINKS = [
   { label: 'Điều khoản sử dụng', slug: 'dieu-khoan' },

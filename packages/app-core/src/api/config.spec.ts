@@ -25,7 +25,7 @@ describe('config — hợp đồng gọi API', () => {
   });
 
   it('fetchSupportContact: cắt khoảng trắng, rỗng hoặc sai kiểu ra null', async () => {
-    const { http } = fakeHttp(() => ({ support: { hotline: ' 0900 ', email: '', zaloOaName: 5 } }));
-    expect(await fetchSupportContact(http)).toEqual({ hotline: '0900', email: null, zaloOaName: null });
+    const { http } = fakeHttp(() => ({ support: { hotline: ' 0900 ', email: '', zaloOaName: 5, hours: ' 8:00–21:00 mỗi ngày ' } }));
+    expect(await fetchSupportContact(http)).toEqual({ hotline: '0900', email: null, zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
   });
 });

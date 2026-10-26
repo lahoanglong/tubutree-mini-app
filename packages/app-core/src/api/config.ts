@@ -24,7 +24,7 @@ export interface PublicConfig {
   /** Số ngày được gửi yêu cầu đổi/trả kể từ khi giao (returns.window_days). */
   returnWindowDays?: number;
   /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
-  support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
+  support?: { hotline: string | null; email: string | null; zaloOaName: string | null; hours?: string | null };
   /** Đơn vị vận hành (tên, MST, địa chỉ, link đã thông báo Bộ Công Thương); từng trường null khi admin để trống, thiếu khi API cũ. */
   company?: { legalName: string | null; taxCode: string | null; address: string | null; bctNoticeUrl: string | null };
   /** Số cho khách mới (D2-07): voucher chào mừng và freeship đơn đầu (mặc định bật từ 199.000đ). Thiếu khi API cũ → không hứa con số. */
@@ -70,6 +70,8 @@ export interface SupportContact {
   hotline: string | null;
   email: string | null;
   zaloOaName: string | null;
+  /** Giờ trực hiển thị cho khách; null khi admin để trống hoặc API cũ chưa trả. */
+  hours: string | null;
 }
 
 const DEFAULT_FAQ_CAT = 'Chung';
@@ -89,5 +91,6 @@ export const fetchSupportContact = async (http: HttpClient): Promise<SupportCont
     hotline: cleanText(cfg.support?.hotline),
     email: cleanText(cfg.support?.email),
     zaloOaName: cleanText(cfg.support?.zaloOaName),
+    hours: cleanText(cfg.support?.hours),
   };
 };

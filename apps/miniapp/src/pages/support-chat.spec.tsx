@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => ({
   fetchContact: vi.fn(),
   upload: vi.fn(),
   getPage: vi.fn(),
+  fetchOrders: vi.fn(),
+  callPhone: vi.fn(),
+  copyText: vi.fn(),
+  hasOA: false,
+  openOAChat: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -45,6 +50,19 @@ vi.mock('./about-data', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchSupportContact: mocks.fetchContact,
 }));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchOrders: mocks.fetchOrders,
+}));
+vi.mock('../services/zmp-bridge', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  callPhone: mocks.callPhone,
+  openOAChat: mocks.openOAChat,
+  get hasOA() {
+    return mocks.hasOA;
+  },
+}));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { LivePathnameContext } from '../hooks/use-live-pathname';
@@ -80,7 +98,10 @@ describe('Màn chat với Tubu Tree', () => {
     mocks.search = '';
     mocks.authStatus = 'authenticated';
     mocks.cloudinary = false;
-    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null });
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
+    mocks.copyText.mockResolvedValue(true);
+    mocks.hasOA = false;
     mocks.getThread.mockResolvedValue(thread());
     mocks.markRead.mockResolvedValue({ ok: true });
     mocks.summary.mockResolvedValue({ unreadCount: 0 });
@@ -197,11 +218,64 @@ describe('Màn chat với Tubu Tree', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
-  it('enabled=false: ẩn ô nhập, hiện câu CHAT_DISABLED', async () => {
+  it('enabled=false: không có ô nhập, hiện số hotline to và nút gọi', async () => {
     mocks.getThread.mockResolvedValue(thread({ enabled: false }));
     renderPage();
-    expect(await screen.findByText('Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.')).toBeInTheDocument();
+    expect(await screen.findByText('Chat đang tạm đóng')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByText('Giờ trực: 8:00–21:00 mỗi ngày')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0984 606 774' }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
+  });
+
+  it('enabled=false: chạm số để sao chép; không có OA thì không có nút Nhắn OA', async () => {
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /0984 606 774\. Chạm vào số để sao chép/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('0984 606 774'));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số hotline', type: 'success' });
+    expect(screen.queryByRole('button', { name: 'Nhắn OA' })).toBeNull();
+  });
+
+  it('enabled=false: có tên Zalo OA và OA gắn sẵn thì hiện nút Nhắn OA; có email thì hiện email', async () => {
+    mocks.hasOA = true;
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree', hours: null });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắn OA' }));
+    expect(mocks.openOAChat).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'tubutree@gmail.com' })).toBeInTheDocument();
+    expect(screen.queryByText(/Giờ trực/)).toBeNull();
+  });
+
+  it('chat bật, chưa có tin: lời chào kèm giờ trực và các câu hỏi nhanh; chạm là gửi câu đó', async () => {
+    mocks.send.mockResolvedValue({});
+    renderPage();
+    expect(await screen.findByText('Tubu Tree hỗ trợ 8:00–21:00 mỗi ngày. Bạn cần hỏi gì ạ?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đơn của tôi đang ở đâu?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đổi trả hàng' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Hỏi về đơn/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Đổi trả hàng' }));
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ body: 'Mình muốn hỏi về đổi trả hàng.', source: 'MINIAPP' })));
+    expect(screen.queryByRole('button', { name: 'Cách dùng sản phẩm' })).toBeNull();
+  });
+
+  it('có đơn đang giao: thêm nút "Hỏi về đơn {mã}", gửi kèm mã đơn làm ngữ cảnh', async () => {
+    mocks.send.mockResolvedValue({});
+    mocks.fetchOrders.mockResolvedValue({ data: [{ code: 'TUBU99' }], meta: { page: 1, limit: 1, total: 1 } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hỏi về đơn TUBU99' }));
+    await waitFor(() =>
+      expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ body: 'Mình muốn hỏi về đơn TUBU99.', context: { orderCode: 'TUBU99' } })),
+    );
+  });
+
+  it('đã có tin: không còn lời chào và câu hỏi nhanh', async () => {
+    mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'a', body: 'xin chào' })] }));
+    renderPage();
+    expect(await screen.findByText('xin chào')).toBeInTheDocument();
+    expect(screen.queryByText(/Bạn cần hỏi gì ạ/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Đổi trả hàng' })).toBeNull();
   });
 
   it('nút ảnh chỉ có khi bản build có Cloudinary', async () => {

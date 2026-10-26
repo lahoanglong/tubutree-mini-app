@@ -78,6 +78,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   // Q-17: liên hệ hiển thị ở trang Về Tubu Tree (GET /config/public). Để trống thì miniapp ẩn dòng đó.
   { key: 'support.hotline', value: '0984 606 774', category: 'support', description: 'Hotline CSKH hiển thị cho khách', createOnly: true },
   { key: 'support.email', value: 'tubutree@gmail.com', category: 'support', description: 'Email CSKH hiển thị cho khách', createOnly: true },
+  { key: 'support.hours', value: '8:00–21:00 mỗi ngày', category: 'support', description: 'Giờ trực CSKH hiển thị cho khách (chuỗi, vd 8:00–21:00 mỗi ngày)', createOnly: true },
   { key: 'support.zalo_oa_name', value: '', category: 'support', description: 'Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)', createOnly: true },
   // Đơn vị vận hành hiển thị ở chân trang, trang Về Tubu Tree và các trang chính sách. Để trống thì ẩn; go-live:check FAIL khi tên/MST/địa chỉ còn trống.
   { key: 'company.legal_name', value: '', category: 'company', description: 'Tên pháp lý của đơn vị vận hành (theo giấy đăng ký kinh doanh), hiển thị cho khách', createOnly: true },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Page, useLocation, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared-types';
+import { quickReplies, supportCopy, type QuickReply } from '@tubutree/app-core/support-copy';
 import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support-chat-view';
 import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { AuthGate } from '../components/ui/auth-gate';
@@ -13,8 +14,11 @@ import { Text } from '../components/ui/text';
 import { MessageList, type ChatItem } from '../components/support-chat/message-list';
 import { Composer } from '../components/support-chat/composer';
 import { ContextChip } from '../components/support-chat/context-chip';
+import { ChatClosedPanel } from '../components/support-chat/closed-panel';
+import { QuickReplies } from '../components/support-chat/quick-replies';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat, supportChatQueryOptions, supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { getErrorMessage, isHttpError } from '../services/api';
+import { fetchOrders } from '../services/shop-api';
 import { useLivePathnameRef } from '../hooks/use-live-pathname';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPhoneDisplay } from '../utils/phone';
@@ -22,7 +26,6 @@ import { haptic } from '../utils/haptic';
 import { DEFAULT_SUPPORT, fetchSupportContact } from './about-data';
 
 const POLL_MS = 5000;
-const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 
 const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.';
@@ -79,8 +82,17 @@ function ChatBody() {
   // refetchInterval hằng số: TanStack tự bỏ nhịp khi cửa sổ không focus, và hàm hỏi lại không bị "tắt hẳn" nếu một lượt hỏi kết thúc lúc đang ẩn.
   const threadQ = useQuery({ ...supportChatQueryOptions(), refetchInterval: POLL_MS, refetchOnWindowFocus: true });
   const supportQ = useQuery({ queryKey: ['support-contact'], queryFn: fetchSupportContact, staleTime: 10 * 60_000 });
-  const hotline = (supportQ.isError ? DEFAULT_SUPPORT : supportQ.data)?.hotline ?? null;
+  const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
+  const hotline = support?.hotline ?? null;
   const thread = threadQ.data;
+  const chatOpen = !!thread && thread.enabled && !thread.blocked;
+  const shippingQ = useQuery({
+    queryKey: ['orders', 'home-strip'],
+    queryFn: () => fetchOrders({ status: 'SHIPPING' }, 1, 1),
+    enabled: chatOpen,
+    staleTime: 30_000,
+    retry: false,
+  });
 
   useEffect(() => {
     const onVisibility = () => setVisible(document.visibilityState === 'visible');
@@ -116,13 +128,13 @@ function ChatBody() {
     [patch, qc],
   );
 
-  const enqueue = (body: string, imageUrl: string | null) => {
+  const enqueue = (body: string, imageUrl: string | null, ctx?: SupportChatContext) => {
     haptic('light');
     const p: Pending = {
       clientMsgId: newIdempotencyKey(),
       body,
       imageUrl,
-      ...(context && !contextUsedRef.current ? { context } : {}),
+      ...(ctx ? { context: ctx } : context && !contextUsedRef.current ? { context } : {}),
       status: 'sending',
       createdAt: new Date().toISOString(),
     };
@@ -206,7 +218,12 @@ function ChatBody() {
   }
   if (!thread) return <ErrorState message={chatErrorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
 
-  const closedText = thread.blocked ? BLOCKED_TEXT : !thread.enabled ? DISABLED_TEXT : null;
+  if (!thread.enabled && !thread.blocked) return <ChatClosedPanel support={support} />;
+  const closedText = thread.blocked ? BLOCKED_TEXT : null;
+  const shippingCode = shippingQ.data?.data[0]?.code ?? null;
+  const empty = items.length === 0;
+  const greeting: ChatItem = { key: 'greeting', sender: 'STAFF', body: supportCopy.greeting(support?.hours ?? null), imageUrl: null, createdAt: null, status: 'sent' };
+  const pickQuick = (q: QuickReply) => enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
   const productName = productSlug ? qc.getQueryData<{ name?: string }>(['product', productSlug])?.name ?? productSlug : null;
   const chipLabel = orderCode ? `Về đơn ${orderCode}` : productName ? `Về sản phẩm ${productName}` : null;
 
@@ -225,7 +242,7 @@ function ChatBody() {
             <Button variant="ghost" loading={loadingOlder} onPress={() => void loadOlder()}>Xem tin cũ hơn</Button>
           </div>
         )}
-        <MessageList items={items} />
+        <MessageList items={server.length === 0 && !closedText ? [greeting, ...items] : items} />
       </div>
       <div style={{ position: 'sticky', bottom: 0, borderTop: '1px solid var(--color-border-subtle)', background: 'var(--color-bg-surface)', paddingBottom: 'var(--safe-bottom)' }}>
         {closedText ? (
@@ -235,6 +252,7 @@ function ChatBody() {
         ) : (
           <>
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
+            {empty && <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />}
             <Composer
               onSend={(body) => enqueue(body, null)}
               onSendImage={(url) => {
