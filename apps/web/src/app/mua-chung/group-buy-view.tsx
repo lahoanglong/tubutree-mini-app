@@ -21,6 +21,7 @@ import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
 import { loginHref } from '@/lib/return-to';
 import { withReferral } from '@/lib/share-link';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 type Note = { text: string; error: boolean } | null;
 
@@ -106,7 +107,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   );
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className={`${PAGE_WIDE} py-6`}>
       <PageHeader title="Mua chung giá tốt" subtitle="Rủ thêm bạn cho đủ nhóm — đủ người, ai cũng nhận mã giảm giá!" />
 
       {note && (

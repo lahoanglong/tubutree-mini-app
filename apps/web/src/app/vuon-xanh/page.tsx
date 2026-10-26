@@ -50,6 +50,7 @@ import { useHeaderOffset } from '@/components/game/use-header-offset';
 import { useWheelPrize } from '@/components/game/use-wheel-prize';
 import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
@@ -360,7 +361,7 @@ function GameBody() {
 export default function GamePage() {
   const phase = useAuthPhase();
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pt-0">
+    <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pt-0`}>
       <PageHeader title={TITLE} />
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}

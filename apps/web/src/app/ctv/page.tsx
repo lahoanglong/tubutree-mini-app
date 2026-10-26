@@ -47,6 +47,7 @@ import {
 } from '@/components/affiliate/ctv-copy';
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
+import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 
 const TITLE = 'Cộng tác viên';
 
@@ -62,9 +63,9 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-function Shell({ children }: { children: ReactNode }) {
+function Shell({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6`}>
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>
@@ -171,8 +172,8 @@ function RegisterGate() {
   ];
 
   return (
-    <Shell>
-      <div className="mx-auto max-w-2xl">
+    <Shell narrow>
+      <div>
         <section className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-center text-stone-0 shadow-card">
           <div className="mx-auto mb-3.5 grid h-16 w-16 place-items-center rounded-full bg-forest-700">
             <Handshake className="h-8 w-8" aria-hidden="true" />

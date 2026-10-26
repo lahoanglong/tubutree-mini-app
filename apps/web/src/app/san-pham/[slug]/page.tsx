@@ -21,6 +21,7 @@ import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship,
 import { PdpRails } from './pdp-rails';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import BackLink from '@/components/back-link';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
 
@@ -71,7 +72,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0">
+    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <BackLink href="/">
         ← Về trang chủ
       </BackLink>

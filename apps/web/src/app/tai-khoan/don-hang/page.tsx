@@ -21,6 +21,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const PAGE_LIMIT = 20;
 
@@ -131,7 +132,7 @@ function OrdersPageBody() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Đơn hàng" backHref="/tai-khoan" backLabel="Tài khoản" />
       <div className="max-md:px-3">{body}</div>
       <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />

@@ -26,6 +26,7 @@ import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, EmptyState, Heading, Icon, ListRow, Skeleton, Text } from '@/components/mini';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -275,7 +276,7 @@ function OffersContent() {
     );
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:pt-0`}>
       <PageHeader title={homeCopy.offers.title} />
       <div className="mt-3">{body}</div>
     </main>

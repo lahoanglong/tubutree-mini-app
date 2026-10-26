@@ -172,7 +172,7 @@ describe('HomeView — nội dung các khối', () => {
     const search = c.querySelector('a[aria-label="Bạn đang tìm gì hôm nay?"]');
     expect(search?.getAttribute('href')).toBe('/san-pham?focus=search');
     // D7-31: từ md thanh đầu website đã có ô tìm, ô này chỉ còn ở điện thoại.
-    expect(search?.className).toMatch(/\bmd:hidden\b/);
+    expect(search?.parentElement?.className).toMatch(/\bmd:hidden\b/);
     click(byText(c, 'button', 'Dầu gội'));
     expect(mocks.push).toHaveBeenCalledWith('/san-pham?category=c-goi');
   });

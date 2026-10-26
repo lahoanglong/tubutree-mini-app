@@ -16,7 +16,7 @@ const cartOf = (...ids: string[]) => ({
 
 const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), getCart: vi.fn(), getMe: vi.fn(), replace: vi.fn() }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: m.replace, push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: m.replace, push: vi.fn() }), usePathname: () => '/thanh-toan' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({

@@ -28,6 +28,7 @@ import { ORDERS_TABS } from '@/components/orders/orders-tabs';
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
 import BackLink from '@/components/back-link';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
 const ROW =
@@ -117,7 +118,7 @@ export default function AccountPage() {
 
   if (phase === 'loading') {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-20 text-center">
+      <main className={`${PAGE_WIDE} py-20 text-center`}>
         <h1 className="sr-only">Cá nhân</h1>
         <AuthLoading />
       </main>
@@ -126,7 +127,7 @@ export default function AccountPage() {
 
   if (phase === 'unavailable') {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className={`${PAGE_WIDE} py-6`}>
         <h1 className={ui.pageTitle}>Cá nhân</h1>
         <SessionUnavailable />
       </main>
@@ -135,7 +136,7 @@ export default function AccountPage() {
 
   if (phase === 'guest' || !user) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className={`${PAGE_WIDE} py-6`}>
         <h1 className={ui.pageTitle}>Cá nhân</h1>
         <LoginRequired message="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn." returnTo="/tai-khoan" />
       </main>
@@ -198,7 +199,7 @@ export default function AccountPage() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0 max-md:pb-4">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 max-md:pb-4`}>
       <div className="max-md:hidden">
         <BackLink href="/">← Trang chủ</BackLink>
       </div>

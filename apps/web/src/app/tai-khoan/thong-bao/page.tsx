@@ -25,6 +25,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const NOTICE_MS = 4000;
 
@@ -104,7 +105,7 @@ export default function NotificationsPage() {
   };
 
   const shell = (body: ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader
         title="Thông báo"
         backHref="/tai-khoan"

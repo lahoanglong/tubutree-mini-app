@@ -10,12 +10,13 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const TITLE = 'Sản phẩm yêu thích';
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className={`${PAGE_WIDE} py-6`}>
       <PageHeader title={TITLE} backHref="/tai-khoan" backLabel="Tài khoản" />
       <div className="mt-4">{children}</div>
     </main>

@@ -5,6 +5,7 @@ import { getPublicSupport, type SupportContact } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import tubuLogo from '@/assets/tubu-logo.png';
 import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -44,7 +45,7 @@ export default async function SiteFooter() {
   return (
     <>
     <footer className="mt-12 hidden md:block border-t border-stone-200 bg-stone-0">
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-8 sm:grid-cols-2">
+      <div className={`${PAGE_WIDE} grid gap-6 py-8 sm:grid-cols-2`}>
         <div>
           <Image src={tubuLogo} alt="Tubu Tree" width={110} height={40} className="h-10 w-auto" />
           <p className="mt-1 max-w-sm text-sm text-stone-600">
@@ -72,7 +73,7 @@ export default async function SiteFooter() {
       </div>
 
       {channels.length > 0 && (
-        <nav aria-label="Kênh cộng đồng" className="mx-auto max-w-6xl px-4 pb-2">
+        <nav aria-label="Kênh cộng đồng" className={`${PAGE_WIDE} pb-2`}>
           <ul className="flex flex-wrap gap-x-6">
             {channels.map((c) => (
               <li key={c.label}>
@@ -86,7 +87,7 @@ export default async function SiteFooter() {
         </nav>
       )}
 
-      <nav aria-label="Chính sách" className="mx-auto max-w-6xl px-4 pb-6">
+      <nav aria-label="Chính sách" className={`${PAGE_WIDE} pb-6`}>
         <ul className="flex flex-wrap gap-x-6 border-t border-stone-200 pt-2">
           {LEGAL_SLUGS.map((slug) => (
             <li key={slug}>
@@ -97,7 +98,7 @@ export default async function SiteFooter() {
           ))}
         </ul>
       </nav>
-      <CompanyInfo company={company} className="mx-auto max-w-6xl px-4 pb-6" />
+      <CompanyInfo company={company} className={`${PAGE_WIDE} pb-6`} />
     </footer>
 
     {/* Điện thoại: chân trang đầy đủ ẩn (Mini App không có), nhưng hotline và chính sách vẫn phải với tới được từ mọi trang.

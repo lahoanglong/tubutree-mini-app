@@ -62,6 +62,7 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -960,7 +961,7 @@ function AddressPicker({
 // `bare`: màn thành công ở điện thoại không có thanh tiêu đề (Mini App OrderSuccess tự có h1), từ md vẫn như các màn khác.
 function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <BackLink href="/gio-hang">
         ← Về giỏ hàng
       </BackLink>

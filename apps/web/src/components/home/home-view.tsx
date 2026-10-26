@@ -4,7 +4,7 @@ import { Fragment, useMemo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
@@ -89,7 +89,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
 
   const blocks: Record<HomeBlockId, ReactNode> = {
-    search: <SearchRow unreadCount={unreadCount} authed={authed} />,
+    search: <SearchRow />,
     member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
@@ -135,38 +135,20 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
 }
 
 /**
- * Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chỉ ở điện thoại (từ md thanh đầu website đã có ô tìm).
- * Chuông ở điện thoại nằm ở HomeHeader; từ md thanh đầu không có chuông nên hàng này giữ chuông cho khách đã đăng nhập.
+ * Ô tìm ở Trang chủ chỉ là vỏ: mở thẳng bàn phím ở ô thật bên /san-pham (?focus=search). Chỉ ở điện thoại: từ md thanh đầu website
+ * đã có ô tìm và chuông thông báo (HeaderBell), chuông điện thoại nằm ở HomeHeader.
  */
-function SearchRow({ unreadCount, authed }: { unreadCount: number; authed: boolean }) {
+function SearchRow() {
   return (
-    <div className="flex items-center gap-2 pb-3 md:justify-end">
+    <div className="flex items-center gap-2 pb-3 md:hidden">
       <Link
         href="/san-pham?focus=search"
         aria-label={homeText.searchPlaceholder}
-        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition md:hidden"
+        className="flex min-h-[46px] min-w-0 flex-1 items-center gap-2 rounded-full border border-[var(--color-border-subtle)] bg-stone-0 px-4 py-[11px] shadow-card transition"
       >
         <Search className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
         <span className="min-w-0 truncate text-sm text-stone-600">{homeText.searchPlaceholder}</span>
       </Link>
-      {authed && isWebRouteReady('/tai-khoan/thong-bao') && (
-        <Link
-          href="/tai-khoan/thong-bao"
-          aria-label={unreadCount > 0 ? homeText.notificationsUnread(unreadCount) : homeText.notifications}
-          className="relative hidden h-11 w-11 flex-none items-center justify-center rounded-full bg-forest-50 md:inline-flex text-forest-700 transition hover:bg-forest-100"
-        >
-          <Bell className="h-5 w-5" aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span
-              role="img"
-              aria-label={homeText.unreadBadge(unreadCount)}
-              className="absolute -right-0.5 -top-0.5 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-promo-solid px-1 text-xs font-bold text-stone-900"
-            >
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          )}
-        </Link>
-      )}
     </div>
   );
 }

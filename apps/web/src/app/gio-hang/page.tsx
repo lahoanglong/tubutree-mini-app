@@ -18,6 +18,7 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { KeyValueRow } from '@/components/mini';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -540,7 +541,7 @@ export default function CartPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <BackLink href="/">
         ← Tiếp tục mua sắm
       </BackLink>

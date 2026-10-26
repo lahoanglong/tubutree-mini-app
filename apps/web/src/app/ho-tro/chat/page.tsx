@@ -26,6 +26,7 @@ import { coreHttp } from '@/lib/core-http';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { friendlyError } from '@/lib/friendly-error';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const POLL_MS = 5000;
 /** Dạng slug sản phẩm (chữ thường, số, gạch nối): tham số lạ như `../auth/me` không được đổi thành một lệnh gọi API. */
@@ -271,7 +272,7 @@ function ChatBody() {
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Chat với Tubu Tree" backHref="/tai-khoan" backLabel="Tài khoản" />
       {children}
     </main>

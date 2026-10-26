@@ -6,6 +6,7 @@ import ProductCard from '@/components/product-card';
 import { EmptyState } from '@/components/empty-state';
 import { safeHexColor } from '@/lib/safe-color';
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Admin gỡ đăng không làm mới được trang này, nên hạn ngắn để nhãn bị gỡ không còn hiện lâu; vẫn dựng phía server cho SEO.
 export const revalidate = 60;
@@ -38,7 +39,7 @@ export default async function BrandPage({
   if (!b) notFound();
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]">
+    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
       {/* Điện thoại: dải bìa tràn mép 96px (xanh đậm khi chưa có ảnh) và avatar đè lên như StorePageShell của Mini App. */}
       {b.coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
