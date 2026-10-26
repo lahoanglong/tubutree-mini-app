@@ -107,7 +107,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     await page.goto('/vuon-xanh');
     await page.getByRole('button', { name: 'Điểm danh', exact: true }).dblclick();
     await expect(page.getByRole('status').getByText('+10 giọt nước')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 

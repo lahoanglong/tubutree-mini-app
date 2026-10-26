@@ -207,7 +207,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     // Tiến độ hạng theo điểm XÉT HẠNG (pointsToGo), không theo số dư.
     await expect(page.getByText('điểm tích từ mua hàng để lên hạng Lộc Biếc')).toBeVisible();
 
-    const btn = page.getByRole('button', { name: 'Điểm danh' });
+    const btn = page.getByRole('button', { name: 'Điểm danh', exact: true });
     await expect(btn).toBeEnabled();
     const posted = api.waitForCall('POST', '/me/daily-check-in');
     await btn.dblclick();
@@ -215,7 +215,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
 
     await expect(page.getByText('+10 Điểm Xanh', { exact: true })).toBeVisible({ timeout: 5_000 });
     // invalidate ['loyalty-checkin'] → GET trả checkedInToday:true → nút khoá.
-    await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled({ timeout: 5_000 });
     // Số dư mới từ GET /me/loyalty (60 + 10) — cộng đúng MỘT lần.
     await expect(page.getByText('Tích điểm ×1 · 70 điểm Xanh')).toBeVisible();
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);

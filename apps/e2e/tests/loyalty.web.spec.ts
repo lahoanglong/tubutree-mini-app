@@ -82,11 +82,11 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
     mockLoyalty(api, { done: false });
     await page.goto('/tai-khoan/diem-xanh');
-    const button = page.getByRole('button', { name: 'Điểm danh' });
+    const button = page.getByRole('button', { name: 'Điểm danh', exact: true });
     await expect(button).toBeEnabled();
     await button.dblclick();
     await expect(page.getByText('+3 Điểm Xanh · +10 giọt nước')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
