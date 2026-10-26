@@ -75,7 +75,7 @@ describe('AnalyticsTab — DS v2', () => {
     vi.stubGlobal('fetch', vi.fn(empty.fn));
     const a = mount(<AnalyticsTab />);
     await flush();
-    expect(a.container.querySelector('p')?.textContent).toMatch(/Chưa có số liệu.*sáng mai/);
+    expect(a.container.querySelector('p')?.textContent).toMatch(/Chưa có số liệu.*sau 3 giờ sáng/);
     expect(a.container.querySelector('p')?.className).toContain('text-stone-500');
 
     const bad = mockFetch({ '/admin/analytics/retention-daily': { status: 500, body: { message: 'x' } } });

@@ -1912,7 +1912,7 @@ function roleChangeConsequences(target: UserRole, current?: string | null): stri
   }
   if (target === 'CUSTOMER' || target === 'AFFILIATE') {
     lines.push(
-      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt cờ đối tác; gian hàng MERCHANT chuyển về CTV.',
+      'Nếu tài khoản sở hữu gian hàng đối tác (đại lý, nhân viên hoặc admin): gian hàng bị tắt quyền đối tác; gian hàng MERCHANT chuyển về CTV.',
     );
   } else if (target === 'DEALER' && (!current || current === 'DEALER')) {
     lines.push(`${current ? 'Tài khoản đã là đại lý' : 'Nếu tài khoản đã là đại lý'}: chỉ đổi bậc, gian hàng đối tác giữ nguyên.`);
@@ -2068,7 +2068,7 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
       <ShopInfoCard rows={q.data} />
       <PartnerRulesCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
-      <details open={advancedOpen || !!needle} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)} className="rounded-card border border-stone-200 bg-stone-0 p-3">
+      <details open={advancedOpen} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)} className="rounded-card border border-stone-200 bg-stone-0 p-3">
         <summary className="flex min-h-[44px] cursor-pointer items-center font-display text-sm font-semibold text-stone-900">
           Cài đặt kỹ thuật (dành cho người cài đặt hệ thống)
         </summary>

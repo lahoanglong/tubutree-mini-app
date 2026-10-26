@@ -966,7 +966,7 @@ describe('admin/page — tab Người dùng', () => {
     expect(dialog?.textContent).toContain('0955555555');
     expect(dialog?.textContent).toContain('Khách hàng');
     expect(dialog?.textContent).toContain('mất toàn bộ nhóm việc');
-    expect(dialog?.textContent).toContain('tắt cờ đối tác');
+    expect(dialog?.textContent).toContain('tắt quyền đối tác');
     await answerDialog(false);
     expect(mocks.setUserRole).not.toHaveBeenCalled();
 
@@ -1018,18 +1018,18 @@ describe('admin/page — tab Người dùng', () => {
 
     const asDealer = await dialogText('DEALER');
     expect(asDealer).toContain('Đại lý');
-    expect(asDealer).not.toContain('tắt cờ đối tác');
+    expect(asDealer).not.toContain('tắt quyền đối tác');
     expect(asDealer).not.toContain('MERCHANT');
 
     const asStaff = await dialogText('STAFF');
     expect(asStaff).toContain('Nhân viên');
     expect(asStaff).not.toContain('mất toàn bộ nhóm việc');
-    expect(asStaff).not.toContain('tắt cờ đối tác');
+    expect(asStaff).not.toContain('tắt quyền đối tác');
 
     for (const role of ['CUSTOMER', 'AFFILIATE']) {
       const text = await dialogText(role);
       expect(text).toContain('mất toàn bộ nhóm việc');
-      expect(text).toContain('tắt cờ đối tác');
+      expect(text).toContain('tắt quyền đối tác');
       expect(text).toContain('MERCHANT');
       expect(text).toContain('nhân viên hoặc admin');
     }
@@ -2408,6 +2408,18 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Đơn đối tác & đối soát',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
+  });
+
+  it('ô tìm mục của nhân viên KE_TOAN: mục không có quyền không bao giờ hiện, gõ tên mục đó ra "Không có mục nào khớp"', async () => {
+    asStaff(['KE_TOAN']);
+    const { container } = await mount();
+    const box = container.querySelector<HTMLInputElement>('nav[aria-label="Mục quản trị"] input[aria-label="Tìm mục quản trị"]')!;
+    typeInto(box, 'cấu hình');
+    expect(container.querySelector('nav[aria-label="Mục quản trị"]')!.textContent).toContain('Không có mục nào khớp');
+    typeInto(box, 'lương');
+    expect(navItems(container)).toEqual([]);
+    typeInto(box, 'hoàn tiền');
+    expect(navItems(container)).toEqual(['Hoàn tiền khách']);
   });
 
   it('KE_TOAN ở tab Đơn hàng: có Xuất CSV và nút "Đã nhận tiền", KHÔNG có nút trạng thái nào (huỷ, đóng gói…) hay thao tác kho', async () => {

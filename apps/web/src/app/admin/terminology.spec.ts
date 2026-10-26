@@ -45,4 +45,10 @@ describe('chữ màn quản trị web', () => {
   it('QT-20: nút trả lương ở bảng lương không đặt tên "Đã chuyển" (dễ nhầm với trạng thái)', () => {
     expect(offenders(/aria-label=\{`Đã chuyển · /)).toEqual([]);
   });
+
+  it('tên nhóm menu cũ và chữ chỉ đường cũ không còn trong app', () => {
+    expect(offenders(/Người bán|Đơn hàng & giao vận|Hoàn tiền & đổi trả|Cấu hình & tích hợp|Khách hàng › Đổi rác/)).toEqual([]);
+    // tab Nhân sự & quyền thuộc gói khác, chữ "cờ đối tác" ở đó đổi cùng gói đó.
+    expect(offenders(/cờ đối tác/).filter((f) => !f.endsWith('staff-roster-tab.tsx'))).toEqual([]);
+  });
 });

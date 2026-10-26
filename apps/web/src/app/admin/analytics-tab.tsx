@@ -17,7 +17,7 @@ export function AnalyticsTab({ onOpenReports }: { onOpenReports?: () => void } =
       <div>
         <h2 className="font-display text-lg font-semibold text-stone-900">Giữ chân khách & chỉ số chính</h2>
         <p className="mt-2 max-w-xl text-sm text-stone-500">
-          Chưa có số liệu. Hệ thống tính một lần mỗi sáng (khoảng 3 giờ), nên sáng mai bạn sẽ thấy khách mới, khách quay lại và số đơn theo ngày ở đây.
+          Chưa có số liệu. Hệ thống tính một lần mỗi đêm, sau 3 giờ sáng; từ lúc đó khách mới, khách quay lại và số đơn theo ngày sẽ hiện ở đây.
           Trong lúc chờ, xem doanh thu và đơn hàng hiện có ở mục Báo cáo.
         </p>
         {onOpenReports && (
