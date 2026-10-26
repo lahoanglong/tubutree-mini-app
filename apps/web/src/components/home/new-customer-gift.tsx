@@ -61,7 +61,9 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
   const authed = phase === 'authenticated';
   const userId = useAuth().user?.id;
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.
-  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, ...(initialConfig ? { initialData: initialConfig } : {}) });
+  // placeholderData (không phải initialData): HTML server vẫn có khối này, nhưng bản dựng ISR có thể cũ tới vài phút nên trình duyệt phải tải
+  // cấu hình thật; initialData làm cache coi bản dựng sẵn là mới và các khối khác (lối tắt Đổi rác...) đọc nhầm cấu hình cũ.
+  const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, ...(initialConfig ? { placeholderData: initialConfig } : {}) });
   const offerQ = useQuery({ ...newCustomerOfferQuery(coreHttp, userId), enabled: authed, retry: false });
 
   // Đang khôi phục một phiên đã có (có cờ phiên) hoặc mất mạng lúc khôi phục thì không hiện bản dành cho khách vãng lai rồi biến mất khi phiên về.

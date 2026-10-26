@@ -677,6 +677,8 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
     api.get('/waste/me/open-count', { count: 1 });
+    // Cấu hình Đổi rác do test đặt, không phụ thuộc giá trị trong DB gate lúc chạy.
+    api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     await page.goto('/');
     await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
     expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);
@@ -706,6 +708,21 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(1);
     });
   }
+
+  test('kệ Mua lại 3 món 375px: thẻ đầu cách đầu kệ 36px, lề trái 16px, rộng 148px như Mini App', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api);
+    api.get('/me/purchased-items', {
+      items: [1, 2, 3].map((n) => ({ ...PURCHASED, variationId: `v${n}`, productId: `p${n}` })),
+      nextCursor: null,
+    });
+    await page.goto('/');
+    const rail = page.getByRole('region', { name: 'Mua lại' });
+    await expect(rail).toBeVisible({ timeout: 15_000 });
+    const section = (await rail.boundingBox())!;
+    const tile = (await rail.locator('li').first().boundingBox())!;
+    expect({ top: tile.y - section.y, left: tile.x, width: tile.width }).toEqual({ top: 36, left: 16, width: 148 });
+  });
 
   for (const withCookie of [true, false]) {
     test(`${withCookie ? 'có' : 'không có'} cookie phiên: HTML server đã có thanh đáy, hydrate không lỗi (không pageerror, không "hydrat")`, async ({ page, api, request, baseURL }) => {

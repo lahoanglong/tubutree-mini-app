@@ -101,6 +101,9 @@ export const homeCopy = {
       minOrder && days
         ? `Bạn nhận Điểm Xanh khi bạn bè vào app bằng mã của bạn và có đơn thứ hai từ ${minOrder} trong ${days} ngày.`
         : 'Bạn nhận Điểm Xanh khi bạn bè vào app bằng mã của bạn và mua hàng.',
+    /** `points` đã có đơn vị ("40 điểm"). Chỉ nêu khi đã có bạn thành công hoặc đã nhận điểm. */
+    referralStats: (count: number, points: string) => `Đã mời thành công ${count} bạn, nhận ${points}.`,
+    referralMilestone: (remaining: number, bonus: string) => `Mời thêm ${remaining} bạn để nhận ${bonus}`,
     referralCode: 'Mã của bạn',
     referralShare: 'Chia sẻ',
     referralCopy: 'Sao chép',

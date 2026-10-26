@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { ChevronRight, Sparkles, Sprout } from 'lucide-react';
@@ -13,6 +12,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { AdvisorPaused } from '@/components/advisor-paused';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { PageHeader } from '@/components/ui/page-header';
@@ -192,20 +192,17 @@ function Advisor() {
 
 export default function AdvisorPage() {
   const phase = useAuthPhase();
-  const router = useRouter();
   const cfg = usePublicConfig();
+  // Link cũ/đã lưu tới trang khi AI bị tắt: nói rõ trợ lý đang nghỉ thay vì để khách gõ rồi nhận lỗi hay bị đẩy đi không một lời.
   const aiOff = cfg.isLoaded && cfg.aiAdvisorEnabled !== true;
-
-  // Link cũ/đã lưu tới trang khi AI bị tắt: đưa về Trang chủ thay vì để khách gõ rồi nhận lỗi.
-  useEffect(() => {
-    if (aiOff) router.replace('/');
-  }, [aiOff, router]);
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
-      <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
+      <PageHeader title="Trợ lý AI Tubu" subtitle={aiOff || !cfg.isLoaded ? undefined : 'Tư vấn sản phẩm tiêu dùng xanh 24/7'} />
       <div className="mt-4">
-        {aiOff ? null : (
+        {aiOff ? (
+          <AdvisorPaused />
+        ) : (
           <>
             {phase === 'loading' && <AuthLoading />}
             {phase === 'unavailable' && <SessionUnavailable />}

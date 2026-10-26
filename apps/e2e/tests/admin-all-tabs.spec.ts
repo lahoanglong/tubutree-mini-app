@@ -127,25 +127,38 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
 
   test('tab Đổi rác mở được; công tắc Đổi rác tạo được dòng khi khoá chưa có trong DB', async ({ page }) => {
     const prisma = prismaClient();
+    // DB gate dùng chung cho cả bộ: trả công tắc Đổi rác về đúng trạng thái cũ, kẻo spec khác (Trang chủ khách) chạy sau thấy cờ bật.
+    let before: { value: unknown; category: string | null; description: string | null } | null = null;
     try {
+      before = await prisma.systemConfig.findUnique({ where: { key: 'waste.enabled' }, select: { value: true, category: true, description: true } });
       await prisma.systemConfig.deleteMany({ where: { key: 'waste.enabled' } });
     } finally {
       await prisma.$disconnect();
     }
-    await openAdmin(page, '/admin?tab=waste');
-    await expect(page.getByRole('heading', { name: 'Đổi rác lấy quà' })).toBeVisible();
-    await expect(page.locator('[data-tab-error]')).toHaveCount(0);
-    await expect(page.getByText('Chương trình đang tắt với khách')).toBeVisible();
+    try {
+      await openAdmin(page, '/admin?tab=waste');
+      await expect(page.getByRole('heading', { name: 'Đổi rác lấy quà' })).toBeVisible();
+      await expect(page.locator('[data-tab-error]')).toHaveCount(0);
+      await expect(page.getByText('Chương trình đang tắt với khách')).toBeVisible();
 
-    await page.goto('/admin?tab=config');
-    const sw = page.getByRole('switch', { name: 'Đổi rác lấy quà' });
-    await expect(sw).toHaveAttribute('aria-checked', 'false');
-    await sw.click();
-    await page.getByRole('alertdialog').getByRole('button', { name: 'Bật', exact: true }).click();
-    await expect(page.locator('[data-flag="waste.enabled"]').getByText('Đã lưu.')).toBeVisible();
-    await expect(sw).toHaveAttribute('aria-checked', 'true');
-    await page.reload();
-    await expect(page.getByRole('switch', { name: 'Đổi rác lấy quà' })).toHaveAttribute('aria-checked', 'true');
+      await page.goto('/admin?tab=config');
+      const sw = page.getByRole('switch', { name: 'Đổi rác lấy quà' });
+      await expect(sw).toHaveAttribute('aria-checked', 'false');
+      await sw.click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Bật', exact: true }).click();
+      await expect(page.locator('[data-flag="waste.enabled"]').getByText('Đã lưu.')).toBeVisible();
+      await expect(sw).toHaveAttribute('aria-checked', 'true');
+      await page.reload();
+      await expect(page.getByRole('switch', { name: 'Đổi rác lấy quà' })).toHaveAttribute('aria-checked', 'true');
+    } finally {
+      const restore = prismaClient();
+      try {
+        await restore.systemConfig.deleteMany({ where: { key: 'waste.enabled' } });
+        if (before) await restore.systemConfig.create({ data: { key: 'waste.enabled', ...before, value: before.value as never } });
+      } finally {
+        await restore.$disconnect();
+      }
+    }
   });
 
   test('Thông tin cửa hàng lưu chuỗi thường và chính sách xem trước được', async ({ page }) => {

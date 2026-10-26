@@ -1,3 +1,4 @@
+import { formatChatHours } from '../support-copy';
 import type { WastePublicFlags } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 
@@ -70,6 +71,8 @@ export interface SupportContact {
   hotline: string | null;
   email: string | null;
   zaloOaName: string | null;
+  /** Giờ trực lấy từ chat.hours (một nguồn duy nhất với giờ chat); null khi API cũ chưa trả. */
+  hours: string | null;
 }
 
 const DEFAULT_FAQ_CAT = 'Chung';
@@ -84,10 +87,11 @@ export const fetchFaqs = async (http: HttpClient): Promise<FaqItem[]> => {
 const cleanText = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
 export const fetchSupportContact = async (http: HttpClient): Promise<SupportContact> => {
-  const cfg = (await getPublicConfig(http)) as { support?: Partial<Record<keyof SupportContact, unknown>> };
+  const cfg = (await getPublicConfig(http)) as { support?: Partial<Record<keyof SupportContact, unknown>>; chat?: { hours?: { start?: unknown; end?: unknown } } };
   return {
     hotline: cleanText(cfg.support?.hotline),
     email: cleanText(cfg.support?.email),
     zaloOaName: cleanText(cfg.support?.zaloOaName),
+    hours: formatChatHours(cfg.chat?.hours),
   };
 };

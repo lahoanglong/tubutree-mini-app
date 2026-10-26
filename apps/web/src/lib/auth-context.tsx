@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { dropForeignHomeHints } from '@tubutree/app-core/home-layout';
 import {
   apiFetch,
   setAccessToken,
@@ -16,6 +17,7 @@ import { clearSavedInvoices } from './saved-invoice';
 import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
 import { readFirstTouchCookie } from './entry-source';
+import { browserStorage } from './recently-viewed';
 
 export interface WebUser {
   id: string;
@@ -115,6 +117,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSessionUnavailable(out.kind === 'transient');
     }
   }, []);
+
+  // Đăng nhập/khôi phục ra tài khoản khác với người dùng máy này lần trước: bỏ gợi ý khung chờ Trang chủ của người đó, cả cookie,
+  // để lần mở sau không dựng khung theo loại khách của họ.
+  const userId = user?.id;
+  useEffect(() => {
+    if (userId && dropForeignHomeHints(browserStorage(), userId)) writeWebCookie(HOME_HINT_COOKIE, null);
+  }, [userId]);
 
   const retrySession = useCallback(async () => {
     if (!hasSessionMarker()) {

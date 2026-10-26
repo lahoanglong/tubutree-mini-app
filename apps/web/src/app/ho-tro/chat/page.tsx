@@ -7,13 +7,17 @@ import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared
 import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
 import { getSupportChatPage, markSupportChatRead, sendSupportChat } from '@tubutree/app-core/api/support-chat';
 import { productQuery } from '@tubutree/app-core/queries/catalog';
+import { ordersHomeStripQuery } from '@tubutree/app-core/queries/orders';
 import { supportContactQuery } from '@tubutree/app-core/queries/config';
 import { supportChatQuery, supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
+import { quickReplies, supportCopy, type QuickReply } from '@tubutree/app-core/support-copy';
 import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support-chat-view';
 import { Button, LineItemSkeleton, Text } from '@/components/mini';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { Composer } from '@/components/support-chat/composer';
 import { ContextChip } from '@/components/support-chat/context-chip';
+import { ChatClosedPanel } from '@/components/support-chat/closed-panel';
+import { QuickReplies } from '@/components/support-chat/quick-replies';
 import { MessageList, type ChatItem } from '@/components/support-chat/message-list';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -26,11 +30,10 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 const POLL_MS = 5000;
 /** Dạng slug sản phẩm (chữ thường, số, gạch nối): tham số lạ như `../auth/me` không được đổi thành một lệnh gọi API. */
 const SLUG_PATTERN = /^-?[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const DISABLED_TEXT = 'Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.';
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 const RATE_LIMITED_TEXT = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
 /** Khớp mặc định của API: lỗi đọc cấu hình thì vẫn còn số để gọi. */
-const DEFAULT_HOTLINE = '0984 606 774';
+const DEFAULT_SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: null };
 
 type PendingStatus = 'sending' | 'sent' | 'failed' | 'rejected';
 interface Pending {
@@ -72,8 +75,11 @@ function ChatBody() {
   const threadQ = useQuery({ ...supportChatQuery(coreHttp), refetchInterval: POLL_MS, refetchOnWindowFocus: true });
   const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: 10 * 60_000 });
   const productQ = useQuery({ ...productQuery(coreHttp, productSlug ?? ''), enabled: !!productSlug && !orderCode && SLUG_PATTERN.test(productSlug), staleTime: 10 * 60_000, retry: false });
-  const hotline = supportQ.isError ? DEFAULT_HOTLINE : supportQ.data?.hotline ?? null;
+  const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
+  const hotline = support?.hotline ?? null;
   const thread = threadQ.data;
+  const chatOpen = !!thread && thread.enabled && !thread.blocked;
+  const shippingQ = useQuery({ ...ordersHomeStripQuery(coreHttp), enabled: chatOpen, staleTime: 30_000, retry: false });
 
   useEffect(() => {
     const onVisibility = () => setVisible(document.visibilityState === 'visible');
@@ -109,13 +115,13 @@ function ChatBody() {
     [patch, qc],
   );
 
-  const enqueue = (body: string, imageUrl: string | null) => {
+  const enqueue = (body: string, imageUrl: string | null, ctx?: SupportChatContext) => {
     setNotice(null);
     const p: Pending = {
       clientMsgId: newIdempotencyKey(),
       body,
       imageUrl,
-      ...(context && !contextUsedRef.current ? { context } : {}),
+      ...(ctx ? { context: ctx } : context && !contextUsedRef.current ? { context } : {}),
       status: 'sending',
       createdAt: new Date().toISOString(),
     };
@@ -200,13 +206,24 @@ function ChatBody() {
   }
   if (!thread) return <ErrorState message={errorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
 
-  const closedText = thread.blocked ? BLOCKED_TEXT : !thread.enabled ? DISABLED_TEXT : null;
+  // Chat tắt: còn lịch sử thì vẫn cho đọc (chỉ đọc, phần liên hệ thay ô nhập); chưa có tin nào thì cả màn là phần liên hệ.
+  const closed = !thread.enabled && !thread.blocked;
+  if (closed && server.length === 0) return <ChatClosedPanel support={support} />;
+  const closedText = thread.blocked ? BLOCKED_TEXT : null;
+  const shippingCode = shippingQ.data?.data[0]?.code ?? null;
+  const empty = items.length === 0;
+  // Hàng câu hỏi nhanh chờ truy vấn đơn đang giao xong để nút "Hỏi về đơn" không chèn muộn làm các nút khác xô xuống.
+  const quickReady = shippingQ.isSuccess || shippingQ.isError;
+  // Lời chào là bong bóng phía client (không lưu): luôn nằm đầu cuộc trò chuyện, tức khi không còn tin cũ hơn để tải.
+  const showGreeting = !closed && !closedText && !(olderHasMore ?? thread.hasMore);
+  const greeting: ChatItem = { key: 'greeting', sender: 'STAFF', body: supportCopy.greeting(support?.hours ?? null), imageUrl: null, createdAt: null, status: 'sent' };
+  const pickQuick = (q: QuickReply) => enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
   const productName = productSlug && !productQ.isLoading ? (productQ.data?.name ?? productSlug) : null;
   const chipLabel = orderCode ? `Về đơn ${orderCode}` : productName ? `Về sản phẩm ${productName}` : null;
 
   return (
     <div className="flex flex-col max-md:min-h-[calc(100dvh-72px)]">
-      {thread.slow && (
+      {thread.slow && !closed && (
         <div style={{ padding: '8px 16px', background: 'var(--color-bg-subtle)' }}>
           <Text variant="caption" tone="secondary">
             {`Nhân viên có thể trả lời chậm.${hotline ? ` Cần gấp, gọi hotline ${formatPhoneDisplay(hotline)}` : ''}`}
@@ -219,7 +236,7 @@ function ChatBody() {
             <Button variant="ghost" loading={loadingOlder} onPress={() => void loadOlder()}>Xem tin cũ hơn</Button>
           </div>
         )}
-        <MessageList items={items} />
+        <MessageList items={showGreeting ? [greeting, ...items] : items} />
       </div>
       <div
         className="max-md:sticky max-md:bottom-0"
@@ -230,13 +247,16 @@ function ChatBody() {
             <Text variant="caption" tone="danger">{notice}</Text>
           </div>
         )}
-        {closedText ? (
+        {closed ? (
+          <ChatClosedPanel support={support} compact />
+        ) : closedText ? (
           <div style={{ padding: 16, textAlign: 'center' }}>
             <Text variant="body-sm" tone="secondary">{closedText}</Text>
           </div>
         ) : (
           <>
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
+            {empty && quickReady && <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />}
             <Composer
               onSend={(body) => enqueue(body, null)}
               onSendImage={(url) => enqueue('', url)}

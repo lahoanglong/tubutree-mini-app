@@ -21,7 +21,7 @@ import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
 import { formatVnd, getMe } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
-import { pointsSummary } from '@/lib/checkout-points';
+import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
 import { ORDERS_TABS } from '@/components/orders/orders-tabs';
@@ -305,6 +305,17 @@ export default function AccountPage() {
               <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
                 {homeCopy.profile.referralBody(minOrder, referral?.windowDays ?? null)}
               </Text>
+              {referral && user.role !== 'AFFILIATE' && (referral.successCount > 0 || referral.earnedPoints > 0) && (
+                <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
+                  {homeCopy.profile.referralStats(referral.successCount, `${formatCount(referral.earnedPoints)} điểm`)}
+                </Text>
+              )}
+              {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
+              {referral?.nextMilestone && user.role !== 'AFFILIATE' && referral.nextMilestone.count > referral.successCount && (
+                <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
+                  {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, `${formatCount(referral.nextMilestone.bonusPoints)} điểm`)}
+                </Text>
+              )}
               <div className="mt-2.5 flex items-center gap-2">
                 <button
                   type="button"

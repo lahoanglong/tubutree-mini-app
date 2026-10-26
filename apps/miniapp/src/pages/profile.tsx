@@ -348,6 +348,17 @@ export default function ProfilePage() {
             <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
               {homeCopy.profile.referralBody(minOrder, referral?.windowDays ?? null)}
             </Text>
+            {referral && user.role !== 'AFFILIATE' && (referral.successCount > 0 || referral.earnedPoints > 0) && (
+              <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
+                {homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints))}
+              </Text>
+            )}
+            {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
+            {referral?.nextMilestone && user.role !== 'AFFILIATE' && referral.nextMilestone.count > referral.successCount && (
+              <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
+                {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, formatPoints(referral.nextMilestone.bonusPoints))}
+              </Text>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
               <button
                 type="button"

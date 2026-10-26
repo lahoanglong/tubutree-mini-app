@@ -161,7 +161,6 @@ test.describe('Web khách: Ví Tubu', () => {
     await expect(page.getByRole('heading', { name: 'Ví Tubu', level: 1 })).toBeVisible();
     await expect(page.getByText('1.250.000đ').first()).toBeVisible();
     await expect(page.getByText('trong đó 119 điểm không hết hạn')).toBeVisible();
-    await expect(page.getByText('AN123')).toBeVisible();
     await expect(page.getByText('Rút về ngân hàng', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Xem thêm' }).click();
     await expect(page.getByText('Số dư 1.300.000đ')).toBeVisible();

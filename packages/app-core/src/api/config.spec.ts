@@ -26,6 +26,13 @@ describe('config — hợp đồng gọi API', () => {
 
   it('fetchSupportContact: cắt khoảng trắng, rỗng hoặc sai kiểu ra null', async () => {
     const { http } = fakeHttp(() => ({ support: { hotline: ' 0900 ', email: '', zaloOaName: 5 } }));
-    expect(await fetchSupportContact(http)).toEqual({ hotline: '0900', email: null, zaloOaName: null });
+    expect(await fetchSupportContact(http)).toEqual({ hotline: '0900', email: null, zaloOaName: null, hours: null });
+  });
+
+  it('fetchSupportContact: giờ trực lấy từ chat.hours, thiếu hoặc sai thì null', async () => {
+    const ok = fakeHttp(() => ({ support: {}, chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } }));
+    expect((await fetchSupportContact(ok.http)).hours).toBe('8:00–21:00 mỗi ngày');
+    const bad = fakeHttp(() => ({ support: {}, chat: { enabled: true, hours: { start: 'x', end: '21:00' } } }));
+    expect((await fetchSupportContact(bad.http)).hours).toBeNull();
   });
 });

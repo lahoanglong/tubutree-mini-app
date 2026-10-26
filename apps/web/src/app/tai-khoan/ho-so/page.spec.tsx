@@ -208,9 +208,44 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     const { container } = await mount();
     expect(field(container, 'Ngày sinh').readOnly).toBe(false);
     typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    expect(container.textContent).toContain('Ngày đã chọn: 03/02/1991');
     click(saveBtn(container));
+    await flush(2);
+    expect(container.textContent).toContain('Ngày sinh 03/02/1991 chỉ đặt được một lần. Xác nhận?');
+    expect(mocks.patch).not.toHaveBeenCalled();
+    click(byText(container, 'button', 'Xác nhận'));
     await flush(6);
     expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '1991-02-03' });
+  });
+
+  it('chọn ngày sinh mới rồi bấm Sửa lại: chưa gửi gì, nút Lưu thay đổi trở lại', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    click(saveBtn(container));
+    await flush(2);
+    click(byText(container, 'button', 'Sửa lại'));
+    await flush(2);
+    expect(mocks.patch).not.toHaveBeenCalled();
+    expect(saveBtn(container)).toBeTruthy();
+    expect(container.textContent).not.toContain('chỉ đặt được một lần. Xác nhận?');
+  });
+
+  it('đang hỏi xác nhận ngày sinh: các ô nhập bị khoá', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    click(saveBtn(container));
+    await flush(2);
+    expect(field(container, 'Ngày sinh').readOnly).toBe(true);
+    expect(field(container, 'Họ và tên').readOnly).toBe(true);
+    expect(field(container, 'Email').readOnly).toBe(true);
+  });
+
+  it('ngày sinh đã lưu: không hiện dòng "Ngày đã chọn"', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: '1990-05-01' });
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Ngày đã chọn');
   });
 
   it('lần lưu đầu mang ngày sinh nhưng phản hồi mất: /me được tải lại, lần lưu sau không gửi lại ngày sinh', async () => {
@@ -220,6 +255,8 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     const { container } = await mount();
     typeInto(field(container, 'Ngày sinh'), '1991-02-03');
     click(saveBtn(container));
+    await flush(2);
+    click(byText(container, 'button', 'Xác nhận'));
     await flush(6);
     expect(mocks.patch.mock.calls[0]![1]).toMatchObject({ dob: '1991-02-03' });
     typeInto(field(container, 'Họ và tên'), 'Lan C');
@@ -281,7 +318,7 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
 });
 
 describe('/tai-khoan/ho-so — ảnh đại diện', () => {
-  const NO_CLOUD_NOTE = 'Chưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.';
+  const NO_CLOUD_NOTE = 'Tạm thời chưa đổi được ảnh đại diện.';
 
   it('chưa cấu hình dịch vụ ảnh: không có nút đổi ảnh và ô chọn tệp, thay bằng dòng giải thích', async () => {
     mocks.cloudinary = false;

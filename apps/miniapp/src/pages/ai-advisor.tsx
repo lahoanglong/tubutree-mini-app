@@ -7,6 +7,7 @@ import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Sparkles, Sprout } from 'lucide-react';
+import { AdvisorPaused } from '../components/advisor-paused';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Icon } from '../components/ui/icon';
@@ -41,11 +42,6 @@ export default function AiAdvisorPage() {
   const endRef = useRef<HTMLDivElement>(null);
   const cfg = usePublicConfig();
   const aiOff = cfg.isLoaded && cfg.aiAdvisorEnabled !== true;
-
-  // Link cũ/đã lưu tới trang khi AI bị tắt: đưa về Trang chủ thay vì để khách gõ rồi nhận lỗi.
-  useEffect(() => {
-    if (aiOff) navigate('/', { replace: true });
-  }, [aiOff, navigate]);
 
   const toHistory = (list: ChatMessage[]): AiChatTurn[] =>
     list.slice(-MAX_HISTORY_TURNS).map((m) => ({ role: m.role, content: m.content }));
@@ -90,6 +86,16 @@ export default function AiAdvisorPage() {
     e.preventDefault();
     send(draft);
   };
+
+  // Link cũ/đã lưu tới trang khi AI bị tắt: nói rõ trợ lý đang nghỉ thay vì để khách gõ rồi nhận lỗi hay bị đẩy đi không một lời.
+  if (aiOff) {
+    return (
+      <Page style={{ background: 'var(--color-bg-canvas)' }}>
+        <PageHeader title="Trợ lý AI Tubu" />
+        <AdvisorPaused />
+      </Page>
+    );
+  }
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', display: 'flex', flexDirection: 'column', paddingBottom: 0 }}>

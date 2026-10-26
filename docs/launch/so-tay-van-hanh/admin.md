@@ -41,6 +41,7 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 | Số ngày giữ hoa hồng CTV (mặc định 10), ngưỡng khấu trừ thuế TNCN theo tổng tháng (mặc định 5.000.000đ) | `affiliate.hold_days`, `affiliate.pit_withhold_threshold` |
 | Số ngày giữ tiền đối tác trước đối soát (mặc định 7) | `merchant.settlement_hold_days` |
 | Hotline hiển thị cho khách | `support.hotline` |
+| Giờ trực hiển thị cho khách (cũng là giờ chat, dạng `{"start":"08:00","end":"21:00"}`) | `chat.hours` |
 | Bật tích điểm tại quầy | Thẻ "Điểm Xanh — điểm danh & tích điểm tại quầy", công tắc "Bật tích điểm tại quầy (POS)" |
 
 Tiền COD tối đa mỗi đơn là 5.000.000đ, nằm cứng trong hệ thống, không đổi được ở đây.

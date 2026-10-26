@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Gift, Loader2, User } from 'lucide-react';
+import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { updateMe } from '@tubutree/app-core/api/account';
 import { meQuery } from '@tubutree/app-core/queries/account';
 import { AvatarCropSheet } from '@/components/account/avatar-crop-sheet';
@@ -21,7 +22,6 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const AVATAR_NO_STORAGE = 'Chưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.';
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
 const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
 const AVATAR_READ_FAILED = 'Không tải được ảnh, vui lòng thử lại.';
@@ -55,6 +55,7 @@ export default function EditProfilePage() {
   const [avatarChanged, setAvatarChanged] = useState(false);
   const [touched, setTouched] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [confirmingDob, setConfirmingDob] = useState(false);
   const [avatarMsg, setAvatarMsg] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -67,12 +68,16 @@ export default function EditProfilePage() {
     if (!me) return;
     setFullName(me.fullName ?? '');
     setEmail(me.email ?? '');
-    setAvatarUrl(me.avatarUrl ?? user?.avatarUrl ?? null);
+    // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
+    setAvatarUrl(me.avatarUrl || user?.avatarUrl || null);
     setDob(me.dob ?? '');
     // Chỉ nạp lại khi /me đổi, không theo `user`: phiên đổi sau khi lưu không được ghi đè chữ khách đang gõ.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
+  // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
+  const dobNew = !me?.dob && dob !== '';
+  const dobDisplay = formatDobDisplay(dob);
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
   const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -148,6 +153,10 @@ export default function EditProfilePage() {
     setTouched(true);
     if (save.isPending || uploadingAvatar) return;
     if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
+    if (dobNew && !confirmingDob) {
+      setConfirmingDob(true);
+      return;
+    }
     setDone(null);
     setSaveError(null);
     save.mutate();
@@ -206,7 +215,7 @@ export default function EditProfilePage() {
         {canChangeAvatar ? (
           <>
             <input ref={fileInputRef} type="file" accept="image/*" hidden className="hidden min-h-11" aria-label="Chọn ảnh đại diện" onChange={(e) => void handleAvatarFile(e)} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="flex min-h-11 flex-col items-center">
+            <button type="button" disabled={confirmingDob} onClick={() => fileInputRef.current?.click()} className="flex min-h-11 flex-col items-center">
               <span className="relative inline-block">
                 {avatarFigure}
                 <span aria-hidden="true" className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-stone-0 bg-forest-600 text-stone-0 shadow-card">
@@ -222,7 +231,7 @@ export default function EditProfilePage() {
         ) : (
           <>
             {avatarFigure}
-            <p className="mt-2 text-center text-xs text-stone-600">{AVATAR_NO_STORAGE}</p>
+            <p className="mt-2 text-center text-xs text-stone-600">{profileCopy.avatarNoStorage}</p>
           </>
         )}
         {avatarMsg && (
@@ -233,7 +242,7 @@ export default function EditProfilePage() {
       </div>
 
       <Field label="Họ và tên">
-        <input type="text" value={fullName} maxLength={120} autoComplete="name" onChange={(e) => setFullName(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
+        <input type="text" value={fullName} maxLength={120} autoComplete="name" readOnly={confirmingDob} onChange={(e) => setFullName(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
       </Field>
 
       <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
@@ -242,6 +251,7 @@ export default function EditProfilePage() {
           inputMode="email"
           autoComplete="email"
           value={email}
+          readOnly={confirmingDob}
           onChange={(e) => setEmail(e.target.value)}
           onBlur={() => setTouched(true)}
           className={`${emailInvalid ? ui.fieldError : ui.field} ${FIELD_MINI}`}
@@ -250,8 +260,12 @@ export default function EditProfilePage() {
 
       <div>
         <Field label="Ngày sinh">
-          <input type="date" value={dob} readOnly={Boolean(me?.dob)} autoComplete="bday" onChange={(e) => setDob(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
+          <input type="date" value={dob} readOnly={Boolean(me?.dob) || confirmingDob} autoComplete="bday" onChange={(e) => {
+              setDob(e.target.value);
+              setConfirmingDob(false);
+            }} className={`${ui.field} ${FIELD_MINI}`} />
         </Field>
+        {dobDisplay && dobNew && <p className="mt-1 text-xs text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
           Nhận mã giảm giá quà tặng vào tháng sinh nhật.{me?.dob ? ' Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.' : ''}
@@ -273,16 +287,28 @@ export default function EditProfilePage() {
         {done ?? ''}
       </p>
 
-      <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
-        {save.isPending ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-            Lưu thay đổi
-          </>
-        ) : (
-          'Lưu thay đổi'
-        )}
-      </button>
+      {confirmingDob && dobNew ? (
+        <div role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} className="flex flex-col gap-2 rounded-card bg-stone-50 p-3 max-md:bg-[var(--color-bg-subtle)]">
+          <p className="text-sm text-stone-900">{profileCopy.dobConfirm(dobDisplay)}</p>
+          <button type="submit" aria-busy={save.isPending ? 'true' : undefined} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
+            {profileCopy.dobConfirmYes}
+          </button>
+          <button type="button" disabled={save.isPending} className={`${ui.btnSecondary} w-full max-md:min-h-12`} onClick={() => setConfirmingDob(false)}>
+            {profileCopy.dobConfirmNo}
+          </button>
+        </div>
+      ) : (
+        <button type="submit" aria-busy={save.isPending ? 'true' : undefined} disabled={emailInvalid || uploadingAvatar} className={`${ui.btnPrimary} w-full max-md:min-h-12`}>
+          {save.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+              Lưu thay đổi
+            </>
+          ) : (
+            'Lưu thay đổi'
+          )}
+        </button>
+      )}
 
       <AvatarCropSheet open={cropSrc !== null} imageSrc={cropSrc} onClose={() => setCropSrc(null)} onConfirm={(url) => void handleConfirmCrop(url)} />
     </form>,
