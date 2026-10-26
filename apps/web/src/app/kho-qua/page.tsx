@@ -9,7 +9,8 @@ import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tu
 import { redeemLoyaltyReward } from '@tubutree/app-core/api/loyalty';
 import { buyTree } from '@tubutree/app-core/api/game';
 import { WASTE_QUERY_KEYS, WASTE_REDEEM_INVALIDATE_KEYS } from '@tubutree/app-core/api/waste';
-import { loyaltyQuery, rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { loyaltyPreviewQuery, loyaltyQuery, rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { guestPreviewCopy, previewAsCatalog } from '@tubutree/app-core/guest-preview';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import {
   REWARD_TABS,
@@ -31,7 +32,8 @@ import { pointsRulesNote } from '@/lib/loyalty-copy';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
+import { GuestLoginLink } from '@/components/loyalty/guest-tiers';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -145,7 +147,7 @@ const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
   GIFT: Gift,
 };
 
-function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void }) {
+function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; preview?: boolean }) {
   const s = rewardCardState(reward, catalog);
   const KindIcon = KIND_ICON[reward.kind];
   return (
@@ -167,21 +169,21 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
       </div>
       <div className="mt-auto flex items-center justify-between gap-2">
         <div className="text-sm font-semibold tabular-nums text-forest-700">{points(reward.pointsCost)}</div>
-        {s.kind === 'redeem' && (
+        {!preview && s.kind === 'redeem' && (
           <button type="button" onClick={onRedeem} className={`${ui.btnPrimary} min-w-[88px]`}>
             Đổi
           </button>
         )}
-        {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
-        {s.kind === 'covered' && <div className="text-right text-xs text-stone-700">{freeShipCoveredNote(s.tierName)}</div>}
-        {s.kind === 'locked' && (
+        {!preview && s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
+        {!preview && s.kind === 'covered' && <div className="text-right text-xs text-stone-700">{freeShipCoveredNote(s.tierName)}</div>}
+        {!preview && s.kind === 'locked' && (
           <button type="button" disabled className={ui.btnPrimary}>
             Chờ mở khoá điểm
           </button>
         )}
-        {s.kind === 'need' && <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
+        {!preview && s.kind === 'need' && <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
       </div>
-      {s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
+      {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
     </div>
   );
 }
@@ -288,13 +290,40 @@ function RewardsBody() {
   );
 }
 
+/** Khách chưa đăng nhập: xem được quà đổi bằng Điểm Xanh nhưng chưa đổi được. */
+function GuestRewards() {
+  const q = useQuery(loyaltyPreviewQuery(coreHttp));
+  const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
+  if (q.isError && !q.data) return <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />;
+  if (!q.data) return <Skeleton height={120} />;
+  const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
+  const shown = q.data.rewards.filter((r) => kinds.includes(r.kind));
+  const catalog = previewAsCatalog(q.data);
+  return (
+    <div className="space-y-4 pb-12">
+      <p className="text-base text-stone-700">{guestPreviewCopy.hint}</p>
+      <GuestLoginLink returnTo="/kho-qua" />
+      <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} label="Loại quà" />
+      {shown.length === 0 ? (
+        <p className="text-sm text-stone-700">Chưa có quà trong mục này</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {shown.map((r) => (
+            <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RewardsPage() {
   const phase = useAuthPhase();
   return (
     <LedgerShell title={TITLE} wide>
       {phase === 'loading' && <AuthLoading />}
       {phase === 'unavailable' && <SessionUnavailable />}
-      {phase === 'guest' && <LoginRequired message="Đăng nhập để đổi Điểm Xanh lấy quà." returnTo="/kho-qua" />}
+      {phase === 'guest' && <GuestRewards />}
       {phase === 'authenticated' && <RewardsBody />}
     </LedgerShell>
   );

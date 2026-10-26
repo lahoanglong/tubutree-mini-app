@@ -10,6 +10,7 @@ type Call = { method: string; path: string; body?: unknown; headers?: Record<str
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   rewards: null as object | null,
+  preview: null as object | null,
   loyalty: null as Record<string, unknown> | null,
   config: null as Record<string, unknown> | null,
   fail: new Set<string>(),
@@ -41,6 +42,7 @@ vi.mock('@/lib/core-http', () => ({
         state.fail.delete(path);
         throw new Error('mất mạng');
       }
+      if (path === '/loyalty/preview') return state.preview;
       if (path === '/me/loyalty/rewards') return state.rewards;
       if (path === '/me/loyalty') return state.loyalty;
       if (path === '/config/public' && state.config) return state.config;
@@ -418,10 +420,23 @@ describe('/kho-qua — trạng thái trang', () => {
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.phase = 'guest';
+    state.preview = { rewards: [], giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12 };
     const c = await mount();
-    expect(c.textContent).toContain('Đăng nhập');
+    await flush(4);
+    expect(c.textContent).toContain('Đăng nhập để đổi');
     expect(c.querySelector('a[href*="/dang-nhap"]')?.getAttribute('href')).toContain(encodeURIComponent('/kho-qua'));
-    expect(state.calls).toHaveLength(0);
+    expect(state.calls.every((x) => x.path === '/loyalty/preview')).toBe(true);
+  });
+
+  it('khách: xem được quà và giá nhưng không có nút Đổi, không gọi API của khách', async () => {
+    state.phase = 'guest';
+    state.preview = { rewards: [makeRewardItem({ canRedeem: false })], giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12 };
+    const c = await mount();
+    await flush(4);
+    expect(c.textContent).toContain('Miễn phí vận chuyển');
+    expect(c.textContent).toContain('20.000 điểm');
+    expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Đổi')).toBe(false);
+    expect(state.calls.map((x) => x.path)).toEqual(['/loyalty/preview']);
   });
 
   it('đang tải → skeleton; lỗi tải danh mục → ErrorState + Thử lại', async () => {

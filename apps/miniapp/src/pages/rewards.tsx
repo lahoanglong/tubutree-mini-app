@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
+import { guestPreviewCopy, previewAsCatalog } from '@tubutree/app-core/guest-preview';
+import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import {
   REWARD_TABS,
@@ -18,10 +20,12 @@ import {
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
 import { getErrorMessage } from '../services/api';
+import { coreHttp } from '../services/core-http';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
+import { GuestLoginButton } from '../components/loyalty/guest-tiers';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -135,7 +139,7 @@ const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
   GIFT: Gift,
 };
 
-function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void }) {
+function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; preview?: boolean }) {
   const s = rewardCardState(reward, catalog);
   return (
     <Card variant="outline">
@@ -165,13 +169,13 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
-          {s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
-          {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
-          {s.kind === 'covered' && <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'right' }}>{freeShipCoveredNote(s.tierName)}</Text>}
-          {s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
-          {s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
+          {!preview && s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
+          {!preview && s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
+          {!preview && s.kind === 'covered' && <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'right' }}>{freeShipCoveredNote(s.tierName)}</Text>}
+          {!preview && s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
+          {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
         </div>
-        {s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
+        {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
       </div>
     </Card>
   );
@@ -273,11 +277,38 @@ function RewardsBody() {
   );
 }
 
+/** Khách chưa đăng nhập: xem được quà đổi bằng Điểm Xanh nhưng chưa đổi được. */
+function GuestRewards() {
+  const q = useQuery(loyaltyPreviewQuery(coreHttp));
+  const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
+  if (q.isError && !q.data) return <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />;
+  if (!q.data) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
+  const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
+  const shown = q.data.rewards.filter((r) => kinds.includes(r.kind));
+  const catalog = previewAsCatalog(q.data);
+  return (
+    <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
+      <Text variant="body-md" tone="secondary" as="div">{guestPreviewCopy.hint}</Text>
+      <GuestLoginButton />
+      <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} />
+      {shown.length === 0 ? (
+        <Text variant="body-sm" tone="secondary" as="div">Chưa có quà trong mục này</Text>
+      ) : (
+        <div style={{ ...COLUMN, gap: 12 }}>
+          {shown.map((r) => (
+            <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RewardsPage() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Kho quà" />
-      <AuthGate>
+      <AuthGate guest={<GuestRewards />}>
         <RewardsBody />
       </AuthGate>
     </Page>

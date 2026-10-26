@@ -28,7 +28,8 @@ import {
   tierThresholdLabel,
 } from '@/lib/loyalty-copy';
 import { ui } from '@/lib/guest-ui';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { GuestTiers } from '@/components/loyalty/guest-tiers';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
@@ -105,7 +106,7 @@ export default function LoyaltyPage() {
   if (phase === 'guest') {
     return (
       <LedgerShell title={TITLE} wide>
-        <LoginRequired message="Đăng nhập để xem hạng thành viên và Điểm Xanh của bạn." returnTo="/tai-khoan/diem-xanh" />
+        <GuestTiers returnTo="/tai-khoan/diem-xanh" />
       </LedgerShell>
     );
   }

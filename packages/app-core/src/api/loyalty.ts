@@ -1,4 +1,4 @@
-import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
+import type { GiftRedemptionDTO, LoyaltyPreviewDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 
 /** Quy tắc tích/đổi Điểm Xanh do API trả từ SystemConfig (loyalty.earn_pct, vnd_per_point_redeem, max_redeem_pct). */
@@ -193,6 +193,7 @@ export const getLoyalty = (http: HttpClient) => http.get<LoyaltyOverview>('/me/l
 export const getPointsTransactions = (http: HttpClient) => http.get<PointsTxn[]>('/me/points/transactions');
 export const getCoupons = (http: HttpClient) => http.get<CouponDTO[]>('/me/coupons');
 export const getNewCustomerOffer = (http: HttpClient) => http.get<NewCustomerOffer>('/me/new-customer-offer');
+export const getLoyaltyPreview = (http: HttpClient) => http.get<LoyaltyPreviewDTO>('/loyalty/preview');
 export const getLoyaltyRewards = (http: HttpClient) => http.get<RewardCatalogDTO>('/me/loyalty/rewards');
 export const redeemLoyaltyReward = (http: HttpClient, rewardId: string, idempotencyKey: string) =>
   http.post<RedeemRewardResultDTO>(`/me/loyalty/rewards/${encodeURIComponent(rewardId)}/redeem`, undefined, {

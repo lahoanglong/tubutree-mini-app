@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   coupons: [] as Record<string, unknown>[],
   txns: [] as Record<string, unknown>[],
   checkIn: null as Record<string, unknown> | null,
+  preview: null as object | null,
   card: null as Record<string, unknown> | null,
   config: { waste: { enabled: true } } as Record<string, unknown>,
   fail: new Set<string>(),
@@ -34,6 +35,7 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => state.readyRoutes.has(p) }));
 vi.mock('@/lib/core-http', () => {
   const table: Record<string, () => unknown> = {
+    '/loyalty/preview': () => state.preview,
     '/me/loyalty': () => state.loyalty,
     '/me/coupons': () => state.coupons,
     '/me/points/transactions': () => state.txns,
@@ -496,11 +498,23 @@ describe('/tai-khoan/diem-xanh — chúc mừng lên hạng', () => {
 });
 
 describe('/tai-khoan/diem-xanh — trạng thái trang', () => {
-  it('khách chưa đăng nhập thấy lời mời đăng nhập mang theo returnTo, không gọi API', async () => {
+  it('khách chưa đăng nhập xem được bảng hạng, nút "Đăng nhập để đổi" mang theo returnTo, không gọi API của khách', async () => {
     state.phase = 'guest';
+    state.preview = {
+      rewards: [], giftClaimDays: 60, claimPoint: null, rates: {}, pointExpireMonths: 12,
+      tiers: [
+        { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, multiplier: 1, perks: ['Tích Điểm Xanh mỗi đơn'] },
+        { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5_000_000, multiplier: 1.2, perks: ['Freeship đơn từ 99k'] },
+      ],
+    };
     const c = await mount();
-    expect(c.querySelector('a[href^="/dang-nhap"]')?.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/diem-xanh')}`);
-    expect(state.calls).toEqual([]);
+    await flush(4);
+    expect(c.textContent).toContain('Lộc Biếc');
+    expect(c.textContent).toContain('Freeship đơn từ 99k');
+    const a = c.querySelector('a[href^="/dang-nhap"]');
+    expect(a?.textContent).toBe('Đăng nhập để đổi');
+    expect(a?.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/diem-xanh')}`);
+    expect(state.calls.map((x) => x.path)).toEqual(['/loyalty/preview']);
   });
 
   it('phiên chưa khôi phục được: nói không kết nối được thay vì mời đăng nhập', async () => {

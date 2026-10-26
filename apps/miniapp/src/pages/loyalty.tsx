@@ -14,6 +14,7 @@ import {
   type PointsTxn,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import { GuestTiers } from '../components/loyalty/guest-tiers';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -139,7 +140,7 @@ export default function LoyaltyPage() {
       <PageHeader title="Hạng thành viên & Điểm Xanh" />
 
       {phase !== 'authenticated' ? (
-        <AuthPhaseView phase={phase} loading={pageSkeleton} />
+        <AuthPhaseView phase={phase} loading={pageSkeleton} guest={<GuestTiers />} />
       ) : loyaltyQ.isLoading ? (
         pageSkeleton
       ) : loyaltyQ.isError && !loyaltyQ.data ? (

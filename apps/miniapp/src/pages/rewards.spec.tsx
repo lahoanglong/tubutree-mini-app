@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn(),
   getCart: vi.fn(),
   applyCoupon: vi.fn(),
+  coreGet: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -51,6 +52,7 @@ vi.mock('../services/account-api', async (importOriginal) => {
     getLoyalty: mocks.getLoyalty,
   };
 });
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../services/game-api', () => ({ buyTree: mocks.buyTree }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -312,6 +314,22 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/browse'));
     expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+  it('khách chưa đăng nhập: xem được quà và giá, có nút "Đăng nhập để đổi", không có nút Đổi, không gọi API của khách', async () => {
+    mocks.auth.status = 'idle';
+    mocks.coreGet.mockResolvedValue({
+      rewards: [makeRewardItem({ canRedeem: false }), makeRewardItem({ id: 'seed', kind: 'SEED_PACK', name: 'Gói hạt giống', pointsCost: 40_000, canRedeem: false })],
+      giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12,
+    });
+    renderPage();
+    expect(await screen.findByText('Miễn phí vận chuyển')).toBeInTheDocument();
+    expect(screen.getByText('20.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đổi' })).toBeNull();
+    expect(mocks.coreGet).toHaveBeenCalledWith('/loyalty/preview');
+    expect(mocks.getLoyaltyRewards).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi' }));
+    expect(mocks.login).toHaveBeenCalled();
+    mocks.auth.status = 'authenticated';
   });
   it('openingHoursText: nhiều ngày, nhiều khung giờ', () => {
     expect(openingHoursText({ MON: [{ open: '08:00', close: '12:00' }, { open: '13:00', close: '17:00' }], TUE: [{ open: '08:00', close: '17:00' }] })).toBe('T2 08:00–12:00, 13:00–17:00 · T3 08:00–17:00');
