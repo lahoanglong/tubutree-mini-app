@@ -221,8 +221,8 @@ test.describe('Web khách: Trang chủ /', () => {
     mockHome(api);
     // HTML đầu dựng từ cấu hình của DB e2e; trình duyệt phải nhận đúng cấu hình đó, nếu không chữ Quà khách mới đổi số dòng
     // (vd "đơn đầu tiên từ 199.000đ" so với "đơn từ 350.000đ") và Danh mục lệch vì dữ liệu mock chứ không vì bố cục.
-    const apiOrigin = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}`;
-    api.get('/config/public', (await (await request.get(`${apiOrigin}/api/config/public`)).json()) as object);
+    // Lấy theo URL trình duyệt gọi: cổng API trên CI đến từ apps/api/.env chứ không từ E2E_API_PORT.
+    api.get('/config/public', async ({ request: browserRequest }) => (await request.get(browserRequest.url())).json());
     let openJs!: () => void;
     const jsHeld = new Promise<void>((resolve) => { openJs = resolve; });
     await page.route(/\/_next\/static\/.*\.js/, async (route) => {
