@@ -8,6 +8,8 @@ export interface StaffMember {
   fullName: string | null;
   avatarUrl: string | null;
   role: StaffRole;
+  /** Nhóm việc (chỉ có nghĩa với STAFF): CSKH, KHO, MARKETING, KE_TOAN. */
+  staffPermissions: string[];
   createdAt: string;
 }
 export interface PendingInvite {

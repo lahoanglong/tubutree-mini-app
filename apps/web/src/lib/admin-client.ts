@@ -1809,6 +1809,12 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {
   MARKETING: 'Marketing — voucher, flash sale, FAQ, Content Kit, Học viện, mẫu thông báo, kiểm duyệt cộng đồng, báo cáo nguồn khách',
   KE_TOAN: 'Kế toán — xem đơn và xác nhận Đã nhận tiền, hoá đơn VAT, công nợ đại lý, chi thưởng đại lý đã duyệt, duyệt hoàn tiền sàn ngoài, hoàn tiền khách, chi lệnh rút đã duyệt, đối soát đối tác, báo cáo, CSV tài chính',
 };
+export const STAFF_PERMISSION_SHORT: Record<StaffPermission, string> = {
+  CSKH: 'Chăm sóc khách',
+  KHO: 'Kho',
+  MARKETING: 'Nội dung và khuyến mãi',
+  KE_TOAN: 'Kế toán',
+};
 export interface OpsAccess {
   role: string;
   staffPermissions: StaffPermission[];

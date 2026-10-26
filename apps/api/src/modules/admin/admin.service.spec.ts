@@ -455,6 +455,34 @@ describe('AdminService.importDealerPrices (import bảng giá đại lý theo b�
   });
 });
 
+describe('AdminService.setStaffPermissions', () => {
+  const staffUser = (role: string, staffPermissions: string[] = []) => makePrisma({
+    user: { findUnique: jest.fn().mockResolvedValue({ role, staffPermissions }), update: jest.fn() },
+    userAdminEvent: { create: jest.fn() },
+    $transaction: jest.fn().mockResolvedValue([]),
+  });
+
+  it('không gán nhóm việc cho quản trị: chủ luôn có đủ quyền, không có gì để gán', async () => {
+    const prisma = staffUser('ADMIN');
+    await expect(mkAdmin(prisma).setStaffPermissions('admin1', 'u-admin', ['KHO'])).rejects.toBeInstanceOf(BadRequestException);
+    expect((prisma as unknown as { $transaction: jest.Mock }).$transaction).not.toHaveBeenCalled();
+  });
+
+  it('từ chối tên nhóm lạ trước khi chạm vào dữ liệu', async () => {
+    const prisma = staffUser('STAFF');
+    await expect(mkAdmin(prisma).setStaffPermissions('admin1', 'u1', ['KHO', 'ROOT'])).rejects.toThrow('Nhóm việc không hợp lệ: ROOT.');
+    expect((prisma as unknown as { user: { findUnique: jest.Mock } }).user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('nhân viên được gán nhóm hợp lệ, bỏ trùng và giữ thứ tự chuẩn', async () => {
+    const prisma = staffUser('STAFF');
+    await expect(mkAdmin(prisma).setStaffPermissions('admin1', 'u1', ['KE_TOAN', 'CSKH', 'CSKH'])).resolves.toMatchObject({
+      staffPermissions: ['CSKH', 'KE_TOAN'],
+      changed: true,
+    });
+  });
+});
+
 describe('AdminService.setUserRole', () => {
   it('SĐT không tồn tại → NotFound (không tự tạo user như script SSH cũ)', async () => {
     const prisma = makePrisma({ user: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() } });

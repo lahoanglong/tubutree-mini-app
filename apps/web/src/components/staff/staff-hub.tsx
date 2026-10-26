@@ -170,14 +170,14 @@ export function StaffHub() {
         onNext={() => setMondayKey(addDaysKey(mondayKey, 7))}
       />
 
-      <div className="flex gap-2">
-        <button type="button" onClick={openQuick} className={`${ui.btnPrimary} flex-1`}>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={openQuick} className={`${ui.btnPrimary} min-w-[10rem] flex-1`}>
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           Đăng ký nhanh
         </button>
-        <button type="button" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${skin.btnSecondary} flex-1`}>
+        <button type="button" disabled={copyM.isPending} onClick={() => { clear(); copyM.mutate(); }} className={`${skin.btnSecondary} min-w-[10rem] flex-1`}>
           <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Copy tuần trước
+          Chép tuần trước
         </button>
       </div>
 
