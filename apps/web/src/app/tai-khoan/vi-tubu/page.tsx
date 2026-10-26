@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { CheckCircle2, ChevronRight, Clock, Gift, History, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
-import { loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
+import { useInfiniteQuery, useQuery, type InfiniteData, type UseInfiniteQueryResult } from '@tanstack/react-query';
+import type { WalletTxnPage } from '@tubutree/app-core/api/wallet';
+import { walletCopy } from '@tubutree/app-core/account-copy';
+import { CheckCircle2, ChevronRight, Clock, History, Leaf, ShoppingBag, Wallet, type LucideIcon } from 'lucide-react';
+import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { walletQuery, walletTransactionsQuery } from '@tubutree/app-core/queries/wallet';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { walletTxLabel } from '@tubutree/app-core/wallet-rules';
@@ -13,7 +14,6 @@ import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { isWebRouteReady } from '@/lib/route-map';
 import { coreHttp } from '@/lib/core-http';
-import { platformBridge } from '@/lib/platform-bridge';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
@@ -29,39 +29,24 @@ const TITLE = 'Ví Tubu';
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
-const referralPromise = (minOrder: number, windowDays: number) =>
-  `Bạn bè vào app bằng mã của bạn và có đơn thứ hai từ ${formatVnd(minOrder)} giao thành công trong ${windowDays} ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.`;
-
 export default function WalletPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const { user } = useAuth();
-  // CTV chỉ hưởng hoa hồng; API không bao giờ thưởng Điểm Xanh giới thiệu cho role này.
-  const isAffiliate = user?.role === 'AFFILIATE';
   const isCommissionRole = user?.role === 'AFFILIATE' || user?.role === 'DEALER';
   const walletQ = useQuery({ ...walletQuery(coreHttp), enabled: authed, refetchOnWindowFocus: true });
-  // Thống kê giới thiệu và điểm là phần phụ: lỗi chỉ làm ẩn khối đó, không chặn cả màn Ví.
-  const referralQ = useQuery({ ...referralQuery(coreHttp), enabled: authed });
+  // Điểm là phần phụ: lỗi chỉ làm ẩn khối đó, không chặn cả màn Ví.
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
-
-  const [shareMsg, setShareMsg] = useState('');
+  // Khoá con của ['wallet'] nên làm mới ví cũng làm mới luôn sao kê.
+  const txQ = useInfiniteQuery({
+    ...walletTransactionsQuery(coreHttp),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
+    enabled: authed,
+  });
 
   const w = walletQ.data;
-  const referral = referralQ.data;
   const loyalty = loyaltyQ.data;
-
-  const shareReferral = async () => {
-    if (!referral) return;
-    setShareMsg('');
-    const code = referral.referralCode;
-    const result = await platformBridge.share({
-      title: 'Tubu Tree — Trồng cây, nhận quà 🌳',
-      text: `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé!`,
-      path: `/?ref=${code}`,
-    });
-    if (result === 'copied') setShareMsg('Đã chép liên kết giới thiệu');
-    else if (result === 'failed') setShareMsg(`Chưa chia sẻ được. Bạn gửi mã ${code} cho bạn bè nhé.`);
-  };
 
   if (phase === 'loading') {
     return (
@@ -108,6 +93,8 @@ export default function WalletPage() {
   const showCommission = isCommissionRole || w.commissionPending > 0 || w.commissionApproved > 0;
   const ctvLinkable = w.commissionApproved > 0 && isWebRouteReady('/ctv');
   const points = loyalty ? pointsSummary(loyalty) : null;
+  // Ví 0đ và chưa có biến động: nói tiền vào Ví từ đâu thay cho câu chung chung và khối Mẹo (trùng ý).
+  const walletEmpty = w.walletBalance === 0 && txQ.isSuccess && (txQ.data?.pages[0]?.data.length ?? 0) === 0;
   const tierName = (loyalty?.tier as { name?: string } | null | undefined)?.name;
 
   return (
@@ -120,7 +107,9 @@ export default function WalletPage() {
             <div className="mt-1 text-3xl font-bold tabular-nums">{formatVnd(w.walletBalance)}</div>
           </section>
           <p className="-mt-2 px-1 text-xs text-stone-600 max-md:order-2">
-            {showCommission
+            {walletEmpty
+              ? walletCopy.empty
+              : showCommission
               ? `Tiền thật từ hoa hồng${CASHBACK_ENABLED ? ' & hoàn tiền sàn ngoài' : ''} — dùng để trả tiền hàng.`
               : 'Dùng để trả tiền hàng ở bước thanh toán'}
           </p>
@@ -172,53 +161,18 @@ export default function WalletPage() {
             </div>
           )}
 
-          <div className="flex gap-2 rounded-card bg-promo-bg p-4 max-md:order-7">
-            <Wallet className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
-            <p className="text-xs text-promo-fg">
-              Mẹo: tiền hoàn đơn và hoa hồng CTV vào Ví Tubu, dùng <b>trả đơn sau</b> ở bước thanh toán.
-            </p>
-          </div>
+          {!walletEmpty && (
+            <div className="flex gap-2 rounded-card bg-promo-bg p-4 max-md:order-7">
+              <Wallet className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
+              <p className="text-xs text-promo-fg">
+                Mẹo: tiền hoàn đơn và hoa hồng CTV vào Ví Tubu, dùng <b>trả đơn sau</b> ở bước thanh toán.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="max-md:contents md:flex md:flex-col md:gap-4">
-          {referral && !isAffiliate && (
-            <section aria-label="Mời bạn bè" className={`p-4 max-md:order-4 ${miniCard}`}>
-              <div className="mb-2 flex items-center gap-2">
-                <Gift className="h-5 w-5 text-forest-600" aria-hidden="true" />
-                <h2 className="text-base font-semibold text-stone-900">Mời bạn — nhận Điểm Xanh</h2>
-              </div>
-              <p className="text-xs text-stone-700">{referralPromise(referral.minOrderAmount ?? 200_000, referral.windowDays ?? 30)}</p>
-              <div className="my-3 flex gap-6">
-                <div>
-                  <div className="text-lg font-bold tabular-nums text-forest-700">{referral.successCount}</div>
-                  <div className="text-xs text-stone-600">bạn thành công</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold tabular-nums text-promo-fg">{formatCount(referral.earnedPoints)} điểm</div>
-                  <div className="text-xs text-stone-600">đã nhận từ giới thiệu</div>
-                </div>
-              </div>
-              {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
-              {referral.nextMilestone && referral.nextMilestone.count > referral.successCount && (
-                <p className="mb-3 text-xs font-medium text-forest-700">
-                  Mời thêm {referral.nextMilestone.count - referral.successCount} bạn để nhận {formatCount(referral.nextMilestone.bonusPoints)} điểm
-                </p>
-              )}
-              <div className="flex items-center gap-2">
-                <div className="flex min-h-11 flex-1 items-center justify-center rounded-control bg-stone-100 font-semibold tracking-widest text-stone-900">
-                  {referral.referralCode}
-                </div>
-                <button type="button" onClick={() => void shareReferral()} className={ui.btnPrimary}>
-                  Chia sẻ
-                </button>
-              </div>
-              <p role="status" className="mt-2 text-xs text-stone-700">
-                {shareMsg}
-              </p>
-            </section>
-          )}
-
-          <WalletHistory enabled={authed} />
+          <WalletHistory q={txQ} />
         </div>
       </div>
 
@@ -249,14 +203,7 @@ function SourceCard({ label, value, icon: SourceIcon, wide, hint, href }: { labe
 }
 
 /** Sao kê Ví Tubu từ sổ cái: mỗi biến động một dòng kèm số dư sau giao dịch. */
-function WalletHistory({ enabled }: { enabled: boolean }) {
-  // Khoá con của ['wallet'] nên làm mới ví cũng làm mới luôn sao kê.
-  const q = useInfiniteQuery({
-    ...walletTransactionsQuery(coreHttp),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.meta.page * last.meta.limit < last.meta.total ? last.meta.page + 1 : undefined),
-    enabled,
-  });
+function WalletHistory({ q }: { q: UseInfiniteQueryResult<InfiniteData<WalletTxnPage>> }) {
   const rows = uniqueById(q.data?.pages.flatMap((p) => p.data) ?? []);
 
   return (

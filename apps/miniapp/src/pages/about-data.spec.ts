@@ -12,11 +12,13 @@ describe('fetchSupportContact (Q-17: liên hệ đọc từ /config/public, dòn
   it('đọc hotline/email/Zalo OA từ khoá support của /config/public', async () => {
     mocks.getPublicConfig.mockResolvedValue({
       support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree' },
+      chat: { enabled: true, hours: { start: '08:00', end: '21:00' } },
     });
     expect(await fetchSupportContact()).toEqual({
       hotline: '0984 606 774',
       email: 'tubutree@gmail.com',
       zaloOaName: 'Tubu Tree',
+      hours: '8:00–21:00 mỗi ngày',
     });
   });
 
@@ -24,12 +26,12 @@ describe('fetchSupportContact (Q-17: liên hệ đọc từ /config/public, dòn
     mocks.getPublicConfig.mockResolvedValue({
       support: { hotline: '  0984 606 774 ', email: '   ', zaloOaName: 42 },
     });
-    expect(await fetchSupportContact()).toEqual({ hotline: '0984 606 774', email: null, zaloOaName: null });
+    expect(await fetchSupportContact()).toEqual({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: null });
   });
 
   it('API cũ chưa có khoá support → cả ba null, không ném lỗi', async () => {
     mocks.getPublicConfig.mockResolvedValue({ freeshipThreshold: 200000 });
-    expect(await fetchSupportContact()).toEqual({ hotline: null, email: null, zaloOaName: null });
+    expect(await fetchSupportContact()).toEqual({ hotline: null, email: null, zaloOaName: null, hours: null });
   });
 });
 

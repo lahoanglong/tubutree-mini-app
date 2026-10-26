@@ -32,7 +32,7 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
   const name = item.variationName ? `${item.productName} · ${item.variationName}` : item.productName;
   const onSale = item.salePrice != null && item.salePrice < item.price;
   return (
-    <li className="flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44">
+    <li className="flex w-[148px] flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44">
       <Link href={`/san-pham/${encodeURIComponent(item.slug)}`} className="block">
         <div className="aspect-square w-full bg-stone-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -201,7 +201,7 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
           ))}
         </div>
       ) : (
-        <ul className="flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
+        <ul className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
           {items.map((p) => (
             <RebuyTile key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} />
           ))}

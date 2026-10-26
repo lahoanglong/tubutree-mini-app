@@ -69,7 +69,7 @@ test.describe('Zalo Mini App E2E - Ví Tubu (không còn TubuXu)', () => {
     expect(api.callsTo('POST', '/wallet/convert-xu')).toHaveLength(0);
   });
 
-  test('Điểm Xanh là tổng hai lô, ghi rõ phần không hết hạn không ra tiền; mời bạn đọc /me/referral', async ({ page }) => {
+  test('Điểm Xanh là tổng hai lô, ghi rõ phần không hết hạn không ra tiền; Mời bạn không còn nằm trong Ví', async ({ page }) => {
     await page.goto('/wallet');
 
     await expect(page.getByText('Điểm Xanh (đổi giảm giá)')).toBeVisible({ timeout: 15_000 });
@@ -77,7 +77,7 @@ test.describe('Zalo Mini App E2E - Ví Tubu (không còn TubuXu)', () => {
     await expect(page.getByText('trong đó 30 điểm không hết hạn')).toBeVisible();
     await expect(page.getByText('Không rút ra tiền.', { exact: false })).toBeVisible();
 
-    await expect(page.getByText('Mời bạn — nhận Điểm Xanh')).toBeVisible();
-    await expect(page.getByText('Mời thêm 1 bạn để nhận 20 điểm')).toBeVisible();
+    await expect(page.getByText('Mời bạn — nhận Điểm Xanh')).toHaveCount(0);
+    await expect(page.getByText(/Mời thêm \d+ bạn/)).toHaveCount(0);
   });
 });

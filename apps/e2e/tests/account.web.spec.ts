@@ -84,7 +84,7 @@ test.describe('Web khách: tài khoản', () => {
     const phone = page.getByText('0912 345 678');
     if (narrow) await expect(phone).toBeHidden();
     else await expect(phone).toBeVisible();
-    await expect(page.getByText('dịch vụ lưu ảnh chưa được bật')).toBeVisible();
+    await expect(page.getByText('Tạm thời chưa đổi được ảnh đại diện')).toBeVisible();
 
     const email = page.getByLabel('Email');
     await email.fill('khong-hop-le');
@@ -96,6 +96,8 @@ test.describe('Web khách: tài khoản', () => {
     await page.getByLabel('Ngày sinh').fill('1990-05-01');
     const saved = api.waitForCall('PATCH', '/me');
     await page.getByRole('button', { name: 'Lưu thay đổi' }).click();
+    await expect(page.getByText('01/05/1990').first()).toBeVisible();
+    await page.getByRole('button', { name: 'Xác nhận', exact: true }).click();
     const body = (await saved).body as Record<string, unknown>;
     expect(body).toEqual({ fullName: 'Nguyễn Văn An', email: 'an@tubu.vn', dob: '1990-05-01' });
     await expect(page.getByText('Đã cập nhật hồ sơ')).toBeVisible();

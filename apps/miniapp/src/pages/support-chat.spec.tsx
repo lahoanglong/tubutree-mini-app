@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => ({
   fetchContact: vi.fn(),
   upload: vi.fn(),
   getPage: vi.fn(),
+  fetchOrders: vi.fn(),
+  callPhone: vi.fn(),
+  copyText: vi.fn(),
+  hasOA: false,
+  openOAChat: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -45,6 +50,19 @@ vi.mock('./about-data', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchSupportContact: mocks.fetchContact,
 }));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchOrders: mocks.fetchOrders,
+}));
+vi.mock('../services/zmp-bridge', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  callPhone: mocks.callPhone,
+  openOAChat: mocks.openOAChat,
+  get hasOA() {
+    return mocks.hasOA;
+  },
+}));
+vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { LivePathnameContext } from '../hooks/use-live-pathname';
@@ -66,6 +84,8 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
+/** Mã các bong bóng thật; lời chào phía client (msg-greeting) không tính. */
+const msgIds = () => screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid')).filter((id) => id !== 'msg-greeting');
 const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 const typeAndSend = (text: string) => {
   fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
@@ -80,7 +100,10 @@ describe('Màn chat với Tubu Tree', () => {
     mocks.search = '';
     mocks.authStatus = 'authenticated';
     mocks.cloudinary = false;
-    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null });
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
+    mocks.copyText.mockResolvedValue(true);
+    mocks.hasOA = false;
     mocks.getThread.mockResolvedValue(thread());
     mocks.markRead.mockResolvedValue({ ok: true });
     mocks.summary.mockResolvedValue({ unreadCount: 0 });
@@ -116,7 +139,7 @@ describe('Màn chat với Tubu Tree', () => {
     expect(within(mine).queryByText('Tubu Tree')).toBeNull();
     expect(within(system).queryByText('Tubu Tree')).toBeNull();
     expect(system).toHaveAttribute('data-sender', 'SYSTEM');
-    const order = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+    const order = msgIds();
     expect(order).toEqual(['msg-m1', 'msg-m2', 'msg-m3']);
   });
 
@@ -197,11 +220,134 @@ describe('Màn chat với Tubu Tree', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
-  it('enabled=false: ẩn ô nhập, hiện câu CHAT_DISABLED', async () => {
+  it('enabled=false: không có ô nhập, hiện số hotline to và nút gọi', async () => {
     mocks.getThread.mockResolvedValue(thread({ enabled: false }));
     renderPage();
-    expect(await screen.findByText('Chat với Tubu Tree đang tạm đóng. Cần hỗ trợ, gọi hotline.')).toBeInTheDocument();
+    expect(await screen.findByText('Chat đang tạm đóng')).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.getByText('Giờ trực: 8:00–21:00 mỗi ngày')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Gọi 0984 606 774' }));
+    expect(mocks.callPhone).toHaveBeenCalledWith('0984 606 774');
+  });
+
+  it('enabled=false: chạm số để sao chép; không có OA thì không có nút Nhắn OA', async () => {
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /0984 606 774\. Chạm vào số để sao chép/ }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('0984 606 774'));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép số hotline', type: 'success' });
+    expect(screen.queryByRole('button', { name: 'Nhắn OA' })).toBeNull();
+  });
+
+  it('enabled=false: có tên Zalo OA và OA gắn sẵn thì hiện nút Nhắn OA; có email thì hiện email', async () => {
+    mocks.hasOA = true;
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree', hours: null });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắn OA' }));
+    expect(mocks.openOAChat).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'tubutree@gmail.com' })).toBeInTheDocument();
+    expect(screen.queryByText(/Giờ trực/)).toBeNull();
+  });
+
+  it('chat bật, chưa có tin: lời chào kèm giờ trực và các câu hỏi nhanh; chạm là gửi câu đó', async () => {
+    mocks.send.mockResolvedValue({});
+    renderPage();
+    expect(await screen.findByText('Tubu Tree hỗ trợ 8:00–21:00 mỗi ngày. Bạn cần hỏi gì ạ?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đơn của tôi đang ở đâu?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đổi trả hàng' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Hỏi về đơn/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Đổi trả hàng' }));
+    await waitFor(() => expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ body: 'Mình muốn hỏi về đổi trả hàng.', source: 'MINIAPP' })));
+    expect(screen.queryByRole('button', { name: 'Cách dùng sản phẩm' })).toBeNull();
+  });
+
+  it('có đơn đang giao: thêm nút "Hỏi về đơn {mã}", gửi kèm mã đơn làm ngữ cảnh', async () => {
+    mocks.send.mockResolvedValue({});
+    mocks.fetchOrders.mockResolvedValue({ data: [{ code: 'TUBU99' }], meta: { page: 1, limit: 1, total: 1 } });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Hỏi về đơn TUBU99' }));
+    await waitFor(() =>
+      expect(mocks.send).toHaveBeenCalledWith(expect.objectContaining({ body: 'Mình muốn hỏi về đơn TUBU99.', context: { orderCode: 'TUBU99' } })),
+    );
+  });
+
+  it('đã có tin: lời chào vẫn ở đầu cuộc trò chuyện, câu hỏi nhanh thì hết', async () => {
+    mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'a', body: 'xin chào' })] }));
+    renderPage();
+    expect(await screen.findByText('xin chào')).toBeInTheDocument();
+    const ids = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+    expect(ids).toEqual(['msg-greeting', 'msg-a']);
+    expect(screen.queryByRole('button', { name: 'Đổi trả hàng' })).toBeNull();
+  });
+
+  it('còn tin cũ hơn để tải: chưa tới đầu cuộc trò chuyện nên chưa hiện lời chào', async () => {
+    mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'a', body: 'xin chào' })] }));
+    renderPage();
+    expect(await screen.findByText('xin chào')).toBeInTheDocument();
+    expect(screen.queryByTestId('msg-greeting')).toBeNull();
+  });
+
+  it('câu hỏi nhanh chỉ hiện khi truy vấn đơn đang giao đã xong, để nút "Hỏi về đơn" không chèn muộn', async () => {
+    let finish: (v: unknown) => void = () => {};
+    mocks.fetchOrders.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    renderPage();
+    await screen.findByRole('textbox');
+    expect(screen.queryByRole('button', { name: 'Đổi trả hàng' })).toBeNull();
+    await act(async () => finish({ data: [{ code: 'TUBU99' }], meta: { page: 1, limit: 1, total: 1 } }));
+    const buttons = (await screen.findAllByRole('button', { name: /Hỏi về đơn|Đổi trả hàng|Đơn của tôi/ })).map((b) => b.textContent);
+    expect(buttons[0]).toBe('Hỏi về đơn TUBU99');
+  });
+
+  it('truy vấn đơn đang giao lỗi: vẫn hiện ba câu hỏi nhanh', async () => {
+    mocks.fetchOrders.mockRejectedValue(new Error('x'));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đổi trả hàng' })).toBeInTheDocument();
+  });
+
+  it('chat tắt mà còn lịch sử: vẫn đọc được tin, đánh dấu đã đọc đúng tin STAFF hiện ra, không có ô nhập, liên hệ thay chỗ ô nhập', async () => {
+    mocks.getThread.mockResolvedValue(
+      thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đơn đã giao nhé' }), msg({ id: 'c1', sender: 'CUSTOMER', body: 'Cảm ơn' })] }),
+    );
+    mocks.markRead.mockResolvedValue({});
+    renderPage();
+    expect(await screen.findByText('Đơn đã giao nhé')).toBeInTheDocument();
+    expect(screen.getByText('Cảm ơn')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByTestId('msg-greeting')).toBeNull();
+    expect(screen.getByText('Chat đang tạm đóng')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gọi 0984 606 774' })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['s1']));
+  });
+
+  it('chat tắt còn lịch sử: phần liên hệ gọn (tiêu đề, giờ trực, nút Gọi); email chỉ hiện sau "Cách liên hệ khác"', async () => {
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đã giao' })] }));
+    renderPage();
+    expect(await screen.findByText('Đã giao')).toBeInTheDocument();
+    expect(screen.getByText('Giờ trực: 8:00–21:00 mỗi ngày')).toBeInTheDocument();
+    expect(screen.queryByText('Chạm vào số để sao chép')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'tubutree@gmail.com' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cách liên hệ khác' }));
+    expect(screen.getByRole('button', { name: 'tubutree@gmail.com' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }));
+    expect(screen.queryByRole('button', { name: 'tubutree@gmail.com' })).toBeNull();
+  });
+
+  it('chat tắt còn lịch sử, không có email/OA: không có liên kết "Cách liên hệ khác"', async () => {
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: null });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đã giao' })] }));
+    renderPage();
+    expect(await screen.findByText('Đã giao')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cách liên hệ khác' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Gọi 0984 606 774' })).toBeInTheDocument();
+  });
+
+  it('chat tắt và chưa có tin nào: không gọi báo đã đọc', async () => {
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    renderPage();
+    expect(await screen.findByText('Chat đang tạm đóng')).toBeInTheDocument();
+    expect(mocks.markRead).not.toHaveBeenCalled();
   });
 
   it('nút ảnh chỉ có khi bản build có Cloudinary', async () => {
@@ -485,7 +631,7 @@ describe('Màn chat với Tubu Tree', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Xem tin cũ hơn' }));
       await screen.findByTestId('msg-m3');
       expect(mocks.getPage).toHaveBeenCalledWith({ before: 'm5' });
-      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m3', 'msg-m5']);
+      expect(msgIds()).toEqual(['msg-m3', 'msg-m5']);
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
     });
 
@@ -504,7 +650,7 @@ describe('Màn chat với Tubu Tree', () => {
         await qc.invalidateQueries({ queryKey: ['support-chat'] });
       });
       await screen.findByTestId('msg-m61');
-      const ids = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+      const ids = msgIds();
       expect(ids).toEqual(range(1, 61).map((x) => `msg-${x.id}`));
       expect(within(screen.getByTestId('msg-m12')).getByText('tin 12 đã sửa')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
@@ -522,7 +668,7 @@ describe('Màn chat với Tubu Tree', () => {
         await qc.invalidateQueries({ queryKey: ['support-chat'] });
       });
       await waitFor(() => expect(screen.queryByTestId('msg-m4')).toBeNull());
-      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m1', 'msg-m2', 'msg-m3', 'msg-m5', 'msg-m6']);
+      expect(msgIds()).toEqual(['msg-m1', 'msg-m2', 'msg-m3', 'msg-m5', 'msg-m6']);
     });
 
     it('hasMore=false: tin thu hồi nằm trước tin đầu cửa sổ cũng biến mất', async () => {
@@ -535,7 +681,7 @@ describe('Màn chat với Tubu Tree', () => {
         await qc.invalidateQueries({ queryKey: ['support-chat'] });
       });
       await waitFor(() => expect(screen.queryByTestId('msg-m1')).toBeNull());
-      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m2', 'msg-m3']);
+      expect(msgIds()).toEqual(['msg-m2', 'msg-m3']);
     });
 
     it('cửa sổ rỗng và hết tin: xoá hết tin đã thấy', async () => {

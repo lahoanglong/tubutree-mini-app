@@ -63,6 +63,29 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     expect(document.cookie).not.toContain('tubu_home_hint');
   });
 
+  it('khôi phục ra tài khoản khác với gợi ý đã lưu: bỏ gợi ý của người trước, xoá cả cookie gợi ý', async () => {
+    setSessionMarker();
+    document.cookie = 'tubu_home_hint=returning-2; Path=/';
+    localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'other', kind: 'returning' }));
+    localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'other', rows: 2 }));
+    mocks.restoreSession.mockResolvedValueOnce({ kind: 'ok', data: { accessToken: 'at', user: USER } });
+    await mount();
+    expect(text()).toBe('init|authenticated|u1');
+    expect(localStorage.getItem('tubu_home_kind')).toBeNull();
+    expect(localStorage.getItem('tubu_home_todo_rows')).toBeNull();
+    expect(document.cookie).not.toContain('tubu_home_hint');
+  });
+
+  it('khôi phục đúng tài khoản đã lưu: giữ gợi ý và cookie', async () => {
+    setSessionMarker();
+    document.cookie = 'tubu_home_hint=returning-2; Path=/';
+    localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'u1', kind: 'returning' }));
+    mocks.restoreSession.mockResolvedValueOnce({ kind: 'ok', data: { accessToken: 'at', user: USER } });
+    await mount();
+    expect(localStorage.getItem('tubu_home_kind')).not.toBeNull();
+    expect(document.cookie).toContain('tubu_home_hint=returning-2');
+  });
+
   it('lỗi tạm lúc mở trang → chưa vào được nhưng GIỮ cờ; có mạng lại thì tự khôi phục', async () => {
     setSessionMarker();
     mocks.restoreSession

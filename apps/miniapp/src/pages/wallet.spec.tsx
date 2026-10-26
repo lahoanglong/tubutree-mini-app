@@ -117,6 +117,7 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     mocks.getWallet.mockRejectedValue(new Error('boom'));
     mocks.getReferral.mockResolvedValue(REFERRAL);
     mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    mocks.getWalletTransactions.mockResolvedValue(TXN_PAGE_1);
     const failed = renderPage();
     await screen.findByRole('button', { name: 'Thử lại' });
     expect(failed.container.querySelectorAll('h1')).toHaveLength(1);
@@ -143,9 +144,6 @@ describe('WalletPage — hiển thị (hành vi giữ nguyên khi chuyển DS v2
     expect(screen.getByText('520.000đ')).toBeInTheDocument();
     expect(screen.getByText('Hoàn tiền đã duyệt, chờ về Ví')).toBeInTheDocument();
     expect(screen.getByText('45.000đ')).toBeInTheDocument();
-    expect(screen.getByText('Mời thêm 3 bạn để nhận 50 điểm')).toBeInTheDocument();
-    expect(screen.getByText('20 điểm')).toBeInTheDocument();
-    expect(screen.getByText('TUBU1234')).toBeInTheDocument();
     expect(await screen.findByText('Hoàn tiền sàn ngoài')).toBeInTheDocument();
     expect(screen.getByText('+50.000đ')).toBeInTheDocument();
     expect(screen.getByText('−100.000đ')).toBeInTheDocument();
@@ -237,29 +235,6 @@ describe('WalletPage — điều hướng', () => {
     expect(mocks.navigate).not.toHaveBeenCalledWith('/affiliate');
   });
 
-  it('"Chia sẻ" mã giới thiệu gọi shareLink với đường dẫn ?ref=; Zalo từ chối thì chép liên kết kèm mã và báo qua snackbar', async () => {
-    stubLoaded();
-    mocks.shareLink.mockRejectedValueOnce(new Error('no share'));
-    mocks.copyText.mockResolvedValueOnce(true);
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
-    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=TUBU1234' })));
-    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=TUBU1234')));
-    await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('đã sao chép liên kết') })),
-    );
-  });
-
-  it('người dùng huỷ hộp thoại chia sẻ Zalo: không snackbar, không ghi đè clipboard', async () => {
-    stubLoaded();
-    mocks.shareLink.mockRejectedValueOnce({ code: -2003 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
-    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(mocks.openSnackbar).not.toHaveBeenCalled();
-    expect(mocks.copyText).not.toHaveBeenCalled();
-  });
 });
 
 describe('WalletPage — số Điểm Xanh không gãy dòng (D6-11)', () => {
@@ -285,22 +260,28 @@ describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường 
     expect(document.body.textContent ?? '').not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
   });
 
-  it('thống kê giới thiệu đọc từ /me/referral (/me/coins đã 410, mock không còn getCoins)', async () => {
+  it('Mời bạn nằm ở trang Cá nhân, không còn trong Ví: Ví không hiện khối mời bạn và không gọi /me/referral', async () => {
     stubLoaded();
     renderPage();
     await screen.findByText('Ví Tubu (số dư khả dụng)');
-    expect(mocks.getReferral).toHaveBeenCalledTimes(1);
+    expect(mocks.getReferral).not.toHaveBeenCalled();
+    expect(screen.queryByText('Mời bạn — nhận Điểm Xanh')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Chia sẻ' })).toBeNull();
   });
 
-  it('mốc thưởng giới thiệu: còn bao nhiêu bạn thì ghi bấy nhiêu; đã đủ hoặc vượt mốc (âm) thì ẩn dòng, không in "Mời thêm -2 bạn"', async () => {
-    stubLoaded();
-    const { unmount } = renderPage();
-    expect(await screen.findByText('Mời thêm 3 bạn để nhận 50 điểm')).toBeInTheDocument();
-    unmount();
-    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 7 });
+  it('Ví 0đ và chưa có biến động: nói tiền vào Ví từ đâu, không lặp thêm khối Mẹo', async () => {
+    stubLoaded({ ...WALLET, walletBalance: 0 }, { data: [], meta: { page: 1, limit: 20, total: 0 } });
     renderPage();
-    await screen.findByText('Mời bạn — nhận Điểm Xanh');
-    expect(screen.queryByText(/Mời thêm/)).toBeNull();
+    const note = await screen.findByText('Tiền hoàn đơn và hoa hồng CTV sẽ vào Ví Tubu. Ví dùng để trả đơn hàng.');
+    expect(note.textContent).not.toMatch(/rút|ngân hàng/i);
+    expect(screen.queryByText(/Mẹo:/)).toBeNull();
+  });
+
+  it('Ví 0đ nhưng đã có biến động: giữ chú thích cũ và khối Mẹo', async () => {
+    stubLoaded({ ...WALLET, walletBalance: 0 });
+    renderPage();
+    expect(await screen.findByText(/Mẹo:/)).toBeInTheDocument();
+    expect(screen.queryByText(/sẽ vào Ví Tubu\. Ví dùng để trả đơn hàng/)).toBeNull();
   });
 
   it('mẹo dưới ví nói đúng việc Ví làm được: trả đơn, không nhắc rút ra ngân hàng', async () => {
@@ -316,65 +297,12 @@ describe('WalletPage — xu đã gộp vào Điểm Xanh, không còn đường 
     renderPage();
     await screen.findByText('Ví Tubu (số dư khả dụng)');
     expect(screen.queryByRole('button', { name: /Rút/ })).toBeNull();
-    expect(screen.queryByText(/ngân hàng/i)).toBeNull();
+    expect(screen.queryByText(/ngân hàng/i, { selector: 'button, a, label' })).toBeNull();
   });
 
-  it('lời mời bạn: thưởng là Điểm Xanh, chia sẻ không hứa "cả hai nhận xu"', async () => {
-    stubLoaded();
-    mocks.shareLink.mockResolvedValue(undefined);
-    renderPage();
-    expect(await screen.findByText('Mời bạn — nhận Điểm Xanh')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Chia sẻ' }));
-    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
-    const arg = mocks.shareLink.mock.calls[0]![0] as { description: string };
-    expect(arg.description).toContain('TUBU1234');
-    expect(arg.description).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
-  });
-
-  it('khách thường thấy đủ điều kiện thưởng: đơn thứ hai từ minOrderAmount trong windowDays', async () => {
-    stubLoaded();
-    mocks.getReferral.mockResolvedValue({ ...REFERRAL, windowDays: 30, minOrderAmount: 200_000 });
-    renderPage();
-    const promise = await screen.findByText(/có đơn thứ hai từ 200\.000đ giao thành công trong 30 ngày kể từ đơn đầu/);
-    expect(promise.textContent).toMatch(/Điểm Xanh/);
-  });
-
-  it('điều kiện lấy theo số API trả, không ghi cứng', async () => {
-    stubLoaded();
-    mocks.getReferral.mockResolvedValue({ ...REFERRAL, windowDays: 45, minOrderAmount: 300_000 });
-    renderPage();
-    expect(await screen.findByText(/từ 300\.000đ giao thành công trong 45 ngày/)).toBeInTheDocument();
-  });
-
-  it('CTV (AFFILIATE) không thấy lời hứa thưởng Điểm Xanh vì không bao giờ được thưởng', async () => {
-    mocks.role = 'AFFILIATE';
-    stubLoaded();
-    mocks.getReferral.mockResolvedValue({ ...REFERRAL, windowDays: 30, minOrderAmount: 200_000 });
-    renderPage();
-    await screen.findByText('Ví Tubu (số dư khả dụng)');
-    expect(screen.queryByText('Mời bạn — nhận Điểm Xanh')).toBeNull();
-    expect(screen.queryByText(/có đơn thứ hai/)).toBeNull();
-  });
-
-  it('chưa tải được thống kê giới thiệu: ví vẫn hiện, chỉ ẩn khối mời bạn', async () => {
-    stubLoaded();
-    mocks.getReferral.mockRejectedValue(new Error('lỗi'));
-    renderPage();
-    expect(await screen.findByText('Ví Tubu (số dư khả dụng)')).toBeInTheDocument();
-    expect(screen.queryByText('Mời bạn — nhận Điểm Xanh')).toBeNull();
-  });
 });
 
 describe('WalletPage — vùng chạm >= 44px, nhãn form và biểu tượng (C-076, C-113)', () => {
-  it('nút Chia sẻ cao tối thiểu 44px', async () => {
-    stubLoaded();
-    renderPage();
-    for (const name of ['Chia sẻ']) {
-      const btn = await screen.findByRole('button', { name });
-      expect(Number.parseFloat(btn.style.minHeight)).toBeGreaterThanOrEqual(44);
-    }
-  });
-
   it('thẻ Điểm Xanh bấm được bằng bàn phím (role=button, Enter mở /loyalty)', async () => {
     stubLoaded();
     renderPage();

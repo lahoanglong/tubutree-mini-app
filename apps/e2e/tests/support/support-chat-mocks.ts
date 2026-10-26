@@ -36,6 +36,7 @@ export function mockSupportChat(api: MockApi): SupportChatState {
   const state: SupportChatState = { messages: [GREETING], sent: [] };
   let getsSinceSend = -1;
   api.get('/config/public', CHAT_ENABLED_CONFIG);
+  api.get('/orders', { data: [], meta: { page: 1, limit: 1, total: 0 } });
   api.get('/me/support-chat', (): SupportChatThreadDTO => {
     if (getsSinceSend >= 0) {
       getsSinceSend += 1;

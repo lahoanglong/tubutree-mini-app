@@ -239,66 +239,32 @@ describe('/tai-khoan/vi-tubu — trạng thái tải, lỗi, khách', () => {
   });
 });
 
-describe('/tai-khoan/vi-tubu — giới thiệu bạn bè', () => {
-  it('hiện thống kê, mốc còn thiếu và mã; chia sẻ gọi bridge với đường dẫn ?ref=', async () => {
+describe('/tai-khoan/vi-tubu — Mời bạn đã chuyển sang trang Cá nhân', () => {
+  it('Ví không còn khối mời bạn, nút chia sẻ và không gọi /me/referral', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Mời bạn — nhận Điểm Xanh');
-    expect(c.textContent).toContain('Mời thêm 3 bạn để nhận 50 điểm');
-    expect(c.textContent).toContain('TUBU1234');
-    click(byText(c, 'button', 'Chia sẻ'));
-    await flush(3);
-    expect(state.shared).toHaveLength(1);
-    const arg = state.shared[0] as { title: string; text: string; path: string };
-    expect(arg.path).toBe('/?ref=TUBU1234');
-    expect(arg.text).toContain('TUBU1234');
-    expect(arg.text).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
+    expect(c.textContent).not.toContain('Mời bạn');
+    expect(byText(c, 'button', 'Chia sẻ')).toBeNull();
+    expect(state.calls.some((x) => x.path === '/me/referral')).toBe(false);
+  });
+});
+
+describe('/tai-khoan/vi-tubu — Ví 0đ và chưa có biến động', () => {
+  const EMPTY_NOTE = 'Tiền hoàn đơn và hoa hồng CTV sẽ vào Ví Tubu. Ví dùng để trả đơn hàng.';
+
+  it('nói tiền vào Ví từ đâu, không nhắc rút tiền, không lặp thêm khối Mẹo', async () => {
+    state.wallet = { ...WALLET, walletBalance: 0 };
+    state.pages = [{ total: 0, data: [] }];
+    const c = await mount();
+    expect(c.textContent).toContain(EMPTY_NOTE);
+    expect(c.textContent).not.toContain('Mẹo:');
+    expect(EMPTY_NOTE).not.toMatch(/rút|ngân hàng/i);
   });
 
-  it('chia sẻ chép được liên kết thì báo đã chép; thất bại thì báo kèm mã; huỷ thì im lặng', async () => {
+  it('Ví 0đ nhưng đã có biến động: giữ chú thích cũ và khối Mẹo', async () => {
+    state.wallet = { ...WALLET, walletBalance: 0 };
     const c = await mount();
-    state.share = async () => 'copied';
-    click(byText(c, 'button', 'Chia sẻ'));
-    await flush(3);
-    expect(c.textContent).toContain('Đã chép liên kết giới thiệu');
-    state.share = async () => 'failed';
-    click(byText(c, 'button', 'Chia sẻ'));
-    await flush(3);
-    expect(c.textContent).toContain('Chưa chia sẻ được. Bạn gửi mã TUBU1234 cho bạn bè nhé.');
-    state.share = async () => 'cancelled';
-    click(byText(c, 'button', 'Chia sẻ'));
-    await flush(3);
-    expect(c.querySelector('[role="status"]')?.textContent ?? '').toBe('');
-  });
-
-  it('điều kiện thưởng lấy theo số API trả; thiếu thì dùng 200.000đ và 30 ngày', async () => {
-    let c = await mount();
-    expect(c.textContent).toContain('có đơn thứ hai từ 200.000đ giao thành công trong 30 ngày kể từ đơn đầu');
-    mounted.forEach((m) => m.unmount());
-    mounted = [];
-    state.referral = { ...REFERRAL, windowDays: 45, minOrderAmount: 300_000 };
-    c = await mount();
-    expect(c.textContent).toContain('từ 300.000đ giao thành công trong 45 ngày');
-  });
-
-  it('đã đủ hoặc vượt mốc: ẩn dòng "Mời thêm", không in số âm', async () => {
-    state.referral = { ...REFERRAL, successCount: 7 };
-    const c = await mount();
-    expect(c.textContent).toContain('Mời bạn — nhận Điểm Xanh');
-    expect(c.textContent).not.toContain('Mời thêm');
-  });
-
-  it('CTV (AFFILIATE) không thấy lời hứa thưởng Điểm Xanh', async () => {
-    state.role = 'AFFILIATE';
-    const c = await mount();
-    expect(c.textContent).not.toContain('Mời bạn — nhận Điểm Xanh');
-    expect(c.textContent).not.toContain('có đơn thứ hai');
-  });
-
-  it('thống kê giới thiệu lỗi: ví vẫn hiện, chỉ ẩn khối mời bạn', async () => {
-    state.fail.add('/me/referral');
-    const c = await mount();
-    expect(c.textContent).toContain('1.250.000đ');
-    expect(c.textContent).not.toContain('Mời bạn — nhận Điểm Xanh');
+    expect(c.textContent).not.toContain(EMPTY_NOTE);
+    expect(c.textContent).toContain('Mẹo:');
   });
 });
 
@@ -376,15 +342,14 @@ describe('/tai-khoan/vi-tubu — truy cập', () => {
 describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () => {
   const orderOf = (el: Element) => Number(/max-md:order-(\d+)/.exec(el.className)![1]);
 
-  it('thứ tự một cột ở điện thoại: thẻ Mời bạn đứng ngay sau thẻ Điểm Xanh, rồi nguồn tiền, hoàn tiền, mẹo, lịch sử', async () => {
+  it('thứ tự một cột ở điện thoại: thẻ Điểm Xanh rồi nguồn tiền, hoàn tiền, mẹo, lịch sử', async () => {
     const c = await mount();
     const items = Array.from(c.querySelectorAll('main *')).filter((el) => /max-md:order-\d+/.test(el.className.toString()));
     const labels = items.sort((a, b) => orderOf(a) - orderOf(b)).map((el) => el.getAttribute('aria-label') ?? el.textContent ?? '');
     const at = (needle: string) => labels.findIndex((l) => l.includes(needle));
     expect(at('Số dư Ví Tubu')).toBeGreaterThan(-1);
     expect(at('Số dư Ví Tubu')).toBeLessThan(at('Điểm Xanh (đổi giảm giá)'));
-    expect(at('Điểm Xanh (đổi giảm giá)')).toBeLessThan(at('Mời bạn bè'));
-    expect(at('Mời bạn bè')).toBeLessThan(at('Hoa hồng chờ duyệt'));
+    expect(at('Điểm Xanh (đổi giảm giá)')).toBeLessThan(at('Hoa hồng chờ duyệt'));
     expect(at('Hoa hồng chờ duyệt')).toBeLessThan(at('Hoàn tiền đã duyệt'));
     expect(at('Hoàn tiền đã duyệt')).toBeLessThan(at('Mẹo: tiền hoàn đơn'));
     expect(at('Mẹo: tiền hoàn đơn')).toBeLessThan(at('Lịch sử Ví'));
@@ -393,8 +358,7 @@ describe('/tai-khoan/vi-tubu — giao diện điện thoại như Mini App', () 
   it('hai cột giữ nguyên ở máy tính: DOM vẫn là cột trái rồi cột phải', async () => {
     const c = await mount();
     const heads = Array.from(c.querySelectorAll('section')).map((s) => s.getAttribute('aria-label'));
-    expect(heads.indexOf('Số dư Ví Tubu')).toBeLessThan(heads.indexOf('Mời bạn bè'));
-    expect(heads.indexOf('Mời bạn bè')).toBeLessThan(heads.indexOf('Lịch sử Ví'));
+    expect(heads.indexOf('Số dư Ví Tubu')).toBeLessThan(heads.indexOf('Lịch sử Ví'));
   });
 
   it('các thẻ không viền ở điện thoại', async () => {

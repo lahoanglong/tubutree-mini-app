@@ -14,6 +14,8 @@ import {
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
 import { loadFirstTouch } from '../services/first-touch';
 import { vi } from '../i18n/vi';
+import { clearHomeHints, dropForeignHomeHints } from '@tubutree/app-core/home-layout';
+import { browserStorage } from '../utils/recently-viewed';
 import { isHttpError } from '../services/http';
 
 const REFRESH_KEY = 'tubu_refresh_token';
@@ -232,6 +234,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setAccessToken(null);
     await clearRefresh();
     set({ user: null, status: 'idle' });
+    clearHomeHints(browserStorage());
     // Xoá sạch cache React Query (ví, lương, hoa hồng...) — không để lộ dữ liệu tài
     // chính của user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung
     // (VD tablet chấm công cửa hàng). Đăng ký qua setLogoutCleanup() ở app.tsx để
@@ -239,6 +242,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     onLogoutCleanup?.();
   },
 }));
+
+// Đăng nhập/khôi phục ra tài khoản khác với người dùng máy này lần trước: bỏ gợi ý khung chờ Trang chủ của người đó
+// (loại khách, số dòng Việc cần làm), kẻo lần mở sau dựng khung theo loại khách của họ.
+useAuthStore.subscribe((s, prev) => {
+  const id = s.user?.id;
+  if (id && id !== prev.user?.id) dropForeignHomeHints(browserStorage(), id);
+});
 
 let onLogoutCleanup: (() => void) | null = null;
 /** Đăng ký hàm dọn dẹp (vd queryClient.clear()) chạy sau khi logout thành công. */
