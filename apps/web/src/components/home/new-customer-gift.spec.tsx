@@ -160,6 +160,20 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(paths()).not.toContain('/me/new-customer-offer');
   });
 
+  it('có cấu hình dựng sẵn từ server: vẫn hiện ngay từ bản đó nhưng trình duyệt vẫn tải /config/public (bản ISR có thể cũ)', async () => {
+    mocks.phase = 'guest';
+    const stale = { ...CONFIG, freeshipThreshold: 100_000 };
+    let release: (v: unknown) => void = () => undefined;
+    config = () => new Promise((resolve) => (release = resolve));
+    mounted = render(<NewCustomerGift initialConfig={stale as never} />);
+    await flush(4);
+    expect(region(mounted.container)?.textContent).toContain('100.000');
+    expect(paths()).toContain('/config/public');
+    release(CONFIG);
+    await flush(8);
+    expect(region(mounted.container)?.textContent).toContain('350.000');
+  });
+
   it('nút "Chọn sản phẩm" mở trang mua sắm /san-pham', async () => {
     const c = await mount();
     const link = Array.from(c.querySelectorAll('a')).find((a) => a.textContent === 'Chọn sản phẩm')!;
