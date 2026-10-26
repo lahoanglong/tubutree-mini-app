@@ -5,14 +5,14 @@ import { WasteCatalogueService, haversineKm, isHiddenInactive } from './waste-ca
 const NOW = new Date('2026-10-17T03:00:00.000Z');
 const day = (n: number) => new Date(NOW.getTime() - n * 86_400_000);
 const pt = (o: Record<string, unknown>) => ({ kind: 'PARTNER', name: 'P', addressLine: 'a', provinceCode: '79', provinceName: 'TP.HCM', communeCode: 'c', communeName: 'C', lat: null, lng: null, phone: null, openingHours: {}, status: 'ACTIVE', monthlyQuotaPoints: 100_000, perkText: null, perkPendingText: 'chờ duyệt', sortOrder: 0, activatedAt: day(1), lastConfirmedAt: null, items: [], ...o });
-function setup(points: unknown[], o: { available?: string[]; usage?: { pointId: string; pointsUsed: number }[] } = {}) {
+function setup(points: unknown[], o: { enabled?: boolean; available?: string[]; usage?: { pointId: string; pointsUsed: number }[] } = {}) {
   const prisma = {
     wastePoint: { findMany: jest.fn().mockResolvedValue(points) },
     wasteItem: { findMany: jest.fn().mockResolvedValue([{ id: 'carton' }, { id: 'film' }]) },
     wastePointUsage: { findMany: jest.fn().mockResolvedValue(o.usage ?? []) },
   };
   const access = { availablePointIds: jest.fn(async (_d: unknown, ids: string[]) => new Set(o.available ?? ids)) };
-  const config = { snapshot: jest.fn().mockResolvedValue({ pointInactiveDays: 60 }) };
+  const config = { snapshot: jest.fn().mockResolvedValue({ pointInactiveDays: 60 }), isEnabled: jest.fn().mockResolvedValue(o.enabled ?? true) };
   const svc = new WasteCatalogueService(prisma as never, access as never, config as never);
   jest.useFakeTimers({ now: NOW });
   return { svc, prisma };
@@ -85,15 +85,30 @@ describe('WasteCatalogueService.nearbyPoints (spec 15.2, 14.4)', () => {
 });
 
 describe('WasteCatalogueService.listItems', () => {
-  it('ACTIVE and COMING_SOON only, by sortOrder then name; exactly the 15 DTO fields (spec 15.2)', async () => {
+  it('ACTIVE and COMING_SOON only, by sortOrder then name; exactly the 16 DTO fields (spec 15.2)', async () => {
     const { svc, prisma } = setup([]);
     prisma.wasteItem.findMany.mockResolvedValueOnce([{
       id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, gramsPerUnit: 300,
-      dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: null, imageUrl: null, hazardous: false, sortOrder: 1,
+      dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: null, imageUrl: null, hazardous: false, sortOrder: 1, warehouseOnly: true,
       createdAt: new Date('2026-10-01T00:00:00Z'), updatedAt: new Date('2026-10-02T00:00:00Z'),
     }]);
     const out = await svc.listItems();
     expect(prisma.wasteItem.findMany).toHaveBeenCalledWith({ where: { status: { in: ['ACTIVE', 'COMING_SOON'] } }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
-    expect(Object.keys(out[0]!).sort()).toEqual(['code', 'dailyCapQty', 'dropsPerUnit', 'gramsPerUnit', 'hazardous', 'id', 'imageUrl', 'monthlyCapQty', 'name', 'pointsPerGroup', 'prepInstructions', 'sortOrder', 'status', 'unitLabel', 'unitsPerPoint']);
+    expect(Object.keys(out[0]!).sort()).toEqual(['code', 'dailyCapQty', 'dropsPerUnit', 'gramsPerUnit', 'hazardous', 'id', 'imageUrl', 'monthlyCapQty', 'name', 'pointsPerGroup', 'prepInstructions', 'sortOrder', 'status', 'unitLabel', 'unitsPerPoint', 'warehouseOnly']);
+    expect(out[0]!.warehouseOnly).toBe(true);
+  });
+});
+
+describe('WasteCatalogueService.publicItems', () => {
+  it('chương trình đang bật thì trả danh mục món', async () => {
+    const { svc, prisma } = setup([]);
+    prisma.wasteItem.findMany.mockResolvedValueOnce([]);
+    await expect(svc.publicItems()).resolves.toEqual([]);
+    expect(prisma.wasteItem.findMany).toHaveBeenCalledTimes(1);
+  });
+  it('chương trình tắt thì không đọc cơ sở dữ liệu và trả rỗng', async () => {
+    const { svc, prisma } = setup([], { enabled: false });
+    await expect(svc.publicItems()).resolves.toEqual([]);
+    expect(prisma.wasteItem.findMany).not.toHaveBeenCalled();
   });
 });

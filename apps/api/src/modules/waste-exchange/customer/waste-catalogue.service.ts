@@ -28,6 +28,7 @@ export function toWasteItemDTO(i: WasteItem): WasteItemDTO {
     gramsPerUnit: i.gramsPerUnit,
     hazardous: i.hazardous,
     sortOrder: i.sortOrder,
+    warehouseOnly: i.warehouseOnly,
   };
 }
 
@@ -86,6 +87,11 @@ export class WasteCatalogueService {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
     return rows.map(toWasteItemDTO);
+  }
+
+  /** Danh mục món cho khách chưa đăng nhập xem chương trình; chỉ trả khi chương trình đang bật. */
+  async publicItems(): Promise<WasteItemDTO[]> {
+    return (await this.config.isEnabled()) ? this.listItems() : [];
   }
 
   async listPoints(provinceCode?: string): Promise<WastePointDTO[]> {

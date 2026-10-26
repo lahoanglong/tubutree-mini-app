@@ -146,6 +146,12 @@ describe('WasteDeskService.points', () => {
 });
 
 describe('WasteDeskService.lookup', () => {
+  it.each(['abcde', 'TRABCDE', 'tr abcde'])('chấp nhận mã gõ thiếu hoặc sai dạng %j', async (typed) => {
+    const { svc, prisma } = setup({ accessList: [partner()], request: reqRow() });
+    await svc.lookup('s1', typed);
+    expect(prisma.wasteRequest.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { code: 'TR-ABCDE' } }));
+  });
+
   it('returns a masked REQUEST for an open drop-off at the caller point', async () => {
     const { svc, prisma } = setup({ accessList: [partner()], request: reqRow() });
     const res = await svc.lookup('s1', ' tr-abcde ');

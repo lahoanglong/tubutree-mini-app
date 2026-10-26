@@ -50,6 +50,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
   it('U6-B03: /rules là route công khai (trang thể lệ web cho khách chưa đăng nhập), /me và /items thì không', () => {
     const proto = WasteCustomerController.prototype as unknown as Record<string, object>;
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.rules!)).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.publicCatalogue!)).toBe(true);
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.me!)).toBeUndefined();
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, proto.items!)).toBeUndefined();
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, WasteCustomerController)).toBeUndefined();
@@ -91,7 +92,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteCustomerController)).toBe('waste');
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
-      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
+      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);

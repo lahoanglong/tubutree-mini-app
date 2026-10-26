@@ -54,7 +54,7 @@ export interface WasteParcelLimits { maxWeightKg: number; maxEdgeCm: number }
 
 // customer
 export interface WasteLineInput { itemId: string; declaredQty: number }
-export interface WasteItemDTO { id: string; code: string; name: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; dailyCapQty: number | null; monthlyCapQty: number | null; status: WasteItemStatus; prepInstructions: string | null; imageUrl: string | null; gramsPerUnit: number | null; hazardous: boolean; sortOrder: number }
+export interface WasteItemDTO { id: string; code: string; name: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; dailyCapQty: number | null; monthlyCapQty: number | null; status: WasteItemStatus; prepInstructions: string | null; imageUrl: string | null; gramsPerUnit: number | null; hazardous: boolean; sortOrder: number; /** Chỉ kho TP.HCM nhận (đại lý không nhận). Optional để bản app cũ vẫn biên dịch; API luôn gửi. */ warehouseOnly?: boolean }
 export interface WasteMeItemDTO extends WasteItemDTO { monthRemainingQty: number | null; dayRemainingQty: number | null }
 export interface WastePointDTO { id: string; kind: WastePointKind; name: string; addressLine: string; provinceCode: string; provinceName: string; communeCode: string; communeName: string; lat: number | null; lng: number | null; phone: string | null; openingHours: WasteOpeningHours; acceptedItemIds: string[]; perkText: string | null; quotaFull: boolean; distanceKm: number | null }
 export interface WastePointContactDTO { id: string; kind: WastePointKind; name: string; addressLine: string; communeName: string; provinceName: string; phone: string | null; openingHours: WasteOpeningHours }

@@ -14,6 +14,7 @@ import type {
   WasteRejectionReason,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
+import { normalizeWasteLookupCode } from '@tubutree/app-core/waste-code-input';
 import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject } from '@tubutree/app-core/api/waste';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { deskPointsQuery } from '@tubutree/app-core/queries/waste';
@@ -92,7 +93,7 @@ function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
   if (point.kind === 'WAREHOUSE') {
     return (
       <section aria-label="Hạn mức" className={CARD}>
-        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Còn ${formatCount(point.staffDailyCapRemaining)} điểm được xác nhận hôm nay`}</p>
+        <p className="text-base max-md:text-[length:var(--type-body-md-size)] max-md:leading-[var(--type-body-md-lh)] text-stone-900">{`Hôm nay còn xác nhận được ${formatCount(point.staffDailyCapRemaining)} điểm`}</p>
       </section>
     );
   }
@@ -216,7 +217,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onSuccess: (res, c) => {
       setLookup(res.type === 'REQUEST' ? res.request : null);
       setGift(res.type === 'GIFT' ? res.redemption : null);
-      setLookedUpCode(c.trim());
+      setLookedUpCode(c);
       setDone(null);
       setReceived(
         res.type === 'REQUEST' && !isReadOnly(res.request)
@@ -304,7 +305,10 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const missingReason = !!request && request.lines.some((l) => isShort(l, received) && !reasons[l.itemId]);
   const preview = request ? deskPreviewPoints(request.lines, received, request.lines.map((l) => l.itemId)) : 0;
   const search = () => {
-    if (code.trim() !== '' && !find.isPending) find.mutate(code);
+    const norm = normalizeWasteLookupCode(code);
+    if (norm === '' || find.isPending) return;
+    setCode(norm);
+    find.mutate(norm);
   };
 
   return (
@@ -313,10 +317,12 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
         <SegmentedTabs scroll value={pointId} onChange={setPointId} items={points.map((p) => ({ key: p.id, label: p.name }))} label="Điểm nhận" />
       )}
       <div className="grid gap-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)] md:items-start">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 max-md:order-2">
           {points.length === 1 && <p className="text-sm text-stone-600">{point.name}</p>}
           <QuotaCard point={point} />
-          <p className="text-sm text-stone-600">Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.</p>
+          {point.kind === 'PARTNER' && (
+            <p className="text-sm text-stone-600">Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-4">
@@ -325,6 +331,9 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
+                placeholder="VD: TR-6NY3J"
+                autoCapitalize="characters"
+                autoComplete="off"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') search();
                 }}

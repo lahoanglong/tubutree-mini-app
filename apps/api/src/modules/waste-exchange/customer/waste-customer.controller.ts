@@ -163,6 +163,13 @@ export class WasteCustomerController {
     return this.meSvc.rules();
   }
 
+  // Công khai như thể lệ: khách chưa đăng nhập xem được món nhận và mức điểm trước khi được xin số điện thoại.
+  @Public()
+  @Get('catalogue')
+  publicCatalogue() {
+    return this.catalogue.publicItems();
+  }
+
   @Get('items')
   async items(@CurrentUser('sub') userId: string) {
     await this.gate(userId, 'FULL');

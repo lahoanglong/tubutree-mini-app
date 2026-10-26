@@ -13,6 +13,16 @@ export function normalizeWasteCode(raw: string): string {
   return raw.toUpperCase().replace(/\s+/g, '');
 }
 
+// Giữ cùng quy tắc với normalizeWasteLookupCode ở packages/app-core (chung bộ ca waste-code-cases.json): quầy gõ thiếu "TR-" hay gạch vẫn tra được.
+export function canonicalWasteLookup(raw: string): string {
+  const text = raw.toUpperCase().replace(/[\s-]+/g, '');
+  if (/^[2-9A-HJKMNP-TV-Z]{5}$/.test(text)) return `TR-${text}`;
+  if (/^[2-9A-HJKMNP-TV-Z]{8}$/.test(text)) return `QG-${text}`;
+  if (text.startsWith('TR') && /^[2-9A-HJKMNP-TV-Z]{5}$/.test(text.slice(2))) return `TR-${text.slice(2)}`;
+  if (text.startsWith('QG') && /^[2-9A-HJKMNP-TV-Z]{8}$/.test(text.slice(2))) return `QG-${text.slice(2)}`;
+  return normalizeWasteCode(raw);
+}
+
 export function normalizeTracking(raw: string): string {
   return raw.toUpperCase().replace(/\s+/g, '');
 }
