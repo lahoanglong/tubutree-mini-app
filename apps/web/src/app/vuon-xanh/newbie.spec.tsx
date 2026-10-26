@@ -274,6 +274,18 @@ describe('Vườn Xanh người mới (web): số hiện trước khi bấm lấ
     expect(maybeBtn(c, 'Nhận nước hôm nay (+28💧)')).toBeDefined();
   });
 
+  it('bình đầy: nút chính "Nhận nước hôm nay" không ghi +N💧; gần đầy ghi số chỗ trống', async () => {
+    state.data['/game/profile'] = DRY({ lastCheckInAt: yesterdayIso(), lastDewAt: null, firstCheckinBonus: 0, totalSeeds: 500, tankCapacity: 500 });
+    let c = await mount();
+    expect(maybeBtn(c, 'Nhận nước hôm nay')).toBeDefined();
+    expect(c.textContent).not.toContain('Nhận nước hôm nay (+');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.data['/game/profile'] = DRY({ lastCheckInAt: yesterdayIso(), lastDewAt: null, firstCheckinBonus: 0, totalSeeds: 495, tankCapacity: 500 });
+    c = await mount();
+    expect(maybeBtn(c, 'Nhận nước hôm nay (+5💧)')).toBeDefined();
+  });
+
   it('lần đầu nói rõ quà người mới; API cũ chưa trả số thì không hiện "undefined"', async () => {
     let c = await mount();
     expect(c.textContent).toContain('Lần đầu nhận +65💧, các ngày sau +15💧');

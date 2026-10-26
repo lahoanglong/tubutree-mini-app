@@ -310,6 +310,19 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
     expect(screen.getByRole('button', { name: 'Nhận nước hôm nay (+28💧)' })).toBeInTheDocument();
   });
 
+  it('bình đầy: nút chính "Nhận nước hôm nay" không ghi +N💧', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), lastDewAt: null, streakDays: 1, totalSeeds: 500, tankCapacity: 500 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Nhận nước hôm nay \(\+/ })).toBeNull();
+  });
+
+  it('bình gần đầy: nút chính ghi số chỗ trống', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), lastDewAt: null, streakDays: 1, totalSeeds: 495, tankCapacity: 500 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhận nước hôm nay (+5💧)' })).toBeInTheDocument();
+  });
+
   it('lần đầu: dòng phụ nói lần đầu nhận gồm quà người mới', async () => {
     renderPage();
     expect(await screen.findByText('Lần đầu nhận +65💧, các ngày sau +15💧, kèm Điểm Xanh')).toBeInTheDocument();

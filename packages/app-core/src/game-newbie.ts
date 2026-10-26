@@ -19,6 +19,8 @@ export interface PrimaryWaterInput {
   dailyLoginSeeds?: number;
   dewSeeds?: number;
   firstCheckinBonus?: number;
+  /** Sức chứa bình: biết thì "+N💧" của nút nhận nước bị cắt theo chỗ trống (cùng luật với server), bình đầy thì bỏ "+N". */
+  tankCapacity?: number;
 }
 
 export type PrimaryWaterAction =
@@ -34,10 +36,12 @@ export function primaryWaterAction(p: PrimaryWaterInput): PrimaryWaterAction {
     const bonus = p.firstCheckinBonus ?? 0;
     const first = bonus > 0;
     const withDew = !first && !p.dewToday;
-    const gain =
+    const raw =
       p.dailyLoginSeeds == null || (withDew && p.dewSeeds == null)
         ? null
         : p.dailyLoginSeeds + (first ? bonus : 0) + (withDew ? (p.dewSeeds ?? 0) : 0);
+    const room = p.tankCapacity == null ? null : Math.max(0, p.tankCapacity - seeds);
+    const gain = raw == null || room == null ? raw : room === 0 ? null : Math.min(raw, room);
     return { kind: 'claim', first, withDew, gain };
   }
   if (seeds >= WATER_STEP) return { kind: 'water', drops: seeds };
