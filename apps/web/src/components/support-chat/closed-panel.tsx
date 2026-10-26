@@ -10,7 +10,7 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 import { platformBridge } from '@/lib/platform-bridge';
 
 /** Chat tắt: cùng nội dung với Mini App, khách thấy ngay số để gọi (lỗi đọc cấu hình đã rơi về số mặc định ở nơi gọi). */
-export function ChatClosedPanel({ support }: { support: SupportContact | undefined }) {
+export function ChatClosedPanel({ support, compact = false }: { support: SupportContact | undefined; compact?: boolean }) {
   const copy = supportCopy.closed;
   const [feedback, setFeedback] = useState<string | null>(null);
   const hotline = support?.hotline ?? null;
@@ -22,9 +22,9 @@ export function ChatClosedPanel({ support }: { support: SupportContact | undefin
   };
 
   return (
-    <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: '40px 24px' }}>
+    <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: compact ? '16px 24px' : '40px 24px' }}>
       <Heading variant="title-md">{copy.title}</Heading>
-      <Text variant="body-md" tone="secondary">{copy.lead}</Text>
+      <Text variant="body-md" tone="secondary">{copy.lead(!!hotline)}</Text>
       {hotline && (
         <>
           <button

@@ -96,7 +96,8 @@ const typeAndSend = (c: HTMLElement, text: string) => {
   typeText(c, text);
   click(buttonByName(c, 'Gửi'));
 };
-const msgIds = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid^="msg-"]')).map((e) => e.getAttribute('data-testid'));
+/** Mã các bong bóng thật; lời chào phía client (msg-greeting) không tính. */
+const msgIds = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid^="msg-"]')).map((e) => e.getAttribute('data-testid')).filter((id) => id !== 'msg-greeting');
 const bubble = (c: HTMLElement, key: string) => c.querySelector(`[data-testid="msg-${key}"]`) as HTMLElement | null;
 // Chờ trong act, mỗi vòng nhả một nhịp trước khi kiểm: promise của lệnh gửi vừa bấm xong phải chạy trong act chứ không rơi ra ngoài.
 const waitFor = async (check: () => void, tries = 40) => {
@@ -125,7 +126,7 @@ beforeEach(() => {
   mocks.phase = 'authenticated';
   mocks.search = '';
   mocks.cloudinary = false;
-  mocks.contact.mockResolvedValue({ support: { hotline: '0984 606 774', email: null, zaloOaName: null, hours: '8:00–21:00 mỗi ngày' } });
+  mocks.contact.mockResolvedValue({ support: { hotline: '0984 606 774', email: null, zaloOaName: null }, chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
   mocks.orders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
   mocks.copy.mockResolvedValue(true);
   mocks.getThread.mockResolvedValue(thread());
@@ -403,7 +404,7 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
   });
 
   it('enabled=false: có tên Zalo OA thì nêu tên OA (web chưa gắn OA), có email thì hiện email', async () => {
-    mocks.contact.mockResolvedValue({ support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree', hours: null } });
+    mocks.contact.mockResolvedValue({ support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree' } });
     mocks.getThread.mockResolvedValue(thread({ enabled: false }));
     const c = mount();
     await waitFor(() => expect(c.textContent).toContain('tubutree@gmail.com'));
@@ -434,12 +435,57 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     expect(mocks.send.mock.calls[0]![0]).toMatchObject({ body: 'Mình muốn hỏi về đơn TUBU99.', context: { orderCode: 'TUBU99' } });
   });
 
-  it('đã có tin: không còn lời chào và câu hỏi nhanh', async () => {
+  it('đã có tin: lời chào vẫn ở đầu cuộc trò chuyện, câu hỏi nhanh thì hết', async () => {
     mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'a', body: 'xin chào' })] }));
     const c = mount();
     await waitFor(() => expect(c.textContent).toContain('xin chào'));
-    expect(c.textContent).not.toContain('Bạn cần hỏi gì ạ');
+    expect(Array.from(c.querySelectorAll('[data-testid^="msg-"]')).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-greeting', 'msg-a']);
     expect(buttonByName(c, 'Đổi trả hàng')).toBeNull();
+  });
+
+  it('còn tin cũ hơn để tải: chưa tới đầu cuộc trò chuyện nên chưa hiện lời chào', async () => {
+    mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'a', body: 'xin chào' })] }));
+    const c = mount();
+    await waitFor(() => expect(c.textContent).toContain('xin chào'));
+    expect(bubble(c, 'greeting')).toBeNull();
+  });
+
+  it('câu hỏi nhanh chỉ hiện khi truy vấn đơn đang giao đã xong, để nút "Hỏi về đơn" không chèn muộn', async () => {
+    let finish: (v: unknown) => void = () => {};
+    mocks.orders.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const c = mount();
+    await waitFor(() => expect(textbox(c)).not.toBeNull());
+    expect(buttonByName(c, 'Đổi trả hàng')).toBeNull();
+    await act(async () => finish({ data: [{ code: 'TUBU99' }], meta: { page: 1, limit: 1, total: 1 } }));
+    await waitFor(() => expect(buttonByName(c, 'Hỏi về đơn TUBU99')).not.toBeNull());
+    expect(buttonByName(c, 'Đổi trả hàng')).not.toBeNull();
+  });
+
+  it('truy vấn đơn đang giao lỗi: vẫn hiện ba câu hỏi nhanh', async () => {
+    mocks.orders.mockRejectedValue(new Error('x'));
+    const c = mount();
+    await waitFor(() => expect(buttonByName(c, 'Đổi trả hàng')).not.toBeNull());
+  });
+
+  it('chat tắt mà còn lịch sử: vẫn đọc được tin, đánh dấu đã đọc đúng tin STAFF hiện ra, không có ô nhập, liên hệ thay chỗ ô nhập', async () => {
+    mocks.getThread.mockResolvedValue(
+      thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đơn đã giao nhé' }), msg({ id: 'c1', sender: 'CUSTOMER', body: 'Cảm ơn' })] }),
+    );
+    const c = mount();
+    await waitFor(() => expect(c.textContent).toContain('Đơn đã giao nhé'));
+    expect(c.textContent).toContain('Cảm ơn');
+    expect(textbox(c)).toBeNull();
+    expect(bubble(c, 'greeting')).toBeNull();
+    expect(c.textContent).toContain('Chat đang tạm đóng');
+    expect(Array.from(c.querySelectorAll('a')).some((a) => a.textContent?.includes('Gọi 0984 606 774'))).toBe(true);
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith({ ids: ['s1'] }));
+  });
+
+  it('chat tắt và chưa có tin nào: không gọi báo đã đọc', async () => {
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    const c = mount();
+    await waitFor(() => expect(c.textContent).toContain('Chat đang tạm đóng'));
+    expect(mocks.markRead).not.toHaveBeenCalled();
   });
 
   it('nút ảnh chỉ có khi bản build có Cloudinary', async () => {

@@ -84,6 +84,8 @@ function renderPage() {
     </QueryClientProvider>,
   );
 }
+/** Mã các bong bóng thật; lời chào phía client (msg-greeting) không tính. */
+const msgIds = () => screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid')).filter((id) => id !== 'msg-greeting');
 const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
 const typeAndSend = (text: string) => {
   fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
@@ -137,7 +139,7 @@ describe('Màn chat với Tubu Tree', () => {
     expect(within(mine).queryByText('Tubu Tree')).toBeNull();
     expect(within(system).queryByText('Tubu Tree')).toBeNull();
     expect(system).toHaveAttribute('data-sender', 'SYSTEM');
-    const order = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+    const order = msgIds();
     expect(order).toEqual(['msg-m1', 'msg-m2', 'msg-m3']);
   });
 
@@ -270,12 +272,59 @@ describe('Màn chat với Tubu Tree', () => {
     );
   });
 
-  it('đã có tin: không còn lời chào và câu hỏi nhanh', async () => {
+  it('đã có tin: lời chào vẫn ở đầu cuộc trò chuyện, câu hỏi nhanh thì hết', async () => {
     mocks.getThread.mockResolvedValue(thread({ messages: [msg({ id: 'a', body: 'xin chào' })] }));
     renderPage();
     expect(await screen.findByText('xin chào')).toBeInTheDocument();
-    expect(screen.queryByText(/Bạn cần hỏi gì ạ/)).toBeNull();
+    const ids = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+    expect(ids).toEqual(['msg-greeting', 'msg-a']);
     expect(screen.queryByRole('button', { name: 'Đổi trả hàng' })).toBeNull();
+  });
+
+  it('còn tin cũ hơn để tải: chưa tới đầu cuộc trò chuyện nên chưa hiện lời chào', async () => {
+    mocks.getThread.mockResolvedValue(thread({ hasMore: true, messages: [msg({ id: 'a', body: 'xin chào' })] }));
+    renderPage();
+    expect(await screen.findByText('xin chào')).toBeInTheDocument();
+    expect(screen.queryByTestId('msg-greeting')).toBeNull();
+  });
+
+  it('câu hỏi nhanh chỉ hiện khi truy vấn đơn đang giao đã xong, để nút "Hỏi về đơn" không chèn muộn', async () => {
+    let finish: (v: unknown) => void = () => {};
+    mocks.fetchOrders.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    renderPage();
+    await screen.findByRole('textbox');
+    expect(screen.queryByRole('button', { name: 'Đổi trả hàng' })).toBeNull();
+    await act(async () => finish({ data: [{ code: 'TUBU99' }], meta: { page: 1, limit: 1, total: 1 } }));
+    const buttons = (await screen.findAllByRole('button', { name: /Hỏi về đơn|Đổi trả hàng|Đơn của tôi/ })).map((b) => b.textContent);
+    expect(buttons[0]).toBe('Hỏi về đơn TUBU99');
+  });
+
+  it('truy vấn đơn đang giao lỗi: vẫn hiện ba câu hỏi nhanh', async () => {
+    mocks.fetchOrders.mockRejectedValue(new Error('x'));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đổi trả hàng' })).toBeInTheDocument();
+  });
+
+  it('chat tắt mà còn lịch sử: vẫn đọc được tin, đánh dấu đã đọc đúng tin STAFF hiện ra, không có ô nhập, liên hệ thay chỗ ô nhập', async () => {
+    mocks.getThread.mockResolvedValue(
+      thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đơn đã giao nhé' }), msg({ id: 'c1', sender: 'CUSTOMER', body: 'Cảm ơn' })] }),
+    );
+    mocks.markRead.mockResolvedValue({});
+    renderPage();
+    expect(await screen.findByText('Đơn đã giao nhé')).toBeInTheDocument();
+    expect(screen.getByText('Cảm ơn')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByTestId('msg-greeting')).toBeNull();
+    expect(screen.getByText('Chat đang tạm đóng')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gọi 0984 606 774' })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['s1']));
+  });
+
+  it('chat tắt và chưa có tin nào: không gọi báo đã đọc', async () => {
+    mocks.getThread.mockResolvedValue(thread({ enabled: false }));
+    renderPage();
+    expect(await screen.findByText('Chat đang tạm đóng')).toBeInTheDocument();
+    expect(mocks.markRead).not.toHaveBeenCalled();
   });
 
   it('nút ảnh chỉ có khi bản build có Cloudinary', async () => {
@@ -559,7 +608,7 @@ describe('Màn chat với Tubu Tree', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Xem tin cũ hơn' }));
       await screen.findByTestId('msg-m3');
       expect(mocks.getPage).toHaveBeenCalledWith({ before: 'm5' });
-      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m3', 'msg-m5']);
+      expect(msgIds()).toEqual(['msg-m3', 'msg-m5']);
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
     });
 
@@ -578,7 +627,7 @@ describe('Màn chat với Tubu Tree', () => {
         await qc.invalidateQueries({ queryKey: ['support-chat'] });
       });
       await screen.findByTestId('msg-m61');
-      const ids = screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'));
+      const ids = msgIds();
       expect(ids).toEqual(range(1, 61).map((x) => `msg-${x.id}`));
       expect(within(screen.getByTestId('msg-m12')).getByText('tin 12 đã sửa')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Xem tin cũ hơn' })).toBeNull();
@@ -596,7 +645,7 @@ describe('Màn chat với Tubu Tree', () => {
         await qc.invalidateQueries({ queryKey: ['support-chat'] });
       });
       await waitFor(() => expect(screen.queryByTestId('msg-m4')).toBeNull());
-      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m1', 'msg-m2', 'msg-m3', 'msg-m5', 'msg-m6']);
+      expect(msgIds()).toEqual(['msg-m1', 'msg-m2', 'msg-m3', 'msg-m5', 'msg-m6']);
     });
 
     it('hasMore=false: tin thu hồi nằm trước tin đầu cửa sổ cũng biến mất', async () => {
@@ -609,7 +658,7 @@ describe('Màn chat với Tubu Tree', () => {
         await qc.invalidateQueries({ queryKey: ['support-chat'] });
       });
       await waitFor(() => expect(screen.queryByTestId('msg-m1')).toBeNull());
-      expect(screen.getAllByTestId(/^msg-/).map((e) => e.getAttribute('data-testid'))).toEqual(['msg-m2', 'msg-m3']);
+      expect(msgIds()).toEqual(['msg-m2', 'msg-m3']);
     });
 
     it('cửa sổ rỗng và hết tin: xoá hết tin đã thấy', async () => {

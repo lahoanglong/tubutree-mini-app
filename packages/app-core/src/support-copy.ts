@@ -2,10 +2,21 @@
  * Chữ của màn Chat hỗ trợ khi chat tắt, lời chào + câu hỏi nhanh khi chat bật mà chưa có tin, và màn "Trợ lý AI đang tạm nghỉ".
  * Một nguồn cho Mini App và web khổ điện thoại.
  */
+/** "08:00"/"21:00" (khung giờ chat.hours của /config/public) thành "8:00–21:00 mỗi ngày"; không đọc được thì null để ẩn dòng giờ trực. */
+export function formatChatHours(hours: { start?: unknown; end?: unknown } | null | undefined): string | null {
+  const clock = (v: unknown): string | null => {
+    const m = typeof v === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(v.trim()) : null;
+    return m ? `${Number(m[1])}:${m[2]}` : null;
+  };
+  const start = clock(hours?.start);
+  const end = clock(hours?.end);
+  return start && end ? `${start}–${end} mỗi ngày` : null;
+}
+
 export const supportCopy = {
   closed: {
     title: 'Chat đang tạm đóng',
-    lead: 'Cần hỗ trợ, bạn gọi hotline nhé.',
+    lead: (hasHotline: boolean) => (hasHotline ? 'Cần hỗ trợ, bạn gọi hotline nhé.' : 'Cần hỗ trợ, bạn liên hệ Tubu Tree nhé.'),
     /** Mô tả nhỏ dưới số: chạm vào số là sao chép. */
     tapToCopy: 'Chạm vào số để sao chép',
     call: (display: string) => `Gọi ${display}`,
@@ -25,7 +36,7 @@ export const supportCopy = {
   orderQuick: (code: string) => ({ label: `Hỏi về đơn ${code}`, body: `Mình muốn hỏi về đơn ${code}.` }),
   advisorPaused: {
     title: 'Trợ lý AI đang tạm nghỉ',
-    body: 'Bạn quay lại sau nhé. Cần hỏi gấp thì bạn liên hệ Tubu Tree nhé.',
+    body: 'Bạn quay lại sau nhé. Cần hỏi gấp, bạn liên hệ Tubu Tree theo cách bên dưới.',
     chat: 'Chat với Tubu',
     call: (display: string) => `Gọi ${display}`,
     home: 'Về Trang chủ',

@@ -206,10 +206,16 @@ function ChatBody() {
   }
   if (!thread) return <ErrorState message={errorText(threadQ.error)} onRetry={() => void threadQ.refetch()} />;
 
-  if (!thread.enabled && !thread.blocked) return <ChatClosedPanel support={support} />;
+  // Chat tắt: còn lịch sử thì vẫn cho đọc (chỉ đọc, phần liên hệ thay ô nhập); chưa có tin nào thì cả màn là phần liên hệ.
+  const closed = !thread.enabled && !thread.blocked;
+  if (closed && server.length === 0) return <ChatClosedPanel support={support} />;
   const closedText = thread.blocked ? BLOCKED_TEXT : null;
   const shippingCode = shippingQ.data?.data[0]?.code ?? null;
   const empty = items.length === 0;
+  // Hàng câu hỏi nhanh chờ truy vấn đơn đang giao xong để nút "Hỏi về đơn" không chèn muộn làm các nút khác xô xuống.
+  const quickReady = shippingQ.isSuccess || shippingQ.isError;
+  // Lời chào là bong bóng phía client (không lưu): luôn nằm đầu cuộc trò chuyện, tức khi không còn tin cũ hơn để tải.
+  const showGreeting = !closed && !closedText && !(olderHasMore ?? thread.hasMore);
   const greeting: ChatItem = { key: 'greeting', sender: 'STAFF', body: supportCopy.greeting(support?.hours ?? null), imageUrl: null, createdAt: null, status: 'sent' };
   const pickQuick = (q: QuickReply) => enqueue(q.body, null, shippingCode && q.body.includes(shippingCode) ? { orderCode: shippingCode } : undefined);
   const productName = productSlug && !productQ.isLoading ? (productQ.data?.name ?? productSlug) : null;
@@ -217,7 +223,7 @@ function ChatBody() {
 
   return (
     <div className="flex flex-col max-md:min-h-[calc(100dvh-72px)]">
-      {thread.slow && (
+      {thread.slow && !closed && (
         <div style={{ padding: '8px 16px', background: 'var(--color-bg-subtle)' }}>
           <Text variant="caption" tone="secondary">
             {`Nhân viên có thể trả lời chậm.${hotline ? ` Cần gấp, gọi hotline ${formatPhoneDisplay(hotline)}` : ''}`}
@@ -230,7 +236,7 @@ function ChatBody() {
             <Button variant="ghost" loading={loadingOlder} onPress={() => void loadOlder()}>Xem tin cũ hơn</Button>
           </div>
         )}
-        <MessageList items={server.length === 0 && !closedText ? [greeting, ...items] : items} />
+        <MessageList items={showGreeting ? [greeting, ...items] : items} />
       </div>
       <div
         className="max-md:sticky max-md:bottom-0"
@@ -241,14 +247,16 @@ function ChatBody() {
             <Text variant="caption" tone="danger">{notice}</Text>
           </div>
         )}
-        {closedText ? (
+        {closed ? (
+          <ChatClosedPanel support={support} compact />
+        ) : closedText ? (
           <div style={{ padding: 16, textAlign: 'center' }}>
             <Text variant="body-sm" tone="secondary">{closedText}</Text>
           </div>
         ) : (
           <>
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
-            {empty && <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />}
+            {empty && quickReady && <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />}
             <Composer
               onSend={(body) => enqueue(body, null)}
               onSendImage={(url) => enqueue('', url)}
