@@ -34,6 +34,11 @@ describe('cardPricing (giá thẻ sản phẩm: Giờ vàng thắng khi rẻ hơ
   it('đợt của sản phẩm khác không ảnh hưởng', () => {
     expect(cardPricing(product, [flash({ productSlug: 'khac' })])).toMatchObject({ price: 120000, isFlash: false });
   });
+
+  it('Giờ vàng thắng trên sản phẩm đang giảm giá: gạch giá đang bán và % tính trên giá đó, cùng quy tắc Mini App', () => {
+    const r = cardPricing({ ...product, salePrice: 100000 }, [flash()]);
+    expect(r).toMatchObject({ price: 79000, isFlash: true, compareAt: 100000, originalPrice: 100000, salePct: 21, hasSale: true });
+  });
 });
 
 describe('variationPricing (giá từng phân loại ở trang chi tiết)', () => {
@@ -49,5 +54,16 @@ describe('variationPricing (giá từng phân loại ở trang chi tiết)', () 
 
   it('Giờ vàng không bao giờ cao hơn giá đang niêm yết', () => {
     expect(variationPricing({ ...variation, salePrice: 60000 }, [flash()])).toMatchObject({ price: 60000, isFlash: false });
+  });
+
+  it('Giờ vàng thắng trên phân loại đang khuyến mãi: gạch giá đang bán như thẻ và Mini App', () => {
+    expect(variationPricing({ ...variation, salePrice: 100000 }, [flash()])).toMatchObject({
+      price: 79000, isFlash: true, originalPrice: 100000, hasSale: true, salePct: 21,
+    });
+  });
+
+  it('giá biên: giá bán 0 hoặc NaN không gạch, không phần trăm', () => {
+    expect(variationPricing({ ...variation, salePrice: 0 }, [])).toMatchObject({ hasSale: false, salePct: 0 });
+    expect(variationPricing({ ...variation, retailPrice: NaN, salePrice: null }, [])).toMatchObject({ hasSale: false, salePct: 0 });
   });
 });

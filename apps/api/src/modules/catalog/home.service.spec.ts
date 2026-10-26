@@ -23,10 +23,12 @@ function setup() {
   // Mặc định cấu hình là bảng rỗng: mọi khoá rơi về mặc định trong mã của buildPublicConfig.
   const config = { get: jest.fn(async (_key: string, fallback?: unknown) => fallback) };
   const loyalty = { getNewCustomerOffer: jest.fn().mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null }) };
+  const prisma = { wasteRequest: { count: jest.fn().mockResolvedValue(2) } };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
+    prisma as never,
   );
-  return { svc, catalog, flashSale, orders, purchased, subs, notifications, config, loyalty };
+  return { svc, catalog, flashSale, orders, purchased, subs, notifications, config, loyalty, prisma };
 }
 
 describe('HomeService.getPublic', () => {
@@ -142,6 +144,24 @@ describe('HomeService — số liệu cho khối Quà khách mới', () => {
     const failed = await svc.getForUser('u1');
     expect(failed.newCustomerOffer).toBeNull();
     expect(failed.forYou).toEqual([{ id: 'fy' }]);
+  });
+});
+
+describe('HomeService.getForUser — yêu cầu đổi rác đang mở', () => {
+  it('đếm đúng yêu cầu OPEN/IN_TRANSIT/RECEIVED của chính user, một câu count', async () => {
+    const { svc, prisma } = setup();
+    const r = await svc.getForUser('u1');
+    expect(r.wasteOpenRequestCount).toBe(2);
+    expect(prisma.wasteRequest.count).toHaveBeenCalledTimes(1);
+    expect(prisma.wasteRequest.count).toHaveBeenCalledWith({ where: { userId: 'u1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } } });
+  });
+
+  it('đếm lỗi thì chỉ khối đó null, các khối khác vẫn trả', async () => {
+    const { svc, prisma } = setup();
+    prisma.wasteRequest.count.mockRejectedValue(new Error('boom'));
+    const r = await svc.getForUser('u1');
+    expect(r.wasteOpenRequestCount).toBeNull();
+    expect(r.forYou).toEqual([{ id: 'fy' }]);
   });
 });
 

@@ -24,6 +24,17 @@ function setup(user: unknown, o: { snap?: Partial<typeof SNAP>; completed?: unkn
 afterEach(() => jest.useRealTimers());
 const base = { id: 'u1', phone: '0901234567', zaloId: 'z1', role: 'STAFF', isBlocked: false, mergedIntoId: null, pointsBalance: 100_000, pointsConvertedBalance: 20_000, wasteFlags: { blockedAt: null, shipLockedAt: new Date('2026-10-10T00:00:00Z') } };
 
+describe('WasteMeService.openCount', () => {
+  it('một câu count theo userId và trạng thái đang mở (OPEN, IN_TRANSIT, RECEIVED), không tải danh sách', async () => {
+    const { svc, prisma } = setup(base);
+    const count = jest.fn().mockResolvedValue(2);
+    (prisma as unknown as { wasteRequest: Record<string, unknown> }).wasteRequest.count = count;
+    await expect(svc.openCount('u1')).resolves.toEqual({ count: 2 });
+    expect(count).toHaveBeenCalledWith({ where: { userId: 'u1', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } } });
+    expect(prisma.wasteRequest.findMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('WasteMeService.me (spec 15.1 read exception, 15.2 row)', () => {
   it('eligible: balance with redeemablePoints, month usage, remaining caps, open requests, desk points, ship lock', async () => {
     const { svc, hold } = setup(base);

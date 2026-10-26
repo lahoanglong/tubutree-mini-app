@@ -33,6 +33,8 @@ export interface HomeMeDTO {
   subscriptions: Block<SubscriptionDTO[]>;
   notifications: Block<NotificationDTO[]>;
   newCustomerOffer: Block<NewCustomerOffer>;
+  /** Số yêu cầu đổi rác đang mở của khách (một câu đếm phía API). API cũ không có trường này: coi là 0. */
+  wasteOpenRequestCount?: Block<number>;
   purchasedLimit?: number;
 }
 
@@ -43,3 +45,6 @@ export const fetchHomePublic = (http: HttpClient) => http.get<HomePublicDTO>('/h
 
 export const fetchHomeMe = (http: HttpClient, purchasedLimit: number = HOME_PURCHASED_LIMIT) =>
   http.get<HomeMeDTO>('/home/me', { query: { purchasedLimit } });
+
+/** Số yêu cầu đổi rác đang mở của khách: một câu đếm nhẹ thay cho `/waste/me`. API cũ chưa có endpoint (404) do người gọi coi là 0. */
+export const fetchWasteOpenCount = (http: HttpClient) => http.get<{ count?: number }>('/waste/me/open-count');

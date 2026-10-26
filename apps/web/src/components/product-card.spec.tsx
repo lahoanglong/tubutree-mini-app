@@ -168,8 +168,10 @@ describe('ProductCard — kiểu Mini App ở điện thoại', () => {
     expect(meta.textContent).toBe('★ Mới');
   });
 
-  it('ảnh thiếu: nền be, không biểu tượng lá ở điện thoại', () => {
+  it('ảnh thiếu: nền pha màu nhãn, lá nhỏ và tên nhãn, ẩn khỏi trình đọc màn hình', () => {
     const ph = html(PRODUCT).querySelector('[data-testid="card-placeholder"]')!;
-    expect(ph.querySelector('svg')!.getAttribute('class')).toContain('max-md:hidden');
+    expect(ph.getAttribute('aria-hidden')).toBe('true');
+    expect(ph.querySelector('svg')).not.toBeNull();
+    expect(ph.textContent).toBe('Fuwa3e');
   });
 });

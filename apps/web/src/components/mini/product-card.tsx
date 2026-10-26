@@ -22,7 +22,7 @@ export default function ProductCard({ product, wishlist }: { product: ProductCar
     <ProductTile
       product={product}
       variant="grid"
-      priceOverride={{ price: pricing.price }}
+      priceOverride={{ price: pricing.price, compareAt: pricing.compareAt }}
       wishlist={wishlist}
       badge={
         // Hết hàng: lớp phủ của ProductTile trong suốt 72% — không để badge % lộ ra bên dưới.

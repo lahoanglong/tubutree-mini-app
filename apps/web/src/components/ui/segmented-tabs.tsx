@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useShellPathname } from '@/lib/shell-pathname';
 
 export interface SegmentedTabItem {
   key: string;
@@ -72,7 +73,7 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
  */
 export function useTabParam(keys: readonly string[], fallback: string): [string, (key: string) => void] {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useShellPathname();
   const params = useSearchParams();
   const raw = params?.get('tab') ?? '';
   const value = keys.includes(raw) ? raw : fallback;

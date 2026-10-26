@@ -78,32 +78,34 @@ afterEach(() => {
 });
 
 describe('hub /tai-khoan như Mini App (điện thoại)', () => {
-  it('h1 chỉ cho trình đọc màn hình; không có dòng "← Trang chủ"; không dải tiêu đề', async () => {
+  it('h1 chỉ cho trình đọc màn hình; không có dòng "← Trang chủ" ở điện thoại; không dải tiêu đề', async () => {
     const c = await mount();
-    expect(c.querySelector('h1')!.className).toContain('max-md:sr-only');
+    expect(c.querySelector('h1')!.className).toContain('sr-only');
     expect(c.querySelector('main')!.hasAttribute('data-page-bleed')).toBe(false);
     const back = Array.from(c.querySelectorAll('a')).find((a) => a.textContent?.includes('Trang chủ'))!;
     expect(back.closest('.max-md\\:hidden')).not.toBeNull();
   });
 
-  it('dải xanh chuyển màu tràn ngang ôm hồ sơ và mã giới thiệu; ba ô số liệu là thẻ trắng nổi đè mép dưới', async () => {
+  it('dải xanh chuyển màu tràn ngang ôm hồ sơ; ba ô số liệu là thẻ trắng nổi đè mép dưới', async () => {
     const c = await mount();
-    const hero = c.querySelector('section[aria-label="Thông tin tài khoản"]')!;
-    expect(hero.className).toContain('max-md:bg-transparent');
-    const band = hero.firstElementChild as HTMLElement;
-    expect(band.className).toContain('max-md:bg-[linear-gradient(');
-    const tiles = Array.from(hero.querySelectorAll('a')).filter((a) => /Điểm Xanh|Ví Tubu|Mã giảm giá/.test(a.textContent ?? ''));
+    const head = c.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/ho-so"]')!;
+    const band = head.parentElement as HTMLElement;
+    expect(band.className).toContain('bg-[linear-gradient(');
+    const tiles = Array.from(c.querySelectorAll('a')).filter((a) => /^(Điểm Xanh|Ví Tubu|Mã giảm giá):/.test(a.getAttribute('aria-label') ?? ''));
     expect(tiles).toHaveLength(3);
     for (const t of tiles) {
-      expect(t.className).toContain('max-md:bg-[var(--color-bg-surface)]');
-      expect(t.className).toContain('max-md:text-center');
-      const value = t.firstElementChild as HTMLElement;
-      expect(value.className).toContain('max-md:text-[length:var(--type-price-md-size)]');
-      expect(value.className).toContain('max-md:tabular-nums');
-      expect(value.className).not.toContain('max-md:font-display');
+      expect(t.className).toContain('bg-[var(--color-bg-surface)]');
+      expect(t.className).toContain('text-center');
     }
-    expect(tiles[0]!.parentElement!.className).toContain('max-md:-mt-5');
-    expect(tiles[2]!.className).toContain('col-span-2');
+    expect(tiles[0]!.parentElement!.className).toContain('-mt-5');
+    expect(tiles[0]!.parentElement!.className).toContain('grid-cols-3');
+  });
+
+  it('hàng trạng thái đơn có năm ô ở điện thoại và khối "Đơn hàng của tôi" có ô tìm chỉ từ md', async () => {
+    const c = await mount();
+    const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
+    expect(row.querySelectorAll('a.tubu-press').length).toBe(6);
+    expect(row.querySelector('.grid-cols-5')!.children).toHaveLength(5);
   });
 
   it('khối "Đơn hàng của tôi" ẩn ở điện thoại (Mini App không có)', async () => {

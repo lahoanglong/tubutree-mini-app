@@ -361,6 +361,7 @@ export const vi = {
     gardenHint: 'Trồng cây mỗi ngày, nhận quà thật',
     activeOrders: (n: number) => `${n} đơn đang xử lý`,
     tabWithActiveOrders: (label: string, n: number) => `${label}, ${n} đơn đang xử lý`,
+    tabWithOffersDot: (label: string) => `${label}, có việc cần làm`,
   },
 
   reorder: {
@@ -535,7 +536,6 @@ export const vi = {
   externalPoints: {
     title: 'Tích điểm đơn sàn',
     menuLabel: 'Tích điểm đơn sàn',
-    menuHint: 'Quét mã trên phiếu giao hàng',
     closedTitle: 'Chưa mở',
     closedBody: 'Tính năng tích điểm đơn sàn chưa mở. Bạn quay lại sau nhé.',
     soonTitle: 'Tích điểm đơn sàn sắp mở',

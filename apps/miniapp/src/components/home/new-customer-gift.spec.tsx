@@ -7,14 +7,22 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   getPublicConfig: vi.fn(),
   getNewCustomerOffer: vi.fn(),
+  fetchOrders: vi.fn(),
   status: 'authenticated' as string,
   userId: 'u1',
+  guest: false,
+  ensurePhone: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
-vi.mock('../../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
+vi.mock('../../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig, fetchOrders: mocks.fetchOrders }));
 vi.mock('../../services/account-api', () => ({ getNewCustomerOffer: mocks.getNewCustomerOffer }));
 vi.mock('../../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string; user: { id: string } }) => unknown) => sel({ status: mocks.status, user: { id: mocks.userId } }),
+  useAuthStore: (sel: (s: unknown) => unknown) =>
+    sel({
+      status: mocks.status,
+      user: { id: mocks.userId, phone: mocks.guest ? null : '0901234567', zaloId: mocks.guest ? 'guest_1' : 'z1' },
+      ensurePhone: mocks.ensurePhone,
+    }),
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -49,6 +57,8 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.status = 'authenticated';
+    mocks.guest = false;
+    mocks.fetchOrders.mockResolvedValue({ data: [], meta: { page: 1, limit: 1, total: 0 } });
     mocks.getPublicConfig.mockResolvedValue(CONFIG);
     mocks.getNewCustomerOffer.mockResolvedValue(OFFER);
   });
@@ -157,6 +167,35 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
     expect(region).not.toHaveTextContent('Mã giảm giá chào mừng');
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản khách Mini App (chưa liên kết Zalo): hứa mã theo cấu hình, không gọi API khách, nút liên kết Zalo gọi ensurePhone', async () => {
+    mocks.guest = true;
+    mocks.ensurePhone.mockResolvedValue('0901234567');
+    renderGift();
+    const region = await section();
+    expect(region).toHaveTextContent('Mã giảm giá chào mừng 25.000đ');
+    expect(region).toHaveTextContent('Liên kết Zalo để nhận mã và giữ điểm');
+    expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Nhận quà bằng Zalo' }));
+    expect(mocks.ensurePhone).toHaveBeenCalled();
+  });
+
+  it('tài khoản khách đã có đơn: không hứa quà chào mừng (khối ẩn hẳn)', async () => {
+    mocks.guest = true;
+    mocks.fetchOrders.mockResolvedValue({ data: [{ code: 'TUBU1' }], meta: { page: 1, limit: 1, total: 1 } });
+    const { container } = renderGift();
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+  });
+
+  it('tài khoản khách: chưa biết có đơn hay không thì chưa hứa gì', async () => {
+    mocks.guest = true;
+    mocks.fetchOrders.mockReturnValue(new Promise(() => {}));
+    const { container } = renderGift();
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalled());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('nút "Chọn sản phẩm" mở trang mua sắm', async () => {

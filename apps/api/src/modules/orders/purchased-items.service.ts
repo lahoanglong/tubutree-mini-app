@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isPartnerOwnedProduct } from '../cart/partner-goods';
+import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import { VARIATION_ID_RE } from './variation-id';
 
 export interface PurchasedItem {
@@ -17,6 +19,8 @@ export interface PurchasedItem {
   inStock: boolean;
   timesBought: number;
   lastPurchasedAt: string;
+  /** Hàng chỉ bán lẻ (gian hàng đối tác hoặc do đối tác tự giao): không đặt định kỳ được. Cùng luật isRetailOnly ở trang chi tiết sản phẩm. */
+  retailOnly: boolean;
 }
 export interface PurchasedItemsPage {
   items: PurchasedItem[];
@@ -102,7 +106,8 @@ export class PurchasedItemsService {
         retailPrice: true,
         salePrice: true,
         stock: true,
-        product: { select: { id: true, slug: true, name: true, brand: true, thumbnail: true, images: true } },
+        pancakeId: true,
+        product: { select: { id: true, slug: true, name: true, brand: true, thumbnail: true, images: true, fulfilment: true, storefrontId: true } },
       },
     });
     const byId = new Map(variations.map((v) => [v.id, v]));
@@ -124,6 +129,7 @@ export class PurchasedItemsService {
         inStock: v.stock > 0,
         timesBought: Number(r.timesBought),
         lastPurchasedAt: new Date(r.lastPurchasedAt).toISOString(),
+        retailOnly: !isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product.fulfilment }) || isPartnerOwnedProduct(v.product),
       });
     }
     const last = page[page.length - 1]!;

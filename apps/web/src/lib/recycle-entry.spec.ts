@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { notificationAction } from '@/components/account/notification-view';
-import { buildAccountMenu } from '@/components/account/account-menu';
 import { isWebRouteReady } from './route-map';
 
 // Kiểm với route map THẬT (không giả resolver): mọi lối vào đổi rác phải tới được khi lane recycle đã bỏ pending.
@@ -28,18 +29,10 @@ describe('lối vào đổi rác trên route map thật', () => {
     expect(to('REFILL_RETURN_CREDITED', {})).toBe('/doi-rac');
   });
 
-  it('menu hub tài khoản có mục Đổi rác lấy quà', () => {
-    const groups = buildAccountMenu({
-      role: 'CUSTOMER',
-      aiEnabled: false,
-      claimEnabled: false,
-      chatEnabled: false,
-      cashbackEnabled: false,
-      dealer: undefined,
-      ownedBrandName: undefined,
-      isReady: isWebRouteReady,
-    });
-    const items = groups.flatMap((g) => g.items);
-    expect(items.find((i) => i.to === '/doi-rac')?.label).toBe('Đổi rác lấy quà');
+  it('trang Ưu đãi có lối vào Đổi rác lấy quà và route /uu-dai đã sẵn sàng', () => {
+    expect(isWebRouteReady('/uu-dai')).toBe(true);
+    const page = readFileSync(fileURLToPath(new URL('../app/uu-dai/page.tsx', import.meta.url)), 'utf8');
+    expect(page).toContain("to: '/doi-rac'");
+    expect(page).toContain('Đổi rác lấy quà');
   });
 });

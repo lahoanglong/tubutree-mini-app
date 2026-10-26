@@ -8,11 +8,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http-server', () => ({ createServerHttp: () => ({ get: mocks.get }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn().mockResolvedValue([]) } }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'loading', useAuthRestoring: () => false }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
+import { homeCopy } from '@tubutree/app-core/home-copy';
+import { SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import HomePage, { metadata } from './page';
 
 const card = (id: string, name: string) => ({
@@ -41,6 +43,7 @@ beforeEach(() => {
     }
     if (path === '/categories') return CATEGORIES;
     if (path === '/brands') return [{ brand: 'Tubu', count: 3 }];
+    if (path === '/config/public') return { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30 };
     throw new Error(`đường dẫn lạ ${path}`);
   });
 });
@@ -56,20 +59,20 @@ describe('HomePage — server render phần công khai', () => {
     expect(metadata.alternates?.canonical).toBe('/');
   });
 
-  it('hỏi API đúng như Mini App: bán chạy 6 theo best_seller, nổi bật 12, mới về 6 theo newest', async () => {
+  it('hỏi API đúng như Mini App: bán chạy 6 theo best_seller và trang 1 của lưới gợi ý; không còn nổi bật/mới về riêng', async () => {
     await render();
     const queries = mocks.get.mock.calls.filter(([p]) => p === '/products').map(([, o]) => o?.query);
-    expect(queries).toEqual(expect.arrayContaining([{ limit: 6, sort: 'best_seller' }, { limit: 12 }, { limit: 6, sort: 'newest' }]));
+    expect(queries).toHaveLength(2);
+    expect(queries).toEqual(expect.arrayContaining([{ limit: 6, sort: 'best_seller' }, { limit: SUGGEST_PAGE_SIZE, page: 1 }]));
   });
 
-  it('HTML đầu đã có sản phẩm của ba lưới, lưới danh mục (ẩn danh mục rỗng) và dải thương hiệu', async () => {
+  it('HTML đầu đã có sản phẩm của kệ Bán chạy và lưới gợi ý, hàng danh mục (ẩn danh mục rỗng) và dải thương hiệu', async () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).toContain('Dầu gội bồ kết');
-    expect(out).toContain('Hàng mới nhất');
     expect(out).toContain('Dầu gội');
     expect(out).not.toContain('Danh mục trống');
-    expect(out).toContain('Thương hiệu Việt');
+    expect(out).toContain(homeCopy.journey.title);
   });
 
   it('khối khách vãng lai: có ô tìm sang /san-pham?focus=search, chuông không huy hiệu như Mini App, không có Dành cho bạn', async () => {
@@ -78,6 +81,21 @@ describe('HomePage — server render phần công khai', () => {
     expect(out).toContain('aria-label="Thông báo"');
     expect(out).not.toContain('chưa đọc');
     expect(out).not.toContain('Dành cho bạn');
+  });
+
+  it('khách vãng lai (chưa có cờ phiên): HTML đầu đã có khối Quà khách mới với số lấy từ cấu hình công khai, để Danh mục không nhảy sau hydrate', async () => {
+    const out = await render();
+    expect(out).toContain('Quà khách mới');
+    expect(out).toContain('Đặt định kỳ giảm 17% mỗi đơn');
+    expect(out).toContain('350.000');
+    expect(out.indexOf('Quà khách mới')).toBeLessThan(out.indexOf('Danh mục'));
+  });
+
+  it('cấu hình công khai lỗi: bỏ khối Quà khách mới (không bịa số), phần còn lại vẫn dựng', async () => {
+    failing = ['/config/public'];
+    const out = await render();
+    expect(out).not.toContain('Quà khách mới');
+    expect(out).toContain('Bán chạy nhất');
   });
 
   it('giữ cấu trúc heading: đúng một h1 (font Fraunces), h2 cho từng khối', async () => {
@@ -93,7 +111,8 @@ describe('HomePage — server render phần công khai', () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).not.toContain('brand=Tubu');
-    expect(out).toContain('data-testid="brand-chip-skeleton"');
+    expect(out).toContain(homeCopy.journey.title);
+    expect(out).not.toContain('Dải thương hiệu');
   });
 
   it('cả ba lưới sản phẩm lỗi lúc Next dựng lại trang: ném để Next giữ bản đã render, không lưu trang rỗng', async () => {

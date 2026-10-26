@@ -24,6 +24,12 @@ export class WasteMeService {
     private readonly loyalty: LoyaltyService,
   ) {}
 
+  /** Số yêu cầu đổi rác đang mở: một câu đếm cho Trang chủ/Ưu đãi quyết định có hiện lối vào "Yêu cầu của tôi" khi chương trình tạm dừng. */
+  async openCount(userId: string): Promise<{ count: number }> {
+    const count = await this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } });
+    return { count };
+  }
+
   async me(userId: string): Promise<WasteMeDTO> {
     const now = new Date();
     const user = await this.prisma.user.findUnique({

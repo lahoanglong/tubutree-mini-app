@@ -28,6 +28,7 @@ export const PURCHASED: PurchasedItem = {
   stock: 20,
   inStock: true,
   timesBought: 2,
+  retailOnly: false,
   lastPurchasedAt: '2026-09-20T08:00:00.000Z',
 };
 export const PURCHASED_PAGE: PurchasedItemsPage = { items: [PURCHASED], nextCursor: null };

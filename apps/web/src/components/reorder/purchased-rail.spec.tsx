@@ -17,7 +17,7 @@ import { PurchasedRail } from './purchased-rail';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
 };
 const CART = { items: [], couponCode: null, subtotal: 65000, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 1 };
 
@@ -43,32 +43,42 @@ afterEach(() => {
 });
 
 describe('PurchasedRail', () => {
-  it('khách cũ: vùng "Mua lại" với thẻ SP, giá, nhãn số lần đã mua; hỏi đúng /me/purchased-items?limit=10', async () => {
+  it('1 món: thẻ ngang thấp (không phải kệ cuộn) với tên, phân loại, giá và hai nút; hỏi đúng /me/purchased-items?limit=10', async () => {
     const c = await mount();
     const region = c.querySelector('section[aria-label="Mua lại"]')!;
-    expect(region.textContent).toContain('Nước rửa chén · Chanh');
+    expect(region.textContent).toContain('Nước rửa chén');
+    expect(region.textContent).toContain('Chanh');
     expect(region.textContent).toContain('65.000đ');
-    expect(region.textContent).toContain('Đã mua 2 lần');
+    expect(byText(region as HTMLElement, 'button', 'Mua lại')).not.toBeNull();
+    expect(Array.from(region.querySelectorAll('button')).some((b) => /Định kỳ/.test(b.textContent ?? ''))).toBe(true);
+    expect(region.querySelector('ul')).toBeNull();
     expect(mocks.get).toHaveBeenCalledWith('/me/purchased-items', { query: { limit: 10 } });
   });
 
-  // D7-29/D7-30: tên SP cao đúng hai dòng (không lòi nửa dòng ba sát giá); từ md các thẻ chia đều bề ngang kệ thay vì dồn 2/3 bên trái.
-  it('tên cao đúng hai dòng; thẻ giãn đều bề ngang từ md', async () => {
+  it('tiêu đề có "Xem tất cả" sang danh sách Đã giao', async () => {
+    const c = await mount();
+    click(byText(c, 'button', 'Xem tất cả'));
+    expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/don-hang?tab=delivered');
+  });
+
+  // D7-29/D7-30: tên SP cao đúng hai dòng; kệ nhiều món không giãn thẻ theo bề ngang từ md (thẻ giãn làm lệch hàng ở 1280px).
+  it('từ 3 món: kệ cuộn ngang, tên cao đúng hai dòng, thẻ không giãn từ md', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2' }, { ...ITEM, variationId: 'v3' }], nextCursor: null });
     const c = await mount();
     const name = c.querySelector('section[aria-label="Mua lại"] p.line-clamp-2')!;
     expect(name.className).toContain('h-8');
     expect(name.className).not.toContain('min-h-');
     const tile = c.querySelector('section[aria-label="Mua lại"] li')!;
-    expect(tile.className).toContain('md:flex-1');
-    expect(tile.className).toContain('md:min-w-44');
+    expect(tile.className).not.toContain('md:flex-1');
+    expect(tile.className).not.toContain('md:min-w-44');
+    expect(tile.textContent).toContain('Đã mua 2 lần');
   });
 
-  it('mua một lần thì không có nhãn; có giá sale thì hiện giá sale kèm giá gạch', async () => {
+  it('có giá sale thì hiện giá sale kèm giá gạch', async () => {
     rail = async () => ({ items: [{ ...ITEM, timesBought: 1, salePrice: 59000 }], nextCursor: null });
     const c = await mount();
-    expect(c.textContent).not.toContain('Đã mua');
     expect(c.textContent).toContain('59.000đ');
-    expect(c.querySelector('.line-through')?.textContent).toBe('65.000đ');
+    expect(c.querySelector('[style*="line-through"]')?.textContent).toBe('65.000đ');
   });
 
   it('khách mới (rỗng) → không render gì', async () => {
@@ -116,7 +126,8 @@ describe('PurchasedRail', () => {
 
   it('chạm tên/ảnh thẻ → trang sản phẩm', async () => {
     const c = await mount();
-    expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen"]')).not.toBeNull();
+    click(c.querySelector('button[aria-label="Nước rửa chén"]'));
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/nuoc-rua-chen');
   });
 
   describe('làm mới lỗi (React Query v5 giữ dữ liệu cũ, status=error)', () => {
@@ -147,11 +158,51 @@ describe('PurchasedRail', () => {
       expect(mounted.container.textContent).toContain('Nước rửa chén');
     });
 
-    it('lỗi ở lần tải đầu (chưa có gì để giữ) → ẩn như cũ', async () => {
+    it('lỗi ở lần tải đầu (chưa có gì để giữ): hiện khối lỗi "Thử lại"; API cũ 404 thì vẫn ẩn', async () => {
       rail = async () => {
         throw new ApiError('Máy chủ đang bận', 503);
       };
+      const c = await mount();
+      expect(c.textContent).toContain('Mua lại');
+      expect(c.textContent).toContain('Máy chủ đang bận');
+      expect(c.querySelector('button[aria-label="Thử lại Mua lại"]')).not.toBeNull();
+      mounted!.unmount();
+      rail = async () => {
+        throw new ApiError('Không tìm thấy', 404);
+      };
       expect((await mount()).textContent).toBe('');
+    });
+  });
+
+  describe('thẻ gọn (1–2 món)', () => {
+    const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent ?? '');
+    it('API báo hàng chỉ bán lẻ (retailOnly): không mời "Định kỳ", vẫn có "Mua lại"', async () => {
+      rail = async () => ({ items: [{ ...ITEM, retailOnly: true }], nextCursor: null });
+      const c = await mount();
+      expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
+      expect(byText(c, 'button', 'Mua lại')).not.toBeNull();
+    });
+
+    it('API cũ chưa trả retailOnly: không mời "Định kỳ"', async () => {
+      const { retailOnly: _omit, ...old } = ITEM;
+      rail = async () => ({ items: [old], nextCursor: null });
+      const c = await mount();
+      expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
+    });
+
+    it('hết hàng: ghi "Tạm hết hàng", không có nút Mua lại / Định kỳ', async () => {
+      rail = async () => ({ items: [{ ...ITEM, stock: 0, inStock: false }], nextCursor: null });
+      const c = await mount();
+      expect(c.textContent).toContain('Tạm hết hàng');
+      expect(byText(c, 'button', 'Mua lại')).toBeNull();
+      expect(labels(c).some((t) => /Định kỳ/.test(t))).toBe(false);
+    });
+
+    it('"Đã mua N lần" chỉ khi mua từ 2 lần', async () => {
+      expect((await mount()).textContent).toContain('Đã mua 2 lần');
+      mounted!.unmount();
+      rail = async () => ({ items: [{ ...ITEM, timesBought: 1 }], nextCursor: null });
+      expect((await mount()).textContent).not.toMatch(/Đã mua \d+ lần/);
     });
   });
 });

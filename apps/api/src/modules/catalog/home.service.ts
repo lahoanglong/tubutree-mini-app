@@ -7,6 +7,8 @@ import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { buildPublicConfig, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
 import { CatalogService } from './catalog.service';
 import type { ProductQuery } from './dto/product-query.dto';
 
@@ -54,6 +56,7 @@ export class HomeService {
     private readonly notifications: NotificationsService,
     private readonly config: SystemConfigService,
     private readonly loyalty: LoyaltyService,
+    private readonly prisma: PrismaService,
   ) {}
 
   private async block<T>(name: string, run: () => Promise<T>): Promise<Block<T>> {
@@ -114,7 +117,7 @@ export class HomeService {
 
   /** Phần theo người dùng — KHÔNG cache dùng chung. */
   async getForUser(userId: string, purchasedLimit: number = DEFAULT_PURCHASED_LIMIT): Promise<HomeMe> {
-    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer] = await Promise.all([
+    const [forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount] = await Promise.all([
       this.block('forYou', () => this.catalog.getForYou(userId)),
       this.block('flashUpcoming', () => this.flashSale.listUpcoming(userId)),
       this.block('purchasedItems', () => this.purchased.list(userId, { limit: purchasedLimit })),
@@ -123,8 +126,10 @@ export class HomeService {
       this.block('subscriptions', () => this.subscriptions.list(userId)),
       this.block('notifications', () => this.notifications.listForUser(userId)),
       this.block('newCustomerOffer', () => this.loyalty.getNewCustomerOffer(userId)),
+      // Chỉ một câu đếm (không gọi /waste/me nặng): để Trang chủ/Ưu đãi giữ lối vào Đổi rác cho khách còn yêu cầu mở khi chương trình tạm dừng.
+      this.block('wasteOpenRequestCount', () => this.prisma.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } })),
     ]);
-    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, purchasedLimit };
+    return { forYou, flashUpcoming, purchasedItems, activeOrderCount, shippingOrders, subscriptions, notifications, newCustomerOffer, wasteOpenRequestCount, purchasedLimit };
   }
 }
 
@@ -151,6 +156,8 @@ export interface HomeMe {
   subscriptions: Block<Awaited2<SubscriptionsService['list']>>;
   notifications: Block<Awaited2<NotificationsService['listForUser']>>;
   newCustomerOffer: Block<Awaited2<LoyaltyService['getNewCustomerOffer']>>;
+  /** Số yêu cầu đổi rác đang mở (OPEN, IN_TRANSIT, RECEIVED) của khách; API cũ không có trường này. */
+  wasteOpenRequestCount: Block<number>;
   /** Giới hạn đã dùng cho kệ Mua lại — client đối chiếu với tham số lẻ của nó. */
   purchasedLimit: number;
 }

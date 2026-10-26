@@ -53,6 +53,16 @@ describe('AuthProvider — khôi phục phiên (BUYERWEB-2)', () => {
     });
   }
 
+  it('mất cờ phiên nhưng còn cookie phiên và gợi ý bố cục: mở trang xoá cả hai cookie, không gọi khôi phục', async () => {
+    document.cookie = 'tubu_web_session=1; Path=/';
+    document.cookie = 'tubu_home_hint=returning-1; Path=/';
+    await mount();
+    expect(text()).toBe('init|idle|-');
+    expect(mocks.restoreSession).not.toHaveBeenCalled();
+    expect(document.cookie).not.toContain('tubu_web_session');
+    expect(document.cookie).not.toContain('tubu_home_hint');
+  });
+
   it('lỗi tạm lúc mở trang → chưa vào được nhưng GIỮ cờ; có mạng lại thì tự khôi phục', async () => {
     setSessionMarker();
     mocks.restoreSession

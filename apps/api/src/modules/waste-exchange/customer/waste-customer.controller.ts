@@ -151,6 +151,11 @@ export class WasteCustomerController {
     return this.meSvc.me(userId);
   }
 
+  @Get('me/open-count')
+  openCount(@CurrentUser('sub') userId: string) {
+    return this.meSvc.openCount(userId);
+  }
+
   // Công khai: chỉ trả chữ thể lệ do admin soạn (không dữ liệu riêng, không cần cờ chương trình), trang /doi-rac/quy-dinh trên web đọc khi chưa đăng nhập.
   @Public()
   @Get('rules')

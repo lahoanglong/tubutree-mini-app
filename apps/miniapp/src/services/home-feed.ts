@@ -21,7 +21,7 @@ export interface HomePublicDTO {
   newest: Block<PageResponse<ProductCard>>;
   flashActive: Block<FlashSaleActiveItem[]>;
   categories: Block<CategoryDTO[]>;
-  brands: Block<{ brand: string; count: number }[]>;
+  brands: Block<{ brand: string; count: number; slug?: string | null }[]>;
   /** Cùng nội dung GET /config/public: khối "Quà khách mới" cần số công khai mà không tốn thêm request khi mở Trang chủ. */
   publicConfig: Block<PublicConfig>;
 }
@@ -35,6 +35,8 @@ export interface HomeMeDTO {
   subscriptions: Block<SubscriptionDTO[]>;
   notifications: Block<NotificationDTO[]>;
   newCustomerOffer: Block<NewCustomerOffer>;
+  /** Số yêu cầu đổi rác đang mở của khách (một câu đếm phía API). API cũ không có trường này: coi là 0. */
+  wasteOpenRequestCount?: Block<number>;
   purchasedLimit?: number;
 }
 
@@ -76,6 +78,8 @@ function startFeed<T>(url: string, personal: boolean, params?: Record<string, nu
 export function armHomeFeed(): void {
   session ??= { pub: null, me: null };
 }
+
+export const isHomeFeedArmed = (): boolean => session !== null;
 
 export function disarmHomeFeed(): void {
   session = null;

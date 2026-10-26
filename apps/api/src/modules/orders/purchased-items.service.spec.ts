@@ -6,8 +6,8 @@ import { PurchasedItemsService, decodePurchasedCursor, encodePurchasedCursor } f
 const AT = new Date('2026-09-10T03:00:00.123Z');
 const row = (variationId: string, timesBought = 1, at: Date = AT) => ({ variationId, timesBought, lastPurchasedAt: at });
 const variation = (id: string, over: Record<string, unknown> = {}, product: Record<string, unknown> = {}) => ({
-  id, name: `Loại ${id}`, retailPrice: 65000, salePrice: null, stock: 4, ...over,
-  product: { id: `p-${id}`, slug: `sp-${id}`, name: `Sản phẩm ${id}`, brand: 'Tubu', thumbnail: `https://img.test/${id}.jpg`, images: [], ...product },
+  id, name: `Loại ${id}`, retailPrice: 65000, salePrice: null, stock: 4, pancakeId: `PK-${id}`, ...over,
+  product: { id: `p-${id}`, slug: `sp-${id}`, name: `Sản phẩm ${id}`, brand: 'Tubu', thumbnail: `https://img.test/${id}.jpg`, images: [], fulfilment: 'TUBU', storefrontId: null, ...product },
 });
 
 function setup(rows: ReturnType<typeof row>[], variations: ReturnType<typeof variation>[]) {
@@ -26,9 +26,27 @@ describe('PurchasedItemsService.list', () => {
     expect(page.items[0]).toEqual({
       variationId: 'v2', productId: 'p-v2', slug: 'sp-v2', productName: 'Sản phẩm v2', variationName: 'Loại v2',
       brand: 'Tubu', thumbnail: 'https://img.test/v2.jpg', price: 65000, salePrice: 59000, stock: 0, inStock: false,
-      timesBought: 3, lastPurchasedAt: '2026-09-10T03:00:00.123Z',
+      timesBought: 3, lastPurchasedAt: '2026-09-10T03:00:00.123Z', retailOnly: false,
     });
     expect(page.nextCursor).toBeNull();
+  });
+
+  it('retailOnly: hàng do đối tác tự giao (fulfilment MERCHANT) hoặc của gian hàng đối tác (có storefrontId) thì true, hàng Tubu thì false', async () => {
+    const { svc } = setup(
+      [row('a'), row('b'), row('c')],
+      [variation('a', {}, { fulfilment: 'MERCHANT' }), variation('b', {}, { storefrontId: 'sf1' }), variation('c')],
+    );
+    const page = await svc.list('u1');
+    expect(page.items.map((i) => i.retailOnly)).toEqual([true, true, false]);
+  });
+
+  it('retailOnly: mã Pancake thiếu, rỗng hoặc mã giả MCH_ thì true (không giao định kỳ được), mã thật thì false', async () => {
+    const { svc } = setup(
+      [row('a'), row('b'), row('c'), row('d')],
+      [variation('a', { pancakeId: null }), variation('b', { pancakeId: '  ' }), variation('c', { pancakeId: 'MCH_123' }), variation('d')],
+    );
+    const page = await svc.list('u1');
+    expect(page.items.map((i) => i.retailOnly)).toEqual([true, true, true, false]);
   });
 
   it('SQL chỉ lấy đơn DELIVERED của CHÍNH user và loại SP ngừng bán / chưa duyệt', async () => {

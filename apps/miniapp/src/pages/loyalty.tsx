@@ -15,18 +15,16 @@ import {
   pointsReasonLabel,
   tierProgressPercent,
   type CheckInStatusResponse,
-  type CouponDTO,
   type PointsTxn,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { formatVnd, formatNumber, formatDate, formatMultiplier } from '../utils/format';
+import { formatNumber, formatDate, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
-import { autoCouponName } from '../utils/coupon-name';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -39,6 +37,7 @@ import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
+import { CouponCard } from '../components/loyalty/coupon-card';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 
 /**
@@ -54,12 +53,6 @@ const TIER_STYLE: Record<string, { emoji: string; color: string; bg: string }> =
   'Cổ Thụ': { emoji: '🌲', color: 'var(--forest-900)', bg: 'var(--clay-50)' },
 };
 const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
-
-function couponLabel(c: CouponDTO): string {
-  if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
-  if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
-  return `Giảm ${formatVnd(c.value)}`;
-}
 
 /** Giữ giá trị khác null gần nhất: BottomSheet còn chạy hoạt ảnh đóng ~200ms sau khi state về null,
  * nội dung không được trống đi trong lúc trượt xuống. */
@@ -325,32 +318,7 @@ export default function LoyaltyPage() {
             ) : couponsQ.data && couponsQ.data.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {couponsQ.data.map((c) => (
-                  <div
-                    key={c.code}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 8,
-                      padding: 12,
-                      background: 'var(--color-promo-bg)',
-                      borderRadius: 'var(--radius-control)',
-                      border: '1px dashed var(--clay-100)',
-                    }}
-                  >
-                    <div>
-                      <Text variant="body-sm" tone="primary" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
-                        {couponLabel(c)}
-                      </Text>
-                      <Text variant="caption" tone="secondary" as="div">
-                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
-                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
-                      </Text>
-                    </div>
-                    <Text variant="caption" tone="tertiary">
-                      HSD {formatDate(c.endAt)}
-                    </Text>
-                  </div>
+                  <CouponCard key={c.code} coupon={c} />
                 ))}
               </div>
             ) : (

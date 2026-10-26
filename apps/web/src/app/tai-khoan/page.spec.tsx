@@ -140,7 +140,6 @@ describe('/tai-khoan — thẻ hồ sơ (D5-14)', () => {
     const head = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/ho-so"]')!;
     expect(head.textContent).toContain('Nguyễn An Khang');
     expect(head.textContent).toContain('Sửa hồ sơ');
-    expect(container.querySelector('section[aria-label="Thông tin tài khoản"]')?.textContent).toContain('Nguyễn An Khang');
     expect(byText(container, 'button', 'Sửa tên')).toBeNull();
   });
 

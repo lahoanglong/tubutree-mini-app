@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
-import { expect, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
+import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
+import { mockHomeEngagement } from './support/discovery-mocks';
 
 /**
  * Web khách, cửa hàng: Trang chủ "/" như Mini App (dòng 1) và danh mục + tìm kiếm ở /san-pham (chuyển từ "/", 00-ma-tran dòng 2). Mọi lời gọi /api/** từ trình
@@ -133,7 +134,7 @@ test.describe('Web khách: danh mục /san-pham', () => {
 
 const PURCHASED = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
-  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
+  thumbnail: null, price: 65000, salePrice: null, stock: 8, inStock: true, timesBought: 2, retailOnly: false, lastPurchasedAt: '2026-09-10T00:00:00.000Z',
 };
 
 function mockHome(api: MockApi) {
@@ -164,13 +165,12 @@ function mockCustomer(api: MockApi) {
 }
 
 test.describe('Web khách: Trang chủ /', () => {
-  test('khách vãng lai: ba lưới công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
+  test('khách vãng lai: kệ Bán chạy và lưới gợi ý công khai, ô tìm sang /san-pham?focus=search, danh mục sang /san-pham?category=', async ({ page, api }) => {
     mockHome(api);
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
-    await expect(page.getByRole('region', { name: 'Bán chạy' }).getByText('Bán chạy nhất')).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Mới về vườn' }).getByText('Hàng mới nhất')).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Dành cho bạn' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true }).getByText('Bán chạy nhất')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByText('Sản phẩm nổi bật')).toBeVisible();
     // Điện thoại: chuông hiện cả với khách như Mini App (trang Thông báo tự đòi đăng nhập); máy tính không có chuông cho khách.
     const phone = (page.viewportSize()?.width ?? 1280) < 768;
     await expect(page.getByRole('link', { name: /^Thông báo/ })).toHaveCount(phone ? 1 : 0);
@@ -205,9 +205,9 @@ test.describe('Web khách: Trang chủ /', () => {
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
     await expect(page.getByRole('link', { name: 'Thông báo, 2 chưa đọc' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Dành cho bạn' }).getByText('Gợi ý riêng')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Gợi ý cho bạn' }).getByText('Gợi ý riêng')).toBeVisible();
     const rail = page.getByRole('region', { name: 'Mua lại' });
-    await expect(rail.getByText('Đã mua 2 lần')).toBeVisible();
+    await expect(rail.getByText('Nước rửa chén')).toBeVisible();
 
     await rail.getByRole('button', { name: 'Mua lại' }).click();
     const addedCall = api.waitForCall('POST', '/cart/items');
@@ -217,18 +217,46 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page).toHaveURL(/\/gio-hang/);
   });
 
+  test('khách vãng lai không cookie, JS bị giữ: HTML đầu đã có khối Quà khách mới; Danh mục không xê dịch từ HTML đầu tới sau hydrate (≤ 2px)', async ({ page, api, request }) => {
+    mockHome(api);
+    // HTML đầu dựng từ cấu hình của DB e2e; trình duyệt phải nhận đúng cấu hình đó, nếu không chữ Quà khách mới đổi số dòng
+    // (vd "đơn đầu tiên từ 199.000đ" so với "đơn từ 350.000đ") và Danh mục lệch vì dữ liệu mock chứ không vì bố cục.
+    // Lấy theo URL trình duyệt gọi: cổng API trên CI đến từ apps/api/.env chứ không từ E2E_API_PORT.
+    api.get('/config/public', async ({ request: browserRequest }) => (await request.get(browserRequest.url())).json());
+    let openJs!: () => void;
+    const jsHeld = new Promise<void>((resolve) => { openJs = resolve; });
+    await page.route(/\/_next\/static\/.*\.js/, async (route) => {
+      await jsHeld;
+      await route.continue();
+    });
+    await page.goto('/', { waitUntil: 'commit' });
+    const gift = page.getByRole('region', { name: 'Quà khách mới' });
+    await expect(gift).toBeVisible();
+    const giftHtml = await gift.innerText();
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(categories).toBeVisible();
+    const firstHtml = (await categories.boundingBox())!.y;
+    openJs();
+    await page.waitForLoadState('networkidle');
+    await refetchStale(page, api, 'GET', '/products');
+    await expect(gift).toBeVisible();
+    expect(await gift.innerText()).toBe(giftHtml);
+    const hydrated = (await categories.boundingBox())!.y;
+    expect(Math.abs(hydrated - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${hydrated}px (sau hydrate)`).toBeLessThanOrEqual(2);
+  });
+
   test('API sản phẩm sập sau khi server đã có dữ liệu: lưới giữ nguyên, không hiện dải lỗi cấp trang', async ({ page, api }) => {
-    // Dải lỗi cấp trang chỉ hiện khi cả ba lưới chưa từng có dữ liệu (home-view pageDown); trang SSR luôn mang sẵn dữ liệu thật của DB e2e nên
+    // Dải lỗi cấp trang chỉ hiện khi Bán chạy chưa từng có dữ liệu (home-view pageDown); trang SSR luôn mang sẵn dữ liệu thật của DB e2e nên
     // trường hợp "sập hẳn từ đầu" chỉ kiểm được ở vitest (home-parts.spec), không dựng lại được qua mock phía trình duyệt.
     mockCatalog(api);
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
     api.get('/products', () => reply(503, { message: 'Máy chủ đang bận' }));
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toBeVisible();
     await refetchStale(page, api, 'GET', '/products');
-    await expect.poll(() => api.callsTo('GET', '/products').length).toBeGreaterThanOrEqual(6);
+    await expect.poll(() => api.callsTo('GET', '/products').length).toBeGreaterThanOrEqual(2);
     await expect(page.getByRole('region', { name: 'Chưa tải được Trang chủ' })).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Bán chạy' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toBeVisible();
   });
 
   test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {
@@ -545,5 +573,254 @@ test.describe('Web khách: Hành trình nguyên liệu /cau-chuyen', () => {
     await page.goto('/cau-chuyen');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồng, vùng chạm chip (điện thoại)', () => {
+  const login = async (page: Page, api: MockApi) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_web_session', '1');
+      } catch {
+        // không có localStorage: spec vẫn chạy
+      }
+    });
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockHome(api);
+    mockCustomer(api);
+    api.get('/me/wishlist/ids', []);
+    api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
+  };
+
+  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở Ưu đãi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
+    await page.goto('/');
+    await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+    await page.getByRole('link', { name: /^Ưu đãi/ }).click();
+    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+  });
+
+  test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: true, expiringInDays: 2 });
+    await page.goto('/');
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+    await page.getByRole('link', { name: /^Ưu đãi/ }).click();
+    await expect(page.getByText('Sắp hết hạn').first()).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toHaveCount(0);
+  });
+
+  test('chip dải thương hiệu và tab gợi ý có vùng chạm phủ đủ 44px', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
+    api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
+    await page.goto('/');
+    const chips = [
+      page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first(),
+      page.getByRole('region', { name: 'Nguồn gợi ý' }).getByRole('button', { name: 'Bán chạy', exact: true }),
+    ];
+    for (const chip of chips) {
+      await chip.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      const box = (await chip.boundingBox())!;
+      const hit = await chip.evaluate(
+        (el, b) => {
+          const x = b.x + b.width / 2;
+          const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
+          return { above3: at(b.y - 3), below3: at(b.y + b.height + 3), inside: at(b.y + b.height / 2) };
+        },
+        { x: box.x, y: box.y, width: box.width, height: box.height },
+      );
+      expect(hit).toEqual({ above3: true, below3: true, inside: true });
+    }
+  });
+
+  test('khách cũ đã nhớ "returning", /auth/refresh chậm 3s: Danh mục không xê dịch từ lúc đầu tới sau đăng nhập (≤ 2px)', async ({ page, api }) => {
+    await login(page, api);
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'u1', kind: 'returning' }));
+        localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u1', rows: 1 }));
+      } catch {
+        // không có localStorage: spec vẫn chạy
+      }
+    });
+    api.get('/orders/active-count', { count: 1 });
+    api.get('/orders', ({ call }) => ({
+      data: call.query.get('status') === 'SHIPPING' ? [makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' })] : [],
+      meta: { page: 1, limit: 1, total: call.query.get('status') === 'SHIPPING' ? 1 : 0 },
+    }));
+    const user = {
+      id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
+      pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
+    };
+    api.post('/auth/refresh', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return { accessToken: 'e2e-token', user };
+    });
+    await page.goto('/');
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(categories).toBeVisible();
+    await expect(page.getByTestId('member-card-loading')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toHaveCount(0);
+    const before = (await categories.boundingBox())!.y;
+    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    const after = (await categories.boundingBox())!.y;
+    expect(Math.abs(after - before), `Danh mục ${before}px → ${after}px`).toBeLessThanOrEqual(2);
+  });
+
+  test('Đổi rác tạm dừng nhưng còn yêu cầu mở: Trang chủ giữ lối vào "Yêu cầu của tôi" qua /waste/me/open-count, không gọi /waste/me', async ({ page, api }) => {
+    await login(page, api);
+    mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
+    api.get('/waste/me/open-count', { count: 1 });
+    await page.goto('/');
+    await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);
+  });
+
+  for (const width of [375, 320]) {
+    test(`kệ Mua lại ${width}px: "Định kỳ -N%" không bị cắt; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
+      await login(page, api);
+      await page.setViewportSize({ width, height: 812 });
+      api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000 } });
+      const heights: number[] = [];
+      for (const name of ['An', 'Nước Rửa Chén Sinh Học Tubu Hương Chanh Gừng Loại Đậm Đặc 500ml Chai Lớn']) {
+        api.get('/me/purchased-items', { items: [{ ...PURCHASED, productName: name }], nextCursor: null });
+        await page.goto('/');
+        const card = page.getByRole('region', { name: 'Mua lại' });
+        await expect(card).toBeVisible({ timeout: 15_000 });
+        // Web gate dựng sẵn Trang chủ với cấu hình từ API thật (mức giảm có thể khác mock trình duyệt); test chỉ cần nhãn đủ chữ.
+        const subscribe = card.getByRole('button', { name: /^Định kỳ -\d+%$/ });
+        await expect(subscribe).toBeVisible();
+        const clipped = await subscribe.evaluate((el) => {
+          const label = el.querySelector('.zaui-btn-container > span') as HTMLElement | null;
+          return label ? label.scrollWidth > label.clientWidth : true;
+        });
+        expect(clipped, `nhãn Định kỳ bị cắt ở ${width}px`).toBe(false);
+        heights.push((await card.boundingBox())!.height);
+      }
+      expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(1);
+    });
+  }
+
+  for (const withCookie of [true, false]) {
+    test(`${withCookie ? 'có' : 'không có'} cookie phiên: HTML server đã có thanh đáy, hydrate không lỗi (không pageerror, không "hydrat")`, async ({ page, api, request, baseURL }) => {
+      await login(page, api);
+      const problems: string[] = [];
+      page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+      page.on('console', (m) => {
+        if (/hydrat|Minified React error/i.test(m.text())) problems.push(`console ${m.type()}: ${m.text()}`);
+      });
+      const cookie = withCookie ? 'tubu_web_session=1; tubu_home_hint=returning-1' : '';
+      const html = await (await request.get('/', { headers: cookie ? { cookie } : {} })).text();
+      expect(html, 'HTML server thiếu thanh đáy').toContain('aria-label="Thanh điều hướng dưới"');
+      if (withCookie) {
+        await page.context().addCookies([
+          { name: 'tubu_web_session', value: '1', url: baseURL! },
+          { name: 'tubu_home_hint', value: 'returning-1', url: baseURL! },
+        ]);
+      }
+      await page.goto('/');
+      await expect(page.getByRole('navigation', { name: 'Thanh điều hướng dưới' })).toBeVisible({ timeout: 15_000 });
+      await page.waitForLoadState('networkidle');
+      expect(problems).toEqual([]);
+    });
+  }
+
+  test('HTML server theo cookie: có cookie phiên thì khối đầu là khung chờ khách cũ (không Bán chạy); không cookie thì bản khách mới', async ({ request }) => {
+    const order = async (cookie?: string) => {
+      const html = await (await request.get('/', { headers: cookie ? { cookie } : {} })).text();
+      return { html, blocks: Array.from(html.matchAll(/data-home-block="(\w+)"/g)).map((m) => m[1]!) };
+    };
+    const returning = await order('tubu_web_session=1; tubu_home_hint=returning-1');
+    expect(returning.blocks.slice(0, 4)).toEqual(['search', 'member', 'todo', 'shortcuts']);
+    expect(returning.blocks).toContain('purchased');
+    expect(returning.blocks).not.toContain('bestSellers');
+    expect(returning.html).toContain('data-testid="member-card-loading"');
+    expect(returning.html).toContain('data-testid="todo-strip-loading"');
+    const fresh = await order();
+    expect(fresh.blocks).toContain('bestSellers');
+    expect(fresh.blocks).not.toContain('purchased');
+    expect(fresh.html).not.toContain('data-testid="member-card-loading"');
+    const unknown = await order('tubu_web_session=1');
+    expect(unknown.html).toContain('data-testid="member-card-loading"');
+    expect(unknown.blocks).not.toContain('bestSellers');
+    expect(unknown.blocks).not.toContain('purchased');
+  });
+
+  test('có cookie phiên, JS bị giữ, /auth/refresh chậm 3s: Danh mục không xê dịch từ HTML đầu tiên (trước hydrate) tới sau đăng nhập (≤ 2px)', async ({ page, api, baseURL }) => {
+    await login(page, api);
+    await page.context().addCookies([
+      { name: 'tubu_web_session', value: '1', url: baseURL! },
+      { name: 'tubu_home_hint', value: 'returning-1', url: baseURL! },
+    ]);
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'u1', kind: 'returning' }));
+        localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u1', rows: 1 }));
+      } catch {
+        // không có localStorage: spec vẫn chạy
+      }
+    });
+    api.get('/orders/active-count', { count: 1 });
+    api.get('/orders', ({ call }) => ({
+      data: call.query.get('status') === 'SHIPPING' ? [makeOrder({ code: 'TUBU-SHIP-W', status: 'SHIPPING', paymentStatus: 'PAID' })] : [],
+      meta: { page: 1, limit: 1, total: call.query.get('status') === 'SHIPPING' ? 1 : 0 },
+    }));
+    const user = {
+      id: 'u1', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
+      pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
+    };
+    api.post('/auth/refresh', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return { accessToken: 'e2e-token', user };
+    });
+    let openJs!: () => void;
+    const jsHeld = new Promise<void>((resolve) => { openJs = resolve; });
+    await page.route(/\/_next\/static\/.*\.js/, async (route) => {
+      await jsHeld;
+      await route.continue();
+    });
+    await page.goto('/', { waitUntil: 'commit' });
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(categories).toBeVisible();
+    await expect(page.getByTestId('member-card-loading')).toBeVisible();
+    await expect(page.getByTestId('todo-strip-loading')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Bán chạy', exact: true })).toHaveCount(0);
+    const firstHtml = (await categories.boundingBox())!.y;
+    openJs();
+    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    const settled = (await categories.boundingBox())!.y;
+    expect(Math.abs(settled - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${settled}px (sau đăng nhập)`).toBeLessThanOrEqual(2);
+  });
+
+  test('thẻ thành viên: tên rất dài cắt "…" trên một dòng, thẻ cao bằng thẻ tên ngắn (≤ 2px), không tràn ngang', async ({ page, api }) => {
+    await login(page, api);
+    api.get('/me/loyalty', {
+      tier: { id: 't1', name: 'Hạt Giống', multiplier: 1, perks: null }, pointsBalance: 1800, pointsConvertedBalance: 0, tierPoints: 1800,
+      tiers: [{ id: 't1', name: 'Hạt Giống', minPoints: 0, multiplier: 1 }, { id: 't2', name: 'Mầm Xanh', minPoints: 3000, multiplier: 1.2 }],
+      nextTier: { id: 't2', name: 'Mầm Xanh', minPoints: 3000, pointsToGo: 1200 },
+    });
+    const heights: number[] = [];
+    for (const name of ['An', 'Nguyễn Thị Phương Thảo Nguyên Vũ Khánh Linh Trần Gia Bảo']) {
+      api.post('/auth/refresh', {
+        accessToken: 'e2e-token',
+        user: { id: 'u1', fullName: name, referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER', pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0 },
+      });
+      await page.goto('/');
+      const card = page.getByRole('region', { name: 'Thẻ thành viên' });
+      await expect(card).toContainText('1.800', { timeout: 15_000 });
+      await expect(card).toContainText('Còn 1.200');
+      await expect(card).toContainText(name);
+      heights.push((await card.boundingBox())!.height);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    }
+    expect(Math.abs(heights[1]! - heights[0]!), `thẻ tên ngắn ${heights[0]}px vs tên dài ${heights[1]}px`).toBeLessThanOrEqual(2);
   });
 });

@@ -38,16 +38,19 @@ test.describe('Web khách: tài khoản', () => {
     });
   });
 
-  test('hub: thẻ hồ sơ, ba số dư, menu theo nhóm, danh sách đơn vẫn còn', async ({ page, api }) => {
+  test('hub: thẻ hồ sơ, ba số dư, hàng trạng thái đơn, menu theo nhóm', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
     await page.goto('/tai-khoan');
 
-    await expect(page.getByRole('heading', { name: 'Tài khoản', level: 1 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Cá nhân', level: 1 })).toBeVisible();
     const head = page.getByRole('link', { name: /Nguyễn Văn An/ });
     await expect(head).toHaveAttribute('href', '/tai-khoan/ho-so');
     await expect(head).toContainText('Hạt Giống');
     await expect(page.getByRole('link', { name: /Mã giảm giá/ })).toContainText('2 mã');
-    await expect(page.getByRole('heading', { name: 'Tài sản', level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Kiếm tiền cùng Tubu', level: 2 })).toBeVisible();
+    // Hàng trạng thái đơn ở đầu trang: mỗi ô mở danh sách đơn đã lọc theo trạng thái.
+    await expect(page.getByRole('link', { name: /^Chờ thanh toán/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=pending_payment');
+    await expect(page.getByRole('link', { name: /^Định kỳ/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=subscriptions');
     await expect(page.getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
     // Điện thoại giống Mini App (hub không có khối đơn hàng); máy tính còn danh sách đơn.
     const narrow = (page.viewportSize()?.width ?? 1280) < 768;

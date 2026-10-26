@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Baby, Check, Droplets, Flag, Flower2, Leaf, Package, PawPrint, Recycle, Smile, Sparkles, Sprout, SprayCan, Sun, User, UserRound,
@@ -14,6 +14,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { platformBridge } from '@/lib/platform-bridge';
 import { useModalA11y } from '@/lib/use-modal-a11y';
+import { useShellPathname } from '@/lib/shell-pathname';
 
 interface Q {
   id: string;
@@ -87,7 +88,7 @@ async function readSnoozedUntil(): Promise<number | null> {
  */
 export function OnboardingGate() {
   const phase = useAuthPhase();
-  const pathname = usePathname();
+  const pathname = useShellPathname();
   const [dismissed, setDismissed] = useState(false);
   // Đọc một lần lúc mở trang: khách vào bằng link CTV/gian hàng thì cả phiên không bị quiz chặn, kể cả khi CouponClaimGate đã xoá ?claim= khỏi URL.
   const [openedFromPartnerLink] = useState(() => typeof window !== 'undefined' && hasPartnerLinkParams(window.location.search, window.location.hash));

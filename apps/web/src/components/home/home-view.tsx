@@ -6,60 +6,71 @@ import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Search } from 'lucide-react';
 import type { CategoryDTO, PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
-import { categoriesQuery, forYouQuery } from '@tubutree/app-core/queries/catalog';
-import { homeBestSellerQuery, homeFeaturedQuery, homeNewestQuery } from '@tubutree/app-core/queries/home';
+import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
+import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { categoryEntries } from '@/lib/browse-categories';
 import { useAuth } from '@/lib/auth-context';
-import { useAuthPhase } from '@/lib/auth-phase';
+import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { homeText, reorderText } from '@/lib/home-text';
+import { homeText } from '@/lib/home-text';
+import { HomeRestoreHintContext } from '@/lib/home-restore-context';
+import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { isWebRouteReady } from '@/lib/route-map';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
-import { usePublicConfig } from '@/lib/use-public-config';
-import { CategoryGrid } from '@/components/catalog/category-grid';
-import { RecentlyViewedRail } from '@/components/catalog/recently-viewed-rail';
 import { PURCHASED_RAIL_LIMIT, PurchasedRail } from '@/components/reorder/purchased-rail';
 import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
+import { BestSellerRail } from './best-seller-rail';
+import { BrandJourney } from './brand-journey';
+import { CategoryRow } from './category-row';
+import { CommunityPreview } from './community-preview';
 import { FlashSale, UpcomingFlashSales } from './flash-sale';
-import { dedupeAgainst, homeBlockOrder, isEndpointMissing, refreshHomeQueries, type HomeBlockId } from './home-blocks';
-import { HomeBlockError, HomeBlockErrorSuppressed } from './home-block-error';
-import { HomeExtras } from './home-extras';
+import { homeBlockOrder, refreshHomeQueries, type HomeBlockId } from './home-blocks';
+import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
-import { HomeSection, type SectionQuery } from './home-section';
+import { MemberCard, MemberCardSkeleton } from './member-card';
 import { NewCustomerGift } from './new-customer-gift';
-import { OrderStrip } from './order-strip';
-import { PointsBoostStrip } from './points-boost-strip';
+import { ShortcutGrid } from './shortcut-grid';
+import { SuggestFeed } from './suggest-feed';
+import { TodoStrip } from './todo-strip';
 import { useBlockQuery } from './use-block-query';
 import { useHomeCustomerKind } from './use-home-customer-kind';
-
-const SECTION_LIMIT = 6;
-// "Tubu chọn cho bạn" bỏ SP trùng "Dành cho bạn" rồi mới cắt về SECTION_LIMIT → xin dư để vẫn đủ ô sau khi bỏ trùng.
-const FEATURED_LIMIT = SECTION_LIMIT * 2;
 
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
   bestSellers?: PageResponse<ProductCard>;
-  featured?: PageResponse<ProductCard>;
-  newest?: PageResponse<ProductCard>;
+  /** Trang 1 của lưới gợi ý (nguồn mặc định). */
+  suggest?: PageResponse<ProductCard>;
   categories?: CategoryDTO[];
   brands?: { brand: string; count: number; slug?: string | null }[];
+  /** Cấu hình công khai: khối "Quà khách mới" của khách vãng lai có ngay trong HTML server (không hiện sau hydrate làm Danh mục nhảy). */
+  publicConfig?: PublicConfig;
 }
 
 const STALE = 60_000;
 const withInitial = <T,>(data: T | undefined) => (data !== undefined ? { initialData: data, staleTime: STALE } : {});
 
 /**
- * Trang chủ web, cùng thứ tự khối và hành vi với pages/home.tsx của Mini App. Thứ tự khối theo khách cũ/mới (`homeBlockOrder`):
- * khách cũ thấy "Mua lại" ngay dưới ô tìm; khách mới ưu tiên Flash + Bán chạy + Danh mục, kèm "Quà khách mới". Cờ
- * `homeNewCustomerLayout` đưa Quà khách mới + Danh mục lên trước giờ vàng. Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ,
- * độc lập từng khối; cả ba lưới công khai lỗi thì một dải lỗi cấp trang thay cho từng thẻ lỗi.
+ * Trang chủ web, cùng thứ tự khối và hành vi với pages/home.tsx của Mini App (phương án A, 9 khối). Khách cũ: thẻ thành viên (Điểm danh,
+ * Đổi quà) → Việc cần làm → 8 lối tắt → Mua lại → Giờ vàng → Danh mục một hàng → Hành trình nguyên liệu → Cộng đồng → MỘT lưới gợi ý
+ * cuộn vô tận. Khách mới/vãng lai: "Quà khách mới" thay thẻ thành viên, không có Mua lại, thêm kệ Bán chạy. Thứ tự khối ở app-core
+ * (`homeBlockOrder`). Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ, độc lập từng khối; Bán chạy lỗi hẳn thì một dải lỗi cấp trang.
  */
-export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
+export default function HomeView({ initial = {}, restoreHint = null }: { initial?: HomeInitial; /** Bản dựng sẵn cho khách đã có cookie phiên: HTML đầu mang khung chờ của loại khách này. */ restoreHint?: HomeRestoreHint | null }) {
+  return (
+    <HomeRestoreHintContext.Provider value={restoreHint}>
+      <HomeViewBody initial={initial} />
+    </HomeRestoreHintContext.Provider>
+  );
+}
+
+function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const qc = useQueryClient();
   const router = useRouter();
   const authed = useAuthPhase() === 'authenticated';
+  const restoring = useAuthRestoring();
   const userId = useAuth().user?.id;
 
   // Chuông ở đây dùng chung queryKey ['notifications'] với trang Thông báo.
@@ -68,65 +79,31 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
   // Cùng query key với PurchasedRail → không thêm request; chỉ để biết khách cũ hay mới. Trong lúc tải dùng loại đã nhớ
   // của tài khoản này để thứ tự khối không đổi sau khung hình đầu (useHomeCustomerKind).
   const purchasedRaw = usePurchasedItems(PURCHASED_RAIL_LIMIT);
-  const purchased = useBlockQuery(purchasedRaw);
-  const kind = useHomeCustomerKind(authed, userId, purchasedRaw);
-  // Bố cục mới cho khách mới đi sau cờ cấu hình, mặc định tắt: cấu hình chưa về hay lỗi thì giữ thứ tự cũ.
-  const publicConfig = usePublicConfig();
-  const newCustomerLayout = publicConfig.isLoaded && publicConfig.homeNewCustomerLayout === true;
+  const kind = useHomeCustomerKind(authed, userId, purchasedRaw, restoring);
 
-  // useBlockQuery: tải lại khi đang lỗi (Thử lại) không được đổi khối lỗi thành khung chờ (React Query v5).
-  const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers) }));
-  const featured = useBlockQuery(useQuery({ ...homeFeaturedQuery(coreHttp), ...withInitial(initial.featured) }));
-  const newest = useBlockQuery(useQuery({ ...homeNewestQuery(coreHttp), ...withInitial(initial.newest) }));
-  // Feed "Dành cho bạn" cá nhân hoá, cần đăng nhập. select() bọc thành { data } để dùng chung HomeSection.
-  const forYou = useBlockQuery(useQuery({ ...forYouQuery(coreHttp), enabled: authed, select: (data) => ({ data }) }));
+  // Cùng khoá với kệ Bán chạy của khách mới: ở đây chỉ để biết API sập hẳn (dải lỗi cấp trang), không thêm request.
+  const bestSellers = useBlockQuery(useQuery({ ...homeBestSellerQuery(coreHttp), ...withInitial(initial.bestSellers), enabled: kind === 'new' }));
   const categories = useQuery({ ...categoriesQuery(coreHttp), staleTime: STALE, retry: false, ...(initial.categories ? { initialData: initial.categories } : {}) });
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
-
-  // Với khách chưa có lịch sử, "Dành cho bạn" rơi về SP nổi bật — trùng "Tubu chọn cho bạn". Chỉ bỏ trùng được khi đã biết
-  // "Dành cho bạn" → chờ nó xong (isPending) thì mới hiện, để khối không đổi số ô lúc dữ liệu về; sau khi bỏ trùng mới cắt về SECTION_LIMIT.
-  const forYouIds = useMemo(() => new Set((forYou.data?.data ?? []).map((p) => p.id)), [forYou.data]);
-  const featuredQuery: SectionQuery = {
-    isLoading: featured.isLoading || (authed && forYou.isPending),
-    isError: featured.isError,
-    error: featured.error,
-    isFetching: featured.isFetching,
-    refetch: featured.refetch,
-    data: featured.data ? { data: dedupeAgainst(featured.data.data, forYouIds).slice(0, SECTION_LIMIT) } : undefined,
-  };
-
-  // API sập hẳn: cả ba lưới SP công khai đều lỗi và chưa có gì để hiện → một dải lỗi cấp trang thay cho từng thẻ lỗi của kệ.
-  const publicGrids = [bestSellers, featured, newest];
-  const pageDown = publicGrids.every((b) => b.isError && b.data === undefined);
+  // Chỉ tính khi khách đang THẤY kệ Bán chạy (khách mới); khách cũ không nhận dải lỗi vì kệ họ không thấy.
+  const pageDown = kind === 'new' && bestSellers.isError && bestSellers.data === undefined;
 
   const blocks: Record<HomeBlockId, ReactNode> = {
     search: <SearchRow unreadCount={unreadCount} authed={authed} />,
-    // Lỗi thật → khối lỗi + Thử lại; 404 = API cũ chưa có endpoint → ẩn như trước (kệ này vốn tuỳ chọn).
-    purchased:
-      purchased.isError && !purchased.data && !isEndpointMissing(purchased.error) ? (
-        <HomeBlockError title={reorderText.railTitle} error={purchased.error} onRetry={purchased.refetch} retrying={purchased.isFetching} />
-      ) : (
-        <PurchasedRail />
-      ),
-    // Khách mới: ô này rỗng và "Quà khách mới" phải là khối đầu sau ô tìm, nên dải đi cùng khối welcome; khách cũ thấy dải ngay sau dải đơn.
-    orderStrip: (
-      <>
-        <OrderStrip />
-        {kind === 'returning' && <PointsBoostStrip />}
-      </>
-    ),
+    member: kind === 'unknown' || (kind === 'returning' && restoring) ? <MemberCardSkeleton /> : kind === 'returning' ? <MemberCard /> : null,
+    todo: <TodoStrip restoring={restoring} />,
+    // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
+    welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
+    shortcuts: <ShortcutGrid />,
+    purchased: <PurchasedRail restoring={restoring} />,
     flash: (
       <>
         <FlashSale />
         <UpcomingFlashSales />
       </>
     ),
-    forYou: authed ? <HomeSection title={homeText.forYou} query={forYou} limit={SECTION_LIMIT} /> : null,
-    bestSellers: (
-      <HomeSection title={homeText.bestSellers} query={bestSellers} limit={SECTION_LIMIT} seeAllTo={browseHref({ ...EMPTY_SEARCH_STATE, sort: 'best_seller' })} priority />
-    ),
     categories: (
-      <CategoryGrid
+      <CategoryRow
         entries={entries}
         isLoading={categories.isLoading}
         onSelect={(e) =>
@@ -134,31 +111,21 @@ export default function HomeView({ initial = {} }: { initial?: HomeInitial }) {
         }
       />
     ),
-    recentlyViewed: <RecentlyViewedRail />,
-    featured: <HomeSection title={homeText.featured} query={featuredQuery} limit={SECTION_LIMIT} seeAllTo={browseHref(EMPTY_SEARCH_STATE)} />,
-    newArrivals: (
-      <HomeSection title={homeText.newArrivals} query={newest} limit={SECTION_LIMIT} seeAllTo={browseHref({ ...EMPTY_SEARCH_STATE, sort: 'newest' })} />
-    ),
-    extras: <HomeExtras initialBrands={initial.brands} />,
-    // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome:
-      kind === 'new' ? (
-        <>
-          <NewCustomerGift />
-          <PointsBoostStrip omitPlain />
-        </>
-      ) : null,
+    bestSellers: <BestSellerRail initial={initial.bestSellers} />,
+    journey: <BrandJourney initialBrands={initial.brands} />,
+    community: <CommunityPreview />,
+    suggest: <SuggestFeed initial={initial.suggest} />,
   };
 
   return (
     <HomeBlockErrorSuppressed.Provider value={pageDown}>
       <HomeHeader unreadCount={unreadCount} />
-      {homeBlockOrder(kind, newCustomerLayout).map((id) => (
+      {homeBlockOrder(kind).map((id) => (
         <Fragment key={id}>
           <div data-home-block={id}>{blocks[id]}</div>
           {pageDown && id === 'search' && (
             <div data-home-block="pageError">
-              <HomePageError error={bestSellers.error} retrying={publicGrids.some((b) => b.isFetching)} onRetry={() => refreshHomeQueries(qc)} />
+              <HomePageError error={bestSellers.error} retrying={bestSellers.isFetching} onRetry={() => refreshHomeQueries(qc)} />
             </div>
           )}
         </Fragment>

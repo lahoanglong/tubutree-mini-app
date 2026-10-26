@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import routeMap from '@tubutree/app-core/route-map.json';
+import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isWebRouteReady } from '@/lib/route-map';
 import { buildAccountMenu, type AccountMenuContext, type AccountMenuGroup } from './account-menu';
 
@@ -9,9 +10,7 @@ const ready = () => true;
 const ctx = (over: Partial<AccountMenuContext> = {}): AccountMenuContext => ({
   role: 'CUSTOMER',
   aiEnabled: false,
-  claimEnabled: false,
   chatEnabled: false,
-  cashbackEnabled: false,
   dealer: null,
   ownedBrandName: null,
   isReady: ready,
@@ -22,54 +21,62 @@ const all = (menu: AccountMenuGroup[]) => menu.flatMap((g) => g.items);
 
 describe('nhóm menu hub tài khoản', () => {
   it('CTV thấy "Cộng tác viên" (bảng điều khiển), không còn lời mời mở gian hàng', () => {
-    const items = buildAccountMenu(ctx({ role: 'AFFILIATE' })).find((g) => g.group === 'Hợp tác')!.items;
+    const items = buildAccountMenu(ctx({ role: 'AFFILIATE' })).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items;
     expect(items.find((i) => i.to === '/ctv')!.label).toBe('Cộng tác viên');
     expect(items.map((i) => i.label)).not.toContain('Mở gian hàng Cộng tác viên');
   });
 
   it('đại lý chỉ thấy mục Cộng tác viên khi còn quyền CTV; đại lý thuần hoặc chưa biết quyền thì không có mục này', () => {
-    const find = (over: Partial<AccountMenuContext>) => buildAccountMenu(ctx(over)).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/ctv');
+    const find = (over: Partial<AccountMenuContext>) => buildAccountMenu(ctx(over)).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.find((i) => i.to === '/ctv');
     expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: true, canRegister: false } })?.label).toBe('Cộng tác viên');
     expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: false, canRegister: false } })).toBeUndefined();
     expect(find({ role: 'DEALER' })).toBeUndefined();
   });
 
   it('lời mời mở gian hàng không nhắc hoa hồng (chính sách Zalo)', () => {
-    const entry = buildAccountMenu(ctx()).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/ctv')!;
+    const entry = buildAccountMenu(ctx()).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.find((i) => i.to === '/ctv')!;
     expect(`${entry.label} ${entry.hint}`).not.toMatch(/hoa hồng/i);
   });
 
-  it('bốn nhóm theo thứ tự Mua sắm, Tài sản, Hợp tác, Khác; khách thường không có nhóm Công việc', () => {
-    expect(buildAccountMenu(ctx()).map((g) => g.group)).toEqual(['Mua sắm', 'Tài sản', 'Hợp tác', 'Khác']);
+  it('ba nhóm theo thứ tự Kiếm tiền cùng Tubu, Tài khoản, Hỗ trợ; khách thường không có nhóm Công việc', () => {
+    expect(buildAccountMenu(ctx()).map((g) => g.group)).toEqual(['Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']);
   });
 
   it('mục đúng như Mini App khi mọi route đã xong và cờ tắt', () => {
     const m = buildAccountMenu(ctx());
-    expect(labels(m, 'Mua sắm')).toEqual(['Mua chung nhóm', 'Đổi rác lấy quà', 'Sản phẩm yêu thích', 'Sổ địa chỉ', 'Cộng đồng hỏi đáp']);
-    expect(labels(m, 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu']);
-    expect(labels(m, 'Hợp tác')).toEqual(['Mở gian hàng Cộng tác viên', 'Đăng ký đại lý']);
-    expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
+    expect(labels(m, 'Kiếm tiền cùng Tubu')).toEqual(['Mở gian hàng Cộng tác viên', 'Học viện Tubu', 'Đại lý']);
+    expect(labels(m, 'Tài khoản')).toEqual(['Sản phẩm yêu thích', 'Sổ địa chỉ', 'Thông báo', 'Cài đặt']);
+    expect(labels(m, 'Hỗ trợ')).toEqual(['Câu chuyện thương hiệu', 'Về Tubu Tree & Hỗ trợ']);
   });
 
-  it('"Chat với Tubu Tree" chỉ hiện khi chat bật, đứng sau Câu chuyện thương hiệu và dẫn tới /ho-tro/chat', () => {
+  it('"Chat với Tubu Tree" chỉ hiện khi chat bật, đứng đầu nhóm Hỗ trợ và dẫn tới /ho-tro/chat', () => {
     expect(all(buildAccountMenu(ctx())).some((i) => i.to === '/ho-tro/chat')).toBe(false);
     const m = buildAccountMenu(ctx({ chatEnabled: true }));
-    expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Chat với Tubu Tree', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
+    expect(labels(m, 'Hỗ trợ')).toEqual(['Chat với Tubu Tree', 'Câu chuyện thương hiệu', 'Về Tubu Tree & Hỗ trợ']);
     expect(all(m).find((i) => i.label === 'Chat với Tubu Tree')?.to).toBe('/ho-tro/chat');
+  });
+
+  it('Trợ lý AI 24/7 chỉ hiện khi máy chủ báo bật, nằm sau Chat', () => {
+    expect(labels(buildAccountMenu(ctx()), 'Hỗ trợ')).not.toContain('Trợ lý AI 24/7');
+    expect(labels(buildAccountMenu(ctx({ aiEnabled: true, chatEnabled: true })), 'Hỗ trợ').slice(0, 2)).toEqual(['Chat với Tubu Tree', 'Trợ lý AI 24/7']);
   });
 
   it('đích là route web của mục Mini App tương ứng', () => {
     const to = (label: string) => all(buildAccountMenu(ctx({ aiEnabled: true }))).find((i) => i.label === label)?.to;
     expect(to('Sổ địa chỉ')).toBe('/tai-khoan/dia-chi');
-    expect(to('Ví Tubu')).toBe('/tai-khoan/vi-tubu');
-    expect(to('Hạng thành viên & Điểm Xanh')).toBe('/tai-khoan/diem-xanh');
     expect(to('Thông báo')).toBe('/tai-khoan/thong-bao');
     expect(to('Cài đặt')).toBe('/tai-khoan/cai-dat');
+    expect(to('Học viện Tubu')).toBe('/hoc-vien');
     expect(to('Trợ lý AI 24/7')).toBe('/tu-van');
   });
 
+  it('không còn Ví, Điểm Xanh, Mua chung, Đổi rác, Tích điểm đơn sàn hay Hoàn tiền trong menu (đã chuyển sang Ưu đãi hoặc dải số liệu)', () => {
+    const text = JSON.stringify(buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, chatEnabled: true })));
+    for (const gone of ['Ví Tubu', 'Hạng thành viên', 'Mua chung', 'Đổi rác', 'Tích điểm đơn sàn', 'Hoàn tiền', 'Cộng đồng hỏi đáp']) expect(text).not.toContain(gone);
+  });
+
   it('không trùng đích trong menu (kể cả khi bật hết cờ và đủ vai trò)', () => {
-    const m = buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, claimEnabled: true, cashbackEnabled: true, ownedBrandName: 'Nhãn A' }));
+    const m = buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, chatEnabled: true, ownedBrandName: 'Nhãn A' }));
     const dests = all(m).map((i) => i.to);
     expect(new Set(dests).size).toBe(dests.length);
   });
@@ -78,55 +85,29 @@ describe('nhóm menu hub tài khoản', () => {
     const webPaths = new Set(
       (routeMap.routes as { items: { web?: string }[] }[]).flatMap((g) => g.items).flatMap((i) => (i.web ? [i.web.split('?')[0]!] : [])),
     );
-    const m = buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, claimEnabled: true, cashbackEnabled: true, ownedBrandName: 'Nhãn A' }));
-    for (const item of all(m).filter((i) => !i.miniAppOnly)) expect(webPaths.has(item.to), item.to).toBe(true);
+    const m = buildAccountMenu(ctx({ role: 'ADMIN', aiEnabled: true, chatEnabled: true, ownedBrandName: 'Nhãn A' }));
+    for (const item of all(m)) expect(webPaths.has(item.to), item.to).toBe(true);
   });
 
   it('mục trỏ route còn pending thì ẩn; route xong thì hiện', () => {
-    const m = buildAccountMenu(ctx({ isReady: (p) => p === '/tai-khoan/dia-chi' || p === '/tai-khoan/vi-tubu' }));
-    expect(labels(m, 'Mua sắm')).toEqual(['Sổ địa chỉ']);
-    expect(labels(m, 'Tài sản')).toEqual(['Ví Tubu']);
-    expect(m.map((g) => g.group)).toEqual(['Mua sắm', 'Tài sản']);
-  });
-});
-
-describe('mục theo cờ', () => {
-  it('Trợ lý AI 24/7 chỉ hiện khi máy chủ báo bật, nằm sau Đổi rác', () => {
-    expect(labels(buildAccountMenu(ctx()), 'Mua sắm')).not.toContain('Trợ lý AI 24/7');
-    expect(labels(buildAccountMenu(ctx({ aiEnabled: true })), 'Mua sắm').slice(0, 3)).toEqual(['Mua chung nhóm', 'Đổi rác lấy quà', 'Trợ lý AI 24/7']);
-  });
-
-  it('Tích điểm đơn sàn: ẩn khi cờ tắt; bật thì hiện ở nhóm Tài sản và đánh dấu chỉ Mini App (không có route web)', () => {
-    expect(labels(buildAccountMenu(ctx()), 'Tài sản')).not.toContain('Tích điểm đơn sàn');
-    const item = all(buildAccountMenu(ctx({ claimEnabled: true }))).find((i) => i.label === 'Tích điểm đơn sàn')!;
-    expect(item.miniAppOnly).toBe(true);
-    expect(item.hint).toBe('Quét mã trên phiếu giao hàng');
-    expect(labels(buildAccountMenu(ctx({ claimEnabled: true })), 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu', 'Tích điểm đơn sàn']);
-  });
-
-  it('Hoàn tiền sàn ngoài chỉ hiện khi bật CASHBACK_ENABLED, giữa mục mở gian hàng và đại lý', () => {
-    expect(labels(buildAccountMenu(ctx()), 'Hợp tác')).not.toContain('Hoàn tiền sàn ngoài');
-    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Mở gian hàng Cộng tác viên', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
-  });
-
-  it('khi cờ tắt, không nhãn nào nhắc "sàn ngoài"', () => {
-    const text = JSON.stringify(buildAccountMenu(ctx({ role: 'ADMIN' })));
-    expect(text).not.toContain('sàn ngoài');
+    const m = buildAccountMenu(ctx({ isReady: (p) => p === '/tai-khoan/dia-chi' }));
+    expect(labels(m, 'Tài khoản')).toEqual(['Sổ địa chỉ']);
+    expect(m.map((g) => g.group)).toEqual(['Tài khoản']);
   });
 });
 
 describe('mục đại lý và chủ nhãn đổi theo dữ liệu', () => {
   const dealerItem = (dealer: AccountMenuContext['dealer']) =>
-    buildAccountMenu(ctx({ dealer })).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/dai-ly')!;
+    buildAccountMenu(ctx({ dealer })).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.find((i) => i.to === '/dai-ly')!;
 
   it('chưa có hồ sơ hoặc chưa tải: "Đăng ký đại lý"', () => {
-    expect(dealerItem(null).label).toBe('Đăng ký đại lý');
-    expect(dealerItem({ status: 'NONE', isDealer: false } as never).label).toBe('Đăng ký đại lý');
+    expect(dealerItem(null).label).toBe(homeCopy.earn.dealer.label);
+    expect(dealerItem({ status: 'NONE', isDealer: false } as never).label).toBe(homeCopy.earn.dealer.label);
   });
 
   it('đã duyệt (isDealer hoặc APPROVED): "Kênh đại lý" kèm tên hạng, thiếu hạng thì mô tả bảng giá sỉ', () => {
     expect(dealerItem({ status: 'APPROVED', isDealer: true, tier: { name: 'Bạc' } } as never)).toMatchObject({ label: 'Kênh đại lý', hint: 'Bạc' });
-    expect(dealerItem({ status: 'APPROVED', isDealer: false } as never)).toMatchObject({ label: 'Kênh đại lý', hint: 'Bảng giá sỉ — công nợ' });
+    expect(dealerItem({ status: 'APPROVED', isDealer: false } as never)).toMatchObject({ label: 'Kênh đại lý', hint: homeCopy.earn.dealer.hint });
   });
 
   it('đang chờ duyệt: "Hồ sơ đại lý" — "Đang chờ duyệt"', () => {
@@ -134,9 +115,9 @@ describe('mục đại lý và chủ nhãn đổi theo dữ liệu', () => {
   });
 
   it('chủ nhãn thấy "Quản lý nhãn hàng" kèm tên nhãn ở cuối nhóm Hợp tác; người khác thì không', () => {
-    const last = buildAccountMenu(ctx({ ownedBrandName: 'Nhãn A' })).find((g) => g.group === 'Hợp tác')!.items.at(-1)!;
+    const last = buildAccountMenu(ctx({ ownedBrandName: 'Nhãn A' })).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.at(-1)!;
     expect(last).toMatchObject({ label: 'Quản lý nhãn hàng', to: '/chu-thuong-hieu', hint: 'Nhãn A' });
-    expect(labels(buildAccountMenu(ctx()), 'Hợp tác')).not.toContain('Quản lý nhãn hàng');
+    expect(labels(buildAccountMenu(ctx()), 'Kiếm tiền cùng Tubu')).not.toContain('Quản lý nhãn hàng');
   });
 });
 
@@ -171,10 +152,10 @@ describe('nhóm Công việc theo vai trò', () => {
 describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
   const real = { isReady: isWebRouteReady };
 
-  it('đại lý, chủ nhãn, nhân viên và Đổi rác có lối vào như Mini App (profile.tsx)', () => {
+  it('đại lý, chủ nhãn, nhân viên và Học viện có lối vào như Mini App (profile.tsx)', () => {
     const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A', ctvAccess: { isAffiliate: true } }));
     const to = all(m).map((i) => i.to);
-    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/doi-rac']));
+    expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/hoc-vien']));
   });
 
   it('admin/nhân viên chưa có kết quả /affiliate/me (đang tải, lỗi, 401): mục Cộng tác viên ẩn, không đổi chữ', () => {

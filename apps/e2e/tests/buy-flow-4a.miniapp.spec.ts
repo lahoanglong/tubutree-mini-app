@@ -23,19 +23,19 @@ async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
 }
 
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
-  test('Home: kệ "Mua lại" là khối đầu tiên dưới ô tìm; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
+  test('Home: kệ "Mua lại" nằm trên Danh mục; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
     mockBuyFlowSession(api);
     await page.goto('/');
 
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
-    const [searchBox, railBox, aiBox] = await Promise.all([
+    const [searchBox, railBox, categoriesBox] = await Promise.all([
       page.getByRole('button', { name: 'Bạn đang tìm gì hôm nay?' }).boundingBox(),
       rail.boundingBox(),
-      page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' }).boundingBox(),
+      page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox(),
     ]);
     expect(railBox!.y).toBeGreaterThan(searchBox!.y);
-    expect(railBox!.y).toBeLessThan(aiBox!.y);
+    expect(railBox!.y).toBeLessThan(categoriesBox!.y);
 
     const added = api.waitForCall('POST', '/cart/items');
     await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click(); // chạm 1
@@ -55,33 +55,32 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
       await gate;
       return PURCHASED_PAGE;
     });
+    // Khối Mua lại chỉ có chỗ khi khách đã được nhớ là khách cũ (use-home-customer-kind.ts).
+    await page.addInitScript(() => {
+      localStorage.setItem('tubu_home_kind', JSON.stringify({ userId: 'user-4a', kind: 'returning' }));
+    });
     await page.goto('/');
 
     const skeleton = page.getByTestId('purchased-rail-loading');
     await expect(skeleton).toBeVisible({ timeout: 15_000 });
     const skeletonBox = await skeleton.boundingBox();
-    const aiBefore = await page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' }).boundingBox();
+    const belowBefore = await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox();
     release();
 
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
     await expect(skeleton).toHaveCount(0);
     const railBox = await rail.boundingBox();
-    const aiAfter = await page.getByRole('button', { name: 'Hỏi trợ lý AI 24/7' }).boundingBox();
+    const belowAfter = await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox();
 
     expect(Math.abs(skeletonBox!.height - railBox!.height), `skeleton ${skeletonBox!.height}px vs kệ ${railBox!.height}px`).toBeLessThanOrEqual(16);
-    // Hệ quả người dùng thấy: khối bên dưới (nút "Hỏi trợ lý AI") gần như không nhảy vị trí.
-    expect(Math.abs(aiAfter!.y - aiBefore!.y), 'khối bên dưới bị đẩy').toBeLessThanOrEqual(16);
+    // Hệ quả người dùng thấy: khối bên dưới (Danh mục) gần như không nhảy vị trí.
+    expect(Math.abs(belowAfter!.y - belowBefore!.y), 'khối bên dưới bị đẩy').toBeLessThanOrEqual(16);
   });
 
-  test('Home: khách cũ đã nhớ loại — "Bán chạy" không xê dịch khi purchased-items về (không nhảy khối "Dành cho bạn")', async ({ page, api }) => {
+  test('Home: khách cũ đã nhớ loại — Danh mục không xê dịch khi purchased-items về (thứ tự khối đúng ngay từ đầu)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     mockBuyFlowSession(api);
-    // "Dành cho bạn" có hàng: khách cũ thấy nó TRÊN "Bán chạy", khách mới thấy dưới → đổi thứ tự sẽ làm "Bán chạy" nhảy.
-    api.get('/products/for-you', [{
-      id: 'prod-fy', slug: 'danh-cho-ban', brand: 'Tubu', name: 'Gợi Ý Riêng Cho Bạn', thumbnail: null,
-      basePrice: 52000, salePrice: null, isFeatured: false, inStock: true, sold: 3,
-    }]);
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
     api.get('/me/purchased-items', async () => {
@@ -94,20 +93,18 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     });
     await page.goto('/');
 
-    const forYou = page.getByRole('region', { name: 'Dành cho bạn' });
-    const best = page.getByRole('region', { name: 'Bán chạy' });
-    await expect(forYou).toBeVisible({ timeout: 15_000 });
-    await expect(best).toBeVisible();
+    const member = page.getByRole('region', { name: 'Thẻ thành viên' });
+    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    await expect(member).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Bán chạy' })).toHaveCount(0); // thứ tự khách cũ: không có kệ Bán chạy
     await expect(page.getByTestId('purchased-rail-loading')).toBeVisible(); // purchased-items vẫn đang chờ
-    const forYouBefore = await forYou.boundingBox();
-    const bestBefore = await best.boundingBox();
-    expect(forYouBefore!.y, 'đúng thứ tự khách cũ ngay từ đầu: "Dành cho bạn" nằm trên "Bán chạy"').toBeLessThan(bestBefore!.y);
+    const before = await categories.boundingBox();
 
     release();
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
-    const bestAfter = await best.boundingBox();
-    expect(Math.abs(bestAfter!.y - bestBefore!.y), '"Bán chạy" bị đẩy khi purchased-items về').toBeLessThanOrEqual(2);
+    const after = await categories.boundingBox();
+    expect(Math.abs(after!.y - before!.y), `Danh mục bị đẩy ${Math.abs(after!.y - before!.y)}px khi purchased-items về`).toBeLessThanOrEqual(2);
   });
 
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {
@@ -127,26 +124,25 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('button', { name: 'Thử lại' })).toHaveCount(0);
   });
 
-  test('Tab bar: "Đơn hàng" thay "Ví & HH", badge đơn đang xử lý; /orders là trang gốc', async ({ page, api }) => {
+  test('Tab bar: "Ưu đãi" thay "Đơn hàng", badge đơn đang xử lý nằm ở Cá nhân; /orders vẫn mở được', async ({ page, api }) => {
     mockBuyFlowSession(api, { activeCount: 2 });
     mockOrdersTab(api);
     await page.goto('/');
 
     const nav = page.getByRole('navigation', { name: 'Điều hướng chính' });
     await expect(nav).toBeVisible({ timeout: 15_000 });
-    for (const label of ['Trang chủ', 'Danh mục', 'Vườn Xanh', 'Cá nhân']) {
+    for (const label of ['Trang chủ', 'Danh mục', 'Vườn Xanh']) {
       await expect(nav.getByRole('button', { name: label, exact: true })).toBeVisible();
     }
     await expect(nav.getByText('Ví & HH')).toHaveCount(0);
-    const ordersTab = nav.getByRole('button', { name: 'Đơn hàng, 2 đơn đang xử lý' });
-    await expect(ordersTab).toBeVisible();
-    await expect(ordersTab.getByText('2', { exact: true })).toBeVisible();
+    await expect(nav.getByText('Đơn hàng', { exact: true })).toHaveCount(0);
+    await expect(nav.getByRole('button', { name: /^Ưu đãi/ })).toBeVisible();
+    const profileTab = nav.getByRole('button', { name: 'Cá nhân, 2 đơn đang xử lý' });
+    await expect(profileTab).toBeVisible();
+    await expect(profileTab.getByText('2', { exact: true })).toBeVisible();
 
-    await ordersTab.click();
-    await expect(page).toHaveURL(/\/orders$/);
+    await page.goto('/orders');
     await expect(page.getByRole('heading', { name: 'Đơn hàng' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Quay lại' })).toHaveCount(0);
-    await expect(nav).toBeVisible();
   });
 
   test('Trang Đơn hàng: kệ Mua lại + 7 tab (có Định kỳ); "Đang xử lý" gửi group=processing; "Định kỳ" hiện lịch', async ({ page, api }) => {

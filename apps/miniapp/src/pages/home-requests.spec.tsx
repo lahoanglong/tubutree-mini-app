@@ -8,14 +8,18 @@ const mocks = vi.hoisted(() => ({
   routes: {} as Record<string, () => Promise<{ data: unknown }> | { data: unknown } | Error>,
   status: 'authenticated',
 }));
-vi.mock('../services/api', () => ({ api: { get: mocks.get, post: vi.fn() }, getAccessToken: () => 'tok' }));
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  api: { get: mocks.get, post: vi.fn() },
+  getAccessToken: () => 'tok',
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
   useNavigate: () => vi.fn(),
 }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.status, user: { id: 'u1' } }),
+  useAuthStore: (sel: (s: { status: string; user: Record<string, string> | null }) => unknown) => sel({ status: mocks.status, user: { id: 'u1', phone: '0901234567', zaloId: 'z1' } }),
 }));
 vi.mock('../components/pull-to-refresh', () => ({ PullToRefresh: () => null }));
 vi.mock('../components/cart-button', () => ({ CartButton: () => null }));
@@ -57,6 +61,7 @@ const ME_FEED = {
     isNewCustomer: true,
     welcomeVoucher: { code: 'WELCOME-U1', type: 'AMOUNT', value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' },
   },
+  wasteOpenRequestCount: 0,
   purchasedLimit: 10,
 };
 
@@ -78,6 +83,9 @@ describe('Trang chủ gộp request (C-037)', () => {
     localStorage.clear();
     mocks.status = 'authenticated';
     mocks.routes = {};
+    // Lưới gợi ý cuối trang (trang 1) và xem trước Cộng đồng không nằm trong request gộp: hai request riêng, luôn có mặt.
+    mocks.routes['/products'] = () => ({ data: PAGE([card('f2', 'Chỉ nổi bật')]) });
+    mocks.routes['/feed'] = () => ({ data: { posts: [] } });
     mocks.get.mockImplementation(async (url: string) => {
       const r = mocks.routes[url];
       if (!r) throw Object.assign(new Error(`404 ${url}`), { response: { status: 404 } });
@@ -87,29 +95,37 @@ describe('Trang chủ gộp request (C-037)', () => {
     });
   });
 
-  it('đã đăng nhập: mở Home chỉ tốn 2 request (/home + /home/me) và vẽ đủ khối từ dữ liệu gộp', async () => {
+  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng lưới gợi ý và Cộng đồng, vẽ đủ khối', async () => {
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
     renderHome();
-    expect(await screen.findByText('Bán chạy nhất')).toBeInTheDocument();
     expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
-    expect(await screen.findByText('Chỉ nổi bật')).toBeInTheDocument();
-    expect(await screen.findByText('Cobote')).toBeInTheDocument();
     // D2-07b: khối "Quà khách mới" (số công khai + ưu đãi của khách) đi cùng hai request gộp, không thêm request lẻ.
     expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/home', '/home/me']);
+    // Trang đầu của lưới gợi ý (không page, limit 12) lấy từ khối gộp; số yêu cầu đổi rác đang mở cũng lấy từ /home/me (không gọi /waste/me).
+    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
+  });
+
+  it('API gộp cũ chưa có khối số yêu cầu đổi rác: hỏi endpoint nhẹ /waste/me/open-count một lần, không gọi /waste/me', async () => {
+    const { wasteOpenRequestCount: _dropped, ...oldMe } = ME_FEED;
+    mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
+    mocks.routes['/home/me'] = () => ({ data: oldMe });
+    mocks.routes['/waste/me/open-count'] = () => ({ data: { count: 0 } });
+    renderHome();
+    expect(await screen.findByText('Gợi ý riêng')).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(paths().filter((p) => p.startsWith('/waste'))).toEqual(['/waste/me/open-count']);
   });
 
   it('khách chưa đăng nhập: chỉ /home, không gọi /home/me', async () => {
     mocks.status = 'guest';
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     renderHome();
-    expect(await screen.findByText('Bán chạy nhất')).toBeInTheDocument();
     expect(await screen.findByText('Đặt định kỳ giảm 17% mỗi đơn')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths()).toEqual(['/home']);
+    expect(paths().sort()).toEqual(['/home']);
   });
 
   it('API gộp cũ chưa có khối cấu hình/ưu đãi khách mới: hai khối đó lùi về request lẻ, phần còn lại vẫn từ gộp', async () => {
@@ -122,11 +138,10 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('Mã giảm giá chào mừng 25.000đ')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/home', '/home/me', '/me/new-customer-offer']);
+    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer']);
   });
 
   it('API cũ chưa có /home (404): lùi về từng request lẻ, trang vẫn đủ nội dung', async () => {
-    mocks.routes['/products'] = () => ({ data: PAGE([card('p1', 'SP lẻ')]) });
     mocks.routes['/products/for-you'] = () => ({ data: [card('fy', 'Gợi ý lẻ')] });
     mocks.routes['/categories'] = () => ({ data: [] });
     mocks.routes['/brands'] = () => ({ data: [] });
@@ -148,7 +163,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText('LẻBrand')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/brands', '/home', '/home/me']);
+    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {
@@ -164,6 +179,5 @@ describe('Trang chủ gộp request (C-037)', () => {
     expect(after.filter((p) => p === '/home').length).toBe(1);
     expect(after.filter((p) => p === '/home/me').length).toBe(1);
     expect(after).not.toContain('/categories');
-    expect(after).not.toContain('/products');
   });
 });

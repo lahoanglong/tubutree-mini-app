@@ -7,9 +7,13 @@
 // — trình duyệt tự đính kèm khi gọi /api/auth/*. Một lỗ XSS vì thế không lấy được token 30 ngày.
 //
 // Thứ JS giữ chỉ là một cờ `tubu_web_session` trong localStorage (không phải bí mật, chỉ là
-// "có phiên đáng thử khôi phục không"). Cố tình KHÔNG dùng cookie cho cờ này: cookie do API set
+// "có phiên đáng thử khôi phục không"). Cờ này KHÔNG thay bằng cookie của API: cookie do API set
 // thuộc origin của API, nên nếu API ở api.tubutree.com còn web ở tubutree.com thì web không đọc
-// được, và mọi lần mở trang đều tưởng chưa đăng nhập.
+// được, và mọi lần mở trang đều tưởng chưa đăng nhập. Riêng Trang chủ cần biết "khách đã có phiên"
+// ngay ở server để dựng đúng khung chờ, nên cờ được GHI THÊM thành cookie thường `tubu_web_session`
+// của chính origin web (JS ghi, không HttpOnly, không chứa bí mật), cùng lúc và cùng vòng đời với cờ localStorage.
+import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
+
 const BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
 
@@ -21,7 +25,23 @@ export function apiMediaUrl(path: string): string {
   return `${BASE.replace(/\/+$/, '')}${path}`;
 }
 
-const SESSION_MARKER = 'tubu_web_session';
+const SESSION_MARKER = SESSION_COOKIE;
+const SESSION_COOKIE_MAX_AGE_S = 30 * 24 * 3600;
+
+function cookieAttrs(maxAgeS: number): string {
+  const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
+  return `; Path=/; Max-Age=${maxAgeS}; SameSite=Lax${secure}`;
+}
+
+/** Ghi hoặc xoá cookie của chính web; trình duyệt chặn cookie thì bỏ qua (Trang chủ chỉ mất bản dựng sẵn, vẫn chạy đúng). */
+export function writeWebCookie(name: string, value: string | null): void {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = value === null ? `${name}=${cookieAttrs(0)}` : `${name}=${encodeURIComponent(value)}${cookieAttrs(SESSION_COOKIE_MAX_AGE_S)}`;
+  } catch {
+    /* cookie bị chặn */
+  }
+}
 
 let accessToken: string | null = null;
 
@@ -49,6 +69,7 @@ export function setSessionMarker(): void {
   } catch {
     /* không có storage thì chỉ mất khôi phục phiên tự động */
   }
+  writeWebCookie(SESSION_COOKIE, '1');
 }
 
 /** Xoá cờ khi phiên chết (refresh 400/401/403) hoặc đăng xuất — chặn vòng lặp thử lại vô hạn. */
@@ -59,6 +80,8 @@ export function clearSessionMarker(): void {
   } catch {
     /* không có storage thì không có gì để xoá */
   }
+  writeWebCookie(SESSION_COOKIE, null);
+  writeWebCookie(HOME_HINT_COOKIE, null);
 }
 
 /** Header đánh dấu "tôi là web shop" — bật chế độ cookie ở BE, đồng thời là lớp chống CSRF. */

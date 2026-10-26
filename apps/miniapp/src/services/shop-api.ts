@@ -317,7 +317,7 @@ export const fetchProducts = async (params: Record<string, string | number> = {}
 export const fetchProduct = (slug: string) =>
   api.get<ProductDetail>(`/products/${slug}`).then((r) => r.data);
 export const fetchBrands = async () =>
-  (await takePublicBlock('brands')) ?? api.get<{ brand: string; count: number }[]>('/brands').then((r) => r.data);
+  (await takePublicBlock('brands')) ?? api.get<{ brand: string; count: number; slug?: string | null }[]>('/brands').then((r) => r.data);
 export const fetchRelated = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/related`).then((r) => r.data);
 /** Feed "Dành cho bạn" — gợi ý cá nhân hoá (cần đăng nhập, xem home.tsx). */
@@ -670,6 +670,8 @@ export interface PurchasedItem {
   stock: number;
   inStock: boolean;
   timesBought: number;
+  /** Hàng chỉ bán lẻ (đối tác): không đặt định kỳ được. API cũ chưa trả: coi là chưa biết, không mời "Định kỳ". */
+  retailOnly?: boolean;
   lastPurchasedAt: string;
 }
 export interface PurchasedItemsPage {

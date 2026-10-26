@@ -3,6 +3,7 @@ import { brandAccent } from '../../utils/brands';
 import { vi } from '../../i18n/vi';
 import { formatSold } from '../../utils/format';
 import { WishlistHeart } from '../wishlist-heart';
+import { ProductImage } from './product-image';
 import { PriceTag } from './price-tag';
 import { Text } from './text';
 import { Button } from './button';
@@ -101,14 +102,7 @@ export function ProductTile({
           flex: isLine ? '0 0 auto' : undefined,
         }}
       >
-        {p.thumbnail && (
-          <img
-            src={p.thumbnail}
-            alt=""
-            loading="lazy"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        )}
+        <ProductImage src={p.thumbnail} brand={p.brand} />
         {badge && <div style={{ position: 'absolute', top: 8, left: 8 }}>{badge}</div>}
         {p.inStock === false && (
           <div

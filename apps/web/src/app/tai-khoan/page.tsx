@@ -1,17 +1,20 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, Leaf, Pencil, User } from 'lucide-react';
+import { fetchOrders } from '@tubutree/app-core/api/orders';
+import { homeCopy } from '@tubutree/app-core/home-copy';
+import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
-import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
+import { couponsQuery, loyaltyQuery, referralQuery } from '@tubutree/app-core/queries/loyalty';
 import { ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
+import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
 import { supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
-import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -20,32 +23,23 @@ import { formatVnd, getMe } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { pointsSummary } from '@/lib/checkout-points';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
-import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
+import { ORDERS_TABS } from '@/components/orders/orders-tabs';
+import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
 import BackLink from '@/components/back-link';
-import { mini } from '@/components/order-mobile/mobile-ui';
 
-const TILE =
-  'block min-h-11 rounded-control p-2 -m-2 transition hover:bg-forest-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0 max-md:m-0 max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:p-3 max-md:text-center max-md:shadow-[var(--elevation-1)] max-md:hover:bg-[var(--color-bg-surface)] max-md:focus-visible:outline-forest-600';
-const TILE_VALUE = 'text-xl font-bold max-md:text-[length:var(--type-price-md-size)] max-md:font-semibold max-md:leading-[var(--type-price-md-lh)] max-md:tabular-nums max-md:text-[color:var(--color-text-brand)]';
-const TILE_LABEL = 'text-xs text-forest-100 max-md:text-[length:var(--type-caption-size)] max-md:text-[color:var(--color-text-tertiary)]';
-const TILE_MORE = 'mt-1 inline-flex items-center gap-0.5 text-xs font-semibold text-stone-0 underline max-md:hidden';
-const ROW = 'flex min-h-11 w-full items-center gap-3 px-3 py-3 text-left max-md:py-3.5 transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';
-
-function MenuIcon({ item }: { item: AccountMenuItem }) {
-  const Icon = item.icon;
-  return (
-    <span className="flex h-9 w-9 flex-none items-center justify-center rounded-control bg-stone-50 text-forest-600 max-md:h-[34px] max-md:w-[34px] max-md:bg-[var(--color-bg-subtle)]">
-      <Icon className="h-5 w-5" aria-hidden="true" />
-    </span>
-  );
-}
+const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
+const ROW =
+  'flex min-h-11 w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-stone-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600';
 
 function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unread?: number; dot?: boolean }) {
+  const Icon = item.icon;
   return (
     <>
-      <MenuIcon item={item} />
+      <span className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-control bg-[var(--color-bg-subtle)] text-forest-600">
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-stone-900">{item.label}</span>
         {item.hint && <span className="block text-xs text-stone-600">{item.hint}</span>}
@@ -61,33 +55,54 @@ function RowBody({ item, unread = 0, dot = false }: { item: AccountMenuItem; unr
   );
 }
 
+function Stat({ label, value, href }: { label: string; value: string; href: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label={`${label}: ${value}`}
+      className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
+    >
+      <Text variant="price-md" as="div" tone="brand" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </Text>
+      <Text variant="caption" tone="tertiary" as="div">
+        {label}
+      </Text>
+    </Link>
+  );
+}
+
+/**
+ * Trang Cá nhân, bản web của `pages/profile.tsx` ở Mini App: hồ sơ, ba số (Điểm Xanh, Ví, Mã giảm giá), hàng trạng thái đơn mở danh sách
+ * đã lọc, mã giới thiệu, rồi ba nhóm Kiếm tiền cùng Tubu / Tài khoản / Hỗ trợ. Dưới md giống Mini App; từ md giữ khung giữa trang và khối đơn có ô tìm.
+ */
 export default function AccountPage() {
   const { user, logout } = useAuth();
   const phase = useAuthPhase();
-  const noticeId = useId();
-  const [noticeOpen, setNoticeOpen] = useState(false);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
   const authed = phase === 'authenticated';
-  // Hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập: sau khi đặt đơn dùng điểm, huỷ đơn có tiền về ví hay
-  // trả hàng thì số trên thẻ phải đổi ngay. Lấy lại mỗi lần vào trang và mỗi lần quay lại tab thay vì chờ F5;
-  // chưa lấy được (mất mạng) thì giữ số cũ.
-  const meQ = useQuery({
-    queryKey: ['me'],
-    queryFn: getMe,
-    enabled: authed,
-    refetchOnWindowFocus: true,
-  });
-  // Cùng queryKey với các trang Điểm Xanh/Ví/Thông báo nên mở hub không tốn thêm request khi đã có cache.
+  // Hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập: số điểm/ví phải đổi ngay sau khi đặt đơn hay huỷ đơn, nên lấy lại mỗi lần vào trang và quay lại tab.
+  const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: authed, refetchOnWindowFocus: true });
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const notifQ = useQuery({ ...notificationsQuery(coreHttp), enabled: authed });
+  const referralQ = useQuery({ ...referralQuery(coreHttp), enabled: authed });
+  const subsQ = useQuery({ ...subscriptionsQuery(coreHttp), enabled: authed });
+  const orderCounts = useQueries({
+    queries: ORDER_ROW_TARGETS.map((r) => {
+      const filter = ORDERS_TABS.find((t) => t.key === r.key)?.filter ?? {};
+      return {
+        queryKey: ['orders', 'count', r.key],
+        queryFn: () => fetchOrders(coreHttp, filter, 1, 1).then((res) => res.meta.total),
+        enabled: authed,
+      };
+    }),
+  });
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   const chatEnabled = cfgQ.data?.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQuery(coreHttp), enabled: authed && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
-  // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại. Giữ kết quả 5 phút để mỗi
-  // lần quay lại hub không lặp lại một request 404; sửa nhãn thì khoá 'owned-brand' bị làm mới.
-  // Cờ ownsBrand trên /auth/me (Mini App cũng hỏi riêng): false thì khỏi gọi /brand/owner/me. /auth/me lỗi hoặc API cũ thiếu cờ (null) thì giữ cách cũ.
+  // 404 nghĩa là không sở hữu nhãn / chưa có hồ sơ đại lý (bình thường), nên không thử lại và giữ kết quả 5 phút.
   const ownsBrandQ = useQuery({ ...ownsBrandQuery(coreHttp), enabled: authed, retry: false });
   const ownedBrandQ = useQuery({
     ...ownedBrandProfileQuery(coreHttp),
@@ -103,7 +118,7 @@ export default function AccountPage() {
   if (phase === 'loading') {
     return (
       <main className="mx-auto max-w-5xl px-4 py-20 text-center">
-        <h1 className="sr-only">Tài khoản</h1>
+        <h1 className="sr-only">Cá nhân</h1>
         <AuthLoading />
       </main>
     );
@@ -112,7 +127,7 @@ export default function AccountPage() {
   if (phase === 'unavailable') {
     return (
       <main className="mx-auto max-w-5xl px-4 py-6">
-        <h1 className={ui.pageTitle}>Tài khoản</h1>
+        <h1 className={ui.pageTitle}>Cá nhân</h1>
         <SessionUnavailable />
       </main>
     );
@@ -121,148 +136,207 @@ export default function AccountPage() {
   if (phase === 'guest' || !user) {
     return (
       <main className="mx-auto max-w-5xl px-4 py-6">
-        <h1 className={ui.pageTitle}>Tài khoản</h1>
-        <LoginRequired message="Đăng nhập để xem tài khoản và đơn hàng của bạn." returnTo="/tai-khoan" />
+        <h1 className={ui.pageTitle}>Cá nhân</h1>
+        <LoginRequired message="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn." returnTo="/tai-khoan" />
       </main>
     );
   }
 
-  // Điểm Xanh = lô thường + lô quy đổi (tiền trả trước, không hết hạn): cùng một con số với Mini App.
   const balances = meQ.data ?? user;
   const points = pointsSummary(balances);
-  const walletBalance = balances.walletBalance;
-  // Tên/SĐT lấy từ /me khi đã có (khách có thể vừa đổi tên ở Mini App); API cũ chưa trả thì dùng ảnh chụp lúc đăng nhập.
   const fullName = meQ.data?.fullName !== undefined ? meQ.data.fullName : user.fullName;
-  const tierName = loyaltyQ.data?.tier?.name ?? 'Mầm Xanh';
+  const tierName = loyaltyQ.data?.tier?.name ?? null;
+  const tierFailed = loyaltyQ.isError && !loyaltyQ.data;
   const unread = notifQ.data?.filter((n) => n.status !== 'READ').length ?? 0;
+  const referral = referralQ.data;
+  const code = referral?.referralCode ?? user.referralCode;
+  const minOrder = referral?.minOrderAmount ? formatVnd(referral.minOrderAmount) : null;
 
   const menu = buildAccountMenu({
     role: user.role,
     aiEnabled: cfgQ.data?.aiAdvisorEnabled === true,
-    claimEnabled: cfgQ.data?.loyalty?.marketplaceClaimEnabled === true,
     chatEnabled,
-    cashbackEnabled: CASHBACK_ENABLED,
     dealer: dealerQ.data,
     ctvAccess: ctvAccessQ.data,
     ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,
     isReady: isWebRouteReady,
   });
 
+  const countFor = (key: string): number | null => {
+    if (key === 'subscriptions') return subsQ.data ? subsQ.data.filter((x) => x.status === 'ACTIVE' || x.status === 'PAUSED').length : null;
+    const i = ORDER_ROW_TARGETS.findIndex((r) => r.key === key);
+    return i >= 0 ? (orderCounts[i]?.data ?? null) : null;
+  };
+
   const copyReferral = async () => {
+    if (!code) return;
     try {
-      await navigator.clipboard.writeText(user.referralCode);
+      await navigator.clipboard.writeText(code);
       setCopyMsg('Đã sao chép mã giới thiệu');
     } catch {
-      setCopyMsg(`Không sao chép được — mã của bạn: ${user.referralCode}`);
+      setCopyMsg(`Không sao chép được — mã của bạn: ${code}`);
+    }
+  };
+  const shareReferral = async () => {
+    if (!code) return;
+    const url = `${window.location.origin}/?ref=${encodeURIComponent(code)}`;
+    const text = `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${url}`;
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'Tubu Tree — Trồng cây, nhận quà', text, url });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyMsg('Đã sao chép lời mời kèm liên kết');
+    } catch {
+      setCopyMsg(`Không chia sẻ được — mã của bạn: ${code}`);
     }
   };
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0 max-md:pb-4">
       <div className="max-md:hidden">
-        <BackLink href="/">
-          ← Trang chủ
-        </BackLink>
+        <BackLink href="/">← Trang chủ</BackLink>
       </div>
-      <h1 className={`mt-1 ${ui.pageTitle} max-md:sr-only`}>Tài khoản</h1>
+      <h1 className="sr-only">Cá nhân</h1>
 
-      <section aria-label="Thông tin tài khoản" className="mt-3 rounded-sheet bg-forest-800 p-5 text-stone-0 shadow-raised max-md:mt-0 max-md:rounded-none max-md:bg-transparent max-md:p-0 max-md:shadow-none">
-        {/* Điện thoại: dải xanh tràn ngang chỉ ôm hồ sơ + mã giới thiệu, ba ô số liệu nổi đè lên mép dưới như Mini App (marginTop -20). */}
-        <div className="max-md:bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] max-md:p-4 max-md:pb-9">
-        <Link href="/tai-khoan/ho-so" className="flex min-h-11 items-center gap-3 rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0">
-          {user.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary, domain không cố định
-            <img src={user.avatarUrl} alt="" className="h-14 w-14 flex-none rounded-full bg-forest-700 object-cover" />
-          ) : (
-            <span className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-forest-700 text-forest-100">
-              <User className="h-7 w-7" aria-hidden="true" />
+      <div className="md:mx-auto md:mt-3 md:max-w-2xl">
+        <div className="bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
+          <Link href="/tai-khoan/ho-so" className="tubu-press flex min-h-11 items-center gap-3 rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0">
+            {user.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary, domain không cố định
+              <img src={user.avatarUrl} alt="" className="h-14 w-14 flex-none rounded-full bg-forest-700 object-cover" />
+            ) : (
+              <span className="flex h-14 w-14 flex-none items-center justify-center rounded-full bg-forest-700 text-forest-100">
+                <User className="h-7 w-7" aria-hidden="true" />
+              </span>
+            )}
+            <span className="min-w-0 flex-1">
+              <Heading variant="title-md" as="span" tone="inverse" style={{ display: 'block', lineHeight: 1.2 }}>
+                {fullName ?? 'Khách Tubu'}
+              </Heading>
+              <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                {tierName ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-xs font-semibold text-forest-800">
+                    <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
+                    {tierName}
+                  </span>
+                ) : !tierFailed ? (
+                  <span aria-hidden="true" className="inline-block h-6 w-[76px] rounded-full" style={{ background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
+                ) : null}
+                <span className="inline-flex items-center gap-1 rounded-full border border-stone-0 px-2 py-0.5 text-xs font-semibold">
+                  <Pencil className="h-3 w-3" aria-hidden="true" />
+                  {homeCopy.profile.editProfile}
+                  <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                </span>
+              </span>
             </span>
+          </Link>
+          {tierFailed && (
+            <div role="alert" className="mt-2 flex items-center justify-between gap-2">
+              <span className="text-xs">{homeCopy.member.tierFailed}</span>
+              <button
+                type="button"
+                onClick={() => void loyaltyQ.refetch()}
+                className="tubu-press -my-3 -mx-1.5 min-h-11 px-1.5 text-xs font-bold underline"
+              >
+                {homeCopy.member.retry}
+              </button>
+            </div>
           )}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-lg font-bold max-md:font-display">{fullName ?? 'Khách Tubu'}</span>
-            <span className="mt-1.5 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-forest-50 px-2 py-0.5 text-xs font-semibold text-forest-800">
-                <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
-                {tierName}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-stone-0 px-2 py-0.5 text-xs font-semibold">
-                <Pencil className="h-3 w-3" aria-hidden="true" />
-                Sửa hồ sơ
-                <ChevronRight className="h-3 w-3" aria-hidden="true" />
-              </span>
-            </span>
-          </span>
-        </Link>
+        </div>
 
-        {user.referralCode && (
-          <button
-            type="button"
-            onClick={() => void copyReferral()}
-            className="mt-3 flex min-h-11 w-full items-center justify-between gap-2 rounded-control bg-forest-50 px-3 py-2 text-left text-xs text-forest-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0 max-md:bg-[var(--color-action-secondary-bg)] max-md:text-[color:var(--color-action-secondary-fg)]"
-          >
-            <span>
-              Mã giới thiệu: <strong>{user.referralCode}</strong>
-            </span>
-            <span className="inline-flex flex-none items-center gap-1 font-semibold">
-              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-              Sao chép
-            </span>
-          </button>
+        <div className="relative -mt-5 grid grid-cols-3 gap-2 px-3">
+          <Stat label={homeCopy.profile.statPoints} value={`${points.total.toLocaleString('vi-VN')} điểm`} href="/tai-khoan/diem-xanh" />
+          <Stat label={homeCopy.profile.statWallet} value={formatVnd(balances.walletBalance)} href="/tai-khoan/vi-tubu" />
+          <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} href="/uu-dai?section=coupons" />
+        </div>
+
+        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3">
+          <Card padding={12}>
+            <div className="mb-2 flex items-center justify-between">
+              <Heading variant="title-sm" as="h2">
+                {homeCopy.profile.ordersTitle}
+              </Heading>
+              <Link
+                href="/tai-khoan/don-hang"
+                aria-label={homeCopy.profile.ordersAllLabel}
+                className="tubu-press inline-flex min-h-11 items-center text-[color:var(--color-text-brand)]"
+              >
+                <Text variant="caption" tone="brand">
+                  {homeCopy.profile.ordersAll}
+                </Text>
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-5 gap-1">
+              {ORDER_STATUS_ROW.map((r) => {
+                const n = r.counted ? countFor(r.key) : null;
+                return (
+                  <Link
+                    key={r.key}
+                    href={`/tai-khoan/don-hang?tab=${r.key}`}
+                    aria-label={homeCopy.profile.orderStatusLabel(r.label, n ?? 0)}
+                    className="tubu-press flex min-h-14 flex-col items-center justify-center gap-0.5 py-1"
+                  >
+                    <Text variant="price-md" as="div" tone={n ? 'brand' : 'tertiary'} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {n ?? '·'}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'center', lineHeight: 1.2 }}>
+                      {r.label}
+                    </Text>
+                  </Link>
+                );
+              })}
+            </div>
+          </Card>
+        </section>
+
+        {code && (
+          <section aria-label={homeCopy.profile.referralTitle} className="px-4 pt-3">
+            <Card padding={12}>
+              <Heading variant="title-sm" as="h2">
+                {homeCopy.profile.referralTitle}
+              </Heading>
+              <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
+                {homeCopy.profile.referralBody(minOrder, referral?.windowDays ?? null)}
+              </Text>
+              <div className="mt-2.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={`${homeCopy.profile.referralCopy} mã ${code}`}
+                  onClick={() => void copyReferral()}
+                  className="tubu-press flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-control bg-[var(--color-action-secondary-bg)] px-3 py-2 text-left"
+                >
+                  <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)' }}>
+                    {homeCopy.profile.referralCode}: <strong>{code}</strong>
+                  </Text>
+                  <Copy className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
+                </button>
+                <button type="button" onClick={() => void shareReferral()} className={`${ui.btnPrimary} flex-none`}>
+                  {homeCopy.profile.referralShare}
+                </button>
+              </div>
+              <p role="status" className={copyMsg ? 'mt-1.5 text-xs text-stone-600' : 'sr-only'}>
+                {copyMsg ?? ''}
+              </p>
+            </Card>
+          </section>
         )}
-        <p role="status" className={copyMsg ? 'mt-1 text-xs text-forest-100' : 'sr-only'}>
-          {copyMsg ?? ''}
-        </p>
-        </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-6 max-md:relative max-md:-mt-5 max-md:gap-2.5 max-md:p-3 max-md:pb-0 md:grid-cols-3">
-          <Link href="/tai-khoan/diem-xanh" className={TILE}>
-            <div className={TILE_VALUE}>{points.total.toLocaleString('vi-VN')} điểm</div>
-            <div className={TILE_LABEL}>Điểm Xanh</div>
-            {points.convertedNote && <div className={`${TILE_LABEL} max-md:hidden`}>{points.convertedNote}</div>}
-            <div className={TILE_MORE}>
-              Xem lịch sử
-              <ChevronRight className="h-3 w-3" aria-hidden="true" />
-            </div>
-          </Link>
-          <Link href="/tai-khoan/vi-tubu" className={TILE}>
-            <div className={TILE_VALUE}>{formatVnd(walletBalance)}</div>
-            <div className={TILE_LABEL}>Ví Tubu</div>
-            <div className={TILE_MORE}>
-              Xem lịch sử
-              <ChevronRight className="h-3 w-3" aria-hidden="true" />
-            </div>
-          </Link>
-          <Link href="/tai-khoan/diem-xanh" className={`${TILE} col-span-2 md:col-span-1`}>
-            <div className={TILE_VALUE}>{couponsQ.data ? `${couponsQ.data.length} mã` : '—'}</div>
-            <div className={TILE_LABEL}>Mã giảm giá</div>
-          </Link>
-        </div>
-      </section>
-
-      <div className="mt-4 grid gap-4 max-md:mt-0 max-md:gap-3 max-md:px-4 md:grid-cols-2">
         {menu.map((section, gi) => (
-          <section key={section.group} aria-labelledby={`${noticeId}-g${gi}`} className="min-w-0">
-            <h2 id={`${noticeId}-g${gi}`} className="mb-1.5 ml-1 text-xs font-semibold uppercase tracking-wide text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">
+          <section key={section.group} aria-labelledby={`account-g${gi}`} className="mx-4 mt-3">
+            <h2 id={`account-g${gi}`} className="mb-1.5 ml-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-tertiary)]">
               {section.group}
             </h2>
-            <ul className={`${ui.card} divide-y divide-stone-200 overflow-hidden ${mini.card}`}>
+            <ul className="divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-card bg-[var(--color-bg-surface)] shadow-[var(--elevation-1)]">
               {section.items.map((item) => {
                 const isNotif = item.to === '/tai-khoan/thong-bao';
                 const isChat = item.to === '/ho-tro/chat';
-                if (item.miniAppOnly) {
-                  return (
-                    <li key={item.to}>
-                      <button type="button" aria-expanded={noticeOpen} aria-controls={`${noticeId}-notice`} onClick={() => setNoticeOpen((o) => !o)} className={ROW}>
-                        <RowBody item={item} />
-                      </button>
-                      {noticeOpen && (
-                        <div id={`${noticeId}-notice`}>
-                          <MiniAppOnlyNotice miniappPath={item.to} />
-                        </div>
-                      )}
-                    </li>
-                  );
-                }
                 return (
                   <li key={item.to}>
                     <Link href={item.to} aria-label={isNotif && unread > 0 ? `${item.label}, ${unread} chưa đọc` : isChat && chatUnread ? `${item.label}, có tin mới` : undefined} className={ROW}>
@@ -274,16 +348,17 @@ export default function AccountPage() {
             </ul>
           </section>
         ))}
-      </div>
 
-      {/* Mini App không có khối này: đơn hàng là tab riêng ở thanh đáy. */}
-      <div className="max-md:hidden">
-        <OrdersSection />
-      </div>
+        <div className="max-md:hidden">
+          <OrdersSection />
+        </div>
 
-      <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} mt-6 w-full ${mini.secondary} max-md:mx-4 max-md:mt-2 max-md:w-[calc(100%-2rem)]`}>
-        Đăng xuất
-      </button>
+        <div className="p-4">
+          <Button fullWidth variant="secondary" onPress={() => void logout()}>
+            Đăng xuất
+          </Button>
+        </div>
+      </div>
     </main>
   );
 }

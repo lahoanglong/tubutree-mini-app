@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
 import { claimCoupon, type ClaimedCoupon } from '@tubutree/app-core/api/coupon-claim';
@@ -24,6 +24,7 @@ import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { loginHref } from '@/lib/return-to';
 import { getCart } from '@/lib/shop-client';
+import { useShellPathname } from '@/lib/shell-pathname';
 
 type Phase =
   | { kind: 'closed' }
@@ -41,7 +42,7 @@ type Phase =
 export function CouponClaimGate() {
   const phaseAuth = useAuthPhase();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = useShellPathname();
   const queryClient = useQueryClient();
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phaseAuth === 'authenticated' });
   const cartCount = cartQ.data?.itemCount ?? 0;

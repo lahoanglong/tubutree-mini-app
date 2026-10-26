@@ -64,7 +64,6 @@ describe('/tai-khoan — số dư điểm và ví luôn lấy lại từ máy ch
     state.me = { pointsBalance: 100, pointsConvertedBalance: 40, walletBalance: 0 };
     const c = await mount();
     expect(card(c, 'Điểm Xanh').textContent).toContain('140');
-    expect(card(c, 'Điểm Xanh').textContent).toContain('trong đó 40 điểm không hết hạn');
   });
 
   it('chưa lấy được hồ sơ (mất mạng) thì giữ số lúc đăng nhập thay vì để trống', async () => {

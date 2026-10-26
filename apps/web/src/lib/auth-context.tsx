@@ -9,7 +9,9 @@ import {
   setSessionMarker,
   clearSessionMarker,
   restoreSession,
+  writeWebCookie,
 } from './client-api';
+import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 import { clearSavedInvoices } from './saved-invoice';
 import { clearRecentCustomers } from '@/components/affiliate/recent-customers';
 import { clearWizardStorage } from './recycle-wizard';
@@ -124,6 +126,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hasSessionMarker()) {
+      // Cookie phiên và gợi ý bố cục còn sót (cờ localStorage đã mất) làm server dựng khung chờ cho một khách không còn phiên.
+      writeWebCookie(SESSION_COOKIE, null);
+      writeWebCookie(HOME_HINT_COOKIE, null);
       setStatus('idle');
       setInitialized(true);
       return;
