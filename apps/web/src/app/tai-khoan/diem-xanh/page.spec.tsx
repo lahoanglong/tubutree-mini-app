@@ -15,8 +15,20 @@ const state = vi.hoisted(() => ({
   readyRoutes: new Set<string>(),
   calls: [] as { method: string; path: string; body?: unknown; headers?: Record<string, string> }[],
   checkInPost: null as null | (() => Promise<unknown>),
+  push: vi.fn(),
+  cartCount: 0,
+  applied: [] as string[],
 }));
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }), usePathname: () => '/' }));
+vi.mock('@/lib/shop-client', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getCart: async () => ({ itemCount: state.cartCount }),
+  applyCoupon: async (code: string) => {
+    state.applied.push(code);
+    return { couponCode: code, discount: 0, freeship: true };
+  },
+}));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => state.readyRoutes.has(p) }));
@@ -67,6 +79,9 @@ beforeEach(() => {
   state.fail = new Set();
   state.readyRoutes = new Set();
   state.calls = [];
+  state.push.mockReset();
+  state.cartCount = 0;
+  state.applied = [];
   state.config = { waste: { enabled: true } };
   state.loyalty = {
     pointsBalance: 1681,
@@ -289,6 +304,40 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
     const c = await mount();
     expect(c.textContent).toContain('Chưa tải được lịch điểm danh: Máy chủ đang bận');
     expect(byText(c, 'button', 'Thử lại')).not.toBeNull();
+  });
+});
+
+describe('/tai-khoan/diem-xanh — thẻ mã giảm giá dùng được ngay', () => {
+  const COUPON = { code: 'TUBU10', type: 'AMOUNT', value: 10000, minOrder: 99000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' };
+
+  it('"Sao chép" chép đúng mã và báo "Đã sao chép mã"', async () => {
+    state.coupons = [COUPON];
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Sao chép mã TUBU10"]'));
+    await flush(4);
+    expect(writeText).toHaveBeenCalledWith('TUBU10');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã');
+  });
+
+  it('"Dùng ngay" khi giỏ có hàng: chọn sẵn mã rồi tới giỏ', async () => {
+    state.coupons = [COUPON];
+    state.cartCount = 2;
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Dùng mã TUBU10 ngay"]'));
+    await flush(4);
+    expect(state.applied).toEqual(['TUBU10']);
+    expect(state.push).toHaveBeenLastCalledWith('/gio-hang');
+  });
+
+  it('"Dùng ngay" khi giỏ trống: tới sản phẩm, không áp mã', async () => {
+    state.coupons = [COUPON];
+    const c = await mount();
+    click(c.querySelector('button[aria-label="Dùng mã TUBU10 ngay"]'));
+    await flush(4);
+    expect(state.applied).toEqual([]);
+    expect(state.push).toHaveBeenLastCalledWith('/san-pham');
   });
 });
 

@@ -33,6 +33,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { CouponActions } from '@/components/loyalty/coupon-actions';
 import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
@@ -209,15 +210,20 @@ export default function LoyaltyPage() {
             ) : couponsQ.data && couponsQ.data.length > 0 ? (
               <ul className="space-y-2">
                 {couponsQ.data.map((c) => (
-                  <li key={c.code} className="flex items-center justify-between gap-2 rounded-control border border-dashed border-stone-450 bg-promo-bg p-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
-                      <div className="break-words text-xs text-stone-700">
-                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
-                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                  <li key={c.code} className="rounded-control border border-dashed border-stone-450 bg-promo-bg p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
+                        <div className="break-words text-xs text-stone-700">
+                          {autoCouponName(c.code) ?? `Mã ${c.code}`}
+                          {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                        </div>
                       </div>
+                      <div className="shrink-0 text-xs text-stone-600">HSD {formatDate(c.endAt)}</div>
                     </div>
-                    <div className="shrink-0 text-xs text-stone-600">HSD {formatDate(c.endAt)}</div>
+                    <div className="mt-2.5">
+                      <CouponActions code={c.code} />
+                    </div>
                   </li>
                 ))}
               </ul>

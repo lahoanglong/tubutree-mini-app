@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { REWARD_TABS, lockedPointsNote, openingHoursText, pointAddress, rewardCardState } from './reward-rules';
+import {
+  REWARD_TABS,
+  WAREHOUSE_ONLY_LABEL,
+  freeShipCovered,
+  freeShipCoveredNote,
+  isWarehousePickup,
+  lockedPointsNote,
+  openingHoursText,
+  orderRewards,
+  pointAddress,
+  rewardCardState,
+  warehouseConfirmText,
+} from './reward-rules';
 
 describe('REWARD_TABS', () => {
   it('ba tab theo loại quà, đúng thứ tự', () => {
@@ -56,5 +68,64 @@ describe('rewardCardState (dùng số máy chủ trả)', () => {
     [{ kind: 'TREE', pointsCost: 60_000, canRedeem: false, soldOut: false }, { kind: 'need', missing: 6000 }],
   ] as const)('%o → %o', (r, want) => {
     expect(rewardCardState(r, c)).toEqual(want);
+  });
+});
+
+describe('quà miễn phí giao hàng và hạng đã có quyền lợi này (B-22)', () => {
+  const freeship = (minOrder: number | null, sortOrder = 1) => ({
+    kind: 'VOUCHER' as const,
+    voucher: { type: 'FREESHIP' as const, value: 0, minOrder, maxDiscount: null, validDays: 30 },
+    sortOrder,
+  });
+  const locBiec = { tierName: 'Lộc Biếc', freeFrom: 99_000 };
+
+  it('ngưỡng hạng bằng hoặc thấp hơn ngưỡng của mã → thừa; cao hơn → không', () => {
+    expect(freeShipCovered(freeship(99_000), locBiec)).toBe(true);
+    expect(freeShipCovered(freeship(199_000), locBiec)).toBe(true);
+    expect(freeShipCovered(freeship(49_000), locBiec)).toBe(false);
+    expect(freeShipCovered(freeship(99_000), { tierName: 'Mầm Xanh', freeFrom: 199_000 })).toBe(false);
+  });
+
+  it('mã không đặt đơn tối thiểu: chỉ hạng freeship mọi đơn mới thừa', () => {
+    expect(freeShipCovered(freeship(null), locBiec)).toBe(false);
+    expect(freeShipCovered(freeship(null), { tierName: 'Đại Thụ', freeFrom: 0 })).toBe(true);
+  });
+
+  it('chỉ áp cho voucher FREESHIP; thiếu thông tin hạng (API cũ, chưa có hạng) thì không đụng tới quà', () => {
+    expect(freeShipCovered({ kind: 'VOUCHER', voucher: { type: 'AMOUNT', value: 30_000, minOrder: null, maxDiscount: null, validDays: 30 } }, locBiec)).toBe(false);
+    expect(freeShipCovered({ kind: 'GIFT', voucher: null }, locBiec)).toBe(false);
+    expect(freeShipCovered(freeship(99_000), null)).toBe(false);
+    expect(freeShipCovered(freeship(99_000), undefined)).toBe(false);
+  });
+
+  it('orderRewards: quà thừa xuống cuối, còn lại giữ thứ tự sortOrder', () => {
+    const list = [{ id: 'a', ...freeship(99_000, 1) }, { id: 'b', ...freeship(49_000, 2) }, { id: 'c', kind: 'VOUCHER' as const, voucher: null, sortOrder: 3 }];
+    expect(orderRewards(list, { tierFreeShip: locBiec }).map((r) => r.id)).toEqual(['b', 'c', 'a']);
+    expect(orderRewards(list, {}).map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('rewardCardState: quà thừa là "covered" kèm tên hạng, không còn nút đổi; hết hàng vẫn đứng trước', () => {
+    const base = { pointsCost: 20_000, canRedeem: true, soldOut: false, ...freeship(99_000) };
+    const c = { redeemablePoints: 50_000, pointsConvertedBalance: 0, tierFreeShip: locBiec };
+    expect(rewardCardState(base, c)).toEqual({ kind: 'covered', tierName: 'Lộc Biếc' });
+    expect(rewardCardState({ ...base, soldOut: true }, c)).toEqual({ kind: 'soldOut' });
+    expect(rewardCardState(base, { ...c, tierFreeShip: null })).toEqual({ kind: 'redeem' });
+    expect(freeShipCoveredNote('Lộc Biếc')).toBe('Hạng Lộc Biếc đã được miễn phí giao hàng');
+  });
+});
+
+describe('quà nhận tại kho (B-60)', () => {
+  it('hạt giống và quà nhỏ nhận tại kho; mã giảm giá và cây góp quỹ thì không', () => {
+    expect(isWarehousePickup({ kind: 'SEED_PACK' })).toBe(true);
+    expect(isWarehousePickup({ kind: 'GIFT' })).toBe(true);
+    expect(isWarehousePickup({ kind: 'VOUCHER' })).toBe(false);
+    expect(isWarehousePickup({ kind: 'TREE' })).toBe(false);
+    expect(WAREHOUSE_ONLY_LABEL).toBe('Chỉ nhận tại kho TP.HCM');
+  });
+
+  it('câu hỏi lại kèm địa chỉ kho từ cấu hình, không có thì nói chung', () => {
+    const point = { name: 'Kho Tubu', addressLine: '99 Nguyễn Văn Linh', communeName: 'Phường Tân Phong', provinceName: 'TP.HCM' };
+    expect(warehouseConfirmText(point)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: Kho Tubu, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
+    expect(warehouseConfirmText(null)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: kho Tubu TP.HCM. Bạn vẫn muốn đổi?');
   });
 });

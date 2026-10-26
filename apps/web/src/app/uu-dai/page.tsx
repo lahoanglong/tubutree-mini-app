@@ -21,6 +21,7 @@ import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
+import { CouponActions } from '@/components/loyalty/coupon-actions';
 import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -46,34 +47,35 @@ function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
         padding: 12,
         background: 'var(--color-promo-bg)',
         borderRadius: 'var(--radius-control)',
         border: '1px dashed var(--clay-100)',
       }}
     >
-      <div>
-        <Text variant="body-sm" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
-          {couponLabel(c)}
-        </Text>
-        <Text variant="caption" tone="secondary" as="div">
-          {autoCouponName(c.code) ?? `Mã ${c.code}`}
-          {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
-        </Text>
-      </div>
-      <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
-        <Text variant="caption" tone="tertiary" as="div">
-          HSD {formatDate(c.endAt)}
-        </Text>
-        {isCouponExpiring(c, Date.now()) && (
-          <Text variant="caption" as="div" style={{ color: 'var(--color-text-warning)', fontWeight: 700 }}>
-            {homeCopy.offers.couponExpiring}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div>
+          <Text variant="body-sm" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
+            {couponLabel(c)}
           </Text>
-        )}
+          <Text variant="caption" tone="secondary" as="div">
+            {autoCouponName(c.code) ?? `Mã ${c.code}`}
+            {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+          </Text>
+        </div>
+        <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+          <Text variant="caption" tone="tertiary" as="div">
+            HSD {formatDate(c.endAt)}
+          </Text>
+          {isCouponExpiring(c, Date.now()) && (
+            <Text variant="caption" as="div" style={{ color: 'var(--color-text-warning)', fontWeight: 700 }}>
+              {homeCopy.offers.couponExpiring}
+            </Text>
+          )}
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <CouponActions code={c.code} />
       </div>
     </div>
   );

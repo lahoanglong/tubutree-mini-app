@@ -16,8 +16,20 @@ const state = vi.hoisted(() => ({
   calls: [] as Call[],
   redeem: null as null | (() => Promise<unknown>),
   keySeq: 0,
+  push: vi.fn(),
+  cartCount: 0,
+  applied: [] as string[],
 }));
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }), usePathname: () => '/' }));
+vi.mock('@/lib/shop-client', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getCart: async () => ({ itemCount: state.cartCount }),
+  applyCoupon: async (code: string) => {
+    state.applied.push(code);
+    return { couponCode: code, discount: 0, freeship: true };
+  },
+}));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/idempotency-key', () => ({ newIdempotencyKey: () => `key-${++state.keySeq}` }));
@@ -93,6 +105,9 @@ beforeEach(() => {
   state.calls = [];
   state.keySeq = 0;
   state.redeem = async () => VOUCHER_RESULT();
+  state.push.mockReset();
+  state.cartCount = 0;
+  state.applied = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -334,6 +349,64 @@ describe('/kho-qua — xác nhận và đổi quà', () => {
     expect(postsOf('/game/tree/buy')[0]!.headers).toEqual({ 'Idempotency-Key': 'key-2' });
     expect(state.calls.some((x) => x.path.includes('/rewards/gift-tree/redeem'))).toBe(false);
     expect(document.body.textContent).not.toMatch(/CERT-123|Sao đen/);
+  });
+});
+
+describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ngay', () => {
+  const freeshipRow = (over = {}) => makeRewardItem({ label: 'Phổ biến', ...over });
+  const discountRow = makeRewardItem({ id: 'reward-discount-50k', name: 'Giảm 50.000đ', pointsCost: 20_000, voucher: { type: 'AMOUNT', value: 50000, minOrder: 300000, maxDiscount: null, validDays: 30 }, sortOrder: 2 });
+
+  it('hạng đã được freeship: quà freeship xuống cuối, ghi rõ hạng, không còn nút Đổi và nhãn "Phổ biến"', async () => {
+    state.rewards = makeRewardCatalog({ tierFreeShip: { tierName: 'Lộc Biếc', freeFrom: 99_000 }, rewards: [freeshipRow(), discountRow] });
+    const c = await mount();
+    const names = Array.from(c.querySelectorAll('[data-reward]')).map((el) => el.textContent ?? '');
+    expect(names[0]).toContain('Giảm 50.000đ');
+    expect(names[1]).toContain('Miễn phí vận chuyển');
+    const free = card(c, 'Miễn phí vận chuyển');
+    expect(free.textContent).toContain('Hạng Lộc Biếc đã được miễn phí giao hàng');
+    expect(free.textContent).not.toContain('Phổ biến');
+    expect(Array.from(free.querySelectorAll('button')).some((b) => b.textContent === 'Đổi')).toBe(false);
+    expect((byText(card(c, 'Giảm 50.000đ'), 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('hạng chưa freeship tới ngưỡng của mã: quà freeship vẫn đổi được', async () => {
+    state.rewards = makeRewardCatalog({ tierFreeShip: { tierName: 'Mầm Xanh', freeFrom: 199_000 } });
+    const c = await mount();
+    expect((byText(card(c, 'Miễn phí vận chuyển'), 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('quà nhận tại kho: thẻ ghi "Chỉ nhận tại kho TP.HCM", mã giảm giá thì không; xác nhận hỏi lại kèm địa chỉ kho', async () => {
+    const c = await mount();
+    expect(card(c, 'Miễn phí vận chuyển').textContent).not.toContain('Chỉ nhận tại kho TP.HCM');
+    click(tab(c, 'Cây và hạt'));
+    await flush(2);
+    expect(card(c, 'Gói hạt giống Tubu').textContent).toContain('Chỉ nhận tại kho TP.HCM');
+    expect(card(c, 'Góp quỹ trồng cây').textContent).not.toContain('Chỉ nhận tại kho TP.HCM');
+    await openConfirm(c, 'Gói hạt giống Tubu');
+    expect(dialog()!.textContent).toContain('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: Kho Tubu TP.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
+  });
+
+  it('đổi mã xong: "Dùng ngay" khi giỏ có hàng → chọn sẵn mã rồi tới giỏ', async () => {
+    state.cartCount = 2;
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(4);
+    expect(state.applied).toEqual(['FREESHIP-ABC']);
+    expect(state.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('đổi mã xong: "Dùng ngay" khi giỏ trống → tới danh sách sản phẩm, không áp mã', async () => {
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(4);
+    expect(state.applied).toEqual([]);
+    expect(state.push).toHaveBeenCalledWith('/san-pham');
   });
 });
 

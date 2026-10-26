@@ -4,12 +4,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
-import { REWARD_TABS, openingHoursText } from '@tubutree/app-core/reward-rules';
+import { couponUseCopy } from '@tubutree/app-core/coupon-use';
+import {
+  REWARD_TABS,
+  WAREHOUSE_ONLY_LABEL,
+  WAREHOUSE_PICKUP_DONE,
+  freeShipCoveredNote,
+  isWarehousePickup,
+  openingHoursText,
+  orderRewards,
+  warehouseConfirmText,
+} from '@tubutree/app-core/reward-rules';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
 import { getErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useCouponUse } from '../hooks/use-coupon-use';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
@@ -98,6 +109,9 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         <Text variant="body-sm" tone="secondary" as="span">Điểm còn lại</Text>
         <Text variant="body-sm" as="span">{formatPoints(Math.max(0, pointsSummary(catalog).total - reward.pointsCost))}</Text>
       </div>
+      {isWarehousePickup(reward) && (
+        <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{warehouseConfirmText(claimPoint)}</Text>
+      )}
       {claimPoint && (
         <div style={{ ...COLUMN, gap: 2 }}>
           <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{claimPoint.name}</Text>
@@ -139,19 +153,21 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
           <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
               <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
-              {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+              {reward.label && s.kind !== 'covered' && <Badge tone="brand">{reward.label}</Badge>}
             </div>
             {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
             {reward.stockRemaining != null && !reward.soldOut && (
               <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
             )}
             {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
+            {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
           {s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
           {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
+          {s.kind === 'covered' && <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'right' }}>{freeShipCoveredNote(s.tierName)}</Text>}
           {s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
           {s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
         </div>
@@ -163,6 +179,7 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
   const navigate = useNavigate();
+  const { use } = useCouponUse();
   const go = (path: string) => {
     onClose();
     navigate(path);
@@ -172,13 +189,14 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
       {outcome?.kind === 'VOUCHER' && (
         <div style={{ ...COLUMN, gap: 12 }}>
           <Text variant="body-md" as="div">{`Mã ${outcome.couponCode ?? ''} đã vào ví mã giảm giá`}</Text>
-          <Button onPress={() => go('/loyalty')}>Xem ví mã</Button>
+          {outcome.couponCode && <Button onPress={() => use(outcome.couponCode ?? '', onClose)}>{couponUseCopy.use}</Button>}
+          <Button variant="secondary" onPress={() => go('/loyalty')}>Xem ví mã</Button>
         </div>
       )}
       {outcome?.kind === 'CLAIM' && (
         <div style={{ ...COLUMN, gap: 12 }}>
           <Heading variant="display-md" as="p">{outcome.code ?? ''}</Heading>
-          <Text variant="body-md" as="div">Mang mã này tới kho Tubu TP.HCM để nhận quà</Text>
+          <Text variant="body-md" as="div">{WAREHOUSE_PICKUP_DONE}</Text>
           {outcome.claimExpiresAt && <Text variant="body-sm" tone="secondary" as="div">{`Hạn nhận ${formatDate(outcome.claimExpiresAt)}`}</Text>}
           <Button onPress={() => go('/rewards/mine')}>Quà của tôi</Button>
         </div>
@@ -204,7 +222,7 @@ function RewardsBody() {
   if (!c) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
-  const shown = c.rewards.filter((r) => kinds.includes(r.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
+  const shown = orderRewards(c.rewards.filter((r) => kinds.includes(r.kind)), c);
   const total = pointsSummary(c).total;
   const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;

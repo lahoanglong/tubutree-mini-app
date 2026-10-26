@@ -10,13 +10,25 @@ import { redeemLoyaltyReward } from '@tubutree/app-core/api/loyalty';
 import { buyTree } from '@tubutree/app-core/api/game';
 import { WASTE_QUERY_KEYS, WASTE_REDEEM_INVALIDATE_KEYS } from '@tubutree/app-core/api/waste';
 import { loyaltyQuery, rewardsQuery } from '@tubutree/app-core/queries/loyalty';
-import { REWARD_TABS, lockedPointsNote, rewardCardState } from '@tubutree/app-core/reward-rules';
+import { couponUseCopy } from '@tubutree/app-core/coupon-use';
+import {
+  REWARD_TABS,
+  WAREHOUSE_ONLY_LABEL,
+  WAREHOUSE_PICKUP_DONE,
+  freeShipCoveredNote,
+  isWarehousePickup,
+  lockedPointsNote,
+  orderRewards,
+  rewardCardState,
+  warehouseConfirmText,
+} from '@tubutree/app-core/reward-rules';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
 import { pointsRulesNote } from '@/lib/loyalty-copy';
+import { useCouponUse } from '@/lib/use-coupon-use';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
@@ -102,6 +114,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         <span className="text-stone-700">Điểm còn lại</span>
         <span className="tabular-nums">{points(Math.max(0, pointsSummary(catalog).total - reward.pointsCost))}</span>
       </div>
+      {isWarehousePickup(reward) && <p className="text-sm font-semibold text-stone-900">{warehouseConfirmText(claimPoint)}</p>}
       {claimPoint && (
         <div className="space-y-0.5">
           <ClaimPointInfo point={claimPoint} heading={claimPoint.name} />
@@ -144,11 +157,12 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <div className="text-base font-semibold text-stone-900">{reward.name}</div>
-            {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+            {reward.label && s.kind !== 'covered' && <Badge tone="brand">{reward.label}</Badge>}
           </div>
           {reward.description && <div className="text-xs text-stone-700">{reward.description}</div>}
           {reward.stockRemaining != null && !reward.soldOut && <div className="text-xs text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
           {reward.claimInstructions && <div className="text-xs text-stone-600">{reward.claimInstructions}</div>}
+          {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
         </div>
       </div>
       <div className="mt-auto flex items-center justify-between gap-2">
@@ -159,6 +173,7 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
           </button>
         )}
         {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
+        {s.kind === 'covered' && <div className="text-right text-xs text-stone-700">{freeShipCoveredNote(s.tierName)}</div>}
         {s.kind === 'locked' && (
           <button type="button" disabled className={ui.btnPrimary}>
             Chờ mở khoá điểm
@@ -172,12 +187,18 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
 }
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
+  const { use } = useCouponUse();
   return (
     <Sheet open={outcome !== null} onClose={onClose} title="Đổi quà thành công">
       {outcome?.kind === 'VOUCHER' && (
         <div className="space-y-3">
           <p className="text-base text-stone-900">{`Mã ${outcome.couponCode ?? ''} đã vào ví mã giảm giá`}</p>
-          <Link href="/tai-khoan/diem-xanh" onClick={onClose} className={`${ui.btnPrimary} w-full`}>
+          {outcome.couponCode && (
+            <button type="button" onClick={() => void use(outcome.couponCode ?? '', onClose)} className={`${ui.btnPrimary} w-full`}>
+              {couponUseCopy.use}
+            </button>
+          )}
+          <Link href="/tai-khoan/diem-xanh" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
             Xem ví mã
           </Link>
         </div>
@@ -185,7 +206,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
       {outcome?.kind === 'CLAIM' && (
         <div className="space-y-3">
           <p className="font-display text-2xl font-semibold tracking-wide text-stone-900">{outcome.code ?? ''}</p>
-          <p className="text-base text-stone-900">Mang mã này tới kho Tubu TP.HCM để nhận quà</p>
+          <p className="text-base text-stone-900">{WAREHOUSE_PICKUP_DONE}</p>
           {outcome.claimExpiresAt && <p className="text-sm text-stone-700">{`Hạn nhận ${formatDate(outcome.claimExpiresAt)}`}</p>}
           <Link href="/kho-qua/cua-toi" onClick={onClose} className={`${ui.btnPrimary} w-full`}>
             Quà của tôi
@@ -212,7 +233,7 @@ function RewardsBody() {
   if (!c) return <Skeleton height={120} />;
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
-  const shown = c.rewards.filter((r) => kinds.includes(r.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
+  const shown = orderRewards(c.rewards.filter((r) => kinds.includes(r.kind)), c);
   const total = pointsSummary(c).total;
   const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;

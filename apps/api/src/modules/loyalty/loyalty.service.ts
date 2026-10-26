@@ -28,6 +28,7 @@ import { decideTier } from './tier-policy';
 import { DEFAULT_POINT_EXPIRE_MONTHS, normalizePointExpireMonths, pointsExpiryFrom } from './points-expiry-date';
 import { POS_ORDER_TOTAL_HARD_MAX } from './dto/loyalty-staff.dto';
 import { pointsForGoods } from '../pricing/points-earn';
+import { freeShipThreshold } from '../pricing/pricing.service';
 import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from './earn-rates';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { maskPhoneOrNull } from '../../common/mask-pii';
@@ -850,7 +851,7 @@ export class LoyaltyService {
   async getRewardCatalog(userId: string): Promise<RewardCatalogDTO> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { pointsBalance: true, pointsConvertedBalance: true },
+      select: { pointsBalance: true, pointsConvertedBalance: true, tierId: true, tier: { select: { name: true } } },
     });
     // canRedeem theo điểm DÙNG ĐƯỢC (cùng quy tắc guard của redeemReward), không theo số dư —
     // không thì nút "Đổi ngay" sáng mà bấm vào bị từ chối.
@@ -895,6 +896,9 @@ export class LoyaltyService {
       giftClaimDays,
       claimPoint,
       rewards,
+      tierFreeShip: user.tierId
+        ? { tierName: user.tier?.name ?? user.tierId, freeFrom: await freeShipThreshold(this.config, user.tierId) }
+        : null,
     };
   }
 

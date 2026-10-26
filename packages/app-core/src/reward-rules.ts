@@ -65,8 +65,28 @@ export function lockedPointsNote(ov: LockedPointsSource): string | null {
   return `Đổi quà dùng được ${formatNumber(usable)} điểm: ${parts.join('; ')}.`;
 }
 
+type TierFreeShip = NonNullable<RewardCatalogDTO['tierFreeShip']>;
+
+/**
+ * Quà "miễn phí giao hàng" mà hạng của khách đã có sẵn quyền lợi bằng hoặc tốt hơn: ngưỡng freeship của hạng không cao hơn
+ * ngưỡng của mã (mã không đặt đơn tối thiểu = freeship mọi đơn). Đổi quà này chỉ mất điểm mà không được thêm gì.
+ */
+export function freeShipCovered(r: Pick<RewardItemDTO, 'kind' | 'voucher'>, tier: TierFreeShip | null | undefined): boolean {
+  if (!tier || r.kind !== 'VOUCHER' || r.voucher?.type !== 'FREESHIP') return false;
+  return tier.freeFrom <= (r.voucher.minOrder ?? 0);
+}
+
+export const freeShipCoveredNote = (tierName: string): string => `Hạng ${tierName} đã được miễn phí giao hàng`;
+
+/** Thứ tự hiển thị trong một mục: theo sortOrder, quà đã có sẵn quyền lợi hạng xuống cuối (giữ nguyên thứ tự còn lại). */
+export function orderRewards<T extends Pick<RewardItemDTO, 'kind' | 'voucher' | 'sortOrder'>>(rewards: readonly T[], c: Pick<RewardCatalogDTO, 'tierFreeShip'>): T[] {
+  const covered = (r: T) => (freeShipCovered(r, c.tierFreeShip) ? 1 : 0);
+  return [...rewards].sort((a, b) => covered(a) - covered(b) || a.sortOrder - b.sortOrder);
+}
+
 export type RewardCardState =
   | { kind: 'redeem' }
+  | { kind: 'covered'; tierName: string }
   | { kind: 'soldOut' }
   | { kind: 'locked' }
   | { kind: 'need'; missing: number };
@@ -76,12 +96,33 @@ export type RewardCardState =
  * cùng tổng với `canRedeem`. Hết hàng đứng trước nên thẻ hết không bao giờ hiện "Cần thêm".
  */
 export function rewardCardState(
-  r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'>,
-  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'>,
+  r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'> & Partial<Pick<RewardItemDTO, 'voucher'>>,
+  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'> & Partial<Pick<RewardCatalogDTO, 'tierFreeShip'>>,
 ): RewardCardState {
   if (r.soldOut) return { kind: 'soldOut' };
+  if (c.tierFreeShip && freeShipCovered({ kind: r.kind, voucher: r.voucher ?? null }, c.tierFreeShip)) return { kind: 'covered', tierName: c.tierFreeShip.tierName };
   if (r.canRedeem) return { kind: 'redeem' };
   const spendable = r.kind === 'TREE' ? c.redeemablePoints + c.pointsConvertedBalance : c.redeemablePoints;
   const missing = r.pointsCost - spendable;
   return missing > 0 ? { kind: 'need', missing } : { kind: 'locked' };
 }
+
+/**
+ * Quà nhận tại kho: hạt giống và quà nhỏ không giao tận nhà, khách đọc mã QG- tại kho TP.HCM (API không có cờ riêng cho việc
+ * này, đây là đúng quy tắc mà sheet "Đổi quà thành công" vẫn dùng: mọi quà không phải mã giảm giá hay cây góp quỹ).
+ */
+export function isWarehousePickup(r: Pick<RewardItemDTO, 'kind'>): boolean {
+  return r.kind === 'SEED_PACK' || r.kind === 'GIFT';
+}
+
+export const WAREHOUSE_ONLY_LABEL = 'Chỉ nhận tại kho TP.HCM';
+
+type PickupPoint = Pick<NonNullable<RewardCatalogDTO['claimPoint']>, 'name' | 'addressLine' | 'communeName' | 'provinceName'>;
+
+/** Câu hỏi lại ở bước xác nhận đổi: nhắc quà không giao tận nhà, kèm địa chỉ kho nếu cấu hình có. */
+export function warehouseConfirmText(point: PickupPoint | null | undefined): string {
+  const where = point ? `${point.name}, ${pointAddress(point)}` : 'kho Tubu TP.HCM';
+  return `Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: ${where}. Bạn vẫn muốn đổi?`;
+}
+
+export const WAREHOUSE_PICKUP_DONE = 'Mang mã này tới kho Tubu TP.HCM để nhận quà';
