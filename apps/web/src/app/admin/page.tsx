@@ -102,6 +102,7 @@ import { GomdonConfigCard } from '@/components/admin/gomdon-config-card';
 import { ConfigItem } from '@/components/admin/config-item';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { FeatureFlagsCard } from '@/components/admin/feature-flags-card';
+import { PartnerRulesCard } from '@/components/admin/partner-rules-card';
 import { ShopInfoCard } from '@/components/admin/shop-info-card';
 import { TabErrorBoundary } from '@/components/admin/tab-error-boundary';
 import { LoyaltyConfigCard } from '@/components/admin/loyalty-config-card';
@@ -899,7 +900,7 @@ function DashboardTab({
           {stats.gmv !== undefined && (
             <dl className="mt-2 space-y-0.5 text-xs text-stone-600" data-kpi-revenue-breakdown>
               <div className="flex justify-between gap-2">
-                <dt>Giá trị đơn còn hiệu lực</dt>
+                <dt>Giá trị đơn đã xác nhận, đang giao và đã giao</dt>
                 <dd className="font-medium text-stone-900">{formatVnd(stats.gmv)}</dd>
               </div>
               <div className="flex justify-between gap-2">
@@ -922,7 +923,7 @@ function DashboardTab({
           <div className="mt-2 text-2xl font-bold text-stone-900">{stats.totalOrders}</div>
           <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
             <span className="rounded bg-warning-bg px-1.5 py-0.5 font-medium text-warning-fg">{stats.pendingOrders} {statusChipText('PENDING_PAYMENT')} / {statusChipText('CONFIRMED')}</span>
-            <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} {statusChipText('SHIPPING')}</span>
+            <span className="rounded bg-info-bg px-1.5 py-0.5 font-medium text-info-fg">{stats.shippingOrders} {statusChipText('PACKED')} / {statusChipText('SHIPPING')}</span>
             <span className="rounded bg-success-bg px-1.5 py-0.5 font-medium text-success-fg">{stats.deliveredOrders} {statusChipText('DELIVERED')}</span>
             {stats.cancelledOrders > 0 && (
               <span className="rounded bg-danger-bg px-1.5 py-0.5 font-medium text-danger-fg">{stats.cancelledOrders} {statusChipText('CANCELLED')}</span>
@@ -2065,6 +2066,7 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
     <div className="space-y-4">
       <FeatureFlagsCard rows={q.data} onOpenSupportChat={onOpenSupportChat} />
       <ShopInfoCard rows={q.data} />
+      <PartnerRulesCard rows={q.data} />
       <LoyaltyConfigCard rows={q.data} />
       <details open={advancedOpen || !!needle} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)} className="rounded-card border border-stone-200 bg-stone-0 p-3">
         <summary className="flex min-h-[44px] cursor-pointer items-center font-display text-sm font-semibold text-stone-900">

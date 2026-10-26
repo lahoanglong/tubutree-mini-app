@@ -111,3 +111,43 @@ export function parseIntInRange(raw: string, min: number, max: number, label: st
   }
   return { value: n };
 }
+
+// ── Hoa hồng cộng tác viên và hạn xử lý của gian hàng đối tác ──
+
+export const PARTNER_RULE_FIELDS = [
+  { form: 'defaultRate', key: 'affiliate.default_rate_pct', label: 'Hoa hồng mặc định cho cộng tác viên (%)', hint: 'Áp cho sản phẩm chưa đặt % riêng. Ví dụ 8 nghĩa là 8%.', min: 0, max: 50, fallback: 8, unit: '%' },
+  { form: 'maxRate', key: 'affiliate.max_rate_pct', label: 'Trần hoa hồng mỗi sản phẩm (%)', hint: 'Không đặt được % riêng cao hơn mức này.', min: 0, max: 100, fallback: 50, unit: '%' },
+  { form: 'confirmHours', key: 'merchant.confirm_sla_hours', label: 'Hạn gian hàng đối tác xác nhận đơn (giờ)', hint: 'Quá hạn thì nhắc và hiện ở Đơn đối tác & đối soát.', min: 1, max: 168, fallback: 24, unit: 'giờ' },
+  { form: 'shipHours', key: 'merchant.ship_sla_hours', label: 'Hạn gửi hàng (giờ kể từ khi khách đặt)', hint: 'Gian hàng phải nhập mã vận đơn trong chừng này giờ.', min: 1, max: 336, fallback: 48, unit: 'giờ' },
+  { form: 'deliverDays', key: 'merchant.deliver_sla_days', label: 'Hạn giao xong (ngày)', hint: 'Đang giao quá chừng này ngày thì hiện ở danh sách quá hạn.', min: 1, max: 60, fallback: 7, unit: 'ngày' },
+] as const;
+
+export type PartnerRuleForm = Record<(typeof PARTNER_RULE_FIELDS)[number]['form'], string>;
+
+export function readPartnerRuleForm(rows: ConfigRow[] | undefined): PartnerRuleForm {
+  const out = {} as PartnerRuleForm;
+  for (const f of PARTNER_RULE_FIELDS) {
+    const v = configValue<unknown>(rows, f.key, f.fallback);
+    out[f.form] = String(typeof v === 'number' ? v : f.fallback);
+  }
+  return out;
+}
+
+/** Kiểm cả form: mỗi ô là số trong biên (hoa hồng mặc định phải nguyên), mặc định không vượt trần. Trả danh sách khoá cần ghi hoặc câu lỗi đầu tiên. */
+export function buildPartnerRuleWrites(f: PartnerRuleForm): { writes?: { key: string; label: string; value: number }[]; error?: string } {
+  const writes: { key: string; label: string; value: number }[] = [];
+  for (const field of PARTNER_RULE_FIELDS) {
+    const raw = f[field.form].trim().replace(',', '.');
+    const n = Number(raw);
+    const integerOnly = field.form !== 'maxRate';
+    const bad = raw === '' || !Number.isFinite(n) || n < field.min || n > field.max || (integerOnly && !Number.isInteger(n));
+    if (bad) {
+      return { error: `${field.label}: nhập ${integerOnly ? 'số nguyên' : 'số'} từ ${field.min} đến ${field.max}.` };
+    }
+    writes.push({ key: field.key, label: field.label, value: n });
+  }
+  if (Number(f.defaultRate) > Number(f.maxRate.replace(',', '.'))) {
+    return { error: 'Hoa hồng mặc định không được cao hơn trần hoa hồng.' };
+  }
+  return { writes };
+}

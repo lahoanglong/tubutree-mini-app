@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { ChevronDown, Menu, Search } from 'lucide-react';
 import { SideDrawer } from './side-drawer';
 
@@ -125,7 +125,11 @@ function NavList<K extends string>({
               onClick={() => onToggle(g.label)}
               className="flex min-h-[36px] w-full items-center justify-between gap-2 rounded-control px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-600 hover:bg-stone-100 disabled:hover:bg-transparent"
             >
-              <span>{g.label}</span>
+              <span className="flex min-w-0 items-center">
+                {g.label}
+                {/* Nhóm gập: số việc chờ của các mục đang ẩn hiện ngay ở tên nhóm, để không phải mở nhóm mới thấy. */}
+                {g.items.filter((i) => !items.includes(i)).map((i) => <Fragment key={i.k}>{badge?.(i.k)}</Fragment>)}
+              </span>
               <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
             </button>
             <ul className="space-y-0.5">

@@ -121,7 +121,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
       {o && (
         <p className="text-xs text-stone-500">
           Thời hạn xử lý: xác nhận {o.slaConfig.confirmHours} giờ, gửi hàng {o.slaConfig.shipHours} giờ, giao xong {o.slaConfig.deliverDays} ngày
-          (sửa ở tab Cấu hình, mục thời hạn của gian hàng đối tác).
+          (sửa ở tab Cấu hình, thẻ &quot;Hoa hồng cộng tác viên và hạn xử lý của đối tác&quot;).
         </p>
       )}
       {error && (

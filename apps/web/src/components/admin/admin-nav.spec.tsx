@@ -180,4 +180,12 @@ describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
     typeInto(box, 'khong co');
     expect(r.container.textContent).toContain('Không có mục nào khớp');
   });
+
+  it('nhóm gập vẫn hiện số việc chờ của mục có huy hiệu ở tên nhóm', () => {
+    const r = render(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} badge={(k) => (k === 'config' ? <span data-badge>3</span> : null)} />);
+    mounted.push(r);
+    const head = heads(r.container)[1]!;
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(head.querySelector('[data-badge]')?.textContent).toBe('3');
+  });
 });

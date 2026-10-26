@@ -483,6 +483,15 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(tab0.textContent).toBe('Hoàn tiền khách');
   });
 
+  it('vào trang lần đầu (menu chưa nhớ gì, nhóm Bán hàng gập): số khoản hoàn cần xử lý vẫn hiện ở tên nhóm', async () => {
+    window.localStorage.removeItem('tubu_admin_nav_open');
+    mocks.refundsPending = 3;
+    const { container } = await mount();
+    const head = container.querySelector('nav[aria-label="Mục quản trị"] [role="group"][aria-label="Bán hàng"] button[aria-expanded]')!;
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(head.querySelector('span[data-refunds-pending]')?.textContent).toContain('3');
+  });
+
   it('liên kết Màn thu ngân vẫn trỏ /admin/pos và cao 44px ở điện thoại', async () => {
     const { container } = await mount();
     const pos = [...container.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/admin/pos')!;
@@ -2189,7 +2198,7 @@ describe('admin/page — KPI doanh thu (ADMINOPS-14)', () => {
     expect(text).toContain('Doanh thu đã thu');
     expect(text).toContain('Đã thanh toán hoặc COD Tubu đã thu; trừ đơn huỷ/trả, tiền hoàn, đơn ghi công nợ và COD gian hàng tự giao');
     const dl = container.querySelector('[data-kpi-revenue-breakdown]')!;
-    expect(dl.textContent).toContain('Giá trị đơn còn hiệu lực1.500.000');
+    expect(dl.textContent).toContain('Giá trị đơn đã xác nhận, đang giao và đã giao1.500.000');
     expect(dl.textContent).toContain('COD chưa thu400.000');
     expect(dl.textContent).toContain('Công nợ đại lý chưa thu2.500.000');
     expect(text).toContain('2 đã trả hàng');
