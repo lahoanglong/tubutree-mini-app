@@ -69,6 +69,13 @@ html[data-tenant-host] [data-site-search] {
   }
 }
 
+/* Giỏ và Thanh toán giữ thanh dính tới hết khổ máy tính bảng (md): chừa đáy trang cho đúng khoảng 768–1023px. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  body.has-sticky-bar-lg {
+    padding-bottom: var(--sticky-bar-h);
+  }
+}
+
 /* Mini App không có chân trang; ở điện thoại chỉ giữ chân trang gọn (hotline + chính sách) ở trang không có thanh hành động dính đáy,
    vì chân trang gọn nằm giữa nội dung và thanh dính sẽ không giống Mini App. Thanh nào dính đáy tự gắn data-sticky-bar. */
 @media (max-width: 767.98px) {

@@ -225,8 +225,8 @@ export default function CartPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:grid-cols-3">
-          <div className="min-w-0 md:col-span-2">
+        <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0">
             <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-0 max-md:px-0 max-md:py-1 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
               <span className={miniCheckboxWrap}>
                 <input
@@ -392,7 +392,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents`}>
+          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
@@ -438,8 +438,8 @@ export default function CartPage() {
               <span>Tổng</span>
               <span>{formatVnd(payTotal)}</span>
             </div>
-            {/* Dưới md nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
-            <div className="hidden md:block">
+            {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
+            <div className="hidden lg:block">
               {selectedItems.length === 0 ? (
                 <>
                   <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
@@ -486,7 +486,7 @@ export default function CartPage() {
         </div>
       )}
       {showBar && (
-        <StickyActionBar label="Thanh toán">
+        <StickyActionBar label="Thanh toán" hideFrom="lg">
           {/* Dưới md khung tóm tắt bị ẩn hẳn (cả với trình đọc màn hình): lời báo ở đây là bản duy nhất khách thấy/nghe được. */}
           {payHint && (
             <p

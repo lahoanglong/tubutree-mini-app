@@ -463,8 +463,8 @@ export default function CheckoutPage() {
           </Link>
         </div>
       )}
-      <div className="grid gap-6 max-md:gap-0 md:grid-cols-3">
-        <div className="space-y-4 max-md:contents md:col-span-2">
+      <div className="grid gap-6 max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4 max-md:contents">
           <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
@@ -620,7 +620,7 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        <div className={`h-fit p-4 ${ui.card} max-md:contents`}>
+        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
               hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
@@ -740,7 +740,7 @@ export default function CheckoutPage() {
             <span>{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
-            <p className="mt-1 text-xs text-success-fg">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
+            <p className="mt-1 text-xs text-success-fg">+{formatCount(quote.pointsEarned)} Điểm Xanh sau khi giao</p>
           )}
           {quoteQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
@@ -761,13 +761,13 @@ export default function CheckoutPage() {
             </p>
           )}
 
-          {/* Dưới md nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
-          <OrderConsent className="mt-4 hidden md:block" />
+          {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
+          <OrderConsent className="mt-4 hidden lg:block" />
           <button
             type="button"
             onClick={() => place.mutate()}
             disabled={placeDisabled}
-            className={`${ui.btnPrimary} mt-2 hidden w-full md:inline-flex`}
+            className={`${ui.btnPrimary} mt-2 hidden w-full lg:inline-flex`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
@@ -797,7 +797,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       </div>
-      <StickyActionBar label="Đặt hàng">
+      <StickyActionBar label="Đặt hàng" hideFrom="lg">
         {barHint && (
           <p aria-hidden="true" className="mb-2 text-xs text-danger-fg">
             {barHint}

@@ -124,13 +124,13 @@ describe('/gio-hang — thanh dính đáy', () => {
     expect(bar(c)!.querySelector('button')!.getAttribute('aria-describedby')).toBe(hint.id);
   });
 
-  it('mỗi lúc chỉ một bản lời báo lộ ra: bản trong khung tóm tắt nằm trong khối hidden (chỉ từ md), thanh dính md:hidden', async () => {
+  it('mỗi lúc chỉ một bản lời báo lộ ra: bản trong khung tóm tắt nằm trong khối hidden (chỉ từ lg), thanh dính lg:hidden', async () => {
     state.cart = cartOf([line({}), line({ id: 'i2', stock: 0, productName: 'Xà phòng' })]);
     const c = await mount();
     const hints = Array.from(c.querySelectorAll<HTMLElement>('[role="alert"]')).filter((el) => el.textContent?.includes('hết hàng'));
     const inCard = hints.find((el) => !bar(c)!.contains(el))!;
-    expect(inCard.closest('.hidden')?.className).toMatch(/\bmd:block\b/);
-    expect(bar(c)!.className).toMatch(/\bmd:hidden\b/);
+    expect(inCard.closest('.hidden')?.className).toMatch(/\blg:block\b/);
+    expect(bar(c)!.className).toMatch(/\blg:hidden\b/);
   });
 
   it('có thể mua: không có lời báo và nút không mang aria-describedby', async () => {
