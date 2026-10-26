@@ -10,6 +10,7 @@ import {
   listPancakeCategories,
   type CategoryProduct,
 } from '@/lib/product-categories';
+import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
@@ -19,7 +20,7 @@ const errText = (e: unknown, fallback: string) => (e instanceof Error && e.messa
 
 /**
  * "Danh mục sản phẩm": đồng bộ Pancake không gán danh mục, nên đây là nơi gán/gỡ danh mục hàng loạt cho sản phẩm
- * (lọc "chưa có danh mục", chỉ hàng Pancake, tìm theo tên/SKU). Đồng bộ không ghi đè danh mục đã gán ở đây.
+ * (lọc "chưa có danh mục", chỉ hàng Pancake, đang bán mà thiếu ảnh, tìm theo tên/SKU) và sửa ảnh, mô tả của từng sản phẩm. Đồng bộ không ghi đè danh mục đã gán ở đây.
  */
 export function ProductCategoriesTab() {
   const qc = useQueryClient();
@@ -27,14 +28,16 @@ export function ProductCategoriesTab() {
   const [typed, setTyped] = useState('');
   const [uncategorized, setUncategorized] = useState(true);
   const [pancakeOnly, setPancakeOnly] = useState(true);
+  const [missingImage, setMissingImage] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryId, setCategoryId] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const q = useDebounced(typed.trim(), 300);
 
   const list = useInfiniteQuery({
-    queryKey: [...LIST_KEY, q, uncategorized, pancakeOnly],
-    queryFn: ({ pageParam }) => listCategoryProducts({ q, uncategorized, pancakeOnly, cursor: pageParam }),
+    queryKey: [...LIST_KEY, q, uncategorized, pancakeOnly, missingImage],
+    queryFn: ({ pageParam }) => listCategoryProducts({ q, uncategorized, pancakeOnly, missingImage, cursor: pageParam }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -113,6 +116,9 @@ export function ProductCategoriesTab() {
         <button type="button" aria-pressed={pancakeOnly} onClick={() => setPancakeOnly((v) => !v)} className={chipClass(pancakeOnly)}>
           Chỉ hàng Pancake
         </button>
+        <button type="button" aria-pressed={missingImage} onClick={() => setMissingImage((v) => !v)} className={chipClass(missingImage)}>
+          Đang bán, thiếu ảnh
+        </button>
         {total !== undefined && <span className="text-xs text-stone-500">{total} sản phẩm khớp bộ lọc</span>}
       </div>
 
@@ -187,6 +193,9 @@ export function ProductCategoriesTab() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="break-words text-sm font-medium text-stone-900">{p.name}</span>
                 {!p.isActive && <ToneBadge tone="neutral">Đang tắt</ToneBadge>}
+                <button type="button" onClick={() => setEditing(p.id)} aria-label={`Sửa ${p.name}`} className={`${BTN_XS_SECONDARY} ml-auto`}>
+                  Sửa
+                </button>
               </div>
               <div className="mt-1 flex flex-wrap gap-1 text-xs text-stone-600">
                 {p.categoryIds.length === 0 ? (
@@ -209,6 +218,18 @@ export function ProductCategoriesTab() {
             {list.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
           </button>
         </div>
+      )}
+
+      {editing && (
+        <ProductEditDrawer
+          id={editing}
+          categories={cats.data ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            void qc.invalidateQueries({ queryKey: LIST_KEY });
+            void qc.invalidateQueries({ queryKey: ['admin-category-options'] });
+          }}
+        />
       )}
 
       <PancakeCategoryHelper catName={catName} />

@@ -21,6 +21,7 @@ export class ProductCategoryAdminService {
   async listProducts(opts: {
     q?: string;
     uncategorized?: boolean;
+    missingImage?: boolean;
     source?: 'pancake' | 'all';
     categoryId?: string;
     cursor?: string;
@@ -31,6 +32,8 @@ export class ProductCategoryAdminService {
     const and: Prisma.ProductWhereInput[] = [];
     if (opts.source === 'pancake') and.push({ pancakeId: { not: null }, NOT: { pancakeId: { startsWith: 'seed-' } } });
     if (opts.uncategorized) and.push({ categoryIds: { isEmpty: true } });
+    // Đang bán mà chưa có ảnh nào: khách thấy ô trống ở danh mục.
+    if (opts.missingImage) and.push({ isActive: true, images: { isEmpty: true } });
     if (opts.categoryId) and.push({ categoryIds: { has: opts.categoryId } });
     if (q) {
       and.push({

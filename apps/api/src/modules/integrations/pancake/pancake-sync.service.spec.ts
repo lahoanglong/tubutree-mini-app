@@ -619,6 +619,18 @@ describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0�
     expect(mk(again).product.update.mock.calls[0][0].data).toMatchObject({ basePrice: 45000, isActive: true, pancakeHold: null });
   });
 
+  it('mô tả và ảnh admin đã nhập không bị xoá khi Pancake để trống; Pancake có nội dung thật thì ghi đè', async () => {
+    const mine = { id: 'prod-d', pancakeId: 'd', basePrice: 1000, isActive: true, pancakeHold: null, forSegment: ['x'], categoryIds: ['c'], images: ['https://mine/a.jpg'], thumbnail: 'https://mine/a.jpg', description: 'Mô tả của chủ shop' };
+    const empty = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(mine) } });
+    const noImg = product('d', [variation('v-d', { images: [] })]);
+    await new PancakeSyncService(empty, makeClient([[{ ...noImg, description: '   ' }]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+    expect(mk(empty).product.update.mock.calls[0][0].data).toMatchObject({ description: 'Mô tả của chủ shop', images: ['https://mine/a.jpg'], thumbnail: 'https://mine/a.jpg' });
+
+    const real = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(mine) } });
+    await new PancakeSyncService(real, makeClient([[{ ...noImg, description: 'Mô tả từ Pancake' }]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
+    expect(mk(real).product.update.mock.calls[0][0].data).toMatchObject({ description: 'Mô tả từ Pancake' });
+  });
+
   it('sản phẩm đang bán, Pancake tạm trả thiếu giá → vẫn bán theo giá cũ (không tự ngừng)', async () => {
     const selling = { id: 'prod-a', pancakeId: 'a', basePrice: 125000, isActive: true, pancakeHold: null, forSegment: ['x'], images: [] };
     const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(selling) } });
