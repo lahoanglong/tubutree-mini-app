@@ -291,6 +291,24 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(btn(c, 'Điểm danh').disabled).toBe(false);
   });
 
+  it('đã nhận giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút vẫn bật, bấm gọi POST gộp để nhận nốt', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    const c = await mount();
+    expect(btn(c, 'Điểm danh').disabled).toBe(false);
+    click(btn(c, 'Điểm danh'));
+    await flush(6);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
+  });
+
+  it('cả hai phần xong theo trạng thái gộp: "Đã điểm danh" tắt', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = { checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] };
+    const c = await mount();
+    expect(btn(c, 'Đã điểm danh').disabled).toBe(true);
+  });
+
   it('lỗi điểm danh: báo lỗi, nút bật lại gọi được lần hai', async () => {
     let n = 0;
     state.posts['/me/daily-check-in'] = () => {

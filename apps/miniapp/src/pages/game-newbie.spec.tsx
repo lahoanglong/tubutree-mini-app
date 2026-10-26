@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getLoyalty: vi.fn(),
+  getDailyCheckInStatus: vi.fn(),
   api: {
     getGameProfile: vi.fn(),
     getTodayQuiz: vi.fn(),
@@ -58,7 +59,7 @@ vi.mock('../utils/features', () => ({ SEASON_PASS_ENABLED: false }));
 const bridge = vi.hoisted(() => ({ shareLink: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/zmp-bridge', () => bridge);
 vi.mock('../services/game-api', () => mocks.api);
-vi.mock('../services/account-api', () => ({ getLoyalty: () => mocks.getLoyalty() }));
+vi.mock('../services/account-api', () => ({ getLoyalty: () => mocks.getLoyalty(), getDailyCheckInStatus: () => mocks.getDailyCheckInStatus() }));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -124,6 +125,7 @@ beforeEach(() => {
   }
   const a = mocks.api;
   mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 });
+  mocks.getDailyCheckInStatus.mockResolvedValue(null);
   a.getGameProfile.mockResolvedValue({ ...NEW_PLAYER });
   a.getTodayQuiz.mockResolvedValue(QUIZ);
   a.getLeaderboard.mockResolvedValue([]);

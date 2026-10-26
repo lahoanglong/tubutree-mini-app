@@ -61,7 +61,10 @@ vi.mock('../utils/features', () => ({
 }));
 vi.mock('../components/wheel', () => ({ WheelOfFortune: () => <div data-testid="wheel" /> }));
 vi.mock('../services/game-api', () => mocks.api);
-vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
+vi.mock('../services/account-api', () => ({
+  getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }),
+  getDailyCheckInStatus: () => Promise.resolve(null),
+}));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';

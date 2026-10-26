@@ -55,7 +55,10 @@ vi.mock('../components/wheel', () => ({
     return <div data-testid="wheel" />;
   },
 }));
-vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
+vi.mock('../services/account-api', () => ({
+  getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }),
+  getDailyCheckInStatus: () => Promise.resolve(null),
+}));
 vi.mock('../services/game-api', () => ({
   ...mocks.api,
   checkIn: vi.fn(),

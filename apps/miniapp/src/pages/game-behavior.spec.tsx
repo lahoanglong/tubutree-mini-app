@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   features: { seasonPass: false },
   getLoyalty: vi.fn(),
+  getDailyCheckInStatus: vi.fn(),
   wheel: { cost: undefined as number | undefined, onSpin: undefined as (() => Promise<unknown>) | undefined },
   api: {
     getGameProfile: vi.fn(),
@@ -77,7 +78,10 @@ vi.mock('../components/wheel', () => ({
   },
 }));
 vi.mock('../services/game-api', () => mocks.api);
-vi.mock('../services/account-api', () => ({ getLoyalty: (...a: unknown[]) => mocks.getLoyalty(...a) }));
+vi.mock('../services/account-api', () => ({
+  getLoyalty: (...a: unknown[]) => mocks.getLoyalty(...a),
+  getDailyCheckInStatus: (...a: unknown[]) => mocks.getDailyCheckInStatus(...a),
+}));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -130,6 +134,7 @@ async function openTab(name: 'Hôm nay' | 'Vườn') {
 beforeEach(() => {
   mocks.publicConfig.waste.enabled = true;
   vi.clearAllMocks();
+  mocks.getDailyCheckInStatus.mockResolvedValue(null);
   mocks.auth.status = 'authenticated';
   mocks.features.seasonPass = false;
   mocks.wheel.cost = undefined;
@@ -311,6 +316,25 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     expect(btn).toBeDisabled();
     fireEvent.click(btn);
     expect(mocks.api.checkIn).not.toHaveBeenCalled();
+  });
+
+  it('đã nhận giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút vẫn bật, bấm gọi checkIn để nhận nốt', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] });
+    mocks.api.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh', type: 'success' }));
+  });
+
+  it('cả hai phần xong theo trạng thái gộp: "Đã điểm danh" tắt', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
   });
 
   it('điểm danh từ hôm kia: nút lại bật (khoá theo ngày giờ VN, không theo "đã từng")', async () => {
