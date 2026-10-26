@@ -23,6 +23,7 @@ import { CartModule } from './modules/cart/cart.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { GameModule } from './modules/game/game.module';
+import { DailyCheckInModule } from './modules/daily-check-in/daily-check-in.module';
 import { FeedModule } from './modules/feed/feed.module';
 import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
 import { FaqModule } from './modules/faq/faq.module';
@@ -84,6 +85,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     CheckoutModule,
     OrdersModule,
     GameModule,
+    DailyCheckInModule,
     FeedModule,
     FaqModule,
     AiAdvisorModule,
