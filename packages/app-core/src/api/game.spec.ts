@@ -6,7 +6,7 @@ import type { HttpClient } from '../http';
 describe('game — đúng route, body, Idempotency-Key', () => {
   it.each<[string, (h: HttpClient) => unknown, Partial<RecordedCall>]>([
     ['getGameProfile', (h) => g.getGameProfile(h), { method: 'get', path: '/game/profile' }],
-    ['checkIn', (h) => g.checkIn(h), { method: 'post', path: '/game/check-in' }],
+    ['checkIn', (h) => g.checkIn(h), { method: 'post', path: '/me/daily-check-in' }],
     ['collectDew', (h) => g.collectDew(h), { method: 'post', path: '/game/dew/collect' }],
     [
       'buyStreakFreeze',

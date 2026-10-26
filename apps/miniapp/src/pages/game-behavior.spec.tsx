@@ -148,7 +148,7 @@ beforeEach(() => {
   a.getFriends.mockResolvedValue([]);
   a.getGarden.mockResolvedValue(null);
   a.fetchSeasonPass.mockResolvedValue({ active: false });
-  a.checkIn.mockResolvedValue({ seedsEarned: 10, pointsEarned: 0, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' });
+  a.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
   a.collectDew.mockResolvedValue({ seedsEarned: 5, totalSeeds: 1_255 });
   a.buyStreakFreeze.mockResolvedValue({ streakFreezes: 2, totalSeeds: 1_170 });
   a.repairStreak.mockResolvedValue({ repaired: true, streakDays: 5, totalSeeds: 900 });
@@ -290,15 +290,16 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     fireEvent.click(btn);
     expect(mocks.api.checkIn).toHaveBeenCalledTimes(1);
     await act(async () => {
-      gate.resolve({ seedsEarned: 10, pointsEarned: 0, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' });
+      gate.resolve({ points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 1000, totalPoints: 2000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' }, alreadyDone: false, pending: [] });
     });
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+10💧 · 🧊 đã dùng vé giữ lửa · Thưởng ngày 3', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh · +10 giọt nước · đã dùng vé giữ lửa · Thưởng ngày 3', type: 'success' }),
     );
     const keys = invalidated();
     expect(keys).toContainEqual(['game']);
     expect(keys).toContainEqual(['me']);
     expect(keys).toContainEqual(['loyalty']);
+    expect(keys).toContainEqual(['loyalty-checkin']);
     // /me/coins đã 410: không còn khoá nào để làm mới.
     expect(keys).not.toContainEqual(['coins']);
   });

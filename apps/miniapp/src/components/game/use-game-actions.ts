@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
+import { checkInSuccessText } from '@tubutree/app-core/daily-check-in-copy';
 import {
   checkIn,
   collectDew,
@@ -86,10 +87,9 @@ export function useGameActions({
   const checkInM = useLockedMutation({
     mutationFn: checkIn,
     onSuccess: (r) => {
-      const parts = [`+${formatDrops(r.seedsEarned)}`];
-      if (r.streakFrozeUsed) parts.push('🧊 đã dùng vé giữ lửa');
-      if (r.bonusNote) parts.push(r.bonusNote);
-      openSnackbar({ text: parts.join(' · '), type: 'success' });
+      openSnackbar({ text: checkInSuccessText(r), type: r.pending.length > 0 ? 'warning' : 'success' });
+      void queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] });
+      void queryClient.invalidateQueries({ queryKey: ['points-txn'] });
       refresh();
     },
     onError,

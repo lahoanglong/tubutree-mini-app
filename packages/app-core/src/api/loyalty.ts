@@ -123,8 +123,9 @@ export interface CheckInReward {
   isToday: boolean;
 }
 
-/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh giọt nước Vườn Xanh). */
+/** GET /me/daily-check-in: trạng thái điểm danh gộp (Điểm Xanh + giọt nước) và dải 7 ngày của Điểm Xanh. */
 export interface CheckInStatusResponse {
+  /** true khi mọi phần đang bật (Điểm Xanh, giọt nước nếu game bật) đã xong hôm nay. */
   checkedInToday: boolean;
   /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
   streakDays: number;
@@ -133,15 +134,43 @@ export interface CheckInStatusResponse {
   /** Điểm của ô hôm nay. Optional: API cũ chưa trả. */
   todayPoints?: number;
   rewards: CheckInReward[];
+  /** Từng phần đã xong hôm nay chưa. Optional: API cũ (chỉ Điểm Xanh) chưa trả. */
+  pointsDone?: boolean;
+  waterDone?: boolean;
+  /** false: game tắt, điểm danh chỉ cộng Điểm Xanh. */
+  gameEnabled?: boolean;
+  /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi game tắt. */
+  todayWater?: number;
 }
 
-export interface CheckInResult {
+/** Phần Điểm Xanh của lần điểm danh. */
+export interface PointsCheckInPart {
   success: boolean;
   cycleDay: number;
   streakDays: number;
   pointsEarned: number;
   totalPoints: number;
   message: string;
+}
+
+/** Phần giọt nước của lần điểm danh. */
+export interface WaterCheckInPart {
+  seedsEarned: number;
+  streakDays: number;
+  totalSeeds: number;
+  streakFrozeUsed: boolean;
+  bonusNote: string;
+}
+
+/**
+ * POST /me/daily-check-in. `points`/`water` là kết quả của LẦN GỌI NÀY; null = phần đó đã xong từ trước (hoặc vừa lỗi: xem
+ * `pending`). `alreadyDone` = cả hai đã xong từ trước. `pending` còn phần nào thì gọi lại để bù đúng phần đó.
+ */
+export interface CheckInResult {
+  points: PointsCheckInPart | null;
+  water: WaterCheckInPart | null;
+  alreadyDone: boolean;
+  pending: Array<'points' | 'water'>;
 }
 
 /**
@@ -170,6 +199,6 @@ export const redeemLoyaltyReward = (http: HttpClient, rewardId: string, idempote
     headers: { 'Idempotency-Key': idempotencyKey },
   });
 export const getMyRedemptions = (http: HttpClient) => http.get<GiftRedemptionDTO[]>('/me/loyalty/rewards/mine');
-export const getDailyCheckInStatus = (http: HttpClient) => http.get<CheckInStatusResponse>('/me/loyalty/check-in');
-export const postDailyCheckIn = (http: HttpClient) => http.post<CheckInResult>('/me/loyalty/check-in');
+export const getDailyCheckInStatus = (http: HttpClient) => http.get<CheckInStatusResponse>('/me/daily-check-in');
+export const postDailyCheckIn = (http: HttpClient) => http.post<CheckInResult>('/me/daily-check-in');
 export const getMemberCard = (http: HttpClient) => http.get<MemberCardResponse>('/me/loyalty/member-card');

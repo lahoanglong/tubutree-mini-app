@@ -3,8 +3,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarCheck, Check, ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
+import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, memberCardAriaLabel, memberCardView, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
 import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
@@ -15,15 +16,15 @@ import { pointsSummary } from '@/lib/checkout-points';
 import { autoCouponName } from '@/lib/coupon-name';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
-import { useCheckIn } from '@/lib/use-check-in';
 import { useMarkExpiringSeen } from '@/lib/use-offers-dot';
 import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
+import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
-import { Button, Card, EmptyState, Heading, Icon, ListRow, Skeleton, Text } from '@/components/mini';
+import { Card, EmptyState, Heading, Icon, ListRow, Skeleton, Text } from '@/components/mini';
 
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
@@ -92,7 +93,6 @@ function OffersContent() {
   const [claimNoticeOpen, setClaimNoticeOpen] = useState(false);
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
-  const { status: checkInStatus, statusQ: checkInQ, view: checkInView, pending, checkIn, message } = useCheckIn(authed);
   const couponsRef = useRef<HTMLElement>(null);
   const wantsCoupons = params?.get('section') === 'coupons';
   const couponsReady = couponsQ.isSuccess || couponsQ.isError;
@@ -217,58 +217,8 @@ function OffersContent() {
             </div>
         </section>
 
-        <section aria-label={homeCopy.offers.checkInTitle}>
-          {checkInQ.isLoading ? (
-            <Skeleton height={112} radius="var(--radius-card)" />
-          ) : checkInQ.isError ? (
-            <Card padding={16}>
-              <ErrorState message={`Chưa tải được lịch điểm danh: ${errText(checkInQ.error)}`} onRetry={() => void checkInQ.refetch()} />
-            </Card>
-          ) : checkInStatus && checkInView ? (
-            <Card padding={16}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                  <IconTile icon={CalendarCheck} />
-                  <div style={{ minWidth: 0 }}>
-                    <Heading variant="title-sm" as="h2">
-                      {homeCopy.offers.checkInTitle}
-                    </Heading>
-                    <Text variant="caption" tone="tertiary" as="div">
-                      {homeCopy.offers.streak(checkInStatus.streakDays)}
-                    </Text>
-                  </div>
-                </div>
-                <Button disabled={!checkInView.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ flexShrink: 0 }}>
-                  {checkInView.buttonLabel}
-                </Button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center', marginTop: 12 }}>
-                {checkInStatus.rewards.map((r) => (
-                  <div
-                    key={r.day}
-                    style={{
-                      padding: '6px 2px',
-                      borderRadius: 'var(--radius-control)',
-                      background: r.claimed ? 'var(--color-bg-subtle)' : r.isToday ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-canvas)',
-                      border: r.isToday ? '1px solid var(--color-border-selected)' : '1px solid transparent',
-                    }}
-                  >
-                    <Text variant="caption" tone="tertiary" as="div">
-                      N{r.day}
-                    </Text>
-                    <Text variant="label" tone={r.claimed ? 'brand' : 'primary'} as="div">
-                      {r.claimed ? <Icon icon={Check} size="sm" tone="brand" /> : `+${r.points.toLocaleString('vi-VN')}`}
-                    </Text>
-                  </div>
-                ))}
-              </div>
-              {message && (
-                <p role="status" className={`mt-2 text-sm ${message.error ? 'text-danger-fg' : 'text-stone-700'}`}>
-                  {message.text}
-                </p>
-              )}
-            </Card>
-          ) : null}
+        <section aria-label={checkInCopy.title}>
+          <DailyCheckInCard authed={authed} />
         </section>
 
         <section aria-label={homeCopy.offers.rewardsTitle}>

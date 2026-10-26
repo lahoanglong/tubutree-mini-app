@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import type { CheckInResult } from './loyalty';
 
 export interface GameProfile {
   totalSeeds: number;
@@ -32,14 +33,7 @@ export interface GameProfile {
   currentTreeTarget?: number;
   nextTreeTarget?: number;
 }
-export interface CheckInResult {
-  seedsEarned: number;
-  pointsEarned: number;
-  streakDays: number;
-  totalSeeds: number;
-  streakFrozeUsed: boolean;
-  bonusNote: string;
-}
+export type { CheckInResult };
 export interface QuizItem {
   id: string;
   question: string;
@@ -100,7 +94,8 @@ export interface ClaimMissionResult {
 }
 
 export const getGameProfile = (http: HttpClient) => http.get<GameProfile>('/game/profile');
-export const checkIn = (http: HttpClient) => http.post<CheckInResult>('/game/check-in');
+/** Một nút cho cả Điểm Xanh và giọt nước: cùng POST /me/daily-check-in với trang Điểm Xanh. */
+export const checkIn = (http: HttpClient) => http.post<CheckInResult>('/me/daily-check-in');
 export const collectDew = (http: HttpClient) => http.post<DewResult>('/game/dew/collect');
 export const buyStreakFreeze = (http: HttpClient) =>
   http.post<StreakFreezeResult>('/game/streak-freeze/buy');

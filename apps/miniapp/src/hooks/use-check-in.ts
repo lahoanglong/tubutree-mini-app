@@ -1,13 +1,14 @@
 import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
+import { checkInSuccessText } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInView, getDailyCheckInStatus, postDailyCheckIn, type CheckInStatusResponse } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 
 /**
- * Điểm danh Điểm Xanh dùng chung cho Trang chủ và Ưu đãi: cùng khoá ['loyalty-checkin'], cùng POST /me/loyalty/check-in.
- * Không đổi mức thưởng và không gộp với điểm danh giọt nước của Vườn Xanh.
+ * Điểm danh dùng chung cho Trang chủ, Ưu đãi và trang Điểm Xanh: cùng khoá ['loyalty-checkin'], cùng POST /me/daily-check-in
+ * (một lần bấm cộng cả Điểm Xanh và giọt nước Vườn Xanh).
  */
 export function useCheckIn(enabled: boolean) {
   const qc = useQueryClient();
@@ -19,9 +20,12 @@ export function useCheckIn(enabled: boolean) {
     mutationFn: postDailyCheckIn,
     onSuccess: (res) => {
       haptic('medium');
-      openSnackbar({ text: res.message, type: 'success' });
-      qc.setQueryData<CheckInStatusResponse>(['loyalty-checkin'], (old) => (old ? { ...old, checkedInToday: true } : old));
+      openSnackbar({ text: checkInSuccessText(res), type: res.pending.length > 0 ? 'warning' : 'success' });
+      if (res.pending.length === 0) {
+        qc.setQueryData<CheckInStatusResponse>(['loyalty-checkin'], (old) => (old ? { ...old, checkedInToday: true } : old));
+      }
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
+      void qc.invalidateQueries({ queryKey: ['game'] });
       void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
       void qc.invalidateQueries({ queryKey: ['points-txn'] });
     },

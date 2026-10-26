@@ -40,7 +40,6 @@ const DATE_API_EXCEPTIONS: Record<string, string> = {
 /** Mỗi file: số lần `.toLocaleString(` được phép và lý do. Tất cả đều là SỐ (điểm, tiền, phần trăm, ngưỡng). */
 const NUMBER_TO_LOCALE_STRING: Record<string, { count: number; why: string }> = {
   'app/tai-khoan/page.tsx': { count: 1, why: 'points.total (tổng Điểm Xanh)' },
-  'app/uu-dai/page.tsx': { count: 1, why: 'r.points (Điểm Xanh thưởng điểm danh từng ngày)' },
   'app/tai-khoan/orders-section.tsx': { count: 2, why: 'số đơn đang hiển thị / tổng số đơn' },
   'app/thanh-toan/page.tsx': { count: 2, why: 'quote.pointsUsed, usablePoints (Điểm Xanh)' },
   'components/game/format.ts': { count: 1, why: 'formatNumber: số giọt nước, điểm và cây của Vườn Xanh' },

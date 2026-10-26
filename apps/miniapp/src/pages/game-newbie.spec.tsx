@@ -136,7 +136,7 @@ beforeEach(() => {
   a.getFriends.mockResolvedValue([]);
   a.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 4, nextUnlock: { slot: 2, seedCost: 100 } });
   a.fetchSeasonPass.mockResolvedValue({ active: false });
-  a.checkIn.mockResolvedValue({ seedsEarned: 65, pointsEarned: 0, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' });
+  a.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 65, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
   a.collectDew.mockResolvedValue({ seedsEarned: 15, totalSeeds: 80 });
   a.waterTree.mockResolvedValue({ progress: 30, target: 60, harvested: false, treesPlanted: 0 });
   a.waterPlot.mockResolvedValue({ progress: 25, target: 300, harvested: false, treesPlanted: 0, revivedFromDead: false });
@@ -300,7 +300,7 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
       totalSeeds: 500,
     });
     renderPage();
-    expect(await screen.findByText('Nhận +17💧 mỗi ngày')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận +17💧 và Điểm Xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hứng giọt sương (+11💧)' })).toBeInTheDocument();
     expect(screen.getByText('+5💧')).toBeInTheDocument();
     expect(screen.getByText('+40💧')).toBeInTheDocument();
@@ -310,7 +310,7 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
 
   it('lần đầu: dòng phụ nói lần đầu nhận gồm quà người mới', async () => {
     renderPage();
-    expect(await screen.findByText('Lần đầu nhận +65💧, các ngày sau +15💧')).toBeInTheDocument();
+    expect(await screen.findByText('Lần đầu nhận +65💧, các ngày sau +15💧, kèm Điểm Xanh')).toBeInTheDocument();
   });
 
   it('API cũ chưa trả số: chữ giữ nguyên như trước, không hiện "undefined"', async () => {
@@ -324,7 +324,7 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
       ecoImpact: { progress: 0, target: 600, treeType: 'Cây', treesPlanted: 1 },
     });
     renderPage();
-    expect(await screen.findByText('Nhận giọt nước tưới cây mỗi ngày')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/undefined|NaN/);
   });

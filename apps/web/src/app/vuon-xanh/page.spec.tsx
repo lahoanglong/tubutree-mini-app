@@ -269,7 +269,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
 
 describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chuỗi', () => {
   it('điểm danh: gửi POST một lần dù chạm đúp, báo thành công, tải lại hồ sơ', async () => {
-    state.posts['/game/check-in'] = () => ({ seedsEarned: 10, pointsEarned: 0, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' });
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' }, alreadyDone: false, pending: [] });
     const c = await mount();
     const b = btn(c, 'Điểm danh');
     act(() => {
@@ -277,8 +277,8 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
       b.click();
     });
     await flush(8);
-    expect(postsOf('/game/check-in')).toHaveLength(1);
-    expect(document.body.textContent).toContain('+10💧 · 🧊 đã dùng vé giữ lửa · Thưởng ngày 3');
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
+    expect(document.body.textContent).toContain('+1.000 Điểm Xanh · +10 giọt nước · đã dùng vé giữ lửa · Thưởng ngày 3');
     expect(getsOf('/game/profile').length).toBeGreaterThanOrEqual(2);
   });
 
@@ -293,7 +293,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
 
   it('lỗi điểm danh: báo lỗi, nút bật lại gọi được lần hai', async () => {
     let n = 0;
-    state.posts['/game/check-in'] = () => {
+    state.posts['/me/daily-check-in'] = () => {
       if (++n === 1) throw new Error('Lỗi máy chủ');
       return { seedsEarned: 5, pointsEarned: 0, streakDays: 4, totalSeeds: 1, streakFrozeUsed: false, bonusNote: '' };
     };
@@ -303,7 +303,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(document.querySelector('[role="alert"]')!.textContent).toContain('Lỗi máy chủ');
     click(btn(c, 'Điểm danh'));
     await flush(6);
-    expect(postsOf('/game/check-in')).toHaveLength(2);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(2);
   });
 
   it('chuỗi 3 ngày: tiêu đề, 7 ô theo chu kỳ, ô thưởng ngày 3 và 7', async () => {
@@ -723,13 +723,13 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
   };
   afterEach(() => spy?.mockRestore());
 
-  it('điểm danh làm mới game, me và loyalty', async () => {
-    state.posts['/game/check-in'] = () => ({ seedsEarned: 10, pointsEarned: 0, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' });
+  it('điểm danh làm mới game, me, loyalty và lịch điểm danh', async () => {
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
     const c = await mount();
     arm();
     click(btn(c, 'Điểm danh'));
     await flush(6);
-    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]', '["loyalty-checkin"]']));
   });
 
   it('tưới cây làm mới game, me và loyalty', async () => {

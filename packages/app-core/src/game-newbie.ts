@@ -128,7 +128,11 @@ export const gameNewbieCopy = {
   },
   checkin: {
     sub: (daily: number | null, first: number) =>
-      daily == null ? 'Nhận giọt nước tưới cây mỗi ngày' : first > 0 ? `Lần đầu nhận +${drops(daily + first)}, các ngày sau +${drops(daily)}` : `Nhận +${drops(daily)} mỗi ngày`,
+      daily == null
+        ? 'Nhận giọt nước và Điểm Xanh mỗi ngày'
+        : first > 0
+          ? `Lần đầu nhận +${drops(daily + first)}, các ngày sau +${drops(daily)}, kèm Điểm Xanh`
+          : `Nhận +${drops(daily)} và Điểm Xanh mỗi ngày`,
     dew: (v: number | null) => (v == null ? 'Hứng giọt sương' : `Hứng giọt sương (+${drops(v)})`),
     dayReward: (v: number) => `+${n(v)}`,
   },

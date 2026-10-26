@@ -2,6 +2,7 @@ import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, Reward
 import { api } from './api';
 import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
+import type { CheckInResult, CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
 import type { LoyaltyRates } from '../utils/loyalty-copy';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
@@ -156,33 +157,13 @@ export type RewardCatalogResponse = RewardCatalogDTO;
 export type RedeemRewardResult = RedeemRewardResultDTO;
 export type GiftRedemption = GiftRedemptionDTO;
 
-export interface CheckInReward {
-  day: number;
-  points: number;
-  claimed: boolean;
-  isToday: boolean;
-}
-
-/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh giọt nước Vườn Xanh). */
-export interface CheckInStatusResponse {
-  checkedInToday: boolean;
-  /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
-  streakDays: number;
-  /** Ô 1..7 của hôm nay: ô SẼ được trả khi bấm (chưa điểm danh) hoặc ô vừa nhận (đã điểm danh). */
-  currentCycleDay: number;
-  /** Điểm của ô hôm nay. Optional: API cũ chưa trả. */
-  todayPoints?: number;
-  rewards: CheckInReward[];
-}
-
-export interface CheckInResult {
-  success: boolean;
-  cycleDay: number;
-  streakDays: number;
-  pointsEarned: number;
-  totalPoints: number;
-  message: string;
-}
+export type {
+  CheckInReward,
+  CheckInResult,
+  CheckInStatusResponse,
+  PointsCheckInPart,
+  WaterCheckInPart,
+} from '@tubutree/app-core/api/loyalty';
 
 /**
  * GET /me/loyalty/member-card. memberCode ("TUBU" + mã giới thiệu duy nhất) là payload DUY NHẤT
@@ -214,8 +195,8 @@ export const redeemLoyaltyReward = (rewardId: string, idempotencyKey: string) =>
     })
     .then((r) => r.data);
 export const getMyRedemptions = () => api.get<GiftRedemptionDTO[]>('/me/loyalty/rewards/mine').then((r) => r.data);
-export const getDailyCheckInStatus = () => api.get<CheckInStatusResponse>('/me/loyalty/check-in').then((r) => r.data);
-export const postDailyCheckIn = () => api.post<CheckInResult>('/me/loyalty/check-in').then((r) => r.data);
+export const getDailyCheckInStatus = () => api.get<CheckInStatusResponse>('/me/daily-check-in').then((r) => r.data);
+export const postDailyCheckIn = () => api.post<CheckInResult>('/me/daily-check-in').then((r) => r.data);
 export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/member-card').then((r) => r.data);
 
 // ── View helper thuần cho trang Hạng thành viên (test: account-api.spec.ts) ──

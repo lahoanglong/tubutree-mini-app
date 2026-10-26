@@ -136,7 +136,7 @@ beforeEach(() => {
   a.getFriends.mockResolvedValue([]);
   a.getGarden.mockResolvedValue(null);
   a.fetchSeasonPass.mockResolvedValue({ active: false });
-  a.checkIn.mockResolvedValue({ seedsEarned: 10, pointsEarned: 0, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' });
+  a.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
   a.collectDew.mockResolvedValue({ seedsEarned: 5, totalSeeds: 1_255 });
   a.buyStreakFreeze.mockResolvedValue({ streakFreezes: 2, totalSeeds: 1_170 });
   a.repairStreak.mockResolvedValue({ repaired: true, streakDays: 5, totalSeeds: 900 });

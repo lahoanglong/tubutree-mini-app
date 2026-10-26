@@ -107,7 +107,7 @@ beforeEach(() => {
   state.push.mockReset();
   state.replace.mockReset();
   state.posts = {
-    '/game/check-in': () => ({ seedsEarned: 65, pointsEarned: 0, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' }),
+    '/me/daily-check-in': () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 65, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] }),
     '/game/dew/collect': () => ({ seedsEarned: 15, totalSeeds: 80 }),
     '/game/tree/water': () => ({ progress: 30, target: 60, harvested: false, treesPlanted: 0 }),
     '/game/garden/plot/pa/water': () => ({ progress: 25, target: 300, harvested: false, treesPlanted: 0, revivedFromDead: false }),
@@ -139,7 +139,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     expect(first.textContent).toContain('Điểm danh nhận 65💧');
     click(first);
     await flush(6);
-    expect(postsOf('/game/check-in')).toHaveLength(1);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
     expect(postsOf('/game/tree/water')).toHaveLength(0);
     expect(postsOf('/game/dew/collect')).toHaveLength(0);
   });
@@ -149,7 +149,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     const c = await mount();
     click(btn(c, 'Nhận nước hôm nay (+30💧)'));
     await flush(8);
-    expect(postsOf('/game/check-in')).toHaveLength(1);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
     expect(postsOf('/game/dew/collect')).toHaveLength(1);
   });
 
@@ -195,7 +195,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
     expect(smallTouchTargets(d)).toEqual([]);
     click(btn(d, 'Điểm danh'));
     await flush(6);
-    expect(postsOf('/game/check-in')).toHaveLength(1);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
   });
 
   it('sheet: hết việc thì báo xong và giờ mở lại; câu đố tải lỗi hiện thông báo và "Thử lại"', async () => {
@@ -222,7 +222,7 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
 
   it('sheet: lỗi điểm danh hiện ngay trong sheet', async () => {
     state.data['/game/profile'] = P({ firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), totalSeeds: 0 });
-    state.posts['/game/check-in'] = () => {
+    state.posts['/me/daily-check-in'] = () => {
       throw new Error('Hôm nay bạn đã điểm danh rồi');
     };
     const c = await mount();
@@ -267,7 +267,7 @@ describe('Vườn Xanh người mới (web): số hiện trước khi bấm lấ
   it('điểm danh, sương, ô N3 và N7 ghi số 💧 từ profile', async () => {
     state.data['/game/profile'] = DRY({ lastCheckInAt: yesterdayIso(), lastDewAt: null, dailyLoginSeeds: 17, dewSeeds: 11, streak7Seeds: 40, totalSeeds: 500 });
     const c = await mount();
-    expect(c.textContent).toContain('Nhận +17💧 mỗi ngày');
+    expect(c.textContent).toContain('Nhận +17💧 và Điểm Xanh mỗi ngày');
     expect(maybeBtn(c, 'Hứng giọt sương (+11💧)')).toBeDefined();
     expect(c.textContent).toContain('+5💧');
     expect(c.textContent).toContain('+40💧');
@@ -281,7 +281,7 @@ describe('Vườn Xanh người mới (web): số hiện trước khi bấm lấ
     mounted = [];
     state.data['/game/profile'] = { totalSeeds: 500, streakDays: 2, treeStage: 1, streakFreezes: 0, lastDewAt: null, lastCheckInAt: yesterdayIso(), ecoImpact: { progress: 0, target: 600, treeType: 'Cây', treesPlanted: 1 } };
     c = await mount();
-    expect(c.textContent).toContain('Nhận giọt nước tưới cây mỗi ngày');
+    expect(c.textContent).toContain('Nhận giọt nước và Điểm Xanh mỗi ngày');
     expect(maybeBtn(c, 'Nhận nước hôm nay')).toBeDefined();
     expect(c.textContent).not.toMatch(/undefined|NaN/);
   });
