@@ -1,10 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { HOME_KIND_KEY } from '@tubutree/app-core/home-layout';
 import { customerKind, resolveHomeKind, type HomeCustomerKind, type HomeKindState } from '../components/home/home-blocks';
 import type { PurchasedItemsPage } from '../services/shop-api';
 import { browserStorage } from '../utils/recently-viewed';
 
-export const HOME_KIND_KEY = 'tubu_home_kind';
+export { HOME_KIND_KEY };
 
 /** Giá trị lưu: `{ userId, kind }` của khách đăng nhập gần nhất. Sai dạng / khác tài khoản → bỏ qua. */
 export function readStoredHomeKind(userId: string | null | undefined): HomeCustomerKind | null {

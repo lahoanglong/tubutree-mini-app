@@ -3,14 +3,14 @@
 import { useContext, useEffect, useMemo, useSyncExternalStore } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { PurchasedItemsPage } from '@tubutree/app-core/api/orders';
-import { readLastTodoRows } from '@tubutree/app-core/home-layout';
+import { HOME_KIND_KEY, readLastTodoRows } from '@tubutree/app-core/home-layout';
 import { hasSessionMarker, writeWebCookie } from '@/lib/client-api';
 import { HOME_HINT_COOKIE, hintSlug } from '@/lib/home-restore-hint';
 import { HomeRestoreHintContext, subscribeStorageEvent } from '@/lib/home-restore-context';
 import { browserStorage } from '@/lib/recently-viewed';
 import { customerKind, resolveHomeKind, type HomeCustomerKind, type HomeKindState } from './home-blocks';
 
-export const HOME_KIND_KEY = 'tubu_home_kind';
+export { HOME_KIND_KEY };
 
 /** Giá trị lưu: `{ userId, kind }` của khách đăng nhập gần nhất. Sai dạng / khác tài khoản → bỏ qua. */
 export function readStoredHomeKind(userId: string | null | undefined): HomeCustomerKind | null {

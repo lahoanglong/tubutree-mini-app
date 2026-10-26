@@ -332,5 +332,42 @@ export function readLastTodoRows(storage: MemoryStorage | null): number {
   }
 }
 
+/** Khoá loại khách (`{ userId, kind }`) mà cả hai app nhớ cho khung chờ Trang chủ. */
+export const HOME_KIND_KEY = 'tubu_home_kind';
+
+export interface RemovableStorage extends MemoryStorage {
+  removeItem(key: string): void;
+}
+
+/**
+ * Gợi ý khung chờ (loại khách, số dòng Việc cần làm) là của tài khoản dùng gần nhất trên máy và được đọc cả khi chưa biết đang là ai
+ * (lúc khôi phục phiên). Khi đăng nhập hay khôi phục ra một tài khoản KHÁC thì phải bỏ gợi ý của người trước ngay, kẻo khung chờ
+ * lần mở sau dựng theo loại khách của họ. Trả true khi đã bỏ ít nhất một khoá (web dùng để xoá luôn cookie gợi ý).
+ * Giá trị không đọc được hoặc không ghi chủ tài khoản cũng bỏ: không biết là của ai thì không được dùng cho ai.
+ */
+export function dropForeignHomeHints(storage: RemovableStorage | null, userId: string | null | undefined): boolean {
+  if (!storage || !userId) return false;
+  let dropped = false;
+  for (const key of [HOME_KIND_KEY, TODO_ROWS_KEY]) {
+    try {
+      const raw = storage.getItem(key);
+      if (raw === null) continue;
+      let owner: unknown;
+      try {
+        owner = (JSON.parse(raw) as { userId?: unknown } | null)?.userId;
+      } catch {
+        owner = undefined;
+      }
+      if (owner !== userId) {
+        storage.removeItem(key);
+        dropped = true;
+      }
+    } catch {
+      /* kho bị chặn: không có gì để bỏ */
+    }
+  }
+  return dropped;
+}
+
 /** Chiều cao khung chờ của "Việc cần làm" cho số dòng đã nhớ: mỗi dòng 60px cộng phần đệm của thẻ. */
 export const todoSkeletonHeight = (rows: number): number => rows * 60 + 18;
