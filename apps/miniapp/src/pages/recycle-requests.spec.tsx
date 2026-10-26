@@ -149,4 +149,25 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
     await screen.findByRole('button', { name: /TR-AAAAA/ });
     expect(screen.queryByText(/Xem kết quả mẫu/)).toBeNull();
   });
+  it('khách chưa đăng nhập: lời mời đăng nhập, không gọi API, không hiện màn lỗi', async () => {
+    mocks.auth.status = 'idle';
+    mocks.login.mockResolvedValue(undefined);
+    mocks.ensurePhone.mockResolvedValue('0901234567');
+    renderPage();
+    expect(await screen.findByText('Đăng nhập để xem các yêu cầu đổi rác của bạn.')).toBeInTheDocument();
+    expect(screen.queryByText(/Chưa tải được/)).toBeNull();
+    expect(mocks.listWasteRequests).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập' }));
+    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalled());
+    expect(mocks.login).toHaveBeenCalled();
+  });
+  it('chương trình tắt và chưa có yêu cầu nào: không mời tạo yêu cầu mới', async () => {
+    mocks.auth.status = 'authenticated';
+    mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
+    mocks.listWasteRequests.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText('Chưa có yêu cầu nào')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đổi rác ngay' })).toBeNull();
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
+  });
 });

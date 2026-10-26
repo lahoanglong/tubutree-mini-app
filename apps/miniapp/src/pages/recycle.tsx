@@ -1,11 +1,15 @@
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { History } from 'lucide-react';
+import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
-import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
+import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
+import { getWasteCatalogue, getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { getLoyaltyRewards } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { useRecycleLogin } from '../hooks/use-recycle-login';
+import { WasteItemThumb } from '../components/waste-item-thumb';
+import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -45,7 +49,6 @@ export function impactLine(grams: number | null | undefined): string | null {
 }
 
 const BLOCKED_TEXT = 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree';
-const LOGIN_TEXT = 'Đăng nhập Zalo và chia sẻ số điện thoại để đổi rác';
 
 const METHOD_FLAG = { DROP_OFF: 'dropoff', MAIL_IN: 'mailin', PICKUP: 'pickup' } as const;
 const METHOD_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
@@ -64,6 +67,77 @@ function NoticeCard({ text }: { text: string }) {
         {text}
       </Text>
     </Card>
+  );
+}
+
+function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
+  return (
+    <section style={SECTION_STYLE}>
+      <Heading variant="title-md" as="h2">
+        {wasteGuestCopy.itemsTitle}
+      </Heading>
+      {items.map((item) => (
+        <div
+          key={item.id}
+          data-item
+          data-status={item.status}
+          aria-disabled={item.status === 'COMING_SOON' || undefined}
+          style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+        >
+          <WasteItemThumb item={item} size={40} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text variant="body-sm" as="span" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'primary'} style={{ fontWeight: 600 }}>
+                {item.name}
+              </Text>
+              {item.status === 'COMING_SOON' && <Badge>Sắp nhận</Badge>}
+              {item.warehouseOnly && item.status !== 'COMING_SOON' && <Badge tone="info" size="sm">{WAREHOUSE_ONLY_TEXT}</Badge>}
+            </div>
+            <Text variant="caption" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'secondary'} as="div">
+              {ruleText(item)}
+            </Text>
+            {item.prepInstructions && (
+              <Text variant="caption" tone="tertiary" as="div">
+                {item.prepInstructions}
+              </Text>
+            )}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function GuestOverview({ items, onRules }: { items: readonly WasteItemDTO[] | undefined; onRules: () => void }) {
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Heading variant="title-md" as="h2">
+          {wasteGuestCopy.introTitle}
+        </Heading>
+        <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
+          {wasteGuestCopy.intro}
+        </Text>
+      </div>
+      <section style={SECTION_STYLE}>
+        <Heading variant="title-md" as="h2">
+          {wasteGuestCopy.stepsTitle}
+        </Heading>
+        <ol style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {wasteGuestCopy.steps.map((t) => (
+            <li key={t}>
+              <Text variant="body-sm" as="span">
+                {t}
+              </Text>
+            </li>
+          ))}
+        </ol>
+      </section>
+      {items === undefined ? <Skeleton height={120} radius="var(--radius-card)" /> : <ItemList items={items} />}
+      <div>
+        <ListRow title={wasteGuestCopy.rulesLink} trailing="chevron" onPress={onRules} />
+      </div>
+    </>
   );
 }
 
@@ -88,9 +162,9 @@ function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) =>
             {tl ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div>
-                  <Badge tone="brand">{status}</Badge>
+                  <Badge tone={paused ? 'warning' : 'brand'}>{status}</Badge>
                 </div>
-                <Timeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} />
+                <Timeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} caption={timelineCaption(TIMELINE_STEPS[r.method], tl.current)} />
               </div>
             ) : (
               closed && (
@@ -112,7 +186,6 @@ export default function RecyclePage() {
   const qc = useQueryClient();
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
-  const login = useAuthStore((s) => s.login);
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
 
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
@@ -124,15 +197,7 @@ export default function RecyclePage() {
     enabled: phase === 'authenticated' && fullPage,
   });
 
-  const guestLogin = async () => {
-    try {
-      await login();
-      await ensurePhone();
-      await qc.invalidateQueries({ queryKey: ['waste'] });
-    } catch (e) {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    }
-  };
+  const guestLogin = useRecycleLogin();
   const sharePhone = async () => {
     try {
       const phone = await ensurePhone();
@@ -142,18 +207,26 @@ export default function RecyclePage() {
     }
   };
 
-  const loginCard = (onPress: () => Promise<void>) => (
-    <Card variant="outline">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
-          {LOGIN_TEXT}
+  const loginBar = (onPress: () => Promise<void>) => (
+    <StickyActionBar
+      summary={
+        <Text variant="body-sm" tone="secondary" as="div">
+          {wasteGuestCopy.whyPhone}
         </Text>
+      }
+      primary={
         <Button fullWidth onPress={onPress}>
-          Chia sẻ số điện thoại
+          {wasteGuestCopy.loginButton}
         </Button>
-      </div>
-    </Card>
+      }
+    />
   );
+
+  const catalogueQ = useQuery({
+    queryKey: [...WASTE_QUERY_KEYS.all, 'catalogue'],
+    queryFn: getWasteCatalogue,
+    enabled: phase === 'guest' && cfg.waste.enabled,
+  });
 
   const showHistory = me?.eligibility === 'OK';
   const header = (
@@ -162,10 +235,11 @@ export default function RecyclePage() {
       actions={showHistory ? <IconButton icon={History} label="Yêu cầu của tôi" onPress={() => navigate('/recycle/requests')} /> : undefined}
     />
   );
-  const shell = (content: React.ReactNode) => (
+  const shell = (content: React.ReactNode, bar?: React.ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       {header}
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>{content}</div>
+      <div style={{ padding: 16, paddingBottom: bar ? 140 : 16, display: 'flex', flexDirection: 'column', gap: 16 }}>{content}</div>
+      {bar}
     </Page>
   );
 
@@ -179,7 +253,14 @@ export default function RecyclePage() {
     );
   }
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
-  if (phase === 'guest') return shell(cfg.waste.enabled ? loginCard(guestLogin) : <NoticeCard text={PAUSED_TEXT} />);
+  if (phase === 'guest') {
+    if (!cfg.waste.enabled) return shell(<NoticeCard text={PAUSED_TEXT} />);
+    const guestItems = catalogueQ.data?.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder);
+    return shell(
+      <GuestOverview items={catalogueQ.isError ? [] : guestItems} onRules={() => navigate('/recycle/rules')} />,
+      loginBar(guestLogin),
+    );
+  }
   if (meQ.isError || !me) return shell(<ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />);
 
   const requestsBlock = <RequestsBlock me={me} onOpen={(id) => navigate(`/recycle/r/${id}`)} />;
@@ -196,26 +277,30 @@ export default function RecyclePage() {
   if (!me.programmeEnabled) {
     return shell(
       <>
+        {deskRow && <div>{deskRow}</div>}
         <NoticeCard text={PAUSED_TEXT} />
         {requestsBlock}
-        {deskRow && <div>{deskRow}</div>}
+        <div>
+          <ListRow title="Kho quà" trailing="chevron" onPress={() => navigate('/rewards')} />
+        </div>
       </>,
     );
   }
   if (me.eligibility !== 'OK') {
     return shell(
       <>
-        {loginCard(sharePhone)}
         {deskRow && <div>{deskRow}</div>}
+        <GuestOverview items={me.items.filter((i) => i.status !== 'HIDDEN')} onRules={() => navigate('/recycle/rules')} />
       </>,
+      loginBar(sharePhone),
     );
   }
   if (me.blocked) {
     return shell(
       <>
+        {deskRow && <div>{deskRow}</div>}
         <NoticeCard text={BLOCKED_TEXT} />
         {requestsBlock}
-        {deskRow && <div>{deskRow}</div>}
       </>,
     );
   }
@@ -233,6 +318,7 @@ export default function RecyclePage() {
 
   return shell(
     <>
+      {deskRow && <div>{deskRow}</div>}
       <Card>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <Text variant="caption" tone="tertiary" as="div">
@@ -241,9 +327,11 @@ export default function RecyclePage() {
           <Heading variant="display-md" as="p">
             {formatPoints(total)}
           </Heading>
-          <Text variant="body-sm" tone="secondary" as="div">
-            {`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}
-          </Text>
+          {total > 0 && (
+            <Text variant="body-sm" tone="secondary" as="div">
+              {`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}
+            </Text>
+          )}
           {impact && (
             <div>
               <Text variant="body-sm" as="div">
@@ -279,52 +367,25 @@ export default function RecyclePage() {
           <Heading variant="title-md" as="h2">
             Cách đổi
           </Heading>
-          {methods.map((m) => (
-            <Card key={m} variant="outline">
-              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
-                {METHOD_LABELS[m]}
-              </Text>
-              <Text variant="caption" tone="tertiary" as="div">
-                {METHOD_LINE[m]}
-              </Text>
-            </Card>
-          ))}
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {methods.map((m) => (
+              <li key={m}>
+                <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                  {METHOD_LABELS[m]}
+                </Text>
+                <Text variant="caption" tone="secondary" as="div">
+                  {METHOD_LINE[m]}
+                </Text>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      <section style={SECTION_STYLE}>
-        <Heading variant="title-md" as="h2">
-          Tubu nhận những món này
-        </Heading>
-        {items.map((item) => (
-          <div
-            key={item.id}
-            data-item
-            data-status={item.status}
-            aria-disabled={item.status === 'COMING_SOON' || undefined}
-            style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Text variant="body-sm" as="span" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'primary'} style={{ fontWeight: 600 }}>
-                {item.name}
-              </Text>
-              {item.status === 'COMING_SOON' && <Badge>Sắp nhận</Badge>}
-            </div>
-            <Text variant="caption" tone={item.status === 'COMING_SOON' ? 'tertiary' : 'secondary'} as="div">
-              {ruleText(item)}
-            </Text>
-            {item.prepInstructions && (
-              <Text variant="caption" tone="tertiary" as="div">
-                {item.prepInstructions}
-              </Text>
-            )}
-          </div>
-        ))}
-      </section>
+      <ItemList items={items} />
 
       <div>
         <ListRow title="Kho quà" subtitle={giftNames || undefined} trailing="chevron" onPress={() => navigate('/rewards')} />
-        {deskRow}
         <ListRow title="Thể lệ chương trình" trailing="chevron" onPress={() => navigate('/recycle/rules')} />
       </div>
     </>,

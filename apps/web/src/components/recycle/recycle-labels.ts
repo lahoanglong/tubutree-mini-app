@@ -200,7 +200,7 @@ export function closedLabel(
 }
 
 function voucherPhrase(name: string): string {
-  return /^giảm/i.test(name) ? `mã ${name.charAt(0).toLowerCase()}${name.slice(1)}` : `mã giảm giá ${name}`;
+  return /^giảm/i.test(name) ? `mã ${name.charAt(0).toLowerCase()}${name.slice(1)}` : `mã ${name}`;
 }
 
 export function nextRewardProgress(
@@ -228,7 +228,8 @@ export function equivalentUnits(missingPoints: number, item: WasteItemDTO): numb
 export function capSentence(item: WasteItemDTO): string | null {
   const parts: string[] = [];
   if (item.monthlyCapQty != null) parts.push(`Tối đa ${formatCount(item.monthlyCapQty)} ${item.unitLabel} mỗi tháng`);
-  if (item.dailyCapQty != null) parts.push(`Mang tới điểm nhận: tối đa ${formatCount(item.dailyCapQty)} ${item.unitLabel} mỗi ngày`);
+  // Món chỉ kho nhận không qua điểm nhận nên trần theo ngày của điểm không áp dụng.
+  if (item.dailyCapQty != null && !item.warehouseOnly) parts.push(`Mỗi ngày mang tới điểm nhận tối đa ${formatCount(item.dailyCapQty)} ${item.unitLabel}`);
   return parts.length ? parts.join('. ') : null;
 }
 

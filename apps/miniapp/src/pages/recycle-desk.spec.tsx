@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   deskReject: vi.fn(),
   deskFulfilGift: vi.fn(),
   getDeskPointReport: vi.fn(),
+  scanCode: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -41,6 +42,7 @@ vi.mock('../store/auth', () => ({
     return sel ? sel(state) : state;
   },
 }));
+vi.mock('../services/zmp-bridge', async (orig) => ({ ...(await orig<object>()), scanCode: mocks.scanCode }));
 vi.mock('../utils/idempotency', () => ({ newIdempotencyKey: () => `key-${++mocks.keySeq}` }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
 vi.mock('../services/waste-api', async (orig) => ({
@@ -133,7 +135,7 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     expect(await screen.findByText('Hạn mức điểm tháng này')).toBeInTheDocument();
     expect(screen.getByText('Đã dùng 120.000 / 500.000 điểm')).toBeInTheDocument();
     expect(screen.getByText('Còn lại 380.000 điểm')).toBeInTheDocument();
-    expect(screen.getByText('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.')).toBeInTheDocument();
+    expect(screen.getByText('Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.')).toBeInTheDocument();
   });
   it('điểm không có hạn mức tháng: ghi "Không giới hạn theo tháng", không lặp chữ "hạn" (D8-13)', async () => {
     mocks.getDeskPoints.mockResolvedValue([makeDeskPoint({ quota: null })]);
@@ -152,7 +154,7 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     await screen.findByRole('tab', { name: 'Đại lý Cô Ba' });
     expect(screen.getAllByText('Đại lý Cô Ba')).toHaveLength(1);
   });
-  it('thứ tự: hạn mức, ô nhập mã, thẻ yêu cầu, rồi ưu đãi và báo cáo; xác nhận nằm trong thanh dính đáy', async () => {
+  it('thứ tự: ô nhập mã, hạn mức, thẻ yêu cầu, rồi ưu đãi và báo cáo; xác nhận nằm trong thanh dính đáy', async () => {
     renderPage();
     await screen.findByText('Hạn mức điểm tháng này');
     await lookUp();
@@ -163,28 +165,28 @@ describe('/recycle/desk — vào màn (§16.1, §4.10)', () => {
     const card = screen.getByText('Ng*** A');
     const perk = screen.getByText('Ưu đãi riêng của cửa hàng');
     const report = screen.getByText('Báo cáo tháng này');
-    expect(before(quota, input) && before(input, card) && before(card, perk) && before(perk, report)).toBe(true);
+    expect(before(input, quota) && before(quota, card) && before(card, perk) && before(perk, report)).toBe(true);
     expect(within(screen.getByTestId('sticky-bar')).getByRole('button', { name: 'Xác nhận đã nhận' })).toBeInTheDocument();
   });
   it('kho: không có thẻ hạn mức; có dòng trần nhân viên trong ngày', async () => {
     mocks.getDeskPoints.mockResolvedValue([WAREHOUSE_DESK]);
     renderPage();
-    expect(await screen.findByText('Còn 150.000 điểm được xác nhận hôm nay')).toBeInTheDocument();
+    expect(await screen.findByText('Hôm nay còn xác nhận được 150.000 điểm')).toBeInTheDocument();
     expect(screen.queryByText('Hạn mức điểm tháng này')).toBeNull();
   });
   it('nhiều điểm → chọn điểm ở đầu màn', async () => {
     mocks.getDeskPoints.mockResolvedValue([makeDeskPoint(), WAREHOUSE_DESK]);
     renderPage();
     fireEvent.click(await screen.findByRole('tab', { name: 'Kho Tubu TP.HCM' }));
-    expect(screen.getByText('Còn 150.000 điểm được xác nhận hôm nay')).toBeInTheDocument();
+    expect(screen.getByText('Hôm nay còn xác nhận được 150.000 điểm')).toBeInTheDocument();
   });
 });
 
 describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
-  it('tra mã gửi đúng chuỗi (máy chủ chuẩn hoá); thẻ yêu cầu che tên và số', async () => {
+  it('tra mã gửi mã đã chuẩn hoá (TR- viết hoa); thẻ yêu cầu che tên và số', async () => {
     renderPage();
     await lookUp();
-    expect(mocks.deskLookup).toHaveBeenCalledWith('tr-8k2m9');
+    expect(mocks.deskLookup).toHaveBeenCalledWith('TR-8K2M9');
     expect(await screen.findByText('Ng*** A')).toBeInTheDocument();
     expect(screen.getByText('090****567')).toBeInTheDocument();
     expect(within(line('Thùng carton')).getByText('Khách khai 5 thùng')).toBeInTheDocument();
@@ -427,7 +429,7 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     expect(await screen.findByText('Gói hạt giống Tubu')).toBeInTheDocument();
     expect(screen.getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Trao quà' }));
-    await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'qg-8k2m9p4t', pointId: 'wh-1' }));
+    await waitFor(() => expect(mocks.deskFulfilGift).toHaveBeenCalledWith({ code: 'QG-8K2M9P4T', pointId: 'wh-1' }));
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã trao Gói hạt giống Tubu', type: 'success' }));
     expect(screen.queryByText('Gói hạt giống Tubu')).toBeNull();
   });
@@ -484,5 +486,54 @@ describe('/recycle/desk — trao quà ở kho (§8, §15.3)', () => {
     expect(await screen.findByText('Ưu đãi riêng của cửa hàng')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: 'Kho Tubu TP.HCM' }));
     expect(screen.queryByText('Ưu đãi riêng của cửa hàng')).toBeNull();
+  });
+});
+
+describe('/recycle/desk — quét mã và gõ mã (B-35)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth.status = 'authenticated';
+    mocks.getDeskPoints.mockResolvedValue([makeDeskPoint()]);
+    lookupReq();
+  });
+
+  it('nút "Quét mã của khách" nằm trước ô gõ; quét ra mã thì tra luôn', async () => {
+    mocks.scanCode.mockResolvedValue({ kind: 'ok', content: 'TR-8K2M9' });
+    renderPage();
+    const scan = await screen.findByRole('button', { name: 'Quét mã của khách' });
+    const input = screen.getByLabelText('Mã yêu cầu hoặc mã nhận quà');
+    expect(scan.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(scan);
+    await waitFor(() => expect(mocks.deskLookup).toHaveBeenCalledWith('TR-8K2M9'));
+  });
+
+  it('quét ra nội dung không phải mã Đổi rác thì báo và không tra', async () => {
+    mocks.scanCode.mockResolvedValue({ kind: 'ok', content: 'https://example.com' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Quét mã của khách' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: expect.stringContaining('không phải mã Đổi rác') })));
+    expect(mocks.deskLookup).not.toHaveBeenCalled();
+  });
+
+  it('đóng camera thì im lặng, camera lỗi thì báo gõ tay', async () => {
+    mocks.scanCode.mockResolvedValueOnce({ kind: 'cancelled' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Quét mã của khách' }));
+    await waitFor(() => expect(mocks.scanCode).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    mocks.scanCode.mockResolvedValueOnce({ kind: 'failed' });
+    fireEvent.click(screen.getByRole('button', { name: 'Quét mã của khách' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('gõ mã') })));
+    expect(mocks.deskLookup).not.toHaveBeenCalled();
+  });
+
+  it('ô gõ có ví dụ mẫu; mã thiếu "TR-" vẫn tra được; Enter là tra', async () => {
+    renderPage();
+    const input = await screen.findByLabelText('Mã yêu cầu hoặc mã nhận quà');
+    expect(input).toHaveAttribute('placeholder', 'VD: TR-6NY3J');
+    fireEvent.change(input, { target: { value: '6ny3j' } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+    await waitFor(() => expect(mocks.deskLookup).toHaveBeenCalledWith('TR-6NY3J'));
+    await waitFor(() => expect(input).toHaveValue('TR-6NY3J'));
   });
 });

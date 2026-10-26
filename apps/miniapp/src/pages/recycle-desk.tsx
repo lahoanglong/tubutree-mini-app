@@ -318,7 +318,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
             search();
           }}
         >
-          <Field label="Hoặc gõ mã yêu cầu, mã nhận quà">
+          <Field label="Mã yêu cầu hoặc mã nhận quà">
             <Input placeholder="VD: TR-6NY3J" value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
           <Button fullWidth variant="secondary" disabled={code.trim() === ''} loading={find.isPending} onPress={search}>

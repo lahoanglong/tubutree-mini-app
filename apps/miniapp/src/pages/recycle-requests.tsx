@@ -2,6 +2,11 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
+import { wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { useRecycleLogin } from '../hooks/use-recycle-login';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Text } from '../components/ui/text';
 import { WASTE_QUERY_KEYS, getWasteMe, listWasteRequests } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -26,6 +31,7 @@ export default function RecycleRequestsPage() {
   const cfg = usePublicConfig();
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const me = meQ.data;
+  const guestLogin = useRecycleLogin();
 
   const shell = (content: ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -35,12 +41,30 @@ export default function RecycleRequestsPage() {
   );
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
+  if (phase === 'guest') {
+    return shell(
+      <Card variant="outline">
+        <div style={{ ...COLUMN, gap: 12 }}>
+          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{wasteGuestCopy.historyBody}</Text>
+          <Text variant="body-sm" tone="secondary" as="div">{wasteGuestCopy.whyPhone}</Text>
+          <Button fullWidth onPress={guestLogin}>{wasteGuestCopy.historyButton}</Button>
+        </div>
+      </Card>,
+    );
+  }
   if (q.isError) return shell(<ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
   if (q.isPending || !q.data) return shell(<Skeleton height={120} />);
 
   const rows = q.data;
   if (rows.length === 0) {
-    return shell(<EmptyState art="box" heading="Chưa có yêu cầu nào" ctaLabel="Đổi rác ngay" onCta={() => navigate('/recycle/new')} />);
+    const canCreate = !cfg.isLoaded || cfg.waste.enabled;
+    return shell(
+      <EmptyState
+        art="box"
+        heading="Chưa có yêu cầu nào"
+        {...(canCreate ? { ctaLabel: 'Đổi rác ngay', onCta: () => navigate('/recycle/new') } : {})}
+      />,
+    );
   }
   const openRows = rows.filter((r) => OPEN_STATUSES.includes(r.status));
   const closedRows = rows.filter((r) => !OPEN_STATUSES.includes(r.status));

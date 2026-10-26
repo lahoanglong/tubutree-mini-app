@@ -34,12 +34,24 @@ import { Card } from '../components/ui/card';
 import { ErrorState } from '../components/ui/empty-state';
 import { Checkbox } from '../components/ui/form';
 import { PageHeader } from '../components/ui/page-header';
-import { ProductThumb } from '../components/ui/product-thumb';
+import { WasteItemThumb } from '../components/waste-item-thumb';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Skeleton } from '../components/ui/skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
+import {
+  ITEMS_NEXT_HINT,
+  QUICK_QTY_STEPS,
+  WAREHOUSE_ONLY_TEXT,
+  WASTE_CONSENT_TEXT,
+  WASTE_RULES_LINK,
+  createBlockedHint,
+  defaultPointId,
+  readLastPointId,
+  wasteStepCopy,
+  writeLastPointId,
+} from '@tubutree/app-core/waste-copy';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { formatPoints, formatVnd } from '../utils/format';
 import { useDebounced } from '../utils/use-debounced';
@@ -86,7 +98,7 @@ const METHOD_LINE: Record<WasteMethod, string> = {
   MAIL_IN: 'Tự gửi qua hãng bất kỳ và tự trả phí ship',
   PICKUP: 'Miễn phí, bưu tá lấy khi giao đơn Tubu kế tiếp',
 };
-const CONSENT_TEXT = 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này';
+const browserStore = () => (typeof localStorage === 'undefined' ? undefined : localStorage);
 const PACKAGING_TEXT = 'Tôi đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn';
 const POSTAGE_TEXT = 'Tôi đã trả đủ cước gửi, kho từ chối kiện còn cước phải trả khi nhận';
 const PARCEL_COUNT_TEXT = 'Mỗi kiện là một yêu cầu riêng: có nhiều kiện thì tạo nhiều yêu cầu, mỗi kiện một mã TR-.';
@@ -135,7 +147,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
             }}
           >
             <span data-item-media>
-              <ProductThumb src={item.imageUrl} alt="" size={48} />
+              <WasteItemThumb item={item} />
             </span>
             <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -147,6 +159,11 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
               <Text variant="caption" tone={comingSoon ? 'tertiary' : 'secondary'} as="div">
                 {ruleText(item)}
               </Text>
+              {item.warehouseOnly && (
+                <div>
+                  <Badge tone="info" size="sm">{WAREHOUSE_ONLY_TEXT}</Badge>
+                </div>
+              )}
               {item.prepInstructions && (
                 <Text variant="caption" tone="tertiary" as="div">
                   {item.prepInstructions}
@@ -167,6 +184,8 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                   <div>
                     <QuantitySelector
                       size="sm"
+                      editable
+                      quickSteps={QUICK_QTY_STEPS}
                       min={0}
                       max={(item.monthRemainingQty ?? UNCAPPED_QTY_MAX) + (allowance?.[item.id] ?? 0)}
                       value={qty}
@@ -313,6 +332,18 @@ export default function RecycleNewPage() {
     })();
   }, [needNearby]);
 
+  // Chọn sẵn "Mang tới điểm nhận" với điểm lần trước (hoặc điểm gần nhất khi đã có vị trí) để khách đỡ phải chạm nhiều lần; không có gợi ý thì để khách tự chọn.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || step !== 'method' || draft.method !== null || !pointsQ.data || !enabledMethods.includes('DROP_OFF')) return;
+    prefilled.current = true;
+    const ids = toLineInputs(draft.lines).map((l) => l.itemId);
+    const live = draft.nearby ? pointsQ.data.map((pt) => ({ ...pt, distanceKm: draft.nearby?.find((n) => n.id === pt.id)?.distanceKm ?? null })) : pointsQ.data;
+    const id = defaultPointId(live, ids, readLastPointId(browserStore()));
+    const point = id ? pointsQ.data.find((pt) => pt.id === id) : undefined;
+    if (point) setDraft((d) => ({ ...d, method: 'DROP_OFF', pointId: point.id, pickedPoint: point }));
+  }, [step, draft.method, draft.lines, draft.nearby, pointsQ.data, enabledMethods]);
+
   const selected = draft.method && enabledMethods.includes(draft.method) ? draft.method : null;
   const keyContent = { method: draft.method, lines: lineInputs, pointId: draft.method === 'DROP_OFF' ? draft.pointId : null };
   const { key, rotate } = useIdempotencyKey(keyContent);
@@ -332,6 +363,7 @@ export default function RecycleNewPage() {
     },
     onSuccess: async (r) => {
       rotate();
+      if (r.method === 'DROP_OFF' && draft.pointId) writeLastPointId(browserStore(), draft.pointId);
       if (draft.sid) submittedSids.add(draft.sid);
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
@@ -346,7 +378,7 @@ export default function RecycleNewPage() {
       {bar}
     </Page>
   );
-  const subtitle = step === 'items' ? 'Bước 1/3: Chọn món' : 'Bước 2/3: Chọn cách giao';
+  const subtitle = step === 'items' ? wasteStepCopy.items : wasteStepCopy.method;
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />, subtitle);
   if (phase === 'authenticated' && meQ.isError) {
@@ -381,7 +413,12 @@ export default function RecycleNewPage() {
     // The last finished preview may belong to older quantities: wait for the debounce and the new request before enabling.
     const previewStale = linesKey !== JSON.stringify(lineInputs) || itemsPreviewQ.isFetching;
     const reward = p && !capBlock ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
-    const summary = p ? (
+    const noLines = lineInputs.length === 0;
+    const summary = noLines ? (
+      <Text variant="body-sm" tone="secondary" as="div">
+        {ITEMS_NEXT_HINT}
+      </Text>
+    ) : p ? (
       capBlock ? (
         <Text variant="body-md" tone="danger" as="div" style={{ fontWeight: 600 }}>
           {blockMessage(capBlock, { items: me.items, maxOpenRequests: me.thresholds.maxOpenRequests, itemCaps: p.itemCaps })}
@@ -456,6 +493,10 @@ export default function RecycleNewPage() {
     consentsOk &&
     (selected !== 'DROP_OFF' || draft.pointId !== null) &&
     !create.isPending;
+
+  const blockedHint = canCreate
+    ? null
+    : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
 
   const unlockedOthers = (m: WasteMethod) => order.filter((o) => o !== m && !isLocked(previews[o]?.data));
 
@@ -620,7 +661,12 @@ export default function RecycleNewPage() {
       )}
       {selected && (
         <div style={{ ...COLUMN, gap: 4 }}>
-          <Checkbox checked={consent} onChange={() => setConsent((v) => !v)} label={CONSENT_TEXT} />
+          <Checkbox checked={consent} onChange={() => setConsent((v) => !v)} label={WASTE_CONSENT_TEXT} />
+          <div>
+            <Button variant="ghost" onPress={() => navigate('/recycle/rules')}>
+              {WASTE_RULES_LINK}
+            </Button>
+          </div>
           {selected === 'MAIL_IN' && (
             <>
               <Checkbox checked={packagingConsent} onChange={() => setPackagingConsent((v) => !v)} label={PACKAGING_TEXT} />
@@ -635,6 +681,13 @@ export default function RecycleNewPage() {
     </>,
     subtitle,
     <StickyActionBar
+      summary={
+        blockedHint ? (
+          <Text variant="body-sm" tone="secondary" as="div">
+            {blockedHint}
+          </Text>
+        ) : undefined
+      }
       primary={
         <Button fullWidth disabled={!canCreate} loading={create.isPending} onPress={() => create.mutate()}>
           Tạo yêu cầu

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -206,7 +206,7 @@ describe('/recycle/r/:id — Gửi về kho (§4.5b)', () => {
     expect(mocks.copyText).toHaveBeenCalledWith('Kho Tubu TP.HCM\n0281234567\n99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM');
     expect(screen.getByText('Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn')).toBeInTheDocument();
     expect(screen.getByText('Kho từ chối kiện còn cước phải trả khi nhận')).toBeInTheDocument();
-    expect(screen.getByText('Nhập trước 25/10')).toBeInTheDocument();
+    expect(screen.getByText('Nhập mã vận đơn trước 25/10')).toBeInTheDocument();
   });
   it.each([null, ''])('kho không có số điện thoại (%j): khối người nhận không có dòng trống và Sao chép bỏ dòng số', async (phone) => {
     mocks.getWasteRequest.mockResolvedValue(MAIL({ point: makeWarehouseContact({ phone }) }));
@@ -404,3 +404,59 @@ describe('/recycle/r/:id — trạng thái, ước tính, tiêu đề (F2, F10)'
   });
 });
 
+
+describe('/recycle/r/:id — theo dõi (B-83)', () => {
+  it('mở mã QR thì hỏi lại trạng thái mỗi 5 giây; thấy COMPLETED thì đóng tấm mã và sang màn kết quả', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Xem mã QR' }));
+      await screen.findByRole('dialog');
+      const calls = mocks.getWasteRequest.mock.calls.length;
+      mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 5000 }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5100);
+      });
+      await waitFor(() => expect(mocks.getWasteRequest.mock.calls.length).toBeGreaterThan(calls));
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle/done/req-1', { replace: true }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('chưa mở mã QR thì không hỏi lại theo chu kỳ', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderPage();
+      await screen.findByRole('button', { name: 'Xem mã QR' });
+      const calls = mocks.getWasteRequest.mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(12_000);
+      });
+      expect(mocks.getWasteRequest.mock.calls.length).toBe(calls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('giờ mở cửa của điểm nhận hiện ở bước Mang tới điểm và trong tấm mã (từ openingHours)', async () => {
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ point: { ...makeRequestDetail().point!, openingHours: { MON: [{ open: '08:00', close: '18:00' }], TUE: [{ open: '08:00', close: '18:00' }], WED: [{ open: '08:00', close: '18:00' }], THU: [{ open: '08:00', close: '18:00' }], FRI: [{ open: '08:00', close: '18:00' }], SAT: [{ open: '08:00', close: '18:00' }], SUN: [{ open: '08:00', close: '18:00' }] } } }));
+    renderPage();
+    expect((await screen.findAllByText(/Hôm nay 8:00–18:00/)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Xem mã QR' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/Hôm nay 8:00–18:00/)).toBeInTheDocument();
+  });
+  it('chương trình tạm dừng: nhãn màu cảnh báo, nói hạn hết hiệu lực', async () => {
+    mocks.publicConfig.waste = { enabled: false, dropoff: false, mailin: false, pickup: false };
+    renderPage();
+    const badge = await screen.findByText('Đang tạm dừng');
+    expect(badge.closest('span')?.getAttribute('style') ?? '').toContain('--color-status-warning');
+    expect(screen.getByText(/sẽ hết hạn ngày 25\/10 nếu chương trình chưa mở lại/)).toBeInTheDocument();
+  });
+  it('tấm xác nhận huỷ nói rõ hậu quả', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText('Mã TR-8K2M9 sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.')).toBeInTheDocument();
+  });
+});

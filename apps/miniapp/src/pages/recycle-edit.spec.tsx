@@ -100,7 +100,7 @@ describe('/recycle/r/:id/edit (§4.5, §7.4)', () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [{ ...ITEM_CARTON, monthRemainingQty: 0 }, ITEM_MILK] }));
     renderPage();
     const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
-    expect(within(carton).getByText('5')).toBeInTheDocument();
+    expect(within(carton).getByRole('textbox', { name: 'Số lượng' })).toHaveValue('5');
     expect(within(carton).getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
     expect(within(carton).getByRole('button', { name: 'Giảm số lượng' })).toHaveAttribute('aria-disabled', 'false');
   });
