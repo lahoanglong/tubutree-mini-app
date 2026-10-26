@@ -1,3 +1,4 @@
+import { formatChatHours } from '@tubutree/app-core/support-copy';
 import { api } from '../services/api';
 import { getPublicConfig, type PublicConfig } from '../services/shop-api';
 import { formatVnd } from '../utils/format';
@@ -90,11 +91,11 @@ const cleanText = (v: unknown): string | null => (typeof v === 'string' && v.tri
 export const DEFAULT_SUPPORT: SupportContact = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: null };
 
 export async function fetchSupportContact(): Promise<SupportContact> {
-  const cfg = (await getPublicConfig()) as { support?: Partial<Record<keyof SupportContact, unknown>> };
+  const cfg = (await getPublicConfig()) as { support?: Partial<Record<keyof SupportContact, unknown>>; chat?: { hours?: { start?: unknown; end?: unknown } } };
   return {
     hotline: cleanText(cfg.support?.hotline),
     email: cleanText(cfg.support?.email),
     zaloOaName: cleanText(cfg.support?.zaloOaName),
-    hours: cleanText(cfg.support?.hours),
+    hours: formatChatHours(cfg.chat?.hours),
   };
 }

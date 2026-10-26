@@ -188,7 +188,6 @@ const APPROVED_LOADED_KEYS = [
     'subscribe.stock_retry_days',
     'support.email',
     'support.hotline',
-    'support.hours',
     'support.zalo_oa_name',
     'voucher.birthday_amount',
     'voucher.milestones',

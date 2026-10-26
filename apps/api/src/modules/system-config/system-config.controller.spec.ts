@@ -123,14 +123,14 @@ describe('SystemConfigController.publicConfig', () => {
 describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)', () => {
   it('chưa cấu hình → hotline/email thật của Tubu Tree, chưa có Zalo OA', async () => {
     const out = await new SystemConfigController(makeConfig()).publicConfig();
-    expect(out.support).toEqual({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
+    expect(out.support).toEqual({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null });
   });
 
   it('admin sửa → trả giá trị mới; để trống hoặc sai kiểu → null để miniapp ẩn dòng', async () => {
     const out = await new SystemConfigController(
-      makeConfig({ 'support.hotline': ' 0900 000 000 ', 'support.email': '', 'support.zalo_oa_name': 42, 'support.hours': '9:00–18:00 thứ Hai đến thứ Sáu' }),
+      makeConfig({ 'support.hotline': ' 0900 000 000 ', 'support.email': '', 'support.zalo_oa_name': 42 }),
     ).publicConfig();
-    expect(out.support).toEqual({ hotline: '0900 000 000', email: null, zaloOaName: null, hours: '9:00–18:00 thứ Hai đến thứ Sáu' });
+    expect(out.support).toEqual({ hotline: '0900 000 000', email: null, zaloOaName: null });
   });
 });
 

@@ -101,7 +101,6 @@ export const ADMIN_CONFIG_ROWS: ConfigRow[] = [
   {"key": "subscribe.discount_tiers", "value": [{"pct": 0.12, "minActive": 1}, {"pct": 0.14, "minActive": 3}, {"pct": 0.15, "minActive": 5}], "description": "Chiết khấu Subscribe&Save theo số subscription đang chạy (chọn bậc cao nhất đạt)", "category": "subscribe"},
   {"key": "support.email", "value": "tubutree@gmail.com", "description": "Email CSKH hiển thị cho khách", "category": "support"},
   {"key": "support.hotline", "value": "0984 606 774", "description": "Hotline CSKH hiển thị cho khách", "category": "support"},
-  {"key": "support.hours", "value": "8:00–21:00 mỗi ngày", "description": "Giờ trực CSKH hiển thị cho khách (chuỗi, vd 8:00–21:00 mỗi ngày)", "category": "support"},
   {"key": "support.zalo_oa_name", "value": "", "description": "Tên Zalo OA hiển thị cho khách (để trống khi chưa có OA)", "category": "support"},
   {"key": "voucher.birthday_amount", "value": 50000, "description": "Mã giảm giá sinh nhật mặc định (đ) cho hạng chưa có mức riêng (mức riêng theo hạng nằm ở bảng hạng thành viên)", "category": "voucher"},
   {"key": "voucher.milestones", "value": [{"spend": 1000000, "reward": 30000}, {"spend": 3000000, "reward": 100000}, {"spend": 5000000, "reward": 200000}], "description": "Mốc chi tiêu trong tháng (đ) → mã giảm giá tri ân (đ); khách nhận mốc cao nhất đạt được", "category": "voucher"},

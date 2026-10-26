@@ -11,7 +11,8 @@ describe('fetchSupportContact (Q-17: liên hệ đọc từ /config/public, dòn
 
   it('đọc hotline/email/Zalo OA từ khoá support của /config/public', async () => {
     mocks.getPublicConfig.mockResolvedValue({
-      support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree', hours: ' 8:00–21:00 mỗi ngày ' },
+      support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree' },
+      chat: { enabled: true, hours: { start: '08:00', end: '21:00' } },
     });
     expect(await fetchSupportContact()).toEqual({
       hotline: '0984 606 774',

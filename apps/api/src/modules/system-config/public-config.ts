@@ -17,9 +17,6 @@ import { readCompanyIdentity } from './company-config';
 /** Chỉ hai trường công khai, để khoá phụ lưu thêm trong cấu hình không lọt ra endpoint công khai. */
 const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end: v.end });
 
-/** Giờ trực hiển thị cho khách (chuỗi tự do); khớp bản seed. Khác chat.hours (khung giờ máy chủ dùng để tính). */
-const DEFAULT_SUPPORT_HOURS = '8:00–21:00 mỗi ngày';
-
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
 
@@ -46,7 +43,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     hotline,
     supportEmail,
     zaloOaName,
-    supportHours,
     groupBuyDiscountPct,
     groupBuyTargetSize,
     returnWindowDays,
@@ -83,7 +79,6 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>('support.hotline', '0984 606 774'),
     config.get<unknown>('support.email', 'tubutree@gmail.com'),
     config.get<unknown>('support.zalo_oa_name', ''),
-    config.get<unknown>('support.hours', DEFAULT_SUPPORT_HOURS),
     // Mặc định phải khớp GroupBuyService.create và OrdersService.requestReturn (cùng khoá, cùng fallback).
     config.get<number>('groupbuy.discount_pct', 15),
     config.get<number>('groupbuy.target_size', 3),
@@ -129,7 +124,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     shippingEta: toShippingEta(etaMinDays, etaMaxDays),
     groupBuy: { discountPct: groupBuyDiscountPct, targetSize: groupBuyTargetSize },
     returnWindowDays,
-    support: { hotline: displayText(hotline), email: displayText(supportEmail), zaloOaName: displayText(zaloOaName), hours: displayText(supportHours) },
+    support: { hotline: displayText(hotline), email: displayText(supportEmail), zaloOaName: displayText(zaloOaName) },
     // Đơn vị vận hành (tên, MST, địa chỉ, link thông báo Bộ Công Thương); trường chưa nhập là null để FE ẩn.
     company,
     newCustomer: {

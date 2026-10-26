@@ -1,3 +1,4 @@
+import { formatChatHours } from '../support-copy';
 import type { WastePublicFlags } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 
@@ -24,7 +25,7 @@ export interface PublicConfig {
   /** Số ngày được gửi yêu cầu đổi/trả kể từ khi giao (returns.window_days). */
   returnWindowDays?: number;
   /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
-  support?: { hotline: string | null; email: string | null; zaloOaName: string | null; hours?: string | null };
+  support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
   /** Đơn vị vận hành (tên, MST, địa chỉ, link đã thông báo Bộ Công Thương); từng trường null khi admin để trống, thiếu khi API cũ. */
   company?: { legalName: string | null; taxCode: string | null; address: string | null; bctNoticeUrl: string | null };
   /** Số cho khách mới (D2-07): voucher chào mừng và freeship đơn đầu (mặc định bật từ 199.000đ). Thiếu khi API cũ → không hứa con số. */
@@ -70,7 +71,7 @@ export interface SupportContact {
   hotline: string | null;
   email: string | null;
   zaloOaName: string | null;
-  /** Giờ trực hiển thị cho khách; null khi admin để trống hoặc API cũ chưa trả. */
+  /** Giờ trực lấy từ chat.hours (một nguồn duy nhất với giờ chat); null khi API cũ chưa trả. */
   hours: string | null;
 }
 
@@ -86,11 +87,11 @@ export const fetchFaqs = async (http: HttpClient): Promise<FaqItem[]> => {
 const cleanText = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
 export const fetchSupportContact = async (http: HttpClient): Promise<SupportContact> => {
-  const cfg = (await getPublicConfig(http)) as { support?: Partial<Record<keyof SupportContact, unknown>> };
+  const cfg = (await getPublicConfig(http)) as { support?: Partial<Record<keyof SupportContact, unknown>>; chat?: { hours?: { start?: unknown; end?: unknown } } };
   return {
     hotline: cleanText(cfg.support?.hotline),
     email: cleanText(cfg.support?.email),
     zaloOaName: cleanText(cfg.support?.zaloOaName),
-    hours: cleanText(cfg.support?.hours),
+    hours: formatChatHours(cfg.chat?.hours),
   };
 };

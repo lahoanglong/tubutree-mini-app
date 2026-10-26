@@ -22,18 +22,17 @@ const supportRows = () => seededConfigs().filter((r) => r.key.startsWith('suppor
 
 /** Q-17: hotline/email do admin sửa ở tab Cấu hình, Zalo OA chưa có thì để trống để ẩn dòng. */
 describe('Khoá liên hệ CSKH trong seed (Q-17)', () => {
-  it('đúng bốn khoá, giá trị chủ dự án chốt, Zalo OA để trống (không bịa)', () => {
+  it('đúng ba khoá, giá trị chủ dự án chốt, Zalo OA để trống (không bịa)', () => {
     expect(Object.fromEntries(supportRows().map((r) => [r.key, r.value]))).toEqual({
       'support.hotline': '0984 606 774',
       'support.email': 'tubutree@gmail.com',
-      'support.hours': '8:00–21:00 mỗi ngày',
       'support.zalo_oa_name': '',
     });
   });
 
   it('createOnly: seed chạy lại mỗi lần deploy không được ghi đè giá trị admin đã sửa', () => {
     const rows = supportRows();
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(3);
     expect(rows.filter((r) => r.createOnly !== true).map((r) => r.key)).toEqual([]);
     expect(new Set(rows.map((r) => r.category))).toEqual(new Set(['support']));
   });
@@ -55,7 +54,6 @@ describe('Khoá liên hệ CSKH trong seed (Q-17)', () => {
       hotline: seeded['support.hotline'],
       email: seeded['support.email'],
       zaloOaName: null,
-      hours: seeded['support.hours'],
     });
   });
 });
