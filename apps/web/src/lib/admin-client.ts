@@ -1742,6 +1742,8 @@ export interface SupportBridgeStatus {
   enabled: boolean;
   /** Cầu nối báo CONNECTED nhưng không còn nhận tin từ nhóm. */
   deaf?: boolean;
+  /** Số cuộc chat có tin khách chưa chuyển được vào nhóm Zalo (khớp bộ lọc "Chưa chuyển được"). */
+  waitingCount?: number;
 }
 export const getSupportBridge = () => apiFetch<SupportBridgeStatus>('/admin/support-chat/bridge');
 

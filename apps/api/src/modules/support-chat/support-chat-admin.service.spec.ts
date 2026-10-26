@@ -13,6 +13,7 @@ function setup(o: { forwards?: any[]; messages?: any[]; conv?: any | null; send?
       findMany: jest.fn().mockResolvedValue(conv ? [{ ...conv, user: { id: 'u1', fullName: 'Lan', phone: '0901234234' }, messages: [], forwards: [] }] : []),
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: conv ? 1 : 0 }),
+      count: jest.fn().mockResolvedValue(3),
     },
     supportMessage: {
       create: jest.fn().mockImplementation(({ data }: any) => {
@@ -358,6 +359,12 @@ describe('SupportChatAdminService', () => {
   it('trạng thái cầu nối kèm groupId và enabled', async () => {
     const { svc } = setup();
     expect(await svc.bridgeStatus()).toMatchObject({ state: 'CONNECTED', groupId: 'G1', enabled: true, displayName: 'CSKH', deaf: false });
+  });
+
+  it('trạng thái cầu nối kèm số hội thoại đang chờ chuyển, cùng điều kiện với bộ lọc "Chưa chuyển được"', async () => {
+    const { svc, prisma } = setup();
+    expect(await svc.bridgeStatus()).toMatchObject({ waitingCount: 3 });
+    expect(prisma.supportConversation.count).toHaveBeenCalledWith({ where: expect.objectContaining({ blockedAt: null, OR: expect.any(Array) }) });
   });
 
   it('test gửi tin thử qua cầu nối', async () => {

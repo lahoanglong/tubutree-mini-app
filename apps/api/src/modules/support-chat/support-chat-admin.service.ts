@@ -29,10 +29,12 @@ export class SupportChatAdminService {
   ) {}
 
   async bridgeStatus() {
-    const [row, groupId, enabled] = await Promise.all([
+    const [row, groupId, enabled, waitingCount] = await Promise.all([
       this.prisma.supportBridgeStatus.findUnique({ where: { id: 'main' } }),
       this.config.get<string>(CHAT_GROUP_KEY, ''),
       this.config.get<boolean>(CHAT_ENABLED_KEY, false),
+      // Cùng điều kiện với bộ lọc "Chưa chuyển được" để số trên băng cảnh báo khớp danh sách bên dưới.
+      this.prisma.supportConversation.count({ where: unforwardedWhere(new Date()) }),
     ]);
     return {
       state: row?.state ?? 'UNREACHABLE',
@@ -45,6 +47,7 @@ export class SupportChatAdminService {
       deaf: row?.deaf ?? false,
       groupId,
       enabled,
+      waitingCount,
     };
   }
 

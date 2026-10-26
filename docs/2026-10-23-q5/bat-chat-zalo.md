@@ -72,7 +72,7 @@ Chỉ ba biến cần người điền: `ZALO_BRIDGE_URL` (API), `ZALO_BRIDGE_SE
 
 1. Khách gửi chữ, gửi ảnh, gửi ngoài giờ làm việc: tin vào đúng nhóm, ngoài giờ khách thấy lời báo trả lời chậm.
 2. Nhân viên trả lời trong Zalo bằng trích tin, bằng `#MÃ`, gửi ảnh, thu hồi một tin: khách thấy tin Tubu Tree ở Mini App và web (cập nhật mỗi 5 giây).
-3. Tắt mạng của cầu nối rồi bật lại (`docker compose stop zalo-bridge`, rồi `up -d zalo-bridge`): tin khách gửi lúc đó nằm chờ, sau đó được chuyển; tab admin báo mất kết nối rồi hết.
+3. Tắt mạng của cầu nối rồi bật lại (`docker compose stop zalo-bridge`, rồi `up -d zalo-bridge`): tin khách gửi lúc đó nằm chờ, sau đó được chuyển; khi công tắc đang bật, tab admin hiện băng đỏ "Tin khách đang không tới nhóm Zalo" kèm số cuộc chat chờ và bước nối lại, rồi băng đỏ hết khi nối lại xong.
 4. Mở Zalo PC bằng tài khoản cầu nối để thấy trạng thái "Đăng nhập nơi khác" (rồi đóng Zalo PC và bấm **Kết nối lại**). Chỉ làm một lần để biết, không để nhân viên làm.
 5. Bật cho khách. Hai tuần đầu xem tab Chat CSKH mỗi ngày: hội thoại có nhãn "Chưa chuyển được" cần xem ngay.
 
