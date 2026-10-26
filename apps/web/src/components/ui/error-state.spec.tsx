@@ -26,7 +26,14 @@ describe('ErrorState', () => {
 
   it('không có onRetry thì không có nút; message tuỳ biến', () => {
     const { container } = mount(<ErrorState message="Không tải được đơn" />);
-    expect(container.textContent).toBe('Không tải được đơn');
+    expect(container.querySelector('p')?.textContent).toBe('Không tải được đơn');
     expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('kèm hotline như ErrorState của Mini App, tắt được bằng showSupport={false}', () => {
+    const { container } = mount(<ErrorState message="x" />);
+    expect(container.querySelector('a[href^="tel:"]')).not.toBeNull();
+    const off = mount(<ErrorState message="x" showSupport={false} />);
+    expect(off.container.querySelector('a')).toBeNull();
   });
 });

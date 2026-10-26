@@ -17,6 +17,8 @@ import { cartKey, useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
+import { ErrorState } from '@/components/ui/error-state';
+import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { KeyValueRow } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
@@ -205,14 +207,14 @@ export default function CartPage() {
         </div>
       )}
       {cartQ.isLoading ? (
-        <p className="py-10 text-center text-stone-600">Đang tải giỏ hàng…</p>
-      ) : cartQ.isError ? (
-        <div className="py-20 text-center">
-          <p className="text-stone-700">Không tải được giỏ hàng.</p>
-          <button type="button" onClick={() => void cartQ.refetch()} className={`${ui.btnPrimary} mt-4`}>
-            Thử lại
-          </button>
+        <div role="status" aria-busy="true" className="flex flex-col gap-3 py-4">
+          <span className="sr-only">Đang tải giỏ hàng…</span>
+          <LineItemSkeleton />
+          <LineItemSkeleton />
+          <LineItemSkeleton />
         </div>
+      ) : cartQ.isError ? (
+        <ErrorState message="Không tải được giỏ hàng." onRetry={() => void cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
         <div className="py-20 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">

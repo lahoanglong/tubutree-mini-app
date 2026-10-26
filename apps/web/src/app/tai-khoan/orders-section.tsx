@@ -1,5 +1,6 @@
 'use client';
 
+import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -128,7 +129,11 @@ export function OrdersSection() {
       </div>
 
       {ordersQ.isLoading ? (
-        <p className="py-6 text-center text-stone-600">Đang tải…</p>
+        <div role="status" aria-busy="true" className="mt-3 flex flex-col gap-3">
+          <span className="sr-only">Đang tải…</span>
+          <LineItemSkeleton />
+          <LineItemSkeleton />
+        </div>
       ) : ordersQ.isError && orders.length === 0 ? (
         <div className={`mt-3 p-6 text-center ${ui.card}`}>
           <p className={ui.error}>Không tải được danh sách đơn hàng.</p>
