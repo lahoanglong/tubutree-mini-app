@@ -116,6 +116,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
     fireEvent.change(await screen.findByLabelText('Họ và tên'), { target: { value: '  Lan B  ' } });
     fireEvent.change(screen.getByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
     await waitFor(() =>
       expect(mocks.updateMe).toHaveBeenCalledWith({
         fullName: 'Lan B',
@@ -168,6 +169,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       renderPage();
       fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Xác nhận' }));
       await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
       expect(mocks.updateMe.mock.calls[0]![0].dob).toBe('1991-02-03');
       expect(mocks.updateMe.mock.calls[1]![0].dob).toBe('1991-02-03');
@@ -182,6 +184,28 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
       await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
       expect(mocks.updateMe.mock.calls[0]![0].dob).toBeUndefined();
+    });
+
+    it('chọn ngày sinh mới: hiện ngày dd/MM/yyyy, hỏi xác nhận TRƯỚC khi lưu; Sửa lại thì chưa gửi gì', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+      expect(screen.getByText('Ngày đã chọn: 03/02/1991')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(screen.getByText('Ngày sinh 03/02/1991 chỉ đặt được một lần. Xác nhận?')).toBeInTheDocument();
+      expect(mocks.updateMe).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Sửa lại' }));
+      expect(screen.queryByText(/chỉ đặt được một lần\. Xác nhận/)).toBeNull();
+      expect(mocks.updateMe).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeInTheDocument();
+    });
+
+    it('đã có ngày sinh: lưu đổi tên không hỏi xác nhận ngày sinh', async () => {
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Họ và tên'), { target: { value: 'Lan D' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(screen.queryByRole('button', { name: 'Xác nhận' })).toBeNull();
+      await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
     });
 
     it('đã có ngày sinh: ô chỉ đọc và có câu nhắc liên hệ CSKH', async () => {
@@ -221,7 +245,7 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
 });
 
 describe('Ảnh đại diện: không báo thành công khi ảnh không được lưu (D6-05 d)', () => {
-  const NO_CLOUD_NOTE = 'Chưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.';
+  const NO_CLOUD_NOTE = 'Tạm thời chưa đổi được ảnh đại diện.';
 
   beforeEach(() => {
     vi.clearAllMocks();

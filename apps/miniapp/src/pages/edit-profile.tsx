@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Avatar, Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -18,7 +19,6 @@ import { Text } from '../components/ui/text';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const AVATAR_NO_STORAGE = 'Chưa đổi được ảnh đại diện lúc này vì dịch vụ lưu ảnh chưa được bật. Bạn vẫn sửa được tên, email và ngày sinh.';
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
 const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
 
@@ -39,6 +39,7 @@ export default function EditProfilePage() {
   const [dob, setDob] = useState('');
   const [touched, setTouched] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [confirmingDob, setConfirmingDob] = useState(false);
 
   // States for Avatar Crop Modal
   const [cropModalVisible, setCropModalVisible] = useState(false);
@@ -50,11 +51,15 @@ export default function EditProfilePage() {
     if (meQ.data) {
       setFullName(meQ.data.fullName ?? '');
       setEmail(meQ.data.email ?? '');
-      setAvatarUrl(meQ.data.avatarUrl ?? useAuthStore.getState().user?.avatarUrl ?? null);
+      // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
+      setAvatarUrl(meQ.data.avatarUrl || useAuthStore.getState().user?.avatarUrl || null);
       setDob(meQ.data.dob ?? '');
     }
   }, [meQ.data]);
 
+  // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
+  const dobNew = !meQ.data?.dob && dob !== '';
+  const dobDisplay = formatDobDisplay(dob);
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
   const handlePickAvatar = () => {
@@ -239,7 +244,7 @@ export default function EditProfilePage() {
               <>
                 {avatarFigure}
                 <Text variant="caption" tone="tertiary" style={{ marginTop: 8, textAlign: 'center' }}>
-                  {AVATAR_NO_STORAGE}
+                  {profileCopy.avatarNoStorage}
                 </Text>
               </>
             )}
@@ -265,7 +270,10 @@ export default function EditProfilePage() {
                 type="date"
                 value={dob}
                 readOnly={Boolean(meQ.data?.dob)}
-                onChange={(e) => setDob(e.target.value)}
+                onChange={(e) => {
+                  setDob(e.target.value);
+                  setConfirmingDob(false);
+                }}
                 style={{
                   width: '100%',
                   boxSizing: 'border-box',
@@ -280,6 +288,11 @@ export default function EditProfilePage() {
                 }}
               />
             </Field>
+            {dobDisplay && (
+              <Text variant="caption" tone="secondary" style={{ marginTop: 4, display: 'block' }}>
+                {profileCopy.dobPicked(dobDisplay)}
+              </Text>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <Icon icon={Gift} size="sm" tone="muted" />
               <Text variant="caption" tone="tertiary">
@@ -293,18 +306,38 @@ export default function EditProfilePage() {
             ) : null}
           </div>
 
-          <Button
-            fullWidth
-            loading={save.isPending}
-            disabled={emailInvalid || uploadingAvatar}
-            onPress={() => {
-              setTouched(true);
-              if (!(email.trim() !== '' && !EMAIL.test(email.trim()))) save.mutate();
-            }}
-            style={{ marginTop: 4 }}
-          >
-            Lưu thay đổi
-          </Button>
+          {confirmingDob && dobNew ? (
+            <div role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }}>
+              <Text variant="body-md" tone="primary">{profileCopy.dobConfirm(dobDisplay)}</Text>
+              <Button
+                fullWidth
+                loading={save.isPending}
+                onPress={() => {
+                  save.mutate();
+                }}
+              >
+                {profileCopy.dobConfirmYes}
+              </Button>
+              <Button fullWidth variant="secondary" disabled={save.isPending} onPress={() => setConfirmingDob(false)}>
+                {profileCopy.dobConfirmNo}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              fullWidth
+              loading={save.isPending}
+              disabled={emailInvalid || uploadingAvatar}
+              onPress={() => {
+                setTouched(true);
+                if (email.trim() !== '' && !EMAIL.test(email.trim())) return;
+                if (dobNew) setConfirmingDob(true);
+                else save.mutate();
+              }}
+              style={{ marginTop: 4 }}
+            >
+              Lưu thay đổi
+            </Button>
+          )}
         </div>
       )}
 
