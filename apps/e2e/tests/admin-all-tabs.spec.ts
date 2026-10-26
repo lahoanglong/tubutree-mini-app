@@ -101,7 +101,8 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
     await openAdmin(page);
     const nav = page.getByRole('navigation', { name: 'Mục quản trị' });
     // Mặc định menu chỉ mở nhóm đầu: mở hết các nhóm trước khi đếm và bấm từng mục.
-    for (const head of await nav.locator('button[aria-expanded="false"]').all()) await head.click();
+    const collapsed = nav.locator('button[aria-expanded="false"]');
+    while ((await collapsed.count()) > 0) await collapsed.first().click();
     const labels = await nav.locator('button:not([aria-expanded])').allInnerTexts();
     const expectedLabels = navLabelsFromSource();
     expect(expectedLabels.length).toBeGreaterThan(30);
@@ -125,6 +126,29 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       }
     }
     expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('điện thoại 375px: đầu trang gọn, mọi mục mở được mà trang không cuộn ngang', async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await openAdmin(page);
+    await expect(page.locator('header')).toBeVisible();
+    // Đầu trang + tiêu đề + nút thu ngân + nút "Đổi mục" phải nằm gọn trong khoảng 220px đầu (trước đây ~490px).
+    const mainTop = await page.getByRole('button', { name: /Đổi mục|Chọn mục/ }).evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(mainTop).toBeLessThan(220);
+    const labels = navLabelsFromSource();
+    const wide: string[] = [];
+    for (const label of labels) {
+      await page.getByRole('button', { name: /Đổi mục/ }).click();
+      const drawer = page.getByRole('dialog', { name: 'Mục quản trị' });
+      await drawer.getByRole('searchbox', { name: 'Tìm mục quản trị' }).fill(label);
+      await drawer.getByRole('button', { name: label, exact: true }).first().click();
+      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForTimeout(200);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (over > 1) wide.push(`${label}: tràn ${over}px`);
+    }
+    expect(wide, wide.join('\n')).toEqual([]);
   });
 
   test('tab Đổi rác mở được; công tắc Đổi rác tạo được dòng khi khoá chưa có trong DB', async ({ page }) => {
