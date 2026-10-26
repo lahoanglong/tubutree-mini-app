@@ -25,6 +25,8 @@ import { Field } from '../components/ui/form';
 import { Text, Heading } from '../components/ui/text';
 import { ImageUpload } from '../components/image-upload';
 import { haptic } from '../utils/haptic';
+import { hasOA, openOAChat } from '../services/zmp-bridge';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { BrandSalesTab } from './brand-owner-sales';
 
 const PAGE_TITLE = 'Quản lý nhãn hàng';
@@ -40,6 +42,13 @@ function OwnerShell({ children, paddingBottom = 0 }: { children: ReactNode; padd
 
 export default function BrandOwnerPage() {
   const q = useQuery({ queryKey: ['owned-brand'], queryFn: getOwnedBrand, retry: false });
+  const navigate = useNavigate();
+  const chatOn = usePublicConfig().chat?.enabled === true;
+  const canMessage = chatOn || hasOA;
+  const messageTubu = () => {
+    if (chatOn) navigate('/chat');
+    else void openOAChat();
+  };
 
   if (q.isLoading) {
     return (
@@ -60,6 +69,8 @@ export default function BrandOwnerPage() {
               art="sprout"
               heading="Quản lý nhãn hàng"
               body="Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn."
+              ctaLabel={canMessage ? 'Nhắn Tubu' : undefined}
+              onCta={canMessage ? messageTubu : undefined}
             />
           </div>
         ) : (
@@ -172,7 +183,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
             <Badge>Chưa xác minh</Badge>
           )}
           <Badge tone={brand.isPublished ? 'success' : 'warning'}>
-            {brand.isPublished ? 'Đang hiển thị' : 'Nháp (admin duyệt)'}
+            {brand.isPublished ? 'Đang hiển thị' : 'Bản nháp, chờ Tubu duyệt'}
           </Badge>
           <Text variant="caption" tone="tertiary">{brand.followerCount} theo dõi</Text>
         </div>
@@ -210,7 +221,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
             <div style={{ marginBottom: 8 }}><ImageUpload label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} /></div>
             <div style={{ marginBottom: 8 }}><ImageUpload label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} /></div>
             <div style={{ marginBottom: 8 }}>
-              <Field label="Tagline"><Input value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Field>
+              <Field label="Câu giới thiệu ngắn"><Input value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} /></Field>
             </div>
             <div style={{ marginBottom: 8 }}>
               <Field label="Nguồn gốc"><Input value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} /></Field>

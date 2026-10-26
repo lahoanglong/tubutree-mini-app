@@ -14,6 +14,8 @@ export interface DealerMe {
   status: DealerStatus;
   tier: { id: string; name: string; creditLimit: number } | null;
   currentDebt: number;
+  /** Đại lý có gian hàng đối tác thật; thiếu (API cũ) thì coi như không có. */
+  hasPartnerStorefront?: boolean;
   /** Luật đơn sỉ do máy chủ cấu hình; thiếu thì màn đặt đơn không tự tính phí/tối thiểu. */
   orderRules?: DealerOrderRules;
   /** Lý do admin từ chối hồ sơ gần nhất (chỉ có khi status REJECTED). */

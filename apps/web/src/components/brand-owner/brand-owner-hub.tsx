@@ -1,12 +1,15 @@
 'use client';
 
 import { Suspense } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 import { ownedBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { usePublicConfig } from '@/lib/use-public-config';
+import { ui } from '@/lib/guest-ui';
 import { ownerLoadError } from '@/lib/brand-owner-view';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
@@ -28,6 +31,7 @@ const TAB_KEYS = TABS.map((t) => t.key);
 function Editor() {
   const [tab, setTab] = useTabParam(TAB_KEYS, 'profile');
   const q = useQuery({ ...ownedBrandQuery(coreHttp), retry: false });
+  const chatOn = usePublicConfig().chat?.enabled === true;
 
   if (q.isLoading) {
     return (
@@ -42,6 +46,9 @@ function Editor() {
         <section aria-label="Chưa có nhãn" className="rounded-card border border-stone-200 bg-stone-0 p-8 text-center shadow-card">
           <h2 className="font-display text-base font-semibold text-stone-900">Quản lý nhãn hàng</h2>
           <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.</p>
+          <Link href={chatOn ? '/ho-tro/chat' : '/gioi-thieu'} className={`${ui.btnPrimary} mt-4`}>
+            Nhắn Tubu
+          </Link>
         </section>
       );
     }
@@ -62,7 +69,7 @@ function Editor() {
           ) : (
             <Badge>Chưa xác minh</Badge>
           )}
-          <Badge tone={brand.isPublished ? 'success' : 'warning'}>{brand.isPublished ? 'Đang hiển thị' : 'Nháp (admin duyệt)'}</Badge>
+          <Badge tone={brand.isPublished ? 'success' : 'warning'}>{brand.isPublished ? 'Đang hiển thị' : 'Bản nháp, chờ Tubu duyệt'}</Badge>
           <span className="text-xs text-stone-600">{brand.followerCount} theo dõi</span>
         </div>
         <p className="text-xs text-stone-600">Bạn sửa được thông tin & khuyến mãi. Tên nhãn, chứng nhận, đăng/ẩn do Tubu duyệt.</p>

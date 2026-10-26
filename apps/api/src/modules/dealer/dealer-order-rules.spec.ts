@@ -52,6 +52,7 @@ function build(opts: { unitPrice: number; terms?: string | null; ledger?: Ledger
       }),
     },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
+    storefront: { findFirst: jest.fn().mockResolvedValue(null) },
     $queryRaw: jest.fn(async (_s: unknown, ...vals: unknown[]) => [{ reserved: (vals.find((v) => typeof v === 'number') as number) ?? 0 }]),
   };
   base.$transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(base));
@@ -210,5 +211,16 @@ describe('DealerService.getMe — luật đơn sỉ trả kèm để màn đại
     };
     const me = await new DealerService(prisma, makeConfig(cfg)).getMe('d1');
     expect(me.orderRules).toEqual({ minOrderValue: 2_000_000, freeShipThreshold: 6_000_000, shippingFee: 30_000 });
+  });
+});
+
+describe('DealerService.getMe — hasPartnerStorefront', () => {
+  it('false khi chưa có gian hàng đối tác; true khi có (không tính gian hàng mẫu)', async () => {
+    const { prisma } = build({ unitPrice: 1 });
+    const findFirst = (prisma as unknown as { storefront: { findFirst: jest.Mock } }).storefront.findFirst;
+    expect((await new DealerService(prisma, makeConfig()).getMe('d1')).hasPartnerStorefront).toBe(false);
+    expect(findFirst.mock.calls[0][0].where).toMatchObject({ ownerUserId: 'd1', isSample: false });
+    findFirst.mockResolvedValue({ id: 's1' });
+    expect((await new DealerService(prisma, makeConfig()).getMe('d1')).hasPartnerStorefront).toBe(true);
   });
 });

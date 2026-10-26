@@ -10,7 +10,9 @@ const mocks = vi.hoisted(() => ({
   copyText: vi.fn(),
   getAffiliateMe: vi.fn(),
   registerAffiliate: vi.fn(),
+  fetchCourses: vi.fn(),
 }));
+vi.mock('../services/academy-api', () => ({ fetchCourses: mocks.fetchCourses }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -104,11 +106,38 @@ describe('Dashboard CTV — chia sẻ mã giới thiệu (C-067)', () => {
   });
 });
 
+describe('Dashboard CTV — lối vào Học viện chỉ hiện khi có khoá học (B-37)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: true, referralCode: 'TUBU88', walletBalance: 0 });
+  });
+
+  it('chưa có khoá nào: không có nút Học viện', async () => {
+    mocks.fetchCourses.mockResolvedValue([]);
+    renderPage();
+    await screen.findByText('Mã giới thiệu của bạn');
+    await waitFor(() => expect(mocks.fetchCourses).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Học viện CTV' })).not.toBeInTheDocument();
+  });
+
+  it('có khoá: hiện nút Học viện và mở /academy', async () => {
+    mocks.fetchCourses.mockResolvedValue([{ id: 'c1', title: 'Bắt đầu làm CTV' }]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Học viện CTV' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/academy');
+  });
+});
+
 describe('Đăng ký CTV — đồng ý điều khoản hoa hồng & thuế (C-117)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAffiliateMe.mockResolvedValue({ isAffiliate: false, referralCode: 'TUBU88', walletBalance: 0 });
     mocks.registerAffiliate.mockResolvedValue({ ok: true, referralCode: 'TUBU88' });
+  });
+
+  it('lợi ích đầu tiên nói về gian hàng riêng', async () => {
+    renderPage();
+    expect(await screen.findByText('Gian hàng riêng với đường dẫn mang tên bạn để gửi cho khách')).toBeInTheDocument();
   });
 
   it('hiện điều khoản ngắn về hoa hồng và thuế trước nút đăng ký', async () => {

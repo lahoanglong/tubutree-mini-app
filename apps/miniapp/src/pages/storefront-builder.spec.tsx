@@ -87,11 +87,6 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><StorefrontBuilderPage /></QueryClientProvider>);
 }
 
-/** Trạng thái "chưa có gian hàng": API /storefront/me trả 404. */
-function notFound() {
-  mocks.getMyStorefront.mockRejectedValue({ response: { status: 404 } });
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getMyStorefront.mockResolvedValue(storefront());
@@ -121,19 +116,12 @@ describe('Trang gian hàng CTV — cấu trúc trang (C-114)', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Gian hàng của tôi');
   });
 
-  it('chưa có gian hàng (404): có đúng một h1 và lời mời tạo', async () => {
-    notFound();
-    renderPage();
-    expect(await screen.findByRole('button', { name: 'Tạo gian hàng' })).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-  });
-
   it('lỗi tải khác 404: có đúng một h1 và nút Thử lại gọi lại API', async () => {
     mocks.getMyStorefront.mockRejectedValueOnce({ response: { status: 500 }, message: 'Máy chủ lỗi' });
     renderPage();
     const retry = await screen.findByRole('button', { name: /Thử lại/ });
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: 'Tạo gian hàng' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Bắt đầu mở gian hàng' })).not.toBeInTheDocument();
     fireEvent.click(retry);
     await waitFor(() => expect(mocks.getMyStorefront).toHaveBeenCalledTimes(2));
   });
@@ -142,7 +130,7 @@ describe('Trang gian hàng CTV — cấu trúc trang (C-114)', () => {
     const view = renderPage();
     expect(await screen.findByRole('heading', { level: 2, name: 'Cửa hàng Xanh' })).toBeInTheDocument();
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.getByText('Nháp — chưa đăng')).toBeInTheDocument();
+    expect(screen.getByText('Bản nháp, chưa gửi duyệt')).toBeInTheDocument();
     expect(screen.getByText('/s/shop-aff-1')).toBeInTheDocument();
     view.unmount();
 
@@ -150,35 +138,6 @@ describe('Trang gian hàng CTV — cấu trúc trang (C-114)', () => {
     renderPage();
     expect(await screen.findByText('Đang hiển thị')).toBeInTheDocument();
     expect(screen.getByText('xanh.tubutree.com')).toBeInTheDocument();
-  });
-});
-
-describe('Tạo gian hàng và chọn mẫu', () => {
-  it('chọn một mẫu: tạo gian hàng rồi áp mẫu đúng danh mục', async () => {
-    notFound();
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tạo gian hàng' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Dùng mẫu Nhà bếp' }));
-    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledWith('cat2'));
-    expect(mocks.createStorefront).toHaveBeenCalledTimes(1);
-  });
-
-  it('bỏ qua mẫu: chỉ tạo gian hàng trống, không áp mẫu', async () => {
-    notFound();
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tạo gian hàng' }));
-    fireEvent.click(await screen.findByRole('button', { name: /Bỏ qua, tự tạo gian hàng trống/ }));
-    await waitFor(() => expect(mocks.createStorefront).toHaveBeenCalledTimes(1));
-    expect(mocks.applyStorefrontTemplate).not.toHaveBeenCalled();
-  });
-
-  it('ô chọn mẫu là nút thật cao >= 44px', async () => {
-    notFound();
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Tạo gian hàng' }));
-    const tile = await screen.findByRole('button', { name: 'Dùng mẫu Chăm sóc da' });
-    expect(tile.tagName).toBe('BUTTON');
-    expect(parseFloat(tile.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 });
 
@@ -304,7 +263,7 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
     await screen.findByText('Bộ sưu tập A');
     const add = screen.getByRole('button', { name: /Tạo bộ sưu tập/ });
     expect(add).toBeDisabled();
-    fireEvent.change(screen.getByPlaceholderText('Tên bộ sưu tập (khách sẽ thấy)'), { target: { value: '  Mùa hè  ' } });
+    fireEvent.change(screen.getByPlaceholderText('Tên bộ sưu tập'), { target: { value: '  Mùa hè  ' } });
     expect(add).not.toBeDisabled();
     fireEvent.click(add);
     await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledWith({ title: 'Mùa hè' }));
@@ -353,28 +312,45 @@ describe('Chỉnh gian hàng — sản phẩm và bộ sưu tập', () => {
 });
 
 describe('Đăng gian hàng và xem trước', () => {
-  it('"Lưu & Đăng" gọi publishStorefront(true) rồi báo đã đăng', async () => {
+  it('"Gửi duyệt" gọi publishStorefront(true) rồi báo đã đăng', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Lưu & Đăng' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Gửi duyệt' }));
     await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đăng gian hàng 🎉', type: 'success' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi duyệt. Tubu sẽ thông báo khi xong.', type: 'success' }));
   });
 
-  it('đang đăng: nút "Lưu & Đăng" báo bận và bấm lại không đăng lần hai', async () => {
+  it('gian hàng đã duyệt từ trước (vừa gỡ đăng): nút "Đăng lại", không hứa duyệt', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ status: 'DRAFT', approved: true, needsApproval: false }));
+    renderPage();
+    expect(screen.queryByRole('button', { name: 'Gửi duyệt' })).toBeNull();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng lại' }));
+    await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đăng lại gian hàng. Khách xem được ngay.', type: 'success' }));
+  });
+
+  it('cờ duyệt tắt, chưa từng duyệt: nút "Đăng gian hàng", không nhắc gửi duyệt', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ status: 'DRAFT', approved: false, needsApproval: false }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đăng gian hàng' }));
+    await waitFor(() => expect(mocks.publishStorefront).toHaveBeenCalledWith(true));
+    expect(screen.queryByRole('button', { name: 'Gửi duyệt' })).toBeNull();
+  });
+
+  it('đang đăng: nút "Gửi duyệt" báo bận và bấm lại không đăng lần hai', async () => {
     mocks.publishStorefront.mockReturnValue(new Promise(() => {}));
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    const btn = await screen.findByRole('button', { name: 'Gửi duyệt' });
     fireEvent.click(btn);
     await waitFor(() => expect(btn).toHaveAttribute('aria-busy', 'true'));
     fireEvent.click(btn);
     expect(mocks.publishStorefront).toHaveBeenCalledTimes(1);
   });
 
-  it('xem trước khi còn nháp: báo cần đăng, không chuyển trang', async () => {
+  it('xem trước khi chưa ai xem được: mở bản xem trước ngay trong app, không chuyển trang', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Xem trước' }));
     expect(mocks.navigate).not.toHaveBeenCalled();
-    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning' }));
+    expect(await screen.findByTestId('storefront-preview')).toHaveTextContent('Cửa hàng Xanh');
   });
 
   it('xem trước khi đã đăng: chuyển tới /s/:slug', async () => {
@@ -392,7 +368,7 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
   it('đã đăng: nút chính là "Chia sẻ gian hàng", mở ShareSheet với slug, tên và mã giới thiệu của chủ', async () => {
     mocks.getMyStorefront.mockResolvedValue(published());
     renderPage();
-    expect(screen.queryByRole('button', { name: 'Lưu & Đăng' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Gửi duyệt' })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ gian hàng' }));
     expect(await screen.findByTestId('share-sheet')).toBeInTheDocument();
     expect(mocks.shareSheet).toHaveBeenLastCalledWith(
@@ -402,7 +378,7 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
 
   it('còn nháp: chưa có nút chia sẻ (link chưa mở được) và không có nút Gỡ đăng', async () => {
     renderPage();
-    await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    await screen.findByRole('button', { name: 'Gửi duyệt' });
     expect(screen.queryByRole('button', { name: 'Chia sẻ gian hàng' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Gỡ đăng' })).not.toBeInTheDocument();
   });
@@ -422,10 +398,10 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gỡ đăng gian hàng', type: 'success' }));
   });
 
-  it('chưa có sản phẩm nào: "Lưu & Đăng" tắt kèm lời nhắc thêm sản phẩm, không gọi API', async () => {
+  it('chưa có sản phẩm nào: "Gửi duyệt" tắt kèm lời nhắc thêm sản phẩm, không gọi API', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront(empty));
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    const btn = await screen.findByRole('button', { name: 'Gửi duyệt' });
     expect(btn).toBeDisabled();
     expect(screen.getByText('Thêm ít nhất 1 sản phẩm để đăng gian hàng.')).toBeInTheDocument();
     fireEvent.click(btn);
@@ -434,7 +410,7 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
 
   it('có sản phẩm: không hiện lời nhắc và nút Đăng bấm được', async () => {
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Lưu & Đăng' });
+    const btn = await screen.findByRole('button', { name: 'Gửi duyệt' });
     expect(btn).not.toBeDisabled();
     expect(screen.queryByText('Thêm ít nhất 1 sản phẩm để đăng gian hàng.')).not.toBeInTheDocument();
   });
@@ -455,12 +431,63 @@ describe('Chia sẻ, gỡ đăng và gian hàng đang bị ẩn (D3-08, D3-02)',
   it('đã đăng: nhắc trang web cập nhật sau vài phút; còn nháp thì không nhắc', async () => {
     mocks.getMyStorefront.mockResolvedValue(published());
     const view = renderPage();
-    expect(await screen.findByText('Trang web cập nhật sau vài phút khi bạn đổi nội dung.')).toBeInTheDocument();
+    expect(await screen.findByText('Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.')).toBeInTheDocument();
     view.unmount();
     mocks.getMyStorefront.mockResolvedValue(storefront());
     renderPage();
-    await screen.findByRole('button', { name: 'Lưu & Đăng' });
-    expect(screen.queryByText('Trang web cập nhật sau vài phút khi bạn đổi nội dung.')).not.toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Gửi duyệt' });
+    expect(screen.queryByText('Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.')).not.toBeInTheDocument();
+  });
+});
+
+describe('Trạng thái chờ duyệt (B-40)', () => {
+  const pending = (over: Record<string, unknown> = {}) =>
+    storefront({ isPublished: true, status: 'PENDING_APPROVAL', publicHiddenReason: 'Gian hàng đang chờ Tubu Tree duyệt lần đầu; khi được duyệt sẽ hiện với khách.', ...over });
+
+  it('đã gửi duyệt mà chưa được duyệt: nhãn "Chờ duyệt", không ghi "Đang hiển thị", nói rõ thời hạn duyệt', async () => {
+    mocks.getMyStorefront.mockResolvedValue(pending());
+    renderPage();
+    expect(await screen.findByText('Chờ duyệt', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.queryByText('Đang hiển thị')).not.toBeInTheDocument();
+    expect(screen.getByTestId('hidden-reason')).toHaveTextContent('1 ngày làm việc');
+    expect(screen.queryByText('Gian hàng cập nhật sau vài phút khi bạn đổi nội dung.')).not.toBeInTheDocument();
+  });
+
+  it('chờ duyệt: nút chia sẻ bị khoá, nói chia sẻ được sau khi duyệt', async () => {
+    mocks.getMyStorefront.mockResolvedValue(pending());
+    renderPage();
+    const share = await screen.findByRole('button', { name: 'Chia sẻ được sau khi duyệt' });
+    expect(share).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Chia sẻ gian hàng' })).not.toBeInTheDocument();
+  });
+
+  it('chờ duyệt: "Xem trước" mở bản xem trước trong app thay vì trang /s/ báo không tồn tại', async () => {
+    mocks.getMyStorefront.mockResolvedValue(pending());
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem trước' }));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('storefront-preview')).toBeInTheDocument();
+  });
+
+  it('chờ duyệt: nút rút lại gửi duyệt thay cho "Gỡ đăng"', async () => {
+    mocks.getMyStorefront.mockResolvedValue(pending());
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Huỷ gửi duyệt' })).toBeInTheDocument();
+  });
+
+  it('đã được duyệt (LIVE): nhãn "Đang hiển thị" và chia sẻ được', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true, status: 'LIVE' }));
+    renderPage();
+    expect(await screen.findByText('Đang hiển thị')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chia sẻ gian hàng' })).not.toBeDisabled();
+  });
+
+  it('gian hàng nháp do máy chủ báo DRAFT: vào luồng 4 bước, có lối mở trình chỉnh sửa đầy đủ', async () => {
+    mocks.getMyStorefront.mockResolvedValue(storefront({ status: 'DRAFT' }));
+    renderPage();
+    expect(await screen.findByText('Bước 2/4')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Mở trình chỉnh sửa đầy đủ' }));
+    expect(await screen.findByRole('button', { name: 'Gửi duyệt' })).toBeInTheDocument();
   });
 });
 
@@ -470,7 +497,7 @@ describe('Link subdomain theo cờ (D3-11)', () => {
     renderPage();
     expect(await screen.findByText('/s/shop-aff-1')).toBeInTheDocument();
     expect(screen.queryByText(/tubutree\.com/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).queryByPlaceholderText('vd: brand1')).not.toBeInTheDocument();
     expect(sheet.textContent).not.toMatch(/tubutree\.com/);
@@ -483,7 +510,7 @@ describe('Link subdomain theo cờ (D3-11)', () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
     renderPage();
     expect(await screen.findByText('lan-xanh.tubutree.com')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByPlaceholderText('vd: brand1')).toBeInTheDocument();
   });
@@ -493,7 +520,7 @@ describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
   it('cờ bật, subdomain đang lưu không đổi: lưu cấu hình không gửi lại subdomain', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByPlaceholderText('vd: brand1')).toHaveValue('lan-xanh');
     fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
@@ -504,7 +531,7 @@ describe('Subdomain chỉ gửi khi người dùng đổi (D3-11)', () => {
   it('cờ bật, đổi subdomain: gửi giá trị mới viết thường', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomain: 'lan-xanh', subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     fireEvent.change(within(sheet).getByPlaceholderText('vd: brand1'), { target: { value: ' Lan-Do ' } });
     fireEvent.click(within(sheet).getByRole('button', { name: 'Lưu cấu hình gian hàng' }));
@@ -542,13 +569,13 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
 
   it('cấu hình: đóng rồi mở lại thì form về dữ liệu đã lưu, chỉnh sửa chưa lưu bị bỏ (BottomSheet gỡ nội dung khi đóng)', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const first = await screen.findByTestId('sheet');
     fireEvent.change(within(first).getByDisplayValue('Cửa hàng Xanh'), { target: { value: 'Tên gõ dở' } });
     expect(within(first).getByDisplayValue('Tên gõ dở')).toBeInTheDocument();
     fireEvent.click(within(first).getByRole('button', { name: 'Đóng' }));
     await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
     const again = await screen.findByTestId('sheet');
     expect(within(again).getByDisplayValue('Cửa hàng Xanh')).toBeInTheDocument();
     expect(mocks.updateStorefront).not.toHaveBeenCalled();
@@ -556,7 +583,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
 
   it('cấu hình CTV: gửi màu mặc định xanh lá, không gửi tài khoản ngân hàng hay kho (Tubu thu tiền và giao hàng)', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(sheet.textContent).not.toMatch(/VietQR/);
     expect(within(sheet).queryByRole('textbox', { name: 'Số tài khoản ngân hàng' })).toBeNull();
@@ -572,7 +599,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
       storefront({ type: 'MERCHANT', warehouseAddress: '12 Lê Lợi', warehouseCity: 'Huế', warehousePhone: '0912000111' }),
     );
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     fireEvent.change(within(sheet).getByRole('textbox', { name: 'Địa chỉ kho xuất hàng' }), { target: { value: '' } });
     fireEvent.change(within(sheet).getByRole('textbox', { name: 'Hotline kho liên hệ' }), { target: { value: ' 0912999888 ' } });
@@ -587,14 +614,14 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('CTV của đại lý (isPartner=true): có ô kho xuất hàng và hotline; isPartner=false thì không', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'CTV', isPartner: true }));
     const first = renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     let sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeInTheDocument();
     expect(within(sheet).getByRole('textbox', { name: 'Hotline kho liên hệ' })).toBeInTheDocument();
     first.unmount();
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'CTV', isPartner: false }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     sheet = await screen.findByTestId('sheet');
     expect(within(sheet).queryByRole('textbox', { name: 'Địa chỉ kho xuất hàng' })).toBeNull();
   });
@@ -602,7 +629,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('tài khoản ngân hàng cũ: báo không dùng để thu tiền và cho gỡ (gửi chuỗi rỗng)', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ bankName: 'Vietcombank', bankAccountNo: '0123456789' }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(sheet.textContent).toContain('Vietcombank ****6789');
     fireEvent.click(within(sheet).getByRole('button', { name: 'Gỡ tài khoản đã lưu' }));
@@ -614,7 +641,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('cấu hình: chọn màu "Xanh dương" gửi #2563eb; subdomain được viết thường', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     const swatch = within(sheet).getByRole('button', { name: 'Xanh dương' });
     expect(swatch).toHaveAttribute('aria-pressed', 'false');
@@ -630,7 +657,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('màu đã lưu của gian hàng được chọn sẵn', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ themeColor: '#7c3aed' }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     expect(within(sheet).getByRole('button', { name: 'Tím' })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -638,7 +665,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
   it('ô nhập trong cấu hình đều có tên truy cập (nhãn hoặc aria-label)', async () => {
     mocks.getMyStorefront.mockResolvedValue(storefront({ type: 'MERCHANT', subdomainEnabled: true }));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     for (const name of [
       'Tên gian hàng', 'Subdomain riêng', 'Địa chỉ kho xuất hàng', 'Tỉnh / Thành phố', 'Hotline kho liên hệ',
@@ -649,7 +676,7 @@ describe('Hồ sơ và cấu hình gian hàng', () => {
 
   it('mỗi ô màu có vùng chạm >= 44px', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Cấu hình' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
     const sheet = await screen.findByTestId('sheet');
     for (const name of ['Xanh lá', 'Ngọc', 'Xanh dương', 'Tím', 'Đất nung']) {
       const btn = within(sheet).getByRole('button', { name });
@@ -664,7 +691,8 @@ describe('Thống kê và Hành trình gian hàng', () => {
     renderPage();
     expect(await screen.findByText('Thống kê 30 ngày')).toBeInTheDocument();
     expect(screen.getByText('9')).toBeInTheDocument();
-    expect(screen.getByText('Đơn (7 ngày: 2)')).toBeInTheDocument();
+    expect(screen.getByText('Đơn 30 ngày')).toBeInTheDocument();
+    expect(screen.queryByText(/7 ngày/)).not.toBeInTheDocument();
     expect(screen.getByText('1.250.000đ')).toBeInTheDocument();
     expect(screen.getByText('125.000đ')).toBeInTheDocument();
     expect(screen.getByText('4 món · 320.000đ')).toBeInTheDocument();

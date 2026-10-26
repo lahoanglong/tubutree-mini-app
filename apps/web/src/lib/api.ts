@@ -262,6 +262,8 @@ export interface StorefrontDetail {
   isPartner?: boolean;
   /** Admin đã duyệt gian hàng (tick xanh, "CTV tuyển chọn"). API cũ chưa trả thì coi như chưa duyệt. */
   approved?: boolean;
+  /** Gian hàng mẫu của máy thử: khách thấy nhãn "Gian hàng mẫu". */
+  isSample?: boolean;
   /** Cờ link `<tên>.tubutree.com`: tắt (hoặc API cũ chưa trả) thì không hiện URL subdomain. */
   subdomainEnabled?: boolean;
   title: string;

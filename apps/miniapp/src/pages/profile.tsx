@@ -1,3 +1,4 @@
+import { ctvMenuEntry, OPEN_STOREFRONT_MENU_HINT, OPEN_STOREFRONT_MENU_LABEL } from '@tubutree/app-core/storefront-signup';
 import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -21,6 +22,7 @@ import { Heading, Text } from '../components/ui/text';
 import { getOwnedBrand, getOwnsBrand } from '../services/brand-owner-api';
 import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
+import { getAffiliateMe } from '../services/affiliate-api';
 import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
@@ -65,7 +67,7 @@ export const MENU: { group: string; items: MenuItem[] }[] = [
     // "Hoàn tiền sàn ngoài" chỉ hiện khi bật cờ (kéo khách sang sàn khác, ngược north-star mua lại).
     group: 'Hợp tác',
     items: [
-      { Icon: Users, label: 'Cộng tác viên', to: '/affiliate', hint: 'Chia sẻ — nhận hoa hồng' },
+      { Icon: Users, label: OPEN_STOREFRONT_MENU_LABEL, to: '/affiliate', hint: OPEN_STOREFRONT_MENU_HINT },
       ...(CASHBACK_ENABLED ? [{ Icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/cashback' }] : []),
       { Icon: Store, label: 'Đăng ký đại lý', to: '/dealer' },
     ],
@@ -131,6 +133,9 @@ export default function ProfilePage() {
     enabled: status === 'authenticated',
     retry: false,
   });
+  // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
+  const needsCtvProbe = status === 'authenticated' && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
+  const ctvAccessQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: needsCtvProbe, retry: false });
   const dealerItem: MenuItem = dealerQ.data?.isDealer || dealerQ.data?.status === 'APPROVED'
     ? { Icon: Store, label: 'Kênh đại lý', to: '/dealer', hint: dealerQ.data?.tier?.name ?? 'Bảng giá sỉ — công nợ' }
     : dealerQ.data?.status === 'PENDING'
@@ -142,9 +147,17 @@ export default function ProfilePage() {
   const chatEnabled = cfg.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: status === 'authenticated' && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
+  const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);
   const withDealer = MENU.map((s) => ({ ...s, items: s.items.filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (claimEnabled || it.to !== '/points/scan') && (chatEnabled || it.to !== '/chat')) })).map((s) =>
     s.group === 'Hợp tác'
-      ? { ...s, items: s.items.map((it) => (it.to === '/dealer' ? dealerItem : it)) }
+      ? {
+          ...s,
+          items: s.items.map((it) => {
+            if (it.to === '/dealer') return dealerItem;
+            if (it.to === '/affiliate') return ctvEntry ? { ...it, label: ctvEntry.label, hint: ctvEntry.hint } : null;
+            return it;
+          }).filter((it): it is MenuItem => it !== null),
+        }
       : s,
   );
   // Query bị disable khi cờ chuyển sang false vẫn giữ data cũ → bỏ data đó để mục không còn hiện.

@@ -1,3 +1,4 @@
+import { ctvMenuEntry, type CtvAccessHint } from '@tubutree/app-core/storefront-signup';
 import {
   BadgePercent, BookOpen, Bell, CalendarClock, Heart, Info, Leaf, MapPin, MessageCircle, MessagesSquare, Recycle, ScanLine, Settings, ShieldCheck, Sparkles, Store, Users, Wallet,
   type LucideIcon,
@@ -24,6 +25,8 @@ export interface AccountMenuContext {
   cashbackEnabled: boolean;
   dealer: Pick<DealerMe, 'status' | 'isDealer'> & { tier?: { name?: string } | null } | null | undefined;
   ownedBrandName: string | null | undefined;
+  /** GET /affiliate/me (chỉ cần với đại lý, nhân viên, admin): quyết định mục Cộng tác viên. */
+  ctvAccess?: CtvAccessHint | null;
   /** Route web đã xong chưa (route map): mục trỏ route còn `pending` bị ẩn để khách không rơi vào 404. */
   isReady: (webPath: string) => boolean;
 }
@@ -32,6 +35,7 @@ export interface AccountMenuContext {
 const GROUP_BUY_MENU_HINT = 'Rủ bạn mua chung, đủ nhóm nhận mã giảm';
 
 export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
+  const ctvEntry = ctvMenuEntry(c.role, c.ctvAccess);
   const dealerItem: AccountMenuItem =
     c.dealer?.isDealer || c.dealer?.status === 'APPROVED'
       ? { icon: Store, label: 'Kênh đại lý', to: '/dai-ly', hint: c.dealer.tier?.name ?? 'Bảng giá sỉ — công nợ' }
@@ -64,7 +68,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
     {
       group: 'Hợp tác',
       items: [
-        { icon: Users, label: 'Cộng tác viên', to: '/ctv', hint: 'Chia sẻ — nhận hoa hồng' },
+        ...(ctvEntry ? [{ icon: Users, ...ctvEntry, to: '/ctv' }] : []),
         ...(c.cashbackEnabled ? [{ icon: BadgePercent, label: 'Hoàn tiền sàn ngoài', to: '/hoan-tien' }] : []),
         dealerItem,
         ...(c.ownedBrandName ? [{ icon: Store, label: 'Quản lý nhãn hàng', to: '/chu-thuong-hieu', hint: c.ownedBrandName }] : []),

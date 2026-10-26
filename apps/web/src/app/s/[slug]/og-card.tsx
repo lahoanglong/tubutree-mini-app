@@ -1,3 +1,4 @@
+import { SAMPLE_STOREFRONT_LABEL } from '@tubutree/app-core/storefront-signup';
 import type { OgCardData } from '@/lib/storefront-og';
 
 export interface OgCardImages {
@@ -26,7 +27,14 @@ export function StorefrontOgCard({ data, images }: { data: OgCardData; images: O
             {data.name.slice(0, 1).toUpperCase()}
           </div>
         )}
-        <div style={{ display: 'flex', flex: 1, marginLeft: 36, fontSize: data.name.length > 28 ? 52 : 68, color: INK, lineHeight: 1.15 }}>{data.name}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginLeft: 36 }}>
+          {data.isSample && (
+            <div style={{ display: 'flex', alignSelf: 'flex-start', marginBottom: 12, padding: '6px 22px', borderRadius: 999, background: '#fdecc8', color: '#7a4a05', fontSize: 30 }}>
+              {SAMPLE_STOREFRONT_LABEL}
+            </div>
+          )}
+          <div style={{ display: 'flex', fontSize: data.name.length > 28 ? 52 : 68, color: INK, lineHeight: 1.15 }}>{data.name}</div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 28 }}>

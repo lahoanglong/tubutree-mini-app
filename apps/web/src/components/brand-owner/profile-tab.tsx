@@ -100,7 +100,7 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
         <h2 className={skin.cardTitleSans}>Thông tin nhãn</h2>
         <BrandImageField label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} />
         <BrandImageField label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} />
-        <Field label="Tagline">
+        <Field label="Câu giới thiệu ngắn">
           <input className={bigField} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} />
         </Field>
         <Field label="Nguồn gốc">

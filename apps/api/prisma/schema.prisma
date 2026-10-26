@@ -663,6 +663,9 @@ model Storefront {
   ordersPausedAt      DateTime?
   isPublished         Boolean                  @default(false)
   publishedAt         DateTime?
+  /// Gian hàng mẫu để giới thiệu tính năng (chỉ tạo bằng script seed:sample-storefronts trên máy thử). Khách vẫn mở được bằng link
+  /// và thấy nhãn "Gian hàng mẫu", nhưng không lên danh sách công khai, không ghi công đơn và không sinh hoa hồng.
+  isSample            Boolean                  @default(false)
   /// Admin duyệt gian hàng CTV (tick xanh, nhãn "CTV tuyển chọn"). NULL = chưa duyệt. Gian hàng đối tác và nhãn hàng luôn tính là đã duyệt
   /// (không đọc cột này): đối tác đã qua bước duyệt đại lý, nhãn hàng do admin tạo.
   approvedAt          DateTime?

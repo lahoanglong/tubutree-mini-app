@@ -1,4 +1,4 @@
-import { isStorefrontApproved, ownerHiddenReason, publicStorefrontWhere } from './storefront-visibility';
+import { isStorefrontApproved, ownerHiddenReason, ownerStorefrontState, publicStorefrontWhere } from './storefront-visibility';
 
 const ROLES = ['AFFILIATE', 'DEALER'] as const;
 
@@ -78,5 +78,36 @@ describe('ownerHiddenReason', () => {
     const on = { ...opts, requireApproval: true };
     expect(ownerHiddenReason({ ...live, approvedAt: null }, owner, on)).toContain('duyệt');
     expect(ownerHiddenReason(live, owner, on)).toBeNull();
+  });
+});
+
+describe('ownerStorefrontState', () => {
+  const live = { type: 'CTV' as const, isPartner: false, isPublished: true, approvedAt: new Date(), takenDownAt: null, takenDownReason: null };
+  const owner = { role: 'AFFILIATE' as const, isBlocked: false };
+  const opts = { eligibleRoles: ROLES, requireApproval: true };
+
+  it('chưa đăng: DRAFT', () => {
+    expect(ownerStorefrontState({ ...live, isPublished: false, approvedAt: null }, owner, opts).status).toBe('DRAFT');
+  });
+
+  it('đã đăng nhưng chưa duyệt lần đầu khi cờ bật: PENDING_APPROVAL, không phải LIVE', () => {
+    const r = ownerStorefrontState({ ...live, approvedAt: null }, owner, opts);
+    expect(r.status).toBe('PENDING_APPROVAL');
+    expect(r.reason).toContain('chờ');
+  });
+
+  it('cờ duyệt tắt: đăng xong là LIVE dù chưa có tick xanh', () => {
+    expect(ownerStorefrontState({ ...live, approvedAt: null }, owner, { ...opts, requireApproval: false }).status).toBe('LIVE');
+  });
+
+  it('đã duyệt: LIVE; bị gỡ: TAKEN_DOWN; chủ bị khoá hoặc hết là CTV: HIDDEN', () => {
+    expect(ownerStorefrontState(live, owner, opts).status).toBe('LIVE');
+    expect(ownerStorefrontState({ ...live, takenDownAt: new Date(), isPublished: false }, owner, opts).status).toBe('TAKEN_DOWN');
+    expect(ownerStorefrontState(live, { ...owner, isBlocked: true }, opts).status).toBe('HIDDEN');
+    expect(ownerStorefrontState(live, { ...owner, role: 'CUSTOMER' }, opts).status).toBe('HIDDEN');
+  });
+
+  it('gian hàng đối tác chưa có approvedAt vẫn LIVE (đã qua bước duyệt đại lý)', () => {
+    expect(ownerStorefrontState({ ...live, type: 'MERCHANT', isPartner: true, approvedAt: null }, owner, opts).status).toBe('LIVE');
   });
 });

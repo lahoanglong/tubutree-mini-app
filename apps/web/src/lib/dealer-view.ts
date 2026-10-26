@@ -1,3 +1,4 @@
+import { dealerApplyPitch } from '@tubutree/app-core/dealer-apply-copy';
 import type { DealerRewardClaimStatus, DealerRewardProgress } from '@tubutree/app-core/api/dealer';
 import { formatVnd } from './format-vnd';
 
@@ -67,8 +68,7 @@ export function formatRatePct(rate: number | string | null | undefined): string 
 export const bonusPctText = (pct: number): string => formatRatePct(pct / 100);
 
 /** Chữ mời đăng ký: chỉ nêu con số khi cấu hình thật đã về, không hứa con số mặc định. */
-export const applyPitch = (maxDiscountPct: number | null | undefined): string =>
-  maxDiscountPct ? `Giá sỉ đến ${formatRatePct(maxDiscountPct)} · công nợ · đặt hàng nhanh số lượng lớn.` : 'Giá sỉ ưu đãi · công nợ · đặt hàng nhanh số lượng lớn.';
+export const applyPitch = (maxDiscountPct: number | null | undefined): string => dealerApplyPitch(maxDiscountPct ? formatRatePct(maxDiscountPct) : null);
 
 export const pendingBody = (reviewHours: number | null | undefined): string =>
   reviewHours

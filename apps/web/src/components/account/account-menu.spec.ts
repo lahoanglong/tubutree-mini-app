@@ -21,6 +21,24 @@ const labels = (menu: AccountMenuGroup[], group: string) => menu.find((g) => g.g
 const all = (menu: AccountMenuGroup[]) => menu.flatMap((g) => g.items);
 
 describe('nhóm menu hub tài khoản', () => {
+  it('CTV thấy "Cộng tác viên" (bảng điều khiển), không còn lời mời mở gian hàng', () => {
+    const items = buildAccountMenu(ctx({ role: 'AFFILIATE' })).find((g) => g.group === 'Hợp tác')!.items;
+    expect(items.find((i) => i.to === '/ctv')!.label).toBe('Cộng tác viên');
+    expect(items.map((i) => i.label)).not.toContain('Mở gian hàng Cộng tác viên');
+  });
+
+  it('đại lý chỉ thấy mục Cộng tác viên khi còn quyền CTV; đại lý thuần hoặc chưa biết quyền thì không có mục này', () => {
+    const find = (over: Partial<AccountMenuContext>) => buildAccountMenu(ctx(over)).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/ctv');
+    expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: true, canRegister: false } })?.label).toBe('Cộng tác viên');
+    expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: false, canRegister: false } })).toBeUndefined();
+    expect(find({ role: 'DEALER' })).toBeUndefined();
+  });
+
+  it('lời mời mở gian hàng không nhắc hoa hồng (chính sách Zalo)', () => {
+    const entry = buildAccountMenu(ctx()).find((g) => g.group === 'Hợp tác')!.items.find((i) => i.to === '/ctv')!;
+    expect(`${entry.label} ${entry.hint}`).not.toMatch(/hoa hồng/i);
+  });
+
   it('bốn nhóm theo thứ tự Mua sắm, Tài sản, Hợp tác, Khác; khách thường không có nhóm Công việc', () => {
     expect(buildAccountMenu(ctx()).map((g) => g.group)).toEqual(['Mua sắm', 'Tài sản', 'Hợp tác', 'Khác']);
   });
@@ -29,7 +47,7 @@ describe('nhóm menu hub tài khoản', () => {
     const m = buildAccountMenu(ctx());
     expect(labels(m, 'Mua sắm')).toEqual(['Mua chung nhóm', 'Đổi rác lấy quà', 'Sản phẩm yêu thích', 'Sổ địa chỉ', 'Cộng đồng hỏi đáp']);
     expect(labels(m, 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu']);
-    expect(labels(m, 'Hợp tác')).toEqual(['Cộng tác viên', 'Đăng ký đại lý']);
+    expect(labels(m, 'Hợp tác')).toEqual(['Mở gian hàng Cộng tác viên', 'Đăng ký đại lý']);
     expect(labels(m, 'Khác')).toEqual(['Thông báo', 'Câu chuyện thương hiệu', 'Cài đặt', 'Về Tubu Tree & Hỗ trợ']);
   });
 
@@ -86,9 +104,9 @@ describe('mục theo cờ', () => {
     expect(labels(buildAccountMenu(ctx({ claimEnabled: true })), 'Tài sản')).toEqual(['Hạng thành viên & Điểm Xanh', 'Ví Tubu', 'Tích điểm đơn sàn']);
   });
 
-  it('Hoàn tiền sàn ngoài chỉ hiện khi bật CASHBACK_ENABLED, giữa Cộng tác viên và đại lý', () => {
+  it('Hoàn tiền sàn ngoài chỉ hiện khi bật CASHBACK_ENABLED, giữa mục mở gian hàng và đại lý', () => {
     expect(labels(buildAccountMenu(ctx()), 'Hợp tác')).not.toContain('Hoàn tiền sàn ngoài');
-    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Cộng tác viên', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
+    expect(labels(buildAccountMenu(ctx({ cashbackEnabled: true })), 'Hợp tác')).toEqual(['Mở gian hàng Cộng tác viên', 'Hoàn tiền sàn ngoài', 'Đăng ký đại lý']);
   });
 
   it('khi cờ tắt, không nhãn nào nhắc "sàn ngoài"', () => {
@@ -154,9 +172,15 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
   const real = { isReady: isWebRouteReady };
 
   it('đại lý, chủ nhãn, nhân viên và Đổi rác có lối vào như Mini App (profile.tsx)', () => {
-    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A' }));
+    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A', ctvAccess: { isAffiliate: true } }));
     const to = all(m).map((i) => i.to);
     expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/doi-rac']));
+  });
+
+  it('admin/nhân viên chưa có kết quả /affiliate/me (đang tải, lỗi, 401): mục Cộng tác viên ẩn, không đổi chữ', () => {
+    for (const role of ['ADMIN', 'STAFF', 'DEALER']) {
+      expect(all(buildAccountMenu(ctx({ ...real, role }))).map((i) => i.to)).not.toContain('/ctv');
+    }
   });
 
   it('khách thường chưa có nhãn: không thấy màn nội bộ', () => {

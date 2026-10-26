@@ -17,9 +17,15 @@ describe('resolvePublishedStorefront', () => {
     const out = await resolvePublishedStorefront({ storefront: { findFirst } } as any, VISIBILITY, ' LINH ');
     expect(out).toEqual({ id: 's1', slug: 'linh', type: 'CTV', ownerUserId: 'u1' });
     expect(findFirst).toHaveBeenCalledWith({
-      where: { ...publicStorefrontWhere(VISIBILITY), OR: [{ slug: 'linh' }, { subdomain: 'linh' }, { customDomain: 'linh' }] },
+      where: { ...publicStorefrontWhere(VISIBILITY), isSample: false, OR: [{ slug: 'linh' }, { subdomain: 'linh' }, { customDomain: 'linh' }] },
       select: { id: true, slug: true, type: true, ownerUserId: true },
     });
+  });
+
+  it('gian hàng mẫu không bao giờ được ghi công', async () => {
+    const findFirst = jest.fn().mockResolvedValue(null);
+    await resolvePublishedStorefront({ storefront: { findFirst } } as any, VISIBILITY, 'mebimla');
+    expect(findFirst.mock.calls[0][0].where.isSample).toBe(false);
   });
 
   it('cờ duyệt bật thì điều kiện duyệt đi theo vào truy vấn', async () => {

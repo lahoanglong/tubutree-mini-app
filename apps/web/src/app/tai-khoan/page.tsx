@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Copy, Leaf, Pencil, User } from 'lucide-react';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
+import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { ownedBrandProfileQuery, ownsBrandQuery } from '@tubutree/app-core/queries/brand-owner';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
@@ -95,6 +96,9 @@ export default function AccountPage() {
     staleTime: 5 * 60_000,
   });
   const dealerQ = useQuery({ ...dealerMeQuery(coreHttp), enabled: authed, retry: false });
+  // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
+  const needsCtvProbe = authed && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
+  const ctvAccessQ = useQuery({ ...affiliateMeQuery(coreHttp), enabled: needsCtvProbe, retry: false });
 
   if (phase === 'loading') {
     return (
@@ -139,6 +143,7 @@ export default function AccountPage() {
     chatEnabled,
     cashbackEnabled: CASHBACK_ENABLED,
     dealer: dealerQ.data,
+    ctvAccess: ctvAccessQ.data,
     ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,
     isReady: isWebRouteReady,
   });

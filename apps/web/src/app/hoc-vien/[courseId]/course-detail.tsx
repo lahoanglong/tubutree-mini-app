@@ -84,9 +84,9 @@ function Detail({ courseId }: { courseId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div>
-        {/* Mini App giữ nút ghost này cạnh nút lùi nổi nên không dùng BackLink (ẩn ở điện thoại). */}
-        <Link href="/hoc-vien" className={`${ui.backLink} max-md:font-semibold max-md:no-underline`}>
+      <div className="max-md:hidden">
+        {/* Điện thoại đã có nút lùi của trang, như Mini App; nút này chỉ cho máy tính. */}
+        <Link href="/hoc-vien" className={ui.backLink}>
           <ChevronLeft className="mr-0.5 h-4 w-4" aria-hidden="true" />
           Danh sách khoá học
         </Link>

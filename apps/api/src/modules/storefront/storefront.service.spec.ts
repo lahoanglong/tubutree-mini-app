@@ -237,8 +237,9 @@ describe('StorefrontService.updateMine/publishMine', () => {
 
   it('publish set isPublished + publishedAt', async () => {
     const prisma = makePrisma({ storefront: { findFirst: jest.fn(), update: jest.fn() }, storefrontItem: { count: jest.fn().mockResolvedValue(2) } });
-    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({ id: 's1', ownerUserId: 'u1' });
-    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const row: Record<string, unknown> = { id: 's1', ownerUserId: 'u1', type: 'CTV', collections: [], owner: { role: 'AFFILIATE', isBlocked: false, referralCode: 'X' } };
+    (prisma.storefront.findFirst as jest.Mock).mockImplementation(async () => row);
+    (prisma.storefront.update as jest.Mock).mockImplementation(({ data }) => Object.assign(row, data));
     const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.publishMine('u1', true);
     expect(r.isPublished).toBe(true);
@@ -717,7 +718,7 @@ describe('StorefrontService.getPublicList', () => {
     const svc = new StorefrontService(prisma, config, affiliate);
     const r = await svc.getPublicList();
     expect(findMany.mock.calls[0]?.[0]).toEqual({
-      where: expect.objectContaining({ isPublished: true, takenDownAt: null }),
+      where: expect.objectContaining({ isPublished: true, takenDownAt: null, isSample: false }),
       select: { slug: true, updatedAt: true },
       orderBy: { updatedAt: 'desc' },
       take: 500,
@@ -957,6 +958,26 @@ describe('StorefrontService.getPublicBySlug', () => {
   });
 });
 
+describe('StorefrontService.getPublicBySlug — gian hàng mẫu không mang nhãn tin cậy', () => {
+  it('isSample: approved=false, ownerTier=null, isPartner=false, không có kho dù là MERCHANT đã duyệt có kho', async () => {
+    const getPublicTier = jest.fn().mockResolvedValue({ name: 'Bạc', emoji: '🌳' });
+    const prisma = makePrisma({
+      storefront: { findFirst: jest.fn().mockResolvedValue({
+        id: 's1', slug: 'mau', title: 'Mẫu', isPublished: true, isSample: true, type: 'MERCHANT', isPartner: true, approvedAt: new Date(),
+        warehouseAddress: '1 Lê Lợi', warehouseCity: 'Đà Nẵng', ownerUserId: 'u1', collections: [],
+      }) },
+    });
+    const svc = new StorefrontService(prisma, config, { getPublicTier, commissionEligibleRoles: async () => new Set(['AFFILIATE', 'DEALER']) } as unknown as AffiliateService);
+    const r = await svc.getPublicBySlug('mau');
+    expect(r.isSample).toBe(true);
+    expect(r.approved).toBe(false);
+    expect(r.ownerTier).toBeNull();
+    expect(r.isPartner).toBe(false);
+    expect(r).not.toHaveProperty('warehouseCity');
+    expect(getPublicTier).not.toHaveBeenCalled();
+  });
+});
+
 describe('StorefrontService.pickerProducts — guardrail role', () => {
   it('CUSTOMER gọi picker → BadRequest (không lộ %HH cho khách)', async () => {
     const prisma = makePrisma({
@@ -1103,6 +1124,13 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
     expect(where.AND).toContainEqual({ OR: [{ type: { not: 'CTV' } }, { owner: { role: { in: ['AFFILIATE', 'DEALER', 'ADMIN'] } } }] });
   });
 
+  it('trả cờ isSample để màn gắn nhãn "Gian hàng mẫu"', async () => {
+    const sample = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...sfRow, isSample: true }) } });
+    expect((await new StorefrontService(sample, config, affiliate).getPublicBySlug('linh')).isSample).toBe(true);
+    const real = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue({ ...sfRow, isSample: false }) } });
+    expect((await new StorefrontService(real, config, affiliate).getPublicBySlug('linh')).isSample).toBe(false);
+  });
+
   it('trả cờ approved để web chỉ hiện tick xanh và "CTV tuyển chọn" khi đã duyệt (CTV chưa duyệt: false; đối tác: true)', async () => {
     const ctv = makePrisma({ storefront: { findFirst: jest.fn().mockResolvedValue(sfRow) } });
     expect((await new StorefrontService(ctv, config, affiliate).getPublicBySlug('linh')).approved).toBe(false);
@@ -1122,6 +1150,26 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
       expect(sf).not.toHaveProperty('owner');
     });
 
+    it('trả status cho màn: DRAFT khi chưa đăng, PENDING_APPROVAL khi đã đăng mà chưa duyệt (cờ duyệt bật)', async () => {
+      const approvalOn = { get: async <T>(_k: string, fb?: T): Promise<T> => (_k === 'storefront.require_approval' ? true : fb) as T } as unknown as SystemConfigService;
+      const draft = await new StorefrontService(mine({ isPublished: false }), approvalOn, affiliate).getMine('u1');
+      expect(draft.status).toBe('DRAFT');
+      const pending = await new StorefrontService(mine({ isPublished: true, approvedAt: null }), approvalOn, affiliate).getMine('u1');
+      expect(pending.status).toBe('PENDING_APPROVAL');
+      const live = await new StorefrontService(mine({ isPublished: true, approvedAt: new Date() }), approvalOn, affiliate).getMine('u1');
+      expect(live.status).toBe('LIVE');
+    });
+
+    it('needsApproval: chưa duyệt + cờ bật = true; đã duyệt = false; cờ tắt = false', async () => {
+      const flag = (on: boolean) => ({ get: async <T>(_k: string, fb?: T): Promise<T> => (_k === 'storefront.require_approval' ? on : fb) as T } as unknown as SystemConfigService);
+      const need = await new StorefrontService(mine({ approvedAt: null }), flag(true), affiliate).getMine('u1');
+      expect(need.needsApproval).toBe(true);
+      const done = await new StorefrontService(mine({ approvedAt: new Date() }), flag(true), affiliate).getMine('u1');
+      expect(done.needsApproval).toBe(false);
+      const off = await new StorefrontService(mine({ approvedAt: null }), flag(false), affiliate).getMine('u1');
+      expect(off.needsApproval).toBe(false);
+    });
+
     it('CTV bị hạ về khách thường: vẫn trả gian hàng, kèm lý do ẩn', async () => {
       const sf = await new StorefrontService(mine({}, { role: 'CUSTOMER', isBlocked: false }), config, affiliate).getMine('u1');
       expect(sf.id).toBe('s1');
@@ -1136,9 +1184,10 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
 
   describe('publishMine', () => {
     const mk = (row: Record<string, unknown>, itemCount: number) => {
-      const update = jest.fn().mockImplementation(({ data }) => ({ id: 's1', ...data }));
+      const stored: Record<string, unknown> = { id: 's1', ownerUserId: 'u1', type: 'CTV', takenDownAt: null, takenDownReason: null, collections: [], owner: { role: 'AFFILIATE', isBlocked: false, referralCode: 'X' }, ...row };
+      const update = jest.fn().mockImplementation(({ data }) => Object.assign(stored, data));
       const prisma = makePrisma({
-        storefront: { findFirst: jest.fn().mockResolvedValue({ id: 's1', ownerUserId: 'u1', takenDownAt: null, takenDownReason: null, ...row }), update },
+        storefront: { findFirst: jest.fn().mockImplementation(async () => stored), update },
         storefrontItem: { count: jest.fn().mockResolvedValue(itemCount) },
       });
       return { svc: new StorefrontService(prisma, config, affiliate), update };
@@ -1156,6 +1205,22 @@ describe('StorefrontService — gian hàng khách được thấy (D3-02)', () =
       const { svc, update } = mk({}, 0);
       await expect(svc.publishMine('u1', true)).rejects.toThrow('ít nhất 1 sản phẩm');
       expect(update).not.toHaveBeenCalled();
+    });
+
+    it('trả status/needsApproval do máy chủ tính sau khi đăng: chưa duyệt → PENDING_APPROVAL, đã duyệt → LIVE', async () => {
+      const on = { get: async <T>(_k: string, fb?: T): Promise<T> => (_k === 'storefront.require_approval' ? true : fb) as T } as unknown as SystemConfigService;
+      const mkWith = (row: Record<string, unknown>) => {
+        const stored: Record<string, unknown> = { id: 's1', ownerUserId: 'u1', type: 'CTV', takenDownAt: null, takenDownReason: null, collections: [], owner: { role: 'AFFILIATE', isBlocked: false, referralCode: 'X' }, ...row };
+        const prisma = makePrisma({
+          storefront: { findFirst: jest.fn().mockImplementation(async () => stored), update: jest.fn().mockImplementation(({ data }) => Object.assign(stored, data)) },
+          storefrontItem: { count: jest.fn().mockResolvedValue(1) },
+        });
+        return new StorefrontService(prisma, on, affiliate);
+      };
+      const pending = await mkWith({ approvedAt: null }).publishMine('u1', true);
+      expect([pending.status, pending.needsApproval]).toEqual(['PENDING_APPROVAL', true]);
+      const live = await mkWith({ approvedAt: new Date() }).publishMine('u1', true);
+      expect([live.status, live.needsApproval]).toEqual(['LIVE', false]);
     });
 
     it('có sản phẩm: đăng, và lệnh ghi chỉ chạy khi gian hàng chưa bị gỡ (admin gỡ chen giữa không bị ghi đè)', async () => {
