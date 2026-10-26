@@ -70,13 +70,13 @@ test.describe('Giới thiệu bạn bè', () => {
     mockProfilePage(api);
     await page.goto('/profile');
 
-    await page.getByRole('button', { name: 'Chia sẻ' }).click({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click({ timeout: 15_000 });
     // Trước đây thumbnail thiếu làm zmp-sdk từ chối (zod) nên luôn rơi vào thông báo dự phòng. Nay payload hợp lệ, SDK
     // ngoài Zalo trả về bình thường: không có thông báo lỗi, nút vẫn bấm được. Nhánh dự phòng (SDK từ chối → chép
     // liên kết + báo; người dùng huỷ → im lặng) do wallet.spec.tsx kiểm, vì e2e không ép được SDK từ chối.
     await page.waitForTimeout(500);
     await expect(page.getByText(/Chưa chia sẻ được qua Zalo|Mã giới thiệu của bạn/)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Chia sẻ' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Chia sẻ', exact: true })).toBeEnabled();
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
   });
 
