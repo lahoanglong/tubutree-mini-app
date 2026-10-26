@@ -217,7 +217,7 @@ test.describe('Trợ lý AI (/tu-van)', () => {
   function mockAdvisor(api: MockApi, enabled = true) {
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
-    api.get('/config/public', { freeshipThreshold: 500000, aiAdvisorEnabled: enabled, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
+    api.get('/config/public', { freeshipThreshold: 500000, aiAdvisorEnabled: enabled, support: { hotline: '0984 606 774', email: null, zaloOaName: null, hours: null }, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
   }
 
   test('bấm câu gợi ý và hỏi bằng Enter gửi đúng body, hiện thẻ sản phẩm dẫn tới trang sản phẩm', async ({ page, api }) => {
