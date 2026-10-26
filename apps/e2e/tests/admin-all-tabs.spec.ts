@@ -142,7 +142,8 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       await page.getByRole('button', { name: /Đổi mục/ }).click();
       const drawer = page.getByRole('dialog', { name: 'Mục quản trị' });
       await drawer.getByRole('searchbox', { name: 'Tìm mục quản trị' }).fill(label);
-      await drawer.getByRole('button', { name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).first().click();
+      // Nút đầu nhóm (aria-expanded) có thể trùng tên mục ("Đổi rác" và "Đổi rác và game"), nên chỉ lấy nút mục.
+      await drawer.locator('button:not([aria-expanded])').filter({ hasText: new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).first().click();
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(200);
       const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
