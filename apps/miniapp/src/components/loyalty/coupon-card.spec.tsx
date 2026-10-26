@@ -64,11 +64,28 @@ describe('CouponCard — Sao chép và Dùng ngay (B-55)', () => {
   it('"Dùng ngay" khi giỏ có hàng: chọn sẵn mã ở giỏ rồi tới giỏ', async () => {
     mocks.getCart.mockResolvedValue({ itemCount: 3 });
     renderCard();
-    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Dùng mã TUBU10 ngay' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Dùng mã TUBU10 ngay' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
     expect(mocks.applyCoupon).toHaveBeenCalledWith('TUBU10');
+  });
+
+  it('"Dùng ngay" bấm khi giỏ còn đang tải: chờ giỏ về rồi mới quyết (giỏ có hàng → giỏ, không bị coi là trống)', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.getCart.mockImplementation(() => new Promise((r) => { release = r; }));
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng mã TUBU10 ngay' }));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    release({ itemCount: 2, couponCode: null });
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+  });
+
+  it('giỏ đang giữ mã khác: sau khi áp báo "Đã đổi sang mã TUBU10"', async () => {
+    mocks.getCart.mockResolvedValue({ itemCount: 2, couponCode: 'FREESHIP1' });
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng mã TUBU10 ngay' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đổi sang mã TUBU10', type: 'info' });
   });
 
   it('"Dùng ngay" khi giỏ trống: tới danh sách sản phẩm, không áp mã', async () => {
@@ -82,8 +99,6 @@ describe('CouponCard — Sao chép và Dùng ngay (B-55)', () => {
     mocks.getCart.mockResolvedValue({ itemCount: 1 });
     mocks.applyCoupon.mockRejectedValue(new Error('rejected'));
     renderCard();
-    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
-    await new Promise((r) => setTimeout(r, 30));
     fireEvent.click(screen.getByRole('button', { name: 'Dùng mã TUBU10 ngay' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: expect.stringContaining('Chưa chọn sẵn được mã: '), type: 'warning' });
