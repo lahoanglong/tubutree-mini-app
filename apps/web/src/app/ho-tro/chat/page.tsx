@@ -238,6 +238,12 @@ function ChatBody() {
           </div>
         )}
         <MessageList items={showGreeting ? [greeting, ...items] : items} />
+        {/* Máy tính: khung chat cao 60vh nên lúc chưa có tin còn trống nhiều; đặt câu hỏi mẫu ngay trong khung thay vì sát đáy. */}
+        {empty && quickReady && !closed && !closedText && (
+          <div data-chat-suggest="" className="max-md:hidden">
+            <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />
+          </div>
+        )}
       </div>
       <div
         className="max-md:sticky max-md:bottom-0"
@@ -257,7 +263,11 @@ function ChatBody() {
         ) : (
           <>
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
-            {empty && quickReady && <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />}
+            {empty && quickReady && (
+              <div className="md:hidden">
+                <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />
+              </div>
+            )}
             <Composer
               onSend={(body) => enqueue(body, null)}
               onSendImage={(url) => enqueue('', url)}

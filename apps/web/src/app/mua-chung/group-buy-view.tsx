@@ -140,17 +140,34 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
             )}
           </div>
         ) : (
-          <EmptyState
-            title="Chưa có nhóm mua chung nào"
-            body="Mở nhóm từ trang sản phẩm để rủ bạn bè mua chung giá tốt!"
-            actionHref="/san-pham"
-            actionLabel="Khám phá sản phẩm"
-          />
+          <>
+            <EmptyState
+              title="Chưa có nhóm mua chung nào"
+              body="Mở nhóm từ trang sản phẩm để rủ bạn bè mua chung giá tốt!"
+              actionHref="/san-pham"
+              actionLabel="Khám phá sản phẩm"
+            />
+            {/* Máy tính: màn trống rộng, giải thích cách chạy để người xem biết bước tiếp theo. */}
+            <ol aria-label="Cách mua chung" className="mx-auto mt-2 grid max-w-3xl gap-3 max-md:hidden md:grid-cols-3">
+              {GROUP_STEPS.map((t, i) => (
+                <li key={t} className={`${ui.card} flex gap-3 p-4 text-sm text-stone-700`}>
+                  <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-forest-100 text-sm font-bold text-forest-800">{i + 1}</span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ol>
+          </>
         )}
       </div>
     </main>
   );
 }
+
+const GROUP_STEPS = [
+  'Chọn sản phẩm có mua chung và mở nhóm từ trang sản phẩm.',
+  'Gửi link cho bạn bè, đủ người trong hạn thì cả nhóm cùng được giá tốt.',
+  'Đủ nhóm là nhận mã giảm giá, dùng ở giỏ hàng trong 30 ngày.',
+];
 
 function GroupCard({
   g,
