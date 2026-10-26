@@ -46,27 +46,28 @@ function UserName({ user: u, onOpenDetail, card = false }: { user: AdminUser; on
   );
 }
 
-/** Trạng thái khoá và nút Khoá / Mở khoá của một người dùng; nhân viên (không phải admin) chỉ xem. */
-function UserStatus({ user: u, isAdmin, blockBusy, unblockBusy, onBlock, onUnblock }: Omit<UsersListProps, 'users' | 'narrow' | 'onOpenDetail'> & { user: AdminUser }) {
-  if (!isAdmin) {
-    return u.isBlocked ? (
+type StatusProps = Omit<UsersListProps, 'users' | 'narrow' | 'onOpenDetail'> & { user: AdminUser };
+
+/** Chỉ nói trạng thái; nút Khoá / Mở khoá nằm riêng ở UserActions để cột trạng thái không lẫn với hành động. */
+function UserStatus({ user: u }: StatusProps) {
+  return u.isBlocked ? (
+    <div className="space-y-0.5">
       <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
-    ) : (
-      <span className="text-stone-500">Đang hoạt động</span>
-    );
-  }
-  if (u.isBlocked) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <ToneBadge tone="danger" title={u.blockedReason ?? undefined}>Đã khoá</ToneBadge>
-        <button type="button" onClick={() => onUnblock(u)} disabled={unblockBusy} className={BTN_SMALL} aria-label={`Mở khoá ${labelOf(u)}`}>
-          Mở khoá
-        </button>
-        {u.blockedReason && <p className="w-full text-xs text-stone-500">Lý do: {u.blockedReason}</p>}
-      </div>
-    );
-  }
-  return (
+      {u.blockedReason && <p className="text-xs text-stone-500">Lý do: {u.blockedReason}</p>}
+    </div>
+  ) : (
+    <span className="text-stone-500">Đang hoạt động</span>
+  );
+}
+
+/** Nút Khoá / Mở khoá; nhân viên (không phải admin) chỉ xem nên không có nút. */
+function UserActions({ user: u, isAdmin, blockBusy, unblockBusy, onBlock, onUnblock }: StatusProps) {
+  if (!isAdmin) return null;
+  return u.isBlocked ? (
+    <button type="button" onClick={() => onUnblock(u)} disabled={unblockBusy} className={BTN_SMALL} aria-label={`Mở khoá ${labelOf(u)}`}>
+      Mở khoá
+    </button>
+  ) : (
     <button type="button" onClick={() => onBlock(u)} disabled={blockBusy} className={BTN_DANGER_OUTLINE} aria-label={`Khoá ${labelOf(u)}`}>
       Khoá
     </button>
@@ -96,8 +97,9 @@ export function UsersList(props: UsersListProps) {
               <dt className="text-stone-500">Ngày</dt>
               <dd>{formatDate(u.createdAt)}</dd>
             </dl>
-            <div className="mt-2 border-t border-stone-100 pt-2">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-2">
               <UserStatus user={u} {...status} />
+              <UserActions user={u} {...status} />
             </div>
           </li>
         ))}
@@ -109,7 +111,7 @@ export function UsersList(props: UsersListProps) {
       <table className="w-full text-left text-sm">
         <thead className="bg-stone-50 text-xs text-stone-500">
           <tr>
-            {['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái'].map((h) => (
+            {['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái', ...(props.isAdmin ? ['Thao tác'] : [])].map((h) => (
               <th key={h} className="px-3 py-2 font-medium">{h}</th>
             ))}
           </tr>
@@ -126,9 +128,14 @@ export function UsersList(props: UsersListProps) {
                 <UserPointsCell user={u} />
               </td>
               <td className="px-3 py-2 text-stone-500">{formatDate(u.createdAt)}</td>
-              <td className="min-w-[16rem] px-3 py-2">
+              <td className="px-3 py-2">
                 <UserStatus user={u} {...status} />
               </td>
+              {props.isAdmin && (
+                <td className="px-3 py-2">
+                  <UserActions user={u} {...status} />
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

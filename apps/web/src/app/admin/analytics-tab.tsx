@@ -3,17 +3,30 @@
 import { useQuery } from '@tanstack/react-query';
 import { getRetentionDaily } from '@/lib/admin-client';
 import { Ns1Card } from '@/components/admin/ns1-card';
-import { ScrollRegion } from '@/components/admin/ui';
+import { BTN_SECONDARY, ScrollRegion } from '@/components/admin/ui';
 import { formatDate } from '@/lib/format-date';
 
-export function AnalyticsTab() {
+export function AnalyticsTab({ onOpenReports }: { onOpenReports?: () => void } = {}) {
   const q = useQuery({ queryKey: ['admin-analytics-retention'], queryFn: () => getRetentionDaily(30) });
 
   if (q.isLoading) return <p className="text-sm text-stone-500">Đang tải…</p>;
   if (q.isError) return <p className="text-sm text-danger-fg">Không tải được số liệu giữ chân khách.</p>;
   const rows = q.data ?? [];
   if (rows.length === 0) {
-    return <p className="text-sm text-stone-500">Chưa có bản chụp số liệu nào — cron tính lúc 3h sáng, quay lại sau.</p>;
+    return (
+      <div>
+        <h2 className="font-display text-lg font-semibold text-stone-900">Giữ chân khách & chỉ số chính</h2>
+        <p className="mt-2 max-w-xl text-sm text-stone-500">
+          Chưa có số liệu. Hệ thống tính một lần mỗi sáng (khoảng 3 giờ), nên sáng mai bạn sẽ thấy khách mới, khách quay lại và số đơn theo ngày ở đây.
+          Trong lúc chờ, xem doanh thu và đơn hàng hiện có ở mục Báo cáo.
+        </p>
+        {onOpenReports && (
+          <button type="button" onClick={onOpenReports} className={`${BTN_SECONDARY} mt-3`}>
+            Mở Báo cáo
+          </button>
+        )}
+      </div>
+    );
   }
   const latest = rows[rows.length - 1]!;
 

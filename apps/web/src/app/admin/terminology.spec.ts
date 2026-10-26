@@ -35,4 +35,14 @@ describe('chữ màn quản trị web', () => {
     expect(offenders(/[Ff]lash [Ss]ale|Content Kit|Chưa có cohort|gộp cohort/)).toEqual([]);
     expect(offenders(/định nghĩa với KPI/)).toEqual([]);
   });
+
+  it('QT-12: chữ kỹ thuật ở các tab quản trị đã đổi sang lời thường (cron, SLA, GMV, webhook, slug, khoá cấu hình)', () => {
+    expect(offenders(/Hạn SLA|tên miền con|slug hoặc|nhóm merchant|auto-reply|Giá trị đặt \(GMV\)|đối tác CTV \/ Affiliate/)).toEqual([]);
+    expect(offenders(/cron tính|Tác vụ nền \(cron\)|Báo động qua webhook|Nhận webhook|Xử lý webhook|Webhook (?:lỗi|kẹt)|Đặt OPS_ALERT_WEBHOOK_URL/)).toEqual([]);
+    expect(offenders(/khoá <code>affiliate\.|\(cấu hình affiliate\./)).toEqual([]);
+  });
+
+  it('QT-20: nút trả lương ở bảng lương không đặt tên "Đã chuyển" (dễ nhầm với trạng thái)', () => {
+    expect(offenders(/aria-label=\{`Đã chuyển · /)).toEqual([]);
+  });
 });

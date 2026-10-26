@@ -127,7 +127,7 @@ describe('MerchantFulfilmentTab (admin, D4)', () => {
     mounted.push(r);
     await flush();
     const root = r.container;
-    expect(root.textContent).toContain('Hạn SLA: xác nhận 24 giờ, gửi hàng 48 giờ, giao xong 7 ngày');
+    expect(root.textContent).toContain('Thời hạn xử lý: xác nhận 24 giờ, gửi hàng 48 giờ, giao xong 7 ngày');
     // Một dòng bảng kê có thể là dòng đảo (trả một phần) của đơn đã quyết toán — đếm "khoản", không phải "đơn".
     expect(root.textContent).toContain('2 khoản · 185.000');
     expect(root.textContent).toContain('Quá hạn xác nhận');

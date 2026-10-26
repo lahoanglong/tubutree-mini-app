@@ -24,10 +24,12 @@ function setup(over: Partial<React.ComponentProps<typeof UsersList>> = {}) {
 }
 
 describe('UsersList — R4-ADMIN-12', () => {
-  it('màn rộng: bảng 6 cột như cũ, nút Khoá / Mở khoá trong cột Trạng thái', () => {
+  it('màn rộng: cột Trạng thái chỉ nói trạng thái, nút Khoá / Mở khoá ở cột Thao tác riêng', () => {
     const { root, onBlock, onUnblock, onOpenDetail } = setup();
     expect(root.querySelector('table')).not.toBeNull();
-    expect(Array.from(root.querySelectorAll('th')).map((h) => h.textContent)).toEqual(['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái']);
+    expect(Array.from(root.querySelectorAll('th')).map((h) => h.textContent)).toEqual(['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái', 'Thao tác']);
+    const statusCells = Array.from(root.querySelectorAll('tbody tr')).map((r) => r.querySelectorAll('td')[5]!);
+    for (const c of statusCells) expect(c.querySelector('button')).toBeNull();
     click(root.querySelector('[aria-label="Khoá Chủ Gian Hàng Một"]'));
     expect(onBlock).toHaveBeenCalledWith(USERS[0]);
     click(root.querySelector('[aria-label="Mở khoá 0900000002"]'));

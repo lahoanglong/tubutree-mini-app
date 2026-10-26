@@ -811,7 +811,7 @@ describe('admin/page — tab Người dùng', () => {
     const table = container.querySelector('table')!;
     expect(table.parentElement!.className).toContain('overflow-x-auto');
     const cells = [...table.querySelectorAll('tbody td')];
-    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'Khách hàng', '12', '01/09/2026', 'Khoá']);
+    expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'Khách hàng', '12', '01/09/2026', 'Đang hoạt động', 'Khoá']);
     for (const c of cells) expect(c.className).toContain('px-3');
   });
 
@@ -1742,7 +1742,7 @@ describe('admin/page — tab CSKH mẫu tin nhanh', () => {
   it('form thêm: ô nhập/nút 44px, từ khoá khoá khi bật lời chào, công tắc cao 44px, gửi đúng dữ liệu', async () => {
     const { container } = await openQuick();
     expect(container.querySelector('h2')!.className).toContain('font-display');
-    const hint = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Dùng để auto-reply'))!;
+    const hint = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Dùng để tự trả lời'))!;
     expect(hint.className).toContain('text-stone-500');
     const inputs = [...container.querySelectorAll('input:not([type="checkbox"]):not([aria-label="Tìm mục quản trị"])')];
     expect(inputs).toHaveLength(3);

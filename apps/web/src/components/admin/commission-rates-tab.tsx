@@ -39,7 +39,7 @@ export function CommissionRatesTab() {
         <h2 className="font-display text-lg font-semibold text-stone-900">Hoa hồng & giá sỉ</h2>
         <p className="mt-1 text-sm text-stone-600">
           % hoa hồng CTV tính trên số tiền khách trả cho từng dòng hàng: <strong>10 nghĩa là 10%</strong>. Để trống % thì dòng đó hưởng
-          <strong> mức mặc định</strong> (đổi ở tab Cấu hình, khoá <code>affiliate.default_rate_pct</code>); hàng gian hàng đối tác để trống
+          <strong> mức mặc định</strong> (đổi ở tab Cấu hình, mục hoa hồng cộng tác viên); hàng gian hàng đối tác để trống
           thì 0đ. Đặt 0% khi cố ý không trả hoa hồng.
         </p>
       </div>
@@ -76,7 +76,7 @@ function RateList() {
               : 'Mọi biến thể đang bán đã có %'}
           </span>
           <span className="text-xs text-stone-600">Mức mặc định khi để trống: {formatRate(first.defaultRate)}</span>
-          <span className="text-xs text-stone-500">Trần mỗi biến thể: {formatRate(maxRate)} (cấu hình affiliate.max_rate_pct)</span>
+          <span className="text-xs text-stone-500">Trần mỗi biến thể: {formatRate(maxRate)} (đổi ở tab Cấu hình)</span>
         </div>
       )}
       {first && <FillMissing missingTubu={first.summary.missingTubu} maxRate={maxRate} />}

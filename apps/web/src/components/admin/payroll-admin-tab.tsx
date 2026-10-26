@@ -193,15 +193,15 @@ export function PayrollAdminTab() {
                 {row.month.status !== 'PAID' && (
                   <button
                     type="button"
-                    aria-label={`Đã chuyển · ${name}`}
+                    aria-label={`Ghi đã trả lương · ${name}`}
                     onClick={() => {
                       setPayRow(row);
                       setProof('');
                       setNote('');
                     }}
-                    className={BTN_XS_PRIMARY}
+                    className={row.month.status === 'OPEN' ? BTN_XS_SECONDARY : BTN_XS_PRIMARY}
                   >
-                    Đã chuyển
+                    Ghi đã trả lương
                   </button>
                 )}
                 {row.month.status !== 'OPEN' && (
@@ -227,7 +227,7 @@ export function PayrollAdminTab() {
               {qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}
             </p>
           )}
-          <p className="text-xs text-stone-600">Quét chuyển khoản rồi bấm &quot;Đã chuyển&quot; để tải ảnh xác nhận.</p>
+          <p className="text-xs text-stone-600">Quét chuyển khoản rồi bấm &quot;Ghi đã trả lương&quot; để tải ảnh xác nhận.</p>
         </div>
       </Sheet>
 

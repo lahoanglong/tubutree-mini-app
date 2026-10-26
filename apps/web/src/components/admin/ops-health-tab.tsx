@@ -86,6 +86,21 @@ function Row({ label, value, warn }: { label: string; value: ReactNode; warn?: b
  * Sức khoẻ vận hành (PLATFORM-5): Pancake, Gomdon, hàng đợi, đơn kẹt — cùng ngưỡng mà cron báo động dùng — kèm các nút
  * vận hành trước đây chỉ gọi được bằng API tay (đồng bộ danh mục Pancake, tính lại số đã bán).
  */
+/** Tên thường cho các việc nền hay gặp; việc chưa có tên ở đây hiện đúng tên kỹ thuật để người cài đặt đối chiếu. */
+const CRON_JOB_LABELS: Record<string, string> = {
+  'AffiliateService.approveDueCommissions': 'Duyệt hoa hồng đã đến hạn',
+  'AnalyticsAggregationService.runNightly': 'Tính số liệu giữ chân khách mỗi sáng',
+  'LoyaltyExpiryService.expirePoints': 'Thu hồi điểm hết hạn',
+  'LoyaltyExpiryService.remindExpiringPoints': 'Nhắc khách điểm sắp hết hạn',
+  'LifecycleService.sendReorderReminders': 'Nhắc khách mua lại',
+  'ReviewInviteService.sendReviewInvites': 'Mời khách đánh giá',
+  'RemarketingService.sendCartAbandonReminders': 'Nhắc giỏ hàng bỏ quên',
+  'SubscriptionsService.processDue': 'Tạo đơn cho gói định kỳ đến hạn',
+  'PendingPaymentExpiryCron.handleCron': 'Huỷ đơn quá hạn thanh toán',
+  'MerchantSlaCron.handleCron': 'Nhắc đơn gian hàng quá hạn xử lý',
+  'GameReminderService.sendDailyReminders': 'Nhắc khách chơi game mỗi ngày',
+};
+
 export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
@@ -112,7 +127,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
   };
   const askDismiss = async (e: OpsWebhookEvent) => {
     const ok = await confirm({
-      title: 'Đánh dấu webhook đã xử lý?',
+      title: 'Đánh dấu tin báo đã xử lý?',
       message: isStaleStockEvent(e)
         ? 'Chỉ bấm sau khi đã chạy Đồng bộ danh mục Pancake để tồn kho lấy số mới. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.'
         : `Chỉ bấm khi đã sửa tay đơn ${e.orderRef ?? 'liên quan'} cho đúng trạng thái. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.`,
@@ -360,11 +375,11 @@ function WebhookChannelCard({ webhook }: { webhook: OpsWebhookChannel }) {
   const failing = newer(webhook.lastErrorAt, webhook.lastOkAt);
   return (
     <Card
-      title="Báo động qua webhook"
+      title="Báo động tự động"
       after={
         <div className="mt-1 space-y-1">
           {webhook.state === 'DISABLED' && (
-            <p className="text-xs text-stone-500">Đặt OPS_ALERT_WEBHOOK_URL (Slack hoặc Zalo) để nhận báo động qua webhook.</p>
+            <p className="text-xs text-stone-500">Chưa nối kênh nhận báo động (Slack hoặc Zalo). Nhờ người cài đặt hệ thống nối giúp để nhận báo khi hệ thống gặp sự cố.</p>
           )}
           {failing && (
             <div className="space-y-0.5">
@@ -456,10 +471,10 @@ function HealthBody({
         >
           <Row label="Cấu hình" value={h.pancake.configured ? 'Đã cấu hình' : 'Chưa cấu hình'} warn={!h.pancake.configured} />
           <Row label="Đẩy đơn thành công gần nhất" value={ago(h.pancake.lastPushOkAt)} />
-          <Row label="Nhận webhook gần nhất" value={ago(h.pancake.lastWebhookAt)} />
-          <Row label="Xử lý webhook gần nhất" value={ago(h.pancake.lastWebhookProcessedAt)} />
-          <Row label="Webhook lỗi chưa xử lý" value={h.pancake.webhookFailedOpen} warn={h.pancake.webhookFailedOpen > 0} />
-          <Row label="Webhook kẹt chưa xử lý" value={h.pancake.webhookStuck} warn={h.pancake.webhookStuck > 0} />
+          <Row label="Nhận tin báo gần nhất" value={ago(h.pancake.lastWebhookAt)} />
+          <Row label="Xử lý tin báo gần nhất" value={ago(h.pancake.lastWebhookProcessedAt)} />
+          <Row label="Tin báo lỗi chưa xử lý" value={h.pancake.webhookFailedOpen} warn={h.pancake.webhookFailedOpen > 0} />
+          <Row label="Tin báo kẹt chưa xử lý" value={h.pancake.webhookStuck} warn={h.pancake.webhookStuck > 0} />
           <Row label="Đơn chưa lên Pancake" value={h.pancake.unsynced} />
           <Row label={`Đơn kẹt quá ${t.unsyncedMinutes} phút`} value={h.pancake.stuck} warn={h.pancake.stuck >= t.stuckOrders} />
           <Row label="Đơn cần xử lý theo Pancake" value={h.pancake.attention} warn={h.pancake.attention > 0} />
@@ -491,8 +506,8 @@ function HealthBody({
             }
             warn={h.gomdon.credentialsRejected || gomdonLoginError}
           />
-          <Row label="Nhận webhook gần nhất" value={ago(h.gomdon.lastWebhookAt)} />
-          <Row label="Webhook lỗi chưa xử lý" value={h.gomdon.webhookFailedOpen} warn={h.gomdon.webhookFailedOpen > 0} />
+          <Row label="Nhận tin báo gần nhất" value={ago(h.gomdon.lastWebhookAt)} />
+          <Row label="Tin báo lỗi chưa xử lý" value={h.gomdon.webhookFailedOpen} warn={h.gomdon.webhookFailedOpen > 0} />
           <Row label={`Đơn thu gom chờ vận đơn quá ${t.gomdonBacklogMinutes} phút`} value={h.gomdon.backlog} warn={h.gomdon.backlog > 0} />
           <Row label="Báo động chưa đóng" value={h.gomdon.openAlerts} warn={h.gomdon.openAlerts > 0} />
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
@@ -537,7 +552,7 @@ function HealthBody({
 
       {h.cronJobs && h.cronJobs.length > 0 && (
         <section aria-label="Tác vụ nền" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <h3 className="font-display text-sm font-semibold text-stone-900">Tác vụ nền (cron)</h3>
+          <h3 className="font-display text-sm font-semibold text-stone-900">Việc tự chạy nền</h3>
           <ScrollRegion label="Bảng tác vụ nền" className="mt-2">
             <table className="w-full text-left text-sm">
               <thead className="bg-stone-50 text-xs text-stone-500">
@@ -555,7 +570,16 @@ function HealthBody({
                   .sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.job.localeCompare(b.job))
                   .map((j) => (
                     <tr key={j.job} className="border-t border-stone-100 align-top">
-                      <td className="px-3 py-2 font-medium text-stone-900">{j.job}</td>
+                      <td className="px-3 py-2 font-medium text-stone-900">
+                        {CRON_JOB_LABELS[j.job] ? (
+                          <>
+                            {CRON_JOB_LABELS[j.job]}
+                            <span className="block break-all font-mono text-[11px] font-normal text-stone-500">{j.job}</span>
+                          </>
+                        ) : (
+                          <span className="break-all">{j.job}</span>
+                        )}
+                      </td>
                       <td className={`px-3 py-2 ${j.lastOutcome === 'ERRORS' || j.lastOutcome === 'THREW' ? 'text-danger-fg' : 'text-stone-600'}`}>{cronOutcomeLabel(j)}</td>
                       <td className="px-3 py-2 text-xs text-stone-500">
                         {j.lastOutcome === 'SKIPPED' ? (
@@ -588,7 +612,7 @@ function HealthBody({
       )}
 
       {events.length > 0 && (
-        <ListSection title="Webhook lỗi cần xử lý">
+        <ListSection title="Tin báo lỗi cần xử lý">
           {events.map((e) => (
             <li key={`${e.source}-${e.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <span className="min-w-0">
