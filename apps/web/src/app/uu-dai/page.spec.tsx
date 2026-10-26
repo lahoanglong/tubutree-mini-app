@@ -79,7 +79,7 @@ beforeEach(() => {
   state.search = '';
   state.loyalty = { tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0, tiers: TIERS, nextTier: { ...TIERS[1], pointsToGo: 80, spendingToGo: null }, totalSpent: 0 };
   state.coupons = [COUPON];
-  state.checkIn = { checkedInToday: false, streakDays: 2, rewards: REWARDS };
+  state.checkIn = { checkedInToday: false, streakDays: 2, currentCycleDay: 3, rewards: REWARDS };
   state.config = { waste: { enabled: true } };
   state.fail = new Set();
   state.calls = [];
@@ -135,7 +135,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('Điểm danh: chuỗi ngày, bảy ô thưởng; bấm nút gọi POST điểm danh một lần và báo kết quả', async () => {
     const c = await mount();
     const card = region(c, 'Điểm danh mỗi ngày')!;
-    expect(card.textContent).toContain('Chuỗi 2 ngày liên tiếp');
+    expect(card.textContent).toContain('Ngày 3/7');
     expect(card.textContent).toContain('N7');
     click(card.querySelector('button:not([disabled])'));
     click(card.querySelector('button'));
@@ -145,7 +145,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
   });
 
   it('đã điểm danh hôm nay: nút khoá', async () => {
-    state.checkIn = { checkedInToday: true, streakDays: 3, rewards: REWARDS };
+    state.checkIn = { checkedInToday: true, streakDays: 3, currentCycleDay: 3, rewards: REWARDS };
     const c = await mount();
     const btn = region(c, 'Điểm danh mỗi ngày')!.querySelector('button')!;
     expect(btn.disabled || btn.getAttribute('aria-disabled') === 'true').toBe(true);

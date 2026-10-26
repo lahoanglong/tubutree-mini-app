@@ -35,10 +35,6 @@ export class DailyCheckInService {
     private readonly economy: GameEconomyService,
   ) {}
 
-  private gameEnabled(): Promise<boolean> {
-    return this.config.get<boolean>('game.enabled', true);
-  }
-
   private async waterDoneToday(userId: string): Promise<boolean> {
     const p = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { lastCheckInAt: true } });
     return !!p?.lastCheckInAt && vnDateKey(p.lastCheckInAt) === vnDateKey();
@@ -53,21 +49,25 @@ export class DailyCheckInService {
    * Mọi lỗi còn lại ném ra cho `run` quyết định.
    */
   private async part<T>(call: () => Promise<T>, isDone: () => Promise<boolean>): Promise<{ value: T | null; error: unknown }> {
-    if (await isDone()) return { value: null, error: null };
+    // Kiểm "đã xong" nằm trong try: lỗi DB ở bước này không được thành 500 sau khi phần kia đã cộng.
     try {
+      if (await isDone()) return { value: null, error: null };
       return { value: await call(), error: null };
     } catch (error) {
-      if (error instanceof BadRequestException && (await isDone())) return { value: null, error: null };
+      if (error instanceof BadRequestException) {
+        try {
+          if (await isDone()) return { value: null, error: null };
+        } catch {
+          /* đọc lại cũng lỗi: giữ lỗi gốc */
+        }
+      }
       return { value: null, error };
     }
   }
 
   async run(userId: string): Promise<DailyCheckInResult> {
-    const withWater = await this.gameEnabled();
     const points = await this.part(() => this.loyalty.dailyCheckIn(userId), () => this.pointsDoneToday(userId));
-    const water = withWater
-      ? await this.part(() => this.economy.checkIn(userId), () => this.waterDoneToday(userId))
-      : { value: null, error: null };
+    const water = await this.part(() => this.economy.checkIn(userId), () => this.waterDoneToday(userId));
 
     const pending: Array<'points' | 'water'> = [];
     if (points.error) pending.push('points');
@@ -86,22 +86,25 @@ export class DailyCheckInService {
     };
   }
 
-  /** Trạng thái gộp: `checkedInToday` = mọi phần đang bật đều đã xong hôm nay. Dải 7 ngày và chuỗi là của Điểm Xanh. */
+  /**
+   * Trạng thái gộp: `checkedInToday` = cả hai phần đã xong hôm nay. Dải 7 ngày và chuỗi là của Điểm Xanh.
+   * Phần đã xong trả 0 ở `todayPoints`/`todayWater` để màn hình không hứa lại phần thưởng đã nhận.
+   */
   async status(userId: string) {
-    const withWater = await this.gameEnabled();
-    const [pointsStatus, waterDone, todayWater] = await Promise.all([
+    const [pointsStatus, waterDone, seeds] = await Promise.all([
       this.loyalty.getDailyCheckInStatus(userId),
-      withWater ? this.waterDoneToday(userId) : Promise.resolve(true),
-      withWater ? configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT) : Promise.resolve(0),
+      this.waterDoneToday(userId),
+      configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT),
     ]);
+    const pointsDone = pointsStatus.checkedInToday;
     return {
       ...pointsStatus,
-      checkedInToday: pointsStatus.checkedInToday && waterDone,
-      pointsDone: pointsStatus.checkedInToday,
+      checkedInToday: pointsDone && waterDone,
+      pointsDone,
       waterDone,
-      gameEnabled: withWater,
-      /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi game tắt. */
-      todayWater,
+      todayPoints: pointsDone ? 0 : pointsStatus.todayPoints,
+      /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi). */
+      todayWater: waterDone ? 0 : seeds,
     };
   }
 }

@@ -73,10 +73,9 @@ describe('checkInView', () => {
   it('đã điểm danh: tắt nút', () => {
     expect(checkInView({ checkedInToday: true, streakDays: 1, currentCycleDay: 1, rewards })).toEqual({ canCheckIn: false, buttonLabel: 'Đã điểm danh' });
   });
-  it('chưa: nút kèm điểm của ô hôm nay, thiếu todayPoints thì lấy từ ô isToday', () => {
-    expect(checkInView({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 5, rewards }).buttonLabel).toBe('Điểm danh +5');
-    expect(checkInView({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, rewards }).buttonLabel).toBe('Điểm danh +3');
-    expect(checkInView({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, rewards: [] }).buttonLabel).toBe('Điểm danh');
+  it('chưa (kể cả nửa vời): nhãn chỉ "Điểm danh", số nằm ở dòng "Hôm nay nhận"', () => {
+    expect(checkInView({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 5, rewards }).buttonLabel).toBe('Điểm danh');
+    expect(checkInView({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, pointsDone: true, waterDone: false, rewards }).buttonLabel).toBe('Điểm danh');
   });
 });
 

@@ -125,21 +125,19 @@ export interface CheckInReward {
 
 /** GET /me/daily-check-in: trạng thái điểm danh gộp (Điểm Xanh + giọt nước) và dải 7 ngày của Điểm Xanh. */
 export interface CheckInStatusResponse {
-  /** true khi mọi phần đang bật (Điểm Xanh, giọt nước nếu game bật) đã xong hôm nay. */
+  /** true khi cả hai phần (Điểm Xanh và giọt nước) đã xong hôm nay. */
   checkedInToday: boolean;
   /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
   streakDays: number;
   /** Ô 1..7 của hôm nay: ô SẼ được trả khi bấm (chưa điểm danh) hoặc ô vừa nhận (đã điểm danh). */
   currentCycleDay: number;
-  /** Điểm của ô hôm nay. Optional: API cũ chưa trả. */
+  /** Điểm của ô hôm nay; 0 khi phần Điểm Xanh đã xong hôm nay. Optional: API cũ chưa trả. */
   todayPoints?: number;
   rewards: CheckInReward[];
   /** Từng phần đã xong hôm nay chưa. Optional: API cũ (chỉ Điểm Xanh) chưa trả. */
   pointsDone?: boolean;
   waterDone?: boolean;
-  /** false: game tắt, điểm danh chỉ cộng Điểm Xanh. */
-  gameEnabled?: boolean;
-  /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi game tắt. */
+  /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi phần nước đã xong hôm nay. */
   todayWater?: number;
 }
 

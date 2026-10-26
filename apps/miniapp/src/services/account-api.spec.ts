@@ -92,8 +92,8 @@ const status = (over: Partial<CheckInStatusResponse> = {}): CheckInStatusRespons
 });
 
 describe('checkInView', () => {
-  it('chưa điểm danh → nút ghi ĐÚNG số điểm sẽ nhận hôm nay (ô isToday)', () => {
-    expect(checkInView(status())).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh +4' });
+  it('chưa điểm danh → nút "Điểm danh" không kèm số (số nằm ở dòng "Hôm nay nhận")', () => {
+    expect(checkInView(status())).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh' });
   });
 
   it('đã điểm danh → khoá nút', () => {
@@ -103,14 +103,8 @@ describe('checkInView', () => {
     });
   });
 
-  it('API cũ thiếu todayPoints → lấy từ ô isToday', () => {
-    const s = status();
-    delete (s as Partial<CheckInStatusResponse>).todayPoints;
-    expect(checkInView(s).buttonLabel).toBe('Điểm danh +4');
-  });
-
-  it('ô hôm nay 0 điểm → không hứa "+0"', () => {
-    expect(checkInView(status({ todayPoints: 0 })).buttonLabel).toBe('Điểm danh');
+  it('nửa vời (xong điểm, thiếu nước): vẫn bấm được, nhãn vẫn chỉ "Điểm danh"', () => {
+    expect(checkInView(status({ todayPoints: 0, pointsDone: true, waterDone: false }))).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh' });
   });
 });
 

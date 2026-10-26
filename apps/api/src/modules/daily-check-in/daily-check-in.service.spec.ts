@@ -4,7 +4,7 @@ import { DailyCheckInService } from './daily-check-in.service';
 const POINTS_RESULT = { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: 'ok' };
 const WATER_RESULT = { seedsEarned: 15, pointsEarned: 0, streakDays: 1, totalSeeds: 15, streakFrozeUsed: false, bonusNote: '' };
 
-function build(opts: { pointsDone?: boolean; waterDone?: boolean; gameEnabled?: boolean } = {}) {
+function build(opts: { pointsDone?: boolean; waterDone?: boolean; waterCheckThrows?: boolean } = {}) {
   const state = { pointsDone: !!opts.pointsDone, waterDone: !!opts.waterDone };
   const loyalty = {
     getDailyCheckInStatus: jest.fn(async () => ({ checkedInToday: state.pointsDone, streakDays: 0, currentCycleDay: 1, todayPoints: 1000, rewards: [] })),
@@ -20,9 +20,9 @@ function build(opts: { pointsDone?: boolean; waterDone?: boolean; gameEnabled?: 
     }),
   };
   const prisma = {
-    gameProfile: { findUnique: jest.fn(async () => (state.waterDone ? { lastCheckInAt: new Date() } : { lastCheckInAt: new Date(Date.now() - 3 * 864e5) })) },
+    gameProfile: { findUnique: jest.fn(async () => (opts.waterCheckThrows ? Promise.reject(new Error('db down')) : state.waterDone ? { lastCheckInAt: new Date() } : { lastCheckInAt: new Date(Date.now() - 3 * 864e5) })) },
   };
-  const config = { get: jest.fn(async (key: string, def: unknown) => (key === 'game.enabled' && opts.gameEnabled === false ? false : def)) };
+  const config = { get: jest.fn(async (_key: string, def: unknown) => def) };
   const svc = new DailyCheckInService(prisma as never, config as never, loyalty as never, economy as never);
   return { svc, loyalty, economy, state };
 }
@@ -75,13 +75,12 @@ describe('DailyCheckInService.run', () => {
     expect(r.pending).toEqual([]);
   });
 
-  it('game tắt (game.enabled=false): chỉ cộng Điểm Xanh, không đụng giọt nước', async () => {
-    const { svc, economy } = build({ gameEnabled: false });
+  it('lỗi DB khi kiểm phần nước sau khi đã cộng điểm: không thành 500, giữ điểm và báo thiếu nước', async () => {
+    const { svc } = build({ waterCheckThrows: true });
     const r = await svc.run('u1');
     expect(r.points).toEqual(POINTS_RESULT);
     expect(r.water).toBeNull();
-    expect(r.pending).toEqual([]);
-    expect(economy.checkIn).not.toHaveBeenCalled();
+    expect(r.pending).toEqual(['water']);
   });
 
   it('một phần lỗi bất ngờ: giữ phần kia, báo phần thiếu ở pending; gọi lại thì bù đúng phần đó', async () => {
@@ -116,13 +115,20 @@ describe('DailyCheckInService.run', () => {
 describe('DailyCheckInService.status', () => {
   it('đã điểm danh khi cả hai phần xong; thiếu một phần thì chưa', async () => {
     expect((await build({ pointsDone: true, waterDone: true }).svc.status('u1')).checkedInToday).toBe(true);
-    const half = await build({ pointsDone: true }).svc.status('u1');
-    expect(half).toMatchObject({ checkedInToday: false, pointsDone: true, waterDone: false, gameEnabled: true, todayWater: 10 });
   });
 
-  it('game tắt: chỉ cần Điểm Xanh', async () => {
-    const s = await build({ pointsDone: true, gameEnabled: false }).svc.status('u1');
-    expect(s).toMatchObject({ checkedInToday: true, gameEnabled: false, todayWater: 0 });
+  it('nửa vời: xong điểm, thiếu nước → chỉ còn hứa giọt nước (todayPoints = 0)', async () => {
+    const half = await build({ pointsDone: true }).svc.status('u1');
+    expect(half).toMatchObject({ checkedInToday: false, pointsDone: true, waterDone: false, todayPoints: 0, todayWater: 10 });
+  });
+
+  it('nửa vời: xong nước, thiếu điểm → chỉ còn hứa Điểm Xanh (todayWater = 0)', async () => {
+    const half = await build({ waterDone: true }).svc.status('u1');
+    expect(half).toMatchObject({ checkedInToday: false, pointsDone: false, waterDone: true, todayPoints: 1000, todayWater: 0 });
+  });
+
+  it('chưa làm gì: hứa cả hai', async () => {
+    expect(await build().svc.status('u1')).toMatchObject({ todayPoints: 1000, todayWater: 10 });
   });
 
   it('giữ nguyên dải 7 ngày của Điểm Xanh', async () => {

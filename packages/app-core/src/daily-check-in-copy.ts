@@ -5,10 +5,9 @@ const num = (n: number): string => ((Number.isFinite(n) ? n : 0) + 0).toLocaleSt
 /** Chữ của khối điểm danh dùng chung cho Mini App và web (trang Điểm Xanh, Ưu đãi, Vườn Xanh). */
 export const checkInCopy = {
   title: 'Điểm danh mỗi ngày',
-  streak: (n: number) => `Chuỗi ${n} ngày liên tiếp`,
-  /** Game tắt thì chỉ nhận Điểm Xanh nên không nhắc giọt nước. */
-  rule: (gameEnabled = true) =>
-    `${gameEnabled ? 'Một lần bấm nhận cả Điểm Xanh và giọt nước. ' : ''}Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.`,
+  /** Vị trí trong vòng 7 ngày của Điểm Xanh. Không dùng chữ "chuỗi": Vườn Xanh có chuỗi nước riêng và hai số có thể khác nhau. */
+  cycleDay: (day: number) => `Ngày ${day}/7`,
+  rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
   alreadyDone: 'Hôm nay bạn đã điểm danh rồi',
   retryMissing: 'Còn thiếu một phần, bấm điểm danh lại để nhận nốt',
   loadError: (reason: string) => `Chưa tải được lịch điểm danh: ${reason}`,
@@ -16,12 +15,12 @@ export const checkInCopy = {
     `Ngày ${day}: +${num(points)} Điểm Xanh${claimed ? ', đã nhận' : ''}`,
 } as const;
 
-/** "Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước": số ghi sẵn trước khi khách bấm. Thiếu số thì bỏ vế đó. */
-export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'checkedInToday'>): string | null {
+/** "Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước": chỉ liệt kê phần CÒN THIẾU (phần đã xong, hoặc thiếu số, thì bỏ vế đó). */
+export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'checkedInToday' | 'pointsDone' | 'waterDone'>): string | null {
   if (s.checkedInToday) return null;
   const parts: string[] = [];
-  if ((s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
-  if ((s.todayWater ?? 0) > 0) parts.push(`+${num(s.todayWater ?? 0)} giọt nước`);
+  if (!s.pointsDone && (s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
+  if (!s.waterDone && (s.todayWater ?? 0) > 0) parts.push(`+${num(s.todayWater ?? 0)} giọt nước`);
   return parts.length > 0 ? `Hôm nay nhận ${parts.join(' · ')}` : null;
 }
 

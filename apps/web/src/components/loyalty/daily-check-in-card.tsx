@@ -40,8 +40,7 @@ export function DailyCheckInCard({ authed }: { authed: boolean }) {
               {checkInCopy.title}
             </Heading>
             <Text variant="caption" tone="tertiary" as="div">
-              {checkInCopy.streak(status.streakDays)}
-              {status.streakDays > 0 ? ' 🔥' : ''}
+              {checkInCopy.cycleDay(status.currentCycleDay)}
             </Text>
           </div>
         </div>
@@ -86,7 +85,7 @@ export function DailyCheckInCard({ authed }: { authed: boolean }) {
           </p>
         )}
         <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-          {checkInCopy.rule(status.gameEnabled !== false)}
+          {checkInCopy.rule}
         </Text>
       </Card>
     </div>

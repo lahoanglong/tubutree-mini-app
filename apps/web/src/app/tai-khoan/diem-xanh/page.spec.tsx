@@ -250,7 +250,7 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
     expect(c.textContent).not.toContain('điểm danh riêng');
   });
 
-  it('chưa điểm danh: nút "Điểm danh +3"; bấm gửi đúng POST /me/daily-check-in một lần, báo kết quả và khoá nút', async () => {
+  it('chưa điểm danh: nút "Điểm danh"; bấm gửi đúng POST /me/daily-check-in một lần, báo kết quả và khoá nút', async () => {
     state.checkInPost = async () => {
       state.checkIn = { ...state.checkIn!, checkedInToday: true };
       return {
@@ -261,7 +261,7 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
       };
     };
     const c = await mount();
-    const btn = byText(c, 'button', 'Điểm danh +3') as HTMLButtonElement;
+    const btn = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
     click(btn);
     click(btn);
@@ -270,6 +270,27 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
     expect(posts).toEqual([{ method: 'post', path: '/me/daily-check-in', body: undefined, headers: undefined }]);
     expect(c.querySelector('[role="status"]')?.textContent).toContain('+3 Điểm Xanh · +10 giọt nước');
     expect((byText(c, 'button', 'Đã điểm danh') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('thiếu một phần (nước lỗi): báo kiểu lỗi (role=alert) kèm lời nhắc bấm lại, giống Vườn Xanh', async () => {
+    state.checkInPost = async () => ({
+      points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1804, message: '' },
+      water: null,
+      alreadyDone: false,
+      pending: ['water'],
+    });
+    const c = await mount();
+    click(byText(c, 'button', 'Điểm danh'));
+    await flush();
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('+3 Điểm Xanh. Còn thiếu một phần, bấm điểm danh lại để nhận nốt');
+    expect(c.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('nửa vời (đã nhận Điểm Xanh, còn thiếu nước): dòng "Hôm nay nhận" chỉ liệt kê giọt nước', async () => {
+    state.checkIn = { ...state.checkIn!, pointsDone: true, waterDone: false, todayPoints: 0, todayWater: 10 };
+    const c = await mount();
+    expect(c.textContent).toContain('Hôm nay nhận +10 giọt nước');
+    expect(c.textContent).not.toContain('Hôm nay nhận +3 Điểm Xanh');
   });
 
   it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
@@ -288,15 +309,15 @@ describe('/tai-khoan/diem-xanh — điểm danh', () => {
     };
     const c = await mount();
     const before = state.calls.filter((x) => x.path === '/me/daily-check-in' && x.method === 'get').length;
-    click(byText(c, 'button', 'Điểm danh +3'));
+    click(byText(c, 'button', 'Điểm danh'));
     await flush();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain('Hôm nay bạn đã điểm danh rồi');
     expect(state.calls.filter((x) => x.path === '/me/daily-check-in' && x.method === 'get').length).toBeGreaterThan(before);
   });
 
-  it('7 ô ngày với điểm từng ngày và chuỗi ngày liên tiếp', async () => {
+  it('7 ô ngày với điểm từng ngày và vị trí trong vòng 7 ngày', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Chuỗi 2 ngày liên tiếp');
+    expect(c.textContent).toContain('Ngày 3/7');
     for (const d of ['N1', 'N2', 'N3', 'N7']) expect(c.textContent).toContain(d);
     expect(c.querySelector('[aria-label="Ngày 7: +10 Điểm Xanh"]')).not.toBeNull();
   });
@@ -511,6 +532,7 @@ describe('/tai-khoan/diem-xanh — trạng thái trang', () => {
     await flush(4);
     expect(c.textContent).toContain('Lộc Biếc');
     expect(c.textContent).toContain('Freeship đơn từ 99k');
+    expect(c.textContent).toContain('Chi tiêu từ 5 triệu trong 12 tháng');
     const a = c.querySelector('a[href^="/dang-nhap"]');
     expect(a?.textContent).toBe('Đăng nhập để đổi');
     expect(a?.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/tai-khoan/diem-xanh')}`);

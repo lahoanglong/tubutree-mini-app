@@ -24,7 +24,8 @@ export function useCheckIn(enabled: boolean) {
   const mut = useMutation({
     mutationFn: () => postDailyCheckIn(coreHttp),
     onSuccess: (res) => {
-      setMessage({ text: checkInSuccessText(res), error: false });
+      // Thiếu một phần cũng báo kiểu lỗi, giống Vườn Xanh: khách phải thấy là cần bấm lại.
+      setMessage({ text: checkInSuccessText(res), error: res.pending.length > 0 });
       if (res.pending.length === 0) {
         qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
       }

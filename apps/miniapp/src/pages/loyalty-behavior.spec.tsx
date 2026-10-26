@@ -215,10 +215,10 @@ describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (EN
 });
 
 describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
-  it('chưa điểm danh: nút "Điểm danh +3" bật; chạm đúp chỉ gọi API 1 lần, rồi báo thành công và khoá nút', async () => {
+  it('chưa điểm danh: nút "Điểm danh" bật; chạm đúp chỉ gọi API 1 lần, rồi báo thành công và khoá nút', async () => {
     mocks.getDailyCheckInStatus.mockResolvedValueOnce(CHECK_IN).mockResolvedValue({ ...CHECK_IN, checkedInToday: true });
     renderPage();
-    const btn = await screen.findByRole('button', { name: 'Điểm danh +3' });
+    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
     expect(btn).toBeEnabled();
     fireEvent.click(btn);
     fireEvent.click(btn);
@@ -230,10 +230,18 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
   it('ghi chú điểm danh nói một nút cho cả Điểm Xanh và giọt nước, không còn câu "điểm danh riêng trong Vườn Xanh"', async () => {
     mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
     renderPage();
-    await screen.findByRole('button', { name: 'Điểm danh +3' });
+    await screen.findByRole('button', { name: 'Điểm danh' });
     const note = screen.getByText(/lỡ 1 ngày thì vòng 7 ngày bắt đầu lại/);
     expect(note.textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
     expect(note.textContent).not.toContain('điểm danh riêng');
+  });
+
+  it('nửa vời (đã nhận nước, còn thiếu Điểm Xanh): dòng "Hôm nay nhận" chỉ liệt kê Điểm Xanh; vòng 7 ngày ghi "Ngày 3/7"', async () => {
+    mocks.getDailyCheckInStatus.mockResolvedValue({ ...CHECK_IN, pointsDone: false, waterDone: true, todayPoints: 3, todayWater: 0 });
+    renderPage();
+    await screen.findByRole('button', { name: 'Điểm danh' });
+    expect(screen.getByText('Hôm nay nhận +3 Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getByText('Ngày 3/7')).toBeInTheDocument();
   });
 
   it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
@@ -248,7 +256,7 @@ describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
   it('lỗi điểm danh: báo lỗi và tải lại trạng thái để nút theo đúng thực tế', async () => {
     mocks.postDailyCheckIn.mockRejectedValue(new Error('boom'));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh +3' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     await waitFor(() => expect(mocks.getDailyCheckInStatus).toHaveBeenCalledTimes(2));
   });
