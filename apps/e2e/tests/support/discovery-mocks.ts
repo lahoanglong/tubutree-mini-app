@@ -185,7 +185,7 @@ const ENGAGEMENT_NOW = '2026-10-18T08:00:00.000Z';
  */
 export function mockHomeEngagement(api: MockApi, opts: { checkedIn?: boolean; expiringInDays?: number | null } = {}): void {
   const { checkedIn = false, expiringInDays = 2 } = opts;
-  api.get('/me/loyalty/check-in', {
+  api.get('/me/daily-check-in', {
     checkedInToday: checkedIn,
     streakDays: 1,
     currentCycleDay: 1,

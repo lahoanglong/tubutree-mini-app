@@ -294,24 +294,30 @@ function RewardsBody() {
 function GuestRewards() {
   const q = useQuery(loyaltyPreviewQuery(coreHttp));
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
-  if (q.isError && !q.data) return <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />;
-  if (!q.data) return <Skeleton height={120} />;
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
-  const shown = q.data.rewards.filter((r) => kinds.includes(r.kind));
-  const catalog = previewAsCatalog(q.data);
+  const shown = q.data ? q.data.rewards.filter((r) => kinds.includes(r.kind)) : [];
+  const catalog = q.data ? previewAsCatalog(q.data) : null;
   return (
     <div className="space-y-4 pb-12">
       <p className="text-base text-stone-700">{guestPreviewCopy.hint}</p>
       <GuestLoginLink returnTo="/kho-qua" />
-      <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} label="Loại quà" />
-      {shown.length === 0 ? (
-        <p className="text-sm text-stone-700">Chưa có quà trong mục này</p>
+      {q.isError && !q.data ? (
+        <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
+      ) : !catalog ? (
+        <Skeleton height={120} />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {shown.map((r) => (
-            <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
-          ))}
-        </div>
+        <>
+          <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} label="Loại quà" />
+          {shown.length === 0 ? (
+            <p className="text-sm text-stone-700">Chưa có quà trong mục này</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {shown.map((r) => (
+                <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

@@ -156,7 +156,7 @@ describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnT
     expect(container.textContent).not.toContain('Đang tải…');
     const login = container.querySelector<HTMLAnchorElement>('a[href^="/dang-nhap"]');
     expect(login).not.toBeNull();
-    expect(login!.textContent).toContain('Đăng nhập với Zalo');
+    expect(login!.textContent).toMatch(/Đăng nhập (với Zalo|để đổi)/);
     expect(login!.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent(returnTo)}`);
   });
 

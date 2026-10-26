@@ -2,7 +2,7 @@ import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách: Điểm Xanh và hạng thành viên (/tai-khoan/diem-xanh). Mọi lời gọi /api/** đi qua mock (fixture `api`).
- * Điểm danh phải gửi đúng POST /me/loyalty/check-in một lần dù bấm đúp; thẻ thành viên số mã hoá đúng memberCode.
+ * Điểm danh phải gửi đúng POST /me/daily-check-in một lần dù bấm đúp; thẻ thành viên số mã hoá đúng memberCode.
  */
 
 const USER = {
@@ -28,10 +28,15 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }) {
   });
   api.get('/me/coupons', [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
   api.get('/me/points/transactions', [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
-  api.get('/me/loyalty/check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, rewards: REWARDS }));
-  api.post('/me/loyalty/check-in', () => {
+  api.get('/me/daily-check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, todayWater: 10, rewards: REWARDS }));
+  api.post('/me/daily-check-in', () => {
     checkIn.done = true;
-    return { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1803, message: 'Điểm danh thành công +3 Điểm Xanh' };
+    return {
+      points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1803, message: 'Điểm danh thành công +3 Điểm Xanh' },
+      water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
+      alreadyDone: false,
+      pending: [],
+    };
   });
   api.get('/me/loyalty/member-card', {
     memberCode: 'TUBUAN123', name: 'An', phone: null, tierName: 'Mầm Xanh', tierMultiplier: 1, pointsBalance: 1681, posCreditEnabled: true,
@@ -66,9 +71,9 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     const button = page.getByRole('button', { name: 'Điểm danh +3' });
     await expect(button).toBeEnabled();
     await button.dblclick();
-    await expect(page.getByText('Điểm danh thành công +3 Điểm Xanh')).toBeVisible();
+    await expect(page.getByText('+3 Điểm Xanh · +10 giọt nước')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
-    expect(api.callsTo('POST', '/me/loyalty/check-in')).toHaveLength(1);
+    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
   test('thẻ thành viên số: hiện mã gõ tay được và lời nhắc, Đóng tắt thẻ', async ({ page, api }) => {

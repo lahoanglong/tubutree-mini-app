@@ -281,24 +281,30 @@ function RewardsBody() {
 function GuestRewards() {
   const q = useQuery(loyaltyPreviewQuery(coreHttp));
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
-  if (q.isError && !q.data) return <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />;
-  if (!q.data) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
-  const shown = q.data.rewards.filter((r) => kinds.includes(r.kind));
-  const catalog = previewAsCatalog(q.data);
+  const shown = q.data ? q.data.rewards.filter((r) => kinds.includes(r.kind)) : [];
+  const catalog = q.data ? previewAsCatalog(q.data) : null;
   return (
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
       <Text variant="body-md" tone="secondary" as="div">{guestPreviewCopy.hint}</Text>
       <GuestLoginButton />
-      <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} />
-      {shown.length === 0 ? (
-        <Text variant="body-sm" tone="secondary" as="div">Chưa có quà trong mục này</Text>
+      {q.isError && !q.data ? (
+        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+      ) : !catalog ? (
+        <Skeleton height={120} />
       ) : (
-        <div style={{ ...COLUMN, gap: 12 }}>
-          {shown.map((r) => (
-            <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
-          ))}
-        </div>
+        <>
+          <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} />
+          {shown.length === 0 ? (
+            <Text variant="body-sm" tone="secondary" as="div">Chưa có quà trong mục này</Text>
+          ) : (
+            <div style={{ ...COLUMN, gap: 12 }}>
+              {shown.map((r) => (
+                <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

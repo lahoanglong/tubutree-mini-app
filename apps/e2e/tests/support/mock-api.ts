@@ -396,7 +396,7 @@ export { expect };
  */
 export function loyaltyDefaults(api: MockApi): void {
   api.fallback('GET', '/me/loyalty', { tier: { name: 'Mầm Xanh' }, pointsBalance: 0, pointsConvertedBalance: 0, nextTier: null });
-  api.fallback('GET', '/me/loyalty/check-in', {
+  api.fallback('GET', '/me/daily-check-in', {
     checkedInToday: true,
     streakDays: 1,
     currentCycleDay: 1,

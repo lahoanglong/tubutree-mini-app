@@ -15,7 +15,7 @@ import { flushEvents } from './support/events';
  * Route (apps/api/src/modules/loyalty/loyalty.controller.ts):
  *   GET  /me/loyalty, /me/coupons, /me/points/transactions
  *   GET  /me/loyalty/rewards          POST /me/loyalty/rewards/:id/redeem
- *   GET  /me/loyalty/check-in         POST /me/loyalty/check-in   (todayPoints = điểm ô hôm nay)
+ *   GET  /me/daily-check-in           POST /me/daily-check-in   (todayPoints = điểm ô hôm nay)
  *   GET  /me/loyalty/member-card      (memberCode = payload QR thật; posCreditEnabled)
  * Mock có trạng thái: sau POST, các GET trả số liệu mới như backend (UI refetch qua invalidate).
  */
@@ -112,23 +112,28 @@ function mockLoyalty(
   api.get('/me/coupons', () => s.coupons);
   api.get('/me/points/transactions', []);
   api.get('/me/loyalty/rewards', () => catalog(s));
-  api.get('/me/loyalty/check-in', () => checkInStatus(s));
-  api.post('/me/loyalty/check-in', async () => {
+  api.get('/me/daily-check-in', () => checkInStatus(s));
+  api.post('/me/daily-check-in', async () => {
     // Giữ response 400ms: cú chạm thứ 2 của double-tap rơi đúng lúc request đang bay — đó là
     // cửa sổ mà busyRef/disabled của loyalty.tsx phải chặn.
     await new Promise((r) => setTimeout(r, 400));
-    // Như loyalty.service dailyCheckIn (unique theo ngày VN): lần 2 trong ngày → 400.
-    if (s.checkedInToday) return reply(400, { message: 'Hôm nay bạn đã điểm danh nhận điểm rồi 🌿' });
+    // Như DailyCheckInService (unique theo ngày VN): lần 2 trong ngày → alreadyDone, không cộng thêm.
+    if (s.checkedInToday) return { points: null, water: null, alreadyDone: true, pending: [] } satisfies CheckInResult;
     const pts = CHECKIN_TABLE[2]!;
     s.checkedInToday = true;
     s.points += pts;
     const res: CheckInResult = {
-      success: true,
-      cycleDay: 3,
-      streakDays: 3,
-      pointsEarned: pts,
-      totalPoints: s.points,
-      message: `Điểm danh Ngày 3 thành công! Nhận +${pts} Điểm Xanh.`,
+      points: {
+        success: true,
+        cycleDay: 3,
+        streakDays: 3,
+        pointsEarned: pts,
+        totalPoints: s.points,
+        message: `Điểm danh Ngày 3 thành công! Nhận +${pts} Điểm Xanh.`,
+      },
+      water: null,
+      alreadyDone: false,
+      pending: [],
     };
     return res;
   });
@@ -188,7 +193,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
   test('Xả hàng đợi analytics (POST /events) khi đang ở trang Điểm Xanh không vỡ mock', async ({ page, api }) => {
     mockLoyalty(api);
     await page.goto('/loyalty');
-    await expect(page.getByText('Điểm danh nhận Điểm Xanh')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Điểm danh mỗi ngày')).toBeVisible({ timeout: 15_000 });
 
     await flushEvents(page);
     await expect.poll(() => api.callsTo('POST', '/events').length, { timeout: 5_000 }).toBeGreaterThan(0);
@@ -198,22 +203,22 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     mockLoyalty(api);
     await page.goto('/loyalty');
 
-    await expect(page.getByText('Điểm danh nhận Điểm Xanh')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Điểm danh mỗi ngày')).toBeVisible({ timeout: 15_000 });
     // Tiến độ hạng theo điểm XÉT HẠNG (pointsToGo), không theo số dư.
     await expect(page.getByText('điểm tích từ mua hàng để lên hạng Lộc Biếc')).toBeVisible();
 
     const btn = page.getByRole('button', { name: 'Điểm danh +10' });
     await expect(btn).toBeEnabled();
-    const posted = api.waitForCall('POST', '/me/loyalty/check-in');
+    const posted = api.waitForCall('POST', '/me/daily-check-in');
     await btn.dblclick();
     await posted;
 
-    await expect(page.getByText('Điểm danh Ngày 3 thành công! Nhận +10 Điểm Xanh.')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('+10 Điểm Xanh', { exact: true })).toBeVisible({ timeout: 5_000 });
     // invalidate ['loyalty-checkin'] → GET trả checkedInToday:true → nút khoá.
     await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled({ timeout: 5_000 });
     // Số dư mới từ GET /me/loyalty (60 + 10) — cộng đúng MỘT lần.
     await expect(page.getByText('Tích điểm ×1 · 70 điểm Xanh')).toBeVisible();
-    expect(api.callsTo('POST', '/me/loyalty/check-in')).toHaveLength(1);
+    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
   test('Đổi điểm lấy mã giảm giá: xác nhận → trừ điểm → mã vào Mã giảm giá của tôi, quà không đủ điểm bị khoá', async ({ page, api }) => {
