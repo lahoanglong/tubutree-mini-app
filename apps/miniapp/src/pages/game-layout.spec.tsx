@@ -55,7 +55,10 @@ vi.mock('../components/wheel', () => ({
     return <div data-testid="wheel" />;
   },
 }));
-vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
+vi.mock('../services/account-api', () => ({
+  getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }),
+  getDailyCheckInStatus: () => Promise.resolve(null),
+}));
 vi.mock('../services/game-api', () => ({
   ...mocks.api,
   checkIn: vi.fn(),
@@ -249,11 +252,11 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
   });
 
-  it('chỉ có một nút "Điểm danh" trên trang Vườn, kèm dòng nói rõ nhận giọt nước', async () => {
+  it('chỉ có một nút "Điểm danh" trên trang Vườn, kèm dòng nói rõ nhận giọt nước và Điểm Xanh', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
     expect(screen.getAllByRole('button', { name: /Điểm danh/ })).toHaveLength(1);
-    expect(screen.getByText('Nhận giọt nước tưới cây mỗi ngày')).toBeInTheDocument();
+    expect(screen.getByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
   });
 
   it('mỗi khối có tiêu đề h2 thật', async () => {

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   getLoyalty: vi.fn(),
+  getDailyCheckInStatus: vi.fn(),
   api: {
     getGameProfile: vi.fn(),
     getTodayQuiz: vi.fn(),
@@ -58,7 +59,7 @@ vi.mock('../utils/features', () => ({ SEASON_PASS_ENABLED: false }));
 const bridge = vi.hoisted(() => ({ shareLink: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/zmp-bridge', () => bridge);
 vi.mock('../services/game-api', () => mocks.api);
-vi.mock('../services/account-api', () => ({ getLoyalty: () => mocks.getLoyalty() }));
+vi.mock('../services/account-api', () => ({ getLoyalty: () => mocks.getLoyalty(), getDailyCheckInStatus: () => mocks.getDailyCheckInStatus() }));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -124,6 +125,7 @@ beforeEach(() => {
   }
   const a = mocks.api;
   mocks.getLoyalty.mockResolvedValue({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 });
+  mocks.getDailyCheckInStatus.mockResolvedValue(null);
   a.getGameProfile.mockResolvedValue({ ...NEW_PLAYER });
   a.getTodayQuiz.mockResolvedValue(QUIZ);
   a.getLeaderboard.mockResolvedValue([]);
@@ -136,7 +138,7 @@ beforeEach(() => {
   a.getFriends.mockResolvedValue([]);
   a.getGarden.mockResolvedValue({ plots: [HOME], maxPlots: 4, nextUnlock: { slot: 2, seedCost: 100 } });
   a.fetchSeasonPass.mockResolvedValue({ active: false });
-  a.checkIn.mockResolvedValue({ seedsEarned: 65, pointsEarned: 0, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' });
+  a.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 65, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
   a.collectDew.mockResolvedValue({ seedsEarned: 15, totalSeeds: 80 });
   a.waterTree.mockResolvedValue({ progress: 30, target: 60, harvested: false, treesPlanted: 0 });
   a.waterPlot.mockResolvedValue({ progress: 25, target: 300, harvested: false, treesPlanted: 0, revivedFromDead: false });
@@ -300,7 +302,7 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
       totalSeeds: 500,
     });
     renderPage();
-    expect(await screen.findByText('Nhận +17💧 mỗi ngày')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận +17💧 và Điểm Xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hứng giọt sương (+11💧)' })).toBeInTheDocument();
     expect(screen.getByText('+5💧')).toBeInTheDocument();
     expect(screen.getByText('+40💧')).toBeInTheDocument();
@@ -308,9 +310,22 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
     expect(screen.getByRole('button', { name: 'Nhận nước hôm nay (+28💧)' })).toBeInTheDocument();
   });
 
+  it('bình đầy: nút chính "Nhận nước hôm nay" không ghi +N💧', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), lastDewAt: null, streakDays: 1, totalSeeds: 500, tankCapacity: 500 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Nhận nước hôm nay \(\+/ })).toBeNull();
+  });
+
+  it('bình gần đầy: nút chính ghi số chỗ trống', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...NEW_PLAYER, firstCheckinBonus: 0, lastCheckInAt: yesterdayIso(), lastDewAt: null, streakDays: 1, totalSeeds: 495, tankCapacity: 500 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Nhận nước hôm nay (+5💧)' })).toBeInTheDocument();
+  });
+
   it('lần đầu: dòng phụ nói lần đầu nhận gồm quà người mới', async () => {
     renderPage();
-    expect(await screen.findByText('Lần đầu nhận +65💧, các ngày sau +15💧')).toBeInTheDocument();
+    expect(await screen.findByText('Lần đầu nhận +65💧, các ngày sau +15💧, kèm Điểm Xanh')).toBeInTheDocument();
   });
 
   it('API cũ chưa trả số: chữ giữ nguyên như trước, không hiện "undefined"', async () => {
@@ -324,7 +339,7 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
       ecoImpact: { progress: 0, target: 600, treeType: 'Cây', treesPlanted: 1 },
     });
     renderPage();
-    expect(await screen.findByText('Nhận giọt nước tưới cây mỗi ngày')).toBeInTheDocument();
+    expect(await screen.findByText('Nhận giọt nước và Điểm Xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/undefined|NaN/);
   });

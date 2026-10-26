@@ -1,3 +1,4 @@
+import type { CheckInResult } from '@tubutree/app-core/api/loyalty';
 import { api } from './api';
 
 export interface GameProfile {
@@ -31,14 +32,7 @@ export interface GameProfile {
   currentTreeTarget?: number;
   nextTreeTarget?: number;
 }
-export interface CheckInResult {
-  seedsEarned: number;
-  pointsEarned: number;
-  streakDays: number;
-  totalSeeds: number;
-  streakFrozeUsed: boolean;
-  bonusNote: string;
-}
+export type { CheckInResult };
 export interface QuizItem {
   id: string;
   question: string;
@@ -99,7 +93,7 @@ export interface ClaimMissionResult {
 }
 
 export const getGameProfile = () => api.get<GameProfile>('/game/profile').then((r) => r.data);
-export const checkIn = () => api.post<CheckInResult>('/game/check-in').then((r) => r.data);
+export const checkIn = () => api.post<CheckInResult>('/me/daily-check-in').then((r) => r.data);
 export const collectDew = () => api.post<DewResult>('/game/dew/collect').then((r) => r.data);
 export const buyStreakFreeze = () =>
   api.post<StreakFreezeResult>('/game/streak-freeze/buy').then((r) => r.data);

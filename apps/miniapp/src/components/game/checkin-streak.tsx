@@ -12,6 +12,7 @@ import { isSameVNDay } from './game-utils';
 // 💧 và 🎁 trong ô ngày là phần thưởng của chuỗi (nội dung game), còn lại là icon Lucide.
 export function CheckInStreak({
   profile,
+  allDone,
   onCheckIn,
   checkInPending,
   onBuyFreeze,
@@ -21,6 +22,8 @@ export function CheckInStreak({
   onNeedWater,
 }: {
   profile: GameProfile | undefined;
+  /** Cả Điểm Xanh và giọt nước đã xong hôm nay (trạng thái gộp); quyết định nút. Dòng giọt nước vẫn theo `lastCheckInAt`. */
+  allDone: boolean;
   onCheckIn: () => void;
   checkInPending: boolean;
   onBuyFreeze: () => void;
@@ -52,13 +55,13 @@ export function CheckInStreak({
         </div>
         {/* flexShrink 0: cạnh tiêu đề dài, nhãn nút bị rút gọn thành "Điểm d…" nếu để nút co lại. */}
         <Button
-          icon={checkedInToday ? Check : undefined}
-          disabled={checkedInToday || checkInPending}
+          icon={allDone ? Check : undefined}
+          disabled={allDone || checkInPending}
           loading={checkInPending}
           onPress={() => onCheckIn()}
           style={{ flexShrink: 0 }}
         >
-          {checkedInToday ? 'Đã điểm danh' : 'Điểm danh'}
+          {allDone ? 'Đã điểm danh' : 'Điểm danh'}
         </Button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>

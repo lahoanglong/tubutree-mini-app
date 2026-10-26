@@ -61,7 +61,10 @@ vi.mock('../utils/features', () => ({
 }));
 vi.mock('../components/wheel', () => ({ WheelOfFortune: () => <div data-testid="wheel" /> }));
 vi.mock('../services/game-api', () => mocks.api);
-vi.mock('../services/account-api', () => ({ getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }) }));
+vi.mock('../services/account-api', () => ({
+  getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }),
+  getDailyCheckInStatus: () => Promise.resolve(null),
+}));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -136,7 +139,7 @@ beforeEach(() => {
   a.getFriends.mockResolvedValue([]);
   a.getGarden.mockResolvedValue(null);
   a.fetchSeasonPass.mockResolvedValue({ active: false });
-  a.checkIn.mockResolvedValue({ seedsEarned: 10, pointsEarned: 0, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' });
+  a.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
   a.collectDew.mockResolvedValue({ seedsEarned: 5, totalSeeds: 1_255 });
   a.buyStreakFreeze.mockResolvedValue({ streakFreezes: 2, totalSeeds: 1_170 });
   a.repairStreak.mockResolvedValue({ repaired: true, streakDays: 5, totalSeeds: 900 });

@@ -30,7 +30,7 @@ vi.mock('@/lib/core-http', () => {
   const table: Record<string, () => unknown> = {
     '/me/loyalty': () => state.loyalty,
     '/me/coupons': () => state.coupons,
-    '/me/loyalty/check-in': () => state.checkIn,
+    '/me/daily-check-in': () => state.checkIn,
     '/config/public': () => state.config,
   };
   return {
@@ -44,7 +44,12 @@ vi.mock('@/lib/core-http', () => {
       },
       post: async (path: string) => {
         state.posts.push(path);
-        return { message: 'Điểm danh thành công' };
+        return {
+          points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 30, message: '' },
+          water: { seedsEarned: 10, streakDays: 1, totalSeeds: 10, streakFrozeUsed: false, bonusNote: '' },
+          alreadyDone: false,
+          pending: [],
+        };
       },
     },
   };
@@ -74,7 +79,7 @@ beforeEach(() => {
   state.search = '';
   state.loyalty = { tier: { name: 'Mầm Xanh' }, pointsBalance: 120, pointsConvertedBalance: 0, tiers: TIERS, nextTier: { ...TIERS[1], pointsToGo: 80, spendingToGo: null }, totalSpent: 0 };
   state.coupons = [COUPON];
-  state.checkIn = { checkedInToday: false, streakDays: 2, rewards: REWARDS };
+  state.checkIn = { checkedInToday: false, streakDays: 2, currentCycleDay: 3, rewards: REWARDS };
   state.config = { waste: { enabled: true } };
   state.fail = new Set();
   state.calls = [];
@@ -112,7 +117,7 @@ describe('/uu-dai — trang Ưu đãi', () => {
   it('khách đã đăng nhập: thẻ Điểm Xanh, Điểm danh, Đổi quà và tiện ích, Mã giảm giá của tôi; đúng một h1', async () => {
     const c = await mount();
     expect(region(c, 'Điểm Xanh của bạn')).not.toBeNull();
-    expect(region(c, 'Điểm danh nhận Điểm Xanh')).not.toBeNull();
+    expect(region(c, 'Điểm danh mỗi ngày')).not.toBeNull();
     expect(region(c, 'Đổi quà')).not.toBeNull();
     expect(region(c, 'Mã giảm giá của tôi')).not.toBeNull();
     expect(c.querySelector('h1')!.textContent).toBe('Ưu đãi');
@@ -129,27 +134,27 @@ describe('/uu-dai — trang Ưu đãi', () => {
 
   it('Điểm danh: chuỗi ngày, bảy ô thưởng; bấm nút gọi POST điểm danh một lần và báo kết quả', async () => {
     const c = await mount();
-    const card = region(c, 'Điểm danh nhận Điểm Xanh')!;
-    expect(card.textContent).toContain('Chuỗi 2 ngày liên tiếp');
+    const card = region(c, 'Điểm danh mỗi ngày')!;
+    expect(card.textContent).toContain('Ngày 3/7');
     expect(card.textContent).toContain('N7');
     click(card.querySelector('button:not([disabled])'));
     click(card.querySelector('button'));
     await flush(6);
-    expect(state.posts.filter((p) => p === '/me/loyalty/check-in')).toHaveLength(1);
-    expect(card.textContent).toContain('Điểm danh thành công');
+    expect(state.posts.filter((p) => p === '/me/daily-check-in')).toHaveLength(1);
+    expect(card.textContent).toContain('+3 Điểm Xanh · +10 giọt nước');
   });
 
   it('đã điểm danh hôm nay: nút khoá', async () => {
-    state.checkIn = { checkedInToday: true, streakDays: 3, rewards: REWARDS };
+    state.checkIn = { checkedInToday: true, streakDays: 3, currentCycleDay: 3, rewards: REWARDS };
     const c = await mount();
-    const btn = region(c, 'Điểm danh nhận Điểm Xanh')!.querySelector('button')!;
+    const btn = region(c, 'Điểm danh mỗi ngày')!.querySelector('button')!;
     expect(btn.disabled || btn.getAttribute('aria-disabled') === 'true').toBe(true);
   });
 
   it('lịch điểm danh lỗi: dòng báo + Thử lại, các khối khác vẫn hiện', async () => {
-    state.fail.add('/me/loyalty/check-in');
+    state.fail.add('/me/daily-check-in');
     const c = await mount();
-    expect(region(c, 'Điểm danh nhận Điểm Xanh')!.textContent).toContain('Chưa tải được lịch điểm danh');
+    expect(region(c, 'Điểm danh mỗi ngày')!.textContent).toContain('Chưa tải được lịch điểm danh');
     expect(region(c, 'Mã giảm giá của tôi')!.textContent).toContain('Giảm');
   });
 

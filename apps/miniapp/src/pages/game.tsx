@@ -11,7 +11,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { getErrorMessage } from '../services/api';
-import { getLoyalty } from '../services/account-api';
+import { getDailyCheckInStatus, getLoyalty } from '../services/account-api';
 import { shareLink } from '../services/zmp-bridge';
 import { pointsSummary } from '../utils/points-lots';
 import { dismissGameTutorial, isGameTutorialDismissed } from '../utils/game-tutorial';
@@ -79,6 +79,8 @@ export default function GamePage() {
   const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
   const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
+  // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
+  const checkInStatusQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
   // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null
   // để nút vẫn bấm được (API là lưới an toàn).
   const loyalty = loyaltyQ.data;
@@ -142,6 +144,8 @@ export default function GamePage() {
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
+  // Gộp điểm + nước: tải lỗi thì để nút bật (POST idempotent, đã xong sẽ báo "đã điểm danh rồi"), đừng suy từ lastCheckInAt vì nó chỉ là phần nước.
+  const checkInDone = checkInStatusQ.data ? checkInStatusQ.data.checkedInToday : checkInStatusQ.isError ? false : checkedInToday;
   const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
   const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
@@ -203,6 +207,7 @@ export default function GamePage() {
           {/* Điểm danh — chuỗi 7 ngày (§6.7.2) */}
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
+            allDone={checkInDone}
             profile={profile}
             onCheckIn={() => checkInM.mutate()}
             checkInPending={checkInM.isPending}

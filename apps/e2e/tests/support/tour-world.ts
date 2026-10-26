@@ -231,7 +231,7 @@ export function mockTourWorld(api: MockApi, user: AuthUser): void {
     { id: 'p1', delta: 250, reason: `ORDER_DELIVERED:${ORDER_DELIVERED}`, expiresAt: null, createdAt: '2026-10-15T05:00:00Z' },
     { id: 'p2', delta: 3, reason: 'CHECK_IN', expiresAt: null, createdAt: '2026-10-14T05:00:00Z' },
   ]);
-  api.get('/me/loyalty/check-in', {
+  api.get('/me/daily-check-in', {
     checkedInToday: false, streakDays: 2, currentCycleDay: 3, todayPoints: 3,
     rewards: [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day === 7 ? 10 : day, claimed: day < 3, isToday: day === 3 })),
   });

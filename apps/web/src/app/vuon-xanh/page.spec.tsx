@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   config: { waste: { enabled: false } } as Record<string, unknown>,
   data: {} as Record<string, unknown>,
   fail: new Map<string, number>(),
+  hang: new Set<string>(),
   posts: {} as Record<string, () => unknown>,
   calls: [] as Call[],
   keySeq: 0,
@@ -40,6 +41,7 @@ vi.mock('@/lib/core-http', () => ({
         state.fail.set(path, left - 1);
         throw new Error('mất mạng');
       }
+      if (state.hang.has(path)) return new Promise(() => undefined);
       if (path === '/config/public') return state.config;
       if (path in state.data) return state.data[path];
       throw new Error(`chưa mock ${path}`);
@@ -102,6 +104,7 @@ beforeEach(() => {
   state.config = { waste: { enabled: false } };
   state.calls = [];
   state.fail = new Map();
+  state.hang = new Set();
   state.keySeq = 0;
   state.replace.mockReset();
   state.push.mockReset();
@@ -269,7 +272,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
 
 describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chuỗi', () => {
   it('điểm danh: gửi POST một lần dù chạm đúp, báo thành công, tải lại hồ sơ', async () => {
-    state.posts['/game/check-in'] = () => ({ seedsEarned: 10, pointsEarned: 0, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' });
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' }, alreadyDone: false, pending: [] });
     const c = await mount();
     const b = btn(c, 'Điểm danh');
     act(() => {
@@ -277,23 +280,74 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
       b.click();
     });
     await flush(8);
-    expect(postsOf('/game/check-in')).toHaveLength(1);
-    expect(document.body.textContent).toContain('+10💧 · 🧊 đã dùng vé giữ lửa · Thưởng ngày 3');
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
+    expect(document.body.textContent).toContain('+1.000 Điểm Xanh · +10 giọt nước · đã dùng vé giữ lửa · Thưởng ngày 3');
     expect(getsOf('/game/profile').length).toBeGreaterThanOrEqual(2);
   });
 
   it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt; hôm kia thì bật lại', async () => {
+    const status = (done: boolean) => ({ checkedInToday: done, pointsDone: done, waterDone: done, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] });
     state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = status(true);
     let c = await mount();
     expect(btn(c, 'Đã điểm danh').disabled).toBe(true);
     state.data['/game/profile'] = PROFILE({ lastCheckInAt: new Date(Date.now() - 2 * 86_400_000).toISOString() });
+    state.data['/me/daily-check-in'] = status(false);
     c = await mount();
     expect(btn(c, 'Điểm danh').disabled).toBe(false);
   });
 
+  it('đã nhận giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút vẫn bật, bấm gọi POST gộp để nhận nốt', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    const c = await mount();
+    expect(btn(c, 'Điểm danh').disabled).toBe(false);
+    click(btn(c, 'Điểm danh'));
+    await flush(6);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
+  });
+
+  it('lấy trạng thái gộp lỗi: nút vẫn bật dù lastCheckInAt là hôm nay (không suy từ phần nước)', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.fail.set('/me/daily-check-in', 5);
+    const c = await mount();
+    expect(btn(c, 'Điểm danh').disabled).toBe(false);
+  });
+
+  it('bấm xong cả hai phần: nút tắt ngay, không bật lại trong lúc chờ lấy lại trạng thái', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    const c = await mount();
+    state.hang.add('/me/daily-check-in');
+    click(btn(c, 'Điểm danh'));
+    await flush(8);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(1);
+    expect(btn(c, 'Đã điểm danh').disabled).toBe(true);
+  });
+
+  it('còn thiếu một phần (pending): nút vẫn bật để bấm lại', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+    state.posts['/me/daily-check-in'] = () => ({ points: null, water: null, alreadyDone: false, pending: ['points'] });
+    const c = await mount();
+    state.hang.add('/me/daily-check-in');
+    click(btn(c, 'Điểm danh'));
+    await flush(8);
+    expect(btn(c, 'Điểm danh').disabled).toBe(false);
+  });
+
+  it('cả hai phần xong theo trạng thái gộp: "Đã điểm danh" tắt', async () => {
+    state.data['/game/profile'] = PROFILE({ lastCheckInAt: todayIso() });
+    state.data['/me/daily-check-in'] = { checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] };
+    const c = await mount();
+    expect(btn(c, 'Đã điểm danh').disabled).toBe(true);
+  });
+
   it('lỗi điểm danh: báo lỗi, nút bật lại gọi được lần hai', async () => {
     let n = 0;
-    state.posts['/game/check-in'] = () => {
+    state.posts['/me/daily-check-in'] = () => {
       if (++n === 1) throw new Error('Lỗi máy chủ');
       return { seedsEarned: 5, pointsEarned: 0, streakDays: 4, totalSeeds: 1, streakFrozeUsed: false, bonusNote: '' };
     };
@@ -303,7 +357,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(document.querySelector('[role="alert"]')!.textContent).toContain('Lỗi máy chủ');
     click(btn(c, 'Điểm danh'));
     await flush(6);
-    expect(postsOf('/game/check-in')).toHaveLength(2);
+    expect(postsOf('/me/daily-check-in')).toHaveLength(2);
   });
 
   it('chuỗi 3 ngày: tiêu đề, 7 ô theo chu kỳ, ô thưởng ngày 3 và 7', async () => {
@@ -723,13 +777,13 @@ describe('Vườn Xanh: hành động đổi Điểm Xanh làm mới đúng kho�
   };
   afterEach(() => spy?.mockRestore());
 
-  it('điểm danh làm mới game, me và loyalty', async () => {
-    state.posts['/game/check-in'] = () => ({ seedsEarned: 10, pointsEarned: 0, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' });
+  it('điểm danh làm mới game, me, loyalty và lịch điểm danh', async () => {
+    state.posts['/me/daily-check-in'] = () => ({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
     const c = await mount();
     arm();
     click(btn(c, 'Điểm danh'));
     await flush(6);
-    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+    expect(keys()).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]', '["loyalty-checkin"]']));
   });
 
   it('tưới cây làm mới game, me và loyalty', async () => {

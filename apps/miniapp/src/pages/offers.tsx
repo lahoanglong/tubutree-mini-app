@@ -1,22 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarCheck, Check, ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
+import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { memberCardAriaLabel, memberCardView, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
 import { getCoupons, getLoyalty } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { useCheckIn } from '../hooks/use-check-in';
 import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
 import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { pointsSummary } from '../utils/points-lots';
 import { AuthPhaseView } from '../components/ui/auth-gate';
-import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
@@ -25,6 +23,7 @@ import { PageHeader } from '../components/ui/page-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
 import { CouponCard } from '../components/loyalty/coupon-card';
+import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { GuestLinkCard } from '../components/home/guest-link-card';
 
 function IconTile({ icon }: { icon: LucideIcon }) {
@@ -48,7 +47,6 @@ export default function OffersPage() {
   const cfg = usePublicConfig();
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
-  const { status: checkInStatus, statusQ: checkInQ, view: checkInView, pending, checkIn } = useCheckIn(authed);
   const couponsRef = useRef<HTMLElement>(null);
   const wantsCoupons = new URLSearchParams(location.search).get('section') === 'coupons';
   const couponsReady = couponsQ.isSuccess || couponsQ.isError;
@@ -193,53 +191,8 @@ export default function OffersPage() {
           </section>
 
           {/* Điểm danh */}
-          <section aria-label={homeCopy.offers.checkInTitle} style={{ padding: '12px 16px 0' }}>
-            {checkInQ.isLoading ? (
-              <Skeleton height={112} radius="var(--radius-card)" />
-            ) : checkInQ.isError ? (
-              <Card padding={16}>
-                <ErrorState variant="inline" message={`Chưa tải được lịch điểm danh: ${getErrorMessage(checkInQ.error)}`} onRetry={() => void checkInQ.refetch()} />
-              </Card>
-            ) : checkInStatus && checkInView ? (
-              <Card padding={16}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                    <IconTile icon={CalendarCheck} />
-                    <div style={{ minWidth: 0 }}>
-                      <Heading variant="title-sm" as="h2">
-                        {homeCopy.offers.checkInTitle}
-                      </Heading>
-                      <Text variant="caption" tone="tertiary" as="div">
-                        {homeCopy.offers.streak(checkInStatus.streakDays)}
-                      </Text>
-                    </div>
-                  </div>
-                  <Button disabled={!checkInView.canCheckIn || pending} loading={pending} onPress={checkIn} style={{ flexShrink: 0 }}>
-                    {checkInView.buttonLabel}
-                  </Button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center', marginTop: 12 }}>
-                  {checkInStatus.rewards.map((r) => (
-                    <div
-                      key={r.day}
-                      style={{
-                        padding: '6px 2px',
-                        borderRadius: 'var(--radius-control)',
-                        background: r.claimed ? 'var(--color-bg-subtle)' : r.isToday ? 'var(--color-action-secondary-bg)' : 'var(--color-bg-canvas)',
-                        border: r.isToday ? '1px solid var(--color-border-selected)' : '1px solid transparent',
-                      }}
-                    >
-                      <Text variant="caption" tone="tertiary" as="div">
-                        N{r.day}
-                      </Text>
-                      <Text variant="label" tone={r.claimed ? 'brand' : 'primary'} as="div">
-                        {r.claimed ? <Icon icon={Check} size="sm" tone="brand" /> : `+${formatNumber(r.points)}`}
-                      </Text>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            ) : null}
+          <section aria-label={checkInCopy.title} style={{ padding: '12px 16px 0' }}>
+            <DailyCheckInCard authed={authed} />
           </section>
 
           {/* Đổi quà và tiện ích */}

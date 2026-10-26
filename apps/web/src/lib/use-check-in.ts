@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { postDailyCheckIn, type CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
+import { checkInSuccessText } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInView } from '@tubutree/app-core/loyalty-copy';
 import { checkInQuery, loyaltyQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '@/lib/core-http';
@@ -10,9 +11,9 @@ import { coreHttp } from '@/lib/core-http';
 const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 
 /**
- * Điểm danh Điểm Xanh dùng chung cho Trang chủ và Ưu đãi: cùng khoá ['loyalty-checkin'], cùng POST /me/loyalty/check-in với trang
- * Điểm Xanh. Không đổi mức thưởng và không gộp với điểm danh giọt nước của Vườn Xanh. Web không có snackbar nên kết quả
- * trả ở `message` để thẻ tự in một dòng `role="status"`.
+ * Điểm danh dùng chung cho Trang chủ, Ưu đãi và trang Điểm Xanh: cùng khoá ['loyalty-checkin'], cùng POST /me/daily-check-in
+ * (một lần bấm cộng cả Điểm Xanh và giọt nước Vườn Xanh). Web không có snackbar nên kết quả trả ở `message` để thẻ tự
+ * in một dòng `role="status"`.
  */
 export function useCheckIn(enabled: boolean) {
   const qc = useQueryClient();
@@ -23,9 +24,13 @@ export function useCheckIn(enabled: boolean) {
   const mut = useMutation({
     mutationFn: () => postDailyCheckIn(coreHttp),
     onSuccess: (res) => {
-      setMessage({ text: res.message, error: false });
-      qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
+      // Thiếu một phần cũng báo kiểu lỗi, giống Vườn Xanh: khách phải thấy là cần bấm lại.
+      setMessage({ text: checkInSuccessText(res), error: res.pending.length > 0 });
+      if (res.pending.length === 0) {
+        qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
+      }
       void qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
+      void qc.invalidateQueries({ queryKey: ['game'] });
       void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
       void qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey });
     },

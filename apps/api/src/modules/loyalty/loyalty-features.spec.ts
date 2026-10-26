@@ -329,9 +329,11 @@ const TREE = giftRow({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng 
 const SEEDED_GIFTS = [FREESHIP, D50K, P15, D100K, TREE];
 const WAREHOUSE = { name: 'Kho Tubu HCM', addressLine: '1 Đường A', communeName: 'Phường B', provinceName: 'TP.HCM', openingHours: { MON: [{ open: '08:00', close: '17:00' }] } };
 
-function catalogPrisma(o: { balance: number; converted?: number; locked?: LockedRow[]; gifts?: GiftRow[]; warehouse?: unknown }) {
+function catalogPrisma(o: { balance: number; converted?: number; locked?: LockedRow[]; gifts?: GiftRow[]; warehouse?: unknown; tier?: { id: string; name: string } }) {
   return {
-    user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: o.balance, pointsConvertedBalance: o.converted ?? 0 }) },
+    user: {
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: o.balance, pointsConvertedBalance: o.converted ?? 0, tierId: o.tier?.id ?? null, tier: o.tier ? { name: o.tier.name } : null }),
+    },
     $queryRaw: jest.fn().mockResolvedValue(o.locked ?? []),
     wasteGift: { findMany: jest.fn().mockResolvedValue(o.gifts ?? SEEDED_GIFTS) },
     wastePoint: { findFirst: jest.fn().mockResolvedValue(o.warehouse ?? null) },
@@ -352,6 +354,41 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(res.rewards.map((r) => r.id)).toEqual(['reward-freeship', 'reward-discount-50k', 'reward-percent-15pct', 'reward-discount-100k', 'gift-tree']);
       expect(res.rewards[0]).toEqual({ id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: FREESHIP.description, label: 'Phổ biến', pointsCost: 20_000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 10 });
       expect(res.rewards[4]).toMatchObject({ id: 'gift-tree', kind: 'TREE', pointsCost: 60_000, voucher: null });
+    });
+
+    it('tierFreeShip: hạng có ngưỡng riêng (Lộc Biếc 99.000đ) và ngưỡng chung khi hạng không có ngưỡng riêng; khách chưa có hạng → null', async () => {
+      const overrides = { 'shipping.tier_freeship_overrides': { LOC_BIEC: 99_000, DAI_THU: 0, CO_THU: 0 }, 'shipping.free_threshold': 199_000 };
+      const loc = await new LoyaltyService(catalogPrisma({ balance: 0, tier: { id: 'LOC_BIEC', name: 'Lộc Biếc' } }), makeConfig(overrides)).getRewardCatalog('u1');
+      expect(loc.tierFreeShip).toEqual({ tierName: 'Lộc Biếc', freeFrom: 99_000 });
+      const dai = await new LoyaltyService(catalogPrisma({ balance: 0, tier: { id: 'DAI_THU', name: 'Đại Thụ' } }), makeConfig(overrides)).getRewardCatalog('u1');
+      expect(dai.tierFreeShip).toEqual({ tierName: 'Đại Thụ', freeFrom: 0 });
+      const mam = await new LoyaltyService(catalogPrisma({ balance: 0, tier: { id: 'MAM_XANH', name: 'Mầm Xanh' } }), makeConfig(overrides)).getRewardCatalog('u1');
+      expect(mam.tierFreeShip).toEqual({ tierName: 'Mầm Xanh', freeFrom: 199_000 });
+      const none = await new LoyaltyService(catalogPrisma({ balance: 0 }), makeConfig(overrides)).getRewardCatalog('u1');
+      expect(none.tierFreeShip).toBeNull();
+    });
+
+    it('getPublicPreview: danh mục quà (không đổi được) + bảng hạng + luật điểm, không đụng bảng người dùng', async () => {
+      const prisma = catalogPrisma({ balance: 999_999 }) as unknown as PrismaService & { membershipTier: { findMany: jest.Mock }; user: { findUniqueOrThrow: jest.Mock } };
+      (prisma as unknown as { membershipTier: unknown }).membershipTier = {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, pointMultiplier: 1, perks: ['Tích Điểm Xanh x1'], sortOrder: 1 },
+          { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5_000_000, pointMultiplier: 1.2, perks: ['Freeship đơn ≥ 99k', 42], sortOrder: 2 },
+        ]),
+      };
+      const res = await new LoyaltyService(prisma, makeConfig({ 'game.tree_points_price': 60_000 })).getPublicPreview();
+      expect(prisma.user.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(res.rewards.every((r) => r.canRedeem === false)).toBe(true);
+      expect(res.rewards.map((r) => r.id)).toEqual(['reward-freeship', 'reward-discount-50k', 'reward-percent-15pct', 'reward-discount-100k', 'gift-tree']);
+      expect(res.rewards[4]).toMatchObject({ kind: 'TREE', pointsCost: 60_000 });
+      expect(res.tiers).toEqual([
+        { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, multiplier: 1, perks: ['Tích Điểm Xanh x1'] },
+        { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5_000_000, multiplier: 1.2, perks: ['Freeship đơn ≥ 99k'] },
+      ]);
+      expect(res.rates).toEqual({ earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2 });
+      expect(res.giftClaimDays).toBe(60);
+      expect(res).not.toHaveProperty('pointsBalance');
+      expect(res).not.toHaveProperty('tierFreeShip');
     });
 
     it('TREE: 28.000 STANDARD + 30.000 CONVERTED so với giá 50.000 → canRedeem true (luật chia lô của buyTree); voucher 50.000 điểm chỉ xét STANDARD → false', async () => {

@@ -90,7 +90,7 @@ describe('LoyaltyPage — kho mã giảm giá lên đầu trang (C-074)', () => 
   it('"Mã giảm giá của tôi" nằm ngay dưới thẻ hạng, trước điểm danh, các hạng, Kho quà và lịch sử', async () => {
     renderPage();
     const vouchers = await screen.findByText('Mã giảm giá của tôi');
-    const checkIn = await screen.findByText('Điểm danh nhận Điểm Xanh');
+    const checkIn = await screen.findByText('Điểm danh mỗi ngày');
     const tiers = await screen.findByText('Các hạng');
     const rewards = await screen.findByText('Kho quà');
     const history = await screen.findByText('Lịch sử Điểm Xanh');

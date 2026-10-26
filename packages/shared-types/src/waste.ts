@@ -75,7 +75,18 @@ export interface WasteRulesDTO { text: string | null }
 // rewards
 export interface WasteVoucherSpec { type: CouponType; value: number; minOrder: number | null; maxDiscount: number | null; validDays: number }
 export interface RewardItemDTO { id: string; kind: WasteGiftKind; name: string; description: string | null; label: string | null; pointsCost: number; imageUrl: string | null; stockRemaining: number | null; soldOut: boolean; canRedeem: boolean; claimInstructions: string | null; voucher: WasteVoucherSpec | null; sortOrder: number }
-export interface RewardCatalogDTO { pointsBalance: number; pointsConvertedBalance: number; lockedPoints: number; redeemablePoints: number; giftClaimDays: number; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; rewards: RewardItemDTO[] }
+export interface RewardCatalogDTO { pointsBalance: number; pointsConvertedBalance: number; lockedPoints: number; redeemablePoints: number; giftClaimDays: number; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; rewards: RewardItemDTO[];
+  /** Hạng của khách và ngưỡng tiền hàng được miễn phí giao ở hạng đó (đã gồm ngưỡng chung); null khi khách chưa có hạng. Thiếu khi API cũ. */
+  tierFreeShip?: { tierName: string; freeFrom: number } | null }
+/** GET /loyalty/preview (công khai): danh mục quà và bảng hạng cho khách chưa đăng nhập; không có số dư hay trường riêng của khách. */
+export interface LoyaltyPreviewDTO {
+  rewards: RewardItemDTO[];
+  giftClaimDays: number;
+  claimPoint: RewardCatalogDTO['claimPoint'];
+  tiers: { id: string; name: string; minPoints: number; minSpending: number | null; multiplier: number; perks: string[] }[];
+  rates: { earnPct: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct: number };
+  pointExpireMonths: number;
+}
 export interface GiftRedemptionDTO { id: string; giftId: string; giftKind: WasteGiftKind; giftName: string; pointsCost: number; status: WasteGiftRedemptionStatus; code: string | null; claimExpiresAt: string | null; claimPoint: { name: string; addressLine: string; communeName: string; provinceName: string; openingHours: WasteOpeningHours } | null; fulfilledAt: string | null; cancelledAt: string | null; cancelReason: string | null; refundedPoints: number | null; couponCode: string | null; createdAt: string }
 export interface RedeemRewardResultDTO { success: true; message: string; pointsSpent: number; remainingPoints: number; redemption: GiftRedemptionDTO; coupon: { code: string; type: CouponType; value: number; minOrder: number | null; maxDiscount: number | null; endAt: string } | null }
 

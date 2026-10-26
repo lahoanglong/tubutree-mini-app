@@ -67,8 +67,6 @@ export const homeCopy = {
     title: 'Ưu đãi',
     pointsTitle: 'Điểm Xanh của bạn',
     pointsDetail: 'Hạng và lịch sử điểm',
-    checkInTitle: 'Điểm danh nhận Điểm Xanh',
-    streak: (n: number) => `Chuỗi ${n} ngày liên tiếp`,
     rewardsTitle: 'Đổi quà',
     rewardsHint: 'Đổi Điểm Xanh lấy mã giảm giá và quà',
     myRewards: 'Quà của tôi',

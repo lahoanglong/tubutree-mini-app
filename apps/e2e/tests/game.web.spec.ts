@@ -23,6 +23,7 @@ function mockGame(api: MockApi, state: { checkedIn: boolean }) {
   api.get('/me', () => USER);
   api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
   api.get('/game/profile', () => profile({ lastCheckInAt: state.checkedIn ? new Date().toISOString() : null }));
+  api.get('/me/daily-check-in', () => ({ checkedInToday: state.checkedIn, pointsDone: true, waterDone: state.checkedIn, streakDays: 3, currentCycleDay: 3, todayPoints: 0, todayWater: state.checkedIn ? 0 : 10, rewards: [] }));
   api.get('/game/quiz/today', [
     { id: 'q1', question: 'Cây nào hấp thụ nhiều CO₂?', options: ['Sưa', 'Tre', 'Cỏ', 'Rêu'], category: 'cay', difficulty: 2, waterReward: 10 },
   ]);
@@ -61,9 +62,14 @@ function mockGame(api: MockApi, state: { checkedIn: boolean }) {
   api.post('/game/garden/unlock', () => ({ id: 'p3', slot: 3, isHome: false, treeType: 'Sồi', speciesId: null, progress: 0, target: 20, treeStage: 0, treesPlanted: 0, treeHealth: 'HEALTHY' }));
   api.post('/game/garden/plot/p2/water', () => ({ progress: 25, target: 20, harvested: true, treesPlanted: 1, revivedFromDead: false, reward: { coupon: 'XANH-123', certificate: 'TT-77' } }));
   api.post('/game/gift/f1', () => ({ amount: 5, recipientId: 'f1' }));
-  api.post('/game/check-in', () => {
+  api.post('/me/daily-check-in', () => {
     state.checkedIn = true;
-    return { seedsEarned: 10, pointsEarned: 0, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' };
+    return {
+      points: null,
+      water: { seedsEarned: 10, streakDays: 4, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
+      alreadyDone: false,
+      pending: [],
+    };
   });
   api.post('/game/tree/water', () => ({ progress: 620, target: 1000, harvested: false, treesPlanted: 2 }));
   api.post('/game/tree/buy', () => ({ certificateCode: 'TT-99', treeType: 'Sưa', cost: 20000, pointsUsed: 20000, pointsUsedConverted: 0 }));
@@ -101,9 +107,9 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
     await page.getByRole('button', { name: 'Điểm danh', exact: true }).dblclick();
-    await expect(page.getByRole('status').getByText('+10💧')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
-    expect(api.callsTo('POST', '/game/check-in')).toHaveLength(1);
+    await expect(page.getByRole('status').getByText('+10 giọt nước')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
+    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
   test('tưới hết: gửi {drops: 1250} một lần dù bấm đúp', async ({ page, api }) => {

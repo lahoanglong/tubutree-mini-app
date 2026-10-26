@@ -3,6 +3,7 @@ import {
   getCoupons,
   getDailyCheckInStatus,
   getLoyalty,
+  getLoyaltyPreview,
   getLoyaltyRewards,
   getMemberCard,
   getMyRedemptions,
@@ -24,3 +25,4 @@ export const newCustomerOfferQuery = (http: HttpClient, userId: string | undefin
 });
 export const rewardsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: () => getLoyaltyRewards(http) });
 export const myRedemptionsQuery = (http: HttpClient) => ({ queryKey: WASTE_QUERY_KEYS.rewardsMine, queryFn: () => getMyRedemptions(http) });
+export const loyaltyPreviewQuery = (http: HttpClient) => ({ queryKey: ['loyalty-preview'] as const, queryFn: () => getLoyaltyPreview(http), staleTime: 5 * 60_000 });

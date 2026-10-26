@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Gift, Leaf, Sprout, Ticket } from 'lucide-react';
@@ -9,17 +9,32 @@ import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tu
 import { redeemLoyaltyReward } from '@tubutree/app-core/api/loyalty';
 import { buyTree } from '@tubutree/app-core/api/game';
 import { WASTE_QUERY_KEYS, WASTE_REDEEM_INVALIDATE_KEYS } from '@tubutree/app-core/api/waste';
-import { loyaltyQuery, rewardsQuery } from '@tubutree/app-core/queries/loyalty';
-import { REWARD_TABS, lockedPointsNote, rewardCardState } from '@tubutree/app-core/reward-rules';
+import { loyaltyPreviewQuery, loyaltyQuery, rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import { guestPreviewCopy, previewAsCatalog } from '@tubutree/app-core/guest-preview';
+import { couponUseCopy } from '@tubutree/app-core/coupon-use';
+import {
+  REWARD_TABS,
+  WAREHOUSE_ONLY_LABEL,
+  WAREHOUSE_PICKUP_DONE,
+  rewardFreeShipNote,
+  isWarehousePickup,
+  lockedPointsNote,
+  orderRewards,
+  rewardCardState,
+  warehouseConfirmText,
+} from '@tubutree/app-core/reward-rules';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
+import { formatVnd } from '@/lib/format-vnd';
 import { pointsRulesNote } from '@/lib/loyalty-copy';
+import { useCouponUse } from '@/lib/use-coupon-use';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
+import { GuestLoginLink } from '@/components/loyalty/guest-tiers';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -102,6 +117,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         <span className="text-stone-700">Điểm còn lại</span>
         <span className="tabular-nums">{points(Math.max(0, pointsSummary(catalog).total - reward.pointsCost))}</span>
       </div>
+      {isWarehousePickup(reward) && <p className="text-sm font-semibold text-stone-900">{warehouseConfirmText(claimPoint)}</p>}
       {claimPoint && (
         <div className="space-y-0.5">
           <ClaimPointInfo point={claimPoint} heading={claimPoint.name} />
@@ -132,8 +148,9 @@ const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
   GIFT: Gift,
 };
 
-function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void }) {
+function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; preview?: boolean }) {
   const s = rewardCardState(reward, catalog);
+  const freeNote = preview ? null : rewardFreeShipNote(reward, catalog, formatVnd);
   const KindIcon = KIND_ICON[reward.kind];
   return (
     <div data-reward className={`flex flex-col gap-2.5 p-4 ${miniOutline}`}>
@@ -144,40 +161,57 @@ function RewardCard({ reward, catalog, onRedeem }: { reward: RewardItemDTO; cata
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <div className="text-base font-semibold text-stone-900">{reward.name}</div>
-            {reward.label && <Badge tone="brand">{reward.label}</Badge>}
+            {reward.label && !freeNote && <Badge tone="brand">{reward.label}</Badge>}
           </div>
           {reward.description && <div className="text-xs text-stone-700">{reward.description}</div>}
           {reward.stockRemaining != null && !reward.soldOut && <div className="text-xs text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
           {reward.claimInstructions && <div className="text-xs text-stone-600">{reward.claimInstructions}</div>}
+          {freeNote && <div className="text-xs text-stone-700">{freeNote}</div>}
+          {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
         </div>
       </div>
       <div className="mt-auto flex items-center justify-between gap-2">
         <div className="text-sm font-semibold tabular-nums text-forest-700">{points(reward.pointsCost)}</div>
-        {s.kind === 'redeem' && (
+        {!preview && s.kind === 'redeem' && (
           <button type="button" onClick={onRedeem} className={`${ui.btnPrimary} min-w-[88px]`}>
             Đổi
           </button>
         )}
         {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
-        {s.kind === 'locked' && (
+        {!preview && s.kind === 'locked' && (
           <button type="button" disabled className={ui.btnPrimary}>
             Chờ mở khoá điểm
           </button>
         )}
-        {s.kind === 'need' && <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
+        {!preview && s.kind === 'need' && <div className="text-xs text-stone-700">{`Cần thêm ${formatCount(s.missing)} điểm`}</div>}
       </div>
-      {s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
+      {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} />}
     </div>
   );
 }
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
+  const { use, notice, cancel } = useCouponUse();
+  // Sheet đóng (bấm X, nền, hoặc "Tiếp tục mua sắm") giữa lúc câu báo đang giữ: khách đã chọn ở lại, không kéo sang giỏ.
+  useEffect(() => {
+    if (outcome === null) cancel();
+  }, [outcome, cancel]);
   return (
     <Sheet open={outcome !== null} onClose={onClose} title="Đổi quà thành công">
       {outcome?.kind === 'VOUCHER' && (
         <div className="space-y-3">
           <p className="text-base text-stone-900">{`Mã ${outcome.couponCode ?? ''} đã vào ví mã giảm giá`}</p>
-          <Link href="/tai-khoan/diem-xanh" onClick={onClose} className={`${ui.btnPrimary} w-full`}>
+          {outcome.couponCode && (
+            <button type="button" onClick={() => void use(outcome.couponCode ?? '', onClose)} className={`${ui.btnPrimary} w-full`}>
+              {couponUseCopy.use}
+            </button>
+          )}
+          {notice && (
+            <p role={notice.error ? 'alert' : 'status'} className={`text-xs ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+              {notice.text}
+            </p>
+          )}
+          <Link href="/tai-khoan/diem-xanh" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
             Xem ví mã
           </Link>
         </div>
@@ -185,7 +219,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
       {outcome?.kind === 'CLAIM' && (
         <div className="space-y-3">
           <p className="font-display text-2xl font-semibold tracking-wide text-stone-900">{outcome.code ?? ''}</p>
-          <p className="text-base text-stone-900">Mang mã này tới kho Tubu TP.HCM để nhận quà</p>
+          <p className="text-base text-stone-900">{WAREHOUSE_PICKUP_DONE}</p>
           {outcome.claimExpiresAt && <p className="text-sm text-stone-700">{`Hạn nhận ${formatDate(outcome.claimExpiresAt)}`}</p>}
           <Link href="/kho-qua/cua-toi" onClick={onClose} className={`${ui.btnPrimary} w-full`}>
             Quà của tôi
@@ -212,7 +246,7 @@ function RewardsBody() {
   if (!c) return <Skeleton height={120} />;
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
-  const shown = c.rewards.filter((r) => kinds.includes(r.kind)).sort((a, b) => a.sortOrder - b.sortOrder);
+  const shown = orderRewards(c.rewards.filter((r) => kinds.includes(r.kind)), c);
   const total = pointsSummary(c).total;
   const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;
@@ -267,13 +301,46 @@ function RewardsBody() {
   );
 }
 
+/** Khách chưa đăng nhập: xem được quà đổi bằng Điểm Xanh nhưng chưa đổi được. */
+function GuestRewards() {
+  const q = useQuery(loyaltyPreviewQuery(coreHttp));
+  const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
+  const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
+  const shown = q.data ? q.data.rewards.filter((r) => kinds.includes(r.kind)) : [];
+  const catalog = q.data ? previewAsCatalog(q.data) : null;
+  return (
+    <div className="space-y-4 pb-12">
+      <p className="text-base text-stone-700">{guestPreviewCopy.hint}</p>
+      <GuestLoginLink returnTo="/kho-qua" />
+      {q.isError && !q.data ? (
+        <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
+      ) : !catalog ? (
+        <Skeleton height={120} />
+      ) : (
+        <>
+          <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} label="Loại quà" />
+          {shown.length === 0 ? (
+            <p className="text-sm text-stone-700">Chưa có quà trong mục này</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {shown.map((r) => (
+                <RewardCard key={r.id} reward={r} catalog={catalog} onRedeem={() => undefined} preview />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RewardsPage() {
   const phase = useAuthPhase();
   return (
     <LedgerShell title={TITLE} wide>
       {phase === 'loading' && <AuthLoading />}
       {phase === 'unavailable' && <SessionUnavailable />}
-      {phase === 'guest' && <LoginRequired message="Đăng nhập để đổi Điểm Xanh lấy quà." returnTo="/kho-qua" />}
+      {phase === 'guest' && <GuestRewards />}
       {phase === 'authenticated' && <RewardsBody />}
     </LedgerShell>
   );

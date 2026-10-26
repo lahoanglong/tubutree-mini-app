@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   getLoyalty: vi.fn(),
   buyTree: vi.fn(),
   invalidate: vi.fn(),
+  getCart: vi.fn(),
+  applyCoupon: vi.fn(),
+  coreGet: vi.fn(),
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -49,7 +52,13 @@ vi.mock('../services/account-api', async (importOriginal) => {
     getLoyalty: mocks.getLoyalty,
   };
 });
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../services/game-api', () => ({ buyTree: mocks.buyTree }));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getCart: mocks.getCart,
+  applyCoupon: mocks.applyCoupon,
+}));
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),
   invalidateAfterRedeem: mocks.invalidate,
@@ -74,6 +83,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.keySeq = 0;
   mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog());
+  mocks.getCart.mockResolvedValue({ itemCount: 0 });
+  mocks.applyCoupon.mockResolvedValue({ couponCode: 'FREESHIP-ABC', discount: 0, freeship: true });
   mocks.getLoyalty.mockResolvedValue({ pointsBalance: 30_000, pointsConvertedBalance: 5000, lockedPoints: 0, redeemablePoints: 30_000 });
 });
 const card = (name: string) => screen.getByText(name).closest('[data-reward]') as HTMLElement;
@@ -245,6 +256,86 @@ describe('/rewards Kho quà (§4.8)', () => {
     const c = await waitFor(() => card('Miễn phí vận chuyển'));
     expect(within(c).getByRole('button', { name: 'Chờ mở khoá điểm' })).toBeDisabled();
     expect(within(c).queryByText(/Cần thêm/)).toBeNull();
+  });
+  it('hạng đã được freeship: quà freeship xuống cuối, ghi rõ hạng và ngưỡng, KHÔNG tắt nút Đổi, không còn nhãn "Phổ biến"', async () => {
+    mocks.getLoyaltyRewards.mockResolvedValue(
+      makeRewardCatalog({
+        tierFreeShip: { tierName: 'Lộc Biếc', freeFrom: 99_000 },
+        rewards: [
+          makeRewardItem({ label: 'Phổ biến' }),
+          makeRewardItem({ id: 'reward-discount-50k', name: 'Giảm 50.000đ', pointsCost: 20_000, voucher: { type: 'AMOUNT', value: 50000, minOrder: 300000, maxDiscount: null, validDays: 30 }, sortOrder: 2 }),
+        ],
+      }),
+    );
+    renderPage();
+    await screen.findByText('Giảm 50.000đ');
+    const names = Array.from(document.querySelectorAll('[data-reward]')).map((el) => el.textContent ?? '');
+    expect(names[0]).toContain('Giảm 50.000đ');
+    expect(names[1]).toContain('Miễn phí vận chuyển');
+    const free = card('Miễn phí vận chuyển');
+    expect(within(free).getByText('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ')).toBeInTheDocument();
+    expect(within(free).getByRole('button', { name: 'Đổi' })).toBeEnabled();
+    expect(within(free).queryByText('Phổ biến')).toBeNull();
+    expect(within(card('Giảm 50.000đ')).getByRole('button', { name: 'Đổi' })).toBeEnabled();
+  });
+  it('hạng chưa freeship tới ngưỡng của mã: quà freeship vẫn đổi được như cũ', async () => {
+    mocks.getLoyaltyRewards.mockResolvedValue(makeRewardCatalog({ tierFreeShip: { tierName: 'Mầm Xanh', freeFrom: 199_000 } }));
+    renderPage();
+    expect(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' })).toBeEnabled();
+  });
+  it('quà nhận tại kho: thẻ ghi "Chỉ nhận tại kho TP.HCM"; mã giảm giá thì không; xác nhận hỏi lại kèm địa chỉ kho', async () => {
+    renderPage();
+    expect(within(await waitFor(() => card('Miễn phí vận chuyển'))).queryByText('Chỉ nhận tại kho TP.HCM')).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
+    expect(within(card('Gói hạt giống Tubu')).getByText('Chỉ nhận tại kho TP.HCM')).toBeInTheDocument();
+    expect(within(card('Góp quỹ trồng cây')).queryByText('Chỉ nhận tại kho TP.HCM')).toBeNull();
+    fireEvent.click(within(card('Gói hạt giống Tubu')).getByRole('button', { name: 'Đổi' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/Quà này chỉ nhận tại kho TP\.HCM, không giao tận nhà: Kho Tubu TP\.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP\.HCM\. Bạn vẫn muốn đổi\?/)).toBeInTheDocument();
+  });
+  it('đổi mã giảm giá xong: "Dùng ngay" khi giỏ có hàng → chọn sẵn mã rồi tới giỏ', async () => {
+    mocks.getCart.mockResolvedValue({ itemCount: 2 });
+    mocks.redeemLoyaltyReward.mockResolvedValue({ success: true, message: 'ok', pointsSpent: 20_000, remainingPoints: 10_000, redemption: makeGiftRedemption({ giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC' }), coupon: { code: 'FREESHIP-ABC', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' } });
+    renderPage();
+    fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    await screen.findByText('Mã FREESHIP-ABC đã vào ví mã giảm giá');
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+    expect(mocks.applyCoupon).toHaveBeenCalledWith('FREESHIP-ABC');
+  });
+  it('đổi mã giảm giá xong: "Dùng ngay" khi giỏ trống → tới danh sách sản phẩm, không gọi áp mã', async () => {
+    mocks.redeemLoyaltyReward.mockResolvedValue({ success: true, message: 'ok', pointsSpent: 20_000, remainingPoints: 10_000, redemption: makeGiftRedemption({ giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC' }), coupon: { code: 'FREESHIP-ABC', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' } });
+    renderPage();
+    fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
+    await screen.findByText('Mã FREESHIP-ABC đã vào ví mã giảm giá');
+    fireEvent.click(screen.getByRole('button', { name: 'Dùng ngay' }));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/browse'));
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+  it('khách chưa đăng nhập: xem được quà và giá, có nút "Đăng nhập để đổi", không có nút Đổi, không gọi API của khách', async () => {
+    mocks.auth.status = 'idle';
+    mocks.coreGet.mockResolvedValue({
+      rewards: [makeRewardItem({ canRedeem: false }), makeRewardItem({ id: 'seed', kind: 'SEED_PACK', name: 'Gói hạt giống', pointsCost: 40_000, canRedeem: false })],
+      giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12,
+    });
+    renderPage();
+    expect(await screen.findByText('Miễn phí vận chuyển')).toBeInTheDocument();
+    expect(screen.getByText('20.000 điểm')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Đổi' })).toBeNull();
+    expect(mocks.coreGet).toHaveBeenCalledWith('/loyalty/preview');
+    expect(mocks.getLoyaltyRewards).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi' }));
+    expect(mocks.login).toHaveBeenCalled();
+    mocks.auth.status = 'authenticated';
+  });
+  it('khách xem trước: quà hết hàng vẫn hiện huy hiệu "Đã hết"', async () => {
+    mocks.auth.status = 'idle';
+    mocks.coreGet.mockResolvedValue({ rewards: [makeRewardItem({ canRedeem: false, soldOut: true })], giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12 });
+    renderPage();
+    expect(await screen.findByText('Đã hết')).toBeInTheDocument();
+    mocks.auth.status = 'authenticated';
   });
   it('openingHoursText: nhiều ngày, nhiều khung giờ', () => {
     expect(openingHoursText({ MON: [{ open: '08:00', close: '12:00' }, { open: '13:00', close: '17:00' }], TUE: [{ open: '08:00', close: '17:00' }] })).toBe('T2 08:00–12:00, 13:00–17:00 · T3 08:00–17:00');

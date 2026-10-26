@@ -29,6 +29,6 @@ import { FeedModule } from '../feed/feed.module';
     GameGardenService,
     SeasonPassService,
   ],
-  exports: [GameService],
+  exports: [GameService, GameEconomyService],
 })
 export class GameModule {}

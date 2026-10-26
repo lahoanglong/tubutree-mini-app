@@ -34,7 +34,7 @@ describe('loyalty — hợp đồng gọi API', () => {
       { method: 'get', path: '/me/new-customer-offer' },
       { method: 'get', path: '/me/loyalty/rewards' },
       { method: 'get', path: '/me/loyalty/rewards/mine' },
-      { method: 'get', path: '/me/loyalty/check-in' },
+      { method: 'get', path: '/me/daily-check-in' },
       { method: 'get', path: '/me/loyalty/member-card' },
     ]);
   });
@@ -42,7 +42,7 @@ describe('loyalty — hợp đồng gọi API', () => {
   it('điểm danh: POST không body', async () => {
     const { http, calls } = fakeHttp();
     await postDailyCheckIn(http);
-    expect(calls).toEqual([{ method: 'post', path: '/me/loyalty/check-in' }]);
+    expect(calls).toEqual([{ method: 'post', path: '/me/daily-check-in' }]);
   });
 
   it('đổi quà: mã quà được encode, không body, Idempotency-Key ở header', async () => {

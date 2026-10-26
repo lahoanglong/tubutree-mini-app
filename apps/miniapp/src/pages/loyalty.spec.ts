@@ -10,6 +10,7 @@ import { join } from 'node:path';
  *  - báo "Đã sao chép" kể cả khi copyText trả false.
  */
 const src = readFileSync(join(process.cwd(), 'src', 'pages', 'loyalty.tsx'), 'utf8');
+const checkInSrc = readFileSync(join(process.cwd(), 'src', 'components', 'loyalty', 'daily-check-in-card.tsx'), 'utf8');
 
 describe('loyalty.tsx — thẻ thành viên', () => {
   it('không còn mã vạch giả (mảng độ rộng vạch cố định)', () => {
@@ -34,8 +35,8 @@ describe('loyalty.tsx — thẻ thành viên', () => {
 
 describe('loyalty.tsx — trạng thái tải/lỗi', () => {
   it('điểm danh có nhánh isError + nút thử lại', () => {
-    expect(src).toMatch(/checkInQ\.isError/);
-    expect(src).toMatch(/checkInQ\.refetch\(\)/);
+    expect(checkInSrc).toMatch(/statusQ\.isError/);
+    expect(checkInSrc).toMatch(/statusQ\.refetch\(\)/);
   });
 
   it('không còn gọi danh mục quà', () => {

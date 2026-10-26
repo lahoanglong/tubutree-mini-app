@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, gameNewbieCopy, type MissionTarget, type PrimaryWaterAction } from '@tubutree/app-core/game-newbie';
-import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
+import { checkInQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { loginHref } from '@/lib/return-to';
@@ -83,6 +83,8 @@ function GameBody() {
   const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
   const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
   const { data: loyalty } = useQuery(loyaltyQuery(coreHttp));
+  // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
+  const checkInStatusQ = useQuery(checkInQuery(coreHttp));
   // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null để
   // nút vẫn bấm được (API là lưới an toàn).
   const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
@@ -120,6 +122,8 @@ function GameBody() {
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);
+  // Gộp điểm + nước: tải lỗi thì để nút bật (POST idempotent, đã xong sẽ báo "đã điểm danh rồi"), đừng suy từ lastCheckInAt vì nó chỉ là phần nước.
+  const checkInDone = checkInStatusQ.data ? checkInStatusQ.data.checkedInToday : checkInStatusQ.isError ? false : checkedInToday;
   const dewToday = isSameVNDay(profile?.lastDewAt ?? null);
   const dailyGain = profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
@@ -190,6 +194,7 @@ function GameBody() {
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
+            allDone={checkInDone}
             onCheckIn={() => checkInM.mutate()}
             checkInPending={checkInM.isPending}
             onBuyFreeze={() => freezeM.mutate()}

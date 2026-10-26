@@ -14,6 +14,7 @@ export function primaryActionOf(profile: GameProfile | undefined): PrimaryWaterA
     dailyLoginSeeds: profile?.dailyLoginSeeds,
     dewSeeds: profile?.dewSeeds,
     firstCheckinBonus: profile?.firstCheckinBonus,
+    tankCapacity: profile?.tankCapacity,
   });
 }
 

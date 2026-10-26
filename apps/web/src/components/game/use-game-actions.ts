@@ -20,6 +20,7 @@ import {
   type HarvestCouponCap,
   type HarvestReward,
 } from '@tubutree/app-core/api/game';
+import { checkInSuccessText } from '@tubutree/app-core/daily-check-in-copy';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { coreHttp } from '@/lib/core-http';
 import { formatDrops, formatNumber, formatPoints } from './format';
@@ -96,10 +97,13 @@ export function useGameActions({
   const checkInM = useLockedMutation({
     mutationFn: () => checkIn(coreHttp),
     onSuccess: (r) => {
-      const parts = [`+${formatDrops(r.seedsEarned)}`];
-      if (r.streakFrozeUsed) parts.push('🧊 đã dùng vé giữ lửa');
-      if (r.bonusNote) parts.push(r.bonusNote);
-      notify(parts.join(' · '), 'success');
+      notify(checkInSuccessText(r), r.pending.length > 0 ? 'error' : 'success');
+      // Cả hai phần xong thì khoá nút ngay, đừng chờ refetch (trong lúc đó nút Vườn Xanh sẽ bật lại).
+      if (r.pending.length === 0) {
+        queryClient.setQueryData<{ checkedInToday: boolean }>(['loyalty-checkin'], (old) => (old ? { ...old, checkedInToday: true } : old));
+      }
+      void queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] });
+      void queryClient.invalidateQueries({ queryKey: ['points-txn'] });
       refresh();
     },
     onError,

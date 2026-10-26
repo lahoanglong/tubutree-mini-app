@@ -2,7 +2,7 @@ import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách: Điểm Xanh và hạng thành viên (/tai-khoan/diem-xanh). Mọi lời gọi /api/** đi qua mock (fixture `api`).
- * Điểm danh phải gửi đúng POST /me/loyalty/check-in một lần dù bấm đúp; thẻ thành viên số mã hoá đúng memberCode.
+ * Điểm danh phải gửi đúng POST /me/daily-check-in một lần dù bấm đúp; thẻ thành viên số mã hoá đúng memberCode.
  */
 
 const USER = {
@@ -28,15 +28,34 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }) {
   });
   api.get('/me/coupons', [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
   api.get('/me/points/transactions', [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
-  api.get('/me/loyalty/check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, rewards: REWARDS }));
-  api.post('/me/loyalty/check-in', () => {
+  api.get('/me/daily-check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, todayWater: 10, rewards: REWARDS }));
+  api.post('/me/daily-check-in', () => {
     checkIn.done = true;
-    return { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1803, message: 'Điểm danh thành công +3 Điểm Xanh' };
+    return {
+      points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1803, message: 'Điểm danh thành công +3 Điểm Xanh' },
+      water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
+      alreadyDone: false,
+      pending: [],
+    };
   });
   api.get('/me/loyalty/member-card', {
     memberCode: 'TUBUAN123', name: 'An', phone: null, tierName: 'Mầm Xanh', tierMultiplier: 1, pointsBalance: 1681, posCreditEnabled: true,
   });
 }
+
+const GUEST_PREVIEW = {
+  rewards: [
+    { id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: 'Đơn từ 99.000đ', label: null, pointsCost: 20000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 1 },
+  ],
+  giftClaimDays: 60,
+  claimPoint: null,
+  tiers: [
+    { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, multiplier: 1, perks: ['Quà sinh nhật'] },
+    { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5000000, multiplier: 1.2, perks: ['Freeship đơn từ 99k'] },
+  ],
+  rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2 },
+  pointExpireMonths: 12,
+};
 
 test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test.beforeEach(async ({ page }) => {
@@ -63,12 +82,22 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
     mockLoyalty(api, { done: false });
     await page.goto('/tai-khoan/diem-xanh');
-    const button = page.getByRole('button', { name: 'Điểm danh +3' });
+    const button = page.getByRole('button', { name: 'Điểm danh', exact: true });
     await expect(button).toBeEnabled();
     await button.dblclick();
-    await expect(page.getByText('Điểm danh thành công +3 Điểm Xanh')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
-    expect(api.callsTo('POST', '/me/loyalty/check-in')).toHaveLength(1);
+    await expect(page.getByText('+3 Điểm Xanh · +10 giọt nước')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
+    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
+  });
+
+  test('"Dùng ngay" mà máy chủ từ chối mã: thẻ mã hiện đúng lý do (role=alert)', async ({ page, api }) => {
+    mockLoyalty(api, { done: true });
+    api.get('/cart', { items: [], itemCount: 2, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 199000, couponCode: null });
+    api.post('/cart/coupon', () => reply(400, { message: 'Đơn tối thiểu 199.000đ' }));
+    await page.goto('/tai-khoan/diem-xanh');
+    await page.getByRole('button', { name: 'Dùng mã FREESHIP1 ngay' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Chưa chọn sẵn được mã: Đơn tối thiểu 199.000đ' })).toBeVisible();
+    expect(api.callsTo('POST', '/cart/coupon')).toHaveLength(1);
   });
 
   test('thẻ thành viên số: hiện mã gõ tay được và lời nhắc, Đóng tắt thẻ', async ({ page, api }) => {
@@ -83,10 +112,12 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test('khách chưa đăng nhập được mời đăng nhập, không gọi API điểm', async ({ page, api }) => {
+  test('khách chưa đăng nhập xem được bảng hạng và có nút Đăng nhập để đổi, không gọi API điểm', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    api.get('/loyalty/preview', GUEST_PREVIEW);
     await page.goto('/tai-khoan/diem-xanh');
-    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Đăng nhập để đổi' })).toBeVisible();
+    await expect(page.getByText('Freeship đơn từ 99k')).toBeVisible();
     expect(api.callsTo('GET', '/me/loyalty')).toHaveLength(0);
   });
 });
@@ -237,10 +268,13 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     await expect(page.getByText('Hạn nhận 17/12/2026')).toBeVisible();
   });
 
-  test('khách chưa đăng nhập được mời đăng nhập, không gọi API kho quà', async ({ page, api }) => {
+  test('khách chưa đăng nhập xem được quà và có nút Đăng nhập để đổi, không có nút Đổi, không gọi API kho quà', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    api.get('/loyalty/preview', GUEST_PREVIEW);
     await page.goto('/kho-qua');
-    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Đăng nhập để đổi' })).toBeVisible();
+    await expect(page.getByText('Miễn phí vận chuyển')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đổi', exact: true })).toHaveCount(0);
     expect(api.callsTo('GET', '/me/loyalty/rewards')).toHaveLength(0);
   });
 

@@ -1,9 +1,15 @@
+import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring } from '@tubutree/app-core/home-layout';
 import type { CouponDTO } from '../../services/account-api';
 import { autoCouponName } from '../../utils/coupon-name';
 import { formatDate, formatVnd } from '../../utils/format';
+import { useCouponUse } from '../../hooks/use-coupon-use';
+import { Button } from '../ui/button';
 import { Text } from '../ui/text';
+
+/** Đệm ngang hẹp: thẻ mã nằm trong hai lớp đệm, ở 320px hai nút với đệm mặc định rộng hơn chỗ có và tràn khỏi viền thẻ. */
+const TIGHT = { minWidth: 0, paddingInline: 8 } as const;
 
 export function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
@@ -13,37 +19,44 @@ export function couponLabel(c: CouponDTO): string {
 
 /** Một mã giảm giá của khách (Điểm Xanh và Ưu đãi dùng chung). */
 export function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
+  const { copy, use } = useCouponUse();
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
         padding: 12,
         background: 'var(--color-promo-bg)',
         borderRadius: 'var(--radius-control)',
         border: '1px dashed var(--clay-100)',
       }}
     >
-      <div style={{ minWidth: 0 }}>
-        <Text variant="body-sm" tone="primary" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
-          {couponLabel(c)}
-        </Text>
-        <Text variant="caption" tone="secondary" as="div">
-          {autoCouponName(c.code) ?? `Mã ${c.code}`}
-          {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
-        </Text>
-      </div>
-      <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
-        <Text variant="caption" tone="tertiary" as="div">
-          HSD {formatDate(c.endAt)}
-        </Text>
-        {isCouponExpiring(c, Date.now()) && (
-          <Text variant="caption" as="div" style={{ color: 'var(--color-text-warning)', fontWeight: 700 }}>
-            {homeCopy.offers.couponExpiring}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <Text variant="body-sm" tone="primary" as="div" style={{ color: 'var(--color-promo-fg)', fontWeight: 700 }}>
+            {couponLabel(c)}
           </Text>
-        )}
+          <Text variant="caption" tone="secondary" as="div">
+            {autoCouponName(c.code) ?? `Mã ${c.code}`}
+            {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+          </Text>
+        </div>
+        <div style={{ textAlign: 'right', flex: '0 0 auto' }}>
+          <Text variant="caption" tone="tertiary" as="div">
+            HSD {formatDate(c.endAt)}
+          </Text>
+          {isCouponExpiring(c, Date.now()) && (
+            <Text variant="caption" as="div" style={{ color: 'var(--color-text-warning)', fontWeight: 700 }}>
+              {homeCopy.offers.couponExpiring}
+            </Text>
+          )}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <Button variant="secondary" fullWidth style={TIGHT} aria-label={couponUseCopy.copyAria(c.code)} onPress={() => copy(c.code)}>
+          {couponUseCopy.copy}
+        </Button>
+        <Button fullWidth style={TIGHT} aria-label={couponUseCopy.useAria(c.code)} onPress={() => use(c.code)}>
+          {couponUseCopy.use}
+        </Button>
       </div>
     </div>
   );

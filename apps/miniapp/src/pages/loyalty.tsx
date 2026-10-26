@@ -1,23 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Sprout, Recycle, Check, CalendarCheck, Gift, Copy, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Sprout, Recycle, Check, Gift, Copy, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
 import {
   getLoyalty,
   getCoupons,
   getPointsTransactions,
-  getDailyCheckInStatus,
-  postDailyCheckIn,
   getMemberCard,
-  checkInView,
   memberCardHint,
   pointsReasonLabel,
   tierProgressPercent,
-  type CheckInStatusResponse,
   type PointsTxn,
 } from '../services/account-api';
 import { getErrorMessage } from '../services/api';
+import { GuestTiers } from '../components/loyalty/guest-tiers';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -38,6 +35,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
 import { CouponCard } from '../components/loyalty/coupon-card';
+import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 
 /**
@@ -66,7 +64,6 @@ export default function LoyaltyPage() {
   const navigate = useNavigate();
   const publicConfig = usePublicConfig();
   const { openSnackbar } = useSnackbar();
-  const qc = useQueryClient();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
   const phase = useAuthPhase();
@@ -74,47 +71,10 @@ export default function LoyaltyPage() {
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useQuery({ queryKey: ['points-txn'], queryFn: getPointsTransactions, enabled: authed });
-  const checkInQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
   const memberCardQ = useQuery({ queryKey: ['loyalty-member-card'], queryFn: getMemberCard, enabled: authed });
 
   const [showMemberCard, setShowMemberCard] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
-  // Khoá đồng bộ chống chạm đúp: `disabled={mut.isPending}` chỉ có hiệu lực sau lần render kế,
-  // 2 cú chạm trong cùng khung hình vẫn gọi mutate 2 lần; backend đã unique điểm danh theo ngày.
-  const busyRef = useRef({ checkIn: false });
-
-  const refreshPoints = () => {
-    void qc.invalidateQueries({ queryKey: ['loyalty'] });
-    void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
-    void qc.invalidateQueries({ queryKey: ['points-txn'] });
-  };
-
-  const checkInMut = useMutation({
-    mutationFn: postDailyCheckIn,
-    onSuccess: (res) => {
-      haptic('medium');
-      openSnackbar({ text: res.message, type: 'success' });
-      // Khoá nút ngay (trước khi refetch trạng thái về) — tránh chạm thêm lúc chờ bị 400 "đã điểm danh".
-      qc.setQueryData<CheckInStatusResponse>(['loyalty-checkin'], (old) =>
-        old ? { ...old, checkedInToday: true } : old,
-      );
-      refreshPoints();
-    },
-    onError: (e) => {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Vd đã điểm danh trên thiết bị khác → tải lại trạng thái để nút chuyển "Đã điểm danh".
-      void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
-    },
-    onSettled: () => {
-      busyRef.current.checkIn = false;
-    },
-  });
-
-  const doCheckIn = () => {
-    if (busyRef.current.checkIn) return;
-    busyRef.current.checkIn = true;
-    checkInMut.mutate();
-  };
   const copyMemberCode = async () => {
     const code = memberCardQ.data?.memberCode;
     if (!code) return;
@@ -140,7 +100,6 @@ export default function LoyaltyPage() {
   const rates = data?.rates;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   const progress = data ? tierProgressPercent(data) : 0;
-  const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
   // Con số khách thấy là tổng hai lô.
   const lots = data ? pointsSummary(data) : null;
   const convertedNote = convertedPointsNote(lots?.converted);
@@ -181,7 +140,7 @@ export default function LoyaltyPage() {
       <PageHeader title="Hạng thành viên & Điểm Xanh" />
 
       {phase !== 'authenticated' ? (
-        <AuthPhaseView phase={phase} loading={pageSkeleton} />
+        <AuthPhaseView phase={phase} loading={pageSkeleton} guest={<GuestTiers />} />
       ) : loyaltyQ.isLoading ? (
         pageSkeleton
       ) : loyaltyQ.isError && !loyaltyQ.data ? (
@@ -332,86 +291,7 @@ export default function LoyaltyPage() {
           </Section>
 
           {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh giọt nước ở Vườn Xanh */}
-          {checkInQ.isLoading ? (
-            <div style={{ margin: '0 16px 12px' }}>
-              <Skeleton height={120} radius="var(--radius-card)" />
-            </div>
-          ) : checkInQ.isError ? (
-            <Card style={{ margin: '0 16px 12px' }} padding={16}>
-              <ErrorState
-                variant="inline"
-                message={`Chưa tải được lịch điểm danh: ${getErrorMessage(checkInQ.error)}`}
-                onRetry={() => void checkInQ.refetch()}
-              />
-            </Card>
-          ) : checkInQ.data && checkIn ? (
-            <Card style={{ margin: '0 16px 12px' }} padding={16}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                  <IconTile>
-                    <Icon icon={CalendarCheck} tone="brand" />
-                  </IconTile>
-                  <div style={{ minWidth: 0 }}>
-                    <Heading variant="title-sm" as="h2">
-                      Điểm danh nhận Điểm Xanh
-                    </Heading>
-                    <Text variant="caption" tone="tertiary" as="div">
-                      Chuỗi: <b>{checkInQ.data.streakDays}</b> ngày liên tiếp {checkInQ.data.streakDays > 0 ? '🔥' : ''}
-                    </Text>
-                  </div>
-                </div>
-                <Button
-                  disabled={!checkIn.canCheckIn || checkInMut.isPending}
-                  loading={checkInMut.isPending}
-                  onPress={doCheckIn}
-                  style={{ flexShrink: 0 }}
-                >
-                  {checkIn.buttonLabel}
-                </Button>
-              </div>
-
-              {/* 7 ngày streak */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center' }}>
-                {checkInQ.data.rewards.map((r) => (
-                  <div
-                    key={r.day}
-                    style={{
-                      padding: 8,
-                      borderRadius: 'var(--radius-control)',
-                      background: r.claimed
-                        ? 'var(--color-bg-subtle)'
-                        : r.isToday
-                        ? 'var(--color-action-secondary-bg)'
-                        : 'var(--color-bg-canvas)',
-                      border: r.isToday
-                        ? '1px solid var(--color-border-selected)'
-                        : r.claimed
-                        ? '1px solid var(--color-action-secondary-border)'
-                        : '1px solid transparent',
-                    }}
-                  >
-                    <Text variant="label" tone="tertiary" as="div" style={{ fontWeight: 400 }}>
-                      N{r.day}
-                    </Text>
-                    <Text variant="label" tone={r.claimed ? 'brand' : 'primary'} as="div" style={{ marginTop: 2 }}>
-                      +{formatNumber(r.points)}
-                    </Text>
-                    <div style={{ marginTop: 2, display: 'flex', justifyContent: 'center' }}>
-                      <Icon
-                        icon={r.claimed ? Check : r.day === 7 ? Gift : Sprout}
-                        size="sm"
-                        tone={r.claimed ? 'brand' : 'muted'}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 8 }}>
-                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính
-                vào xét hạng; giọt nước điểm danh riêng trong Vườn Xanh.
-              </Text>
-            </Card>
-          ) : null}
+          <DailyCheckInCard authed={authed} margin="0 16px 12px" />
 
           {/* Lối tắt tích Điểm & Giọt nước */}
           <Card style={{ margin: '0 16px 12px' }} padding={16}>

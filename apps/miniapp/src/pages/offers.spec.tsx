@@ -73,7 +73,7 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
   it('có đủ: thẻ Điểm Xanh và hạng, Điểm danh, Đổi quà, Quà của tôi, Đổi rác, Tích điểm đơn sàn, Mua chung, Mã giảm giá của tôi', async () => {
     renderPage();
     expect(await screen.findByText('Mầm Xanh')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Điểm danh nhận Điểm Xanh' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Điểm danh mỗi ngày' })).toBeInTheDocument();
     for (const t of ['Đổi quà', 'Quà của tôi', 'Đổi rác lấy quà', 'Tích điểm đơn sàn', 'Mua chung nhóm']) {
       expect(screen.getByText(t)).toBeInTheDocument();
     }

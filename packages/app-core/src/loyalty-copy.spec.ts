@@ -26,10 +26,10 @@ describe('quy tắc chữ Điểm Xanh dùng chung', () => {
     expect(pointsToSpend(100, RATES)).toBe(5000);
   });
 
-  it('checkInView ghi số điểm của ô hôm nay, đã điểm danh thì khoá nút', () => {
+  it('checkInView: nhãn nút không kèm số, đã điểm danh thì khoá nút', () => {
     const base = { checkedInToday: false, streak: 0, rewards: [{ day: 1, points: 5, isToday: true }] };
-    expect(checkInView(base as never)).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh +5' });
-    expect(checkInView({ ...base, todayPoints: 0, rewards: [] } as never)).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh' });
+    expect(checkInView(base as never)).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh' });
+    expect(checkInView({ ...base, pointsDone: true, waterDone: false } as never)).toEqual({ canCheckIn: true, buttonLabel: 'Điểm danh' });
     expect(checkInView({ ...base, checkedInToday: true } as never)).toEqual({ canCheckIn: false, buttonLabel: 'Đã điểm danh' });
   });
 

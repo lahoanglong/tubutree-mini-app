@@ -177,9 +177,14 @@ test.describe('Vườn Xanh', () => {
       ecoImpact: { progress: harvested ? 5 : 0, target: harvested ? 300 : 60, treeType: 'Cây Dứa', treesPlanted: harvested ? 1 : 0 },
     }));
     api.get('/game/quiz/today', [{ id: 'q1', question: 'Cây cần gì?', options: ['Nước', 'Đá'], category: 'cay', difficulty: 1, waterReward: 8 }]);
-    api.post('/game/check-in', () => {
+    api.post('/me/daily-check-in', () => {
       checkedIn = true;
-      return { seedsEarned: 65, pointsEarned: 0, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' };
+      return {
+        points: null,
+        water: { seedsEarned: 65, streakDays: 1, totalSeeds: 65, streakFrozeUsed: false, bonusNote: '' },
+        alreadyDone: false,
+        pending: [],
+      };
     });
     api.post('/game/tree/water', () => {
       harvested = true;

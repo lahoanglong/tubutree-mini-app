@@ -9,6 +9,7 @@ import { isSameVNDay } from './game-utils';
 // 💧 và 🎁 trong ô ngày là phần thưởng của chuỗi (nội dung game), còn lại là icon Lucide.
 export function CheckInStreak({
   profile,
+  allDone,
   onCheckIn,
   checkInPending,
   onBuyFreeze,
@@ -18,6 +19,8 @@ export function CheckInStreak({
   onNeedWater,
 }: {
   profile: GameProfile | undefined;
+  /** Cả Điểm Xanh và giọt nước đã xong hôm nay (trạng thái gộp); quyết định nút. Dòng giọt nước vẫn theo `lastCheckInAt`. */
+  allDone: boolean;
   onCheckIn: () => void;
   checkInPending: boolean;
   onBuyFreeze: () => void;
@@ -44,9 +47,9 @@ export function CheckInStreak({
           </h2>
           <p className="text-xs text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
-        <button type="button" disabled={checkedInToday || checkInPending} onClick={onCheckIn} className={`${ui.btnPrimary} flex-none gap-1`}>
-          {checkedInToday && <Check className="h-4 w-4" aria-hidden="true" />}
-          {checkedInToday ? 'Đã điểm danh' : 'Điểm danh'}
+        <button type="button" disabled={allDone || checkInPending} onClick={onCheckIn} className={`${ui.btnPrimary} flex-none gap-1`}>
+          {allDone && <Check className="h-4 w-4" aria-hidden="true" />}
+          {allDone ? 'Đã điểm danh' : 'Điểm danh'}
         </button>
       </div>
       <div className="mt-3 flex gap-1.5">

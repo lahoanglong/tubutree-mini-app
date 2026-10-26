@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarCheck, Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout } from 'lucide-react';
-import { postDailyCheckIn, type CheckInStatusResponse, type CouponDTO } from '@tubutree/app-core/api/loyalty';
-import { checkInQuery, couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
+import { useQuery } from '@tanstack/react-query';
+import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout } from 'lucide-react';
+import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
+import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -16,7 +16,6 @@ import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { autoCouponName } from '@/lib/coupon-name';
 import {
-  checkInView,
   earnRuleLine,
   expiringPointsNote,
   formatMultiplier,
@@ -29,11 +28,14 @@ import {
   tierThresholdLabel,
 } from '@/lib/loyalty-copy';
 import { ui } from '@/lib/guest-ui';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { GuestTiers } from '@/components/loyalty/guest-tiers';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { CouponActions } from '@/components/loyalty/coupon-actions';
+import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
@@ -60,50 +62,14 @@ function couponLabel(c: CouponDTO): string {
 export default function LoyaltyPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
-  const qc = useQueryClient();
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed, refetchOnWindowFocus: true });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const txnQ = useQuery({ ...pointsTxnQuery(coreHttp), enabled: authed });
-  const checkInQ = useQuery({ ...checkInQuery(coreHttp), enabled: authed });
   const cardQ = useQuery({ ...memberCardQuery(coreHttp), enabled: authed });
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
 
   const [showCard, setShowCard] = useState(false);
   const [celebrate, setCelebrate] = useState<string | null>(null);
-  // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
-  const checkInBusy = useRef(false);
-  const [checkInMsg, setCheckInMsg] = useState<{ text: string; error: boolean } | null>(null);
-
-  const refreshPoints = () => {
-    void qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
-    void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
-    void qc.invalidateQueries({ queryKey: pointsTxnQuery(coreHttp).queryKey });
-  };
-
-  const checkInMut = useMutation({
-    mutationFn: () => postDailyCheckIn(coreHttp),
-    onSuccess: (res) => {
-      setCheckInMsg({ text: res.message, error: false });
-      // Khoá nút ngay, trước khi trạng thái mới về: bấm thêm lúc chờ sẽ bị 400 "đã điểm danh".
-      qc.setQueryData<CheckInStatusResponse>(checkInQuery(coreHttp).queryKey, (old) => (old ? { ...old, checkedInToday: true } : old));
-      refreshPoints();
-    },
-    onError: (e) => {
-      setCheckInMsg({ text: errText(e), error: true });
-      // Vd đã điểm danh trên thiết bị khác: tải lại để nút chuyển "Đã điểm danh".
-      void qc.invalidateQueries({ queryKey: checkInQuery(coreHttp).queryKey });
-    },
-    onSettled: () => {
-      checkInBusy.current = false;
-    },
-  });
-  const doCheckIn = () => {
-    if (checkInBusy.current) return;
-    checkInBusy.current = true;
-    setCheckInMsg(null);
-    checkInMut.mutate();
-  };
-
   const data = loyaltyQ.data;
   const curMin = data?.tiers.find((t) => t.id === data.tier?.id)?.minPoints ?? 0;
   // So hạng hiện tại với lần xem trước: lần đầu chỉ ghi mốc, tránh chúc mừng giả cho khách hạng cao mở trang lần đầu.
@@ -140,7 +106,7 @@ export default function LoyaltyPage() {
   if (phase === 'guest') {
     return (
       <LedgerShell title={TITLE} wide>
-        <LoginRequired message="Đăng nhập để xem hạng thành viên và Điểm Xanh của bạn." returnTo="/tai-khoan/diem-xanh" />
+        <GuestTiers returnTo="/tai-khoan/diem-xanh" />
       </LedgerShell>
     );
   }
@@ -171,7 +137,6 @@ export default function LoyaltyPage() {
   const lots = pointsSummary(data);
   const expiring = expiringPointsNote(data.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
-  const checkIn = checkInQ.data ? checkInView(checkInQ.data) : null;
   const wasteOn = configQ.data?.waste?.enabled === true;
   const shortcuts = [
     { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Xanh', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
@@ -246,15 +211,20 @@ export default function LoyaltyPage() {
             ) : couponsQ.data && couponsQ.data.length > 0 ? (
               <ul className="space-y-2">
                 {couponsQ.data.map((c) => (
-                  <li key={c.code} className="flex items-center justify-between gap-2 rounded-control border border-dashed border-stone-450 bg-promo-bg p-3">
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
-                      <div className="break-words text-xs text-stone-700">
-                        {autoCouponName(c.code) ?? `Mã ${c.code}`}
-                        {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                  <li key={c.code} className="rounded-control border border-dashed border-stone-450 bg-promo-bg p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
+                        <div className="break-words text-xs text-stone-700">
+                          {autoCouponName(c.code) ?? `Mã ${c.code}`}
+                          {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
+                        </div>
                       </div>
+                      <div className="shrink-0 text-xs text-stone-600">HSD {formatDate(c.endAt)}</div>
                     </div>
-                    <div className="shrink-0 text-xs text-stone-600">HSD {formatDate(c.endAt)}</div>
+                    <div className="mt-2.5">
+                      <CouponActions code={c.code} />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -266,61 +236,7 @@ export default function LoyaltyPage() {
             )}
           </Section>
 
-          {checkInQ.isLoading ? (
-            <Skeleton height={120} />
-          ) : checkInQ.isError ? (
-            <div className={`p-4 ${miniCard}`}>
-              <InlineError message={`Chưa tải được lịch điểm danh: ${errText(checkInQ.error)}`} onRetry={() => void checkInQ.refetch()} />
-            </div>
-          ) : checkInQ.data && checkIn ? (
-            <section aria-label="Điểm danh" className={`p-4 ${miniCard}`}>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <IconTile>
-                    <CalendarCheck className="h-4 w-4 text-forest-600" aria-hidden="true" />
-                  </IconTile>
-                  <div className="min-w-0">
-                    <h2 className="font-display text-base font-semibold text-stone-900">Điểm danh nhận Điểm Xanh</h2>
-                    <div className="text-xs text-stone-600">
-                      Chuỗi: <b>{checkInQ.data.streakDays}</b> ngày liên tiếp {checkInQ.data.streakDays > 0 ? '🔥' : ''}
-                    </div>
-                  </div>
-                </div>
-                <button type="button" disabled={!checkIn.canCheckIn || checkInMut.isPending} onClick={doCheckIn} className={`${ui.btnPrimary} shrink-0`}>
-                  {checkIn.buttonLabel}
-                </button>
-              </div>
-              {checkInMsg && (
-                <p role={checkInMsg.error ? 'alert' : 'status'} className={`mb-2 text-sm ${checkInMsg.error ? ui.error : 'text-success-fg'}`}>
-                  {checkInMsg.text}
-                </p>
-              )}
-              <ul className="grid grid-cols-7 gap-1.5 text-center">
-                {checkInQ.data.rewards.map((r) => (
-                  <li
-                    key={r.day}
-                    className={`rounded-control border p-1.5 ${r.isToday ? 'border-forest-600 bg-forest-50' : r.claimed ? 'border-forest-100 bg-stone-100' : 'border-transparent bg-stone-50'}`}
-                  >
-                    <div className="text-xs text-stone-600">N{r.day}</div>
-                    <div className={`mt-0.5 text-xs font-semibold ${r.claimed ? 'text-forest-700' : 'text-stone-900'}`}>+{formatCount(r.points)}</div>
-                    <div className="mt-0.5 flex justify-center text-stone-500">
-                      {r.claimed ? (
-                        <Check className="h-4 w-4 text-forest-600" aria-hidden="true" />
-                      ) : r.day === 7 ? (
-                        <Gift className="h-4 w-4" aria-hidden="true" />
-                      ) : (
-                        <Sprout className="h-4 w-4" aria-hidden="true" />
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-2 text-xs text-stone-600">
-                Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng; giọt nước điểm danh riêng trong
-                Vườn Xanh.
-              </p>
-            </section>
-          ) : null}
+          <DailyCheckInCard authed={authed} />
 
           {shortcuts.length > 0 && (
             <ul className={`divide-y divide-stone-200 ${miniCard}`}>

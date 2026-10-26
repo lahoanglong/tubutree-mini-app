@@ -3,6 +3,7 @@ import { BadRequestException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { LoyaltyController } from './loyalty.controller';
 import type { LoyaltyService } from './loyalty.service';
@@ -34,6 +35,25 @@ describe('LoyaltyController — route nhân viên (POS)', () => {
   it('route khách (check-in/đổi quà) KHÔNG giới hạn role', () => {
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.checkIn)).toBeUndefined();
     expect(Reflect.getMetadata(ROLES_KEY, LoyaltyController.prototype.redeemReward)).toBeUndefined();
+  });
+});
+
+describe('LoyaltyController.preview — xem trước cho khách chưa đăng nhập', () => {
+  it('GET loyalty/preview là route công khai, không đọc userId, có throttle', () => {
+    const h = LoyaltyController.prototype.preview;
+    expect(Reflect.getMetadata(PATH_METADATA, h)).toBe('loyalty/preview');
+    expect(Reflect.getMetadata(METHOD_METADATA, h)).toBe(RequestMethod.GET);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, h)).toBe(true);
+    expect(Reflect.getMetadata(ROLES_KEY, h)).toBeUndefined();
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', h)).toBe(60);
+    expect(Reflect.getMetadata('public-cache-policy', h)).toBe('CATALOG');
+    expect(h.length).toBe(0);
+  });
+
+  it('các route /me/loyalty/* còn lại KHÔNG công khai', () => {
+    for (const m of ['overview', 'rewards', 'myRedemptions', 'redeemReward', 'checkIn'] as const) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, LoyaltyController.prototype[m])).toBeUndefined();
+    }
   });
 });
 

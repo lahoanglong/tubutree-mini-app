@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   features: { seasonPass: false },
   getLoyalty: vi.fn(),
+  getDailyCheckInStatus: vi.fn(),
   wheel: { cost: undefined as number | undefined, onSpin: undefined as (() => Promise<unknown>) | undefined },
   api: {
     getGameProfile: vi.fn(),
@@ -77,7 +78,10 @@ vi.mock('../components/wheel', () => ({
   },
 }));
 vi.mock('../services/game-api', () => mocks.api);
-vi.mock('../services/account-api', () => ({ getLoyalty: (...a: unknown[]) => mocks.getLoyalty(...a) }));
+vi.mock('../services/account-api', () => ({
+  getLoyalty: (...a: unknown[]) => mocks.getLoyalty(...a),
+  getDailyCheckInStatus: (...a: unknown[]) => mocks.getDailyCheckInStatus(...a),
+}));
 
 import GamePage from './game';
 import { vi as viText } from '../i18n/vi';
@@ -130,6 +134,7 @@ async function openTab(name: 'Hôm nay' | 'Vườn') {
 beforeEach(() => {
   mocks.publicConfig.waste.enabled = true;
   vi.clearAllMocks();
+  mocks.getDailyCheckInStatus.mockResolvedValue(null);
   mocks.auth.status = 'authenticated';
   mocks.features.seasonPass = false;
   mocks.wheel.cost = undefined;
@@ -148,7 +153,7 @@ beforeEach(() => {
   a.getFriends.mockResolvedValue([]);
   a.getGarden.mockResolvedValue(null);
   a.fetchSeasonPass.mockResolvedValue({ active: false });
-  a.checkIn.mockResolvedValue({ seedsEarned: 10, pointsEarned: 0, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' });
+  a.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: false, bonusNote: '' }, alreadyDone: false, pending: [] });
   a.collectDew.mockResolvedValue({ seedsEarned: 5, totalSeeds: 1_255 });
   a.buyStreakFreeze.mockResolvedValue({ streakFreezes: 2, totalSeeds: 1_170 });
   a.repairStreak.mockResolvedValue({ repaired: true, streakDays: 5, totalSeeds: 900 });
@@ -290,15 +295,16 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     fireEvent.click(btn);
     expect(mocks.api.checkIn).toHaveBeenCalledTimes(1);
     await act(async () => {
-      gate.resolve({ seedsEarned: 10, pointsEarned: 0, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' });
+      gate.resolve({ points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 1000, totalPoints: 2000, message: '' }, water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1_260, streakFrozeUsed: true, bonusNote: 'Thưởng ngày 3' }, alreadyDone: false, pending: [] });
     });
     await waitFor(() =>
-      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+10💧 · 🧊 đã dùng vé giữ lửa · Thưởng ngày 3', type: 'success' }),
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh · +10 giọt nước · đã dùng vé giữ lửa · Thưởng ngày 3', type: 'success' }),
     );
     const keys = invalidated();
     expect(keys).toContainEqual(['game']);
     expect(keys).toContainEqual(['me']);
     expect(keys).toContainEqual(['loyalty']);
+    expect(keys).toContainEqual(['loyalty-checkin']);
     // /me/coins đã 410: không còn khoá nào để làm mới.
     expect(keys).not.toContainEqual(['coins']);
   });
@@ -310,6 +316,55 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     expect(btn).toBeDisabled();
     fireEvent.click(btn);
     expect(mocks.api.checkIn).not.toHaveBeenCalled();
+  });
+
+  it('đã nhận giọt nước nhưng Điểm Xanh còn thiếu (trạng thái gộp chưa xong): nút vẫn bật, bấm gọi checkIn để nhận nốt', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] });
+    mocks.api.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
+    expect(btn).toBeEnabled();
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+1.000 Điểm Xanh', type: 'success' }));
+  });
+
+  it('lấy trạng thái gộp lỗi: nút vẫn bật dù lastCheckInAt là hôm nay (không suy từ phần nước)', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    mocks.getDailyCheckInStatus.mockRejectedValue(new Error('mạng lỗi'));
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+  });
+
+  it('bấm xong cả hai phần: nút tắt ngay, không bật lại trong lúc chờ lấy lại trạng thái', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    const half = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+    mocks.getDailyCheckInStatus.mockResolvedValueOnce(half).mockImplementation(() => new Promise(() => undefined));
+    mocks.api.checkIn.mockResolvedValue({ points: { success: true, cycleDay: 1, streakDays: 1, pointsEarned: 1000, totalPoints: 1000, message: '' }, water: null, alreadyDone: false, pending: [] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh' }));
+    await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
+  });
+
+  it('còn thiếu một phần (pending): nút vẫn bật để bấm lại', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    const half = { checkedInToday: false, pointsDone: false, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 0, rewards: [] };
+    mocks.getDailyCheckInStatus.mockResolvedValueOnce(half).mockImplementation(() => new Promise(() => undefined));
+    mocks.api.checkIn.mockResolvedValue({ points: null, water: null, alreadyDone: false, pending: ['points'] });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh' }));
+    await waitFor(() => expect(mocks.api.checkIn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'Điểm danh' })).toBeEnabled();
+  });
+
+  it('cả hai phần xong theo trạng thái gộp: "Đã điểm danh" tắt', async () => {
+    mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, lastCheckInAt: todayIso() });
+    mocks.getDailyCheckInStatus.mockResolvedValue({ checkedInToday: true, pointsDone: true, waterDone: true, streakDays: 1, currentCycleDay: 1, todayPoints: 0, todayWater: 0, rewards: [] });
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
   });
 
   it('điểm danh từ hôm kia: nút lại bật (khoá theo ngày giờ VN, không theo "đã từng")', async () => {

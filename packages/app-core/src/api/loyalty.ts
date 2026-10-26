@@ -1,4 +1,4 @@
-import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
+import type { GiftRedemptionDTO, LoyaltyPreviewDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
 
 /** Quy tắc tích/đổi Điểm Xanh do API trả từ SystemConfig (loyalty.earn_pct, vnd_per_point_redeem, max_redeem_pct). */
@@ -123,25 +123,54 @@ export interface CheckInReward {
   isToday: boolean;
 }
 
-/** GET /me/loyalty/check-in — điểm danh Điểm Xanh (tách riêng với điểm danh giọt nước Vườn Xanh). */
+/** GET /me/daily-check-in: trạng thái điểm danh gộp (Điểm Xanh + giọt nước) và dải 7 ngày của Điểm Xanh. */
 export interface CheckInStatusResponse {
+  /** true khi cả hai phần (Điểm Xanh và giọt nước) đã xong hôm nay. */
   checkedInToday: boolean;
   /** Chuỗi ngày liên tiếp tới hôm qua (chưa điểm danh) hoặc tới hôm nay (đã điểm danh); đứt = 0. */
   streakDays: number;
   /** Ô 1..7 của hôm nay: ô SẼ được trả khi bấm (chưa điểm danh) hoặc ô vừa nhận (đã điểm danh). */
   currentCycleDay: number;
-  /** Điểm của ô hôm nay. Optional: API cũ chưa trả. */
+  /** Điểm của ô hôm nay; 0 khi phần Điểm Xanh đã xong hôm nay. Optional: API cũ chưa trả. */
   todayPoints?: number;
   rewards: CheckInReward[];
+  /** Từng phần đã xong hôm nay chưa. Optional: API cũ (chỉ Điểm Xanh) chưa trả. */
+  pointsDone?: boolean;
+  waterDone?: boolean;
+  /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi phần nước đã xong hôm nay. */
+  todayWater?: number;
+  /** Bình nước đã đầy (totalSeeds >= sức chứa): phần nước hôm nay sẽ không cộng thêm. Optional: API cũ chưa trả thì không hiện chữ bình đầy. */
+  tankFull?: boolean;
 }
 
-export interface CheckInResult {
+/** Phần Điểm Xanh của lần điểm danh. */
+export interface PointsCheckInPart {
   success: boolean;
   cycleDay: number;
   streakDays: number;
   pointsEarned: number;
   totalPoints: number;
   message: string;
+}
+
+/** Phần giọt nước của lần điểm danh. */
+export interface WaterCheckInPart {
+  seedsEarned: number;
+  streakDays: number;
+  totalSeeds: number;
+  streakFrozeUsed: boolean;
+  bonusNote: string;
+}
+
+/**
+ * POST /me/daily-check-in. `points`/`water` là kết quả của LẦN GỌI NÀY; null = phần đó đã xong từ trước (hoặc vừa lỗi: xem
+ * `pending`). `alreadyDone` = cả hai đã xong từ trước. `pending` còn phần nào thì gọi lại để bù đúng phần đó.
+ */
+export interface CheckInResult {
+  points: PointsCheckInPart | null;
+  water: WaterCheckInPart | null;
+  alreadyDone: boolean;
+  pending: Array<'points' | 'water'>;
 }
 
 /**
@@ -164,12 +193,13 @@ export const getLoyalty = (http: HttpClient) => http.get<LoyaltyOverview>('/me/l
 export const getPointsTransactions = (http: HttpClient) => http.get<PointsTxn[]>('/me/points/transactions');
 export const getCoupons = (http: HttpClient) => http.get<CouponDTO[]>('/me/coupons');
 export const getNewCustomerOffer = (http: HttpClient) => http.get<NewCustomerOffer>('/me/new-customer-offer');
+export const getLoyaltyPreview = (http: HttpClient) => http.get<LoyaltyPreviewDTO>('/loyalty/preview');
 export const getLoyaltyRewards = (http: HttpClient) => http.get<RewardCatalogDTO>('/me/loyalty/rewards');
 export const redeemLoyaltyReward = (http: HttpClient, rewardId: string, idempotencyKey: string) =>
   http.post<RedeemRewardResultDTO>(`/me/loyalty/rewards/${encodeURIComponent(rewardId)}/redeem`, undefined, {
     headers: { 'Idempotency-Key': idempotencyKey },
   });
 export const getMyRedemptions = (http: HttpClient) => http.get<GiftRedemptionDTO[]>('/me/loyalty/rewards/mine');
-export const getDailyCheckInStatus = (http: HttpClient) => http.get<CheckInStatusResponse>('/me/loyalty/check-in');
-export const postDailyCheckIn = (http: HttpClient) => http.post<CheckInResult>('/me/loyalty/check-in');
+export const getDailyCheckInStatus = (http: HttpClient) => http.get<CheckInStatusResponse>('/me/daily-check-in');
+export const postDailyCheckIn = (http: HttpClient) => http.post<CheckInResult>('/me/daily-check-in');
 export const getMemberCard = (http: HttpClient) => http.get<MemberCardResponse>('/me/loyalty/member-card');

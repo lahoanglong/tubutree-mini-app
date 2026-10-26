@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { requireIdempotencyKey } from '../../common/idempotency-key';
 import { LoyaltyService } from './loyalty.service';
@@ -35,6 +37,15 @@ export class LoyaltyController {
   @Get('me/loyalty/rewards')
   rewards(@CurrentUser('sub') userId: string) {
     return this.loyalty.getRewardCatalog(userId);
+  }
+
+  /** Xem trước kho quà và bảng hạng cho khách chưa đăng nhập: chỉ dữ liệu danh mục, không có trường riêng của khách. */
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('loyalty/preview')
+  @Throttle({ default: { ttl: 60_000, limit: 60 } })
+  preview() {
+    return this.loyalty.getPublicPreview();
   }
 
   /** Các lượt đổi quà của khách (mã QG- của lượt còn chờ nhận). */
