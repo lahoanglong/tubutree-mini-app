@@ -71,7 +71,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
     await page.getByRole('radio', { name: /Tạp hoá Cô Ba/ }).click();
     await page.getByRole('button', { name: 'Chọn điểm này' }).click();
     await expect(page.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
-    await page.getByText('Tôi đồng ý cho Tubu Tree xử lý yêu cầu này').click();
+    await page.getByText('Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này').click();
     await page.getByRole('button', { name: 'Tạo yêu cầu' }).click();
 
     await expect(page.getByText('TR-7K3QP').first()).toBeVisible();
