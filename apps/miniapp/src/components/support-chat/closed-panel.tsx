@@ -1,5 +1,5 @@
 import { useSnackbar } from 'zmp-ui';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Copy, MessageSquare, Phone, type LucideIcon } from 'lucide-react';
 import { supportCopy } from '@tubutree/app-core/support-copy';
 import { Button } from '../ui/button';
@@ -27,6 +27,7 @@ function WithIcon({ icon, tone, gap = 12, children }: { icon: LucideIcon; tone: 
  */
 export function ChatClosedPanel({ support, compact = false }: { support: SupportContact | undefined; compact?: boolean }) {
   const { openSnackbar } = useSnackbar();
+  const [more, setMore] = useState(false);
   const copy = supportCopy.closed;
   const hotline = support?.hotline ?? null;
   const display = hotline ? formatPhoneDisplay(hotline) : '';
@@ -38,8 +39,61 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
     openSnackbar(ok ? { text: copy.copied, type: 'success' } : { text: copy.copyFailed, type: 'error' });
   };
 
+  const callButton = hotline && (
+    <Button
+      aria-label={copy.call(display)}
+      fullWidth
+      onPress={() => {
+        haptic('light');
+        void callPhone(hotline);
+      }}
+      style={{ marginTop: 8 }}
+    >
+      <WithIcon icon={Phone} tone="inverse" gap={8}>{copy.call(display)}</WithIcon>
+    </Button>
+  );
+  const oaNode =
+    support?.zaloOaName &&
+    (hasOA ? (
+      <Button variant="secondary" aria-label={copy.oa} fullWidth onPress={() => void openOAChat()}>
+        <WithIcon icon={MessageSquare} tone="brand">{copy.oa}</WithIcon>
+      </Button>
+    ) : (
+      <Text variant="body-sm" tone="secondary">{copy.oaName(support.zaloOaName)}</Text>
+    ));
+  const emailNode = support?.email && (
+    <Button
+      variant="ghost"
+      aria-label={support.email}
+      onPress={() => {
+        haptic('light');
+        void copyText(support.email!).then((ok) => openSnackbar(ok ? { text: 'Đã sao chép email hỗ trợ', type: 'success' } : { text: copy.copyFailed, type: 'error' }));
+      }}
+    >
+      <WithIcon icon={Copy} tone="brand">{support.email}</WithIcon>
+    </Button>
+  );
+
+  if (compact) {
+    const hasMore = !!(oaNode || emailNode);
+    return (
+      <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 4, padding: '12px 16px' }}>
+        <Heading variant="title-sm">{copy.title}</Heading>
+        {support?.hours && <Text variant="caption" tone="secondary">{copy.hours(support.hours)}</Text>}
+        {callButton}
+        {hasMore && (
+          <Button variant="ghost" aria-expanded={more} onPress={() => setMore((v) => !v)}>
+            {more ? copy.less : copy.more}
+          </Button>
+        )}
+        {more && oaNode}
+        {more && emailNode}
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: compact ? '16px 24px' : '40px 24px' }}>
+    <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: '40px 24px' }}>
       <Heading variant="title-md">{copy.title}</Heading>
       <Text variant="body-md" tone="secondary">{copy.lead(!!hotline)}</Text>
       {hotline && (
@@ -53,40 +107,12 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
             <Heading variant="display-md" tone="brand">{display}</Heading>
           </button>
           <Text variant="caption" tone="tertiary">{copy.tapToCopy}</Text>
-          <Button
-            aria-label={copy.call(display)}
-            fullWidth
-            onPress={() => {
-              haptic('light');
-              void callPhone(hotline);
-            }}
-            style={{ marginTop: 8 }}
-          >
-            <WithIcon icon={Phone} tone="inverse" gap={8}>{copy.call(display)}</WithIcon>
-          </Button>
+          {callButton}
         </>
       )}
       {support?.hours && <Text variant="body-sm" tone="secondary">{copy.hours(support.hours)}</Text>}
-      {support?.zaloOaName &&
-        (hasOA ? (
-          <Button variant="secondary" aria-label={copy.oa} fullWidth onPress={() => void openOAChat()}>
-            <WithIcon icon={MessageSquare} tone="brand">{copy.oa}</WithIcon>
-          </Button>
-        ) : (
-          <Text variant="body-sm" tone="secondary">{copy.oaName(support.zaloOaName)}</Text>
-        ))}
-      {support?.email && (
-        <Button
-          variant="ghost"
-          aria-label={support.email}
-          onPress={() => {
-            haptic('light');
-            void copyText(support.email!).then((ok) => openSnackbar(ok ? { text: 'Đã sao chép email hỗ trợ', type: 'success' } : { text: copy.copyFailed, type: 'error' }));
-          }}
-        >
-          <WithIcon icon={Copy} tone="brand">{support.email}</WithIcon>
-        </Button>
-      )}
+      {oaNode}
+      {emailNode}
     </div>
   );
 }

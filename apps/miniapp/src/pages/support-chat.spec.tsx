@@ -320,6 +320,29 @@ describe('Màn chat với Tubu Tree', () => {
     await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith(['s1']));
   });
 
+  it('chat tắt còn lịch sử: phần liên hệ gọn (tiêu đề, giờ trực, nút Gọi); email chỉ hiện sau "Cách liên hệ khác"', async () => {
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null, hours: '8:00–21:00 mỗi ngày' });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đã giao' })] }));
+    renderPage();
+    expect(await screen.findByText('Đã giao')).toBeInTheDocument();
+    expect(screen.getByText('Giờ trực: 8:00–21:00 mỗi ngày')).toBeInTheDocument();
+    expect(screen.queryByText('Chạm vào số để sao chép')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'tubutree@gmail.com' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cách liên hệ khác' }));
+    expect(screen.getByRole('button', { name: 'tubutree@gmail.com' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }));
+    expect(screen.queryByRole('button', { name: 'tubutree@gmail.com' })).toBeNull();
+  });
+
+  it('chat tắt còn lịch sử, không có email/OA: không có liên kết "Cách liên hệ khác"', async () => {
+    mocks.fetchContact.mockResolvedValue({ hotline: '0984 606 774', email: null, zaloOaName: null, hours: null });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đã giao' })] }));
+    renderPage();
+    expect(await screen.findByText('Đã giao')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cách liên hệ khác' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Gọi 0984 606 774' })).toBeInTheDocument();
+  });
+
   it('chat tắt và chưa có tin nào: không gọi báo đã đọc', async () => {
     mocks.getThread.mockResolvedValue(thread({ enabled: false }));
     renderPage();

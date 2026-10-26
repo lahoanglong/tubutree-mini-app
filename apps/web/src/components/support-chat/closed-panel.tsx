@@ -13,6 +13,7 @@ import { platformBridge } from '@/lib/platform-bridge';
 export function ChatClosedPanel({ support, compact = false }: { support: SupportContact | undefined; compact?: boolean }) {
   const copy = supportCopy.closed;
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const hotline = support?.hotline ?? null;
   const display = hotline ? formatPhoneDisplay(hotline) : '';
   const hasOA = platformBridge.oa.available;
@@ -21,8 +22,57 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
     setFeedback((await copyText(value)) ? okText : copy.copyFailed);
   };
 
+  const callLink = hotline && (
+    <a
+      href={`tel:${hotline.replace(/[^\d+]/g, '')}`}
+      className="zaui-btn zaui-btn-primary zaui-btn-prefix-icon tubu-btn"
+      style={{ minHeight: 44, width: '100%', borderRadius: 'var(--radius-control)', fontWeight: 600, marginTop: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+    >
+      <Phone size={16} aria-hidden />
+      {copy.call(display)}
+    </a>
+  );
+  const oaNode =
+    support?.zaloOaName &&
+    (hasOA ? (
+      <Button variant="secondary" icon={MessageSquare} fullWidth onPress={() => void platformBridge.oa.openChat()}>
+        {copy.oa}
+      </Button>
+    ) : (
+      <Text variant="body-sm" tone="secondary">{copy.oaName(support.zaloOaName)}</Text>
+    ));
+  const emailNode = support?.email && (
+    <Button variant="ghost" icon={Copy} onPress={() => void copyWith(support.email!, 'Đã sao chép email hỗ trợ')}>
+      {support.email}
+    </Button>
+  );
+  const status = (
+    <div role="status" aria-live="polite" style={{ minHeight: compact ? 0 : 18 }}>
+      {feedback && <Text variant="caption" tone="secondary">{feedback}</Text>}
+    </div>
+  );
+
+  if (compact) {
+    const hasMore = !!(oaNode || emailNode);
+    return (
+      <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 4, padding: '12px 16px' }}>
+        <Heading variant="title-sm">{copy.title}</Heading>
+        {support?.hours && <Text variant="caption" tone="secondary">{copy.hours(support.hours)}</Text>}
+        {callLink}
+        {hasMore && (
+          <Button variant="ghost" aria-expanded={more} onPress={() => setMore((v) => !v)}>
+            {more ? copy.less : copy.more}
+          </Button>
+        )}
+        {more && oaNode}
+        {more && emailNode}
+        {status}
+      </div>
+    );
+  }
+
   return (
-    <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: compact ? '16px 24px' : '40px 24px' }}>
+    <div data-testid="chat-closed" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: '40px 24px' }}>
       <Heading variant="title-md">{copy.title}</Heading>
       <Text variant="body-md" tone="secondary">{copy.lead(!!hotline)}</Text>
       {hotline && (
@@ -36,33 +86,13 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
             <Heading variant="display-md" tone="brand">{display}</Heading>
           </button>
           <Text variant="caption" tone="tertiary">{copy.tapToCopy}</Text>
-          <a
-            href={`tel:${hotline.replace(/[^\d+]/g, '')}`}
-            className="zaui-btn zaui-btn-primary zaui-btn-prefix-icon tubu-btn"
-            style={{ minHeight: 44, width: '100%', borderRadius: 'var(--radius-control)', fontWeight: 600, marginTop: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-          >
-            <Phone size={16} aria-hidden />
-            {copy.call(display)}
-          </a>
+          {callLink}
         </>
       )}
       {support?.hours && <Text variant="body-sm" tone="secondary">{copy.hours(support.hours)}</Text>}
-      {support?.zaloOaName &&
-        (hasOA ? (
-          <Button variant="secondary" icon={MessageSquare} fullWidth onPress={() => void platformBridge.oa.openChat()}>
-            {copy.oa}
-          </Button>
-        ) : (
-          <Text variant="body-sm" tone="secondary">{copy.oaName(support.zaloOaName)}</Text>
-        ))}
-      {support?.email && (
-        <Button variant="ghost" icon={Copy} onPress={() => void copyWith(support.email!, 'Đã sao chép email hỗ trợ')}>
-          {support.email}
-        </Button>
-      )}
-      <div role="status" aria-live="polite" style={{ minHeight: 18 }}>
-        {feedback && <Text variant="caption" tone="secondary">{feedback}</Text>}
-      </div>
+      {oaNode}
+      {emailNode}
+      {status}
     </div>
   );
 }

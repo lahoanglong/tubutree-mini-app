@@ -25,6 +25,9 @@ export const supportCopy = {
     oa: 'Nhắn OA',
     oaName: (name: string) => `Zalo OA: ${name}`,
     hours: (hours: string) => `Giờ trực: ${hours}`,
+    /** Bản gọn (chat tắt mà còn lịch sử): mở/đóng phần email, OA. */
+    more: 'Cách liên hệ khác',
+    less: 'Thu gọn',
   },
   greeting: (hours: string | null) => (hours ? `Tubu Tree hỗ trợ ${hours}. Bạn cần hỏi gì ạ?` : 'Tubu Tree sẵn sàng hỗ trợ bạn. Bạn cần hỏi gì ạ?'),
   quickTitle: 'Hỏi nhanh',

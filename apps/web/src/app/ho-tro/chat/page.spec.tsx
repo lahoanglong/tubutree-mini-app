@@ -481,6 +481,20 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     await waitFor(() => expect(mocks.markRead).toHaveBeenCalledWith({ ids: ['s1'] }));
   });
 
+  it('chat tắt còn lịch sử: phần liên hệ gọn (tiêu đề, giờ trực, nút Gọi); email chỉ hiện sau "Cách liên hệ khác"', async () => {
+    mocks.contact.mockResolvedValue({ support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null }, chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
+    mocks.getThread.mockResolvedValue(thread({ enabled: false, messages: [msg({ id: 's1', sender: 'STAFF', body: 'Đã giao' })] }));
+    const c = mount();
+    await waitFor(() => expect(c.textContent).toContain('Đã giao'));
+    expect(c.textContent).toContain('Giờ trực: 8:00–21:00 mỗi ngày');
+    expect(c.textContent).not.toContain('Chạm vào số để sao chép');
+    expect(c.textContent).not.toContain('tubutree@gmail.com');
+    click(buttonByName(c, 'Cách liên hệ khác'));
+    await waitFor(() => expect(c.textContent).toContain('tubutree@gmail.com'));
+    click(buttonByName(c, 'Thu gọn'));
+    await waitFor(() => expect(c.textContent).not.toContain('tubutree@gmail.com'));
+  });
+
   it('chat tắt và chưa có tin nào: không gọi báo đã đọc', async () => {
     mocks.getThread.mockResolvedValue(thread({ enabled: false }));
     const c = mount();
