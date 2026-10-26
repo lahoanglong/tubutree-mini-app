@@ -46,7 +46,7 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
           </span>
         </button>
         {list.length > 0 && (
-          <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
+          <ScrollRow arrows label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
             {list.map((b) => (
               <Chip key={b.brand} onPress={() => router.push(b.slug ? `/brand/${encodeURIComponent(b.slug)}` : browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] }))}>
                 {b.brand}

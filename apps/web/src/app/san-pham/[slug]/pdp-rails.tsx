@@ -8,6 +8,7 @@ import ProductCard from '@/components/product-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { ScrollRail } from '@/components/scroll-rail';
 
 const FIVE_MIN = 5 * 60_000;
 
@@ -32,13 +33,13 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
         {icon && <ShoppingCart className="h-5 w-5" aria-hidden="true" />}
         {title}
       </h2>
-      <ul className="mt-3 flex gap-3 overflow-x-auto pb-2">
+      <ScrollRail className="mt-3 flex gap-3 overflow-x-auto pb-2">
         {products.map((p) => (
           <li key={p.id} className="w-40 shrink-0 md:w-48">
             <ProductCard product={p} />
           </li>
         ))}
-      </ul>
+      </ScrollRail>
     </section>
   );
 }
