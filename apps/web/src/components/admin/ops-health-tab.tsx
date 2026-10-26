@@ -86,19 +86,59 @@ function Row({ label, value, warn }: { label: string; value: ReactNode; warn?: b
  * Sức khoẻ vận hành (PLATFORM-5): Pancake, Gomdon, hàng đợi, đơn kẹt — cùng ngưỡng mà cron báo động dùng — kèm các nút
  * vận hành trước đây chỉ gọi được bằng API tay (đồng bộ danh mục Pancake, tính lại số đã bán).
  */
-/** Tên thường cho các việc nền hay gặp; việc chưa có tên ở đây hiện đúng tên kỹ thuật để người cài đặt đối chiếu. */
-const CRON_JOB_LABELS: Record<string, string> = {
+/**
+ * Tên thường cho việc nền, khoá theo đúng tên API ghi vào cron_runs: tên đặt trong `@Cron({ name })` nếu có, không thì `Lớp.hàm`.
+ * Việc chưa có tên ở đây hiện đúng tên kỹ thuật để người cài đặt đối chiếu; ops-health-tab.spec.ts đối chiếu bảng này với mã API.
+ */
+export const CRON_JOB_LABELS: Record<string, string> = {
   'AffiliateService.approveDueCommissions': 'Duyệt hoa hồng đã đến hạn',
   'AnalyticsAggregationService.runNightly': 'Tính số liệu giữ chân khách mỗi sáng',
+  'CashbackService.settleConfirmed': 'Chốt hoàn tiền sàn ngoài đã xác nhận',
+  'CashbackService.reconcile': 'Đối chiếu hoàn tiền sàn ngoài',
+  'CatalogService.recomputeSoldCron': 'Tính lại số đã bán của sản phẩm',
+  'coupons.cleanup-personal-expired': 'Dọn mã giảm giá cá nhân hết hạn',
+  'data-retention.cleanup': 'Dọn dữ liệu cũ theo thời hạn lưu',
+  'DealerBackorderService.reconcile': 'Đối chiếu hàng đại lý đặt chờ',
+  'DealerCron.payoutQuarterly': 'Trả thưởng đại lý theo quý',
+  'DealerCron.topUpQuarterly': 'Nạp hạn mức đại lý theo quý',
+  'ExternalClaimCron.everyThirtyMinutes': 'Xử lý yêu cầu tích điểm đơn sàn',
+  'ExternalClaimCron.pollFallback': 'Dò lại yêu cầu tích điểm đơn sàn',
+  'FlashSaleService.notifyStartedFlashSales': 'Báo khách giờ vàng đã bắt đầu',
+  'FlashSaleService.notifyWishlistOfStartedSales': 'Báo khách yêu thích về giờ vàng',
+  'GameReminderService.sendDailyReminders': 'Nhắc khách chơi game mỗi ngày',
+  'GroupBuyCron.sweep': 'Chốt các nhóm mua chung hết hạn',
+  'GomdonReconcileService.reconcile': 'Đối chiếu vận đơn Gomdon',
+  'pancake.events-reconcile': 'Đối chiếu tin báo từ Pancake',
+  'PancakePushReconcileService.reconcile': 'Đối chiếu đơn đẩy sang Pancake',
+  'PancakeSyncService.scheduledSync': 'Đồng bộ danh mục Pancake (định kỳ)',
+  'PancakeSyncService.nightlyFullSync': 'Đồng bộ danh mục Pancake (toàn bộ ban đêm)',
+  'payments.zalopay-reconcile': 'Đối chiếu thanh toán ZaloPay',
+  'ZaloOaTokenCron.refresh': 'Làm mới khoá kết nối Zalo OA',
+  'LifecycleService.sendReorderReminders': 'Nhắc khách mua lại',
+  'RemarketingService.sendCartAbandonReminders': 'Nhắc giỏ hàng bỏ quên',
+  'RemarketingService.sendVoucherExpiryReminders': 'Nhắc mã giảm giá sắp hết hạn',
+  'ReviewInviteService.sendReviewInvites': 'Mời khách đánh giá',
   'LoyaltyExpiryService.expirePoints': 'Thu hồi điểm hết hạn',
   'LoyaltyExpiryService.remindExpiringPoints': 'Nhắc khách điểm sắp hết hạn',
-  'LifecycleService.sendReorderReminders': 'Nhắc khách mua lại',
-  'ReviewInviteService.sendReviewInvites': 'Mời khách đánh giá',
-  'RemarketingService.sendCartAbandonReminders': 'Nhắc giỏ hàng bỏ quên',
+  'LoyaltyCron.recalcTiers': 'Tính lại hạng thành viên',
+  'merchant.sla-reminder': 'Nhắc đơn gian hàng quá hạn xử lý',
+  'ops.health-alert': 'Kiểm tra sức khoẻ hệ thống và báo động',
+  'orders.delivered-effects-resync': 'Chạy lại việc sau khi đơn giao xong',
+  'orders.pending-payment-expiry': 'Huỷ đơn quá hạn thanh toán',
+  'orders.reversal-effects-resync': 'Chạy lại việc sau khi đơn huỷ hoặc trả',
+  'AttendanceJob.sweep': 'Quét ca làm chưa chốt ra',
+  'PayrollJob.nightly': 'Tính lương hằng đêm',
+  'StorefrontReminderService.remindTrendingProducts': 'Nhắc gian hàng về sản phẩm đang hot',
   'SubscriptionsService.processDue': 'Tạo đơn cho gói định kỳ đến hạn',
-  'PendingPaymentExpiryCron.handleCron': 'Huỷ đơn quá hạn thanh toán',
-  'MerchantSlaCron.handleCron': 'Nhắc đơn gian hàng quá hạn xử lý',
-  'GameReminderService.sendDailyReminders': 'Nhắc khách chơi game mỗi ngày',
+  'BridgeHealthCron.everyMinute': 'Kiểm tra cầu nối chat Zalo',
+  'VouchersService.welcomeVouchers': 'Gửi mã chào khách mới',
+  'VouchersService.birthdayVouchers': 'Gửi mã sinh nhật',
+  'VouchersService.winbackVouchers': 'Gửi mã kéo khách cũ quay lại',
+  'VouchersService.milestoneVouchers': 'Gửi mã mừng mốc khách thân thiết',
+  'VouchersService.secondOrderVouchers': 'Gửi mã khuyến khích đơn thứ hai',
+  'wallet.referral-notice-reconcile': 'Đối chiếu thông báo giới thiệu',
+  'waste.expiry': 'Hết hạn yêu cầu đổi rác',
+  'waste.pickup-sweep': 'Quét lịch hẹn thu gom rác',
 };
 
 export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
