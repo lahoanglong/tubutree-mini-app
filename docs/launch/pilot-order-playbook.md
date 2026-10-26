@@ -142,7 +142,7 @@ Gặp bất kỳ dòng nào dưới đây: DỪNG, chụp màn hình, ghi mã đ
 | Cùng một mã đơn xuất hiện hai lần trên Pancake POS, hoặc hai vận đơn Gomdon cho một đơn | Dừng đặt đơn mới. Kho không giao. Gọi Tech lead |
 | Đơn hiện "Đã thanh toán" nhưng tiền KHÔNG có trong sao kê ngân hàng | Dừng Phần 4. Gọi Tech lead |
 | Pancake báo "Đã xác nhận" hay "Đã gửi hàng" cho một đơn mà Tubu vẫn "Chờ thanh toán" quá 30 phút | Dừng. Gọi Tech lead |
-| Màn Sức khoẻ hệ thống đỏ quá 15 phút, hoặc "Webhook lỗi chưa xử lý" lớn hơn 0 mà không tự về 0 sau 10 phút | Dừng. Gọi Tech lead |
+| Màn Sức khoẻ hệ thống đỏ quá 15 phút, hoặc "Tin báo lỗi chưa xử lý" lớn hơn 0 mà không tự về 0 sau 10 phút | Dừng. Gọi Tech lead |
 | "Gomdon từ chối đăng nhập" hoặc nút Kiểm tra kết nối báo "Không đăng nhập được Gomdon" | Dừng Phần 3 (đừng bấm thử liên tiếp, tài khoản có thể bị khoá). Gọi Tech lead |
 | Khách thật (không phải Người thử) đặt hàng giữa lúc thử | Báo kho tách đơn thật khỏi đơn thử. Tiếp tục nếu không ảnh hưởng, dừng nếu đụng tồn kho |
 | ZNS gửi tới số điện thoại không phải của Người thử | Dừng. Gọi Tech lead |
@@ -239,7 +239,7 @@ Nguồn: [GO-LIVE-KEYS.md](../GO-LIVE-KEYS.md) mục 6. Webhook vào Tubu: `http
 
 - **Ai**: Quản trị. **Ở đâu**: Quản trị, Sức khoẻ hệ thống, phần Pancake.
 - **Làm**: mở màn; bấm "Làm mới".
-- **Đúng là**: "Cấu hình: Đã cấu hình"; "Đồng bộ danh mục" có mốc giờ gần đây, không có chữ lỗi; "Webhook lỗi chưa xử lý" và "Webhook kẹt chưa xử lý" đều 0; "Đơn cần xử lý theo Pancake" là 0.
+- **Đúng là**: "Cấu hình: Đã cấu hình"; "Đồng bộ danh mục" có mốc giờ gần đây, không có chữ lỗi; "Tin báo lỗi chưa xử lý" và "Tin báo kẹt chưa xử lý" đều 0; "Đơn cần xử lý theo Pancake" là 0.
 - **Bằng chứng**: chụp màn hình. Phụ lục P5 cho 10 webhook gần nhất.
 - **Hoàn tác**: không cần.
 
@@ -409,7 +409,7 @@ Trước khi sang 3.2, bật thêm hai công tắc của khách để thẻ "Thu
 
 - **Ai**: Bưu tá BestExpress làm thật; Người theo dõi nhìn Quản trị.
 - **Làm**: không có thao tác của bạn: để bưu tá tới lấy hàng ở kho, giao tới Người thử và lấy lại vật liệu tái chế (nếu có đưa). Sau mỗi mốc, nhìn lại đơn.
-- **Đúng là**: đơn lần lượt thấy "Đã lấy hàng" (3, đơn Tubu chuyển "Đang giao"), "Đang vận chuyển đến bưu cục nhận" (4), "Đang đi giao hàng" (5), "Giao thành công" (7, đơn COD chuyển "Đã giao"). Sức khoẻ hệ thống, phần Gomdon: "Nhận webhook gần nhất" mới; "Webhook lỗi chưa xử lý" 0. Webhook cho vận đơn không thuộc đơn nào của ta sẽ ghi `IGNORED`: bình thường.
+- **Đúng là**: đơn lần lượt thấy "Đã lấy hàng" (3, đơn Tubu chuyển "Đang giao"), "Đang vận chuyển đến bưu cục nhận" (4), "Đang đi giao hàng" (5), "Giao thành công" (7, đơn COD chuyển "Đã giao"). Sức khoẻ hệ thống, phần Gomdon: "Nhận webhook gần nhất" mới; "Tin báo lỗi chưa xử lý" 0. Webhook cho vận đơn không thuộc đơn nào của ta sẽ ghi `IGNORED`: bình thường.
 - **Bằng chứng**: Phụ lục P6 (các dòng `status = PROCESSED`, `gomdonStatus` 1, 3, 5, 7), Phụ lục P1, P2.
 - **Hoàn tác**: không có.
 - **Nếu không thấy webhook nào sau khi bưu tá đã lấy hàng**: không có cách hỏi lại Gomdon bằng mã (Gomdon không có API tra đơn). Đối chiếu tay trên cổng Gomdon, báo Tech lead, và nhờ Gomdon bắn lại webhook (gomdon.md, mục 3, điều 5).

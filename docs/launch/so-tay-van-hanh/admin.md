@@ -18,7 +18,7 @@ Bạn dùng: web **Quản trị** (`app.tubutree.com/admin`), Mini App (**Cá nh
 | Hoàn tiền khách, Lệnh rút tiền chờ duyệt, Phiếu đối soát chờ chuyển / thu | Kế toán | Hoàn tiền khách, Duyệt yêu cầu rút tiền, Đơn đối tác & đối soát |
 | Hồ sơ đại lý, Thưởng đại lý, Sản phẩm đối tác, Liên kết ký gửi, Đơn đối tác quá hạn, Gian hàng có khoản chờ lập phiếu | Quản lý đại lý–CTV | Đại lý, Thưởng đại lý, Duyệt SP đối tác, Đơn đối tác & đối soát |
 
-3. Mở **Quản trị › Cấu hình & tích hợp › Sức khoẻ hệ thống**, bấm "Làm mới". Phải thấy: Pancake "Đã cấu hình"; "Đồng bộ danh mục" có giờ gần đây và không có chữ lỗi; "Webhook lỗi chưa xử lý" (tin Pancake báo về bị lỗi) bằng 0. Đỏ quá 15 phút: gọi kỹ thuật.
+3. Mở **Quản trị › Cài đặt › Sức khoẻ hệ thống**, bấm "Làm mới". Phải thấy: Pancake "Đã cấu hình"; "Đồng bộ danh mục" có giờ gần đây và không có chữ lỗi; "Tin báo lỗi chưa xử lý" (tin Pancake báo về bị lỗi) bằng 0. Đỏ quá 15 phút: gọi kỹ thuật.
 4. Hệ thống tự gửi email báo động khi đơn kẹt hoặc Pancake lỗi. Mở hộp thư báo động (cần xác nhận email nhận đã cài).
 
 ## Trong ca
@@ -58,7 +58,7 @@ Tiền COD tối đa mỗi đơn là 5.000.000đ, nằm cứng trong hệ thốn
 ## Cuối ca
 
 1. Mở lại **Việc cần xử lý**. Còn thẻ nào, ghi tên người nhận bàn giao.
-2. Xem **Tổng quan › Tổng quan KPI**: "Doanh thu đã thu", "COD chưa thu", số đơn chờ xử lý, số lệnh rút chờ duyệt. Các số này là cộng dồn từ đầu, không chọn được ngày.
+2. Xem **Tổng quan › Tổng quan chỉ số**: "Doanh thu đã thu", "COD chưa thu", số đơn chờ xử lý, số lệnh rút chờ duyệt. Các số này là cộng dồn từ đầu, không chọn được ngày.
 3. Doanh thu theo ngày, theo kênh, theo sản phẩm, theo CTV: **⏳ đang làm**. Đường tạm: **Đơn hàng**, chọn "Từ ngày … đến …", bấm "Xuất CSV (Excel)", lọc tiếp trong Excel. File chưa có cột nền tảng, nguồn, CTV giới thiệu, và chưa có từng dòng hàng.
 
 ## Hằng tuần

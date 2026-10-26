@@ -273,7 +273,7 @@ Hệ thống chỉ có MỘT đường đưa sản phẩm từ Pancake sang: `Pa
    - Sản phẩm mới tạo ra với nhãn `Tubu Tree`, phân khúc suy từ tên (`forSegment`), `isFeatured = false`, đã duyệt và ĐANG BÁN ngay: khách thấy toàn bộ hàng của shop Pancake ngay sau lần quét đầu. Có món không muốn bán trên app thì tắt tay trong Quản trị sau lần quét (tắt tay được giữ, đồng bộ không tự bật lại).
    - Biến thể chưa có giá hợp lệ: không mở bán tới khi Pancake có giá (`pancakeHold = NO_PRICE`), không hiện "0đ".
 6. **Danh mục**: đồng bộ KHÔNG tự gán danh mục nếu chưa có bản đồ (bước 6b). Sản phẩm mới có `categoryIds` rỗng: vẫn thấy ở danh sách chung, tìm kiếm, trang sản phẩm và theo phân khúc, nhưng KHÔNG thấy trong trang từng danh mục, và danh mục không có sản phẩm đang bán bị Mini App ẩn (7 danh mục demo được giữ lại sẽ ẩn cho tới khi có hàng). Gán bằng Quản trị (ADMIN), không cần SQL:
-   1. Quản trị, nhóm "Người bán", mục "Danh mục sản phẩm". Mặc định đã bật hai bộ lọc "Chưa có danh mục" và "Chỉ hàng Pancake"; gõ tên hoặc SKU để thu hẹp.
+   1. Quản trị, nhóm "Bán hàng", mục "Danh mục sản phẩm". Mặc định đã bật hai bộ lọc "Chưa có danh mục" và "Chỉ hàng Pancake"; gõ tên hoặc SKU để thu hẹp.
    2. Tick các sản phẩm (hoặc "Chọn tất cả ... đang hiện"; "Tải thêm" để đưa thêm sản phẩm vào danh sách), chọn danh mục ở ô "Chọn danh mục…", bấm "Gán danh mục", xác nhận. Tối đa 500 sản phẩm mỗi lần. "Gỡ danh mục" làm ngược lại. Gán thêm không xoá danh mục khác của sản phẩm.
    3. Đồng bộ Pancake không ghi đè danh mục đã gán. Danh mục Mini App được ghi nhớ khoảng một phút nên đợi hoặc tải lại.
 
