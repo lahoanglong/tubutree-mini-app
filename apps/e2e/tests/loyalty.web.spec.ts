@@ -82,12 +82,22 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
     mockLoyalty(api, { done: false });
     await page.goto('/tai-khoan/diem-xanh');
-    const button = page.getByRole('button', { name: 'Điểm danh +3' });
+    const button = page.getByRole('button', { name: 'Điểm danh' });
     await expect(button).toBeEnabled();
     await button.dblclick();
     await expect(page.getByText('+3 Điểm Xanh · +10 giọt nước')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
     expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
+  });
+
+  test('"Dùng ngay" mà máy chủ từ chối mã: thẻ mã hiện đúng lý do (role=alert)', async ({ page, api }) => {
+    mockLoyalty(api, { done: true });
+    api.get('/cart', { items: [], itemCount: 2, subtotal: 150000, discount: 0, freeship: false, freeshipThreshold: 199000, couponCode: null });
+    api.post('/cart/coupon', () => reply(400, { message: 'Đơn tối thiểu 199.000đ' }));
+    await page.goto('/tai-khoan/diem-xanh');
+    await page.getByRole('button', { name: 'Dùng mã FREESHIP1 ngay' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Chưa chọn sẵn được mã: Đơn tối thiểu 199.000đ' })).toBeVisible();
+    expect(api.callsTo('POST', '/cart/coupon')).toHaveLength(1);
   });
 
   test('thẻ thành viên số: hiện mã gõ tay được và lời nhắc, Đóng tắt thẻ', async ({ page, api }) => {

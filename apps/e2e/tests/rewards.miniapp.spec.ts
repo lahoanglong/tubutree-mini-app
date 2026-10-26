@@ -32,6 +32,7 @@ const discount50k: RewardItemDTO = {
   ...freeship,
   id: 'reward-discount-50k',
   name: 'Giảm 50.000đ',
+  description: 'Đơn từ 300.000đ',
   pointsCost: 50_000,
   canRedeem: false,
   voucher: { type: 'AMOUNT', value: 50000, minOrder: 300000, maxDiscount: null, validDays: 30 },

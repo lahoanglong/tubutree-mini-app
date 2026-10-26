@@ -207,7 +207,7 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     // Tiến độ hạng theo điểm XÉT HẠNG (pointsToGo), không theo số dư.
     await expect(page.getByText('điểm tích từ mua hàng để lên hạng Lộc Biếc')).toBeVisible();
 
-    const btn = page.getByRole('button', { name: 'Điểm danh +10' });
+    const btn = page.getByRole('button', { name: 'Điểm danh' });
     await expect(btn).toBeEnabled();
     const posted = api.waitForCall('POST', '/me/daily-check-in');
     await btn.dblclick();
