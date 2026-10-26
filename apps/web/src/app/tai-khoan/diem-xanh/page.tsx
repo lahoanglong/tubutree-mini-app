@@ -197,7 +197,7 @@ export default function LoyaltyPage() {
               </div>
             )}
 
-            <button type="button" onClick={() => setShowCard(true)} className={`${miniBtnSecondary} mt-4 gap-2`}>
+            <button type="button" onClick={() => setShowCard(true)} className={`${miniBtnSecondary} mt-4 max-w-full gap-2 py-2 text-center`}>
               <QrCodeIcon className="h-4 w-4" aria-hidden="true" />
               Thẻ thành viên số (mã QR)
             </button>
