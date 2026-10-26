@@ -88,6 +88,10 @@ export function useGameActions({
     mutationFn: checkIn,
     onSuccess: (r) => {
       openSnackbar({ text: checkInSuccessText(r), type: r.pending.length > 0 ? 'warning' : 'success' });
+      // Cả hai phần xong thì khoá nút ngay, đừng chờ refetch (trong lúc đó nút Vườn Xanh sẽ bật lại).
+      if (r.pending.length === 0) {
+        queryClient.setQueryData<{ checkedInToday: boolean }>(['loyalty-checkin'], (old) => (old ? { ...old, checkedInToday: true } : old));
+      }
       void queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] });
       void queryClient.invalidateQueries({ queryKey: ['points-txn'] });
       refresh();
