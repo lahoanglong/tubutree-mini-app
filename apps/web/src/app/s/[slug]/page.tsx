@@ -24,6 +24,7 @@ import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import ProductCard from '@/components/product-card';
 import { safeHexColor } from '@/lib/safe-color';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 export const revalidate = 300;
 
@@ -272,7 +273,7 @@ export default async function StorefrontPage({
             <span className="text-xs text-stone-600 max-md:hidden">({c.items?.length ?? 0} sản phẩm)</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
+          <div className={GRID_PRODUCTS}>
             {c.items.map((it) => (
               <div key={it.id}>
                 <ProductCard product={it.product as ProductCardData} />

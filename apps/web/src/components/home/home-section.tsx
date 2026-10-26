@@ -6,6 +6,7 @@ import { homeText } from '@/lib/home-text';
 import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
 import { ProductCardSkeleton } from '@/components/ui/skeleton';
 import { HomeBlockError } from './home-block-error';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 export interface SectionQuery {
   isLoading: boolean;
@@ -28,7 +29,7 @@ export interface HomeSectionProps {
   priority?: boolean;
 }
 
-const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6';
+const GRID = GRID_PRODUCTS;
 
 /**
  * Một khối lưới SP của Trang chủ. Đã tải mà rỗng → không vẽ gì (không để tiêu đề trống).

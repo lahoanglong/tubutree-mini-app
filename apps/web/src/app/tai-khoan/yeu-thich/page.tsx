@@ -11,6 +11,7 @@ import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 const TITLE = 'Sản phẩm yêu thích';
 
@@ -61,7 +62,7 @@ export default function WishlistPage() {
           <h2 id="wishlist-list" className="sr-only">
             Danh sách sản phẩm yêu thích
           </h2>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className={GRID_PRODUCTS}>
             {wishQ.data.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}

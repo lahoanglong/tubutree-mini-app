@@ -17,6 +17,7 @@ import {
 } from '@/lib/search-state';
 import { useBrowseState } from '@/lib/use-browse-state';
 import { useSuggest } from '@/lib/use-suggest';
+import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
 import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
@@ -25,6 +26,7 @@ import { PhoneCartButton } from '@/components/phone-cart-button';
 import { phoneBrandText } from '@/lib/phone-ui';
 import { CategoryGrid } from './category-grid';
 import { FilterSheet } from './filter-sheet';
+import { FilterSidebar } from './filter-sidebar';
 import { RecentlyViewedRail } from './recently-viewed-rail';
 import { ResultHeader } from './result-header';
 import { SortChips } from './sort-chips';
@@ -156,7 +158,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           e.preventDefault();
           commit(draft);
         }}
-        className="flex items-center gap-2 pb-2"
+        className="flex items-center gap-2 pb-2 lg:max-w-2xl"
       >
         <div className="relative min-w-0 flex-1">
           <label htmlFor="browse-q" className="sr-only">
@@ -217,8 +219,28 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           }}
         />
       ) : (
-        <>
-          {root && <CategoryGrid entries={entries} isLoading={categoriesQ.isLoading} onSelect={pickCategory} />}
+        <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-6 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <FilterSidebar
+            state={state}
+            entries={entries}
+            brands={brandsQ.data ?? []}
+            onPickCategory={pickCategory}
+            onClearCategory={() => {
+              leaveSearchField();
+              update({ category: undefined, segment: undefined });
+            }}
+            onPatch={(patch) => {
+              leaveSearchField();
+              update(patch);
+            }}
+          />
+          <div className="min-w-0">
+          {/* Từ lg danh mục nằm ở cột lọc bên trái nên lưới ô danh mục ẩn đi. */}
+          {root && (
+            <div className="lg:hidden">
+              <CategoryGrid entries={entries} isLoading={categoriesQ.isLoading} onSelect={pickCategory} />
+            </div>
+          )}
           {root && <RecentlyViewedRail />}
           <SortChips
             value={state.sort}
@@ -252,7 +274,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               Danh sách sản phẩm
             </h2>
             {products.isLoading ? (
-              <ProductGridSkeleton count={8} />
+              <ProductGridSkeleton count={8} className={GRID_PRODUCTS_WITH_FILTER} />
             ) : products.isError && list.length === 0 ? (
               <ErrorState message={errorMessage(products.error)} onRetry={() => void products.refetch()} retryLabel={browseText.retry} />
             ) : list.length === 0 ? (
@@ -263,7 +285,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               />
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 md:grid-cols-4">
+                <div className={GRID_PRODUCTS_WITH_FILTER}>
                   {list.map((p, i) => (
                     <ProductCard key={p.id} product={p} priority={i < PRIORITY_CARDS} />
                   ))}
@@ -309,7 +331,8 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           </section>
           {/* Tìm/lọc không ra gì vẫn cho khách lối đi tiếp; ở trang gốc dải đã hiện phía trên lưới. */}
           {noResults && !root && <RecentlyViewedRail />}
-        </>
+          </div>
+        </div>
       )}
 
       <FilterSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} state={state} brands={brandsQ.data ?? []} onApply={applyFilters} />
