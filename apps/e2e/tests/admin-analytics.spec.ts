@@ -73,6 +73,7 @@ test.describe('Admin — tab Giữ chân khách & chỉ số chính', () => {
     await p.goto('/admin?tab=analytics');
 
     await expect(p.getByRole('button', { name: 'Giữ chân khách & chỉ số chính' })).toHaveAttribute('aria-current', 'page');
-    await expect(p.getByText('Chưa có bản chụp số liệu nào')).toBeVisible();
+    await expect(p.getByText(/Chưa có số liệu\. Hệ thống tính một lần mỗi sáng/)).toBeVisible();
+    await expect(p.getByRole('button', { name: 'Mở Báo cáo' })).toBeVisible();
   });
 });
