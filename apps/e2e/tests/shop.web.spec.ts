@@ -217,8 +217,12 @@ test.describe('Web khách: Trang chủ /', () => {
     await expect(page).toHaveURL(/\/gio-hang/);
   });
 
-  test('khách vãng lai không cookie, JS bị giữ: HTML đầu đã có khối Quà khách mới; Danh mục không xê dịch từ HTML đầu tới sau hydrate (≤ 2px)', async ({ page, api }) => {
+  test('khách vãng lai không cookie, JS bị giữ: HTML đầu đã có khối Quà khách mới; Danh mục không xê dịch từ HTML đầu tới sau hydrate (≤ 2px)', async ({ page, api, request }) => {
     mockHome(api);
+    // HTML đầu dựng từ cấu hình của DB e2e; trình duyệt phải nhận đúng cấu hình đó, nếu không chữ Quà khách mới đổi số dòng
+    // (vd "đơn đầu tiên từ 199.000đ" so với "đơn từ 350.000đ") và Danh mục lệch vì dữ liệu mock chứ không vì bố cục.
+    const apiOrigin = `http://localhost:${process.env.E2E_API_PORT ?? '3001'}`;
+    api.get('/config/public', (await (await request.get(`${apiOrigin}/api/config/public`)).json()) as object);
     let openJs!: () => void;
     const jsHeld = new Promise<void>((resolve) => { openJs = resolve; });
     await page.route(/\/_next\/static\/.*\.js/, async (route) => {
@@ -226,14 +230,17 @@ test.describe('Web khách: Trang chủ /', () => {
       await route.continue();
     });
     await page.goto('/', { waitUntil: 'commit' });
-    await expect(page.getByRole('region', { name: 'Quà khách mới' })).toBeVisible();
+    const gift = page.getByRole('region', { name: 'Quà khách mới' });
+    await expect(gift).toBeVisible();
+    const giftHtml = await gift.innerText();
     const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(categories).toBeVisible();
     const firstHtml = (await categories.boundingBox())!.y;
     openJs();
     await page.waitForLoadState('networkidle');
     await refetchStale(page, api, 'GET', '/products');
-    await expect(page.getByRole('region', { name: 'Quà khách mới' })).toBeVisible();
+    await expect(gift).toBeVisible();
+    expect(await gift.innerText()).toBe(giftHtml);
     const hydrated = (await categories.boundingBox())!.y;
     expect(Math.abs(hydrated - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${hydrated}px (sau hydrate)`).toBeLessThanOrEqual(2);
   });
