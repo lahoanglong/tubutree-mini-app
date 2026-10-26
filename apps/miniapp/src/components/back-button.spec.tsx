@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), location: { pathname: '/offers', search: '', state: null as unknown } }));
@@ -31,5 +31,20 @@ describe('BackButton — ROOTS từ nav-config', () => {
     render(<BackButton />);
     const btn = screen.getByRole('button', { name: 'Quay lại' });
     expect(btn.getAttribute('style')).not.toContain('rgba(');
+  });
+  it('thanh nền trong suốt ở đỉnh, đặc lên khi .zaui-page cuộn quá 8px', () => {
+    mocks.location = { pathname: '/orders', search: '', state: null };
+    const { container } = render(<BackButton />);
+    const bar = container.querySelector('[data-back-bar]') as HTMLElement;
+    expect(bar.dataset.scrolled).toBe('false');
+    const page = document.createElement('div');
+    page.className = 'zaui-page';
+    document.body.appendChild(page);
+    Object.defineProperty(page, 'scrollTop', { value: 200, configurable: true });
+    act(() => {
+      page.dispatchEvent(new Event('scroll'));
+    });
+    expect(bar.dataset.scrolled).toBe('true');
+    page.remove();
   });
 });

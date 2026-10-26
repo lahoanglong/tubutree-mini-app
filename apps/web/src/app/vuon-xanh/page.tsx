@@ -156,7 +156,7 @@ function GameBody() {
         <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
 
         {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
-        <div className="sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
+        <div className="sticky-below-back sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} label="Vườn Xanh" />
         </div>
 
