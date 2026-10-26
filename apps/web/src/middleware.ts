@@ -42,13 +42,12 @@ export function middleware(request: NextRequest) {
   }
 
   // Khách đã có cookie phiên: Trang chủ dựng sẵn khung chờ đúng loại khách (xem app/khoi-phuc/[hint]/page.tsx), URL vẫn là "/".
-  // Hai bản khác nhau theo cookie nên báo Vary cho bộ nhớ đệm phía trước.
+  // Hai bản khác nhau theo cookie; Next không giữ Vary trên "/", nên cache chung phía trước phải bỏ qua khi có cookie (xem runbook 0.3).
   if (pathname === '/') {
     const restoring = request.cookies.get(SESSION_COOKIE)?.value === '1';
     const response = restoring
       ? NextResponse.rewrite(new URL(`/khoi-phuc/${parseHintSlug(request.cookies.get(HOME_HINT_COOKIE)?.value)}`, request.url))
       : NextResponse.next();
-    response.headers.append('Vary', 'Cookie');
     return response;
   }
 

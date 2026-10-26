@@ -87,6 +87,28 @@ afterEach(() => {
 });
 
 describe('/uu-dai — trang Ưu đãi', () => {
+  it('Tích điểm đơn sàn: cờ bật thì có dòng sau Đổi rác, bấm mở thông báo chỉ Mini App, không điều hướng; cờ tắt thì không có', async () => {
+    state.config = { waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
+    const c = await mount();
+    const shortcuts = region(c, 'Đổi quà')!;
+    const titles = Array.from(shortcuts.querySelectorAll('[role="button"], button')).map((b) => b.textContent ?? '');
+    const claim = titles.findIndex((t) => t.includes('Tích điểm đơn sàn'));
+    expect(claim).toBeGreaterThan(titles.findIndex((t) => t.includes('Đổi rác lấy quà')));
+    expect(claim).toBeLessThan(titles.findIndex((t) => t.includes('Mua chung nhóm')));
+    expect(shortcuts.textContent).toContain('Quét mã trên phiếu giao hàng');
+    expect(shortcuts.textContent).not.toContain('cần mở Tubu Tree trên Zalo');
+    click(byText(shortcuts, '[role="button"], button', 'Tích điểm đơn sàn'));
+    await flush(2);
+    expect(shortcuts.textContent).toContain('cần mở Tubu Tree trên Zalo');
+    expect(state.push).not.toHaveBeenCalled();
+  });
+
+  it('Tích điểm đơn sàn: cờ tắt thì không có dòng', async () => {
+    state.config = { waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: false } };
+    const c = await mount();
+    expect(region(c, 'Đổi quà')!.textContent).not.toContain('Tích điểm đơn sàn');
+  });
+
   it('khách đã đăng nhập: thẻ Điểm Xanh, Điểm danh, Đổi quà và tiện ích, Mã giảm giá của tôi; đúng một h1', async () => {
     const c = await mount();
     expect(region(c, 'Điểm Xanh của bạn')).not.toBeNull();

@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useEffect, useRef } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarCheck, Check, ChevronRight, Gift, Leaf, PackageOpen, Recycle, Sprout, Users, type LucideIcon } from 'lucide-react';
+import { CalendarCheck, Check, ChevronRight, Gift, Leaf, PackageOpen, Recycle, ScanLine, Sprout, Users, type LucideIcon } from 'lucide-react';
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, memberCardAriaLabel, memberCardView, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
@@ -20,6 +20,7 @@ import { useMarkExpiringSeen } from '@/lib/use-offers-dot';
 import { useRecycleOpenRequests } from '@/lib/use-recycle-open-requests';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button, Card, EmptyState, Heading, Icon, ListRow, Skeleton, Text } from '@/components/mini';
@@ -79,7 +80,7 @@ function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
 
 /**
  * Trang Ưu đãi (phương án A), bản web của `pages/offers.tsx` ở Mini App: thẻ Điểm Xanh và hạng, Điểm danh, Đổi quà và tiện ích,
- * Mã giảm giá của tôi. `?section=coupons` cuộn tới danh sách mã. Web không có "tích điểm đơn sàn" (chưa có route) nên dòng đó ẩn.
+ * Mã giảm giá của tôi. `?section=coupons` cuộn tới danh sách mã. Dòng "Tích điểm đơn sàn" chỉ hiện khi cấu hình bật và mở thông báo "cần mở trên Zalo" (web không có màn quét).
  */
 function OffersContent() {
   const router = useRouter();
@@ -88,6 +89,7 @@ function OffersContent() {
   const authed = phase === 'authenticated';
   const { user } = useAuth();
   const cfg = usePublicConfig();
+  const [claimNoticeOpen, setClaimNoticeOpen] = useState(false);
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed });
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const { status: checkInStatus, statusQ: checkInQ, view: checkInView, pending, checkIn, message } = useCheckIn(authed);
@@ -107,7 +109,7 @@ function OffersContent() {
   const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
   const recycleOpen = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
 
-  const shortcuts: { icon: LucideIcon; title: string; subtitle: string; to: string; show: boolean }[] = [
+  const shortcuts: { icon: LucideIcon; title: string; subtitle: string; to: string; show: boolean; miniAppOnly?: boolean }[] = [
     { icon: Gift, title: homeCopy.offers.rewardsTitle, subtitle: homeCopy.offers.rewardsHint, to: '/kho-qua', show: true },
     { icon: PackageOpen, title: homeCopy.offers.myRewards, subtitle: homeCopy.offers.myRewardsHint, to: '/kho-qua/cua-toi', show: true },
     {
@@ -117,6 +119,7 @@ function OffersContent() {
       to: '/doi-rac',
       show: wasteEnabled || recycleOpen,
     },
+    { icon: ScanLine, title: 'Tích điểm đơn sàn', subtitle: homeCopy.offers.claimHint, to: '/points/scan', show: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true, miniAppOnly: true },
     { icon: Users, title: 'Mua chung nhóm', subtitle: homeCopy.offers.groupBuyHint, to: '/mua-chung', show: true },
     { icon: Sprout, title: 'Vườn Xanh', subtitle: 'Chăm cây nhận quà', to: '/vuon-xanh', show: true },
   ];
@@ -279,10 +282,15 @@ function OffersContent() {
                   title={s.title}
                   subtitle={s.subtitle}
                   trailing="chevron"
-                  onPress={() => router.push(s.to)}
+                  onPress={() => (s.miniAppOnly ? setClaimNoticeOpen((o) => !o) : router.push(s.to))}
                   style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
                 />
               ))}
+            {claimNoticeOpen && shortcuts.some((s) => s.miniAppOnly && s.show) && (
+              <div id="claim-notice">
+                <MiniAppOnlyNotice compact miniappPath="/points/scan" />
+              </div>
+            )}
           </Card>
         </section>
 

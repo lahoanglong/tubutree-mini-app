@@ -47,9 +47,7 @@ describe('middleware: Trang chủ cho khách đã có cookie phiên', () => {
     expect(rewriteOf(withCookie('tubu_web_session=0'))).toBeNull();
   });
 
-  it('chỉ rewrite "/": trang khác đi thẳng; cả hai bản báo Vary: Cookie', () => {
+  it('chỉ rewrite "/": trang khác đi thẳng', () => {
     expect(rewriteOf(withCookie('tubu_web_session=1', '/san-pham'))).toBeNull();
-    expect(withCookie('tubu_web_session=1').headers.get('vary')).toContain('Cookie');
-    expect(withCookie('x=1').headers.get('vary')).toContain('Cookie');
   });
 });
