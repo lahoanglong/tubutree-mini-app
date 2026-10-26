@@ -423,6 +423,36 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(state.push).toHaveBeenCalledWith('/gio-hang');
   });
 
+  it('chạm đúp "Dùng ngay": chỉ áp mã và chuyển trang một lần', async () => {
+    state.cartCount = 2;
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    const use = byText(dialog()!, 'button', 'Dùng ngay');
+    click(use);
+    click(use);
+    await flush(6);
+    expect(state.applied).toEqual(['FREESHIP-ABC']);
+    expect(state.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('rời trang trong lúc giữ câu báo: hẹn giờ bị huỷ, không kéo khách sang giỏ', async () => {
+    state.cartCount = 2;
+    state.applyError = 'Đơn tối thiểu 300.000đ';
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(4);
+    expect(dialog()!.querySelector('[role="alert"]')).not.toBeNull();
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    await new Promise((r) => setTimeout(r, 1900));
+    expect(state.push).not.toHaveBeenCalled();
+  });
+
   it('"Dùng ngay" khi giỏ đang giữ mã khác: báo "Đã đổi sang mã …" rồi tới giỏ', async () => {
     state.cartCount = 2;
     state.cartCoupon = 'TUBU10';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-core/coupon-use';
@@ -29,6 +29,15 @@ export function useCouponUse() {
   const router = useRouter();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<CouponNotice | null>(null);
+  // Hẹn giờ sang giỏ giữ trong ref: lần "Dùng ngay" kế tiếp và lúc rời trang đều huỷ nó, để một hẹn giờ cũ không kéo khách sang giỏ.
+  const holdTimer = useRef<number | null>(null);
+  // Khoá đồng bộ chống chạm đúp: chỉ một lần "Dùng ngay" đang chạy.
+  const busy = useRef(false);
+  const clearHold = () => {
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  useEffect(() => clearHold, []);
 
   const copy = async (code: string) => {
     const ok = await copyText(code);
@@ -41,9 +50,23 @@ export function useCouponUse() {
   };
 
   const use = async (code: string, onBeforeNavigate?: () => void) => {
+    if (busy.current) return;
+    busy.current = true;
+    clearHold();
+    try {
+      await run(code, onBeforeNavigate);
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  const run = async (code: string, onBeforeNavigate?: () => void) => {
     const hold = (n: CouponNotice) => {
       setNotice(n);
-      window.setTimeout(() => goToCart(onBeforeNavigate), NOTICE_HOLD_MS);
+      holdTimer.current = window.setTimeout(() => {
+        holdTimer.current = null;
+        goToCart(onBeforeNavigate);
+      }, NOTICE_HOLD_MS);
     };
     let before;
     try {

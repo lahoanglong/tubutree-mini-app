@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSnackbar } from 'zmp-ui';
 import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-core/coupon-use';
@@ -16,6 +17,8 @@ export function useCouponUse() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
+  // Khoá đồng bộ chống chạm đúp: chỉ một lần "Dùng ngay" đang chạy, nên chuyển trang đúng một lần.
+  const busy = useRef(false);
 
   const copy = async (code: string) => {
     const ok = await copyText(code);
@@ -24,6 +27,16 @@ export function useCouponUse() {
   };
 
   const use = async (code: string, onBeforeNavigate?: () => void) => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      await run(code, onBeforeNavigate);
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  const run = async (code: string, onBeforeNavigate?: () => void) => {
     haptic('light');
     let before;
     try {

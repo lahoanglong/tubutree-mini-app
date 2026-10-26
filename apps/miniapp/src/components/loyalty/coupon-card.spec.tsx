@@ -80,6 +80,18 @@ describe('CouponCard — Sao chép và Dùng ngay (B-55)', () => {
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
   });
 
+  it('chạm đúp "Dùng ngay": chỉ áp mã và chuyển trang một lần', async () => {
+    mocks.getCart.mockResolvedValue({ itemCount: 2, couponCode: null });
+    renderCard();
+    const btn = screen.getByRole('button', { name: 'Dùng mã TUBU10 ngay' });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+  });
+
   it('giỏ đang giữ mã khác: sau khi áp báo "Đã đổi sang mã TUBU10"', async () => {
     mocks.getCart.mockResolvedValue({ itemCount: 2, couponCode: 'FREESHIP1' });
     renderCard();
