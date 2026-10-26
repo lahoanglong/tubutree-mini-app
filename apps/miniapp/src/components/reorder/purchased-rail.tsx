@@ -145,7 +145,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
           ))}
         </div>
       ) : (
-        <div className="scroll-x" style={{ display: 'flex', gap: 10, padding: '4px 16px 0', margin: '-4px 0 0', minWidth: 0, maxWidth: '100%' }}>
+        <div className="scroll-x" style={{ display: 'flex', gap: 10, padding: '4px 16px 12px', margin: '-4px 0 -12px', minWidth: 0, maxWidth: '100%' }}>
           {items.map((p) => (
             <div key={p.variationId} style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH }}>
               <ProductTile
