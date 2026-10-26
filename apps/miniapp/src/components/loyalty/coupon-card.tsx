@@ -8,6 +8,9 @@ import { useCouponUse } from '../../hooks/use-coupon-use';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
+/** Đệm ngang hẹp: thẻ mã nằm trong hai lớp đệm, ở 320px hai nút với đệm mặc định rộng hơn chỗ có và tràn khỏi viền thẻ. */
+const TIGHT = { minWidth: 0, paddingInline: 8 } as const;
+
 export function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
   if (c.type === 'PERCENT') return `Giảm ${c.value}%${c.maxDiscount ? ` (tối đa ${formatVnd(c.maxDiscount)})` : ''}`;
@@ -48,10 +51,10 @@ export function CouponCard({ coupon: c }: { coupon: CouponDTO }) {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <Button variant="secondary" fullWidth aria-label={couponUseCopy.copyAria(c.code)} onPress={() => copy(c.code)}>
+        <Button variant="secondary" fullWidth style={TIGHT} aria-label={couponUseCopy.copyAria(c.code)} onPress={() => copy(c.code)}>
           {couponUseCopy.copy}
         </Button>
-        <Button fullWidth aria-label={couponUseCopy.useAria(c.code)} onPress={() => use(c.code)}>
+        <Button fullWidth style={TIGHT} aria-label={couponUseCopy.useAria(c.code)} onPress={() => use(c.code)}>
           {couponUseCopy.use}
         </Button>
       </div>
