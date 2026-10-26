@@ -62,6 +62,8 @@ test.describe('Web khách: danh mục /san-pham', () => {
       if (call.query.get('limit') === '1') return pageOf([product(1)], 5, 1, 1);
       return pageOf([product(1), product(2)], 2);
     });
+    // Từ lg bộ lọc nằm ở cột bên trái nên không có nút mở sheet; giữ khổ dưới lg để kiểm đúng luồng sheet.
+    await page.setViewportSize({ width: 900, height: 900 });
     await page.goto('/san-pham');
     await refetchStale(page, api, 'GET', '/categories');
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
