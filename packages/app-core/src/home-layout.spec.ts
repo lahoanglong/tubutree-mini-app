@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
+  clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts,
 } from './home-layout';
 import type { LoyaltyOverview } from './api/loyalty';
@@ -183,6 +183,16 @@ describe('memberCardView', () => {
 describe('mergeSuggestions', () => {
   it('đặt gợi ý cá nhân lên đầu và bỏ trùng', () => {
     expect(mergeSuggestions([{ id: 'a' }, { id: 'b' }], [[{ id: 'b' }, { id: 'c' }], [{ id: 'a' }, { id: 'd' }]]).map((p) => p.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+});
+
+describe('clearHomeHints', () => {
+  it('bỏ cả hai khoá, kho null hoặc bị chặn thì không ném lỗi', () => {
+    const removed: string[] = [];
+    clearHomeHints({ getItem: () => null, setItem: () => {}, removeItem: (k: string) => void removed.push(k) });
+    expect(removed.sort()).toEqual([HOME_KIND_KEY, TODO_ROWS_KEY].sort());
+    expect(() => clearHomeHints(null)).not.toThrow();
+    expect(() => clearHomeHints({ getItem: () => null, setItem: () => {}, removeItem: () => { throw new Error('blocked'); } })).not.toThrow();
   });
 });
 

@@ -201,7 +201,7 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
           ))}
         </div>
       ) : (
-        <ul className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-3">
+        <ul className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
           {items.map((p) => (
             <RebuyTile key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} />
           ))}

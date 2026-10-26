@@ -14,7 +14,7 @@ import {
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
 import { loadFirstTouch } from '../services/first-touch';
 import { vi } from '../i18n/vi';
-import { dropForeignHomeHints } from '@tubutree/app-core/home-layout';
+import { clearHomeHints, dropForeignHomeHints } from '@tubutree/app-core/home-layout';
 import { browserStorage } from '../utils/recently-viewed';
 import { isHttpError } from '../services/http';
 
@@ -234,6 +234,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setAccessToken(null);
     await clearRefresh();
     set({ user: null, status: 'idle' });
+    clearHomeHints(browserStorage());
     // Xoá sạch cache React Query (ví, lương, hoa hồng...) — không để lộ dữ liệu tài
     // chính của user vừa đăng xuất cho user kế tiếp trên cùng thiết bị dùng chung
     // (VD tablet chấm công cửa hàng). Đăng ký qua setLogoutCleanup() ở app.tsx để

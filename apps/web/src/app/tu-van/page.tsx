@@ -198,7 +198,7 @@ export default function AdvisorPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
-      <PageHeader title="Trợ lý AI Tubu" subtitle="Tư vấn sản phẩm tiêu dùng xanh 24/7" />
+      <PageHeader title="Trợ lý AI Tubu" subtitle={aiOff ? undefined : 'Tư vấn sản phẩm tiêu dùng xanh 24/7'} />
       <div className="mt-4">
         {aiOff ? (
           <AdvisorPaused />

@@ -19,11 +19,16 @@ const mocks = vi.hoisted(() => ({
   fetchOrders: vi.fn(),
   getReferral: vi.fn(),
   getSubscriptions: vi.fn(),
+  shareLink: vi.fn(),
 }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getPublicConfig: mocks.getPublicConfig,
   fetchOrders: mocks.fetchOrders,
+}));
+vi.mock('../services/zmp-bridge', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  shareLink: mocks.shareLink,
 }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: mocks.getSubscriptions }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -300,6 +305,38 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     renderPage();
     await screen.findByText(/có đơn thứ hai từ 200\.000đ/);
     expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
+  });
+
+  it('"Chia sẻ" gọi shareLink với đường dẫn ?ref=; Zalo từ chối thì chép liên kết kèm mã và báo qua snackbar', async () => {
+    mocks.shareLink.mockRejectedValueOnce(new Error('no share'));
+    mocks.copyText.mockResolvedValueOnce(true);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=LAN1' })));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining('/?ref=LAN1')));
+    await waitFor(() =>
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'warning', text: expect.stringContaining('đã sao chép liên kết') })),
+    );
+  });
+
+  it('người dùng huỷ hộp thoại chia sẻ Zalo: không snackbar, không ghi đè clipboard', async () => {
+    mocks.shareLink.mockRejectedValueOnce({ code: -2003 });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    expect(mocks.copyText).not.toHaveBeenCalled();
+  });
+
+  it('lời mời bạn: thưởng là Điểm Xanh, chia sẻ không hứa "cả hai nhận xu"', async () => {
+    mocks.shareLink.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    const arg = mocks.shareLink.mock.calls[0]![0] as { description: string };
+    expect(arg.description).toContain('LAN1');
+    expect(arg.description).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
   });
 
   it('CTV (AFFILIATE) không thấy thống kê Điểm Xanh giới thiệu', async () => {

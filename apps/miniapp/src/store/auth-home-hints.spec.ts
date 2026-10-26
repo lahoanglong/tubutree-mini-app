@@ -49,4 +49,11 @@ describe('đổi tài khoản trên cùng máy — gợi ý khung chờ Trang ch
     useAuthStore.setState({ user: { id: 'A', fullName: 'An' } as AuthUser });
     expect(localStorage.getItem(KIND)).not.toBeNull();
   });
+
+  it('đăng xuất: bỏ luôn gợi ý của chính tài khoản đó', async () => {
+    useAuthStore.setState({ user: { id: 'A' } as AuthUser, status: 'authenticated' });
+    await useAuthStore.getState().logout();
+    expect(localStorage.getItem(KIND)).toBeNull();
+    expect(localStorage.getItem(ROWS)).toBeNull();
+  });
 });

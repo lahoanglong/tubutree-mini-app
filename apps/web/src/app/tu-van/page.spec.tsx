@@ -120,6 +120,12 @@ describe('Trợ lý AI: trạng thái trang', () => {
     expect(c.querySelector('a[href^="tel:"]')).toBeNull();
   });
 
+  it('server báo tắt AI: không còn dòng phụ "Tư vấn ... 24/7" ở tiêu đề', async () => {
+    state.config = { aiAdvisorEnabled: false, chat: { enabled: true }, support: { hotline: '0984 606 774' } };
+    const c = await mount();
+    expect(c.textContent).not.toContain('24/7');
+  });
+
   it('server báo tắt AI, chat tắt: nút Gọi hotline (tel:) thay cho Chat', async () => {
     state.config = { aiAdvisorEnabled: false, chat: { enabled: false }, support: { hotline: '0984 606 774' } };
     const c = await mount();

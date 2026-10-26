@@ -339,6 +339,18 @@ export interface RemovableStorage extends MemoryStorage {
   removeItem(key: string): void;
 }
 
+/** Đăng xuất: không còn tài khoản nào dùng gợi ý khung chờ, bỏ cả hai khoá. */
+export function clearHomeHints(storage: RemovableStorage | null): void {
+  if (!storage) return;
+  for (const key of [HOME_KIND_KEY, TODO_ROWS_KEY]) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      /* kho bị chặn: không có gì để bỏ */
+    }
+  }
+}
+
 /**
  * Gợi ý khung chờ (loại khách, số dòng Việc cần làm) là của tài khoản dùng gần nhất trên máy và được đọc cả khi chưa biết đang là ai
  * (lúc khôi phục phiên). Khi đăng nhập hay khôi phục ra một tài khoản KHÁC thì phải bỏ gợi ý của người trước ngay, kẻo khung chờ
