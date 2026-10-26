@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Gift, Leaf, Sprout, Ticket } from 'lucide-react';
@@ -191,7 +191,11 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
 }
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
-  const { use, notice } = useCouponUse();
+  const { use, notice, cancel } = useCouponUse();
+  // Sheet đóng (bấm X, nền, hoặc "Tiếp tục mua sắm") giữa lúc câu báo đang giữ: khách đã chọn ở lại, không kéo sang giỏ.
+  useEffect(() => {
+    if (outcome === null) cancel();
+  }, [outcome, cancel]);
   return (
     <Sheet open={outcome !== null} onClose={onClose} title="Đổi quà thành công">
       {outcome?.kind === 'VOUCHER' && (

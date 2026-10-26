@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-core/coupon-use';
@@ -29,15 +29,22 @@ export function useCouponUse() {
   const router = useRouter();
   const qc = useQueryClient();
   const [notice, setNotice] = useState<CouponNotice | null>(null);
-  // Hẹn giờ sang giỏ giữ trong ref: lần "Dùng ngay" kế tiếp và lúc rời trang đều huỷ nó, để một hẹn giờ cũ không kéo khách sang giỏ.
+  // Hẹn giờ sang giỏ giữ trong ref: lần "Dùng ngay" kế tiếp, lúc rời trang và `cancel` đều huỷ nó, để một hẹn giờ cũ không kéo khách sang giỏ.
   const holdTimer = useRef<number | null>(null);
   // Khoá đồng bộ chống chạm đúp: chỉ một lần "Dùng ngay" đang chạy.
   const busy = useRef(false);
+  // Đổi số mỗi lần huỷ/rời trang: lần chạy đang chờ getCart/applyCoupon thấy số đã đổi thì không đặt hẹn giờ hay chuyển trang nữa.
+  const epoch = useRef(0);
   const clearHold = () => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
     holdTimer.current = null;
   };
-  useEffect(() => clearHold, []);
+  const cancel = useCallback(() => {
+    epoch.current += 1;
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  }, []);
+  useEffect(() => cancel, [cancel]);
 
   const copy = async (code: string) => {
     const ok = await copyText(code);
@@ -54,14 +61,16 @@ export function useCouponUse() {
     busy.current = true;
     clearHold();
     try {
-      await run(code, onBeforeNavigate);
+      await run(code, onBeforeNavigate, epoch.current);
     } finally {
       busy.current = false;
     }
   };
 
-  const run = async (code: string, onBeforeNavigate?: () => void) => {
+  const run = async (code: string, onBeforeNavigate: (() => void) | undefined, startEpoch: number) => {
+    const stale = () => epoch.current !== startEpoch;
     const hold = (n: CouponNotice) => {
+      if (stale()) return;
       setNotice(n);
       holdTimer.current = window.setTimeout(() => {
         holdTimer.current = null;
@@ -76,6 +85,7 @@ export function useCouponUse() {
       hold({ code, text: couponUseCopy.notApplied(errMessage(e)), error: true });
       return;
     }
+    if (stale()) return;
     if (couponUseTarget(before.itemCount) === 'products') {
       onBeforeNavigate?.();
       router.push('/san-pham');
@@ -85,6 +95,7 @@ export function useCouponUse() {
       const cart = await applyCoupon(code.trim().toUpperCase());
       qc.setQueryData(cartKey(), cart);
       void qc.invalidateQueries({ queryKey: ['quote'] });
+      if (stale()) return;
       const outcome = couponUseOutcome(before.couponCode, code, cart);
       if (outcome.kind === 'ok') goToCart(onBeforeNavigate);
       else hold({ code, text: outcome.text, error: outcome.kind === 'notApplied' });
@@ -93,5 +104,5 @@ export function useCouponUse() {
     }
   };
 
-  return { copy, use, notice };
+  return { copy, use, notice, cancel };
 }

@@ -23,12 +23,16 @@ const state = vi.hoisted(() => ({
   cartCoupon: null as string | null,
   applyError: null as string | null,
   applyResult: null as Record<string, unknown> | null,
+  cartGate: null as Promise<void> | null,
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }), usePathname: () => '/' }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getCart: async () => ({ itemCount: state.cartCount, couponCode: state.cartCoupon }),
+  getCart: async () => {
+    if (state.cartGate) await state.cartGate;
+    return { itemCount: state.cartCount, couponCode: state.cartCoupon };
+  },
   applyCoupon: async (code: string) => {
     state.applied.push(code);
     if (state.applyError) throw new Error(state.applyError);
@@ -117,6 +121,7 @@ beforeEach(() => {
   state.cartCoupon = null;
   state.applyError = null;
   state.applyResult = null;
+  state.cartGate = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -449,6 +454,42 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(dialog()!.querySelector('[role="alert"]')).not.toBeNull();
     mounted.forEach((m) => m.unmount());
     mounted = [];
+    await new Promise((r) => setTimeout(r, 1900));
+    expect(state.push).not.toHaveBeenCalled();
+  });
+
+  it('rời trang khi giỏ còn đang tải (chưa có hẹn giờ): không áp mã, không chuyển trang', async () => {
+    state.cartCount = 2;
+    let release!: () => void;
+    state.cartGate = new Promise<void>((r) => {
+      release = r;
+    });
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(2);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    release();
+    await new Promise((r) => setTimeout(r, 1900));
+    expect(state.applied).toEqual([]);
+    expect(state.push).not.toHaveBeenCalled();
+  });
+
+  it('đóng sheet "Đổi quà thành công" trong lúc giữ câu báo: hẹn giờ bị huỷ, không sang giỏ', async () => {
+    state.cartCount = 2;
+    state.applyError = 'Đơn tối thiểu 300.000đ';
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(4);
+    expect(dialog()!.querySelector('[role="alert"]')).not.toBeNull();
+    click(dialog()!.querySelector<HTMLElement>('button[aria-label="Đóng"]')!);
+    await flush(4);
     await new Promise((r) => setTimeout(r, 1900));
     expect(state.push).not.toHaveBeenCalled();
   });
