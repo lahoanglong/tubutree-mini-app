@@ -283,6 +283,33 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     expect(await screen.findByText(/có đơn thứ hai từ 200\.000đ trong 30 ngày/)).toBeInTheDocument();
   });
 
+  it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp (chuyển từ trang Ví sang đây)', async () => {
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 20, nextMilestone: { count: 5, bonusPoints: 50 } });
+    renderPage();
+    expect(await screen.findByText('Đã mời thành công 2 bạn, nhận 20 điểm.')).toBeInTheDocument();
+    expect(screen.getByText('Mời thêm 3 bạn để nhận 50 điểm')).toBeInTheDocument();
+  });
+
+  it('chưa có ai: không hiện dòng thống kê; đã đủ hoặc vượt mốc: không in "Mời thêm -2 bạn"', async () => {
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 7, earnedPoints: 70, nextMilestone: { count: 5, bonusPoints: 50 } });
+    const { unmount } = renderPage();
+    await screen.findByText('Đã mời thành công 7 bạn, nhận 70 điểm.');
+    expect(screen.queryByText(/Mời thêm/)).toBeNull();
+    unmount();
+    mocks.getReferral.mockResolvedValue(REFERRAL);
+    renderPage();
+    await screen.findByText(/có đơn thứ hai từ 200\.000đ/);
+    expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
+  });
+
+  it('CTV (AFFILIATE) không thấy thống kê Điểm Xanh giới thiệu', async () => {
+    mocks.role = 'AFFILIATE';
+    mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 20 });
+    renderPage();
+    await screen.findByText('Mời bạn bè mua hàng');
+    expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
+  });
+
   it('chưa có số liệu (API lỗi) → nói chung, không hứa con số', async () => {
     mocks.getReferral.mockRejectedValue(new Error('boom'));
     renderPage();

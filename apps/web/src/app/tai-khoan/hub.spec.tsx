@@ -129,6 +129,25 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được — mã của bạn: AN1');
   });
 
+  it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp; chưa có ai thì không hiện dòng thống kê', async () => {
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 2, earnedPoints: 20, nextMilestone: { count: 5, bonusPoints: 50 } });
+    const c = await mount();
+    expect(c.textContent).toContain('Đã mời thành công 2 bạn, nhận 20 điểm.');
+    expect(c.textContent).toContain('Mời thêm 3 bạn để nhận 50 điểm');
+  });
+
+  it('đã đủ hoặc vượt mốc: không in "Mời thêm" số âm; CTV không thấy thống kê Điểm Xanh', async () => {
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 7, earnedPoints: 70, nextMilestone: { count: 5, bonusPoints: 50 } });
+    const c = await mount();
+    expect(c.textContent).toContain('Đã mời thành công 7 bạn, nhận 70 điểm.');
+    expect(c.textContent).not.toContain('Mời thêm');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
+    const c2 = await mount();
+    expect(c2.textContent).not.toContain('Đã mời thành công');
+  });
+
   it('chưa có mã giới thiệu: không có nút', async () => {
     mocks.auth.user = { ...mocks.auth.user, referralCode: '' };
     const c = await mount();
