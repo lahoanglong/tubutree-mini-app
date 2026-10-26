@@ -163,6 +163,14 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
     if (a === 'reject') {
       const e = rejectReasonError(text);
       if (e) return setErr(e);
+      const ok = await confirm({
+        title: 'Từ chối yêu cầu nhận thưởng',
+        message: `Từ chối yêu cầu "${c.rewardTitle}" của đại lý? Lý do bạn nhập sẽ hiện cho đại lý.`,
+        confirmLabel: 'Từ chối',
+        cancelLabel: 'Không từ chối',
+        tone: 'danger',
+      });
+      if (!ok) return;
     }
     if (a === 'markPaid') {
       const ok = await confirm({

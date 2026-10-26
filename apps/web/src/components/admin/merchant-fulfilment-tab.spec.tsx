@@ -817,7 +817,7 @@ describe('Bật/tắt cờ đối tác (admin)', () => {
     await flush();
     click(partnerBtn(r.container)[0]!);
     await flush();
-    expect(confirmDialog()?.textContent).toContain('Tắt cờ đối tác của "Mật ong Linh"');
+    expect(confirmDialog()?.textContent).toContain('Tắt quyền đối tác của "Mật ong Linh"');
     answerConfirm(false);
     await flush();
     expect(api.calls.some((c) => c.url.includes('/partner'))).toBe(false);

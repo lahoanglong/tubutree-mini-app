@@ -95,10 +95,11 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
     const ok = await confirm({
       title: next ? 'Bật gian hàng đối tác' : 'Tắt gian hàng đối tác',
       message: next
-        ? `Bật cờ đối tác cho "${s.title}"? Chủ gian hàng sẽ dùng được Cổng người bán (đăng sản phẩm, đơn tự giao, đối soát).`
-        : `Tắt cờ đối tác của "${s.title}"? Hệ thống từ chối nếu gian hàng còn việc đối tác dở dang (đơn tự giao, khoản chờ đối soát, phiếu chưa chuyển, yêu cầu trả hàng, sản phẩm đang bán).`,
+        ? `Bật quyền đối tác cho "${s.title}"? Chủ gian hàng sẽ dùng được Cổng người bán (đăng sản phẩm, đơn tự giao, đối soát).`
+        : `Tắt quyền đối tác của "${s.title}"? Hệ thống từ chối nếu gian hàng còn việc đối tác dở dang (đơn tự giao, khoản chờ đối soát, phiếu chưa chuyển, yêu cầu trả hàng, sản phẩm đang bán).`,
       confirmLabel: next ? 'Bật' : 'Tắt',
       cancelLabel: 'Đóng',
+      tone: next ? 'default' : 'danger',
     });
     if (ok && !partnerMut.isPending) partnerMut.mutate({ storefrontId: s.storefrontId, isPartner: next });
   };
