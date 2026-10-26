@@ -95,7 +95,7 @@ export default function SettingsPage() {
 
   const switchesLocked = !notify || saving;
   return shell(
-    <div className="mt-4 grid gap-3 md:grid-cols-2">
+    <div className="mt-4 grid gap-3">
       <Section title="Thông báo">
         {platformBridge.oa.available && <FollowOaRow />}
         <div className="min-h-11 border-b border-stone-200 py-2">
@@ -154,7 +154,7 @@ export default function SettingsPage() {
         <LinkRow href="/tai-khoan/dia-chi" label="Sổ địa chỉ" last />
       </Section>
 
-      <div className="flex flex-col justify-end md:col-span-1">
+      <div className="flex flex-col">
         <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
           Đăng xuất
         </button>

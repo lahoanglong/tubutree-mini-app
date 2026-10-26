@@ -27,7 +27,7 @@ import { GardenPlots } from '@/components/game/garden-plots';
 import { GameLinkRow } from '@/components/game/game-link-row';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
-import { GAME_TAB_KEYS, GAME_TABS, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
+import { GAME_TAB_KEYS, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
@@ -152,7 +152,7 @@ function GameBody() {
 
   return (
     <>
-      <div className="mx-auto flex max-w-2xl flex-col gap-3 lg:max-w-5xl">
+      <div className="flex flex-col gap-3">
         <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
 
         {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
@@ -160,7 +160,8 @@ function GameBody() {
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} label="Vườn Xanh" />
         </div>
 
-        <GameTabPanel tab="today" active={tab === ('today' satisfies GameTabKey)}>
+        <GameTabPanel tab="today" active={tab === ('today' satisfies GameTabKey)} layout="split">
+          <GameCol>
           <TreeHealthAlert health={profile?.treeHealth} />
 
           {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
@@ -191,7 +192,37 @@ function GameBody() {
             onWater={(drops) => waterM.mutate(drops)}
             onEarn={() => openEarn()}
           />
+          <div id="game-quiz" className="max-lg:order-1">
+            <QuizCard
+              quiz={quiz}
+              currentQuiz={currentQuiz}
+              answeredCount={answeredIds.size}
+              reveal={reveal}
+              pending={answerM.isPending}
+              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+              onNext={nextQuiz}
+            />
+          </div>
 
+          <div className="max-lg:order-1">
+          <LuckyWheelCard
+            cost={profile?.spinCostPoints ?? 10_000}
+            points={wheelPoints}
+            onEarnPoints={() => router.push(POINTS_PATH)}
+            onSpin={handleSpin}
+            onResult={wheelPrize.onResult}
+          />
+          </div>
+
+          {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
+          {wasteLink && (
+            <div className="max-lg:order-1">
+              <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
+            </div>
+          )}
+          </GameCol>
+
+          <GameCol>
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
@@ -206,6 +237,7 @@ function GameBody() {
           />
           </div>
 
+          <div className="empty:hidden">
           <MissionsCard
             missions={missions}
             streakDays={profile?.streakDays}
@@ -214,31 +246,8 @@ function GameBody() {
             onClaim={(code) => claimMissionM.mutate(code)}
             onGo={goMission}
           />
-
-          <div id="game-quiz">
-            <QuizCard
-              quiz={quiz}
-              currentQuiz={currentQuiz}
-              answeredCount={answeredIds.size}
-              reveal={reveal}
-              pending={answerM.isPending}
-              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-              onNext={nextQuiz}
-            />
           </div>
-
-          <LuckyWheelCard
-            cost={profile?.spinCostPoints ?? 10_000}
-            points={wheelPoints}
-            onEarnPoints={() => router.push(POINTS_PATH)}
-            onSpin={handleSpin}
-            onResult={wheelPrize.onResult}
-          />
-
-          {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
-          {wasteLink && (
-            <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
-          )}
+          </GameCol>
         </GameTabPanel>
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>

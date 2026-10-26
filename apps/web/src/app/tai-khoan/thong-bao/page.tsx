@@ -163,7 +163,7 @@ export default function NotificationsPage() {
           </p>
         )}
       </div>
-      <ul className="mt-4 grid gap-2 md:grid-cols-2">
+      <ul className="mt-4 grid gap-2">
         {notifQ.data.map((n) => {
           const m = notificationMeta(n.templateCode);
           const unread = n.status !== 'READ';

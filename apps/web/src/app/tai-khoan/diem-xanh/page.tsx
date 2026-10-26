@@ -147,7 +147,7 @@ export default function LoyaltyPage() {
 
   return (
     <LedgerShell title={TITLE} wide>
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
           <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
             <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
               {tierStyle.emoji}
@@ -238,6 +238,8 @@ export default function LoyaltyPage() {
 
           <DailyCheckInCard authed={authed} />
 
+          {/* Từ lg: cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng), lịch sử chiếm 2/3 bên trái; dưới lg thứ tự và khoảng cách như một cột. */}
+          <div className="contents lg:col-start-2 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
           {shortcuts.length > 0 && (
             <ul className={`divide-y divide-stone-200 ${miniCard}`}>
               {shortcuts.map((s) => (
@@ -294,8 +296,9 @@ export default function LoyaltyPage() {
               })}
             </ul>
           </section>
+          </div>
 
-          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-span-2 ${miniCard}`}>
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 lg:row-start-2 ${miniCard}`}>
             <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />

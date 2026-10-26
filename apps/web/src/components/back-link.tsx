@@ -8,7 +8,7 @@ import { ui } from '@/lib/guest-ui';
  */
 export default function BackLink({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Link href={href} className={`${ui.backLink} max-md:hidden`}>
+    <Link href={href} data-back-link="" className={`${ui.backLink} max-md:hidden`}>
       {children}
     </Link>
   );

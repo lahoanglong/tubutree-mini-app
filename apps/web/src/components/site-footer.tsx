@@ -6,6 +6,7 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 import tubuLogo from '@/assets/tubu-logo.png';
 import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { isWebRouteReady } from '@/lib/route-map';
 
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
@@ -14,6 +15,43 @@ const LINK =
 function operatorLine(company: SupportContact['company']): string | null {
   const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : undefined, company?.address].filter(Boolean);
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
+}
+
+/** Lối vào chức năng ở chân trang máy tính: các chương trình trước đây không có link nào ngoài thanh đáy điện thoại. Route chưa làm xong thì ẩn. */
+const DISCOVER_LINKS = [
+  { to: '/san-pham', label: 'Danh mục sản phẩm' },
+  { to: '/uu-dai', label: 'Ưu đãi' },
+  { to: '/mua-chung', label: 'Mua chung' },
+  { to: '/cong-dong', label: 'Cộng đồng' },
+  { to: '/cau-chuyen', label: 'Câu chuyện thương hiệu' },
+  { to: '/gioi-thieu', label: 'Về Tubu Tree' },
+];
+const PROGRAM_LINKS = [
+  { to: '/vuon-xanh', label: 'Vườn Xanh' },
+  { to: '/doi-rac', label: 'Đổi rác lấy quà' },
+  { to: '/kho-qua', label: 'Kho quà' },
+  { to: '/ctv', label: 'Cộng tác viên' },
+  { to: '/dai-ly', label: 'Đại lý' },
+  { to: '/hoc-vien', label: 'Học viện' },
+];
+
+function LinkColumn({ title, links }: { title: string; links: { to: string; label: string }[] }) {
+  const ready = links.filter((l) => isWebRouteReady(l.to));
+  if (ready.length === 0) return null;
+  return (
+    <nav aria-label={title}>
+      <h2 className="text-sm font-semibold text-stone-900">{title}</h2>
+      <ul className="mt-1">
+        {ready.map((l) => (
+          <li key={l.to}>
+            <Link href={l.to} className={LINK}>
+              {l.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
 }
 
 function CompanyInfo({ company, className }: { company: SupportContact['company']; className: string }) {
@@ -45,13 +83,16 @@ export default async function SiteFooter() {
   return (
     <>
     <footer className="mt-12 hidden md:block border-t border-stone-200 bg-stone-0">
-      <div className={`${PAGE_WIDE} grid gap-6 py-8 sm:grid-cols-2`}>
+      <div className={`${PAGE_WIDE} grid gap-6 py-8 sm:grid-cols-2 lg:grid-cols-4`}>
         <div>
           <Image src={tubuLogo} alt="Tubu Tree" width={110} height={40} className="h-10 w-auto" />
           <p className="mt-1 max-w-sm text-sm text-stone-600">
             Sống xanh An Lành — mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt.
           </p>
         </div>
+
+        <LinkColumn title="Khám phá" links={DISCOVER_LINKS} />
+        <LinkColumn title="Chương trình" links={PROGRAM_LINKS} />
 
         <div>
           <h2 className="text-sm font-semibold text-stone-900">Hỗ trợ khách hàng</h2>

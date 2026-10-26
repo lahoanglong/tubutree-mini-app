@@ -205,7 +205,7 @@ export default function AccountPage() {
       </div>
       <h1 className="sr-only">Cá nhân</h1>
 
-      <div className="md:mx-auto md:mt-3 md:max-w-2xl">
+      <div className="md:mx-auto md:mt-3 md:max-w-2xl lg:mx-0">
         <div className="bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
           <Link href="/tai-khoan/ho-so" className="tubu-press flex min-h-11 items-center gap-3 rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0">
             {user.avatarUrl ? (
