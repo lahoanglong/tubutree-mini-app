@@ -227,35 +227,15 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     ],
   },
   {
-    label: 'Đơn hàng & giao vận',
+    label: 'Bán hàng',
     items: [
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
-      { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
-      { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
-    ],
-  },
-  {
-    label: 'Hoàn tiền & đổi trả',
-    items: [
       { k: 'returns', label: 'Đổi / Trả' },
       { k: 'customerRefunds', label: 'Hoàn tiền khách' },
       ...(CASHBACK_ENABLED ? [{ k: 'cashback' as const, label: 'Hoàn tiền sàn ngoài' }] : []),
-    ],
-  },
-  {
-    label: 'Người bán',
-    items: [
-      { k: 'dealers', label: 'Đại lý' },
-      { k: 'dealerClaims', label: 'Thưởng đại lý' },
-      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
-      { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
-      { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
+      { k: 'subscriptions', label: 'Gói định kỳ' },
       { k: 'productCategories', label: 'Danh mục sản phẩm' },
-      { k: 'payouts', label: 'Thuế TNCN hoa hồng' },
-      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
-      { k: 'storefronts', label: 'Gian hàng' },
-      { k: 'brands', label: 'Nhãn hàng' },
     ],
   },
   {
@@ -265,17 +245,38 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'reviews', label: 'Đánh giá' },
       { k: 'community', label: 'Cộng đồng' },
       { k: 'supportChat', label: 'Chat CSKH' },
-      { k: 'subscriptions', label: 'Gói định kỳ' },
-      { k: 'posCredits', label: 'Tích điểm tại quầy' },
-      { k: 'waste', label: 'Đổi rác' },
+      { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
     ],
   },
   {
-    label: 'Khuyến mãi',
+    label: 'Khuyến mãi và điểm',
     items: [
       { k: 'coupons', label: 'Mã giảm giá' },
       { k: 'flashSales', label: 'Giờ vàng' },
+      { k: 'posCredits', label: 'Tích điểm tại quầy' },
+      { k: 'externalClaims', label: 'Tích điểm đơn sàn' },
+    ],
+  },
+  {
+    label: 'Đổi rác và game',
+    items: [
+      { k: 'waste', label: 'Đổi rác' },
       { k: 'engagement', label: 'Nhiệm vụ' },
+    ],
+  },
+  {
+    label: 'Đại lý và đối tác',
+    items: [
+      { k: 'dealers', label: 'Đại lý' },
+      { k: 'dealerClaims', label: 'Thưởng đại lý' },
+      { k: 'dealerAccounts', label: 'Đại lý & công nợ' },
+      { k: 'dealerPrices', label: 'Lịch sử giá đại lý' },
+      { k: 'commissionRates', label: 'Hoa hồng & giá sỉ' },
+      { k: 'payouts', label: 'Thuế TNCN hoa hồng' },
+      { k: 'merchantProducts', label: 'Duyệt SP đối tác' },
+      { k: 'merchantFulfilment', label: 'Đơn đối tác & đối soát' },
+      { k: 'storefronts', label: 'Gian hàng' },
+      { k: 'brands', label: 'Nhãn hàng' },
     ],
   },
   {
@@ -284,7 +285,6 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
       { k: 'faqs', label: 'Câu hỏi thường gặp' },
       { k: 'contentKit', label: 'Bộ nội dung CTV' },
       { k: 'academy', label: 'Học viện CTV' },
-      { k: 'quickReplies', label: 'CSKH mẫu tin nhanh' },
       { k: 'notificationTemplates', label: 'Mẫu thông báo' },
     ],
   },
@@ -298,7 +298,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     ],
   },
   {
-    label: 'Cấu hình & tích hợp',
+    label: 'Cài đặt',
     items: [
       { k: 'config', label: 'Cấu hình' },
       { k: 'opsHealth', label: 'Sức khoẻ hệ thống' },

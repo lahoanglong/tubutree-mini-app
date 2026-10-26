@@ -100,7 +100,9 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
 
     await openAdmin(page);
     const nav = page.getByRole('navigation', { name: 'Mục quản trị' });
-    const labels = await nav.locator('button').allInnerTexts();
+    // Mặc định menu chỉ mở nhóm đầu: mở hết các nhóm trước khi đếm và bấm từng mục.
+    for (const head of await nav.locator('button[aria-expanded="false"]').all()) await head.click();
+    const labels = await nav.locator('button:not([aria-expanded])').allInnerTexts();
     const expectedLabels = navLabelsFromSource();
     expect(expectedLabels.length).toBeGreaterThan(30);
     expect(labels.map((l) => l.trim()).sort()).toEqual([...expectedLabels].sort());
@@ -111,7 +113,7 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       pageErrors.length = 0;
       consoleErrors.length = 0;
       apiErrors.length = 0;
-      await nav.locator('button', { hasText: label }).first().click();
+      await nav.locator('button:not([aria-expanded])', { hasText: label }).first().click();
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(250);
       const boundary = await page.locator('[data-tab-error]').count();

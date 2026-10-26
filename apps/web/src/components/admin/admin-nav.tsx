@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { Menu } from 'lucide-react';
+import { ChevronDown, Menu, Search } from 'lucide-react';
 import { SideDrawer } from './side-drawer';
 
 export interface NavItem<K extends string> {
@@ -38,41 +38,114 @@ const ITEM_CLASS = 'flex min-h-[44px] w-full items-center gap-1.5 rounded-contro
 const ITEM_ACTIVE = 'bg-forest-100 font-semibold text-forest-800';
 const ITEM_IDLE = 'text-stone-700 hover:bg-stone-100';
 
+const OPEN_KEY = 'tubu_admin_nav_open';
+
+/** Bỏ dấu và chữ hoa để "don hang" cũng tìm ra "Đơn hàng". */
+const fold = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+
+/**
+ * Nhóm đang mở, nhớ trong trình duyệt (try/catch: chế độ riêng tư hoặc chặn lưu trữ thì dùng mặc định). Chưa từng chọn
+ * thì chỉ mở nhóm đầu để menu gọn; nhóm chứa mục đang xem luôn hiện ít nhất mục đó (xem NavList).
+ */
+function useOpenGroups(firstGroup: string | undefined) {
+  const [open, setOpen] = useState<string[] | null>(() => {
+    try {
+      const raw = window.localStorage.getItem(OPEN_KEY);
+      const v: unknown = raw ? JSON.parse(raw) : null;
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
+    } catch {
+      return null;
+    }
+  });
+  const current = open ?? (firstGroup ? [firstGroup] : []);
+  const toggle = (label: string) => {
+    const next = current.includes(label) ? current.filter((x) => x !== label) : [...current, label];
+    setOpen(next);
+    try {
+      window.localStorage.setItem(OPEN_KEY, JSON.stringify(next));
+    } catch {
+      /* không lưu được thì lần sau về mặc định */
+    }
+  };
+  return { open: current, toggle };
+}
+
 function NavList<K extends string>({
   groups,
   active,
   onSelect,
   badge,
+  open,
+  onToggle,
 }: {
   groups: NavGroup<K>[];
   active: K;
   onSelect: (k: K) => void;
   badge?: (k: K) => ReactNode;
+  open: string[];
+  onToggle: (label: string) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const q = fold(query.trim());
+  const shown = q
+    ? groups
+        .map((g) => ({ ...g, items: g.items.filter((i) => fold(i.label).includes(q) || fold(g.label).includes(q)) }))
+        .filter((g) => g.items.length > 0)
+    : groups;
+  const firstMatch = q ? shown[0]?.items[0] : undefined;
   return (
-    <div className="space-y-3">
-      {groups.map((g) => (
-        <div key={g.label} role="group" aria-label={g.label}>
-          <div aria-hidden="true" className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-stone-500">
-            {g.label}
+    <div className="space-y-2">
+      <div className="relative">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && firstMatch) {
+              e.preventDefault();
+              onSelect(firstMatch.k);
+            }
+          }}
+          placeholder="Tìm mục…"
+          aria-label="Tìm mục quản trị"
+          className="min-h-[44px] w-full rounded-control border border-stone-450 bg-stone-0 pl-9 pr-3 text-sm text-stone-900 placeholder:text-stone-500 lg:min-h-[36px]"
+        />
+      </div>
+      {q && shown.length === 0 && <p className="px-3 py-2 text-sm text-stone-600">Không có mục nào khớp &quot;{query.trim()}&quot;.</p>}
+      {shown.map((g) => {
+        const expanded = !!q || open.includes(g.label);
+        const items = expanded ? g.items : g.items.filter((i) => i.k === active);
+        return (
+          <div key={g.label} role="group" aria-label={g.label}>
+            <button
+              type="button"
+              aria-expanded={expanded}
+              disabled={!!q}
+              onClick={() => onToggle(g.label)}
+              className="flex min-h-[36px] w-full items-center justify-between gap-2 rounded-control px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-600 hover:bg-stone-100 disabled:hover:bg-transparent"
+            >
+              <span>{g.label}</span>
+              <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+            </button>
+            <ul className="space-y-0.5">
+              {items.map((t) => (
+                <li key={t.k}>
+                  <button
+                    type="button"
+                    aria-current={active === t.k ? 'page' : undefined}
+                    onClick={() => onSelect(t.k)}
+                    className={`${ITEM_CLASS} ${active === t.k ? ITEM_ACTIVE : ITEM_IDLE}`}
+                  >
+                    {t.label}
+                    {badge?.(t.k)}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="space-y-0.5">
-            {g.items.map((t) => (
-              <li key={t.k}>
-                <button
-                  type="button"
-                  aria-current={active === t.k ? 'page' : undefined}
-                  onClick={() => onSelect(t.k)}
-                  className={`${ITEM_CLASS} ${active === t.k ? ITEM_ACTIVE : ITEM_IDLE}`}
-                >
-                  {t.label}
-                  {badge?.(t.k)}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -90,6 +163,7 @@ export function AdminNav<K extends string>({
   badge?: (k: K) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const nav = useOpenGroups(groups[0]?.label);
   const listRef = useRef<HTMLDivElement>(null);
   // Mở thẳng tab ở cuối menu (?tab=config) thì mục đang chọn nằm ngoài khung cuộn. Chỉ cuộn khung menu, không dùng
   // scrollIntoView: nó kéo cả cửa sổ xuống và đẩy tiêu đề của tab ra khỏi màn hình.
@@ -110,7 +184,7 @@ export function AdminNav<K extends string>({
       </a>
       <nav aria-label="Mục quản trị" data-admin-nav-part className="hidden w-60 shrink-0 lg:block">
         <div ref={listRef} className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
-          <NavList groups={groups} active={active} onSelect={onSelect} badge={badge} />
+          <NavList groups={groups} active={active} onSelect={onSelect} badge={badge} open={nav.open} onToggle={nav.toggle} />
         </div>
       </nav>
       <div data-admin-nav-part className="sticky z-30 -mx-4 border-b border-stone-200 bg-stone-50 px-4 py-2 lg:hidden" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
@@ -136,6 +210,8 @@ export function AdminNav<K extends string>({
               groups={groups}
               active={active}
               badge={badge}
+              open={nav.open}
+              onToggle={nav.toggle}
               onSelect={(k) => {
                 setOpen(false);
                 onSelect(k);

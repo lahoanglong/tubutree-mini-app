@@ -336,8 +336,14 @@ beforeEach(() => {
   mocks.downloadUsers.mockReset();
   mocks.userDetail.mockReset();
   window.history.replaceState(null, '', '/admin');
+  // Mặc định menu chỉ mở nhóm đầu; các spec dưới đây cần thấy mọi mục nên mở sẵn mọi nhóm (gập/mở được thử ở admin-nav.spec).
+  window.localStorage.setItem(
+    'tubu_admin_nav_open',
+    JSON.stringify(['Tổng quan', 'Bán hàng', 'Khách hàng', 'Khuyến mãi và điểm', 'Đổi rác và game', 'Đại lý và đối tác', 'Nội dung', 'Nhân sự', 'Cài đặt']),
+  );
 });
 afterEach(() => {
+  window.localStorage.removeItem('tubu_admin_nav_open');
   mounted.forEach((m) => m.unmount());
   mounted = [];
 });
@@ -376,30 +382,30 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const groups = [...nav.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label'));
     expect(groups).toEqual([
       'Tổng quan',
-      'Đơn hàng & giao vận',
-      'Hoàn tiền & đổi trả',
-      'Người bán',
+      'Bán hàng',
       'Khách hàng',
-      'Khuyến mãi',
+      'Khuyến mãi và điểm',
+      'Đổi rác và game',
+      'Đại lý và đối tác',
       'Nội dung',
       'Nhân sự',
-      'Cấu hình & tích hợp',
+      'Cài đặt',
     ]);
-    const items = [...nav.querySelectorAll('button')];
+    const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
     expect(items).toHaveLength(41);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
-      [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button')].map((b) => b.textContent);
-    expect(group('Người bán')).toEqual(
-      expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Danh mục sản phẩm', 'Đại lý & công nợ', 'Gian hàng']),
+      [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map((b) => b.textContent);
+    expect(group('Đại lý và đối tác')).toEqual(
+      expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Đại lý & công nợ', 'Gian hàng']),
     );
-    expect(group('Khuyến mãi')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Nhiệm vụ']);
+    expect(group('Bán hàng')).toContain('Danh mục sản phẩm');
+    expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn']);
+    expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
     expect(group('Khách hàng')).toContain('Cộng đồng');
-    expect(group('Khách hàng')).toContain('Đổi rác');
     expect(group('Khách hàng')).toContain('Chat CSKH');
-    expect(group('Khách hàng')).not.toContain('Đổi vỏ chai');
     expect(items.map((b) => b.textContent)).not.toContain('Đổi vỏ chai');
     const current = items.find((b) => b.getAttribute('aria-current') === 'page')!;
     expect(current.textContent).toBe('Việc cần xử lý');
@@ -411,7 +417,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     mocks.config = [{ key: 'waste.enabled', value: 'false', description: 'Bật đổi rác', category: 'waste' }];
     window.history.replaceState(null, '', '/admin?tab=waste');
     const { container } = await mount();
-    const btn = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Đổi rác')!;
+    const btn = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].find((b) => b.textContent === 'Đổi rác')!;
     expect(btn.getAttribute('aria-current')).toBe('page');
     expect([...container.querySelectorAll('h2')].some((h) => h.textContent === 'Đổi rác lấy quà')).toBe(true);
   });
@@ -420,7 +426,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Việc cần xử lý');
     expect(mocks.inbox).toHaveBeenCalled();
-    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].find((b) => b.textContent === 'Tổng quan chỉ số')!);
+    click([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].find((b) => b.textContent === 'Tổng quan chỉ số')!);
     await flush();
     expect(window.location.search).toBe('?tab=dashboard');
     expect(container.textContent).toContain('Doanh thu đã thu');
@@ -813,7 +819,7 @@ describe('admin/page — tab Người dùng', () => {
   it('ô tìm kiếm gửi từ khoá lên API và quay về trang 1; Xoá lọc bỏ từ khoá', async () => {
     mocks.listUsersArgs = [];
     const { container } = await openUsers();
-    const input = container.querySelector('input[type="search"]') as HTMLInputElement;
+    const input = container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])') as HTMLInputElement;
     expect(input.getAttribute('aria-label')).toBe('Tìm theo SĐT, tên hoặc mã người dùng');
     typeInto(input, ' 0944 ');
     act(() => (container.querySelector('form[role="search"]') as HTMLFormElement).requestSubmit());
@@ -1412,7 +1418,7 @@ describe('admin/page — tab Flash Sale', () => {
     const { container } = await openSales();
     const heading = container.querySelector('h2')!;
     expect(heading.className).toContain('font-display');
-    const inputs = [...container.querySelectorAll('input')];
+    const inputs = [...container.querySelectorAll('input:not([aria-label="Tìm mục quản trị"])')];
     expect(inputs).toHaveLength(3);
     for (const el of inputs) {
       expect(el.className).toContain('min-h-[44px]');
@@ -1518,7 +1524,7 @@ describe('admin/page — tab Flash Sale: nhập liệu rõ ràng, sửa và xoá
     mocks.productSearch = [
       { id: 'p1', name: 'Nước rửa chén', brand: 'Tubu', isActive: true, variations: [{ id: 'v1', name: 'Chai 500ml', sku: 'NRC-500', price: 80_000, stock: 50, isActive: true }] },
     ];
-    typeInto(container.querySelector('input[type="search"]'), 'nuoc');
+    typeInto(container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), 'nuoc');
     await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
     await flush();
     click(container.querySelector('[role="option"]'));
@@ -1644,7 +1650,7 @@ describe('admin/page — tab Câu hỏi thường gặp', () => {
     const { container } = await openFaqs();
     expect(container.querySelector('h2')!.className).toContain('font-display');
     expect(para(container, 'Nội dung này cũng được nạp vào ngữ cảnh của AI tư vấn để trả lời nhất quán.').className).toContain('text-stone-500');
-    const fields = [...container.querySelectorAll('input')];
+    const fields = [...container.querySelectorAll('input:not([aria-label="Tìm mục quản trị"])')];
     expect(fields).toHaveLength(3);
     for (const el of fields) {
       expect(el.className).toContain('min-h-[44px]');
@@ -1738,7 +1744,7 @@ describe('admin/page — tab CSKH mẫu tin nhanh', () => {
     expect(container.querySelector('h2')!.className).toContain('font-display');
     const hint = [...container.querySelectorAll('p')].find((p) => p.textContent?.startsWith('Dùng để auto-reply'))!;
     expect(hint.className).toContain('text-stone-500');
-    const inputs = [...container.querySelectorAll('input:not([type="checkbox"])')];
+    const inputs = [...container.querySelectorAll('input:not([type="checkbox"]):not([aria-label="Tìm mục quản trị"])')];
     expect(inputs).toHaveLength(3);
     for (const el of inputs) {
       expect(el.className).toContain('min-h-[44px]');
@@ -1828,7 +1834,7 @@ describe('admin/page — tab Content Kit CTV', () => {
     return mount();
   };
   const pickAndLoad = async (container: HTMLElement) => {
-    typeInto(container.querySelector('input[type="search"]'), 'dừa');
+    typeInto(container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), 'dừa');
     await act(async () => {
       await new Promise((r) => setTimeout(r, 320));
     });
@@ -1922,7 +1928,7 @@ describe('admin/page — tab Academy', () => {
   it('form tạo khoá: tiêu đề font-display, ô nhập/nút 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu', async () => {
     const { container } = await openAcademy();
     expect(container.querySelector('h2')!.className).toContain('font-display');
-    const inputs = [...container.querySelectorAll('input')];
+    const inputs = [...container.querySelectorAll('input:not([aria-label="Tìm mục quản trị"])')];
     expect(inputs).toHaveLength(3);
     for (const el of inputs) {
       expect(el.className).toContain('min-h-[44px]');
@@ -2198,7 +2204,7 @@ describe('admin/page — KPI doanh thu (ADMINOPS-14)', () => {
 
 describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
   const navItems = (c: HTMLElement) =>
-    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].map((b) => b.textContent);
 
   it('nhân viên KHO chỉ thấy mục của mình, không gọi API chỉ dành cho ADMIN', async () => {
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
@@ -2353,7 +2359,7 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
 // D1-05: marketing và kế toán là nhân viên (STAFF) có nhóm việc riêng, không cấp ADMIN. Mục ẩn chỉ là giao diện; API tự chặn.
 describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
   const navItems = (c: HTMLElement) =>
-    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+    [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].map((b) => b.textContent);
   const asStaff = (perms: string[]) => {
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
     mocks.access = { role: 'STAFF', staffPermissions: perms };
@@ -2366,9 +2372,9 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Việc cần xử lý',
       'Báo cáo',
       'Cộng đồng',
-      'Đổi rác',
       'Mã giảm giá',
       'Giờ vàng',
+      'Đổi rác',
       'Câu hỏi thường gặp',
       'Bộ nội dung CTV',
       'Học viện CTV',
@@ -2384,13 +2390,13 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Việc cần xử lý',
       'Báo cáo',
       'Đơn hàng',
-      'Tích điểm đơn sàn',
-      'Đơn đối tác & đối soát',
       'Hoàn tiền khách',
+      'Tích điểm đơn sàn',
+      'Đổi rác',
       'Thưởng đại lý',
       'Đại lý & công nợ',
       'Thuế TNCN hoa hồng',
-      'Đổi rác',
+      'Đơn đối tác & đối soát',
     ]);
     expect(mocks.refundsCalls).toBeGreaterThan(0);
   });
@@ -2834,7 +2840,7 @@ describe('admin/page — Cộng đồng và hoá đơn VAT trên "Việc cần x
   };
   afterEach(() => vi.unstubAllGlobals());
 
-  const navItems = (c: HTMLElement) => [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+  const navItems = (c: HTMLElement) => [...c.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].map((b) => b.textContent);
   const activeChip = (c: HTMLElement) => c.querySelector('[role="group"][aria-label="Mục kiểm duyệt cộng đồng"] [aria-pressed="true"]')!.textContent;
 
   it('thẻ bài chờ duyệt mở tab Cộng đồng ở danh sách chờ duyệt', async () => {
@@ -3184,7 +3190,7 @@ describe('admin/page — UAT ui-admin-2', () => {
   describe('D7-23: tên tab đúng chức năng', () => {
     it('tab thuế và lệnh rút cũ tên là "Thuế TNCN hoa hồng", không "Rút tiền CTV"; "Nhiệm vụ & quà đổi điểm" đổi thành "Nhiệm vụ"', async () => {
       const { container } = await mount();
-      const items = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].map((b) => b.textContent);
+      const items = [...container.querySelectorAll('nav[aria-label="Mục quản trị"] button:not([aria-expanded])')].map((b) => b.textContent);
       expect(items).toContain('Thuế TNCN hoa hồng');
       expect(items).not.toContain('Yêu cầu rút tiền');
       expect(items).not.toContain('Rút tiền CTV');
@@ -3377,7 +3383,7 @@ describe('admin/page — UAT ui-admin-2', () => {
       mocks.kit = { id: 'k1', productId: 'p1', captions: ['Caption 1'], usps: ['USP 1'], faqs: [{ q: 'Bảo quản?', a: 'Nơi khô ráo' }], videoUrls: [], updatedAt: '' };
       window.history.replaceState(null, '', '/admin?tab=contentKit');
       const kit = await mount();
-      typeInto(kit.container.querySelector('input[type="search"]'), 'dừa');
+      typeInto(kit.container.querySelector('input[type="search"]:not([aria-label="Tìm mục quản trị"])'), 'dừa');
       await act(async () => {
         await new Promise((r) => setTimeout(r, 320));
       });
