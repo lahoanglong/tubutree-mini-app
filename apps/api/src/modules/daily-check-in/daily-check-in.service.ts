@@ -4,6 +4,7 @@ import { vnDateKey } from '../../common/vn-time';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { GameEconomyService } from '../game/game-economy.service';
+import { DAILY_LOGIN_SEEDS_DEFAULT, configInt } from '../game/game.constants';
 
 type PointsResult = Awaited<ReturnType<LoyaltyService['dailyCheckIn']>>;
 type WaterResult = Awaited<ReturnType<GameEconomyService['checkIn']>>;
@@ -88,9 +89,10 @@ export class DailyCheckInService {
   /** Trạng thái gộp: `checkedInToday` = mọi phần đang bật đều đã xong hôm nay. Dải 7 ngày và chuỗi là của Điểm Xanh. */
   async status(userId: string) {
     const withWater = await this.gameEnabled();
-    const [pointsStatus, waterDone] = await Promise.all([
+    const [pointsStatus, waterDone, todayWater] = await Promise.all([
       this.loyalty.getDailyCheckInStatus(userId),
       withWater ? this.waterDoneToday(userId) : Promise.resolve(true),
+      withWater ? configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT) : Promise.resolve(0),
     ]);
     return {
       ...pointsStatus,
@@ -98,6 +100,8 @@ export class DailyCheckInService {
       pointsDone: pointsStatus.checkedInToday,
       waterDone,
       gameEnabled: withWater,
+      /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi game tắt. */
+      todayWater,
     };
   }
 }

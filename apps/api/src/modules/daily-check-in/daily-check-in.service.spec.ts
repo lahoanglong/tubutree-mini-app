@@ -117,12 +117,12 @@ describe('DailyCheckInService.status', () => {
   it('đã điểm danh khi cả hai phần xong; thiếu một phần thì chưa', async () => {
     expect((await build({ pointsDone: true, waterDone: true }).svc.status('u1')).checkedInToday).toBe(true);
     const half = await build({ pointsDone: true }).svc.status('u1');
-    expect(half).toMatchObject({ checkedInToday: false, pointsDone: true, waterDone: false, gameEnabled: true });
+    expect(half).toMatchObject({ checkedInToday: false, pointsDone: true, waterDone: false, gameEnabled: true, todayWater: 10 });
   });
 
   it('game tắt: chỉ cần Điểm Xanh', async () => {
     const s = await build({ pointsDone: true, gameEnabled: false }).svc.status('u1');
-    expect(s).toMatchObject({ checkedInToday: true, gameEnabled: false });
+    expect(s).toMatchObject({ checkedInToday: true, gameEnabled: false, todayWater: 0 });
   });
 
   it('giữ nguyên dải 7 ngày của Điểm Xanh', async () => {
