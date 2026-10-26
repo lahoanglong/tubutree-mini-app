@@ -12,7 +12,7 @@ type WaterResult = Awaited<ReturnType<GameEconomyService['checkIn']>>;
 export interface DailyCheckInResult {
   /** Kết quả cộng Điểm Xanh của LẦN GỌI NÀY; null = đã điểm danh từ trước (hoặc phần này vừa lỗi, xem `pending`). */
   points: PointsResult | null;
-  /** Kết quả cộng giọt nước của lần gọi này; null = đã làm từ trước, game tắt, hoặc vừa lỗi. */
+  /** Kết quả cộng giọt nước của lần gọi này; null = đã làm từ trước hoặc vừa lỗi. */
   water: WaterResult | null;
   /** true khi cả hai phần đều đã xong từ trước: lần gọi này không cộng gì. */
   alreadyDone: boolean;
@@ -35,9 +35,13 @@ export class DailyCheckInService {
     private readonly economy: GameEconomyService,
   ) {}
 
+  private async waterToday(userId: string): Promise<{ done: boolean; totalSeeds: number }> {
+    const p = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { lastCheckInAt: true, totalSeeds: true } });
+    return { done: !!p?.lastCheckInAt && vnDateKey(p.lastCheckInAt) === vnDateKey(), totalSeeds: p?.totalSeeds ?? 0 };
+  }
+
   private async waterDoneToday(userId: string): Promise<boolean> {
-    const p = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { lastCheckInAt: true } });
-    return !!p?.lastCheckInAt && vnDateKey(p.lastCheckInAt) === vnDateKey();
+    return (await this.waterToday(userId)).done;
   }
 
   private async pointsDoneToday(userId: string): Promise<boolean> {
@@ -91,11 +95,13 @@ export class DailyCheckInService {
    * Phần đã xong trả 0 ở `todayPoints`/`todayWater` để màn hình không hứa lại phần thưởng đã nhận.
    */
   async status(userId: string) {
-    const [pointsStatus, waterDone, seeds] = await Promise.all([
+    const [pointsStatus, water, seeds, tankCap] = await Promise.all([
       this.loyalty.getDailyCheckInStatus(userId),
-      this.waterDoneToday(userId),
+      this.waterToday(userId),
       configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT),
+      this.config.get<number>('game.tank_capacity', 500),
     ]);
+    const waterDone = water.done;
     const pointsDone = pointsStatus.checkedInToday;
     return {
       ...pointsStatus,
@@ -103,8 +109,11 @@ export class DailyCheckInService {
       pointsDone,
       waterDone,
       todayPoints: pointsDone ? 0 : pointsStatus.todayPoints,
-      /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi). */
-      todayWater: waterDone ? 0 : seeds,
+      /**
+       * Giọt nước khách THỰC SỰ nhận ở lần điểm danh kế tiếp: bình đầy thì phần tràn bị cắt (cùng luật với economy.checkIn,
+       * áp cho cả phần thưởng mốc/quà lần đầu nên không hứa quá), chưa tính các khoản thưởng thêm đó. 0 khi đã xong hoặc bình đầy.
+       */
+      todayWater: waterDone ? 0 : Math.max(0, Math.min(seeds, tankCap - water.totalSeeds)),
     };
   }
 }

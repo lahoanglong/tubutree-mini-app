@@ -36,6 +36,10 @@ describe('checkInTodayLine', () => {
     // Nửa vời: chỉ liệt kê phần còn thiếu, dù server còn trả số của phần đã xong.
     expect(checkInTodayLine({ checkedInToday: false, pointsDone: true, waterDone: false, todayPoints: 1000, todayWater: 10 })).toBe('Hôm nay nhận +10 giọt nước');
     expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: true, todayPoints: 1000, todayWater: 10 })).toBe('Hôm nay nhận +1.000 Điểm Xanh');
+    // Bình đầy: không hứa giọt nước.
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: false, todayPoints: 1000, todayWater: 0 })).toBe('Hôm nay nhận +1.000 Điểm Xanh. Bình nước đang đầy nên không cộng thêm giọt nước.');
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: true, waterDone: false, todayPoints: 0, todayWater: 0 })).toBe('Bình nước đang đầy nên không cộng thêm giọt nước.');
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: true, todayPoints: 1000, todayWater: 0 })).toBe('Hôm nay nhận +1.000 Điểm Xanh');
     expect(checkInTodayLine({ checkedInToday: true, todayPoints: 1000, todayWater: 10 })).toBeNull();
     expect(checkInTodayLine({ checkedInToday: false })).toBeNull();
   });

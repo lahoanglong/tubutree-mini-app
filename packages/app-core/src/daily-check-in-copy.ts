@@ -8,6 +8,8 @@ export const checkInCopy = {
   /** Vị trí trong vòng 7 ngày của Điểm Xanh. Không dùng chữ "chuỗi": Vườn Xanh có chuỗi nước riêng và hai số có thể khác nhau. */
   cycleDay: (day: number) => `Ngày ${day}/7`,
   rule: 'Một lần bấm nhận cả Điểm Xanh và giọt nước. Mỗi ngày 1 lần (giờ Việt Nam), lỡ 1 ngày thì vòng 7 ngày bắt đầu lại. Điểm danh không tính vào xét hạng.',
+  /** Phần nước còn thiếu nhưng bình đã đầy: không hứa giọt nước mà bình không chứa được. */
+  tankFull: 'Bình nước đang đầy nên không cộng thêm giọt nước.',
   alreadyDone: 'Hôm nay bạn đã điểm danh rồi',
   retryMissing: 'Còn thiếu một phần, bấm điểm danh lại để nhận nốt',
   loadError: (reason: string) => `Chưa tải được lịch điểm danh: ${reason}`,
@@ -21,7 +23,9 @@ export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 
   const parts: string[] = [];
   if (!s.pointsDone && (s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
   if (!s.waterDone && (s.todayWater ?? 0) > 0) parts.push(`+${num(s.todayWater ?? 0)} giọt nước`);
-  return parts.length > 0 ? `Hôm nay nhận ${parts.join(' · ')}` : null;
+  const tankFull = s.waterDone === false && s.todayWater === 0;
+  if (parts.length === 0) return tankFull ? checkInCopy.tankFull : null;
+  return `Hôm nay nhận ${parts.join(' · ')}${tankFull ? `. ${checkInCopy.tankFull}` : ''}`;
 }
 
 /**
