@@ -43,6 +43,20 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }) {
   });
 }
 
+const GUEST_PREVIEW = {
+  rewards: [
+    { id: 'reward-freeship', kind: 'VOUCHER', name: 'Miễn phí vận chuyển', description: 'Đơn từ 99.000đ', label: null, pointsCost: 20000, imageUrl: null, stockRemaining: null, soldOut: false, canRedeem: false, claimInstructions: null, voucher: { type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, validDays: 30 }, sortOrder: 1 },
+  ],
+  giftClaimDays: 60,
+  claimPoint: null,
+  tiers: [
+    { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, multiplier: 1, perks: ['Quà sinh nhật'] },
+    { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5000000, multiplier: 1.2, perks: ['Freeship đơn từ 99k'] },
+  ],
+  rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2 },
+  pointExpireMonths: 12,
+};
+
 test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -88,10 +102,12 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test('khách chưa đăng nhập được mời đăng nhập, không gọi API điểm', async ({ page, api }) => {
+  test('khách chưa đăng nhập xem được bảng hạng và có nút Đăng nhập để đổi, không gọi API điểm', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    api.get('/loyalty/preview', GUEST_PREVIEW);
     await page.goto('/tai-khoan/diem-xanh');
-    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Đăng nhập để đổi' })).toBeVisible();
+    await expect(page.getByText('Freeship đơn từ 99k')).toBeVisible();
     expect(api.callsTo('GET', '/me/loyalty')).toHaveLength(0);
   });
 });
@@ -243,10 +259,13 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     await expect(page.getByText('Hạn nhận 17/12/2026')).toBeVisible();
   });
 
-  test('khách chưa đăng nhập được mời đăng nhập, không gọi API kho quà', async ({ page, api }) => {
+  test('khách chưa đăng nhập xem được quà và có nút Đăng nhập để đổi, không có nút Đổi, không gọi API kho quà', async ({ page, api }) => {
     api.post('/auth/refresh', () => reply(401, { message: 'Hết phiên' }));
+    api.get('/loyalty/preview', GUEST_PREVIEW);
     await page.goto('/kho-qua');
-    await expect(page.getByRole('main').getByRole('link', { name: /Đăng nhập/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('link', { name: 'Đăng nhập để đổi' })).toBeVisible();
+    await expect(page.getByText('Miễn phí vận chuyển')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Đổi', exact: true })).toHaveCount(0);
     expect(api.callsTo('GET', '/me/loyalty/rewards')).toHaveLength(0);
   });
 
