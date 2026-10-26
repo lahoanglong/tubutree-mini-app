@@ -16,9 +16,9 @@ type PreviewTier = LoyaltyPreviewDTO['tiers'][number];
  * (mốc điểm không còn dùng); chỉ hạng không có mốc chi tiêu mới xét điểm tích luỹ.
  */
 export function tierRequirementText(t: PreviewTier, formatPoints: (n: number) => string, formatMoney: (n: number) => string): string {
-  if (t.minPoints <= 0 && !t.minSpending) return 'Hạng khởi đầu';
-  if (t.minSpending) return `Chi tiêu từ ${formatMoney(t.minSpending)} trong 12 tháng`;
-  return `Từ ${formatPoints(t.minPoints)} tích luỹ`;
+  if (t.minPoints <= 0 && (t.minSpending ?? 0) <= 0) return 'Hạng khởi đầu';
+  if (t.minSpending != null) return `Chi tiêu từ ${formatMoney(t.minSpending)} trong 12 tháng`;
+  return `Từ ${formatPoints(t.minPoints)} tích luỹ trong 12 tháng`;
 }
 
 /** Khách chưa đăng nhập không có điểm: dựng danh mục rỗng điểm để dùng lại thẻ quà, thẻ chỉ hiện giá. */
