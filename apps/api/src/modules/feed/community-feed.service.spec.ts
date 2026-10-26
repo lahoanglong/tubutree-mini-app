@@ -1954,6 +1954,17 @@ describe('CommunityFeedService.getLeaderboard', () => {
     ]);
   });
 
+  it('họ tên đầy đủ chỉ hiện tên kèm chữ cái đầu của họ (B-88)', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findMany as jest.Mock).mockResolvedValue([
+      { reputation: 9, level: 1, user: { fullName: 'Nguyễn Thị Quay Lại', avatarUrl: null } },
+      { reputation: 8, level: 1, user: { fullName: 'Đỗ Hương', avatarUrl: null } },
+      { reputation: 7, level: 1, user: { fullName: '0912345678', avatarUrl: null } },
+    ]);
+    const r = await makeSvc(prisma).getLeaderboard();
+    expect(r.map((x) => x.author)).toEqual(['Lại N.', 'Hương Đ.', 'Bạn Tubu']);
+  });
+
   it('truyền take tuỳ biến → dùng take đó', async () => {
     const prisma = makePrisma();
     await makeSvc(prisma).getLeaderboard(5);

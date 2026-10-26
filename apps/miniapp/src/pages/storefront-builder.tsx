@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,11 +7,13 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
-  getMyStorefront, createStorefront, publishStorefront, updateStorefront,
-  createCollection, updateCollection, deleteCollection, addItem, updateItem, removeItem, pickerProducts,
-  getQuests, claimQuest, getStorefrontStats, getStorefrontCategories, applyStorefrontTemplate,
-  type StorefrontEdit, type PickerProduct, type StorefrontCategory,
+  getMyStorefront, publishStorefront, updateStorefront,
+  createCollection, updateCollection, deleteCollection, updateItem, removeItem, pickerProducts,
+  getQuests, claimQuest, getStorefrontStats,
+  type StorefrontEdit, type PickerProduct,
 } from '../services/storefront-api';
+import { STOREFRONT_REVIEW_PROMISE, shouldStartSignupWizard, storefrontPublishCopy,
+  storefrontPublishedMessage, storefrontStatusView } from '@tubutree/app-core/storefront-signup';
 import { getErrorMessage } from '../services/api';
 import { formatVnd, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -22,7 +24,7 @@ import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
-import { EmptyState, ErrorState } from '../components/ui/empty-state';
+import { ErrorState } from '../components/ui/empty-state';
 import { Field } from '../components/ui/form';
 import { Icon, type IconProps } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
@@ -34,12 +36,12 @@ import { Heading, Text } from '../components/ui/text';
 import { ContentKitSheet } from '../components/content-kit-sheet';
 import { ImageUpload } from '../components/image-upload';
 import { ShareSheet } from '../components/share-sheet';
+import { PickerSheet } from '../components/storefront-pickers';
+import { StorefrontPreview } from '../components/storefront-preview';
+import { StorefrontSignupFlow } from './storefront-signup';
 import { isPartnerStore } from '../utils/partner-store';
 
-const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
-const TEMPLATE_HINT =
-  'Chọn danh mục gần với sản phẩm bạn muốn giới thiệu — chúng tôi tự thêm sẵn 8 sản phẩm nổi bật, bạn chỉnh sửa sau cũng được.';
-const CONFIG_TITLE = 'Cấu hình gian hàng';
+const CONFIG_TITLE = 'Cài đặt gian hàng';
 
 /** Thẻ cách mép trang 16px, cách thẻ kế 12px — dùng chung cho mọi khối trong trang. */
 const CARD_MARGIN: CSSProperties = { margin: '0 16px 12px' };
@@ -58,30 +60,10 @@ function BuilderShell({ children, style }: { children: ReactNode; style?: CSSPro
 }
 
 export default function StorefrontBuilderPage() {
-  const qc = useQueryClient();
-  const { openSnackbar } = useSnackbar();
   const sfQ = useQuery({ queryKey: ['my-storefront'], queryFn: getMyStorefront, retry: false });
-  const [pickerOpen, setPickerOpen] = useState(false);
-
-  const createMut = useMutation({
-    mutationFn: createStorefront,
-    onSuccess: () => { haptic('medium'); void qc.invalidateQueries({ queryKey: ['my-storefront'] }); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  // Tạo gian hàng RỒI áp mẫu — tách 2 bước để lỗi ở bước áp mẫu (vd hết SP gợi ý) không
-  // chặn gian hàng đã tạo, CTV vẫn vào được Builder để tự thêm collection.
-  const createWithTemplateMut = useMutation({
-    mutationFn: async (categoryId: string) => {
-      await createStorefront();
-      return applyStorefrontTemplate(categoryId);
-    },
-    onSuccess: () => {
-      haptic('medium');
-      setPickerOpen(false);
-      void qc.invalidateQueries({ queryKey: ['my-storefront'] });
-    },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
+  const [fullEditor, setFullEditor] = useState(false);
+  // Quyết định vào luồng 4 bước đúng một lần, lúc dữ liệu về: giữa chừng (đã tạo, còn nháp) không bị đá sang trình dựng.
+  const wizardRef = useRef<boolean | null>(null);
 
   if (sfQ.isLoading) {
     return (
@@ -90,90 +72,24 @@ export default function StorefrontBuilderPage() {
       </BuilderShell>
     );
   }
-  if (sfQ.isError && !sfQ.data) {
-    // Chỉ 404 = chưa có gian hàng → mời tạo. Lỗi network/500/401 → ErrorState có retry
-    // (không nuốt lỗi thành "Tạo gian hàng" vì bấm Tạo cũng sẽ fail). retry:false để 404 không retry.
-    const status = (sfQ.error as { response?: { status?: number } })?.response?.status;
-    if (status === 404) {
-      return (
-        <BuilderShell>
-          <div style={{ padding: 24 }}>
-            <EmptyState art="sprout" heading={vi.storefront.title} body={vi.storefront.empty}
-              ctaLabel={vi.storefront.create} onCta={() => setPickerOpen(true)} ctaLoading={createMut.isPending} />
-          </div>
-          <BottomSheet open={pickerOpen} onClose={() => setPickerOpen(false)} title={TEMPLATE_TITLE} description={TEMPLATE_HINT}>
-            <TemplatePickerSheet
-              applying={createWithTemplateMut.isPending}
-              applyingCategoryId={createWithTemplateMut.variables ?? null}
-              onPick={(categoryId) => createWithTemplateMut.mutate(categoryId)}
-              onSkip={() => { setPickerOpen(false); createMut.mutate(); }}
-              skipLoading={createMut.isPending}
-            />
-          </BottomSheet>
-        </BuilderShell>
-      );
-    }
+  // Chỉ 404 = chưa có gian hàng. Lỗi network/500/401 → ErrorState có retry (không nuốt lỗi thành màn tạo gian hàng
+  // vì bấm tạo cũng sẽ fail). retry:false để 404 không retry.
+  const status = (sfQ.error as { response?: { status?: number } } | null)?.response?.status;
+  if (sfQ.isError && !sfQ.data && status !== 404) {
     return (
       <BuilderShell>
         <div style={{ padding: 24 }}><ErrorState message={getErrorMessage(sfQ.error)} onRetry={() => void sfQ.refetch()} /></div>
       </BuilderShell>
     );
   }
-  return <Builder sf={sfQ.data!} />;
-}
-
-/**
- * Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới — mỗi mẫu tạo sẵn 1 collection + tối
- * đa 8 sản phẩm nổi bật của danh mục đó (POST /storefront/me/apply-template), giảm ma sát cho
- * CTV mới thay vì bắt đầu từ gian hàng trắng hoàn toàn. Luôn có lối "Bỏ qua" để giữ đúng hành
- * vi cũ (tự tạo, tự dựng tay) — không ép buộc.
- */
-function TemplatePickerSheet({
-  applying, applyingCategoryId, onPick, onSkip, skipLoading,
-}: {
-  applying: boolean;
-  applyingCategoryId: string | null;
-  onPick: (categoryId: string) => void;
-  onSkip: () => void;
-  skipLoading: boolean;
-}) {
-  const catQ = useQuery({ queryKey: ['storefront-categories'], queryFn: getStorefrontCategories });
-  const busy = applying || skipLoading;
-
+  const sf = sfQ.data ?? null;
+  // Luồng 4 bước dành cho gian hàng mới hoặc còn phải qua duyệt; đã duyệt (hoặc cờ duyệt tắt) mà bị gỡ thì vào thẳng trình dựng để đăng lại.
+  wizardRef.current ??= shouldStartSignupWizard(sf);
+  if (sf && (!wizardRef.current || sf.status !== 'DRAFT' || fullEditor)) return <Builder sf={sf} />;
   return (
-    <>
-      {catQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-      {catQ.data && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {catQ.data.map((c: StorefrontCategory) => (
-            <button
-              key={c.id}
-              type="button"
-              aria-label={`Dùng mẫu ${c.name}`}
-              aria-disabled={busy || undefined}
-              className="tubu-press"
-              onClick={() => !busy && onPick(c.id)}
-              style={{
-                minHeight: 44, padding: 12, textAlign: 'center', cursor: busy ? 'default' : 'pointer',
-                opacity: busy && applyingCategoryId !== c.id ? 0.5 : 1,
-                background: 'var(--color-bg-surface)', border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-card)',
-              }}
-            >
-              {c.image ? (
-                <img src={c.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 'var(--radius-media)', margin: '0 auto 6px', display: 'block' }} />
-              ) : (
-                <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)', margin: '0 auto 6px' }} />
-              )}
-              <Text variant="body-sm">{applying && applyingCategoryId === c.id ? 'Đang dựng...' : c.name}</Text>
-            </button>
-          ))}
-        </div>
-      )}
-      <Button variant="secondary" fullWidth disabled={applying} loading={skipLoading} style={{ marginTop: 16 }} onPress={onSkip}>
-        Bỏ qua, tự tạo gian hàng trống
-      </Button>
-    </>
+    <BuilderShell>
+      <StorefrontSignupFlow sf={sf} onOpenEditor={() => setFullEditor(true)} />
+    </BuilderShell>
   );
 }
 
@@ -204,6 +120,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const view = storefrontStatusView(sf);
+  const publishCopy = storefrontPublishCopy(sf);
   // Nhiệm vụ "Viết lý do cho 3 sản phẩm" đọc StorefrontItem.note, nhưng builder
   // chưa từng có ô nhập note — CTV không thể hoàn thành dù thanh tiến trình vẫn hiện (P0-5).
   const [notingItem, setNotingItem] = useState<{ id: string; note: string } | null>(null);
@@ -227,7 +146,7 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(true),
-    onSuccess: () => { haptic('medium'); openSnackbar({ text: vi.storefront.published, type: 'success' }); void refresh(); },
+    onSuccess: (res) => { haptic('medium'); openSnackbar({ text: storefrontPublishedMessage(res, sf), type: 'success' }); void refresh(); },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
   const unpublishMut = useMutation({
@@ -300,25 +219,24 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
       <div style={{ padding: '12px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
           <Heading variant="title-md" as="h2">{sf.title}</Heading>
-          {/* Không có badge này thì CTV không biết gian hàng đã đăng hay còn nháp — bấm
-              "Xem trước" ra trang lỗi mà không hiểu vì sao (P0-2 audit mạch lạc CTV). */}
-          <Badge tone={sf.isPublished ? 'success' : 'neutral'} size="sm">
-            {sf.isPublished ? vi.storefront.statusPublished : vi.storefront.statusDraft}
-          </Badge>
+          {/* Nhãn theo trạng thái máy chủ tính: đã gửi duyệt chưa chắc khách đã thấy, nên không ghi "Đang hiển thị" khi còn chờ duyệt. */}
+          <Badge tone={view.tone} size="sm">{view.label}</Badge>
         </div>
         <Text variant="caption" tone="tertiary" as="div">
           {sf.subdomainEnabled && sf.subdomain ? `${sf.subdomain}.tubutree.com` : `/s/${sf.slug}`}
         </Text>
-        {sf.isPublished && (
+        {view.code === 'LIVE' && (
           <Text variant="caption" tone="tertiary" as="div">{vi.storefront.webRefreshNote}</Text>
         )}
-        {sf.publicHiddenReason && (
+        {(view.hint || sf.publicHiddenReason) && (
           <div
             data-testid="hidden-reason"
             role="status"
             style={{ marginTop: 8, padding: '8px 12px', background: 'var(--color-status-warning-bg)', borderRadius: 'var(--radius-control)' }}
           >
-            <Text variant="caption" as="div" style={{ color: 'var(--color-status-warning-fg)' }}>{sf.publicHiddenReason}</Text>
+            <Text variant="caption" as="div" style={{ color: 'var(--color-status-warning-fg)' }}>
+              {view.code === 'PENDING_APPROVAL' ? view.hint : (sf.publicHiddenReason ?? view.hint)}
+            </Text>
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
@@ -326,12 +244,12 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             {vi.storefront.editProfile}
           </Button>
           <Button variant="secondary" icon={Settings} style={{ flex: 1 }} onPress={() => setConfigOpen(true)}>
-            Cấu hình
+            {vi.storefront.settings}
           </Button>
         </div>
         {sf.isPublished && (
           <Button variant="secondary" icon={EyeOff} fullWidth style={{ marginTop: 8 }} onPress={() => setConfirmUnpublish(true)}>
-            {vi.storefront.unpublish}
+            {view.code === 'PENDING_APPROVAL' ? vi.storefront.withdrawSubmit : vi.storefront.unpublish}
           </Button>
         )}
       </div>
@@ -486,10 +404,9 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
             variant="secondary"
             style={{ flex: 1 }}
             onPress={() => {
-              // Trang /s/:slug chỉ trả gian hàng ĐÃ ĐĂNG. Trước đây bấm "Xem trước" lúc còn nháp
-              // là rơi thẳng vào màn lỗi "Gian hàng không tồn tại hoặc chưa đăng".
-              if (!sf.isPublished) {
-                openSnackbar({ text: vi.storefront.previewNeedsPublish, type: 'warning' });
+              // Trang /s/:slug chỉ trả gian hàng khách đang thấy: chưa thì chủ xem bản xem trước ngay trong app.
+              if (!view.canShare) {
+                setPreviewOpen(true);
                 return;
               }
               navigate(`/s/${sf.slug}`);
@@ -499,13 +416,17 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
           </Button>
         }
         primary={
-          sf.isPublished ? (
-            <Button fullWidth icon={Share2} onPress={() => setShareOpen(true)}>
-              {vi.storefront.shareStore}
+          view.canShare ? (
+            <Button fullWidth icon={Share2} aria-label={vi.storefront.shareStore} onPress={() => setShareOpen(true)}>
+              {vi.storefront.shareShort}
+            </Button>
+          ) : sf.isPublished ? (
+            <Button fullWidth disabled aria-label={view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApproval : vi.storefront.shareStore}>
+              {view.code === 'PENDING_APPROVAL' ? vi.storefront.shareAfterApprovalShort : vi.storefront.shareShort}
             </Button>
           ) : (
             <Button fullWidth disabled={itemCount === 0} loading={publishMut.isPending} onPress={() => publishMut.mutate()}>
-              {vi.storefront.publish}
+              {publishCopy.button}
             </Button>
           )
         }
@@ -519,6 +440,13 @@ function Builder({ sf }: { sf: StorefrontEdit }) {
         referralCode={sf.referralCode ?? null}
         thumbnail={sf.collections[0]?.items[0]?.product.thumbnail ?? undefined}
       />
+
+      <BottomSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title={vi.storefront.preview} description={view.code === 'DRAFT' ? publishCopy.previewHint : STOREFRONT_REVIEW_PROMISE}>
+        <div style={SCROLL_BODY}>
+          <StorefrontPreview sf={sf} />
+          <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onPress={() => setPreviewOpen(false)}>{vi.common.close}</Button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={confirmUnpublish} onClose={() => setConfirmUnpublish(false)} title={vi.storefront.unpublishConfirm} description={vi.storefront.unpublishHint}>
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -669,7 +597,7 @@ function StatsSection() {
         <Heading variant="title-sm" as="h2">Thống kê 30 ngày</Heading>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <StatBox value={String(data.orders30d)} label={`Đơn (7 ngày: ${data.orders7d})`} />
+        <StatBox value={String(data.orders30d)} label="Đơn 30 ngày" />
         <StatBox value={formatVnd(data.revenue30d)} label="Doanh thu" />
         <StatBox value={formatVnd(data.commission30d)} label="Hoa hồng" tone="brand" />
       </div>
@@ -766,54 +694,6 @@ function QuestSection() {
         );
       })}
     </Card>
-  );
-}
-
-function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: string; onAdded: () => void; onClose: () => void }) {
-  const { openSnackbar } = useSnackbar();
-  const [search, setSearch] = useState('');
-  const listQ = useQuery({ queryKey: ['picker', search], queryFn: () => pickerProducts(search) });
-  const addMut = useMutation({
-    mutationFn: (p: PickerProduct) => addItem(collectionId, { productId: p.id }),
-    onSuccess: () => { haptic('light'); onAdded(); },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
-  });
-  const products = listQ.data ?? [];
-
-  return (
-    <>
-      <Input aria-label={vi.storefront.pickerSearch} placeholder={vi.storefront.pickerSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div style={{ marginTop: 12, maxHeight: 360, overflowY: 'auto' }}>
-        {listQ.isError ? <ErrorState message={getErrorMessage(listQ.error)} onRetry={() => void listQ.refetch()} variant="inline" /> :
-          listQ.isLoading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Skeleton height={44} />
-              <Skeleton height={44} />
-              <Skeleton height={44} />
-            </div>
-          ) : products.length === 0 ? (
-            <EmptyState art="search" heading={vi.ctvOrder.noProductsFound} variant="inline" />
-          ) : (
-            products.map((p) => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text variant="body-sm" as="div">{p.name}</Text>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <PriceTag value={p.salePrice ?? p.basePrice} size="sm" />
-                    {p.maxAffiliateRate > 0 && (
-                      <Badge tone="success" size="sm">
-                        +{p.maxAffiliateRate}% {vi.storefront.commission}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <Button icon={Plus} onPress={() => addMut.mutate(p)}>Thêm</Button>
-              </div>
-            ))
-          )}
-      </div>
-      <Button fullWidth variant="secondary" style={{ marginTop: 12 }} onPress={onClose}>Xong</Button>
-    </>
   );
 }
 

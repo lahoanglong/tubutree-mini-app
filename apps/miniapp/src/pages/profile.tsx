@@ -1,3 +1,4 @@
+import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
 import { Avatar, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
@@ -27,6 +28,7 @@ import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { fetchOrders } from '../services/shop-api';
 import { getSubscriptions } from '../services/subscriptions-api';
+import { getAffiliateMe } from '../services/affiliate-api';
 import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
 import { formatVnd, formatPoints } from '../utils/format';
@@ -113,6 +115,9 @@ export default function ProfilePage() {
     retry: false,
   });
   const dealerQ = useQuery({ queryKey: ['dealer-me'], queryFn: getDealerMe, enabled: authed, retry: false });
+  // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
+  const needsCtvProbe = status === 'authenticated' && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
+  const ctvAccessQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: needsCtvProbe, retry: false });
   const dealerItem: MenuItem = dealerQ.data?.isDealer || dealerQ.data?.status === 'APPROVED'
     ? { Icon: Store, label: 'Kênh đại lý', to: '/dealer', hint: dealerQ.data?.tier?.name ?? homeCopy.earn.dealer.hint }
     : dealerQ.data?.status === 'PENDING'
@@ -124,12 +129,18 @@ export default function ProfilePage() {
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: authed && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
   const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
+  const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);
 
   const baseMenu = MENU.map((s) => ({
     ...s,
     items: s.items
       .filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (chatEnabled || it.to !== '/chat'))
-      .map((it) => (it.to === '/dealer' ? dealerItem : it)),
+      .map((it) => {
+        if (it.to === '/dealer') return dealerItem;
+        if (it.to === '/affiliate') return ctvEntry ? { ...it, label: ctvEntry.label, hint: ctvEntry.hint } : null;
+        return it;
+      })
+      .filter((it): it is MenuItem => it !== null),
   })).map((s) =>
     ownedBrand && s.group === homeCopy.profile.groupEarn
       ? { ...s, items: [...s.items, { Icon: Store, label: 'Quản lý nhãn hàng', to: '/brand-owner', hint: ownedBrand.name }] }

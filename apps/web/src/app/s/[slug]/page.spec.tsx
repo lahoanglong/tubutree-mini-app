@@ -90,6 +90,31 @@ describe('trang gian hàng /s/[slug] — tin cậy chỉ khi đúng sự thật 
 });
 
 // Kiểu Mini App ở điện thoại (StorePageShell + ProductTile): bìa tràn mép 84px, đầu trang phẳng không thẻ, không dải cam kết, thẻ sản phẩm chung.
+describe('trang gian hàng /s/[slug] — gian hàng mẫu và lối mở gian hàng', () => {
+  it('gian hàng mẫu: có nhãn "Gian hàng mẫu" và dòng giải thích; gian hàng thật thì không', async () => {
+    mocks.sf = { ...SF, isSample: true };
+    const box = await html();
+    expect(box.textContent).toContain('Gian hàng mẫu');
+    expect(box.querySelector('[data-testid="sample-note"]')?.textContent).toContain('không phải người bán thật');
+    mocks.sf = SF;
+    const real = await html();
+    expect(real.textContent).not.toContain('Gian hàng mẫu');
+    expect(real.querySelector('[data-testid="sample-note"]')).toBeNull();
+  });
+
+  it('gian hàng CTV của người khác: khách thấy lời mời Mở gian hàng dẫn tới /ctv/gian-hang', async () => {
+    const box = await html();
+    const cta = box.querySelector('[data-testid="open-storefront-cta"]')!;
+    expect(cta.textContent).toContain('Bạn cũng muốn có gian hàng như này?');
+    expect(cta.querySelector('a')?.getAttribute('href')).toBe('/ctv/gian-hang');
+  });
+
+  it('gian hàng đối tác không có lời mời mở gian hàng CTV', async () => {
+    mocks.sf = { ...SF, type: 'MERCHANT', isPartner: true, approved: true };
+    expect((await html()).querySelector('[data-testid="open-storefront-cta"]')).toBeNull();
+  });
+});
+
 describe('trang gian hàng — kiểu Mini App ở điện thoại', () => {
   it('trang hero: không đệm trang ở điện thoại; bìa 84px tràn mép, màu xanh đậm như Mini App (không theo màu chủ đề)', async () => {
     const box = await html();
@@ -204,6 +229,23 @@ describe('trang gian hàng /s/[slug] — canonical và thẻ chia sẻ (D3-10)',
     const m = await meta('LINH');
     expect(m.alternates?.canonical).toBe('https://app.tubutree.com/s/linh');
     expect((m.openGraph as { url?: string }).url).toBe('https://app.tubutree.com/s/linh');
+  });
+
+  it('gian hàng mẫu: noindex; gian hàng thật: không chặn công cụ tìm kiếm', async () => {
+    mocks.sf = { ...SF, isSample: true };
+    expect((await meta()).robots).toEqual({ index: false, follow: false });
+    mocks.sf = { ...SF };
+    expect((await meta()).robots).toBeUndefined();
+  });
+
+  it('gian hàng mẫu: tiêu đề và mô tả chia sẻ có tiền tố "Gian hàng mẫu · "; gian hàng thật thì không', async () => {
+    mocks.sf = { ...SF, isSample: true };
+    const m = await meta();
+    expect(m.title).toBe('Gian hàng mẫu · Shop của Linh — Tubu Tree');
+    expect(m.description).toBe('Gian hàng mẫu · Hàng sống xanh');
+    expect((m.openGraph as { title?: string }).title).toBe('Gian hàng mẫu · Shop của Linh — Tubu Tree');
+    mocks.sf = { ...SF };
+    expect((await meta()).title).toBe('Shop của Linh — Tubu Tree');
   });
 
   it('ảnh chia sẻ do opengraph-image của trang dựng: metadata không nhét ảnh gốc (kể cả base64) vào og:image', async () => {

@@ -115,6 +115,7 @@ export function mockAffiliateDashboard(
   api.get('/affiliate/analytics/products', []);
   api.get('/affiliate/tiers', CTV_TIERS);
   api.get('/affiliate/payouts', []);
+  api.get('/academy/courses', []);
   api.get('/affiliate/tax-statement', CTV_TAX_STATEMENT_EMPTY);
   const ms = opts.milestones ?? CTV_MILESTONES_EMPTY;
   api.get('/affiliate/milestones', typeof ms === 'function' ? () => ms() : ms);

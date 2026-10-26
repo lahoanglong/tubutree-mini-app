@@ -25,6 +25,18 @@ export function publicAuthorName(fullName: string | null | undefined): string {
   return name.split(/\s+/).at(-1) ?? ANONYMOUS_AUTHOR;
 }
 
+/**
+ * Tên trên bảng xếp hạng cho người đã đăng nhập: tên gọi kèm chữ cái đầu của họ ("Lại N."), không lộ họ tên đầy đủ.
+ * Tên có số hoặc "@" dùng tên chung như {@link publicAuthorName}.
+ */
+export function leaderboardAuthorName(fullName: string | null | undefined): string {
+  const name = fullName?.trim() ?? '';
+  if (!name || /[\d@]/.test(name)) return ANONYMOUS_AUTHOR;
+  const parts = name.split(/\s+/);
+  if (parts.length === 1) return parts[0]!;
+  return `${parts.at(-1)} ${Array.from(parts[0]!)[0]!.toLocaleUpperCase('vi')}.`;
+}
+
 function redactContact(text: string): string {
   return text.replace(EMAIL, '…').replace(PHONE, '…').replace(/\s+/g, ' ').trim();
 }

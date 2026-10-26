@@ -5,7 +5,7 @@ import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  navigate: vi.fn(), openSnackbar: vi.fn(),
+  navigate: vi.fn(), openSnackbar: vi.fn(), chatOn: false, openOAChat: vi.fn(),
   getOwnedBrand: vi.fn(), getOwnedBrandSales: vi.fn(),
   updateOwnedBrand: vi.fn(), createOwnedPromotion: vi.fn(), updateOwnedPromotion: vi.fn(), deleteOwnedPromotion: vi.fn(),
 }));
@@ -27,6 +27,8 @@ vi.mock('../services/brand-owner-api', () => ({
   deleteOwnedPromotion: mocks.deleteOwnedPromotion,
 }));
 vi.mock('../components/image-upload', () => ({ ImageUpload: ({ label }: { label: string }) => <div>{label}</div> }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, chat: { enabled: mocks.chatOn } }) }));
+vi.mock('../services/zmp-bridge', () => ({ hasOA: true, openOAChat: mocks.openOAChat }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import BrandOwnerPage from './brand-owner';
@@ -223,6 +225,19 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     oneH1();
   });
 
+  it('chưa được cấp nhãn: có nút Nhắn Tubu mở chat khi chat bật, mở OA khi chat tắt (B-87)', async () => {
+    mocks.getOwnedBrand.mockRejectedValue({ response: { status: 404 } });
+    mocks.chatOn = true;
+    const first = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắn Tubu' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    first.unmount();
+    mocks.chatOn = false;
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhắn Tubu' }));
+    expect(mocks.openOAChat).toHaveBeenCalled();
+  });
+
   it('đúng một h1 khi lỗi tải, có nút Thử lại', async () => {
     mocks.getOwnedBrand.mockRejectedValueOnce(new Error('mạng lỗi')).mockResolvedValue(BRAND);
     renderPage();
@@ -253,7 +268,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
     renderPage();
     await screen.findByText('Sachi');
     expect(screen.getByText('Chưa xác minh')).toBeInTheDocument();
-    expect(screen.getByText('Nháp (admin duyệt)')).toBeInTheDocument();
+    expect(screen.getByText('Bản nháp, chờ Tubu duyệt')).toBeInTheDocument();
   });
 
   it('"Xem trang nhãn": đã đăng thì sang /brand/:slug, nháp thì chỉ báo cảnh báo', async () => {
@@ -273,7 +288,7 @@ describe('BrandOwnerPage cấu trúc trang (C-076, C-114)', () => {
   it('Lưu thông tin gửi các trường đang nhập', async () => {
     renderPage();
     await screen.findByText('Sachi');
-    fireEvent.change(screen.getByLabelText('Tagline'), { target: { value: 'Sống xanh' } });
+    fireEvent.change(screen.getByLabelText('Câu giới thiệu ngắn'), { target: { value: 'Sống xanh' } });
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
     await waitFor(() => expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1));
     expect(mocks.updateOwnedBrand.mock.calls[0]![0]).toMatchObject({ tagline: 'Sống xanh', logoUrl: '', coverUrl: '', origin: '', story: '' });

@@ -32,6 +32,8 @@ export interface AdminStorefrontRow {
   title: string;
   type: StorefrontTypeFilter;
   isPartner: boolean;
+  /** Gian hàng mẫu do hệ thống tạo để giới thiệu; không phải của khách thật. */
+  isSample?: boolean;
   isPublished: boolean;
   publishedAt: string | null;
   approved: boolean;

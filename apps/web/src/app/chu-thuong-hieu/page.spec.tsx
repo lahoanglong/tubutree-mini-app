@@ -144,6 +144,7 @@ describe('khung trang /chu-thuong-hieu', () => {
     expect(text()).toContain('Bạn chưa được cấp quyền quản lý nhãn nào. Liên hệ Tubu để trở thành đối tác nhãn.');
     expect(h1s()).toEqual(['Quản lý nhãn hàng']);
     expect(btn(/thử lại/i)).toBeNull();
+    expect(Array.from(document.querySelectorAll('a')).some((a) => a.textContent === 'Nhắn Tubu')).toBe(true);
   });
 
   it('máy chủ từ chối (403): báo không có quyền bằng lời dễ hiểu, không lộ mã lỗi', async () => {
@@ -175,7 +176,7 @@ describe('khung trang /chu-thuong-hieu', () => {
     m.data['/brand/owner/me'] = { ...BRAND, isVerified: false, isPublished: false };
     await mount();
     expect(text()).toContain('Chưa xác minh');
-    expect(text()).toContain('Nháp (admin duyệt)');
+    expect(text()).toContain('Bản nháp, chờ Tubu duyệt');
   });
 
   it('"Xem trang nhãn": đã đăng thì là liên kết /brand/:slug; nháp thì chỉ báo, không có liên kết', async () => {
@@ -210,7 +211,7 @@ describe('tab Hồ sơ & khuyến mãi', () => {
 
   it('Lưu thông tin gửi PATCH /brand/owner/me với đủ năm trường; ảnh mới lấy từ ô tải ảnh', async () => {
     await mount();
-    typeInto(field('Tagline'), 'Sống xanh');
+    typeInto(field('Câu giới thiệu ngắn'), 'Sống xanh');
     click(btn('Logo'));
     await press('Lưu thông tin');
     const sent = calls('PATCH', '/brand/owner/me');
@@ -371,9 +372,9 @@ describe('/chu-thuong-hieu — diện mạo Mini App ở điện thoại', () =>
     expect(info.querySelector('h2')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');
   });
 
-  it('ô Tagline và Nguồn gốc cỡ chữ body-lg như Mini App', async () => {
+  it('ô Câu giới thiệu ngắn và Nguồn gốc cỡ chữ body-lg như Mini App', async () => {
     await mount();
-    expect(field('Tagline')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
+    expect(field('Câu giới thiệu ngắn')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
     expect(field('Nguồn gốc')!.className).toContain('max-md:text-[length:var(--type-body-lg-size)]');
   });
 });

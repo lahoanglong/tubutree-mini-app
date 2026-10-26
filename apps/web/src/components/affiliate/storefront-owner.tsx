@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Leaf, Plus, Share2, ShoppingBag } from 'lucide-react';
+import { OPEN_STOREFRONT_CTA, OPEN_STOREFRONT_PROMPT } from '@tubutree/app-core/storefront-signup';
 import { useAuth } from '@/lib/auth-context';
 import { ui } from '@/lib/guest-ui';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -78,6 +79,20 @@ export function StorefrontEmpty({ referralCode }: { referralCode?: string | null
           <GuestLink label="Xem sản phẩm trên Tubu Tree" />
         )}
       </div>
+    </section>
+  );
+}
+
+/** Khách xem gian hàng CTV của người khác được mời mở gian hàng riêng; chủ gian hàng thì không cần. */
+export function OpenStorefrontCta({ referralCode }: { referralCode?: string | null }) {
+  const owner = useIsStorefrontOwner(referralCode);
+  if (owner) return null;
+  return (
+    <section data-testid="open-storefront-cta" className="mt-8 rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card max-md:mx-4 max-md:mt-6">
+      <p className="text-sm font-semibold text-stone-900">{OPEN_STOREFRONT_PROMPT}</p>
+      <Link href="/ctv/gian-hang" className={`${ui.btnSecondary} mt-2.5 max-md:w-full`}>
+        {OPEN_STOREFRONT_CTA}
+      </Link>
     </section>
   );
 }

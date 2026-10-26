@@ -65,6 +65,13 @@ describe('renderStorefrontOgImage', () => {
     expect(mocks.readFile.mock.calls.some(([file]) => String(file).endsWith('BeVietnamPro-SemiBold.ttf'))).toBe(true);
   });
 
+  it('gian hàng mẫu: dữ liệu thẻ mang isSample để vẽ nhãn', async () => {
+    mocks.getStorefront.mockResolvedValue({ ...store, isSample: true });
+    await renderStorefrontOgImage(params);
+    const [element] = mocks.imageCtor.mock.calls[0]!;
+    expect((element as { props: { data: { isSample: boolean } } }).props.data.isSample).toBe(true);
+  });
+
   it('API không trả lời: ảnh mặc định, không ném lỗi', async () => {
     mocks.getStorefront.mockRejectedValue(new Error('API unavailable'));
     const res = await renderStorefrontOgImage(params);

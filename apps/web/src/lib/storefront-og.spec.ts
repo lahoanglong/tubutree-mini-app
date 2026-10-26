@@ -48,3 +48,12 @@ describe('ogCardData — dữ liệu thẻ chia sẻ của gian hàng (D3-10)', 
     expect(d.name.endsWith('…')).toBe(true);
   });
 });
+
+describe('ogCardData: gian hàng mẫu', () => {
+  it('isSample chỉ true khi API báo gian hàng mẫu', () => {
+    const base = { title: 'Mẫu', avatarUrl: null, themeColor: null, collections: [] };
+    expect(ogCardData({ ...base, isSample: true }).isSample).toBe(true);
+    expect(ogCardData({ ...base, isSample: false }).isSample).toBe(false);
+    expect(ogCardData(base).isSample).toBe(false);
+  });
+});

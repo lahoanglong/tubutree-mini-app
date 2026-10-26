@@ -31,6 +31,8 @@ const OWNERS = [
   'app/admin/',
   'components/admin/',
   'lib/merchant-client.ts',
+  // Hub đại lý đã duyệt (không phải web khách): thẻ "Gian hàng đối tác" dẫn đối tác sang cổng quản lý (B-41).
+  'components/dealer/dealer-hub.tsx',
   'lib/admin-',
   'lib/site.ts',
   'app/robots.ts',

@@ -100,6 +100,7 @@ describe('/hoc-vien — danh sách khoá học', () => {
     const { container } = await mount();
     expect(container.textContent).toContain('Chưa có khoá học nào');
     expect(container.textContent).toContain('Tubu sẽ sớm thêm khoá học đào tạo cho CTV.');
+    expect(container.querySelector('a[href="/ctv"]')?.textContent).toBe('Về trang Cộng tác viên');
   });
 
   it('lỗi tải: báo lỗi, Thử lại tải lại', async () => {

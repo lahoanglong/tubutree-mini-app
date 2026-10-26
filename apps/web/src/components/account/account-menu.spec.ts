@@ -20,13 +20,31 @@ const labels = (menu: AccountMenuGroup[], group: string) => menu.find((g) => g.g
 const all = (menu: AccountMenuGroup[]) => menu.flatMap((g) => g.items);
 
 describe('nhóm menu hub tài khoản', () => {
+  it('CTV thấy "Cộng tác viên" (bảng điều khiển), không còn lời mời mở gian hàng', () => {
+    const items = buildAccountMenu(ctx({ role: 'AFFILIATE' })).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items;
+    expect(items.find((i) => i.to === '/ctv')!.label).toBe('Cộng tác viên');
+    expect(items.map((i) => i.label)).not.toContain('Mở gian hàng Cộng tác viên');
+  });
+
+  it('đại lý chỉ thấy mục Cộng tác viên khi còn quyền CTV; đại lý thuần hoặc chưa biết quyền thì không có mục này', () => {
+    const find = (over: Partial<AccountMenuContext>) => buildAccountMenu(ctx(over)).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.find((i) => i.to === '/ctv');
+    expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: true, canRegister: false } })?.label).toBe('Cộng tác viên');
+    expect(find({ role: 'DEALER', ctvAccess: { isAffiliate: false, canRegister: false } })).toBeUndefined();
+    expect(find({ role: 'DEALER' })).toBeUndefined();
+  });
+
+  it('lời mời mở gian hàng không nhắc hoa hồng (chính sách Zalo)', () => {
+    const entry = buildAccountMenu(ctx()).find((g) => g.group === 'Kiếm tiền cùng Tubu')!.items.find((i) => i.to === '/ctv')!;
+    expect(`${entry.label} ${entry.hint}`).not.toMatch(/hoa hồng/i);
+  });
+
   it('ba nhóm theo thứ tự Kiếm tiền cùng Tubu, Tài khoản, Hỗ trợ; khách thường không có nhóm Công việc', () => {
     expect(buildAccountMenu(ctx()).map((g) => g.group)).toEqual(['Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']);
   });
 
   it('mục đúng như Mini App khi mọi route đã xong và cờ tắt', () => {
     const m = buildAccountMenu(ctx());
-    expect(labels(m, 'Kiếm tiền cùng Tubu')).toEqual(['Cộng tác viên', 'Học viện Tubu', 'Đại lý']);
+    expect(labels(m, 'Kiếm tiền cùng Tubu')).toEqual(['Mở gian hàng Cộng tác viên', 'Học viện Tubu', 'Đại lý']);
     expect(labels(m, 'Tài khoản')).toEqual(['Sản phẩm yêu thích', 'Sổ địa chỉ', 'Thông báo', 'Cài đặt']);
     expect(labels(m, 'Hỗ trợ')).toEqual(['Câu chuyện thương hiệu', 'Về Tubu Tree & Hỗ trợ']);
   });
@@ -135,9 +153,15 @@ describe('với route map thật (sau khi lane pro và recycle gộp)', () => {
   const real = { isReady: isWebRouteReady };
 
   it('đại lý, chủ nhãn, nhân viên và Học viện có lối vào như Mini App (profile.tsx)', () => {
-    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A' }));
+    const m = buildAccountMenu(ctx({ ...real, role: 'ADMIN', ownedBrandName: 'Nhãn A', ctvAccess: { isAffiliate: true } }));
     const to = all(m).map((i) => i.to);
     expect(to).toEqual(expect.arrayContaining(['/ctv', '/dai-ly', '/chu-thuong-hieu', '/nhan-vien', '/nhan-vien/bang-luong', '/admin', '/hoc-vien']));
+  });
+
+  it('admin/nhân viên chưa có kết quả /affiliate/me (đang tải, lỗi, 401): mục Cộng tác viên ẩn, không đổi chữ', () => {
+    for (const role of ['ADMIN', 'STAFF', 'DEALER']) {
+      expect(all(buildAccountMenu(ctx({ ...real, role }))).map((i) => i.to)).not.toContain('/ctv');
+    }
   });
 
   it('khách thường chưa có nhãn: không thấy màn nội bộ', () => {

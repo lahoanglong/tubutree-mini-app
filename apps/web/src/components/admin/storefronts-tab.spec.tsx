@@ -47,6 +47,16 @@ describe('StorefrontsTab (D3-02)', () => {
     expect(container.querySelector('article[aria-label="Shop nháp"]')!.textContent).toContain('Nháp');
   });
 
+  it('gian hàng mẫu có nhãn Mẫu trong danh sách, gian hàng thật thì không', async () => {
+    const api = mockFetch({ '/admin/storefronts?': page([row({ isSample: true }), row({ id: 's2', title: 'Shop thật' })]) });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<StorefrontsTab />);
+    await flush();
+    const badges = (t: string) => Array.from(container.querySelector(`article[aria-label="${t}"]`)!.querySelectorAll('span')).map((e) => e.textContent);
+    expect(badges('Shop của Linh')).toContain('Mẫu');
+    expect(badges('Shop thật')).not.toContain('Mẫu');
+  });
+
   it('gian hàng đã đăng nhưng đang ẩn thì nói vì sao; gian hàng bị gỡ hiện lý do của admin', async () => {
     const api = mockFetch({
       '/admin/storefronts?': page([

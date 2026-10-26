@@ -252,9 +252,16 @@ export default function MerchantPage() {
         </div>
         <h1 className="mt-4 font-display text-2xl font-semibold text-stone-900">Kênh dành cho đối tác</h1>
         <p className="mt-2 text-sm text-stone-600">
-          Tài khoản của bạn chưa phải đại lý hoặc cộng tác viên. Đăng ký trong Mini App Tubu Tree
-          để mở kênh bán hàng riêng.
+          Tài khoản của bạn chưa phải đại lý hoặc cộng tác viên. Đăng ký ngay để mở kênh bán hàng riêng.
         </p>
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link href="/ctv" className="inline-flex min-h-11 items-center justify-center rounded-control bg-forest-600 px-5 text-sm font-semibold text-stone-0 hover:bg-forest-700">
+            Đăng ký Cộng tác viên
+          </Link>
+          <Link href="/dai-ly" className="inline-flex min-h-11 items-center justify-center rounded-control border border-stone-300 bg-stone-0 px-5 text-sm font-semibold text-stone-900 hover:bg-stone-50">
+            Đăng ký đại lý
+          </Link>
+        </div>
       </main>
     );
   }
@@ -391,6 +398,12 @@ export default function MerchantPage() {
         {storeQ.isError && (
           <div className="rounded-control border border-danger-fg bg-danger-bg p-4 text-sm text-danger-fg">
             {(storeQ.error as Error).message}
+          </div>
+        )}
+        {authed && !storeQ.isLoading && !storeQ.isError && !store && (
+          <div data-testid="merchant-empty" className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center">
+            <p className="text-sm font-semibold text-stone-900">Chưa có gian hàng để quản lý</p>
+            <p className="mt-1 text-sm text-stone-600">Trang này dành cho gian hàng đối tác và Cộng tác viên đã có gian hàng. Khi gian hàng được tạo, sản phẩm, đơn và đối soát sẽ hiện ở đây.</p>
           </div>
         )}
 

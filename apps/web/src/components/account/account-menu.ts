@@ -1,3 +1,4 @@
+import { ctvMenuEntry, type CtvAccessHint } from '@tubutree/app-core/storefront-signup';
 import { BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
 import type { DealerMe } from '@tubutree/app-core/api/dealer';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -19,6 +20,8 @@ export interface AccountMenuContext {
   chatEnabled: boolean;
   dealer: Pick<DealerMe, 'status' | 'isDealer'> & { tier?: { name?: string } | null } | null | undefined;
   ownedBrandName: string | null | undefined;
+  /** GET /affiliate/me (chỉ cần với đại lý, nhân viên, admin): quyết định mục Cộng tác viên. */
+  ctvAccess?: CtvAccessHint | null;
   /** Route web đã xong chưa (route map): mục trỏ route còn `pending` bị ẩn để khách không rơi vào 404. */
   isReady: (webPath: string) => boolean;
 }
@@ -26,6 +29,7 @@ export interface AccountMenuContext {
 // Mục theo cùng thứ tự, nhãn và mô tả với MENU trong apps/miniapp/src/pages/profile.tsx; chỉ đổi đích sang route web.
 export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
   const earnDealer = homeCopy.earn.dealer;
+  const ctvEntry = ctvMenuEntry(c.role, c.ctvAccess);
   const dealerItem: AccountMenuItem =
     c.dealer?.isDealer || c.dealer?.status === 'APPROVED'
       ? { icon: Store, label: 'Kênh đại lý', to: '/dai-ly', hint: c.dealer.tier?.name ?? earnDealer.hint }
@@ -37,7 +41,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
     {
       group: homeCopy.profile.groupEarn,
       items: [
-        { icon: Users, label: homeCopy.earn.affiliate.label, to: '/ctv', hint: homeCopy.earn.affiliate.hint },
+        ...(ctvEntry ? [{ icon: Users, ...ctvEntry, to: '/ctv' }] : []),
         { icon: GraduationCap, label: homeCopy.earn.academy.label, to: '/hoc-vien', hint: homeCopy.earn.academy.hint },
         dealerItem,
         ...(c.ownedBrandName ? [{ icon: Store, label: 'Quản lý nhãn hàng', to: '/chu-thuong-hieu', hint: c.ownedBrandName }] : []),

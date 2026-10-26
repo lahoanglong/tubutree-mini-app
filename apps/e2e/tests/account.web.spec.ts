@@ -67,6 +67,7 @@ test.describe('Web khách: tài khoản', () => {
 
   test('hub: quản trị viên thấy nhóm Công việc', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Quản Trị', email: null, dob: null }, 'ADMIN');
+    api.get('/affiliate/me', { isAffiliate: true, canRegister: false, canOpenStorefront: true });
     await page.goto('/tai-khoan');
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toBeVisible();
     await expect(page.getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin');

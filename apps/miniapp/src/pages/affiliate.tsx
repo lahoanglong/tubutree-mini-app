@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchCourses } from '../services/academy-api';
 import {
   getAffiliateMe,
   registerAffiliate,
@@ -154,6 +155,7 @@ function RegisterGate() {
   });
 
   const benefits = [
+    { Icon: Store, text: 'Gian hàng riêng với đường dẫn mang tên bạn để gửi cho khách' },
     { Icon: BadgePercent, text: 'Hoa hồng theo từng sản phẩm + thưởng bậc doanh số tháng' },
     { Icon: Link2, text: 'Tạo link chia sẻ riêng, theo dõi lượt bấm & chuyển đổi' },
     // Chuyển vào Ví luôn là 1:1, không nhân hệ số.
@@ -272,6 +274,9 @@ function Dashboard() {
   const pbQ = useQuery({ queryKey: ['affiliate-product-breakdown'], queryFn: getProductBreakdown });
   const ctvTiersQ = useQuery({ queryKey: ['affiliate-ctv-tiers'], queryFn: getCtvTiers });
   const milestonesQ = useQuery({ queryKey: ['affiliate-milestones'], queryFn: getCtvMilestones });
+  // Lối vào Học viện chỉ hiện khi đã có khoá để học: vào mà thấy trống thì CTV mới tưởng sản phẩm chưa xong.
+  const academyQ = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses, retry: false });
+  const hasCourses = (academyQ.data?.length ?? 0) > 0;
   const [showAllTiers, setShowAllTiers] = useState(false);
   const [transferring, setTransferring] = useState(false);
   const [ctvOrdering, setCtvOrdering] = useState(false);
@@ -513,14 +518,16 @@ function Dashboard() {
         <MilestoneRewards data={milestonesQ.data} />
       ) : null}
 
-      <div style={BLOCK_GAP}>
-        <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => navigate('/academy')}>
-          {vi.academy.entry}
-        </Button>
-        <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
-          {vi.academy.entryHint}
-        </Text>
-      </div>
+      {hasCourses && (
+        <div style={BLOCK_GAP}>
+          <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => navigate('/academy')}>
+            {vi.academy.entry}
+          </Button>
+          <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>
+            {vi.academy.entryHint}
+          </Text>
+        </div>
+      )}
 
       {/* Mã giới thiệu + chia sẻ */}
       <Section title="Mã giới thiệu của bạn">

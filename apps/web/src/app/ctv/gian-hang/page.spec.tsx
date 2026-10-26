@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   picker: [] as unknown[],
   categories: [] as unknown[],
   kit: null as unknown,
+  me: { isAffiliate: true, canRegister: true, canOpenStorefront: true } as unknown,
   fail: new Set<string>(),
   calls: [] as Call[],
   share: vi.fn(),
@@ -21,6 +22,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn(), user: { id: 'ctv1' } }) }));
+vi.mock('@/components/product-card', () => ({ default: ({ product }: { product: { name: string } }) => <div data-testid="product-card">{product.name}</div> }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
 vi.mock('@/components/account/cloudinary-upload', () => ({ uploadToCloudinary: async () => null }));
 
@@ -37,6 +39,7 @@ vi.mock('@/lib/core-http', () => {
         if (state.sfStatus !== 200) throw httpError(state.sfStatus, 'không có');
         return state.sf;
       }
+      if (path === '/affiliate/me') return state.me;
       if (path === '/storefront/me/quests') return state.quests;
       if (path === '/storefront/me/stats') return state.stats;
       if (path === '/storefront/me/products') return state.picker;
@@ -182,66 +185,152 @@ describe('/ctv/gian-hang — cổng vào theo phiên', () => {
     expect(container.querySelectorAll('h1')).toHaveLength(1);
     expect(container.querySelector('h1')?.textContent).toBe('Gian hàng của tôi');
     expect(Array.from(container.querySelectorAll('h2')).some((h) => h.textContent === 'Cửa hàng Xanh')).toBe(true);
-    expect(container.textContent).toContain('Nháp — chưa đăng');
+    expect(container.textContent).toContain('Bản nháp, chưa gửi duyệt');
     expect(container.querySelector('a[href="/ctv"]')).not.toBeNull();
   });
 });
 
-describe('tạo gian hàng và chọn mẫu', () => {
+describe('đăng ký gian hàng 4 bước (404 = chưa có gian hàng)', () => {
   beforeEach(() => {
     state.sfStatus = 404;
   });
 
-  it('404: mời tạo gian hàng, một h1', async () => {
+  it('bước 1: điều kiện, một h1, CTV thấy nút Bắt đầu', async () => {
     const { container } = mount();
     await flush();
     expect(container.querySelectorAll('h1')).toHaveLength(1);
-    expect(container.textContent).toContain('Tạo gian hàng để chia sẻ sản phẩm bạn tâm đắc.');
+    expect(text()).toContain('Bước 1/4');
+    expect(text()).toContain('Điều kiện mở gian hàng');
+    expect(text()).toContain('Bạn đã là Cộng tác viên.');
+    expect(hasBtn('Bắt đầu mở gian hàng')).toBe(true);
   });
 
-  it('chọn một mẫu: tạo gian hàng rồi áp mẫu đúng danh mục', async () => {
+  it('bấm Bắt đầu: tạo gian hàng rồi sang bước thông tin', async () => {
     mount();
     await flush();
-    click(btn('Tạo gian hàng'));
+    state.sfStatus = 200;
+    state.sf = storefront({ status: 'DRAFT', collections: [] });
+    click(btn('Bắt đầu mở gian hàng'));
+    await flush();
+    expect(writes().map((c) => [c.method, c.path])).toEqual([['post', '/storefront']]);
+    expect(text()).toContain('Bước 2/4');
+    expect(text()).toContain('/s/shop-aff-1');
+  });
+
+  it('khách thường chưa là CTV: lối Đăng ký làm Cộng tác viên tới /ctv, không có nút tạo', async () => {
+    state.me = { isAffiliate: false, canRegister: true };
+    const { container } = mount();
+    await flush();
+    expect(text()).toContain('Bạn cần là Cộng tác viên trước khi mở gian hàng.');
+    expect(hasBtn('Bắt đầu mở gian hàng')).toBe(false);
+    expect(btn('Đăng ký làm Cộng tác viên').getAttribute('href')).toBe('/ctv');
+    expect(writes()).toEqual([]);
+    state.me = { isAffiliate: true, canRegister: true, canOpenStorefront: true };
+  });
+
+  it('tài khoản không thể làm CTV: giải thích, không có nút nào để tạo', async () => {
+    state.me = { isAffiliate: false, canRegister: false };
+    mount();
+    await flush();
+    expect(text()).toContain('Tài khoản này không mở gian hàng Cộng tác viên được.');
+    expect(hasBtn('Bắt đầu mở gian hàng')).toBe(false);
+    state.me = { isAffiliate: true, canRegister: true, canOpenStorefront: true };
+  });
+});
+
+describe('đăng ký gian hàng: các bước sau khi có bản nháp', () => {
+  beforeEach(() => {
+    state.sf = storefront({ status: 'DRAFT' });
+  });
+
+  it('bản nháp vào bước 2; sửa tên rồi Tiếp tục lưu thông tin', async () => {
+    mount();
+    await flush();
+    expect(text()).toContain('Bước 2/4');
+    typeInto(document.body.querySelector('input')!, 'Shop mới');
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(writes().map((c) => [c.method, c.path, (c.body as { title?: string }).title])).toEqual([['patch', '/storefront/me', 'Shop mới']]);
+    expect(text()).toContain('Bước 3/4');
+  });
+
+  it('tên trống: báo lỗi, không gọi API', async () => {
+    mount();
+    await flush();
+    typeInto(document.body.querySelector('input')!, '');
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(text()).toContain('Nhập tên gian hàng.');
+    expect(writes()).toEqual([]);
+  });
+
+  it('bước 3 chưa có sản phẩm: Tiếp tục tắt kèm lời nhắc; chọn mẫu gọi apply-template', async () => {
+    state.sf = storefront({ status: 'DRAFT', collections: [] });
+    mount();
+    await flush();
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(text()).toContain('Bước 3/4');
+    expect((btn('Tiếp tục') as HTMLButtonElement).disabled).toBe(true);
+    expect(text()).toContain('Thêm ít nhất 1 sản phẩm để tiếp tục.');
+    click(btn('Chọn danh mục'));
     await flush();
     expect(text()).toContain('Bắt đầu nhanh với 1 mẫu có sẵn');
-    click(btn('Dùng mẫu Nhà bếp'));
+    const cat = btn('Dùng mẫu Nhà bếp');
+    expect(cat.className).toContain('min-h-11');
+    click(cat);
     await flush();
-    expect(writes().map((c) => [c.method, c.path, c.body])).toEqual([
-      ['post', '/storefront', undefined],
-      ['post', '/storefront/me/apply-template', { categoryId: 'cat2' }],
-    ]);
+    expect(writes().map((c) => [c.method, c.path, c.body]).slice(-1)).toEqual([['post', '/storefront/me/apply-template', { categoryId: 'cat2' }]]);
   });
 
-  it('bỏ qua mẫu: chỉ tạo gian hàng trống, không áp mẫu', async () => {
+  it('bước 4: xem trước, lời hứa duyệt, Gửi duyệt gọi publish(true)', async () => {
     mount();
     await flush();
-    click(btn('Tạo gian hàng'));
+    click(btn('Tiếp tục'));
     await flush();
-    click(btn('Bỏ qua, tự tạo gian hàng trống'));
+    click(btn('Tiếp tục'));
     await flush();
-    expect(writes().map((c) => c.path)).toEqual(['/storefront']);
+    expect(text()).toContain('Bước 4/4');
+    expect(document.body.querySelector('[data-testid="storefront-preview"]')).not.toBeNull();
+    expect(text()).toContain('Tubu duyệt trong 1 ngày làm việc');
+    click(btn('Gửi duyệt'));
+    await flush();
+    expect(writes().map((c) => [c.path, c.body]).slice(-1)).toEqual([['/storefront/me/publish', { isPublished: true }]]);
+    expect(text()).toContain('Đã gửi duyệt.');
   });
 
-  it('lỗi khi tạo: báo ngay trong sheet', async () => {
-    state.fail.add('post /storefront');
+  it('có lối mở trình chỉnh sửa đầy đủ', async () => {
     mount();
     await flush();
-    click(btn('Tạo gian hàng'));
+    click(btn('Mở trình chỉnh sửa đầy đủ'));
     await flush();
-    click(btn('Dùng mẫu Nhà bếp'));
-    await flush();
-    expect(dialog()?.textContent).toContain('mất mạng');
+    expect(text()).toContain('Cài đặt');
+  });
+});
+
+describe('gian hàng chờ duyệt (B-40)', () => {
+  beforeEach(() => {
+    state.sf = storefront({ isPublished: true, status: 'PENDING_APPROVAL', publicHiddenReason: 'Gian hàng đang chờ duyệt' });
   });
 
-  it('ô chọn mẫu là nút thật cao >= 44px', async () => {
+  it('ghi Chờ duyệt, không ghi Đang hiển thị, kèm lời hứa 1 ngày làm việc', async () => {
     mount();
     await flush();
-    click(btn('Tạo gian hàng'));
+    expect(text()).toContain('Chờ duyệt');
+    expect(text()).not.toContain('Đang hiển thị');
+    expect(text()).not.toContain('Gian hàng cập nhật sau vài phút');
+    expect(document.body.querySelector('[data-testid="hidden-reason"]')?.textContent).toContain('1 ngày làm việc');
+  });
+
+  it('chia sẻ bị khoá, Xem trước mở bản xem trước, có nút Huỷ gửi duyệt', async () => {
+    mount();
     await flush();
-    const b = btn('Dùng mẫu Nhà bếp');
-    expect(b.tagName).toBe('BUTTON');
-    expect(b.className).toContain('min-h-11');
+    expect((btn('Chia sẻ sau khi Tubu duyệt') as HTMLButtonElement).disabled).toBe(true);
+    expect(btn('Xem trước').tagName).toBe('BUTTON');
+    click(btn('Xem trước'));
+    await flush();
+    expect(dialog()?.querySelector('[data-testid="storefront-preview"]')).not.toBeNull();
+    expect(hasBtn('Huỷ gửi duyệt')).toBe(true);
   });
 });
 
@@ -394,12 +483,12 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
     await flush();
     const create = btn('Tạo bộ sưu tập') as HTMLButtonElement;
     expect(create.disabled).toBe(true);
-    typeInto(inputByLabel('Tên bộ sưu tập (khách sẽ thấy)'), '  Mới  ');
+    typeInto(inputByLabel('Tên bộ sưu tập'), '  Mới  ');
     expect((btn('Tạo bộ sưu tập') as HTMLButtonElement).disabled).toBe(false);
     click(btn('Tạo bộ sưu tập'));
     await flush();
     expect(writes().map((c) => [c.method, c.path, c.body])).toEqual([['post', '/storefront/me/collections', { title: 'Mới' }]]);
-    expect((inputByLabel('Tên bộ sưu tập (khách sẽ thấy)') as HTMLInputElement).value).toBe('');
+    expect((inputByLabel('Tên bộ sưu tập') as HTMLInputElement).value).toBe('');
   });
 
   it('form tạo bộ sưu tập chỉ có ô tên, không có chọn loại, bố cục hay % giảm', async () => {
@@ -494,21 +583,42 @@ describe('chỉnh gian hàng: sản phẩm và bộ sưu tập', () => {
 });
 
 describe('đăng gian hàng và xem trước', () => {
-  it('"Lưu & Đăng" gọi publish(true) rồi báo đã đăng', async () => {
+  it('"Gửi duyệt" gọi publish(true) rồi báo đã gửi', async () => {
     mount();
     await flush();
-    click(btn('Lưu & Đăng'));
+    click(btn('Gửi duyệt'));
     await flush();
     expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/publish', { isPublished: true }]]);
-    expect(text()).toContain('Đã đăng gian hàng');
+    expect(text()).toContain('Đã gửi duyệt');
   });
 
-  it('chưa có sản phẩm: "Lưu & Đăng" tắt kèm lời nhắc, không gọi API', async () => {
+  it('gian hàng đã duyệt từ trước (vừa gỡ đăng): nút "Đăng lại", không hứa duyệt', async () => {
+    state.sf = storefront({ status: 'DRAFT', approved: true, needsApproval: false });
+    mount();
+    await flush();
+    expect(hasBtn('Gửi duyệt')).toBe(false);
+    click(btn('Đăng lại'));
+    await flush();
+    expect(writes().map((c) => [c.path, c.body])).toEqual([['/storefront/me/publish', { isPublished: true }]]);
+    expect(text()).toContain('Đã đăng lại gian hàng');
+  });
+
+  it('cờ duyệt tắt, chưa từng duyệt: nút "Đăng gian hàng", không nhắc gửi duyệt', async () => {
+    state.sf = storefront({ status: 'DRAFT', approved: false, needsApproval: false });
+    mount();
+    await flush();
+    expect(hasBtn('Gửi duyệt')).toBe(false);
+    click(btn('Đăng gian hàng'));
+    await flush();
+    expect(writes().map((c) => c.path)).toEqual(['/storefront/me/publish']);
+  });
+
+  it('chưa có sản phẩm: "Gửi duyệt" tắt kèm lời nhắc, không gọi API', async () => {
     state.sf = storefront({ collections: [{ id: 'c1', title: 'A', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [] }] });
     mount();
     await flush();
     expect(text()).toContain('Thêm ít nhất 1 sản phẩm để đăng gian hàng.');
-    expect((btn('Lưu & Đăng') as HTMLButtonElement).disabled).toBe(true);
+    expect((btn('Gửi duyệt') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('có sản phẩm: không có lời nhắc', async () => {
@@ -523,7 +633,9 @@ describe('đăng gian hàng và xem trước', () => {
     expect(btn('Xem trước').tagName).toBe('BUTTON');
     click(btn('Xem trước'));
     await flush();
-    expect(text()).toContain('Gian hàng đang là nháp');
+    expect(dialog()?.textContent).toContain('Gian hàng chưa gửi duyệt nên khách chưa thấy');
+    expect(dialog()?.querySelector('[data-testid="storefront-preview"]')).not.toBeNull();
+    expect(dialog()?.querySelectorAll('[data-testid="product-card"]').length).toBeGreaterThan(0);
   });
 
   it('xem trước khi đã đăng: liên kết tới /s/<slug>', async () => {
@@ -537,7 +649,7 @@ describe('đăng gian hàng và xem trước', () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
-    expect(text()).toContain('Trang web cập nhật sau vài phút');
+    expect(text()).toContain('Gian hàng cập nhật sau vài phút');
     expect(text()).toContain('Đang hiển thị');
   });
 
@@ -546,7 +658,7 @@ describe('đăng gian hàng và xem trước', () => {
     await flush();
     expect(hasBtn('Chia sẻ gian hàng')).toBe(false);
     expect(hasBtn('Gỡ đăng')).toBe(false);
-    expect(text()).not.toContain('Trang web cập nhật sau vài phút');
+    expect(text()).not.toContain('Gian hàng cập nhật sau vài phút');
   });
 
   it('gỡ đăng phải xác nhận; Huỷ thì không gọi API, xác nhận gọi publish(false)', async () => {
@@ -573,7 +685,7 @@ describe('đăng gian hàng và xem trước', () => {
     await flush();
     expect(a.container.querySelector('[data-testid="hidden-reason"]')?.textContent).toBe('Gian hàng đã bị gỡ');
     a.unmount();
-    state.sf = storefront();
+    state.sf = storefront({ isPublished: true, status: 'LIVE' });
     const b = mount();
     await flush();
     expect(b.container.querySelector('[data-testid="hidden-reason"]')).toBeNull();
@@ -639,7 +751,7 @@ describe('link subdomain theo cờ', () => {
     await flush();
     expect(text()).toContain('/s/shop-aff-1');
     expect(text()).not.toContain('brand1.tubutree.com');
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).not.toContain('Subdomain riêng');
     click(btn('Lưu cấu hình gian hàng'));
@@ -652,7 +764,7 @@ describe('link subdomain theo cờ', () => {
     mount();
     await flush();
     expect(text()).toContain('brand1.tubutree.com');
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     typeInto(dialog()!.querySelectorAll('input')[1] as HTMLInputElement, 'Brand2');
     click(btn('Lưu cấu hình gian hàng'));
@@ -664,7 +776,7 @@ describe('link subdomain theo cờ', () => {
     state.sf = storefront({ subdomain: 'brand1', subdomainEnabled: true });
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     click(btn('Lưu cấu hình gian hàng'));
     await flush();
@@ -717,7 +829,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
   it('cấu hình CTV: gửi màu mặc định xanh lá, không gửi tài khoản ngân hàng hay kho', async () => {
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).toContain('Khách luôn thanh toán cho Tubu Tree.');
     expect(dialog()?.textContent).not.toContain('Kho gửi hàng');
@@ -731,7 +843,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ themeColor: '#7c3aed' });
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(btn('Tím').getAttribute('aria-pressed')).toBe('true');
     click(btn('Xanh dương'));
@@ -743,7 +855,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
   it('mỗi ô màu có vùng chạm >= 44px', async () => {
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     for (const n of ['Xanh lá', 'Ngọc', 'Xanh dương', 'Tím', 'Đất nung']) {
       expect(btn(n).className).toContain('min-h-11');
@@ -755,7 +867,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ type: 'MERCHANT', warehouseAddress: '1 Lê Lợi', warehouseCity: 'HCM', warehousePhone: '0912345678' });
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).toContain('Kho gửi hàng');
     expect(dialog()?.textContent).toContain('Tiền hàng của bạn được đối soát');
@@ -770,14 +882,14 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ isPartner: true });
     const a = mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(inputByLabel('Hotline kho liên hệ')).not.toBeNull();
     a.unmount();
     state.sf = storefront({ isPartner: false });
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(inputByLabel('Hotline kho liên hệ')).toBeNull();
   });
@@ -786,7 +898,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ bankName: 'VCB', bankAccountNo: '0011223344' });
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()?.textContent).toContain('****3344');
     click(btn('Gỡ tài khoản đã lưu'));
@@ -797,12 +909,12 @@ describe('hồ sơ và cấu hình gian hàng', () => {
   it('cấu hình: đóng rồi mở lại thì form về dữ liệu đã lưu', async () => {
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     typeInto(dialog()!.querySelector('input'), 'Đã sửa');
     click(btn('Đóng', dialog()!));
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     expect(dialog()!.querySelector('input')!.value).toBe('Cửa hàng Xanh');
   });
@@ -811,7 +923,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.sf = storefront({ type: 'MERCHANT', subdomainEnabled: true });
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     for (const el of Array.from(dialog()!.querySelectorAll('input'))) {
       const named = el.getAttribute('aria-label') || (el.id && dialog()!.querySelector(`label[for="${el.id}"]`));
@@ -823,7 +935,7 @@ describe('hồ sơ và cấu hình gian hàng', () => {
     state.fail.add('patch /storefront/me');
     mount();
     await flush();
-    click(btn('Cấu hình'));
+    click(btn('Cài đặt'));
     await flush();
     click(btn('Lưu cấu hình gian hàng'));
     await flush();
@@ -837,7 +949,7 @@ describe('thống kê và hành trình gian hàng', () => {
     await flush();
     const s = document.querySelector('[aria-label="Thống kê 30 ngày"]')!.textContent!;
     expect(s).toContain('9');
-    expect(s).toContain('Đơn (7 ngày: 2)');
+    expect(s).toContain('Đơn 30 ngày');
     expect(s).toContain('1.250.000đ');
     expect(s).toContain('125.000đ');
     expect(s).toContain('4 món · 320.000đ');
@@ -899,11 +1011,11 @@ describe('không vỡ ở màn hẹp', () => {
 
 // Kiểu Mini App ở điện thoại (pages/storefront-builder.tsx): nút phụ nền nhạt không viền, ảnh bìa gradient, không nhãn bố cục, thẻ phẳng.
 describe('kiểu Mini App ở điện thoại', () => {
-  it('Sửa hồ sơ / Cấu hình nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
+  it('Sửa hồ sơ / Cài đặt nền xanh nhạt không viền; Gỡ đăng cũng vậy khi đã đăng', async () => {
     state.sf = storefront({ isPublished: true });
     mount();
     await flush();
-    for (const name of ['Sửa hồ sơ', 'Cấu hình', 'Gỡ đăng']) {
+    for (const name of ['Sửa hồ sơ', 'Cài đặt', 'Gỡ đăng']) {
       expect(btn(name).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
       expect(btn(name).className).toContain('max-md:border-0');
     }

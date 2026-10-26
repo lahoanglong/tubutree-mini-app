@@ -1,6 +1,6 @@
 import { Page, useSnackbar, useNavigate, useParams } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { PlayCircle, FileText, ChevronLeft, CheckCircle2, BookOpen } from 'lucide-react';
+import { PlayCircle, FileText, CheckCircle2, BookOpen } from 'lucide-react';
 import {
   fetchCourses,
   fetchCourse,
@@ -51,15 +51,15 @@ export default function AcademyPage() {
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={vi.academy.title} subtitle={courseId ? undefined : vi.academy.subtitle} />
       {courseId ? (
-        <CourseDetail courseId={courseId} onBack={() => navigate('/academy', { replace: true })} />
+        <CourseDetail courseId={courseId} />
       ) : (
-        <CourseList onOpen={(id) => navigate(`/academy/${id}`)} />
+        <CourseList onOpen={(id) => navigate(`/academy/${id}`)} onBackToCtv={() => navigate('/affiliate')} />
       )}
     </Page>
   );
 }
 
-function CourseList({ onOpen }: { onOpen: (id: string) => void }) {
+function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onBackToCtv: () => void }) {
   const q = useQuery({ queryKey: ['academy-courses'], queryFn: fetchCourses });
 
   return (
@@ -80,7 +80,7 @@ function CourseList({ onOpen }: { onOpen: (id: string) => void }) {
           ))}
         </div>
       ) : (
-        <EmptyState art="sprout" heading={vi.academy.empty} body={vi.academy.emptyBody} />
+        <EmptyState art="sprout" heading={vi.academy.empty} body={vi.academy.emptyBody} ctaLabel={vi.academy.backToCtv} onCta={onBackToCtv} />
       )}
     </div>
   );
@@ -138,7 +138,7 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
   );
 }
 
-function CourseDetail({ courseId, onBack }: { courseId: string; onBack: () => void }) {
+function CourseDetail({ courseId }: { courseId: string }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['academy-course', courseId], queryFn: () => fetchCourse(courseId) });
@@ -156,12 +156,6 @@ function CourseDetail({ courseId, onBack }: { courseId: string; onBack: () => vo
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ marginBottom: 12 }}>
-        <Button variant="ghost" icon={ChevronLeft} onPress={onBack}>
-          {vi.academy.backToList}
-        </Button>
-      </div>
-
       {q.isLoading ? (
         <Skeleton height={200} radius="var(--radius-card)" />
       ) : q.isError && isForbidden(q.error) ? (
