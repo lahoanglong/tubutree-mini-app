@@ -34,6 +34,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { startOfVnDay, startOfVnMonth } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
+import { missionKindOf } from '../../common/mission-kinds';
 import { parseTreeBuyKey, treeCertificateCodeFor } from './tree-purchase-key';
 import { returnedProductsByOrder, REVIEWABLE_ORDER, returnWindowClosed } from '../reviews/review-eligibility';
 
@@ -633,17 +634,17 @@ export class GameService {
    * (hiển thị, cap tại đây) VÀ claimMission (tính cycleKey của nhiệm vụ lặp lại). Tách ra để 2 nơi
    * không lệch định nghĩa "đạt điều kiện" (trước đây chỉ getMissions có logic này). */
   private missionRawProgress(
-    code: string,
+    mission: { code: string; kind?: string | null },
     metrics: { streakDays: number; ordersCount: number; reviewedProductsCount: number; referralsCount: number },
   ): number {
-    switch (code) {
-      case 'CHECKIN_7':
+    switch (missionKindOf(mission)) {
+      case 'CHECKIN_STREAK':
         return metrics.streakDays;
-      case 'FIRST_ORDER':
+      case 'ORDER_COUNT':
         return metrics.ordersCount;
-      case 'REVIEW_3':
+      case 'REVIEW_COUNT':
         return metrics.reviewedProductsCount;
-      case 'INVITE_3':
+      case 'INVITE_COUNT':
         return metrics.referralsCount;
       default:
         return 0;
@@ -726,13 +727,14 @@ export class GameService {
 
   /** Nhiệm vụ đã có đơn/đánh giá nhưng chưa tính vì đơn còn trong hạn đổi/trả (hoặc đang có yêu cầu trả). */
   private missionWaitsForReturnWindow(
-    code: string,
+    mission: { code: string; kind?: string | null },
     goal: number,
     metrics: { pendingOrdersCount: number; reviewedProductsCount: number; pendingReviewedProductsCount: number },
   ): boolean {
-    if (code === 'FIRST_ORDER') return metrics.pendingOrdersCount > 0;
+    const kind = missionKindOf(mission);
+    if (kind === 'ORDER_COUNT') return metrics.pendingOrdersCount > 0;
     // Chỉ nói "chờ hết hạn" khi phần đang chờ đủ để hoàn thành nhiệm vụ; thiếu thì khách còn phải viết thêm đánh giá.
-    if (code === 'REVIEW_3') return metrics.pendingReviewedProductsCount > 0 && metrics.reviewedProductsCount + metrics.pendingReviewedProductsCount >= goal;
+    if (kind === 'REVIEW_COUNT') return metrics.pendingReviewedProductsCount > 0 && metrics.reviewedProductsCount + metrics.pendingReviewedProductsCount >= goal;
     return false;
   }
 
@@ -745,7 +747,7 @@ export class GameService {
   }
 
   async getMissions(userId: string) {
-    const [missions, metrics] = await Promise.all([this.prisma.mission.findMany(), this.missionMetrics(userId)]);
+    const [missions, metrics] = await Promise.all([this.prisma.mission.findMany({ where: { disabledAt: null } }), this.missionMetrics(userId)]);
 
     const missionIds = missions.map((m) => m.id);
     // A1-02: mission_progress giờ là khoá "đã nhận" thật (trước đây tồn tại trong schema nhưng
@@ -760,7 +762,7 @@ export class GameService {
 
     return missions.map((m) => {
       const targetGoal = m.goal > 0 ? m.goal : 1;
-      const raw = this.missionRawProgress(m.code, metrics);
+      const raw = this.missionRawProgress(m, metrics);
       const cycleKey = this.missionCycleKey(m, raw, targetGoal);
       const claimed = m.isRepeatable ? claimedKeys.has(`${m.id}:${cycleKey}`) : claimedOnce.has(m.id);
       // Nhiệm vụ không lặp lại đã nhận là đã xong: chỉ số thô có thể tụt sau lúc nhận (đơn trả, đánh giá xoá, REVIEW_3 đếm
@@ -768,7 +770,7 @@ export class GameService {
       const done = !m.isRepeatable && claimed;
       const progress = done ? targetGoal : Math.min(targetGoal, raw);
       const completed = done || raw >= targetGoal;
-      const waiting = !done && raw < targetGoal && this.missionWaitsForReturnWindow(m.code, targetGoal, metrics);
+      const waiting = !done && raw < targetGoal && this.missionWaitsForReturnWindow(m, targetGoal, metrics);
 
       return {
         code: m.code,
@@ -795,10 +797,11 @@ export class GameService {
   async claimMission(userId: string, code: string) {
     const mission = await this.prisma.mission.findUnique({ where: { code } });
     if (!mission) throw new NotFoundException(`Nhiệm vụ "${code}" không tồn tại.`);
+    if (mission.disabledAt) throw new BadRequestException('Nhiệm vụ này đang tạm dừng.');
 
     const metrics = await this.missionMetrics(userId);
     const targetGoal = mission.goal > 0 ? mission.goal : 1;
-    const raw = this.missionRawProgress(mission.code, metrics);
+    const raw = this.missionRawProgress(mission, metrics);
     // Đã nhận thì báo đã nhận trước khi xét điều kiện, cùng lý do getMissions coi nhiệm vụ đã nhận là đã xong.
     if (!mission.isRepeatable) {
       const prior = await this.prisma.missionProgress.findFirst({ where: { userId, missionId: mission.id } });

@@ -2728,6 +2728,10 @@ model Mission {
   rewardCoupon String?
   goal         Int     @default(1)
   isRepeatable Boolean @default(false)
+  /// Cách chấm tiến độ (common/mission-kinds.ts). NULL = suy từ `code` (4 nhiệm vụ seed).
+  kind         String?
+  /// Có giá trị = nhiệm vụ đang tạm dừng: không hiện cho khách, không nhận thưởng được.
+  disabledAt   DateTime?
 
   @@map("missions")
 }

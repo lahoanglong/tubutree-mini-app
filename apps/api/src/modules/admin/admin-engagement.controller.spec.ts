@@ -1,9 +1,9 @@
 import 'reflect-metadata';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
-import { AdminEngagementController, UpdateMissionDto } from './admin-engagement.controller';
+import { AdminEngagementController, CreateMissionDto, UpdateMissionDto } from './admin-engagement.controller';
 import { AdminEngagementService } from './admin-engagement.service';
 
 const mission = (over: Record<string, unknown> = {}) => ({
@@ -66,5 +66,82 @@ describe('AdminEngagementService', () => {
     await svc.updateMission('m1', { rewardPoints: 40 });
     expect(update).toHaveBeenCalledWith({ where: { id: 'm1' }, data: { rewardPoints: 40 } });
     await expect(svc.updateMission('nope', { title: 'X' })).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CreateMissionDto — nhiệm vụ mới', () => {
+  const ok = { title: ' Mời bạn ', description: 'Mời 2 bạn mua hàng', kind: 'INVITE_COUNT', goal: 2, rewardPoints: 30_000 };
+  const bad = (body: object) => validateSync(plainToInstance(CreateMissionDto, { ...ok, ...body }), { whitelist: true, forbidNonWhitelisted: true }).length;
+
+  it('nhận nhiệm vụ hợp lệ và cắt khoảng trắng đầu cuối', () => {
+    const dto = plainToInstance(CreateMissionDto, ok);
+    expect(validateSync(dto, { whitelist: true, forbidNonWhitelisted: true })).toEqual([]);
+    expect(dto.title).toBe('Mời bạn');
+  });
+
+  it.each([
+    ['loại lạ', { kind: 'WIN_LOTTERY' }],
+    ['mục tiêu 0', { goal: 0 }],
+    ['mục tiêu âm', { goal: -3 }],
+    ['mục tiêu lẻ', { goal: 1.5 }],
+    ['mục tiêu quá lớn', { goal: 366 }],
+    ['điểm âm', { rewardPoints: -1 }],
+    ['điểm lẻ', { rewardPoints: 10.5 }],
+    ['điểm vượt trần', { rewardPoints: 500_001 }],
+    ['thiếu tiêu đề', { title: ' ' }],
+    ['tự đặt mã (mã do hệ thống sinh)', { code: 'FIRST_ORDER' }],
+    ['tự đặt lặp lại', { isRepeatable: true }],
+  ])('từ chối: %s', (_l, body) => {
+    expect(bad(body)).toBeGreaterThan(0);
+  });
+
+  it('điểm 0 và đúng trần đều nhận', () => {
+    expect(bad({ rewardPoints: 0 })).toBe(0);
+    expect(bad({ rewardPoints: 500_000 })).toBe(0);
+  });
+});
+
+describe('AdminEngagementService — thêm và tạm dừng nhiệm vụ', () => {
+  const make = (prisma: Record<string, unknown>) => new AdminEngagementService(prisma as never);
+  const input = { title: 'Mời bạn', description: 'Mời 2 bạn', kind: 'INVITE_COUNT', goal: 2, rewardPoints: 30_000 } as const;
+
+  it('tạo nhiệm vụ: mã do hệ thống sinh, không lặp lại, mục tiêu và điểm đúng như nhập', async () => {
+    const create = jest.fn().mockImplementation(({ data }) => Promise.resolve(data));
+    const created = await make({ mission: { create } }).createMission('admin1', input);
+    expect(created.code).toMatch(/^CUSTOM_[0-9A-F]{8}$/);
+    expect(create.mock.calls[0][0].data).toMatchObject({ kind: 'INVITE_COUNT', goal: 2, rewardPoints: 30_000, isRepeatable: false });
+  });
+
+  it('trần mục tiêu theo loại: 366 ngày điểm danh và 101 đơn đều bị từ chối, không ghi gì', async () => {
+    const create = jest.fn();
+    const svc = make({ mission: { create } });
+    await expect(svc.createMission('admin1', { ...input, kind: 'ORDER_COUNT', goal: 101 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.createMission('admin1', { ...input, kind: 'CHECKIN_STREAK', goal: 0 })).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+    create.mockResolvedValue({ code: 'CUSTOM_X' });
+    await svc.createMission('admin1', { ...input, kind: 'CHECKIN_STREAK', goal: 365 });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('tạm dừng ghi giờ, bật lại xoá giờ; tạm dừng lần hai giữ giờ cũ', async () => {
+    const before = new Date('2026-10-01T00:00:00Z');
+    const update = jest.fn().mockResolvedValue({});
+    const findUnique = jest.fn().mockResolvedValueOnce(mission()).mockResolvedValueOnce(mission({ disabledAt: before })).mockResolvedValueOnce(mission({ disabledAt: before }));
+    const svc = make({ mission: { findUnique, update } });
+    await svc.updateMission('m1', { disabled: true });
+    expect(update.mock.calls[0][0].data.disabledAt).toBeInstanceOf(Date);
+    await svc.updateMission('m1', { disabled: true });
+    expect(update.mock.calls[1][0].data.disabledAt).toBe(before);
+    await svc.updateMission('m1', { disabled: false });
+    expect(update.mock.calls[2][0].data).toEqual({ disabledAt: null });
+  });
+
+  it('danh sách trả loại nhiệm vụ (suy từ mã cho nhiệm vụ cũ) và cờ tạm dừng', async () => {
+    const prisma = {
+      mission: { findMany: jest.fn().mockResolvedValue([mission(), mission({ id: 'm5', code: 'CUSTOM_1', kind: 'REVIEW_COUNT', disabledAt: new Date() })]) },
+      missionProgress: { groupBy: jest.fn().mockResolvedValue([]) },
+    };
+    const rows = await make(prisma).listMissions();
+    expect(rows.map((r) => [r.kind, r.disabled])).toEqual([['ORDER_COUNT', false], ['REVIEW_COUNT', true]]);
   });
 });

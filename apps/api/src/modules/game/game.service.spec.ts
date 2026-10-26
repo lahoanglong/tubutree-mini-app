@@ -1454,6 +1454,23 @@ describe('GameService.getMissions', () => {
     });
   });
 
+  it('nhiệm vụ do quản trị thêm được chấm theo loại; nhiệm vụ đang tạm dừng bị lọc khỏi truy vấn', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      { id: 'm9', code: 'CUSTOM_AB12CD34', kind: 'REVIEW_COUNT', title: 'Chấm điểm sản phẩm', goal: 5, rewardPoints: 40, isRepeatable: false },
+    ]);
+    const prisma = makePrisma({
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 0 }) },
+      review: { findMany: jest.fn().mockResolvedValue(reviewedProducts(2)) },
+      order: settledOrders(2),
+      user: { count: jest.fn().mockResolvedValue(0) },
+      mission: { findMany },
+      missionProgress: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    const [custom] = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
+    expect(custom).toMatchObject({ code: 'CUSTOM_AB12CD34', progress: 2, goal: 5, completed: false, claimed: false });
+    expect(findMany).toHaveBeenCalledWith({ where: { disabledAt: null } });
+  });
+
   it('ENGAGE-11: nhiệm vụ không lặp lại đã có dòng nhận ở chu kỳ bất kỳ (dữ liệu cũ khi còn lặp lại) → claimed=true', async () => {
     const prisma = makePrisma({
       gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 21 }) },
@@ -1646,6 +1663,18 @@ describe('GameService.claimMission', () => {
     const prisma = missionsPrisma({ mission: { findUnique: jest.fn().mockResolvedValue(null) } });
     const svc = new GameService(prisma, makeConfig(), analytics);
     await expect(svc.claimMission('u1', 'NOPE')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('nhiệm vụ đang tạm dừng → BadRequest, không ghi gì, không cộng điểm', async () => {
+    const missionProgressCreate = jest.fn();
+    const prisma = missionsPrisma({
+      mission: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'm2', code: 'FIRST_ORDER', goal: 1, rewardPoints: 20, isRepeatable: false, rewardCoupon: null, disabledAt: new Date() }),
+      },
+      missionProgress: { create: missionProgressCreate },
+    });
+    await expect(new GameService(prisma, makeConfig(), analytics).claimMission('u1', 'FIRST_ORDER')).rejects.toThrow('tạm dừng');
+    expect(missionProgressCreate).not.toHaveBeenCalled();
   });
 
   it('chưa đủ điều kiện (raw < goal) → BadRequest, KHÔNG insert mission_progress, KHÔNG cộng điểm', async () => {

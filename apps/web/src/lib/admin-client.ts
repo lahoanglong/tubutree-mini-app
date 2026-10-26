@@ -2155,11 +2155,23 @@ export interface AdminMission {
   rewardPoints: number;
   goal: number;
   isRepeatable: boolean;
+  kind: MissionKind | null;
+  disabled: boolean;
   claimedCount: number;
 }
+export type MissionKind = 'CHECKIN_STREAK' | 'ORDER_COUNT' | 'REVIEW_COUNT' | 'INVITE_COUNT';
+/** Nhãn và trần mục tiêu theo loại; khớp common/mission-kinds.ts của API (máy chủ vẫn kiểm lại). */
+export const MISSION_KIND_OPTIONS: { kind: MissionKind; label: string; unit: string; goalMax: number }[] = [
+  { kind: 'CHECKIN_STREAK', label: 'Điểm danh liên tiếp', unit: 'ngày', goalMax: 365 },
+  { kind: 'ORDER_COUNT', label: 'Mua đơn hàng (đã giao, hết hạn đổi trả)', unit: 'đơn', goalMax: 100 },
+  { kind: 'REVIEW_COUNT', label: 'Đánh giá sản phẩm có ảnh', unit: 'sản phẩm', goalMax: 100 },
+  { kind: 'INVITE_COUNT', label: 'Mời bạn mua hàng thành công', unit: 'người', goalMax: 100 },
+];
 export const listAdminMissions = () => apiFetch<AdminMission[]>('/admin/engagement/missions');
-export const updateAdminMission = (id: string, body: { title: string; description: string; rewardPoints: number }) =>
+export const updateAdminMission = (id: string, body: { title?: string; description?: string; rewardPoints?: number; disabled?: boolean }) =>
   apiFetch<AdminMission>(`/admin/engagement/missions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+export const createAdminMission = (body: { title: string; description: string; kind: MissionKind; goal: number; rewardPoints: number }) =>
+  apiFetch<AdminMission>('/admin/engagement/missions', { method: 'POST', body });
 
 export interface DealerPriceChange {
   id: string;
