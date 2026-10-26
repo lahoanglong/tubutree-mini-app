@@ -87,6 +87,7 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { RecyclingBadge, RecyclingPanel } from '@/components/admin/recycling-panel';
+import { ImageUrlField } from '@/components/admin/image-url-field';
 import {
   PANCAKE_ATTENTION_COUNT_KEY,
   PancakeAttentionBadge,
@@ -2456,12 +2457,8 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
     <div className="rounded-card border border-stone-200 bg-stone-50 p-3">
       <div className="mb-2 font-display text-sm font-medium text-stone-900">Thông tin nhãn</div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Field label="Logo (URL)">
-          <input placeholder="Logo URL" value={f.logoUrl} onChange={(e) => setF({ ...f, logoUrl: e.target.value })} className={input} />
-        </Field>
-        <Field label="Ảnh bìa (URL)">
-          <input placeholder="Ảnh bìa (URL)" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={input} />
-        </Field>
+        <ImageUrlField label="Logo" value={f.logoUrl} onChange={(v) => setF({ ...f, logoUrl: v })} />
+        <ImageUrlField label="Ảnh bìa" value={f.coverUrl} onChange={(v) => setF({ ...f, coverUrl: v })} />
         <Field label="Tagline">
           <input placeholder="Tagline" value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} className={input} />
         </Field>
@@ -3450,14 +3447,7 @@ function AcademyTab() {
               />
             </Field>
           </div>
-          <Field label="Ảnh bìa (URL)">
-            <input
-              placeholder="Ảnh bìa (URL)"
-              value={form.coverUrl}
-              onChange={(e) => setForm({ ...form, coverUrl: e.target.value })}
-              className={`${INPUT_CLASS} ${TOUCH_H}`}
-            />
-          </Field>
+          <ImageUrlField label="Ảnh bìa" value={form.coverUrl} onChange={(v) => setForm({ ...form, coverUrl: v })} />
           <Field label="Mô tả">
             <textarea
               placeholder="Mô tả"
@@ -3588,9 +3578,7 @@ function CourseRow({ course }: { course: AdminCourse }) {
                 <input type="number" placeholder="Thứ tự" value={f.sortOrder} onChange={(e) => setF({ ...f, sortOrder: Number(e.target.value) })} className={input} />
               </Field>
               <div className="sm:col-span-2">
-                <Field label="Ảnh bìa (URL)">
-                  <input placeholder="Ảnh bìa (URL)" value={f.coverUrl} onChange={(e) => setF({ ...f, coverUrl: e.target.value })} className={input} />
-                </Field>
+                <ImageUrlField label="Ảnh bìa" value={f.coverUrl} onChange={(v) => setF({ ...f, coverUrl: v })} />
               </div>
             </div>
             <div className="mt-2">

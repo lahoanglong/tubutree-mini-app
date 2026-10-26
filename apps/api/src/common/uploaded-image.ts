@@ -109,3 +109,19 @@ export function IsUploadedMediaUrl(validationOptions?: ValidationOptions) {
     });
   };
 }
+
+/** Ảnh bìa/logo quản trị đặt: rỗng, link https hoặc ảnh raster base64 (cùng luật gian hàng). Chặn javascript:, http:, SVG. */
+export function IsImageRef(validationOptions?: ValidationOptions) {
+  return (object: object, propertyName: string) => {
+    registerDecorator({
+      name: 'isImageRef',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate: (value: unknown) => isStorefrontImageValue(value),
+        defaultMessage: (args: ValidationArguments) => `${args.property} chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).`,
+      },
+    });
+  };
+}

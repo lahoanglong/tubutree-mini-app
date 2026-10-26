@@ -1,11 +1,12 @@
 import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsImageRef } from '../../../common/uploaded-image';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
 
 export class CreateCourseDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title!: string;
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsString() coverUrl?: string;
+  @IsOptional() @IsString() @IsImageRef() coverUrl?: string;
   @IsOptional() @IsInt() @Min(0) sortOrder?: number;
   @IsOptional() @IsBoolean() isPublished?: boolean;
 }
@@ -13,7 +14,7 @@ export class CreateCourseDto {
 export class UpdateCourseDto {
   @OptionalNotNull() @Trim() @IsString() @IsNotEmpty() @MaxLength(200) title?: string;
   @OptionalNotNull() @IsString() description?: string;
-  @OptionalNotNull() @IsString() coverUrl?: string;
+  @OptionalNotNull() @IsString() @IsImageRef() coverUrl?: string;
   @OptionalNotNull() @IsInt() @Min(0) sortOrder?: number;
   @OptionalNotNull() @IsBoolean() isPublished?: boolean;
 }
