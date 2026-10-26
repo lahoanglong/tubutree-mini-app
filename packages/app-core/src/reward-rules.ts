@@ -76,7 +76,22 @@ export function freeShipCovered(r: Pick<RewardItemDTO, 'kind' | 'voucher'>, tier
   return tier.freeFrom <= (r.voucher.minOrder ?? 0);
 }
 
-export const freeShipCoveredNote = (tierName: string): string => `Hạng ${tierName} đã được miễn phí giao hàng`;
+/**
+ * Ghi chú trên quà freeship thừa với hạng. KHÔNG khoá nút Đổi: ngưỡng của mã tính cả hàng đối tác, còn ngưỡng của hạng chỉ
+ * tính kiện hàng Tubu, nên mã vẫn có thể có ích; vì vậy ghi rõ ngưỡng hạng áp cho đơn Tubu.
+ */
+export const freeShipCoveredNote = (tierName: string, freeFrom: number, formatMoney: (n: number) => string): string =>
+  `Hạng ${tierName} đã được miễn phí giao hàng cho ${freeFrom > 0 ? `đơn Tubu từ ${formatMoney(freeFrom)}` : 'mọi đơn Tubu'}`;
+
+/** Ghi chú của một quà (null khi quà không thừa với hạng). */
+export function rewardFreeShipNote(
+  r: Pick<RewardItemDTO, 'kind' | 'voucher'>,
+  c: Partial<Pick<RewardCatalogDTO, 'tierFreeShip'>>,
+  formatMoney: (n: number) => string,
+): string | null {
+  const t = c.tierFreeShip;
+  return t && freeShipCovered(r, t) ? freeShipCoveredNote(t.tierName, t.freeFrom, formatMoney) : null;
+}
 
 /** Thứ tự hiển thị trong một mục: theo sortOrder, quà đã có sẵn quyền lợi hạng xuống cuối (giữ nguyên thứ tự còn lại). */
 export function orderRewards<T extends Pick<RewardItemDTO, 'kind' | 'voucher' | 'sortOrder'>>(rewards: readonly T[], c: Pick<RewardCatalogDTO, 'tierFreeShip'>): T[] {
@@ -86,7 +101,6 @@ export function orderRewards<T extends Pick<RewardItemDTO, 'kind' | 'voucher' | 
 
 export type RewardCardState =
   | { kind: 'redeem' }
-  | { kind: 'covered'; tierName: string }
   | { kind: 'soldOut' }
   | { kind: 'locked' }
   | { kind: 'need'; missing: number };
@@ -96,11 +110,10 @@ export type RewardCardState =
  * cùng tổng với `canRedeem`. Hết hàng đứng trước nên thẻ hết không bao giờ hiện "Cần thêm".
  */
 export function rewardCardState(
-  r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'> & Partial<Pick<RewardItemDTO, 'voucher'>>,
-  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'> & Partial<Pick<RewardCatalogDTO, 'tierFreeShip'>>,
+  r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'>,
+  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'>,
 ): RewardCardState {
   if (r.soldOut) return { kind: 'soldOut' };
-  if (c.tierFreeShip && freeShipCovered({ kind: r.kind, voucher: r.voucher ?? null }, c.tierFreeShip)) return { kind: 'covered', tierName: c.tierFreeShip.tierName };
   if (r.canRedeem) return { kind: 'redeem' };
   const spendable = r.kind === 'TREE' ? c.redeemablePoints + c.pointsConvertedBalance : c.redeemablePoints;
   const missing = r.pointsCost - spendable;

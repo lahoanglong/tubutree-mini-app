@@ -3,7 +3,7 @@ import {
   REWARD_TABS,
   WAREHOUSE_ONLY_LABEL,
   freeShipCovered,
-  freeShipCoveredNote,
+  rewardFreeShipNote,
   isWarehousePickup,
   lockedPointsNote,
   openingHoursText,
@@ -104,13 +104,16 @@ describe('quà miễn phí giao hàng và hạng đã có quyền lợi này (B-
     expect(orderRewards(list, {}).map((r) => r.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('rewardCardState: quà thừa là "covered" kèm tên hạng, không còn nút đổi; hết hàng vẫn đứng trước', () => {
+  it('quà thừa với hạng vẫn đổi được (ngưỡng mã tính cả hàng đối tác); chỉ thêm ghi chú kèm ngưỡng hạng cho đơn Tubu', () => {
     const base = { pointsCost: 20_000, canRedeem: true, soldOut: false, ...freeship(99_000) };
     const c = { redeemablePoints: 50_000, pointsConvertedBalance: 0, tierFreeShip: locBiec };
-    expect(rewardCardState(base, c)).toEqual({ kind: 'covered', tierName: 'Lộc Biếc' });
+    const money = (n: number) => `${n / 1000}k`;
+    expect(rewardCardState(base, c)).toEqual({ kind: 'redeem' });
     expect(rewardCardState({ ...base, soldOut: true }, c)).toEqual({ kind: 'soldOut' });
-    expect(rewardCardState(base, { ...c, tierFreeShip: null })).toEqual({ kind: 'redeem' });
-    expect(freeShipCoveredNote('Lộc Biếc')).toBe('Hạng Lộc Biếc đã được miễn phí giao hàng');
+    expect(rewardFreeShipNote(base, c, money)).toBe('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99k');
+    expect(rewardFreeShipNote(base, { tierFreeShip: { tierName: 'Đại Thụ', freeFrom: 0 } }, money)).toBe('Hạng Đại Thụ đã được miễn phí giao hàng cho mọi đơn Tubu');
+    expect(rewardFreeShipNote(base, { tierFreeShip: null }, money)).toBeNull();
+    expect(rewardFreeShipNote({ ...base, voucher: { ...base.voucher!, minOrder: 49_000 } }, c, money)).toBeNull();
   });
 });
 

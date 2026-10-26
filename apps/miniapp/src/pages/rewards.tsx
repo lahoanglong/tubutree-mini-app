@@ -11,7 +11,7 @@ import {
   REWARD_TABS,
   WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
-  freeShipCoveredNote,
+  rewardFreeShipNote,
   isWarehousePickup,
   openingHoursText,
   orderRewards,
@@ -39,7 +39,7 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { Heading, Text } from '../components/ui/text';
-import { formatDate, formatNumber, formatPoints } from '../utils/format';
+import { formatDate, formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import { pointsRulesNote } from '../utils/points-rules-note';
 import { pointAddress } from '../utils/waste-labels';
@@ -141,6 +141,7 @@ const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
 
 function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; preview?: boolean }) {
   const s = rewardCardState(reward, catalog);
+  const freeNote = preview ? null : rewardFreeShipNote(reward, catalog, formatVnd);
   return (
     <Card variant="outline">
       <div data-reward style={{ ...COLUMN, gap: 10 }}>
@@ -157,21 +158,21 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
           <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
               <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
-              {reward.label && s.kind !== 'covered' && <Badge tone="brand">{reward.label}</Badge>}
+              {reward.label && !freeNote && <Badge tone="brand">{reward.label}</Badge>}
             </div>
             {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
             {reward.stockRemaining != null && !reward.soldOut && (
               <Text variant="caption" tone="tertiary" as="div">{`Còn ${formatNumber(reward.stockRemaining)}`}</Text>
             )}
             {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
+            {freeNote && <Text variant="caption" tone="secondary" as="div">{freeNote}</Text>}
             {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
           {!preview && s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
-          {!preview && s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
-          {!preview && s.kind === 'covered' && <Text variant="caption" tone="secondary" as="div" style={{ textAlign: 'right' }}>{freeShipCoveredNote(s.tierName)}</Text>}
+          {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
           {!preview && s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
           {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
         </div>

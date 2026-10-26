@@ -257,7 +257,7 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(within(c).getByRole('button', { name: 'Chờ mở khoá điểm' })).toBeDisabled();
     expect(within(c).queryByText(/Cần thêm/)).toBeNull();
   });
-  it('hạng đã được freeship: quà freeship xuống cuối, ghi rõ hạng, không còn nút Đổi và không còn nhãn "Phổ biến"', async () => {
+  it('hạng đã được freeship: quà freeship xuống cuối, ghi rõ hạng và ngưỡng, KHÔNG tắt nút Đổi, không còn nhãn "Phổ biến"', async () => {
     mocks.getLoyaltyRewards.mockResolvedValue(
       makeRewardCatalog({
         tierFreeShip: { tierName: 'Lộc Biếc', freeFrom: 99_000 },
@@ -273,8 +273,8 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(names[0]).toContain('Giảm 50.000đ');
     expect(names[1]).toContain('Miễn phí vận chuyển');
     const free = card('Miễn phí vận chuyển');
-    expect(within(free).getByText('Hạng Lộc Biếc đã được miễn phí giao hàng')).toBeInTheDocument();
-    expect(within(free).queryByRole('button', { name: 'Đổi' })).toBeNull();
+    expect(within(free).getByText('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ')).toBeInTheDocument();
+    expect(within(free).getByRole('button', { name: 'Đổi' })).toBeEnabled();
     expect(within(free).queryByText('Phổ biến')).toBeNull();
     expect(within(card('Giảm 50.000đ')).getByRole('button', { name: 'Đổi' })).toBeEnabled();
   });
@@ -297,7 +297,6 @@ describe('/rewards Kho quà (§4.8)', () => {
     mocks.getCart.mockResolvedValue({ itemCount: 2 });
     mocks.redeemLoyaltyReward.mockResolvedValue({ success: true, message: 'ok', pointsSpent: 20_000, remainingPoints: 10_000, redemption: makeGiftRedemption({ giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC' }), coupon: { code: 'FREESHIP-ABC', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' } });
     renderPage();
-    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
     fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
     await screen.findByText('Mã FREESHIP-ABC đã vào ví mã giảm giá');
@@ -329,6 +328,13 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(mocks.getLoyaltyRewards).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập để đổi' }));
     expect(mocks.login).toHaveBeenCalled();
+    mocks.auth.status = 'authenticated';
+  });
+  it('khách xem trước: quà hết hàng vẫn hiện huy hiệu "Đã hết"', async () => {
+    mocks.auth.status = 'idle';
+    mocks.coreGet.mockResolvedValue({ rewards: [makeRewardItem({ canRedeem: false, soldOut: true })], giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12 });
+    renderPage();
+    expect(await screen.findByText('Đã hết')).toBeInTheDocument();
     mocks.auth.status = 'authenticated';
   });
   it('openingHoursText: nhiều ngày, nhiều khung giờ', () => {

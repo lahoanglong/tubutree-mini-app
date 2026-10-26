@@ -16,7 +16,7 @@ import {
   REWARD_TABS,
   WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
-  freeShipCoveredNote,
+  rewardFreeShipNote,
   isWarehousePickup,
   lockedPointsNote,
   orderRewards,
@@ -28,6 +28,7 @@ import { coreHttp } from '@/lib/core-http';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
+import { formatVnd } from '@/lib/format-vnd';
 import { pointsRulesNote } from '@/lib/loyalty-copy';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -149,6 +150,7 @@ const KIND_ICON: Record<RewardItemDTO['kind'], LucideIcon> = {
 
 function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: RewardItemDTO; catalog: RewardCatalogDTO; onRedeem: () => void; preview?: boolean }) {
   const s = rewardCardState(reward, catalog);
+  const freeNote = preview ? null : rewardFreeShipNote(reward, catalog, formatVnd);
   const KindIcon = KIND_ICON[reward.kind];
   return (
     <div data-reward className={`flex flex-col gap-2.5 p-4 ${miniOutline}`}>
@@ -159,11 +161,12 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <div className="text-base font-semibold text-stone-900">{reward.name}</div>
-            {reward.label && s.kind !== 'covered' && <Badge tone="brand">{reward.label}</Badge>}
+            {reward.label && !freeNote && <Badge tone="brand">{reward.label}</Badge>}
           </div>
           {reward.description && <div className="text-xs text-stone-700">{reward.description}</div>}
           {reward.stockRemaining != null && !reward.soldOut && <div className="text-xs text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
           {reward.claimInstructions && <div className="text-xs text-stone-600">{reward.claimInstructions}</div>}
+          {freeNote && <div className="text-xs text-stone-700">{freeNote}</div>}
           {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
         </div>
       </div>
@@ -174,8 +177,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
             Đổi
           </button>
         )}
-        {!preview && s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
-        {!preview && s.kind === 'covered' && <div className="text-right text-xs text-stone-700">{freeShipCoveredNote(s.tierName)}</div>}
+        {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
         {!preview && s.kind === 'locked' && (
           <button type="button" disabled className={ui.btnPrimary}>
             Chờ mở khoá điểm
@@ -189,7 +191,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
 }
 
 function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onClose: () => void }) {
-  const { use } = useCouponUse();
+  const { use, notice } = useCouponUse();
   return (
     <Sheet open={outcome !== null} onClose={onClose} title="Đổi quà thành công">
       {outcome?.kind === 'VOUCHER' && (
@@ -199,6 +201,11 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
             <button type="button" onClick={() => void use(outcome.couponCode ?? '', onClose)} className={`${ui.btnPrimary} w-full`}>
               {couponUseCopy.use}
             </button>
+          )}
+          {notice && (
+            <p role={notice.error ? 'alert' : 'status'} className={`text-xs ${notice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+              {notice.text}
+            </p>
           )}
           <Link href="/tai-khoan/diem-xanh" onClick={onClose} className={`${miniBtnSecondary} w-full`}>
             Xem ví mã

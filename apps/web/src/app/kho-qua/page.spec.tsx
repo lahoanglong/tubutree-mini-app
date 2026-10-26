@@ -20,15 +20,19 @@ const state = vi.hoisted(() => ({
   push: vi.fn(),
   cartCount: 0,
   applied: [] as string[],
+  cartCoupon: null as string | null,
+  applyError: null as string | null,
+  applyResult: null as Record<string, unknown> | null,
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }), usePathname: () => '/' }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  getCart: async () => ({ itemCount: state.cartCount }),
+  getCart: async () => ({ itemCount: state.cartCount, couponCode: state.cartCoupon }),
   applyCoupon: async (code: string) => {
     state.applied.push(code);
-    return { couponCode: code, discount: 0, freeship: true };
+    if (state.applyError) throw new Error(state.applyError);
+    return state.applyResult ?? { couponCode: code, discount: 0, freeship: true };
   },
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
@@ -110,6 +114,9 @@ beforeEach(() => {
   state.push.mockReset();
   state.cartCount = 0;
   state.applied = [];
+  state.cartCoupon = null;
+  state.applyError = null;
+  state.applyResult = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -358,16 +365,16 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
   const freeshipRow = (over = {}) => makeRewardItem({ label: 'Phổ biến', ...over });
   const discountRow = makeRewardItem({ id: 'reward-discount-50k', name: 'Giảm 50.000đ', pointsCost: 20_000, voucher: { type: 'AMOUNT', value: 50000, minOrder: 300000, maxDiscount: null, validDays: 30 }, sortOrder: 2 });
 
-  it('hạng đã được freeship: quà freeship xuống cuối, ghi rõ hạng, không còn nút Đổi và nhãn "Phổ biến"', async () => {
+  it('hạng đã được freeship: quà freeship xuống cuối, ghi rõ hạng và ngưỡng, KHÔNG tắt nút Đổi, không còn nhãn "Phổ biến"', async () => {
     state.rewards = makeRewardCatalog({ tierFreeShip: { tierName: 'Lộc Biếc', freeFrom: 99_000 }, rewards: [freeshipRow(), discountRow] });
     const c = await mount();
     const names = Array.from(c.querySelectorAll('[data-reward]')).map((el) => el.textContent ?? '');
     expect(names[0]).toContain('Giảm 50.000đ');
     expect(names[1]).toContain('Miễn phí vận chuyển');
     const free = card(c, 'Miễn phí vận chuyển');
-    expect(free.textContent).toContain('Hạng Lộc Biếc đã được miễn phí giao hàng');
+    expect(free.textContent).toContain('Hạng Lộc Biếc đã được miễn phí giao hàng cho đơn Tubu từ 99.000đ');
     expect(free.textContent).not.toContain('Phổ biến');
-    expect(Array.from(free.querySelectorAll('button')).some((b) => b.textContent === 'Đổi')).toBe(false);
+    expect((byText(free, 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
     expect((byText(card(c, 'Giảm 50.000đ'), 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -400,6 +407,36 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(state.push).toHaveBeenCalledWith('/gio-hang');
   });
 
+  it('"Dùng ngay" mà máy chủ từ chối mã: hiện đúng lý do (role=alert) ngay trong khung, rồi vẫn tới giỏ', async () => {
+    state.cartCount = 2;
+    state.applyError = 'Đơn tối thiểu 300.000đ';
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(4);
+    const alert = dialog()!.querySelector('[role="alert"]');
+    expect(alert?.textContent).toBe('Chưa chọn sẵn được mã: Đơn tối thiểu 300.000đ');
+    expect(state.push).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 1900));
+    expect(state.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
+  it('"Dùng ngay" khi giỏ đang giữ mã khác: báo "Đã đổi sang mã …" rồi tới giỏ', async () => {
+    state.cartCount = 2;
+    state.cartCoupon = 'TUBU10';
+    const c = await mount();
+    await openConfirm(c, 'Miễn phí vận chuyển');
+    click(confirmBtn());
+    await flush(6);
+    click(byText(dialog()!, 'button', 'Dùng ngay'));
+    await flush(4);
+    expect(dialog()!.querySelector('[role="status"]')?.textContent).toBe('Đã đổi sang mã FREESHIP-ABC');
+    await new Promise((r) => setTimeout(r, 1900));
+    expect(state.push).toHaveBeenCalledWith('/gio-hang');
+  });
+
   it('đổi mã xong: "Dùng ngay" khi giỏ trống → tới danh sách sản phẩm, không áp mã', async () => {
     const c = await mount();
     await openConfirm(c, 'Miễn phí vận chuyển');
@@ -426,6 +463,14 @@ describe('/kho-qua — trạng thái trang', () => {
     expect(c.textContent).toContain('Đăng nhập để đổi');
     expect(c.querySelector('a[href*="/dang-nhap"]')?.getAttribute('href')).toContain(encodeURIComponent('/kho-qua'));
     expect(state.calls.every((x) => x.path === '/loyalty/preview')).toBe(true);
+  });
+
+  it('khách xem trước: quà hết hàng vẫn hiện huy hiệu "Đã hết"', async () => {
+    state.phase = 'guest';
+    state.preview = { rewards: [makeRewardItem({ canRedeem: false, soldOut: true })], giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12 };
+    const c = await mount();
+    await flush(4);
+    expect(c.textContent).toContain('Đã hết');
   });
 
   it('khách: xem được quà và giá nhưng không có nút Đổi, không gọi API của khách', async () => {
