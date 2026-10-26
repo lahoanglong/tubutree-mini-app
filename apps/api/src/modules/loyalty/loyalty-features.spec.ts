@@ -368,6 +368,29 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(none.tierFreeShip).toBeNull();
     });
 
+    it('getPublicPreview: danh mục quà (không đổi được) + bảng hạng + luật điểm, không đụng bảng người dùng', async () => {
+      const prisma = catalogPrisma({ balance: 999_999 }) as unknown as PrismaService & { membershipTier: { findMany: jest.Mock }; user: { findUniqueOrThrow: jest.Mock } };
+      (prisma as unknown as { membershipTier: unknown }).membershipTier = {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, pointMultiplier: 1, perks: ['Tích Điểm Xanh x1'], sortOrder: 1 },
+          { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5_000_000, pointMultiplier: 1.2, perks: ['Freeship đơn ≥ 99k', 42], sortOrder: 2 },
+        ]),
+      };
+      const res = await new LoyaltyService(prisma, makeConfig({ 'game.tree_points_price': 60_000 })).getPublicPreview();
+      expect(prisma.user.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(res.rewards.every((r) => r.canRedeem === false)).toBe(true);
+      expect(res.rewards.map((r) => r.id)).toEqual(['reward-freeship', 'reward-discount-50k', 'reward-percent-15pct', 'reward-discount-100k', 'gift-tree']);
+      expect(res.rewards[4]).toMatchObject({ kind: 'TREE', pointsCost: 60_000 });
+      expect(res.tiers).toEqual([
+        { id: 'MAM_XANH', name: 'Mầm Xanh', minPoints: 0, minSpending: null, multiplier: 1, perks: ['Tích Điểm Xanh x1'] },
+        { id: 'LOC_BIEC', name: 'Lộc Biếc', minPoints: 2500, minSpending: 5_000_000, multiplier: 1.2, perks: ['Freeship đơn ≥ 99k'] },
+      ]);
+      expect(res.rates).toEqual({ earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1, maxRedeemPct: 0.2 });
+      expect(res.giftClaimDays).toBe(60);
+      expect(res).not.toHaveProperty('pointsBalance');
+      expect(res).not.toHaveProperty('tierFreeShip');
+    });
+
     it('TREE: 28.000 STANDARD + 30.000 CONVERTED so với giá 50.000 → canRedeem true (luật chia lô của buyTree); voucher 50.000 điểm chỉ xét STANDARD → false', async () => {
       const res = await new LoyaltyService(catalogPrisma({ balance: 28_000, converted: 30_000 }), makeConfig({ 'game.tree_points_price': 50_000 })).getRewardCatalog('u1');
       const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));

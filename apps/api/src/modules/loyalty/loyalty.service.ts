@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { MembershipTier, PosPointCredit, Prisma } from '@prisma/client';
-import type { GiftRedemptionDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
+import type { GiftRedemptionDTO, LoyaltyPreviewDTO, RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO, WasteOpeningHours, WasteVoucherSpec } from '@tubutree/shared-types';
 import type { CouponType, WasteGift, WasteGiftRedemption } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NO_PARTIAL_RETURNS, partialReturnTotals } from '../orders/return-ledger';
@@ -864,30 +864,14 @@ export class LoyaltyService {
     });
     const claimPoint = await this.claimPointOf(this.prisma);
     const redeemable = Math.max(0, user.pointsBalance - lock.locked);
-    const rewards: RewardItemDTO[] = gifts.map((row) => {
-      const soldOut = row.stock !== null && row.stock < 1;
-      const isTree = row.kind === 'TREE';
-      const canRedeem =
+    const rewards = gifts.map((row) =>
+      this.rewardItemOf(row, treePrice, (soldOut, isTree) =>
         !soldOut &&
         (isTree
           ? Number.isSafeInteger(treePrice) && treePrice > 0 && redeemable + user.pointsConvertedBalance >= treePrice
-          : redeemable >= row.pointsCost);
-      return {
-        id: row.id,
-        kind: row.kind,
-        name: row.name,
-        description: row.description,
-        label: row.label,
-        pointsCost: isTree ? treePrice : row.pointsCost,
-        imageUrl: row.imageUrl,
-        stockRemaining: row.stock,
-        soldOut,
-        canRedeem,
-        claimInstructions: row.claimInstructions,
-        voucher: row.kind === 'VOUCHER' ? voucherSpecOf(row) : null,
-        sortOrder: row.sortOrder,
-      };
-    });
+          : redeemable >= row.pointsCost),
+      ),
+    );
     return {
       pointsBalance: user.pointsBalance,
       pointsConvertedBalance: user.pointsConvertedBalance,
@@ -899,6 +883,59 @@ export class LoyaltyService {
       tierFreeShip: user.tierId
         ? { tierName: user.tier?.name ?? user.tierId, freeFrom: await freeShipThreshold(this.config, user.tierId) }
         : null,
+    };
+  }
+
+  private rewardItemOf(row: WasteGift, treePrice: number, canRedeemOf: (soldOut: boolean, isTree: boolean) => boolean): RewardItemDTO {
+    const soldOut = row.stock !== null && row.stock < 1;
+    const isTree = row.kind === 'TREE';
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      description: row.description,
+      label: row.label,
+      pointsCost: isTree ? treePrice : row.pointsCost,
+      imageUrl: row.imageUrl,
+      stockRemaining: row.stock,
+      soldOut,
+      canRedeem: canRedeemOf(soldOut, isTree),
+      claimInstructions: row.claimInstructions,
+      voucher: row.kind === 'VOUCHER' ? voucherSpecOf(row) : null,
+      sortOrder: row.sortOrder,
+    };
+  }
+
+  /**
+   * Xem trước kho quà và bảng hạng cho khách CHƯA đăng nhập: chỉ dữ liệu danh mục (không số dư, không hạng, không trường riêng
+   * của khách); mọi quà `canRedeem: false` vì chưa có tài khoản để đổi.
+   */
+  async getPublicPreview(): Promise<LoyaltyPreviewDTO> {
+    const treePrice = Number(await this.config.get<number>('game.tree_points_price', 50_000));
+    const giftClaimDays = Number(await this.config.get<number>('waste.gift_claim_days', 60));
+    const [gifts, tiers, claimPoint, earnPct, vndPerPointRedeem, maxRedeemPct, pointExpireMonths] = await Promise.all([
+      this.prisma.wasteGift.findMany({ where: { status: 'ACTIVE' }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
+      this.prisma.membershipTier.findMany({ orderBy: { sortOrder: 'asc' } }),
+      this.claimPointOf(this.prisma),
+      this.positiveConfig(EARN_PCT_KEY, DEFAULT_EARN_PCT),
+      this.positiveConfig('loyalty.vnd_per_point_redeem', 1),
+      this.fractionConfig('loyalty.max_redeem_pct', 0.2),
+      this.pointExpireMonths(),
+    ]);
+    return {
+      rewards: gifts.map((row) => this.rewardItemOf(row, treePrice, () => false)),
+      giftClaimDays,
+      claimPoint,
+      tiers: tiers.map((t) => ({
+        id: t.id,
+        name: t.name,
+        minPoints: t.minPoints,
+        minSpending: t.minSpending ?? null,
+        multiplier: Number(t.pointMultiplier),
+        perks: Array.isArray(t.perks) ? t.perks.filter((p): p is string => typeof p === 'string') : [],
+      })),
+      rates: { earnPct, vndPerPoint: Math.round(100 / earnPct), vndPerPointRedeem, maxRedeemPct },
+      pointExpireMonths,
     };
   }
 
