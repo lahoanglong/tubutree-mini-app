@@ -23,6 +23,7 @@ function mockGame(api: MockApi, state: { checkedIn: boolean }) {
   api.get('/me', () => USER);
   api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
   api.get('/game/profile', () => profile({ lastCheckInAt: state.checkedIn ? new Date().toISOString() : null }));
+  api.get('/me/daily-check-in', () => ({ checkedInToday: state.checkedIn, pointsDone: true, waterDone: state.checkedIn, streakDays: 3, currentCycleDay: 3, todayPoints: 0, todayWater: state.checkedIn ? 0 : 10, rewards: [] }));
   api.get('/game/quiz/today', [
     { id: 'q1', question: 'Cây nào hấp thụ nhiều CO₂?', options: ['Sưa', 'Tre', 'Cỏ', 'Rêu'], category: 'cay', difficulty: 2, waterReward: 10 },
   ]);
