@@ -1087,6 +1087,23 @@ export interface AdminNotificationTemplate {
   znsLastError?: { text: string; at: string } | null;
   /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
   staffEditable?: boolean;
+  /** Biến mã thật sự điền cho mẫu này; null = mẫu ngoài danh sách (không kiểm được); thiếu = API cũ. */
+  variables?: { key: string; label: string }[] | null;
+}
+
+/** Cùng luật với templateVariableProblem của API (máy chủ vẫn là nơi quyết định); chuỗi rỗng = hợp lệ. */
+export function templateVariableProblem(variables: { key: string }[] | null | undefined, body: string): string {
+  const allowed = variables?.map((v) => v.key) ?? null;
+  const list = allowed?.length ? allowed.map((k) => `{{${k}}}`).join(', ') : 'không có biến nào';
+  const hint = allowed ? ` Mẫu này dùng được: ${list}.` : '';
+  for (const m of body.matchAll(/\{\{([^{}]*)\}\}/g)) {
+    const name = m[1]!;
+    if (!/^\w+$/.test(name)) return `Biến "${m[0]}" viết sai: chỉ gồm chữ không dấu, số và gạch dưới, không có dấu cách.${hint}`;
+    if (allowed && !allowed.includes(name)) return `Biến "{{${name}}}" không dùng được cho mẫu này, khách sẽ nhận câu bị trống chỗ đó.${hint}`;
+  }
+  const single = /\{\w*\}/.exec(body.replace(/\{\{[^{}]*\}\}/g, ''));
+  if (single) return `"${single[0]}" chỉ có một dấu ngoặc nên khách sẽ thấy nguyên chữ đó. Biến phải nằm trong hai dấu ngoặc, ví dụ {{${allowed?.[0] ?? 'ten_bien'}}}.`;
+  return '';
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (
