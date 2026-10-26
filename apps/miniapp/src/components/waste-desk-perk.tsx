@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { WasteDeskPointDTO } from '@tubutree/shared-types';
+import { CASH_WORDING_MESSAGE, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, getDeskPointReport, submitDeskPerk } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -35,6 +35,8 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
+  const cashProblem = findCashWording(text) !== null;
+
   if (point.kind === 'WAREHOUSE') return null;
 
   return (
@@ -65,7 +67,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
         onClose={() => setOpen(false)}
         title={PERK_TITLE}
         footer={
-          <Button fullWidth disabled={text.trim() === ''} loading={submit.isPending} onPress={() => submit.mutate(text)}>
+          <Button fullWidth disabled={text.trim() === '' || cashProblem} loading={submit.isPending} onPress={() => submit.mutate(text)}>
             Gửi duyệt
           </Button>
         }
@@ -73,6 +75,11 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
         <Field label="Nội dung ưu đãi">
           <Input maxLength={200} value={text} onChange={(e) => setText(e.target.value)} />
         </Field>
+        {cashProblem && (
+          <div role="alert" style={{ marginTop: 8 }}>
+            <Text variant="caption" tone="danger" as="div">{CASH_WORDING_MESSAGE}</Text>
+          </div>
+        )}
       </BottomSheet>
     </Card>
   );

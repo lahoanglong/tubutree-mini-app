@@ -776,6 +776,20 @@ describe('WasteAdminPointsService', () => {
       expect(order.indexOf('tx end')).toBeLessThan(order.indexOf('perkReviewed'));
     });
 
+    it('approve refuses a pending text that promises cash (sent before the rule): 400, nothing written, nobody notified; reject still works', async () => {
+      const h = staffSetup();
+      const CASH = 'Tặng 10k cho khách đổi vỏ chai';
+      h.$queryRaw.mockResolvedValue([{ ...lockRow, perkPendingText: CASH }]);
+
+      await expect(h.svc.approvePerk('a1', 'p1', CASH)).rejects.toThrow(/Zalo không cho phép/);
+      expect(h.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeEvent).not.toHaveBeenCalled();
+      expect(h.notifier.perkReviewed).not.toHaveBeenCalled();
+
+      await h.svc.rejectPerk('a1', 'p1', CASH);
+      expect(h.wastePoint.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { perkPendingText: null } });
+    });
+
     it('reject clears the pending text, keeps the live text and notifies the owner after commit', async () => {
       const h = staffSetup();
 

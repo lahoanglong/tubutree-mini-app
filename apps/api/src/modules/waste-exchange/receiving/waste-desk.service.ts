@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { CASH_WORDING_MESSAGE, findCashWording } from '@tubutree/shared-types';
 import type { WasteDeskLookupDTO, WasteDeskPointDTO, WastePerkSubmitRequest } from '@tubutree/shared-types';
 import { vnMonthKey } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -63,6 +64,7 @@ export class WasteDeskService {
     if (access.kind !== 'PARTNER' || access.myRole !== 'OWNER') throw new ForbiddenException(PERK_OWNER_ONLY);
     const text = body.perkText.trim();
     if (!text) throw new BadRequestException(PERK_EMPTY);
+    if (findCashWording(text)) throw new BadRequestException(CASH_WORDING_MESSAGE);
 
     await this.prisma.$transaction(async (tx) => {
       // Same point lock as removeStaff, so an owner removed after the access check above cannot put a perk back.

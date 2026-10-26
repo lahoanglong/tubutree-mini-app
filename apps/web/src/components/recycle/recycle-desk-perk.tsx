@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { WasteDeskPointDTO } from '@tubutree/shared-types';
+import { CASH_WORDING_MESSAGE, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
 import { friendlyError as errText } from '@/lib/friendly-error';
@@ -36,6 +36,8 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
       void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
     },
   });
+
+  const cashProblem = findCashWording(text) !== null;
 
   if (point.kind === 'WAREHOUSE') return null;
 
@@ -74,7 +76,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
           <button
             type="button"
             className={`${ui.btnPrimary} w-full`}
-            disabled={text.trim() === '' || submit.isPending}
+            disabled={text.trim() === '' || cashProblem || submit.isPending}
             onClick={() => submit.mutate(text)}
           >
             Gửi duyệt
@@ -85,6 +87,11 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
           <Field label="Nội dung ưu đãi">
             <input maxLength={200} value={text} onChange={(e) => setText(e.target.value)} className={ui.field} />
           </Field>
+          {cashProblem && (
+            <p role="alert" className={ui.error}>
+              {CASH_WORDING_MESSAGE}
+            </p>
+          )}
           {submit.isError && (
             <p role="alert" className={ui.error}>
               {errText(submit.error)}

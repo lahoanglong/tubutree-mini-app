@@ -61,6 +61,26 @@ describe('WasteDeskPerk (§4.10, §5.6)', () => {
     expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã gửi, chờ Tubu duyệt' }));
     expect(spy).toHaveBeenCalledWith({ queryKey: ['waste', 'desk'] });
   });
+  it.each(['Tặng 10k cho khách', 'Hoàn tiền mặt 5%', 'Chuyển khoản lại tiền chai'])(
+    'chữ trả/thưởng tiền mặt (%s): báo lỗi ngay, khoá nút Gửi duyệt, không gọi API',
+    async (text) => {
+      renderWith(<WasteDeskPerk point={makeDeskPoint()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa' }));
+      fireEvent.change(await screen.findByLabelText('Nội dung ưu đãi'), { target: { value: text } });
+      expect(screen.getByRole('alert').textContent).toContain('Zalo không cho phép');
+      const send = screen.getByRole('button', { name: 'Gửi duyệt' });
+      expect(send).toBeDisabled();
+      fireEvent.click(send);
+      expect(mocks.submitDeskPerk).not.toHaveBeenCalled();
+    },
+  );
+  it('giảm giá và quà thường không bị chặn', async () => {
+    renderWith(<WasteDeskPerk point={makeDeskPoint()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa' }));
+    fireEvent.change(await screen.findByLabelText('Nội dung ưu đãi'), { target: { value: 'Giảm 10k đơn từ 100k, tặng túi vải' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Gửi duyệt' })).not.toBeDisabled();
+  });
   it('kho Tubu → không render gì', () => {
     const { container } = renderWith(<WasteDeskPerk point={WAREHOUSE_DESK} />);
     expect(container).toBeEmptyDOMElement();

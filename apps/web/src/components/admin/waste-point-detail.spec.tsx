@@ -185,6 +185,16 @@ describe('WastePointDetail', () => {
     expectNoBannedCopy(c.textContent);
   });
 
+  it('ưu đãi chờ duyệt có chữ trả/thưởng tiền: hiện cảnh báo, khoá nút Duyệt, vẫn cho Từ chối; luôn có câu dặn chỉ duyệt giảm giá hoặc quà', async () => {
+    const ok = await mount(wastePoint({ perkText: null, perkPendingText: 'Giảm 10% hoá đơn đầu' }));
+    expect(ok.c.textContent).toContain('Chỉ duyệt ưu đãi bằng giảm giá hoặc quà');
+    expect(ok.c.querySelector('[role=alert]')).toBeNull();
+    const bad = await mount(wastePoint({ perkText: null, perkPendingText: 'Tặng 10k cho khách mang vỏ chai' }));
+    expect(bad.c.querySelector('[role=alert]')?.textContent).toContain('Zalo không cho phép');
+    expect((btn(bad.c, 'Duyệt ưu đãi') as HTMLButtonElement).disabled).toBe(true);
+    expect((btn(bad.c, 'Từ chối ưu đãi') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('duyệt / từ chối ưu đãi riêng', async () => {
     const { c, api } = await mount(wastePoint({ perkText: null, perkPendingText: 'Giảm 10% hoá đơn đầu' }));
     expect(c.textContent).toContain('Giảm 10% hoá đơn đầu');
