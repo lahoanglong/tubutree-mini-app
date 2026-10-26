@@ -201,7 +201,9 @@ export default function AccountPage() {
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 max-md:pb-4`}>
       <div className="max-md:hidden">
-        <BackLink href="/">← Trang chủ</BackLink>
+        <BackLink href="/" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Tài khoản' }]}>
+          ← Trang chủ
+        </BackLink>
       </div>
       <h1 className="sr-only">Cá nhân</h1>
 

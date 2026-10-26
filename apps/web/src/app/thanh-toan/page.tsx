@@ -962,7 +962,7 @@ function AddressPicker({
 function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }) {
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
-      <BackLink href="/gio-hang">
+      <BackLink href="/gio-hang" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Giỏ hàng', href: '/gio-hang' }, { label: 'Thanh toán' }]}>
         ← Về giỏ hàng
       </BackLink>
       {bare ? (

@@ -6,7 +6,7 @@ import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 export function LedgerShell({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <main className={`${wide ? PAGE_WIDE : PAGE_NARROW} py-6 max-md:pt-0`}>
-      <BackLink href="/tai-khoan">
+      <BackLink href="/tai-khoan" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Tài khoản', href: '/tai-khoan' }, { label: title }]}>
         ← Tài khoản
       </BackLink>
       <PageHeader title={title} parentHref="/tai-khoan" className="md:mt-1" />

@@ -542,7 +542,7 @@ export default function CartPage() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
-      <BackLink href="/">
+      <BackLink href="/" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Giỏ hàng' }]}>
         ← Tiếp tục mua sắm
       </BackLink>
       <PageHeader title="Giỏ hàng" className="md:mt-1" />
