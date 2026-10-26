@@ -6,8 +6,7 @@ import { guestPreviewCopy, tierRequirementText } from '@tubutree/app-core/guest-
 import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
-import { formatVnd } from '@/lib/format-vnd';
-import { formatMultiplier } from '@/lib/loyalty-copy';
+import { formatMultiplier, moneyShort } from '@/lib/loyalty-copy';
 import { loginHref } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { ErrorState } from '@/components/ui/error-state';
@@ -45,7 +44,7 @@ export function GuestTiers({ returnTo }: { returnTo: string }) {
                 <div className="text-base font-semibold text-stone-900">{t.name}</div>
                 <div className="text-xs font-semibold text-forest-700">{`Điểm x${formatMultiplier(t.multiplier)}`}</div>
               </div>
-              <div className="text-xs text-stone-700">{tierRequirementText(t, (n) => `${formatCount(n)} điểm`, formatVnd)}</div>
+              <div className="text-xs text-stone-700">{tierRequirementText(t, (n) => `${formatCount(n)} điểm`, moneyShort)}</div>
               {t.perks.map((p) => (
                 <div key={p} className="text-xs text-stone-600">{p}</div>
               ))}

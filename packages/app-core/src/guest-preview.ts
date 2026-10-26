@@ -11,12 +11,14 @@ export const guestPreviewCopy = {
 
 type PreviewTier = LoyaltyPreviewDTO['tiers'][number];
 
-/** Điều kiện lên hạng, một dòng: mốc điểm, thêm mốc chi tiêu nếu hạng có. */
+/**
+ * Điều kiện lên hạng, một dòng, đúng luật xét hạng của máy chủ: hạng có `minSpending` CHỈ xét tiền mua trong 12 tháng
+ * (mốc điểm không còn dùng); chỉ hạng không có mốc chi tiêu mới xét điểm tích luỹ.
+ */
 export function tierRequirementText(t: PreviewTier, formatPoints: (n: number) => string, formatMoney: (n: number) => string): string {
   if (t.minPoints <= 0 && !t.minSpending) return 'Hạng khởi đầu';
-  const parts = [formatPoints(t.minPoints)];
-  if (t.minSpending) parts.push(`chi tiêu ${formatMoney(t.minSpending)}`);
-  return `Từ ${parts.join(' · ')}`;
+  if (t.minSpending) return `Chi tiêu từ ${formatMoney(t.minSpending)} trong 12 tháng`;
+  return `Từ ${formatPoints(t.minPoints)} tích luỹ`;
 }
 
 /** Khách chưa đăng nhập không có điểm: dựng danh mục rỗng điểm để dùng lại thẻ quà, thẻ chỉ hiện giá. */

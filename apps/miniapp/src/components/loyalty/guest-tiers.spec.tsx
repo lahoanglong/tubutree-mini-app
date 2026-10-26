@@ -30,6 +30,7 @@ describe('GuestTiers (khách xem hạng thành viên)', () => {
     );
     expect(await screen.findByText('Lộc Biếc')).toBeInTheDocument();
     expect(screen.getByText('Hạng khởi đầu')).toBeInTheDocument();
+    expect(screen.getByText('Chi tiêu từ 5 triệu trong 12 tháng')).toBeInTheDocument();
     expect(screen.getByText('Freeship đơn từ 99k')).toBeInTheDocument();
     expect(screen.getByText('Điểm x1,2')).toBeInTheDocument();
     expect(mocks.coreGet).toHaveBeenCalledWith('/loyalty/preview');
