@@ -231,6 +231,23 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(container.textContent).not.toContain('chỉ đặt được một lần. Xác nhận?');
   });
 
+  it('đang hỏi xác nhận ngày sinh: các ô nhập bị khoá', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: null });
+    const { container } = await mount();
+    typeInto(field(container, 'Ngày sinh'), '1991-02-03');
+    click(saveBtn(container));
+    await flush(2);
+    expect(field(container, 'Ngày sinh').readOnly).toBe(true);
+    expect(field(container, 'Họ và tên').readOnly).toBe(true);
+    expect(field(container, 'Email').readOnly).toBe(true);
+  });
+
+  it('ngày sinh đã lưu: không hiện dòng "Ngày đã chọn"', async () => {
+    mocks.get.mockResolvedValue({ ...ME, dob: '1990-05-01' });
+    const { container } = await mount();
+    expect(container.textContent).not.toContain('Ngày đã chọn');
+  });
+
   it('lần lưu đầu mang ngày sinh nhưng phản hồi mất: /me được tải lại, lần lưu sau không gửi lại ngày sinh', async () => {
     let meCalls = 0;
     mocks.get.mockImplementation(async () => (++meCalls === 1 ? { ...ME, dob: null } : { ...ME, dob: '1991-02-03' }));

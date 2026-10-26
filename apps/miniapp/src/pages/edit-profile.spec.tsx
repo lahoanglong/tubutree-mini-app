@@ -200,6 +200,24 @@ describe('Sửa hồ sơ theo DS v2 (C-076, C-114)', () => {
       expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeInTheDocument();
     });
 
+    it('đang hỏi xác nhận ngày sinh: các ô nhập bị khoá, bấm Sửa lại thì mở lại', async () => {
+      mocks.getMe.mockResolvedValue({ ...ME, dob: null });
+      renderPage();
+      fireEvent.change(await screen.findByLabelText('Ngày sinh'), { target: { value: '1991-02-03' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      expect(screen.getByLabelText('Ngày sinh')).toHaveAttribute('readonly');
+      expect(screen.getByLabelText('Họ và tên')).toHaveAttribute('readonly');
+      expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
+      fireEvent.click(screen.getByRole('button', { name: 'Sửa lại' }));
+      expect(screen.getByLabelText('Ngày sinh')).not.toHaveAttribute('readonly');
+    });
+
+    it('ngày sinh đã lưu: không hiện dòng "Ngày đã chọn" (chỉ hiện với ngày vừa chọn chưa lưu)', async () => {
+      renderPage();
+      expect(await screen.findByLabelText('Ngày sinh')).toHaveValue('1990-05-01');
+      expect(screen.queryByText(/Ngày đã chọn/)).toBeNull();
+    });
+
     it('đã có ngày sinh: lưu đổi tên không hỏi xác nhận ngày sinh', async () => {
       renderPage();
       fireEvent.change(await screen.findByLabelText('Họ và tên'), { target: { value: 'Lan D' } });

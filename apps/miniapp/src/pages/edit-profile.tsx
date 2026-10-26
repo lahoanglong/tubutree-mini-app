@@ -63,7 +63,7 @@ export default function EditProfilePage() {
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
 
   const handlePickAvatar = () => {
-    if (!canChangeAvatar) return;
+    if (!canChangeAvatar || confirmingDob) return;
     haptic('light');
     fileInputRef.current?.click();
   };
@@ -251,13 +251,14 @@ export default function EditProfilePage() {
           </div>
 
           <Field label="Họ và tên">
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={120} />
+            <Input value={fullName} readOnly={confirmingDob} onChange={(e) => setFullName(e.target.value)} maxLength={120} />
           </Field>
 
           <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
             <Input
               type="text"
               value={email}
+              readOnly={confirmingDob}
               onChange={(e) => setEmail(e.target.value)}
               onBlur={() => setTouched(true)}
               status={emailInvalid ? 'error' : undefined}
@@ -269,7 +270,7 @@ export default function EditProfilePage() {
               <input
                 type="date"
                 value={dob}
-                readOnly={Boolean(meQ.data?.dob)}
+                readOnly={Boolean(meQ.data?.dob) || confirmingDob}
                 onChange={(e) => {
                   setDob(e.target.value);
                   setConfirmingDob(false);
@@ -288,7 +289,7 @@ export default function EditProfilePage() {
                 }}
               />
             </Field>
-            {dobDisplay && (
+            {dobDisplay && dobNew && (
               <Text variant="caption" tone="secondary" style={{ marginTop: 4, display: 'block' }}>
                 {profileCopy.dobPicked(dobDisplay)}
               </Text>
@@ -312,7 +313,10 @@ export default function EditProfilePage() {
               <Button
                 fullWidth
                 loading={save.isPending}
+                disabled={emailInvalid || uploadingAvatar}
                 onPress={() => {
+                  setTouched(true);
+                  if (uploadingAvatar || (email.trim() !== '' && !EMAIL.test(email.trim()))) return;
                   save.mutate();
                 }}
               >

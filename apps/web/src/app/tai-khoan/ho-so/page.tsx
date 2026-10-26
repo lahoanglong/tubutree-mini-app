@@ -215,7 +215,7 @@ export default function EditProfilePage() {
         {canChangeAvatar ? (
           <>
             <input ref={fileInputRef} type="file" accept="image/*" hidden className="hidden min-h-11" aria-label="Chọn ảnh đại diện" onChange={(e) => void handleAvatarFile(e)} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} className="flex min-h-11 flex-col items-center">
+            <button type="button" disabled={confirmingDob} onClick={() => fileInputRef.current?.click()} className="flex min-h-11 flex-col items-center">
               <span className="relative inline-block">
                 {avatarFigure}
                 <span aria-hidden="true" className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-stone-0 bg-forest-600 text-stone-0 shadow-card">
@@ -242,7 +242,7 @@ export default function EditProfilePage() {
       </div>
 
       <Field label="Họ và tên">
-        <input type="text" value={fullName} maxLength={120} autoComplete="name" onChange={(e) => setFullName(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
+        <input type="text" value={fullName} maxLength={120} autoComplete="name" readOnly={confirmingDob} onChange={(e) => setFullName(e.target.value)} className={`${ui.field} ${FIELD_MINI}`} />
       </Field>
 
       <Field label="Email" error={emailInvalid ? 'Email không hợp lệ' : undefined}>
@@ -251,6 +251,7 @@ export default function EditProfilePage() {
           inputMode="email"
           autoComplete="email"
           value={email}
+          readOnly={confirmingDob}
           onChange={(e) => setEmail(e.target.value)}
           onBlur={() => setTouched(true)}
           className={`${emailInvalid ? ui.fieldError : ui.field} ${FIELD_MINI}`}
@@ -259,12 +260,12 @@ export default function EditProfilePage() {
 
       <div>
         <Field label="Ngày sinh">
-          <input type="date" value={dob} readOnly={Boolean(me?.dob)} autoComplete="bday" onChange={(e) => {
+          <input type="date" value={dob} readOnly={Boolean(me?.dob) || confirmingDob} autoComplete="bday" onChange={(e) => {
               setDob(e.target.value);
               setConfirmingDob(false);
             }} className={`${ui.field} ${FIELD_MINI}`} />
         </Field>
-        {dobDisplay && <p className="mt-1 text-xs text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
+        {dobDisplay && dobNew && <p className="mt-1 text-xs text-stone-700">{profileCopy.dobPicked(dobDisplay)}</p>}
         <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-600">
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
           Nhận mã giảm giá quà tặng vào tháng sinh nhật.{me?.dob ? ' Ngày sinh chỉ đặt được một lần, cần chỉnh lại thì liên hệ CSKH.' : ''}
