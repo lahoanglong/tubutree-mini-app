@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
 import { WASTE_WRITE_INVALIDATE_KEYS, cancelWasteRequest, setWasteTracking } from '@tubutree/app-core/api/waste';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { wasteMeQuery, wastePointsQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
+import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -40,6 +42,7 @@ import {
   timelineFor,
 } from './recycle-labels';
 
+const QR_POLL_MS = 5000;
 const POINT_PAUSED = 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác';
 const POINT_QUOTA_FULL = 'Điểm này tạm hết hạn mức tháng này, hãy chọn điểm khác';
 const BLOCK = `flex flex-col gap-2.5 p-4 ${skin.card}`;
@@ -115,6 +118,7 @@ function Shell({ children, title = 'Yêu cầu đổi rác', subtitle }: { child
 }
 
 export function RecycleRequestDetail({ id }: { id: string }) {
+  const router = useRouter();
   const phase = useAuthPhase();
   const cfg = usePublicConfig();
   const refresh = useRefreshAfterWrite();
@@ -127,7 +131,18 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const authed = phase === 'authenticated';
-  const q = useQuery({ ...wasteRequestQuery(coreHttp, id), enabled: authed });
+  // Mở mã QR ở quầy thì hỏi lại trạng thái mỗi 5 giây để thấy ngay lúc nhân viên xác nhận; dừng khi đóng tấm mã hoặc yêu cầu không còn chờ.
+  const q = useQuery({
+    ...wasteRequestQuery(coreHttp, id),
+    enabled: authed,
+    refetchInterval: (query) => (qrOpen && query.state.data?.status === 'OPEN' ? QR_POLL_MS : false),
+  });
+  const liveStatus = q.data?.status;
+  useEffect(() => {
+    if (!qrOpen || !liveStatus || liveStatus === 'OPEN') return;
+    setQrOpen(false);
+    if (liveStatus === 'COMPLETED') router.replace(`/doi-rac/xong/${id}`);
+  }, [qrOpen, liveStatus, id, router]);
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
   const r: WasteRequestDetailDTO | undefined = q.data;
   const pointsQ = useQuery({
@@ -188,7 +203,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const cancelButton = (
     <button
       type="button"
-      className={`${skin.btnSecondary} w-full`}
+      className="inline-flex min-h-11 w-full items-center justify-center rounded-control px-5 text-sm font-semibold text-danger-fg transition active:scale-95"
       onClick={() => {
         cancel.reset();
         setCancelOpen(true);
@@ -236,7 +251,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         )}
         <p className="text-sm text-stone-800">Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn</p>
         <p className="text-sm text-stone-800">Kho từ chối kiện còn cước phải trả khi nhận</p>
-        <p className="text-sm text-stone-600">{`Nhập trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</p>
+        <p className="text-sm text-stone-600">{`Nhập mã vận đơn trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</p>
         <TrackingForm
           id={id}
           initialCarrier={r.carrier ?? ''}
@@ -279,6 +294,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
       </section>
     ) : null;
 
+  const hoursLine = r.point ? [todayHoursText(r.point.openingHours, new Date()), openingStatus(r.point.openingHours, new Date()).text].filter(Boolean).join(' · ') : '';
   const stepHints =
     r.method === 'DROP_OFF' && open && r.point && r.pointAvailable && !quotaFull && !dropOffPaused
       ? {
@@ -286,6 +302,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             <>
               <span className="text-xs text-stone-600">{`Mang tới ${r.point.name} trước ${dayMonth(r.expiresAt ?? r.createdAt)}`}</span>
               <span className="text-xs text-stone-600">{pointAddress(r.point)}</span>
+              <span className="text-xs text-stone-600">{hoursLine}</span>
             </>
           ),
         }
@@ -303,12 +320,15 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-4">
           {t && (
             <div>
-              <Badge tone="brand">{requestStatusText(r, { blocked: !!me?.blocked, paused })}</Badge>
+              <Badge tone={paused ? 'warning' : 'brand'}>{requestStatusText(r, { blocked: !!me?.blocked, paused })}</Badge>
             </div>
           )}
           {mailBlock}
           {pickupBlock}
           {pointNotice}
+          {paused && (
+            <p className="text-sm text-stone-600">{`${PAUSED_TEXT}. Yêu cầu sẽ hết hạn ngày ${dayMonth(r.expiresAt ?? r.createdAt)} nếu chương trình chưa mở lại.`}</p>
+          )}
           {t ? (
             <RecycleTimeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
           ) : (
@@ -399,6 +419,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             <div className="flex flex-col gap-0.5">
               <p className="text-base font-semibold text-stone-900">{r.point.name}</p>
               <p className="text-sm text-stone-600">{pointAddress(r.point)}</p>
+              <p className="text-sm text-stone-600">{hoursLine}</p>
             </div>
           )}
           <p className="text-sm text-stone-800">{`Giữ chỗ tới ${formatDate(r.expiresAt)}`}</p>
@@ -421,6 +442,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
           </button>
         }
       >
+        <p className="text-sm text-stone-800">{`Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</p>
         {cancel.isError ? (
           <p role="alert" className={ui.error}>
             {errText(cancel.error)}

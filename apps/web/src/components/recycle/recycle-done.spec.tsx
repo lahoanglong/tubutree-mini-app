@@ -99,7 +99,7 @@ describe('/doi-rac/xong/[id] (§4.7)', () => {
   it('số dư mới (tổng hai lô) và tiến độ tới quà từ redeemablePoints', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Số dư mới 14.000 điểm');
-    expect(c.textContent).toContain('Còn 6.000 điểm tới mã giảm giá Miễn phí vận chuyển');
+    expect(c.textContent).toContain('Còn 6.000 điểm tới mã Miễn phí vận chuyển');
   });
 
   it('giọt nước: chỉ khi dropsAwarded > 0, dùng biểu tượng không dùng emoji', async () => {

@@ -71,7 +71,7 @@ describe('WastePointPicker (web)', () => {
     expect(c.textContent).toContain('Điểm này không nhận: Vỏ hộp sữa');
     expect(r.querySelector('s')?.textContent).toBe('Vỏ hộp sữa');
     expect(r.textContent).toContain('Không nhận');
-    expect(c.textContent).toContain('Ưu đãi riêng của cửa hàng (cửa hàng tự chịu, không qua Điểm Xanh, Tubu không đảm bảo): Giảm 10% hoá đơn đầu');
+    expect(c.textContent).toContain('Ưu đãi của cửa hàng (không dùng Điểm Xanh): Giảm 10% hoá đơn đầu');
     click(r);
     expect(onChange).not.toHaveBeenCalled();
   });

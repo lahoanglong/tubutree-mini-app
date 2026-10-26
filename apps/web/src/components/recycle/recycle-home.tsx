@@ -4,17 +4,19 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
-import type { WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
-import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
+import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
+import { wasteCatalogueQuery, wasteMeQuery } from '@tubutree/app-core/queries/waste';
+import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { pointsSummary } from '@/lib/checkout-points';
+import { loginHref } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -23,9 +25,9 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RecycleLinkRow } from './recycle-link-row';
 import { RecycleTimeline } from './recycle-timeline';
+import { WasteItemThumb } from './waste-item-thumb';
 import {
   BLOCKED_TEXT,
-  LOGIN_TEXT,
   METHOD_FLAG,
   METHOD_LABELS,
   METHOD_LINE,
@@ -72,6 +74,65 @@ function NoticeCard({ text }: { text: string }) {
   );
 }
 
+function ItemList({ items }: { items: readonly WasteItemDTO[] }) {
+  return (
+    <section className="space-y-2">
+      <h2 className={skin.sectionTitle}>{wasteGuestCopy.itemsTitle}</h2>
+      {items.map((item) => {
+        const comingSoon = item.status === 'COMING_SOON';
+        return (
+          <div key={item.id} data-item data-status={item.status} aria-disabled={comingSoon || undefined} className="flex items-center gap-3">
+            <WasteItemThumb item={item} size={40} />
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`text-sm font-semibold max-md:text-[length:var(--type-body-sm-size)] ${comingSoon ? 'text-stone-500' : 'text-stone-900'}`}>{item.name}</span>
+                {comingSoon && <Badge>Sắp nhận</Badge>}
+                {item.warehouseOnly && !comingSoon && <Badge tone="info">{WAREHOUSE_ONLY_TEXT}</Badge>}
+              </div>
+              <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
+              {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function GuestOverview({ items }: { items: readonly WasteItemDTO[] | undefined }) {
+  return (
+    <>
+      <div className="space-y-1">
+        <h2 className={skin.sectionTitle}>{wasteGuestCopy.introTitle}</h2>
+        <p className="text-sm text-stone-700">{wasteGuestCopy.intro}</p>
+      </div>
+      <section className="space-y-2">
+        <h2 className={skin.sectionTitle}>{wasteGuestCopy.stepsTitle}</h2>
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-stone-900">
+          {wasteGuestCopy.steps.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ol>
+      </section>
+      {items === undefined ? <Skeleton height={120} rounded="rounded-card" /> : <ItemList items={items} />}
+      <div className={`${skin.plain}`}>
+        <RecycleLinkRow bare href="/doi-rac/quy-dinh" title={wasteGuestCopy.rulesLink} />
+      </div>
+    </>
+  );
+}
+
+function GuestLogin() {
+  return (
+    <div className={`space-y-3 p-4 ${skin.card}`}>
+      <p className="text-sm text-stone-700">{wasteGuestCopy.whyPhone}</p>
+      <Link href={loginHref('/doi-rac')} className={`${ui.btnPrimary} w-full sm:w-auto`}>
+        {wasteGuestCopy.loginButton}
+      </Link>
+    </div>
+  );
+}
+
 function RequestsBlock({ me }: { me: WasteMeDTO }) {
   const cfg = usePublicConfig();
   if (me.openRequests.length === 0) return null;
@@ -97,9 +158,9 @@ function RequestsBlock({ me }: { me: WasteMeDTO }) {
                 {tl ? (
                   <div className="space-y-2">
                     <div>
-                      <Badge tone="brand">{status}</Badge>
+                      <Badge tone={paused ? 'warning' : 'brand'}>{status}</Badge>
                     </div>
-                    <RecycleTimeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} />
+                    <RecycleTimeline compact label={`Tiến độ ${r.code}`} steps={TIMELINE_STEPS[r.method]} current={tl.current} caption={timelineCaption(TIMELINE_STEPS[r.method], tl.current)} />
                   </div>
                 ) : (
                   closed && <p className="text-xs text-stone-600">{closed.reason ? `${closed.label}: ${closed.reason}` : closed.label}</p>
@@ -122,6 +183,7 @@ export function RecycleHome() {
   const fullPage = me?.programmeEnabled === true && me.eligibility === 'OK' && !me.blocked;
   const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: phase === 'authenticated' && fullPage });
 
+  const catalogueQ = useQuery({ ...wasteCatalogueQuery(coreHttp), enabled: phase === 'guest' && cfg.waste.enabled });
   const showHistory = me?.eligibility === 'OK';
 
   if (phase === 'loading') {
@@ -139,7 +201,14 @@ export function RecycleHome() {
     );
   }
   if (phase === 'guest') {
-    return <Shell>{cfg.isLoaded && !cfg.waste.enabled ? <NoticeCard text={PAUSED_TEXT} /> : <LoginRequired message={LOGIN_TEXT} returnTo="/doi-rac" />}</Shell>;
+    if (cfg.isLoaded && !cfg.waste.enabled) return <Shell><NoticeCard text={PAUSED_TEXT} /></Shell>;
+    const guestItems = catalogueQ.data?.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder);
+    return (
+      <Shell>
+        <GuestOverview items={catalogueQ.isError ? [] : guestItems} />
+        <GuestLogin />
+      </Shell>
+    );
   }
   if (meQ.isPending) {
     return (
@@ -162,9 +231,12 @@ export function RecycleHome() {
   if (!me.programmeEnabled) {
     return (
       <Shell showHistory={showHistory}>
+        {deskRow && <div className={skin.card}>{deskRow}</div>}
         <NoticeCard text={PAUSED_TEXT} />
         {openRequests}
-        {deskRow && <div className={skin.card}>{deskRow}</div>}
+        <div className={skin.plain}>
+          <RecycleLinkRow bare href="/kho-qua" title="Kho quà" />
+        </div>
       </Shell>
     );
   }
@@ -172,17 +244,17 @@ export function RecycleHome() {
   if (me.eligibility !== 'OK') {
     return (
       <Shell>
-        <MiniAppOnlyNotice path="/doi-rac" />
         {deskRow && <div className={skin.card}>{deskRow}</div>}
+        <MiniAppOnlyNotice path="/doi-rac" />
       </Shell>
     );
   }
   if (me.blocked) {
     return (
       <Shell showHistory={showHistory}>
+        {deskRow && <div className={skin.card}>{deskRow}</div>}
         <NoticeCard text={BLOCKED_TEXT} />
         {openRequests}
-        {deskRow && <div className={skin.card}>{deskRow}</div>}
       </Shell>
     );
   }
@@ -200,10 +272,11 @@ export function RecycleHome() {
 
   return (
     <Shell showHistory>
+      {deskRow && <div className={skin.card}>{deskRow}</div>}
       <div className={`space-y-2 p-4 ${skin.card}`}>
         <p className="text-xs text-stone-600">Điểm Xanh của bạn</p>
         <p className="font-display text-3xl font-semibold tabular-nums text-stone-900">{formatPoints(total)}</p>
-        <p className="text-sm text-stone-700">{`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}</p>
+        {total > 0 && <p className="text-sm text-stone-700">{`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}</p>}
         {impact && (
           <div>
             <p className="text-sm text-stone-900">{impact}</p>
@@ -231,36 +304,22 @@ export function RecycleHome() {
         {methods.length > 0 && (
           <section className="space-y-2">
             <h2 className={skin.sectionTitle}>Cách đổi</h2>
-            {methods.map((m) => (
-              <div key={m} className={`p-3 ${skin.outlineCard}`}>
-                <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
-                <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
-              </div>
-            ))}
+            <ul className="space-y-2">
+              {methods.map((m) => (
+                <li key={m}>
+                  <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
+                  <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
-        <section className="space-y-2">
-          <h2 className={skin.sectionTitle}>Tubu nhận những món này</h2>
-          {items.map((item) => {
-            const comingSoon = item.status === 'COMING_SOON';
-            return (
-            <div key={item.id} data-item data-status={item.status} aria-disabled={comingSoon || undefined} className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className={`text-sm font-semibold max-md:text-[length:var(--type-body-sm-size)] ${comingSoon ? 'text-stone-500' : 'text-stone-900'}`}>{item.name}</span>
-                {comingSoon && <Badge>Sắp nhận</Badge>}
-              </div>
-              <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
-              {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
-            </div>
-            );
-          })}
-        </section>
+        <ItemList items={items} />
       </div>
 
       <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
         <RecycleLinkRow bare href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
-        {deskRow}
         <RecycleLinkRow bare href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
       </div>
     </Shell>

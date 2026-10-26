@@ -170,7 +170,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     expect(c.textContent).toContain('Hạn mức điểm tháng này');
     expect(c.textContent).toContain('Đã dùng 120.000 / 500.000 điểm');
     expect(c.textContent).toContain('Còn lại 380.000 điểm');
-    expect(c.textContent).toContain('Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.');
+    expect(c.textContent).toContain('Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.');
   });
   it('một điểm: tên điểm hiện dưới tiêu đề; hạn mức có thanh tiến độ theo đã dùng trên giới hạn', async () => {
     const c = await mount();
@@ -203,7 +203,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
   it('kho: không có thẻ hạn mức, có dòng trần nhân viên trong ngày', async () => {
     state.points = [WAREHOUSE_DESK];
     const c = await mount();
-    expect(c.textContent).toContain('Còn 150.000 điểm được xác nhận hôm nay');
+    expect(c.textContent).toContain('Hôm nay còn xác nhận được 150.000 điểm');
     expect(c.textContent).not.toContain('Hạn mức điểm tháng này');
   });
   it('nhiều điểm: chọn điểm ở đầu màn', async () => {
@@ -211,7 +211,7 @@ describe('/doi-rac/quay: vào màn (§16.1, §4.10)', () => {
     const c = await mount();
     click(byText(c, '[role="tab"]', 'Kho Tubu TP.HCM'));
     await flush();
-    expect(c.textContent).toContain('Còn 150.000 điểm được xác nhận hôm nay');
+    expect(c.textContent).toContain('Hôm nay còn xác nhận được 150.000 điểm');
   });
   it('một h1, mọi điều khiển có tên', async () => {
     const c = await mount();
@@ -225,7 +225,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
   it('gửi đúng mã đã cắt khoảng trắng; thẻ yêu cầu che tên và số', async () => {
     const c = await mount();
     await lookUp(c, '  tr-8k2m9 ');
-    expect(calls('/waste/desk/lookup')[0]!.body).toEqual({ code: 'tr-8k2m9' });
+    expect(calls('/waste/desk/lookup')[0]!.body).toEqual({ code: 'TR-8K2M9' });
     expect(c.textContent).toContain('Ng*** A');
     expect(c.textContent).toContain('090****567');
     expect(lineOf(c, 'Thùng carton').textContent).toContain('Khách khai 5 thùng');
@@ -477,7 +477,7 @@ describe('/doi-rac/quay: trao quà ở kho (§8, §15.3)', () => {
     expect(c.textContent).toContain('Hạn nhận 17/12/2026');
     click(button(c, 'Trao quà'));
     await flush(10);
-    expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'qg-8k2m9p4t', pointId: 'wh-1' });
+    expect(calls('/waste/desk/gifts/fulfil')[0]!.body).toEqual({ code: 'QG-8K2M9P4T', pointId: 'wh-1' });
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã trao Gói hạt giống Tubu');
     expect(button(c, 'Trao quà')).toBeNull();
   });

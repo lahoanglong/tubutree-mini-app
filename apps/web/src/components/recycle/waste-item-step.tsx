@@ -5,7 +5,8 @@ import type { WasteMeItemDTO } from '@tubutree/shared-types';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
-import { ProductThumb } from '@/components/mini';
+import { QUICK_QTY_STEPS, WAREHOUSE_ONLY_TEXT } from '@tubutree/app-core/waste-copy';
+import { WasteItemThumb } from './waste-item-thumb';
 import { UNCAPPED_QTY_MAX, capSentence, groupProgressText, monthRemainingText, ruleText } from './recycle-labels';
 
 interface WasteItemStepProps {
@@ -36,7 +37,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
             className="flex gap-3 rounded-card border border-stone-200 bg-stone-0 p-3"
           >
             <span data-item-media>
-              <ProductThumb src={item.imageUrl} alt="" size={48} />
+              <WasteItemThumb item={item} />
             </span>
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex items-center gap-2">
@@ -44,6 +45,11 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                 {comingSoon && <Badge>Sắp nhận</Badge>}
               </div>
               <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${comingSoon ? 'text-stone-500' : 'text-stone-700'}`}>{ruleText(item)}</p>
+              {item.warehouseOnly && (
+                <div>
+                  <Badge tone="info" size="sm">{WAREHOUSE_ONLY_TEXT}</Badge>
+                </div>
+              )}
               {item.prepInstructions && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{item.prepInstructions}</p>}
               {cap && <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)]">{cap}</p>}
               {monthLeft && <p className={`text-xs max-md:text-[length:var(--type-caption-size)] max-md:leading-[var(--type-caption-lh)] ${item.monthRemainingQty === 0 ? 'text-warning-fg' : 'text-stone-600'}`}>{monthLeft}</p>}
@@ -52,6 +58,8 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                   <div>
                     <QuantitySelector
                       size="sm"
+                      editable
+                      quickSteps={QUICK_QTY_STEPS}
                       min={0}
                       max={(item.monthRemainingQty ?? UNCAPPED_QTY_MAX) + (allowance?.[item.id] ?? 0)}
                       value={qty}

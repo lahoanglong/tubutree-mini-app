@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
-import { makeRequestSummary, makeWasteMe } from './recycle-fixtures';
+import { ITEM_CARTON, ITEM_MILK, makeRequestSummary, makeWasteMe } from './recycle-fixtures';
 
 // Chép ý recycle.spec.tsx (Mini App, §4.1): thẻ số dư, tiến độ quà, tác động, cách đổi, món nhận, yêu cầu đang xử lý, các thẻ
 // trạng thái và thứ tự ưu tiên. Khác Mini App: khách chưa đủ điều kiện (eligibility khác OK, thường thiếu SĐT) thấy
@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   me: null as unknown,
   rewards: null as unknown,
+  catalogue: [] as unknown[],
   calls: [] as string[],
   fail: new Set<string>(),
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } } as Record<string, unknown>,
@@ -31,6 +32,7 @@ vi.mock('@/lib/core-http', () => ({
       }
       if (path === '/waste/me') return state.me;
       if (path === '/me/loyalty/rewards') return state.rewards;
+      if (path === '/waste/catalogue') return state.catalogue;
       throw new Error(`chưa mock ${path}`);
     },
     post: async () => {
@@ -53,6 +55,7 @@ const link = (c: HTMLElement, href: string) => c.querySelector<HTMLAnchorElement
 beforeEach(() => {
   state.phase = 'authenticated';
   state.calls = [];
+  state.catalogue = [];
   state.fail = new Set();
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } };
   state.me = makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 } });
@@ -76,7 +79,7 @@ describe('/doi-rac trang vào (§4.1)', () => {
 
   it('tiến độ tới quà kế tiếp theo redeemablePoints của máy chủ + tương đương đơn vị món', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Còn 6.000 điểm tới mã giảm giá Miễn phí vận chuyển');
+    expect(c.textContent).toContain('Còn 6.000 điểm tới mã Miễn phí vận chuyển');
     expect(c.textContent).toContain('tương đương khoảng 6 thùng carton');
     expect(c.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('14000');
   });
@@ -199,11 +202,11 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     state.me = makeWasteMe({ programmeEnabled: false, openRequests: [makeRequestSummary()] });
     const c = await mount();
     expect(c.textContent).toContain('Chương trình đang tạm dừng');
-    for (const t of ['Điểm Xanh của bạn', 'Đổi rác ngay', 'Kho quà']) expect(c.textContent).not.toContain(t);
+    for (const t of ['Điểm Xanh của bạn', 'Đổi rác ngay']) expect(c.textContent).not.toContain(t);
     expect(byText(c, 'h2', 'Cách đổi')).toBeNull();
     expect(byText(c, 'h2', 'Tubu nhận những món này')).toBeNull();
     expect(c.querySelector('[data-item]')).toBeNull();
-    expect(link(c, '/kho-qua')).toBeNull();
+    expect(link(c, '/kho-qua')).not.toBeNull();
     expect(link(c, '/doi-rac/yeu-cau/req-1')).not.toBeNull();
   });
 
@@ -294,6 +297,43 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(state.calls).not.toContain('/waste/me');
   });
 
+  it('khách chưa đăng nhập + chương trình bật: thấy chương trình trước (bước, món, kho TP.HCM, Thể lệ), nút đăng nhập sau kèm lý do SĐT', async () => {
+    state.phase = 'guest';
+    state.catalogue = [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }];
+    const c = await mount();
+    expect(state.calls).toContain('/waste/catalogue');
+    expect(c.textContent).toContain('Đổi bao bì lấy Điểm Xanh');
+    expect(c.querySelectorAll('ol li')).toHaveLength(3);
+    expect(c.querySelectorAll('[data-item]')).toHaveLength(2);
+    expect(byText(c, '[data-item]', 'Vỏ hộp sữa')!.textContent).toContain('Chỉ kho TP.HCM nhận');
+    expect(byText(c, '[data-item]', 'Thùng carton')!.textContent).not.toContain('Chỉ kho TP.HCM nhận');
+    expect(link(c, '/doi-rac/quy-dinh')).not.toBeNull();
+    const login = c.querySelector('a[href*="/dang-nhap"]')!;
+    expect(login.textContent).toContain('Đăng nhập để đổi rác');
+    expect(c.textContent).toContain('Cần số điện thoại để cộng Điểm Xanh');
+    expect(c.textContent!.indexOf('Tubu nhận những món này')).toBeLessThan(c.textContent!.indexOf('Đăng nhập để đổi rác'));
+  });
+
+  it('khách chưa đăng nhập: danh mục lỗi thì vẫn thấy bước và nút đăng nhập', async () => {
+    state.phase = 'guest';
+    state.fail.add('/waste/catalogue');
+    const c = await mount();
+    expect(c.querySelectorAll('ol li')).toHaveLength(3);
+    expect(c.querySelector('a[href*="/dang-nhap"]')).not.toBeNull();
+  });
+
+  it('lối vào quầy nằm trên cùng, trước thẻ điểm; món chỉ kho nhận có nhãn; 0 điểm thì không dòng "Dùng như 0đ"', async () => {
+    state.me = makeWasteMe({
+      deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }],
+      items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }],
+      balance: { pointsBalance: 0, pointsConvertedBalance: 0, redeemablePoints: 0 },
+    });
+    const c = await mount();
+    expect(c.textContent!.indexOf('Nhận hàng tại điểm')).toBeLessThan(c.textContent!.indexOf('Điểm Xanh của bạn'));
+    expect(c.textContent).not.toContain('Dùng như');
+    expect(byText(c, '[data-item]', 'Vỏ hộp sữa')!.textContent).toContain('Chỉ kho TP.HCM nhận');
+  });
+
   it('khách chưa đăng nhập + cấu hình chưa tải: mời đăng nhập, không nháy "tạm dừng"', async () => {
     state.phase = 'guest';
     state.config = { isLoaded: false, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } };
@@ -355,10 +395,11 @@ describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
     expect(c.querySelector('a[aria-label="Trang chủ"]')).toBeNull();
   });
 
-  it('thẻ Cách đổi giữ viền, không bóng như Card outline của Mini App', async () => {
+  it('Cách đổi là danh sách chữ phẳng, không viền để khách khỏi tưởng bấm được', async () => {
     const c = await mount();
-    const card = byText(c, 'p', 'Mang tới điểm nhận')!.parentElement!;
-    expect(card.className).toContain('max-md:shadow-none');
-    expect(card.className).not.toContain('max-md:border-transparent');
+    const row = byText(c, 'p', 'Mang tới điểm nhận')!.parentElement!;
+    expect(row.tagName).toBe('LI');
+    expect(row.className).not.toContain('border');
+    expect(row.className).not.toContain('shadow');
   });
 });

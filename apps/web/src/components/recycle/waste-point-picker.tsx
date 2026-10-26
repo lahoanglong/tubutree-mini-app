@@ -4,16 +4,18 @@ import { Clock, MapPin, Navigation, Phone } from 'lucide-react';
 import type { WastePointDTO } from '@tubutree/shared-types';
 import { platformBridge } from '@/lib/platform-bridge';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { missingItemsReason } from '@tubutree/app-core/waste-copy';
+import { openingStatus } from '@tubutree/app-core/waste-hours';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
-import { isOpenNow, mapsUrl, pointAddress } from './recycle-labels';
+import { mapsUrl, pointAddress } from './recycle-labels';
 
 export interface WastePointPickerProps {
   points: readonly WastePointDTO[];
   value: string | null;
   onChange: (pointId: string) => void;
   /** Các món đang bật, liệt kê trên từng thẻ. */
-  items: readonly { id: string; name: string }[];
+  items: readonly { id: string; name: string; warehouseOnly?: boolean }[];
   selectedItemIds: readonly string[];
   now?: Date;
 }
@@ -48,7 +50,8 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
         const selected = p.id === value;
         const locked = isLocked(p);
         const missing = missingItemIds(p, selectedItemIds);
-        const missingNames = items.filter((it) => missing.includes(it.id)).map((it) => it.name);
+        const missingItems = items.filter((it) => missing.includes(it.id));
+        const hours = openingStatus(p.openingHours, clock);
         return (
           <div
             key={p.id}
@@ -84,7 +87,7 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                 </span>
                 <span className="flex flex-wrap items-center gap-2">
                   <Clock className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
-                  <span className="text-sm text-stone-800">{isOpenNow(p.openingHours, clock) ? 'Đang mở' : 'Đang đóng'}</span>
+                  <span className={`text-sm ${hours.open === null ? 'text-stone-600' : 'text-stone-800'}`}>{hours.text}</span>
                 </span>
                 <span className="flex flex-wrap gap-x-2 gap-y-1">
                   {items.map((it) =>
@@ -108,13 +111,13 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
               {locked && (
                 <div>
                   <span className="inline-block rounded-control bg-warning-bg px-2 py-[3px] text-xs font-semibold text-warning-fg">
-                    {p.quotaFull ? 'Tạm hết hạn mức tháng này' : `Điểm này không nhận: ${missingNames.join(', ')}`}
+                    {p.quotaFull ? 'Tạm hết hạn mức tháng này' : missingItemsReason(missingItems)}
                   </span>
                 </div>
               )}
               {p.perkText && (
                 <p className="text-sm text-stone-800">
-                  {`Ưu đãi riêng của cửa hàng (cửa hàng tự chịu, không qua Điểm Xanh, Tubu không đảm bảo): ${p.perkText}`}
+                  {`Ưu đãi của cửa hàng (không dùng Điểm Xanh): ${p.perkText}`}
                 </p>
               )}
               <div className="flex flex-wrap gap-2">

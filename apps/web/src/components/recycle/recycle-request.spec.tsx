@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   copied: [] as string[],
 }));
 
+const replaceMock = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: replaceMock, push: vi.fn() }) }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: () => state.config }));
@@ -237,7 +239,7 @@ describe('/doi-rac/yeu-cau/[id]: Gửi về kho (§4.5b)', () => {
     expect(c.textContent).toContain('Đã sao chép');
     expect(c.textContent).toContain('Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn');
     expect(c.textContent).toContain('Kho từ chối kiện còn cước phải trả khi nhận');
-    expect(c.textContent).toContain('Nhập trước 25/10');
+    expect(c.textContent).toContain('Nhập mã vận đơn trước 25/10');
   });
 
   it.each([null, ''])('kho không có số điện thoại (%j): khối người nhận không có dòng trống, Sao chép bỏ dòng số', async (phone) => {
@@ -480,9 +482,9 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () =
 });
 
 describe('/doi-rac/yeu-cau/[id] — diện mạo Mini App ở điện thoại', () => {
-  it('Sửa món và Huỷ yêu cầu là nút secondary xanh nhạt không viền', async () => {
+  it('Sửa món là nút secondary xanh nhạt không viền, Huỷ yêu cầu là chữ đỏ không nền', async () => {
     const c = await mount();
     expect(byText(c, 'a', 'Sửa món')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
-    expect(button(c, 'Huỷ yêu cầu')!.className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(button(c, 'Huỷ yêu cầu')!.className).toContain('text-danger-fg');
   });
 });

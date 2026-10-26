@@ -29,7 +29,7 @@ describe('WasteItemStep (web)', () => {
     const carton = card(c, 'Thùng carton');
     expect(carton.textContent).toContain('1 thùng = 1.000 điểm');
     expect(carton.textContent).toContain('Gấp phẳng, bỏ băng keo');
-    expect(carton.textContent).toContain('Tối đa 20 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày');
+    expect(carton.textContent).toContain('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
     expect(carton.querySelector('[data-item-media] svg, [data-item-media] img')).not.toBeNull();
   });
   it('món sắp nhận mờ đi, có nhãn và không có bộ đếm; món ẩn không hiện', () => {
@@ -83,11 +83,10 @@ describe('WasteItemStep (web)', () => {
 });
 
 describe('WasteItemStep — diện mạo Mini App ở điện thoại', () => {
-  it('món chưa có ảnh dùng lá xanh nhạt của ProductThumb thay icon Recycle; chữ phụ cỡ caption', () => {
+  it('món chưa có ảnh dùng biểu tượng theo loại món; chữ phụ cỡ caption', () => {
     const { c } = mount({ items: [{ ...ITEM_CARTON, imageUrl: null }] });
     const media = c.querySelector('[data-item-media]')!;
-    expect(media.querySelector('svg[class*="lucide"]')).toBeNull();
-    expect(media.querySelector('path')?.getAttribute('fill')).toBe('var(--forest-200)');
+    expect(media.querySelector('[data-item-icon="package"]')).not.toBeNull();
     expect(card(c, 'Thùng carton').querySelector('p')!.className).toContain('max-md:text-[length:var(--type-caption-size)]');
   });
 });

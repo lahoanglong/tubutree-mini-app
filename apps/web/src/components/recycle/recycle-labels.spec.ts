@@ -60,14 +60,14 @@ describe('nhãn Đổi rác', () => {
   });
   it('nextRewardProgress bỏ quà hết hàng và cây, equivalentUnits làm tròn lên', () => {
     const p = nextRewardProgress(makeRewardCatalog({ redeemablePoints: 14_000 }));
-    expect(p).toMatchObject({ rewardName: 'mã giảm giá Miễn phí vận chuyển', missing: 6000, have: 14_000 });
+    expect(p).toMatchObject({ rewardName: 'mã Miễn phí vận chuyển', missing: 6000, have: 14_000 });
     expect(nextRewardProgress(undefined)).toBeNull();
     expect(equivalentUnits(6000, ITEM_CARTON)).toBe(6);
     expect(equivalentUnits(1500, ITEM_MILK)).toBe(10);
   });
 
   it('capSentence nối trần tháng và trần ngày, món không có trần thì null', () => {
-    expect(capSentence(ITEM_CARTON)).toBe('Tối đa 20 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày');
+    expect(capSentence(ITEM_CARTON)).toBe('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
     expect(capSentence({ ...ITEM_CARTON, monthlyCapQty: null, dailyCapQty: null })).toBeNull();
   });
   it('groupProgressText chỉ cho món nhóm và khi đã có số lượng', () => {

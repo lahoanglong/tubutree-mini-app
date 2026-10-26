@@ -135,7 +135,7 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
     state.me = makeWasteMe({ items: [{ ...ITEM_CARTON, monthRemainingQty: 0 }, ITEM_MILK] });
     const c = await mount();
     const carton = card(c, 'Thùng carton');
-    expect(carton.querySelector('[aria-live="polite"]')?.textContent).toBe('5');
+    expect(carton.querySelector<HTMLInputElement>('input[aria-label="Số lượng"]')?.value).toBe('5');
     expect(carton.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(carton.querySelector('button[aria-label="Giảm số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
   });
