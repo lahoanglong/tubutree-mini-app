@@ -134,7 +134,12 @@ describe('DailyCheckInService.status', () => {
 
   it('bình đã đầy mà phần nước còn thiếu: todayWater = 0, không hứa giọt nước; điểm vẫn hứa', async () => {
     const s = await build({ pointsDone: false, totalSeeds: 500, tankCap: 500 }).svc.status('u1');
-    expect(s).toMatchObject({ waterDone: false, todayWater: 0, todayPoints: 1000 });
+    expect(s).toMatchObject({ waterDone: false, todayWater: 0, todayPoints: 1000, tankFull: true });
+  });
+
+  it('tankFull theo totalSeeds >= sức chứa, không theo todayWater (thưởng ngày cấu hình 0 thì chưa đầy)', async () => {
+    expect((await build({ totalSeeds: 499, tankCap: 500 }).svc.status('u1')).tankFull).toBe(false);
+    expect((await build({ totalSeeds: 700, tankCap: 500 }).svc.status('u1')).tankFull).toBe(true);
   });
 
   it('bình vượt trần (cấu hình hạ thấp): chỗ trống không âm', async () => {

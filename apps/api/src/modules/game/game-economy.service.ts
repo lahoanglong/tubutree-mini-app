@@ -67,7 +67,9 @@ export class GameEconomyService {
         const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + seeds);
         // Số 💧 thật vào bình (bình đầy thì phần tràn bị cắt), không phải số định cộng.
         const seedsEarned = Math.max(0, Math.min(seeds, totalSeeds - p.totalSeeds));
-        return { seedsEarned, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote };
+        // Bình đầy cắt phần tràn: chỉ khi toàn bộ số định cộng vào bình mới được khoe thưởng, kẻo báo "+5 💧" mà bình không tăng.
+        const credited = seedsEarned >= seeds;
+        return { seedsEarned, pointsEarned: 0, streakDays, totalSeeds, streakFrozeUsed, bonusNote: credited ? bonusNote : '' };
       }
     }
     throw new BadRequestException('Điểm danh chưa xong, bạn thử lại nhé 🌿');

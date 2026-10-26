@@ -18,12 +18,12 @@ export const checkInCopy = {
 } as const;
 
 /** "Hôm nay nhận +1.000 Điểm Xanh · +10 giọt nước": chỉ liệt kê phần CÒN THIẾU (phần đã xong, hoặc thiếu số, thì bỏ vế đó). */
-export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'checkedInToday' | 'pointsDone' | 'waterDone'>): string | null {
+export function checkInTodayLine(s: Pick<CheckInStatusResponse, 'todayPoints' | 'todayWater' | 'tankFull' | 'checkedInToday' | 'pointsDone' | 'waterDone'>): string | null {
   if (s.checkedInToday) return null;
   const parts: string[] = [];
   if (!s.pointsDone && (s.todayPoints ?? 0) > 0) parts.push(`+${num(s.todayPoints ?? 0)} Điểm Xanh`);
   if (!s.waterDone && (s.todayWater ?? 0) > 0) parts.push(`+${num(s.todayWater ?? 0)} giọt nước`);
-  const tankFull = s.waterDone === false && s.todayWater === 0;
+  const tankFull = s.waterDone === false && s.tankFull === true;
   if (parts.length === 0) return tankFull ? checkInCopy.tankFull : null;
   return `Hôm nay nhận ${parts.join(' · ')}${tankFull ? `. ${checkInCopy.tankFull}` : ''}`;
 }
@@ -37,7 +37,7 @@ export function checkInSuccessText(r: CheckInResult): string {
   if (r.points && r.points.pointsEarned > 0) parts.push(`+${num(r.points.pointsEarned)} Điểm Xanh`);
   if (r.water && r.water.seedsEarned > 0) parts.push(`+${num(r.water.seedsEarned)} giọt nước`);
   if (r.water?.streakFrozeUsed) parts.push('đã dùng vé giữ lửa');
-  if (r.water?.bonusNote) parts.push(r.water.bonusNote);
+  if (r.water && r.water.seedsEarned > 0 && r.water.bonusNote) parts.push(r.water.bonusNote);
   let text: string;
   if (parts.length > 0) text = parts.join(' · ');
   else if (r.points || r.water) text = 'Điểm danh thành công!';

@@ -7,6 +7,12 @@ const water = { seedsEarned: 10, streakDays: 1, totalSeeds: 10, streakFrozeUsed:
 const res = (over: Partial<CheckInResult>): CheckInResult => ({ points: pts, water, alreadyDone: false, pending: [], ...over });
 
 describe('checkInSuccessText', () => {
+  it('bình đầy (seedsEarned 0): không hiện ghi chú thưởng nước dù server lỡ trả', () => {
+    const t = checkInSuccessText(res({ water: { ...water, seedsEarned: 0, bonusNote: '+5 💧 chuỗi 3 ngày!' } }));
+    expect(t).toBe('+1.000 Điểm Xanh');
+    expect(t).not.toContain('chuỗi 3 ngày');
+  });
+
   it('cả hai phần: "+N Điểm Xanh · +M giọt nước"', () => {
     expect(checkInSuccessText(res({}))).toBe('+1.000 Điểm Xanh · +10 giọt nước');
   });
@@ -37,9 +43,12 @@ describe('checkInTodayLine', () => {
     expect(checkInTodayLine({ checkedInToday: false, pointsDone: true, waterDone: false, todayPoints: 1000, todayWater: 10 })).toBe('Hôm nay nhận +10 giọt nước');
     expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: true, todayPoints: 1000, todayWater: 10 })).toBe('Hôm nay nhận +1.000 Điểm Xanh');
     // Bình đầy: không hứa giọt nước.
-    expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: false, todayPoints: 1000, todayWater: 0 })).toBe('Hôm nay nhận +1.000 Điểm Xanh. Bình nước đang đầy nên không cộng thêm giọt nước.');
-    expect(checkInTodayLine({ checkedInToday: false, pointsDone: true, waterDone: false, todayPoints: 0, todayWater: 0 })).toBe('Bình nước đang đầy nên không cộng thêm giọt nước.');
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: false, tankFull: true, todayPoints: 1000, todayWater: 0 })).toBe('Hôm nay nhận +1.000 Điểm Xanh. Bình nước đang đầy nên không cộng thêm giọt nước.');
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: true, waterDone: false, tankFull: true, todayPoints: 0, todayWater: 0 })).toBe('Bình nước đang đầy nên không cộng thêm giọt nước.');
     expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: true, todayPoints: 1000, todayWater: 0 })).toBe('Hôm nay nhận +1.000 Điểm Xanh');
+    // todayWater = 0 do cấu hình thưởng ngày = 0 (bình chưa đầy), hoặc API cũ không trả tankFull: không nói bình đầy.
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: false, waterDone: false, tankFull: false, todayPoints: 1000, todayWater: 0 })).toBe('Hôm nay nhận +1.000 Điểm Xanh');
+    expect(checkInTodayLine({ checkedInToday: false, pointsDone: true, waterDone: false, todayPoints: 0, todayWater: 0 })).toBeNull();
     expect(checkInTodayLine({ checkedInToday: true, todayPoints: 1000, todayWater: 10 })).toBeNull();
     expect(checkInTodayLine({ checkedInToday: false })).toBeNull();
   });

@@ -139,6 +139,8 @@ export interface CheckInStatusResponse {
   waterDone?: boolean;
   /** Giọt nước của lần điểm danh kế tiếp (chưa tính quà lần đầu và thưởng mốc chuỗi); 0 khi phần nước đã xong hôm nay. */
   todayWater?: number;
+  /** Bình nước đã đầy (totalSeeds >= sức chứa): phần nước hôm nay sẽ không cộng thêm. Optional: API cũ chưa trả thì không hiện chữ bình đầy. */
+  tankFull?: boolean;
 }
 
 /** Phần Điểm Xanh của lần điểm danh. */

@@ -113,6 +113,7 @@ export class DailyCheckInService {
        * Giọt nước khách THỰC SỰ nhận ở lần điểm danh kế tiếp: bình đầy thì phần tràn bị cắt (cùng luật với economy.checkIn,
        * áp cho cả phần thưởng mốc/quà lần đầu nên không hứa quá), chưa tính các khoản thưởng thêm đó. 0 khi đã xong hoặc bình đầy.
        */
+      tankFull: water.totalSeeds >= tankCap,
       todayWater: waterDone ? 0 : Math.max(0, Math.min(seeds, tankCap - water.totalSeeds)),
     };
   }

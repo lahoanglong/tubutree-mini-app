@@ -400,6 +400,28 @@ describe('GameEconomyService.checkIn — nhịp người mới', () => {
     expect(r.seedsEarned).toBe(10);
   });
 
+  it('bình đầy đúng ngày mốc chuỗi 3: không trả ghi chú thưởng, 0 giọt', async () => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 1000, streakDays: 2 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.tank_capacity': 1000 }), sp(), analytics).checkIn('u1');
+    expect(r.streakDays).toBe(3);
+    expect(r.seedsEarned).toBe(0);
+    expect(r.bonusNote).toBe('');
+  });
+
+  it('bình cắt một phần thưởng mốc: không khoe cả thưởng', async () => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 990, streakDays: 2 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.tank_capacity': 1000 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(10);
+    expect(r.bonusNote).toBe('');
+  });
+
+  it('bình còn chỗ cho cả thưởng mốc: vẫn có ghi chú', async () => {
+    const { prisma: p } = fakeDb(prof({ totalSeeds: 0, streakDays: 2 }));
+    const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.tank_capacity': 1000 }), sp(), analytics).checkIn('u1');
+    expect(r.seedsEarned).toBe(20);
+    expect(r.bonusNote).toContain('chuỗi 3 ngày');
+  });
+
   it('bình đã đầy → seedsEarned = 0, không âm', async () => {
     const { prisma: p } = fakeDb(prof({ totalSeeds: 1000 }));
     const r = await new GameEconomyService(p, cfg({ 'game.daily_login_seeds': 15, 'game.tank_capacity': 1000 }), sp(), analytics).checkIn('u1');
