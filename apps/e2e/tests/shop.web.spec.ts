@@ -676,7 +676,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
   });
 
   for (const width of [375, 320]) {
-    test(`kệ Mua lại ${width}px: "Định kỳ -17%" không bị cắt; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
+    test(`kệ Mua lại ${width}px: "Định kỳ -N%" không bị cắt; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
       await login(page, api);
       await page.setViewportSize({ width, height: 812 });
       api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000 } });
@@ -686,7 +686,8 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
         await page.goto('/');
         const card = page.getByRole('region', { name: 'Mua lại' });
         await expect(card).toBeVisible({ timeout: 15_000 });
-        const subscribe = card.getByRole('button', { name: 'Định kỳ -17%' });
+        // Web gate dựng sẵn Trang chủ với cấu hình từ API thật (mức giảm có thể khác mock trình duyệt); test chỉ cần nhãn đủ chữ.
+        const subscribe = card.getByRole('button', { name: /^Định kỳ -\d+%$/ });
         await expect(subscribe).toBeVisible();
         const clipped = await subscribe.evaluate((el) => {
           const label = el.querySelector('.zaui-btn-container > span') as HTMLElement | null;
