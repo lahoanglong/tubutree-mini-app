@@ -60,6 +60,7 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     });
     expect(m.height).toBeLessThanOrEqual(m.lineHeight * 2 + 1);
     const link = consent.getByRole('button', { name: 'Điều khoản' });
+    await link.evaluate((el) => el.scrollIntoView({ block: 'center' }));
     const box = (await link.boundingBox())!;
     const hit = await link.evaluate((el, b) => {
       const x = b.x + b.width / 2;
