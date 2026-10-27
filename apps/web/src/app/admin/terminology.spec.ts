@@ -35,4 +35,20 @@ describe('chữ màn quản trị web', () => {
     expect(offenders(/[Ff]lash [Ss]ale|Content Kit|Chưa có cohort|gộp cohort/)).toEqual([]);
     expect(offenders(/định nghĩa với KPI/)).toEqual([]);
   });
+
+  it('QT-12: chữ kỹ thuật ở các tab quản trị đã đổi sang lời thường (cron, SLA, GMV, webhook, slug, khoá cấu hình)', () => {
+    expect(offenders(/Hạn SLA|tên miền con|slug hoặc|nhóm merchant|auto-reply|Giá trị đặt \(GMV\)|đối tác CTV \/ Affiliate/)).toEqual([]);
+    expect(offenders(/cron tính|Tác vụ nền \(cron\)|Báo động qua webhook|Nhận webhook|Xử lý webhook|Webhook (?:lỗi|kẹt)|Đặt OPS_ALERT_WEBHOOK_URL/)).toEqual([]);
+    expect(offenders(/khoá <code>affiliate\.|\(cấu hình affiliate\./)).toEqual([]);
+  });
+
+  it('QT-20: nút trả lương ở bảng lương không đặt tên "Đã chuyển" (dễ nhầm với trạng thái)', () => {
+    expect(offenders(/aria-label=\{`Đã chuyển · /)).toEqual([]);
+  });
+
+  it('tên nhóm menu cũ và chữ chỉ đường cũ không còn trong app', () => {
+    expect(offenders(/Người bán|Đơn hàng & giao vận|Hoàn tiền & đổi trả|Cấu hình & tích hợp|Khách hàng › Đổi rác/)).toEqual([]);
+    // tab Nhân sự & quyền thuộc gói khác, chữ "cờ đối tác" ở đó đổi cùng gói đó.
+    expect(offenders(/cờ đối tác/).filter((f) => !f.endsWith('staff-roster-tab.tsx'))).toEqual([]);
+  });
 });

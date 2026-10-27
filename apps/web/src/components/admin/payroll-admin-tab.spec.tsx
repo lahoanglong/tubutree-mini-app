@@ -73,7 +73,7 @@ describe('PayrollAdminTab (Lương)', () => {
     expect(container.querySelector('[aria-label="Chốt · Mai"]')).toBeNull();
     expect(container.querySelector('[aria-label="Mở lại · Lan"]')).toBeNull();
     expect(container.querySelector('[aria-label="Mở lại · Mai"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Đã chuyển · 0930000000"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Ghi đã trả lương · 0930000000"]')).toBeNull();
     expect(container.querySelector('[aria-label="QR chuyển · Mai"]')).not.toBeNull();
     expect(container.querySelector('[aria-label="QR chuyển · Lan"]')).toBeNull();
   });
@@ -134,7 +134,7 @@ describe('PayrollAdminTab (Lương)', () => {
     const api = stub([row('1', 'Lan', 'FINALIZED')]);
     const { container } = mount(<PayrollAdminTab />);
     await flush();
-    click(container.querySelector('[aria-label="Đã chuyển · Lan"]'));
+    click(container.querySelector('[aria-label="Ghi đã trả lương · Lan"]'));
     await flush();
     const save = byText(document.body, 'button', 'Đánh dấu đã trả') as HTMLButtonElement;
     expect(save.disabled).toBe(true);

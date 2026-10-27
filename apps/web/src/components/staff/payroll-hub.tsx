@@ -226,7 +226,7 @@ export function PayrollHub() {
         }
       >
         <div className="flex flex-col gap-2.5">
-          <Field label="Mã ngân hàng (BIN Napas, VD 970407)">
+          <Field label="Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)">
             <input className={ui.field} inputMode="numeric" value={bin} onChange={(e) => setBin(e.target.value)} />
           </Field>
           <Field label="Số tài khoản">

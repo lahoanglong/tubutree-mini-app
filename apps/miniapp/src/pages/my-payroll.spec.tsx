@@ -249,7 +249,7 @@ describe('Lương của tôi theo DS v2 (C-076, C-114)', () => {
     renderPage();
     await screen.findByText('Thực nhận tháng 3/2026');
     fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
-    expect(screen.getByLabelText('Mã ngân hàng (BIN Napas, VD 970407)')).toHaveValue('970407');
+    expect(screen.getByLabelText('Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)')).toHaveValue('970407');
     expect(screen.getByLabelText('Số tài khoản')).toHaveValue('0123456789');
     expect(screen.getByLabelText('Tên chủ tài khoản')).toHaveValue('NGUYEN VAN A');
     fireEvent.click(screen.getByRole('button', { name: 'QR nhận lương' }));

@@ -54,7 +54,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 **Nhận hàng trả (khách trả hàng đã duyệt).**
 1. CSKH duyệt trong Tubu. Đơn hiện nhãn đỏ "Pancake: cần xử lý" với lời nhắc "Khách trả cả đơn" hoặc "Khách trả một phần đơn".
 2. Trên Pancake tạo phiếu: trả cả đơn thì tạo phiếu trả hàng. Trả một phần thì tạo phiếu **"Hoàn một phần"**, **không** dùng "Đã hoàn" cho cả đơn.
-3. Hàng về, kiểm số lượng và tình trạng. Mở **Quản trị › Hoàn tiền & đổi trả › Đổi / Trả**, bộ lọc "Chờ nhận hàng về" (kho mở sẵn bộ lọc này). Bấm **"Đã nhận hàng về"**. Mỗi yêu cầu bấm một lần. Tubu cộng tồn.
+3. Hàng về, kiểm số lượng và tình trạng. Mở **Quản trị › Bán hàng › Đổi / Trả**, bộ lọc "Chờ nhận hàng về" (kho mở sẵn bộ lọc này). Bấm **"Đã nhận hàng về"**. Mỗi yêu cầu bấm một lần. Tubu cộng tồn.
 4. Lời nhắc tự mất khi hàng đã nhận. Không tự mất thì mở đơn, ghi chú, bấm "Đã xử lý".
 5. Không hoàn tiền tay. Tiền và điểm do hệ thống tính lúc CSKH duyệt.
 
@@ -64,7 +64,7 @@ Chữ "đã thanh toán", "không thu COD" do khách tự gõ trong ghi chú b�
 - "Đã xử lý tay" (ghi chú): bạn đã xử lý ngoài hệ thống, ví dụ gọi hãng tạo vận đơn riêng.
 Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sau khi xong.
 
-**Đổi rác** (mọi nhân viên): **Quản trị › Khách hàng › Đổi rác › Yêu cầu**. Hai thẻ ở "Việc cần xử lý" mở thẳng tới đây: "Kiện đổi rác chờ đếm" và "Kiện không rõ chủ".
+**Đổi rác** (mọi nhân viên): **Quản trị › Đổi rác và game › Đổi rác › Yêu cầu**. Hai thẻ ở "Việc cần xử lý" mở thẳng tới đây: "Kiện đổi rác chờ đếm" và "Kiện không rõ chủ".
 - Mở yêu cầu: gõ mã vào ô "Mã yêu cầu, mã đơn hoặc mã vận đơn", bấm "Tra", rồi bấm "Mở" ở dòng kết quả.
 - Nhận kiện gửi về kho hoặc kiện thu kèm đơn: bấm "Nhận kiện", gõ "Mã TR- trên kiện", bấm "Xác nhận đã nhận kiện". Nhận theo mã TR-, không theo mã vận đơn của hãng. Kiện còn cước thu thì bấm "Từ chối tại cửa (chưa trả cước)".
 - Đếm: ở khối "Đếm hàng thực nhận", gõ số thực nhận của từng món (nhận thiếu thì chọn lý do), bấm "Xác nhận số đếm". Điểm cộng theo số thực nhận, không theo số khách khai.

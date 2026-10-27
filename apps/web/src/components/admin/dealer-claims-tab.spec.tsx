@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ClaimRow } from './dealer-claims-tab';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { AdminDealerRewardClaim } from '@/lib/admin-client';
 
 let mounted: Rendered[] = [];
@@ -56,5 +56,30 @@ describe('ClaimRow — nút theo quyền (B18)', () => {
     expect(await labels('APPROVED', false)).toEqual(['Đã trao thưởng']);
     expect(await labels('REJECTED', false)).toEqual([]);
     expect(await labels('PAID', false)).toEqual([]);
+  });
+});
+
+describe('ClaimRow — từ chối phải hỏi lại', () => {
+  it('nhập lý do rồi bấm Từ chối: hiện hộp hỏi kiểu nguy hiểm; không đồng ý thì không gọi API', async () => {
+    const calls: string[] = [];
+    const api = mockFetch({ '/admin/dealer-reward-claims/c1/reject': () => (calls.push('reject'), { body: { ok: true } }) });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ClaimRow claim={claim('PENDING')} />
+      </QueryClientProvider>,
+    );
+    mounted.push(r);
+    await flush();
+    typeInto(r.container.querySelector('input'), 'Doanh số đã chốt chưa đủ mốc');
+    const reject = [...r.container.querySelectorAll('button')].find((b) => b.textContent === 'Từ chối')!;
+    expect(reject.className).toContain('danger');
+    click(reject);
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Từ chối yêu cầu nhận thưởng');
+    answerConfirm(false);
+    await flush();
+    expect(calls).toEqual([]);
+    vi.unstubAllGlobals();
   });
 });
