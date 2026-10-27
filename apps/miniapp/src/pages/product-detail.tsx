@@ -958,6 +958,20 @@ const BUY_NOW_LINE: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** Một ảnh của carousel: tải lỗi thì rơi về hình lá chung, giữ nguyên ô vuông và vị trí cuộn. */
+export function GallerySlide({ src, alt, eager }: { src: string; alt: string; eager: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const frame = { width: '100%', aspectRatio: '1 / 1', flex: '0 0 100%', scrollSnapAlign: 'center', display: 'block' } as const;
+  if (failed) {
+    return (
+      <div data-testid="gallery-fallback" style={{ ...frame, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-subtle)' }}>
+        <LeafGlyph size={72} />
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
+}
+
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
 function Gallery({ images, alt }: { images: string[]; alt: string }) {
   const [index, setIndex] = useState(0);
@@ -1003,20 +1017,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
         }}
       >
         {images.map((src, i) => (
-          <img
-            key={src}
-            src={src}
-            alt={`${alt} — ảnh ${i + 1}`}
-            loading={i === 0 ? 'eager' : 'lazy'}
-            style={{
-              width: '100%',
-              aspectRatio: '1 / 1',
-              objectFit: 'cover',
-              flex: '0 0 100%',
-              scrollSnapAlign: 'center',
-              display: 'block',
-            }}
-          />
+          <GallerySlide key={src} src={src} alt={`${alt} — ảnh ${i + 1}`} eager={i === 0} />
         ))}
       </div>
       {images.length > 1 && (

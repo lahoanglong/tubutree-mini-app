@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Leaf } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { LeafGlyph } from '@/components/mini/product-image';
 
 // Điện thoại: ảnh tràn mép, vuông, không viền như Gallery của Mini App; từ md là khung bo góc.
 const FRAME =
@@ -23,7 +24,7 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
   if (count === 0) {
     return (
       <div className={`${FRAME} flex items-center justify-center text-forest-600`}>
-        <Leaf className="h-20 w-20 stroke-[1.5]" aria-hidden="true" />
+        <LeafGlyph size={80} />
       </div>
     );
   }
@@ -68,7 +69,7 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
               className="flex h-full w-full flex-none snap-center items-center justify-center"
             >
               {broken.has(i) ? (
-                <Leaf className="h-20 w-20 stroke-[1.5] text-forest-600" aria-hidden="true" />
+                <LeafGlyph size={80} />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -127,7 +128,7 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
                 }`}
               >
                 {broken.has(i) ? (
-                  <Leaf className="h-6 w-6 text-forest-600" aria-hidden="true" />
+                  <LeafGlyph size={24} />
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={src} alt="" className="h-full w-full object-cover" width={56} height={56} loading="lazy" decoding="async" onError={() => markBroken(i)} />

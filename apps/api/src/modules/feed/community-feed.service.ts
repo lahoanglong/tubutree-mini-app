@@ -875,7 +875,7 @@ export class CommunityFeedService {
           const answerer = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
           const template = role === 'STAFF' || role === 'ADMIN' ? 'COMMUNITY_EXPERT_REPLIED' : 'COMMUNITY_NEW_ANSWER';
           const data = {
-            author: answerer?.fullName ?? 'Thành viên',
+            author: publicDisplayName(answerer?.fullName, 'Thành viên'),
             title: post.title ?? 'câu hỏi của bạn',
             post_id: post.id,
           };
@@ -900,7 +900,7 @@ export class CommunityFeedService {
     } else {
       await this.notifyAuthorOfActivity(post, userId, 'COMMUNITY_POST_COMMENTED', async () => {
         const commenter = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
-        return { author: commenter?.fullName ?? 'Thành viên', title: previewTitle(post.title, post.body), post_id: post.id };
+        return { author: publicDisplayName(commenter?.fullName, 'Thành viên'), title: previewTitle(post.title, post.body), post_id: post.id };
       });
     }
     return { id: comment.id };
@@ -1229,7 +1229,7 @@ export class CommunityFeedService {
       title: p.title,
       body: p.body,
       images: images.get(p.id)?.images ?? [],
-      author: publicDisplayName(p.user.fullName),
+      author: p.user.fullName ?? 'Bạn Tubu',
       category: p.category?.name ?? null,
       createdAt: p.createdAt,
     }));
@@ -1260,7 +1260,7 @@ export class CommunityFeedService {
         kind: p.kind,
         title: p.title,
         excerpt: p.body.slice(0, 200),
-        author: publicDisplayName(p.user.fullName),
+        author: p.user.fullName ?? 'Bạn Tubu',
         category: p.category?.name ?? null,
         createdAt: p.createdAt,
         isPinned: p.isPinned,
