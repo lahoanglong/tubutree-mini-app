@@ -39,12 +39,14 @@ describe('ScrollRail', () => {
     const next = c.querySelector('button[aria-label="Xem các mục tiếp"]') as HTMLButtonElement;
     expect(next).not.toBeNull();
     const prev = c.querySelector('button[aria-label="Xem các mục trước"]') as HTMLButtonElement;
-    expect(prev.disabled).toBe(true);
-    expect(next.disabled).toBe(false);
+    expect(prev.getAttribute('aria-disabled')).toBe('true');
+    expect(next.getAttribute('aria-disabled')).toBe('false');
     expect(next.className).toMatch(/\bhidden\b/);
     expect(next.className).toMatch(/\bmd:flex\b/);
     const ul = c.querySelector('ul') as HTMLUListElement;
     ul.scrollBy = vi.fn() as unknown as typeof ul.scrollBy;
+    click(prev);
+    expect(ul.scrollBy).not.toHaveBeenCalled();
     click(next);
     expect(ul.scrollBy).toHaveBeenCalledWith({ left: 320, behavior: 'smooth' });
   });

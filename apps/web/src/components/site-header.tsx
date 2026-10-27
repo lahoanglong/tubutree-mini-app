@@ -29,7 +29,7 @@ export default function SiteHeader() {
       style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
     >
       {/* Hàng 1 luôn một hàng cao 64px (logo, ô tìm, chuông, giỏ, tài khoản); hàng 2 là điều hướng mục chính. Chiều cao tổng
-          cố định 108px = --header-h trong globals.css, để cột dính của các trang đặt đúng dưới thanh. */}
+          cố định = --header-h trong globals.css (6.75rem + 2px viền, 110px ở chữ mặc định), để cột dính của các trang đặt đúng dưới thanh. */}
       <div className={`${PAGE_WIDE} flex h-16 items-center gap-3`}>
         {/* Logo thật của thương hiệu (đã có sẵn khẩu hiệu), không dựng lại bằng biểu tượng + chữ. */}
         <Link href="/" aria-label="Tubu Tree — trang chủ" className="flex min-h-11 flex-none items-center">
