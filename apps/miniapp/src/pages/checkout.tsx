@@ -397,7 +397,7 @@ export default function CheckoutPage() {
     };
     return (
       <Shell>
-        <ErrorState message={getErrorMessage(err)} onRetry={retry} />
+        <ErrorState message={getLoadErrorMessage(err)} onRetry={retry} />
       </Shell>
     );
   }

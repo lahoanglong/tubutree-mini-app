@@ -12,7 +12,7 @@ export const CANCEL_REASON_CODES = Object.keys(CANCEL_REASONS) as CancelReasonCo
 
 /** Ghi chú gắn vào dòng lịch sử huỷ đơn; không có mã thì null (app bản cũ không gửi lý do). */
 export function cancelReasonNote(code: string | undefined, text: string | undefined): string | null {
-  if (!code || !(code in CANCEL_REASONS)) return null;
+  if (!code || !Object.hasOwn(CANCEL_REASONS, code)) return null;
   const label = CANCEL_REASONS[code as CancelReasonCode];
   const detail = text?.trim();
   return detail ? `Khách huỷ: ${label}. ${detail}` : `Khách huỷ: ${label}`;

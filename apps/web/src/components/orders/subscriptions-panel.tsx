@@ -21,7 +21,7 @@ import { subscriptionCycleView } from './subscription-price';
 import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { PAY_SHORT, addressText } from './subscription-options';
 import { ProductThumb } from '@/components/mini';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
@@ -73,7 +73,7 @@ export function SubscriptionsPanel() {
     if (!cancelTarget) return;
     statusMut.mutate({ id: cancelTarget, status }, { onSuccess: () => setCancelTarget(null) });
   };
-  const actionError = statusMut.isError ? errText(statusMut.error) : skipMut.isError ? errText(skipMut.error) : null;
+  const actionError = statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null;
 
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
