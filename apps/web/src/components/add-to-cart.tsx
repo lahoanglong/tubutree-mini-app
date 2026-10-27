@@ -12,8 +12,8 @@ import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
-import { pickDefaultVariation, variationPricing } from '@/lib/flash-price';
-import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
+import { useActiveFlashSales, useFlashSalesLoaded } from '@/lib/use-flash-sales';
 import { formatDateTime } from '@/lib/format-date';
 import { usePdpSelection } from './pdp-selection';
 import { cartKey, useCartKey } from '@/lib/cart-key';
@@ -90,15 +90,21 @@ export default function AddToCart({
     setQty((q) => Math.min(q, maxQty));
   }, [maxQty, setQty]);
 
-  // Khách vào từ thẻ hay dải Giờ vàng (`?v=<variationId>`, như Mini App truyền state.variationId) thì mở đúng phân loại đang giảm.
-  // Vào từ nơi khác thì giữ phân loại mặc định, kể cả khi sản phẩm có Giờ vàng ở phân loại khác.
+  // Phân loại mở sẵn chốt một lần khi danh sách Giờ vàng về (để giá không đổi hai lần). `?v=<variationId>` (thẻ, dải Giờ vàng) thắng
+  // khi phân loại đó còn hàng và còn Giờ vàng; không thì cùng luật với thẻ (`defaultVariationFor`), nên gợi ý tìm, bài cộng đồng,
+  // Đã xem gần đây, liên kết trực tiếp đều mở đúng phân loại có giá đã hiện. Khách đã tự chọn thì không tự đổi.
+  const flashLoaded = useFlashSalesLoaded();
+  const autoPicked = useRef(false);
   useEffect(() => {
+    if (!flashLoaded || autoPicked.current) return;
+    autoPicked.current = true;
+    if (userPicked.current) return;
     const wanted = new URLSearchParams(window.location.search).get('v');
-    if (!wanted || userPicked.current) return;
-    const target = variations.find((v) => v.id === wanted && v.stock > 0);
+    const entry = wanted ? variations.find((v) => v.id === wanted && v.stock > 0 && variationPricing(v, flash).isFlash) : undefined;
+    const target = entry ?? defaultVariationFor({ slug }, variations, flash);
     if (target && target.id !== selectedId) setSelectedId(target.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy một lần khi trang vừa mở
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chốt một lần khi Giờ vàng vừa về
+  }, [flashLoaded]);
 
   // Phân loại mặc định (theo bản ISR) hết hàng thật rồi mà còn phân loại khác → chọn giúp, trừ khi khách đã tự chọn.
   useEffect(() => {

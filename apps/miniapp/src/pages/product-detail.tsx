@@ -41,7 +41,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
-import { cardPricing, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
+import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
@@ -105,12 +105,13 @@ export default function ProductDetailPage() {
   const chatOn = config.chat?.enabled === true;
   const chatReady = chatOn && status === 'authenticated';
 
-  // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
-  // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
-  // đầu tiên còn hàng.
+  // Thẻ và dải "Giờ vàng" truyền variationId qua state; hợp lệ khi phân loại đó còn hàng và còn Giờ vàng. Mọi lối vào khác
+  // (lưới, gợi ý tìm, bài cộng đồng, deep link) mở phân loại mà thẻ đã ghi giá (`defaultVariationFor`). Chỉ khách bấm chọn mới
+  // là `selectedId`; phân loại tự chọn chốt một lần khi danh sách Giờ vàng về, không đổi lại khi đợt hết giờ lúc khách đang xem.
   const location = useLocation();
   const navState = location.state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
-  const [selectedId, setSelectedId] = useState<string | null>(navState?.variationId ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
@@ -159,15 +160,23 @@ export default function ProductDetailPage() {
     queryKey: ['flash-sales', 'active'],
     queryFn: fetchActiveFlashSales,
     refetchInterval: 60_000,
+    // Trang chờ danh sách này để chọn phân loại mặc định: lỗi thì thôi sau một lần thử lại, không giữ khách ở màn chờ.
+    retry: 1,
   });
 
   // Mặc định: phân loại còn hàng có giá đang bán thấp nhất, cùng phân loại mà thẻ sản phẩm lấy giá.
   const variations = product.data?.variations ?? [];
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
+  if (product.data && !flashQ.isPending && autoPick.current?.slug !== slug) {
+    const flashNow = flashQ.data ?? [];
+    const entry = variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash);
+    autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow))?.id ?? null };
+  }
+  const auto = autoPick.current;
+  const autoId = auto && auto.slug === slug ? auto.id : null;
   const selected = useMemo(
-    () =>
-      variations.find((v) => v.id === selectedId) ?? pickDefaultVariation(variations),
-    [selectedId, variations],
+    () => variations.find((v) => v.id === selectedId) ?? variations.find((v) => v.id === autoId) ?? pickDefaultVariation(variations),
+    [selectedId, autoId, variations],
   );
 
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
@@ -260,7 +269,7 @@ export default function ProductDetailPage() {
     onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
 
-  if (product.isLoading) return <PdpSkeleton />;
+  if (product.isLoading || (product.data && flashQ.isPending)) return <PdpSkeleton />;
   if (!product.data) {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>

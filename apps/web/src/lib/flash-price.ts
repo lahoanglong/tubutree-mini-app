@@ -1,6 +1,6 @@
 import { cardPricing as sharedCardPricing, variationPricing as sharedVariationPricing } from '@tubutree/app-core/flash-price';
 
-export { pickDefaultVariation } from '@tubutree/app-core/flash-price';
+export { defaultVariationFor, pickDefaultVariation } from '@tubutree/app-core/flash-price';
 
 /**
  * Giá Giờ vàng (flash sale) cho web shop, cùng quy tắc với giỏ hàng và đơn: giá Giờ vàng chỉ thắng khi RẺ HƠN giá đang bán

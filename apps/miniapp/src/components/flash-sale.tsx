@@ -9,6 +9,7 @@ import {
   cancelFlashReminder,
   type UpcomingFlashItem,
 } from '../services/shop-api';
+import { flashItemLabel } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
@@ -142,7 +143,7 @@ export function FlashSale() {
               </div>
               <div style={{ padding: 8 }}>
                 <Text variant="caption" style={NAME_CLAMP_STYLE}>
-                  {item.productName}
+                  {flashItemLabel(item)}
                 </Text>
                 <div style={{ marginTop: 2 }}>
                   <PriceTag value={price} flash={{ price }} size="sm" />

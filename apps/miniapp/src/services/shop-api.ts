@@ -407,6 +407,7 @@ export interface FlashSaleActiveItem {
   variationId: string;
   productSlug: string;
   productName: string;
+  variationName?: string | null;
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;

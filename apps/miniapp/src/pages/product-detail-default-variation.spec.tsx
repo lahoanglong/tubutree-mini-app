@@ -1,0 +1,142 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn() }));
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
+  useSnackbar: () => ({ openSnackbar: vi.fn() }),
+  useNavigate: () => vi.fn(),
+}));
+vi.mock('../services/shop-api', () => ({
+  fetchProduct: mocks.fetchProduct,
+  fetchRelated: vi.fn().mockResolvedValue([]),
+  fetchBoughtTogether: vi.fn().mockResolvedValue([]),
+  fetchReviews: vi.fn().mockResolvedValue({ data: [], count: 0, average: 0 }),
+  fetchActiveFlashSales: mocks.fetchActiveFlashSales,
+  getCart: vi.fn().mockResolvedValue({ items: [], itemCount: 0 }),
+  addToCart: vi.fn(),
+}));
+vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
+vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
+vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
+vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
+vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
+vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn() }) }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ subscribeDiscountPct: 0.1 }) }));
+vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
+vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
+vi.mock('../components/subscribe-sheet', () => ({ SubscribeSheet: () => null }));
+vi.mock('../components/content-kit-sheet', () => ({ ContentKitSheet: () => null }));
+vi.mock('../components/storefront-context-bar', () => ({ StorefrontContextBar: () => null }));
+vi.mock('../components/ui/cart-badge', () => ({ CartBadge: () => null }));
+vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+
+import ProductDetailPage from './product-detail';
+
+const FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
+const product = {
+  id: 'p1', slug: 'gao', brand: 'Cô Lan', name: 'Gạo ST25', shortDesc: null, description: 'Mô tả',
+  images: [], thumbnail: null, basePrice: 300_000, salePrice: null, certifications: [], ingredients: null, sold: 0,
+  variations: [
+    { id: 'v-1kg', sku: 'B', name: '1kg', attributes: {}, retailPrice: 300_000, salePrice: null, stock: 5 },
+    { id: 'v-500', sku: 'A', name: '500g', attributes: {}, retailPrice: 150_000, salePrice: null, stock: 5 },
+  ],
+};
+const flash = (variationId: string, flashPrice: number, retailPrice: number) => ({
+  itemId: `f-${variationId}`, productId: 'p1', productSlug: 'gao', productName: 'Gạo ST25', thumbnail: null, variationId,
+  retailPrice, flashPrice, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+});
+
+function renderPdp(state?: { variationId: string }) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[{ pathname: '/product/gao', state }]} future={FUTURE}>
+        <Routes>
+          <Route path="/product/:slug" element={<ProductDetailPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+const chip = (name: string) => screen.getByText(name).closest('[role="button"]') as HTMLElement;
+
+describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với thẻ (đại diện 500g 150.000đ, 1kg 300.000đ)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchProduct.mockResolvedValue(product);
+  });
+
+  it('không có Giờ vàng: mở phân loại đại diện 500g', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp();
+    await screen.findByText('500g');
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('Giờ vàng 1kg 100.000đ rẻ hơn thẻ, vào không kèm state (gợi ý tìm, bài cộng đồng, Đã xem gần đây): mở 1kg, giá 100.000đ như thẻ', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-1kg', 100_000, 300_000)]);
+    renderPdp();
+    await screen.findByText('1kg');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByText('100.000đ').length).toBeGreaterThan(0);
+  });
+
+  it('Giờ vàng 1kg 250.000đ đắt hơn thẻ: mở 500g, không nhãn Giờ vàng', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-1kg', 250_000, 300_000)]);
+    renderPdp();
+    await screen.findByText('500g');
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it.each([
+    ['1kg trước', [flash('v-1kg', 250_000, 300_000), flash('v-500', 120_000, 150_000)]],
+    ['500g trước', [flash('v-500', 120_000, 150_000), flash('v-1kg', 250_000, 300_000)]],
+  ])('hai suất: mở phân loại của suất thắng (500g 120.000đ), %s', async (_n, items) => {
+    mocks.fetchActiveFlashSales.mockResolvedValue(items);
+    renderPdp();
+    await screen.findByText('500g');
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByText('120.000đ').length).toBeGreaterThan(0);
+  });
+
+  it('state.variationId còn Giờ vàng: ưu tiên phân loại đó dù suất khác rẻ hơn', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([flash('v-1kg', 140_000, 300_000), flash('v-500', 120_000, 150_000)]);
+    renderPdp({ variationId: 'v-1kg' });
+    await screen.findByText('1kg');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('state.variationId của suất đã hết: về phân loại mặc định', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp({ variationId: 'v-1kg' });
+    await screen.findByText('500g');
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('chờ danh sách Giờ vàng rồi mới hiện giá: không có lúc hiện giá 150.000đ của đại diện rồi đổi sang 100.000đ', async () => {
+    let release: (v: unknown[]) => void = () => undefined;
+    mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));
+    renderPdp();
+    await waitFor(() => expect(mocks.fetchProduct).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByText('500g')).toBeNull();
+    expect(screen.queryByText('150.000đ')).toBeNull();
+    release([flash('v-1kg', 100_000, 300_000)]);
+    await screen.findByText('1kg');
+    expect(chip('1kg')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('Giờ vàng lỗi: vẫn mở trang với phân loại đại diện', async () => {
+    mocks.fetchActiveFlashSales.mockRejectedValue(new Error('x'));
+    renderPdp();
+    await screen.findByText('500g', undefined, { timeout: 4000 });
+    expect(chip('500g')).toHaveAttribute('aria-pressed', 'true');
+  });
+});

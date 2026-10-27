@@ -12,6 +12,10 @@ export interface FlashPriceItem {
   salePrice?: number | null;
 }
 
+/** Tên hiển thị của một suất Giờ vàng: thêm tên phân loại khi sản phẩm có nhiều phân loại, để khách biết suất giảm là của loại nào. */
+export const flashItemLabel = (item: { productName: string; variationName?: string | null }): string =>
+  item.variationName ? `${item.productName} · ${item.variationName}` : item.productName;
+
 export interface CardPricing {
   /** Giá khách thật sự trả cho một đơn vị (đã gồm Giờ vàng). */
   price: number;

@@ -13,6 +13,7 @@ const REFRESH_MS = 60_000;
 const NONE: readonly FlashItem[] = [];
 
 let items: readonly FlashItem[] = NONE;
+let loaded = false;
 let fetchedAt = 0;
 let inflight: Promise<void> | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -29,6 +30,7 @@ function load(): Promise<void> {
       fetchedAt = 0;
     })
     .finally(() => {
+      loaded = true;
       inflight = null;
       listeners.forEach((l) => l());
     });
@@ -59,8 +61,14 @@ export function useActiveFlashSales(): readonly FlashItem[] {
   return current;
 }
 
+/** Đã có kết quả đầu tiên (kể cả lỗi): trang chi tiết chờ cờ này rồi mới chốt phân loại mặc định. */
+export function useFlashSalesLoaded(): boolean {
+  return useSyncExternalStore(subscribe, () => loaded, () => false);
+}
+
 /** Chỉ cho test: xoá bộ nhớ dùng chung giữa các ca. */
 export function resetFlashSales(): void {
+  loaded = false;
   items = NONE;
   fetchedAt = 0;
   inflight = null;

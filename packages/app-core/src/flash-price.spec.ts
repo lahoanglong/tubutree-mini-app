@@ -220,3 +220,27 @@ describe('defaultVariationFor (phân loại mặc định của trang chi tiết
     expect(defaultVariationFor({ slug: 'gao' }, [], [])).toBeUndefined();
   });
 });
+
+describe('thẻ và trang chi tiết ra cùng một giá ở mọi tổ hợp suất', () => {
+  const v500 = { id: 'v-500', sku: 'A', retailPrice: 150_000, salePrice: null, stock: 5 };
+  const v1kg = { id: 'v-1kg', sku: 'B', retailPrice: 300_000, salePrice: null, stock: 5 };
+  const item = (variationId: string, flashPrice: number, retailPrice: number) => ({ productSlug: 'gao', variationId, flashPrice, retailPrice, salePrice: null });
+  const combos = [
+    [],
+    [item('v-1kg', 250_000, 300_000)],
+    [item('v-1kg', 100_000, 300_000)],
+    [item('v-500', 120_000, 150_000)],
+    [item('v-1kg', 250_000, 300_000), item('v-500', 120_000, 150_000)],
+    [item('v-500', 120_000, 150_000), item('v-1kg', 250_000, 300_000)],
+    [item('v-1kg', 100_000, 300_000), item('v-500', 120_000, 150_000)],
+    [item('v-1kg', 120_000, 300_000), item('v-500', 120_000, 150_000)],
+  ];
+
+  it.each(combos.map((c, i) => [i, c] as const))('tổ hợp %i: giá thẻ = giá phân loại mở sẵn', (_i, flash) => {
+    const rep = pickDefaultVariation([v1kg, v500])!;
+    const card = cardPricing({ slug: 'gao', basePrice: rep.retailPrice, salePrice: rep.salePrice }, flash);
+    const opened = defaultVariationFor({ slug: 'gao' }, [v1kg, v500], flash)!;
+    expect(variationPricing(opened, flash).price).toBe(card.price);
+    expect(variationPricing(opened, flash).isFlash).toBe(card.isFlash);
+  });
+});

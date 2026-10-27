@@ -82,6 +82,12 @@ describe('FlashSale', () => {
     expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')).not.toBeNull();
   });
 
+  it('sản phẩm nhiều phân loại: tên thẻ kèm tên phân loại, giống Mini App', async () => {
+    activeResult = async () => [active({ variationName: '500g' })];
+    const c = await mount(<FlashSale />);
+    expect(c.textContent).toContain('Nước rửa chén · 500g');
+  });
+
   it('giá Giờ vàng không rẻ hơn giá đang bán: liên kết không ép mở phân loại Giờ vàng', async () => {
     activeResult = async () => [active({ flashPrice: 100000 })];
     const c = await mount(<FlashSale />);

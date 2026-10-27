@@ -6,6 +6,8 @@ export interface FlashSaleActiveItem {
   variationId: string;
   productSlug: string;
   productName: string;
+  /** Tên phân loại có suất Giờ vàng; chỉ có khi sản phẩm bán nhiều phân loại. */
+  variationName?: string | null;
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;

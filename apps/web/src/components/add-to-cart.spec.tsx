@@ -233,6 +233,41 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
   });
 
+  it('vào không kèm ?v= (gợi ý tìm, bài cộng đồng, Đã xem gần đây) mà Giờ vàng ở phân loại khác rẻ hơn giá thẻ: mở phân loại đó, giá bằng giá thẻ', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([{ ...FLASH_V2, flashPrice: 100000 }]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 100.000đ');
+  });
+
+  it.each([
+    ['500ml trước', [{ ...FLASH_V2, flashPrice: 250000, itemId: 'a' }, { ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }]],
+    ['250ml trước', [{ ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }, { ...FLASH_V2, flashPrice: 250000, itemId: 'a' }]],
+  ])('hai suất, suất 500ml 250.000đ đắt hơn thẻ: mở 250ml theo suất 120.000đ, %s', async (_n, items) => {
+    mocks.getActiveFlashSales.mockResolvedValue(items);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 120.000đ');
+  });
+
+  it('?v= của suất Giờ vàng đã hết: về phân loại mặc định', async () => {
+    openedFrom('?v=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+  });
+
+  it('?v= còn Giờ vàng thắng suất khác rẻ hơn ở phân loại khác', async () => {
+    openedFrom('?v=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2, { ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
   it('?v= trỏ tới phân loại hết hàng hoặc không có: giữ phân loại mặc định', async () => {
     openedFrom('?v=v2');
     mocks.getProductStock.mockResolvedValue({ v1: 5, v2: 0 });
