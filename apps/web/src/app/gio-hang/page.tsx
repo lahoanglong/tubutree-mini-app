@@ -18,6 +18,7 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
+import { loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { KeyValueRow } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -214,7 +215,7 @@ export default function CartPage() {
           <LineItemSkeleton />
         </div>
       ) : cartQ.isError ? (
-        <ErrorState message="Không tải được giỏ hàng." onRetry={() => void cartQ.refetch()} />
+        <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => void cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
         <div className="py-20 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
