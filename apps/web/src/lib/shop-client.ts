@@ -452,8 +452,17 @@ export type RefundDestinationBody =
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
 /** Đơn đã trả tiền: gửi kèm nơi nhận tiền hoàn (Ví Tubu hoặc tài khoản ngân hàng). */
-export const cancelOrder = (code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody) =>
-  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: { ...destination, ...reason } });
+export async function cancelOrder(code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody): Promise<OrderDTO> {
+  const path = `/orders/${encodeURIComponent(code)}/cancel`;
+  try {
+    return await apiFetch<OrderDTO>(path, { method: 'POST', body: { ...destination, ...reason } });
+  } catch (err) {
+    // API cũ (lúc triển khai, hoặc quay về bản trước) từ chối trường lạ bằng 400 «Không nhận trường cancelReason…»: gửi lại không kèm lý do.
+    const e = err as { status?: number; message?: string };
+    if (!reason || e?.status !== 400 || !/cancelReason/.test(e.message ?? '')) throw err;
+    return apiFetch<OrderDTO>(path, { method: 'POST', body: { ...destination } });
+  }
+}
 
 export interface RepurchaseResult {
   results: { orderItemId: string; status: 'added' | 'partial' | 'skipped'; reason?: string; addedQuantity: number }[];

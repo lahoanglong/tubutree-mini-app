@@ -4,9 +4,11 @@ vi.mock('./api', () => ({ api: { get: vi.fn(), post: vi.fn() } }));
 vi.mock('../store/storefront-context', () => ({ useStorefrontContext: { getState: vi.fn(() => ({ kind: 'ctv', slug: null })) } }));
 
 import { api } from './api';
+import { HttpError } from './http';
 import { useStorefrontContext } from '../store/storefront-context';
 import {
   addToCart,
+  cancelOrder,
   applyCoupon,
   getCart,
   catalogParams,
@@ -175,5 +177,29 @@ describe('shop-api — giỏ gửi gian hàng CTV đang ghi công để máy ch�
     ctx.mockReturnValue({ kind: 'ctv', slug: null });
     await getCart();
     expect(get).toHaveBeenLastCalledWith('/cart', {});
+  });
+});
+
+describe('cancelOrder — API cũ chưa nhận lý do huỷ', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const reason = { cancelReasonCode: 'CHANGED_MIND' } as never;
+
+  it('400 «Không nhận trường cancelReasonCode» → gửi lại một lần không kèm lý do', async () => {
+    post
+      .mockRejectedValueOnce(new HttpError('x', undefined, { status: 400, data: { message: 'Không nhận trường «cancelReasonCode».' } }))
+      .mockResolvedValueOnce({ data: { code: 'T1' } });
+    await expect(cancelOrder('T1', { refundMethod: 'WALLET' }, reason)).resolves.toEqual({ code: 'T1' });
+    expect(post).toHaveBeenNthCalledWith(1, '/orders/T1/cancel', { refundMethod: 'WALLET', cancelReasonCode: 'CHANGED_MIND' });
+    expect(post).toHaveBeenNthCalledWith(2, '/orders/T1/cancel', { refundMethod: 'WALLET' });
+  });
+
+  it('lỗi 400 khác, hoặc không có lý do → không gửi lại', async () => {
+    post.mockRejectedValue(new HttpError('x', undefined, { status: 400, data: { message: 'Đơn đã giao.' } }));
+    await expect(cancelOrder('T1', undefined, reason)).rejects.toBeInstanceOf(HttpError);
+    expect(post).toHaveBeenCalledTimes(1);
+    post.mockClear();
+    post.mockRejectedValue(new HttpError('x', undefined, { status: 400, data: { message: 'Không nhận trường «cancelReasonCode».' } }));
+    await expect(cancelOrder('T1')).rejects.toBeInstanceOf(HttpError);
+    expect(post).toHaveBeenCalledTimes(1);
   });
 });

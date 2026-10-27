@@ -692,8 +692,17 @@ export type RefundDestinationBody =
   | { refundMethod: 'WALLET' }
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
-export const cancelOrder = (code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody) =>
-  api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination, ...reason }).then((r) => r.data);
+export async function cancelOrder(code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody): Promise<OrderDTO> {
+  try {
+    return (await api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination, ...reason })).data;
+  } catch (err) {
+    // API cũ (lúc triển khai, hoặc quay về bản trước) từ chối trường lạ bằng 400 «Không nhận trường cancelReason…»: gửi lại không kèm lý do.
+    const data = isHttpError(err) ? (err.response?.data as { message?: unknown } | undefined) : undefined;
+    const message = typeof data?.message === 'string' ? data.message : '';
+    if (!reason || !isHttpError(err) || err.response?.status !== 400 || !/cancelReason/.test(message)) throw err;
+    return (await api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination })).data;
+  }
+}
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {
