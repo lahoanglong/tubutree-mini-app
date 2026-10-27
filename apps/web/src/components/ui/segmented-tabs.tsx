@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, type KeyboardEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useShellPathname } from '@/lib/shell-pathname';
+import { useScrollHints } from '@/components/mini/use-scroll-hints';
 
 export interface SegmentedTabItem {
   key: string;
@@ -20,7 +21,7 @@ export interface SegmentedTabsProps {
 
 /** Tab dạng viên thuốc, cùng API với `SegmentedTabs` của Mini App. role tablist/tab, mũi tên trái/phải đổi tab. */
 export function SegmentedTabs({ items, value, onChange, scroll, label }: SegmentedTabsProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const { ref, ...hintProps } = useScrollHints<HTMLDivElement>();
   useEffect(() => {
     if (!scroll) return;
     ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -39,10 +40,11 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
   return (
     <div
       ref={ref}
+      {...(scroll ? hintProps : {})}
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className={`flex gap-1 rounded-control bg-stone-100 p-[3px] ${scroll ? 'overflow-x-auto' : ''}`}
+      className={`flex gap-1 rounded-control bg-stone-100 p-[3px] ${scroll ? 'tubu-scroll-fade overflow-x-auto' : ''}`}
     >
       {items.map((it) => {
         const active = it.key === value;
