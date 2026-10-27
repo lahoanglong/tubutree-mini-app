@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { isRealUser } from '../../common/real-user';
 import { startOfNextVnWeek, startOfVnWeek } from '../../common/vn-time';
-import { ORDER_WATER_REASON, ORDER_WATER_REVERSED_REASON, ORDER_WATER_SEEDS_DEFAULT, ORDER_WATER_WEEKLY_CAP_DEFAULT } from './game.constants';
+import { ORDER_WATER_REASON, ORDER_WATER_REVERSED_REASON, ORDER_WATER_PENDING_DAYS_DEFAULT, ORDER_WATER_SEEDS_DEFAULT, ORDER_WATER_WEEKLY_CAP_DEFAULT } from './game.constants';
 
 const WATER_LEDGER_REASONS = [ORDER_WATER_REASON, ORDER_WATER_REVERSED_REASON];
 
@@ -40,11 +40,12 @@ export class GameOrderWaterService {
   }
 
   private async settings() {
-    const [perOrder, weeklyCap] = await Promise.all([
+    const [perOrder, weeklyCap, pendingDays] = await Promise.all([
       this.offWhenInvalid('game.order_seeds', ORDER_WATER_SEEDS_DEFAULT),
       this.offWhenInvalid('game.order_seeds_weekly_cap', ORDER_WATER_WEEKLY_CAP_DEFAULT),
+      this.offWhenInvalid('game.order_seeds_pending_days', ORDER_WATER_PENDING_DAYS_DEFAULT),
     ]);
-    return { perOrder, weeklyCap };
+    return { perOrder, weeklyCap, pendingDays };
   }
 
   /** Tiến độ tuần; gọi sau `claimPending` để số đã gồm đơn chờ vừa cộng. */
@@ -71,7 +72,7 @@ export class GameOrderWaterService {
 
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, userId: true, status: true, placedForCustomer: true, checkoutGroup: true },
+      select: { id: true, userId: true, status: true, placedForCustomer: true, checkoutGroup: true, deliveredAt: true },
     });
     if (!order || order.status !== 'DELIVERED') return { granted: 0, skipped: 'NOT_DELIVERED' };
     // Đơn CTV lên hộ khách mang userId của CTV: nước thưởng mua hàng không thuộc về người lên đơn.
@@ -96,7 +97,7 @@ export class GameOrderWaterService {
 
         if (profile.length === 0) {
           await tx.gameWaterEvent.create({
-            data: { userId: order.userId, delta: 0, reason: ORDER_WATER_REASON, refId, pending: true, createdAt: now },
+            data: { userId: order.userId, delta: 0, reason: ORDER_WATER_REASON, refId, pending: true, createdAt: order.deliveredAt ?? now },
           });
           return { granted: 0, pending: true };
         }
@@ -174,15 +175,17 @@ export class GameOrderWaterService {
   }
 
   /**
-   * Gọi khi hồ sơ game của khách đã tồn tại (lần mở game đầu). Cộng các đơn chờ của TUẦN VN HIỆN TẠI, cũ nhất trước, qua cùng
-   * khoá dòng và cùng trần tuần; đơn chờ của tuần trước chỉ được đóng (không cộng bù). Trả số giọt vừa cộng.
+   * Gọi khi hồ sơ game của khách đã tồn tại (lần mở game đầu). Cộng các đơn chờ giao trong `game.order_seeds_pending_days` ngày
+   * (mặc định 30) tính tới `now`, cũ nhất trước; trần tuần áp theo tuần VN CỦA TỪNG ĐƠN (đơn giao Chủ nhật 23:50 dùng trần của
+   * tuần đó, không của tuần khách mở game) và tính cả phần đã cộng hoặc đã đảo của tuần ấy. Đơn chờ cũ hơn hạn chỉ được đánh dấu
+   * `expiredAt`, không cộng, dòng giữ để đối soát. Khoá users rồi game_profiles, nên hai lần mở game song song chỉ cộng một lần.
+   * Trả số giọt vừa cộng.
    */
   async claimPending(userId: string, now: Date = new Date()): Promise<number> {
     const pendingCount = await this.prisma.gameWaterEvent.count({ where: { userId, reason: ORDER_WATER_REASON, pending: true } });
     if (pendingCount === 0) return 0;
-    const { perOrder, weeklyCap } = await this.settings();
-    const weekStart = startOfVnWeek(now);
-    const weekEnd = startOfNextVnWeek(now);
+    const { perOrder, weeklyCap, pendingDays } = await this.settings();
+    const oldest = new Date(now.getTime() - pendingDays * 86_400_000);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
       const profile = await tx.$queryRaw<{ userId: string }[]>`SELECT "userId" FROM "game_profiles" WHERE "userId" = ${userId} FOR UPDATE`;
@@ -192,16 +195,29 @@ export class GameOrderWaterService {
         orderBy: { createdAt: 'asc' },
         select: { id: true, createdAt: true },
       });
-      const used = await tx.gameWaterEvent.aggregate({
-        _sum: { delta: true },
-        where: { userId, reason: { in: WATER_LEDGER_REASONS }, pending: false, createdAt: { gte: weekStart, lt: weekEnd } },
-      });
-      let weekLeft = Math.max(0, weeklyCap - (used._sum.delta ?? 0));
+      const weekLeft = new Map<number, number>();
+      const leftOf = async (weekStart: Date) => {
+        const key = weekStart.getTime();
+        const known = weekLeft.get(key);
+        if (known !== undefined) return known;
+        const used = await tx.gameWaterEvent.aggregate({
+          _sum: { delta: true },
+          where: { userId, reason: { in: WATER_LEDGER_REASONS }, pending: false, createdAt: { gte: weekStart, lt: startOfNextVnWeek(weekStart) } },
+        });
+        const left = Math.max(0, weeklyCap - (used._sum.delta ?? 0));
+        weekLeft.set(key, left);
+        return left;
+      };
       let total = 0;
       for (const ev of pending) {
-        const inWeek = ev.createdAt >= weekStart && ev.createdAt < weekEnd;
-        const give = inWeek && perOrder > 0 ? Math.min(perOrder, weekLeft) : 0;
-        weekLeft -= give;
+        if (perOrder <= 0 || ev.createdAt < oldest) {
+          await tx.gameWaterEvent.update({ where: { id: ev.id }, data: { pending: false, delta: 0, expiredAt: now } });
+          continue;
+        }
+        const weekStart = startOfVnWeek(ev.createdAt);
+        const left = await leftOf(weekStart);
+        const give = Math.min(perOrder, left);
+        weekLeft.set(weekStart.getTime(), left - give);
         total += give;
         await tx.gameWaterEvent.update({ where: { id: ev.id }, data: { pending: false, delta: give } });
       }

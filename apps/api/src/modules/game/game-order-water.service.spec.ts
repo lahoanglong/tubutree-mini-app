@@ -138,13 +138,15 @@ describe('GameOrderWaterService.claimPending', () => {
   const thisWeek = new Date('2026-10-27T03:00:00Z');
   const lastWeek = new Date('2026-10-20T03:00:00Z');
 
-  it('cộng đơn chờ của tuần này theo trần tuần, đơn tuần trước chỉ đóng', async () => {
-    const { svc, tx } = make({ used: 200, pending: [{ id: 'a', createdAt: lastWeek }, { id: 'b', createdAt: thisWeek }, { id: 'c', createdAt: thisWeek }] });
-    await expect(svc.claimPending('u1', now)).resolves.toBe(100);
-    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { pending: false, delta: 0 } });
+  it('cộng đơn chờ trong 30 ngày, trần tính theo tuần của từng đơn; đơn quá hạn chỉ đánh dấu hết hạn', async () => {
+    const old = new Date('2026-09-20T03:00:00Z');
+    const { svc, tx } = make({ used: 200, pending: [{ id: 'x', createdAt: old }, { id: 'a', createdAt: lastWeek }, { id: 'b', createdAt: thisWeek }, { id: 'c', createdAt: thisWeek }] });
+    await expect(svc.claimPending('u1', now)).resolves.toBe(200);
+    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'x' }, data: { pending: false, delta: 0, expiredAt: now } });
+    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { pending: false, delta: 100 } });
     expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'b' }, data: { pending: false, delta: 100 } });
     expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'c' }, data: { pending: false, delta: 0 } });
-    expect(tx.gameProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { totalSeeds: { increment: 100 } } });
+    expect(tx.gameProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { totalSeeds: { increment: 200 } } });
   });
 
   it('không có đơn chờ: không mở giao dịch', async () => {

@@ -110,7 +110,7 @@ describe('GameOrderWaterService (real Postgres)', () => {
     expect(await seedsOf(u.id)).toBe(100);
   });
 
-  it('nhiều đơn chờ + mở game song song: trần tuần 300 không vượt, đơn tuần trước không được cộng', async () => {
+  it('nhiều đơn chờ + mở game song song: trần 300 theo tuần của từng đơn, không cộng hai lần', async () => {
     const u = await realUser();
     const now = new Date();
     const last = new Date(now.getTime() - 8 * 86_400_000);
@@ -118,12 +118,65 @@ describe('GameOrderWaterService (real Postgres)', () => {
     await water.grantForOrder(old.id, last);
     const orders = await Promise.all(Array.from({ length: 5 }, () => delivered(u.id)));
     for (const o of orders) await water.grantForOrder(o.id);
-    const results = await Promise.allSettled(Array.from({ length: 6 }, () => game.getProfile(u.id)));
+    await prisma.gameProfile.create({ data: { userId: u.id, totalSeeds: 0 } });
+    const results = await Promise.allSettled(Array.from({ length: 6 }, () => water.claimPending(u.id)));
     expect(summarize(results).errors).toEqual([]);
-    expect(await seedsOf(u.id)).toBe(300);
-    const events = await eventsOf(u.id);
-    expect(events.filter((e) => e.pending)).toHaveLength(0);
-    expect(events.find((e) => e.refId === old.id)?.delta).toBe(0);
+    // Tuần của đơn cũ còn trần riêng (+100); tuần này 5 đơn chỉ được 300.
+    expect(await seedsOf(u.id)).toBe(400);
+    expect((await eventsOf(u.id)).filter((e) => e.pending)).toHaveLength(0);
+  });
+
+  describe('đơn chờ theo tuần của đơn, hạn 30 ngày', () => {
+    const at = (iso: string) => new Date(iso);
+    const pendingOrder = async (userId: string, deliveredAt: Date) => {
+      const o = await createOrder(prisma, { userId, status: 'DELIVERED', deliveredAt, deliveredEffectsAt: null });
+      await expect(water.grantForOrder(o.id)).resolves.toEqual({ granted: 0, pending: true });
+      return o;
+    };
+    const openGame = async (userId: string) => {
+      await prisma.gameProfile.create({ data: { userId, totalSeeds: 0 } });
+    };
+
+    it('giao 23:50 Chủ nhật, mở game 00:10 thứ Hai: được 100', async () => {
+      const u = await realUser();
+      await pendingOrder(u.id, at('2026-10-25T16:50:00Z'));
+      await openGame(u.id);
+      await expect(water.claimPending(u.id, at('2026-10-25T17:10:00Z'))).resolves.toBe(100);
+      expect(await seedsOf(u.id)).toBe(100);
+    });
+
+    it('4 đơn trong một tuần cũ: được 300 (trần của tuần đó)', async () => {
+      const u = await realUser();
+      for (let i = 0; i < 4; i++) await pendingOrder(u.id, at(`2026-10-14T0${i + 1}:00:00Z`));
+      await openGame(u.id);
+      await expect(water.claimPending(u.id, at('2026-10-28T03:00:00Z'))).resolves.toBe(300);
+      expect(await seedsOf(u.id)).toBe(300);
+    });
+
+    it('đơn giao 31 ngày trước: 0, đánh dấu hết hạn và giữ dòng', async () => {
+      const u = await realUser();
+      const now = at('2026-10-28T03:00:00Z');
+      await pendingOrder(u.id, new Date(now.getTime() - 31 * 86_400_000));
+      await openGame(u.id);
+      await expect(water.claimPending(u.id, now)).resolves.toBe(0);
+      const [ev] = await eventsOf(u.id);
+      expect(ev).toMatchObject({ pending: false, delta: 0 });
+      expect(ev!.expiredAt).not.toBeNull();
+    });
+
+    it('hai lần mở game song song chỉ cộng một lần; đơn đã đảo thì không cộng', async () => {
+      const u = await realUser();
+      const now = at('2026-10-28T03:00:00Z');
+      const a = await pendingOrder(u.id, at('2026-10-27T01:00:00Z'));
+      const b = await pendingOrder(u.id, at('2026-10-27T02:00:00Z'));
+      await prisma.order.update({ where: { id: b.id }, data: { status: 'CANCELLED', reversalEffectsAt: null } });
+      await water.reverseForOrder(b.id);
+      await openGame(u.id);
+      const results = await Promise.allSettled([water.claimPending(u.id, now), water.claimPending(u.id, now)]);
+      expect(summarize(results).errors).toEqual([]);
+      expect(await seedsOf(u.id)).toBe(100);
+      expect((await eventsOf(u.id)).find((e) => e.refId === a.id)?.delta).toBe(100);
+    });
   });
 
   it('nước đơn vượt bể: checkIn và tưới nước sau đó không cắt phần vượt', async () => {

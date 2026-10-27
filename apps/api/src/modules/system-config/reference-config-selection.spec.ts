@@ -94,6 +94,7 @@ const APPROVED_LOADED_KEYS = [
     'game.harvest_coupon_monthly_cap',
     'game.max_plots',
     'game.order_seeds',
+    'game.order_seeds_pending_days',
     'game.order_seeds_weekly_cap',
     'game.plot_target',
     'game.plot_unlock_seed_base',

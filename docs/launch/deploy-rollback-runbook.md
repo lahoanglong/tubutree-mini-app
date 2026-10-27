@@ -420,9 +420,9 @@ Chưa diễn tập được (cần SSH và bản backup PROD): thời gian migra
 
 ### 1.10 Nước thưởng đơn hàng (Vườn Xanh): lỗi game và cách chạy lại
 
-Mỗi đơn giao thành công cộng 100 giọt (tối đa 300 giọt mỗi tuần VN, thứ Hai đến Chủ nhật; cấu hình `game.order_seeds` và `game.order_seeds_weekly_cap`, đặt 0 để tắt). Nhiều kiện cùng một lần thanh toán (cùng `checkoutGroup`) tính một lần. Nước theo đơn được vượt sức chứa bình. Khách chưa mở game không bị tạo hồ sơ: đơn ghi ở trạng thái chờ và được cộng khi khách mở game lần đầu, nếu đơn nằm trong tuần VN hiện tại; đơn chờ của tuần trước thì không cộng bù.
+Mỗi đơn giao thành công cộng 100 giọt (tối đa 300 giọt mỗi tuần VN, thứ Hai đến Chủ nhật; cấu hình `game.order_seeds` và `game.order_seeds_weekly_cap`, đặt 0 để tắt). Nhiều kiện cùng một lần thanh toán (cùng `checkoutGroup`) tính một lần. Nước theo đơn được vượt sức chứa bình. Khách chưa mở game không bị tạo hồ sơ: đơn ghi ở trạng thái chờ và được cộng khi khách mở game lần đầu nếu đơn giao trong `game.order_seeds_pending_days` ngày (mặc định 30; 0 = không cộng đơn chờ). Trần 300 áp theo tuần VN của từng đơn, không theo tuần mở game. Đơn chờ cũ hơn hạn được đánh dấu `expiredAt` và không cộng (dòng giữ để đối soát: `SELECT * FROM game_water_events WHERE "expiredAt" IS NOT NULL`).
 
-Migration của tính năng: `20261027090000_game_water_events` và `20261028090000_game_water_event_pending` (chỉ thêm bảng và một cột, không khoá lâu).
+Migration của tính năng: `20261027090000_game_water_events` và `20261028090000_game_water_event_pending` và `20261028100000_game_water_event_expired` (chỉ thêm bảng và hai cột, không khoá lâu).
 
 Nếu việc cộng nước lỗi (game hỏng, DB chậm), đơn vẫn sang DELIVERED và Điểm Xanh vẫn cộng, nhưng đơn ở trạng thái việc-sau-giao chưa xong (INCOMPLETE): mốc `deliveredEffectsAt` chưa được ghi. Cron `orders.delivered-effects-resync` chạy 10 phút một lần, thử lại các đơn như vậy trong 14 ngày kể từ lúc giao; việc đã xong thì không làm lại nên chạy lại an toàn.
 
