@@ -147,7 +147,7 @@ export default function LoyaltyPage() {
 
   return (
     <LedgerShell title={TITLE} wide>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_auto_1fr] lg:items-start">
           <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
             <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
               {tierStyle.emoji}
@@ -203,7 +203,7 @@ export default function LoyaltyPage() {
             </button>
           </section>
 
-          <Section className="lg:col-start-1 lg:row-start-2" title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
+          <Section className="lg:col-start-1" title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
             {couponsQ.isLoading ? (
               <Skeleton height={64} />
             ) : couponsQ.isError ? (
@@ -236,11 +236,11 @@ export default function LoyaltyPage() {
             )}
           </Section>
 
-          <div className="contents lg:col-start-1 lg:row-start-3 lg:block">
+          <div className="contents empty:hidden lg:col-start-1 lg:block">
             <DailyCheckInCard authed={authed} />
           </div>
 
-          {/* Từ lg: cột trái 2/3 gồm mã giảm giá, điểm danh, lịch sử; cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
+          {/* Từ lg: cột trái 2/3 gồm mã giảm giá, điểm danh, lịch sử (xếp tự động nối nhau trong cột 1, nên thẻ nào vắng thì không để lại hàng/khoảng trống; hàng cuối 1fr nhận phần cao dư của cột phải); cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
           <div className="contents lg:col-start-2 lg:row-span-3 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
           {shortcuts.length > 0 && (
             <ul className={`divide-y divide-stone-200 ${miniCard}`}>
@@ -300,7 +300,7 @@ export default function LoyaltyPage() {
           </section>
           </div>
 
-          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 lg:row-start-4 ${miniCard}`}>
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 ${miniCard}`}>
             <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
