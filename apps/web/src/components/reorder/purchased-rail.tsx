@@ -19,6 +19,8 @@ import { useBlockQuery } from '@/components/home/use-block-query';
 import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
+import { ScrollRail } from '@/components/scroll-rail';
+import { ThumbPlaceholder } from '@/components/thumb-placeholder';
 
 /** Dùng CHUNG query key ['purchased-items', 10] với Trang chủ khi quyết định thứ tự khối. */
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
@@ -36,7 +38,7 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
       <Link href={`/san-pham/${encodeURIComponent(item.slug)}`} className="block">
         <div className="aspect-square w-full bg-stone-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {item.thumbnail && <img src={item.thumbnail} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" />}
+          {item.thumbnail ? <img src={item.thumbnail} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" /> : <ThumbPlaceholder brand={item.brand} />}
         </div>
         <div className="p-2">
           {item.brand && <p className="truncate text-xs text-stone-600">{item.brand}</p>}
@@ -201,11 +203,11 @@ export function PurchasedRail({ restoring = false }: { restoring?: boolean }) {
           ))}
         </div>
       ) : (
-        <ul className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
+        <ScrollRail className="-mx-1 -mt-1 flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
           {items.map((p) => (
             <RebuyTile key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} />
           ))}
-        </ul>
+        </ScrollRail>
       )}
       {notice && (
         <p role="status" className="mt-2 text-sm text-stone-700">

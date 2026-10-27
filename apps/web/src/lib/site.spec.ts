@@ -150,3 +150,26 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
     expect([rule.allow].flat().some((a) => a?.includes(':'))).toBe(false);
   });
 });
+
+describe('restoringBootScript', () => {
+  const run = async (getItem: () => string | null) => {
+    const { restoringBootScript } = await loadSite();
+    const attrs: string[] = [];
+    new Function('localStorage', 'document', restoringBootScript())(
+      { getItem },
+      { documentElement: { setAttribute: (k: string) => attrs.push(k) } },
+    );
+    return attrs;
+  };
+  it('có cờ phiên thì đặt data-restoring; không có cờ thì không', async () => {
+    expect(await run(() => '1')).toEqual(['data-restoring']);
+    expect(await run(() => null)).toEqual([]);
+  });
+  it('localStorage ném lỗi (chế độ riêng tư) thì nuốt lỗi, không đặt gì', async () => {
+    expect(
+      await run(() => {
+        throw new Error('blocked');
+      }),
+    ).toEqual([]);
+  });
+});

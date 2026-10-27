@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { getLegalDoc, getPublicSupport } from '@/lib/api';
 import { LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 export const revalidate = 300;
 
@@ -32,7 +33,7 @@ export default async function LegalPage({ params }: Params) {
   const others = LEGAL_SLUGS.filter((s) => s !== loai);
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8">
+    <main className={`${PAGE_NARROW} py-8`}>
       {isDraft && (
         <div
           role="note"

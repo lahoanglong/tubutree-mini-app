@@ -28,6 +28,7 @@ import { ORDERS_TABS } from '@/components/orders/orders-tabs';
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { OrdersSection } from './orders-section';
 import BackLink from '@/components/back-link';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const ORDER_ROW_TARGETS = ORDER_STATUS_ROW.filter((r) => r.counted && r.key !== 'subscriptions');
 const ROW =
@@ -117,7 +118,7 @@ export default function AccountPage() {
 
   if (phase === 'loading') {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-20 text-center">
+      <main className={`${PAGE_WIDE} py-20 text-center`}>
         <h1 className="sr-only">Cá nhân</h1>
         <AuthLoading />
       </main>
@@ -126,7 +127,7 @@ export default function AccountPage() {
 
   if (phase === 'unavailable') {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className={`${PAGE_WIDE} py-6`}>
         <h1 className={ui.pageTitle}>Cá nhân</h1>
         <SessionUnavailable />
       </main>
@@ -135,7 +136,7 @@ export default function AccountPage() {
 
   if (phase === 'guest' || !user) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-6">
+      <main className={`${PAGE_WIDE} py-6`}>
         <h1 className={ui.pageTitle}>Cá nhân</h1>
         <LoginRequired message="Đăng nhập để xem tích điểm, đơn hàng và ưu đãi cá nhân của bạn." returnTo="/tai-khoan" />
       </main>
@@ -198,13 +199,15 @@ export default function AccountPage() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0 max-md:pb-4">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 max-md:pb-4`}>
       <div className="max-md:hidden">
-        <BackLink href="/">← Trang chủ</BackLink>
+        <BackLink href="/" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Tài khoản' }]}>
+          ← Trang chủ
+        </BackLink>
       </div>
       <h1 className="sr-only">Cá nhân</h1>
 
-      <div className="md:mx-auto md:mt-3 md:max-w-2xl">
+      <div className="md:mx-auto md:mt-3 md:max-w-2xl lg:mx-0">
         <div className="bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
           <Link href="/tai-khoan/ho-so" className="tubu-press flex min-h-11 items-center gap-3 rounded-control focus-visible:outline focus-visible:outline-2 focus-visible:outline-stone-0">
             {user.avatarUrl ? (

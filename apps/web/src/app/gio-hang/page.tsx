@@ -17,7 +17,11 @@ import { cartKey, useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
+import { ErrorState } from '@/components/ui/error-state';
+import { loadErrorText } from '@/lib/error-text';
+import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { KeyValueRow } from '@/components/mini';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -204,14 +208,14 @@ export default function CartPage() {
         </div>
       )}
       {cartQ.isLoading ? (
-        <p className="py-10 text-center text-stone-600">Đang tải giỏ hàng…</p>
-      ) : cartQ.isError ? (
-        <div className="py-20 text-center">
-          <p className="text-stone-700">Không tải được giỏ hàng.</p>
-          <button type="button" onClick={() => void cartQ.refetch()} className={`${ui.btnPrimary} mt-4`}>
-            Thử lại
-          </button>
+        <div role="status" aria-busy="true" className="flex flex-col gap-3 py-4">
+          <span className="sr-only">Đang tải giỏ hàng…</span>
+          <LineItemSkeleton />
+          <LineItemSkeleton />
+          <LineItemSkeleton />
         </div>
+      ) : cartQ.isError ? (
+        <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => void cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
         <div className="py-20 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">
@@ -224,8 +228,8 @@ export default function CartPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:grid-cols-3">
-          <div className="min-w-0 md:col-span-2">
+        <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-w-0">
             <label className="relative mb-3 flex min-h-11 cursor-pointer items-center gap-3 px-1 text-sm font-medium text-stone-900 max-md:mb-1 max-md:min-h-0 max-md:px-0 max-md:py-1 max-md:font-normal max-md:text-[length:var(--type-body-md-size)]">
               <span className={miniCheckboxWrap}>
                 <input
@@ -391,7 +395,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents`}>
+          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
@@ -433,15 +437,19 @@ export default function CartPage() {
             {!allSelected && !priced && cart.couponCode && (
               <p className="mt-2 text-xs text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}
-            <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden">
+            <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden lg:hidden">
               <span>Tổng</span>
               <span>{formatVnd(payTotal)}</span>
             </div>
-            {/* Dưới md nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
-            <div className="hidden md:block">
+            {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
+            <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:py-4">
+              <div className="mb-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
+                <span>Tổng</span>
+                <span>{formatVnd(payTotal)}</span>
+              </div>
               {selectedItems.length === 0 ? (
                 <>
-                  <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                  <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán (0)
                   </button>
                   <p role="status" className="mt-2 text-xs text-stone-600">
@@ -450,7 +458,7 @@ export default function CartPage() {
                 </>
               ) : stockBlocked ? (
                 <>
-                  <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
+                  <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán ({selectedCount})
                   </button>
                   <p role="alert" className="mt-2 text-xs text-danger-fg">
@@ -458,7 +466,7 @@ export default function CartPage() {
                   </p>
                 </>
               ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} mt-4 w-full`}>
+                <Link href="/thanh-toan" onClick={onPay} className={`${ui.btnPrimary} w-full`}>
                   Thanh toán ({selectedCount})
                 </Link>
               )}
@@ -475,7 +483,7 @@ export default function CartPage() {
         <div
           role="status"
           className={`fixed inset-x-3 z-30 mx-auto flex max-w-md items-center justify-between rounded-control bg-stone-900 px-4 py-2 text-sm text-stone-0 ${
-            showBar ? 'bottom-[calc(var(--sticky-bar-h,8rem)+0.5rem)] md:bottom-6' : 'bottom-6'
+            showBar ? 'bottom-[calc(var(--sticky-bar-h,8rem)+0.5rem)] lg:bottom-6' : 'bottom-6'
           }`}
         >
           <span>Đã bỏ khỏi giỏ</span>
@@ -485,7 +493,7 @@ export default function CartPage() {
         </div>
       )}
       {showBar && (
-        <StickyActionBar label="Thanh toán">
+        <StickyActionBar label="Thanh toán" hideFrom="lg">
           {/* Dưới md khung tóm tắt bị ẩn hẳn (cả với trình đọc màn hình): lời báo ở đây là bản duy nhất khách thấy/nghe được. */}
           {payHint && (
             <p
@@ -540,8 +548,8 @@ export default function CartPage() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <BackLink href="/">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
+      <BackLink href="/" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Giỏ hàng' }]}>
         ← Tiếp tục mua sắm
       </BackLink>
       <PageHeader title="Giỏ hàng" className="md:mt-1" />

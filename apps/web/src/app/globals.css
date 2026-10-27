@@ -47,6 +47,16 @@ html[data-tenant-host] [data-site-search] {
   display: none;
 }
 
+/* Chiều cao thanh đầu máy tính (hai hàng h-16 + h-11 tính theo rem, nên chữ lớn không làm cột dính sát header, cộng hai đường viền 2px): cột dính của trang đặt dưới nó. Điện thoại không có thanh này. */
+:root {
+  --header-h: 0px;
+}
+@media (min-width: 768px) {
+  :root {
+    --header-h: calc(6.75rem + 2px + env(safe-area-inset-top, 0px));
+  }
+}
+
 /* StickyActionBar (giỏ, thanh toán, chi tiết sản phẩm) che đáy trang trên điện thoại: chừa đúng chiều cao thanh dưới chân trang.
    --sticky-bar-h do StickyActionBar đo và đặt lúc chạy (thanh cao thêm khi có dòng báo lỗi); giá trị dưới đây là mặc định
    cho lúc chưa đo được. */
@@ -55,6 +65,13 @@ html[data-tenant-host] [data-site-search] {
 }
 @media (max-width: 767px) {
   body.has-sticky-bar {
+    padding-bottom: var(--sticky-bar-h);
+  }
+}
+
+/* Giỏ và Thanh toán giữ thanh dính tới hết khổ máy tính bảng (md): chừa đáy trang cho đúng khoảng 768–1023px. */
+@media (min-width: 768px) and (max-width: 1023.98px) {
+  body.has-sticky-bar-lg {
     padding-bottom: var(--sticky-bar-h);
   }
 }
@@ -81,6 +98,10 @@ body.has-sticky-bar [data-bottom-nav] {
   }
   body.with-back-btn {
     padding-top: calc(var(--safe-top) + 48px);
+  }
+  /* Thanh dính của trang (vd. tab Vườn Xanh) nằm dưới thanh đặc của nút lùi (56px + vùng an toàn). */
+  body.with-back-btn .sticky-below-back {
+    top: calc(var(--safe-top) + 56px) !important;
   }
   /* Trang hero full-bleed (gallery/hero): nút lùi nằm trên hero nên không cần đệm, như .page.page-bleed của Mini App. */
   body.with-back-btn:has([data-page-bleed]) {

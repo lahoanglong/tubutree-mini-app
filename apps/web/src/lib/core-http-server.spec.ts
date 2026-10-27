@@ -25,6 +25,22 @@ describe('core-http-server — fetch ISR cho server component', () => {
     expect(init.next).toEqual({ revalidate: 300 });
   });
 
+  it('ảnh /public-image/... ghép gốc API CÔNG KHAI, không phải API_BASE_URL nội bộ dùng để gọi', async () => {
+    vi.resetModules();
+    vi.stubEnv('API_BASE_URL', 'http://api:3001/api');
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'https://api.example.vn/api');
+    const mod = await import('./core-http-server');
+    fetchMock.mockResolvedValue(
+      res(200, { items: [{ thumbnail: '/public-image/product/p1/thumb?v=abc', images: ['/public-image/product/p1/0?v=abc', 'https://cdn.x/a.jpg'] }] }),
+    );
+    const out = await mod.createServerHttp().get<{ items: { thumbnail: string; images: string[] }[] }>('/products');
+    expect((fetchMock.mock.calls[0] as [string])[0]).toBe('http://api:3001/api/products');
+    expect(out.items[0]).toEqual({
+      thumbnail: 'https://api.example.vn/api/public-image/product/p1/thumb?v=abc',
+      images: ['https://api.example.vn/api/public-image/product/p1/0?v=abc', 'https://cdn.x/a.jpg'],
+    });
+  });
+
   it('revalidate truyền vào được dùng', async () => {
     fetchMock.mockResolvedValue(res(200, []));
     await createServerHttp({ revalidate: 600 }).get('/brands');

@@ -473,11 +473,11 @@ function StaffHub() {
           onNext={() => setMondayKey(addDaysKey(mondayKey, 7))}
         />
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Button icon={Plus} style={{ flex: 1 }} onPress={openQuick}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <Button icon={Plus} style={{ flex: '1 1 150px' }} onPress={openQuick}>
             Đăng ký nhanh
           </Button>
-          <Button variant="secondary" icon={Copy} style={{ flex: 1 }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
+          <Button variant="secondary" icon={Copy} style={{ flex: '1 1 150px' }} loading={copyM.isPending} onPress={() => copyM.mutate()}>
             Chép tuần trước
           </Button>
         </div>

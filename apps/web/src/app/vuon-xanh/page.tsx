@@ -29,7 +29,7 @@ import { GardenPlots } from '@/components/game/garden-plots';
 import { GameLinkRow } from '@/components/game/game-link-row';
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
-import { GAME_TAB_KEYS, GAME_TABS, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
+import { GAME_TAB_KEYS, GAME_COL, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { OrderWaterCard } from '@/components/game/order-water-card';
@@ -53,6 +53,8 @@ import { useHeaderOffset } from '@/components/game/use-header-offset';
 import { useWheelPrize } from '@/components/game/use-wheel-prize';
 import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
+import { PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
@@ -64,7 +66,7 @@ const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
   invite: '/tai-khoan/vi-tubu',
 };
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function GameBody() {
   const router = useRouter();
@@ -159,7 +161,7 @@ function GameBody() {
 
   return (
     <>
-      <div className="mx-auto flex max-w-2xl flex-col gap-3 lg:max-w-5xl">
+      <div className="flex flex-col gap-3">
         <GardenHero
           eco={eco}
           totalSeeds={profile?.totalSeeds}
@@ -170,11 +172,12 @@ function GameBody() {
         />
 
         {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
-        <div className="sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
+        <div className="sticky-below-back sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={setTab} label="Vườn Xanh" />
         </div>
 
-        <GameTabPanel tab="today" active={tab === ('today' satisfies GameTabKey)}>
+        <GameTabPanel tab="today" active={tab === ('today' satisfies GameTabKey)} layout="split">
+          <GameCol place={GAME_COL.top}>
           <TreeHealthAlert health={profile?.treeHealth} />
 
           {/* Hồi sinh chuỗi vừa mất (§streak-repair) — chỉ hiện trong cửa sổ hồi sinh */}
@@ -208,7 +211,9 @@ function GameBody() {
           />
 
           <OrderWaterCard info={profile?.orderWater} shopHref="/san-pham" />
+          </GameCol>
 
+          <GameCol place={GAME_COL.side}>
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
             profile={profile}
@@ -223,6 +228,7 @@ function GameBody() {
           />
           </div>
 
+          <div className="empty:hidden">
           <MissionsCard
             missions={missions}
             streakDays={profile?.streakDays}
@@ -231,7 +237,10 @@ function GameBody() {
             onClaim={(code) => claimMissionM.mutate(code)}
             onGo={goMission}
           />
+          </div>
+          </GameCol>
 
+          <GameCol place={GAME_COL.bottom}>
           <div id="game-quiz">
             <QuizCard
               quiz={quiz}
@@ -244,6 +253,7 @@ function GameBody() {
             />
           </div>
 
+          <div>
           <LuckyWheelCard
             cost={profile?.spinCostPoints ?? 10_000}
             points={wheelPoints}
@@ -251,11 +261,15 @@ function GameBody() {
             onSpin={handleSpin}
             onResult={wheelPrize.onResult}
           />
+          </div>
 
           {/* Lối vào Đổi rác lấy quà (spec 4.9): chỉ khi chương trình bật và trang đổi rác đã có trên web */}
           {wasteLink && (
-            <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
+            <div>
+              <GameLinkRow icon={Recycle} title="Đổi rác lấy quà" badge="Mới" hint="Giọt nước dùng trong Vườn, Điểm Xanh dùng để mua sắm" href={WASTE_PATH} />
+            </div>
           )}
+          </GameCol>
         </GameTabPanel>
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
@@ -381,7 +395,7 @@ function GameBody() {
 export default function GamePage() {
   const phase = useAuthPhase();
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pt-0">
+    <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pt-0`}>
       <PageHeader title={TITLE} />
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}

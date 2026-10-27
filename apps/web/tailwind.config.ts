@@ -86,6 +86,8 @@ const config: Config = {
       borderRadius: { sm: '6px', md: '10px', lg: '16px', xl: '24px' },
       // Bóng đổ ấm của DS v2 (tokens.css --elevation-*); cần tokens.css được nạp trong globals.css.
       boxShadow: { card: 'var(--elevation-1)', raised: 'var(--elevation-2)' },
+      // Bề rộng khung trang máy tính (lib/page-frame.ts).
+      maxWidth: { frame: '1200px' },
     },
   },
   plugins: [],

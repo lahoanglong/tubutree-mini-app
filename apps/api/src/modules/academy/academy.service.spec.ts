@@ -55,6 +55,23 @@ describe('AcademyService.listCourses', () => {
     ]);
   });
 
+  it('ảnh bìa base64 của khoá học đi ra dưới dạng đường dẫn, link thường giữ nguyên; quản trị xem chi tiết vẫn nhận ảnh gốc', async () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    const prisma = makePrisma();
+    (prisma as any).course.findMany.mockResolvedValue([
+      { id: 'c1', title: 'A', coverUrl: PNG, lessons: [] },
+      { id: 'c2', title: 'B', coverUrl: 'https://cdn.example.com/b.jpg', lessons: [] },
+    ]);
+    const svc = new AcademyService(prisma);
+    const out = await svc.listCourses('u1');
+    expect(JSON.stringify(out)).not.toContain('data:image');
+    expect(out[0]!.coverUrl).toMatch(/^\/public-image\/academy\/c1\/cover\?v=/);
+    expect(out[1]!.coverUrl).toBe('https://cdn.example.com/b.jpg');
+    (prisma as any).course.findUnique.mockResolvedValue({ id: 'c1', title: 'A', coverUrl: PNG, isPublished: true, lessons: [] });
+    expect((await svc.getCourse('u1', 'c1')).coverUrl).toMatch(/^\/public-image\//);
+    expect((await svc.getCourse('u1', 'c1', true)).coverUrl).toBe(PNG);
+  });
+
   it('isCompleted=true khi completedCount===lessonCount và lessonCount>0', async () => {
     const prisma = makePrisma();
     (prisma as any).course.findMany.mockResolvedValue([

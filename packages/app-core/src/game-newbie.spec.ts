@@ -78,6 +78,11 @@ describe('missionTarget', () => {
     expect(missionTarget('INVITE_3')).toBe('invite');
     expect(missionTarget('CHECKIN_7')).toBe('checkin');
     expect(missionTarget('UNKNOWN')).toBeNull();
+    expect(missionTarget('CUSTOM_AB12', 'ORDER_COUNT')).toBe('catalog');
+    expect(missionTarget('CUSTOM_AB12', 'CHECKIN_STREAK')).toBe('checkin');
+    expect(missionTarget('CUSTOM_AB12', 'WHATEVER')).toBeNull();
+    expect(missionTarget('CUSTOM_AB12', 'toString')).toBeNull();
+    expect(missionTarget('FIRST_ORDER', 'REVIEW_COUNT')).toBe('catalog');
     expect(missionTarget('toString')).toBeNull();
   });
 });

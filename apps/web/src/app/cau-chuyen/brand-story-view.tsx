@@ -18,8 +18,8 @@ export function BrandStoryView() {
   const [selected, setSelected] = useState<BrandOrigin | null>(null);
 
   return (
-    <main className="mx-auto max-w-5xl pb-8">
-      <div className="px-4 pt-6 max-md:pt-0">
+    <main className="mx-auto w-full max-w-frame pb-8">
+      <div className="px-4 pt-6 max-md:pt-0 md:px-6">
         <PageHeader title="Hành trình nguyên liệu" />
         <p className="mt-3 leading-relaxed text-stone-700 max-md:mt-3 max-md:text-[length:var(--type-body-md-size)] max-md:leading-normal max-md:text-[var(--color-text-secondary)]">
           Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Chạm mốc trên bản đồ gỗ 3D để khám phá xuất xứ.

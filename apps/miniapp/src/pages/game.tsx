@@ -180,7 +180,7 @@ export default function GamePage() {
 
         {/* Điều hướng nội bộ: giữ thanh tab trong tầm tay khi cuộn hết khối dài của "Hôm nay".
             top = safe-top vì app immersive: dính mép 0 thì tab "Cộng đồng" nằm dưới status bar/capsule Zalo. */}
-        <div style={{ position: 'sticky', top: 'var(--safe-top)', zIndex: 5, background: 'var(--color-bg-canvas)', padding: '4px 0' }}>
+        <div className="sticky-below-back" style={{ position: 'sticky', top: 'var(--safe-top)', zIndex: 5, background: 'var(--color-bg-canvas)', padding: '4px 0' }}>
           <SegmentedTabs items={GAME_TABS.map((t) => ({ key: t.key, label: t.label }))} value={tab} onChange={(key) => setTab(key as GameTabKey)} />
         </div>
 

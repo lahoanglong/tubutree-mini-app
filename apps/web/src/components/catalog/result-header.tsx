@@ -33,7 +33,7 @@ export function ResultHeader({
         <p aria-live="polite" aria-atomic="true" data-testid="result-count" className="min-w-0 text-sm text-stone-600">
           {isLoading || total === undefined ? ' ' : browseText.resultCount(total)}
         </p>
-        <button type="button" onClick={onOpenFilters} className={`${ui.btnSecondary} ${phoneSecondary} flex-none gap-2`}>
+        <button type="button" onClick={onOpenFilters} className={`${ui.btnSecondary} ${phoneSecondary} flex-none gap-2 lg:hidden`}>
           <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
           {filterCount > 0 ? browseText.filterButtonCount(filterCount) : browseText.filterButton}
         </button>

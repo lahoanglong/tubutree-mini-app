@@ -25,6 +25,7 @@ import {
 } from '../coupons/coupon-notice';
 import { fulfillerOf, merchantStoreUnavailableReason, storeUnavailableOnAddMessage } from '../checkout/checkout-split';
 import { isPartnerStore } from '../merchant/partner-store';
+import { publicImage } from '../../common/public-image';
 
 const ADD_ITEM_INCLUDE = {
   product: {
@@ -148,7 +149,7 @@ export class CartService {
         productName: it.variation.product.name,
         variationName: it.variation.name,
         slug: it.variation.product.slug,
-        thumbnail: it.variation.product.thumbnail,
+        thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         quantity: it.quantity,
       }));
 
@@ -175,7 +176,7 @@ export class CartService {
         productName: it.variation.product.name,
         variationName: it.variation.name,
         slug: it.variation.product.slug,
-        thumbnail: it.variation.product.thumbnail,
+        thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         unitPrice,
         quantity: it.quantity,
         stock: it.variation.stock,

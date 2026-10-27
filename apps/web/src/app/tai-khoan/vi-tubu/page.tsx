@@ -24,10 +24,11 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Ví Tubu';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 export default function WalletPage() {
   const phase = useAuthPhase();

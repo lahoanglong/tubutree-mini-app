@@ -576,6 +576,23 @@ describe('/doi-rac/quay: ưu đãi và báo cáo tháng', () => {
     expect(c.textContent).toContain('Đã gửi, chờ Tubu duyệt');
     expect(dialog()).toBeNull();
   });
+  it('chữ trả/thưởng tiền mặt: báo lỗi ngay, khoá nút Gửi duyệt, không gọi API', async () => {
+    const c = await mount();
+    click(button(c, 'Chỉnh sửa'));
+    await flush();
+    const sheet = dialog()!;
+    typeInto(label(sheet, 'Nội dung ưu đãi'), 'Tặng 10k cho khách mang vỏ chai');
+    expect(sheet.querySelector('[role=alert]')?.textContent).toContain('Zalo không cho phép');
+    expect(sheet.querySelector('[role=alert]')?.textContent).toContain('Chữ "Tặng 10k" nói về');
+    const send = byText(sheet, 'button', 'Gửi duyệt') as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    click(send);
+    await flush(10);
+    expect(state.calls.find((x) => x.method === 'PUT')).toBeUndefined();
+    typeInto(label(sheet, 'Nội dung ưu đãi'), 'Giảm 10k đơn từ 100k, tặng túi vải');
+    expect(sheet.querySelector('[role=alert]')).toBeNull();
+    expect((byText(sheet, 'button', 'Gửi duyệt') as HTMLButtonElement).disabled).toBe(false);
+  });
   it('chủ hai điểm: gửi duyệt ở điểm A rồi đổi sang điểm B thì B không hiện "Đã gửi"', async () => {
     state.points = [makeDeskPoint(), makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
     const c = await mount();

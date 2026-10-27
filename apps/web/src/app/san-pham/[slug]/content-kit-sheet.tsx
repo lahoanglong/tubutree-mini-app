@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { absoluteLink, shareFallbackText, withAbsoluteLink } from '@/lib/content-kit-link';
+import { loadErrorText } from '@/lib/error-text';
 
 type Note = { text: string; error: boolean } | null;
 
@@ -63,7 +64,7 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
           <Skeleton height={60} />
         </div>
       )}
-      {q.isError && <ErrorState message={q.error instanceof Error ? q.error.message : undefined} onRetry={() => void q.refetch()} />}
+      {q.isError && <ErrorState message={loadErrorText(q.error)} onRetry={() => void q.refetch()} />}
 
       {data && (
         <>

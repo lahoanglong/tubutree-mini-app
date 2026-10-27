@@ -18,6 +18,7 @@ import { formatCount } from '@/lib/checkout-points';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
 const formatPoints = (n: number) => `${formatCount(n)} điểm`;
@@ -27,7 +28,7 @@ const isEventEnded = (event: Pick<CommunityEvent, 'endAt'>) => new Date(event.en
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
+    <main className={`${PAGE_WIDE} py-6 max-md:pt-0`}>
       <PageHeader title="Sự kiện" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4 flex flex-col gap-3">{children}</div>
     </main>

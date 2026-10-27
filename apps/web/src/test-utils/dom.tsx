@@ -44,11 +44,11 @@ export async function flush(times = 5) {
 
 export function typeInto(el: Element | null, value: string) {
   if (!el) throw new Error('typeInto: không thấy phần tử');
-  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, 'value')!.set!;
   act(() => {
     setter.call(el, value);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }));
   });
 }
 

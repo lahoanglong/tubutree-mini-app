@@ -685,6 +685,7 @@ export class MerchantService {
       thumbnail: dto.thumbnail === undefined ? baseline.thumbnail : dto.thumbnail,
     };
     const contentChanged = !sameContent(merged, baseline);
+    const imagesChanged = JSON.stringify(merged.images) !== JSON.stringify(product.images) || (merged.thumbnail ?? null) !== (product.thumbnail ?? null);
     // Mở bán lại sản phẩm đã gỡ liên kết, hoặc xin mã Pancake khác, thì admin duyệt lại để liên kết biến thể Pancake. Bỏ mã (tự
     // giao) giữ nguyên trạng thái duyệt: nội dung đã được duyệt, giá và tồn do gian hàng tự đặt như mọi sản phẩm tự giao.
     const requestsLink = awaitingLink && codeChanged && !!codeChange;
@@ -733,7 +734,14 @@ export class MerchantService {
             ...(tubuFulfilled ? {} : { basePrice, salePrice }),
             // Sản phẩm đang bán: nội dung đang bán không đổi cho tới khi duyệt; lời từ chối bản sửa cũ hết nghĩa khi gửi bản mới.
             ...(liveEdit ? (contentChanged ? { rejectReason: null } : {}) : contentChanged || draft ? merged : {}),
-            ...(reReview ? { approvalStatus: 'PENDING_REVIEW' as const, rejectReason: null } : {}),
+            ...(reReview
+              ? {
+                  approvalStatus: 'PENDING_REVIEW' as const,
+                  rejectReason: null,
+                  ...(product.approvalStatus === 'APPROVED' && !product.approvedAt ? { approvedAt: new Date() } : {}),
+                }
+              : {}),
+            ...(!liveEdit && imagesChanged ? { approvedAt: null } : {}),
           },
         });
       } catch (err) {

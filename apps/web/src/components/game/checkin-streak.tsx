@@ -39,11 +39,12 @@ export function CheckInStreak({
   const dayReward = (day: number): number | null => (day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null);
   return (
     <section className={`p-4 ${miniCard}`}>
-      <div className="flex items-center justify-between gap-3">
+      {/* flex-wrap: màn hẹp (320/375) thì nút xuống hàng riêng thay vì ép tiêu đề gãy hai dòng cạnh nút, như Mini App. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h2 className={`flex items-center gap-1.5 ${ui.sectionTitle} ${miniSectionTitle}`}>
+          <h2 className={`flex items-center gap-1.5 whitespace-nowrap ${ui.sectionTitle} ${miniSectionTitle}`}>
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
-            {t.title(streakDays)}
+            <span className="min-w-0 truncate">{t.title(streakDays)}</span>
           </h2>
           <p className="text-xs text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>

@@ -1,11 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 } }));
+const mocks = vi.hoisted(() => ({ auth: { user: null as { fullName: string } | null, status: 'anonymous', initialized: true, sessionUnavailable: false }, cart: { itemCount: 0 }, notifications: [] as { status: string }[] }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: mocks.cart }) }));
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: (o: { queryKey: unknown[] }) => ({ data: o.queryKey[0] === 'notifications' ? mocks.notifications : mocks.cart }),
+}));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
-vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => p === '/' || p === '/tai-khoan' }));
+vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/vuon-xanh', '/mua-chung', '/tai-khoan/thong-bao'].includes(p) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/' }));
 
 import SiteHeader from './site-header';
@@ -74,14 +76,30 @@ describe('SiteHeader', () => {
     expect(out).not.toContain('SỐNG XANH AN LÀNH');
   });
 
-  it('máy tính: điều hướng các mục gốc như thanh đáy, ẩn mục chưa làm xong, ẩn ở điện thoại', () => {
+  it('máy tính: điều hướng không lặp logo và nút tài khoản, ẩn mục chưa làm xong, thêm chức năng chương trình', () => {
     mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
     const out = render();
     const desk = out.match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
-    expect(desk).toMatch(/class="[^"]*hidden[^"]*md:flex/);
-    expect(desk).toContain('>Trang chủ<');
-    expect(desk).toContain('>Cá nhân<');
+    expect(desk).not.toContain('>Trang chủ<');
+    expect(desk).not.toContain('>Cá nhân<');
+    expect(desk).toContain('>Vườn Xanh<');
+    expect(desk).toContain('>Mua chung<');
     expect(desk).not.toContain('>Danh mục<');
-    expect(desk).not.toContain('>Vườn Xanh<');
+    expect(desk).not.toContain('>Kho quà<');
+  });
+
+  it('thanh đầu một hàng chính cao 64px, chuông thông báo có số chưa đọc cho khách đã đăng nhập', () => {
+    mocks.auth = { user: { fullName: 'Lan Anh' }, status: 'authenticated', initialized: true, sessionUnavailable: false };
+    mocks.notifications = [{ status: 'UNREAD' }, { status: 'READ' }, { status: 'UNREAD' }];
+    const out = render();
+    expect(out).not.toMatch(/flex-wrap/);
+    expect(out).toMatch(/aria-label="Thông báo, 2 chưa đọc"/);
+    expect(out).toMatch(/>2<\/span>/);
+    mocks.notifications = [];
+  });
+
+  it('khách chưa đăng nhập không có chuông', () => {
+    mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
+    expect(render()).not.toContain('/tai-khoan/thong-bao');
   });
 });

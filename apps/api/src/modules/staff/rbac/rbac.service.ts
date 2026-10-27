@@ -202,7 +202,7 @@ export class RbacService {
   async listStaff() {
     const members = await this.prisma.user.findMany({
       where: { role: { in: ['STAFF', 'ADMIN'] } },
-      select: { id: true, phone: true, fullName: true, avatarUrl: true, role: true, createdAt: true },
+      select: { id: true, phone: true, fullName: true, avatarUrl: true, role: true, staffPermissions: true, createdAt: true },
       orderBy: { createdAt: 'desc' },
     });
     const memberPhones = new Set(members.map((m) => m.phone).filter(Boolean) as string[]);

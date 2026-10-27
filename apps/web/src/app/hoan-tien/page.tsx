@@ -22,10 +22,12 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniCard } from '@/components/loyalty/mini-surface';
+import { PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const DEFAULT_HOLD_DAYS = 30;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: number }) {
   const box = { width: size, height: size };
@@ -133,7 +135,7 @@ export default function CashbackPage() {
   })();
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:pt-0">
+    <main className={`${PAGE_WIDE} py-6 max-md:pt-0`}>
       <PageHeader title="Hoàn tiền" backHref="/tai-khoan/vi-tubu" backLabel="Quay lại Ví Tubu" />
       <div role="status" aria-live="polite">
         {notice && <p className="mt-3 text-sm font-medium text-success-fg">{notice}</p>}

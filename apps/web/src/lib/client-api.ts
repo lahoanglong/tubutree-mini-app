@@ -12,6 +12,7 @@
 // được, và mọi lần mở trang đều tưởng chưa đăng nhập. Riêng Trang chủ cần biết "khách đã có phiên"
 // ngay ở server để dựng đúng khung chờ, nên cờ được GHI THÊM thành cookie thường `tubu_web_session`
 // của chính origin web (JS ghi, không HttpOnly, không chứa bí mật), cùng lúc và cùng vòng đời với cờ localStorage.
+import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { HOME_HINT_COOKIE, SESSION_COOKIE } from './home-restore-hint';
 
 const BASE =
@@ -82,6 +83,7 @@ export function clearSessionMarker(): void {
   }
   writeWebCookie(SESSION_COOKIE, null);
   writeWebCookie(HOME_HINT_COOKIE, null);
+  document.documentElement.removeAttribute('data-restoring');
 }
 
 /** Header đánh dấu "tôi là web shop" — bật chế độ cookie ở BE, đồng thời là lớp chống CSRF. */
@@ -217,7 +219,7 @@ async function exchange(url: string, init: RequestInit): Promise<Reply> {
     } else {
       body = null;
     }
-    return { status: res.status, ok: res.ok, body };
+    return { status: res.status, ok: res.ok, body: resolveServedMedia(body, BASE) };
   } catch (e) {
     if (ctrl.signal.aborted) throw new NetworkError(true);
     if (e instanceof TypeError) throw new NetworkError(false);

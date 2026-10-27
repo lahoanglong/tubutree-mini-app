@@ -56,3 +56,12 @@ export function tenantHostBootScript(): string {
     '}catch(e){}})()'
   );
 }
+
+/**
+ * Script chạy ở <head> trước khi vẽ: máy có cờ phiên (localStorage.tubu_web_session) thì đặt `data-restoring` lên <html>, để khung khu
+ * tài khoản (AccountShell) dựng đúng bố cục hai cột ngay khung hình đầu mà HTML server vẫn giống nhau cho mọi người (trang giữ tĩnh/ISR,
+ * không đọc cookie). AccountShell gỡ thuộc tính khi biết đã đăng nhập hoặc là khách; clearSessionMarker cũng gỡ.
+ */
+export function restoringBootScript(): string {
+  return "(function(){try{if(localStorage.getItem('tubu_web_session')==='1')document.documentElement.setAttribute('data-restoring','')}catch(e){}})()";
+}

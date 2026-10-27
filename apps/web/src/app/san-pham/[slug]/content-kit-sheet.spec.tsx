@@ -123,7 +123,7 @@ describe('ContentKitSheet', () => {
     expect(document.querySelector('[role="alert"]')!.textContent).toContain('Máy chủ bận');
     click(byText(document.body, 'button', 'Thử lại'));
     await flush();
-    expect(mocks.http.get).toHaveBeenCalledTimes(2);
+    expect(mocks.http.get.mock.calls.filter(([p]) => !String(p).includes('/config/'))).toHaveLength(2);
     expect(document.body.textContent).toContain('Không sulfate');
   });
 });

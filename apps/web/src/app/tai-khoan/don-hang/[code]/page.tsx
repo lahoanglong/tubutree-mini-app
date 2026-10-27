@@ -40,6 +40,7 @@ import { FollowOaPrompt, OrderInvoice, OrderWasteLink } from './order-extras';
 import { CopyShippingCode } from './copy-shipping-code';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -440,7 +441,7 @@ function Row({ label, value, positive }: { label: string; value: string; positiv
 
 function Shell({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title={title} subtitle={subtitle} subtitleClassName="md:text-sm" backHref="/tai-khoan" backLabel="Đơn hàng của tôi" />
       <div className="mt-3 max-md:mt-0 max-md:pb-6">{children}</div>
     </main>

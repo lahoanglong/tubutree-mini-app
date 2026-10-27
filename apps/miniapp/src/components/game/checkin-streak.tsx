@@ -43,11 +43,12 @@ export function CheckInStreak({
     day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null;
   return (
     <Card padding={16}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      {/* flexWrap: màn hẹp (320/375) thì nút xuống hàng riêng thay vì ép tiêu đề gãy hai dòng cạnh nút. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ minWidth: 0 }}>
-          <Heading variant="title-sm" as="h2" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Heading variant="title-sm" as="h2" style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             <Icon icon={Flame} tone="brand" />
-            {t.title(streakDays ?? 0)}
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.title(streakDays ?? 0)}</span>
           </Heading>
           <Text variant="caption" tone="tertiary" as="div">
             {t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}

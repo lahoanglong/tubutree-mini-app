@@ -12,8 +12,9 @@ import ProductCard, { PRIORITY_CARDS } from '@/components/product-card';
 import { ProductCardSkeleton } from '@/components/ui/skeleton';
 import { Button, Chip, Heading, ScrollRow, Text } from '@/components/mini';
 import { HomeBlockError } from './home-block-error';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
-const GRID = 'grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-6';
+const GRID = GRID_PRODUCTS;
 
 /**
  * MỘT lưới gợi ý cuộn vô tận ở cuối Trang chủ (bản web của `suggest-feed.tsx` ở Mini App), thay bốn lưới riêng. Ba nguồn đổi bằng

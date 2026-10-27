@@ -1,6 +1,7 @@
 import type { LoginResponse } from '@tubutree/shared-types';
 import { vi } from '../i18n/vi';
 import type { FirstTouch } from './first-touch';
+import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { createTransport, HttpError, isHttpError, type HttpResponse, type RequestConfig } from './http';
 
 export { HttpError, isHttpError };
@@ -124,7 +125,9 @@ async function prepare(req: PendingRequest): Promise<void> {
 async function execute<T>(req: PendingRequest): Promise<HttpResponse<T>> {
   await prepare(req);
   try {
-    return await send<T>(req);
+    const res = await send<T>(req);
+    resolveServedMedia(res.data, BASE_URL);
+    return res;
   } catch (error) {
     if (!isHttpError(error)) throw error;
     const status = error.response?.status;
@@ -172,6 +175,9 @@ export const api = {
   patch: <T = unknown, R = HttpResponse<T>>(url: string, data?: unknown, config?: RequestConfig) => request<T, R>('PATCH', url, data, config),
 };
 
+/** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
+const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be|too large|not allowed|not acceptable|unexpected token)\b)/i;
+
 /**
  * Chuẩn hóa mọi lỗi API thành message Việt thân thiện (Voice & Tone §7.5).
  * Ưu tiên message backend (NestJS trả tiếng Việt sẵn, vd "Giỏ hàng trống."),
@@ -184,7 +190,7 @@ export function getErrorMessage(error: unknown): string {
     const data = error.response?.data as { message?: string | string[] } | undefined;
     const backendMsg = Array.isArray(data?.message) ? data.message[0] : data?.message;
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng.
-    if (backendMsg && error.response && error.response.status < 500) return backendMsg;
+    if (backendMsg && error.response && error.response.status < 500) return TECHNICAL_MESSAGE.test(backendMsg.trim()) ? vi.errors.generic : backendMsg;
     if (error.code === 'ECONNABORTED') return vi.errors.timeout;
     // Không có response: phân biệt MẤT MẠNG thật (navigator.onLine=false) với server/CORS không
     // phản hồi (vẫn có mạng) — tránh báo "mất mạng" sai khi thực chất là lỗi máy chủ.

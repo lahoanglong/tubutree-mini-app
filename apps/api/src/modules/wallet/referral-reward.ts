@@ -144,7 +144,8 @@ export async function hasReferralEntry(db: Db, reasons: string[]): Promise<boole
 }
 
 /** Số bạn giới thiệu thành công còn hiệu lực, gộp hai sổ: thưởng (kể cả kiểu cũ qua cashback) trừ lần đã thu hồi. */
-export async function countReferralSuccesses(db: Db, referrerId: string): Promise<number> {
+export async function countReferralSuccesses(db: Db, referrerId: string, since: Date | null = null): Promise<number> {
+  if (since) return referralSuccessesSince(await readReferralSuccessRows(db, referrerId), since);
   const count = async (prefix: string) => {
     const where = { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: prefix } };
     const [coin, points] = await Promise.all([db.coinTransaction.count({ where }), db.pointsTransaction.count({ where })]);
@@ -154,6 +155,46 @@ export async function countReferralSuccesses(db: Db, referrerId: string): Promis
     [LEGACY_REFERRAL_CASHBACK_PREFIX, REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX].map(count),
   );
   return legacy + granted - revoked;
+}
+
+export interface ReferralSuccessRow {
+  reason: string;
+  createdAt: Date;
+}
+
+/** Dòng thưởng và thu hồi hoàn toàn của người mời ở cả hai sổ, một truy vấn mỗi sổ (nhiệm vụ lọc theo mốc trong bộ nhớ). */
+export async function readReferralSuccessRows(db: Db, referrerId: string): Promise<ReferralSuccessRow[]> {
+  const where = {
+    userId: referrerId,
+    refType: 'REFERRAL',
+    OR: [LEGACY_REFERRAL_CASHBACK_PREFIX, REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX].map((p) => ({ reason: { startsWith: p } })),
+  };
+  const select = { reason: true, createdAt: true };
+  const [coin, points] = await Promise.all([db.coinTransaction.findMany({ where, select }), db.pointsTransaction.findMany({ where, select })]);
+  return [...coin, ...points];
+}
+
+/**
+ * Như countReferralSuccesses nhưng chỉ tính lượt có thưởng cấp từ `since`: một dòng thu hồi chỉ trừ khi lượt thưởng tương ứng
+ * (cùng người được mời) cũng cấp sau mốc. Thu hồi lượt cũ không được ăn vào lượt mới.
+ */
+export function referralSuccessesSince(rows: ReferralSuccessRow[], since: Date | null): number {
+  const granted = new Set<string>();
+  let n = 0;
+  for (const r of rows) {
+    const legacy = r.reason.startsWith(LEGACY_REFERRAL_CASHBACK_PREFIX);
+    const order2 = r.reason.startsWith(REFERRAL_ORDER2_PREFIX);
+    if (!legacy && !order2) continue;
+    if (since && r.createdAt.getTime() < since.getTime()) continue;
+    n += 1;
+    granted.add(r.reason.slice((legacy ? LEGACY_REFERRAL_CASHBACK_PREFIX : REFERRAL_ORDER2_PREFIX).length));
+  }
+  for (const r of rows) {
+    if (!r.reason.startsWith(REFERRAL_ORDER2_REVOKE_PREFIX)) continue;
+    if (since && !granted.has(r.reason.slice(REFERRAL_ORDER2_REVOKE_PREFIX.length))) continue;
+    n -= 1;
+  }
+  return since ? Math.max(0, n) : n;
 }
 
 export interface MilestoneState {

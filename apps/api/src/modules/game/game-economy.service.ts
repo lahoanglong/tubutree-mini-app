@@ -174,6 +174,7 @@ export class GameEconomyService {
         lastCheckInAt: new Date(),
         brokenStreakDays,
         brokenStreakAt,
+        ...(streakFrozeUsed ? { lastStreakFreezeAt: new Date() } : {}),
       },
     });
     if (res.count === 0) return null;

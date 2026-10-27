@@ -715,7 +715,7 @@ describe('MerchantService — sửa/ngừng bán sản phẩm', () => {
     it('sản phẩm đã bị admin gỡ liên kết (isActive=false) xin mã khác → mở bán lại cùng lúc, nếu không duyệt xong vẫn ẩn và SKU không bán ở đâu', async () => {
       const { svc, productUpdate } = buildEdit(UNLINKED, { ...PANCAKE_ROW, pancakeId: 'PK-NEW' });
       await svc.updateProduct('u1', 'prod-a', { pancakeCode: 'PK-NEW' });
-      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true });
+      expect(productUpdate.mock.calls[0]![0].data).toMatchObject({ approvalStatus: 'PENDING_REVIEW', isActive: true, approvedAt: expect.any(Date) });
     });
 
     it('sản phẩm bị từ chối rồi ngừng bán xin mã khác → cũng mở bán lại cùng lúc xin mã', async () => {

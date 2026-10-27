@@ -62,6 +62,7 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniRadio, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProductThumb } from '@/components/mini';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -462,8 +463,8 @@ export default function CheckoutPage() {
           </Link>
         </div>
       )}
-      <div className="grid gap-6 max-md:gap-0 md:grid-cols-3">
-        <div className="space-y-4 max-md:contents md:col-span-2">
+      <div className="grid gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-4 max-md:contents">
           <section data-mini-block="address" className={`${MINI_BAND} max-md:order-1`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Địa chỉ giao hàng</h2>
             {addrQ.isError && (
@@ -619,7 +620,8 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        <div className={`h-fit p-4 ${ui.card} max-md:contents`}>
+        {/* 9rem: khung chưa dính ở đầu trang nằm thấp hơn vị trí dính khoảng 6.5rem (tiêu đề + đường dẫn); trừ thêm để đáy khung, nơi có nút Đặt hàng, đã trong màn ngay khi chưa cuộn. */}
+        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Giỏ một nơi giao: cuộn trong khung (focus được bằng bàn phím, axe scrollable-region-focusable). Giỏ tách kiện
               hiện hết để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
@@ -731,15 +733,15 @@ export default function CheckoutPage() {
           {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           </div>
-          <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4">
-          <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:mt-0 max-md:border-t-0 max-md:pt-1">
+          <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
+          <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:mt-0 max-md:border-t-0 max-md:pt-1 lg:hidden">
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
             <span>{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
-            <p className="mt-1 text-xs text-success-fg">+{quote.pointsEarned} Điểm Xanh sau khi giao</p>
+            <p className="mt-1 text-xs text-success-fg">Nhận +{formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công</p>
           )}
           {quoteQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
@@ -760,13 +762,21 @@ export default function CheckoutPage() {
             </p>
           )}
 
-          {/* Dưới md nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ md giữ ở khung tóm tắt. */}
-          <OrderConsent className="mt-4 hidden md:block" />
+          {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải, dính đáy khung để màn thấp (1366×768) vẫn thấy nút và lỗi đặt hàng. */}
+          </div>
+          {/* Con trực tiếp của khung cuộn (không nằm trong khối tổng): sticky chỉ trượt trong khối cha của nó. Điện thoại giữ thứ tự và đệm cũ. */}
+          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-stone-0 lg:py-4">
+          {/* Bản sao hiển thị của dòng Tổng cộng: khung tóm tắt cuộn được nên dòng gốc có thể trượt khỏi màn, tổng tiền phải luôn nằm cạnh nút Đặt hàng. */}
+          <div className="mb-3 hidden justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 lg:flex">
+            <span>Tổng cộng</span>
+            <span>{totalText}</span>
+          </div>
+          <OrderConsent className="hidden lg:block" />
           <button
             type="button"
             onClick={() => place.mutate()}
             disabled={placeDisabled}
-            className={`${ui.btnPrimary} mt-2 hidden w-full md:inline-flex`}
+            className={`${ui.btnPrimary} mt-2 hidden w-full lg:inline-flex`}
           >
             {place.isPending ? 'Đang đặt hàng…' : 'Đặt hàng'}
           </button>
@@ -796,7 +806,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       </div>
-      <StickyActionBar label="Đặt hàng">
+      <StickyActionBar label="Đặt hàng" hideFrom="lg">
         {barHint && (
           <p aria-hidden="true" className="mb-2 text-xs text-danger-fg">
             {barHint}
@@ -960,8 +970,8 @@ function AddressPicker({
 // `bare`: màn thành công ở điện thoại không có thanh tiêu đề (Mini App OrderSuccess tự có h1), từ md vẫn như các màn khác.
 function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
-      <BackLink href="/gio-hang">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
+      <BackLink href="/gio-hang" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Giỏ hàng', href: '/gio-hang' }, { label: 'Thanh toán' }]}>
         ← Về giỏ hàng
       </BackLink>
       {bare ? (

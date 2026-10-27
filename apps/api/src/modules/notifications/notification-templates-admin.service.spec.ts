@@ -86,6 +86,29 @@ describe('NotificationTemplatesAdminService', () => {
     await expect(svc.update('ORDER_CONFIRMED', { zaloTemplateId: 'abc-1' })).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('biến không thuộc mẫu → 400 nêu biến sai và biến dùng được; không ghi gì', async () => {
+    const { svc, update } = setup();
+    await expect(svc.update('ORDER_CONFIRMED', { bodyTemplate: 'Tặng mã {{code}}' })).rejects.toThrow('{{order_code}}');
+    await expect(svc.update('ORDER_CONFIRMED', { bodyTemplate: 'Đơn {{ order_code }} xong' })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.update('ORDER_CONFIRMED', { bodyTemplate: 'Đơn {order_code} xong' })).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('biến đúng của mẫu → lưu; mẫu ngoài bảng biến (GAME_STREAK) không bị kiểm biến', async () => {
+    const { svc, update } = setup();
+    await svc.update('ORDER_CONFIRMED', { bodyTemplate: 'Đơn {{order_code}} đã nhận, cảm ơn bạn.' });
+    await svc.update('GAME_STREAK', { bodyTemplate: 'Chuỗi {{bat_ky}} ngày' });
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it('danh sách trả biến dùng được kèm tên gọi dễ hiểu', async () => {
+    const { svc } = setup();
+    const rows = await svc.list();
+    const order = rows.find((r) => r.code === 'ORDER_CONFIRMED')!;
+    expect(order.variables).toEqual([{ key: 'order_code', label: 'mã đơn hàng' }]);
+    expect(rows.find((r) => r.code === 'GAME_STREAK')!.variables).toBeNull();
+  });
+
   it('nội dung trống → 400; template không tồn tại → 404', async () => {
     const { svc } = setup();
     await expect(svc.update('ORDER_CONFIRMED', { bodyTemplate: '   ' })).rejects.toBeInstanceOf(BadRequestException);
@@ -152,10 +175,16 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('biến không thuộc mẫu bị chặn cả với nhân viên: mẫu flash sale không có {{order_code}}', async () => {
+    const { svc, update } = staffSetup();
+    await expect(svc.update('FLASH_STARTING', { bodyTemplate: 'Flash {{order_code}}' }, staff)).rejects.toThrow('{{product}}');
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it('link tubutree, OA và Mini App của shop, số tiền thường, biến {{...}} → được', async () => {
     const { svc, update } = staffSetup({ oaId: '1234567890123', miniapp: 'https://zalo.me/s/555' });
     const body =
-      'Flash sale giảm 1.500.000đ cho đơn {{order_code}} tại https://tubutree.com/flash, www.tubutree.vn, zalo.me/1234567890123 hoặc https://zalo.me/s/555/?p=1';
+      'Flash sale giảm 1.500.000đ cho {{product}} tại https://tubutree.com/flash, www.tubutree.vn, zalo.me/1234567890123 hoặc https://zalo.me/s/555/?p=1';
     await svc.update('FLASH_STARTING', { bodyTemplate: body }, staff);
     expect(update).toHaveBeenCalled();
   });
@@ -163,9 +192,9 @@ describe('NotificationTemplatesAdminService — nhân viên Marketing (D1-05)', 
   it.each([
     'Giảm 50% cho đơn từ 199.000đ, tối đa 30k',
     'Giờ vàng 12h-14h, còn 3 suất. Mua tại tubutree.com/flash nhé',
-    'Mã {{coupon_code}} giảm {{discount}} hết hạn {{expire_date}}',
+    'Giảm {{product}} hết hạn hôm nay',
     'Giao nhanh nội thành Tp.HCM và Hà Nội, v.v.',
-    'Ghé shop.tubutree.com/an hoặc https://app.tubutree.vn/s/an?ref={{ref}}',
+    'Ghé shop.tubutree.com/an hoặc https://app.tubutree.vn/s/an?ref=abc',
   ])('nội dung hợp lệ không bị chặn nhầm: %s', async (body) => {
     const { svc, update } = staffSetup({ oaId: '1234567890123', miniapp: 'https://zalo.me/s/555' });
     await svc.update('FLASH_STARTING', { bodyTemplate: body }, staff);

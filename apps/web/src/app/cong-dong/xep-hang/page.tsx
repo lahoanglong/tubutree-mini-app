@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const MEDAL: Record<number, { label: string; color: string }> = {
   1: { label: 'Huy chương vàng', color: 'var(--honey-500)' },
@@ -26,7 +27,7 @@ const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message :
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:pt-0`}>
       <PageHeader title="Bảng xếp hạng" backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4">{children}</div>
     </main>

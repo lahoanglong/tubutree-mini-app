@@ -41,6 +41,7 @@ import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
 const TIER_KEY = 'tubu_last_tier_min_v2';
@@ -53,7 +54,7 @@ const TIER_STYLE: Record<string, { emoji: string; bg: string; fg: string }> = {
 };
 const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';
@@ -154,7 +155,7 @@ export default function LoyaltyPage() {
 
   return (
     <LedgerShell title={TITLE} wide>
-      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_auto_1fr] lg:items-start">
           <section aria-label="Hạng thành viên" className={`p-5 text-center lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
             <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
               {tierStyle.emoji}
@@ -204,13 +205,13 @@ export default function LoyaltyPage() {
               </div>
             )}
 
-            <button type="button" onClick={() => setShowCard(true)} className={`${miniBtnSecondary} mt-4 gap-2`}>
+            <button type="button" onClick={() => setShowCard(true)} className={`${miniBtnSecondary} mt-4 max-w-full gap-2 py-2 text-center`}>
               <QrCodeIcon className="h-4 w-4" aria-hidden="true" />
               Thẻ thành viên số (mã QR)
             </button>
           </section>
 
-          <Section title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
+          <Section className="lg:col-start-1" title="Mã giảm giá của tôi" action={couponsQ.data && couponsQ.data.length > 0 ? `${couponsQ.data.length} mã` : undefined}>
             {couponsQ.isLoading ? (
               <Skeleton height={64} />
             ) : couponsQ.isError ? (
@@ -243,8 +244,12 @@ export default function LoyaltyPage() {
             )}
           </Section>
 
-          <DailyCheckInCard authed={authed} />
+          <div className="contents empty:hidden lg:col-start-1 lg:block">
+            <DailyCheckInCard authed={authed} />
+          </div>
 
+          {/* Từ lg: cột trái 2/3 gồm mã giảm giá, điểm danh, lịch sử (xếp tự động nối nhau trong cột 1, nên thẻ nào vắng thì không để lại hàng/khoảng trống; hàng cuối 1fr nhận phần cao dư của cột phải); cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
+          <div className="contents lg:col-start-2 lg:row-span-3 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
           {shortcuts.length > 0 && (
             <ul className={`divide-y divide-stone-200 ${miniCard}`}>
               {shortcuts.map((s) => (
@@ -301,8 +306,9 @@ export default function LoyaltyPage() {
               })}
             </ul>
           </section>
+          </div>
 
-          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-span-2 ${miniCard}`}>
+          <section aria-label="Lịch sử Điểm Xanh" className={`p-4 lg:col-start-1 ${miniCard}`}>
             <h2 className={`mb-2 ${ui.sectionTitle} ${miniSectionTitle}`}>Lịch sử Điểm Xanh</h2>
             {txnQ.isLoading ? (
               <Skeleton height={64} />
@@ -469,9 +475,9 @@ function MemberCardSheet({
   );
 }
 
-function Section({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
+function Section({ title, action, children, className = '' }: { title: string; action?: string; children: React.ReactNode; className?: string }) {
   return (
-    <section aria-label={title} className={`p-4 ${miniCard}`}>
+    <section aria-label={title} className={`p-4 ${miniCard} ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className={`${ui.sectionTitle} ${miniSectionTitle}`}>{title}</h2>
         {action && <span className="text-xs text-stone-600">{action}</span>}

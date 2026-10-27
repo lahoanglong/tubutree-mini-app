@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { publicImage } from '../../common/public-image';
 
 export type LessonContentType = 'VIDEO' | 'ARTICLE';
 
@@ -49,6 +50,7 @@ export class AcademyService {
       const completedCount = lessons.filter((l) => completedIds.has(l.id)).length;
       return {
         ...rest,
+        ...('coverUrl' in rest ? { coverUrl: publicImage('academy', c.id, 'cover', rest.coverUrl as string | null | undefined) } : {}),
         lessonCount,
         completedCount,
         isCompleted: lessonCount > 0 && completedCount === lessonCount,
@@ -71,7 +73,12 @@ export class AcademyService {
     const lessonIds = (course.lessons as { id: string }[]).map((l) => l.id);
     const completedIds = await this.completedLessonIdSet(userId, lessonIds);
 
-    return { ...course, completedLessonIds: [...completedIds] };
+    return {
+      ...course,
+      // Quản trị cần ảnh nguyên bản để sửa; khách chỉ nhận đường dẫn tới endpoint ảnh.
+      ...(isAdmin ? {} : { coverUrl: publicImage('academy', course.id, 'cover', course.coverUrl) }),
+      completedLessonIds: [...completedIds],
+    };
   }
 
   /** User: đánh dấu đã học xong 1 bài — idempotent (upsert theo unique [userId, lessonId]). */

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { grantStaff, revokeStaff, type StaffRole } from '@tubutree/app-core/api/staff';
 import { adminStaffQuery } from '@tubutree/app-core/queries/staff';
 import { coreHttp } from '@/lib/core-http';
+import { setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
 import { errText } from '@/components/staff/staff-shell';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK_DANGER, BTN_PRIMARY, chipClass, Field, INPUT_CLASS, Notice, ToneBadge } from './ui';
@@ -13,7 +14,7 @@ const PHONE_RE = /^0\d{8,10}$/;
 const ROLE_LABEL: Record<StaffRole, string> = { STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
 
 /** Nhân sự: danh sách người có quyền, cấp quyền theo SĐT (STAFF hoặc ADMIN), thu hồi và huỷ lời mời chờ mở app. */
-export function StaffRosterTab() {
+export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const staffQ = useQuery(adminStaffQuery(coreHttp));
@@ -39,7 +40,7 @@ export function StaffRosterTab() {
         res.storeBlocked
           ? {
               tone: 'warning',
-              text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin xong thì: gian hàng loại CTV tắt cờ đối tác; gian hàng loại MERCHANT không tắt bằng cờ được, hãy đặt lại vai trò cho người này. Hoặc đặt lại vai trò DEALER để giữ nguyên gian hàng.',
+              text: 'Đã gỡ quyền, nhưng gian hàng đối tác của người này còn việc dở nên được giữ nguyên và họ có thể chưa dùng được Cổng người bán. Xử lý ở tab "Đơn đối tác & đối soát" trên web admin xong thì: gian hàng loại CTV tắt quyền đối tác; gian hàng loại MERCHANT không tắt bằng cờ được, hãy đặt lại vai trò cho người này. Hoặc đặt lại vai trò DEALER để giữ nguyên gian hàng.',
             }
           : { tone: 'success', text: 'Đã thu hồi quyền.' },
       );
@@ -139,24 +140,29 @@ export function StaffRosterTab() {
           {staffQ.data.members.length === 0 && <p className="text-sm text-stone-500">Chưa có nhân sự. Nhập số điện thoại ở trên để cấp quyền.</p>}
           <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {staffQ.data.members.map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
-                <div className="min-w-0 text-sm">
-                  <div className="break-words font-medium text-stone-900">{m.fullName ?? 'Chưa có tên'}</div>
-                  <div className="text-xs text-stone-600">
-                    {m.phone ?? '—'} · <ToneBadge tone={m.role === 'ADMIN' ? 'warning' : 'neutral'}>{ROLE_LABEL[m.role]}</ToneBadge>
+              <li key={m.id} className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 text-sm">
+                    <div className="break-words font-medium text-stone-900">{m.fullName ?? 'Chưa có tên'}</div>
+                    <div className="text-xs text-stone-600">
+                      {m.phone ?? '—'} · <ToneBadge tone={m.role === 'ADMIN' ? 'warning' : 'neutral'}>{ROLE_LABEL[m.role]}</ToneBadge>
+                    </div>
                   </div>
+                  {m.id === meId && <span className="shrink-0 text-xs text-stone-500">(bạn)</span>}
+                  {m.phone && m.id !== meId && (
+                    <button
+                      type="button"
+                      aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}
+                      disabled={revokeM.isPending}
+                      onClick={() => void askRevoke(m.phone as string, m.fullName ?? (m.phone as string))}
+                      className={`${BTN_LINK_DANGER} shrink-0`}
+                    >
+                      Thu hồi
+                    </button>
+                  )}
                 </div>
-                {m.phone && (
-                  <button
-                    type="button"
-                    aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}
-                    disabled={revokeM.isPending}
-                    onClick={() => void askRevoke(m.phone as string, m.fullName ?? (m.phone as string))}
-                    className={BTN_LINK_DANGER}
-                  >
-                    Thu hồi
-                  </button>
-                )}
+                {m.role === 'STAFF' && <PermissionPicker key={`${m.id}:${(m.staffPermissions ?? []).join(',')}`} userId={m.id} current={(m.staffPermissions ?? []) as StaffPermission[]} onSaved={refresh} />}
+                {m.role === 'ADMIN' && <p className="text-xs text-stone-500">Quản trị thấy và làm được mọi việc.</p>}
               </li>
             ))}
           </ul>
@@ -187,5 +193,48 @@ export function StaffRosterTab() {
         </>
       )}
     </div>
+  );
+}
+
+/** Nhóm việc quyết định nhân viên thấy mục nào và gọi được việc nào; máy chủ kiểm lại từng lần gọi nên bỏ tick là mất quyền ngay. */
+function PermissionPicker({ userId, current, onSaved }: { userId: string; current: StaffPermission[]; onSaved: () => void }) {
+  const [perms, setPerms] = useState<StaffPermission[]>(current);
+  const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
+  const save = useMutation({
+    mutationFn: () => setStaffPermissions(userId, perms),
+    onSuccess: (r) => {
+      setMsg({ tone: 'success', text: r.changed ? 'Đã lưu nhóm việc. Nhân viên thấy mục mới ở lần mở trang kế tiếp.' : 'Không có gì thay đổi.' });
+      onSaved();
+    },
+    onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
+  });
+  const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
+  return (
+    <fieldset className="space-y-1">
+      <legend className="text-xs font-semibold text-stone-700">Nhóm việc</legend>
+      <p className="text-xs text-stone-500">Không chọn nhóm nào: chỉ dùng quầy thu ngân, Đổi rác và chấm công.</p>
+      {(Object.keys(STAFF_PERMISSION_SHORT) as StaffPermission[]).map((p) => (
+        <label key={p} className="flex min-h-[44px] items-start gap-2 py-1 text-sm sm:min-h-[32px]">
+          <input
+            type="checkbox"
+            checked={perms.includes(p)}
+            onChange={(e) => setPerms((cur) => (e.target.checked ? [...cur, p] : cur.filter((x) => x !== p)))}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-forest-600"
+          />
+          <span className="min-w-0">
+            <span className="font-medium text-stone-900">{STAFF_PERMISSION_SHORT[p]}</span>
+            <span className="block break-words text-xs text-stone-500">{STAFF_PERMISSION_LABELS[p].split(' — ')[1]}</span>
+          </span>
+        </label>
+      ))}
+      <button type="button" disabled={!dirty || save.isPending} onClick={() => save.mutate()} className={BTN_PRIMARY}>
+        {save.isPending ? 'Đang lưu…' : 'Lưu nhóm việc'}
+      </button>
+      {msg && (
+        <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
+          {msg.text}
+        </Notice>
+      )}
+    </fieldset>
   );
 }

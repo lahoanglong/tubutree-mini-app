@@ -15,6 +15,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const LOAD_FAILED = 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.';
 const SAVE_FAILED = 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.';
@@ -82,7 +83,7 @@ export default function SettingsPage() {
   };
 
   const shell = (body: ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Cài đặt" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
       <div className="max-md:px-4">{body}</div>
     </main>
@@ -94,7 +95,7 @@ export default function SettingsPage() {
 
   const switchesLocked = !notify || saving;
   return shell(
-    <div className="mt-4 grid gap-3 md:grid-cols-2">
+    <div className="mt-4 grid gap-3">
       <Section title="Thông báo">
         {platformBridge.oa.available && <FollowOaRow />}
         <div className="min-h-11 border-b border-stone-200 py-2">
@@ -153,7 +154,7 @@ export default function SettingsPage() {
         <LinkRow href="/tai-khoan/dia-chi" label="Sổ địa chỉ" last />
       </Section>
 
-      <div className="flex flex-col justify-end md:col-span-1">
+      <div className="flex flex-col">
         <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
           Đăng xuất
         </button>

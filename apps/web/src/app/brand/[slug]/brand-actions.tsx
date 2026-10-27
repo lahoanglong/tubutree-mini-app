@@ -75,18 +75,18 @@ export function BrandActions({ slug, name, followerCount }: { slug: string; name
         data-sticky-bar
         className="max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]"
       >
-        <div className="mt-2 flex gap-2 max-md:mt-0">
+        <div className="mt-2 flex gap-2 max-md:mt-0 md:justify-end">
           <button
             type="button"
             aria-pressed={authed ? following : undefined}
             disabled={followMut.isPending}
             onClick={onFollow}
-            className={`${ui.btnSecondary} ${phoneSecondary} flex-1 gap-1.5`}
+            className={`${ui.btnSecondary} ${phoneSecondary} flex-1 gap-1.5 md:w-auto md:min-w-48 md:flex-none`}
           >
             {following ? <Check className="h-4 w-4" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
             {following ? 'Đang theo dõi' : 'Theo dõi'}
           </button>
-          <button type="button" onClick={() => setShareOpen(true)} className={`${ui.btnPrimary} flex-1 gap-1.5`}>
+          <button type="button" onClick={() => setShareOpen(true)} className={`${ui.btnPrimary} flex-1 gap-1.5 md:w-auto md:min-w-48 md:flex-none`}>
             <Share2 className="h-4 w-4" aria-hidden="true" />
             Chia sẻ
           </button>

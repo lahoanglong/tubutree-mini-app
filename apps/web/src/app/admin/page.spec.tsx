@@ -1937,8 +1937,9 @@ describe('admin/page — tab Academy', () => {
   it('form tạo khoá: tiêu đề font-display, ô nhập/nút 44px, khoá tới khi có tiêu đề, gửi đúng dữ liệu', async () => {
     const { container } = await openAcademy();
     expect(container.querySelector('h2')!.className).toContain('font-display');
-    const inputs = [...container.querySelectorAll('input:not([aria-label="Tìm mục quản trị"])')];
+    const inputs = [...container.querySelectorAll('input:not([type=file]):not([aria-label="Tìm mục quản trị"])')];
     expect(inputs).toHaveLength(3);
+    expect(container.querySelector('input[type=file]')).not.toBeNull();
     for (const el of inputs) {
       expect(el.className).toContain('min-h-[44px]');
       expect(el.className).toContain('border-stone-450');
@@ -2010,7 +2011,7 @@ describe('admin/page — tab Academy', () => {
     const save = btn(container, 'Lưu thông tin');
     expect(save.className).toContain('bg-forest-600');
     expect(save.parentElement!.className).toContain('bg-stone-50');
-    typeInto(save.parentElement!.querySelector('input[placeholder="Ảnh bìa (URL)"]'), 'https://c.test/x.png');
+    typeInto(save.parentElement!.querySelector('input[type=url]'), 'https://c.test/x.png');
     mocks.updateAcademyCourse.mockResolvedValue({});
     click(save);
     await flush();
@@ -3369,7 +3370,7 @@ describe('admin/page — UAT ui-admin-2', () => {
       }
     });
 
-    it('Nhãn hàng: "Ảnh bìa (URL)" thay "Cover URL", mọi ô thông tin nhãn có nhãn nhìn thấy', async () => {
+    it('Nhãn hàng: logo và ảnh bìa có nút tải lên và ô link, không còn "Cover URL", mọi ô thông tin nhãn có nhãn nhìn thấy', async () => {
       mocks.brands = [{
         id: 'b1', slug: 'dua', name: 'Dừa', tagline: null, logoUrl: null, coverUrl: null, story: null, origin: null,
         certifications: [], isVerified: false, isPublished: true, followerCount: 0,
@@ -3379,7 +3380,8 @@ describe('admin/page — UAT ui-admin-2', () => {
       click(btn(container, 'Quản lý'));
       await flush();
       expect(container.querySelector('[placeholder="Cover URL"]')).toBeNull();
-      for (const t of ['Logo (URL)', 'Ảnh bìa (URL)', 'Tagline', 'Nguồn gốc', 'Câu chuyện thương hiệu']) {
+      expect(container.querySelectorAll('input[type=file]')).toHaveLength(2);
+      for (const t of ['Tagline', 'Nguồn gốc', 'Câu chuyện thương hiệu']) {
         expect(labelOf(container, t), t).toBeDefined();
       }
     });

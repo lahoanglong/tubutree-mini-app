@@ -428,6 +428,8 @@ function shellDefaults(api: MockApi): void {
   });
   api.fallback('GET', '/orders/active-count', { count: 0 });
   api.fallback('GET', '/me/subscriptions', []);
+  // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
+  api.fallback('GET', '/me/notifications', []);
 }
 
 // ─────────────────────────── Dữ liệu mẫu dùng chung ───────────────────────────

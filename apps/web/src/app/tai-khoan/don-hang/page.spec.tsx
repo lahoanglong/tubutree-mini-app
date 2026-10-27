@@ -192,7 +192,7 @@ describe('trang Đơn hàng /tai-khoan/don-hang', () => {
   it('lỗi tải: báo lỗi, "Thử lại" gọi lại API', async () => {
     ordersFail = true;
     const c = await mount();
-    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
     ordersFail = false;
     click(btn('Thử lại', c) ?? null);
     await flush(8);

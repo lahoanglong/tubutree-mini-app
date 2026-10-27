@@ -6,6 +6,7 @@ import { MAX_INPUT_CHARS } from './gateway-prompt';
 import { LlmClient, LlmUnavailableException, type ChatMessage, type LlmFailureReason } from './llm.client';
 import { productQueryTokens, rankProducts } from './product-match';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
+import { publicImage } from '../../common/public-image';
 
 export interface ProductSuggestion {
   id: string;
@@ -153,7 +154,7 @@ export class AiAdvisorService {
       orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
       select: { id: true, name: true, slug: true, brand: true, shortDesc: true, thumbnail: true, basePrice: true, salePrice: true },
     });
-    return rankProducts(tokens, candidates, MAX_SUGGESTIONS);
+    return rankProducts(tokens, candidates, MAX_SUGGESTIONS).map((p) => ({ ...p, thumbnail: publicImage('product', p.id, 'thumb', p.thumbnail) }));
   }
 
   private systemPrompt(products: ProductSuggestion[], faqs: FaqContext[] = []): string {

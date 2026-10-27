@@ -15,12 +15,13 @@ import { StorefrontSignupFlow } from '@/components/affiliate/storefront-signup';
 import { errText } from '@/components/affiliate/storefront-sheets';
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const TITLE = 'Gian hàng của tôi';
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className={`${PAGE_WIDE} py-6`}>
       <BackLink href="/ctv">
         ← Cộng tác viên
       </BackLink>

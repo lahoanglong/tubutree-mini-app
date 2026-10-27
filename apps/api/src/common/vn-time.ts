@@ -62,3 +62,8 @@ export function startOfVnWeek(d: Date = new Date()): Date {
 export function startOfNextVnWeek(d: Date = new Date()): Date {
   return new Date(startOfVnWeek(d).getTime() + 7 * 86_400_000);
 }
+
+/** Số ngày lịch VN từ `from` tới `to` (cùng ngày = 0). */
+export function vnDaysBetween(from: Date, to: Date): number {
+  return Math.max(0, Math.round((Date.parse(vnDateKey(to)) - Date.parse(vnDateKey(from))) / 86_400_000));
+}

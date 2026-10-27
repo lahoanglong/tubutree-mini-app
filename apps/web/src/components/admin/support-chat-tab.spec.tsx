@@ -157,6 +157,58 @@ describe('SupportChatTab — thẻ trạng thái cầu nối', () => {
     expect(b.container.querySelector('[data-bridge-deaf]')).toBeNull();
   });
 
+  it('công tắc đang bật mà cầu nối mất kết nối: băng đỏ nói tin không tới nhóm, từ lúc nào, số chat chờ và cách nối lại', async () => {
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true, waitingCount: 4 } }) });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    const banner = container.querySelector('[data-bridge-down]')!;
+    expect(banner.querySelector('[role=alert]')).not.toBeNull();
+    expect(banner.textContent).toContain('Tin khách đang không tới nhóm Zalo từ 10:05');
+    expect(banner.textContent).toContain('4 cuộc chat chờ chuyển');
+    expect(banner.textContent).toContain('Bấm "Kết nối lại"');
+    expect(banner.textContent).toContain('tắt công tắc');
+    expect(container.textContent).toContain('nhưng cầu nối đang mất kết nối');
+  });
+
+  it('mới mất kết nối chưa tới 10 phút: chưa hiện băng đỏ (cùng ngưỡng với cảnh báo của hệ thống)', async () => {
+    const recent = new Date(Date.now() - 3 * 60_000).toISOString();
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true, since: recent } }) });
+    const a = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(a.container.querySelector('[data-bridge-down]')).toBeNull();
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true, since: new Date(Date.now() - 11 * 60_000).toISOString() } }) });
+    const b = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(b.container.querySelector('[data-bridge-down]')).not.toBeNull();
+  });
+
+  it.each([
+    ['NEED_QR', 'quét mã QR'],
+    ['KICKED', 'Đóng Zalo đó lại'],
+    ['CONNECTING', 'chờ vài phút'],
+  ])('băng đỏ %s dặn đúng bước nối lại', async (state, copy) => {
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state, enabled: true } }) });
+    const { container } = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(container.querySelector('[data-bridge-down]')!.textContent).toContain(copy);
+  });
+
+  it('không hiện băng đỏ khi công tắc tắt hay cầu nối đang nối; nhân viên không phải admin được dặn nhờ quản trị viên', async () => {
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: false } }) });
+    const off = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(off.container.querySelector('[data-bridge-down]')).toBeNull();
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'CONNECTED', enabled: true } }) });
+    const on = mount(<SupportChatTab isAdmin />);
+    await flush();
+    expect(on.container.querySelector('[data-bridge-down]')).toBeNull();
+    stub({ 'GET bridge': () => ({ body: { ...BRIDGE, state: 'UNREACHABLE', enabled: true } }) });
+    const staff = mount(<SupportChatTab isAdmin={false} />);
+    await flush();
+    expect(staff.container.querySelector('[data-bridge-down]')!.textContent).toContain('Nhờ quản trị viên nối lại');
+    expect(staff.container.querySelector('[data-bridge-down]')!.textContent).not.toContain('tắt công tắc');
+  });
+
   it('chờ quét QR mà tệp phiên cũ chưa xoá được: hiện lỗi và vẫn có nút Đăng xuất để xoá lại', async () => {
     stub({
       'GET bridge': () => ({

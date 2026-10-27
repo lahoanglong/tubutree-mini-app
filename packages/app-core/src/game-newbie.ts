@@ -255,9 +255,17 @@ const MISSION_TARGETS: Record<string, MissionTarget> = {
   CHECKIN_7: 'checkin',
 };
 
-/** Đích của nhiệm vụ theo `code`; mã lạ trả null để không hiện nút. */
-export function missionTarget(code: string): MissionTarget | null {
-  return Object.prototype.hasOwnProperty.call(MISSION_TARGETS, code) ? MISSION_TARGETS[code]! : null;
+const KIND_TARGETS: Record<string, MissionTarget> = {
+  ORDER_COUNT: 'catalog',
+  REVIEW_COUNT: 'delivered-orders',
+  INVITE_COUNT: 'invite',
+  CHECKIN_STREAK: 'checkin',
+};
+
+/** Đích của nhiệm vụ: theo `code` (4 nhiệm vụ cố định), không có thì theo `kind` (nhiệm vụ quản trị thêm); lạ thì null để không hiện nút. */
+export function missionTarget(code: string, kind?: string | null): MissionTarget | null {
+  if (Object.prototype.hasOwnProperty.call(MISSION_TARGETS, code)) return MISSION_TARGETS[code]!;
+  return kind && Object.prototype.hasOwnProperty.call(KIND_TARGETS, kind) ? KIND_TARGETS[kind]! : null;
 }
 
 /** Mã khối điểm danh trong trang game, đích cuộn của nhiệm vụ "Chăm chỉ 7 ngày". */

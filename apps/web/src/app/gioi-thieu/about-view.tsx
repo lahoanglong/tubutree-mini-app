@@ -27,6 +27,7 @@ import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { formatVnd } from '@/lib/format-vnd';
 import { platformBridge } from '@/lib/platform-bridge';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const ALL_CATS = 'Tất cả';
 const FAQ_SKELETON_ROWS = 4;
@@ -50,7 +51,7 @@ const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 export function AboutView({ initialFaqs, initialConfig, initialSupport }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig; initialSupport?: SupportContact }) {
   const phase = useAuthPhase();
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Về Tubu Tree" />
       <section className="mt-4 rounded-card bg-forest-800 p-5 text-stone-0 shadow-card max-md:mx-4 max-md:mt-3 max-md:bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] max-md:shadow-none">
         <TreePine className="h-8 w-8 max-md:h-6 max-md:w-6" aria-hidden="true" />

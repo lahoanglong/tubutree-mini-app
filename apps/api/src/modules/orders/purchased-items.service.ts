@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { isPancakeFulfilledLine } from '../integrations/pancake/pancake-fulfilment';
 import { VARIATION_ID_RE } from './variation-id';
+import { publicProductThumb } from '../../common/public-image';
 
 export interface PurchasedItem {
   variationId: string;
@@ -122,7 +123,7 @@ export class PurchasedItemsService {
         productName: v.product.name,
         variationName: v.name,
         brand: v.product.brand,
-        thumbnail: v.product.thumbnail ?? v.product.images[0] ?? null,
+        thumbnail: publicProductThumb({ id: v.product.id, thumbnail: v.product.thumbnail, images: v.product.images }),
         price: v.retailPrice,
         salePrice: v.salePrice,
         stock: Math.max(v.stock, 0),

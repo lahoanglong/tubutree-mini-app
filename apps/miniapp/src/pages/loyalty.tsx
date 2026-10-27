@@ -256,6 +256,7 @@ export default function LoyaltyPage() {
                 <Button
                   variant="secondary"
                   icon={QrCodeIcon}
+                  style={{ whiteSpace: 'normal', height: 'auto', maxWidth: '100%', paddingTop: 8, paddingBottom: 8, textAlign: 'center' }}
                   onPress={() => {
                     haptic('light');
                     setShowMemberCard(true);

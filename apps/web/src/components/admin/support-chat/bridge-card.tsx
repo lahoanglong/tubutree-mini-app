@@ -39,6 +39,39 @@ function stateView(s: SupportBridgeStatus): { tone: Tone; text: string } {
   }
 }
 
+/** Cùng ngưỡng với bridgeIsDown của API (STALE_AFTER_MS): dưới mức này là chập chờn ngắn, chưa báo động. */
+const BRIDGE_DOWN_AFTER_MS = 10 * 60_000;
+
+function downLongEnough(since: string | null): boolean {
+  if (!since) return true;
+  const at = new Date(since).getTime();
+  return !Number.isFinite(at) || Date.now() - at > BRIDGE_DOWN_AFTER_MS;
+}
+
+/** "từ 10:05, cách đây 2 giờ": thời lượng thô theo phút/giờ/ngày để chủ cửa hàng biết tin đã nằm chờ bao lâu. */
+function outageSince(since: string | null): string {
+  if (!since) return '';
+  const ms = Date.now() - new Date(since).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const min = Math.floor(ms / 60_000);
+  const ago = min < 1 ? 'vừa mới' : min < 60 ? `${min} phút trước` : min < 1440 ? `${Math.floor(min / 60)} giờ trước` : `${Math.floor(min / 1440)} ngày trước`;
+  return ` từ ${isoToVnHHMM(since)} (${ago})`;
+}
+
+function reconnectSteps(state: SupportBridgeStatus['state'], isAdmin: boolean): string {
+  if (!isAdmin) return 'Nhờ quản trị viên nối lại cầu nối. Trong lúc đó hãy trả lời khách ngay ở tab này.';
+  switch (state) {
+    case 'NEED_QR':
+      return 'Bấm "Đăng nhập Zalo" rồi quét mã QR bằng Zalo của tài khoản cầu nối.';
+    case 'KICKED':
+      return 'Tài khoản cầu nối vừa được mở ở nơi khác (Zalo máy tính hoặc web). Đóng Zalo đó lại rồi bấm "Kết nối lại".';
+    case 'CONNECTING':
+      return 'Cầu nối đang nối lại, chờ vài phút. Nếu vẫn chưa được thì bấm "Kết nối lại".';
+    default:
+      return 'Bấm "Kết nối lại". Nếu vẫn chưa được, bấm "Đăng nhập Zalo" và quét mã QR bằng Zalo của tài khoản cầu nối.';
+  }
+}
+
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
 
 /** Trạng thái cầu nối Zalo; chỉ ADMIN có thêm đăng nhập, đăng xuất, nhóm nhận tin, công tắc chat. */
@@ -156,6 +189,17 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
             {status.lastError && <span className="min-w-0 break-words text-xs text-stone-500">{status.lastError}</span>}
           </div>
 
+          {status.enabled && !connected && downLongEnough(status.since) && (
+            <div data-bridge-down>
+              <Notice tone="danger" role="alert">
+                <strong>Tin khách đang không tới nhóm Zalo{outageSince(status.since)}.</strong> Khách vẫn gửi được tin và tin được giữ lại
+                {status.waitingCount ? ` (đang có ${status.waitingCount} cuộc chat chờ chuyển)` : ''}, nhưng nhân viên trong nhóm Zalo chưa thấy.{' '}
+                {reconnectSteps(status.state, isAdmin)}
+                {isAdmin && ' Chưa nối lại được thì tắt công tắc "Cho khách chat" bên dưới để khách thấy số điện thoại hỗ trợ thay vì chờ.'}
+              </Notice>
+            </div>
+          )}
+
           {connected && status.deaf && (
             <div data-bridge-deaf>
               <Notice tone="danger" role="alert">
@@ -228,7 +272,10 @@ export function BridgeCard({ isAdmin }: { isAdmin: boolean }) {
                 >
                   <span className={`inline-block h-5 w-5 rounded-full bg-stone-0 shadow transition-transform ${status.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
-                <span className="text-sm text-stone-700">Cho khách chat: {status.enabled ? 'đang bật' : 'đang tắt'}</span>
+                <span className="text-sm text-stone-700">
+                  Cho khách chat: {status.enabled ? 'đang bật' : 'đang tắt'}
+                  {status.enabled && !connected && <span className="text-danger-fg"> (nhưng cầu nối đang mất kết nối)</span>}
+                </span>
               </div>
             </>
           )}

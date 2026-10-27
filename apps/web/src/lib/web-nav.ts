@@ -28,3 +28,22 @@ export const isWebRootPath = (pathname: string | null | undefined): boolean => !
 
 /** Mục có route web đã xong; route còn `pending` trong route-map thì ẩn để khách không bấm vào trang chưa có. */
 export const readyNavTabs = (): WebNavTab[] => WEB_NAV_TABS.filter((t) => isWebRouteReady(t.path));
+
+/**
+ * Chức năng không nằm trên thanh đáy điện thoại nhưng khách máy tính cần thấy ngay ở thanh đầu và chân trang (trước đây bị giấu).
+ * Cũng lọc theo route-map: route web chưa xong thì ẩn.
+ */
+export const WEB_PROGRAM_LINKS: readonly { path: string; label: string }[] = [
+  { path: '/doi-rac', label: 'Đổi rác lấy quà' },
+  { path: '/kho-qua', label: 'Kho quà' },
+  { path: '/mua-chung', label: 'Mua chung' },
+  { path: '/cong-dong', label: 'Cộng đồng' },
+];
+
+export const readyProgramLinks = () => WEB_PROGRAM_LINKS.filter((l) => isWebRouteReady(l.path));
+
+/** Hàng điều hướng của thanh đầu máy tính: không lặp "Trang chủ" (logo) và "Cá nhân" (nút tài khoản). */
+export const readyDesktopNav = (): { path: string; label: string }[] => [
+  ...readyNavTabs().filter((t) => t.id !== 'home' && t.id !== 'profile'),
+  ...readyProgramLinks(),
+];

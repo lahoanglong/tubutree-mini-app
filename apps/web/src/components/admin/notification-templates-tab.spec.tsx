@@ -24,6 +24,7 @@ const TEMPLATES = [
     bodyTemplate: 'Đơn {{order_code}} đã được xác nhận.',
     delivery: 'ZNS_MISSING_TEMPLATE_ID',
     sent30d: { INAPP: 40, ZNS: 0 },
+    variables: [{ key: 'order_code', label: 'mã đơn hàng' }],
   },
   {
     id: 'nt-streak',
@@ -33,6 +34,20 @@ const TEMPLATES = [
     bodyTemplate: 'Giữ lửa chuỗi điểm danh nhé!',
     delivery: 'INAPP',
     sent30d: { INAPP: 120, ZNS: 0 },
+    variables: null,
+  },
+  {
+    id: 'nt-welcome',
+    code: 'WELCOME_VOUCHER',
+    channel: 'INAPP',
+    zaloTemplateId: null,
+    bodyTemplate: 'Tặng mã {{code}} giảm {{value}}đ',
+    delivery: 'INAPP',
+    sent30d: { INAPP: 5, ZNS: 0 },
+    variables: [
+      { key: 'code', label: 'mã' },
+      { key: 'value', label: 'giá trị mã' },
+    ],
   },
 ];
 
@@ -152,5 +167,36 @@ describe('NotificationTemplatesTab (Mẫu thông báo)', () => {
     const text = container.textContent ?? '';
     expect(text).toContain('Đăng ký mẫu ZNS trên Zalo');
     expect(text).not.toMatch(/docs\/|GO-LIVE-KEYS|\.md/);
+  });
+
+  it('liệt kê biến dùng được đúng theo mẫu, không còn gợi ý {{order_code}} cho mẫu mã giảm giá', async () => {
+    stub();
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    const welcome = container.querySelector<HTMLElement>('[data-template="WELCOME_VOUCHER"]')!;
+    const chips = [...welcome.querySelectorAll('[data-variables] button')].map((b) => b.textContent);
+    expect(chips).toEqual(['mã {{code}}', 'giá trị mã {{value}}']);
+    expect(welcome.textContent).not.toContain('{{order_code}}');
+    expect(container.textContent).not.toContain('biến dạng');
+    expect(container.querySelector('[data-template="GAME_STREAK_REMINDER"] [data-variables]')).toBeNull();
+  });
+
+  it('bấm biến thì thêm vào cuối nội dung; gõ biến không thuộc mẫu thì báo lỗi và khoá nút Lưu', async () => {
+    const api = stub();
+    const { container } = mount(<NotificationTemplatesTab />);
+    await flush();
+    const row = container.querySelector<HTMLElement>('[data-template="WELCOME_VOUCHER"]')!;
+    click(byText(row, 'button', /giá trị mã/));
+    expect((row.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Tặng mã {{code}} giảm {{value}}đ{{value}}');
+    typeInto(row.querySelector('textarea'), 'Tặng mã {{order_code}}');
+    const save = byText(row, 'button', 'Lưu') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(row.querySelector('[role=alert]')?.textContent).toContain('{{order_code}}');
+    expect(row.querySelector('[role=alert]')?.textContent).toContain('{{code}}, {{value}}');
+    typeInto(row.querySelector('textarea'), 'Tặng mã {{code}}');
+    expect(save.disabled).toBe(false);
+    click(save);
+    await flush();
+    expect(JSON.parse(String(api.patches()[0]!.init!.body)).bodyTemplate).toBe('Tặng mã {{code}}');
   });
 });
