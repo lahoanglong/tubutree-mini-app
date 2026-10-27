@@ -12,6 +12,7 @@ import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
 import { decodeServedImage } from '../../common/served-image';
 import { cardPrices } from '../catalog/variation-order';
+import { publicDisplayName } from '../../common/mask-name';
 import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
 import { isStorefrontApproved, ownerStorefrontState, publicStorefrontWhere } from './storefront-visibility';
@@ -85,7 +86,7 @@ export class StorefrontService {
           // Chuẩn hoá tại nguồn; phía đọc cũng so khớp insensitive để cứu dữ liệu cũ.
           slug: user.referralCode.toLowerCase(),
           ownerUserId: userId,
-          title: `Cửa hàng của ${user.fullName ?? 'bạn'}`,
+          title: `Cửa hàng của ${publicDisplayName(user.fullName, 'bạn')}`,
         },
       });
     } catch (err) {
@@ -124,6 +125,7 @@ export class StorefrontService {
                     isActive: true,
                     affiliateBlocked: true,
                     approvalStatus: true,
+                    variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
                   },
                 },
               },
@@ -151,7 +153,10 @@ export class StorefrontService {
       publicHiddenReason: ownerState.reason,
       collections: sf.collections.map((c) => ({
         ...c,
-        items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
+        items: c.items.map((i) => {
+          const { variations, ...product } = i.product;
+          return { ...i, product: { ...product, ...cardPrices(product, variations) }, hiddenReason: buyerHiddenReason(i) };
+        }),
       })),
     };
   }

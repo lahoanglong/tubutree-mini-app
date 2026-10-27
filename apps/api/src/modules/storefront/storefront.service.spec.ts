@@ -57,6 +57,18 @@ describe('StorefrontService.getOrCreateMine', () => {
     expect(sf.title).toContain('Linh');
   });
 
+  it.each([
+    ['Lã Hoàng Long', 'Cửa hàng của Long L.'],
+    ['0912345678', 'Cửa hàng của bạn'],
+  ])('tên gian hàng mặc định không lộ họ tên đầy đủ hay số điện thoại: %s', async (fullName, title) => {
+    const prisma = makePrisma();
+    (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', role: 'AFFILIATE', referralCode: 'LINH123', fullName });
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.storefront.create as jest.Mock).mockImplementation(({ data }) => ({ id: 's1', ...data }));
+    const sf = await new StorefrontService(prisma, config, affiliate).getOrCreateMine('u1');
+    expect(sf.title).toBe(title);
+  });
+
   it('trả gian hàng có sẵn, không tạo mới', async () => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', role: 'AFFILIATE', referralCode: 'L', fullName: 'L' });
@@ -98,6 +110,27 @@ describe('StorefrontService.getOrCreateMine', () => {
 });
 
 describe('StorefrontService.getMine', () => {
+  it('giá món trong builder là giá khách thấy: của phân loại mặc định, không phải cột Product; không lộ danh sách phân loại', async () => {
+    const prisma = makePrisma();
+    (prisma.storefront.findFirst as jest.Mock).mockResolvedValue({
+      id: 's1', ownerUserId: 'u1', type: 'CTV',
+      collections: [{ id: 'c1', sortOrder: 0, items: [{
+        id: 'i1', isHidden: false,
+        product: {
+          isActive: true, affiliateBlocked: false, approvalStatus: 'APPROVED', basePrice: 300000, salePrice: null,
+          variations: [
+            { id: 'a', sku: 'A', retailPrice: 300000, salePrice: null, stock: 3 },
+            { id: 'b', sku: 'B', retailPrice: 180000, salePrice: 159000, stock: 3 },
+          ],
+        },
+      }] }],
+    });
+    const sf = await new StorefrontService(prisma, config, affiliate).getMine('u1');
+    const product = sf.collections[0]!.items[0]!.product as unknown as Record<string, unknown>;
+    expect(product).toMatchObject({ basePrice: 180000, salePrice: 159000 });
+    expect(product).not.toHaveProperty('variations');
+  });
+
   it('trả gian hàng kèm collections+items (gồm cả isHidden) theo sortOrder', async () => {
     const sfWithChildren = {
       id: 's1', ownerUserId: 'u1', type: 'CTV',

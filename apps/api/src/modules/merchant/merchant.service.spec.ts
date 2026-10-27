@@ -53,6 +53,28 @@ describe('MerchantService', () => {
       expect((prisma.storefront.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ type: 'MERCHANT', isPartner: true });
     });
 
+    it.each([
+      ['Lã Hoàng Long', 'Gian hàng của Long L.'],
+      ['0912345678', 'Gian hàng của Đối tác'],
+      [null, 'Gian hàng của Đối tác'],
+    ])('tên gian hàng mặc định không lộ họ tên đầy đủ hay số điện thoại: %s', async (fullName, title) => {
+      const prisma = makePrisma({
+        user: {
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u2', role: 'DEALER', referralCode: 'DEALER01', fullName }),
+          findUnique: jest.fn().mockResolvedValue({ role: 'DEALER' }),
+        },
+        storefront: {
+          findFirst: jest.fn().mockResolvedValue(null),
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({ id: 's-new', collections: [] }),
+        },
+        $executeRaw: jest.fn().mockResolvedValue(0),
+      });
+      (prisma as unknown as { $transaction: unknown }).$transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(prisma));
+      await new MerchantService(prisma, orderStatus).getOrCreateStore('u2');
+      expect((prisma.storefront.create as jest.Mock).mock.calls[0][0].data.title).toBe(title);
+    });
+
     it('gian hàng tự tạo là nháp: chưa có sản phẩm thì chưa hiện với khách, đăng bằng nút Đăng (D3-08)', async () => {
       const prisma = makePrisma({
         user: {

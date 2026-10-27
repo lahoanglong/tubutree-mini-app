@@ -19,13 +19,13 @@ const MASK_NAME_EXPECTED = [
   'Bạn Tubu',
   'Bạn Tubu',
   'Bạn Tubu',
-  '***',
+  'Bạn Tubu',
   'Long***',
   'Long***',
   'An***',
   'Long***',
-  'Lã\tLong***',
-  'Lã Long***',
+  'Long***',
+  'Long***',
 ];
 
 const MASK_FULL_NAME_EXPECTED = [
@@ -105,5 +105,22 @@ describe('publicDisplayName: chọn từ khi tên có emoji, dấu câu, ngoặc
     ['(Shop)', 'Bạn Tubu'],
   ])('%s -> %s', (name, want) => {
     expect(publicDisplayName(name)).toBe(want);
+  });
+});
+
+describe('maskName và maskFullName làm sạch tên như publicDisplayName', () => {
+  it.each([
+    ['Nguyễn​Thị​Lan', 'Lan***'],
+    ['Hoa 🌸', 'Hoa***'],
+    ['Lan (Shop cây)', 'Lan***'],
+    ['Nguyễn Văn An.', 'An***'],
+  ])('%s -> %s', (name, want) => {
+    expect(maskName(name)).toBe(want);
+    expect(maskFullName(name)).toBe(want);
+  });
+
+  it.each(['🌸🌸', '(Mẹ Bin)', '~ ~'])('"%s" không còn từ nào: tên chung', (name) => {
+    expect(maskName(name)).toBe('Bạn Tubu');
+    expect(maskFullName(name)).toBe('Khách Tubu');
   });
 });
