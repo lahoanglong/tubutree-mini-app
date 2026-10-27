@@ -1,4 +1,4 @@
-import { expect, reply, test, type MockApi } from './support/mock-api';
+import { expect, reply, replyEmptyBody, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách: Vườn Xanh (/vuon-xanh), tab Hôm nay. Mọi lời gọi /api/** đi qua mock (fixture `api`).
@@ -204,6 +204,13 @@ test.describe('Web khách: Vườn Xanh', () => {
     const calls = api.callsTo('POST', '/game/garden/plot/p2/water');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ drops: 20 });
+  });
+
+  test('không có mùa nào chạy: thân rỗng từ server vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
+    mockGame(api, { checkedIn: false });
+    api.get('/game/season', () => replyEmptyBody());
+    await page.goto('/vuon-xanh?tab=community');
+    await expect(page.getByTestId('season-empty')).toBeVisible();
   });
 
   test('tab Cộng đồng: xếp hạng, tặng nước gọi đúng bạn một lần, bạn đã tặng hôm nay bị khoá', async ({ page, api }) => {

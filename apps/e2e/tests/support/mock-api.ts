@@ -49,6 +49,12 @@ export interface MockReply {
   [REPLY]: true;
   status: number;
   json: unknown;
+  empty?: boolean;
+}
+
+/** Thân rỗng 200 như Nest khi handler trả null: client phải coi là null, không vỡ vì JSON.parse. */
+export function replyEmptyBody(status = 200): MockReply {
+  return { [REPLY]: true, status, json: null, empty: true };
 }
 
 /** Trả status khác 200 (vd lỗi nghiệp vụ 400 với message tiếng Việt như NestJS). */
@@ -289,7 +295,7 @@ export class MockApi {
       await route.fulfill({
         status: res.status,
         headers: { ...cors, 'content-type': 'application/json; charset=utf-8' },
-        body: JSON.stringify(res.json ?? null),
+        body: 'empty' in res && res.empty ? '' : JSON.stringify(res.json ?? null),
       });
       return;
     }

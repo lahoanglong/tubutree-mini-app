@@ -1,5 +1,5 @@
 import type { Garden, GameProfile } from '../../miniapp/src/services/game-api';
-import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
+import { test, expect, makeUser, mockSession, reply, replyEmptyBody, type MockApi } from './support/mock-api';
 
 /**
  * Zalo Mini App E2E — Vườn Xanh (apps/miniapp/src/pages/game.tsx, route /game).
@@ -66,6 +66,14 @@ test.describe('Vườn Xanh', () => {
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(/ })).toBeVisible();
     await expect(page.getByText('Lô đất của bạn (2/4)')).toBeVisible();
     await expect(page.getByText('Lô 2 · Cây Lim Xanh')).toBeVisible();
+  });
+
+  test('không có mùa nào chạy: server trả thân rỗng (như Nest khi trả null) vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
+    mockGame(api);
+    api.get('/game/season', () => replyEmptyBody());
+    await page.goto('/game');
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
   });
 
   test('chạm đúp "Tưới hết" chỉ gửi một request (drops = toàn bộ số giọt) và hiện tiến độ mới', async ({ page, api }) => {

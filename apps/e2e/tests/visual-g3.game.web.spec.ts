@@ -1,6 +1,6 @@
 import { mkdirSync } from 'fs';
 import path from 'path';
-import { test, expect } from './support/mock-api';
+import { test, expect, replyEmptyBody } from './support/mock-api';
 import { installVisualMode, settle } from './support/visual';
 import { mockNewbieGame, newbieProfile } from './support/game-newbie-states';
 
@@ -11,6 +11,7 @@ const USER = {
   pointsBalance: 20000, pointsConvertedBalance: 0, walletBalance: 0,
 };
 const ORDER_WATER = { perOrder: 100, weeklyCap: 300, weeklyGranted: 100 };
+const FIRST_OPEN = { ...ORDER_WATER, claimedNow: 200 };
 
 async function setup(page: import('@playwright/test').Page, api: import('./support/mock-api').MockApi) {
   await installVisualMode(page);
@@ -47,7 +48,7 @@ test('chụp g3 hộp thu hoạch có mã và loài mới (web)', async ({ page,
   api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65, orderWater: ORDER_WATER });
   api.post('/game/tree/water', () => ({
     progress: 60, target: 60, harvested: true, treesPlanted: 1,
-    reward: { coupon: 'XANH-123', species: { id: 's', name: 'Sao đen', emoji: '🌴', rarity: 'RARE', ecoFact: 'Sống hàng trăm năm.' } },
+    reward: { coupon: 'XANH-123', coupons: ['XANH-123'], couponTerms: [{ code: 'XANH-123', value: 20000, minOrder: 150000, expiresAt: '2026-12-31T16:59:59.000Z' }], species: { id: 's', name: 'Sao đen', emoji: '🌴', rarity: 'RARE', ecoFact: 'Sống hàng trăm năm.' } },
   }));
   await page.goto('/vuon-xanh');
   await page.getByRole('button', { name: 'Tưới hết (65💧)' }).click({ timeout: 15_000 });
@@ -74,4 +75,35 @@ test('chụp g3 tab Cộng đồng khi chưa có mùa và bảng trống (web)',
   await expect(page.getByTestId('leaderboard-empty')).toBeVisible({ timeout: 15_000 });
   await settle(page);
   await shot(page, 'g3-community-empty');
+});
+
+test('chụp g3 mở game lần đầu có nước từ đơn hàng (web)', async ({ page, api }) => {
+  test.skip(!OUT, 'đặt GAME_SHOTS_DIR để chụp');
+  await setup(page, api);
+  api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 200, orderWater: { ...FIRST_OPEN, weeklyGranted: 200 } });
+  await page.goto('/vuon-xanh');
+  await expect(page.getByTestId('order-water-claimed')).toBeVisible({ timeout: 15_000 });
+  await settle(page);
+  await shot(page, 'g3-first-open');
+});
+
+test('chụp g3 bể vượt sức chứa nhờ nước đơn hàng (web)', async ({ page, api }) => {
+  test.skip(!OUT, 'đặt GAME_SHOTS_DIR để chụp');
+  await setup(page, api);
+  api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 1050, tankCapacity: 1000, orderWater: ORDER_WATER });
+  await page.goto('/vuon-xanh');
+  await expect(page.getByTestId('tank-over')).toBeVisible({ timeout: 15_000 });
+  await settle(page);
+  await shot(page, 'g3-tank-over', false);
+});
+
+test('chụp g3 chưa có mùa, thân rỗng từ server (web)', async ({ page, api }) => {
+  test.skip(!OUT, 'đặt GAME_SHOTS_DIR để chụp');
+  await setup(page, api);
+  api.get('/game/profile', { ...newbieProfile('after-checkin'), totalSeeds: 65 });
+  api.get('/game/season', () => replyEmptyBody());
+  await page.goto('/vuon-xanh?tab=community');
+  await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
+  await settle(page);
+  await shot(page, 'g3-season-empty', false);
 });
