@@ -395,7 +395,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto`}>
+          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
             <div className="flex justify-between text-sm">
               <span className="text-stone-600">Tạm tính</span>
@@ -442,7 +442,7 @@ export default function CartPage() {
               <span>{formatVnd(payTotal)}</span>
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
-            <div className="hidden lg:sticky lg:bottom-0 lg:-mb-4 lg:block lg:bg-stone-0 lg:pb-4">
+            <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:pb-4">
               {selectedItems.length === 0 ? (
                 <>
                   <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
