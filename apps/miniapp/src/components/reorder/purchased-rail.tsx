@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { isFlashRunning, variationPricing } from '@tubutree/app-core/flash-price';
+import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { vi } from '../../i18n/vi';
@@ -53,12 +53,8 @@ export function toTileProduct(p: PurchasedItem): ProductTileProduct {
   };
 }
 
-/** Giá của đúng phân loại đã mua (gồm Giờ vàng đang chạy của phân loại đó): kệ mở trang chi tiết ở phân loại này nên giá thẻ và giá trang là một. */
-export function rebuyPricing(p: PurchasedItem, flash: Parameters<typeof variationPricing>[1], now: number = serverNow()) {
-  return variationPricing({ id: p.variationId, retailPrice: p.price, salePrice: p.salePrice }, flash.filter((f) => isFlashRunning(f, now)));
-}
-
-const openVariation = (p: PurchasedItem) => ({ state: { variationId: p.variationId } });
+// `pinnedVariationId` (không phải `variationId`): trang chi tiết chỉ nhận `variationId` khi phân loại đó đang có Giờ vàng, còn ghim thì mở miễn còn hàng.
+const openVariation = (p: PurchasedItem) => ({ state: { pinnedVariationId: p.variationId } });
 
 export interface PurchasedRailProps {
   source: 'home_rail' | 'orders_tab';
@@ -152,7 +148,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
               discountPct={discountPct}
               onRebuy={() => setTarget(itemReorderTarget(p))}
               onSubscribe={() => setSubscribeFor(p)}
-              pricing={rebuyPricing(p, flash)}
+              pricing={rebuyPricing(p, flash, serverNow())}
               onOpen={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
             />
           ))}
@@ -163,7 +159,7 @@ export function PurchasedRail({ source, restoring = false }: PurchasedRailProps)
             <div key={p.variationId} style={{ flex: `0 0 ${TILE_WIDTH}px`, width: TILE_WIDTH }}>
               <ProductTile
                 product={toTileProduct(p)}
-                priceOverride={rebuyPricing(p, flash)}
+                priceOverride={rebuyPricing(p, flash, serverNow())}
                 variant="rail"
                 showWishlist={false}
                 action="rebuy"

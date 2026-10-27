@@ -52,10 +52,10 @@ const product = (price: number) => ({
   variations: [{ id: 'v1', sku: 'S1', name: 'Mặc định', attributes: {}, retailPrice: price, salePrice: null, stock: 5 }],
 });
 
-function renderPdp(qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+function renderPdp(qc = new QueryClient({ defaultOptions: { queries: { retry: false } } }), state?: Record<string, unknown>) {
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/product/xa-phong']} future={FUTURE}>
+      <MemoryRouter initialEntries={[{ pathname: '/product/xa-phong', state }]} future={FUTURE}>
         <Routes>
           <Route path="/product/:slug" element={<ProductDetailPage />} />
         </Routes>
@@ -154,5 +154,27 @@ describe('ProductDetailPage — dòng Điểm Xanh sẽ nhận (D2-07c)', () => 
     renderPdp();
     expect(await screen.findByText('Xà phòng sả chanh')).toBeInTheDocument();
     expect(screen.queryByText(/Điểm Xanh khi đơn giao thành công/)).toBeNull();
+  });
+
+  describe('lối vào từ kệ Mua lại (không có Giờ vàng)', () => {
+    const twoVariations = () => ({
+      ...product(100_000),
+      variations: [
+        { id: 'v1', sku: 'S1', name: 'Nhỏ', attributes: {}, retailPrice: 100_000, salePrice: null, stock: 5 },
+        { id: 'v2', sku: 'S2', name: 'Lớn', attributes: {}, retailPrice: 250_000, salePrice: null, stock: 5 },
+      ],
+    });
+
+    it('state { pinnedVariationId } mở đúng phân loại đã mua dù đắt hơn: giá trang (qua dòng điểm) khớp giá thẻ 250.000đ', async () => {
+      mocks.fetchProduct.mockResolvedValue(twoVariations());
+      renderPdp(undefined, { pinnedVariationId: 'v2' });
+      expect(await screen.findByText('Nhận tối đa 5.000 Điểm Xanh (≈5.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    });
+
+    it('state { variationId } khi phân loại đó không có Giờ vàng thì KHÔNG đủ để mở nó (đó là lý do kệ phải dùng pinnedVariationId)', async () => {
+      mocks.fetchProduct.mockResolvedValue(twoVariations());
+      renderPdp(undefined, { variationId: 'v2' });
+      expect(await screen.findByText('Nhận tối đa 2.000 Điểm Xanh (≈2.000đ) khi đơn giao thành công')).toBeInTheDocument();
+    });
   });
 });

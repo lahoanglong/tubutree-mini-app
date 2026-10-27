@@ -5,10 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { PurchasedItem } from '@tubutree/app-core/api/orders';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
 import { formatVnd } from '@/lib/format-vnd';
 import { homeText, reorderText } from '@/lib/home-text';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
+import { productHref } from '@/lib/product-href';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -32,10 +35,11 @@ export const PURCHASED_RAIL_LIMIT = 10;
 
 function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void }) {
   const name = item.variationName ? `${item.productName} · ${item.variationName}` : item.productName;
-  const onSale = item.salePrice != null && item.salePrice < item.price;
+  const pricing = rebuyPricing(item, useActiveFlashSales());
+  const onSale = pricing.compareAt != null;
   return (
     <li className="flex w-[148px] flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44">
-      <Link href={`/san-pham/${encodeURIComponent(item.slug)}`} className="block">
+      <Link href={productHref(encodeURIComponent(item.slug), null, item.variationId)} className="block">
         <div className="relative aspect-square w-full bg-stone-100">
           <ProductImage src={item.thumbnail} brand={item.brand} alt={name} size={176} className="h-full w-full object-cover" />
         </div>
@@ -43,8 +47,8 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
           {item.brand && <p className="truncate text-xs text-stone-600">{item.brand}</p>}
           <p className="line-clamp-2 h-8 text-xs leading-4 text-stone-900">{name}</p>
           <div className="flex flex-wrap items-baseline gap-x-1.5">
-            <span className="text-sm font-bold text-stone-900">{formatVnd(onSale ? item.salePrice! : item.price)}</span>
-            {onSale && <span className="text-xs text-stone-500 line-through">{formatVnd(item.price)}</span>}
+            <span className="text-sm font-bold text-stone-900">{formatVnd(pricing.price)}</span>
+            {onSale && <span className="text-xs text-stone-500 line-through">{formatVnd(pricing.compareAt!)}</span>}
           </div>
           <div className="mt-1 min-h-[1.25rem]">
             {item.timesBought > 1 && (
@@ -84,8 +88,7 @@ function CompactRebuyCard({
 }) {
   const router = useRouter();
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
-  const standing = item.salePrice ?? item.price;
-  const hasSale = standing < item.price;
+  const pricing = rebuyPricing(item, useActiveFlashSales());
   const available = item.inStock !== false && item.stock > 0;
   // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
   const subscribable = item.retailOnly === false;
@@ -95,7 +98,7 @@ function CompactRebuyCard({
         type="button"
         aria-label={item.productName}
         className="tubu-press"
-        onClick={() => router.push(`/san-pham/${encodeURIComponent(item.slug)}`)}
+        onClick={() => router.push(productHref(encodeURIComponent(item.slug), null, item.variationId))}
         style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'transparent', textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer' }}
       >
         <ProductThumb src={item.thumbnail} alt="" size={64} />
@@ -109,7 +112,7 @@ function CompactRebuyCard({
             </Text>
           )}
           <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
-            <PriceTag value={standing} compareAt={hasSale ? item.price : undefined} size="sm" />
+            <PriceTag value={pricing.price} compareAt={pricing.compareAt ?? undefined} size="sm" />
             {item.timesBought > 1 && <Badge tone="brand" size="sm">{reorderText.timesBought(item.timesBought)}</Badge>}
           </span>
         </span>

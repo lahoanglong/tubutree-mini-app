@@ -5,9 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { newTestClient } from '@/test-utils/render-hook';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
+import { formatVnd } from '@/lib/format-vnd';
 
 // Chép ý nghĩa purchased-rail.spec của Mini App: kệ "Mua lại" cho khách cũ, ẩn khi rỗng/404/khách, sheet → thêm giỏ → sang giỏ, lỗi làm mới.
-const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated' }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), push: vi.fn(), phase: 'authenticated', flash: [] as unknown[] }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null }));
@@ -31,6 +33,7 @@ const mount = async () => {
 
 beforeEach(() => {
   mocks.phase = 'authenticated';
+  mocks.flash = [];
   rail = async () => ({ items: [ITEM], nextCursor: null });
   mocks.get.mockReset().mockImplementation(() => rail());
   mocks.post.mockReset().mockResolvedValue(CART);
@@ -127,7 +130,17 @@ describe('PurchasedRail', () => {
   it('chạm tên/ảnh thẻ → trang sản phẩm', async () => {
     const c = await mount();
     click(c.querySelector('button[aria-label="Nước rửa chén"]'));
-    expect(mocks.push).toHaveBeenCalledWith('/san-pham/nuoc-rua-chen');
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/nuoc-rua-chen?pv=v1');
+  });
+
+  it('B-146: liên kết thẻ mở đúng phân loại đã mua (?pv=), thẻ hiện giá Giờ vàng của phân loại đó', async () => {
+    rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v3', slug: 'xa-bong' }, { ...ITEM, variationId: 'v4', slug: 'tay' }], nextCursor: null });
+    mocks.flash = [{ itemId: 'f', variationId: 'v1', productSlug: 'nuoc-rua-chen', flashPrice: 50_000, retailPrice: 65_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }];
+    const c = await mount();
+    const link = c.querySelector('a[href="/san-pham/nuoc-rua-chen?pv=v1"]');
+    expect(link).not.toBeNull();
+    expect(link!.textContent).toContain(formatVnd(50_000));
+    expect(c.querySelector('a[href="/san-pham/xa-bong?pv=v3"]')!.textContent).toContain(formatVnd(65_000));
   });
 
   describe('làm mới lỗi (React Query v5 giữ dữ liệu cũ, status=error)', () => {

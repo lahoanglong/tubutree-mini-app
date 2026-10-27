@@ -21,7 +21,8 @@ vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string })
 vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { PurchasedRail, rebuyPricing } from './purchased-rail';
+import { rebuyPricing } from '@tubutree/app-core/rebuy-pricing';
+import { PurchasedRail } from './purchased-rail';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
@@ -117,7 +118,7 @@ describe('PurchasedRail', () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
     renderRail();
     fireEvent.click(await screen.findByRole('button', { name: 'Nước rửa chén' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { variationId: 'v1' } });
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
   });
 
   describe('làm mới lỗi (React Query v5 giữ dữ liệu cũ, status=error)', () => {
@@ -237,6 +238,6 @@ describe('rebuyPricing / phân loại đã mua (B-146)', () => {
     const region = await screen.findByRole('region', { name: 'Mua lại' });
     await waitFor(() => expect(region).toHaveTextContent('50.000'));
     fireEvent.click(region.querySelector('.tubu-tile-link')!);
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { variationId: 'v1' } });
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen', { state: { pinnedVariationId: 'v1' } });
   });
 });
