@@ -39,6 +39,7 @@ import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
 import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
 const TIER_KEY = 'tubu_last_tier_min_v2';
@@ -51,7 +52,7 @@ const TIER_STYLE: Record<string, { emoji: string; bg: string; fg: string }> = {
 };
 const DEFAULT_STYLE = TIER_STYLE['Mầm Xanh']!;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';

@@ -23,10 +23,11 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniCard } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const DEFAULT_HOLD_DAYS = 30;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: number }) {
   const box = { width: size, height: size };

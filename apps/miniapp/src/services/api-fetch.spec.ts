@@ -140,6 +140,10 @@ describe('api trên fetch: phản hồi', () => {
     expect(getErrorMessage(err)).toBe(copy.errors.generic);
     stubFetch(() => ({ status: 400, body: { message: ['phone must be a string'] } }));
     expect(getErrorMessage(await api.post('/x', {}).catch((e: unknown) => e))).toBe(copy.errors.generic);
+    for (const m of ['request entity too large', 'Payload Too Large', 'Method Not Allowed', 'Unexpected token < in JSON at position 0', 'Cannot HEAD /api/x']) {
+      stubFetch(() => ({ status: 413, body: { message: m } }));
+      expect(getErrorMessage(await api.post('/x', {}).catch((e: unknown) => e)), m).toBe(copy.errors.generic);
+    }
   });
 
   it('5xx kèm message backend → KHÔNG lộ, dùng câu lỗi máy chủ chung; chưa biết kết quả', async () => {

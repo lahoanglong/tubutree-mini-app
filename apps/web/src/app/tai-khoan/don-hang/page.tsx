@@ -22,6 +22,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const PAGE_LIMIT = 20;
 
@@ -89,7 +90,7 @@ function OrdersPageBody() {
           </div>
         ) : orders.isError && list.length === 0 ? (
           <div className="mt-3">
-            <ErrorState message={orders.error instanceof Error ? orders.error.message : undefined} onRetry={() => void orders.refetch()} />
+            <ErrorState message={loadErrorText(orders.error)} onRetry={() => void orders.refetch()} />
           </div>
         ) : list.length === 0 ? (
           tab === 'all' ? (

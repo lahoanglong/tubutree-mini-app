@@ -18,10 +18,11 @@ import { QrCode } from '@/components/ui/qr-code';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniOutline } from '@/components/loyalty/mini-surface';
 import { LedgerShell } from '../../tai-khoan/ledger-shell';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Quà của tôi';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function byReadyThenNewest(a: GiftRedemptionDTO, b: GiftRedemptionDTO): number {
   const ar = a.status === 'READY' ? 0 : 1;

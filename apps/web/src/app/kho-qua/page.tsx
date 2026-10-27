@@ -44,10 +44,11 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 import { LedgerShell } from '../tai-khoan/ledger-shell';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Kho quà';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 const points = (n: number) => `${formatCount(n)} điểm`;
 
 type RedeemOutcome =

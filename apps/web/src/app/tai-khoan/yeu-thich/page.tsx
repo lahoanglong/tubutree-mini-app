@@ -12,6 +12,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { GRID_PRODUCTS } from '@/lib/product-grid';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Sản phẩm yêu thích';
 
@@ -56,7 +57,7 @@ export default function WishlistPage() {
       {wishQ.isLoading ? (
         <ProductGridSkeleton count={4} />
       ) : wishQ.isError && !wishQ.data ? (
-        <ErrorState message={wishQ.error instanceof Error ? wishQ.error.message : undefined} onRetry={() => void wishQ.refetch()} />
+        <ErrorState message={loadErrorText(wishQ.error)} onRetry={() => void wishQ.refetch()} />
       ) : wishQ.data && wishQ.data.length > 0 ? (
         <section aria-labelledby="wishlist-list">
           <h2 id="wishlist-list" className="sr-only">

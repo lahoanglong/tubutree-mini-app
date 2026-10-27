@@ -51,6 +51,7 @@ import { useWheelPrize } from '@/components/game/use-wheel-prize';
 import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
@@ -62,7 +63,7 @@ const MISSION_PATHS: Record<Exclude<MissionTarget, 'checkin'>, string> = {
   invite: '/tai-khoan/vi-tubu',
 };
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function GameBody() {
   const router = useRouter();

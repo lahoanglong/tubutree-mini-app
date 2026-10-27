@@ -26,10 +26,11 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const NOTICE_MS = 4000;
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = loadErrorText;
 
 /** Thông báo (cùng nội dung với `notifications.tsx` của Mini App): danh sách, chấm chưa đọc, đọc một/đọc hết, chi tiết kèm nút hành động theo loại tin. */
 export default function NotificationsPage() {

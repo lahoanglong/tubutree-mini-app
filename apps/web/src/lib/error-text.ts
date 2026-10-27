@@ -6,7 +6,7 @@ const OFFLINE = 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại
 const GENERIC = 'Có chút trục trặc, thử lại nhé';
 
 /** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
-const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot (get|post|put|patch|delete)\b|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be)\b)/i;
+const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be|too large|not allowed|not acceptable|unexpected token)\b)/i;
 
 /**
  * Chữ báo lỗi tải dữ liệu, cùng quy tắc với getErrorMessage của Mini App: lỗi nghiệp vụ 4xx hiện lời của máy chủ (trừ lời kỹ thuật tiếng
@@ -23,5 +23,7 @@ export function loadErrorText(error: unknown): string {
     if (error.timedOut) return 'Hơi chậm tí, bạn đợi nhé';
     return typeof navigator !== 'undefined' && navigator.onLine === false ? OFFLINE : SERVER_BUSY;
   }
+  // Lỗi do chính web ném (không qua máy chủ) kèm lời tiếng Việt tự viết thì giữ; lời tiếng Anh của trình duyệt/thư viện (Failed to fetch…) thì câu chung.
+  if (error instanceof Error && /[^\x00-\x7F]/.test(error.message)) return error.message;
   return GENERIC;
 }

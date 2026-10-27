@@ -24,6 +24,10 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   it('lời kỹ thuật tiếng Anh của 4xx không hiện ra; 4xx không có lời thì máy chủ bận', () => {
     expect(loadErrorText(new ApiError('Cannot GET /api/me/loyalty', 404))).toBe('Có chút trục trặc, thử lại nhé');
     expect(loadErrorText(new ApiError('phone must be a string', 400))).toBe('Có chút trục trặc, thử lại nhé');
+    for (const m of ['request entity too large', 'Payload Too Large', 'Method Not Allowed', 'Unexpected token < in JSON at position 0', 'Cannot HEAD /api/x', 'Not Acceptable']) {
+      expect(loadErrorText(new ApiError(m, 400)), m).toBe('Có chút trục trặc, thử lại nhé');
+    }
+    expect(loadErrorText(new ApiError('Mã giảm giá không được phép dùng cho đơn này', 400))).toContain('không được phép');
     expect(loadErrorText(new ApiError('', 404))).toBe('Máy chủ đang bận, thử lại nhé.');
   });
   it('lỗi lạ', () => {

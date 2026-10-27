@@ -31,6 +31,7 @@ import { RecentlyViewedRail } from './recently-viewed-rail';
 import { ResultHeader } from './result-header';
 import { SortChips } from './sort-chips';
 import { SuggestList } from './suggest-list';
+import { loadErrorText } from '@/lib/error-text';
 
 export const PAGE_LIMIT = 24;
 
@@ -52,7 +53,7 @@ const uniqueById = (list: ProductCardData[]) => {
   return list.filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
 };
 
-const errorMessage = (e: unknown) => (e instanceof Error && e.message ? e.message : undefined);
+const errorMessage = loadErrorText;
 
 /**
  * Trang Danh mục / Tìm kiếm của web, cùng hành vi với pages/browse.tsx của Mini App. Toàn bộ trạng thái (q, sắp xếp, lọc,
