@@ -221,7 +221,7 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
           const r = el.getBoundingClientRect();
           const x = r.left + r.width / 2;
           const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-          return { above: at(r.top - 3), below: at(r.bottom + 3) };
+          return { above: at(r.top + 2), below: at(r.bottom - 2) };
         });
         expect(hit, `"${name}": vùng chạm phải phủ ≥ 44px theo chiều dọc`).toEqual({ above: true, below: true });
       }

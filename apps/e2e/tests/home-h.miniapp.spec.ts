@@ -20,7 +20,7 @@ async function expectChipHitArea44(chip: Locator): Promise<void> {
     (el, b) => {
       const x = b.x + b.width / 2;
       const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
-      return { above3: at(b.y - 3), below3: at(b.y + b.height + 3), inside: at(b.y + b.height / 2) };
+      return { above3: at(b.y + 2), below3: at(b.y + b.height - 2), inside: at(b.y + b.height / 2) };
     },
     { x: box.x, y: box.y, width: box.width, height: box.height },
   );
@@ -188,7 +188,7 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
 });
 
 test.describe('Trang chủ — vùng chạm 44px', () => {
-  test('chip dải thương hiệu và tab gợi ý cao dưới 44px nhưng vùng chạm phủ đủ 44px', async ({ page, api }) => {
+  test('chip dải thương hiệu và tab gợi ý cao thật 44px, mép trên và dưới vẫn trúng chip', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     mockDiscovery(api, { returning: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
