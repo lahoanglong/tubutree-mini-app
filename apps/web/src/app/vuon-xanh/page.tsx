@@ -75,7 +75,7 @@ function GameBody() {
   // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
   const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
   const couponUse = useCouponUse();
-  const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true, {
+  const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, gardenQ, boardQ, seasonPass } = useGameData(true, {
     garden: tab === 'garden',
     community: tab === 'community',
     friends: tab === 'community' || earn.open,
@@ -260,7 +260,10 @@ function GameBody() {
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
-          {garden === undefined && <Skeleton height={120} rounded="rounded-card" />}
+          {garden === undefined && !gardenQ.isError && <Skeleton height={120} rounded="rounded-card" />}
+          {garden === undefined && gardenQ.isError && (
+            <ErrorState message={gameNewbieCopy.loadError.garden} retryLabel={gameNewbieCopy.loadError.retry} onRetry={() => void gardenQ.refetch()} />
+          )}
           {garden && plotsOpen && (
             <GardenPlots
               garden={garden}
@@ -313,7 +316,7 @@ function GameBody() {
             <FriendGifts friends={friends} giftPending={giftM.isPending} giftVariables={giftM.variables} onGift={(recipientId) => giftM.mutate(recipientId)} />
           )}
 
-          <WeeklyLeaderboard board={board} />
+          <WeeklyLeaderboard board={board} failed={boardQ.isError} onRetry={() => void boardQ.refetch()} />
 
           {seasonBoard && seasonBoard.length > 0 && <SeasonLeaderboard rows={seasonBoard} />}
 

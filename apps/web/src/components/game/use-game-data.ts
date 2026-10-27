@@ -30,14 +30,16 @@ export function useGameData(authed: boolean, tabs: { garden: boolean; community:
   const quiz = quizQ.data;
   const { data: missions } = useQuery({ ...gameMissionsQuery(coreHttp), enabled: authed });
   const { data: forest } = useQuery({ ...gameForestQuery(coreHttp), enabled: authed && tabs.garden });
-  const { data: board } = useQuery({ ...gameBoardQuery(coreHttp), enabled: tabs.community });
+  const boardQ = useQuery({ ...gameBoardQuery(coreHttp), enabled: tabs.community });
+  const board = boardQ.data;
   const { data: community } = useQuery({ ...gameCommunityQuery(coreHttp), enabled: authed && tabs.garden });
   const { data: codex } = useQuery({ ...gameCollectionQuery(coreHttp), enabled: authed && tabs.garden });
   const { data: season } = useQuery({ ...gameSeasonQuery(coreHttp), enabled: tabs.community });
   const { data: seasonBoard } = useQuery({ ...gameSeasonBoardQuery(coreHttp), enabled: tabs.community });
   const { data: friends } = useQuery({ ...gameFriendsQuery(coreHttp), enabled: authed && tabs.friends });
-  const { data: garden } = useQuery({ ...gameGardenQuery(coreHttp), enabled: authed && tabs.garden });
+  const gardenQ = useQuery({ ...gameGardenQuery(coreHttp), enabled: authed && tabs.garden });
+  const garden = gardenQ.data;
   const { data: seasonPass } = useQuery({ ...gameSeasonPassQuery(coreHttp), enabled: authed && tabs.community && SEASON_PASS_ENABLED });
 
-  return { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass };
+  return { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, gardenQ, boardQ, seasonPass };
 }

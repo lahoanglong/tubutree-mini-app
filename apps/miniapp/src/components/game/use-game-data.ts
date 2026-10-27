@@ -27,8 +27,9 @@ export function useGameData(authed: boolean, gardenTab: boolean) {
   const { data: community } = useQuery({ queryKey: ['game', 'community'], queryFn: getCommunity, enabled: authed && gardenTab });
   const { data: codex } = useQuery({ queryKey: ['game', 'collection'], queryFn: getCollection, enabled: authed && gardenTab });
   const { data: season } = useQuery({ queryKey: ['game', 'season'], queryFn: getSeason, enabled: gardenTab });
-  const { data: garden } = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed && gardenTab });
+  const gardenQ = useQuery({ queryKey: ['game', 'garden'], queryFn: getGarden, enabled: authed && gardenTab });
+  const garden = gardenQ.data;
   const { data: seasonPass } = useQuery({ queryKey: ['game', 'seasonPass'], queryFn: fetchSeasonPass, enabled: authed && gardenTab && SEASON_PASS_ENABLED });
 
-  return { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, seasonPass };
+  return { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, gardenQ, seasonPass };
 }

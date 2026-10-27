@@ -30,7 +30,7 @@ export function OrderWaterCard({ info, onShop }: { info: GameProfile['orderWater
             {t.title}
           </Heading>
           <Text variant="caption" tone="tertiary" as="div">
-            {t.perOrder(info.perOrder)}
+            {t.perOrder(info.perOrder, info.weeklyCap)}
           </Text>
         </div>
         <Button variant="secondary" onPress={onShop} style={{ flexShrink: 0 }}>

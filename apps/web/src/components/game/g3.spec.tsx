@@ -80,6 +80,20 @@ describe('G3 lượt 2', () => {
     expect(q('leaderboard-loading')).not.toBeNull();
     expect(q('leaderboard-empty')).toBeNull();
   });
+  it('bảng xếp hạng tải lỗi: báo lỗi có nút thử lại, không quay mãi', () => {
+    const retry = vi.fn();
+    mounted = render(<WeeklyLeaderboard board={undefined} failed onRetry={retry} />);
+    expect(q('leaderboard-loading')).toBeNull();
+    const btn = mounted.container.querySelector('button')!;
+    expect(btn.textContent).toBe('Thử lại');
+    btn.click();
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+  it('thẻ nước đơn nói rõ lần mua giao thành công và trần tuần', () => {
+    mounted = render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 0 }} shopHref="/san-pham" />);
+    expect(mounted.container.textContent).toContain('Mỗi lần mua giao thành công +100');
+    expect(mounted.container.textContent).toContain('tối đa 300');
+  });
   it('hộp thu hoạch ghi giá trị, đơn tối thiểu, hạn của mã', () => {
     mounted = render(
       <HarvestCelebration

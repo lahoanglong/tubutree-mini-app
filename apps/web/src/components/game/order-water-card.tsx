@@ -29,7 +29,7 @@ export function OrderWaterCard({ info, shopHref }: { info: GameProfile['orderWat
             <ShoppingBag className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
             {t.title}
           </h2>
-          <p className="text-xs text-stone-600">{t.perOrder(info.perOrder)}</p>
+          <p className="text-xs text-stone-600">{t.perOrder(info.perOrder, info.weeklyCap)}</p>
         </div>
         <Link href={shopHref} className={`${miniBtnSecondary} flex-none`}>
           {t.cta}

@@ -1,14 +1,18 @@
 import { Trophy } from 'lucide-react';
 import type { LeaderRow } from '@tubutree/app-core/api/game';
 import { Skeleton } from '@/components/ui/skeleton';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import { ErrorState } from '@/components/ui/error-state';
 import { GameCard } from './game-card';
 
 // API xếp theo chuỗi điểm danh dài nhất mọi thời gian (không reset theo tuần), nên nhãn và số trên bục là chuỗi ngày.
 // Huy chương, 🌳 (cây đã trồng) và 🔥 (chuỗi ngày) là số liệu xếp hạng của game.
-export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined }) {
+export function WeeklyLeaderboard({ board, failed = false, onRetry }: { board: LeaderRow[] | undefined; failed?: boolean; onRetry?: () => void }) {
   return (
     <GameCard title="Chuỗi điểm danh dài nhất" icon={Trophy}>
-      {board === undefined ? (
+      {board === undefined && failed ? (
+        <ErrorState message={gameNewbieCopy.loadError.board} retryLabel={gameNewbieCopy.loadError.retry} onRetry={onRetry} />
+      ) : board === undefined ? (
         <div aria-busy="true" data-testid="leaderboard-loading">
           <Skeleton height={96} rounded="rounded-control" />
         </div>

@@ -107,6 +107,10 @@ describe('G3 lượt 2', () => {
     rerender(<OrderWaterCard info={{ ...info, claimedNow: 0 }} onShop={vi.fn()} />);
     expect(screen.getByTestId('order-water-claimed')).toHaveTextContent('+100');
   });
+  it('thẻ nước đơn nói rõ lần mua giao thành công và trần tuần', () => {
+    render(<OrderWaterCard info={{ perOrder: 100, weeklyCap: 300, weeklyGranted: 0 }} onShop={vi.fn()} />);
+    expect(screen.getByText(/Mỗi lần mua giao thành công \+100/)).toHaveTextContent('tối đa 300');
+  });
   it('màn mùa rỗng có tiêu đề và lời nhắn', () => {
     render(<SeasonEmpty />);
     expect(screen.getByTestId('season-empty')).toBeInTheDocument();

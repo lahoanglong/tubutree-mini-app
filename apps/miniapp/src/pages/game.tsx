@@ -65,7 +65,7 @@ export default function GamePage() {
   const authed = phase === 'authenticated';
 
   const [tab, setTab] = useState<GameTabKey>('today');
-  const { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, seasonPass } =
+  const { profileQ, quizQ, quiz, missions, forest, community, codex, season, garden, gardenQ, seasonPass } =
     useGameData(authed, tab === 'garden');
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
@@ -280,7 +280,10 @@ export default function GamePage() {
 
         <GameTabPanel tab="garden" active={tab === 'garden'}>
           {/* Lô đất / mở rộng vườn (§6.7) — nhiều cây song song */}
-          {garden === undefined && <Skeleton height={120} radius="var(--radius-card)" />}
+          {garden === undefined && !gardenQ.isError && <Skeleton height={120} radius="var(--radius-card)" />}
+          {garden === undefined && gardenQ.isError && (
+            <ErrorState variant="inline" message={vi.game.newbie.loadError.garden} onRetry={() => void gardenQ.refetch()} retrying={gardenQ.isFetching} />
+          )}
           {garden && plotsOpen && (
             <GardenPlots
               garden={garden}

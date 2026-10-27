@@ -114,7 +114,7 @@ export const gameNewbieCopy = {
   },
   orderWater: {
     title: 'Từ đơn hàng',
-    perOrder: (v: number) => `Mỗi đơn giao thành công +${drops(v)}`,
+    perOrder: (v: number, cap: number) => `Mỗi lần mua giao thành công +${drops(v)} (tối đa ${drops(cap)} mỗi tuần)`,
     progress: (got: number, cap: number) => `Đã nhận ${n(got)}/${drops(cap)} tuần này`,
     full: 'Tuần này bạn đã nhận đủ nước từ đơn hàng. Thứ Hai tuần sau nhận tiếp.',
     cta: 'Mua sắm',
@@ -190,6 +190,12 @@ export const gameNewbieCopy = {
   wheel: {
     have: (have: number, cost: number) => `Bạn có ${n(have)} / ${n(cost)} Điểm Xanh cho 1 lượt quay`,
     howToEarn: 'Cách kiếm Điểm Xanh',
+  },
+  /** Một khối game tải lỗi (mạng, API): có nút thử lại, không để khung chờ quay mãi. */
+  loadError: {
+    garden: 'Chưa tải được vườn của bạn. Kiểm tra mạng rồi thử lại.',
+    board: 'Chưa tải được bảng xếp hạng. Kiểm tra mạng rồi thử lại.',
+    retry: 'Thử lại',
   },
   seasonEmpty: {
     title: 'Chưa có mùa nào đang mở',
