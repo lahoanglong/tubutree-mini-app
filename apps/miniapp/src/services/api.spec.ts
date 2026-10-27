@@ -26,6 +26,17 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(err)).toBe(viCopy.errors.server);
   });
 
+  it('429 kèm mã nghiệp vụ → giữ lời máy chủ; 429 không mã (bộ giới hạn tốc độ) → câu đợi vài giây', () => {
+    const daily = 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.';
+    expect(getErrorMessage(httpError({ response: { status: 429, data: { message: daily, code: 'CHAT_DAILY_LIMIT' } } }))).toBe(daily);
+    expect(getErrorMessage(httpError({ response: { status: 429, data: { message: 'ThrottlerException: Too Many Requests' } } }))).toContain('đợi vài giây');
+  });
+
+  it('401 → báo hết phiên; 4xx chỉ có chữ tiếng Anh không dấu → câu chung', () => {
+    expect(getErrorMessage(httpError({ response: { status: 401, data: { message: 'Unauthorized' } } }))).toBe(viCopy.errors.sessionExpired);
+    expect(getErrorMessage(httpError({ response: { status: 400, data: { message: 'Bad Gateway from upstream' } } }))).toBe(viCopy.errors.generic);
+  });
+
   it('timeout (ECONNABORTED) → copy timeout', () => {
     const err = httpError({ code: 'ECONNABORTED', response: undefined });
     expect(getErrorMessage(err)).toBe(viCopy.errors.timeout);

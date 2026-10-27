@@ -28,6 +28,7 @@ export const vi = {
     timeout: 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.',
     server: 'Máy chủ đang bận, thử lại nhé.',
     generic: 'Có chút trục trặc, thử lại nhé',
+    sessionExpired: 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.',
     loadFailed: 'Chưa tải được nội dung',
     sessionUnavailable: 'Mất kết nối. Vui lòng kiểm tra mạng rồi thử lại.',
     title: 'Chưa tải được trang này',

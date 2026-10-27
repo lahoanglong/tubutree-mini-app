@@ -1,7 +1,7 @@
 import { errorStatus } from '@tubutree/app-core/api/error-status';
-import { loadErrorText } from './error-text';
+import { loadErrorText, SESSION_EXPIRED_TEXT } from './error-text';
 
-export const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+export { SESSION_EXPIRED_TEXT };
 export const NO_ACCESS_TEXT = 'Tài khoản này không có quyền xem nội dung này.';
 
 const RAW_AUTH = /^(unauthorized|forbidden)$/i;

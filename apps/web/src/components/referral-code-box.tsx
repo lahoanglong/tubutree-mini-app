@@ -5,6 +5,7 @@ import { ChevronRight, TriangleAlert, Users } from 'lucide-react';
 import { recordReferralTouch } from '@/lib/shop-client';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
+import { actionErrorText } from '@/lib/error-text';
 
 const MISS_MESSAGE = 'Không tìm thấy mã này, hoặc đây là mã của chính bạn. Bạn kiểm tra lại giúp Tubu nhé.';
 
@@ -127,7 +128,7 @@ export function ReferralCodeBox({
       setOpen(false);
       onApplied(code);
     } catch (e) {
-      setError(e instanceof Error ? e.message : MISS_MESSAGE);
+      setError(actionErrorText(e));
     } finally {
       setChecking(false);
     }

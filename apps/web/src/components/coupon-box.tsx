@@ -21,6 +21,7 @@ import {
 } from '@/lib/coupon-view';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
+import { actionErrorText } from '@/lib/error-text';
 
 /** Số voucher hiện sẵn; còn lại nằm sau nút xem thêm để giỏ/thanh toán trên điện thoại không dài thêm hàng chục cuộn. */
 const VISIBLE_COUPONS = 3;
@@ -154,7 +155,7 @@ export function CouponBox({
       afterChange(cart);
     },
     onError: (e) => {
-      setErr(e instanceof Error ? e.message : 'Không áp dụng được mã giảm giá');
+      setErr(actionErrorText(e));
       // Khách có thể đã thu gọn trong lúc chờ: đưa ô nhập ra lại để sửa mã.
       setOpen(true);
     },
@@ -166,7 +167,7 @@ export function CouponBox({
       showApplyWarning(null);
       afterChange(cart);
     },
-    onError: (e) => setErr(e instanceof Error ? e.message : 'Không bỏ được mã giảm giá'),
+    onError: (e) => setErr(actionErrorText(e)),
   });
   const busy = apply.isPending || drop.isPending || disabled;
 

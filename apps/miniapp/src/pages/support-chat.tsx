@@ -5,6 +5,7 @@ import type { SupportChatContext, SupportChatMessageDTO } from '@tubutree/shared
 import { quickReplies, supportCopy, type QuickReply } from '@tubutree/app-core/support-copy';
 import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support-chat-view';
 import { errorCode, errorStatus } from '@tubutree/app-core/api/error-status';
+import { vi } from '../i18n/vi';
 import { AuthGate } from '../components/ui/auth-gate';
 import { PageHeader } from '../components/ui/page-header';
 import { ErrorState } from '../components/ui/empty-state';
@@ -28,7 +29,6 @@ import { DEFAULT_SUPPORT, fetchSupportContact } from './about-data';
 const POLL_MS = 5000;
 const BLOCKED_TEXT = 'Bạn tạm thời không gửi được tin. Cần hỗ trợ, gọi hotline.';
 
-const SESSION_EXPIRED_TEXT = 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.';
 const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
 
 /**
@@ -40,7 +40,7 @@ function chatErrorText(e: unknown): string {
   const data = e.response?.data as { message?: string | string[] } | undefined;
   const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
   if (e.response?.status === 429 && errorCode(e) === 'CHAT_DAILY_LIMIT' && message) return message;
-  if ((e.response?.status === 401 || e.response?.status === 403) && (!message || GENERIC_AUTH_MESSAGES.has(message))) return SESSION_EXPIRED_TEXT;
+  if ((e.response?.status === 401 || e.response?.status === 403) && (!message || GENERIC_AUTH_MESSAGES.has(message))) return vi.errors.sessionExpired;
   return getErrorMessage(e);
 }
 

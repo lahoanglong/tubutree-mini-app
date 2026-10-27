@@ -21,6 +21,11 @@ describe('friendlyError', () => {
     expect(friendlyError(null)).toBe('Có chút trục trặc, thử lại nhé');
     expect(friendlyError(new ApiError('ECONNRESET', 500))).toBe('Máy chủ đang bận, thử lại nhé.');
   });
+  it('429 CHAT_DAILY_LIMIT (ApiError thật): giữ lời máy chủ, không thành "thao tác hơi nhanh"; 429 không mã thì câu đợi vài giây', () => {
+    const m = 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.';
+    expect(friendlyError(new ApiError(m, 429, 'CHAT_DAILY_LIMIT'))).toBe(m);
+    expect(friendlyError(new ApiError('ThrottlerException', 429))).toContain('đợi vài giây');
+  });
   it('isAuthError: 401/403 hoặc message thô', () => {
     expect(isAuthError(new ApiError('x', 403))).toBe(true);
     expect(isAuthError(new Error('Unauthorized'))).toBe(true);

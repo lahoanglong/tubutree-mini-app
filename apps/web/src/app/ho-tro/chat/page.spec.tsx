@@ -3,6 +3,7 @@ import { act, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider, focusManager, type QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/lib/client-api';
 import { createQueryClient } from '@/lib/query-client';
 import { flush } from '@/test-utils/dom';
 
@@ -59,7 +60,7 @@ const msg = (over: Record<string, unknown>) => ({
 const thread = (over: Record<string, unknown> = {}) => ({
   code: 'K7Q3', blocked: false, enabled: true, slow: false, hasMore: false, messages: [], ...over,
 });
-const statusError = (status: number, message: string, code: string | null = null) => Object.assign(new Error(message), { status, code });
+const statusError = (status: number, message: string, code: string | null = null) => new ApiError(message, status, code);
 
 let qc: QueryClient;
 let unmounts: (() => void)[] = [];

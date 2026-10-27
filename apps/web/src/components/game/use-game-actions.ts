@@ -25,7 +25,8 @@ import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { coreHttp } from '@/lib/core-http';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { useLockedMutation } from './use-locked-mutation';
-import { loadErrorText } from '@/lib/error-text';
+import { NetworkError } from '@/lib/client-api';
+import { actionErrorText } from '@/lib/error-text';
 
 export type { HarvestReward };
 
@@ -68,7 +69,7 @@ const harvestMeta = (r: WateringResult, home: boolean): HarvestMeta => {
 
 type Notify = (text: string, tone: 'success' | 'error') => void;
 
-const errText = loadErrorText;
+const errText = actionErrorText;
 
 /**
  * Mọi lệnh ghi của trang Vườn Xanh. Trạng thái giao diện (hộp thu hoạch, đáp án quiz) ở lại trang và đi vào qua
@@ -93,7 +94,11 @@ export function useGameActions({
     // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
     void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
   };
-  const onError = (e: unknown) => notify(errText(e), 'error');
+  // Hết thời gian: máy chủ có thể đã ghi nhận thao tác, nên làm mới để màn hình khớp với sổ.
+  const onError = (e: unknown) => {
+    notify(errText(e), 'error');
+    if (e instanceof NetworkError && e.timedOut) refresh();
+  };
 
   const checkInM = useLockedMutation({
     mutationFn: () => checkIn(coreHttp),
