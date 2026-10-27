@@ -77,14 +77,17 @@ export function AccountShell({ children }: { children: ReactNode }) {
   // Chỉ khi ĐANG KHÔI PHỤC một phiên có sẵn (cờ tubu_web_session) mới dựng khung hai cột với menu khung xương, để phiên về thì nội dung không
   // dịch ngang 264px. Phase 'loading' một mình không đủ: SSR và lần render đầu ai cũng 'loading', khách vãng lai sẽ thấy khung rồi nhảy.
   const restoring = useAuthRestoring();
-  const framed = authed || restoring;
+  // 'unavailable' (cờ còn, mất mạng lúc khôi phục) giữ nguyên khung xương: bỏ khung ở đây sẽ là cú nhảy ngang thứ hai. Phiên hết hạn thật
+  // thì cờ bị xoá → khách → khung gỡ đúng một lần.
+  const waiting = restoring || phase === 'unavailable';
+  const framed = authed || waiting;
 
   // Cây DOM giữ nguyên khi phiên đổi từ đang kiểm tra sang đã đăng nhập (chỉ lớp và menu thay đổi): trang con không bị dựng lại.
   return (
     <div
       className={`mx-auto w-full max-w-frame ${framed ? 'lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-6 lg:pt-6' : ''}`}
     >
-      {restoring && !authed && (
+      {waiting && !authed && (
         <div aria-hidden="true" data-testid="account-shell-nav-skeleton" className="hidden lg:block">
           {[0, 1, 2].map((g) => (
             <div key={g} className="mb-4 space-y-2">

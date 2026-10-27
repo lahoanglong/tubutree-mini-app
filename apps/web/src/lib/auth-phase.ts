@@ -3,7 +3,7 @@
 import { useContext, useSyncExternalStore } from 'react';
 import { useAuth } from './auth-context';
 import { hasSessionMarker } from './client-api';
-import { HomeRestoreHintContext } from './home-restore-context';
+import { HomeRestoreHintContext, SessionCookieContext } from './home-restore-context';
 
 export type AuthPhase = 'loading' | 'guest' | 'unavailable' | 'authenticated';
 
@@ -30,10 +30,12 @@ const subscribeStorage = (cb: () => void) => {
 /**
  * Đang khôi phục một phiên đã có (cờ `tubu_web_session` còn và chưa biết kết quả). Khách vãng lai không có cờ nên không bao giờ "đang
  * khôi phục" (không thấy khung chờ rồi mất). Đọc cờ bằng useSyncExternalStore; ảnh chụp phía server là `false`, trừ bản Trang chủ dựng sẵn
- * cho khách có cookie phiên (HomeRestoreHintContext) là `true`, để HTML đầu đã mang khung chờ và hydrate không lệch.
+ * cho khách có cookie phiên (HomeRestoreHintContext) hoặc layout đọc được cookie đó (SessionCookieContext) là `true`, để HTML đầu đã mang khung chờ và hydrate không lệch.
  */
 export function useAuthRestoring(): boolean {
-  const prebuilt = useContext(HomeRestoreHintContext) !== null;
+  const hasHint = useContext(HomeRestoreHintContext) !== null;
+  const hasCookie = useContext(SessionCookieContext);
+  const prebuilt = hasHint || hasCookie;
   const marker = useSyncExternalStore(subscribeStorage, hasSessionMarker, () => prebuilt);
   const phase = useAuthPhase();
   return marker && phase === 'loading';

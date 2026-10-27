@@ -9,6 +9,9 @@ import type { HomeRestoreHint } from './home-restore-hint';
  */
 export const HomeRestoreHintContext = createContext<HomeRestoreHint | null>(null);
 
+/** Server thấy cookie `tubu_web_session` (layout khu tài khoản/kho quà đọc cookies()): ảnh chụp phía server của useAuthRestoring là true. */
+export const SessionCookieContext = createContext(false);
+
 /** Đăng ký sự kiện `storage` (tab khác ghi localStorage) cho useSyncExternalStore. */
 export const subscribeStorageEvent = (cb: () => void) => {
   window.addEventListener('storage', cb);

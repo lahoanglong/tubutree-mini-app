@@ -338,3 +338,46 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     expect(api.callsTo('POST', '/cashback/click')[0]!.body).toEqual({ merchantId: 'm1' });
   });
 });
+
+/**
+ * Khung khu tài khoản từ 1024px: khách có cookie phiên thấy khung hai cột ngay HTML đầu (SSR đọc cookie), nên nội dung không dịch ngang
+ * khi phiên khôi phục xong; khách vãng lai không có cookie thì không có khung. Giữ /auth/refresh lại để đo đúng lúc "đang khôi phục".
+ */
+test.describe('Web khách: khung tài khoản không nhảy ngang khi khôi phục phiên (lg)', () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  const mainLeft = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => Math.round(document.querySelector('main')!.getBoundingClientRect().left));
+
+  for (const path of ['/tai-khoan/vi-tubu', '/kho-qua']) {
+    test(`${path}: có cookie phiên, main đứng đúng chỗ ở HTML đầu và sau khi phiên về`, async ({ page, context, api, baseURL }) => {
+      test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
+      if (path === '/kho-qua') mockRewards(api, { redeemed: false });
+      else mockWallet(api);
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      api.post('/auth/refresh', async () => {
+        await gate;
+        return { accessToken: 'e2e-token', user: USER };
+      });
+      await context.addCookies([{ name: 'tubu_web_session', value: '1', url: baseURL! }]);
+      await page.addInitScript(() => localStorage.setItem('tubu_web_session', '1'));
+
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      await expect(page.getByTestId('account-shell-nav-skeleton')).toBeVisible();
+      const first = await mainLeft(page);
+      release();
+      await expect(page.getByTestId('account-shell-nav')).toBeVisible();
+      await expect(page.getByRole('main').first()).toBeVisible();
+      expect(await mainLeft(page)).toBe(first);
+    });
+  }
+
+  test('khách vãng lai (không cookie, không cờ): không có khung khôi phục', async ({ page, api }) => {
+    test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
+    mockWallet(api);
+    await page.goto('/tai-khoan/vi-tubu');
+    await expect(page.getByTestId('account-shell-nav-skeleton')).toHaveCount(0);
+    await expect(page.getByTestId('account-shell-nav')).toHaveCount(0);
+  });
+});
