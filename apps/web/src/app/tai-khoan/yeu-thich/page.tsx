@@ -10,12 +10,15 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { PAGE_WIDE } from '@/lib/page-frame';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
+import { loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Sản phẩm yêu thích';
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className={`${PAGE_WIDE} py-6`}>
       <PageHeader title={TITLE} backHref="/tai-khoan" backLabel="Tài khoản" />
       <div className="mt-4">{children}</div>
     </main>
@@ -54,13 +57,13 @@ export default function WishlistPage() {
       {wishQ.isLoading ? (
         <ProductGridSkeleton count={4} />
       ) : wishQ.isError && !wishQ.data ? (
-        <ErrorState message={wishQ.error instanceof Error ? wishQ.error.message : undefined} onRetry={() => void wishQ.refetch()} />
+        <ErrorState message={loadErrorText(wishQ.error)} onRetry={() => void wishQ.refetch()} />
       ) : wishQ.data && wishQ.data.length > 0 ? (
         <section aria-labelledby="wishlist-list">
           <h2 id="wishlist-list" className="sr-only">
             Danh sách sản phẩm yêu thích
           </h2>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className={GRID_PRODUCTS}>
             {wishQ.data.map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}

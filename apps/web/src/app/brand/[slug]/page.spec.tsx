@@ -118,7 +118,7 @@ describe('trang nhãn hàng /brand/[slug] — DS v2', () => {
   // D7-28: cùng bề rộng với các trang khác (max-w-5xl), không còn khung hẹp max-w-3xl.
   it('khung trang rộng như các trang khác (D7-28); ở điện thoại không đệm vì ảnh bìa tràn mép', async () => {
     const main = (await html()).querySelector('main')!;
-    expect(main.className).toContain('max-w-5xl');
+    expect(main.className).toContain('max-w-frame');
     expect(main.className).not.toContain('max-w-3xl');
     expect(main.className).toContain('max-md:p-0');
   });

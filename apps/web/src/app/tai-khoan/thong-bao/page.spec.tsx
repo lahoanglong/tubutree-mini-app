@@ -119,7 +119,7 @@ describe('/tai-khoan/thong-bao: khung trang', () => {
     const { container } = await mount();
     click(byText(container, 'button', 'Thử lại'));
     await flush(6);
-    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/'))).toHaveLength(2);
     expect(container.textContent).toContain('Bạn nhận thêm 50 điểm Xanh');
   });
 

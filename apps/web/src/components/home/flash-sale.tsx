@@ -17,8 +17,10 @@ import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
+import { ScrollRail } from '@/components/scroll-rail';
+import { ThumbPlaceholder } from '@/components/thumb-placeholder';
 
-const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 md:min-w-44 md:flex-1';
+const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 lg:w-48';
 const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
@@ -26,7 +28,12 @@ function Thumb({ src, name, pct }: { src: string | null; name: string; pct: numb
   return (
     <div className="relative aspect-square w-full bg-stone-100">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src && <img src={src} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" />}
+      {src ? <img src={src} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" /> : (
+        // Mini App để ô nền trống khi thiếu ảnh; hình lá chỉ có từ md.
+        <div className="hidden h-full w-full md:block">
+          <ThumbPlaceholder />
+        </div>
+      )}
       {pct > 0 && (
         <span className="absolute left-1.5 top-1.5">
           <Badge tone="promo" size="sm">
@@ -79,12 +86,12 @@ export function FlashSale() {
           </span>
         )}
       </div>
-      <ul className={RAIL}>
+      <ScrollRail className={RAIL}>
         {items.map((item: FlashSaleActiveItem) => {
           const { price, was, pct } = flashDisplay(item);
           const sold = soldPercent(item.soldCount, item.quota);
           return (
-            <li key={item.itemId} className="md:flex md:min-w-44 md:flex-1">
+            <li key={item.itemId} className="flex-none">
               <Link href={`/san-pham/${encodeURIComponent(item.productSlug)}`} className={CARD}>
                 <Thumb src={item.thumbnail} name={item.productName} pct={pct} />
                 <div className="p-2">
@@ -100,7 +107,7 @@ export function FlashSale() {
             </li>
           );
         })}
-      </ul>
+      </ScrollRail>
     </section>
   );
 }
@@ -173,7 +180,7 @@ export function UpcomingFlashSales() {
         <Bell className="h-4 w-4" aria-hidden="true" />
         {flashSaleText.upcomingTitle}
       </h2>
-      <ul className={RAIL}>
+      <ScrollRail className={RAIL}>
         {items.map((item) => (
           <UpcomingFlashCard
             key={item.itemId}
@@ -182,7 +189,7 @@ export function UpcomingFlashSales() {
             onToggleRemind={() => remind.mutate({ itemId: item.itemId, reminded: item.reminded })}
           />
         ))}
-      </ul>
+      </ScrollRail>
     </section>
   );
 }

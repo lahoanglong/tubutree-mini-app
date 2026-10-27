@@ -199,13 +199,20 @@ describe('UpcomingFlashSales', () => {
   });
 });
 
-describe('FlashSale — khổ máy tính (D7-30)', () => {
-  it('thẻ giờ vàng giãn đều bề ngang từ md như kệ Mua lại, không cố định 176px', async () => {
+describe('FlashSale — khổ máy tính', () => {
+  it('thẻ giờ vàng rộng cố định từ md (ít món thì hàng ngắn lại, thẻ không phình), không giãn theo số món', async () => {
     activeResult = async () => [active()];
     const c = await mount(<FlashSale />);
     const tile = c.querySelector('a[href="/san-pham/nuoc-rua-chen"]')!;
-    expect(tile.className).toContain('md:min-w-44');
-    expect(tile.className).toContain('md:flex-1');
-    expect(tile.parentElement!.className).toContain('md:flex-1');
+    expect(tile.className).toContain('sm:w-44');
+    expect(tile.className).toContain('lg:w-48');
+    expect(tile.className).not.toContain('md:flex-1');
+    expect(tile.parentElement!.className).not.toContain('md:flex-1');
+  });
+
+  it('thẻ chưa có ảnh dùng ô thay thế hình lá như thẻ sản phẩm', async () => {
+    activeResult = async () => [{ ...active(), thumbnail: null }];
+    const c = await mount(<FlashSale />);
+    expect(c.querySelector('[data-testid="card-placeholder"]')).not.toBeNull();
   });
 });

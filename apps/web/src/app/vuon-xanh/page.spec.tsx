@@ -757,13 +757,21 @@ describe('Vườn Xanh: khung rộng và thanh tab', () => {
     }
   });
 
-  it('từ lg khung rộng và tab đang mở chia hai cột; tab ẩn vẫn hidden; điện thoại một cột', async () => {
+  it('từ lg tab Hôm nay chia cố định 2/3 + 1/3 (điểm danh và nhiệm vụ ở cột phụ), tab khác xếp hai cột đều; tab ẩn vẫn hidden; điện thoại một cột', async () => {
     const c = await mount();
-    const frame = panel(c, 'Hôm nay').parentElement as HTMLElement;
-    expect(frame.className).toContain('lg:max-w-5xl');
-    expect(frame.className).toContain('max-w-2xl');
-    expect(panel(c, 'Hôm nay').className).toContain('lg:grid-cols-2');
-    expect(panel(c, 'Hôm nay').className).toContain('flex-col');
+    const today = panel(c, 'Hôm nay');
+    expect(today.className).toContain('lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]');
+    expect(today.className).toContain('flex-col');
+    // Thứ tự DOM = thứ tự nhìn ở điện thoại (WCAG 2.4.3): việc chính, rồi điểm danh + nhiệm vụ, rồi quiz + vòng quay; từ lg ba khối đặt vào ô lưới.
+    const [top, side, bottom] = Array.from(today.children) as HTMLElement[];
+    for (const col of [top!, side!, bottom!]) expect(col.className).toContain('contents');
+    expect(side!.querySelector('#game-checkin')).not.toBeNull();
+    expect(bottom!.querySelector('#game-quiz')).not.toBeNull();
+    expect(top!.querySelector('#game-quiz')).toBeNull();
+    expect(top!.className).toContain('lg:col-start-1 lg:row-start-1');
+    expect(side!.className).toContain('lg:col-start-2 lg:row-span-2');
+    expect(bottom!.className).toContain('lg:col-start-1 lg:row-start-2');
+    expect(today.innerHTML).not.toContain('max-lg:order-1');
     expect(panel(c, 'Vườn').className).toBe('hidden');
   });
 });

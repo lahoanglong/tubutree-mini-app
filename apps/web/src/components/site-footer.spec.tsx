@@ -114,4 +114,13 @@ describe('SiteFooter', () => {
       expect(out).toContain('Đã thông báo Bộ Công Thương');
     });
   });
+
+  it('máy tính: 4 cột, có lối vào Vườn Xanh, Đổi rác, Kho quà, Cộng tác viên, Đại lý, Câu chuyện thương hiệu (trước đây bị giấu)', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    const out = await html();
+    expect(out).toMatch(/<div class="[^"]*lg:grid-cols-4/);
+    for (const to of ['/vuon-xanh', '/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/cau-chuyen', '/gioi-thieu', '/mua-chung']) {
+      expect(out).toContain(`href="${to}"`);
+    }
+  });
 });

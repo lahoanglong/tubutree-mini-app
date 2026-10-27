@@ -25,10 +25,12 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
+import { PAGE_NARROW } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const NOTICE_MS = 4000;
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = loadErrorText;
 
 /** Thông báo (cùng nội dung với `notifications.tsx` của Mini App): danh sách, chấm chưa đọc, đọc một/đọc hết, chi tiết kèm nút hành động theo loại tin. */
 export default function NotificationsPage() {
@@ -104,7 +106,7 @@ export default function NotificationsPage() {
   };
 
   const shell = (body: ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader
         title="Thông báo"
         backHref="/tai-khoan"
@@ -162,7 +164,7 @@ export default function NotificationsPage() {
           </p>
         )}
       </div>
-      <ul className="mt-4 grid gap-2 md:grid-cols-2">
+      <ul className="mt-4 grid gap-2">
         {notifQ.data.map((n) => {
           const m = notificationMeta(n.templateCode);
           const unread = n.status !== 'READ';

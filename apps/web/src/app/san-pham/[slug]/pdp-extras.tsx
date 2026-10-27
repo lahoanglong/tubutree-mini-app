@@ -115,14 +115,14 @@ export function PdpCoupons({ productId }: { productId: string }) {
 
   return (
     <div className="mt-3">
-      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 overflow-x-auto pb-1 max-md:flex-col max-md:overflow-visible">
+      <ul aria-label="Mã giảm giá có thể dùng" className="flex gap-2 pb-1 max-md:flex-col md:grid md:grid-cols-2">
         {list.map((c) => (
-          <li key={c.code} className="shrink-0 max-md:min-w-0 max-md:shrink">
+          <li key={c.code} className="shrink-0 max-md:min-w-0 max-md:shrink md:min-w-0">
             <button
               type="button"
               aria-label={`Sao chép mã ${c.code}`}
               onClick={() => void onCopy(c.code)}
-              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-promo-fg bg-promo-bg px-3 py-1.5 text-left max-md:w-full"
+              className="flex min-h-11 flex-col items-start justify-center gap-0.5 rounded-control border border-dashed border-promo-fg bg-promo-bg px-3 py-1.5 text-left max-md:w-full md:w-full"
             >
               <span className="text-xs font-bold text-promo-fg">
                 {c.code} · {couponLabel(c)}

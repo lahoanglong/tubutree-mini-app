@@ -47,6 +47,7 @@ import {
 } from '@/components/affiliate/ctv-copy';
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
+import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 
 const TITLE = 'Cộng tác viên';
 
@@ -62,9 +63,9 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-function Shell({ children }: { children: ReactNode }) {
+function Shell({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6">
+    <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6`}>
       <BackLink href="/tai-khoan">
         ← Tài khoản
       </BackLink>
@@ -171,8 +172,8 @@ function RegisterGate() {
   ];
 
   return (
-    <Shell>
-      <div className="mx-auto max-w-2xl">
+    <Shell narrow>
+      <div>
         <section className="rounded-card bg-gradient-to-br from-forest-600 to-forest-700 p-5 text-center text-stone-0 shadow-card">
           <div className="mx-auto mb-3.5 grid h-16 w-16 place-items-center rounded-full bg-forest-700">
             <Handshake className="h-8 w-8" aria-hidden="true" />
@@ -436,7 +437,7 @@ function Dashboard() {
 
           {milestonesQ.isError ? (
             <div className={`${ui.card} ${phoneFlatCard} p-4`}>
-              <ErrorState message={errText(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
+              <ErrorState variant="inline" message={errText(milestonesQ.error)} onRetry={() => void milestonesQ.refetch()} />
             </div>
           ) : milestonesQ.isLoading ? (
             <div className={`${ui.card} ${phoneFlatCard} p-4`}>
@@ -490,7 +491,7 @@ function Dashboard() {
             }
           >
             {linksQ.isError ? (
-              <ErrorState message={errText(linksQ.error)} onRetry={() => void linksQ.refetch()} />
+              <ErrorState variant="inline" message={errText(linksQ.error)} onRetry={() => void linksQ.refetch()} />
             ) : linksQ.data && linksQ.data.length > 0 ? (
               <ul>
                 {linksQ.data.map((l) => (
@@ -524,7 +525,7 @@ function Dashboard() {
           <Section title="Lịch sử hoa hồng">
             {commQ.isError ? (
               // Tránh "Chưa có hoa hồng" khi thực tế là API lỗi.
-              <ErrorState message={errText(commQ.error)} onRetry={() => void commQ.refetch()} />
+              <ErrorState variant="inline" message={errText(commQ.error)} onRetry={() => void commQ.refetch()} />
             ) : commQ.data && commQ.data.length > 0 ? (
               <ul>
                 {commQ.data.slice(0, 30).map((c) => (
@@ -554,7 +555,7 @@ function Dashboard() {
               </div>
             )}
             {payoutsQ.isError ? (
-              <ErrorState message={errText(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
+              <ErrorState variant="inline" message={errText(payoutsQ.error)} onRetry={() => void payoutsQ.refetch()} />
             ) : payoutsQ.data && payoutsQ.data.length > 0 ? (
               <ul>
                 {payoutsQ.data.map((p) => (
@@ -570,7 +571,7 @@ function Dashboard() {
 
           <Section title="Theo gian hàng">
             {sfQ.isError ? (
-              <ErrorState message={errText(sfQ.error)} onRetry={() => void sfQ.refetch()} />
+              <ErrorState variant="inline" message={errText(sfQ.error)} onRetry={() => void sfQ.refetch()} />
             ) : sfQ.data && sfQ.data.storefronts.length > 0 ? (
               <ul>
                 {sfQ.data.storefronts.map((sf) => (
@@ -597,7 +598,7 @@ function Dashboard() {
 
           <Section title="Theo sản phẩm">
             {pbQ.isError ? (
-              <ErrorState message={errText(pbQ.error)} onRetry={() => void pbQ.refetch()} />
+              <ErrorState variant="inline" message={errText(pbQ.error)} onRetry={() => void pbQ.refetch()} />
             ) : pbQ.data && pbQ.data.length > 0 ? (
               <ul>
                 {pbQ.data.slice(0, 10).map((p, i) => (

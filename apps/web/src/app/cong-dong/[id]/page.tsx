@@ -30,6 +30,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { CommentRow } from './comment-row';
 import { ConfirmDeleteSheet, EditPostSheet, ReportSheet } from './post-sheets';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const TITLE = 'Cộng đồng Vườn Tubu';
 const ICON_BTN = 'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-700 hover:bg-stone-100';
@@ -48,7 +49,7 @@ function ReplyBar(props: FormHTMLAttributes<HTMLFormElement>) {
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:pt-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:pt-0`}>
       <PageHeader title={TITLE} backHref="/cong-dong" backLabel="Quay lại cộng đồng" />
       <div className="mt-4 flex flex-col gap-3 max-md:mt-0 max-md:gap-2">{children}</div>
     </main>

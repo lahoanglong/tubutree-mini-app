@@ -52,7 +52,7 @@ function Chip({ selected, onClick, icon: Icon, label, children, pressed = true }
 
 function ListSkeleton({ count, height, testId }: { count: number; height: number; testId?: string }) {
   return (
-    <div data-testid={testId} className="grid gap-3 md:grid-cols-2">
+    <div data-testid={testId} className="grid gap-3">
       {Array.from({ length: count }, (_, i) => (
         <Skeleton key={i} height={height} rounded="rounded-card" />
       ))}
@@ -279,7 +279,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
         )
       ) : (
         <>
-          <div className="grid gap-3 max-md:gap-2 md:grid-cols-2">
+          <div className="grid gap-3 max-md:gap-2">
             {posts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}

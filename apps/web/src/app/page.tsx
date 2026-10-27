@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import HomeView from '@/components/home/home-view';
 import { loadHomeInitial } from '@/lib/home-initial';
 import { homeText } from '@/lib/home-text';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
 
@@ -16,7 +17,7 @@ export const metadata: Metadata = { alternates: { canonical: '/' } };
 export default async function HomePage() {
   const initial = await loadHomeInitial();
   return (
-    <main className="mx-auto max-w-6xl px-4 py-4 max-md:py-0 md:py-6">
+    <main className={`${PAGE_WIDE} py-4 max-md:py-0 md:py-6`}>
       <h1 className="sr-only font-display">Tubu Tree — {homeText.seoTitle}</h1>
       <HomeView initial={initial} />
     </main>

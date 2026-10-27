@@ -19,6 +19,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { MAX_IMAGE_BYTES, isUsableImageFile, readAndCompressImage } from '@/lib/image-compress';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -163,7 +164,7 @@ export default function EditProfilePage() {
   };
 
   const shell = (body: React.ReactNode) => (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Sửa hồ sơ" backHref="/tai-khoan" backLabel="Quay lại tài khoản" />
       <div className="max-md:px-4">{body}</div>
     </main>
@@ -205,7 +206,7 @@ export default function EditProfilePage() {
   return shell(
     <form
       noValidate
-      className="mx-auto mt-4 flex max-w-md flex-col gap-4 max-md:max-w-none max-md:gap-5"
+      className="mt-4 flex max-w-xl flex-col gap-4 max-md:max-w-none max-md:gap-5"
       onSubmit={(e) => {
         e.preventDefault();
         submit();

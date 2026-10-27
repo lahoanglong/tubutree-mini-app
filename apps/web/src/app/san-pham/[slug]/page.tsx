@@ -21,6 +21,7 @@ import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashMeta, PdpFreeship,
 import { PdpRails } from './pdp-rails';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import BackLink from '@/components/back-link';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
 
@@ -71,14 +72,25 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0">
-      <BackLink href="/">
+    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
+      <BackLink
+        href="/"
+        crumbs={[
+          { label: 'Trang chủ', href: '/' },
+          { label: product.brand, href: `/san-pham?brand=${encodeURIComponent(product.brand)}` },
+          { label: product.name },
+        ]}
+      >
         ← Về trang chủ
       </BackLink>
-      <div className="mt-2 grid grid-cols-1 gap-8 max-md:mt-0 max-md:gap-0 md:grid-cols-2">
+      {/* Từ lg: ảnh và các khối đọc (thành phần, mô tả, đánh giá) ở cột trái, khối mua ở cột phải 400px dính dưới thanh đầu khi cuộn. */}
+      <div className="mt-2 grid grid-cols-1 gap-8 max-md:mt-0 max-md:gap-0 md:grid-cols-2 md:gap-y-0 lg:grid-cols-[minmax(0,1fr)_400px]">
         <ProductGallery images={images} name={product.name} />
         <PdpSelectionProvider initialId={(product.variations.find((v) => v.stock > 0) ?? product.variations[0])?.id ?? ''}>
-        <div data-testid="pdp-info" className="min-w-0 max-md:bg-stone-0 max-md:p-4">
+        <div
+          data-testid="pdp-info"
+          className="min-w-0 max-md:bg-stone-0 max-md:p-4 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:-mx-1 lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto lg:px-1"
+        >
           <div className="flex items-center justify-between gap-2">
             {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
             <Link
@@ -165,10 +177,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <PdpContentKitRow slug={product.slug} />
         </div>
         </PdpSelectionProvider>
-      </div>
 
       {/* Điện thoại: trang không đệm (ảnh tràn mép), nên các khối dưới tự đệm lại 16px. */}
-      <div className="max-md:px-4 max-md:py-6">
+      <div className="min-w-0 max-md:px-4 max-md:py-6 md:col-span-2 lg:col-span-1">
       <PdpIngredients ingredients={product.ingredients} />
       <PdpPromises>
         <PdpChatButton productName={product.name} productSlug={product.slug} />
@@ -181,6 +192,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </Suspense>
 
       <PdpRails slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} />
+      </div>
       </div>
 
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />

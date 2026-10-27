@@ -82,6 +82,7 @@ export function clearSessionMarker(): void {
   }
   writeWebCookie(SESSION_COOKIE, null);
   writeWebCookie(HOME_HINT_COOKIE, null);
+  document.documentElement.removeAttribute('data-restoring');
 }
 
 /** Header đánh dấu "tôi là web shop" — bật chế độ cookie ở BE, đồng thời là lớp chống CSRF. */

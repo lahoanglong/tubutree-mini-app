@@ -102,3 +102,20 @@ describe('StickyActionBar — đệm đáy theo chiều cao thật', () => {
     expect(cssVar()).toBe('');
   });
 });
+
+describe('StickyActionBar — hideFrom="lg" (giỏ, thanh toán)', () => {
+  it('giữ thanh tới hết khổ md và đánh dấu body để chừa đáy trang ở 768–1023px', () => {
+    const r = render(
+      <StickyActionBar label="Đặt hàng" hideFrom="lg">
+        x
+      </StickyActionBar>,
+    );
+    mounted.push(r);
+    const bar = r.container.querySelector('[data-testid="sticky-bar"]') as HTMLElement;
+    expect(bar.className).toMatch(/\blg:hidden\b/);
+    expect(bar.className).not.toMatch(/\bmd:hidden\b/);
+    expect(document.body.classList.contains('has-sticky-bar-lg')).toBe(true);
+    r.unmount();
+    expect(document.body.classList.contains('has-sticky-bar-lg')).toBe(false);
+  });
+});

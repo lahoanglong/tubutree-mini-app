@@ -1,11 +1,12 @@
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
+import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 
 /** Khung chung của các trang sổ cái trong tài khoản (Điểm Xanh, Ví Tubu). */
 export function LedgerShell({ title, children, wide = false }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
-    <main className={`mx-auto px-4 py-6 max-md:pt-0 ${wide ? 'max-w-5xl' : 'max-w-3xl'}`}>
-      <BackLink href="/tai-khoan">
+    <main className={`${wide ? PAGE_WIDE : PAGE_NARROW} py-6 max-md:pt-0`}>
+      <BackLink href="/tai-khoan" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Tài khoản', href: '/tai-khoan' }, { label: title }]}>
         ← Tài khoản
       </BackLink>
       <PageHeader title={title} parentHref="/tai-khoan" className="md:mt-1" />

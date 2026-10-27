@@ -17,6 +17,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { PageHeader } from '@/components/ui/page-header';
 import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -197,7 +198,7 @@ export default function AdvisorPage() {
   const aiOff = cfg.isLoaded && cfg.aiAdvisorEnabled !== true;
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-6 pb-24 max-md:pb-0 max-md:pt-0">
+    <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pb-0 max-md:pt-0`}>
       <PageHeader title="Trợ lý AI Tubu" subtitle={aiOff || !cfg.isLoaded ? undefined : 'Tư vấn sản phẩm tiêu dùng xanh 24/7'} />
       <div className="mt-4">
         {aiOff ? (

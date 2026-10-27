@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click } from '@/test-utils/dom';
+import { act } from 'react';
 import { mount } from './harness';
 
 const nav = vi.hoisted(() => ({ pathname: '/san-pham/abc', back: vi.fn(), push: vi.fn(), replace: vi.fn() }));
@@ -181,5 +182,21 @@ describe('BackButton: không bao giờ rời web, không bao giờ im lặng', (
     press(container);
     expect(nav.back).not.toHaveBeenCalled();
     expect(nav.replace).toHaveBeenLastCalledWith('/');
+  });
+});
+
+describe('BackButton: thanh nền đặc phía sau nút khi cuộn', () => {
+  it('trong suốt ở đỉnh trang, đặc khi cuộn quá 8px', async () => {
+    const { container } = mount(<BackButton />);
+    const bar = () => container.querySelector('[data-back-bar]') as HTMLElement;
+    expect(bar().dataset.scrolled).toBe('false');
+    expect(bar().style.pointerEvents).toBe('none');
+    Object.defineProperty(window, 'scrollY', { value: 120, configurable: true });
+    await act(async () => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(bar().dataset.scrolled).toBe('true');
+    expect(bar().style.opacity).toBe('1');
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
   });
 });

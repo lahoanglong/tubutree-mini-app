@@ -98,7 +98,7 @@ export function SubscriptionsPanel() {
           <LineItemSkeleton />
         </>
       ) : subsQ.isError ? (
-        <ErrorState message={errText(subsQ.error)} onRetry={() => void subsQ.refetch()} />
+        <ErrorState variant="inline" message={errText(subsQ.error)} onRetry={() => void subsQ.refetch()} />
       ) : subs.length > 0 ? (
         <ul className="flex flex-col gap-3">
           {subs.map((s) => (

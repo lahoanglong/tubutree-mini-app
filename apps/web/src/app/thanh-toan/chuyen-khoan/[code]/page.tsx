@@ -11,6 +11,7 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const TITLE = 'Quét QR để chuyển khoản';
 // Tên trang của Mini App khi chưa có QR để quét (đã trả, chưa đăng nhập).
@@ -56,7 +57,7 @@ export default function BankPaymentPage() {
     body = <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo={bankPaymentHref(code)} />;
   } else {
     body = (
-      <div className="mx-auto max-w-md">
+      <div className="max-w-md max-md:mx-auto">
         <BankTransferPanel
           order={{ code, paymentMethod: 'BANK_TRANSFER' }}
           onPaid={onPaid}
@@ -86,7 +87,7 @@ export default function BankPaymentPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       {showQr ? (
         <PageHeader
           title={TITLE}

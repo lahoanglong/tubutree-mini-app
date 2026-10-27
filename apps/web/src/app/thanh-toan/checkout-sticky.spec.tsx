@@ -133,7 +133,7 @@ describe('/thanh-toan — thanh dính đáy', () => {
     const inCard = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Đặt hàng');
     expect(inCard).toBeDefined();
     expect(inCard!.className).toMatch(/\bhidden\b/);
-    expect(inCard!.className).toMatch(/\bmd:inline-flex\b/);
+    expect(inCard!.className).toMatch(/\blg:inline-flex\b/);
   });
 
   it('dòng đồng ý điều khoản nằm ngay trên nút Đặt hàng ở thanh dính và ở khung tóm tắt, có link tới Điều khoản và Chính sách đổi trả, không có ô tick', async () => {

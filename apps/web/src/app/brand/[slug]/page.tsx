@@ -6,6 +6,8 @@ import ProductCard from '@/components/product-card';
 import { EmptyState } from '@/components/empty-state';
 import { safeHexColor } from '@/lib/safe-color';
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
+import { PAGE_WIDE } from '@/lib/page-frame';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 // Admin gỡ đăng không làm mới được trang này, nên hạn ngắn để nhãn bị gỡ không còn hiện lâu; vẫn dựng phía server cho SEO.
 export const revalidate = 60;
@@ -38,7 +40,7 @@ export default async function BrandPage({
   if (!b) notFound();
 
   return (
-    <main data-page-bleed className="mx-auto max-w-5xl px-4 py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]">
+    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
       {/* Điện thoại: dải bìa tràn mép 96px (xanh đậm khi chưa có ảnh) và avatar đè lên như StorePageShell của Mini App. */}
       {b.coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -133,7 +135,7 @@ export default async function BrandPage({
       {b.products.length > 0 && (
         <section className="mt-6">
           <h2 className="mb-3 font-display font-semibold text-stone-900">Sản phẩm</h2>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className={GRID_PRODUCTS}>
             {b.products.map((p) => (
               // Payload sản phẩm của trang nhãn không kèm `brand` (mọi sản phẩm thuộc nhãn này): dùng tên nhãn của trang như Mini App.
               <ProductCard key={p.id} product={{ ...p, brand: b.name } as ProductCardData} />

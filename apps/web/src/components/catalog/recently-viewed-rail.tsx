@@ -7,6 +7,8 @@ import { browseText } from '@/lib/browse-text';
 import { coreHttp } from '@/lib/core-http';
 import { useRecentlyViewed } from '@/lib/use-recently-viewed';
 import { ProductPriceRow } from '@/components/flash-price';
+import { ScrollRail } from '@/components/scroll-rail';
+import { ThumbPlaceholder } from '@/components/thumb-placeholder';
 
 /**
  * "Đã xem gần đây": thẻ gọn, tên và ảnh đọc từ localStorage nên hiện ngay. GIÁ không lưu (giá đổi theo Giờ vàng/khuyến mãi):
@@ -23,7 +25,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed }: { titl
   return (
     <section aria-label={title} className="py-2">
       <h2 className="mb-2 font-display text-lg font-semibold text-stone-900">{title}</h2>
-      <ul className="flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
+      <ScrollRail className="flex gap-2.5 overflow-x-auto px-1 pb-3 pt-1">
         {items.map((it) => {
           const product = bySlug.get(it.slug);
           return (
@@ -35,7 +37,12 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed }: { titl
               >
                 <div className="aspect-square w-full bg-stone-100">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {it.thumbnail && <img src={it.thumbnail} alt="" width={128} height={128} loading="lazy" className="h-full w-full object-cover" />}
+                  {it.thumbnail ? <img src={it.thumbnail} alt="" width={128} height={128} loading="lazy" className="h-full w-full object-cover" /> : (
+                    // Mini App để ô nền trống khi thiếu ảnh; hình lá chỉ có từ md.
+                    <div className="hidden h-full w-full md:block">
+                      <ThumbPlaceholder iconSize={28} />
+                    </div>
+                  )}
                 </div>
                 <div className="p-2">
                   <p className="line-clamp-2 min-h-[2rem] text-xs text-stone-900">{it.name}</p>
@@ -54,7 +61,7 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed }: { titl
             </li>
           );
         })}
-      </ul>
+      </ScrollRail>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 interface SkeletonProps {
   width?: number | string;
@@ -28,9 +29,9 @@ export function ProductCardSkeleton() {
 }
 
 /** Lưới khung chờ: 2 cột trên điện thoại, nhiều cột hơn từ md. */
-export function ProductGridSkeleton({ count = 6 }: { count?: number }) {
+export function ProductGridSkeleton({ count = 6, className = GRID_PRODUCTS }: { count?: number; className?: string }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+    <div className={className}>
       {Array.from({ length: count }, (_, i) => (
         <ProductCardSkeleton key={i} />
       ))}

@@ -129,7 +129,7 @@ describe('/tai-khoan/ho-so — khung trang', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối');
     click(byText(container, 'button', 'Thử lại'));
     await flush(6);
-    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(mocks.get.mock.calls.filter(([p]) => !String(p).includes('/config/'))).toHaveLength(2);
     expect(field(container, 'Họ và tên').value).toBe('Lan');
   });
 });

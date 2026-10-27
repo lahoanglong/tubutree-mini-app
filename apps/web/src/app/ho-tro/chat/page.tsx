@@ -26,6 +26,7 @@ import { coreHttp } from '@/lib/core-http';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { friendlyError } from '@/lib/friendly-error';
 import { formatPhoneDisplay } from '@/lib/phone-display';
+import { PAGE_NARROW } from '@/lib/page-frame';
 
 const POLL_MS = 5000;
 /** Dạng slug sản phẩm (chữ thường, số, gạch nối): tham số lạ như `../auth/me` không được đổi thành một lệnh gọi API. */
@@ -237,6 +238,12 @@ function ChatBody() {
           </div>
         )}
         <MessageList items={showGreeting ? [greeting, ...items] : items} />
+        {/* Máy tính: khung chat cao 60vh nên lúc chưa có tin còn trống nhiều; đặt câu hỏi mẫu ngay trong khung thay vì sát đáy. */}
+        {empty && quickReady && !closed && !closedText && (
+          <div data-chat-suggest="" className="max-md:hidden">
+            <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />
+          </div>
+        )}
       </div>
       <div
         className="max-md:sticky max-md:bottom-0"
@@ -256,7 +263,11 @@ function ChatBody() {
         ) : (
           <>
             {chipLabel && !contextUsed && <ContextChip label={chipLabel} />}
-            {empty && quickReady && <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />}
+            {empty && quickReady && (
+              <div className="md:hidden">
+                <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} />
+              </div>
+            )}
             <Composer
               onSend={(body) => enqueue(body, null)}
               onSendImage={(url) => enqueue('', url)}
@@ -271,7 +282,7 @@ function ChatBody() {
 
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 max-md:max-w-none max-md:px-0 max-md:py-0">
+    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Chat với Tubu Tree" backHref="/tai-khoan" backLabel="Tài khoản" />
       {children}
     </main>

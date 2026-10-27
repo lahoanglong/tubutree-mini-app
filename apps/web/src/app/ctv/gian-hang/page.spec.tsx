@@ -1003,7 +1003,7 @@ describe('không vỡ ở màn hẹp', () => {
   it('khung trang không rộng cố định, thanh hành động dính đáy', async () => {
     const { container } = mount();
     await flush();
-    expect(container.querySelector('main')?.className).toContain('max-w-5xl');
+    expect(container.querySelector('main')?.className).toContain('max-w-frame');
     expect(container.innerHTML).not.toMatch(/min-w-\[\d{3,}px\]|w-\[\d{4,}px\]/);
     expect(container.querySelector('.sticky')).not.toBeNull();
   });

@@ -62,6 +62,10 @@ body {
 body.with-back-btn .page {
   padding-top: calc(var(--safe-top) + 48px);
 }
+/* Thanh dính của trang (vd. tab Vườn Xanh) phải nằm dưới thanh đặc của nút back (cao 56px + vùng an toàn), không thì bị nó che khi cuộn. */
+body.with-back-btn .sticky-below-back {
+  top: calc(var(--safe-top) + 56px) !important;
+}
 /* Trang hero full-bleed (gallery/hero màu): nút back nằm TRÊN hero — không cần đệm. */
 body.with-back-btn .page.page-bleed {
   padding-top: var(--safe-top);

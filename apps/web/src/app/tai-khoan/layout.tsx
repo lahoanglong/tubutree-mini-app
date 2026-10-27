@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AccountShell } from '@/components/account/account-shell';
 
 /**
  * Trang nội bộ/riêng tư — chặn lập chỉ mục ở cả hai lớp: robots.txt (xem app/robots.ts) và thẻ
@@ -7,5 +8,5 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Tài khoản — Tubu Tree', robots: { index: false, follow: false } };
 
 export default function PrivateLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return <AccountShell>{children}</AccountShell>;
 }

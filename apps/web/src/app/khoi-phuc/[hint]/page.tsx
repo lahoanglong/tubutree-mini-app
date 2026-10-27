@@ -4,6 +4,7 @@ import HomeView from '@/components/home/home-view';
 import { HOME_HINT_SLUGS, hintOfSlug, type HomeHintSlug } from '@/lib/home-restore-hint';
 import { loadHomeInitial } from '@/lib/home-initial';
 import { homeText } from '@/lib/home-text';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 export const revalidate = 300;
 export const dynamicParams = false;
@@ -23,7 +24,7 @@ export default async function RestoringHomePage({ params }: { params: Promise<{ 
   if (!(HOME_HINT_SLUGS as readonly string[]).includes(hint)) notFound();
   const initial = await loadHomeInitial();
   return (
-    <main className="mx-auto max-w-6xl px-4 py-4 max-md:py-0 md:py-6">
+    <main className={`${PAGE_WIDE} py-4 max-md:py-0 md:py-6`}>
       <h1 className="sr-only font-display">Tubu Tree — {homeText.seoTitle}</h1>
       <HomeView initial={initial} restoreHint={hintOfSlug(hint as HomeHintSlug)} />
     </main>

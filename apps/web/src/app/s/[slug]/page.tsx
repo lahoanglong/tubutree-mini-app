@@ -23,6 +23,8 @@ import { OpenStorefrontCta, StorefrontAction, StorefrontEmpty } from '@/componen
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
 import ProductCard from '@/components/product-card';
 import { safeHexColor } from '@/lib/safe-color';
+import { PAGE_WIDE } from '@/lib/page-frame';
+import { GRID_PRODUCTS } from '@/lib/product-grid';
 
 export const revalidate = 300;
 
@@ -79,7 +81,7 @@ export default async function StorefrontPage({
     .filter((c) => c.items.length > 0);
 
   return (
-    <main data-page-bleed className={`mx-auto max-w-5xl px-4 py-6 max-md:px-0 max-md:py-0 md:py-8 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
+    <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 md:py-8 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
       {/* Ghi nhớ gian hàng để đơn đặt sau đó còn ghi nhận hoa hồng CTV + áp combo của gian hàng. */}
       <StorefrontTracker slug={sf.slug} type={sf.type ?? undefined} referralCode={sf.referralCode} />
 
@@ -271,7 +273,7 @@ export default async function StorefrontPage({
             <span className="text-xs text-stone-600 max-md:hidden">({c.items?.length ?? 0} sản phẩm)</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4">
+          <div className={GRID_PRODUCTS}>
             {c.items.map((it) => (
               <div key={it.id}>
                 <ProductCard product={it.product as ProductCardData} />
