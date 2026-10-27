@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createBlockedHint, dropOffDayLimitText, itemQtyMax, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
+import { createBlockedHint, createdTodayVn, dropOffDayLimitText, itemQtyMax, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteItemIconKey, writeLastPointId } from './waste-copy';
 
 describe('parseQtyInput', () => {
   it('chỉ giữ chữ số và kẹp vào khoảng', () => {
@@ -117,5 +117,18 @@ describe('itemQtyMax và dropOffDayLimitText', () => {
     expect(dropOffDayLimitText({ ...base, dayRemainingQty: 20 })).toBeNull();
     expect(dropOffDayLimitText({ ...base, hazardous: false, dayRemainingQty: 12 })).toBeNull();
     expect(dropOffDayLimitText({ ...base, dayRemainingQty: null })).toBeNull();
+  });
+  it('trang sửa: allowance cộng lại phần đã giữ; yêu cầu không tạo hôm nay thì bỏ trần ngày; đã giữ đủ trần thì không hiện "còn 0"', () => {
+    const pin = { hazardous: true, dailyCapQty: 20, unitLabel: 'viên', monthRemainingQty: 50, dayRemainingQty: 0 };
+    expect(itemQtyMax(pin, 20, 999)).toBe(20);
+    expect(itemQtyMax(pin, 20, 999, false)).toBe(70);
+    expect(dropOffDayLimitText(pin, 20)).toBeNull();
+    expect(dropOffDayLimitText(pin, 8)).toBe('Hôm nay còn nhận được 8 viên (tối đa 20 viên mỗi ngày)');
+    expect(dropOffDayLimitText(pin, 8, false)).toBeNull();
+  });
+  it('createdTodayVn so ngày theo giờ Việt Nam', () => {
+    const now = new Date('2026-10-27T18:30:00Z'); // 28/10 01:30 giờ VN
+    expect(createdTodayVn('2026-10-27T17:05:00Z', now)).toBe(true); // 28/10 00:05 VN
+    expect(createdTodayVn('2026-10-27T16:59:00Z', now)).toBe(false); // 27/10 23:59 VN
   });
 });

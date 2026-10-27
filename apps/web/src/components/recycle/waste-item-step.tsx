@@ -16,16 +16,18 @@ interface WasteItemStepProps {
   onChange: (itemId: string, qty: number) => void;
   /** Số lượng đã khai ở yêu cầu đang sửa, cộng lại vào trần còn lại. */
   allowance?: Readonly<Record<string, number>>;
+  /** Sai khi sửa một yêu cầu không tạo hôm nay: máy chủ tính trần ngày theo ngày của yêu cầu nên khách không áp trần ngày. */
+  dayCap?: boolean;
 }
 
 /** Bước chọn món: thẻ từng món với quy tắc điểm, hạn mức và bộ đếm; món sắp nhận mờ đi và không có bộ đếm. */
-export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemStepProps) {
+export function WasteItemStep({ items, lines, onChange, allowance, dayCap = true }: WasteItemStepProps) {
   const sorted = useMemo(() => items.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder), [items]);
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {sorted.map((item) => {
         const qty = lines[item.id] ?? 0;
-        const dayLine = dropOffDayLimitText(item);
+        const dayLine = dropOffDayLimitText(item, allowance?.[item.id] ?? 0, dayCap);
         const cap = capSentence(item, dayLine !== null);
         const monthLeft = monthRemainingText(item);
         const progress = groupProgressText(qty, item);
@@ -64,7 +66,7 @@ export function WasteItemStep({ items, lines, onChange, allowance }: WasteItemSt
                       editable
                       quickSteps={QUICK_QTY_STEPS}
                       min={0}
-                      max={itemQtyMax(item, allowance?.[item.id] ?? 0, UNCAPPED_QTY_MAX)}
+                      max={itemQtyMax(item, allowance?.[item.id] ?? 0, UNCAPPED_QTY_MAX, dayCap)}
                       value={qty}
                       onChange={(n) => onChange(item.id, n)}
                     />

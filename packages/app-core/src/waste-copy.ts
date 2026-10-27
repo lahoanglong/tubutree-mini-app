@@ -150,26 +150,45 @@ export const HAZARDOUS_DESK_NOTES = [
   'Pin phồng hoặc chảy nước thì không đếm, chọn lý do nhận thiếu "Hỏng"',
 ] as const;
 
+/** Ngày theo giờ Việt Nam (UTC+7), dạng yyyy-mm-dd, cùng quy ước `capDayKey` của máy chủ. */
+export function vnDayKey(d: Date): string {
+  return new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** Máy chủ tính trần ngày theo ngày tạo yêu cầu (`capDayKey`), nên trang sửa chỉ áp trần ngày phía khách khi yêu cầu tạo hôm nay. */
+export function createdTodayVn(createdAt: string, now: Date = new Date()): boolean {
+  return vnDayKey(new Date(createdAt)) === vnDayKey(now);
+}
+
 /**
  * Số tối đa của ô chọn số. Món chỉ mang tới (nguy hại, như pin) bị chặn cả bởi trần ngày còn lại, vì máy chủ không
  * cho gửi nó qua đường vận chuyển nên không có đường nào khác để mang phần vượt; món khác chỉ theo trần tháng.
+ * `dayCap` sai (trang sửa một yêu cầu không tạo hôm nay) thì bỏ trần ngày phía khách, để máy chủ chặn theo ngày của yêu cầu.
  */
 export function itemQtyMax(
   item: { monthRemainingQty?: number | null; dayRemainingQty?: number | null; hazardous?: boolean },
   allowance: number,
   uncapped: number,
+  dayCap = true,
 ): number {
-  const month = item.monthRemainingQty ?? uncapped;
-  const limit = item.hazardous && item.dayRemainingQty != null ? Math.min(month, item.dayRemainingQty) : month;
-  return limit + allowance;
+  const month = (item.monthRemainingQty ?? uncapped) + allowance;
+  if (dayCap && item.hazardous && item.dayRemainingQty != null) return Math.min(month, item.dayRemainingQty + allowance);
+  return month;
 }
 
 /**
  * Dòng trần ngày cho món chỉ mang tới, thay cho câu trần ngày có sẵn khi phần còn lại hôm nay đã bớt.
- * Còn nguyên trần (hoặc không có trần ngày) thì trả null để câu trần của thẻ đứng một mình.
+ * `allowance` là phần yêu cầu đang sửa đã giữ (máy chủ đã trừ nó khỏi phần còn lại). Còn nguyên trần, không có trần ngày,
+ * hoặc `dayCap` sai thì trả null để câu trần của thẻ đứng một mình (không hiện "còn nhận được 0" trên yêu cầu đã giữ đủ trần).
  */
-export function dropOffDayLimitText(item: { hazardous?: boolean; dailyCapQty?: number | null; dayRemainingQty?: number | null; unitLabel: string }): string | null {
-  if (!item.hazardous || item.dayRemainingQty == null || item.dailyCapQty == null || item.dayRemainingQty >= item.dailyCapQty) return null;
+export function dropOffDayLimitText(
+  item: { hazardous?: boolean; dailyCapQty?: number | null; dayRemainingQty?: number | null; unitLabel: string },
+  allowance = 0,
+  dayCap = true,
+): string | null {
+  if (!dayCap || !item.hazardous || item.dayRemainingQty == null || item.dailyCapQty == null) return null;
+  const left = item.dayRemainingQty + allowance;
+  if (left >= item.dailyCapQty) return null;
   const fmt = (n: number) => n.toLocaleString('vi-VN');
-  return `Hôm nay còn nhận được ${fmt(item.dayRemainingQty)} ${item.unitLabel} (tối đa ${fmt(item.dailyCapQty)} ${item.unitLabel} mỗi ngày)`;
+  return `Hôm nay còn nhận được ${fmt(left)} ${item.unitLabel} (tối đa ${fmt(item.dailyCapQty)} ${item.unitLabel} mỗi ngày)`;
 }

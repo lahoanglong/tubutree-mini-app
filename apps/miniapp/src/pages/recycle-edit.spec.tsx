@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { findNestedInteractive, describeNested } from '../components/ui/nested-interactive';
-import { ITEM_CARTON, ITEM_MILK, makeRequestDetail, makeWasteMe, makeWastePoint } from '../services/waste-test-fixtures';
+import { ITEM_BATTERY, ITEM_CARTON, ITEM_MILK, makeRequestDetail, makeWasteMe, makeWastePoint } from '../services/waste-test-fixtures';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -103,6 +103,29 @@ describe('/recycle/r/:id/edit (§4.5, §7.4)', () => {
     expect(within(carton).getByRole('textbox', { name: 'Số lượng' })).toHaveValue('5');
     expect(within(carton).getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
     expect(within(carton).getByRole('button', { name: 'Giảm số lượng' })).toHaveAttribute('aria-disabled', 'false');
+  });
+  describe('trần ngày của món chỉ mang tới theo ngày của yêu cầu', () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 0 };
+    const withPin = (createdAt: string, declaredQty: number) => {
+      const base = makeRequestDetail();
+      mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [ITEM_CARTON, pin] }));
+      mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ createdAt, lines: [{ ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty }] }));
+    };
+    it('tạo hôm nay và đã giữ đủ trần: chỉ câu trần, không "còn 0", không tăng quá trần', async () => {
+      withPin(new Date().toISOString(), 20);
+      renderPage();
+      const card = (await screen.findByText('Pin đã dùng')).closest('[data-item]') as HTMLElement;
+      expect(within(card).queryByText(/Hôm nay còn nhận được/)).toBeNull();
+      expect(within(card).getByText(/Mỗi ngày mang tới điểm nhận tối đa 20 viên/)).toBeInTheDocument();
+      expect(within(card).getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'true');
+    });
+    it('không tạo hôm nay: không áp trần ngày phía khách, không dòng "Hôm nay còn…"', async () => {
+      withPin('2026-10-17T03:00:00.000Z', 5);
+      renderPage();
+      const card = (await screen.findByText('Pin đã dùng')).closest('[data-item]') as HTMLElement;
+      expect(within(card).queryByText(/Hôm nay còn nhận được/)).toBeNull();
+      expect(within(card).getByRole('button', { name: 'Tăng số lượng' })).toHaveAttribute('aria-disabled', 'false');
+    });
   });
   it('nói rõ điểm ước tính có thể đổi và hạn giữ chỗ không đổi', async () => {
     renderPage();
