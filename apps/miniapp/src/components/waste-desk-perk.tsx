@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CASH_WORDING_MESSAGE, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
+import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, getDeskPointReport, submitDeskPerk } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -77,7 +77,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
         </Field>
         {cashProblem && (
           <div role="alert" style={{ marginTop: 8 }}>
-            <Text variant="caption" tone="danger" as="div">{CASH_WORDING_MESSAGE}</Text>
+            <Text variant="caption" tone="danger" as="div">{cashWordingMessage(text)}</Text>
           </div>
         )}
       </BottomSheet>

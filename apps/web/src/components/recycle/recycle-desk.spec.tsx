@@ -574,6 +574,7 @@ describe('/doi-rac/quay: ưu đãi và báo cáo tháng', () => {
     const sheet = dialog()!;
     typeInto(label(sheet, 'Nội dung ưu đãi'), 'Tặng 10k cho khách mang vỏ chai');
     expect(sheet.querySelector('[role=alert]')?.textContent).toContain('Zalo không cho phép');
+    expect(sheet.querySelector('[role=alert]')?.textContent).toContain('Chữ "Tặng 10k" nói về');
     const send = byText(sheet, 'button', 'Gửi duyệt') as HTMLButtonElement;
     expect(send.disabled).toBe(true);
     click(send);

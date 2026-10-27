@@ -68,6 +68,7 @@ describe('WasteDeskPerk (§4.10, §5.6)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa' }));
       fireEvent.change(await screen.findByLabelText('Nội dung ưu đãi'), { target: { value: text } });
       expect(screen.getByRole('alert').textContent).toContain('Zalo không cho phép');
+      expect(screen.getByRole('alert').textContent).toContain(`Chữ "${{ 'Tặng 10k cho khách': 'Tặng 10k', 'Hoàn tiền mặt 5%': 'tiền mặt', 'Chuyển khoản lại tiền chai': 'Chuyển khoản' }[text]}"`);
       const send = screen.getByRole('button', { name: 'Gửi duyệt' });
       expect(send).toBeDisabled();
       fireEvent.click(send);

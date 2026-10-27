@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CASH_WORDING_MESSAGE, findCashWording, type AdminWastePointDTO, type WastePointStaffRole } from '@tubutree/shared-types';
+import { cashWordingMessage, findCashWording, type AdminWastePointDTO, type WastePointStaffRole } from '@tubutree/shared-types';
 import {
   addWastePointStaff,
   approveWastePerk,
@@ -239,7 +239,7 @@ export function WastePointDetail({
             </p>
             {findCashWording(point.perkPendingText) !== null && (
               <Notice tone="danger" role="alert">
-                Ưu đãi này có chữ nói về tiền. {CASH_WORDING_MESSAGE} Hãy từ chối ưu đãi này.
+                Ưu đãi này có chữ nói về tiền. {cashWordingMessage(point.perkPendingText)} Hãy từ chối ưu đãi này.
               </Notice>
             )}
             <div className="flex flex-wrap gap-2">

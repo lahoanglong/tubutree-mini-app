@@ -1,4 +1,4 @@
-import { CASH_WORDING_MESSAGE, findCashWording } from '@tubutree/shared-types';
+import { CASH_WORDING_MESSAGE, cashWordingMessage, findCashWording } from '@tubutree/shared-types';
 
 describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cửa hàng)', () => {
   it.each([
@@ -30,6 +30,18 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Tặng hai trăm nghìn cho khách mới',
     'Chuyển 50k vào số tài khoản',
     'Nạp thẻ cào 20k',
+    'Hoàn 5% giá trị đơn',
+    'hoàn ví 5%',
+    'Hoàn vào ví 10k',
+    'Tặng phiếu mua hàng 50.000đ',
+    'Tặng phiếu mua hàng cho khách quen',
+    'Thưởng 2 củ',
+    'Tặng năm chục',
+    'Tặng 50 cành',
+    'Thưởng 2 củ cho người mang nhiều vỏ nhất',
+    'Cho khách 20k',
+    'Tặng thẻ quà tặng 100k',
+    'Chuyển thưởng vào ngân hàng của bạn',
   ])('chặn: %s', (text) => {
     expect(findCashWording(text)).not.toBeNull();
   });
@@ -53,8 +65,26 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Tặng 10000 điểm',
     'Tặng năm hạt giống rau',
     'Tặng 1 năm bảo hành',
+    'Nhắn 0901234567 để đặt lịch',
+    'Gọi hoặc nhắn 0909 123 456',
+    'Gọi 0909.123.456 hoặc nhắn Zalo +84 909 123 456',
+    'Giảm 5% cho 1.000 khách đầu tiên',
+    'Giảm 10% cho 2000 người đăng ký đầu',
+    'Không phải trả tiền ship',
+    'Miễn trả tiền vận chuyển',
+    'Thanh toán qua thẻ ngân hàng',
+    'Tặng 2 củ cải trắng',
+    'Tặng 1 chục trứng gà',
+    'Hoàn 5% giá trị đơn bằng điểm Xanh',
   ])('cho qua: %s', (text) => {
     expect(findCashWording(text)).toBeNull();
+  });
+
+  it('lời nhắn nêu đúng đoạn chữ đại lý đã viết (giữ dấu) để biết sửa chỗ nào', () => {
+    expect(findCashWording('Mang vỏ chai về nhận Tặng 10K ngay nhé')).toBe('Tặng 10K');
+    expect(cashWordingMessage('Chúng tôi Hoàn Tiền mặt tại quầy')).toMatch(/^Chữ "Tiền mặt"|^Chữ "Hoàn Tiền"/);
+    expect(cashWordingMessage('Thưởng 2 củ')).toContain('Chữ "Thưởng 2 củ"');
+    expect(cashWordingMessage('Giảm 10% hoá đơn đầu')).toBe(CASH_WORDING_MESSAGE);
   });
 
   it('lời nhắn nói bằng chữ thường và gợi ý cách viết khác', () => {

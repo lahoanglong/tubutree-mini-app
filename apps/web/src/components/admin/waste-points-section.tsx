@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminWastePointDTO } from '@tubutree/shared-types';
+import { findCashWording, type AdminWastePointDTO } from '@tubutree/shared-types';
 import { getWasteOverview, listWasteItems, listWastePoints, updateWastePoint } from '@/lib/admin-client';
 import { formatCount } from '@/lib/checkout-points';
 import { summarizeOpeningHours, WASTE_POINT_KIND_LABELS, WASTE_POINT_STATUS_LABELS } from '@/lib/waste-labels';
@@ -112,6 +112,7 @@ export function WastePointsSection({ seed }: { seed?: WasteSeed | null }) {
                       {p.status === 'ACTIVE' && p.quotaFull && <ToneBadge tone="warning">Tạm dừng, hết hạn mức</ToneBadge>}
                       {p.hiddenInactive && <ToneBadge tone="warning">Ẩn khỏi khách do không hoạt động</ToneBadge>}
                       {p.perkPendingText && <ToneBadge tone="warning">Có ưu đãi chờ duyệt</ToneBadge>}
+                      {p.perkText && findCashWording(p.perkText) !== null && <ToneBadge tone="warning">Ưu đãi đang hiện có chữ về tiền</ToneBadge>}
                     </div>
                   </td>
                   <td className={TD}>

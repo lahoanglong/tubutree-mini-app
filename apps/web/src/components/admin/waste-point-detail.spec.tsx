@@ -199,6 +199,7 @@ describe('WastePointDetail', () => {
     expect(ok.c.querySelector('[role=alert]')).toBeNull();
     const bad = await mount(wastePoint({ perkText: null, perkPendingText: 'Tặng 10k cho khách mang vỏ chai' }));
     expect(bad.c.querySelector('[role=alert]')?.textContent).toContain('Zalo không cho phép');
+    expect(bad.c.querySelector('[role=alert]')?.textContent).toContain('Chữ "Tặng 10k"');
     expect((btn(bad.c, 'Duyệt ưu đãi') as HTMLButtonElement).disabled).toBe(true);
     expect((btn(bad.c, 'Từ chối ưu đãi') as HTMLButtonElement).disabled).toBe(false);
   });

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CASH_WORDING_MESSAGE, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
+import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
 import { friendlyError as errText } from '@/lib/friendly-error';
@@ -89,7 +89,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
           </Field>
           {cashProblem && (
             <p role="alert" className={ui.error}>
-              {CASH_WORDING_MESSAGE}
+              {cashWordingMessage(text)}
             </p>
           )}
           {submit.isError && (
