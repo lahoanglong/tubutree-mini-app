@@ -2,12 +2,13 @@ import type { CSSProperties } from 'react';
 import { SEGMENT_ENTRIES, type CategoryEntry } from '../../hooks/use-categories';
 import { vi } from '../../i18n/vi';
 import { Icon } from '../ui/icon';
+import { ScrollRow } from '../ui/scroll-row';
 import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 
-const GRID: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 };
-/** Viền 1px + đệm 12 + 1 dòng body-sm (22px) + đệm 12 + viền 1px = 48px — khung chờ cùng chiều cao. */
-const ITEM_HEIGHT = 48;
+/** Một hàng cuộn ngang thay cho lưới ô to: 7 danh mục xếp lưới 2 cột đẩy món đầu xuống giữa màn thứ hai. Cao 44px = vùng chạm tối thiểu. */
+const ROW: CSSProperties = { gap: 8, padding: '4px 16px 8px', margin: '0 -16px' };
+const ITEM_HEIGHT = 44;
 
 export interface CategoryGridProps {
   entries: CategoryEntry[];
@@ -31,13 +32,15 @@ export function CategoryGrid({ entries, isLoading, onSelect, title = vi.browse.c
         {title}
       </Heading>
       {isLoading ? (
-        <div data-testid="category-grid-loading" aria-hidden="true" style={GRID}>
+        <div data-testid="category-grid-loading" aria-hidden="true" className="scroll-x" style={ROW}>
           {Array.from({ length: placeholderCount }, (_, i) => (
-            <Skeleton key={i} height={ITEM_HEIGHT} radius="var(--radius-card)" />
+            <div key={i} style={{ flex: '0 0 auto' }}>
+              <Skeleton width={112} height={ITEM_HEIGHT} radius="var(--radius-pill)" />
+            </div>
           ))}
         </div>
       ) : (
-        <div style={GRID}>
+        <ScrollRow label={`${title} (vuốt ngang)`} style={ROW}>
           {entries.map((e) => (
             <button
               key={`${e.kind}:${e.key}`}
@@ -45,18 +48,18 @@ export function CategoryGrid({ entries, isLoading, onSelect, title = vi.browse.c
               className="tubu-press"
               onClick={() => onSelect(e)}
               style={{
+                flex: '0 0 auto',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                minWidth: 0,
                 minHeight: ITEM_HEIGHT,
-                padding: 12,
+                padding: '0 14px',
                 boxSizing: 'border-box',
-                textAlign: 'left',
+                whiteSpace: 'nowrap',
                 fontFamily: 'inherit',
                 background: 'var(--color-bg-surface)',
                 border: '1px solid var(--color-border-subtle)',
-                borderRadius: 'var(--radius-card)',
+                borderRadius: 'var(--radius-pill)',
               }}
             >
               {e.image ? (
@@ -64,12 +67,12 @@ export function CategoryGrid({ entries, isLoading, onSelect, title = vi.browse.c
               ) : (
                 <Icon icon={e.icon} size="md" tone="brand" style={{ flex: '0 0 auto' }} />
               )}
-              <Text variant="body-sm" style={{ fontWeight: 600, minWidth: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>
+              <Text variant="body-sm" style={{ fontWeight: 600 }}>
                 {e.label}
               </Text>
             </button>
           ))}
-        </div>
+        </ScrollRow>
       )}
     </section>
   );
