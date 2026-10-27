@@ -186,6 +186,25 @@ describe('WasteItemsSection', () => {
     expect(callsTo(api, '/admin/waste/items/i2', 'PATCH')).toHaveLength(0);
   });
 
+  it('tắt món nguy hại kèm gắn cờ trong cùng lần lưu thì không hỏi điều kiện bật; hộp bật nhắc chưa gắn cho đại lý', async () => {
+    const { c, api } = await mount();
+    click(Array.from(row(c, 'i2').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    click(field(c, 'hazardous'));
+    selectValue(c.querySelector('[name="status"]'), 'HIDDEN');
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Không bỏ được cờ này sau khi lưu');
+    answerConfirm(true);
+    await flush();
+    expect(confirmDialog()).toBeNull();
+    expect(callsTo(api, '/admin/waste/items/i2', 'PATCH')).toHaveLength(1);
+    click(Array.from(row(c, 'i5').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    selectValue(c.querySelector('[name="status"]'), 'ACTIVE');
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Chưa gắn món này cho điểm đại lý cho tới khi Sở trả lời về điểm đối tác.');
+  });
+
   it('thêm món: ô trần để trống gửi null; xem trước thẻ khách cập nhật theo ô nhập', async () => {
     const { c, api } = await mount();
     fillNew(c);

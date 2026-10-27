@@ -7,6 +7,8 @@ import { remainingQty } from '../core/waste-caps';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteHoldService, type WasteHoldConfig } from '../core/waste-hold.service';
 import { computeWastePublicFlags } from '../core/waste-public-config';
+import { requestTotals } from '../waste-points';
+import { CUSTOMER_VISIBLE_ITEMS_WHERE } from './waste-catalogue.service';
 import { estimateMailinFee } from './waste-fee';
 
 const METHOD_FREE_BLOCKS: ReadonlySet<string> = new Set(['ITEM_MONTH_CAP', 'POINTS_MONTH_CAP']);
@@ -43,21 +45,26 @@ export class WastePreviewService {
     );
     const blocks: WastePreviewBlockDTO[] = body.method ? allBlocks : allBlocks.filter((b) => METHOD_FREE_BLOCKS.has(b.code));
 
-    const grams = result.lines.some((l) => l.gramsPerUnit === null)
-      ? null
-      : result.lines.reduce((s, l) => s + l.declaredQty * (l.gramsPerUnit as number), 0);
-
     const usage = await this.hold.capUsage(this.prisma, userId, vnDateKey(now), vnMonthKey(now));
     const items = await this.prisma.wasteItem.findMany({
-      where: { id: { in: body.lines.map((l) => l.itemId) } },
+      where: { AND: [{ id: { in: body.lines.map((l) => l.itemId) } }, CUSTOMER_VISIBLE_ITEMS_WHERE] },
       select: { id: true, dailyCapQty: true, monthlyCapQty: true },
     });
+    // Món nguy hại chưa ACTIVE (pin) khách không được thấy: không tính điểm, không lộ trần; khối ITEM_NOT_ACTIVE vẫn do máy chủ báo.
+    const visibleIds = new Set(items.map((i) => i.id));
+    const shown = result.lines.filter((l) => visibleIds.has(l.itemId));
+    const totals = shown.length === result.lines.length
+      ? { points: result.estimatedPoints, drops: result.estimatedDrops, grams: null as number | null }
+      : requestTotals(shown.map((l) => ({ qty: l.declaredQty, snap: l })));
+    const grams = shown.some((l) => l.gramsPerUnit === null)
+      ? null
+      : shown.reduce((sum, l) => sum + l.declaredQty * (l.gramsPerUnit as number), 0);
     const itemCaps = body.lines.map((l) => {
       const it = items.find((i) => i.id === l.itemId);
       return {
         itemId: l.itemId,
-        monthRemainingQty: remainingQty(it?.monthlyCapQty ?? null, usage.itemMonth.get(l.itemId) ?? 0),
-        dayRemainingQty: remainingQty(it?.dailyCapQty ?? null, usage.itemDay.get(l.itemId) ?? 0),
+        monthRemainingQty: it ? remainingQty(it.monthlyCapQty, usage.itemMonth.get(l.itemId) ?? 0) : null,
+        dayRemainingQty: it ? remainingQty(it.dailyCapQty, usage.itemDay.get(l.itemId) ?? 0) : null,
       };
     });
 
@@ -69,10 +76,10 @@ export class WastePreviewService {
     }
 
     return {
-      estimatedPoints: result.estimatedPoints,
-      estimatedDrops: result.estimatedDrops,
+      estimatedPoints: totals.points,
+      estimatedDrops: totals.drops,
       estimatedGrams: grams,
-      pointsValueVnd: result.estimatedPoints * vndPerPoint,
+      pointsValueVnd: totals.points * vndPerPoint,
       blocks,
       feeEstimate,
       itemCaps,
