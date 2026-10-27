@@ -219,7 +219,7 @@ export const vi = {
     emptyBody: 'Khám phá sản phẩm Tubu chọn riêng cho bạn',
     emptyCta: 'Khám phá ngay',
     subtotal: 'Tạm tính',
-    subtotalAfterDiscount: 'Tạm tính (đã giảm, chưa gồm phí giao hàng)',
+    subtotalAfterDiscount: 'Tạm tính (đã giảm)',
     discount: 'Giảm giá',
     comboDiscount: 'Giảm giá combo',
     tierDiscount: 'Ưu đãi hạng thành viên',

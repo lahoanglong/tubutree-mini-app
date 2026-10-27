@@ -86,7 +86,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
           <Tile />
           <div>
             <Text variant="label" as="div">
-              Mã giới thiệu
+              Mã người giới thiệu
             </Text>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
               <CodeChip code={fixedCode} />
@@ -141,7 +141,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
           <Tile />
           <span style={{ display: 'block', minWidth: 0 }}>
             <Text variant="label" as="span" style={{ display: 'block' }}>
-              Mã giới thiệu
+              Mã người giới thiệu
             </Text>
             <Text variant="caption" tone="tertiary" as="span" style={{ display: 'block', marginTop: 2 }}>
               Có người giới thiệu Tubu cho bạn? Nhập mã của họ
@@ -161,7 +161,7 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
   const apply = async () => {
     const code = draft.replace(/\s+/g, '').toUpperCase();
     if (!code) {
-      setError('Bạn nhập mã giới thiệu giúp Tubu nhé');
+      setError('Bạn nhập mã người giới thiệu giúp Tubu nhé');
       return;
     }
     setChecking(true);
@@ -185,11 +185,11 @@ export function ReferralCodeBox({ linkedCode, appliedCode, onApplied }: Referral
   return shell(
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Text variant="label" as="div">
-        Mã giới thiệu
+        Mã người giới thiệu
       </Text>
       <Input
-        aria-label="Mã giới thiệu"
-        placeholder="Nhập mã giới thiệu"
+        aria-label="Mã người giới thiệu"
+        placeholder="Nhập mã người giới thiệu"
         value={draft}
         maxLength={64}
         autoCapitalize="characters"

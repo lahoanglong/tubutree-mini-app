@@ -12,15 +12,15 @@ function setup(props: Partial<React.ComponentProps<typeof ReferralCodeBox>> = {}
   const utils = render(<ReferralCodeBox linkedCode={null} appliedCode={null} onApplied={onApplied} {...props} />);
   return { onApplied, ...utils };
 }
-const input = () => screen.getByPlaceholderText('Nhập mã giới thiệu') as HTMLInputElement;
+const input = () => screen.getByPlaceholderText('Nhập mã người giới thiệu') as HTMLInputElement;
 
 describe('ReferralCodeBox — ô nhập mã giới thiệu CTV ở checkout (C-020)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('mặc định thu gọn: 1 dòng mời nhập, chưa có ô nhập', () => {
     setup();
-    expect(screen.getByText('Mã giới thiệu')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText('Nhập mã giới thiệu')).not.toBeInTheDocument();
+    expect(screen.getByText('Mã người giới thiệu')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Nhập mã người giới thiệu')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Nhập mã'));
     expect(input()).toBeInTheDocument();
   });
@@ -30,7 +30,7 @@ describe('ReferralCodeBox — ô nhập mã giới thiệu CTV ở checkout (C-0
     const label = screen.getByText('Nhập mã');
     expect(label.style.whiteSpace).toBe('nowrap');
     expect(label.parentElement!.style.flexShrink).toBe('0');
-    expect(screen.getByText('Mã giới thiệu').parentElement!.parentElement!.style.minWidth).toBe('0px');
+    expect(screen.getByText('Mã người giới thiệu').parentElement!.parentElement!.style.minWidth).toBe('0px');
   });
 
   it('đã có mã từ link CTV/gian hàng → hiện cố định, KHÔNG cho nhập đè (tránh lệch slug gian hàng với người nhận hoa hồng)', () => {
@@ -63,14 +63,14 @@ describe('ReferralCodeBox — ô nhập mã giới thiệu CTV ở checkout (C-0
   it('ô nhập có nhãn truy cập riêng cho trình đọc màn hình (không chỉ placeholder)', () => {
     setup();
     fireEvent.click(screen.getByText('Nhập mã'));
-    expect(input()).toHaveAttribute('aria-label', 'Mã giới thiệu');
+    expect(input()).toHaveAttribute('aria-label', 'Mã người giới thiệu');
   });
 
   it('ô trống → nhắc nhập, không gọi server', () => {
     const { onApplied } = setup();
     fireEvent.click(screen.getByText('Nhập mã'));
     fireEvent.click(screen.getByText('Áp dụng'));
-    expect(screen.getByText(/Bạn nhập mã giới thiệu giúp Tubu nhé/)).toBeInTheDocument();
+    expect(screen.getByText(/Bạn nhập mã người giới thiệu giúp Tubu nhé/)).toBeInTheDocument();
     expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
     expect(onApplied).not.toHaveBeenCalled();
   });

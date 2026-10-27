@@ -525,7 +525,7 @@ export default function CartPage() {
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
-            <KeyValueRow label="Tạm tính (đã giảm, chưa gồm phí giao hàng)" value={formatVnd(payTotal)} emphasis />
+            <KeyValueRow label="Tạm tính (đã giảm)" value={formatVnd(payTotal)} emphasis />
             {payHint ? (
               <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
                 Thanh toán ({selectedCount})

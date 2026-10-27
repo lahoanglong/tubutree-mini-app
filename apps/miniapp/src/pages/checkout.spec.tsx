@@ -149,7 +149,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     mocks.recordReferralTouch.mockResolvedValue({ ok: true });
     renderPage();
     fireEvent.click(await screen.findByText('Nhập mã'));
-    fireEvent.change(screen.getByPlaceholderText('Nhập mã giới thiệu'), { target: { value: 'ab12cd34' } });
+    fireEvent.change(screen.getByPlaceholderText('Nhập mã người giới thiệu'), { target: { value: 'ab12cd34' } });
     fireEvent.click(screen.getByText('Áp dụng'));
     await waitFor(() => expect(screen.getByText('AB12CD34')).toBeInTheDocument());
 
@@ -205,7 +205,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     mocks.recordReferralTouch.mockResolvedValue({ ok: false });
     renderPage();
     fireEvent.click(await screen.findByText('Nhập mã'));
-    fireEvent.change(screen.getByPlaceholderText('Nhập mã giới thiệu'), { target: { value: 'sai' } });
+    fireEvent.change(screen.getByPlaceholderText('Nhập mã người giới thiệu'), { target: { value: 'sai' } });
     fireEvent.click(screen.getByText('Áp dụng'));
     expect(await screen.findByText(/Không tìm thấy mã này/)).toBeInTheDocument();
     fireEvent.click(screen.getByText('Huỷ'));
@@ -222,7 +222,7 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     expect(screen.queryByText('TUBU-CO')).not.toBeInTheDocument();
     expect(screen.queryByText(/mua qua link giới thiệu/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Nhập mã'));
-    fireEvent.change(screen.getByPlaceholderText('Nhập mã giới thiệu'), { target: { value: 'ab12cd34' } });
+    fireEvent.change(screen.getByPlaceholderText('Nhập mã người giới thiệu'), { target: { value: 'ab12cd34' } });
     fireEvent.click(screen.getByText('Áp dụng'));
     await waitFor(() => expect(screen.getByText('AB12CD34')).toBeInTheDocument());
     const body = await placeOrderClick();

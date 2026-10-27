@@ -691,7 +691,7 @@ export default function CheckoutPage() {
             <div data-mini-block="coupon" className="max-md:order-3 max-md:mt-2">
               <CouponBox
                 band
-                actionLabel="Xem mã"
+                actionLabel="Chọn mã"
                 currentCode={cart.couponCode}
                 appliedDiscount={quote?.discount ?? 0}
                 subtotal={previewSubtotal}

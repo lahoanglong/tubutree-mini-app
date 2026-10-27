@@ -49,7 +49,7 @@ afterEach(() => {
 describe('/gio-hang — thanh dính đáy', () => {
   it('hiện tạm tính đã giảm và liên kết "Thanh toán (số lượng)" sang /thanh-toan', async () => {
     const c = await mount();
-    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm, chưa gồm phí giao hàng)300.000đ');
+    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm)300.000đ');
     const link = bar(c)!.querySelector<HTMLAnchorElement>('a[href="/thanh-toan"]')!;
     expect(link.textContent).toBe('Thanh toán (2)');
   });
@@ -57,7 +57,7 @@ describe('/gio-hang — thanh dính đáy', () => {
   it('tổng trên thanh dính trừ các khoản giảm như khung tóm tắt', async () => {
     state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
     const c = await mount();
-    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm, chưa gồm phí giao hàng)250.000đ');
+    expect(bar(c)!.textContent).toContain('Tạm tính (đã giảm)250.000đ');
   });
 
   it('bấm trên thanh dính cũng nhớ phần giỏ đang chọn (toàn giỏ khi chọn hết)', async () => {

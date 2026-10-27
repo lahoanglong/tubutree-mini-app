@@ -650,7 +650,7 @@ export default function CheckoutPage() {
 
           <Box flex alignItems="center" style={{ gap: 4, color: 'var(--color-text-brand)' }}>
             <Text size="xSmall" bold style={{ color: 'var(--color-text-brand)' }}>
-              {cart.data?.couponCode ? 'Thay đổi' : 'Xem mã'}
+              {cart.data?.couponCode ? 'Thay đổi' : 'Chọn mã'}
             </Text>
             <ChevronRight size={16} color="var(--color-text-brand)" />
           </Box>
