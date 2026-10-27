@@ -41,7 +41,7 @@ export function ErrorState({
       <p className="font-display text-lg font-semibold text-stone-900">{title}</p>
       <p data-testid="error-message" className="max-w-xs text-sm text-stone-700">{message}</p>
       {onRetry && (
-        <button type="button" onClick={onRetry} className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:border-forest-100 max-md:bg-forest-50 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}>
+        <button type="button" onClick={onRetry} className={`${ui.btnPrimary} max-md:min-h-12 max-md:min-w-[7.5rem] max-md:rounded-full max-md:bg-forest-50 max-md:hover:bg-forest-100 max-md:px-6 max-md:text-base max-md:text-forest-700 max-md:shadow-none`}>
           {retryLabel}
         </button>
       )}

@@ -30,6 +30,14 @@ describe('ErrorState', () => {
     expect(container.querySelector('button')!.textContent).toBe('Thử lại');
   });
 
+  it('nút Thử lại dưới md: khi rê chuột nền sáng đổi sang sáng khác, không rơi về nền xanh đậm của btnPrimary (chữ xanh đậm mất hút)', () => {
+    const { container } = mount(<ErrorState onRetry={() => {}} />);
+    const cls = container.querySelector('button')!.className.split(/\s+/);
+    expect(cls).toContain('max-md:text-forest-700');
+    expect(cls).toContain('max-md:hover:bg-forest-100');
+    expect(cls).not.toContain('max-md:border-forest-100');
+  });
+
   it('không có onRetry thì không có nút; message tuỳ biến', () => {
     const { container } = mount(<ErrorState message="Không tải được đơn" />);
     expect(container.querySelector('[data-testid="error-message"]')?.textContent).toBe('Không tải được đơn');
