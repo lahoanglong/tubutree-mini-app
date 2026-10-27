@@ -293,7 +293,7 @@ export default function CartPage() {
                           href={`/san-pham/${it.slug}`}
                           tabIndex={-1}
                           aria-hidden="true"
-                          className={`flex-none ${mini.thumb}`}
+                          className="flex-none"
                         >
                           <ProductThumb src={it.thumbnail} alt="" size={64} />
                         </Link>

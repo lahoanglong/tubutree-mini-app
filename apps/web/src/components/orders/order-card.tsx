@@ -52,7 +52,7 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
         <Badge tone={STATUS_TONE[o.status] ?? 'neutral'}>{buyerOrderStatusLabel(o)}</Badge>
       </div>
       <div id={summaryId} className="flex items-center gap-3">
-        <div className={`flex-none ${mini.thumb}`}>
+        <div className="flex-none">
           <ProductThumb src={first?.thumbnail} alt="" size={56} />
         </div>
         <div className="min-w-0 flex-1">

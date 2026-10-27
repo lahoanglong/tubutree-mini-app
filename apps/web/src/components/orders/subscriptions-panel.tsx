@@ -194,7 +194,7 @@ function SubscriptionCard({
   return (
     <li className={`p-3 ${ui.card} ${mini.card}`}>
       <div className="flex gap-3">
-        <div className={`flex-none ${mini.thumb}`}>
+        <div className="flex-none">
           <ProductThumb src={s.thumbnail} alt={s.productName} size={56} />
         </div>
         <div className="min-w-0 flex-1">
