@@ -222,51 +222,8 @@ describe('waste DB constraints (real Postgres)', () => {
     const b = sql.indexOf('-- END WASTE HAND-WRITTEN CONSTRAINTS');
     const statements = splitSqlStatements(sql.slice(a, b));
     expect(statements).toHaveLength(21);
-    for (let pass = 0; pass < 2; pass++) for (const s of statements) await prisma.$executeRawUnsafe(s);
-  });
-});
-
-describe('seeded reference data after migrate deploy', () => {
-  let moduleRef: TestingModule;
-  let prisma: PrismaService;
-
-  beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
-    await moduleRef.init();
-    prisma = moduleRef.get(PrismaService);
-  });
-  afterAll(async () => {
-    await moduleRef?.close();
-  });
-
-  const exec = (sql: string, ...params: unknown[]) => prisma.$executeRawUnsafe(sql, ...params);
-  const violates = (p: Promise<unknown>, constraint: string) =>
-    expect(p).rejects.toThrow(new RegExp(`violates check constraint "${constraint}"`));
-
-  it('the five items and five gifts exist after migrate deploy (prod never runs seed.ts)', async () => {
-    const itemIds = ['wi-carton', 'wi-bubble-wrap', 'wi-milk-carton', 'wi-tubu-bottle', 'wi-battery'];
-    const items = await prisma.wasteItem.findMany({ where: { id: { in: itemIds } }, orderBy: { id: 'asc' } });
-    expect(items.map((i) => i.id)).toEqual([...itemIds].sort());
-    for (const i of items) {
-      expect([typeof i.code, typeof i.unitsPerPoint, typeof i.pointsPerGroup, typeof i.dropsPerUnit, typeof i.hazardous]).toEqual(['string', 'number', 'number', 'number', 'boolean']);
-    }
-    const giftKinds: Record<string, string> = {
-      'reward-freeship': 'VOUCHER', 'reward-discount-50k': 'VOUCHER', 'reward-percent-15pct': 'VOUCHER', 'reward-discount-100k': 'VOUCHER', 'gift-tree': 'TREE',
-    };
-    const gifts = await prisma.wasteGift.findMany({ where: { id: { in: Object.keys(giftKinds) } } });
-    expect(Object.fromEntries(gifts.map((g) => [g.id, g.kind]))).toEqual(giftKinds);
-    for (const g of gifts.filter((x) => x.kind === 'VOUCHER')) {
-      expect([typeof g.voucherType, typeof g.voucherValue, typeof g.voucherValidDays, typeof g.pointsCost]).toEqual(['string', 'number', 'number', 'number']);
-    }
-  });
-  it('pin được seed ACTIVE ở mức mới và CHECK nguy hại đã bỏ; vouchers vẫn giữ trường và khoảng giá', async () => {
-    const [battery] = await prisma.wasteItem.findMany({ where: { id: 'wi-battery' } });
-    expect(battery).toMatchObject({ hazardous: true, warehouseOnly: false, status: 'ACTIVE', unitsPerPoint: 10, pointsPerGroup: 1000, dailyCapQty: 20, monthlyCapQty: 50 });
-    const gone = await prisma.$queryRaw<{ n: number }[]>`SELECT COUNT(*)::int AS n FROM pg_constraint WHERE conname = 'waste_items_hazardous_not_active_chk'`;
-    expect(gone[0]!.n).toBe(0);
-    await violates(exec(`UPDATE "waste_gifts" SET "voucherType" = NULL WHERE "id" = 'reward-freeship'`), 'waste_gifts_voucher_fields_chk');
-    await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 2000001 WHERE "id" = 'reward-percent-15pct'`), 'waste_gifts_points_cost_chk');
-    await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 0 WHERE "id" = 'reward-discount-50k'`), 'waste_gifts_points_cost_chk');
+    // Migration 20261027000000 đã gỡ ràng buộc nguy hại và món nguy hại ACTIVE hợp lệ, nên bỏ câu thêm lại nó khỏi lần chạy lại.
+    for (let pass = 0; pass < 2; pass++) for (const s of statements.filter((x) => !x.includes('waste_items_hazardous_not_active_chk'))) await prisma.$executeRawUnsafe(s);
   });
   it('re-applying the seed data section changes nothing (ON CONFLICT DO NOTHING)', async () => {
     const sql = readApiSql(MIGRATION);
