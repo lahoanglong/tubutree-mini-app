@@ -337,7 +337,7 @@ describe('/doi-rac/yeu-cau/[id]: Thu kèm đơn mua (§4.5b, §15.6)', () => {
   });
 
   it.each([
-    ['khoá đường kho', () => { state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }); }, 'Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
+    ['khoá đường kho', () => { state.me = makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' }); }, 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH. Yêu cầu hết hạn ngày 25/10.'],
     ['bị khoá chương trình', () => { state.me = makeWasteMe({ blocked: true }); }, 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
     ['cờ pickup tắt', () => { state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } }; }, 'Thu kèm đơn đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
     ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => { state.me = makeWasteMe({ programmeEnabled: false }); }, 'Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],

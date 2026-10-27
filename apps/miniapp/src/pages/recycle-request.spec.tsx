@@ -283,7 +283,7 @@ describe('/recycle/r/:id — Thu kèm đơn mua (§4.5b, §15.6)', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/');
   });
   it.each([
-    ['khoá đường kho', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' })), 'Tài khoản của bạn tạm chưa gửi hàng được, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
+    ['khoá đường kho', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ shipLockedAt: '2026-10-01T00:00:00.000Z' })), 'Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH. Yêu cầu hết hạn ngày 25/10.'],
     ['bị khoá chương trình', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true })), 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree. Yêu cầu hết hạn ngày 25/10.'],
     ['cờ pickup tắt', () => { mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false }; }, 'Thu kèm đơn đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
     ['chương trình tắt khi cấu hình công khai cũ vẫn bật pickup', () => mocks.getWasteMe.mockResolvedValue(makeWasteMe({ programmeEnabled: false })), 'Chương trình đang tạm dừng. Yêu cầu hết hạn ngày 25/10.'],
