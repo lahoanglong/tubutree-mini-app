@@ -32,11 +32,11 @@ export function QuizCard({
       {currentQuiz ? (
         <>
           <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-xs text-stone-600">
+            <span className="text-caption text-stone-600">
               {categoryLabel(currentQuiz.category)} · {difficultyLabel(currentQuiz.difficulty)}
               {quiz && quiz.length > 1 ? ` · Câu ${answeredCount + 1}/${quiz.length}` : ''}
             </span>
-            <span className="text-xs font-semibold text-forest-700">+{formatDrops(currentQuiz.waterReward)}</span>
+            <span className="text-caption font-semibold text-forest-700">+{formatDrops(currentQuiz.waterReward)}</span>
           </div>
           <QuizBlock q={currentQuiz} reveal={shownReveal} onAnswer={(choice) => onAnswer(currentQuiz.id, choice)} pending={pending} />
           {shownReveal && (
@@ -45,7 +45,7 @@ export function QuizCard({
                 {shownReveal.isCorrect ? `Chính xác! +${formatDrops(shownReveal.waterEarned)}` : 'Chưa đúng — cùng học nhé 🌿'}
               </div>
               {shownReveal.explanation && (
-                <div className="mt-1 flex gap-1.5 text-xs text-stone-700">
+                <div className="mt-1 flex gap-1.5 text-caption text-stone-700">
                   <Lightbulb className="mt-0.5 h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
                   <span>Bạn có biết: {shownReveal.explanation}</span>
                 </div>

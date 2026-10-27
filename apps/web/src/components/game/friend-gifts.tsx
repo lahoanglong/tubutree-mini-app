@@ -31,7 +31,7 @@ export function FriendGifts({
           </div>
         );
       })}
-      <p className="mt-2 text-xs text-stone-600">Tặng nước cho bạn bè (người bạn mời hoặc người mời bạn) — mỗi người 1 lần/ngày 🌿</p>
+      <p className="mt-2 text-caption text-stone-600">Tặng nước cho bạn bè (người bạn mời hoặc người mời bạn) — mỗi người 1 lần/ngày 🌿</p>
     </GameCard>
   );
 }

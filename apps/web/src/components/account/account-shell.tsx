@@ -131,7 +131,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
             if (items.length === 0) return null;
             return (
               <div key={g.group} className="mb-4">
-                <h2 className="mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-stone-600">
+                <h2 className="mb-1 px-3 text-caption font-semibold uppercase tracking-wide text-stone-600">
                   {g.group}
                 </h2>
                 <ul>

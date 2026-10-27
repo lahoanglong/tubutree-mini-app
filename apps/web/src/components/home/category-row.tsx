@@ -23,7 +23,7 @@ export function CategoryRow({ entries, isLoading, onSelect, placeholderCount = 5
           {homeCopy.categories.title}
         </Heading>
       </div>
-      <ScrollRow label={homeCopy.categories.rail} style={{ gap: 8, padding: '4px 16px 8px', margin: '0 -16px' }}>
+      <ScrollRow label={homeCopy.categories.rail} style={{ gap: 8, padding: '4px 16px 8px', margin: '0 -16px', maxWidth: 'none' }}>
         {isLoading
           ? Array.from({ length: placeholderCount }, (_, i) => (
               <div key={i} data-testid="category-row-skeleton" aria-hidden="true" style={{ flex: `0 0 ${ITEM_WIDTH}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>

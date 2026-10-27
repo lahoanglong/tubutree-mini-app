@@ -19,7 +19,7 @@ export function GameLinkRow({ icon: Icon, title, hint, badge, href }: { icon: Lu
             </Badge>
           )}
         </span>
-        <span className="block text-xs text-stone-600">{hint}</span>
+        <span className="block text-caption text-stone-600">{hint}</span>
       </span>
       <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
     </Link>

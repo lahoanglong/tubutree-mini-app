@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Plus, Recycle, ShoppingBag, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
@@ -515,7 +515,7 @@ export default function CheckoutPage() {
                         {p.label}
                       </label>
                       {reason && (
-                        <p id={`pay-blocked-${p.k}`} className="mt-1 text-xs text-stone-600">
+                        <p id={`pay-blocked-${p.k}`} className="mt-1 text-caption text-stone-600">
                           {reason}
                         </p>
                       )}
@@ -534,7 +534,7 @@ export default function CheckoutPage() {
           <section data-mini-block="note" className={`${MINI_BAND} max-md:order-7`}>
             <h2 className={`${ui.sectionTitle} ${mini.sectionLabel}`}>Ghi chú cho đơn hàng</h2>
             <label className="mt-2 block">
-              <span className="text-xs font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
+              <span className="text-caption font-medium text-stone-700">Lời nhắn cho người giao hàng (không bắt buộc)</span>
               <textarea
                 value={note}
                 onChange={chosen((e: React.ChangeEvent<HTMLTextAreaElement>) => setNote(e.target.value))}
@@ -546,7 +546,7 @@ export default function CheckoutPage() {
                 className={`${ui.field} mt-1 py-2`}
               />
             </label>
-            <p id="order-note-count" className="mt-1 text-xs text-stone-600">
+            <p id="order-note-count" className="mt-1 text-caption text-stone-600">
               {note.length}/{ORDER_NOTE_MAX} ký tự
             </p>
           </section>
@@ -559,7 +559,7 @@ export default function CheckoutPage() {
                     <Recycle className="h-5 w-5 text-forest-600" aria-hidden="true" />
                     <span>
                       <span className="block font-semibold text-stone-900">Thu kèm rác</span>
-                      <span className="block text-xs text-stone-600">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
+                      <span className="block text-caption text-stone-600">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
                     </span>
                   </span>
                   <span aria-hidden="true" className="text-stone-600">
@@ -581,7 +581,7 @@ export default function CheckoutPage() {
                       className="h-6 w-6 shrink-0 accent-forest-600"
                     />
                   </label>
-                  <div className="mt-2 rounded-control bg-stone-100 p-3 text-xs text-stone-700">
+                  <div className="mt-2 rounded-control bg-stone-100 p-3 text-caption text-stone-700">
                     <p className="text-sm font-semibold text-stone-900">{pickupReq.code}</p>
                     {pickupReq.lines.map((l) => (
                       <p key={`${l.itemName}-${l.unitLabel}`} className="mt-0.5">
@@ -636,7 +636,7 @@ export default function CheckoutPage() {
             {split
               ? shipments.map((sh) => (
                   <div key={sh.key} className="space-y-1 border-b border-stone-200 pb-2 last:border-b-0">
-                    <p className="text-xs font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
+                    <p className="text-caption font-semibold text-stone-900">{fulfillerLabel(sh.fulfiller)}</p>
                     {checkoutItems
                       .filter((it) => sh.itemIds.includes(it.id))
                       .map((it) => (
@@ -645,7 +645,7 @@ export default function CheckoutPage() {
                           <span className="text-stone-900">{formatVnd(it.total)}</span>
                         </div>
                       ))}
-                    <div className="flex justify-between gap-2 text-xs text-stone-600">
+                    <div className="flex justify-between gap-2 text-caption text-stone-600">
                       <span>Phí giao</span>
                       <span>{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
                     </div>
@@ -659,14 +659,14 @@ export default function CheckoutPage() {
                 ))}
           </div>
           {itemIds && cart && (
-            <p className="mt-2 text-xs text-stone-600">
+            <p className="mt-2 text-caption text-stone-600">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
               <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
                 Đổi lựa chọn
               </Link>
             </p>
           )}
-          {splitNote && <p className="mt-2 text-xs text-stone-600 max-md:hidden">{splitNote}</p>}
+          {splitNote && <p className="mt-2 text-caption text-stone-600 max-md:hidden">{splitNote}</p>}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <h2 className="mb-2.5 hidden font-ui text-sm font-semibold max-md:block">Tóm tắt đơn hàng</h2>
@@ -728,10 +728,10 @@ export default function CheckoutPage() {
               </span>
             </label>
           )}
-          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.capNote}</p>}
-          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-xs text-stone-600">{partnerPoints.partnerNote}</p>}
-          {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
-          {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
+          {usablePoints > 0 && partnerPoints.capNote && <p className="mt-1 text-caption text-stone-600">{partnerPoints.capNote}</p>}
+          {usablePoints > 0 && partnerPoints.partnerNote && <p className="mt-1 text-caption text-stone-600">{partnerPoints.partnerNote}</p>}
+          {convertedLine && <p className="mt-1 text-caption text-stone-600">{convertedLine}</p>}
+          {pointsOffer.lockNote && <p className="mt-1 text-caption text-stone-600">{pointsOffer.lockNote}</p>}
           </div>
           <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:mt-0 max-md:border-t-0 max-md:pt-1 lg:hidden">
@@ -741,7 +741,10 @@ export default function CheckoutPage() {
             <span>{totalText}</span>
           </div>
           {quote && quote.pointsEarned > 0 && (
-            <p className="mt-1 text-xs text-success-fg">Nhận +{formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công</p>
+            <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
+              <Sprout size={13} aria-hidden="true" />
+              Nhận +{formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công
+            </p>
           )}
           {quoteQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
@@ -808,7 +811,7 @@ export default function CheckoutPage() {
       </div>
       <StickyActionBar label="Đặt hàng" hideFrom="lg">
         {barHint && (
-          <p aria-hidden="true" className="mb-2 text-xs text-danger-fg">
+          <p aria-hidden="true" className="mb-2 text-caption text-danger-fg">
             {barHint}
           </p>
         )}
@@ -884,13 +887,12 @@ function AddressPicker({
                 <span className="flex flex-wrap items-center gap-x-1.5">
                   <span className="font-medium text-stone-900 max-md:font-semibold">{a.recipient} · {a.phone}</span>
                   {a.isDefault && (
-                    <span className="rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-xs font-semibold text-[color:var(--color-action-secondary-fg)]">
+                    <span className="rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-caption font-semibold text-[color:var(--color-action-secondary-fg)]">
                       Mặc định
                     </span>
                   )}
                 </span>
-                <br />
-                <span className="text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
+                <span className="block text-stone-600">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
               </span>
             </label>
             <button
@@ -1006,7 +1008,7 @@ function MobileItems({
   return (
     <div className="md:hidden">
       <h2 className="font-ui text-sm font-semibold leading-5">Sản phẩm ({count})</h2>
-      {splitNote && <p className="mt-2.5 text-xs text-[color:var(--color-text-secondary)]">{splitNote}</p>}
+      {splitNote && <p className="mt-2.5 text-caption text-[color:var(--color-text-secondary)]">{splitNote}</p>}
       <div className="mt-2.5 space-y-3">
         {groups.map((g) => (
           <section key={g.key} aria-label={g.shipment ? fulfillerLabel(g.shipment.fulfiller) : 'Sản phẩm sẽ mua'}>
@@ -1017,8 +1019,8 @@ function MobileItems({
                   <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm">{it.productName}</div>
-                    {it.variationName && <div className="text-xs text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
-                    <div className="text-xs text-[color:var(--color-text-tertiary)]">
+                    {it.variationName && <div className="text-caption text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
+                    <div className="text-caption text-[color:var(--color-text-tertiary)]">
                       {formatVnd(it.unitPrice)} × {it.quantity}
                     </div>
                   </div>

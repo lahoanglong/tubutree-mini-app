@@ -22,7 +22,7 @@ import { ScrollRail } from '@/components/scroll-rail';
 import { ProductImage } from '@/components/mini/product-image';
 
 const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card transition hover:shadow-raised sm:w-44 lg:w-48';
-const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
+const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1 max-md:-mx-4 max-md:px-4';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
 function Thumb({ src, name, pct }: { src: string | null; name: string; pct: number }) {

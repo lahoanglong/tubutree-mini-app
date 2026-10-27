@@ -164,9 +164,9 @@ export default function LoyaltyPage() {
             <p className="mt-0.5 text-sm text-stone-700">
               Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatCount(lots.total)} Điểm Xanh
             </p>
-            {lots.convertedNote && <p className="mt-0.5 text-xs text-stone-600">{lots.convertedNote}</p>}
-            {expiring && <p className={`mt-1.5 text-xs ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
-            {expiryPolicy && <p className="mt-0.5 text-xs text-stone-600">{expiryPolicy}</p>}
+            {lots.convertedNote && <p className="mt-0.5 text-caption text-stone-600">{lots.convertedNote}</p>}
+            {expiring && <p className={`mt-1.5 text-caption ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
+            {expiryPolicy && <p className="mt-0.5 text-caption text-stone-600">{expiryPolicy}</p>}
 
             {next ? (
               <div className="mt-4 text-left">
@@ -180,7 +180,7 @@ export default function LoyaltyPage() {
                 >
                   <div className={`h-full rounded-full bg-current ${tierStyle.fg}`} style={{ width: `${progress}%` }} />
                 </div>
-                <p className="mt-1.5 text-center text-xs text-stone-700">
+                <p className="mt-1.5 text-center text-caption text-stone-700">
                   {next.spendingToGo != null ? (
                     <>
                       Còn <b>{moneyShort(next.spendingToGo)}</b> mua hàng để lên hạng {next.name}
@@ -199,7 +199,7 @@ export default function LoyaltyPage() {
             )}
 
             {rates && (
-              <div className="mt-3 space-y-0.5 text-xs text-stone-600">
+              <div className="mt-3 space-y-0.5 text-caption text-stone-600">
                 <p>{earnRuleLine(rates, data.tier?.multiplier ?? 1)}</p>
                 <p>{redeemRuleLine(rates)}</p>
               </div>
@@ -223,12 +223,12 @@ export default function LoyaltyPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="text-sm font-bold text-promo-fg">{couponLabel(c)}</div>
-                        <div className="break-words text-xs text-stone-700">
+                        <div className="break-words text-caption text-stone-700">
                           {autoCouponName(c.code) ?? `Mã ${c.code}`}
                           {c.minOrder ? ` · đơn từ ${formatVnd(c.minOrder)}` : ''}
                         </div>
                       </div>
-                      <div className="shrink-0 text-xs text-stone-600">HSD {formatDate(c.endAt)}</div>
+                      <div className="shrink-0 text-caption text-stone-600">HSD {formatDate(c.endAt)}</div>
                     </div>
                     <div className="mt-2.5">
                       <CouponActions code={c.code} />
@@ -260,7 +260,7 @@ export default function LoyaltyPage() {
                     </IconTile>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold text-stone-900">{s.title}</span>
-                      <span className="block text-xs text-stone-600">{s.sub}</span>
+                      <span className="block text-caption text-stone-600">{s.sub}</span>
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
                   </Link>
@@ -298,7 +298,7 @@ export default function LoyaltyPage() {
                       <span aria-hidden="true">{ts.emoji}</span>
                       <span className={`text-sm ${active ? 'font-bold' : ''}`}>{t.name}</span>
                     </div>
-                    <span className="text-right text-xs text-stone-700">
+                    <span className="text-right text-caption text-stone-700">
                       {tierThresholdLabel(t, rates)} · ×{formatMultiplier(t.multiplier)}
                     </span>
                   </li>
@@ -322,7 +322,7 @@ export default function LoyaltyPage() {
                   <li key={t.id} className="flex items-start justify-between gap-3 py-2.5">
                     <div className="min-w-0">
                       <div className="break-words text-sm font-medium text-stone-900">{pointsReasonLabel(t.reason)}</div>
-                      <div className="text-xs text-stone-600">
+                      <div className="text-caption text-stone-600">
                         {formatDate(t.createdAt)}
                         {t.lot === 'CONVERTED' ? ' · Điểm không hết hạn' : ''}
                       </div>
@@ -458,7 +458,7 @@ function MemberCardSheet({
                 {copied ? 'Đã chép' : 'Chép'}
               </button>
             </div>
-            <div role="status" className="text-xs">
+            <div role="status" className="text-caption">
               {copied && <span className="text-success-fg">Đã sao chép mã thành viên</span>}
               {copyError && <span className="text-danger-fg">Không sao chép được — hãy đọc mã cho nhân viên.</span>}
             </div>
@@ -468,7 +468,7 @@ function MemberCardSheet({
       {card && (
         <div className="mt-3 flex items-start gap-2 rounded-control bg-stone-100 p-2">
           <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-          <p className="text-xs text-stone-700">{memberCardHint(card)}</p>
+          <p className="text-caption text-stone-700">{memberCardHint(card)}</p>
         </div>
       )}
     </Sheet>
@@ -480,7 +480,7 @@ function Section({ title, action, children, className = '' }: { title: string; a
     <section aria-label={title} className={`p-4 ${miniCard} ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className={`${ui.sectionTitle} ${miniSectionTitle}`}>{title}</h2>
-        {action && <span className="text-xs text-stone-600">{action}</span>}
+        {action && <span className="text-caption text-stone-600">{action}</span>}
       </div>
       {children}
     </section>

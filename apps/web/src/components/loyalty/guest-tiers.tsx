@@ -43,11 +43,11 @@ export function GuestTiers({ returnTo }: { returnTo: string }) {
             <div key={t.id} data-tier className={`space-y-1 p-4 ${miniOutline}`}>
               <div className="flex items-center justify-between gap-2">
                 <div className="text-base font-semibold text-stone-900">{t.name}</div>
-                <div className="text-xs font-semibold text-forest-700">{`Điểm x${formatMultiplier(t.multiplier)}`}</div>
+                <div className="text-caption font-semibold text-forest-700">{`Điểm x${formatMultiplier(t.multiplier)}`}</div>
               </div>
-              <div className="text-xs text-stone-700">{tierRequirementText(t, (n) => `${formatCount(n)} điểm`, moneyShort)}</div>
+              <div className="text-caption text-stone-700">{tierRequirementText(t, (n) => `${formatCount(n)} điểm`, moneyShort)}</div>
               {t.perks.map((p) => (
-                <div key={p} className="text-xs text-stone-600">{p}</div>
+                <div key={p} className="text-caption text-stone-600">{p}</div>
               ))}
             </div>
           ))}

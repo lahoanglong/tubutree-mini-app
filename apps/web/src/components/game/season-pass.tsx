@@ -13,7 +13,7 @@ const rewardText = (r: SeasonPassReward) => (r.type === 'SEEDS' ? formatDrops(r.
 
 function ClaimedMark() {
   return (
-    <div className="mt-1 flex items-center justify-center gap-1 text-xs text-stone-600">
+    <div className="mt-1 flex items-center justify-center gap-1 text-caption text-stone-600">
       <Check className="h-4 w-4" aria-hidden="true" />
       Đã nhận
     </div>
@@ -38,15 +38,15 @@ export function SeasonPass({
   const ppct = maxXp > 0 ? Math.min(100, Math.round((xp / maxXp) * 100)) : 0;
   return (
     <GameCard title="Chặng Mùa" icon={Ticket}>
-      <p className="text-xs text-stone-700">{`Điểm danh mỗi ngày để lên bậc mùa "${pass.seasonTitle ?? ''}"`}</p>
-      <div className="mb-1 mt-2.5 flex justify-between text-xs">
+      <p className="text-caption text-stone-700">{`Điểm danh mỗi ngày để lên bậc mùa "${pass.seasonTitle ?? ''}"`}</p>
+      <div className="mb-1 mt-2.5 flex justify-between text-caption">
         <span className="font-semibold text-forest-700">{xpText(xp)}</span>
         <span className="text-stone-600">{xpText(maxXp)}</span>
       </div>
       <ProgressBar value={ppct} max={100} />
 
       {!pass.premiumEligible && (
-        <p className="mt-2 flex items-center gap-1.5 text-xs text-promo-fg">
+        <p className="mt-2 flex items-center gap-1.5 text-caption text-promo-fg">
           <Lock className="h-4 w-4 flex-none" aria-hidden="true" />
           Cần đăng ký định kỳ để mở phần thưởng Cao cấp.
         </p>
@@ -62,14 +62,14 @@ export function SeasonPass({
               key={t.tier}
               className={`rounded-control border p-3 ${t.unlocked ? 'border-transparent bg-stone-50' : 'border-dashed border-[color:var(--color-border-strong)] bg-stone-0'}`}
             >
-              <div className="mb-1 flex items-center justify-between text-xs">
+              <div className="mb-1 flex items-center justify-between text-caption">
                 <span className="font-semibold text-stone-900">{`Bậc ${t.tier + 1}`}</span>
                 <span className="text-stone-600">{xpText(t.xpRequired)}</span>
               </div>
               <div className="flex gap-2">
                 <div className="min-w-0 flex-1 text-center">
-                  <div className="text-xs text-stone-700">Miễn phí</div>
-                  <div className="text-xs font-semibold text-forest-700">{rewardText(t.free)}</div>
+                  <div className="text-caption text-stone-700">Miễn phí</div>
+                  <div className="text-caption font-semibold text-forest-700">{rewardText(t.free)}</div>
                   {t.claimedFree ? (
                     <ClaimedMark />
                   ) : (
@@ -85,11 +85,11 @@ export function SeasonPass({
                   )}
                 </div>
                 <div className="min-w-0 flex-1 text-center">
-                  <div className="flex items-center justify-center gap-1 text-xs text-honey-600">
+                  <div className="flex items-center justify-center gap-1 text-caption text-honey-600">
                     <Star className="h-4 w-4" aria-hidden="true" />
                     Cao cấp
                   </div>
-                  <div className="text-xs font-semibold text-honey-600">{rewardText(t.premium)}</div>
+                  <div className="text-caption font-semibold text-honey-600">{rewardText(t.premium)}</div>
                   {t.claimedPremium ? (
                     <ClaimedMark />
                   ) : (

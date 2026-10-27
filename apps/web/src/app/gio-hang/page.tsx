@@ -254,7 +254,7 @@ export default function CartPage() {
               </div>
             )}
             {withHeaders && (
-              <p className="mb-3 text-xs text-stone-600 max-md:mb-1">
+              <p className="mb-3 text-caption text-stone-600 max-md:mb-1">
                 Giỏ có hàng do nhiều nơi giao: mỗi nơi giao thành một đơn riêng, có phí giao riêng.
               </p>
             )}
@@ -304,34 +304,34 @@ export default function CartPage() {
                               {it.productName}
                             </Link>
                           </div>
-                          <div className="break-words text-xs text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
+                          <div className="break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <span className="font-semibold text-stone-900">{formatVnd(it.unitPrice)}</span>
                             {it.isFlash && (
                               <span
                                 data-testid="cart-flash-badge"
-                                className="inline-flex items-center gap-0.5 rounded-full bg-promo-bg px-2 py-0.5 text-xs font-bold text-promo-fg"
+                                className="inline-flex items-center gap-0.5 rounded-full bg-promo-bg px-2 py-0.5 text-caption font-bold text-promo-fg"
                               >
                                 <Zap className="h-3 w-3" aria-hidden="true" />
                                 Giá Giờ vàng
                               </span>
                             )}
                             {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && (
-                              <span className="text-xs text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
+                              <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
                             )}
                           </div>
                           {/* Số của máy chủ (it.total): máy chủ có thể tính lại giá cả dòng (flash hết suất). Ẩn khi lệnh đổi số lượng của dòng còn bay, vì lúc đó số chưa phải của máy chủ. Từ md đã có cột tổng bên phải. */}
                           {it.quantity > 1 && !(update.isPending && update.variables?.id === it.id) && (
-                            <div className="text-xs tabular-nums text-stone-600 md:hidden">Thành tiền {formatVnd(it.total)}</div>
+                            <div className="text-caption tabular-nums text-stone-600 md:hidden">Thành tiền {formatVnd(it.total)}</div>
                           )}
-                          {it.flashLimitNotice && <p className="mt-1 text-xs font-medium text-warning-fg">{it.flashLimitNotice}</p>}
+                          {it.flashLimitNotice && <p className="mt-1 text-caption font-medium text-warning-fg">{it.flashLimitNotice}</p>}
                           {soldOut && (
-                            <p className="mt-1 text-xs font-semibold text-danger-fg">
+                            <p className="mt-1 text-caption font-semibold text-danger-fg">
                               Hết hàng — hãy xoá khỏi giỏ hoặc bỏ chọn để thanh toán các món còn lại
                             </p>
                           )}
                           {!soldOut && atMax && (
-                            <p className="mt-1 text-xs font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
+                            <p className="mt-1 text-caption font-medium text-warning-fg">Chỉ còn {it.stock} sản phẩm</p>
                           )}
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 max-md:mt-2 max-md:gap-y-1">
                             {!soldOut && (
@@ -375,7 +375,7 @@ export default function CartPage() {
                             </button>
                           </div>
                           {failedItemId === it.id && (
-                            <p role="alert" className="mt-1 text-xs text-danger-fg">
+                            <p role="alert" className="mt-1 text-caption text-danger-fg">
                               {(update.error ?? remove.error) instanceof Error
                                 ? (update.error ?? remove.error)?.message
                                 : 'Cập nhật giỏ hàng thất bại.'}
@@ -431,7 +431,7 @@ export default function CartPage() {
               previewKey={couponPreviewKey(selectedItems)}
             />
             {!allSelected && !priced && cart.couponCode && (
-              <p className="mt-2 text-xs text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
+              <p className="mt-2 text-caption text-stone-600 max-md:mt-0 max-md:px-1">Mua một phần giỏ: mã giảm giá được tính lại ở bước thanh toán.</p>
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden lg:hidden">
               <span>Tổng</span>
@@ -448,7 +448,7 @@ export default function CartPage() {
                   <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán (0)
                   </button>
-                  <p role="status" className="mt-2 text-xs text-stone-600">
+                  <p role="status" className="mt-2 text-caption text-stone-600">
                     {payHint}
                   </p>
                 </>
@@ -457,7 +457,7 @@ export default function CartPage() {
                   <button type="button" disabled className={`${ui.btnPrimary} w-full`}>
                     Thanh toán ({selectedCount})
                   </button>
-                  <p role="alert" className="mt-2 text-xs text-danger-fg">
+                  <p role="alert" className="mt-2 text-caption text-danger-fg">
                     {payHint}
                   </p>
                 </>
@@ -495,7 +495,7 @@ export default function CartPage() {
             <p
               id="cart-pay-hint"
               role={stockBlocked ? 'alert' : 'status'}
-              className={`mb-2 text-xs ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}
+              className={`mb-2 text-caption ${stockBlocked ? 'text-danger-fg' : 'text-stone-600'}`}
             >
               {payHint}
             </p>
@@ -503,7 +503,7 @@ export default function CartPage() {
           <div className="pb-1 pt-1">
             {showFreeship && (
               <div className="mb-0.5">
-                <div className={`text-xs ${freeshipReached ? 'text-success-fg' : 'text-stone-600'}`}>
+                <div className={`text-caption ${freeshipReached ? 'text-success-fg' : 'text-stone-600'}`}>
                   {freeshipReached
                     ? hasMerchant
                       ? 'Miễn phí giao hàng cho phần hàng Tubu Tree giao'

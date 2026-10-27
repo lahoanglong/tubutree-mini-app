@@ -33,7 +33,7 @@ function Rail({ title, icon, products, loading }: { title: string; icon?: boolea
         {icon && <ShoppingCart className="h-5 w-5" aria-hidden="true" />}
         {title}
       </h2>
-      <ScrollRail className="mt-3 flex gap-3 overflow-x-auto pb-2">
+      <ScrollRail className="mt-3 flex gap-3 overflow-x-auto pb-2 max-md:-mx-4 max-md:px-4">
         {products.map((p) => (
           <li key={p.id} className="w-40 shrink-0 md:w-48">
             <ProductCard product={p} />

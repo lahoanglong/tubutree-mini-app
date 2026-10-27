@@ -81,7 +81,7 @@ export function WheelOfFortune({
               }}
             >
               <span className="text-xl">{s.emoji}</span>
-              <span className="text-xs font-medium text-stone-800">{s.label}</span>
+              <span className="text-caption font-medium text-stone-800">{s.label}</span>
             </span>
           ))}
         </div>
@@ -91,7 +91,7 @@ export function WheelOfFortune({
           aria-label="Quay vòng quay"
           disabled={spinning || short}
           onClick={() => void handleSpin()}
-          className="absolute left-1/2 top-1/2 z-[2] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-forest-600 text-xs font-semibold text-stone-0 shadow-card disabled:opacity-70"
+          className="absolute left-1/2 top-1/2 z-[2] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-forest-600 text-caption font-semibold text-stone-0 shadow-card disabled:opacity-70"
         >
           QUAY
         </button>

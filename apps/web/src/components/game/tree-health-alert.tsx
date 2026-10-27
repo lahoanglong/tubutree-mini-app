@@ -8,7 +8,7 @@ export function TreeHealthAlert({ health }: { health: GameProfile['treeHealth'] 
   return (
     <div role="status" data-testid="tree-health" className="flex items-start gap-2 rounded-control bg-warning-bg p-3">
       <TriangleAlert className="mt-0.5 h-4 w-4 flex-none text-warning-fg" aria-hidden="true" />
-      <p className="text-xs text-warning-fg">{gameNewbieCopy.treeWilted}</p>
+      <p className="text-caption text-warning-fg">{gameNewbieCopy.treeWilted}</p>
     </div>
   );
 }

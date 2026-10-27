@@ -291,7 +291,7 @@ function GameBody() {
             />
           )}
 
-          {garden && !plotsOpen && <p className="text-xs text-stone-700">{gameNewbieCopy.plots.locked}</p>}
+          {garden && !plotsOpen && <p className="text-caption text-stone-700">{gameNewbieCopy.plots.locked}</p>}
 
           {/* Sổ tay loài cây (Phase 3) — sưu tập khi thu hoạch */}
           {codex && codex.length > 0 && <SpeciesCodex codex={codex} />}
