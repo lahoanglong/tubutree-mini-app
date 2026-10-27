@@ -48,7 +48,7 @@ describe('SystemConfig: khoá JSON null → đặt giá trị đầu tiên (real
 
   it('còn null cả hai khoá → config công khai ẩn ETA; admin đặt 2 và 4 → hiện { minDays: 2, maxDays: 4 }', async () => {
     const svc = new SystemConfigService(prisma);
-    const ctrl = new SystemConfigController(svc);
+    const ctrl = new SystemConfigController(svc, prisma);
     expect((await ctrl.publicConfig()).shippingEta).toBeNull();
 
     await svc.set(MIN, 2, 'admin-it');
