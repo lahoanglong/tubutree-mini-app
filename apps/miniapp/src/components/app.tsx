@@ -114,6 +114,12 @@ function ScreenTracker() {
   return null;
 }
 
+/** Gắn nhịp tải lại Giờ vàng (chủ duy nhất) bên trong QueryClientProvider. */
+function FlashSalesPoller() {
+  useFlashSalesPoller();
+  return null;
+}
+
 export default function MyApp() {
   const restore = useAuthStore((s) => s.restore);
   const authed = useAuthStore((s) => s.status === 'authenticated');
@@ -129,7 +135,6 @@ export default function MyApp() {
   useLegacyNotifyPrefsSync(authed);
   // Mở app lúc mất mạng: phiên ở trạng thái lỗi thì tự khôi phục khi có mạng/quay lại app, không chờ khách bấm Thử lại.
   useSessionRecovery();
-  useFlashSalesPoller();
 
   // Phát đúng 1 lần lúc mở app (deps rỗng — không phụ thuộc state nào nên không chạy lại
   // khi re-render). Cùng effect này gắn luôn global error handler (window.onerror +
@@ -182,6 +187,7 @@ export default function MyApp() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        <FlashSalesPoller />
         <App>
           <SnackbarProvider>
             <ZMPRouter>
