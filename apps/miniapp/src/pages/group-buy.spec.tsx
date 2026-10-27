@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   listGroupBuys: vi.fn(),
   getGroupBuy: vi.fn(),
   joinGroupBuy: vi.fn(),
+  fetchActiveFlashSales: vi.fn(),
   shareWithFallback: vi.fn(),
   params: {} as { id?: string },
   auth: { status: 'authenticated' as 'loading' | 'authenticated' | 'anonymous', user: undefined as { referralCode: string } | undefined },
@@ -30,6 +31,7 @@ vi.mock('../services/groupbuy-api', () => ({
   getGroupBuy: mocks.getGroupBuy,
   joinGroupBuy: mocks.joinGroupBuy,
 }));
+vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../store/auth', () => ({
@@ -68,6 +70,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.fetchActiveFlashSales.mockResolvedValue([]);
   mocks.params = {};
   mocks.auth.status = 'authenticated';
   mocks.auth.user = undefined;
@@ -127,6 +130,14 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(screen.queryByRole('button', { name: 'Đã tham gia' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Mời bạn bè' })).toBeInTheDocument();
     expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
+  });
+
+  it('B-72: đang có Giờ vàng của sản phẩm thì "Mua một mình" theo giá Giờ vàng hiện nay, không theo giá lưu lúc tạo nhóm', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([{ itemId: 'f', variationId: 'v', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }]);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 102_000, basePrice: 120_000 })]);
+    renderPage();
+    expect(await screen.findByText(`Mua một mình ${formatVnd(90_000)}`)).toBeInTheDocument();
+    expect(screen.queryByText(`Mua một mình ${formatVnd(120_000)}`)).toBeNull();
   });
 
   it('B-72: ghi giá nhóm và giá mua một mình, không gạch giá', async () => {

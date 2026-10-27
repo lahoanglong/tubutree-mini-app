@@ -9,6 +9,7 @@ import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { EmptyState } from '@/components/empty-state';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -191,7 +192,7 @@ function GroupCard({
   const productHref = `/san-pham/${encodeURIComponent(g.product.slug)}`;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
   const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;
-  const prices = groupPriceLabels(g, formatVnd);
+  const prices = groupPriceLabels(g, formatVnd, useActiveFlashSales());
   const inOpenGroup = member && isOpen;
 
   return (

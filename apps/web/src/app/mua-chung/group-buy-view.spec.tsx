@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
   list: [] as unknown[],
   one: null as unknown,
   oneError: false,
+  flash: [] as unknown[],
 }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.user, retrySession: mocks.retrySession }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
@@ -56,6 +58,7 @@ const btn = (c: HTMLElement, name: string | RegExp) =>
   });
 
 beforeEach(() => {
+  mocks.flash = [];
   mocks.phase = 'authenticated';
   mocks.user = null;
   mocks.list = [GROUP('a'), GROUP('b', { joined: true })];
@@ -215,6 +218,14 @@ describe('/mua-chung — tham gia', () => {
     expect(c.textContent).toContain(`Giá nhóm ${formatVnd(102_000)}`);
     expect(c.textContent).toContain(`Mua một mình ${formatVnd(120_000)}`);
     expect(c.querySelector('.line-through')).toBeNull();
+  });
+
+  it('B-72: đang có Giờ vàng của sản phẩm thì "Mua một mình" theo giá Giờ vàng hiện nay, không theo giá lưu lúc tạo nhóm', async () => {
+    mocks.list = [GROUP('a', { unitPrice: 102_000, basePrice: 120_000 })];
+    mocks.flash = [{ itemId: 'f', variationId: 'v', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }];
+    const c = await mount();
+    expect(c.textContent).toContain(`Mua một mình ${formatVnd(90_000)}`);
+    expect(c.textContent).not.toContain(`Mua một mình ${formatVnd(120_000)}`);
   });
 
   it('đang gửi tham gia: bấm lại không gửi thêm', async () => {

@@ -4,6 +4,8 @@ import { Share2 } from 'lucide-react';
 import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage } from '../services/api';
+import { fetchActiveFlashSales } from '../services/shop-api';
+import { serverNow } from '../utils/server-clock';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -154,7 +156,9 @@ function GroupCard({
   const member = authed && g.joined;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
   const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;
-  const prices = groupPriceLabels(g, formatVnd);
+  // Chỉ đọc cache Giờ vàng (nhịp tải lại do useFlashSalesPoller lo): "Mua một mình" theo giá hiện nay, không theo giá lưu lúc tạo nhóm.
+  const flash = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 }).data;
+  const prices = groupPriceLabels(g, formatVnd, flash, serverNow());
   const inOpenGroup = member && isOpen;
   return (
     <Card padding={12}>
