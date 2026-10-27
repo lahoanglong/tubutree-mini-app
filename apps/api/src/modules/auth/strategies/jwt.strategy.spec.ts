@@ -1,4 +1,3 @@
-import { UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { JwtPayload } from '@tubutree/shared-types';
 import type { PrismaService } from '../../../prisma/prisma.service';
