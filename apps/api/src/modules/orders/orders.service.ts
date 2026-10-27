@@ -13,6 +13,7 @@ import { AffiliateService } from '../affiliate/affiliate.service';
 import { OrderReversalService, type ReversalResult } from './order-reversal.service';
 import { OrderStatusService } from './order-status.service';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
+import { cancelReasonNote } from './cancel-reasons';
 import { parseRefundDestination, type RefundDestinationInput } from './refund-destination';
 import { announceBankRefund, announceDeletedAccountRefund, receivedRefundNote, refundReportedUnderpayment } from './refund-queue';
 import { refundNote } from './order-returns.service';
@@ -29,6 +30,8 @@ import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
+
+export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
 export interface OrderListFilter {
   status?: OrderStatus;
@@ -336,12 +339,12 @@ export class OrdersService {
     }));
   }
 
-  async cancel(userId: string, code: string, refundInput: RefundDestinationInput = {}) {
+  async cancel(userId: string, code: string, refundInput: CancelOrderInput = {}) {
     const order = await this.cancelOrder(userId, code, refundInput);
     return { ...forBuyer(order), canCancel: customerCancelBlock(order, userId) === null, manualHandling: isManualHandling(order) };
   }
 
-  private async cancelOrder(userId: string, code: string, refundInput: RefundDestinationInput) {
+  private async cancelOrder(userId: string, code: string, refundInput: CancelOrderInput) {
     // Kiểm tra sớm trên ảnh chụp (thông báo thân thiện, không mở tx vô ích). Ảnh chụp này đọc NGOÀI tx
     // nên KHÔNG được dùng để quyết định ghi — tx bên dưới khoá dòng đơn rồi kiểm tra lại trên dữ liệu thật.
     const order = await this.detail(userId, code);
@@ -390,6 +393,7 @@ export class OrdersService {
           toStatus: 'CANCELLED',
           actorType: 'CUSTOMER',
           actorId: userId,
+          note: cancelReasonNote(refundInput.cancelReasonCode, refundInput.cancelReasonText),
         },
       });
       // Hoàn ví/Điểm Xanh + restock + release flash quota — logic dùng chung với admin.reviewReturn/

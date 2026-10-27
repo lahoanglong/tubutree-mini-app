@@ -50,6 +50,8 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { ListRow } from '../components/ui/list-row';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
+import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
+import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
@@ -85,6 +87,8 @@ export default function OrderDetailPage() {
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
   const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [cancelTouched, setCancelTouched] = useState(false);
+  const [cancelReason, setCancelReason] = useState<CancelReasonCode | null>(null);
+  const [cancelReasonText, setCancelReasonText] = useState('');
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const phase = useAuthPhase();
@@ -185,7 +189,8 @@ export default function OrderDetailPage() {
   };
 
   const cancel = useMutation({
-    mutationFn: (choose: boolean) => cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined),
+    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
+      cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: (cancelled) => {
       // Gộp phản hồi huỷ vào cache NGAY (trạng thái mới → ẩn "Hủy đơn"/"Thanh toán ngay" tức thì) nhưng GIỮ
       // `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng nên ghi đè cả object sẽ làm ReorderSheet
@@ -762,6 +767,15 @@ export default function OrderDetailPage() {
               {vi.orders.cancelConfirmBody}
             </Text>
           </Box>
+          <Box mt={4}>
+            <CancelReasonPicker
+              code={cancelReason}
+              onCode={setCancelReason}
+              text={cancelReasonText}
+              onText={setCancelReasonText}
+              showError={cancelTouched}
+            />
+          </Box>
           {refundMode === 'choose' && (
             <Box mt={4}>
               <RefundDestinationPicker
@@ -797,8 +811,8 @@ export default function OrderDetailPage() {
               loading={cancel.isPending}
               onPress={() => {
                 setCancelTouched(true);
-                if (cancelBankError) return;
-                cancel.mutate(refundMode === 'choose');
+                if (!cancelReason || cancelBankError) return;
+                cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
               }}
               style={{ color: 'var(--color-text-danger)' }}
             >

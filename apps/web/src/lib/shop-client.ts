@@ -1,5 +1,7 @@
 'use client';
 
+import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
+
 import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
@@ -448,8 +450,8 @@ export type RefundDestinationBody =
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
 /** Đơn đã trả tiền: gửi kèm nơi nhận tiền hoàn (Ví Tubu hoặc tài khoản ngân hàng). */
-export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
-  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: destination ?? {} });
+export const cancelOrder = (code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody) =>
+  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: { ...destination, ...reason } });
 
 export interface RepurchaseResult {
   results: { orderItemId: string; status: 'added' | 'partial' | 'skipped'; reason?: string; addedQuantity: number }[];

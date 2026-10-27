@@ -1,3 +1,4 @@
+import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
 import { api } from './api';
 import { isHttpError } from './http';
 import { syncServerClock } from '../utils/server-clock';
@@ -689,8 +690,8 @@ export type RefundDestinationBody =
   | { refundMethod: 'WALLET' }
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
-export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
-  api.post<OrderDTO>(`/orders/${code}/cancel`, destination ?? {}).then((r) => r.data);
+export const cancelOrder = (code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody) =>
+  api.post<OrderDTO>(`/orders/${code}/cancel`, { ...destination, ...reason }).then((r) => r.data);
 export type RepurchaseAddSource = 'repurchase' | 'reorder_notification';
 export type RepurchaseSkipReason = 'OUT_OF_STOCK' | 'INACTIVE' | 'NOT_APPROVED' | 'EXCEEDS_STOCK';
 export interface RepurchaseLineResult {

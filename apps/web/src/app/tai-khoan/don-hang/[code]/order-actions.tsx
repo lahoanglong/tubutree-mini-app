@@ -37,6 +37,9 @@ import { orderReorderTarget, type ReorderTarget } from '@/components/reorder/reo
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { RefundDestinationControl } from './order-refunds';
 import { ReturnRequestForm } from './return-request-form';
+import { CancelReasonPicker } from './cancel-reason-picker';
+import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
+import { actionErrorText } from '@/lib/error-text';
 
 /**
  * Việc khách tự làm được trên đơn: hủy (khi còn kịp, đơn đã trả tiền thì chọn nơi nhận tiền hoàn), mua lại (đơn đã kết thúc),
@@ -54,6 +57,8 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
   const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [cancelTouched, setCancelTouched] = useState(false);
+  const [cancelReason, setCancelReason] = useState<CancelReasonCode | null>(null);
+  const [cancelReasonText, setCancelReasonText] = useState('');
   const cancelTriggerRef = useRef<HTMLButtonElement>(null);
   const keepOrderRef = useRef<HTMLButtonElement>(null);
   const cancelNoticeRef = useRef<HTMLParagraphElement>(null);
@@ -86,7 +91,8 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
     delivered && !orderReturns.some((r) => r.status === 'REQUESTED') && [...remaining.values()].some((q) => q > 0);
 
   const cancel = useMutation({
-    mutationFn: (choose: boolean) => cancelOrder(o.code, choose ? destinationBody(cancelMethod, cancelBank) : undefined),
+    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
+      cancelOrder(o.code, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: () => {
       setConfirmCancel(false);
       void qc.invalidateQueries({ queryKey: ['order', o.code] });
@@ -129,7 +135,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
       )}
       {cancel.isError && (
         <p ref={cancelNoticeRef} tabIndex={-1} role="alert" className={`mb-3 outline-none ${ui.error}`}>
-          {cancel.error instanceof Error ? cancel.error.message : 'Không huỷ được đơn hàng.'}
+          {actionErrorText(cancel.error)}
         </p>
       )}
 
@@ -146,6 +152,13 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
           <p id="cancel-note" className="mt-1 text-sm text-stone-700">
             Đơn đã huỷ không thể khôi phục lại.
           </p>
+          <CancelReasonPicker
+            code={cancelReason}
+            onCode={setCancelReason}
+            text={cancelReasonText}
+            onText={setCancelReasonText}
+            showError={cancelTouched}
+          />
           {refundMode === 'choose' && (
             <div className="mt-3 rounded-control bg-stone-0 p-3">
               <RefundDestinationPicker
@@ -175,7 +188,7 @@ export function OrderActions({ order: o, userId }: { order: OrderDetailDTO; user
               type="button"
               onClick={() => {
                 setCancelTouched(true);
-                if (!cancelBankError) cancel.mutate(refundMode === 'choose');
+                if (cancelReason && !cancelBankError) cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
               }}
               disabled={cancel.isPending}
               className={`${ui.btnSecondary} border-danger-fg text-danger-fg`}

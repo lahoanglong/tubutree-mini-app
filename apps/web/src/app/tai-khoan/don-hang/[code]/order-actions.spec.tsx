@@ -87,6 +87,15 @@ const field = (c: HTMLElement, label: string) =>
     Array.from(i.labels ?? []).some((l) => (l.firstChild?.textContent ?? '').trim() === label),
   ) ?? null;
 
+const pickReason = (c: HTMLElement, label = /Đổi ý/) => {
+  const r = radio(c, label);
+  if (r && !r.checked) click(r);
+};
+const confirmWithReason = (c: HTMLElement) => {
+  pickReason(c);
+  click(confirmCancelBtn(c));
+};
+
 beforeEach(() => {
   mocks.user = { id: 'u1' };
   mocks.order = { ...BASE };
@@ -178,7 +187,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
   it('WEB-13: huỷ xong (nút Huỷ đơn đã ẩn) focus chuyển sang dòng báo kết quả, không rơi về <body>', async () => {
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(8);
     const status = container.querySelector('[role="status"]')!;
     expect(status.textContent).toContain('Đã huỷ đơn hàng');
@@ -189,7 +198,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     mocks.cancel.mockRejectedValue(new Error('Đơn đã bàn giao vận chuyển.'));
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(8);
     expect(container.querySelector('[role="alert"]')!.textContent).toContain('Đơn đã bàn giao vận chuyển.');
     expect(document.activeElement).toBe(btn(container, 'Huỷ đơn'));
@@ -198,16 +207,31 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
   it('xác nhận huỷ: gọi API đúng mã đơn rồi báo đã huỷ', async () => {
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
+    confirmWithReason(container);
+    await flush(8);
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', undefined, { cancelReasonCode: 'CHANGED_MIND' });
+    expect(container.textContent).toContain('Đã huỷ đơn hàng');
+  });
+
+  it('chưa chọn lý do: báo chọn lý do và không gọi API; chọn "Lý do khác" thì có ô viết thêm và gửi kèm', async () => {
+    const { container } = await mount();
+    click(btn(container, 'Huỷ đơn')!);
+    expect(container.querySelector('textarea[aria-label="Mô tả lý do huỷ"]')).toBeNull();
+    click(confirmCancelBtn(container));
+    await flush();
+    expect(mocks.cancel).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Bạn chọn lý do huỷ giúp Tubu nhé');
+    pickReason(container, /Lý do khác/);
+    typeInto(container.querySelector('textarea[aria-label="Mô tả lý do huỷ"]'), ' Con ốm ');
     click(confirmCancelBtn(container));
     await flush(8);
-    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', undefined);
-    expect(container.textContent).toContain('Đã huỷ đơn hàng');
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', undefined, { cancelReasonCode: 'OTHER', cancelReasonText: 'Con ốm' });
   });
 
   it('huỷ xong làm mới số dư Điểm Xanh/Ví (tiền và điểm hoàn về) — R2-BUYERWEB-3', async () => {
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(8);
     expect(mocks.invalidateBalances).toHaveBeenCalled();
   });
@@ -217,9 +241,9 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
     expect(container.querySelector('[role="alertdialog"] [role="radiogroup"]')?.getAttribute('aria-label')).toBe('Nơi nhận tiền hoàn');
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(8);
-    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', { refundMethod: 'WALLET' });
+    expect(mocks.cancel).toHaveBeenCalledWith('TB-9', { refundMethod: 'WALLET' }, { cancelReasonCode: 'CHANGED_MIND' });
   });
 
   it('MONEY-9: chọn tài khoản ngân hàng → điền sẵn tài khoản gần nhất, thiếu số thì báo lỗi và không gọi API', async () => {
@@ -231,16 +255,16 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     await flush(8);
     expect(field(container, 'Số tài khoản')?.value).toBe('190312345678');
     typeInto(field(container, 'Số tài khoản'), '12');
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush();
     expect(mocks.cancel).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Số tài khoản chỉ gồm chữ số, từ 6 đến 24 số.');
     typeInto(field(container, 'Số tài khoản'), '1903 1234 5678');
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(8);
     expect(mocks.cancel).toHaveBeenCalledWith('TB-9', {
       refundMethod: 'BANK', bankName: 'Techcombank', accountNumber: '1903 1234 5678', accountName: 'NGUYEN VAN A',
-    });
+    }, { cancelReasonCode: 'CHANGED_MIND' });
   });
 
   it('MONEY-6: đơn chuyển khoản chưa ghi nhận tiền → cảnh báo đừng huỷ vội, tiền về muộn vẫn được hoàn', async () => {
@@ -264,7 +288,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     mocks.cancel.mockRejectedValue(new Error('Đơn đã vào quy trình giao, vui lòng liên hệ Zalo OA để được hỗ trợ.'));
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(8);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã vào quy trình giao');
   });
@@ -277,7 +301,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     });
     const { container } = await mount();
     click(btn(container, 'Huỷ đơn')!);
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(12);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('đã bàn giao');
     expect(btn(container, 'Huỷ đơn')).toBeUndefined();
@@ -292,7 +316,7 @@ describe('chi tiết đơn — huỷ đơn (BUYERWEB-13)', () => {
     const { container } = await mount();
     expect(container.querySelector('[data-testid="order-action-bar"]')).not.toBeNull();
     click(btn(container, 'Huỷ đơn')!);
-    click(confirmCancelBtn(container));
+    confirmWithReason(container);
     await flush(12);
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="order-action-bar"]')).toBeNull();

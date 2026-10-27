@@ -154,6 +154,21 @@ describe('OrdersService.cancel', () => {
     expect((notifications.notify as jest.Mock)).toHaveBeenCalled();
   });
 
+  it('huỷ kèm lý do: ghi vào ghi chú lịch sử (Khác kèm lời khách viết); không gửi lý do hoặc mã lạ thì ghi chú rỗng', async () => {
+    const a = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await a.svc.cancel('u1', 'TUBU1', { cancelReasonCode: 'CHANGED_MIND' });
+    expect(a.historyCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ note: 'Khách huỷ: Đổi ý, không muốn mua nữa' }) });
+    const b = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await b.svc.cancel('u1', 'TUBU1', { cancelReasonCode: 'OTHER', cancelReasonText: '  Con ốm  ' });
+    expect(b.historyCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ note: 'Khách huỷ: Lý do khác. Con ốm' }) });
+    const c = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await c.svc.cancel('u1', 'TUBU1');
+    expect(c.historyCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ note: null }) });
+    const d = makeService({ ...baseOrder, status: 'CONFIRMED' });
+    await d.svc.cancel('u1', 'TUBU1', { cancelReasonCode: 'HACK' });
+    expect(d.historyCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ note: null }) });
+  });
+
   it('Q19: huỷ xong trọn vẹn ghi mốc reversalEffectsAt; đảo điểm lỗi thì KHÔNG ghi (cron chạy lại)', async () => {
     const ok = makeService({ ...baseOrder, status: 'CONFIRMED' });
     await ok.svc.cancel('u1', 'TUBU1');

@@ -492,6 +492,7 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     expect(screen.getByText('Nhận lại 114.000đ về')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ }));
     await waitFor(() => expect(screen.getByLabelText('Số tài khoản')).toHaveValue('0071000123456'));
+    fireEvent.click(screen.getByRole('button', { name: /Đổi ý/ }));
     const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
     await waitFor(() =>
@@ -500,7 +501,7 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
         bankName: 'VCB',
         accountNumber: '0071000123456',
         accountName: 'TRAN THI B',
-      }),
+      }, { cancelReasonCode: 'CHANGED_MIND' }),
     );
   });
 
@@ -508,9 +509,27 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     mocks.fetchOrder.mockResolvedValue(paidTransfer);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    fireEvent.click(screen.getByRole('button', { name: /Đổi ý/ }));
     const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
-    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }));
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }, { cancelReasonCode: 'CHANGED_MIND' }));
+  });
+
+  it('chưa chọn lý do: báo chọn lý do và không gọi API; "Lý do khác" có ô viết thêm và gửi kèm', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'CONFIRMED' });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    expect(screen.queryByLabelText('Mô tả lý do huỷ')).toBeNull();
+    const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    expect(await screen.findByText('Bạn chọn lý do huỷ giúp Tubu nhé')).toBeInTheDocument();
+    expect(mocks.cancelOrder).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Lý do khác/ }));
+    fireEvent.change(screen.getByLabelText('Mô tả lý do huỷ'), { target: { value: ' Con ốm ' } });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() =>
+      expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', { refundMethod: 'WALLET' }, { cancelReasonCode: 'OTHER', cancelReasonText: 'Con ốm' }),
+    );
   });
 
   it('R3-MONEY-1: đơn đang xử lý đã nhận tiền mà khách trả dư → khối Hoàn tiền hiện khoản trả dư', async () => {
@@ -539,9 +558,10 @@ describe('OrderDetailPage — huỷ đơn chọn nơi nhận tiền hoàn, hạn
     expect(await screen.findByText(/quá hạn đơn sẽ tự huỷ/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Huỷ đơn' }));
     expect(screen.getByRole('note')).toHaveTextContent('Nếu bạn vừa chuyển khoản');
+    fireEvent.click(screen.getByRole('button', { name: /Đổi ý/ }));
     const buttons = screen.getAllByRole('button', { name: 'Huỷ đơn' });
     fireEvent.click(buttons[buttons.length - 1]!);
-    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined));
+    await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledWith('TT001', undefined, { cancelReasonCode: 'CHANGED_MIND' }));
   });
 
   it.each([
