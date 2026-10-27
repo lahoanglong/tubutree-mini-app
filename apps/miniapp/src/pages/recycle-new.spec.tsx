@@ -62,7 +62,7 @@ vi.mock('../services/geo-api', () => ({ getProvinces: mocks.getProvinces }));
 vi.mock('../services/zmp-bridge', () => ({ requestZaloLocation: mocks.requestZaloLocation, getZaloAccessToken: mocks.getZaloAccessToken }));
 
 import RecycleNewPage, { toLineInputs, type WasteWizardDraft } from './recycle-new';
-import { ITEM_CARTON, ITEM_MILK, makeWasteMe, makeWastePoint, makeRewardCatalog, makeRequestDetail } from '../services/waste-test-fixtures';
+import { ITEM_BATTERY, ITEM_CARTON, ITEM_MILK, makeWasteMe, makeWastePoint, makeRewardCatalog, makeRequestDetail } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 
 function renderPage() {
@@ -95,13 +95,22 @@ beforeEach(() => {
 });
 
 describe('bước 1: chọn món (§4.2)', () => {
+  it('món chỉ mang tới (pin): trần ngày đã bớt thì một dòng gộp thay câu trần ngày; còn nguyên trần thì chỉ câu trần', async () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 12 };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, items: [ITEM_CARTON, pin] }));
+    renderPage();
+    const card = (await screen.findByText('Pin đã dùng')).closest('[data-item]') as HTMLElement;
+    expect(within(card).getByText('Hôm nay còn nhận được 12 viên (tối đa 20 viên mỗi ngày)')).toBeInTheDocument();
+    expect(within(card).queryByText(/Mỗi ngày mang tới điểm nhận tối đa 20 viên/)).toBeNull();
+    expect(within((await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement).getByText(/Mỗi ngày mang tới điểm nhận tối đa 10 thùng/)).toBeInTheDocument();
+  });
   it('thẻ món: quy tắc, chuẩn bị, câu trần; món sắp nhận không có bộ đếm', async () => {
     renderPage();
     const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
     expect(within(carton).getByText('1 thùng = 1.000 điểm')).toBeInTheDocument();
-    expect(within(carton).getByText('Tối đa 20 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày')).toBeInTheDocument();
+    expect(within(carton).getByText('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng')).toBeInTheDocument();
     expect(carton.querySelector('[data-item-media] img, [data-item-media] svg')).not.toBeNull();
-    const battery = screen.getByText('Pin cũ').closest('[data-item]') as HTMLElement;
+    const battery = screen.getByText('Pin đã dùng').closest('[data-item]') as HTMLElement;
     expect(within(battery).queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
     expect(within(battery).getByText('Sắp nhận')).toBeInTheDocument();
     expect(within(battery).getByText('Đợt này Tubu chưa nhận pin')).toBeInTheDocument();
@@ -280,6 +289,18 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     await waitFor(() => expect(screen.getAllByRole('radio').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true));
     expect(screen.getAllByText('Bạn đang có 3 yêu cầu chưa xong').length).toBeGreaterThan(0);
   });
+  it('ITEM_DROPOFF_ONLY: thẻ Gửi về kho và Thu kèm đơn khoá kèm lý do, thẻ Mang tới điểm nhận vẫn chọn được', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'PICKUP' || b.method === 'MAIL_IN' ? { blocks: [{ code: 'ITEM_DROPOFF_ONLY', itemId: 'item-carton' }] } : {}));
+    atStep2();
+    renderPage();
+    const pickup = await screen.findByRole('radio', { name: /Thu kèm đơn/ });
+    const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
+    expect(await within(pickup).findByText(/không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được/)).toBeInTheDocument();
+    expect(within(mail).getByText(/không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được/)).toBeInTheDocument();
+    expect(pickup.getAttribute('aria-disabled')).toBe('true');
+    expect(mail.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ }).getAttribute('aria-disabled')).not.toBe('true');
+  });
   it('MONTH_CAP_FOR_MIN: thẻ Thu kèm đơn nói gói thu kèm đơn, thẻ Gửi về kho nói gói gửi kho', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'PICKUP' || b.method === 'MAIL_IN' ? { blocks: [{ code: 'MONTH_CAP_FOR_MIN', pointsRemaining: 5_000 }] } : {}));
     atStep2();
@@ -405,7 +426,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     renderPage();
     const create = await screen.findByRole('button', { name: 'Tạo yêu cầu' });
     expect(create).toBeDisabled();
-    screen.getByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' }).click();
+    screen.getByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' }).click();
     await waitFor(() => expect(create).toBeEnabled());
     fireEvent.click(create);
     await waitFor(() => expect(mocks.createWasteRequest).toHaveBeenCalledWith({ method: 'DROP_OFF', lines: [{ itemId: 'item-carton', declaredQty: 5 }, { itemId: 'item-milk', declaredQty: 5 }], pointId: 'pt-1', consent: true }, 'key-1'));
@@ -418,7 +439,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     const itemsEntry = { draft: { ...DRAFT, lines, sid: 'wizard-1' } };
     atStep2({ ...PICKED, lines, sid: 'wizard-1' });
     const first = renderPage();
-    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' })).click();
     fireEvent.click(await screen.findByRole('button', { name: 'Tạo yêu cầu' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/r/req-9', { replace: true }));
     first.unmount();
@@ -436,7 +457,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     const lines = { 'item-carton': 3 };
     atStep2({ ...PICKED, lines, sid: 'wizard-1' });
     const first = renderPage();
-    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' })).click();
     fireEvent.click(await screen.findByRole('button', { name: 'Tạo yêu cầu' }));
     await waitFor(() => expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/r/req-9', { replace: true }));
     first.unmount();
@@ -444,20 +465,20 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
 
     mocks.location.search = ''; mocks.location.state = { draft: { ...DRAFT, lines, sid: 'other' } };
     renderPage();
-    expect(await screen.findByText('Bước 1/3: Chọn món')).toBeInTheDocument();
+    expect(await screen.findByText('Bước 1/2: Chọn món')).toBeInTheDocument();
     expect(mocks.navigate).not.toHaveBeenCalledWith('/recycle', expect.anything());
   });
   it('mục bước 1 có nháp chưa từng gửi (về từ chọn điểm hay nạp lại) vẫn hiện nguyên số lượng', async () => {
     mocks.location.search = ''; mocks.location.state = { draft: { ...DRAFT, lines: { 'item-carton': 7 } } };
     renderPage();
-    expect(await screen.findByText('Bước 1/3: Chọn món')).toBeInTheDocument();
+    expect(await screen.findByText('Bước 1/2: Chọn món')).toBeInTheDocument();
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
   it('lỗi mạng → snackbar câu của máy chủ, bấm lại dùng CÙNG khoá', async () => {
     mocks.createWasteRequest.mockRejectedValueOnce(new Error('Điểm nhận đang tạm ngừng, hãy chọn điểm khác')).mockResolvedValue(makeRequestDetail());
     atStep2(PICKED);
     renderPage();
-    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' })).click();
     fireEvent.click(await screen.findByRole('button', { name: 'Tạo yêu cầu' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Điểm nhận đang tạm ngừng, hãy chọn điểm khác', type: 'error' })));
     fireEvent.click(screen.getByRole('button', { name: 'Tạo yêu cầu' }));
@@ -469,7 +490,7 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     atStep2({ ...DRAFT, method: 'MAIL_IN', lines: { 'item-carton': 20 } });
     renderPage();
     expect(await screen.findByText('Mỗi kiện là một yêu cầu riêng: có nhiều kiện thì tạo nhiều yêu cầu, mỗi kiện một mã TR-.')).toBeInTheDocument();
-    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này' })).click();
+    (await screen.findByRole('checkbox', { name: 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này' })).click();
     const create = screen.getByRole('button', { name: 'Tạo yêu cầu' });
     expect(create).toBeDisabled();
     screen.getByRole('checkbox', { name: 'Tôi đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn' }).click();
@@ -484,5 +505,94 @@ describe('tạo yêu cầu (§15.2, §16.1 idempotency)', () => {
     await screen.findAllByRole('radio');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
+  });
+});
+
+describe('khai món nhanh và báo trước (B-35/B-36/B-82)', () => {
+  beforeEach(() => localStorage.clear());
+  it('chưa chọn món: dòng lý do dưới nút Tiếp tục', async () => {
+    renderPage();
+    expect(await screen.findByText('Chọn ít nhất 1 món để tiếp tục')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
+  });
+  it('+5 cộng nhanh, gõ số trực tiếp, và không vượt trần tháng còn lại', async () => {
+    renderPage();
+    const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
+    fireEvent.click(within(carton).getByRole('button', { name: 'Thêm 5' }));
+    const box = within(carton).getByRole('textbox', { name: 'Số lượng' });
+    expect(box).toHaveValue('5');
+    fireEvent.change(box, { target: { value: '12' } });
+    expect(box).toHaveValue('12');
+    fireEvent.click(within(carton).getByRole('button', { name: 'Thêm 10' }));
+    expect(box).toHaveValue('20');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeEnabled());
+  });
+  it('món chỉ kho nhận ghi "Chỉ kho TP.HCM nhận" và không in trần theo ngày của điểm', async () => {
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true, dailyCapQty: 50 }] }));
+    renderPage();
+    const milk = (await screen.findByText('Vỏ hộp sữa')).closest('[data-item]') as HTMLElement;
+    expect(within(milk).getByText('Chỉ kho TP.HCM nhận')).toBeInTheDocument();
+    expect(within(milk).queryByText(/mỗi ngày/)).toBeNull();
+    const carton = screen.getByText('Thùng carton').closest('[data-item]') as HTMLElement;
+    expect(within(carton).queryByText('Chỉ kho TP.HCM nhận')).toBeNull();
+  });
+  it('bước 2 nói lý do nút Tạo yêu cầu còn khoá theo từng việc còn thiếu', async () => {
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint()]);
+    atStep2();
+    renderPage();
+    expect(await screen.findByText('Chọn cách giao để tạo yêu cầu')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('radio', { name: /Mang tới điểm nhận/ }));
+    expect(await screen.findByText('Chọn điểm nhận để tạo yêu cầu')).toBeInTheDocument();
+  });
+  it('có điểm lần trước thì chọn sẵn Mang tới điểm nhận kèm điểm đó, chỉ còn tick đồng ý', async () => {
+    const store = new Map<string, string>([['tubu.waste.lastPointId', 'pt-2']]);
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint(), makeWastePoint({ id: 'pt-2', name: 'Đại lý Hai' })]);
+    atStep2();
+    renderPage();
+    expect(await screen.findByText('Đại lý Hai')).toBeInTheDocument();
+    expect(screen.getByText('Tick các ô đồng ý ở trên để tạo yêu cầu')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'true');
+    vi.unstubAllGlobals();
+  });
+  it('không có điểm lần trước và chưa có vị trí thì không chọn sẵn gì', async () => {
+    atStep2();
+    renderPage();
+    await screen.findByRole('radio', { name: /Mang tới điểm nhận/ });
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'false');
+    expect(mocks.requestZaloLocation).toHaveBeenCalledTimes(1);
+  });
+  it('link Thể lệ cạnh ô đồng ý: lưu nháp đầy đủ và các ô đồng ý vào mục lịch sử rồi mới sang Thể lệ', async () => {
+    const draft = { ...DRAFT, method: 'DROP_OFF' as const, pointId: 'pt-1', pickedPoint: makeWastePoint() };
+    atStep2(draft);
+    renderPage();
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem Thể lệ' }));
+    expect(mocks.navigate.mock.calls.slice(-2)).toEqual([
+      ['/recycle/new?step=method', { replace: true, state: { draft, consents: { consent: true, packaging: false, postage: false } } }],
+      ['/recycle/rules'],
+    ]);
+  });
+  it('quay về từ Thể lệ: giữ Gửi về kho và các ô đồng ý dù máy có điểm lần trước', async () => {
+    const store = new Map<string, string>([['tubu.waste.lastPointId', 'pt-1']]);
+    vi.stubGlobal('localStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) });
+    mocks.location.search = '?step=method';
+    mocks.location.state = { draft: { ...DRAFT, method: 'MAIL_IN', provinceCode: '79' }, consents: { consent: true, packaging: true, postage: false } };
+    renderPage();
+    const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
+    await waitFor(() => expect(mail).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('checkbox', { name: /Tôi đồng ý với Thể lệ/ })).toBeChecked();
+    vi.unstubAllGlobals();
+  });
+  it('không có điểm lần trước, vị trí về sau khi danh sách điểm đã có: chọn sẵn điểm gần nhất', async () => {
+    mocks.requestZaloLocation.mockResolvedValue({ token: 'loc' });
+    mocks.getZaloAccessToken.mockResolvedValue({ accessToken: 'acc', code: 'c' });
+    mocks.getWastePoints.mockResolvedValue([makeWastePoint(), makeWastePoint({ id: 'pt-2', name: 'Đại lý Hai' })]);
+    mocks.getNearbyWastePoints.mockResolvedValue([makeWastePoint({ distanceKm: 3 }), makeWastePoint({ id: 'pt-2', name: 'Đại lý Hai', distanceKm: 0.5 })]);
+    atStep2();
+    renderPage();
+    expect(await screen.findByText('Đại lý Hai')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ })).toHaveAttribute('aria-checked', 'true');
   });
 });

@@ -10,9 +10,11 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { loginHref } from '@/lib/return-to';
+import { wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
-import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
@@ -46,7 +48,19 @@ export function RecycleRequests() {
 
   if (phase === 'loading') return <Shell><AuthLoading /></Shell>;
   if (phase === 'unavailable') return <Shell><SessionUnavailable /></Shell>;
-  if (phase === 'guest') return <Shell><LoginRequired message="Đăng nhập để xem các yêu cầu đổi rác của bạn." returnTo="/doi-rac/yeu-cau" /></Shell>;
+  if (phase === 'guest') {
+    return (
+      <Shell>
+        <div className={`space-y-3 p-4 ${skin.card}`}>
+          <p className="text-base font-semibold text-stone-900">{wasteGuestCopy.historyBody}</p>
+          <p className="text-sm text-stone-700">{wasteGuestCopy.whyPhone}</p>
+          <Link href={loginHref('/doi-rac/yeu-cau')} className={`${ui.btnPrimary} w-full sm:w-auto`}>
+            {wasteGuestCopy.historyButton}
+          </Link>
+        </div>
+      </Shell>
+    );
+  }
   // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, như ba trang đổi rác kia (Q2).
   if (me && me.eligibility !== 'OK') return <Shell><MiniAppOnlyNotice path="/doi-rac/yeu-cau" /></Shell>;
   if (q.isError) return <Shell><ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => void q.refetch()} /></Shell>;
@@ -58,9 +72,11 @@ export function RecycleRequests() {
       <Shell>
         <div className={`flex flex-col items-center gap-3 p-8 text-center ${skin.card}`}>
           <p className="text-base font-semibold text-stone-900">Chưa có yêu cầu nào</p>
-          <Link href="/doi-rac/tao" className={ui.btnPrimary}>
-            Đổi rác ngay
-          </Link>
+          {(!cfg.isLoaded || cfg.waste.enabled) && (
+            <Link href="/doi-rac/tao" className={ui.btnPrimary}>
+              Đổi rác ngay
+            </Link>
+          )}
         </div>
       </Shell>
     );

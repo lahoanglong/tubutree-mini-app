@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { EMPTY_DRAFT, savePointsNav, takeReturn, type WasteWizardDraft } from '@/lib/recycle-wizard';
-import { makeWasteMe, makeWastePoint } from './recycle-fixtures';
+import { ITEM_CARTON, ITEM_MILK, makeWasteMe, makeWastePoint } from './recycle-fixtures';
 
 // Chép ý recycle-points.spec.tsx (Mini App, §4.4): tab theo tỉnh, tìm không phân biệt dấu, chọn điểm và trả nháp về trang
 // gọi, khoá điểm hết hạn mức hoặc không nhận đủ món, khối "Chưa có điểm gần bạn?". Khác Mini App: không có "Gần tôi" và
@@ -174,5 +174,23 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(c.querySelector('a[aria-label="Quay lại"]')?.getAttribute('href')).toBe('/doi-rac/tao?step=method');
+  });
+});
+
+describe('/doi-rac/diem-nhan — món chỉ kho nhận (B-36)', () => {
+  const warehouse = makeWastePoint({ id: 'wh-1', kind: 'WAREHOUSE', name: 'Kho Tubu TP.HCM' });
+  beforeEach(() => {
+    state.me = makeWasteMe({ items: [ITEM_CARTON, { ...ITEM_MILK, warehouseOnly: true }] });
+  });
+  it('kho đang nhận: bảo khách chọn kho hoặc bỏ món', async () => {
+    state.points = [HCM, warehouse];
+    const c = await mount();
+    expect(c.textContent).toMatch(/Vỏ hộp sữa chỉ kho TP\.HCM nhận, nên các điểm đại lý đang bị khoá.*chọn kho Tubu/);
+  });
+  it('kho không có trong danh sách (không ACTIVE): không bảo chọn kho, nói chưa có điểm nhận món này', async () => {
+    state.points = [HCM];
+    const c = await mount();
+    expect(c.textContent).toContain('Vỏ hộp sữa chỉ kho TP.HCM nhận, mà kho chưa nhận được lúc này. Hiện chưa có điểm nào nhận món này');
+    expect(c.textContent).not.toContain('chọn kho Tubu');
   });
 });

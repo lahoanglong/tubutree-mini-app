@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   getDailyCheckInStatus: vi.fn(),
   getMemberCard: vi.fn(),
   postDailyCheckIn: vi.fn(),
+  listWasteRequests: vi.fn(),
   copyText: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
 }));
@@ -48,6 +49,8 @@ vi.mock('../services/account-api', async (importOriginal) => ({
   getMemberCard: mocks.getMemberCard,
   postDailyCheckIn: mocks.postDailyCheckIn,
 }));
+
+vi.mock('../services/waste-api', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), listWasteRequests: mocks.listWasteRequests }));
 
 import LoyaltyPage from './loyalty';
 
@@ -87,6 +90,8 @@ beforeEach(() => {
   } catch {
     /* ignore */
   }
+  boost.cfg = { isLoaded: false };
+  mocks.listWasteRequests.mockResolvedValue([]);
   mocks.getLoyalty.mockResolvedValue(LOYALTY);
   mocks.getCoupons.mockResolvedValue([]);
   mocks.getPointsTransactions.mockResolvedValue([]);
@@ -156,11 +161,28 @@ describe('LoyaltyPage — thẻ hạng', () => {
 describe('LoyaltyPage — lối vào Đổi rác theo cờ chương trình', () => {
   it('chương trình tắt → không có hàng Đổi rác; hàng Kho quà vẫn hiện', async () => {
     mocks.publicConfig.waste.enabled = false;
+    boost.cfg = { isLoaded: true };
     renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
     expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
     expect(screen.queryByText('Trạm Refill')).toBeNull();
     expect(screen.getByText('Kho quà')).toBeInTheDocument();
+    expect(mocks.listWasteRequests).toHaveBeenCalledTimes(1);
+  });
+  it('chương trình tắt nhưng khách từng có yêu cầu → hàng "Yêu cầu đổi rác" chỉ để xem, mở /recycle/requests', async () => {
+    mocks.publicConfig.waste.enabled = false;
+    mocks.listWasteRequests.mockResolvedValue([{ id: 'r1' }]);
+    boost.cfg = { isLoaded: true };
+    renderPage();
+    fireEvent.click(await screen.findByText('Yêu cầu đổi rác'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/requests');
+    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+  });
+  it('chương trình bật → không hỏi danh sách yêu cầu và không có hàng lịch sử riêng', async () => {
+    renderPage();
+    await screen.findByText('Lịch sử Điểm Xanh');
+    expect(mocks.listWasteRequests).not.toHaveBeenCalled();
+    expect(screen.queryByText('Yêu cầu đổi rác')).toBeNull();
   });
 });
 

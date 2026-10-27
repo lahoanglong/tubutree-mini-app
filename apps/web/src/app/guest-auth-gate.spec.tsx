@@ -147,6 +147,9 @@ const RECYCLE: PageCase[] = [
   ['/doi-rac/xong/[id]', () => <RecycleDone id="req-77" />, '/doi-rac/xong/req-77'],
   ['/doi-rac/quay', () => <RecycleDeskPage />, '/doi-rac/quay'],
 ];
+// Nhãn nút đăng nhập hợp lệ: chung của LoginRequired, trang vào Đổi rác của khách và lời mời xem Yêu cầu của tôi.
+const LOGIN_LABELS = ['Đăng nhập với Zalo', 'Đăng nhập để đổi rác', 'Đăng nhập để đổi', 'Đăng nhập'];
+
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 
 describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnTo) => {
@@ -156,7 +159,7 @@ describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnT
     expect(container.textContent).not.toContain('Đang tải…');
     const login = container.querySelector<HTMLAnchorElement>('a[href^="/dang-nhap"]');
     expect(login).not.toBeNull();
-    expect(login!.textContent).toMatch(/Đăng nhập (với Zalo|để đổi)/);
+    expect(LOGIN_LABELS).toContain(login!.textContent!.trim());
     expect(login!.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent(returnTo)}`);
   });
 

@@ -43,6 +43,8 @@ export const WASTE_WRITE_INVALIDATE_KEYS = [['waste'], ['loyalty'], ['points-txn
 export const WASTE_REDEEM_INVALIDATE_KEYS = [...WASTE_WRITE_INVALIDATE_KEYS, ['loyalty-rewards'], ['coupons']] as const;
 
 export const getWasteMe = (http: HttpClient) => http.get<WasteMeDTO>('/waste/me');
+/** Công khai: khách chưa đăng nhập xem món nhận và mức điểm. */
+export const getWasteCatalogue = (http: HttpClient) => http.get<WasteItemDTO[]>('/waste/catalogue');
 export const getWasteItems = (http: HttpClient) => http.get<WasteItemDTO[]>('/waste/items');
 export const getWastePoints = (http: HttpClient, provinceCode?: string) =>
   http.get<WastePointDTO[]>('/waste/points', { query: provinceCode ? { provinceCode } : {} });

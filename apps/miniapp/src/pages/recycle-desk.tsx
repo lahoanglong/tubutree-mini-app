@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { HAZARDOUS_DESK_NOTES } from '@tubutree/app-core/waste-copy';
 import type { CSSProperties } from 'react';
 import { Input, Page, useSnackbar } from 'zmp-ui';
-import { CheckCircle2, ChevronDown } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ScanLine } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   WasteConfirmLineInput,
@@ -14,6 +15,8 @@ import type {
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
 import { getErrorMessage } from '../services/api';
+import { extractWasteLookupCode, normalizeWasteLookupCode } from '@tubutree/app-core/waste-code-input';
+import { scanCode } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { AuthGate } from '../components/ui/auth-gate';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -62,14 +65,13 @@ interface DeskDone {
 
 type DeskLine = WasteDeskRequestDTO['lines'][number];
 
-/** Ước tính phía máy khách: máy chủ vẫn áp trần và hạn mức khi xác nhận. Món nguy hại không bao giờ được cộng. */
+/** Ước tính phía máy khách: máy chủ vẫn áp trần và hạn mức khi xác nhận. */
 export function deskPreviewPoints(
-  lines: readonly { unitsPerPoint: number; pointsPerGroup: number; hazardous: boolean }[],
+  lines: readonly { unitsPerPoint: number; pointsPerGroup: number }[],
   received: Readonly<Record<string, number>>,
   ids: readonly string[],
 ): number {
   return lines.reduce((sum, l, i) => {
-    if (l.hazardous) return sum;
     const qty = received[ids[i] as string] ?? 0;
     return sum + Math.floor(qty / l.unitsPerPoint) * l.pointsPerGroup;
   }, 0);
@@ -77,13 +79,13 @@ export function deskPreviewPoints(
 
 const isReadOnly = (r: WasteDeskRequestDTO) => r.status === 'COMPLETED' || r.status === 'REJECTED';
 
-const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => !l.hazardous && (received[l.itemId] ?? 0) < l.declaredQty;
+const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => (received[l.itemId] ?? 0) < l.declaredQty;
 
 function QuotaCard({ point }: { point: WasteDeskPointDTO }) {
   if (point.kind === 'WAREHOUSE') {
     return (
       <Card>
-        <Text variant="body-md" as="div">{`Còn ${formatNumber(point.staffDailyCapRemaining)} điểm được xác nhận hôm nay`}</Text>
+        <Text variant="body-md" as="div">{`Hôm nay còn xác nhận được ${formatNumber(point.staffDailyCapRemaining)} điểm`}</Text>
       </Card>
     );
   }
@@ -175,6 +177,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
   const [rejectOpen, setRejectOpen] = useState(false);
   const [done, setDone] = useState<DeskDone | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const point = points.find((p) => p.id === pointId) ?? points[0]!;
 
@@ -183,17 +186,42 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onSuccess: (res, c) => {
       setLookup(res.type === 'REQUEST' ? res.request : null);
       setGift(res.type === 'GIFT' ? res.redemption : null);
-      setLookedUpCode(c.trim());
+      setLookedUpCode(c);
       setDone(null);
       setReceived(
         res.type === 'REQUEST' && !isReadOnly(res.request)
-          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty]))
+          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.declaredQty]))
           : {},
       );
       setReasons({});
     },
     onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
   });
+
+  const search = () => {
+    const norm = normalizeWasteLookupCode(code);
+    if (norm === '' || find.isPending) return;
+    setCode(norm);
+    find.mutate(norm);
+  };
+
+  const scan = async () => {
+    if (scanning || find.isPending) return;
+    setScanning(true);
+    try {
+      const res = await scanCode();
+      if (res.kind === 'cancelled') return;
+      const scanned = res.kind === 'ok' ? extractWasteLookupCode(res.content) : null;
+      if (scanned) {
+        setCode(scanned);
+        find.mutate(scanned);
+      } else {
+        openSnackbar({ text: res.kind === 'ok' ? 'Mã QR này không phải mã Đổi rác. Hãy quét lại hoặc gõ mã bên dưới.' : 'Chưa quét được. Hãy thử lại hoặc gõ mã bên dưới.', type: 'error' });
+      }
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const request = lookup;
   const readOnly = !!request && isReadOnly(request);
@@ -209,7 +237,6 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const confirm = useMutation({
     mutationFn: (req: WasteDeskRequestDTO) => {
       const lines: WasteConfirmLineInput[] = req.lines.map((l) => {
-        if (l.hazardous) return { itemId: l.itemId, declaredQty: l.declaredQty, receivedQty: 0, shortfallReason: 'WRONG_TYPE' };
         const reason = reasons[l.itemId];
         return {
           itemId: l.itemId,
@@ -279,19 +306,32 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
         <SegmentedTabs scroll value={pointId} onChange={setPointId} items={points.map((p) => ({ key: p.id, label: p.name }))} />
       )}
       {points.length === 1 && <Text variant="body-sm" tone="secondary" as="div">{point.name}</Text>}
-      <QuotaCard point={point} />
-      <Text variant="body-sm" tone="secondary" as="div">
-        Đại lý không tự cộng điểm. Tubu cộng điểm cho khách theo số bạn xác nhận.
-      </Text>
-
       <div style={{ ...COLUMN, gap: 10 }}>
-        <Field label="Mã yêu cầu hoặc mã nhận quà">
-          <Input value={code} onChange={(e) => setCode(e.target.value)} />
-        </Field>
-        <Button fullWidth disabled={code.trim() === ''} loading={find.isPending} onPress={() => find.mutate(code)}>
-          Tra mã
+        <Button size="lg" fullWidth icon={ScanLine} loading={scanning} onPress={scan}>
+          Quét mã của khách
         </Button>
+        <form
+          style={{ ...COLUMN, gap: 10 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            search();
+          }}
+        >
+          <Field label="Mã yêu cầu hoặc mã nhận quà">
+            <Input placeholder="VD: TR-6NY3J" value={code} onChange={(e) => setCode(e.target.value)} />
+          </Field>
+          <Button fullWidth variant="secondary" disabled={code.trim() === ''} loading={find.isPending} onPress={search}>
+            Tra mã
+          </Button>
+        </form>
       </div>
+
+      <QuotaCard point={point} />
+      {point.kind === 'PARTNER' && (
+        <Text variant="body-sm" tone="secondary" as="div">
+          Tubu cộng điểm cho khách theo số bạn xác nhận. Điểm không do cửa hàng cộng.
+        </Text>
+      )}
 
       {done && (
         <Card>
@@ -344,9 +384,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                 ) : (
                   <>
                     <Text variant="body-sm" tone="secondary" as="div">{`Khách khai ${l.declaredQty} ${l.unitLabel}`}</Text>
-                    {l.hazardous ? (
-                      <Text variant="body-sm" tone="danger" as="div">Không nhận món này</Text>
-                    ) : (
+                    {l.hazardous && HAZARDOUS_DESK_NOTES.map((t) => <Text key={t} variant="body-sm" tone="danger" as="div">{t}</Text>)}
                       <>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <QuantitySelector
@@ -380,7 +418,6 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                           </div>
                         )}
                       </>
-                    )}
                   </>
                 )}
               </div>

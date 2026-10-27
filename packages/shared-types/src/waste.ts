@@ -37,7 +37,7 @@ export const WASTE_ELIGIBILITY_VALUES = ['OK', 'GUEST', 'NEED_PHONE'] as const;
 export type WasteEligibility = (typeof WASTE_ELIGIBILITY_VALUES)[number];
 export const WASTE_WEEKDAY_VALUES = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
 export type WasteWeekday = (typeof WASTE_WEEKDAY_VALUES)[number];
-export const WASTE_PREVIEW_BLOCK_VALUES = ['BELOW_MIN', 'MONTH_CAP_FOR_MIN', 'ITEM_MONTH_CAP', 'ITEM_DAY_CAP', 'POINTS_MONTH_CAP', 'POINT_QUOTA_FULL', 'POINT_UNAVAILABLE', 'ITEM_NOT_ACTIVE', 'POINT_MISSING_ITEMS', 'LANE_DISABLED', 'SHIP_LOCKED', 'MAX_OPEN', 'PICKUP_PENDING', 'NEED_PROVINCE'] as const;
+export const WASTE_PREVIEW_BLOCK_VALUES = ['BELOW_MIN', 'MONTH_CAP_FOR_MIN', 'ITEM_MONTH_CAP', 'ITEM_DAY_CAP', 'POINTS_MONTH_CAP', 'POINT_QUOTA_FULL', 'POINT_UNAVAILABLE', 'ITEM_NOT_ACTIVE', 'ITEM_DROPOFF_ONLY', 'POINT_MISSING_ITEMS', 'LANE_DISABLED', 'SHIP_LOCKED', 'MAX_OPEN', 'PICKUP_PENDING', 'NEED_PROVINCE'] as const;
 export type WastePreviewBlock = (typeof WASTE_PREVIEW_BLOCK_VALUES)[number];
 export const WASTE_ALERT_KIND_VALUES = ['QUOTA_PACE', 'FULL_MATCH', 'FULL_MATCH_CONFIRMER', 'AVG_UNITS', 'AVG_UNITS_CONFIRMER', 'REPEAT_CUSTOMER', 'LOOKUP_MISS', 'STAFF_ACCOUNT_CONFIRMED', 'STAFF_DIRECT'] as const;
 export type WasteAlertKind = (typeof WASTE_ALERT_KIND_VALUES)[number];
@@ -54,7 +54,7 @@ export interface WasteParcelLimits { maxWeightKg: number; maxEdgeCm: number }
 
 // customer
 export interface WasteLineInput { itemId: string; declaredQty: number }
-export interface WasteItemDTO { id: string; code: string; name: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; dailyCapQty: number | null; monthlyCapQty: number | null; status: WasteItemStatus; prepInstructions: string | null; imageUrl: string | null; gramsPerUnit: number | null; hazardous: boolean; sortOrder: number }
+export interface WasteItemDTO { id: string; code: string; name: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; dailyCapQty: number | null; monthlyCapQty: number | null; status: WasteItemStatus; prepInstructions: string | null; imageUrl: string | null; gramsPerUnit: number | null; hazardous: boolean; sortOrder: number; /** Chỉ kho TP.HCM nhận (đại lý không nhận). Optional để bản app cũ vẫn biên dịch; API luôn gửi. */ warehouseOnly?: boolean }
 export interface WasteMeItemDTO extends WasteItemDTO { monthRemainingQty: number | null; dayRemainingQty: number | null }
 export interface WastePointDTO { id: string; kind: WastePointKind; name: string; addressLine: string; provinceCode: string; provinceName: string; communeCode: string; communeName: string; lat: number | null; lng: number | null; phone: string | null; openingHours: WasteOpeningHours; acceptedItemIds: string[]; perkText: string | null; quotaFull: boolean; distanceKm: number | null }
 export interface WastePointContactDTO { id: string; kind: WastePointKind; name: string; addressLine: string; communeName: string; provinceName: string; phone: string | null; openingHours: WasteOpeningHours }

@@ -38,7 +38,12 @@ describe('Hub Cá nhân gọn (KP mục 3, phương án A)', () => {
 
 describe('lối vào Đổi rác không thêm lệnh gọi mạng (§16.1)', () => {
   const SRC = join(process.cwd(), 'src');
-  it.each(['pages/home.tsx', 'pages/game.tsx', 'pages/profile.tsx', 'pages/loyalty.tsx'])('%s không gọi waste-api', (f) => {
+  it.each(['pages/home.tsx', 'pages/game.tsx', 'pages/profile.tsx'])('%s không gọi waste-api', (f) => {
     expect(readFileSync(join(SRC, f), 'utf8')).not.toMatch(/waste-api|useWasteMe/);
+  });
+  it('pages/loyalty.tsx chỉ hỏi danh sách yêu cầu khi chương trình tắt (để giữ lối xem lịch sử), không gọi /waste/me', () => {
+    const src = readFileSync(join(SRC, 'pages/loyalty.tsx'), 'utf8');
+    expect(src).not.toMatch(/getWasteMe|useWasteMe/);
+    expect(src).toMatch(/enabled: authed && wasteOff/);
   });
 });

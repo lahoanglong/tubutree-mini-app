@@ -19,6 +19,7 @@ export function RecycleTimeline({
   label = 'Tiến độ yêu cầu',
   compact = false,
   hints,
+  caption: captionText,
 }: {
   steps: readonly string[];
   current: number;
@@ -26,6 +27,8 @@ export function RecycleTimeline({
   compact?: boolean;
   /** Dòng phụ dưới tên bước, theo chỉ số bước; chỉ hiện ở bản đầy đủ. */
   hints?: Readonly<Record<number, ReactNode>>;
+  /** Chữ thay cho tên bước hiện tại ở bản gọn, ví dụ "Bước 2/4: Mang tới điểm". */
+  caption?: string;
 }) {
   const size = compact ? 'h-4 w-4' : 'h-6 w-6';
   const list = (
@@ -67,7 +70,7 @@ export function RecycleTimeline({
     </ol>
   );
   if (!compact) return list;
-  const caption = steps[Math.min(current, steps.length - 1)];
+  const caption = captionText ?? steps[Math.min(current, steps.length - 1)];
   return (
     <div className="flex min-w-0 flex-col gap-1">
       {list}

@@ -17,7 +17,7 @@ import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { wasteGiftOverdueWhere } from '../core/waste-queue-filters';
 import { customerView } from '../core/waste-mask';
-import { lookupMissMeta, normalizeWasteCode } from '../waste-codes';
+import { canonicalWasteLookup, lookupMissMeta } from '../waste-codes';
 
 const CODE_NOT_FOUND = 'Không tìm thấy mã';
 const ALREADY_HANDLED = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
@@ -40,7 +40,7 @@ export class WasteGiftRedemptionsService {
     if (access.kind === 'PARTNER' && !access.giftHandoverEnabled) {
       throw new ForbiddenException('Điểm nhận này chưa được bật trao quà; khách nhận quà tại kho Tubu.');
     }
-    const code = normalizeWasteCode(body.code);
+    const code = canonicalWasteLookup(body.code);
     const row = await this.prisma.wasteGiftRedemption.findUnique({ where: { code } });
     if (!row) {
       await writeWasteEvent(this.prisma, { kind: 'LOOKUP_MISS', actorUserId: callerUserId, actorRole: access.actorRole, pointId: body.pointId, meta: lookupMissMeta(body.code) });
@@ -54,7 +54,7 @@ export class WasteGiftRedemptionsService {
     const wh = await this.access.warehousePoint();
     if (!wh) throw new ConflictException('Chưa có kho Tubu đang hoạt động.');
     const row = await this.prisma.wasteGiftRedemption.findUnique({ where: { id } });
-    if (!row || row.code !== normalizeWasteCode(body.code)) {
+    if (!row || row.code !== canonicalWasteLookup(body.code)) {
       await writeWasteEvent(this.prisma, { kind: 'LOOKUP_MISS', actorUserId: callerUserId, actorRole: staff.role, pointId: wh.id, meta: lookupMissMeta(body.code) });
       throw new NotFoundException(CODE_NOT_FOUND);
     }

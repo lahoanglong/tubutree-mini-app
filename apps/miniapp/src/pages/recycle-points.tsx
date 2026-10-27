@@ -17,6 +17,7 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
+import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste-copy';
 import { WastePointPicker } from '../components/waste-point-picker';
 import { METHOD_LABELS } from '../utils/waste-labels';
 import type { WastePointsNavState, WastePointsReturnState } from './recycle-new';
@@ -104,7 +105,7 @@ export default function RecyclePointsPage() {
 
   const shell = (content: React.ReactNode, bar?: React.ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title="Điểm nhận gần bạn" />
+      <PageHeader title={wasteStepCopy.points} />
       <div style={{ ...COLUMN, padding: 16, paddingBottom: 120, gap: 16 }}>{content}</div>
       {bar}
     </Page>
@@ -135,6 +136,7 @@ export default function RecyclePointsPage() {
 
   const source = tab === NEAR_TAB ? (nearby ?? []) : points.filter((p) => p.provinceCode === tab);
   const list = filterPointsByText(source, q);
+  const warehouseOnlyNames = me.items.filter((i) => nav.selectedItemIds.includes(i.id) && i.warehouseOnly).map((i) => i.name);
   const pickedPoint = list.find((p) => p.id === picked) ?? null;
   const canChoose =
     pickedPoint !== null && !pickedPoint.quotaFull && nav.selectedItemIds.every((id) => pickedPoint.acceptedItemIds.includes(id));
@@ -158,6 +160,11 @@ export default function RecyclePointsPage() {
 
   return shell(
     <>
+      {warehouseOnlyNames.length > 0 && (
+        <Text variant="body-sm" tone="secondary" as="p" style={{ margin: 0 }}>
+          {warehouseOnlyPointsNote(warehouseOnlyNames, points.some((p) => p.kind === 'WAREHOUSE'))}
+        </Text>
+      )}
       <SearchField
         label="Tìm điểm nhận"
         placeholder="Tên điểm, phường/xã hoặc tên đường"

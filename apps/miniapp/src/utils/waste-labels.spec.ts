@@ -8,10 +8,11 @@ describe('câu quy tắc và câu trần (§4.2, §5.1)', () => {
     expect(L.ruleText(ITEM_MILK)).toBe('5 vỏ = 1.000 điểm');
   });
   it('trần tháng + trần ngày', () => {
-    expect(L.capSentence(ITEM_CARTON)).toBe('Tối đa 20 thùng mỗi tháng. Mang tới điểm nhận: tối đa 10 thùng mỗi ngày');
+    expect(L.capSentence(ITEM_CARTON)).toBe('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng');
   });
+  it('món chỉ kho nhận vẫn hiện trần ngày, nơi mang tới là kho', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null, warehouseOnly: true })).toBe('Mỗi ngày mang tới kho tối đa 10 thùng'); });
   it('chỉ trần tháng', () => { expect(L.capSentence(ITEM_MILK)).toBe('Tối đa 100 vỏ mỗi tháng'); });
-  it('chỉ trần ngày', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null })).toBe('Mang tới điểm nhận: tối đa 10 thùng mỗi ngày'); });
+  it('chỉ trần ngày', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null })).toBe('Mỗi ngày mang tới điểm nhận tối đa 10 thùng'); });
   it('không trần → không có câu (R5.1.37)', () => { expect(L.capSentence({ ...ITEM_CARTON, monthlyCapQty: null, dailyCapQty: null })).toBeNull(); });
   it('nhóm 5 vỏ = 1.000 điểm: thêm N vỏ nữa', () => {
     expect(L.groupProgressText(2, ITEM_MILK)).toBe('thêm 3 vỏ nữa được +1.000 điểm');
@@ -125,7 +126,7 @@ describe('phí ship và giá trị điểm (§4.3, §7.2, §14.5)', () => {
 describe('tiến độ tới quà kế tiếp (§4.1, §16.1: dùng redeemablePoints của máy chủ)', () => {
   it('chọn quà rẻ nhất chưa đủ, bỏ quà đã hết và TREE', () => {
     const c = makeRewardCatalog({ redeemablePoints: 14_000, rewards: [makeRewardItem({ pointsCost: 20_000 }), makeRewardItem({ id: 'x', pointsCost: 10_000 }), makeRewardItem({ id: 'y', pointsCost: 15_000, soldOut: true }), makeRewardItem({ id: 't', kind: 'TREE', pointsCost: 16_000 })] });
-    expect(L.nextRewardProgress(c)).toEqual({ rewardName: 'mã giảm giá Miễn phí vận chuyển', cost: 20_000, have: 14_000, missing: 6000 });
+    expect(L.nextRewardProgress(c)).toEqual({ rewardName: 'mã Miễn phí vận chuyển', cost: 20_000, have: 14_000, missing: 6000 });
     const sale = makeRewardCatalog({ redeemablePoints: 14_000, rewards: [makeRewardItem({ name: 'Giảm 50.000đ', pointsCost: 20_000 })] });
     expect(L.nextRewardProgress(sale)?.rewardName).toBe('mã giảm 50.000đ');
     const seed = makeRewardCatalog({ redeemablePoints: 14_000, rewards: [makeRewardItem({ id: 's', kind: 'SEED_PACK', name: 'Gói hạt giống Tubu', voucher: null, pointsCost: 25_000 })] });

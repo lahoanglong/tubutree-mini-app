@@ -9,6 +9,7 @@ const key = { headers: { 'Idempotency-Key': 'key-1' } };
 describe('waste — đúng route, body, header (bảng của spec Mini App)', () => {
   it.each([
     ['getWasteMe', (h: HttpClient) => w.getWasteMe(h), { method: 'get', path: '/waste/me' }],
+    ['getWasteCatalogue', (h: HttpClient) => w.getWasteCatalogue(h), { method: 'get', path: '/waste/catalogue' }],
     ['getWasteItems', (h: HttpClient) => w.getWasteItems(h), { method: 'get', path: '/waste/items' }],
     ['getWastePoints()', (h: HttpClient) => w.getWastePoints(h), { method: 'get', path: '/waste/points', opts: { query: {} } }],
     ['getWastePoints(79)', (h: HttpClient) => w.getWastePoints(h, '79'), { method: 'get', path: '/waste/points', opts: { query: { provinceCode: '79' } } }],

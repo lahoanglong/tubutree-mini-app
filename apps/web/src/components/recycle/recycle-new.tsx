@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -16,6 +17,16 @@ import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, createWasteRequest, prev
 import { getProvinces } from '@tubutree/app-core/api/geo';
 import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
+import {
+  ITEMS_NEXT_HINT,
+  WASTE_CONSENT_TEXT,
+  WASTE_RULES_LINK,
+  createBlockedHint,
+  defaultPointId,
+  readLastPointId,
+  wasteStepCopy,
+  writeLastPointId,
+} from '@tubutree/app-core/waste-copy';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -62,7 +73,7 @@ import {
 
 const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
 const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
-const CONSENT_TEXT = 'Tôi đồng ý cho Tubu Tree xử lý yêu cầu này';
+const browserStore = () => (typeof window === 'undefined' ? undefined : window.localStorage);
 const PACKAGING_TEXT = 'Tôi đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn';
 const POSTAGE_TEXT = 'Tôi đã trả đủ cước gửi, kho từ chối kiện còn cước phải trả khi nhận';
 const PARCEL_COUNT_TEXT = 'Mỗi kiện là một yêu cầu riêng: có nhiều kiện thì tạo nhiều yêu cầu, mỗi kiện một mã TR-.';
@@ -100,6 +111,8 @@ function Actions({ label, summary, children }: { label: string; summary?: ReactN
     </>
   );
 }
+
+const CONSENT_KEY = 'tubu.waste.consents';
 
 export function RecycleNew() {
   const router = useRouter();
@@ -149,6 +162,30 @@ export function RecycleNew() {
   const [consent, setConsent] = useState(false);
   const [packagingConsent, setPackagingConsent] = useState(false);
   const [postageConsent, setPostageConsent] = useState(false);
+  // Khách mở Thể lệ rồi quay lại thì giữ các ô đồng ý (cách giao nằm trong nháp, đã lưu cùng lúc).
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem(CONSENT_KEY);
+      if (!raw) return;
+      window.sessionStorage.removeItem(CONSENT_KEY);
+      const c = JSON.parse(raw) as { consent?: boolean; packaging?: boolean; postage?: boolean };
+      setConsent(c.consent === true);
+      setPackagingConsent(c.packaging === true);
+      setPostageConsent(c.postage === true);
+    } catch {
+      // Không có sessionStorage thì chỉ mất các ô đồng ý, khách tích lại.
+    }
+  }, []);
+  const openRules = () => {
+    toPicker.current = true;
+    saveDraft(draft);
+    markResume();
+    try {
+      window.sessionStorage.setItem(CONSENT_KEY, JSON.stringify({ consent, packaging: packagingConsent, postage: postageConsent }));
+    } catch {
+      // như trên
+    }
+  };
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
   const me: WasteMeDTO | undefined = meQ.data;
@@ -215,6 +252,17 @@ export function RecycleNew() {
   const wantProvinces = step === 'method' && enabledMethods.includes('MAIL_IN');
   const provincesQ = useQuery({ queryKey: ['geo', 'provinces'], queryFn: () => getProvinces(coreHttp), enabled: wantProvinces });
 
+  // Chọn sẵn "Mang tới điểm nhận" với điểm lần trước để khách đỡ phải chạm nhiều lần; không có gợi ý thì để khách tự chọn.
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (!ready || prefilled.current || step !== 'method' || draft.method !== null || !pointsQ.data || !enabledMethods.includes('DROP_OFF')) return;
+    prefilled.current = true;
+    const id = defaultPointId(pointsQ.data, lineInputs.map((l) => l.itemId), readLastPointId(browserStore()));
+    const point = id ? pointsQ.data.find((pt) => pt.id === id) : undefined;
+    if (point) setDraft((d) => ({ ...d, method: 'DROP_OFF', pointId: point.id, pickedPoint: point }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, step, draft.method, pointsQ.data, enabledMethods]);
+
   const selected = draft.method && enabledMethods.includes(draft.method) ? draft.method : null;
   const keyContent = { method: draft.method, lines: lineInputs, pointId: draft.method === 'DROP_OFF' ? draft.pointId : null };
   const { key, rotate } = useIdempotencyKey(keyContent);
@@ -234,6 +282,7 @@ export function RecycleNew() {
     },
     onSuccess: async (r) => {
       rotate();
+      if (r.method === 'DROP_OFF' && draft.pointId) writeLastPointId(browserStore(), draft.pointId);
       submitted.current = true;
       clearWizardStorage();
       await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
@@ -241,7 +290,7 @@ export function RecycleNew() {
     },
   });
 
-  const subtitle = step === 'items' ? 'Bước 1/3: Chọn món' : 'Bước 2/3: Chọn cách giao';
+  const subtitle = step === 'items' ? wasteStepCopy.items : wasteStepCopy.method;
   const shell = (content: ReactNode, bar?: ReactNode) => (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12">
       <PageHeader title="Đổi rác" subtitle={subtitle} backHref={step === 'method' ? WIZARD_PATH : '/doi-rac'} backLabel={step === 'method' ? 'Chọn món' : 'Đổi rác lấy quà'} />
@@ -283,7 +332,10 @@ export function RecycleNew() {
     // Ước tính xong gần nhất có thể thuộc số lượng cũ: chờ debounce và lời gọi mới rồi mới mở nút.
     const previewStale = linesKey !== JSON.stringify(lineInputs) || itemsPreviewQ.isFetching;
     const reward = p && !capBlock ? nextRewardProgress(rewardsQ.data, p.estimatedPoints) : null;
-    const summary = p ? (
+    const noLines = lineInputs.length === 0;
+    const summary = noLines ? (
+      <p className="text-sm text-stone-600">{ITEMS_NEXT_HINT}</p>
+    ) : p ? (
       capBlock ? (
         <p className="text-sm font-semibold text-danger-fg">
           {blockMessage(capBlock, { items: me.items, maxOpenRequests: me.thresholds.maxOpenRequests, itemCaps: p.itemCaps })}
@@ -339,6 +391,9 @@ export function RecycleNew() {
   const consentsOk = consent && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
   const canCreate =
     selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null) && !create.isPending;
+  const blockedHint = canCreate
+    ? null
+    : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
   const unlockedOthers = (m: WasteMethod) => order.filter((o) => o !== m && !isLocked(previews[o]));
 
   const renderCard = (m: WasteMethod) => {
@@ -451,7 +506,10 @@ export function RecycleNew() {
       )}
       {selected && (
         <div className="flex flex-col">
-          <Check checked={consent} onChange={() => setConsent((v) => !v)} label={CONSENT_TEXT} />
+          <Check checked={consent} onChange={() => setConsent((v) => !v)} label={WASTE_CONSENT_TEXT} />
+          <Link href="/doi-rac/quy-dinh" onClick={openRules} className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-forest-700 underline">
+            {WASTE_RULES_LINK}
+          </Link>
           {selected === 'MAIL_IN' && (
             <>
               <Check checked={packagingConsent} onChange={() => setPackagingConsent((v) => !v)} label={PACKAGING_TEXT} />
@@ -466,7 +524,7 @@ export function RecycleNew() {
           {errText(create.error)}
         </p>
       )}
-      <Actions label="Tạo yêu cầu đổi rác">
+      <Actions label="Tạo yêu cầu đổi rác" summary={blockedHint ? <p className="text-sm text-stone-600">{blockedHint}</p> : undefined}>
         <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!canCreate} onClick={() => create.mutate()}>
           {create.isPending ? 'Đang tạo…' : 'Tạo yêu cầu'}
         </button>

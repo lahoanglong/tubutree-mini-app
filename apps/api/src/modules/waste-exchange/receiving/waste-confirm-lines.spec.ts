@@ -9,14 +9,12 @@ const L = (o: Partial<WasteStoredLine> = {}): WasteStoredLine => ({
   pointsPerGroup: 1000,
   dropsPerUnit: 0,
   gramsPerUnit: null,
-  hazardous: false,
   ...o,
 });
 
 const STALE = 'Khách vừa sửa yêu cầu, vui lòng tra lại mã';
 const CLAMP = 'Số thực nhận phải là số nguyên từ 0 tới số khai';
 const NEED_REASON = 'Dòng nhận thiếu phải có lý do';
-const HAZARD = 'Món nguy hại chỉ được đếm 0 với lý do sai loại';
 
 describe('validateConfirmLines (spec 15.5 step 5, 11.2)', () => {
   it('1. full receipt', () => {
@@ -103,21 +101,21 @@ describe('validateConfirmLines (spec 15.5 step 5, 11.2)', () => {
     expect(l?.shortfallReason).toBeNull();
   });
 
-  describe('8. hazardous line', () => {
-    const hz = L({ itemId: 'wi-battery', hazardous: true, declaredQty: 2 });
-    it('0 with WRONG_TYPE is accepted with no points', () => {
-      const [l] = validateConfirmLines([hz], [{ itemId: 'wi-battery', declaredQty: 2, receivedQty: 0, shortfallReason: 'WRONG_TYPE' }]);
-      expect(l?.pointsAwarded).toBe(0);
-      expect(l?.shortfallReason).toBe('WRONG_TYPE');
+  describe('8. pin (hazardous = xử lý riêng, vẫn nhận và cộng điểm)', () => {
+    const pin = L({ itemId: 'wi-battery', unitsPerPoint: 10, pointsPerGroup: 1000, declaredQty: 25 });
+    it('nhận đủ 25 viên: 2 nhóm 10 viên = 2.000 điểm', () => {
+      const [l] = validateConfirmLines([pin], [{ itemId: 'wi-battery', declaredQty: 25, receivedQty: 25 }]);
+      expect(l?.pointsAwarded).toBe(2000);
+      expect(l?.shortfallReason).toBeNull();
     });
-    it.each([
-      [1, 'WRONG_TYPE' as const],
-      [0, 'WET' as const],
-      [0, undefined],
-    ])('received %p with reason %p is refused', (receivedQty, shortfallReason) => {
-      const fn = () => validateConfirmLines([hz], [{ itemId: 'wi-battery', declaredQty: 2, receivedQty, shortfallReason }]);
-      expect(fn).toThrow(BadRequestException);
-      expect(fn).toThrow(HAZARD);
+    it('nhận thiếu 15 viên vì sai loại: 1 nhóm = 1.000 điểm, vẫn phải có lý do', () => {
+      const [l] = validateConfirmLines([pin], [{ itemId: 'wi-battery', declaredQty: 25, receivedQty: 15, shortfallReason: 'DAMAGED' }]);
+      expect(l?.pointsAwarded).toBe(1000);
+      expect(() => validateConfirmLines([pin], [{ itemId: 'wi-battery', declaredQty: 25, receivedQty: 15 }])).toThrow(NEED_REASON);
+    });
+    it('đếm 0 kèm WRONG_TYPE (pin phồng, chảy nước) cũng được, không cộng điểm', () => {
+      const [l] = validateConfirmLines([pin], [{ itemId: 'wi-battery', declaredQty: 25, receivedQty: 0, shortfallReason: 'WRONG_TYPE' }]);
+      expect(l?.pointsAwarded).toBe(0);
     });
   });
 

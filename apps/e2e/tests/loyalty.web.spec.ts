@@ -30,6 +30,8 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: bo
     tiers, spent12m: 1_500_000, tierPoints: 80,
     rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 },
   });
+  // Trang Điểm Xanh hỏi lịch sử yêu cầu đổi rác để quyết định có hiện lối xem lại.
+  api.get('/waste/requests', []);
   api.get('/me/coupons', opts.tall ? [] : [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
   api.get('/me/points/transactions', opts.tall ? [] : [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
   api.get('/me/daily-check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, todayWater: 10, rewards: REWARDS }));

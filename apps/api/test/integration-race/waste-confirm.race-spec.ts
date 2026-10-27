@@ -184,6 +184,30 @@ describe('WasteConfirmService races (real Postgres)', () => {
     await expect(prisma.user.findUniqueOrThrow({ where: { id: customer.id } })).resolves.toMatchObject({ pointsBalance: 10_000 });
   });
 
+  it('pin (hazardous, ACTIVE): hai nhân viên cùng xác nhận một yêu cầu DROP_OFF chỉ cộng điểm một lần (25 viên = 2.000 điểm)', async () => {
+    const pin = await createWasteItem(prisma, { unitsPerPoint: 10, pointsPerGroup: 1000, hazardous: true, status: 'ACTIVE', dailyCapQty: 20, monthlyCapQty: 50 });
+    reg.itemIds.push(pin.id);
+    const owner = await newUser();
+    const point = await createWastePoint(prisma, { kind: 'PARTNER', ownerUserId: owner.id, quota: 100_000, itemIds: [pin.id] });
+    reg.pointIds.push(point.id);
+    if (point.createdStorefront && point.ownerStorefrontId) reg.storefrontIds.push(point.ownerStorefrontId);
+    const clerk = await newUser();
+    await prisma.wastePointStaff.create({ data: { pointId: point.id, userId: clerk.id, role: 'STAFF', isActive: true } });
+    const customer = await newUser();
+    const r = await createWasteRequest(prisma, { userId: customer.id, method: 'DROP_OFF', status: 'OPEN', pointId: point.id, lines: [{ itemId: pin.id, declaredQty: 25 }] });
+    const pinBody = { lines: [{ itemId: pin.id, declaredQty: 25, receivedQty: 25 }] };
+    const results = await heldPair(
+      () => confirmSvc.confirm(call(owner.id, r.id, 'DESK'), pinBody),
+      () => confirmSvc.confirm(call(clerk.id, r.id, 'DESK'), pinBody),
+    );
+    const s = summarize(results);
+    expect(s.errors.join()).not.toMatch(/40P01|P2034/);
+    expect(results[0]).toMatchObject({ status: 'fulfilled', value: expect.objectContaining({ pointsAwarded: 2_000 }) });
+    expect(results[1].status).toBe('rejected');
+    await expect(prisma.pointsTransaction.count({ where: { refType: 'RECYCLE', refId: r.id } })).resolves.toBe(1);
+    await expect(prisma.user.findUniqueOrThrow({ where: { id: customer.id } })).resolves.toMatchObject({ pointsBalance: 2_000 });
+  });
+
   it('confirm(B) then confirm(A) on one request grants once', async () => {
     const customer = await newUser();
     const r = await mailInReceived(customer.id, 10);

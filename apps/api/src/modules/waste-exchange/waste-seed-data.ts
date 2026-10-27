@@ -38,8 +38,8 @@ export const WASTE_SEED_ITEMS: readonly WasteSeedItem[] = [
   { id: 'wi-bubble-wrap', code: 'BUBBLE_WRAP', name: 'Nilon chống sốc', unitLabel: 'túi lớn', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 10, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', sortOrder: 20, hazardous: false, warehouseOnly: false },
   { id: 'wi-milk-carton', code: 'MILK_CARTON', name: 'Vỏ hộp sữa sạch', unitLabel: 'vỏ', unitsPerPoint: 5, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 50, monthlyCapQty: 300, status: 'ACTIVE', prepInstructions: 'Rửa sạch, để ráo, ép dẹt.', sortOrder: 30, hazardous: false, warehouseOnly: true },
   { id: 'wi-tubu-bottle', code: 'TUBU_BOTTLE', name: 'Vỏ chai, hộp Tubu Tree', unitLabel: 'vỏ', unitsPerPoint: 1, pointsPerGroup: 2000, dropsPerUnit: 2, dailyCapQty: null, monthlyCapQty: 20, status: 'ACTIVE', prepInstructions: 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', sortOrder: 40, hazardous: false, warehouseOnly: true },
-  // The battery rate exists only to satisfy the CHECKs: a hazardous item can never be ACTIVE.
-  { id: 'wi-battery', code: 'BATTERY', name: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 1, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: null, monthlyCapQty: null, status: 'COMING_SOON', prepInstructions: null, sortOrder: 50, hazardous: true, warehouseOnly: false },
+  // Pin: hazardous = cần xử lý riêng, chỉ nhận khi khách mang tới điểm (không MAIL_IN/PICKUP). Điểm nào nhận là theo WastePointItem, nên không warehouseOnly. Sắp nhận: chủ bật trong Quản trị khi đủ điều kiện (hợp đồng xử lý, ý kiến Sở, Mini App mới Live).
+  { id: 'wi-battery', code: 'BATTERY', name: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 1000, dropsPerUnit: 0, dailyCapQty: 20, monthlyCapQty: 50, status: 'COMING_SOON', prepInstructions: 'Dán băng keo hai đầu cực. Không nhận pin phồng, chảy nước, pin xe điện hay ắc quy.', sortOrder: 50, hazardous: true, warehouseOnly: false },
 ];
 
 export const WASTE_SEED_GIFTS: readonly WasteSeedGift[] = [

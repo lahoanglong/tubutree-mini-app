@@ -315,3 +315,34 @@ describe('WastePointForm, món chỉ kho Tubu HCMC nhận', () => {
     expect(body(patches[0]!)).toEqual({ itemIds: ['i1'] });
   });
 });
+
+describe('WastePointForm, món nguy hại cho điểm đại lý', () => {
+  const PIN = wasteItem({ id: 'i3', name: 'Pin đã dùng', unitLabel: 'viên', hazardous: true });
+  const PIN_BOX = 'input[aria-label="Pin đã dùng"]';
+  const dlg = () => document.querySelector('[role="dialog"], [role="alertdialog"]');
+  const answer = (ok: boolean) => click(Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button, [role="alertdialog"] button')).find((b) => b.textContent === (ok ? 'Gắn món này' : 'Huỷ'))!);
+
+  it('tick pin cho điểm PARTNER hỏi xác nhận; Huỷ thì bỏ tick, Đồng ý thì tick', async () => {
+    const { c } = await mount({ items: [wasteItem(), PIN] });
+    click(q(c, PIN_BOX));
+    await flush();
+    expect(dlg()!.textContent).toContain('Chỉ gắn pin cho điểm đại lý khi Sở NN&MT đã trả lời về điểm đối tác và đã có quy trình chuyển pin về kho hoặc đơn vị có giấy phép.');
+    answer(false);
+    await flush();
+    expect(q(c, PIN_BOX)!.checked).toBe(false);
+    click(q(c, PIN_BOX));
+    await flush();
+    answer(true);
+    await flush();
+    expect(q(c, PIN_BOX)!.checked).toBe(true);
+  });
+
+  it('kho thì tick pin không hỏi', async () => {
+    const { c } = await mount({ items: [wasteItem(), PIN], warehouseExists: false });
+    click(q(c, 'input[name="kind"][value="WAREHOUSE"]'));
+    click(q(c, PIN_BOX));
+    await flush();
+    expect(dlg()).toBeNull();
+    expect(q(c, PIN_BOX)!.checked).toBe(true);
+  });
+});

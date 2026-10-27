@@ -4,7 +4,7 @@ import type { WastePreviewDTO } from '@tubutree/shared-types';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
 import { loadPointsNav, saveReturn } from '@/lib/recycle-wizard';
-import { ITEM_CARTON, ITEM_MILK, makeRequestDetail, makeWasteMe, makeWastePoint } from './recycle-fixtures';
+import { ITEM_BATTERY, ITEM_CARTON, ITEM_MILK, makeRequestDetail, makeWasteMe, makeWastePoint } from './recycle-fixtures';
 
 // Chép ý recycle-edit.spec.tsx (Mini App, §4.5, §7.4, §15.2): sửa món giữ nguyên hạn giữ chỗ, ước tính mới debounce,
 // đổi điểm nhận qua trang chọn điểm rồi quay về nháp, PATCH. Khác Mini App: nháp quay về nằm trong sessionStorage.
@@ -135,9 +135,33 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
     state.me = makeWasteMe({ items: [{ ...ITEM_CARTON, monthRemainingQty: 0 }, ITEM_MILK] });
     const c = await mount();
     const carton = card(c, 'Thùng carton');
-    expect(carton.querySelector('[aria-live="polite"]')?.textContent).toBe('5');
+    expect(carton.querySelector<HTMLInputElement>('input[aria-label="Số lượng"]')?.value).toBe('5');
     expect(carton.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(carton.querySelector('button[aria-label="Giảm số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
+  });
+
+  describe('trần ngày của món chỉ mang tới theo ngày của yêu cầu', () => {
+    const pin = { ...ITEM_BATTERY, status: 'ACTIVE' as const, hazardous: true, dailyCapQty: 20, monthlyCapQty: 50, monthRemainingQty: 50, dayRemainingQty: 0 };
+    const withPin = (createdAt: string, declaredQty: number) => {
+      const base = makeRequestDetail();
+      state.me = makeWasteMe({ items: [ITEM_CARTON, pin] });
+      state.request = makeRequestDetail({ createdAt, lines: [{ ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty }] });
+    };
+    it('tạo hôm nay và đã giữ đủ trần: chỉ câu trần, không "còn 0", không tăng quá trần', async () => {
+      withPin(new Date().toISOString(), 20);
+      const c = await mount();
+      const t = card(c, 'Pin đã dùng');
+      expect(t.textContent).not.toContain('Hôm nay còn nhận được');
+      expect(t.textContent).toContain('Mỗi ngày mang tới điểm nhận tối đa 20 viên');
+      expect(t.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('true');
+    });
+    it('không tạo hôm nay: không áp trần ngày phía khách, không dòng "Hôm nay còn…"', async () => {
+      withPin('2026-10-17T03:00:00.000Z', 5);
+      const c = await mount();
+      const t = card(c, 'Pin đã dùng');
+      expect(t.textContent).not.toContain('Hôm nay còn nhận được');
+      expect(t.querySelector('button[aria-label="Tăng số lượng"]')?.getAttribute('aria-disabled')).toBe('false');
+    });
   });
 
   it('nói rõ điểm ước tính có thể đổi và hạn giữ chỗ không đổi; ước tính mới từ /waste/preview', async () => {
@@ -210,7 +234,7 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
   it('dòng của món không còn nhận: phải bỏ được trước khi lưu (§15.2 PATCH)', async () => {
     const base = makeRequestDetail();
     state.request = makeRequestDetail({
-      lines: [...base.lines, { ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', declaredQty: 2 }],
+      lines: [...base.lines, { ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty: 2 }],
     });
     const c = await mount();
     expect(c.textContent).toContain('Món này hiện chưa nhận');
