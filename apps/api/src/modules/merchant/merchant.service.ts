@@ -342,6 +342,7 @@ export class MerchantService {
       return store;
     }
 
+    const ownerName = publicDisplayName(user.fullName, '');
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;
     let counter = 1;
@@ -376,7 +377,7 @@ export class MerchantService {
               slug: baseSlug,
               subdomain,
               ownerUserId: userId,
-              title: `Gian hàng của ${publicDisplayName(user.fullName, 'Đối tác')}`,
+              title: ownerName ? `Gian hàng của ${ownerName}` : 'Gian hàng đối tác Tubu Tree',
               themeColor: '#16a34a',
               isPublished: false,
               publishedAt: null,

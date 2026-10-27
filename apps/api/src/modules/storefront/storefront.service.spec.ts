@@ -59,7 +59,8 @@ describe('StorefrontService.getOrCreateMine', () => {
 
   it.each([
     ['Lã Hoàng Long', 'Cửa hàng của Long L.'],
-    ['0912345678', 'Cửa hàng của bạn'],
+    ['0912345678', 'Cửa hàng CTV Tubu Tree'],
+    ['🌸🌸', 'Cửa hàng CTV Tubu Tree'],
   ])('tên gian hàng mặc định không lộ họ tên đầy đủ hay số điện thoại: %s', async (fullName, title) => {
     const prisma = makePrisma();
     (prisma.user.findUniqueOrThrow as jest.Mock).mockResolvedValue({ id: 'u1', role: 'AFFILIATE', referralCode: 'LINH123', fullName });

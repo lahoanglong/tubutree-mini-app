@@ -77,6 +77,7 @@ export class StorefrontService {
     if (existing) return existing;
     if (!canCreate) throw new BadRequestException('Chỉ CTV mới tạo được gian hàng.');
     try {
+      const ownerName = publicDisplayName(user.fullName, '');
       return await this.prisma.storefront.create({
         data: {
           type: 'CTV',
@@ -86,7 +87,7 @@ export class StorefrontService {
           // Chuẩn hoá tại nguồn; phía đọc cũng so khớp insensitive để cứu dữ liệu cũ.
           slug: user.referralCode.toLowerCase(),
           ownerUserId: userId,
-          title: `Cửa hàng của ${publicDisplayName(user.fullName, 'bạn')}`,
+          title: ownerName ? `Cửa hàng của ${ownerName}` : 'Cửa hàng CTV Tubu Tree',
         },
       });
     } catch (err) {

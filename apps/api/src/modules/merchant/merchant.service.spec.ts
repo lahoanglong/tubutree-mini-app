@@ -55,8 +55,9 @@ describe('MerchantService', () => {
 
     it.each([
       ['Lã Hoàng Long', 'Gian hàng của Long L.'],
-      ['0912345678', 'Gian hàng của Đối tác'],
-      [null, 'Gian hàng của Đối tác'],
+      ['0912345678', 'Gian hàng đối tác Tubu Tree'],
+      ['🌸🌸', 'Gian hàng đối tác Tubu Tree'],
+      [null, 'Gian hàng đối tác Tubu Tree'],
     ])('tên gian hàng mặc định không lộ họ tên đầy đủ hay số điện thoại: %s', async (fullName, title) => {
       const prisma = makePrisma({
         user: {

@@ -52,23 +52,54 @@ export function pickDefaultVariation<T extends { id: string; sku?: string; retai
 
 /**
  * Giá thẻ sản phẩm. `basePrice`/`salePrice` của thẻ là giá của phân loại đại diện (API đã chọn, xem `pickDefaultVariation`).
- * Giờ vàng chỉ thắng khi rẻ hơn cả giá đang bán của chính phân loại có Giờ vàng lẫn giá đang bán của thẻ; khi đó thẻ dùng giá niêm yết
- * và giá đang bán của phân loại Giờ vàng (như dải Giờ vàng và trang chi tiết mở ở phân loại đó) và trả `flashVariationId`. Không thắng
- * thì thẻ giữ giá phân loại đại diện, không nhãn Giờ vàng, không `flashVariationId`: trang chi tiết mở ở phân loại mặc định.
+ * Một suất Giờ vàng chỉ thắng khi rẻ hơn cả giá đang bán của chính phân loại có suất lẫn giá đang bán của thẻ. Sản phẩm có nhiều
+ * suất thì xét hết, lấy suất có `flashPrice` thấp nhất; hoà thì suất của phân loại đại diện (`variationId` nếu biết, không thì
+ * suất có giá giống thẻ), rồi `variationId`. Thắng thì thẻ dùng giá niêm yết và giá đang bán của phân loại Giờ vàng (như dải Giờ
+ * vàng và trang chi tiết mở ở phân loại đó) và trả `flashVariationId`. Không suất nào thắng thì thẻ giữ giá phân loại đại diện,
+ * không nhãn Giờ vàng, không `flashVariationId`.
  */
 export function cardPricing(
-  product: { slug: string; basePrice: number; salePrice?: number | null },
+  product: { slug: string; basePrice: number; salePrice?: number | null; variationId?: string },
   flash: readonly FlashPriceItem[],
 ): CardPricing {
-  const item = flash.find((f) => f.productSlug === product.slug);
   const cardStanding = product.salePrice ?? product.basePrice;
-  const flashStanding = item && item.retailPrice != null ? (item.salePrice ?? item.retailPrice) : cardStanding;
-  if (item && item.flashPrice < flashStanding && item.flashPrice < cardStanding) {
-    const view = discountView(item.flashPrice, flashStanding);
+  const standingOf = (f: FlashPriceItem) => (f.retailPrice != null ? (f.salePrice ?? f.retailPrice) : cardStanding);
+  const isRep = (f: FlashPriceItem) =>
+    product.variationId != null
+      ? f.variationId === product.variationId
+      : f.retailPrice == null || (f.retailPrice === product.basePrice && standingOf(f) === cardStanding);
+  const item = flash
+    .filter((f) => f.productSlug === product.slug && f.flashPrice < standingOf(f) && f.flashPrice < cardStanding)
+    .sort(
+      (a, b) =>
+        a.flashPrice - b.flashPrice ||
+        Number(isRep(b)) - Number(isRep(a)) ||
+        (a.variationId < b.variationId ? -1 : a.variationId > b.variationId ? 1 : 0),
+    )[0];
+  if (item) {
+    const view = discountView(item.flashPrice, standingOf(item));
     return { price: item.flashPrice, isFlash: true, salePct: view.salePct, compareAt: view.compareAt, flashVariationId: item.variationId };
   }
   const view = discountView(cardStanding, product.basePrice);
   return { price: cardStanding, isFlash: false, salePct: view.salePct, compareAt: view.compareAt };
+}
+
+/**
+ * Phân loại trang chi tiết mở sẵn khi khách không chọn: phân loại đại diện (`pickDefaultVariation`), trừ khi thẻ đang ghi giá Giờ
+ * vàng thì phân loại của suất thắng. Thẻ và trang chi tiết dùng chung nên mọi lối vào ra cùng một giá.
+ */
+export function defaultVariationFor<T extends { id: string; sku?: string; retailPrice: number; salePrice?: number | null; stock: number }>(
+  product: { slug: string },
+  variations: readonly T[],
+  flash: readonly FlashPriceItem[],
+): T | undefined {
+  const rep = pickDefaultVariation(variations);
+  if (!rep) return undefined;
+  const { flashVariationId } = cardPricing(
+    { slug: product.slug, basePrice: rep.retailPrice, salePrice: rep.salePrice, variationId: rep.id },
+    flash,
+  );
+  return (flashVariationId ? variations.find((v) => v.id === flashVariationId) : undefined) ?? rep;
 }
 
 export interface VariationPricingResult {

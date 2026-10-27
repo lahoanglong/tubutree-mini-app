@@ -762,6 +762,9 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
   });
 });
 
+/** Không có đợt Giờ vàng nào đang chạy (hoặc các suất đã cho). */
+const noFlash = (rows: unknown[] = []) => ({ findMany: jest.fn().mockResolvedValue(rows) });
+
 describe('CatalogService.list — best_seller (dự án 4b)', () => {
   const RANKED = [
     { id: 'c', soldApp: 0, soldExternal: 15 },
@@ -772,7 +775,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
   function setup(pageRows: ReturnType<typeof card>[]) {
     const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValueOnce(pageRows);
     const $transaction = jest.fn();
-    const prisma = { product: { findMany, count: jest.fn() }, $transaction } as unknown as PrismaService;
+    const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: noFlash(), $transaction } as unknown as PrismaService;
     return { svc: new CatalogService(prisma), findMany, $transaction };
   }
 
@@ -825,7 +828,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
       { id: 'a', soldApp: 1, soldExternal: 0 },
     ];
     const findMany = jest.fn().mockResolvedValueOnce(tied).mockResolvedValueOnce([card('k'), card('m')]);
-    const prisma = { product: { findMany }, $transaction: jest.fn() } as unknown as PrismaService;
+    const prisma = { product: { findMany }, flashSaleItem: noFlash(), $transaction: jest.fn() } as unknown as PrismaService;
     const r = await new CatalogService(prisma).list({ page: 1, limit: 2, sort: 'best_seller' });
     expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['k', 'm'] } });
     expect(r.data.map((c) => c.id)).toEqual(['k', 'm']);
@@ -869,7 +872,7 @@ describe('CatalogService.list — sắp theo giá đang bán (U1-B01)', () => {
       return rows.map((r) => ({ ...card(r.id), basePrice: r.basePrice, salePrice: r.salePrice, variations: [{ id: `${r.id}-v`, sku: r.id, retailPrice: r.basePrice, salePrice: r.salePrice, stock: 5 }] }));
     });
     const count = jest.fn().mockResolvedValue(ROWS.length);
-    const prisma = { product: { findMany, count }, $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)) } as unknown as PrismaService;
+    const prisma = { product: { findMany, count }, flashSaleItem: noFlash(), $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)) } as unknown as PrismaService;
     return { svc: new CatalogService(prisma), findMany };
   }
 
@@ -1080,7 +1083,7 @@ describe('CatalogService.list: giá thẻ lấy từ phân loại đại diện 
     { id: 'out', basePrice: 500_000, salePrice: null, variations: [v('out-a', 100_000, null, 0), v('out-b', 500_000)] }, // 100k hết hàng, thẻ 500k
   ];
 
-  function setup() {
+  function setup(flashRows: unknown[] = []) {
     const findMany = jest.fn(async (args: { where?: { AND?: { id?: { in: string[] } }[] }; orderBy?: unknown }) => {
       const ids = args.where?.AND?.find((c) => c.id)?.id?.in;
       const rows = (ids ? TABLE.filter((r) => ids.includes(r.id)) : [...TABLE]).map((r) => ({ ...card(r.id), ...r }));
@@ -1088,6 +1091,7 @@ describe('CatalogService.list: giá thẻ lấy từ phân loại đại diện 
     });
     const prisma = {
       product: { findMany, count: jest.fn().mockResolvedValue(TABLE.length) },
+      flashSaleItem: noFlash(flashRows),
       $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     } as unknown as PrismaService;
     return new CatalogService(prisma);
@@ -1127,6 +1131,49 @@ describe('CatalogService.list: giá thẻ lấy từ phân loại đại diện 
     const svc = setup();
     expect(ids(await svc.list({ page: 1, limit: 10, sort: 'price_asc', minPrice: 200_000, maxPrice: 100_000 }))).toEqual(['low', 'sale', 'big']);
     expect(await svc.list({ page: 9, limit: 10, sort: 'price_asc', maxPrice: 200_000 })).toEqual({ data: [], meta: { page: 9, limit: 10, total: 3 } });
+  });
+
+  describe('Giờ vàng đang chạy tính vào giá thẻ', () => {
+    const offer = (variationId: string, productId: string, flashPrice: number, retailPrice: number, over: { salePrice?: number | null; soldCount?: number; quota?: number } = {}) => ({
+      flashPrice,
+      soldCount: over.soldCount ?? 0,
+      quota: over.quota ?? 10,
+      variationId,
+      variation: { productId, retailPrice, salePrice: over.salePrice ?? null },
+    });
+
+    it('thẻ 119k Giờ vàng (cột 290k): lọc "dưới 120k" có món này và "giá tăng dần" xếp theo 119k', async () => {
+      const svc = setup([offer('m1-a', 'm1', 119_000, 290_000)]);
+      const r = await svc.list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 120_000 });
+      expect(ids(r)).toEqual(['low', 'm1', 'sale']);
+      expect(r.meta.total).toBe(3);
+    });
+
+    it('sản phẩm hai suất, mọi thứ tự trả về: suất 250k đắt hơn thẻ không che suất 120k của phân loại đại diện', async () => {
+      const dear = offer('big-1kg', 'big', 250_000, 300_000);
+      const cheap = offer('big-500g', 'big', 120_000, 150_000);
+      for (const rows of [[dear, cheap], [cheap, dear]]) {
+        const r = await setup(rows).list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 125_000 });
+        expect(ids(r)).toEqual(['low', 'big', 'sale']);
+      }
+    });
+
+    it('Giờ vàng hết suất, không còn rẻ hơn giá đang bán hoặc đắt hơn thẻ thì không đổi giá thẻ', async () => {
+      const svc = setup([
+        offer('m1-a', 'm1', 100_000, 290_000, { soldCount: 10, quota: 10 }),
+        offer('m2-a', 'm2', 280_000, 280_000),
+        offer('big-1kg', 'big', 200_000, 300_000),
+      ]);
+      const r = await svc.list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 200_000 });
+      expect(ids(r)).toEqual(['low', 'sale', 'big']);
+    });
+
+    it('giá giảm dần và lọc khoảng giá cùng dùng giá Giờ vàng', async () => {
+      const flashRows = [offer('m2-a', 'm2', 99_000, 280_000)];
+      const svc = setup(flashRows);
+      expect(ids(await svc.list({ page: 1, limit: 10, sort: 'price_desc' }))).toEqual(['out', 'm1', 'big', 'sale', 'low', 'm2']);
+      expect(ids(await svc.list({ page: 1, limit: 10, sort: 'newest', minPrice: 90_000, maxPrice: 100_000 }))).toEqual(['m2', 'low']);
+    });
   });
 
   it('thẻ trả về cùng giá với giá dùng để sắp và lọc', async () => {

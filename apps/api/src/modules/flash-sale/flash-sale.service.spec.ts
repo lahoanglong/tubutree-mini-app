@@ -93,12 +93,23 @@ describe('FlashSaleService.listActive', () => {
     const row = {
       id: 'fi1', variationId: 'v1', flashPrice: 80000, quota: 10, soldCount: 3,
       flashSale: { endAt: new Date('2026-07-05T12:00:00Z') },
-      variation: { retailPrice: 100000, product: { slug: 'a', name: 'A', thumbnail: null } },
+      variation: { name: '500g', retailPrice: 100000, product: { slug: 'a', name: 'A', thumbnail: null, _count: { variations: 2 } } },
     };
     const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row]) } } as unknown as PrismaService;
     const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
     expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ itemId: 'fi1', flashPrice: 80000, retailPrice: 100000, productSlug: 'a' });
+    expect(list[0]).toMatchObject({ itemId: 'fi1', flashPrice: 80000, retailPrice: 100000, productSlug: 'a', variationName: '500g' });
+  });
+
+  it('sản phẩm một phân loại: không ghi tên phân loại', async () => {
+    const row = {
+      id: 'fi1', variationId: 'v1', flashPrice: 80000, quota: 10, soldCount: 3,
+      flashSale: { endAt: new Date('2026-07-05T12:00:00Z') },
+      variation: { name: 'Mặc định', retailPrice: 100000, product: { slug: 'a', name: 'A', thumbnail: null, _count: { variations: 1 } } },
+    };
+    const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row]) } } as unknown as PrismaService;
+    const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
+    expect(list[0]!.variationName).toBeNull();
   });
 
   it('kèm serverNow (giờ máy chủ lúc tính danh sách) để app bù lệch đồng hồ điện thoại khi đếm ngược', async () => {
@@ -110,6 +121,13 @@ describe('FlashSaleService.listActive', () => {
     const prisma = { flashSaleItem: { findMany: jest.fn().mockResolvedValue([row]) } } as unknown as PrismaService;
     const list = await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
     expect(list[0]!.serverNow).toBe(NOW.toISOString());
+  });
+
+  it('sắp theo thứ tự cố định (giá Giờ vàng, phân loại, id) để sản phẩm nhiều suất không đổi thứ tự theo DB', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { flashSaleItem: { findMany } } as unknown as PrismaService;
+    await new FlashSaleService(prisma, config, notifications, lifecycle).listActive(NOW);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: [{ flashPrice: 'asc' }, { variationId: 'asc' }, { id: 'asc' }] }));
   });
 
   it('where CHỈ lấy hàng còn bán (biến thể và sản phẩm đang bán, sản phẩm đã duyệt)', async () => {

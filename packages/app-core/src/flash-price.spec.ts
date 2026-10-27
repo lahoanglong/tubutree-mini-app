@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardPricing, discountView, flashDisplay, pickDefaultVariation, variationPricing } from './flash-price';
+import { cardPricing, defaultVariationFor, discountView, flashDisplay, pickDefaultVariation, variationPricing } from './flash-price';
 
 const flash = [{ productSlug: 'hat-dieu', variationId: 'v1', flashPrice: 119_000 }];
 
@@ -156,5 +156,67 @@ describe('pickDefaultVariation', () => {
   });
   it('không có phân loại: undefined', () => {
     expect(pickDefaultVariation([])).toBeUndefined();
+  });
+});
+
+describe('nhiều suất Giờ vàng trong một sản phẩm (đại diện 500g 150.000đ, 1kg 300.000đ)', () => {
+  const card = { slug: 'gao', basePrice: 150_000, salePrice: null };
+  const kg = { productSlug: 'gao', variationId: 'v-1kg', flashPrice: 250_000, retailPrice: 300_000, salePrice: null };
+  const g500 = { productSlug: 'gao', variationId: 'v-500', flashPrice: 120_000, retailPrice: 150_000, salePrice: null };
+  const lowKg = { productSlug: 'gao', variationId: 'v-1kg', flashPrice: 100_000, retailPrice: 300_000, salePrice: null };
+
+  it.each([
+    ['1kg trước', [kg, g500]],
+    ['500g trước', [g500, kg]],
+  ])('suất 1kg 250.000đ (đắt hơn thẻ) không che suất 500g 120.000đ: %s', (_n, items) => {
+    expect(cardPricing(card, items)).toMatchObject({ price: 120_000, isFlash: true, flashVariationId: 'v-500', compareAt: 150_000 });
+  });
+
+  it.each([
+    ['1kg trước', [lowKg, g500]],
+    ['500g trước', [g500, lowKg]],
+  ])('suất rẻ nhất thắng dù ở phân loại khác (1kg 100.000đ): %s', (_n, items) => {
+    expect(cardPricing(card, items)).toMatchObject({ price: 100_000, flashVariationId: 'v-1kg', compareAt: 300_000 });
+  });
+
+  it('hai suất cùng giá: ưu tiên phân loại đại diện, thứ tự đầu vào không đổi kết quả', () => {
+    const tie1kg = { ...kg, flashPrice: 120_000 };
+    expect(cardPricing(card, [tie1kg, g500]).flashVariationId).toBe('v-500');
+    expect(cardPricing(card, [g500, tie1kg]).flashVariationId).toBe('v-500');
+    expect(cardPricing({ ...card, variationId: 'v-500' }, [tie1kg, g500]).flashVariationId).toBe('v-500');
+  });
+
+  it('không suất nào thắng (đắt hơn thẻ): giá thẻ, không nhãn', () => {
+    expect(cardPricing(card, [kg])).toMatchObject({ price: 150_000, isFlash: false });
+    expect(cardPricing(card, [kg]).flashVariationId).toBeUndefined();
+  });
+});
+
+describe('defaultVariationFor (phân loại mặc định của trang chi tiết, cùng luật với thẻ)', () => {
+  const v500 = { id: 'v-500', sku: 'A', retailPrice: 150_000, salePrice: null, stock: 5 };
+  const v1kg = { id: 'v-1kg', sku: 'B', retailPrice: 300_000, salePrice: null, stock: 5 };
+  const f = (variationId: string, flashPrice: number, retailPrice: number) => ({ productSlug: 'gao', variationId, flashPrice, retailPrice, salePrice: null });
+
+  it('không Giờ vàng: phân loại đại diện', () => {
+    expect(defaultVariationFor({ slug: 'gao' }, [v1kg, v500], [])?.id).toBe('v-500');
+  });
+
+  it('Giờ vàng ở phân loại khác rẻ hơn giá thẻ: mở phân loại đó', () => {
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [f('v-1kg', 100_000, 300_000)])?.id).toBe('v-1kg');
+  });
+
+  it('Giờ vàng ở phân loại khác đắt hơn giá thẻ: giữ đại diện', () => {
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [f('v-1kg', 250_000, 300_000)])?.id).toBe('v-500');
+  });
+
+  it('hai suất, mọi thứ tự: mở phân loại của suất thắng', () => {
+    const items = [f('v-1kg', 250_000, 300_000), f('v-500', 120_000, 150_000)];
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], items)?.id).toBe('v-500');
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [...items].reverse())?.id).toBe('v-500');
+  });
+
+  it('Giờ vàng đã hết (danh sách rỗng): đại diện; không có phân loại: undefined', () => {
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [])?.id).toBe('v-500');
+    expect(defaultVariationFor({ slug: 'gao' }, [], [])).toBeUndefined();
   });
 });

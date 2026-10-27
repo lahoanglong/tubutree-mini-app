@@ -1,7 +1,8 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
-import { VARIATION_ORDER_BY, cardPrices, sortVariationsByPrice } from './variation-order';
+import { VARIATION_ORDER_BY, cardPriceWithFlash, cardPrices, sortVariationsByPrice, type FlashOffer } from './variation-order';
+import { activeFlashWhere, isStillDiscounted } from '../flash-sale/flash-active';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
@@ -86,10 +87,9 @@ const inPriceRange = (value: number, r: PriceBounds) => (r.gte == null || value 
 type CardVariation = { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number };
 const CARD_VARIATION_SELECT = { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } satisfies Prisma.VariationSelect;
 
-/** Giá đang bán trên thẻ: của phân loại đại diện (xem `cardPrices`). */
-function standingOf(p: { basePrice: number; salePrice: number | null; variations: CardVariation[] }): number {
-  const c = cardPrices(p, p.variations);
-  return c.salePrice ?? c.basePrice;
+/** Giá khách thấy trên thẻ: giá đang bán của phân loại đại diện, hoặc giá Giờ vàng thắng (xem `cardPriceWithFlash`). */
+function standingOf(p: { id: string; basePrice: number; salePrice: number | null; variations: CardVariation[] }, offers: ReadonlyMap<string, FlashOffer[]>): number {
+  return cardPriceWithFlash(p, p.variations, offers.get(p.id));
 }
 
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
@@ -190,8 +190,8 @@ export class CatalogService {
   }
 
   /**
-   * "Giá tăng/giảm" theo giá khách thấy trên thẻ: `salePrice ?? basePrice` của phân loại đại diện (`cardPrices`), không phải cột
-   * của Product (Pancake chỉ ghi giá bán vào phân loại). Giờ vàng không tính vào thứ tự: đợt chạy theo từng phút và nằm ở trình duyệt.
+   * "Giá tăng/giảm" theo giá khách thấy trên thẻ: giá đang bán của phân loại đại diện hoặc giá Giờ vàng đang thắng
+   * (`cardPriceWithFlash`), không phải cột của Product (Pancake chỉ ghi giá bán vào phân loại).
    */
   private listByStandingPrice(where: Prisma.ProductWhereInput, page: number, limit: number, dir: 'asc' | 'desc', price?: PriceBounds) {
     type Row = { id: string; basePrice: number; salePrice: number | null; variations: CardVariation[] };
@@ -200,7 +200,7 @@ export class CatalogService {
       page,
       limit,
       { id: true },
-      (x, y) => (dir === 'asc' ? standingOf(x) - standingOf(y) : standingOf(y) - standingOf(x)),
+      (x, y, offers) => (dir === 'asc' ? standingOf(x, offers) - standingOf(y, offers) : standingOf(y, offers) - standingOf(x, offers)),
       price,
     );
   }
@@ -214,7 +214,7 @@ export class CatalogService {
     page: number,
     limit: number,
     select: Prisma.ProductSelect,
-    compare: ((x: T, y: T) => number) | null,
+    compare: ((x: T & { basePrice: number; salePrice: number | null; variations: CardVariation[] }, y: T & { basePrice: number; salePrice: number | null; variations: CardVariation[] }, offers: ReadonlyMap<string, FlashOffer[]>) => number) | null,
     price?: PriceBounds,
     orderBy?: Prisma.ProductOrderByWithRelationInput[],
   ) {
@@ -224,10 +224,11 @@ export class CatalogService {
       ...(orderBy ? { orderBy } : {}),
       select: { ...select, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } },
     })) as unknown as Priced[];
-    if (price) ranked = ranked.filter((r) => inPriceRange(standingOf(r), price));
+    const offers = await this.activeFlashOffers();
+    if (price) ranked = ranked.filter((r) => inPriceRange(standingOf(r, offers), price));
     if (compare) {
       ranked.sort((x, y) => {
-        const diff = compare(x, y);
+        const diff = compare(x, y, offers);
         if (diff !== 0) return diff;
         return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
       });
@@ -245,6 +246,28 @@ export class CatalogService {
       .filter((p): p is NonNullable<typeof p> => Boolean(p))
       .map((p) => this.toCard(p));
     return paginated(items, page, limit, ranked.length);
+  }
+
+  /** Suất Giờ vàng đang chạy gom theo sản phẩm: một truy vấn, cùng điều kiện và cùng luật "còn rẻ hơn" với dải Giờ vàng. */
+  private async activeFlashOffers(): Promise<Map<string, FlashOffer[]>> {
+    const rows = await this.prisma.flashSaleItem.findMany({
+      where: activeFlashWhere(new Date()),
+      select: {
+        flashPrice: true,
+        soldCount: true,
+        quota: true,
+        variationId: true,
+        variation: { select: { productId: true, retailPrice: true, salePrice: true } },
+      },
+    });
+    const byProduct = new Map<string, FlashOffer[]>();
+    for (const r of rows) {
+      if (r.soldCount >= r.quota || !isStillDiscounted(r)) continue;
+      const list = byProduct.get(r.variation.productId) ?? [];
+      list.push({ variationId: r.variationId, flashPrice: r.flashPrice, retailPrice: r.variation.retailPrice, salePrice: r.variation.salePrice });
+      byProduct.set(r.variation.productId, list);
+    }
+    return byProduct;
   }
 
   /**

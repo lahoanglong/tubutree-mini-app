@@ -36,3 +36,24 @@ export function cardPrices(
   const rep = representativeVariation(variations ?? []);
   return rep ? { basePrice: rep.retailPrice, salePrice: rep.salePrice } : { basePrice: product.basePrice, salePrice: product.salePrice };
 }
+
+/** Suất Giờ vàng đang chạy của một phân loại, cùng dạng với `FlashPriceItem` ở app-core. */
+export type FlashOffer = { variationId: string; flashPrice: number; retailPrice: number; salePrice: number | null };
+
+/**
+ * Giá khách thấy trên thẻ gồm Giờ vàng, cùng luật với `cardPricing` ở app-core: một suất chỉ thắng khi rẻ hơn giá đang bán của
+ * chính phân loại có suất lẫn giá đang bán của thẻ; nhiều suất thì lấy `flashPrice` thấp nhất (hoà thì cùng giá nên số không đổi).
+ */
+export function cardPriceWithFlash(
+  product: { basePrice: number; salePrice: number | null },
+  variations: readonly PricedVariation[] | null | undefined,
+  offers: readonly FlashOffer[] | undefined,
+): number {
+  const card = cardPrices(product, variations);
+  const standing = card.salePrice ?? card.basePrice;
+  let best = standing;
+  for (const o of offers ?? []) {
+    if (o.flashPrice < (o.salePrice ?? o.retailPrice) && o.flashPrice < best) best = o.flashPrice;
+  }
+  return best;
+}
