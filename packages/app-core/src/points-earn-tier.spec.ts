@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { multiplierVi, tierEarnNote, tierEarnOf } from './points-earn-tier';
+import { tierEarnNote, tierEarnOf } from './points-earn-tier';
 
 const LOY = { tierMultipliers: { t1: 1, t2: 1.2, t3: 1.25 }, tierNames: { t1: 'Mầm Xanh', t2: 'Lộc Biếc', t3: 'Đại Thụ' } };
-
-describe('multiplierVi', () => {
-  it('hệ số: dấu phẩy, tối đa 2 số lẻ, bỏ số 0 thừa', () => {
-    expect([1, 1.2, 1.25, 2, 1.5].map(multiplierVi)).toEqual(['1', '1,2', '1,25', '2', '1,5']);
-  });
-});
 
 describe('tierEarnOf', () => {
   it('có hạng trong bảng: hệ số và tên', () => {

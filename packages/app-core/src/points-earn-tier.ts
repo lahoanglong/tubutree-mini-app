@@ -1,7 +1,4 @@
-/** Hệ số hạng kiểu Việt, tối đa 2 số lẻ (server làm tròn hệ số đến 0,01): 1.2 → "1,2", 1.25 → "1,25", 2 → "2". */
-export function multiplierVi(n: number): string {
-  return String(Math.round(n * 100) / 100).replace('.', ',');
-}
+import { multiplierLabel } from './number-format';
 
 type TierTables = { tierMultipliers?: Record<string, number>; tierNames?: Record<string, string> };
 
@@ -22,5 +19,5 @@ export function tierEarnOf(loyalty: TierTables | undefined, tierId: string | nul
 
 /** "hạng Lộc Biếc ×1,2"; null khi hệ số là 1 (người xem thấy số gốc, không cần giải thích) hoặc thiếu tên hạng. */
 export function tierEarnNote(t: TierEarn | null): string | null {
-  return t && t.multiplier !== 1 && t.tierName ? `hạng ${t.tierName} ×${multiplierVi(t.multiplier)}` : null;
+  return t && t.multiplier !== 1 && t.tierName ? `hạng ${t.tierName} ${multiplierLabel(t.multiplier)}` : null;
 }

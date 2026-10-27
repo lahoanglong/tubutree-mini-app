@@ -5,7 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
-import { cardPrices, representativeVariation } from '../catalog/variation-order';
+import { cardPrices, representativeVariation, sortVariationsByPrice } from '../catalog/variation-order';
 import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { formatVnDate } from '../../common/vn-time';
 import { publicImage } from '../../common/public-image';
@@ -418,7 +418,7 @@ export class GroupBuyService {
     for (const g of groups) {
       const mine = rows.filter((v) => v.productId === g.productId);
       const rep = representativeVariation(mine);
-      const matching = mine.find((v) => (v.salePrice ?? v.retailPrice) === g.basePrice);
+      const matching = sortVariationsByPrice(mine).find((v) => (v.salePrice ?? v.retailPrice) === g.basePrice);
       const variationId = (rep && (rep.salePrice ?? rep.retailPrice) === g.basePrice ? rep : (matching ?? rep))?.id;
       out.set(g.id, { minOrder: groupMinOrder(g, mine), ...(variationId ? { variationId } : {}) });
     }

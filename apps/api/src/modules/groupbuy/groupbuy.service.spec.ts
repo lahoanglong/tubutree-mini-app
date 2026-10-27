@@ -776,6 +776,16 @@ describe('B-72: view nhóm trả variationId của phân loại mà giá nhóm d
     expect((await viewOf(430000)).variationId).toBe('vBig');
   });
 
+  it('nhiều phân loại cùng khớp giá lưu: chọn theo thứ tự giá, sku, id, không theo thứ tự DB trả về', async () => {
+    const twins = [
+      { id: 'vZ', sku: 'Z', productId: 'prod1', retailPrice: 430000, salePrice: null, stock: 3 },
+      { id: 'vY', sku: 'Y', productId: 'prod1', retailPrice: 430000, salePrice: null, stock: 3 },
+      rows[1]!,
+    ];
+    expect((await viewOf(430000, twins)).variationId).toBe('vY');
+    expect((await viewOf(430000, [...twins].reverse())).variationId).toBe('vY');
+  });
+
   it('không phân loại nào khớp giá lưu: dùng phân loại đại diện hiện tại; không có phân loại: không trả trường', async () => {
     expect((await viewOf(999999)).variationId).toBe('vSmall');
     expect((await viewOf(120000, [])).variationId).toBeUndefined();
