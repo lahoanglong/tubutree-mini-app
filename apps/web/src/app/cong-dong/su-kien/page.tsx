@@ -19,8 +19,9 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = loadErrorText;
 const formatPoints = (n: number) => `${formatCount(n)} điểm`;
 
 /** Sự kiện đã qua endAt thì không nhận bài dự thi nữa. */

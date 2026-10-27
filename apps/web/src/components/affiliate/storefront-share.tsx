@@ -13,8 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { QrCode } from '@/components/ui/qr-code';
 import { absoluteKitLink, shareCaptions, shareFallbackText, storefrontShareUrl, withAbsoluteLink } from './storefront-rules';
+import { loadErrorText } from '@/lib/error-text';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 const COPY_FAILED = 'Không sao chép được — hãy chọn và chép thủ công.';
 
 async function copyText(text: string): Promise<boolean> {

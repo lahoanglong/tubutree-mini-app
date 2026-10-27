@@ -27,8 +27,9 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, EmptyState, Heading, Icon, ListRow, Skeleton, Text } from '@/components/mini';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 function couponLabel(c: CouponDTO): string {
   if (c.type === 'FREESHIP') return 'Miễn phí giao hàng';

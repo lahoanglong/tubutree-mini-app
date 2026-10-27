@@ -7,8 +7,9 @@ import { checkInSuccessText } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInView } from '@tubutree/app-core/loyalty-copy';
 import { checkInQuery, loyaltyQuery, pointsTxnQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '@/lib/core-http';
+import { loadErrorText } from './error-text';
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 /**
  * Điểm danh dùng chung cho Trang chủ, Ưu đãi và trang Điểm Xanh: cùng khoá ['loyalty-checkin'], cùng POST /me/daily-check-in

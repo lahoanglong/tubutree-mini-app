@@ -16,6 +16,7 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { loadErrorText } from '@/lib/error-text';
 
 const MEDAL: Record<number, { label: string; color: string }> = {
   1: { label: 'Huy chương vàng', color: 'var(--honey-500)' },
@@ -23,7 +24,7 @@ const MEDAL: Record<number, { label: string; color: string }> = {
   3: { label: 'Huy chương đồng', color: 'var(--clay-600)' },
 };
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = loadErrorText;
 
 function Shell({ children }: { children: ReactNode }) {
   return (

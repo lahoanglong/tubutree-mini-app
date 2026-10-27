@@ -25,6 +25,7 @@ import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { coreHttp } from '@/lib/core-http';
 import { formatDrops, formatNumber, formatPoints } from './format';
 import { useLockedMutation } from './use-locked-mutation';
+import { loadErrorText } from '@/lib/error-text';
 
 export type { HarvestReward };
 
@@ -67,7 +68,7 @@ const harvestMeta = (r: WateringResult, home: boolean): HarvestMeta => {
 
 type Notify = (text: string, tone: 'success' | 'error') => void;
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 /**
  * Mọi lệnh ghi của trang Vườn Xanh. Trạng thái giao diện (hộp thu hoạch, đáp án quiz) ở lại trang và đi vào qua

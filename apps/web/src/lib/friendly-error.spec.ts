@@ -18,7 +18,8 @@ describe('friendlyError', () => {
   });
   it('lỗi khác giữ câu tiếng Việt của API; không có thì câu chung', () => {
     expect(friendlyError(new ApiError('Hết lượt đổi hôm nay', 400))).toBe('Hết lượt đổi hôm nay');
-    expect(friendlyError(null)).toBe('Đã có lỗi xảy ra — Vui lòng thử lại');
+    expect(friendlyError(null)).toBe('Có chút trục trặc, thử lại nhé');
+    expect(friendlyError(new ApiError('ECONNRESET', 500))).toBe('Máy chủ đang bận, thử lại nhé.');
   });
   it('isAuthError: 401/403 hoặc message thô', () => {
     expect(isAuthError(new ApiError('x', 403))).toBe(true);
