@@ -651,6 +651,8 @@ export class AuthService {
       // 7) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
       //    cùng chơi thì giữ game của target, cụm của khách ở lại — ghép hai khu vườn (ô đất,
       //    cấp cây, chuỗi tưới) cần quyết định riêng.
+      // Sổ nước thưởng đơn hàng đi theo đơn (đơn đã chuyển sang target ở trên), nên chuyển luôn dù hồ sơ game có chuyển hay không.
+      await tx.gameWaterEvent.updateMany({ where: { userId: gid }, data: { userId: tid } });
       const targetPlays = (await tx.gameProfile.count({ where: { userId: tid } })) > 0;
       if (!targetPlays) {
         await tx.gameProfile.updateMany({ where: { userId: gid }, data: { userId: tid } });

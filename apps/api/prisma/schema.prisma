@@ -291,6 +291,7 @@ model User {
   dealerApplications     DealerApplication[]
   dealerTemplates        DealerOrderTemplate[]
   gameProfile            GameProfile?
+  gameWaterEvents        GameWaterEvent[]
   reviews                Review[]
   refreshTokens          RefreshToken[]
   plantedTrees           PlantedTree[]
@@ -2040,6 +2041,22 @@ model GameProfile {
   lastStreakRepairAt DateTime? // lần hồi sinh gần nhất (cooldown 30 ngày)
 
   @@map("game_profiles")
+}
+
+/// Sổ các lần cộng nước có nguồn ngoài game (hiện chỉ `ORDER_DELIVERED`, refId = id đơn). Unique (reason, refId) là khoá chống
+/// cộng hai lần cho một đơn; cộng delta theo tuần giờ VN để áp trần tuần.
+model GameWaterEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delta     Int
+  reason    String
+  refId     String?
+  createdAt DateTime @default(now())
+
+  @@unique([reason, refId])
+  @@index([userId, createdAt])
+  @@map("game_water_events")
 }
 
 // Cây thật cam kết trồng khi user thu hoạch cây ảo (§6.7.7 "Tác động xanh").

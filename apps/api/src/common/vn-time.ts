@@ -50,3 +50,15 @@ export function formatVnDateTime(d: Date): string {
   const p2 = (n: number) => String(n).padStart(2, '0');
   return `${p2(vn.getUTCHours())}:${p2(vn.getUTCMinutes())} ${p2(vn.getUTCDate())}/${p2(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`;
 }
+
+/** 00:00 giờ VN thứ Hai của tuần (thứ Hai đến Chủ nhật) chứa `d`. */
+export function startOfVnWeek(d: Date = new Date()): Date {
+  const dayStart = startOfVnDay(d);
+  const dow = new Date(dayStart.getTime() + VN_OFFSET_MS).getUTCDay(); // 0 = Chủ nhật
+  return new Date(dayStart.getTime() - ((dow + 6) % 7) * 86_400_000);
+}
+
+/** 00:00 giờ VN thứ Hai của tuần KẾ TIẾP: cận trên (loại trừ) của cửa sổ tuần. */
+export function startOfNextVnWeek(d: Date = new Date()): Date {
+  return new Date(startOfVnWeek(d).getTime() + 7 * 86_400_000);
+}

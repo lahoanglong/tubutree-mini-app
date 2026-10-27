@@ -51,6 +51,7 @@ import { announceDeletedAccountRefund, receivedRefundNote, recordedPancakeUnderp
 import { notifyMerchantOwner } from './merchant-order-notify';
 import { sendReferralNotices } from '../wallet/referral-notify';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
+import { GameOrderWaterService } from '../game/game-order-water.service';
 import { markReversalEffectsDone } from './reversal-effects';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
@@ -147,6 +148,8 @@ export class OrderStatusService {
     @Optional() private readonly pancakeHooks?: PancakeSyncHooks,
     // Optional như các tham số trên: call site dựng tay không truyền thì bỏ qua hook thu kèm rác.
     @Optional() private readonly wastePickupHooks?: WastePickupHooks,
+    // Optional như trên: không truyền thì bỏ qua nước thưởng đơn giao.
+    @Optional() private readonly gameWater?: GameOrderWaterService,
   ) {}
 
   /** true nếu transition hợp lệ — dùng để webhook/cron bỏ qua êm thay vì throw. */
@@ -632,8 +635,19 @@ export class OrderStatusService {
         return msg;
       },
     );
+    // Nước thưởng của game chạy sau Điểm Xanh và hoa hồng, lỗi của nó không được cản hai việc đó. Vẫn để đơn chưa có mốc để cron
+    // thử lại (idempotent theo đơn) thay vì mất nước vì một lần DB chập chờn.
+    const gameError = await (this.gameWater?.grantForOrder(order.id) ?? Promise.resolve(null)).then(
+      () => null,
+      (e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        this.logger.error(`Cộng nước thưởng cho đơn ${order.code} lỗi: ${msg}`);
+        return msg;
+      },
+    );
     const effects = { pointsCredited: pointsCredited === true, commissionsLocked };
     if (referralError !== null) return { outcome: 'INCOMPLETE', ...effects, error: `Xét thưởng giới thiệu lỗi: ${referralError}` };
+    if (gameError !== null) return { outcome: 'INCOMPLETE', ...effects, error: `Cộng nước thưởng game lỗi: ${gameError}` };
     try {
       await this.prisma.order.updateMany({ where: { id: order.id, deliveredEffectsAt: null }, data: { deliveredEffectsAt: new Date() } });
     } catch (err) {

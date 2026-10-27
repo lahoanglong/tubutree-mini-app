@@ -369,6 +369,7 @@ function makeGuestMergeFixture(opts: {
     'gameProfile',
     'plantedTree',
     'gameSpin',
+    'gameWaterEvent',
     'wasteRequest',
     'wasteGiftRedemption',
   ] as const;

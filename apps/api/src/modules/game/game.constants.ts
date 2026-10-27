@@ -90,3 +90,8 @@ export async function streak7Seeds(config: Pick<SystemConfigService, 'get'>): Pr
   const n = Number(raw?.seeds ?? STREAK_7_SEEDS_DEFAULT);
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : STREAK_7_SEEDS_DEFAULT;
 }
+
+export const ORDER_WATER_SEEDS_DEFAULT = 100;
+export const ORDER_WATER_WEEKLY_CAP_DEFAULT = 300;
+/** Lý do (cột reason của game_water_events) của nước thưởng đơn giao; refId = id đơn. */
+export const ORDER_WATER_REASON = 'ORDER_DELIVERED';

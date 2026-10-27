@@ -9,6 +9,7 @@ import { GameCollectionService } from './game-collection.service';
 import { applyPointsDelta } from '../loyalty/points-ledger';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { CommunityFeedService } from '../feed/community-feed.service';
+import { GameOrderWaterService } from './game-order-water.service';
 import {
   DAILY_LOGIN_SEEDS_DEFAULT,
   DEFAULT_TREE_TYPE,
@@ -78,6 +79,8 @@ export class GameService {
     // Optional như các dịch vụ trên để test dựng GameService ít tham số; riêng spin và buyTree (hai chỗ tiêu Điểm Xanh
     // thường của khách) BẮT BUỘC có để đọc điểm đang khoá.
     @Optional() private readonly loyalty?: LoyaltyService,
+    // Optional: không truyền thì hồ sơ không có phần "từ đơn hàng".
+    @Optional() private readonly orderWater?: GameOrderWaterService,
   ) {}
 
   // ── Profile ────────────────────────────────────────
@@ -104,6 +107,7 @@ export class GameService {
       quizWrongSeeds,
       firstCheckinBonusConfig,
       ladder,
+      orderWater,
     ] = await Promise.all([
       this.config.get<number>('game.streak_freeze_cost', 80),
       this.config.get<number>('game.tree_points_price', 50_000),
@@ -115,6 +119,7 @@ export class GameService {
       configInt(this.config, 'game.quiz_wrong_seeds', QUIZ_WRONG_SEEDS_DEFAULT),
       configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT),
       treeTargetLadder(this.config),
+      this.orderWater?.summary(userId) ?? Promise.resolve(null),
     ]);
     const eco = this.eco(profile.ecoImpact, ladder);
     const streakRepairable =
@@ -141,6 +146,7 @@ export class GameService {
       quizWrongSeeds,
       currentTreeTarget: eco.target,
       nextTreeTarget: ladderTarget(ladder, eco.treesPlanted + 1),
+      orderWater,
     };
   }
 
