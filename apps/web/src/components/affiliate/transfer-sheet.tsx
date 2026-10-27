@@ -11,7 +11,8 @@ import { ui } from '@/lib/guest-ui';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { Sheet } from '@/components/ui/sheet';
 import { Field } from '@/components/ui/field';
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+import { loadErrorText } from '@/lib/error-text';
+const errText = loadErrorText;
 
 export interface TransferSheetProps {
   open: boolean;

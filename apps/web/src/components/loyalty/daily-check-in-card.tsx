@@ -5,10 +5,11 @@ import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } fr
 import { useCheckIn } from '@/lib/use-check-in';
 import { ErrorState } from '@/components/ui/error-state';
 import { Button, Card, Heading, Icon, Skeleton, Text } from '@/components/mini';
+import { loadErrorText } from '@/lib/error-text';
 
 const DAY_ICON: Record<CheckInDayIcon, LucideIcon> = { check: Check, gift: Gift, sprout: Sprout };
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 /**
  * Khối điểm danh DUY NHẤT của web (trang Điểm Xanh và Ưu đãi), cùng bố cục với Mini App: một nút cộng cả Điểm Xanh và giọt

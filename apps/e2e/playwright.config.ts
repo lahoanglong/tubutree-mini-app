@@ -42,6 +42,7 @@ function apiPortFromEnvFile(): string | undefined {
 }
 
 const API_PORT = process.env.E2E_API_PORT ?? apiPortFromEnvFile() ?? '3001';
+process.env.E2E_API_PORT = API_PORT;
 const API_URL = `http://localhost:${API_PORT}`;
 const WEB_PORT = process.env.E2E_WEB_PORT ?? '3112';
 const MINIAPP_PORT = process.env.E2E_MINIAPP_PORT ?? '3113';

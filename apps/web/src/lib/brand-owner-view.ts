@@ -1,18 +1,18 @@
 import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { loadErrorText } from './error-text';
 import type { BrandSalesPeriod, OwnedPromotion } from '@tubutree/app-core/api/brand-owner';
 
 export const OWNER_FORBIDDEN = 'Tài khoản này không có quyền quản lý nhãn hàng.';
 const ACTION_FORBIDDEN = 'Bạn không có quyền thực hiện thao tác này.';
-const GENERIC = 'Đã có lỗi xảy ra — Vui lòng thử lại';
 
-/** 403 đổi sang lời dễ hiểu (không lộ "Forbidden resource" của máy chủ); lỗi khác giữ thông báo máy chủ trả về. */
+/** 403 đổi sang lời dễ hiểu (không lộ "Forbidden resource" của máy chủ); lỗi khác theo loadErrorText. */
 export function ownerLoadError(e: unknown): string {
   if (errorStatus(e) === 403) return OWNER_FORBIDDEN;
-  return e instanceof Error && e.message ? e.message : GENERIC;
+  return loadErrorText(e);
 }
 export function ownerActionError(e: unknown): string {
   if (errorStatus(e) === 403) return ACTION_FORBIDDEN;
-  return e instanceof Error && e.message ? e.message : GENERIC;
+  return loadErrorText(e);
 }
 
 export const SALES_PERIODS: { key: BrandSalesPeriod; label: string }[] = [

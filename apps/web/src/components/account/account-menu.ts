@@ -1,5 +1,5 @@
 import { ctvMenuEntry, type CtvAccessHint } from '@tubutree/app-core/storefront-signup';
-import { BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { BadgeDollarSign, BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
 import type { DealerMe } from '@tubutree/app-core/api/dealer';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 
@@ -18,6 +18,8 @@ export interface AccountMenuContext {
   role: string | undefined;
   aiEnabled: boolean;
   chatEnabled: boolean;
+  /** Cờ CASHBACK_ENABLED: bật thì có lối vào Hoàn tiền sàn ngoài ở nhóm Tài khoản. */
+  cashbackEnabled?: boolean;
   dealer: Pick<DealerMe, 'status' | 'isDealer'> & { tier?: { name?: string } | null } | null | undefined;
   ownedBrandName: string | null | undefined;
   /** GET /affiliate/me (chỉ cần với đại lý, nhân viên, admin): quyết định mục Cộng tác viên. */
@@ -53,6 +55,7 @@ export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
         { icon: Heart, label: 'Sản phẩm yêu thích', to: '/tai-khoan/yeu-thich' },
         { icon: MapPin, label: 'Sổ địa chỉ', to: '/tai-khoan/dia-chi' },
         { icon: Bell, label: 'Thông báo', to: '/tai-khoan/thong-bao' },
+        ...(c.cashbackEnabled ? [{ icon: BadgeDollarSign, label: 'Hoàn tiền sàn ngoài', to: '/hoan-tien' }] : []),
         { icon: Settings, label: 'Cài đặt', to: '/tai-khoan/cai-dat' },
       ],
     },

@@ -23,13 +23,14 @@ import { ui } from '@/lib/guest-ui';
 import { isWebRouteReady } from '@/lib/route-map';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { FeedShell } from './feed-shell';
+import { loadErrorText } from '@/lib/error-text';
 
 const SORTS: { key: FeedSort; label: string }[] = [
   { key: 'new', label: 'Mới nhất' },
   { key: 'popular', label: 'Nổi bật' },
 ];
 
-const errorText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errorText = loadErrorText;
 
 function Chip({ selected, onClick, icon: Icon, label, children, pressed = true }: { selected: boolean; onClick: () => void; icon?: LucideIcon; label?: string; children: ReactNode; pressed?: boolean }) {
   return (

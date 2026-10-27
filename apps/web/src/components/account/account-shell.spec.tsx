@@ -6,6 +6,12 @@ const mocks = vi.hoisted(() => ({ phase: 'authenticated', restoring: false, path
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/shell-pathname', () => ({ useShellPathname: () => mocks.path }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => p !== '/kho-qua/cua-toi' }));
+const features = vi.hoisted(() => ({ cashback: false }));
+vi.mock('@tubutree/app-core/features', () => ({
+  get CASHBACK_ENABLED() {
+    return features.cashback;
+  },
+}));
 
 import { AccountShell } from './account-shell';
 
@@ -71,6 +77,32 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     expect(c.querySelector('nav')).toBeNull();
     mocks.phase = 'authenticated';
     mocks.restoring = false;
+  });
+
+  it('phase "unavailable" (cờ còn, mất mạng lúc khôi phục): giữ khung hai cột và menu khung xương, không có menu thật', () => {
+    mocks.phase = 'unavailable';
+    mocks.restoring = false;
+    const c = mount(
+      <AccountShell>
+        <main>mất mạng</main>
+      </AccountShell>,
+    );
+    expect(c.firstElementChild?.className).toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
+    const skeleton = c.querySelector('[data-testid="account-shell-nav-skeleton"]') as HTMLElement;
+    expect(skeleton.className.split(/\s+/)).toContain('lg:block');
+    expect(c.querySelector('nav')).toBeNull();
+    expect(c.textContent).toContain('mất mạng');
+    mocks.phase = 'authenticated';
+  });
+
+  it('cờ hoàn tiền bật: menu có Hoàn tiền sàn ngoài tới /hoan-tien; tắt thì ẩn', () => {
+    features.cashback = true;
+    mocks.phase = 'authenticated';
+    const on = mount(<AccountShell>x</AccountShell>);
+    expect(on.querySelector('nav a[href="/hoan-tien"]')?.textContent).toContain('Hoàn tiền sàn ngoài');
+    features.cashback = false;
+    const off = mount(<AccountShell>x</AccountShell>);
+    expect(off.querySelector('nav a[href="/hoan-tien"]')).toBeNull();
   });
 
   it('lần dựng đầu (chưa biết phiên): khung chỉ ăn khi <html> có data-restoring (script ở head), không có lớp khung vô điều kiện', () => {

@@ -12,6 +12,7 @@ import { ui } from '@/lib/guest-ui';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniOutline } from './mini-surface';
+import { loadErrorText } from '@/lib/error-text';
 
 /** Nút đăng nhập của màn xem trước dành cho khách; đăng nhập xong quay lại đúng trang. */
 export function GuestLoginLink({ returnTo }: { returnTo: string }) {
@@ -22,7 +23,7 @@ export function GuestLoginLink({ returnTo }: { returnTo: string }) {
   );
 }
 
-const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+const errText = loadErrorText;
 
 /** Trang Điểm Xanh cho khách chưa đăng nhập: chỉ xem bảng hạng, muốn đổi hay xem điểm của mình thì đăng nhập. */
 export function GuestTiers({ returnTo }: { returnTo: string }) {

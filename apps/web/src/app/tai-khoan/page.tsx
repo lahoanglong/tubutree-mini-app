@@ -26,6 +26,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { buildAccountMenu, type AccountMenuItem } from '@/components/account/account-menu';
 import { ORDERS_TABS } from '@/components/orders/orders-tabs';
 import { Button, Card, Heading, Text } from '@/components/mini';
+import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { OrdersSection } from './orders-section';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -157,6 +158,7 @@ export default function AccountPage() {
     role: user.role,
     aiEnabled: cfgQ.data?.aiAdvisorEnabled === true,
     chatEnabled,
+    cashbackEnabled: CASHBACK_ENABLED,
     dealer: dealerQ.data,
     ctvAccess: ctvAccessQ.data,
     ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,

@@ -9,7 +9,10 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RewardPointsService } from '../../src/modules/wallet/reward-points.service';
-import { createOrder, createUser as createUserRow, randCode, setConfig, summarize, warmPool } from './helpers';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { isMergeBusy } from '../../src/modules/auth/auth.service';
+import { LOCK_BUSY_MESSAGE } from '../../src/common/lock-busy';
+import { createOrder, createUser as createUserRow, randCode, setConfig, sleep, summarize, warmPool } from './helpers';
 
 const REWARD = 100;
 const UNIT = 50_000;
@@ -102,7 +105,20 @@ describe('Gộp đồng thời 4 khách vào một tài khoản (real Postgres)'
     });
   }
 
-  const merge = (guestId: string) => auth.ensurePhoneForCurrentUser(guestId, 'code', 'access');
+  const MERGE_BUSY_RETRIES = 5;
+  const isBusy = (err: unknown) => isMergeBusy(err) || (err instanceof ServiceUnavailableException && err.message === LOCK_BUSY_MESSAGE);
+
+  // Lần thứ tư xếp hàng sau khoá advisory có thể quá lock_timeout 2s khi máy tải nặng và nhận "đang bận" (đúng hành vi sản phẩm, tx đã rollback): client thử lại, nên test cũng thử lại có giới hạn rồi mới kiểm.
+  const merge = async (guestId: string) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await auth.ensurePhoneForCurrentUser(guestId, 'code', 'access');
+      } catch (err) {
+        if (!isBusy(err) || attempt >= MERGE_BUSY_RETRIES) throw err;
+        await sleep(200 * (attempt + 1));
+      }
+    }
+  };
 
   async function ledgerMatches(userId: string) {
     const u = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { pointsBalance: true } });

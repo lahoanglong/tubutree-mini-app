@@ -20,6 +20,7 @@ import {
 } from '../../services/game-api';
 import { haptic } from '../../utils/haptic';
 import { getErrorMessage } from '../../services/api';
+import { isHttpError } from '../../services/http';
 import { vi } from '../../i18n/vi';
 import { formatDrops, formatPoints } from '../../utils/format';
 import { useLockedMutation } from './use-locked-mutation';
@@ -82,7 +83,11 @@ export function useGameActions({
     // khách vừa tiêu xong sang checkout vẫn thấy số cũ.
     void queryClient.invalidateQueries({ queryKey: ['loyalty'] });
   };
-  const onError = (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' });
+  // Hết thời gian: máy chủ có thể đã ghi nhận thao tác, nên làm mới để màn hình khớp với sổ.
+  const onError = (e: unknown) => {
+    openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    if (isHttpError(e) && e.code === 'ECONNABORTED') refresh();
+  };
 
   const checkInM = useLockedMutation({
     mutationFn: checkIn,

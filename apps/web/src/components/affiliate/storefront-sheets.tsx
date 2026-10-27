@@ -27,8 +27,9 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from './storefront-theme';
+import { loadErrorText } from '@/lib/error-text';
 
-export const errText = (e: unknown) => (e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại');
+export const errText = loadErrorText;
 
 export type Notify = (text: string, error?: boolean) => void;
 

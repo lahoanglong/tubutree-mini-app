@@ -286,12 +286,13 @@ describe('/tai-khoan/ho-so — lưu (PATCH /me)', () => {
     expect(statusText(container)).toContain('Đã cập nhật hồ sơ');
   });
 
-  it('lỗi khác: hiện thông báo của máy chủ, không báo thành công, không đụng phiên', async () => {
-    mocks.patch.mockRejectedValue(new ApiError('Máy chủ bận', 500));
+  it('lỗi khác: lời nghiệp vụ 4xx của máy chủ hiện nguyên văn, 5xx hiện câu chung không lộ lời thô, không báo thành công, không đụng phiên', async () => {
+    mocks.patch.mockRejectedValue(new ApiError('ECONNRESET tại bảng users', 500));
     const { container } = await mount();
     click(saveBtn(container));
     await flush(6);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ bận');
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
+    expect(container.textContent).not.toContain('ECONNRESET');
     expect(container.textContent).not.toContain('Đã cập nhật hồ sơ');
     expect(mocks.auth.updateProfile).not.toHaveBeenCalled();
   });
