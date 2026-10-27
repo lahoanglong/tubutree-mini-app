@@ -732,7 +732,7 @@ export default function CheckoutPage() {
           {convertedLine && <p className="mt-1 text-xs text-stone-600">{convertedLine}</p>}
           {pointsOffer.lockNote && <p className="mt-1 text-xs text-stone-600">{pointsOffer.lockNote}</p>}
           </div>
-          <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4">
+          <div data-mini-part="summary-total" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4">
           <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:mt-0 max-md:border-t-0 max-md:pt-1">
             <span>Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
@@ -762,7 +762,9 @@ export default function CheckoutPage() {
           )}
 
           {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải, dính đáy khung để màn thấp (1366×768) vẫn thấy nút và lỗi đặt hàng. */}
-          <div className="lg:sticky lg:bottom-0 lg:bg-stone-0 lg:pb-1">
+          </div>
+          {/* Con trực tiếp của khung cuộn (không nằm trong khối tổng): sticky chỉ trượt trong khối cha của nó. Điện thoại giữ thứ tự và đệm cũ. */}
+          <div data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:-mb-4 lg:bg-stone-0 lg:pb-4">
           <OrderConsent className="mt-4 hidden lg:block" />
           <button
             type="button"
@@ -795,7 +797,6 @@ export default function CheckoutPage() {
               )}
             </div>
           )}
-          </div>
           </div>
         </div>
       </div>

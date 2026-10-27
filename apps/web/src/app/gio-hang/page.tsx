@@ -441,7 +441,7 @@ export default function CartPage() {
               <span>{formatVnd(payTotal)}</span>
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
-            <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:pb-1">
+            <div className="hidden lg:sticky lg:bottom-0 lg:-mb-4 lg:block lg:bg-stone-0 lg:pb-4">
               {selectedItems.length === 0 ? (
                 <>
                   <button type="button" disabled className={`${ui.btnPrimary} mt-4 w-full`}>
