@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { loadErrorText } from './error-text';
 
@@ -12,7 +13,20 @@ describe('loadErrorText (khớp getErrorMessage của Mini App)', () => {
   });
   it('mất mạng / quá hạn / lỗi lạ', () => {
     expect(loadErrorText(new NetworkError(true))).toBe('Hơi chậm tí, bạn đợi nhé');
-    expect(loadErrorText(new NetworkError(false))).toContain('Mất kết nối');
+    expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
+  });
+  it('không có phản hồi nhưng máy còn mạng (máy chủ/CORS không đáp): máy chủ bận; thật sự mất mạng: câu mất mạng', () => {
+    expect(loadErrorText(new NetworkError(false))).toBe('Máy chủ đang bận, thử lại nhé.');
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    expect(loadErrorText(new NetworkError(false))).toBe('Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.');
+    online.mockRestore();
+  });
+  it('lời kỹ thuật tiếng Anh của 4xx không hiện ra; 4xx không có lời thì máy chủ bận', () => {
+    expect(loadErrorText(new ApiError('Cannot GET /api/me/loyalty', 404))).toBe('Có chút trục trặc, thử lại nhé');
+    expect(loadErrorText(new ApiError('phone must be a string', 400))).toBe('Có chút trục trặc, thử lại nhé');
+    expect(loadErrorText(new ApiError('', 404))).toBe('Máy chủ đang bận, thử lại nhé.');
+  });
+  it('lỗi lạ', () => {
     expect(loadErrorText(new Error('x'))).toBe('Có chút trục trặc, thử lại nhé');
   });
 });

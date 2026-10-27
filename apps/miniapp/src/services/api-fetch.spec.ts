@@ -134,6 +134,14 @@ describe('api trên fetch: phản hồi', () => {
     expect(getErrorMessage(err)).toBe('SĐT không hợp lệ.');
   });
 
+  it('4xx kèm lời kỹ thuật tiếng Anh (Cannot GET…, class-validator) → câu lỗi chung, không lộ cho khách', async () => {
+    stubFetch(() => ({ status: 404, body: { statusCode: 404, message: 'Cannot GET /api/me/loyalty' } }));
+    const err = await api.get('/me/loyalty').catch((e: unknown) => e);
+    expect(getErrorMessage(err)).toBe(copy.errors.generic);
+    stubFetch(() => ({ status: 400, body: { message: ['phone must be a string'] } }));
+    expect(getErrorMessage(await api.post('/x', {}).catch((e: unknown) => e))).toBe(copy.errors.generic);
+  });
+
   it('5xx kèm message backend → KHÔNG lộ, dùng câu lỗi máy chủ chung; chưa biết kết quả', async () => {
     stubFetch(() => ({ status: 500, body: { message: 'Internal error XYZ' } }));
     const err = await api.post('/x', {}).catch((e: unknown) => e);
