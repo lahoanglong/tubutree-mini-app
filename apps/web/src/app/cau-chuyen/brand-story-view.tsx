@@ -1,7 +1,7 @@
 'use client';
 
 import { PageHeader } from '@/components/ui/page-header';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { MapPin } from 'lucide-react';
@@ -14,13 +14,25 @@ import './brand-theme.css';
 /** Nền tối nhẹ ngay sau chữ trắng trên gradient nhãn (D8-1): màu nhãn giữ nguyên, chỉ vùng chữ đủ 4,5:1. */
 const TEXT_SCRIM = 'rounded-control bg-[var(--color-brand-tile-scrim)] px-2.5 py-1.5';
 
+/** Đọc ?brand= trong một con nhỏ để useSearchParams chỉ làm phần này chờ client, còn cả trang vẫn có trong HTML dựng sẵn. */
+function OpenFromQuery({ onOpen }: { onOpen: (o: BrandOrigin) => void }) {
+  const brand = useSearchParams()?.get('brand');
+  useEffect(() => {
+    const match = BRAND_ORIGINS.find((o) => o.id === brand);
+    if (match) onOpen(match);
+  }, [brand, onOpen]);
+  return null;
+}
+
 /** Hành trình nguyên liệu: bản đồ gỗ 3D và 8 ô nhãn gắn với tỉnh xuất xứ; chạm mở sheet câu chuyện kèm lối sang sản phẩm của nhãn. */
 export function BrandStoryView() {
-  const params = useSearchParams();
-  const [selected, setSelected] = useState<BrandOrigin | null>(() => BRAND_ORIGINS.find((o) => o.id === params?.get('brand')) ?? null);
+  const [selected, setSelected] = useState<BrandOrigin | null>(null);
 
   return (
     <main className="mx-auto w-full max-w-frame pb-8">
+      <Suspense fallback={null}>
+        <OpenFromQuery onOpen={setSelected} />
+      </Suspense>
       <div className="px-4 pt-6 max-md:pt-0 md:px-6">
         <PageHeader title="Hành trình nguyên liệu" />
         <p className="mt-3 leading-relaxed text-stone-700 max-md:mt-3 max-md:text-[length:var(--type-body-md-size)] max-md:leading-normal max-md:text-[var(--color-text-secondary)]">
