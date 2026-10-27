@@ -27,9 +27,10 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from './storefront-theme';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 export const errText = loadErrorText;
+export const actErrText = actionErrorText;
 
 export type Notify = (text: string, error?: boolean) => void;
 
@@ -52,12 +53,12 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
       return applyStorefrontTemplate(coreHttp, categoryId);
     },
     onSuccess: onCreated,
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
   const blank = useMutation({
     mutationFn: () => createStorefront(coreHttp),
     onSuccess: onCreated,
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
   const busy = withTemplate.isPending || blank.isPending;
 
@@ -132,7 +133,7 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
       setError(null);
       onAdded();
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
   const products = listQ.data ?? [];
 
@@ -202,7 +203,7 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
       onSaved('Đã cập nhật hồ sơ gian hàng');
       onClose();
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
   const complete = !!(avatarUrl.trim() && coverUrl.trim() && headerNote.trim());
 
@@ -273,13 +274,13 @@ function ConfigForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () 
       onSaved('Đã lưu cấu hình gian hàng!');
       onClose();
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
   // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
   const clearBankMut = useMutation({
     mutationFn: () => updateStorefront(coreHttp, { bankName: '', bankBin: '', bankAccountNo: '', bankAccountName: '' }),
     onSuccess: () => onSaved('Đã gỡ tài khoản ngân hàng khỏi gian hàng'),
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
 
   return (
@@ -385,7 +386,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
       onSaved('Đã lưu bộ sưu tập');
       onClose();
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
   });
 
   return (

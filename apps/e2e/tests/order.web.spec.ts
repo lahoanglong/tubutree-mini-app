@@ -260,9 +260,10 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await page.getByRole('button', { name: 'Huỷ đơn' }).click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.getByRole('radio', { name: /Ví Tubu/ }).check();
+    await page.getByRole('radio', { name: /Đổi ý/ }).check();
     const cancelled = api.waitForCall('POST', '/orders/:code/cancel');
     await page.getByRole('alertdialog').getByRole('button', { name: 'Huỷ đơn' }).click();
-    expect((await cancelled).body).toEqual({ refundMethod: 'WALLET' });
+    expect((await cancelled).body).toEqual({ refundMethod: 'WALLET', cancelReasonCode: 'CHANGED_MIND' });
     await expect(page.getByText(/Đã huỷ đơn hàng/)).toBeVisible();
   });
 

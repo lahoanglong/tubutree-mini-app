@@ -11,7 +11,7 @@ import {
   type CashbackTxn,
 } from '../services/cashback-api';
 import { getWallet } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { openAffiliateLink } from '../services/zmp-bridge';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -70,7 +70,7 @@ export default function CashbackPage() {
           <AuthPhaseView phase={phase} loading={<Skeleton height={120} radius="var(--radius-card)" />} />
         ) : walletQ.isError ? (
           // KHÔNG fallback 0đ khi lỗi tải ví — tránh user nghĩ rằng tiền hoàn đã biến mất.
-          <ErrorState message={getErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(walletQ.error)} onRetry={() => void walletQ.refetch()} />
         ) : (
           <div
             style={{
@@ -115,7 +115,7 @@ export default function CashbackPage() {
           </div>
         ) : merchantsQ.isError ? (
           // Phân biệt "lỗi tải sàn" vs "chưa có sàn" — không cho user tưởng feature trống.
-          <ErrorState message={getErrorMessage(merchantsQ.error)} onRetry={() => void merchantsQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(merchantsQ.error)} onRetry={() => void merchantsQ.refetch()} />
         ) : merchantsQ.data && merchantsQ.data.length > 0 ? (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             {merchantsQ.data.map((m) => (
@@ -170,7 +170,7 @@ export default function CashbackPage() {
           <Skeleton height={60} radius="var(--radius-card)" />
         ) : txnQ.isError ? (
           // Tránh "Chưa có giao dịch hoàn tiền" khi thực ra là API lỗi — gây hiểu lầm mất tiền.
-          <ErrorState message={getErrorMessage(txnQ.error)} onRetry={() => void txnQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(txnQ.error)} onRetry={() => void txnQ.refetch()} />
         ) : txnQ.data && txnQ.data.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {txnQ.data.map((t: CashbackTxn) => {

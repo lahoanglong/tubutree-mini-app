@@ -11,7 +11,7 @@ import { WASTE_WRITE_INVALIDATE_KEYS, cancelWasteRequest, setWasteTracking } fro
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { wasteMeQuery, wastePointsQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
 import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
-import { friendlyError as errText } from '@/lib/friendly-error';
+import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
@@ -98,7 +98,7 @@ function TrackingForm({
       </Field>
       {m.isError && (
         <p role="alert" className={ui.error}>
-          {errText(m.error)}
+          {actErrText(m.error)}
         </p>
       )}
       <button type="button" className={`${ui.btnPrimary} w-full`} disabled={!ready || m.isPending} onClick={() => m.mutate()}>
@@ -446,7 +446,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         <p className="text-sm text-stone-800">{`Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</p>
         {cancel.isError ? (
           <p role="alert" className={ui.error}>
-            {errText(cancel.error)}
+            {actErrText(cancel.error)}
           </p>
         ) : null}
       </Sheet>

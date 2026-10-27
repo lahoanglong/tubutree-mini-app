@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
-import { friendlyError as errText } from '@/lib/friendly-error';
+import { friendlyActionError as errText } from '@/lib/friendly-error';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';

@@ -121,6 +121,25 @@ describe('chi tiết đơn web — mốc thời gian và Điểm Xanh', () => {
     expect(text((await mount()).container)).toContain('Đặt lúc 10:00 01/10/2026');
   });
 
+  it('hành trình ghi giờ từng bước đã tới; bước chưa tới không có giờ; đơn huỷ ghi "Huỷ lúc"', async () => {
+    mocks.order = {
+      ...ORDER,
+      status: 'PACKED',
+      paymentMethod: 'COD',
+      statusTimes: { CONFIRMED: '2026-10-01T03:05:00Z', PACKED: '2026-10-02T04:30:00Z' },
+    };
+    const { container } = await mount();
+    const steps = [...container.querySelectorAll('#order-timeline-title ~ ol > li')].map((li) => li.textContent ?? '');
+    expect(steps).toHaveLength(4);
+    expect(steps[0]).toContain('10:05 01/10/2026');
+    expect(steps[1]).toContain('11:30 02/10/2026');
+    expect(steps[2]).not.toMatch(/\d\d:\d\d/);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.order = { ...ORDER, status: 'CANCELLED', statusTimes: { CANCELLED: '2026-10-03T07:45:00Z' } };
+    expect(text((await mount()).container)).toContain('Huỷ lúc 14:45 03/10/2026');
+  });
+
   it('dòng Điểm Xanh theo trạng thái: chưa giao thì "Nhận +…", đã giao thì "Đã cộng +…"', async () => {
     mocks.order = { ...ORDER, pointsEarned: 1200 };
     expect(text((await mount()).container)).toContain('Nhận +1.200 Điểm Xanh khi giao thành công');
@@ -158,11 +177,11 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(text((await mount()).container)).toContain('Đặt trước 2/5 — chờ hàng về');
   });
 
-  it('có mã vận đơn: hiện trạng thái hãng và nút Sao chép đưa đúng mã vào clipboard', async () => {
+  it('có mã vận đơn: hiện trạng thái hãng và nút Chép mã đưa đúng mã vào clipboard', async () => {
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123', shippingStatus: 'delivering' };
     const { container } = await mount();
     expect(text(container)).toContain('Đang giao hàng');
-    click(byText(container, 'button', 'Sao chép'));
+    click(byText(container, 'button', 'Chép mã'));
     await flush();
     expect(mocks.writeText).toHaveBeenCalledWith('GHN123');
     expect(text(container)).toContain('Đã sao chép mã vận đơn');
@@ -175,11 +194,37 @@ describe('chi tiết đơn web — dòng hàng và vận chuyển', () => {
     expect(t).not.toContain('lost');
   });
 
+  it('thứ tự khối như Mini App: Vận chuyển, Địa chỉ giao hàng, câu "không huỷ được", rồi phần liên hệ', async () => {
+    mocks.order = { ...ORDER, status: 'SHIPPING', shippingPartner: 'GHN', shippingCode: 'GHN123' };
+    const t = text((await mount()).container);
+    const at = (s: string) => t.indexOf(s);
+    expect(at('Vận chuyển')).toBeGreaterThan(-1);
+    expect(at('Vận chuyển')).toBeLessThan(at('Địa chỉ giao hàng'));
+    expect(at('Địa chỉ giao hàng')).toBeLessThan(at('nên không huỷ được'));
+  });
+
+  it('có cả hoá đơn VAT và phiếu thu rác: Vận chuyển → Hoá đơn VAT → thu rác → Địa chỉ → "không huỷ được" → liên hệ', async () => {
+    mocks.order = {
+      ...ORDER,
+      status: 'SHIPPING',
+      shippingPartner: 'GHN',
+      shippingCode: 'GHN123',
+      invoiceStatus: 'ISSUED',
+      invoiceUrl: 'https://hd.example/1.pdf',
+      hasRecyclingPickup: true,
+    };
+    mocks.waste = { id: 'w1', code: 'RC-77' };
+    const t = text((await mount()).container);
+    const order = ['Vận chuyển', 'Hoá đơn VAT', 'Yêu cầu thu rác RC-77', 'Địa chỉ giao hàng', 'nên không huỷ được', 'Cần hỗ trợ'].map((s) => t.indexOf(s));
+    expect(order.every((i) => i > -1)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+  });
+
   it('không chép được thì báo chép tay', async () => {
     mocks.writeText.mockRejectedValue(new Error('chặn'));
     mocks.order = { ...ORDER, status: 'SHIPPING', shippingCode: 'GHN123' };
     const { container } = await mount();
-    click(byText(container, 'button', 'Sao chép'));
+    click(byText(container, 'button', 'Chép mã'));
     await flush();
     expect(text(container)).toContain('Không sao chép được — hãy chép mã thủ công.');
   });

@@ -10,7 +10,7 @@ import {
   deleteOwnedPromotion,
   type OwnedBrand,
 } from '../services/brand-owner-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Button } from '../components/ui/button';
@@ -74,7 +74,7 @@ export default function BrandOwnerPage() {
             />
           </div>
         ) : (
-          <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
         )}
       </OwnerShell>
     );

@@ -14,7 +14,7 @@ import {
   type PointsTxn,
 } from '../services/account-api';
 import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS, listWasteRequests } from '../services/waste-api';
 import { GuestTiers } from '../components/loyalty/guest-tiers';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -151,7 +151,7 @@ export default function LoyaltyPage() {
       ) : loyaltyQ.isLoading ? (
         pageSkeleton
       ) : loyaltyQ.isError && !loyaltyQ.data ? (
-        <ErrorState message={getErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(loyaltyQ.error)} onRetry={() => void loyaltyQ.refetch()} />
       ) : data ? (
         <>
           <PointsBoostStrip placement="wallet" />
@@ -279,7 +279,7 @@ export default function LoyaltyPage() {
             ) : couponsQ.isError ? (
               <ErrorState
                 variant="inline"
-                message={`Chưa tải được mã giảm giá: ${getErrorMessage(couponsQ.error)}`}
+                message={`Chưa tải được mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`}
                 onRetry={() => void couponsQ.refetch()}
               />
             ) : couponsQ.data && couponsQ.data.length > 0 ? (
@@ -485,7 +485,7 @@ export default function LoyaltyPage() {
           ) : memberCardQ.isError || !memberCardQ.data ? (
             <ErrorState
               variant="inline"
-              message={`Chưa tải được mã thành viên: ${getErrorMessage(memberCardQ.error)}`}
+              message={`Chưa tải được mã thành viên: ${getLoadErrorMessage(memberCardQ.error)}`}
               onRetry={() => void memberCardQ.refetch()}
             />
           ) : (

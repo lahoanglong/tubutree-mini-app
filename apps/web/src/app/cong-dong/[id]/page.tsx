@@ -32,13 +32,14 @@ import { CommentRow } from './comment-row';
 import { ConfirmDeleteSheet, EditPostSheet, ReportSheet } from './post-sheets';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Cộng đồng Vườn Tubu';
 const ICON_BTN = 'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-700 hover:bg-stone-100';
 const CLAMP1 = { display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
 
 const errorText = loadErrorText;
+const actErrText = actionErrorText;
 
 type ReportTarget = { targetType: 'POST' | 'COMMENT'; targetId?: string };
 
@@ -115,7 +116,7 @@ export default function PostDetailPage() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['community'] });
   const onFail = (e: unknown) => {
     setNotice(null);
-    setFailure(errorText(e));
+    setFailure(actErrText(e));
   };
   const ok = (message?: string) => {
     setFailure(null);
@@ -136,20 +137,20 @@ export default function PostDetailPage() {
       setReplyError(null);
       ok();
     },
-    onError: (e) => setReplyError(errorText(e)),
+    onError: (e) => setReplyError(actErrText(e)),
   });
   // Lỗi của thao tác trên một bình luận hiện ngay dưới bình luận đó: dải lỗi đầu trang nằm ngoài màn hình khi danh sách dài.
   const markBest = useMutation({
     mutationFn: (commentId: string) => setBestAnswer(coreHttp, id, commentId),
     onMutate: () => setCommentError(null),
     onSuccess: () => ok(),
-    onError: (e, commentId) => setCommentError({ commentId, message: errorText(e) }),
+    onError: (e, commentId) => setCommentError({ commentId, message: actErrText(e) }),
   });
   const removeCommentMut = useMutation({
     mutationFn: (commentId: string) => removeComment(coreHttp, commentId),
     onMutate: () => setCommentError(null),
     onSuccess: () => ok(),
-    onError: (e, commentId) => setCommentError({ commentId, message: errorText(e) }),
+    onError: (e, commentId) => setCommentError({ commentId, message: actErrText(e) }),
   });
   const editMut = useMutation({
     mutationFn: (patch: { title?: string; body: string }) => editPost(coreHttp, id, patch),
@@ -158,7 +159,7 @@ export default function PostDetailPage() {
       setEditError(null);
       ok('Lưu');
     },
-    onError: (e) => setEditError(errorText(e)),
+    onError: (e) => setEditError(actErrText(e)),
   });
   const reportMut = useMutation({
     mutationFn: (target: ReportTarget) => reportContent(coreHttp, id, { ...target, reason: reportReason.trim() }),
@@ -168,7 +169,7 @@ export default function PostDetailPage() {
       setReportError(null);
       ok('Đã gửi báo cáo, cảm ơn bạn 🌿');
     },
-    onError: (e) => setReportError(errorText(e)),
+    onError: (e) => setReportError(actErrText(e)),
   });
   const pinMut = useMutation({ mutationFn: () => adminPin(coreHttp, id, !(post.data?.isPinned ?? false)), onSuccess: () => ok(), onError: onFail });
   const deleteMut = useMutation({

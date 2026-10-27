@@ -5,7 +5,7 @@ import { MapPin } from 'lucide-react';
 import type { WasteMethod, WastePointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, getNearbyWastePoints, getWasteMe, getWastePoints } from '../services/waste-api';
 import { getZaloAccessToken, requestZaloLocation } from '../services/zmp-bridge';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -124,7 +124,7 @@ export default function RecyclePointsPage() {
   if (loadError) {
     return shell(
       <ErrorState
-        message={getErrorMessage(loadError)}
+        message={getLoadErrorMessage(loadError)}
         onRetry={() => {
           void meQ.refetch();
           void pointsQ.refetch();

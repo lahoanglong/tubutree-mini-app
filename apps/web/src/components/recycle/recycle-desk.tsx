@@ -36,7 +36,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StickyActionBar } from '@/components/sticky-action-bar';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { WasteDeskPerk, WasteDeskReport } from './recycle-desk-perk';
 import { DESK_REJECTION_OPTIONS, METHOD_LABELS, PAUSED_TEXT, SHORTFALL_LABELS, formatPoints } from './recycle-labels';
 
@@ -62,7 +62,9 @@ interface DeskDone {
 type DeskLine = WasteDeskRequestDTO['lines'][number];
 type Notice = { text: string; ok: boolean };
 
-const errText = (e: unknown) => (errorStatus(e) === 403 ? NO_PERMISSION : loadErrorText(e));
+const withPermission = (fallback: (e: unknown) => string) => (e: unknown) => (errorStatus(e) === 403 ? NO_PERMISSION : fallback(e));
+const errText = withPermission(loadErrorText);
+const actErrText = withPermission(actionErrorText);
 
 /** Ước tính phía máy khách: máy chủ vẫn áp trần và hạn mức khi xác nhận. */
 export function deskPreviewPoints(
@@ -170,7 +172,7 @@ function RejectSheet({
         </Field>
         {error ? (
           <p role="alert" className={ui.error}>
-            {errText(error)}
+            {actErrText(error)}
           </p>
         ) : null}
       </div>
@@ -226,7 +228,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       );
       setReasons({});
     },
-    onError: (e) => setNotice({ text: errText(e), ok: false }),
+    onError: (e) => setNotice({ text: actErrText(e), ok: false }),
   });
 
   const request = lookup;
@@ -274,7 +276,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setCode('');
       finish();
     },
-    onError: (e) => setNotice({ text: errText(e), ok: false }),
+    onError: (e) => setNotice({ text: actErrText(e), ok: false }),
   });
 
   const reject = useMutation({
@@ -298,7 +300,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setGift(null);
       setNotice({ text: `Đã trao ${v.giftName}`, ok: true });
     },
-    onError: (e) => setNotice({ text: errText(e), ok: false }),
+    onError: (e) => setNotice({ text: actErrText(e), ok: false }),
   });
 
   const missingReason = !!request && request.lines.some((l) => isShort(l, received) && !reasons[l.itemId]);

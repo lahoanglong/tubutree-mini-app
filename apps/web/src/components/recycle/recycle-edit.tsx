@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteLineInput } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, editWasteRequest, previewWaste } from '@tubutree/app-core/api/waste';
 import { wasteMeQuery, wasteRequestQuery } from '@tubutree/app-core/queries/waste';
-import { friendlyError as errText } from '@/lib/friendly-error';
+import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
@@ -165,7 +165,7 @@ export function RecycleEdit({ id }: { id: string }) {
         <>
           {save.isError && (
             <p role="alert" className={ui.error}>
-              {errText(save.error)}
+              {actErrText(save.error)}
             </p>
           )}
           <Actions summary={summary}>

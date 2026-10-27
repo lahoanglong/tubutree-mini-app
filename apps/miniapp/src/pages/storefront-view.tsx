@@ -10,7 +10,7 @@ import {
   sampleShareText,
 } from '@tubutree/app-core/storefront-signup';
 import { getPublicStorefront } from '../services/storefront-api';
-import { apiMediaUrl, getErrorMessage, isNotFoundError } from '../services/api';
+import { apiMediaUrl, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { vi } from '../i18n/vi';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -58,7 +58,7 @@ export default function StorefrontViewPage() {
         {gone ? (
           <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => navigate('/')} />
         ) : (
-          <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
         )}
         {gone && <SuggestedRail listSource="storefront_not_found" />}
       </Page>

@@ -13,7 +13,7 @@ import {
   invalidateAfterWasteWrite,
   setWasteTracking,
 } from '../services/waste-api';
-import { getErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { QrCode } from '../components/qr-code';
@@ -194,7 +194,7 @@ export default function RecycleRequestPage() {
         />,
       );
     }
-    return shell(<ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+    return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
   }
   if (!r) return shell(<Skeleton height={120} />);
 

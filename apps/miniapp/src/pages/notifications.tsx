@@ -11,7 +11,7 @@ import {
   markAllNotificationsRead,
   type NotificationDTO,
 } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -290,7 +290,7 @@ export default function NotificationsPage() {
             <LineItemSkeleton />
           </div>
         ) : notifQ.isError && !notifQ.data ? (
-          <ErrorState message={getErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(notifQ.error)} onRetry={() => void notifQ.refetch()} />
         ) : notifQ.data && notifQ.data.length > 0 ? (
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {notifQ.data.map((n) => {

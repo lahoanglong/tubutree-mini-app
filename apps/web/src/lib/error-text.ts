@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@/lib/client-api';
+import { ApiError, GENERIC_ERROR, NetworkError } from '@/lib/client-api';
 
 const RATE_LIMITED = 'Bạn thao tác hơi nhanh, đợi vài giây rồi thử lại nhé.';
 const SERVER_BUSY = 'Máy chủ đang bận, thử lại nhé.';
@@ -12,18 +12,25 @@ const ACTION_TIMEOUT = 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm t
 const NO_VIETNAMESE = /^(?=[^]*[A-Za-z])[^\u0080-\uffff]*$/;
 const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be|too large|not allowed|not acceptable|unexpected token)\b)/i;
 
+/** Lời của máy chủ đủ tiếng Việt để đọc thẳng cho khách (không phải câu kỹ thuật của framework hay câu chung của apiFetch). */
+export const isBusinessMessage = (raw: string | null | undefined): boolean => {
+  const message = (raw ?? '').trim();
+  return !!message && message !== GENERIC_ERROR && !TECHNICAL_MESSAGE.test(message) && !NO_VIETNAMESE.test(message);
+};
+
 /**
  * Chữ báo lỗi, cùng quy tắc với getErrorMessage của Mini App: lỗi nghiệp vụ 4xx hiện lời của máy chủ (lời tiếng Anh của framework thì dùng câu
- * chung), 401 báo hết phiên, 429 của bộ giới hạn tốc độ và 5xx có câu riêng, 429 kèm mã nghiệp vụ (CHAT_DAILY_LIMIT, hết lượt tích điểm...)
+ * chung), 401 báo hết phiên (trừ 401 mang lời nghiệp vụ như tài khoản bị khoá thì giữ lời đó), 429 của bộ giới hạn tốc độ và 5xx có câu riêng, 429 kèm mã nghiệp vụ (CHAT_DAILY_LIMIT, hết lượt tích điểm...)
  * giữ lời máy chủ, không có phản hồi thì tuỳ máy đang mất mạng thật hay máy chủ/CORS không đáp. Hết thời gian: tải dữ liệu nói tải chậm,
  * bấm nút (actionErrorText) nói chưa rõ kết quả vì máy chủ có thể đã làm xong.
  */
 function errorText(error: unknown, timeout: string): string {
   if (error instanceof ApiError) {
     const message = error.message.trim();
-    const businessText = message && !TECHNICAL_MESSAGE.test(message) && !NO_VIETNAMESE.test(message);
+    const businessText = isBusinessMessage(message);
     if (error.status === 429) return error.code && businessText ? message : RATE_LIMITED;
-    if (error.status === 401) return SESSION_EXPIRED_TEXT;
+    // Mã của máy chủ quyết định: SESSION_EXPIRED luôn là câu hết phiên của web; 401 khác mang lời tiếng Việt (tài khoản bị khoá) giữ lời đó.
+    if (error.status === 401) return error.code !== 'SESSION_EXPIRED' && businessText ? message : SESSION_EXPIRED_TEXT;
     if (error.status < 500 && message) return businessText ? message : GENERIC;
     return SERVER_BUSY;
   }

@@ -3,7 +3,7 @@ import { Input, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { addItem, getStorefrontCategories, pickerProducts, type PickerProduct, type StorefrontCategory } from '../services/storefront-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { Badge } from './ui/badge';
@@ -88,7 +88,7 @@ export function PickerSheet({ collectionId, onAdded, onClose }: { collectionId: 
     <>
       <Input aria-label={vi.storefront.pickerSearch} placeholder={vi.storefront.pickerSearch} value={search} onChange={(e) => setSearch(e.target.value)} />
       <div style={{ marginTop: 12, maxHeight: 360, overflowY: 'auto' }}>
-        {listQ.isError ? <ErrorState message={getErrorMessage(listQ.error)} onRetry={() => void listQ.refetch()} variant="inline" /> :
+        {listQ.isError ? <ErrorState message={getLoadErrorMessage(listQ.error)} onRetry={() => void listQ.refetch()} variant="inline" /> :
           listQ.isLoading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Skeleton height={44} />

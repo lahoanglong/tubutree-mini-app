@@ -48,11 +48,12 @@ import {
 import BackLink from '@/components/back-link';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Cộng tác viên';
 
 const errText = loadErrorText;
+const actErrText = actionErrorText;
 
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -152,7 +153,7 @@ function RegisterGate() {
       setNotice({ text: 'Chào mừng CTV Tubu Tree! 🎉', error: false });
       void qc.invalidateQueries({ queryKey: affiliateMeQuery(coreHttp).queryKey });
     },
-    onError: (e) => setNotice({ text: errText(e), error: true }),
+    onError: (e) => setNotice({ text: actErrText(e), error: true }),
     onSettled: () => {
       busy.current = false;
     },
@@ -334,7 +335,7 @@ function Dashboard() {
       setNotice({ text: 'Đã tạo link chia sẻ mới', error: false });
       void qc.invalidateQueries({ queryKey: affiliateLinksQuery(coreHttp).queryKey });
     },
-    onError: (e) => setNotice({ text: errText(e), error: true }),
+    onError: (e) => setNotice({ text: actErrText(e), error: true }),
     onSettled: () => {
       linkBusy.current = false;
     },

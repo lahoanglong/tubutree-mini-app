@@ -35,7 +35,7 @@ import {
   type CtvOrderItemInput,
   type CtvOrderResult,
 } from '../../services/affiliate-api';
-import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown } from '../../services/api';
 import { isHttpError } from '../../services/http';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
@@ -169,7 +169,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
   const quoteFailed = quoteFresh && quoteQ.isError;
   // Máy chủ từ chối báo giá vì chính các dòng hàng (vd hàng gian hàng đối tác tự giao): bước tạo đơn cũng sẽ từ chối như vậy.
   const quoteProblem =
-    quoteFailed && isHttpError(quoteQ.error) && quoteQ.error.response?.status === 400 ? getErrorMessage(quoteQ.error) : null;
+    quoteFailed && isHttpError(quoteQ.error) && quoteQ.error.response?.status === 400 ? getLoadErrorMessage(quoteQ.error) : null;
   const priceMovedMessage = priceMoved?.itemsKey === itemsKey ? priceMoved.message : null;
   const quotedLines = new Map((quote?.items ?? []).map((i) => [i.variationId, i]));
   const goods = quote?.goods ?? lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);

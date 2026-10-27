@@ -94,10 +94,14 @@ export function FlashSale() {
                   {item.variationName && <p className="truncate text-xs leading-4 text-stone-500">{item.variationName}</p>}
                   <p className="mt-0.5 text-sm font-bold text-promo-fg">{formatVnd(price)}</p>
                   {was > price && <p className="text-xs text-stone-500 line-through">{formatVnd(was)}</p>}
-                  <div className="mt-1">
-                    <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
-                  </div>
-                  <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
+                  {sold > 0 && (
+                    <>
+                      <div className="mt-1">
+                        <ProgressBar value={sold} max={100} tone="flash" ariaLabel={flashSaleText.soldPct(sold)} />
+                      </div>
+                      <p className="mt-0.5 text-xs text-stone-600">{flashSaleText.soldPct(sold)}</p>
+                    </>
+                  )}
                 </div>
               </Link>
             </li>

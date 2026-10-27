@@ -14,7 +14,7 @@ import { phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { formatPoints, milestoneStatusText, monthLabel, revenueRuleText } from './milestone-copy';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 interface ClaimTarget {
   id: string;
@@ -31,6 +31,7 @@ interface ClaimFailure {
 }
 
 const errText = loadErrorText;
+const actErrText = actionErrorText;
 
 const toTargets = (items: CtvMilestoneItem[], month: string): ClaimTarget[] =>
   items.filter((m) => m.canClaim).map((m) => ({ id: m.id, month, title: m.title, points: m.rewardPoints }));
@@ -66,7 +67,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       refresh();
     },
     onError: (e) => {
-      setNotice({ text: errText(e), tone: 'error' });
+      setNotice({ text: actErrText(e), tone: 'error' });
       // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
       void qc.invalidateQueries({ queryKey: affiliateMilestonesQuery(coreHttp).queryKey });
     },
@@ -79,7 +80,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         try {
           await claimCtvMilestone(coreHttp, t.id, t.month);
         } catch (e) {
-          failed.push({ id: t.id, month: t.month, title: t.title, message: errText(e) });
+          failed.push({ id: t.id, month: t.month, title: t.title, message: actErrText(e) });
         }
       }
       return { total: list.length, failed };

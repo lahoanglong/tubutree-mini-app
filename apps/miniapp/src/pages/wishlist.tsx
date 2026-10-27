@@ -1,7 +1,7 @@
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { getWishlist } from '../services/wishlist-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import ProductCard from '../components/product-card';
@@ -30,7 +30,7 @@ export default function WishlistPage() {
           {wishQ.isLoading ? (
             <ProductGridSkeleton count={4} />
           ) : wishQ.isError && !wishQ.data ? (
-            <ErrorState message={getErrorMessage(wishQ.error)} onRetry={() => void wishQ.refetch()} />
+            <ErrorState message={getLoadErrorMessage(wishQ.error)} onRetry={() => void wishQ.refetch()} />
           ) : wishQ.data && wishQ.data.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {wishQ.data.map((p) => (

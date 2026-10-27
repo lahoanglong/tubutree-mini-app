@@ -11,8 +11,9 @@ import { ui } from '@/lib/guest-ui';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { Sheet } from '@/components/ui/sheet';
 import { Field } from '@/components/ui/field';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 const errText = loadErrorText;
+const actErrText = actionErrorText;
 
 export interface TransferSheetProps {
   open: boolean;
@@ -52,7 +53,7 @@ function TransferForm({ max, knownMax, taxIdOnFile, taxPreview, onDone }: Omit<T
     onSuccess: (r) => {
       onDone(r.note ?? 'Đã chuyển hoa hồng vào Ví Tubu.');
     },
-    onError: (e) => setError(errText(e)),
+    onError: (e) => setError(actErrText(e)),
     onSettled: () => {
       busy.current = false;
     },

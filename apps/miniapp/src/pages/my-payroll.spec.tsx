@@ -21,7 +21,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/payroll-api', () => ({ getMyPayroll: mocks.getMyPayroll, updateBank: mocks.updateBank }));
 vi.mock('../services/attendance-api', () => ({ getHistory: mocks.getHistory }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
 }));

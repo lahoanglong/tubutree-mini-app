@@ -49,7 +49,7 @@ export function ReferralCodeBox({
   const [checking, setChecking] = useState(false);
 
   const shell = (children: React.ReactNode) => (
-    <section aria-label="Mã giới thiệu" className={`p-4 ${ui.card} ${mini.band}`}>
+    <section aria-label="Mã người giới thiệu" className={`p-4 ${ui.card} ${mini.band}`}>
       {children}
     </section>
   );
@@ -61,7 +61,7 @@ export function ReferralCodeBox({
         <div className="flex min-w-0 items-center gap-3">
           <Tile />
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-stone-900">Mã giới thiệu</div>
+            <div className="text-sm font-semibold text-stone-900">Mã người giới thiệu</div>
             <div className="mt-0.5 flex flex-wrap items-center gap-2">
               <CodeChip code={fixedCode} />
               <span className="text-xs text-success-fg">
@@ -99,7 +99,7 @@ export function ReferralCodeBox({
         <span className="flex min-w-0 items-center gap-3">
           <Tile />
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-stone-900">Mã giới thiệu</span>
+            <span className="block text-sm font-semibold text-stone-900">Mã người giới thiệu</span>
             <span className="block text-xs text-stone-600">Có người giới thiệu Tubu cho bạn? Nhập mã của họ</span>
           </span>
         </span>
@@ -114,7 +114,7 @@ export function ReferralCodeBox({
   const apply = async () => {
     const code = draft.replace(/\s+/g, '').toUpperCase();
     if (!code) {
-      setError('Bạn nhập mã giới thiệu giúp Tubu nhé');
+      setError('Bạn nhập mã người giới thiệu giúp Tubu nhé');
       return;
     }
     setChecking(true);
@@ -143,7 +143,7 @@ export function ReferralCodeBox({
       }}
     >
       <label htmlFor="referral-code" className="text-sm font-semibold text-stone-900">
-        Mã giới thiệu
+        Mã người giới thiệu
       </label>
       <input
         id="referral-code"
@@ -155,8 +155,8 @@ export function ReferralCodeBox({
         maxLength={64}
         autoCapitalize="characters"
         autoComplete="off"
-        placeholder="Nhập mã giới thiệu"
-        aria-label="Mã giới thiệu"
+        placeholder="Nhập mã người giới thiệu"
+        aria-label="Mã người giới thiệu"
         aria-invalid={error ? true : undefined}
         className={error ? ui.fieldError : ui.field}
       />

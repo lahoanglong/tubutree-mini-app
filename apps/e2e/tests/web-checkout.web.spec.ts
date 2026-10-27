@@ -72,7 +72,7 @@ test.describe('Web khách: thanh toán', () => {
       api.post('/checkout/coupon-previews', { previews: [] });
       await page.setViewportSize(vp);
       await page.goto('/thanh-toan');
-      await page.getByRole('button', { name: /Xem mã/ }).click();
+      await page.getByRole('button', { name: /Chọn mã/ }).click();
       await expect(page.getByText('GIAM10K').first()).toBeVisible();
       const place = page.getByRole('button', { name: /^Đặt hàng/ });
       // Đầu trang (chưa cuộn): khung tóm tắt chưa dính vào thanh đầu nên đáy khung phải đã nằm trong màn.

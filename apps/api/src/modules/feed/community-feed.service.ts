@@ -80,6 +80,8 @@ const MAX_TITLE = 160;
 const MAX_BODY = 5000;
 const MAX_PRODUCT_TAGS = 5;
 const MAX_TAGS = 5;
+/** Cửa sổ chống bình luận trùng do gửi đúp. */
+const COMMENT_DEDUPE_MS = 10_000;
 const MAX_COMMENT = 500;
 
 export interface CreatePostInput {
@@ -855,7 +857,8 @@ export class CommunityFeedService {
   }
 
   async addComment(userId: string, role: string, postId: string, body: string) {
-    const text = (body ?? '').trim();
+    // NFC: cùng chữ có dấu gõ bằng hai cách (dựng sẵn / tổ hợp) phải coi là một khi so trùng, và lưu một dạng.
+    const text = (body ?? '').trim().normalize('NFC');
     if (!text) throw new BadRequestException('Nội dung bình luận trống.');
     if (text.length > MAX_COMMENT) throw new BadRequestException('Bình luận quá dài.');
     const post = await this.prisma.feedPost.findUnique({ where: { id: postId }, select: { id: true, userId: true, kind: true, status: true, title: true, body: true } });
@@ -864,7 +867,20 @@ export class CommunityFeedService {
     // vô hình đó để rút Điểm Xanh thưởng (bình luận, câu trả lời hay nhất) mà không ai kiểm
     // duyệt được. Điểm Xanh tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
-    const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
+    // Bấm gửi hai lần / mạng chập chờn gửi lại: cùng người, cùng bài, cùng nội dung trong 10 giây thì trả bình luận đã có,
+    // không tạo thêm (và không thưởng, không báo, không cộng uy tín lần nữa). Hai yêu cầu chạy SONG SONG cũng không cùng lọt:
+    // khoá tư vấn theo (người, bài) buộc yêu cầu sau đợi yêu cầu trước ghi xong rồi mới tìm.
+    const { comment, duplicate } = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`feed-comment:${userId}:${postId}`}))`;
+      const existing = await tx.feedComment.findFirst({
+        where: { userId, postId, body: text, isRemoved: false, createdAt: { gte: new Date(Date.now() - COMMENT_DEDUPE_MS) } },
+        select: { id: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (existing) return { comment: existing, duplicate: true };
+      return { comment: await tx.feedComment.create({ data: { userId, postId, body: text } }), duplicate: false };
+    });
+    if (duplicate) return { id: comment.id };
     // Task 9: addComment luôn TẠO mới (không có nhánh xoá/toggle-off) — phát ngay sau khi ghi thành công.
     await this.analytics.recordBestEffort({
       eventName: 'engagement_action',

@@ -28,11 +28,11 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 import { formatVnd } from '@/lib/format-vnd';
 import { platformBridge } from '@/lib/platform-bridge';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { actionErrorText } from '@/lib/error-text';
 
 const ALL_CATS = 'Tất cả';
 const FAQ_SKELETON_ROWS = 4;
 const STALE_MS = 10 * 60_000;
-const DELETE_FAILED = 'Chưa gửi được yêu cầu. Kiểm tra mạng rồi thử lại.';
 const DELETE_OA_MESSAGE = 'Tôi muốn xoá tài khoản Tubu Tree';
 
 /** Khớp mặc định của API và web (DEFAULT_SUPPORT): khi không đọc được cấu hình vẫn còn đường liên hệ. */
@@ -270,7 +270,7 @@ function AccountSection() {
           </p>
           {del.isError && (
             <p role="alert" className={`mt-2 ${ui.error}`}>
-              {del.error instanceof Error && del.error.message ? del.error.message : DELETE_FAILED}
+              {actionErrorText(del.error)}
             </p>
           )}
           {walletQ.isLoading && <p className="mt-2 text-xs text-stone-600">{WALLET_FORFEIT_LOADING}</p>}

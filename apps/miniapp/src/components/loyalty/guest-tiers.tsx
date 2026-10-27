@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { guestPreviewCopy, tierRequirementText } from '@tubutree/app-core/guest-preview';
 import { loyaltyPreviewQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '../../services/core-http';
-import { getErrorMessage } from '../../services/api';
+import { getLoadErrorMessage } from '../../services/api';
 import { useAuthStore } from '../../store/auth';
 import { formatPoints } from '../../utils/format';
 import { moneyShort } from '../../utils/loyalty-copy';
@@ -30,7 +30,7 @@ export function GuestTiers() {
       <GuestLoginButton />
       <Heading variant="title-md" as="h2">{guestPreviewCopy.tiersTitle}</Heading>
       {q.isError && !q.data ? (
-        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : !q.data ? (
         <Skeleton height={120} />
       ) : (

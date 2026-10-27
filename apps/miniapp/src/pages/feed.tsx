@@ -3,7 +3,7 @@ import { Page, useLocation, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { HelpCircle, Hash, MessageCircle, X } from 'lucide-react';
 import { getFeed, getFeedPublicPreview, getCategories, type FeedSort } from '../services/feed-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -245,7 +245,7 @@ export default function FeedPage() {
           ))}
         </div>
       ) : feed.isError ? (
-        <ErrorState message={getErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
+        <ErrorState message={getLoadErrorMessage(feed.error)} onRetry={() => void feed.refetch()} />
       ) : posts.length === 0 ? (
         filtering ? (
           <EmptyState art="search" heading={vi.community.noResult} />

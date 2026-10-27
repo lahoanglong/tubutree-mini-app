@@ -158,7 +158,6 @@ export default function SettingsPage() {
         <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
           Đăng xuất
         </button>
-        <p className="mt-3 text-center text-xs text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">Tubu Tree · phiên bản 1.0.0</p>
       </div>
     </div>,
   );

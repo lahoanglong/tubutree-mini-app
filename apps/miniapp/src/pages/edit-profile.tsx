@@ -4,7 +4,7 @@ import { Camera, Gift, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { getMe, updateMe } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { isCloudinaryConfigured, readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
@@ -184,7 +184,7 @@ export default function EditProfilePage() {
           <Skeleton height={56} />
         </div>
       ) : meQ.isError ? (
-        <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       ) : (
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Avatar Upload Section */}

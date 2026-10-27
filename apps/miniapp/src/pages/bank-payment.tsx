@@ -4,7 +4,7 @@ import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isBusinessMessage } from '../services/api';
 import { isHttpError } from '../services/http';
 import { haptic } from '../utils/haptic';
 import { formatDateTime } from '../utils/format';
@@ -42,12 +42,11 @@ function isSessionExpired(error: unknown): boolean {
   const status = error.response?.status;
   return status === 401 || status === 403;
 }
-// Lý do cụ thể của máy chủ (vd. "Tài khoản đã bị khoá.") đáng hiện hơn câu chung về phiên; chữ mặc định tiếng Anh của Nest thì không.
-const GENERIC_AUTH_MESSAGES = new Set(['Unauthorized', 'Forbidden']);
+// Mã SESSION_EXPIRED của máy chủ: luôn câu của màn này. Lý do khác bằng tiếng Việt (vd. "Tài khoản đã bị khoá.") đáng hiện hơn câu chung về phiên.
 function sessionExpiredText(error: unknown): string {
   const data = isHttpError(error) ? (error.response?.data as { message?: string | string[] } | undefined) : undefined;
   const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
-  return message && !GENERIC_AUTH_MESSAGES.has(message) ? message : SESSION_EXPIRED_MESSAGE;
+  return getErrorCode(error) !== 'SESSION_EXPIRED' && isBusinessMessage(message) ? (message as string) : SESSION_EXPIRED_MESSAGE;
 }
 
 // Máy chủ 503 kèm lý do (vd. chưa cấu hình tài khoản nhận tiền): getErrorMessage giấu message của 5xx sau câu chung, nhưng ở đây
@@ -56,9 +55,9 @@ function loadErrorMessage(error: unknown): string {
   if (isHttpError(error) && error.response?.status === 503) {
     const data = error.response.data as { message?: string | string[] } | undefined;
     const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
-    if (message) return message;
+    if (isBusinessMessage(message)) return message as string;
   }
-  return getErrorMessage(error);
+  return getLoadErrorMessage(error);
 }
 
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
@@ -168,7 +167,7 @@ export default function BankPaymentPage() {
   }
 
   const rejected = isFinalRejection(error);
-  const closedMessage = data?.paymentStatus === 'PAID' ? null : rejected ? getErrorMessage(error) : remaining.expired ? EXPIRED_MESSAGE : null;
+  const closedMessage = data?.paymentStatus === 'PAID' ? null : rejected ? getLoadErrorMessage(error) : remaining.expired ? EXPIRED_MESSAGE : null;
   if (closedMessage) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>

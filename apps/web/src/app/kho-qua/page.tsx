@@ -44,11 +44,12 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 import { LedgerShell } from '../tai-khoan/ledger-shell';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const TITLE = 'Kho quà';
 
 const errText = loadErrorText;
+const actErrText = actionErrorText;
 const points = (n: number) => `${formatCount(n)} điểm`;
 
 type RedeemOutcome =
@@ -92,7 +93,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
       onDone(outcome);
     },
     onError: (e) => {
-      setError(errText(e));
+      setError(actErrText(e));
       void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
     },
     onSettled: () => {

@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Landmark, ChevronDown } from 'lucide-react';
 import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
 import { getHistory, type SessionHistory } from '../services/attendance-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Badge } from '../components/ui/badge';
@@ -146,7 +146,7 @@ function MyPayrollHub() {
         />
 
         {payQ.isLoading && <Skeleton height={120} radius="var(--radius-card)" />}
-        {payQ.isError && <ErrorState message={getErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
+        {payQ.isError && <ErrorState message={getLoadErrorMessage(payQ.error)} onRetry={() => void payQ.refetch()} />}
 
         {m && (
           <div

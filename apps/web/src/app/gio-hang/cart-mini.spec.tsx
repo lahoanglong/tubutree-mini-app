@@ -123,7 +123,7 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
     const c = await mount();
     const b = bar(c).textContent!;
     expect(b).toContain('Bạn được miễn phí giao hàng 🌿');
-    expect(b).toContain('Tạm tính (đã giảm, chưa gồm phí giao hàng)');
+    expect(b).toContain('Tạm tính (đã giảm)');
     expect(b).toContain('578.000đ');
     expect(b).not.toContain('Tổng cộng');
     expect(bar(c).querySelector('a[href="/thanh-toan"]')!.textContent).toBe('Thanh toán (2)');

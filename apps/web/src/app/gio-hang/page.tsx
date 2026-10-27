@@ -18,11 +18,10 @@ import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { KeyValueRow, ProductThumb } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { actionErrorText } from '@/lib/error-text';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 const UNDO_WINDOW_MS = 3500;
@@ -316,7 +315,7 @@ export default function CartPage() {
                                 Giá Giờ vàng
                               </span>
                             )}
-                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && (
+                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
                               <span className="text-caption text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
                             )}
                           </div>
@@ -376,9 +375,7 @@ export default function CartPage() {
                           </div>
                           {failedItemId === it.id && (
                             <p role="alert" className="mt-1 text-caption text-danger-fg">
-                              {(update.error ?? remove.error) instanceof Error
-                                ? (update.error ?? remove.error)?.message
-                                : 'Cập nhật giỏ hàng thất bại.'}
+                              {actionErrorText(update.error ?? remove.error)}
                             </p>
                           )}
                         </div>
@@ -525,7 +522,7 @@ export default function CartPage() {
             {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" />}
             {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" />}
             {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" />}
-            <KeyValueRow label="Tạm tính (đã giảm, chưa gồm phí giao hàng)" value={formatVnd(payTotal)} emphasis />
+            <KeyValueRow label="Tạm tính (đã giảm)" value={formatVnd(payTotal)} emphasis />
             {payHint ? (
               <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} mt-2 w-full`}>
                 Thanh toán ({selectedCount})

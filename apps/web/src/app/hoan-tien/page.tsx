@@ -23,11 +23,12 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniCard } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 const DEFAULT_HOLD_DAYS = 30;
 
 const errText = loadErrorText;
+const actErrText = actionErrorText;
 
 function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: number }) {
   const box = { width: size, height: size };
@@ -96,7 +97,7 @@ export default function CashbackPage() {
     onError: (e) => {
       partnerTab.current?.close();
       partnerTab.current = null;
-      setClickError(errText(e));
+      setClickError(actErrText(e));
     },
     onSettled: () => {
       clickBusy.current = false;

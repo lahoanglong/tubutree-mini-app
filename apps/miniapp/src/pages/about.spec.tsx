@@ -21,7 +21,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useLocation: () => ({ pathname: '/about', search: '', state: null }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/api', () => ({ api: { get: mocks.apiGet }, getErrorMessage: () => 'lỗi' }));
+vi.mock('../services/api', () => ({ api: { get: mocks.apiGet }, getErrorMessage: () => 'lỗi', getLoadErrorMessage: () => 'lỗi' }));
 vi.mock('../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../services/account-api', () => ({ requestAccountDeletion: mocks.requestAccountDeletion, getWallet: mocks.getWallet }));
 vi.mock('../services/zmp-bridge', () => ({ hasOA: false, openOAChat: vi.fn(), callPhone: mocks.callPhone, openExternal: mocks.openExternal }));

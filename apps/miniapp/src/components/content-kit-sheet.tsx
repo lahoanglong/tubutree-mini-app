@@ -2,7 +2,7 @@ import { useSnackbar } from 'zmp-ui';
 import { Share2, Copy } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchContentKit } from '../services/affiliate-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useShareWithFallback } from './share-sheet';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
@@ -93,7 +93,7 @@ export function ContentKitSheet({
           </div>
         )}
 
-        {q.isError && <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />}
+        {q.isError && <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />}
 
         {data && (
           <>

@@ -1,5 +1,7 @@
 'use client';
 
+import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
+
 import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { apiFetch } from './client-api';
 import type { MyRefund, RefundBankInput, ReturnReasonCode } from './refund-rules';
@@ -387,6 +389,8 @@ export interface ShippingEvent {
   code?: string | null;
 }
 export interface OrderDetailDTO extends OrderDTO {
+  /** Giờ đơn chạm từng trạng thái lần đầu (ISO). API cũ chưa trả. */
+  statusTimes?: Partial<Record<string, string>>;
   id?: string;
   /** Hai trường dưới quyết định khách có tự hủy được không (xem canCancelOrder). */
   placedForCustomer?: boolean | null;
@@ -448,8 +452,17 @@ export type RefundDestinationBody =
   | { refundMethod: 'BANK'; bankName: string; accountNumber: string; accountName: string };
 
 /** Đơn đã trả tiền: gửi kèm nơi nhận tiền hoàn (Ví Tubu hoặc tài khoản ngân hàng). */
-export const cancelOrder = (code: string, destination?: RefundDestinationBody) =>
-  apiFetch<OrderDTO>(`/orders/${encodeURIComponent(code)}/cancel`, { method: 'POST', body: destination ?? {} });
+export async function cancelOrder(code: string, destination?: RefundDestinationBody, reason?: CancelReasonBody): Promise<OrderDTO> {
+  const path = `/orders/${encodeURIComponent(code)}/cancel`;
+  try {
+    return await apiFetch<OrderDTO>(path, { method: 'POST', body: { ...destination, ...reason } });
+  } catch (err) {
+    // API cũ (lúc triển khai, hoặc quay về bản trước) từ chối trường lạ bằng 400 «Không nhận trường cancelReason…»: gửi lại không kèm lý do.
+    const e = err as { status?: number; message?: string };
+    if (!reason || e?.status !== 400 || !/cancelReason/.test(e.message ?? '')) throw err;
+    return apiFetch<OrderDTO>(path, { method: 'POST', body: { ...destination } });
+  }
+}
 
 export interface RepurchaseResult {
   results: { orderItemId: string; status: 'added' | 'partial' | 'skipped'; reason?: string; addedQuantity: number }[];

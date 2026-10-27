@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
-import { TIMELINE_STEPS, orderStatusLabel } from '@/lib/order-view';
+import { TIMELINE_STEPS, orderStatusLabel, stepTime } from '@/lib/order-view';
+import { formatDateTime } from '@/lib/format-date';
 import { mini } from '@/components/order-mobile/mobile-ui';
 
 /** Như timelineStepsFor của Mini App: COD và Ví Tubu không bao giờ chờ thanh toán nên bỏ bước đầu. */
@@ -11,7 +12,17 @@ const stepsFor = (paymentMethod?: string | null) =>
  * Đường đi của đơn qua 5 bước chuẩn. Đơn đã hủy/hoàn không nằm trên đường này nên không dựng (trạng thái đã có ở huy hiệu
  * đầu trang). Bước hiện tại có aria-current="step"; bước đã qua đánh dấu tích.
  */
-export function OrderTimeline({ status, paymentMethod }: { status: string; paymentMethod?: string | null }) {
+export function OrderTimeline({
+  status,
+  paymentMethod,
+  createdAt,
+  statusTimes,
+}: {
+  status: string;
+  paymentMethod?: string | null;
+  createdAt?: string;
+  statusTimes?: Partial<Record<string, string>>;
+}) {
   const steps = stepsFor(paymentMethod);
   const current = (steps as readonly string[]).indexOf(status);
   if (current < 0) return null;
@@ -24,6 +35,7 @@ export function OrderTimeline({ status, paymentMethod }: { status: string; payme
         {steps.map((step, i) => {
           const done = i < current;
           const active = i === current;
+          const at = createdAt ? stepTime({ createdAt, statusTimes }, step, i, current) : (statusTimes?.[step] ?? null);
           return (
             <li key={step} aria-current={active ? 'step' : undefined} className="flex gap-3">
               <div className="flex flex-col items-center">
@@ -53,6 +65,7 @@ export function OrderTimeline({ status, paymentMethod }: { status: string; payme
                 </span>
                 {done && <span className="sr-only"> — đã qua</span>}
                 {active && <span className="sr-only"> — hiện tại</span>}
+                {at && <p className="text-xs text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{formatDateTime(at)}</p>}
               </div>
             </li>
           );

@@ -17,7 +17,7 @@ export function CopyShippingCode({ code }: { code: string }) {
   return (
     <>
       <button type="button" onClick={() => void copy()} className={ui.btnSecondary}>
-        Sao chép
+        Chép mã
       </button>
       {result && (
         <span role="status" className={`basis-full text-xs ${result === 'ok' ? 'text-success-fg' : 'text-danger-fg'}`}>

@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAddresses, type AddressDTO } from '../services/shop-api';
 import { updateAddress, deleteAddress } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -71,7 +71,7 @@ export default function AddressesPage() {
             <Skeleton style={{ height: 84, borderRadius: 'var(--radius-card)' }} />
           </div>
         ) : addrQ.isError && !addrQ.data ? (
-          <ErrorState message={getErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(addrQ.error)} onRetry={() => void addrQ.refetch()} />
         ) : (
           <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {addrQ.data && addrQ.data.length === 0 && (

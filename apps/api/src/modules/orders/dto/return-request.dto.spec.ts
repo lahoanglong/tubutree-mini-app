@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
-import { ReturnRequestDto } from './return-request.dto';
+import { CancelOrderDto, ReturnRequestDto } from './return-request.dto';
 
 /** Đúng cấu hình ValidationPipe toàn cục ở main.ts. */
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -67,5 +67,16 @@ describe('ReturnRequestDto.images (C-050)', () => {
     await expect(asBody({ items: [{ orderItemId: 'oi1', quantity: 0 }] })).rejects.toThrow();
     await expect(asBody({ items: [] })).rejects.toThrow();
     await expect(asBody({ reason, refundMethod: 'CASH' })).rejects.toThrow();
+  });
+});
+
+describe('CancelOrderDto lý do huỷ', () => {
+  const cancelBody = (value: Record<string, unknown>) =>
+    pipe.transform(value, { type: 'body', metatype: CancelOrderDto, data: undefined });
+  it('body rỗng (app cũ) và mã lý do hợp lệ qua; mã lạ hoặc lời dài quá 200 ký tự bị từ chối', async () => {
+    await expect(cancelBody({})).resolves.toBeDefined();
+    await expect(cancelBody({ cancelReasonCode: 'OTHER', cancelReasonText: 'Con ốm' })).resolves.toBeDefined();
+    await expect(cancelBody({ cancelReasonCode: 'HACK' })).rejects.toBeDefined();
+    await expect(cancelBody({ cancelReasonText: 'x'.repeat(201) })).rejects.toBeDefined();
   });
 });

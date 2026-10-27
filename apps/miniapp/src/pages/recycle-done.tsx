@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Droplet } from 'lucide-react';
 import { WASTE_QUERY_KEYS, getWasteMe, getWasteRequest } from '../services/waste-api';
 import { getLoyaltyRewards } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { Button } from '../components/ui/button';
@@ -48,7 +48,7 @@ export default function RecycleDonePage() {
   );
 
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
-  if (q.isError) return shell(<ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+  if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
   if (!r) return shell(<Skeleton height={120} />);
   if (notDone) return null;
 

@@ -29,7 +29,7 @@ vi.mock('../services/academy-api', () => ({
   fetchCourse: mocks.fetchCourse,
   completeLesson: mocks.completeLesson,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 
 import AcademyPage from './academy';

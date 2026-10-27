@@ -28,6 +28,7 @@ import {
   type ReviewableOrder,
 } from '@/lib/reviews-client';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { actionErrorText } from '@/lib/error-text';
 
 const PAGE_SIZE = 5;
 
@@ -468,7 +469,7 @@ function ReviewForm({
       <p className={`mt-3 text-sm ${!isEdit && rewardAvailable && hasMedia ? 'font-semibold text-success-fg' : 'text-stone-600'}`}>{hint}</p>
       {save.isError && (
         <p role="alert" className={`mt-2 ${ui.error}`}>
-          {save.error instanceof Error ? save.error.message : 'Không gửi được đánh giá, vui lòng thử lại.'}
+          {actionErrorText(save.error)}
         </p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">

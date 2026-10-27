@@ -163,9 +163,12 @@ describe('ProductCard — kiểu Mini App ở điện thoại', () => {
     expect(meta.className).toMatch(/\bmd:order-2\b/);
   });
 
-  it('chưa có đánh giá: "★ Mới" như Mini App', () => {
+  it('chưa có đánh giá: không dán nhãn "★ Mới", không khoe sao; lượt bán (nếu có) không bắt đầu bằng dấu chấm giữa', () => {
     const meta = html(PRODUCT).querySelector('[data-testid="card-meta"]')!;
-    expect(meta.textContent).toBe('★ Mới');
+    expect(meta.textContent).not.toContain('Mới');
+    expect(meta.textContent).not.toContain('★');
+    const sold = html({ ...PRODUCT, sold: 12 }).querySelector('[data-testid="card-meta"]')!;
+    expect(sold.textContent).toBe('Đã bán 12');
   });
 
   it('ảnh thiếu: nền pha màu nhãn, lá nhỏ và tên nhãn, ẩn khỏi trình đọc màn hình', () => {

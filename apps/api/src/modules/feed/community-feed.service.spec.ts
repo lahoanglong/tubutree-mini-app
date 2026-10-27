@@ -25,6 +25,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
       groupBy: jest.fn().mockResolvedValue([]),
       findMany: jest.fn().mockResolvedValue([]),
       findUnique: jest.fn().mockResolvedValue({ id: 'c1', postId: 'p1', userId: 'answerer' }),
+      findFirst: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'c1', ...data })),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       update: jest.fn().mockResolvedValue({}),
@@ -80,6 +81,7 @@ function makePrisma(over: Record<string, unknown> = {}) {
   base.$transaction = jest.fn((arg: unknown) =>
     typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(base) : Promise.all(arg as Promise<unknown>[]),
   );
+  base.$executeRaw = jest.fn().mockResolvedValue(1);
   const merged = { ...base, ...over } as Record<string, unknown>;
   // Nếu test override 1 bảng nào đó, callback tx vẫn phải thấy bản override.
   merged.$transaction = jest.fn((arg: unknown) =>
@@ -750,6 +752,41 @@ describe('CommunityFeedService.addComment', () => {
     await makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', '  tuyệt vời  ');
     const data = (prisma.feedComment.create as jest.Mock).mock.calls[0][0].data;
     expect(data).toMatchObject({ userId: 'u1', postId: 'p1', body: 'tuyệt vời' });
+  });
+
+  it('gửi đúp: cùng người + bài + nội dung trong 10 giây → trả bình luận cũ, KHÔNG tạo, KHÔNG thưởng, KHÔNG báo', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'QUESTION', status: 'PUBLISHED' });
+    (prisma.feedComment.findFirst as jest.Mock).mockResolvedValue({ id: 'old1' });
+    const reward = { rewardPost: jest.fn(), rewardAnswer: jest.fn(), rewardBestAnswer: jest.fn() };
+    const analytics = makeAnalytics();
+    const out = await makeSvc(prisma, reward, undefined, undefined, analytics).addComment('u1', 'CUSTOMER', 'p1', '  hay quá ');
+    expect(out).toEqual({ id: 'old1' });
+    const where = (prisma.feedComment.findFirst as jest.Mock).mock.calls[0][0].where;
+    expect(where).toMatchObject({ userId: 'u1', postId: 'p1', body: 'hay quá', isRemoved: false });
+    expect(where.createdAt.gte.getTime()).toBeGreaterThan(Date.now() - 11_000);
+    expect(prisma.feedComment.create).not.toHaveBeenCalled();
+    expect(reward.rewardAnswer).not.toHaveBeenCalled();
+    expect(analytics.recordBestEffort).not.toHaveBeenCalled();
+  });
+
+  it('khoá tư vấn theo (người, bài) lấy TRƯỚC khi tìm bản trùng và tạo, trong cùng giao dịch; chữ NFC được lưu và so trùng', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ id: 'p1', userId: 'author', kind: 'SHOWCASE', status: 'PUBLISHED' });
+    const order: string[] = [];
+    (prisma.$executeRaw as unknown as jest.Mock).mockImplementation(async (strings: TemplateStringsArray, ...vals: unknown[]) => {
+      order.push('lock');
+      expect(strings.join('?')).toContain('pg_advisory_xact_lock(hashtext(');
+      expect(vals).toEqual(['feed-comment:u1:p1']);
+      return 1;
+    });
+    (prisma.feedComment.findFirst as jest.Mock).mockImplementation(async () => (order.push('find'), null));
+    (prisma.feedComment.create as jest.Mock).mockImplementation(async ({ data }: { data: Record<string, unknown> }) => (order.push('create'), { id: 'c1', ...data }));
+    const decomposed = 'Cây đẹp'.normalize('NFD');
+    await makeSvc(prisma).addComment('u1', 'CUSTOMER', 'p1', decomposed);
+    expect(order).toEqual(['lock', 'find', 'create']);
+    expect((prisma.feedComment.findFirst as jest.Mock).mock.calls[0][0].where.body).toBe('Cây đẹp'.normalize('NFC'));
+    expect((prisma.feedComment.create as jest.Mock).mock.calls[0][0].data.body).toBe('Cây đẹp'.normalize('NFC'));
   });
 
   it('Task 9: bình luận tạo thành công → recordBestEffort đúng eventName/action/props (addComment luôn TẠO, không có nhánh xoá)', async () => {

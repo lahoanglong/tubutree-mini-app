@@ -19,7 +19,7 @@ import {
 } from '@tubutree/app-core/reward-rules';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -222,7 +222,7 @@ function RewardsBody() {
   // Giữ khoá ở thân trang để đóng khung rồi mở lại cùng quà sau lỗi mạng vẫn gửi đúng khoá cũ: máy chủ có thể đã trừ điểm.
   const idem = useIdempotencyKey({ rewardId: confirmReward?.id ?? null });
 
-  if (rewardsQ.isError && !rewardsQ.data) return <ErrorState message={getErrorMessage(rewardsQ.error)} onRetry={() => void rewardsQ.refetch()} />;
+  if (rewardsQ.isError && !rewardsQ.data) return <ErrorState message={getLoadErrorMessage(rewardsQ.error)} onRetry={() => void rewardsQ.refetch()} />;
   const c = rewardsQ.data;
   if (!c) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
 
@@ -290,7 +290,7 @@ function GuestRewards() {
       <Text variant="body-md" tone="secondary" as="div">{guestPreviewCopy.hint}</Text>
       <GuestLoginButton />
       {q.isError && !q.data ? (
-        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : !catalog ? (
         <Skeleton height={120} />
       ) : (

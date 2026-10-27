@@ -3,7 +3,7 @@ import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
-import { getErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { getWasteRequestByOrder, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -25,6 +25,7 @@ import {
   isHandedToCarrier,
   orderPointsNote,
   orderStamp,
+  stepTime,
   returnWindowState,
   timelineIndex,
   timelineStepsFor,
@@ -50,6 +51,8 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { ListRow } from '../components/ui/list-row';
 import { ReorderSheet } from '../components/reorder/reorder-sheet';
+import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
+import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
@@ -85,6 +88,8 @@ export default function OrderDetailPage() {
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
   const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [cancelTouched, setCancelTouched] = useState(false);
+  const [cancelReason, setCancelReason] = useState<CancelReasonCode | null>(null);
+  const [cancelReasonText, setCancelReasonText] = useState('');
   // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
   const phase = useAuthPhase();
@@ -185,7 +190,8 @@ export default function OrderDetailPage() {
   };
 
   const cancel = useMutation({
-    mutationFn: (choose: boolean) => cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined),
+    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
+      cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: (cancelled) => {
       // Gộp phản hồi huỷ vào cache NGAY (trạng thái mới → ẩn "Hủy đơn"/"Thanh toán ngay" tức thì) nhưng GIỮ
       // `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng nên ghi đè cả object sẽ làm ReorderSheet
@@ -233,7 +239,7 @@ export default function OrderDetailPage() {
         {isNotFoundError(order.error) ? (
           <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => navigate('/')} />
         ) : (
-          <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+          <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => void order.refetch()} />
         )}
       </Shell>
     );
@@ -326,7 +332,11 @@ export default function OrderDetailPage() {
           <Text bold size="small" style={{ marginBottom: 12 }}>
             {vi.orders.timeline}
           </Text>
-          <Timeline steps={timelineSteps} current={timelineIndex(o.status, timelineSteps)} />
+          <Timeline
+            steps={timelineSteps}
+            current={timelineIndex(o.status, timelineSteps)}
+            times={timelineSteps.map((s, i) => stepTime(o, s, i, timelineIndex(o.status, timelineSteps)))}
+          />
         </Box>
       )}
 
@@ -762,6 +772,15 @@ export default function OrderDetailPage() {
               {vi.orders.cancelConfirmBody}
             </Text>
           </Box>
+          <Box mt={4}>
+            <CancelReasonPicker
+              code={cancelReason}
+              onCode={setCancelReason}
+              text={cancelReasonText}
+              onText={setCancelReasonText}
+              showError={cancelTouched}
+            />
+          </Box>
           {refundMode === 'choose' && (
             <Box mt={4}>
               <RefundDestinationPicker
@@ -797,8 +816,8 @@ export default function OrderDetailPage() {
               loading={cancel.isPending}
               onPress={() => {
                 setCancelTouched(true);
-                if (cancelBankError) return;
-                cancel.mutate(refundMode === 'choose');
+                if (!cancelReason || cancelBankError) return;
+                cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
               }}
               style={{ color: 'var(--color-text-danger)' }}
             >
@@ -833,7 +852,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 }
 
 /** Timeline dọc 5 bước — bước hiện tại pulse, bước qua tick lá. */
-function Timeline({ steps, current }: { steps: readonly string[]; current: number }) {
+function Timeline({ steps, current, times }: { steps: readonly string[]; current: number; times?: readonly (string | null)[] }) {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column' }}>
       {steps.map((step, i) => {
@@ -875,16 +894,23 @@ function Timeline({ steps, current }: { steps: readonly string[]; current: numbe
                 />
               )}
             </Box>
-            <Text
-              size="small"
-              bold={active}
-              style={{
-                color: active ? 'var(--color-text-brand)' : done ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
-                paddingTop: 0,
-              }}
-            >
-              {vi.orderStatus[step]}
-            </Text>
+            <Box>
+              <Text
+                size="small"
+                bold={active}
+                style={{
+                  color: active ? 'var(--color-text-brand)' : done ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+                  paddingTop: 0,
+                }}
+              >
+                {vi.orderStatus[step]}
+              </Text>
+              {times?.[i] && (
+                <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                  {formatDateTime(times[i])}
+                </Text>
+              )}
+            </Box>
           </Box>
         );
       })}

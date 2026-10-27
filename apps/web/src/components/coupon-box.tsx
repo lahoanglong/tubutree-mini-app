@@ -90,7 +90,7 @@ export function CouponBox({
    * dấu này là số xem trước cũ hết đúng và phải hỏi lại.
    */
   previewKey?: string;
-  /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán "Xem mã" như Mini App. */
+  /** Chữ bên phải thẻ mã khi chưa áp mã nào: giỏ "Chọn mã", thanh toán cũng "Chọn mã" như Mini App. */
   actionLabel?: string;
   /** Thanh toán: dải phẳng tràn ngang như các khối khác của Mini App thay vì thẻ nổi của giỏ. */
   band?: boolean;

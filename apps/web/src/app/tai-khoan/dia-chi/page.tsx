@@ -12,6 +12,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { actionErrorText } from '@/lib/error-text';
 
 /** ActionLink của Mini App: chữ 14px/600 xanh (Xóa đỏ), không gạch chân. */
 const LINK_MINI = 'max-md:text-sm max-md:no-underline max-md:text-[color:var(--color-text-brand)]';
@@ -120,7 +121,7 @@ export default function AddressBookPage() {
       )}
       {actionError && (
         <p role="alert" className={`mb-3 ${ui.error}`}>
-          {actionError instanceof Error ? actionError.message : 'Không thực hiện được. Vui lòng thử lại.'}
+          {actionErrorText(actionError)}
         </p>
       )}
 

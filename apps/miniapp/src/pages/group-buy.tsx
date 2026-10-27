@@ -2,7 +2,7 @@ import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { useAuthStore } from '../store/auth';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -104,7 +104,7 @@ export default function GroupBuyPage() {
           <LineItemSkeleton />
         </div>
       ) : isError ? (
-        <ErrorState message={getErrorMessage(error)} onRetry={() => void refetch()} />
+        <ErrorState message={getLoadErrorMessage(error)} onRetry={() => void refetch()} />
       ) : invited || others.length > 0 || done.length > 0 ? (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {invited && renderCard(invited, !invited.isOwner && !invited.joined)}

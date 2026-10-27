@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError } from '@/lib/client-api';
-import { friendlyError, isAuthError, SESSION_EXPIRED_TEXT, NO_ACCESS_TEXT } from './friendly-error';
+import { ApiError, NetworkError } from '@/lib/client-api';
+import { friendlyActionError, friendlyError, isAuthError, SESSION_EXPIRED_TEXT, NO_ACCESS_TEXT } from './friendly-error';
 
 describe('friendlyError', () => {
   it('401/403 không bao giờ in message thô của API', () => {
@@ -25,6 +25,16 @@ describe('friendlyError', () => {
     const m = 'Bạn đã gửi quá nhiều tin hôm nay. Cần hỗ trợ, gọi hotline.';
     expect(friendlyError(new ApiError(m, 429, 'CHAT_DAILY_LIMIT'))).toBe(m);
     expect(friendlyError(new ApiError('ThrottlerException', 429))).toContain('đợi vài giây');
+  });
+  it('401 mang lời nghiệp vụ tiếng Việt giữ lời đó, 401 thô thì câu hết phiên', () => {
+    expect(friendlyError(new ApiError('Tài khoản đã bị khoá.', 401))).toBe('Tài khoản đã bị khoá.');
+    expect(friendlyError(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
+  });
+  it('friendlyActionError: hết thời gian nói chưa rõ kết quả, friendlyError nói tải chậm; 401/403 thô vẫn không lộ', () => {
+    expect(friendlyError(new NetworkError(true))).toBe('Tải chậm quá, thử lại nhé.');
+    expect(friendlyActionError(new NetworkError(true))).toContain('chưa rõ đã xong chưa');
+    expect(friendlyActionError(new ApiError('Unauthorized', 401))).toBe(SESSION_EXPIRED_TEXT);
+    expect(friendlyActionError(new ApiError('Forbidden', 403))).toBe(NO_ACCESS_TEXT);
   });
   it('isAuthError: 401/403 hoặc message thô', () => {
     expect(isAuthError(new ApiError('x', 403))).toBe(true);
