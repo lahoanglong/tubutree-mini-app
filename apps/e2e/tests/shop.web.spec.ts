@@ -475,6 +475,11 @@ test.describe('Web: yêu thích', () => {
 });
 
 test.describe('Web: mua chung', () => {
+  // Thẻ nhóm đọc Giờ vàng đang chạy để ghi giá "Mua một mình" hiện nay.
+  test.beforeEach(({ api }) => {
+    api.get('/flash-sales/active', []);
+  });
+
   test('khách chưa đăng nhập: xem được danh sách, bấm Đăng nhập để tham gia sang đăng nhập kèm returnTo, không gửi tham gia', async ({ page, api }) => {
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
     api.get('/group-buy', [group('g1')]);
