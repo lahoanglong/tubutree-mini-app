@@ -56,14 +56,15 @@ test.describe('Web khách: danh mục /san-pham', () => {
     expect(call.get('q')).toBe('dau goi');
   });
 
-  test('lưới danh mục, sắp xếp và bộ lọc ghi vào URL và gọi API đúng tham số', async ({ page, api }) => {
+  test('lưới danh mục, sắp xếp và bộ lọc ghi vào URL và gọi API đúng tham số', async ({ page, api }, testInfo) => {
     mockCatalog(api);
     api.get('/products', ({ call }) => {
       if (call.query.get('limit') === '1') return pageOf([product(1)], 5, 1, 1);
       return pageOf([product(1), product(2)], 2);
     });
-    // Từ lg bộ lọc nằm ở cột bên trái nên không có nút mở sheet; giữ khổ dưới lg để kiểm đúng luồng sheet.
-    await page.setViewportSize({ width: 900, height: 900 });
+    // Từ lg bộ lọc nằm ở cột bên trái nên không có nút mở sheet; project desktop hạ xuống khổ dưới lg để kiểm luồng sheet,
+    // project Mobile giữ nguyên khổ điện thoại.
+    if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 900, height: 900 });
     await page.goto('/san-pham');
     await refetchStale(page, api, 'GET', '/categories');
     await expect(page.getByText('Sản phẩm 1')).toBeVisible();
@@ -88,6 +89,22 @@ test.describe('Web khách: danh mục /san-pham', () => {
     expect(last.get('minRating')).toBe('4');
     expect(last.get('sort')).toBe('price_asc');
     await expect(page.getByRole('button', { name: 'Bộ lọc (2)' })).toBeVisible();
+  });
+
+  test('từ lg bộ lọc là cột bên trái: không có nút Bộ lọc, chọn danh mục và còn hàng ghi vào URL', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'Cột lọc chỉ có ở máy tính');
+    mockCatalog(api);
+    api.get('/products', pageOf([product(1), product(2)], 2));
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/san-pham');
+    await refetchStale(page, api, 'GET', '/categories');
+    const side = page.getByRole('complementary', { name: 'Bộ lọc' });
+    await expect(side).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Bộ lọc', exact: true })).toHaveCount(0);
+    await side.getByRole('button', { name: /Dầu gội/ }).click();
+    await expect(page).toHaveURL(/category=c-goi/);
+    await side.getByRole('checkbox', { name: 'Chỉ hiện còn hàng' }).click();
+    await expect(page).toHaveURL(/inStock=1/);
   });
 
   test('gõ hiện gợi ý sản phẩm; Enter ghi từ khoá vào URL; tìm không ra thì nói rõ', async ({ page, api }) => {

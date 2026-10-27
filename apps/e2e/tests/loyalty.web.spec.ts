@@ -79,6 +79,19 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(page.getByText('Tích điểm từ đơn hàng', { exact: true })).toBeVisible();
   });
 
+  test('từ lg mã giảm giá và điểm danh nằm ở cột trái, trên lịch sử; không rơi xuống dưới', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name !== 'Web Customer', 'Hai cột chỉ có ở máy tính');
+    mockLoyalty(api, { done: false });
+    await page.setViewportSize({ width: 1000, height: 900 });
+    await page.goto('/tai-khoan/diem-xanh');
+    const y = async (name: string) => (await page.getByRole('region', { name }).boundingBox())!.y;
+    await expect(page.getByRole('region', { name: 'Mã giảm giá của tôi' })).toBeVisible();
+    const coupons = await y('Mã giảm giá của tôi');
+    const history = await y('Lịch sử Điểm Xanh');
+    expect(coupons).toBeLessThan(history);
+    expect(coupons).toBeLessThan(900);
+  });
+
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
     mockLoyalty(api, { done: false });
     await page.goto('/tai-khoan/diem-xanh');
