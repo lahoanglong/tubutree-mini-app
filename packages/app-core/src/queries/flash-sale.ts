@@ -11,13 +11,13 @@ export const flashUpcomingQuery = (http: HttpClient) => ({
 });
 
 export const FLASH_REFETCH_MS = 60_000;
-export const FLASH_REFETCH_MIN_MS = 1_000;
+export const FLASH_REFETCH_MIN_MS = 5_000;
 
 type FlashPollQuery = { state: { data?: readonly { endAt?: string }[] } };
 
 /**
  * `refetchInterval` cho danh sách Giờ vàng đang chạy: không có suất thì không thêm request nào; có suất thì tải lại tối đa mỗi 60 giây
- * và sớm hơn, vào đúng mốc kết thúc gần nhất theo giờ `now` (tối thiểu 1 giây), để thẻ bỏ giá Giờ vàng ngay khi đợt hết thay vì
+ * và sớm hơn, vào đúng mốc kết thúc gần nhất theo giờ `now` (tối thiểu 5 giây: phản hồi được cache tới 10 giây nên nhịp dày hơn chỉ lấy lại suất vừa hết), để thẻ bỏ giá Giờ vàng ngay khi đợt hết thay vì
  * chờ nhịp kế. Chỉ MỘT nơi trong mỗi app gắn hàm này (xem useFlashSalesPoller của Mini App); nơi khác chỉ đọc cache.
  */
 export const makeFlashRefetchInterval =
