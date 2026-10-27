@@ -42,6 +42,21 @@ const DESK_POINT: WasteDeskPointDTO = {
 };
 
 test.describe('Đổi rác lấy quà — khách', () => {
+  test('pin: chọn pin ở bước món rồi sang bước cách giao, Gửi về kho bị khoá kèm lý do, Mang tới điểm nhận vẫn chọn được', async ({ page, api }) => {
+    mockSession(api, makeUser({ id: 'u-wx' }));
+    mockWasteCustomer(api, { points: [wastePoint({ id: 'wp-q1' })] });
+    await page.goto('/recycle/new');
+    const card = page.locator('[data-item]').filter({ hasText: 'Pin cũ' });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    const plus = card.getByRole('button', { name: 'Tăng số lượng' });
+    for (let i = 0; i < 10; i++) await plus.click();
+    await page.getByRole('button', { name: 'Tiếp tục' }).click();
+    const mail = page.getByRole('radio', { name: /Gửi về kho/ });
+    await expect(mail).toHaveAttribute('aria-disabled', 'true');
+    await expect(mail.getByText(/không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được/)).toBeVisible();
+    await expect(page.getByRole('radio', { name: /Mang tới điểm nhận/ })).not.toHaveAttribute('aria-disabled', 'true');
+  });
+
   test('/refill chuyển sang /recycle', async ({ page, api }) => {
     mockSession(api, makeUser({ id: 'u-wx' }));
     mockWasteCustomer(api, { points: [wastePoint({ id: 'wp-q1' })] });

@@ -54,6 +54,26 @@ export const WASTE_ITEMS: WasteMeItemDTO[] = [
     monthRemainingQty: 300,
     dayRemainingQty: 50,
   },
+  {
+    id: 'wi-battery',
+    code: 'BATTERY',
+    name: 'Pin cũ',
+    unitLabel: 'viên',
+    unitsPerPoint: 10,
+    pointsPerGroup: 1000,
+    dropsPerUnit: 0,
+    dailyCapQty: 20,
+    monthlyCapQty: 50,
+    status: 'ACTIVE',
+    prepInstructions: 'Dán băng keo hai đầu cực. Không nhận pin phồng, chảy nước, pin xe điện hay ắc quy.',
+    imageUrl: null,
+    gramsPerUnit: null,
+    hazardous: true,
+    warehouseOnly: false,
+    sortOrder: 40,
+    monthRemainingQty: 50,
+    dayRemainingQty: 20,
+  },
 ];
 
 export function wastePoint(over: Partial<WastePointDTO> & Pick<WastePointDTO, 'id'>): WastePointDTO {
@@ -189,7 +209,11 @@ export function mockWasteCustomer(
       estimatedDrops: 0,
       estimatedGrams: null,
       pointsValueVnd: estimatedPoints,
-      blocks: [],
+      // Như máy chủ: món nguy hại (pin) chỉ nhận khi khách mang tới điểm nhận.
+      blocks:
+        body.method !== 'DROP_OFF' && body.lines.some((l) => WASTE_ITEMS.find((i) => i.id === l.itemId)?.hazardous)
+          ? [{ code: 'ITEM_DROPOFF_ONLY', itemId: WASTE_ITEMS.find((i) => i.hazardous)!.id }]
+          : [],
       feeEstimate: null,
       itemCaps: [],
       pointsMonthRemaining: 60_000,
