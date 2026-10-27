@@ -15,6 +15,7 @@ import { pointsSummary } from '@/lib/checkout-points';
 import { dismissGameTutorial, isGameTutorialDismissed } from '@/lib/game-tutorial';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { useCouponUse } from '@/lib/use-coupon-use';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -30,6 +31,7 @@ import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
 import { GAME_TAB_KEYS, GAME_TABS, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
+import { OrderWaterCard } from '@/components/game/order-water-card';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
 import { MissionsCard } from '@/components/game/missions-card';
 import { QuizCard, type QuizReveal } from '@/components/game/quiz-card';
@@ -69,7 +71,14 @@ function GameBody() {
   const { notice, notify } = useGameNotice();
   const headerOffset = useHeaderOffset();
   const [tab, setTab] = useTabParam(GAME_TAB_KEYS, 'today');
-  const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true);
+  // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
+  const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
+  const couponUse = useCouponUse();
+  const { profileQ, quizQ, quiz, board, missions, forest, community, codex, season, seasonBoard, friends, garden, seasonPass } = useGameData(true, {
+    garden: tab === 'garden',
+    community: tab === 'community',
+    friends: tab === 'community' || earn.open,
+  });
   const { data: profile, isLoading, isError, error: profileError, refetch } = profileQ;
 
   // Quiz nhiều câu/ngày: theo dõi câu đã trả lời phía trình duyệt để hiện câu kế tiếp (§6.7.8).
@@ -79,8 +88,6 @@ function GameBody() {
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
 
   const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null; shared: boolean }>({ open: false, reward: undefined, meta: null, shared: false });
-  // Sheet "Kiếm nước": đích chung của mọi nút thiếu nước. `missing` = số giọt thiếu của nút đã mở nó (null: nút chính).
-  const [earn, setEarn] = useState<{ open: boolean; missing: number | null }>({ open: false, missing: null });
   const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
   const { data: loyalty } = useQuery(loyaltyQuery(coreHttp));
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
@@ -152,7 +159,13 @@ function GameBody() {
   return (
     <>
       <div className="mx-auto flex max-w-2xl flex-col gap-3 lg:max-w-5xl">
-        <GardenHero eco={eco} totalSeeds={profile?.totalSeeds} streakDays={profile?.streakDays} />
+        <GardenHero
+          eco={eco}
+          totalSeeds={profile?.totalSeeds}
+          streakDays={profile?.streakDays}
+          harvestReady={profile?.harvestReady}
+          wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}
+        />
 
         {/* Dính dưới thanh đầu trang của site để thanh tab còn trong tầm tay khi cuộn hết khối dài của "Hôm nay". */}
         <div className="sticky z-10 bg-stone-25 py-1" style={{ top: headerOffset }}>
@@ -188,8 +201,11 @@ function GameBody() {
             pending={waterM.isPending || checkInM.isPending || dewM.isPending}
             onClaim={claimDaily}
             onWater={(drops) => waterM.mutate(drops)}
+            onHarvest={() => waterM.mutate(0)}
             onEarn={() => openEarn()}
           />
+
+          <OrderWaterCard info={profile?.orderWater} shopHref="/san-pham" />
 
           <div id={GAME_CHECKIN_ANCHOR}>
           <CheckInStreak
@@ -347,10 +363,8 @@ function GameBody() {
         sharing={shareHarvestM.isPending}
         onShare={shareToCommunity}
         onCopyCoupon={(code) => void copyCoupon(code)}
-        onUseCoupon={() => {
-          closeHarvest();
-          router.push('/san-pham');
-        }}
+        couponNotice={couponUse.notice}
+        onUseCoupon={(code) => void couponUse.use(code, closeHarvest)}
       />
       <GameNoticeBar notice={notice} />
     </>

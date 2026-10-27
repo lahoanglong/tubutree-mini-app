@@ -168,7 +168,7 @@ describe('Vườn Xanh: trạng thái trang', () => {
     click(btn(c, 'Thử lại'));
     await flush(8);
     expect(getsOf('/game/profile')).toHaveLength(2);
-    expect(c.textContent).toContain('Điểm danh chuỗi 3 ngày');
+    expect(c.textContent).toContain('Chuỗi 3 ngày');
   });
 });
 
@@ -203,7 +203,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
   it('thẻ vườn: tên cây, tiến độ và dòng tổng hợp có dấu phân cách nghìn', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Cây Sưa');
-    expect(c.textContent).toContain('600/1.000💧 · 💧 1.250 · 🔥 3 ngày · 🌳 cây đã trồng: 2');
+    expect(c.textContent).toContain('600/1.000💧 · 🔥 Chuỗi 3 ngày · 🌳 Đã thu hoạch 2 cây');
     expect(c.querySelector('[role="progressbar"][aria-label="Tiến độ cây"]')!.getAttribute('aria-valuenow')).toBe('60');
   });
 
@@ -211,7 +211,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     state.data['/game/profile'] = PROFILE({ ecoImpact: null, totalSeeds: undefined, streakDays: undefined });
     const c = await mount();
     expect(c.textContent).toContain('Vườn của bạn');
-    expect(c.textContent).toContain('0/0💧 · 💧 0 · 🔥 0 ngày · 🌳 cây đã trồng: 0');
+    expect(c.textContent).toContain('0/0💧 · 🔥 Chuỗi 0 ngày · 🌳 Đã thu hoạch 0 cây');
   });
 
   it('giai đoạn cây: <=50% mầm, >50% cành, 100% cây', async () => {
@@ -226,6 +226,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
   });
 
   it('banner mùa (tab Cộng đồng) hiện chủ đề, vùng và loài nổi bật; không có mùa thì ẩn', async () => {
+    state.search = 'tab=community';
     const c = await mount();
     expect(panel(c, 'Cộng đồng').textContent).toContain('Mùa Thu Xanh');
     expect(panel(c, 'Cộng đồng').textContent).toContain('Thu · Tây Nguyên');
@@ -254,7 +255,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
   it('khối nào ở tab nào: tưới, điểm danh, nhiệm vụ, quiz, vòng quay thuộc Hôm nay, mỗi khối có h2; tác động xanh ở tab Vườn', async () => {
     const c = await mount();
     const today = panel(c, 'Hôm nay');
-    for (const t of ['Nhận nước hôm nay', 'Điểm danh chuỗi']) expect(today.textContent).toContain(t);
+    for (const t of ['Nhận nước hôm nay', 'Chuỗi 3 ngày', 'Điểm danh']) expect(today.textContent).toContain(t);
     expect(Array.from(today.querySelectorAll('h2')).map((h) => h.textContent)).toEqual(
       expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn']),
     );
@@ -363,7 +364,7 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
   it('chuỗi 3 ngày: tiêu đề, 7 ô theo chu kỳ, ô thưởng ngày 3 và 7', async () => {
     state.data['/game/profile'] = PROFILE({ streakDays: 2 });
     const c = await mount();
-    expect(c.textContent).toContain('Điểm danh chuỗi 2 ngày');
+    expect(c.textContent).toContain('Chuỗi 2 ngày');
     const cells = Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).map((x) => x.textContent);
     expect(cells).toEqual(['💧', '💧', '🎁', '4', '5', '6', '🎁']);
   });
@@ -441,8 +442,9 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     await flush(8);
     expect(postsOf('/game/tree/water')).toHaveLength(1);
     expect(postsOf('/game/tree/water')[0]!.body).toEqual({ drops: 1250 });
-    expect(document.body.textContent).toContain('Đã tưới · 620/1.000💧');
-    expect(getsOf('/game/forest').length).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).toContain('Đã tưới −1.250💧 · còn 380💧 nữa là thu hoạch');
+    // Rừng chỉ tải khi mở tab Vườn: ở tab Hôm nay chưa tải thì cũng chưa có gì để làm mới.
+    expect(getsOf('/game/forest')).toHaveLength(0);
   });
 
   it('tưới lỗi: báo lỗi và nút bật lại', async () => {
@@ -463,7 +465,7 @@ describe('Vườn Xanh: tưới cây và góp quỹ trồng cây', () => {
     state.data['/game/profile'] = PROFILE({ treePointsPrice: undefined });
     c = await mount();
     expect(btn(c, 'Góp quỹ trồng cây').textContent!.trim()).toBe('Góp quỹ trồng cây');
-    expect(c.textContent).toContain('Góp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.');
+    expect(c.textContent).toContain('Góp bằng Điểm Xanh. Điểm sắp hết hạn được dùng trước.');
   });
 
   const BUY = '/game/tree/buy';
@@ -687,6 +689,7 @@ describe('Vườn Xanh: vòng quay may mắn', () => {
 
 describe('Vườn Xanh: tác động xanh', () => {
   it('số cây góp quỹ, giọt nước đã góp, tối đa 5 mã kèm trạng thái, số cây còn lại', async () => {
+    state.search = 'tab=garden';
     const c = await mount();
     const eco = Array.from(c.querySelectorAll('h2')).find((h) => h.textContent === 'Tác động xanh của bạn')!.parentElement!;
     expect(eco.textContent).toContain('Cây đã góp quỹ');

@@ -85,7 +85,7 @@ export function TreeFund({
           </span>
         </button>
       )}
-      <p className="text-center text-xs text-stone-600">Góp bằng Điểm Xanh — dùng điểm thường trước, thiếu mới dùng điểm không hết hạn.</p>
+      <p className="text-center text-xs text-stone-600">{gameNewbieCopy.fund.line}</p>
       <Sheet
         open={confirmOpen}
         onClose={closeConfirm}
@@ -105,7 +105,7 @@ export function TreeFund({
         <p className="text-sm text-stone-900">
           {treePointsPrice != null ? `Góp quỹ trồng cây sẽ trừ ${formatPoints(treePointsPrice)} từ Điểm Xanh của bạn.` : 'Góp quỹ trồng cây sẽ trừ Điểm Xanh của bạn.'}
         </p>
-        <p className="mt-2 text-xs text-stone-600">Điểm thường trừ trước, rồi điểm quy đổi không hết hạn. Không hoàn lại sau khi góp.</p>
+        <p className="mt-2 text-xs text-stone-600">{gameNewbieCopy.fund.confirmOrder}</p>
       </Sheet>
     </div>
   );

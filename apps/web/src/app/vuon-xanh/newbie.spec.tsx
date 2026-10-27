@@ -171,6 +171,8 @@ describe('Vườn Xanh người mới (web): nút chính và không ngõ cụt',
   it.each(cases)('mọi nút thiếu nước mở sheet "Kiếm nước", không gọi API, không báo lỗi: $label', async ({ tab: t, name, path, need }) => {
     state.data['/game/profile'] = DRY({ totalSeeds: 0, streakRepairable: true, brokenStreakDays: 5 });
     state.data['/game/garden'] = { plots: [HOME, PLOT], maxPlots: 4, nextUnlock: { slot: 3, seedCost: 100 } };
+    // Dữ liệu tab Vườn chỉ tải khi mở tab (?tab=garden).
+    state.search = t ? 'tab=garden' : '';
     const c = await mount();
     if (t) await tab(c, t);
     click(btn(t ? panel(c, t) : c, name));
@@ -405,6 +407,7 @@ describe('Vườn Xanh người mới (web): thiếu điểm và lô phụ', () 
   });
 
   it('lô phụ ẩn tới khi thu hoạch cây thứ 2, thay bằng dòng gợi ý; từ cây thứ 2 hiện nút mở lô ghi giá', async () => {
+    state.search = 'tab=garden';
     state.data['/game/profile'] = DRY({ ecoImpact: { progress: 5, target: 300, treeType: 'Cây', treesPlanted: 1 } });
     let c = await mount();
     expect(panel(c, 'Vườn').textContent).toContain('Thu hoạch cây thứ 2 để mở thêm lô đất.');

@@ -52,7 +52,7 @@ const harvestMeta = (r: WateringResult): HarvestMeta => {
   const list = (r.reward?.coupons ?? []).map((c) => (typeof c === 'string' ? c : c.code)).filter(Boolean);
   const coupons = list.length > 0 ? list : r.reward?.coupon ? [r.reward.coupon] : [];
   return {
-    couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' ? r.couponCapped : null,
+    couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' || r.couponCapped === 'OFF' ? r.couponCapped : null,
     guest: r.couponCapped === 'GUEST' || r.rewardBlocked === 'GUEST',
     coupons,
     nextTarget: r.target,

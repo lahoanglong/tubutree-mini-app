@@ -43,11 +43,11 @@ export function CheckInStreak({
         <div className="min-w-0">
           <h2 className={`flex items-center gap-1.5 ${ui.sectionTitle} ${miniSectionTitle}`}>
             <Flame className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
-            Điểm danh chuỗi {streakDays} ngày
+            {t.title(streakDays)}
           </h2>
           <p className="text-xs text-stone-600">{t.sub(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
-        <button type="button" disabled={allDone || checkInPending} onClick={onCheckIn} className={`${ui.btnPrimary} flex-none gap-1`}>
+        <button type="button" disabled={allDone || checkInPending} onClick={onCheckIn} className={`${miniBtnSecondary} flex-none gap-1`}>
           {allDone && <Check className="h-4 w-4" aria-hidden="true" />}
           {allDone ? 'Đã điểm danh' : 'Điểm danh'}
         </button>
@@ -66,12 +66,12 @@ export function CheckInStreak({
               >
                 {done ? '💧' : bonus ? '🎁' : day}
               </div>
-              <div className="mt-0.5 text-xs text-stone-600">N{day}</div>
-              {bonus && reward != null && <div className="text-xs font-bold text-stone-700">{t.dayReward(reward)}💧</div>}
+              {bonus && reward != null && <div className="mt-0.5 text-xs font-bold text-stone-700">{t.dayReward(reward)}💧</div>}
             </div>
           );
         })}
       </div>
+      <p className="mt-2 text-xs text-stone-600">{t.bonusNote(STREAK_3_SEEDS, profile?.streak7Seeds ?? null)}</p>
 
       {/* Vé giữ lửa (streak-freeze) + giọt sương sáng (dew) */}
       <div className="mt-3 border-t border-stone-200 pt-1">

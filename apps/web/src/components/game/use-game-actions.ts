@@ -56,7 +56,7 @@ const harvestMeta = (r: WateringResult, home: boolean): HarvestMeta => {
   const list = (r.reward?.coupons ?? []).filter(Boolean);
   const coupons = list.length > 0 ? list : r.reward?.coupon ? [r.reward.coupon] : [];
   return {
-    couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' ? r.couponCapped : null,
+    couponCapped: r.couponCapped === 'DAY' || r.couponCapped === 'MONTH' || r.couponCapped === 'OFF' ? r.couponCapped : null,
     guest: r.couponCapped === 'GUEST' || r.rewardBlocked === 'GUEST',
     coupons,
     nextTarget: r.target,
@@ -158,7 +158,7 @@ export function useGameActions({
     if (r.harvested) {
       onHarvest(r.reward, harvestMeta(r, home));
     } else {
-      notify(`${label} · ${formatNumber(r.progress)}/${formatDrops(r.target)}`, 'success');
+      notify(`${label} · còn ${formatDrops(Math.max(0, r.target - r.progress))} nữa là thu hoạch`, 'success');
     }
     refresh();
     void queryClient.invalidateQueries({ queryKey: ['game', 'forest'] });
@@ -166,7 +166,7 @@ export function useGameActions({
 
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(coreHttp, drops),
-    onSuccess: (r) => afterWatering('Đã tưới', r, true),
+    onSuccess: (r, drops) => afterWatering(`Đã tưới −${formatDrops(drops)}`, r, true),
     onError,
   });
   // Khoá chống bấm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
@@ -191,7 +191,7 @@ export function useGameActions({
   const waterPlotM = useLockedMutation(
     {
       mutationFn: (plotId: string) => waterPlot(coreHttp, plotId, 20),
-      onSuccess: (r) => afterWatering('Đã tưới lô', r, false),
+      onSuccess: (r) => afterWatering(`Đã tưới lô −${formatDrops(20)}`, r, false),
       onError,
     },
     (plotId) => plotId,
