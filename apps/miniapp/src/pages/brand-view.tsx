@@ -7,7 +7,7 @@ import {
 } from '../services/brand-api';
 import { useStorefrontContext } from '../store/storefront-context';
 import { useAuthStore } from '../store/auth';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { ErrorState } from '../components/ui/empty-state';
@@ -90,7 +90,7 @@ export default function BrandViewPage() {
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
         <div style={{ padding: 24 }}>
-          <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
         </div>
       </Page>
     );

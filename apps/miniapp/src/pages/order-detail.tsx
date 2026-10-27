@@ -3,7 +3,7 @@ import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
-import { getErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
 import { getWasteRequestByOrder, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -233,7 +233,7 @@ export default function OrderDetailPage() {
         {isNotFoundError(order.error) ? (
           <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => navigate('/')} />
         ) : (
-          <ErrorState message={getErrorMessage(order.error)} onRetry={() => void order.refetch()} />
+          <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => void order.refetch()} />
         )}
       </Shell>
     );

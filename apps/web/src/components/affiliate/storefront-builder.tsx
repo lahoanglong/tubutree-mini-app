@@ -26,7 +26,7 @@ import { StorefrontPreview } from './storefront-preview';
 import { ContentKitSheet, StorefrontShareSheet } from './storefront-share';
 import { QuestSection, StatsSection } from './storefront-panels';
 import { KIND_LABEL, LAYOUT_LABEL, storefrontHost } from './storefront-rules';
-import { CollectionSheet, ConfigSheet, errText, NewCollectionForm, PickerSheet, ProfileSheet, type Notify } from './storefront-sheets';
+import { CollectionSheet, ConfigSheet, actErrText, NewCollectionForm, PickerSheet, ProfileSheet, type Notify } from './storefront-sheets';
 
 type Notice = { text: string; error: boolean } | null;
 
@@ -111,7 +111,7 @@ export function StorefrontBuilder({ sf }: { sf: StorefrontEdit }) {
     void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
     return qc.invalidateQueries({ queryKey: ['my-storefront'] });
   };
-  const fail = (e: unknown) => notify(errText(e), true);
+  const fail = (e: unknown) => notify(actErrText(e), true);
 
   const publishMut = useMutation({
     mutationFn: () => publishStorefront(coreHttp, true),

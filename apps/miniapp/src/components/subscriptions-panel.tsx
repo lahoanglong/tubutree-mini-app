@@ -9,7 +9,7 @@ import {
 } from '../services/subscriptions-api';
 import { subscriptionCycleView } from '../utils/subscription-price';
 import { getAddresses } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatDate, formatVnd } from '../utils/format';
@@ -97,7 +97,7 @@ export function SubscriptionsPanel() {
           <LineItemSkeleton />
         </>
       ) : subsQ.isError ? (
-        <ErrorState variant="inline" message={getErrorMessage(subsQ.error)} onRetry={() => void subsQ.refetch()} />
+        <ErrorState variant="inline" message={getLoadErrorMessage(subsQ.error)} onRetry={() => void subsQ.refetch()} />
       ) : subs.length > 0 ? (
         subs.map((s) => (
           <SubscriptionCard

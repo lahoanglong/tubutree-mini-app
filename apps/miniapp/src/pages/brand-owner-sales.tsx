@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Package, ShoppingBag, Wallet } from 'lucide-react';
 import { getOwnedBrandSales, type BrandSalesPeriod } from '../services/brand-owner-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { StatTile } from '../components/ui/tiles';
@@ -34,7 +34,7 @@ export function BrandSalesTab() {
             <Skeleton height={84} radius="var(--radius-card)" />
           </div>
         ) : !q.data ? (
-          <ErrorState variant="inline" message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+          <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
         ) : q.data.orderCount === 0 ? (
           <EmptyState
             variant="inline"

@@ -21,7 +21,7 @@ import {
   type FeedPostKind,
   type CreateEventInput,
 } from '../services/feed-api';
-import { apiMediaUrl, getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { Skeleton } from '../components/ui/skeleton';
@@ -126,7 +126,7 @@ function PendingSection() {
   });
 
   if (pendingQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
-  if (pendingQ.isError && !pendingQ.data) return <ErrorState message={getErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />;
+  if (pendingQ.isError && !pendingQ.data) return <ErrorState message={getLoadErrorMessage(pendingQ.error)} onRetry={() => void pendingQ.refetch()} />;
   if (!pendingQ.data || pendingQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noPending} />;
   }
@@ -230,7 +230,7 @@ function ReportsSection() {
   });
 
   if (reportsQ.isLoading) return <Skeleton height={120} radius="var(--radius-card)" />;
-  if (reportsQ.isError && !reportsQ.data) return <ErrorState message={getErrorMessage(reportsQ.error)} onRetry={() => void reportsQ.refetch()} />;
+  if (reportsQ.isError && !reportsQ.data) return <ErrorState message={getLoadErrorMessage(reportsQ.error)} onRetry={() => void reportsQ.refetch()} />;
   if (!reportsQ.data || reportsQ.data.length === 0) {
     return <EmptyState art="leaf" heading={vi.community.noReports} />;
   }
@@ -415,7 +415,7 @@ function EventsSection() {
       {eventsQ.isLoading ? (
         <Skeleton height={120} radius="var(--radius-card)" />
       ) : eventsQ.isError ? (
-        <ErrorState message={getErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />
       ) : !eventsQ.data || eventsQ.data.length === 0 ? (
         <EmptyState art="leaf" heading={view === 'OPEN' ? vi.community.noEvents : vi.community.noClosedEvents} />
       ) : (
@@ -506,7 +506,7 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
           {participantsQ.isLoading ? (
             <Skeleton height={56} radius="var(--radius-card)" style={{ marginTop: 8 }} />
           ) : participantsQ.isError ? (
-            <ErrorState message={getErrorMessage(participantsQ.error)} onRetry={() => void participantsQ.refetch()} />
+            <ErrorState message={getLoadErrorMessage(participantsQ.error)} onRetry={() => void participantsQ.refetch()} />
           ) : participants.length === 0 ? (
             <Text variant="body-sm" tone="tertiary" as="div" style={{ marginTop: 8 }}>{vi.community.noParticipants}</Text>
           ) : (

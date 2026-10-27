@@ -43,7 +43,7 @@ vi.mock('../services/shifts-api', () => ({
   copyWeek: mocks.copyWeek,
   cancelShift: mocks.cancelShift,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
 }));

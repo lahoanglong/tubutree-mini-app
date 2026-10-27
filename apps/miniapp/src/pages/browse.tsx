@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } from '../services/discovery-events';
 import { CartButton } from '../components/cart-button';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -233,7 +233,7 @@ export default function BrowsePage() {
             {products.isLoading ? (
               <CatalogGridSkeleton count={6} />
             ) : products.isError && list.length === 0 ? (
-              <ErrorState message={getErrorMessage(products.error)} onRetry={() => void products.refetch()} />
+              <ErrorState message={getLoadErrorMessage(products.error)} onRetry={() => void products.refetch()} />
             ) : list.length === 0 ? (
               <EmptyState
                 art={state.q ? 'search' : 'leaf'}

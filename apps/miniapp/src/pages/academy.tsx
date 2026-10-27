@@ -8,7 +8,7 @@ import {
   type AcademyCourseSummary,
   type AcademyCourseDetail,
 } from '../services/academy-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { Button } from '../components/ui/button';
@@ -72,7 +72,7 @@ function CourseList({ onOpen, onBackToCtv }: { onOpen: (id: string) => void; onB
       ) : q.isError && isForbidden(q.error) ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
-        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data && q.data.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {q.data.map((c) => (
@@ -161,7 +161,7 @@ function CourseDetail({ courseId }: { courseId: string }) {
       ) : q.isError && isForbidden(q.error) ? (
         <CtvOnlyNotice />
       ) : q.isError ? (
-        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data ? (
         <CourseDetailBody
           course={q.data}

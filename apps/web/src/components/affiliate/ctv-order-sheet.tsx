@@ -31,7 +31,7 @@ import { ChoiceCard } from './choice-card';
 import { CTV_ORDER_COPY as t } from './ctv-order-copy';
 import { loadRecentCustomers, normalizeCustomerPhone, recentCustomerLabel, saveRecentCustomer, type RecentCustomer } from './recent-customers';
 import { ProductThumb } from '@/components/mini';
-import { loadErrorText } from '@/lib/error-text';
+import { actionErrorText, loadErrorText } from '@/lib/error-text';
 
 interface OrderLine {
   variationId: string;
@@ -53,6 +53,7 @@ const SUGGEST_DEBOUNCE_MS = 300;
 const QUOTE_DEBOUNCE_MS = 300;
 
 const errText = loadErrorText;
+const actErrText = actionErrorText;
 const errCode = (e: unknown) => (e instanceof ApiError ? e.code : null);
 /** Không có phản hồi hoặc 5xx: máy chủ có thể đã ghi đơn, nên gửi lại phải dùng đúng Idempotency-Key cũ; 4xx là đã từ chối. */
 const isOutcomeUnknown = (e: unknown) => e instanceof NetworkError || (e instanceof ApiError && e.status >= 500);
@@ -223,13 +224,13 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
       setUnconfirmedKey(null);
       const code = errCode(e);
       if (code && PRICE_MOVED.has(code)) {
-        setPriceMoved({ message: errText(e), itemsKey });
+        setPriceMoved({ message: actErrText(e), itemsKey });
         void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
         return;
       }
       // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
       if (code === 'PAYMENT_METHOD_NOT_ALLOWED') void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
-      setSubmitError(errText(e));
+      setSubmitError(actErrText(e));
     },
     onSettled: () => {
       busy.current = false;

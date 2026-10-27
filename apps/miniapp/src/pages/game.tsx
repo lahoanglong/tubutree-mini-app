@@ -12,7 +12,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { getDailyCheckInStatus, getLoyalty } from '../services/account-api';
 import { shareLink } from '../services/zmp-bridge';
 import { pointsSummary } from '../utils/points-lots';
@@ -147,7 +147,7 @@ export default function GamePage() {
 
   // Profile là dữ liệu chủ đạo của trang (streak/giọt nước/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
-  if (isError && !profile) return shell(<ErrorState message={getErrorMessage(profileError)} onRetry={() => void refetch()} />);
+  if (isError && !profile) return shell(<ErrorState message={getLoadErrorMessage(profileError)} onRetry={() => void refetch()} />);
 
   const eco = profile?.ecoImpact;
   const checkedInToday = isSameVNDay(profile?.lastCheckInAt ?? null);

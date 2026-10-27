@@ -1,6 +1,6 @@
 import { CalendarCheck, Check, Gift, Sprout, type LucideIcon } from 'lucide-react';
 import { checkInCopy, checkInDayIcon, checkInTodayLine, type CheckInDayIcon } from '@tubutree/app-core/daily-check-in-copy';
-import { getErrorMessage } from '../../services/api';
+import { getLoadErrorMessage } from '../../services/api';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -23,7 +23,7 @@ export function DailyCheckInCard({ authed, margin }: { authed: boolean; margin?:
   if (statusQ.isError) {
     return (
       <Card style={wrap} padding={16}>
-        <ErrorState variant="inline" message={checkInCopy.loadError(getErrorMessage(statusQ.error))} onRetry={() => void statusQ.refetch()} />
+        <ErrorState variant="inline" message={checkInCopy.loadError(getLoadErrorMessage(statusQ.error))} onRetry={() => void statusQ.refetch()} />
       </Card>
     );
   }

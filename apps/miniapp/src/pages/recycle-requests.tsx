@@ -8,7 +8,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Text } from '../components/ui/text';
 import { WASTE_QUERY_KEYS, getWasteMe, listWasteRequests } from '../services/waste-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -52,7 +52,7 @@ export default function RecycleRequestsPage() {
       </Card>,
     );
   }
-  if (q.isError) return shell(<ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
+  if (q.isError) return shell(<ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />);
   if (q.isPending || !q.data) return shell(<Skeleton height={120} />);
 
   const rows = q.data;

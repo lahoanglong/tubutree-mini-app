@@ -27,6 +27,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
 }));
 vi.mock('../store/auth', () => ({

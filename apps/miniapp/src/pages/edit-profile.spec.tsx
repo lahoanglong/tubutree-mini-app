@@ -22,7 +22,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/account-api', () => ({ getMe: mocks.getMe, updateMe: mocks.updateMe }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 vi.mock('../store/auth', () => ({
   useAuthStore: Object.assign(() => ({}), {
     getState: () => ({ user: { fullName: 'Lan', avatarUrl: null } }),

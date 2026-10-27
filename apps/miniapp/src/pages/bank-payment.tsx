@@ -4,7 +4,7 @@ import { Box, Page, Text, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { Check, Copy, CheckCircle2, Clock, TriangleAlert } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getBankQr } from '../services/payment-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { isHttpError } from '../services/http';
 import { haptic } from '../utils/haptic';
 import { formatDateTime } from '../utils/format';
@@ -58,7 +58,7 @@ function loadErrorMessage(error: unknown): string {
     const message = Array.isArray(data?.message) ? data.message[0] : data?.message;
     if (message) return message;
   }
-  return getErrorMessage(error);
+  return getLoadErrorMessage(error);
 }
 
 const EXPIRED_MESSAGE = 'Đơn đã quá hạn chuyển khoản. Nếu bạn đã chuyển tiền, Tubu sẽ hoàn lại cho bạn.';
@@ -168,7 +168,7 @@ export default function BankPaymentPage() {
   }
 
   const rejected = isFinalRejection(error);
-  const closedMessage = data?.paymentStatus === 'PAID' ? null : rejected ? getErrorMessage(error) : remaining.expired ? EXPIRED_MESSAGE : null;
+  const closedMessage = data?.paymentStatus === 'PAID' ? null : rejected ? getLoadErrorMessage(error) : remaining.expired ? EXPIRED_MESSAGE : null;
   if (closedMessage) {
     return (
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>

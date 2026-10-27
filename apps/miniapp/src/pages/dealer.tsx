@@ -37,7 +37,7 @@ import {
   type PricelistRow,
   type DealerOrderRules,
 } from '../services/dealer-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { formatDate, formatRatePct, formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { vi } from '../i18n/vi';
@@ -110,7 +110,7 @@ export default function DealerPage() {
   if (meQ.isError && !meQ.data) {
     return (
       <DealerShell title={TITLE_HUB}>
-        <ErrorState message={getErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => void meQ.refetch()} />
       </DealerShell>
     );
   }
@@ -598,7 +598,7 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
             ))}
           </div>
         ) : priceQ.isError ? (
-          <ErrorState message={getErrorMessage(priceQ.error)} onRetry={() => void priceQ.refetch()} />
+          <ErrorState message={getLoadErrorMessage(priceQ.error)} onRetry={() => void priceQ.refetch()} />
         ) : rows.length > 0 ? (
           rows.map((r, i) => (
             <PriceRow
@@ -758,7 +758,7 @@ function DealerOrders() {
           <Skeleton height={80} radius="var(--radius-card)" />
         </div>
       ) : ordersQ.isError ? (
-        <ErrorState message={getErrorMessage(ordersQ.error)} onRetry={() => void ordersQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(ordersQ.error)} onRetry={() => void ordersQ.refetch()} />
       ) : ordersQ.data && ordersQ.data.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {ordersQ.data.map((o) => {
@@ -871,7 +871,7 @@ function DealerCredit() {
   if (ledgerQ.isError && !ledgerQ.data) {
     return (
       <div style={{ margin: '0 16px', paddingBottom: 24 }}>
-        <ErrorState message={getErrorMessage(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />
+        <ErrorState message={getLoadErrorMessage(ledgerQ.error)} onRetry={() => void ledgerQ.refetch()} />
       </div>
     );
   }
@@ -968,7 +968,7 @@ function DealerReport() {
   if (!q.data) {
     return (
       <div style={{ margin: '0 16px' }}>
-        <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       </div>
     );
   }

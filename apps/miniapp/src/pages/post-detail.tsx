@@ -3,7 +3,7 @@ import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Flag, MessageCircle, Pin, Sprout } from 'lucide-react';
 import { getPost, getComments, reportContent, type FeedComment } from '../services/feed-api';
-import { apiMediaUrl, getErrorMessage } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -94,7 +94,7 @@ export default function PostDetailPage() {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.community.title} />
-        <ErrorState message={getErrorMessage(post.error)} onRetry={() => void post.refetch()} />
+        <ErrorState message={getLoadErrorMessage(post.error)} onRetry={() => void post.refetch()} />
       </Page>
     );
   }
@@ -295,7 +295,7 @@ export default function PostDetailPage() {
             ))}
           </div>
         ) : comments.isError ? (
-          <ErrorState message={getErrorMessage(comments.error)} onRetry={() => void comments.refetch()} />
+          <ErrorState message={getLoadErrorMessage(comments.error)} onRetry={() => void comments.refetch()} />
         ) : sortedComments.length === 0 ? (
           <Text variant="body-sm" tone="tertiary" as="div">
             {vi.community.noAnswers}

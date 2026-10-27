@@ -7,7 +7,7 @@ import { getAddresses, getCart, checkoutQuote, placeOrder, type PlacedOrder } fr
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
-import { getErrorCode, getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown } from '../services/api';
 import { isHttpError } from '../services/http';
 import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
@@ -976,7 +976,7 @@ export default function CheckoutPage() {
             <Box flex alignItems="center" style={{ gap: 4 }}>
               <AlertCircle size={13} color="var(--color-text-danger)" aria-hidden />
               <Text size="xSmall" style={{ color: 'var(--color-text-danger)' }}>
-                {getErrorMessage(quote.error)}
+                {getLoadErrorMessage(quote.error)}
               </Text>
             </Box>
             <Text

@@ -6,7 +6,7 @@ import { checkInCopy } from '@tubutree/app-core/daily-check-in-copy';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { memberCardAriaLabel, memberCardView, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
 import { getCoupons, getLoyalty } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useMarkExpiringSeen } from '../hooks/use-offers-dot';
@@ -237,7 +237,7 @@ export default function OffersPage() {
             {couponsQ.isLoading ? (
               <Skeleton height={64} />
             ) : couponsQ.isError ? (
-              <ErrorState variant="inline" message={`Chưa tải được mã giảm giá: ${getErrorMessage(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
+              <ErrorState variant="inline" message={`Chưa tải được mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`} onRetry={() => void couponsQ.refetch()} />
             ) : coupons.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {coupons.map((c) => (

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ticket } from 'lucide-react';
 import type { GiftRedemption } from '../services/account-api';
 import { getMyRedemptions } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 import { WASTE_QUERY_KEYS } from '../services/waste-api';
 import { AuthGate } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
@@ -99,7 +99,7 @@ function RewardsMineBody() {
   const navigate = useNavigate();
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.rewardsMine, queryFn: getMyRedemptions });
 
-  if (q.isError) return <ErrorState message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />;
   if (!q.data) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
   if (q.data.length === 0) {
     return <EmptyState art="box" heading="Bạn chưa đổi quà nào" ctaLabel="Đến Kho quà" onCta={() => navigate('/rewards')} />;

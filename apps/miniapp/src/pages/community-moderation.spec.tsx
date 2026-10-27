@@ -45,6 +45,7 @@ vi.mock('../services/feed-api', () => ({
 }));
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   apiMediaUrl: (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `https://api.test${src}` : src),
 }));
 vi.mock('../store/auth', () => ({

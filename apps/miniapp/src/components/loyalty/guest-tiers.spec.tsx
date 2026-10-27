@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ login: vi.fn(), coreGet: vi.fn() }));
-vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
 vi.mock('../../services/core-http', () => ({ coreHttp: { get: mocks.coreGet } }));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {

@@ -1,10 +1,20 @@
 import { describe, it, expect, vi as vitestVi, afterEach } from 'vitest';
-import { api, apiMediaUrl, getErrorMessage, HttpError, isOutcomeUnknown, loginGuest, loginZaloMiniApp } from './api';
+import { api, apiMediaUrl, getErrorMessage, getLoadErrorMessage, HttpError, isOutcomeUnknown, loginGuest, loginZaloMiniApp } from './api';
 import { vi as viCopy } from '../i18n/vi';
 
 function httpError(o: { code?: string; response?: { status: number; data?: unknown } }): unknown {
   return new HttpError('boom', o.code, o.response);
 }
+
+describe('getLoadErrorMessage', () => {
+  it('hết thời gian lúc tải nói "tải chậm", nút bấm (getErrorMessage) nói chưa rõ kết quả; lỗi khác giống nhau', () => {
+    const timeout = httpError({ code: 'ECONNABORTED' });
+    expect(getLoadErrorMessage(timeout)).toBe(viCopy.errors.loadTimeout);
+    expect(getErrorMessage(timeout)).toBe(viCopy.errors.timeout);
+    const busy = httpError({ response: { status: 503, data: {} } });
+    expect(getLoadErrorMessage(busy)).toBe(getErrorMessage(busy));
+  });
+});
 
 describe('getErrorMessage', () => {
   afterEach(() => {

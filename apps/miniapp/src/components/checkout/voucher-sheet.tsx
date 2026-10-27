@@ -5,7 +5,7 @@ import { Ticket, TriangleAlert } from 'lucide-react';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, getLoadErrorMessage } from '../../services/api';
 import { formatDate, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
@@ -194,7 +194,7 @@ export function VoucherSheet({
           ) : couponsQ.isError ? (
             <ErrorState
               variant="inline"
-              message={`Không thể tải danh sách mã giảm giá: ${getErrorMessage(couponsQ.error)}`}
+              message={`Không thể tải danh sách mã giảm giá: ${getLoadErrorMessage(couponsQ.error)}`}
               onRetry={() => void couponsQ.refetch()}
             />
           ) : couponsQ.data && couponsQ.data.length > 0 ? (

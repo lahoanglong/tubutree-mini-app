@@ -9,7 +9,7 @@ import { ErrorState } from './ui/empty-state';
 import { Skeleton } from './ui/skeleton';
 import { Text } from './ui/text';
 import { LegalMarkdown } from './legal-markdown';
-import { getErrorMessage } from '../services/api';
+import { getLoadErrorMessage } from '../services/api';
 
 export const POLICY_TITLES: Record<LegalSlug, string> = {
   'dieu-khoan': LEGAL_PAGES['dieu-khoan'].title,
@@ -52,7 +52,7 @@ export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose
           <Skeleton height={14} width="75%" />
         </div>
       ) : q.isError ? (
-        <ErrorState variant="inline" message={getErrorMessage(q.error)} onRetry={() => void q.refetch()} />
+        <ErrorState variant="inline" message={getLoadErrorMessage(q.error)} onRetry={() => void q.refetch()} />
       ) : q.data?.content ? (
         <LegalMarkdown source={q.data.content} onPolicy={setLinked} />
       ) : q.data ? (

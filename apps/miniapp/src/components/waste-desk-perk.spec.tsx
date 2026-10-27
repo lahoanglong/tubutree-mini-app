@@ -16,6 +16,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
 }));
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),

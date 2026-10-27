@@ -26,6 +26,7 @@ export const vi = {
     offline: 'Có vẻ mất mạng. Kiểm tra kết nối rồi thử lại nhé.',
     network: 'Chưa tải được nội dung, thử lại nhé.',
     timeout: 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.',
+    loadTimeout: 'Tải chậm quá, thử lại nhé.',
     server: 'Máy chủ đang bận, thử lại nhé.',
     generic: 'Có chút trục trặc, thử lại nhé',
     sessionExpired: 'Phiên đăng nhập đã hết hạn. Bạn mở lại ứng dụng hoặc đăng nhập lại rồi thử lại nhé.',

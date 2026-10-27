@@ -186,6 +186,15 @@ const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unau
  * fallback theo loại lỗi. Component KHÔNG tự diễn dịch HttpError.
  */
 export function getErrorMessage(error: unknown): string {
+  return errorMessage(error, vi.errors.timeout);
+}
+
+/** Như getErrorMessage nhưng cho màn tải dữ liệu: hết thời gian nói "tải chậm", không nói "chưa rõ đã xong chưa" (chỉ đúng với nút bấm). */
+export function getLoadErrorMessage(error: unknown): string {
+  return errorMessage(error, vi.errors.loadTimeout);
+}
+
+function errorMessage(error: unknown, timeoutMessage: string): string {
   if (isHttpError(error)) {
     // Message của throttler là tiếng Anh kỹ thuật ("ThrottlerException: ...") — không hiển thị.
     const data = error.response?.data as { message?: string | string[] } | undefined;
@@ -196,7 +205,7 @@ export function getErrorMessage(error: unknown): string {
     if (error.response?.status === 401) return businessMsg ?? vi.errors.sessionExpired;
     // Message backend 4xx là nghiệp vụ (viết sẵn tiếng Việt) — hiển thị thẳng; lời tiếng Anh của framework thì câu chung.
     if (backendMsg && error.response && error.response.status < 500) return businessMsg ?? vi.errors.generic;
-    if (error.code === 'ECONNABORTED') return vi.errors.timeout;
+    if (error.code === 'ECONNABORTED') return timeoutMessage;
     // Không có response: phân biệt MẤT MẠNG thật (navigator.onLine=false) với server/CORS không
     // phản hồi (vẫn có mạng) — tránh báo "mất mạng" sai khi thực chất là lỗi máy chủ.
     if (!error.response) {

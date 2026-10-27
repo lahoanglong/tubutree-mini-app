@@ -12,7 +12,7 @@ import { phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { questPercent, statsRows } from './storefront-rules';
-import { errText, type Notify } from './storefront-sheets';
+import { actErrText, type Notify } from './storefront-sheets';
 
 function StatBox({ value, label, brand }: { value: string; label: string; brand?: boolean }) {
   return (
@@ -65,7 +65,7 @@ export function QuestSection({ onNotice }: { onNotice: Notify }) {
       onNotice(`+${formatCount(r.rewardPoints)} điểm 🎉`);
       void qc.invalidateQueries({ queryKey: storefrontQuestsQuery(coreHttp).queryKey });
     },
-    onError: (e) => onNotice(errText(e), true),
+    onError: (e) => onNotice(actErrText(e), true),
   });
   const data = questsQ.data;
   if (!data) return null;
