@@ -1,4 +1,3 @@
-import { flashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
@@ -25,7 +24,7 @@ export interface CatalogTileProps {
 export function CatalogTile({ product, listSource, onOpen }: CatalogTileProps) {
   const navigate = useNavigate();
   // Cùng queryKey với dải giờ vàng → không thêm request.
-  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, refetchInterval: flashRefetchInterval });
+  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
   const pricing = tilePricing(product, flashQ.data ?? []);
   return (
     <ProductTile

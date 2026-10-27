@@ -155,10 +155,30 @@ describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
   });
 });
 
-describe('flashRefetchInterval (B-132)', () => {
-  it('có suất đang chạy: tải lại mỗi phút; không có suất hoặc chưa có dữ liệu: không thêm request', () => {
-    expect(flash.flashRefetchInterval({ state: { data: [{ itemId: 'a' }] } })).toBe(60_000);
-    expect(flash.flashRefetchInterval({ state: { data: [] } })).toBe(false);
-    expect(flash.flashRefetchInterval({ state: { data: undefined } })).toBe(false);
+describe('makeFlashRefetchInterval (B-132)', () => {
+  const NOW = Date.parse('2026-10-27T10:00:00Z');
+  const poll = flash.makeFlashRefetchInterval(() => NOW);
+  const at = (ms: number) => ({ endAt: new Date(NOW + ms).toISOString() });
+
+  it('không có suất hoặc chưa có dữ liệu: không thêm request', () => {
+    expect(poll({ state: { data: [] } })).toBe(false);
+    expect(poll({ state: { data: undefined } })).toBe(false);
+  });
+
+  it('mốc kết thúc còn xa hơn một phút: nhịp 60 giây', () => {
+    expect(poll({ state: { data: [at(3_600_000)] } })).toBe(60_000);
+  });
+
+  it('mốc kết thúc gần nhất trong vòng một phút: tải lại đúng lúc đó, lấy suất sớm nhất', () => {
+    expect(poll({ state: { data: [at(3_600_000), at(12_500)] } })).toBe(12_500);
+  });
+
+  it('đã quá mốc hoặc sát mốc: tối thiểu 1 giây, không dồn request', () => {
+    expect(poll({ state: { data: [at(-5_000)] } })).toBe(1_000);
+    expect(poll({ state: { data: [at(300)] } })).toBe(1_000);
+  });
+
+  it('suất không có endAt hợp lệ: nhịp 60 giây', () => {
+    expect(poll({ state: { data: [{}, { endAt: 'abc' }] } })).toBe(60_000);
   });
 });

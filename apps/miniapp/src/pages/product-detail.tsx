@@ -41,7 +41,6 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
-import { flashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
@@ -161,7 +160,6 @@ export default function ProductDetailPage() {
   const flashQ = useQuery({
     queryKey: ['flash-sales', 'active'],
     queryFn: fetchActiveFlashSales,
-    refetchInterval: flashRefetchInterval,
   });
 
   // Mặc định: phân loại còn hàng có giá đang bán thấp nhất, cùng phân loại mà thẻ sản phẩm lấy giá.
@@ -292,7 +290,7 @@ export default function ProductDetailPage() {
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
   const flashList = flashQ.data ?? [];
-  const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList);
+  const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;

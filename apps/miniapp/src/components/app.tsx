@@ -16,6 +16,7 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
+import { useFlashSalesPoller } from '../hooks/use-flash-sales-poller';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
 import { LivePathnameProvider } from '../hooks/use-live-pathname';
@@ -128,6 +129,7 @@ export default function MyApp() {
   useLegacyNotifyPrefsSync(authed);
   // Mở app lúc mất mạng: phiên ở trạng thái lỗi thì tự khôi phục khi có mạng/quay lại app, không chờ khách bấm Thử lại.
   useSessionRecovery();
+  useFlashSalesPoller();
 
   // Phát đúng 1 lần lúc mở app (deps rỗng — không phụ thuộc state nào nên không chạy lại
   // khi re-render). Cùng effect này gắn luôn global error handler (window.onerror +

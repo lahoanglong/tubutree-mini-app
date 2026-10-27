@@ -2,7 +2,6 @@ import type { CSSProperties } from 'react';
 import { useNavigate } from 'zmp-ui';
 import { Zap } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { flashRefetchInterval } from '@tubutree/app-core/queries/flash-sale';
 import { fetchActiveFlashSales } from '../services/shop-api';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
@@ -23,7 +22,6 @@ export default function ProductCard({ product }: { product: ProductTileProduct }
     queryKey: ['flash-sales', 'active'],
     queryFn: fetchActiveFlashSales,
     staleTime: 30_000,
-    refetchInterval: flashRefetchInterval,
   });
   const pricing = tilePricing(product, flashQ.data ?? []);
 
