@@ -1,4 +1,4 @@
-import { expect, reply, test, type MockApi } from './support/mock-api';
+import { expect, reply, replyEmptyBody, test, type MockApi } from './support/mock-api';
 
 /**
  * Web khách: Vườn Xanh (/vuon-xanh), tab Hôm nay. Mọi lời gọi /api/** đi qua mock (fixture `api`).
@@ -92,15 +92,40 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
     await expect(page.getByRole('heading', { name: 'Vườn Xanh', level: 1 })).toBeVisible();
-    await expect(page.getByText('600/1.000💧 · 💧 1.250 · 🔥 3 ngày · 🌳 cây đã trồng: 2')).toBeVisible();
+    await expect(page.getByText('600/1.000💧 · 🔥 Chuỗi 3 ngày · 🌳 Đã thu hoạch 2 cây')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Hôm nay' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Điểm danh chuỗi 3 ngày' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Chuỗi 3 ngày' })).toBeVisible();
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây/ })).toBeHidden();
     await page.getByRole('tab', { name: 'Vườn' }).click();
     await expect(page).toHaveURL(/tab=garden/);
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeHidden();
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(20\.000 điểm\)/ })).toBeVisible();
+  });
+
+  // B-80: trước khi sửa, mở trang gọi 13 lần của game (11 lần /game/*, điểm và điểm danh); nay chỉ hồ sơ, câu đố, nhiệm vụ, điểm, điểm danh.
+  test('mở /vuon-xanh: dữ liệu tab Vườn và Cộng đồng chỉ tải khi mở tab', async ({ page, api }) => {
+    mockGame(api, { checkedIn: false });
+    await page.goto('/vuon-xanh');
+    await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    const gameOwned = /^GET \/(game\/|me\/loyalty$|me\/daily-check-in$)/;
+    const opened = api.calls.map((c) => `${c.method} ${c.path}`);
+    console.log(`WEB_GAME_CALLS_OPEN ${opened.filter((c) => gameOwned.test(c)).length} (tổng ${opened.length})\n${opened.join('\n')}`);
+    expect(opened.filter((c) => gameOwned.test(c))).toHaveLength(5);
+    const tabOnly = /game\/(garden|forest|collection|community|season|leaderboard|friends)/;
+    expect(opened.some((c) => tabOnly.test(c))).toBe(false);
+    const before = opened.length;
+    await page.getByRole('tab', { name: 'Vườn' }).click();
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('tab', { name: 'Cộng đồng' }).click();
+    await expect(page).toHaveURL(/tab=community/);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(800);
+    const added = api.calls.slice(before).map((c) => `${c.method} ${c.path}`);
+    console.log(`WEB_GAME_CALLS_TABS +${added.length}\n${added.join('\n')}`);
+    expect(added.filter((c) => tabOnly.test(c)).length).toBeGreaterThanOrEqual(7);
   });
 
   test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
@@ -116,7 +141,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: true });
     await page.goto('/vuon-xanh');
     await page.getByRole('button', { name: 'Tưới hết (1.250💧)' }).dblclick();
-    await expect(page.getByText('Đã tưới · 620/1.000💧')).toBeVisible();
+    await expect(page.getByText('Đã tưới −1.250💧 · còn 380💧 nữa là thu hoạch')).toBeVisible();
     const calls = api.callsTo('POST', '/game/tree/water');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ drops: 1250 });
@@ -179,6 +204,24 @@ test.describe('Web khách: Vườn Xanh', () => {
     const calls = api.callsTo('POST', '/game/garden/plot/p2/water');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.body).toEqual({ drops: 20 });
+  });
+
+  test('không có mùa nào chạy: thân rỗng từ server vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
+    mockGame(api, { checkedIn: false });
+    api.get('/game/season', () => replyEmptyBody());
+    await page.goto('/vuon-xanh?tab=community');
+    await expect(page.getByTestId('season-empty')).toBeVisible();
+  });
+
+  test('API bảng xếp hạng lỗi: tab Cộng đồng báo lỗi có nút Thử lại', async ({ page, api }) => {
+    mockGame(api, { checkedIn: false });
+    let failing = true;
+    api.get('/game/leaderboard', () => (failing ? reply(500, { message: 'lỗi' }) : [{ rank: 1, nickname: 'Nhất', streak: 30, treesPlanted: 9 }]));
+    await page.goto('/vuon-xanh?tab=community');
+    await expect(page.getByText(/Chưa tải được bảng xếp hạng/)).toBeVisible();
+    failing = false;
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('Nhất').first()).toBeVisible();
   });
 
   test('tab Cộng đồng: xếp hạng, tặng nước gọi đúng bạn một lần, bạn đã tặng hôm nay bị khoá', async ({ page, api }) => {

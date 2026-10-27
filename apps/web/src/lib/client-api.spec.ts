@@ -286,3 +286,34 @@ describe('client-api — mạng yếu / mất mạng (BUYERWEB-12)', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('client-api — thân rỗng', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn()));
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Content-Length không đọc được qua CORS: chỉ dựa vào nội dung thật của thân (bản sao đọc bằng text()).
+  const emptyBody = (status: number, text: string): Response => {
+    const res = {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: { get: () => null },
+      json: async () => {
+        throw new SyntaxError('Unexpected end of JSON input');
+      },
+      text: async () => text,
+      clone: () => res,
+    };
+    return res as unknown as Response;
+  };
+
+  it('200 thân rỗng (thân rỗng) là null; 204 cũng là null', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(emptyBody(200, '')).mockResolvedValueOnce(emptyBody(204, ''));
+    await expect(apiFetch('/game/season')).resolves.toBeNull();
+    await expect(apiFetch('/x', { method: 'DELETE' })).resolves.toBeNull();
+  });
+
+  it('200 thân hỏng (có nội dung nhưng không phải JSON) vẫn ném lỗi', async () => {
+    (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(emptyBody(200, '<html>oops'));
+    await expect(apiFetch('/x')).rejects.toBeInstanceOf(SyntaxError);
+  });
+});

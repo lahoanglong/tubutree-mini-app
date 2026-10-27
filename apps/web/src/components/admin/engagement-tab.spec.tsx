@@ -22,6 +22,7 @@ const MISSIONS = [
 
 function stub(patch: { status?: number; body: unknown } = { body: { id: 'm-first' } }) {
   const m = mockFetch({
+    '/admin/engagement/seasons': { body: [] },
     '/admin/engagement/missions/': () => patch,
     '/admin/engagement/missions': { body: MISSIONS },
   });

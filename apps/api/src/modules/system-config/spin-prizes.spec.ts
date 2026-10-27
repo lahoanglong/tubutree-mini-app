@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BadRequestException } from '@nestjs/common';
 import { SystemConfigService } from './system-config.service';
-import { SPIN_POINTS_PRIZE_MAX, spinPrizeProblem } from './spin-prizes';
+import { SPIN_POINTS_PRIZE_MAX, SPIN_SEEDS_PRIZE_MAX, spinPrizeProblem } from './spin-prizes';
 import type { PrismaService } from '../../prisma/prisma.service';
 
 /**
@@ -35,9 +35,17 @@ describe('spinPrizeProblem', () => {
 
   it('weight được phép lẻ (chỉ là tỉ trọng của pickWeighted); value lớn nhất vừa cột Int của DB vẫn hợp lệ', () => {
     expect(spinPrizeProblem({ ...ok, weight: 0.5 })).toBeNull();
-    for (const rewardType of ['COUPON', 'SEEDS', 'NONE']) {
+    for (const rewardType of ['COUPON', 'NONE']) {
       expect(spinPrizeProblem({ id: 'x', name: 'x', weight: 1, rewardType, value: 2 ** 31 - 1 })).toBeNull();
     }
+  });
+
+  it('giải SEEDS có trần 1.000 giọt: đúng trần qua, hơn một giọt bị từ chối (bể không còn chặn)', () => {
+    expect(SPIN_SEEDS_PRIZE_MAX).toBe(1_000);
+    const seeds = (value: number) => ({ id: 's', name: 'x', weight: 1, rewardType: 'SEEDS', value });
+    expect(spinPrizeProblem(seeds(SPIN_SEEDS_PRIZE_MAX))).toBeNull();
+    expect(spinPrizeProblem(seeds(SPIN_SEEDS_PRIZE_MAX + 1))).toMatch(/SEEDS.*1000/);
+    expect(spinPrizeProblem(seeds(2 ** 31 - 1))).toMatch(/SEEDS/);
   });
 
   it('giải POINTS có trần nghiệp vụ 100.000 Điểm Xanh: đúng trần qua, hơn trần một điểm bị từ chối', () => {

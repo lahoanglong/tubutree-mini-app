@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { initialEcoImpact } from './game-profile';
+import { clampTankKeepingOverflow, initialEcoImpact } from './game-profile';
 import { RewardPointsService } from '../wallet/reward-points.service';
 
 /**
@@ -158,10 +158,7 @@ export class SeasonPassService {
           create: { userId, totalSeeds: Math.min(cap, reward.amount), ...(ecoImpact ? { ecoImpact } : {}) },
         });
         if (gp.totalSeeds > cap) {
-          await tx.gameProfile.updateMany({
-            where: { userId, totalSeeds: { gt: cap } },
-            data: { totalSeeds: cap },
-          });
+          await clampTankKeepingOverflow(tx, userId, cap, reward.amount);
         }
       } else if (reward.amount > 0) {
         // Cấp TRÊN tx của claim: grant ném (vd vượt trần 2.000 điểm) thì việc đánh dấu đã nhận

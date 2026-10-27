@@ -1,13 +1,22 @@
 import { Trophy } from 'lucide-react';
 import type { LeaderRow } from '@tubutree/app-core/api/game';
+import { Skeleton } from '@/components/ui/skeleton';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import { ErrorState } from '@/components/ui/error-state';
 import { GameCard } from './game-card';
 
 // API xếp theo chuỗi điểm danh dài nhất mọi thời gian (không reset theo tuần), nên nhãn và số trên bục là chuỗi ngày.
 // Huy chương, 🌳 (cây đã trồng) và 🔥 (chuỗi ngày) là số liệu xếp hạng của game.
-export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined }) {
+export function WeeklyLeaderboard({ board, failed = false, onRetry }: { board: LeaderRow[] | undefined; failed?: boolean; onRetry?: () => void }) {
   return (
     <GameCard title="Chuỗi điểm danh dài nhất" icon={Trophy}>
-      {board && board.length > 0 ? (
+      {board === undefined && failed ? (
+        <ErrorState message={gameNewbieCopy.loadError.board} retryLabel={gameNewbieCopy.loadError.retry} onRetry={onRetry} />
+      ) : board === undefined ? (
+        <div aria-busy="true" data-testid="leaderboard-loading">
+          <Skeleton height={96} rounded="rounded-control" />
+        </div>
+      ) : board.length > 0 ? (
         <>
           {/* Bục top 3. Khoá theo vị trí ô: khoá theo hạng va với khoá ô trống khi chỉ có 2 người (hạng 2 đứng ở ô 0). */}
           <div data-podium className="mb-3 flex items-end justify-center gap-2">
@@ -39,9 +48,16 @@ export function WeeklyLeaderboard({ board }: { board: LeaderRow[] | undefined })
               </span>
             </div>
           ))}
+          {board.length < 3 && (
+            <p data-testid="leaderboard-few" className="mt-2 text-xs text-stone-600">
+              Mới có {board.length} người trên bảng. Điểm danh mỗi ngày để giữ chuỗi và lên hạng.
+            </p>
+          )}
         </>
       ) : (
-        <p className="text-sm text-stone-600">Chưa có dữ liệu xếp hạng.</p>
+        <p data-testid="leaderboard-empty" className="text-sm text-stone-600">
+          Chưa có ai trên bảng. Điểm danh mỗi ngày để trở thành người đầu tiên.
+        </p>
       )}
     </GameCard>
   );

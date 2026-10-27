@@ -418,6 +418,18 @@ Chưa diễn tập được (cần SSH và bản backup PROD): thời gian migra
 - Chưa có remote ngoài máy `tubucrypt` nên backup chỉ nằm local trên VPS.
 - Với công cụ cũ, `go-live:check --phase=pre-deploy` in `[FAIL] db.connect ... (P2022)` vì Prisma client mới không đọc được schema cũ. Công cụ hiện tại đã sửa: các kiểm bị ảnh hưởng báo WARN "chưa kiểm được trước khi migrate (schema cũ: ...)" và được kiểm lại ở bước 10. Lưu ý: chỉ khi còn migration chờ áp; hết migration chờ mà vẫn gặp lỗi cột/bảng thiếu thì là FAIL thật (lệch schema hoặc lỗi mã).
 
+### 1.10 Nước thưởng đơn hàng (Vườn Xanh): lỗi game và cách chạy lại
+
+Mỗi đơn giao thành công cộng 100 giọt (tối đa 300 giọt mỗi tuần VN, thứ Hai đến Chủ nhật; cấu hình `game.order_seeds` và `game.order_seeds_weekly_cap`, đặt 0 để tắt). Nhiều kiện cùng một lần thanh toán (cùng `checkoutGroup`) tính một lần. Nước theo đơn được vượt sức chứa bình. Giải nước của vòng quay (khách đã trả Điểm Xanh) cũng được cộng đủ và vượt bể, không kẹp; chỉ các nguồn miễn phí hằng ngày (điểm danh, sương, câu đố, quà tặng) bị kẹp theo `game.tank_capacity`, và việc kẹp luôn giữ phần đã vượt từ trước. Khách chưa mở game không bị tạo hồ sơ: đơn ghi ở trạng thái chờ và được cộng khi khách mở game lần đầu nếu đơn giao trong `game.order_seeds_pending_days` ngày (mặc định 30; 0 = không cộng đơn chờ). Trần 300 áp theo tuần VN của từng đơn, không theo tuần mở game. Đơn chờ cũ hơn hạn được đánh dấu `expiredAt` và không cộng (dòng giữ để đối soát: `SELECT * FROM game_water_events WHERE "expiredAt" IS NOT NULL`).
+
+Migration của tính năng: `20261027090000_game_water_events` và `20261028090000_game_water_event_pending` và `20261028100000_game_water_event_expired` (chỉ thêm bảng và hai cột, không khoá lâu).
+
+Nếu việc cộng nước lỗi (game hỏng, DB chậm), đơn vẫn sang DELIVERED và Điểm Xanh vẫn cộng, nhưng đơn ở trạng thái việc-sau-giao chưa xong (INCOMPLETE): mốc `deliveredEffectsAt` chưa được ghi. Cron `orders.delivered-effects-resync` chạy 10 phút một lần, thử lại các đơn như vậy trong 14 ngày kể từ lúc giao; việc đã xong thì không làm lại nên chạy lại an toàn.
+
+Nhận biết: kết quả INCOMPLETE của đơn mang câu `Cộng nước thưởng game lỗi: ...` (hiện ở log API và kết quả chạy lại tay); cron cảnh báo khi hai lượt liền không chạy; hoặc đơn giao hơn 15 phút mà `deliveredEffectsAt` còn rỗng. Chạy lại tay cho một đơn: admin web, chi tiết đơn, nút chạy lại việc sau giao (`POST /admin/orders/:id/resync-delivered-effects`). Quá 14 ngày cron không nhặt nữa: sửa nguyên nhân rồi chạy tay từng đơn.
+
+Đơn đã giao rồi bị trả hoặc huỷ: nước được đảo cùng lúc với Điểm Xanh (`reverseClosedOrderEffects`, chạy lại bởi `ReversalEffectsResyncCron`, idempotent theo dòng sổ `ORDER_REVERSED` cùng `refId`). Đã cộng thì trừ khỏi hồ sơ tối đa bằng số dư (không xuống dưới 0, nước đã tiêu thì không đòi lại) và ghi dòng âm đúng bằng phần thu hồi được (mang `createdAt` của dòng cộng): chỉ phần thu hồi được mới trả lại vào trần tuần, phần đã tiêu vẫn tính vào trần; thu hồi 0 vẫn ghi dòng delta 0. Còn chờ thì huỷ đơn chờ. Nhiều kiện cùng `checkoutGroup` chỉ đảo khi mọi kiện đã trả hoặc huỷ. Đảo lỗi thì đơn chưa có mốc `reversalEffectsAt` và cron thử lại; không có nút chạy tay riêng cho phần đảo: chờ cron (5 phút một lượt, cửa sổ 14 ngày).
+
 ## 2. Trỏ lại GitHub Actions (máy ảo GCP đã đóng)
 
 Việc của người giữ quyền admin repo GitHub (Settings, Secrets and variables, Actions). Không cần làm trước deploy tay, nhưng phải làm trước khi dùng lại `ops.yml`.

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { QUIZ_WRONG_SEEDS_DEFAULT, configInt } from './game.constants';
-import { ensureGameProfile, initialEcoImpact } from './game-profile';
+import { clampTankKeepingOverflow, ensureGameProfile, initialEcoImpact } from './game-profile';
 import { vnDateKey } from '../../common/vn-time';
 
 @Injectable()
@@ -119,10 +119,7 @@ export class GameQuizService {
       // thay vì update() tuyệt đối — nếu 1 quiz khác trả lời song song vừa cộng thêm nước sau khi
       // ta đọc `upserted`, unconditional update sẽ đè mất phần cộng đó dù vẫn > cap.
       if (upserted.totalSeeds > tankCap) {
-        await this.prisma.gameProfile.updateMany({
-          where: { userId, totalSeeds: { gt: tankCap } },
-          data: { totalSeeds: tankCap },
-        });
+        await clampTankKeepingOverflow(this.prisma, userId, tankCap, waterEarned);
       }
     }
     return { isCorrect, correct: quiz.correct, waterEarned, explanation: quiz.explanation ?? null };

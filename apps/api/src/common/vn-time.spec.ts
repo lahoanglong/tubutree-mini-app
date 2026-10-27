@@ -1,4 +1,4 @@
-import { formatVnDate, formatVnDateTime, startOfVnDay, startOfNextVnMonth, startOfVnMonth, vnDateParts, vnMonthKey } from './vn-time';
+import { formatVnDate, formatVnDateTime, startOfVnDay, startOfNextVnMonth, startOfVnMonth, startOfVnWeek, startOfNextVnWeek, vnDateParts, vnMonthKey } from './vn-time';
 
 // Jest chạy với TZ=UTC (test/jest-global-utc.js) nên các phép tính dưới đây chỉ đúng nếu helper
 // thật sự tính theo lịch VN chứ không theo giờ local.
@@ -26,6 +26,14 @@ describe('vn-time (lịch giờ VN, độc lập TZ host)', () => {
     expect(startOfNextVnMonth(new Date('2026-12-31T16:59:00Z')).toISOString()).toBe('2026-12-31T17:00:00.000Z');
     expect(startOfNextVnMonth(new Date('2026-12-31T17:00:00Z')).toISOString()).toBe('2027-01-31T17:00:00.000Z'); // 00:00 1/1/2027 VN
     expect(startOfNextVnMonth(new Date('2026-12-10T00:00:00Z')).toISOString()).toBe('2026-12-31T17:00:00.000Z');
+  });
+
+  it('startOfVnWeek / startOfNextVnWeek: thứ Hai 00:00 VN, Chủ nhật 23:59 vẫn thuộc tuần cũ', () => {
+    expect(startOfVnWeek(new Date('2026-10-25T16:59:59Z')).toISOString()).toBe('2026-10-18T17:00:00.000Z'); // CN 23:59:59 VN
+    expect(startOfVnWeek(new Date('2026-10-25T17:00:00Z')).toISOString()).toBe('2026-10-25T17:00:00.000Z'); // T2 00:00 VN
+    expect(startOfVnWeek(new Date('2026-10-28T05:00:00Z')).toISOString()).toBe('2026-10-25T17:00:00.000Z'); // T4
+    expect(startOfNextVnWeek(new Date('2026-10-25T16:59:59Z')).toISOString()).toBe('2026-10-25T17:00:00.000Z');
+    expect(startOfVnWeek(new Date('2026-12-31T20:00:00Z')).toISOString()).toBe('2026-12-27T17:00:00.000Z'); // qua năm
   });
 
   it('formatVnDate: hạn 00:00 ngày 10/10 VN hiển thị 10/10/2026, không lùi về 9/10', () => {

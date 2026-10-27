@@ -23,6 +23,17 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
+vi.mock('@/lib/use-coupon-use', () => ({
+  useCouponUse: () => ({
+    notice: null,
+    copy: vi.fn(),
+    cancel: vi.fn(),
+    use: (code: string, before?: () => void) => {
+      state.push('/san-pham', code);
+      before?.();
+    },
+  }),
+}));
 vi.mock('@/lib/idempotency-key', () => ({ newIdempotencyKey: () => 'key-1' }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => state.ready.has(p) }));
 vi.mock('@tubutree/app-core/features', () => ({
@@ -157,11 +168,11 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(garden.textContent).toContain('Tác động xanh của bạn');
     expect(garden.textContent).toContain('Mục tiêu cộng đồng');
     expect(garden.textContent).not.toContain('Tặng nước cho bạn bè');
-    const community = panel(c, 'Cộng đồng');
+    expect(panel(c, 'Hôm nay').textContent).not.toContain('Lô đất');
+    const community = panel(await mount('tab=community'), 'Cộng đồng');
     for (const t of ['Tặng nước cho bạn bè', 'Chuỗi điểm danh dài nhất', 'Xếp hạng góp nước mùa này']) {
       expect(community.textContent).toContain(t);
     }
-    expect(panel(c, 'Hôm nay').textContent).not.toContain('Lô đất');
   });
 
   it('chưa tải được garden: không có khối lô đất', async () => {
@@ -217,7 +228,7 @@ describe('Vườn Xanh: tab Vườn', () => {
     expect(postsOf('/game/garden/plot/p2/water')).toHaveLength(1);
     expect(postsOf('/game/garden/plot/p2/water')[0]!.body).toEqual({ drops: 20 });
     expect(postsOf('/game/garden/plot/p3/water')).toHaveLength(1);
-    expect(document.body.textContent).toContain('Đã tưới lô · 6/20💧');
+    expect(document.body.textContent).toContain('Đã tưới lô −20💧 · còn 14💧 nữa là thu hoạch');
   });
 
   it('tưới lô lỗi: báo lỗi và nhả khoá, bấm lại gọi lần hai', async () => {
@@ -388,7 +399,7 @@ describe('Vườn Xanh: tab Cộng đồng', () => {
   it('bảng chuỗi trống: "Chưa có dữ liệu xếp hạng."', async () => {
     state.data['/game/leaderboard'] = [];
     const c = await mount('tab=community');
-    expect(card(c, 'Chuỗi điểm danh dài nhất')!.textContent).toContain('Chưa có dữ liệu xếp hạng.');
+    expect(card(c, 'Chuỗi điểm danh dài nhất')!.textContent).toContain('Chưa có ai trên bảng.');
   });
 
   it('top góp nước mùa này: huy chương top 3, #hạng từ 4; không có dữ liệu thì ẩn khối', async () => {
@@ -553,7 +564,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
   it('thu hoạch ở lô phụ: hộp chúc mừng không có nút chia sẻ', async () => {
     state.data['/game/garden'] = GARDEN();
     state.posts['/game/garden/plot/p2/water'] = () => ({ progress: 0, target: 20, harvested: true, treesPlanted: 2, revivedFromDead: false, reward: { certificate: 'TT-9' } });
-    const c = await mount();
+    const c = await mount('tab=garden');
     const waters = Array.from(panel(c, 'Vườn').querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent?.includes('Tưới'));
     click(waters[0]!);
     await flush(8);
@@ -599,7 +610,7 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     expect(document.body.textContent).toContain('Không sao chép được — mã của bạn: XANH-123');
     click(btn(dlg(), 'Dùng mã giảm giá ngay'));
     await flush();
-    expect(state.push).toHaveBeenCalledWith('/san-pham');
+    expect(state.push).toHaveBeenCalledWith('/san-pham', 'XANH-123');
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 

@@ -1,6 +1,6 @@
 import { Lightbulb } from 'lucide-react';
 import { useSnackbar } from 'zmp-ui';
-import type { HarvestCouponCap, HarvestSpecies } from '../../services/game-api';
+import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '../../services/game-api';
 import { vi } from '../../i18n/vi';
 import { copyText } from '../../utils/clipboard';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -10,11 +10,35 @@ import { rowKeyboardProps } from '../ui/row-keyboard';
 import { Text } from '../ui/text';
 import { rarityColor, rarityLabel } from './game-utils';
 
+const CONFETTI = [
+  ['6%', 'var(--forest-500)', 0],
+  ['16%', 'var(--honey-500)', 120],
+  ['27%', 'var(--clay-500)', 60],
+  ['38%', 'var(--forest-300)', 200],
+  ['49%', 'var(--honey-600)', 20],
+  ['60%', 'var(--forest-600)', 160],
+  ['71%', 'var(--clay-500)', 90],
+  ['82%', 'var(--honey-600)', 40],
+  ['92%', 'var(--forest-500)', 140],
+] as const;
+
+/** Pháo giấy nhẹ rơi một lần khi mở hộp; tắt khi máy bật giảm chuyển động (CSS .tubu-confetti). */
+function Confetti() {
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      {CONFETTI.map(([left, color, delay]) => (
+        <span key={left} className="tubu-confetti" style={{ left, background: color, animationDelay: `${delay}ms` }} />
+      ))}
+    </div>
+  );
+}
+
 // Harvest celebration. 🌳 lớn, 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
 // Luôn dựng sẵn và điều khiển bằng `open`: BottomSheet cần còn mounted để chạy hoạt ảnh đóng.
 export function HarvestCelebration({
   open,
   coupons,
+  couponTerms = [],
   guest,
   onLogin,
   certificate,
@@ -29,6 +53,8 @@ export function HarvestCelebration({
 }: {
   open: boolean;
   coupons: string[];
+  /** Điều kiện từng mã (API cũ không trả thì chỉ hiện mã). */
+  couponTerms?: HarvestCouponTerms[];
   /** Khách vãng lai: không có quà thu hoạch, mời đăng nhập. */
   guest: boolean;
   onLogin: () => void;
@@ -42,7 +68,8 @@ export function HarvestCelebration({
   /** 💧 cần cho cây kế tiếp. */
   nextTarget: number | null;
   onClose: () => void;
-  onUseCoupon: () => void;
+  /** Nút chính khi có mã: tới giỏ (chọn sẵn mã) hoặc mua sắm, với mã đầu tiên của lần thu hoạch. */
+  onUseCoupon: (code: string) => void;
   /** Mở hộp chia sẻ Zalo gốc. Cộng đồng trong Mini App chỉ đọc nên không đăng bài ở đây. */
   onShare: () => void;
 }) {
@@ -50,6 +77,7 @@ export function HarvestCelebration({
   const t = vi.game.newbie.harvest;
   const seedling = sprout || (points != null && points > 0);
   const showPoints = points != null && points > 0;
+  const hasCoupon = coupons.length > 0;
   return (
     <BottomSheet
       open={open}
@@ -57,9 +85,9 @@ export function HarvestCelebration({
       title="Thu hoạch thành công!"
       footer={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {coupons.length > 0 && (
-            <Button fullWidth variant="secondary" onPress={onUseCoupon}>
-              Dùng mã giảm giá ngay
+          {hasCoupon && (
+            <Button fullWidth onPress={() => onUseCoupon(coupons[0]!)}>
+              {t.useCoupon}
             </Button>
           )}
           {guest && (
@@ -68,18 +96,24 @@ export function HarvestCelebration({
             </Button>
           )}
           {!guest && (
-            <Button fullWidth variant="secondary" onPress={onShare}>
+            <Button fullWidth variant={hasCoupon ? 'ghost' : 'secondary'} onPress={onShare}>
               {t.shareFriends}
             </Button>
           )}
-          <Button fullWidth variant={guest ? 'secondary' : 'primary'} onPress={onClose}>
-            Tuyệt vời!
+          <Button fullWidth variant={hasCoupon || guest ? 'secondary' : 'primary'} onPress={onClose}>
+            {hasCoupon ? t.later : 'Tuyệt vời!'}
           </Button>
         </div>
       }
     >
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 56, lineHeight: 1.2 }}>🌳</div>
+      <div style={{ textAlign: 'center', position: 'relative' }}>
+        {open && <Confetti />}
+        <div style={{ fontSize: 56, lineHeight: 1.2 }}>
+          {/* Dựng lại mỗi lần mở để hoạt ảnh lớn lên chạy lại. */}
+          <span key={String(open)} className="tubu-grow">
+            🌳
+          </span>
+        </div>
         <Text variant="body-sm" tone="secondary" as="div" style={{ marginTop: 4 }}>
           {certificate ? t.fund : seedling ? t.seedling : t.grown}
         </Text>
@@ -137,6 +171,11 @@ export function HarvestCelebration({
             <Text variant="body-md" tone="brand" as="div" style={{ fontWeight: 700, letterSpacing: 1 }}>
               {coupon}
             </Text>
+            {couponTerms.find((x) => x.code === coupon) && (
+              <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 2 }} data-testid="coupon-terms">
+                {t.couponTerms(couponTerms.find((x) => x.code === coupon)!)}
+              </Text>
+            )}
           </div>
         ))}
         {certificate && (

@@ -233,6 +233,9 @@ export class SystemConfigService {
     // Dưới 3 ngày thì khách điểm danh cách ngày cũng được quà quay lại mỗi lần, có lời hơn điểm danh đều.
     'game.comeback_gap_days': { min: 3, max: 365, note: 'số ngày vắng tối thiểu để nhận quà quay lại', integer: true },
     'game.comeback_seeds': { min: 0, max: 10_000, note: '💧 quà quay lại (0 = không tặng)', integer: true },
+    'game.order_seeds': { min: 0, max: 10_000, note: '💧 thưởng mỗi đơn giao thành công (0 = tắt)', integer: true },
+    'game.order_seeds_pending_days': { min: 0, max: 365, note: 'đơn giao khi khách chưa mở game chỉ được cộng 💧 nếu giao trong chừng này ngày (0 = không cộng)', integer: true },
+    'game.order_seeds_weekly_cap': { min: 0, max: 100_000, note: 'tối đa 💧 nhận từ đơn hàng mỗi tuần giờ VN, thứ Hai đến Chủ nhật (0 = tắt)', integer: true },
     'game.harvest_coupon_monthly_cap': { min: 0, max: 100, note: 'số mã thu hoạch mỗi tháng/người, tính cả lô nhà và lô phụ (0 = không phát)', integer: true },
     'game.quiz_wrong_seeds': { min: 0, max: 1_000, note: '💧 khi trả lời sai câu đố (0 = không tặng)', integer: true },
     'seasonpass.checkin_xp': { min: 0, max: 1000, note: 'XP mỗi lần điểm danh', integer: true },

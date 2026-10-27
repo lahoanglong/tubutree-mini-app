@@ -1,15 +1,40 @@
 import { Lightbulb } from 'lucide-react';
-import type { HarvestCouponCap, HarvestSpecies } from '@tubutree/app-core/api/game';
+import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
+import type { CouponNotice } from '@/lib/use-coupon-use';
 import { Sheet } from '@/components/ui/sheet';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { rarityBorder, rarityLabel, rarityText } from './game-utils';
 
+const CONFETTI = [
+  ['6%', 'bg-forest-500', 0],
+  ['16%', 'bg-honey-500', 120],
+  ['27%', 'bg-promo-solid', 60],
+  ['38%', 'bg-forest-300', 200],
+  ['49%', 'bg-honey-600', 20],
+  ['60%', 'bg-forest-600', 160],
+  ['71%', 'bg-promo-solid', 90],
+  ['82%', 'bg-honey-600', 40],
+  ['92%', 'bg-forest-500', 140],
+] as const;
+
+/** Pháo giấy nhẹ rơi một lần khi mở hộp; tắt khi máy bật giảm chuyển động (CSS .tubu-confetti). */
+function Confetti() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      {CONFETTI.map(([left, color, delay]) => (
+        <span key={left} className={`tubu-confetti ${color}`} style={{ left, animationDelay: `${delay}ms` }} />
+      ))}
+    </div>
+  );
+}
+
 // Harvest celebration. 🌳 lớn, 🌿 ở lời chúc và emoji loài là nội dung ăn mừng của game.
 export function HarvestCelebration({
   open,
   coupons,
+  couponTerms = [],
   guest,
   onLogin,
   certificate,
@@ -22,12 +47,15 @@ export function HarvestCelebration({
   onClose,
   onCopyCoupon,
   onUseCoupon,
+  couponNotice,
   shared,
   sharing,
   onShare,
 }: {
   open: boolean;
   coupons: string[];
+  /** Điều kiện từng mã (API cũ không trả thì chỉ hiện mã). */
+  couponTerms?: HarvestCouponTerms[];
   /** Khách vãng lai: không có quà thu hoạch, mời đăng nhập. */
   guest: boolean;
   onLogin: () => void;
@@ -44,7 +72,10 @@ export function HarvestCelebration({
   nextTarget: number | null;
   onClose: () => void;
   onCopyCoupon: (code: string) => void;
-  onUseCoupon: () => void;
+  /** Nút chính khi có mã: tới giỏ (chọn sẵn mã) hoặc sản phẩm, với mã đầu tiên của lần thu hoạch. */
+  onUseCoupon: (code: string) => void;
+  /** Câu báo của lần "Dùng mã" (mã chưa áp được, lỗi mạng…), in ngay trong hộp trước khi sang giỏ. */
+  couponNotice?: CouponNotice | null;
   /** Đã đăng thành tích lần thu hoạch này lên Cộng đồng. */
   shared: boolean;
   sharing: boolean;
@@ -60,9 +91,14 @@ export function HarvestCelebration({
       title="Thu hoạch thành công!"
       footer={
         <div className="flex flex-col gap-2">
+          {couponNotice && (
+            <p role={couponNotice.error ? 'alert' : 'status'} className={`text-center text-xs ${couponNotice.error ? 'text-danger-fg' : 'text-stone-700'}`}>
+              {couponNotice.text}
+            </p>
+          )}
           {coupons.length > 0 && (
-            <button type="button" onClick={onUseCoupon} className={`${miniBtnSecondary} w-full`}>
-              Dùng mã giảm giá ngay
+            <button type="button" onClick={() => onUseCoupon(coupons[0]!)} className={`${ui.btnPrimary} w-full`}>
+              {t.useCoupon}
             </button>
           )}
           {guest && (
@@ -78,15 +114,18 @@ export function HarvestCelebration({
               <p className="text-center text-xs text-stone-700">{t.shareCommunityNote}</p>
             </>
           )}
-          <button type="button" onClick={onClose} className={`${guest ? miniBtnSecondary : ui.btnPrimary} w-full`}>
-            Tuyệt vời!
+          <button type="button" onClick={onClose} className={`${coupons.length > 0 || guest ? miniBtnSecondary : ui.btnPrimary} w-full`}>
+            {coupons.length > 0 ? t.later : 'Tuyệt vời!'}
           </button>
         </div>
       }
     >
-      <div className="text-center">
+      <div className="relative text-center">
+        {open && <Confetti />}
         <div className="text-6xl leading-tight" aria-hidden="true">
-          🌳
+          <span key={String(open)} className="tubu-grow">
+            🌳
+          </span>
         </div>
         <p className="mt-1 text-sm text-stone-700">
           {certificate ? t.fund : seedling ? t.seedling : t.grown}
@@ -117,6 +156,11 @@ export function HarvestCelebration({
           >
             <span className="block text-xs text-stone-700">Quà thu hoạch — mã giảm giá (chạm để sao chép)</span>
             <span className="block break-all text-base font-bold tracking-wide text-forest-700">{coupon}</span>
+            {couponTerms.find((x) => x.code === coupon) && (
+              <span data-testid="coupon-terms" className="mt-0.5 block text-xs text-stone-700">
+                {t.couponTerms(couponTerms.find((x) => x.code === coupon)!)}
+              </span>
+            )}
           </button>
         ))}
         {certificate && (

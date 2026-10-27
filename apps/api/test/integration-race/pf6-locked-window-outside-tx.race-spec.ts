@@ -207,8 +207,8 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
     return inTxMisses;
   }
 
-  describe('vòng quay trúng giải SEEDS (đọc game.tank_capacity)', () => {
-    it('cache cấu hình trống: kể cả trần bình nước cũng đọc khi KHÔNG có tx nào đang mở, và totalSeeds vẫn bị kẹp theo trần', async () => {
+  describe('vòng quay trúng giải SEEDS (không đọc cấu hình trong tx, không kẹp bể)', () => {
+    it('cache cấu hình trống: mọi lần đọc cấu hình xảy ra khi KHÔNG có tx nào đang mở, và giải trả bằng điểm được cộng đủ dù vượt trần bình', async () => {
       await setConfig(prisma, 'returns.window_days', 1);
       await setConfig(prisma, 'game.tank_capacity', 40);
       await setConfig(prisma, 'game.spin_prizes', [{ id: 'seeds', name: '30 giọt', weight: 1, rewardType: 'SEEDS', value: 30 }]);
@@ -221,7 +221,7 @@ describe('PF-6a cửa sổ đổi/trả được đọc ngoài tx ở cả bốn
 
         expect(inTxMisses).toEqual([]);
         expect(await balance(u.user.id)).toBe(50);
-        expect((await prisma.gameProfile.findUniqueOrThrow({ where: { userId: u.user.id } })).totalSeeds).toBe(40);
+        expect((await prisma.gameProfile.findUniqueOrThrow({ where: { userId: u.user.id } })).totalSeeds).toBe(55);
       } finally {
         await setConfig(prisma, 'game.spin_prizes', [{ id: 'none', name: 'Chúc may mắn', weight: 1, rewardType: 'NONE', value: 0 }]);
         await setConfig(prisma, 'game.tank_capacity', 500);

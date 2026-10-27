@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { initialEcoImpact } from './game-profile';
+import { clampTankKeepingOverflow, initialEcoImpact } from './game-profile';
 import { NotificationsService } from '../notifications/notifications.service';
 import { vnDateKey } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
@@ -109,10 +109,7 @@ export class GameGiftService {
       update: { totalSeeds: { increment: amount } },
     });
     if (upserted.totalSeeds > cap) {
-      await this.prisma.gameProfile.updateMany({
-        where: { userId: recipientId, totalSeeds: { gt: cap } },
-        data: { totalSeeds: cap },
-      });
+      await clampTankKeepingOverflow(this.prisma, recipientId, cap, amount);
     }
 
     await this.notifications

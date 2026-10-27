@@ -165,6 +165,13 @@ describe('GamePage — một h1 ở mọi trạng thái (C-114)', () => {
   });
 });
 
+/** Khối của tab Vườn chỉ tải khi mở tab: mở rồi quay lại Hôm nay để các phép kiểm khác thấy tab mặc định. */
+async function loadGardenTab() {
+  fireEvent.click(await screen.findByRole('tab', { name: 'Vườn' }));
+  await screen.findByText('Lô 2 · Mận');
+  fireEvent.click(screen.getByRole('tab', { name: 'Hôm nay' }));
+}
+
 describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
   it('chỉ có hai tab Hôm nay / Vườn (Cộng đồng chỉ đọc nên không có tab), mở sẵn Hôm nay', async () => {
     renderPage();
@@ -187,11 +194,11 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
   it('chỉ khối của tab đang chọn nhìn thấy được; đổi tab thì đổi khối', async () => {
     renderPage();
     await screen.findByRole('tab', { name: 'Hôm nay' });
-    await screen.findByText('Lô 2 · Mận');
     expect(tabPanel('Hôm nay')).toBeVisible();
     expect(tabPanel('Vườn')).not.toBeVisible();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Vườn' }));
+    await screen.findByText('Lô 2 · Mận');
     expect(tabPanel('Vườn')).toBeVisible();
     expect(tabPanel('Hôm nay')).not.toBeVisible();
     expect(screen.getByRole('tab', { name: 'Vườn' })).toHaveAttribute('aria-selected', 'true');
@@ -200,7 +207,7 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 
   it('Mini App không có bảng xếp hạng người chơi và tặng nước bạn bè (Zalo 4.6); lối đọc bảng tin nằm ở tab Vườn', async () => {
     renderPage();
-    await screen.findByText('Lô 2 · Mận');
+    await loadGardenTab();
     expect(screen.queryByRole('tab', { name: 'Cộng đồng' })).toBeNull();
     expect(screen.queryByText('Chuỗi điểm danh dài nhất')).toBeNull();
     expect(screen.queryByText('Top góp nước mùa này')).toBeNull();
@@ -213,7 +220,7 @@ describe('GamePage — điều hướng nội bộ bằng tab (C-082)', () => {
 
   it('mỗi khối đặt vào đúng tab: nút chính/điểm danh/nhiệm vụ/quiz/vòng quay ở Hôm nay, lô đất ở Vườn', async () => {
     renderPage();
-    await screen.findByText('Lô 2 · Mận');
+    await loadGardenTab();
     const today = within(tabPanel('Hôm nay'));
     expect(today.getByRole('button', { name: 'Nhận nước hôm nay' })).toBeInTheDocument();
     expect(today.getByRole('button', { name: 'Điểm danh' })).toBeInTheDocument();
@@ -261,7 +268,7 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
 
   it('mỗi khối có tiêu đề h2 thật', async () => {
     const { container } = renderPage();
-    await screen.findByText('Lô 2 · Mận');
+    await loadGardenTab();
     const h2 = [...container.querySelectorAll('h2')].map((h) => h.textContent);
     expect(h2).toEqual(
       expect.arrayContaining(['Nhiệm vụ', 'Câu đố Sống Xanh hôm nay', 'Vòng quay may mắn', 'Tác động xanh của bạn']),

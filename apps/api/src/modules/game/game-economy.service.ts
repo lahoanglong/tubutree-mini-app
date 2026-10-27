@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { SeasonPassService } from './season-pass.service';
-import { ensureGameProfile } from './game-profile';
+import { clampTankKeepingOverflow, ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { vnDateKey } from '../../common/vn-time';
 import {
@@ -53,10 +53,7 @@ export class GameEconomyService {
           props: { action: 'garden_checkin', streakDays },
         });
         const tankCap = await this.config.get<number>('game.tank_capacity', 500);
-        await this.prisma.gameProfile.updateMany({
-          where: { userId, totalSeeds: { gt: tankCap } },
-          data: { totalSeeds: tankCap },
-        });
+        await clampTankKeepingOverflow(this.prisma, userId, tankCap, seeds);
 
         // Hook Season Pass: cộng XP chặng mùa (side-effect an toàn, không ảnh hưởng streak math).
         await this.seasonPass
@@ -203,10 +200,7 @@ export class GameEconomyService {
       data: { totalSeeds: { increment: dew }, lastDewAt: new Date() },
     });
     if (res.count === 0) throw new BadRequestException('Hôm nay bạn đã hứng giọt sương rồi 🌿');
-    await this.prisma.gameProfile.updateMany({
-      where: { userId, totalSeeds: { gt: tankCap } },
-      data: { totalSeeds: tankCap },
-    });
+    await clampTankKeepingOverflow(this.prisma, userId, tankCap, dew);
 
     const after = await this.prisma.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } });
     const totalSeeds = after?.totalSeeds ?? Math.min(tankCap, p.totalSeeds + dew);

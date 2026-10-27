@@ -1,5 +1,5 @@
 import type { Garden, GameProfile } from '../../miniapp/src/services/game-api';
-import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
+import { test, expect, makeUser, mockSession, reply, replyEmptyBody, type MockApi } from './support/mock-api';
 
 /**
  * Zalo Mini App E2E — Vườn Xanh (apps/miniapp/src/pages/game.tsx, route /game).
@@ -59,13 +59,33 @@ test.describe('Vườn Xanh', () => {
 
     await expect(page.getByText('Cây Sưa Đỏ').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('progressbar', { name: 'Tiến độ cây' })).toHaveAttribute('aria-valuenow', '40');
-    await expect(page.getByText(/🔥 5 ngày/)).toBeVisible();
+    await expect(page.getByText(/🔥 Chuỗi 5 ngày/)).toBeVisible();
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
 
     await page.getByText('Vườn', { exact: true }).first().click();
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(/ })).toBeVisible();
     await expect(page.getByText('Lô đất của bạn (2/4)')).toBeVisible();
     await expect(page.getByText('Lô 2 · Cây Lim Xanh')).toBeVisible();
+  });
+
+  test('không có mùa nào chạy: server trả thân rỗng (như Nest khi trả null) vẫn hiện màn "chưa có mùa"', async ({ page, api }) => {
+    mockGame(api);
+    api.get('/game/season', () => replyEmptyBody());
+    await page.goto('/game');
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await expect(page.getByTestId('season-empty')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('API vườn lỗi: tab Vườn báo lỗi có nút Thử lại, không quay khung chờ mãi', async ({ page, api }) => {
+    mockGame(api);
+    let failing = true;
+    api.get('/game/garden', () => (failing ? reply(500, { message: 'lỗi' }) : GARDEN));
+    await page.goto('/game');
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await expect(page.getByText(/Chưa tải được vườn/)).toBeVisible({ timeout: 15_000 });
+    failing = false;
+    await page.getByRole('button', { name: 'Thử lại' }).click();
+    await expect(page.getByText('Lô đất của bạn (2/4)')).toBeVisible();
   });
 
   test('chạm đúp "Tưới hết" chỉ gửi một request (drops = toàn bộ số giọt) và hiện tiến độ mới', async ({ page, api }) => {
@@ -81,7 +101,7 @@ test.describe('Vườn Xanh', () => {
       (el as HTMLButtonElement).click();
     });
 
-    await expect(page.getByText(/Đã tưới · 60\/100/)).toBeVisible();
+    await expect(page.getByText(/Đã tưới −340💧 · còn 40💧 nữa là thu hoạch/)).toBeVisible();
     expect(api.callsTo('POST', '/game/tree/water')).toHaveLength(1);
     expect(api.callsTo('POST', '/game/tree/water')[0]!.body).toEqual({ drops: 340 });
   });
@@ -156,7 +176,7 @@ test.describe('Vườn Xanh', () => {
       (el as HTMLButtonElement).click();
     });
 
-    await expect(page.getByText(/Đã tưới lô · 50\/60/)).toBeVisible();
+    await expect(page.getByText(/Đã tưới lô −20💧 · còn 10💧 nữa là thu hoạch/)).toBeVisible();
     const calls = api.callsTo('POST', '/game/garden/plot/:id/water');
     expect(calls).toHaveLength(1);
     expect(calls[0]!.path).toBe('/game/garden/plot/plot-2/water');

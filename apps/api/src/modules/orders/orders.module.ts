@@ -16,10 +16,11 @@ import { ReturnImagesController } from './return-images.controller';
 import { CartModule } from '../cart/cart.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { PancakeSyncHooksModule } from '../integrations/pancake/pancake-sync-hooks.module';
+import { GameModule } from '../game/game.module';
 import { WastePickupModule } from '../waste-exchange/pickup/waste-pickup.module';
 
 @Module({
-  imports: [CartModule, FlashSaleModule, PancakeSyncHooksModule, WastePickupModule],
+  imports: [CartModule, FlashSaleModule, PancakeSyncHooksModule, WastePickupModule, GameModule],
   controllers: [OrdersController, PurchasedItemsController, CustomerRefundsAdminController, ReturnsAdminController, ReturnImagesController],
   providers: [
     OrdersService,

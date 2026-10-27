@@ -90,3 +90,12 @@ export async function streak7Seeds(config: Pick<SystemConfigService, 'get'>): Pr
   const n = Number(raw?.seeds ?? STREAK_7_SEEDS_DEFAULT);
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : STREAK_7_SEEDS_DEFAULT;
 }
+
+export const ORDER_WATER_SEEDS_DEFAULT = 100;
+export const ORDER_WATER_WEEKLY_CAP_DEFAULT = 300;
+/** Đơn giao khi khách chưa mở game chỉ được cộng nếu giao trong chừng này ngày tính tới lúc mở game lần đầu. */
+export const ORDER_WATER_PENDING_DAYS_DEFAULT = 30;
+/** Lý do (cột reason của game_water_events) của nước thưởng đơn giao; refId = id đơn. */
+export const ORDER_WATER_REASON = 'ORDER_DELIVERED';
+/** Dòng sổ âm khi đơn đã giao bị trả/huỷ; cùng refId với dòng cộng, createdAt = của dòng cộng để trần tuần cũ được trả lại. */
+export const ORDER_WATER_REVERSED_REASON = 'ORDER_REVERSED';

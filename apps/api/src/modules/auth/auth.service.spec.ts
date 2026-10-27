@@ -369,6 +369,7 @@ function makeGuestMergeFixture(opts: {
     'gameProfile',
     'plantedTree',
     'gameSpin',
+    'gameWaterEvent',
     'wasteRequest',
     'wasteGiftRedemption',
   ] as const;
@@ -487,6 +488,9 @@ function makeGuestMergeFixture(opts: {
     (base[table] as Record<string, unknown>).findMany = jest.fn(async () => []);
   }
   (base.gameProfile as Record<string, unknown>).count = jest.fn(async () => 0);
+  (base.gameProfile as Record<string, unknown>).findUnique = jest.fn(async () => null);
+  (base.plantedTree as Record<string, unknown>).count = jest.fn(async () => 0);
+  (base as Record<string, unknown>).gardenPlot = { count: jest.fn(async () => 0) };
   const findCart = (id: string) => [...carts.values()].find((c) => c.id === id);
   (base.cartItem as Record<string, unknown>).updateMany = jest.fn(
     async ({ where, data }: { where: { cartId: string }; data: { cartId: string } }) => {

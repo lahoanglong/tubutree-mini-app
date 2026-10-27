@@ -12,6 +12,7 @@ import {
 } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
+import { SeasonAdmin } from './season-admin';
 
 const REWARD_POINTS_MAX = 500_000;
 const CHECKIN_NOTE = 'Nhiệm vụ điểm danh: nếu khách dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó (khách chỉ thấy dòng này trên thẻ nhiệm vụ khi đã dùng vé giữ lửa hay hồi sinh sau ngày bắt đầu nhiệm vụ).';
@@ -35,6 +36,8 @@ export function EngagementTab() {
           {missionsQ.data?.map((m) => <MissionRow key={m.id} item={m} />)}
         </div>
       </section>
+
+      <SeasonAdmin />
 
       <Notice tone="info">Quà đổi Điểm Xanh nay quản lý ở tab Đổi rác, mục Quà.</Notice>
     </div>

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
@@ -15,6 +16,7 @@ import { SeasonPassService } from './season-pass.service';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
+class TreeWaterDto { @IsInt() @Min(0) drops!: number; }
 class BuySeedsDto { @IsInt() @Min(1) seeds!: number; }
 // 'XU' vẫn nhận ở DTO để GameGardenService trả 410 (PD-3: mở lô bằng xu đã ngừng) thay vì 400.
 class UnlockPlotDto {
@@ -73,7 +75,7 @@ export class GameController {
   shareHarvest(@CurrentUser('sub') userId: string) { return this.game.shareHarvest(userId); }
 
   @Post('tree/water')
-  water(@CurrentUser('sub') userId: string, @Body() dto: WaterDto) { return this.game.waterTree(userId, dto.drops); }
+  water(@CurrentUser('sub') userId: string, @Body() dto: TreeWaterDto) { return this.game.waterTree(userId, dto.drops); }
 
   @Post('seeds/buy')
   buySeeds(@CurrentUser('sub') userId: string, @Body() dto: BuySeedsDto) { return this.game.buySeeds(userId, dto.seeds); }
@@ -102,7 +104,10 @@ export class GameController {
 
   @Public()
   @Get('season')
-  activeSeason() { return this.season.getActiveSeason(); }
+  // Không có mùa thì trả JSON `null` thật: Nest bỏ thân khi handler trả null, và client đọc thân rỗng bằng res.json() sẽ ném lỗi.
+  async activeSeason(@Res() res: Response) {
+    res.json(await this.season.getActiveSeason());
+  }
 
   @Public()
   @Get('season/leaderboard')
