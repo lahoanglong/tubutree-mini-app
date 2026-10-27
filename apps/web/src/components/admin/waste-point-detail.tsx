@@ -217,6 +217,12 @@ export function WastePointDetail({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Ưu đãi riêng</h3>
         <p className="text-sm text-stone-800">{point.perkText ?? 'Chưa có'}</p>
+        {point.perkText && findCashWording(point.perkText) !== null && (
+          <Notice tone="warning" role="status">
+            Ưu đãi này đã được duyệt trước khi có luật mới và có chữ thưởng hay trả bằng tiền. Khách vẫn đang thấy nó. Hãy xem lại, nếu không phù hợp thì bấm
+            &quot;Gỡ ưu đãi đang hiện&quot; (hoặc nhờ chủ điểm gửi lại bản mới để duyệt).
+          </Notice>
+        )}
         {point.perkText && (
           <div>
             <button type="button" className={BTN_XS_DANGER} disabled={clear.isPending} onClick={() => void askClear()}>Gỡ ưu đãi đang hiện</button>

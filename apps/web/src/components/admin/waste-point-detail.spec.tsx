@@ -148,6 +148,14 @@ describe('WastePointDetail', () => {
     expect(dels[0]!.url.endsWith('/admin/waste/points/p1/staff/u-owner')).toBe(true);
   });
 
+  it('ưu đãi đã duyệt từ trước có chữ tiền: admin thấy cờ xem lại, khách chưa bị ẩn (vẫn có nút gỡ); chữ hợp lệ không có cờ', async () => {
+    const old = await mount(wastePoint({ perkText: 'Tặng 10k cho khách đầu tiên' }));
+    expect(old.c.textContent).toContain('duyệt trước khi có luật mới');
+    expect(btn(old.c, 'Gỡ ưu đãi đang hiện')).not.toBeNull();
+    const fine = await mount(wastePoint({ perkText: 'Giảm 10% hoá đơn đầu' }));
+    expect(fine.c.textContent).not.toContain('duyệt trước khi có luật mới');
+  });
+
   it('gỡ chủ điểm: cảnh báo dừng cả điểm (kèm câu ưu đãi khi có ưu đãi), gỡ nhân viên giữ câu cũ', async () => {
     const OWNER_MSG = 'Gỡ chủ điểm sẽ dừng cả điểm: khách không thấy điểm, người ở điểm không xác nhận được cho tới khi thêm chủ mới.';
     const a = await mount(wastePoint({ perkText: 'Tặng túi vải' }));

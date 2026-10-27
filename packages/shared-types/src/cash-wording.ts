@@ -21,13 +21,28 @@ const PHRASES = [
   'li xi tien',
   'cash',
   'cashback',
+  'momo',
+  'zalopay',
+  'zalo pay',
+  'vnpay',
+  'shopeepay',
+  'ngan hang',
+  'so tai khoan',
+  'stk',
+  'the cao',
 ] as const;
 
 // Động từ cho/thưởng ngay trước số tiền: "tặng 10k", "thưởng ngay 20.000đ", "hoàn lại 5 nghìn".
-const GIVE_VERB = '(?:tang|thuong|hoan|tra|cho|bieu|li xi|nhan)';
-const FILLER = '(?:\\s+(?:ban|khach|ngay|lai|them|luon|toi da|den|tuong duong))*';
+const GIVE_VERB = '(?:tang|thuong|hoan|tra|cho|bieu|li ?xi|nhan|cong|chuyen|ck)';
+const FILLER = '(?:\\s+(?:ban|khach|hang|moi|nguoi|thanh vien|tung|cac|ngay|lai|them|luon|toi da|den|tuong duong))*';
+const NUMBER_WORDS = '(?:mot|hai|ba|bon|tu|nam|lam|sau|bay|tam|chin|muoi|tram|linh|le|ruoi)';
+// Số tiền: số + đơn vị tiền, số có dấu phân cách nghìn, số trần từ 4 chữ số, hoặc số viết bằng chữ ("năm mươi nghìn").
+// Bỏ qua khi ngay sau là điểm/xu/giọt hay đơn vị hàng hoá ("tặng 1.000 điểm", "cộng 2k điểm").
 const AMOUNT =
-  '(?:\\d[\\d.,]*\\s?(?:k|d|vnd|dong|nghin|ngan|trieu|tr)\\b|\\d{1,3}(?:[.,]\\d{3})+(?![a-z0-9])(?!\\s?(?:diem|xu|giot|sp|san pham|cai|goi|hop|chai|lit|ml|gram|kg|g)\\b))';
+  '(?:(?:\\d[\\d.,]*\\s?(?:k|d|vnd|dong|nghin|ngan|trieu|tr|usd|dollar|do la|euro)\\b|' +
+  NUMBER_WORDS + '(?:\\s+' + NUMBER_WORDS + ')*\\s+(?:nghin|ngan|trieu|ty)\\b|' +
+  '\\d{1,3}(?:[.,]\\d{3})+(?![a-z0-9])|\\d{4,}(?![a-z0-9]))' +
+  '(?!\\s?(?:diem|xu|giot|sp|san pham|cai|goi|hop|chai|lit|ml|gram|kg|g)\\b))';
 const GIVE_AMOUNT = new RegExp(`(?<![a-z0-9])${GIVE_VERB}${FILLER}\\s+${AMOUNT}`, 'u');
 const WORD = '[a-z0-9]';
 const PHRASE_RES = PHRASES.map((p) => ({ phrase: p, re: new RegExp(`(?<!${WORD})${p}(?!${WORD})`, 'u') }));
@@ -44,7 +59,8 @@ function fold(text: string): string {
 
 /** Đoạn chữ vi phạm đầu tiên tìm thấy (đã bỏ dấu, chữ thường), hoặc null nếu không có. */
 export function findCashWording(text: string): string | null {
-  const t = fold(text);
+  // Tiền cọc vỏ chai/hộp được trả lại là hoàn cọc thật, không phải thưởng bằng tiền.
+  const t = fold(text).replace(/(?:hoan|tra)(?: lai)? tien coc\b/g, ' ');
   for (const { phrase, re } of PHRASE_RES) if (re.test(t)) return phrase;
   const m = GIVE_AMOUNT.exec(t);
   return m ? m[0] : null;

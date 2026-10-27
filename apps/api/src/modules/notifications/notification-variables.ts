@@ -1,7 +1,8 @@
 /**
  * Biến `{{ten_bien}}` mà mã thật sự điền cho từng mẫu thông báo. NotificationsService.render thay `{{ten}}` bằng giá trị mã truyền vào và bằng
  * chuỗi rỗng nếu không có, nên gõ một biến mã không điền (vd `{{order_code}}` trong mẫu mã giảm giá) khiến khách nhận câu bị trống chỗ.
- * Danh sách theo đúng nội dung mặc định của từng mẫu trong prisma/seed.ts, nơi viết cùng lúc với đoạn mã gọi notify(); spec đối chiếu hai bên.
+ * Danh sách gồm biến của nội dung mặc định trong prisma/seed.ts và mọi biến mà đoạn mã gọi notify() điền cho mẫu đó (có biến mã điền sẵn
+ * mà nội dung mặc định chưa dùng, admin muốn thêm vào câu thì phải được phép); spec đối chiếu cả hai bên.
  * Thêm mẫu hoặc thêm biến mới thì thêm vào đây cùng lúc, nếu không màn sửa mẫu từ chối biến đó.
  */
 export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
@@ -48,17 +49,17 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   MILESTONE_VOUCHER: ['code', 'value', 'expires'],
   REFERRAL_REWARD_PAID: ['points', 'friend'],
   REFERRAL_MILESTONE_PAID: ['count', 'points'],
-  REFERRAL_REWARD_REVOKED: ['friend', 'cause', 'detail'],
+  REFERRAL_REWARD_REVOKED: ['friend', 'cause', 'detail', 'points', 'debt'],
   EXTERNAL_POINTS_PENDING: ['points', 'code'],
   EXTERNAL_POINTS_CREDITED: ['points', 'code'],
   EXTERNAL_POINTS_VOIDED: ['code', 'detail'],
   EXTERNAL_POINTS_CLAIM_NOT_FOUND: ['code', 'detail'],
   CHAT_ORDER_POINTS_CREDITED: ['points'],
   CHAT_ORDER_POINTS_LINKED: ['points', 'count'],
-  GAME_CHECKIN_REMINDER: ['streak'],
+  GAME_CHECKIN_REMINDER: ['streak', 'freezes'],
   GAME_TREE_THIRSTY: [],
   GAME_WATER_GIFT: ['amount'],
-  GROUP_BUY_SUCCESS: ['discount'],
+  GROUP_BUY_SUCCESS: ['discount', 'code', 'expires', 'product'],
   GROUP_BUY_FAILED: ['product'],
   COMMUNITY_EVENT_WINNER: ['title', 'reward'],
   DEALER_BONUS_PAID: ['quarter', 'amount', 'revenue'],
@@ -68,7 +69,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   DEALER_REWARD_CLAIM_PAID: ['reward', 'period'],
   DEALER_BONUS_ADJUSTED: ['quarter', 'order_code', 'amount', 'remaining'],
   DEALER_BONUS_TOPUP: ['quarter', 'amount', 'revenue'],
-  DEALER_CREDIT_PAYMENT_REPORTED: ['dealer', 'amount'],
+  DEALER_CREDIT_PAYMENT_REPORTED: ['dealer', 'amount', 'note'],
   DEALER_CREDIT_PAYMENT_CONFIRMED: ['amount'],
   SUPPORT_CHAT_REPLY: ['preview'],
   OPS_ZALO_BRIDGE_DOWN: ['since', 'state'],
@@ -144,6 +145,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   count: 'số lượng',
   created: 'ngày lập',
   date: 'ngày',
+  debt: 'số điểm còn thiếu chưa trừ được',
   deadline: 'hạn chót',
   dealer: 'tên đại lý',
   detail: 'chi tiết',
@@ -151,6 +153,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   due_date: 'hạn thanh toán',
   error: 'lỗi gần nhất',
   expires: 'ngày hết hạn',
+  freezes: 'số lượt giữ chuỗi',
   friend: 'tên người bạn',
   gift: 'tên quà',
   hours: 'số giờ',
@@ -162,6 +165,7 @@ export const VARIABLE_LABELS: Readonly<Record<string, string>> = {
   min_order_note: 'ghi chú đơn tối thiểu',
   missing: 'số tiền còn thiếu',
   mode: 'cách giao hàng',
+  note: 'ghi chú của người gửi',
   order_code: 'mã đơn hàng',
   owner: 'tên chủ cơ sở',
   paid: 'số tiền đã nhận',
