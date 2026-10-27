@@ -1,6 +1,7 @@
 import type { LoginResponse } from '@tubutree/shared-types';
 import { vi } from '../i18n/vi';
 import type { FirstTouch } from './first-touch';
+import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { createTransport, HttpError, isHttpError, type HttpResponse, type RequestConfig } from './http';
 
 export { HttpError, isHttpError };
@@ -124,7 +125,9 @@ async function prepare(req: PendingRequest): Promise<void> {
 async function execute<T>(req: PendingRequest): Promise<HttpResponse<T>> {
   await prepare(req);
   try {
-    return await send<T>(req);
+    const res = await send<T>(req);
+    resolveServedMedia(res.data, BASE_URL);
+    return res;
   } catch (error) {
     if (!isHttpError(error)) throw error;
     const status = error.response?.status;

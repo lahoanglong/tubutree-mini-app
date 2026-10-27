@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from '../affiliate/commission-eligibility';
 import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import type { BrandSalesPeriod } from './dto/brand.dto';
+import { publicImage } from '../../common/public-image';
 
 interface Cert {
   code: string;
@@ -127,8 +128,8 @@ export class BrandService {
       id: brand.id,
       slug: brand.slug,
       name: brand.name,
-      logoUrl: brand.logoUrl,
-      coverUrl: brand.coverUrl,
+      logoUrl: publicImage('brand', brand.id, 'logo', brand.logoUrl),
+      coverUrl: publicImage('brand', brand.id, 'cover', brand.coverUrl),
       tagline: brand.tagline,
       story: brand.story,
       storyImages: brand.storyImages,
@@ -139,6 +140,7 @@ export class BrandService {
       promotions: publicPromotions,
       products: products.map(({ soldExternal, soldApp, variations, ...p }) => ({
         ...p,
+        thumbnail: publicImage('product', p.id, 'thumb', p.thumbnail),
         sold: soldExternal + soldApp,
         inStock: (variations ?? []).some((v) => v.stock > 0),
       })),

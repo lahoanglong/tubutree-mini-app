@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isStorefrontImageValue } from '../../common/uploaded-image';
+import { storedThumbnailFor } from '../../common/public-image';
 
 export const PRODUCT_IMAGES_MAX = 8;
 export const PRODUCT_CATEGORIES_MAX = 10;
@@ -73,7 +74,8 @@ export class ProductAdminService {
         throw new BadRequestException('Ảnh chỉ nhận ảnh tải lên (png, jpeg, webp, gif) hoặc link https.');
       }
       data.images = images;
-      data.thumbnail = images[0] ?? null;
+      // Ảnh đầu là base64 thì thumbnail chỉ giữ đường dẫn tới ảnh đó: cùng một ảnh không nằm hai lần trong DB và JSON thẻ sản phẩm nhẹ.
+      data.thumbnail = storedThumbnailFor(id, images[0]);
     }
     if (patch.description !== undefined) {
       const description = patch.description.trim();

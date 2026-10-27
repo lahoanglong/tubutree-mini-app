@@ -1,3 +1,4 @@
+import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { formatVnd } from './format-vnd';
 import { DEFAULT_LEGAL_VARS, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
@@ -42,7 +43,7 @@ async function fetchDetail<T>(path: string, revalidate: number): Promise<T | nul
   }
   if (res.status === 404) return null;
   if (!res.ok) throw new ApiUnavailableError(path, res.status);
-  return (await res.json()) as T;
+  return resolveServedMedia(await res.json(), PUBLIC_API_BASE) as T;
 }
 
 /**
@@ -63,7 +64,7 @@ async function fetchList<T>(path: string, revalidate: number, select: (json: unk
     if (building) return [];
     throw new ApiUnavailableError(path, res.status);
   }
-  return select(await res.json());
+  return select(resolveServedMedia(await res.json(), PUBLIC_API_BASE));
 }
 
 export interface ProductCard {

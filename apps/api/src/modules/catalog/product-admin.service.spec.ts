@@ -55,8 +55,13 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     const { svc, update } = setup();
     await svc.update('a1', 'p1', { images: ['https://cdn.example.com/a.jpg', PNG] });
     expect(update.mock.calls[0][0].data).toEqual({ images: ['https://cdn.example.com/a.jpg', PNG], thumbnail: 'https://cdn.example.com/a.jpg' });
+    await svc.update('a1', 'p1', { images: [PNG] });
+    const stored = update.mock.calls[1][0].data as { images: string[]; thumbnail: string };
+    expect(stored.images).toEqual([PNG]);
+    expect(stored.thumbnail).toMatch(/^\/public-image\/product\/p1\/0\?v=[0-9a-f]{16}$/);
+    expect(stored.thumbnail).not.toContain('data:');
     await svc.update('a1', 'p1', { images: [] });
-    expect(update.mock.calls[1][0].data).toEqual({ images: [], thumbnail: null });
+    expect(update.mock.calls[2][0].data).toEqual({ images: [], thumbnail: null });
   });
 
   it.each([
