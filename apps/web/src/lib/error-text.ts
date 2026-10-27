@@ -9,7 +9,7 @@ const LOAD_TIMEOUT = 'Tải chậm quá, thử lại nhé.';
 const ACTION_TIMEOUT = 'Mạng chậm, chưa rõ đã xong chưa. Bạn kiểm tra lại rồi thử lại nhé.';
 
 /** Lời kỹ thuật tiếng Anh của framework (Nest/class-validator/proxy) lọt ra từ 4xx: không phải lời nghiệp vụ, khách không đọc hiểu. */
-const NO_VIETNAMESE = /^[\x00-\x7F]*[A-Za-z][\x00-\x7F]*$/;
+const NO_VIETNAMESE = /^(?=[^]*[A-Za-z])[^\u0080-\uffff]*$/;
 const TECHNICAL_MESSAGE = /^(?=[ -~]*$)(cannot \w+ \/|not found|bad request|unauthorized|forbidden|conflict|unprocessable|too many|request failed|throttler|validation failed|.*\b(must be|should not|should be|too large|not allowed|not acceptable|unexpected token)\b)/i;
 
 /**
