@@ -115,14 +115,15 @@ export function parseIntInRange(raw: string, min: number, max: number, label: st
 // ── Hoa hồng cộng tác viên và hạn xử lý của gian hàng đối tác ──
 
 export const PARTNER_RULE_FIELDS = [
-  { form: 'defaultRate', key: 'affiliate.default_rate_pct', label: 'Hoa hồng mặc định cho cộng tác viên (%)', hint: 'Áp cho sản phẩm chưa đặt % riêng. Ví dụ 8 nghĩa là 8%.', min: 0, max: 50, fallback: 8, unit: '%' },
-  { form: 'maxRate', key: 'affiliate.max_rate_pct', label: 'Trần hoa hồng mỗi sản phẩm (%)', hint: 'Không đặt được % riêng cao hơn mức này.', min: 0, max: 100, fallback: 50, unit: '%' },
+  { form: 'defaultRate', key: 'affiliate.default_rate_pct', label: 'Hoa hồng mặc định cho cộng tác viên (%)', hint: 'Áp cho sản phẩm Tubu chưa đặt % riêng. Sản phẩm của gian hàng đối tác chưa đặt % riêng thì hoa hồng là 0đ.', min: 0, max: 50, fallback: 8, unit: '%' },
+  { form: 'maxRate', key: 'affiliate.max_rate_pct', label: 'Trần hoa hồng mỗi sản phẩm (%)', hint: 'Không đặt được % riêng cao hơn mức này. Hạ trần không đổi những % riêng đã đặt từ trước.', min: 0, max: 100, fallback: 50, unit: '%' },
   { form: 'confirmHours', key: 'merchant.confirm_sla_hours', label: 'Hạn gian hàng đối tác xác nhận đơn (giờ)', hint: 'Quá hạn thì nhắc và hiện ở Đơn đối tác & đối soát.', min: 1, max: 168, fallback: 24, unit: 'giờ' },
   { form: 'shipHours', key: 'merchant.ship_sla_hours', label: 'Hạn gửi hàng (giờ kể từ khi khách đặt)', hint: 'Gian hàng phải nhập mã vận đơn trong chừng này giờ.', min: 1, max: 336, fallback: 48, unit: 'giờ' },
   { form: 'deliverDays', key: 'merchant.deliver_sla_days', label: 'Hạn giao xong (ngày)', hint: 'Đang giao quá chừng này ngày thì hiện ở danh sách quá hạn.', min: 1, max: 60, fallback: 7, unit: 'ngày' },
 ] as const;
 
 export type PartnerRuleForm = Record<(typeof PARTNER_RULE_FIELDS)[number]['form'], string>;
+export type PartnerRuleWrite = { key: string; label: string; value: number };
 
 export function readPartnerRuleForm(rows: ConfigRow[] | undefined): PartnerRuleForm {
   const out = {} as PartnerRuleForm;
@@ -133,9 +134,13 @@ export function readPartnerRuleForm(rows: ConfigRow[] | undefined): PartnerRuleF
   return out;
 }
 
-/** Kiểm cả form: mỗi ô là số trong biên (hoa hồng mặc định phải nguyên), mặc định không vượt trần. Trả danh sách khoá cần ghi hoặc câu lỗi đầu tiên. */
-export function buildPartnerRuleWrites(f: PartnerRuleForm): { writes?: { key: string; label: string; value: number }[]; error?: string } {
-  const writes: { key: string; label: string; value: number }[] = [];
+/**
+ * Kiểm cả form: mỗi ô là số trong biên (hoa hồng mặc định phải nguyên), mặc định không vượt trần.
+ * Trả danh sách khoá cần ghi theo ĐÚNG thứ tự ghi được: API so mỗi lần ghi với giá trị đang lưu của khoá còn lại, nên nâng cả hai
+ * thì ghi trần trước, còn lại (hạ cả hai, hoặc chỉ một) ghi mặc định trước. `current` là giá trị đang lưu.
+ */
+export function buildPartnerRuleWrites(f: PartnerRuleForm, current?: PartnerRuleForm): { writes?: PartnerRuleWrite[]; error?: string } {
+  const writes: PartnerRuleWrite[] = [];
   for (const field of PARTNER_RULE_FIELDS) {
     const raw = f[field.form].trim().replace(',', '.');
     const n = Number(raw);
@@ -146,8 +151,21 @@ export function buildPartnerRuleWrites(f: PartnerRuleForm): { writes?: { key: st
     }
     writes.push({ key: field.key, label: field.label, value: n });
   }
-  if (Number(f.defaultRate) > Number(f.maxRate.replace(',', '.'))) {
-    return { error: 'Hoa hồng mặc định không được cao hơn trần hoa hồng.' };
+  const newDefault = Number(f.defaultRate);
+  const newMax = Number(f.maxRate.replace(',', '.'));
+  if (newDefault > newMax) return { error: 'Hoa hồng mặc định không được cao hơn trần hoa hồng.' };
+  const curMax = Number((current ?? f).maxRate.replace(',', '.'));
+  if (newDefault > curMax) {
+    const i = writes.findIndex((w) => w.key === 'affiliate.max_rate_pct');
+    const [cap] = writes.splice(i, 1);
+    writes.unshift(cap!);
   }
   return { writes };
+}
+
+/** Câu lỗi từ API nhắc tên khoá kỹ thuật: đổi tên khoá thành tên thường. */
+export function friendlyPartnerRuleError(message: string): string {
+  let out = message;
+  for (const f of PARTNER_RULE_FIELDS) out = out.split(`"${f.key}"`).join(`"${f.label.replace(/ \((?:%|giờ|ngày)\)$/, '')}"`);
+  return out.replace(/Nâng trần trước\./, 'Hãy nâng trần trước.').replace(/Hạ mức mặc định trước\./, 'Hãy hạ mức mặc định trước.');
 }

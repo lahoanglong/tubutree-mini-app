@@ -4,9 +4,34 @@ import { useEffect, useState } from 'react';
 import { Percent } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
-import { buildPartnerRuleWrites, configValue, PARTNER_RULE_FIELDS, readPartnerRuleForm, type PartnerRuleForm } from '@/lib/admin-config-forms';
+import { buildPartnerRuleWrites, configValue, friendlyPartnerRuleError, PARTNER_RULE_FIELDS, readPartnerRuleForm, type PartnerRuleForm, type PartnerRuleWrite } from '@/lib/admin-config-forms';
 import { BTN_PRIMARY, Field, INPUT_CLASS, Notice } from './ui';
 import { useConfirm } from './confirm-dialog';
+
+const shortLabel = (w: PartnerRuleWrite) => w.label.replace(/ \((?:%|giờ|ngày)\)$/, '');
+const isRate = (key: string) => key.startsWith('affiliate.');
+const isLoweredSla = (w: PartnerRuleWrite, current: (key: string) => unknown) => !isRate(w.key) && w.value < Number(current(w.key));
+
+/** Mỗi loại khoá một câu hậu quả riêng: hoa hồng chốt lúc đặt đơn, còn hạn xử lý tính lại mỗi lần xem và nhắc mỗi giờ. */
+export function partnerRuleConfirmMessage(changed: PartnerRuleWrite[], current: (key: string) => unknown): string {
+  const lines = changed.map((w) => `${w.label}\n${String(current(w.key))} → ${w.value}`).join('\n\n');
+  const notes: string[] = [];
+  if (changed.some((w) => isRate(w.key))) {
+    notes.push('Hoa hồng: áp cho các đơn đặt từ lúc này; đơn cũ giữ mức đã chốt.');
+  }
+  if (changed.some((w) => w.key === 'affiliate.max_rate_pct' && w.value < Number(current(w.key)))) {
+    notes.push('Hạ trần không đổi những % riêng đã đặt trước đó cho từng sản phẩm.');
+  }
+  if (changed.some((w) => !isRate(w.key))) {
+    notes.push(
+      'Hạn xử lý: áp ngay cho cả đơn đang xử lý. Đơn vừa thành quá hạn sẽ được nhắc trong vòng một giờ, kể cả báo cho khách là đơn bị chậm.',
+    );
+  }
+  if (changed.some((w) => isLoweredSla(w, current))) {
+    notes.push('Bạn đang HẠ hạn: nhiều đơn có thể quá hạn cùng lúc và khách nhận thông báo chậm trễ hàng loạt. Hãy chắc chắn trước khi lưu.');
+  }
+  return `${lines}\n\n${notes.join('\n')}`;
+}
 
 /**
  * Hoa hồng cộng tác viên và hạn xử lý của gian hàng đối tác: các con số dính tới tiền nên có thẻ riêng, kiểm giá trị
@@ -17,36 +42,48 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const { confirm, dialog } = useConfirm();
   const [form, setForm] = useState<PartnerRuleForm>(() => readPartnerRuleForm(rows));
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  // Chỉ nạp lại khi giá trị trong hệ thống đổi (tải xong / sau khi lưu) để không xoá số đang gõ dở.
+  // Chỉ nạp lại ô nào có giá trị lưu thật đổi (tải xong / sau khi lưu): ô khác, kể cả ô lưu lỗi, giữ số đang gõ.
   const snapshot = JSON.stringify(readPartnerRuleForm(rows));
   const [loaded, setLoaded] = useState(snapshot);
   useEffect(() => {
-    if (snapshot !== loaded) {
-      setForm(JSON.parse(snapshot) as PartnerRuleForm);
-      setLoaded(snapshot);
-    }
+    if (snapshot === loaded) return;
+    const next = JSON.parse(snapshot) as PartnerRuleForm;
+    const prev = JSON.parse(loaded) as PartnerRuleForm;
+    setForm((cur) => {
+      const merged = { ...cur };
+      for (const f of PARTNER_RULE_FIELDS) if (next[f.form] !== prev[f.form]) merged[f.form] = next[f.form];
+      return merged;
+    });
+    setLoaded(snapshot);
   }, [snapshot, loaded]);
 
   const save = useMutation({
     mutationFn: async () => {
-      const built = buildPartnerRuleWrites(form);
+      const built = buildPartnerRuleWrites(form, readPartnerRuleForm(rows));
       if (!built.writes) throw new Error(built.error);
       const current = (key: string) => configValue<unknown>(rows, key, PARTNER_RULE_FIELDS.find((f) => f.key === key)?.fallback);
       const changed = built.writes.filter((w) => current(w.key) !== w.value);
       if (changed.length === 0) return 0;
       const ok = await confirm({
         title: 'Lưu thay đổi hoa hồng và thời hạn?',
-        message: `${changed
-          .map((w) => `${w.label}\n${String(current(w.key))} → ${w.value}`)
-          .join('\n\n')}\n\nÁp dụng cho các đơn đặt từ lúc này; đơn cũ giữ mức đã chốt.`,
+        message: partnerRuleConfirmMessage(changed, current),
         confirmLabel: 'Lưu thay đổi',
+        tone: changed.some((w) => isLoweredSla(w, current)) ? 'danger' : 'default',
       });
       if (!ok) return null;
+      const saved: string[] = [];
       for (const w of changed) {
         try {
           await setConfig(w.key, w.value);
+          saved.push(shortLabel(w));
         } catch (e) {
-          throw new Error(`${w.label}: ${e instanceof Error ? e.message : 'không lưu được'}`);
+          const reason = friendlyPartnerRuleError(e instanceof Error ? e.message : 'không lưu được');
+          const notSaved = changed.slice(saved.length).map(shortLabel).join(', ');
+          throw new Error(
+            saved.length > 0
+              ? `Đã lưu: ${saved.join(', ')}. Chưa lưu: ${notSaved}. ${reason}`
+              : `Chưa lưu được ${shortLabel(w)}. ${reason}`,
+          );
         }
       }
       return changed.length;
@@ -88,6 +125,11 @@ export function PartnerRulesCard({ rows }: { rows: ConfigRow[] | undefined }) {
             />
           </Field>
         ))}
+        {Number(form.confirmHours) >= Number(form.shipHours) && (
+          <div className="sm:col-span-2">
+            <Notice tone="warning">Hạn xác nhận đang bằng hoặc lớn hơn hạn gửi hàng, nên đơn vừa được nhận có thể quá hạn gửi hàng ngay.</Notice>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <button type="submit" disabled={!rows || save.isPending} className={BTN_PRIMARY}>
             {save.isPending ? 'Đang lưu…' : 'Lưu hoa hồng và thời hạn'}
