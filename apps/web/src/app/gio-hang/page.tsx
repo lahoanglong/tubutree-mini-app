@@ -316,7 +316,7 @@ export default function CartPage() {
                                 Giá Giờ vàng
                               </span>
                             )}
-                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && (
+                            {it.isFlash && it.soldPct != null && Number.isFinite(it.soldPct) && clampPercent(it.soldPct) > 0 && (
                               <span className="text-xs text-stone-600">Đã bán {clampPercent(it.soldPct)}%</span>
                             )}
                           </div>

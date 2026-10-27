@@ -487,7 +487,7 @@ function CartLineRow({
             <Badge tone="promo" size="sm" icon={Zap}>
               {vi.flashSale.badge}
             </Badge>
-            {line.soldPct != null && Number.isFinite(line.soldPct) && (
+            {line.soldPct != null && Number.isFinite(line.soldPct) && clampPercent(line.soldPct) > 0 && (
               <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
                 {vi.flashSale.soldPct(clampPercent(line.soldPct))}
               </Text>

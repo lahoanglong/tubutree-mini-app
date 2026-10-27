@@ -186,14 +186,11 @@ export function ProductTile({
                 ({p.reviewCount})
               </Text>
             </>
-          ) : (
-            <Text variant="caption" tone="disabled">
-              ★ Mới
-            </Text>
-          )}
+          ) : null}
           {formatSold(p.sold) && (
             <Text variant="caption" tone="tertiary" style={{ fontWeight: 600 }}>
-              · {formatSold(p.sold)}
+              {(p.reviewCount ?? 0) > 0 ? '· ' : ''}
+              {formatSold(p.sold)}
             </Text>
           )}
         </div>

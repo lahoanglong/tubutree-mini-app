@@ -86,13 +86,13 @@ describe('ProductTile', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('hiện nhãn hiệu, đánh giá, đã bán; chưa có đánh giá thì "Mới"', () => {
+  it('hiện nhãn hiệu, đánh giá, đã bán; chưa có đánh giá thì không có nhãn Mới', () => {
     const c = mount(<ProductTile product={P} onPress={() => {}} />).container;
     expect(c.textContent).toContain('Polang');
     expect(c.textContent).toContain('4.5');
     expect(c.textContent).toContain('(4)');
     expect(c.textContent).toContain('Đã bán 1,5k+');
-    expect(mount(<ProductTile product={{ ...P, reviewCount: 0, sold: 0 }} onPress={() => {}} />).container.textContent).toContain('★ Mới');
+    expect(mount(<ProductTile product={{ ...P, reviewCount: 0, sold: 0 }} onPress={() => {}} />).container.textContent).not.toContain('Mới');
   });
 
   it('giá sale hiện kèm giá gốc; priceOverride (giờ vàng) thắng', () => {

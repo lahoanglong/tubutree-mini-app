@@ -1,14 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatCountdown } from '@tubutree/app-core/countdown-format';
 import { serverNow } from '@tubutree/app-core/server-clock';
 
-/** "Xh YYm" cho `ms` còn lại, làm tròn LÊN theo phút (phút cuối không hiện "0h 00m" khi chưa hết giờ). Hết giờ → ''. */
-export function formatCountdown(ms: number): string {
-  if (!(ms > 0)) return '';
-  const totalMin = Math.ceil(ms / 60_000);
-  return `${Math.floor(totalMin / 60)}h ${(totalMin % 60).toString().padStart(2, '0')}m`;
-}
+export { formatCountdown };
 
 const read = (targetMs: number) => (Number.isNaN(targetMs) ? '' : formatCountdown(targetMs - serverNow()));
 

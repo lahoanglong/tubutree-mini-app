@@ -424,9 +424,11 @@ export default function ProductDetailPage() {
                 {vi.flashSale.endsIn(flashLeft)}
               </Badge>
             )}
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
-            </Text>
+            {soldPercent(flashItem.soldCount, flashItem.quota) > 0 && (
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                {vi.flashSale.soldPct(soldPercent(flashItem.soldCount, flashItem.quota))}
+              </Text>
+            )}
           </Box>
         )}
 

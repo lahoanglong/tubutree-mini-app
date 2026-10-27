@@ -156,7 +156,7 @@ export function PdpFlashMeta() {
           Còn {left}
         </Badge>
       )}
-      <span>Đã bán {soldPercent(item.soldCount, item.quota)}%</span>
+      {soldPercent(item.soldCount, item.quota) > 0 && <span>Đã bán {soldPercent(item.soldCount, item.quota)}%</span>}
     </p>
   );
 }
