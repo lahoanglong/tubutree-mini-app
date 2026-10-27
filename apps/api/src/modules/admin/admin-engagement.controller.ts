@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsString, Max, MaxLength, Min } from 'class-validator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { MISSION_KINDS, type MissionKind } from '../../common/mission-kinds';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { AdminEngagementService } from './admin-engagement.service';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
@@ -15,6 +17,16 @@ export class UpdateMissionDto {
   @OptionalNotNull() @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) title?: string;
   @OptionalNotNull() @Transform(trim) @IsString() @MaxLength(300) description?: string;
   @OptionalNotNull() @IsInt() @Min(0) @Max(MISSION_REWARD_POINTS_MAX) rewardPoints?: number;
+  @OptionalNotNull() @IsBoolean() disabled?: boolean;
+}
+
+export class CreateMissionDto {
+  @Transform(trim) @IsString() @IsNotEmpty() @MaxLength(80) title!: string;
+  @Transform(trim) @IsString() @MaxLength(300) description!: string;
+  @IsIn([...MISSION_KINDS]) kind!: MissionKind;
+  /** Trần theo loại kiểm ở service (MISSION_GOAL_MAX); 365 là trần chung của mọi loại. */
+  @IsInt() @Min(1) @Max(365) goal!: number;
+  @IsInt() @Min(0) @Max(MISSION_REWARD_POINTS_MAX) rewardPoints!: number;
 }
 
 @ApiTags('admin-engagement')
@@ -26,6 +38,11 @@ export class AdminEngagementController {
   @Get('missions')
   missions() {
     return this.engagement.listMissions();
+  }
+
+  @Post('missions')
+  createMission(@CurrentUser('sub') adminId: string, @Body() dto: CreateMissionDto) {
+    return this.engagement.createMission(adminId, dto);
   }
 
   @Patch('missions/:id')

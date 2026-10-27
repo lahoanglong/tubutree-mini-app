@@ -7,6 +7,7 @@ import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
 import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { formatVnDate } from '../../common/vn-time';
+import { publicImage } from '../../common/public-image';
 
 /** Số nhóm hết hạn xử lý mỗi lần quét (15 phút/lần): chặn một đợt tồn đọng làm cron chạy quá lâu; phần dư để lần quét sau. */
 const EXPIRE_BATCH = 200;
@@ -417,7 +418,7 @@ export class GroupBuyService {
   ) {
     return {
       id: g.id,
-      product,
+      product: { ...product, thumbnail: publicImage('product', g.productId, 'thumb', product.thumbnail) },
       targetSize: g.targetSize,
       currentSize: memberCount,
       unitPrice: g.unitPrice,

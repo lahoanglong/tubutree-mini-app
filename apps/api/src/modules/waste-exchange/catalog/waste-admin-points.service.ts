@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, WastePoint, WastePointUsage } from '@prisma/client';
-import { WASTE_WEEKDAY_VALUES } from '@tubutree/shared-types';
+import { cashWordingMessage, findCashWording, WASTE_WEEKDAY_VALUES } from '@tubutree/shared-types';
 import type {
   AdminWastePointDTO,
   AdminWastePointQuery,
@@ -429,6 +429,8 @@ export class WasteAdminPointsService {
       if (!locked.perkPendingText) throw new ConflictException(NO_PENDING_PERK);
       // Exact comparison: the admin approves the text on screen, never one an owner submitted since.
       if (locked.perkPendingText !== expectedPendingText) throw new ConflictException(PERK_CHANGED);
+      // Duyệt là lúc chữ này hiện cho khách: chữ gửi từ trước khi có luật vẫn không được qua. Từ chối thì cho qua để gỡ khỏi hàng chờ.
+      if (approved && findCashWording(locked.perkPendingText)) throw new BadRequestException(cashWordingMessage(locked.perkPendingText));
       await tx.wastePoint.update({
         where: { id: pointId },
         data: approved ? { perkText: locked.perkPendingText, perkPendingText: null } : { perkPendingText: null },

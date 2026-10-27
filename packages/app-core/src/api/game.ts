@@ -78,6 +78,8 @@ export interface LeaderRow {
 }
 export interface MissionItem {
   code: string;
+  /** Loại nhiệm vụ để chọn nút "Làm ngay" cho nhiệm vụ quản trị thêm (mã của chúng không cố định). */
+  kind?: 'CHECKIN_STREAK' | 'ORDER_COUNT' | 'REVIEW_COUNT' | 'INVITE_COUNT' | null;
   title: string;
   description?: string;
   rewardPoints: number;

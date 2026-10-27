@@ -148,6 +148,14 @@ describe('WastePointDetail', () => {
     expect(dels[0]!.url.endsWith('/admin/waste/points/p1/staff/u-owner')).toBe(true);
   });
 
+  it('ưu đãi đã duyệt từ trước có chữ tiền: admin thấy cờ xem lại, khách chưa bị ẩn (vẫn có nút gỡ); chữ hợp lệ không có cờ', async () => {
+    const old = await mount(wastePoint({ perkText: 'Tặng 10k cho khách đầu tiên' }));
+    expect(old.c.textContent).toContain('duyệt trước khi có luật mới');
+    expect(btn(old.c, 'Gỡ ưu đãi đang hiện')).not.toBeNull();
+    const fine = await mount(wastePoint({ perkText: 'Giảm 10% hoá đơn đầu' }));
+    expect(fine.c.textContent).not.toContain('duyệt trước khi có luật mới');
+  });
+
   it('gỡ chủ điểm: cảnh báo dừng cả điểm (kèm câu ưu đãi khi có ưu đãi), gỡ nhân viên giữ câu cũ', async () => {
     const OWNER_MSG = 'Gỡ chủ điểm sẽ dừng cả điểm: khách không thấy điểm, người ở điểm không xác nhận được cho tới khi thêm chủ mới.';
     const a = await mount(wastePoint({ perkText: 'Tặng túi vải' }));
@@ -183,6 +191,17 @@ describe('WastePointDetail', () => {
     const { c } = await mount();
     expect(c.textContent).toContain('Chủ điểm phải là chủ gian hàng đối tác.');
     expectNoBannedCopy(c.textContent);
+  });
+
+  it('ưu đãi chờ duyệt có chữ trả/thưởng tiền: hiện cảnh báo, khoá nút Duyệt, vẫn cho Từ chối; luôn có câu dặn chỉ duyệt giảm giá hoặc quà', async () => {
+    const ok = await mount(wastePoint({ perkText: null, perkPendingText: 'Giảm 10% hoá đơn đầu' }));
+    expect(ok.c.textContent).toContain('Chỉ duyệt ưu đãi bằng giảm giá hoặc quà');
+    expect(ok.c.querySelector('[role=alert]')).toBeNull();
+    const bad = await mount(wastePoint({ perkText: null, perkPendingText: 'Tặng 10k cho khách mang vỏ chai' }));
+    expect(bad.c.querySelector('[role=alert]')?.textContent).toContain('Zalo không cho phép');
+    expect(bad.c.querySelector('[role=alert]')?.textContent).toContain('Chữ "Tặng 10k"');
+    expect((btn(bad.c, 'Duyệt ưu đãi') as HTMLButtonElement).disabled).toBe(true);
+    expect((btn(bad.c, 'Từ chối ưu đãi') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('duyệt / từ chối ưu đãi riêng', async () => {

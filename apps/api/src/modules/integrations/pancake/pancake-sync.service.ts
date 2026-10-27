@@ -409,7 +409,8 @@ export class PancakeSyncService implements OnModuleInit {
 
     const baseData = {
       name: p.name,
-      description: p.description ?? existing?.description ?? '',
+      // Mô tả Pancake để trống không xoá mô tả admin đã nhập ở trang quản trị; có nội dung thật thì Pancake là nguồn chính.
+      description: p.description?.trim() ? p.description : (existing?.description ?? ''),
       images: imgs.length ? imgs : (existing?.images ?? []),
       thumbnail: imgs[0] ?? existing?.thumbnail ?? null,
       basePrice: p.variations?.find((v) => !v.is_removed && positiveInt(v.retail_price))?.retail_price ?? existing?.basePrice ?? 0,

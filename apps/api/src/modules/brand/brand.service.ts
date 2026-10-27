@@ -5,6 +5,8 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { COMMISSION_ELIGIBLE_ROLES_KEY, DEFAULT_COMMISSION_ELIGIBLE_ROLES, sanitizeEligibleRoles } from '../affiliate/commission-eligibility';
 import { loadDefaultRate, maxResolvedRate } from '../affiliate/commission-rate';
 import type { BrandSalesPeriod } from './dto/brand.dto';
+import { publicImage } from '../../common/public-image';
+import { isStorefrontImageValue } from '../../common/uploaded-image';
 
 interface Cert {
   code: string;
@@ -127,8 +129,8 @@ export class BrandService {
       id: brand.id,
       slug: brand.slug,
       name: brand.name,
-      logoUrl: brand.logoUrl,
-      coverUrl: brand.coverUrl,
+      logoUrl: publicImage('brand', brand.id, 'logo', brand.logoUrl),
+      coverUrl: publicImage('brand', brand.id, 'cover', brand.coverUrl),
       tagline: brand.tagline,
       story: brand.story,
       storyImages: brand.storyImages,
@@ -139,6 +141,7 @@ export class BrandService {
       promotions: publicPromotions,
       products: products.map(({ soldExternal, soldApp, variations, ...p }) => ({
         ...p,
+        thumbnail: publicImage('product', p.id, 'thumb', p.thumbnail),
         sold: soldExternal + soldApp,
         inStock: (variations ?? []).some((v) => v.stock > 0),
       })),
@@ -175,6 +178,18 @@ export class BrandService {
     return this.prisma.brand.findMany({ orderBy: { createdAt: 'desc' } });
   }
 
+  /**
+   * Logo và ảnh bìa: link https hoặc ảnh raster tải lên (không javascript:, http:, SVG). Chỉ kiểm khi giá trị khác giá trị đang lưu: form
+   * luôn gửi lại cả hai ô, nên nhãn có logo cũ (http, SVG) vẫn sửa được lời giới thiệu mà không bị chặn vì ảnh không đụng tới.
+   */
+  private assertImageChanges(dto: { logoUrl?: string; coverUrl?: string }, current: { logoUrl: string | null; coverUrl: string | null } | null) {
+    for (const k of ['logoUrl', 'coverUrl'] as const) {
+      const v = dto[k];
+      if (v === undefined || v === (current?.[k] ?? undefined)) continue;
+      if (!isStorefrontImageValue(v)) throw new BadRequestException(`${k} chỉ nhận link https hoặc ảnh tải lên (png, jpeg, webp, gif).`);
+    }
+  }
+
   async createBrand(dto: {
     name: string;
     slug?: string;
@@ -188,6 +203,7 @@ export class BrandService {
   }) {
     const slug = dto.slug?.trim() ? slugifyVi(dto.slug) : slugifyVi(dto.name);
     if (!slug) throw new BadRequestException('Tên nhãn không hợp lệ để tạo slug.');
+    this.assertImageChanges(dto, null);
     return this.prisma.brand.create({
       data: {
         name: dto.name,
@@ -218,7 +234,8 @@ export class BrandService {
       ownerUserId?: string;
     },
   ) {
-    await this.prisma.brand.findUniqueOrThrow({ where: { id } });
+    const current = await this.prisma.brand.findUniqueOrThrow({ where: { id } });
+    this.assertImageChanges(dto, current);
     const data: Record<string, unknown> = { ...dto };
     if (typeof dto.slug === 'string') {
       // Chặn slug rỗng tường minh (dto.slug='') — trước đây bị guard `&& dto.slug.trim()` bỏ qua
@@ -516,6 +533,7 @@ export class BrandService {
     dto: { logoUrl?: string; coverUrl?: string; tagline?: string; story?: string; origin?: string },
   ) {
     const brand = await this.assertOwnedBrand(userId);
+    this.assertImageChanges(dto, brand);
     const data: Record<string, unknown> = {};
     for (const k of ['logoUrl', 'coverUrl', 'tagline', 'story', 'origin'] as const) {
       if (dto[k] !== undefined) data[k] = dto[k];

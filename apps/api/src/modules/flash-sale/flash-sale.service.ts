@@ -9,6 +9,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { isSellableVariation, SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '../admin/coupon-input-rules';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { publicImage } from '../../common/public-image';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
@@ -185,7 +186,7 @@ export class FlashSaleService {
         variationId: it.variationId,
         productSlug: it.variation.product.slug,
         productName: it.variation.product.name,
-        thumbnail: it.variation.product.thumbnail,
+        thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
         flashPrice: it.flashPrice,
         retailPrice: it.variation.retailPrice,
         salePrice: it.variation.salePrice,
@@ -588,7 +589,7 @@ export class FlashSaleService {
       variationId: it.variationId,
       productSlug: it.variation.product.slug,
       productName: it.variation.product.name,
-      thumbnail: it.variation.product.thumbnail,
+      thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),
       flashPrice: it.flashPrice,
       retailPrice: it.variation.retailPrice,
       salePrice: it.variation.salePrice,

@@ -14,6 +14,8 @@ import { isPartnerStore } from '../merchant/partner-store';
 import { DEFAULT_MERCHANT_SHIPPING_FEE } from '../merchant/merchant-config';
 import { isPartnerOwnedProduct } from '../cart/partner-goods';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { publicImages, publicProductThumb } from '../../common/public-image';
+import { publicImage } from '../../common/public-image';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -311,6 +313,8 @@ export class CatalogService {
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
     return {
       ...publicProduct,
+      images: publicImages('product', product.id, publicProduct.images ?? []),
+      thumbnail: publicProductThumb(publicProduct),
       variations: sortVariationsByPrice(publicProduct.variations),
       brandSlug,
       sold: product.soldExternal + product.soldApp,
@@ -512,11 +516,12 @@ export class CatalogService {
     if (foldVietnamese(q).length < SUGGEST_MIN_CHARS) return [];
     const text = await this.textWhere(q);
     if (!text) return [];
-    return this.prisma.product.findMany({
+    const rows = await this.prisma.product.findMany({
       where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
       take: 8,
-      select: { slug: true, name: true, thumbnail: true, basePrice: true },
+      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true },
     });
+    return rows.map(({ id, ...r }) => ({ ...r, thumbnail: publicImage('product', id, 'thumb', r.thumbnail) }));
   }
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {
@@ -551,7 +556,7 @@ export class CatalogService {
       slug: p.slug,
       brand: p.brand,
       name: p.name,
-      thumbnail: p.thumbnail ?? p.images[0] ?? null,
+      thumbnail: publicProductThumb(p),
       basePrice: p.basePrice,
       salePrice: p.salePrice,
       isFeatured: p.isFeatured,

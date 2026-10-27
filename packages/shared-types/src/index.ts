@@ -6,3 +6,4 @@ export * from './analytics';
 export * from './waste';
 export * from './external-points';
 export * from './support-chat';
+export * from './cash-wording';

@@ -16,7 +16,12 @@ export default defineConfig(({ command, mode }) => {
     base: '',
     plugins: [zaloMiniApp(), react()],
     // Hai bản React trong một bundle làm hook null; web dùng React 19 nên ép một bản duy nhất.
-    resolve: { dedupe: ['react', 'react-dom'] },
+    // shared-types phát hành CJS (dist); Vite gói sẵn CJS nên tên export qua `export *` không thấy được ("Importing binding name ... is not found")
+    // khi Mini App lấy giá trị chạy thật (không chỉ kiểu). Trỏ thẳng vào mã nguồn TS như jest của API.
+    resolve: {
+      dedupe: ['react', 'react-dom'],
+      alias: { '@tubutree/shared-types': fileURLToPath(new URL('../../packages/shared-types/src/index.ts', import.meta.url)) },
+    },
     server: {
       port: 3113,
       host: '0.0.0.0',

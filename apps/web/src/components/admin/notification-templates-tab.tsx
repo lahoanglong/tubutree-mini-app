@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listNotificationTemplates,
+  templateVariableProblem,
   updateNotificationTemplate,
   type AdminNotificationTemplate,
   type NotificationDelivery,
@@ -74,6 +75,7 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
     onError: (e) => setMsg({ ok: false, text: e instanceof Error ? e.message : 'Không lưu được mẫu thông báo.' }),
   });
   const needsId = f.channel === 'ZNS' && !f.zaloTemplateId.trim();
+  const bodyProblem = templateVariableProblem(item.variables, f.bodyTemplate);
   const dirty =
     f.channel !== (item.channel === 'ZNS' ? 'ZNS' : 'INAPP') ||
     f.zaloTemplateId.trim() !== (item.zaloTemplateId ?? '') ||
@@ -119,15 +121,45 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
         </label>
       </div>
       <label className="mt-2 block text-xs text-stone-600">
-        <span className="mb-1 block">Nội dung trong app (biến dạng {'{{order_code}}'})</span>
+        <span className="mb-1 block">Nội dung trong app</span>
         <textarea
           name="bodyTemplate"
           rows={2}
           value={f.bodyTemplate}
           onChange={(e) => setF({ ...f, bodyTemplate: e.target.value })}
+          aria-invalid={bodyProblem ? true : undefined}
           className={INPUT_CLASS}
         />
       </label>
+      {item.variables && (
+        <div data-variables className="mt-1 text-xs text-stone-600">
+          {item.variables.length === 0 ? (
+            <span>Mẫu này không có chỗ điền thông tin riêng cho từng khách.</span>
+          ) : (
+            <>
+              <span>Chỗ điền thông tin của từng khách (bấm để thêm vào cuối nội dung): </span>
+              <span className="inline-flex flex-wrap gap-1 align-middle">
+                {item.variables.map((v) => (
+                  <button
+                    key={v.key}
+                    type="button"
+                    title={`Thêm {{${v.key}}}`}
+                    onClick={() => setF({ ...f, bodyTemplate: `${f.bodyTemplate}{{${v.key}}}` })}
+                    className="min-h-[44px] rounded-control border border-stone-450 bg-stone-0 px-2 py-0.5 text-stone-700 hover:bg-stone-50 sm:min-h-0"
+                  >
+                    {v.label} <code>{`{{${v.key}}}`}</code>
+                  </button>
+                ))}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+      {bodyProblem && (
+        <p role="alert" className="mt-1 text-xs text-danger-fg">
+          {bodyProblem}
+        </p>
+      )}
       {needsId && <p className="mt-1 text-xs text-warning-fg">Kênh ZNS cần mã mẫu Zalo đã duyệt.</p>}
       {failed > 0 && (
         <div data-zns-failure className="mt-2">
@@ -144,7 +176,7 @@ function TemplateRow({ item, canEditDelivery }: { item: AdminNotificationTemplat
             setMsg(null);
             save.mutate();
           }}
-          disabled={!dirty || needsId || !f.bodyTemplate.trim() || save.isPending}
+          disabled={!dirty || needsId || !f.bodyTemplate.trim() || Boolean(bodyProblem) || save.isPending}
           className={BTN_XS_PRIMARY}
         >
           {save.isPending ? 'Đang lưu…' : 'Lưu'}

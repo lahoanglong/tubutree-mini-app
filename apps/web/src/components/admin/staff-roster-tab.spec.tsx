@@ -17,8 +17,8 @@ afterEach(() => {
 
 const LIST = {
   members: [
-    { id: 'u1', phone: '0911111111', fullName: 'Lan', avatarUrl: null, role: 'STAFF', createdAt: '2026-10-01T00:00:00Z' },
-    { id: 'u2', phone: '0922222222', fullName: null, avatarUrl: null, role: 'ADMIN', createdAt: '2026-10-01T00:00:00Z' },
+    { id: 'u1', phone: '0911111111', fullName: 'Lan', avatarUrl: null, role: 'STAFF', staffPermissions: ['KHO'], createdAt: '2026-10-01T00:00:00Z' },
+    { id: 'u2', phone: '0922222222', fullName: null, avatarUrl: null, role: 'ADMIN', staffPermissions: [], createdAt: '2026-10-01T00:00:00Z' },
   ],
   pendingInvites: [{ phone: '0933333333', role: 'STAFF', createdAt: '2026-10-02T00:00:00Z' }],
 };
@@ -31,11 +31,15 @@ function stub(over: { list?: unknown; listStatus?: number; revoke?: unknown } = 
       calls.push({ url, init });
       const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'Content-Type': 'application/json' } });
       if (url.includes('/admin/staff/grant')) return json({ granted: 'STAFF', applied: false });
+      if (url.includes('/staff-permissions')) return json({ id: 'u1', staffPermissions: [], changed: true });
       if (url.includes('/admin/staff/revoke')) return json(over.revoke ?? { revoked: 1, downgraded: true });
       return json(over.list ?? LIST, over.listStatus ?? 200);
     }),
   );
-  return { posts: (p: string) => calls.filter((c) => c.url.includes(p) && c.init?.method === 'POST') };
+  return {
+    posts: (p: string) => calls.filter((c) => c.url.includes(p) && c.init?.method === 'POST'),
+    puts: (p: string) => calls.filter((c) => c.url.includes(p) && c.init?.method === 'PUT'),
+  };
 }
 
 describe('StaffRosterTab (Nhân sự)', () => {
@@ -49,6 +53,15 @@ describe('StaffRosterTab (Nhân sự)', () => {
     expect(t).toContain('Quản trị');
     expect(t).toContain('Chờ mở app');
     expect(t).toContain('0933333333');
+  });
+
+  it('dòng của chính mình: không có nút Thu hồi, ghi "(bạn)"; dòng người khác vẫn có', async () => {
+    stub();
+    const { container } = mount(<StaffRosterTab meId="u2" />);
+    await flush();
+    expect(container.querySelector('[aria-label="Thu hồi · 0922222222"]')).toBeNull();
+    expect(container.textContent).toContain('(bạn)');
+    expect(container.querySelector('[aria-label="Thu hồi · Lan"]')).not.toBeNull();
   });
 
   it('nút Lưu quyền khoá tới khi SĐT hợp lệ; cấp STAFF gửi đúng body, báo "sẽ áp khi họ mở app"', async () => {
@@ -82,6 +95,23 @@ describe('StaffRosterTab (Nhân sự)', () => {
     answerConfirm(true);
     await flush();
     expect(JSON.parse(api.posts('/admin/staff/grant')[0]!.init!.body as string)).toEqual({ phone: '0944444444', role: 'ADMIN' });
+  });
+
+  it('thẻ nhân viên có nhóm việc đang bật; tick thêm rồi lưu gửi đúng danh sách; quản trị không có ô tick', async () => {
+    const api = stub();
+    const { container } = mount(<StaffRosterTab />);
+    await flush();
+    expect(container.querySelectorAll('fieldset')).toHaveLength(1);
+    expect(container.textContent).toContain('Quản trị thấy và làm được mọi việc.');
+    const boxes = [...container.querySelectorAll<HTMLInputElement>('fieldset input[type=checkbox]')];
+    expect(boxes.map((b) => b.checked)).toEqual([false, true, false, false]);
+    const save = byText(container, 'button', 'Lưu nhóm việc') as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    click(boxes[0]!);
+    expect((byText(container, 'button', 'Lưu nhóm việc') as HTMLButtonElement).disabled).toBe(false);
+    click(byText(container, 'button', 'Lưu nhóm việc'));
+    await flush();
+    expect(JSON.parse(api.puts('/admin/users/u1/staff-permissions')[0]!.init!.body as string)).toEqual({ permissions: ['KHO', 'CSKH'] });
   });
 
   it('thu hồi có xác nhận; huỷ lời mời chờ thì gọi thẳng revoke theo SĐT', async () => {

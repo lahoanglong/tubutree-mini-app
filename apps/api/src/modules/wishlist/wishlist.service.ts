@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
+import { publicProductThumb } from '../../common/public-image';
 
 // Chặn tăng trưởng vô hạn: giới hạn hợp lý cho 1 wishlist (không ai cần thích quá số này).
 const MAX_WISHLIST_ITEMS = 500;
@@ -33,7 +34,7 @@ export class WishlistService {
         slug: p.slug,
         brand: p.brand,
         name: p.name,
-        thumbnail: p.thumbnail ?? p.images[0] ?? null,
+        thumbnail: publicProductThumb(p),
         basePrice: p.basePrice,
         salePrice: p.salePrice,
         isFeatured: p.isFeatured,

@@ -479,6 +479,7 @@ const TIME_RE = /^\d{1,2}:\d{2}$/;
 function StaffSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
+  const meId = useAuthStore((s) => s.user?.id);
   const staffQ = useQuery({ queryKey: ['admin-staff'], queryFn: listStaff });
   const [sheetOpen, setSheetOpen] = useState(false);
   const [phone, setPhone] = useState('');
@@ -550,7 +551,12 @@ function StaffSection() {
                     {m.phone ?? '—'} · {m.role === 'ADMIN' ? 'Quản trị' : 'Nhân viên'}
                   </Text>
                 </div>
-                {m.phone && (
+                {m.id === meId && (
+                  <Text variant="caption" tone="secondary">
+                    (bạn)
+                  </Text>
+                )}
+                {m.phone && m.id !== meId && (
                   <Button
                     variant="ghost"
                     aria-label={`Thu hồi · ${m.fullName ?? m.phone}`}

@@ -294,16 +294,16 @@ describe('lịch tuần', () => {
     expect(calls('get', '/staff/shifts')).toHaveLength(2);
   });
 
-  it('Copy tuần trước: gửi mốc hai tuần; báo số ca đã copy hoặc không có ca', async () => {
+  it('Chép tuần trước: gửi mốc hai tuần; báo số ca đã copy hoặc không có ca', async () => {
     await mount();
-    await press('Copy tuần trước');
+    await press('Chép tuần trước');
     expect(calls('post', '/staff/shifts/copy-week')[0]!.body).toEqual({
       sourceWeekStart: '2026-03-02T00:00:00.000Z',
       targetWeekStart: '2026-03-09T00:00:00.000Z',
     });
     expect(text()).toContain('Đã copy 2 ca từ tuần trước.');
     m.post['/staff/shifts/copy-week'] = () => ({ created: 0, skipped: 3 });
-    await press('Copy tuần trước');
+    await press('Chép tuần trước');
     expect(text()).toContain('Tuần trước không có ca để copy.');
   });
 
@@ -312,7 +312,7 @@ describe('lịch tuần', () => {
       throw new Error('Tuần này đã có ca');
     };
     await mount();
-    await press('Copy tuần trước');
+    await press('Chép tuần trước');
     expect(document.querySelector('[role="alert"]')?.textContent).toContain('Tuần này đã có ca');
   });
 });
@@ -538,9 +538,9 @@ describe('/nhan-vien — diện mạo Mini App ở điện thoại', () => {
     expect(text()).toContain('Cần ở đúng mạng WiFi công ty & trong vùng để chấm công.');
   });
 
-  it('Copy tuần trước là nút secondary xanh nhạt; thẻ ngày không viền; tiêu đề thẻ cỡ title-sm', async () => {
+  it('Chép tuần trước là nút secondary xanh nhạt; thẻ ngày không viền; tiêu đề thẻ cỡ title-sm', async () => {
     await mount();
-    expect(btn(/Copy tuần trước/).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
+    expect(btn(/Chép tuần trước/).className).toContain('max-md:bg-[var(--color-action-secondary-bg)]');
     const day = Array.from(document.querySelectorAll('section')).find((s) => s.querySelector('h2')?.textContent?.startsWith('T2'))!;
     expect(day.className).toContain('max-md:[box-shadow:var(--elevation-1)]');
     expect(day.querySelector('h2')!.className).toContain('max-md:text-[length:var(--type-title-sm-size)]');

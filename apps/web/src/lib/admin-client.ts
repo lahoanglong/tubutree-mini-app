@@ -1087,6 +1087,23 @@ export interface AdminNotificationTemplate {
   znsLastError?: { text: string; at: string } | null;
   /** Nhân viên Marketing sửa được nội dung (mẫu khuyến mãi / tương tác). */
   staffEditable?: boolean;
+  /** Biến mã thật sự điền cho mẫu này; null = mẫu ngoài danh sách (không kiểm được); thiếu = API cũ. */
+  variables?: { key: string; label: string }[] | null;
+}
+
+/** Cùng luật với templateVariableProblem của API (máy chủ vẫn là nơi quyết định); chuỗi rỗng = hợp lệ. */
+export function templateVariableProblem(variables: { key: string }[] | null | undefined, body: string): string {
+  const allowed = variables?.map((v) => v.key) ?? null;
+  const list = allowed?.length ? allowed.map((k) => `{{${k}}}`).join(', ') : 'không có biến nào';
+  const hint = allowed ? ` Mẫu này dùng được: ${list}.` : '';
+  for (const m of body.matchAll(/\{\{([^{}]*)\}\}/g)) {
+    const name = m[1]!;
+    if (!/^\w+$/.test(name)) return `Biến "${m[0]}" viết sai: chỉ gồm chữ không dấu, số và gạch dưới, không có dấu cách.${hint}`;
+    if (allowed && !allowed.includes(name)) return `Biến "{{${name}}}" không dùng được cho mẫu này, khách sẽ nhận câu bị trống chỗ đó.${hint}`;
+  }
+  const single = /\{\w*\}/.exec(body.replace(/\{\{[^{}]*\}\}/g, ''));
+  if (single) return `"${single[0]}" chỉ có một dấu ngoặc nên khách sẽ thấy nguyên chữ đó. Biến phải nằm trong hai dấu ngoặc, ví dụ {{${allowed?.[0] ?? 'ten_bien'}}}.`;
+  return '';
 }
 export const listNotificationTemplates = () => apiFetch<AdminNotificationTemplate[]>('/admin/notification-templates');
 export const updateNotificationTemplate = (
@@ -1725,6 +1742,8 @@ export interface SupportBridgeStatus {
   enabled: boolean;
   /** Cầu nối báo CONNECTED nhưng không còn nhận tin từ nhóm. */
   deaf?: boolean;
+  /** Số cuộc chat có tin khách chưa chuyển được vào nhóm Zalo (khớp bộ lọc "Chưa chuyển được"). */
+  waitingCount?: number;
 }
 export const getSupportBridge = () => apiFetch<SupportBridgeStatus>('/admin/support-chat/bridge');
 
@@ -1808,6 +1827,12 @@ export const STAFF_PERMISSION_LABELS: Record<StaffPermission, string> = {
   KHO: 'Kho — trạng thái đơn, đẩy lại Pancake, vận đơn thu gom, nhận hàng trả',
   MARKETING: 'Marketing — voucher, flash sale, FAQ, Content Kit, Học viện, mẫu thông báo, kiểm duyệt cộng đồng, báo cáo nguồn khách',
   KE_TOAN: 'Kế toán — xem đơn và xác nhận Đã nhận tiền, hoá đơn VAT, công nợ đại lý, chi thưởng đại lý đã duyệt, duyệt hoàn tiền sàn ngoài, hoàn tiền khách, chi lệnh rút đã duyệt, đối soát đối tác, báo cáo, CSV tài chính',
+};
+export const STAFF_PERMISSION_SHORT: Record<StaffPermission, string> = {
+  CSKH: 'Chăm sóc khách',
+  KHO: 'Kho',
+  MARKETING: 'Nội dung và khuyến mãi',
+  KE_TOAN: 'Kế toán',
 };
 export interface OpsAccess {
   role: string;
@@ -2149,11 +2174,23 @@ export interface AdminMission {
   rewardPoints: number;
   goal: number;
   isRepeatable: boolean;
+  kind: MissionKind | null;
+  disabled: boolean;
   claimedCount: number;
 }
+export type MissionKind = 'CHECKIN_STREAK' | 'ORDER_COUNT' | 'REVIEW_COUNT' | 'INVITE_COUNT';
+/** Nhãn và trần mục tiêu theo loại; khớp common/mission-kinds.ts của API (máy chủ vẫn kiểm lại). */
+export const MISSION_KIND_OPTIONS: { kind: MissionKind; label: string; unit: string; goalMax: number }[] = [
+  { kind: 'CHECKIN_STREAK', label: 'Điểm danh liên tiếp', unit: 'ngày', goalMax: 365 },
+  { kind: 'ORDER_COUNT', label: 'Mua đơn hàng (đã giao, hết hạn đổi trả)', unit: 'đơn', goalMax: 100 },
+  { kind: 'REVIEW_COUNT', label: 'Đánh giá sản phẩm có ảnh', unit: 'sản phẩm', goalMax: 100 },
+  { kind: 'INVITE_COUNT', label: 'Mời bạn mua hàng thành công', unit: 'người', goalMax: 100 },
+];
 export const listAdminMissions = () => apiFetch<AdminMission[]>('/admin/engagement/missions');
-export const updateAdminMission = (id: string, body: { title: string; description: string; rewardPoints: number }) =>
+export const updateAdminMission = (id: string, body: { title?: string; description?: string; rewardPoints?: number; disabled?: boolean }) =>
   apiFetch<AdminMission>(`/admin/engagement/missions/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+export const createAdminMission = (body: { title: string; description: string; kind: MissionKind; goal: number; rewardPoints: number }) =>
+  apiFetch<AdminMission>('/admin/engagement/missions', { method: 'POST', body });
 
 export interface DealerPriceChange {
   id: string;

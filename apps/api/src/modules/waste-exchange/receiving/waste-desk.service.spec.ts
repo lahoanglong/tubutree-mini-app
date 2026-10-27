@@ -337,6 +337,22 @@ describe('WasteDeskService.submitPerk', () => {
     expect(writeWasteEvent).not.toHaveBeenCalled();
   });
 
+  it.each(['Tặng 10k cho khách mang vỏ chai', 'Hoàn tiền mặt 5%', 'Trả thưởng cuối tháng bằng chuyển khoản'])(
+    '400 and nothing written when the text promises cash: %s',
+    async (perkText) => {
+      const { svc, tx } = setup({ accessList: [partner()] });
+      await expect(svc.submitPerk('s1', 'p1', { perkText })).rejects.toThrow(/Zalo không cho phép/);
+      expect(tx.wastePoint.update).not.toHaveBeenCalled();
+      expect(writeWasteEvent).not.toHaveBeenCalled();
+    },
+  );
+
+  it('discounts and gifts still go through', async () => {
+    const { svc, tx } = setup({ accessList: [partner()] });
+    await svc.submitPerk('s1', 'p1', { perkText: 'Giảm 10k cho đơn từ 100k, tặng 1 túi vải' });
+    expect(tx.wastePoint.update).toHaveBeenCalled();
+  });
+
   it('400 for a blank text', async () => {
     const { svc, tx } = setup({ accessList: [partner()] });
     await expect(svc.submitPerk('s1', 'p1', { perkText: '   ' })).rejects.toThrow(new BadRequestException('Nội dung ưu đãi không được để trống'));

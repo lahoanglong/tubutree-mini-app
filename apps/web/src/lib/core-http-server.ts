@@ -1,5 +1,6 @@
 import type { HttpClient, RequestOptions } from '@tubutree/app-core/http';
-import { ApiUnavailableError } from './api';
+import { resolveServedMedia } from '@tubutree/app-core/served-media';
+import { ApiUnavailableError, PUBLIC_API_BASE } from './api';
 import { withQuery } from './core-query';
 
 // Cùng nguồn BASE như lib/api.ts (API_BASE_URL đổi được lúc deploy không cần rebuild).
@@ -45,7 +46,8 @@ export function createServerHttp(init?: { revalidate?: number }): HttpClient {
       }
       if (res.status === 404) throw new ApiNotFoundError(full);
       if (!res.ok) throw new ApiUnavailableError(full, res.status);
-      return (await res.json()) as T;
+      // Ảnh API phục vụ về dạng /public-image/...: ghép gốc CÔNG KHAI (BASE có thể là địa chỉ nội bộ giữa các container, trình duyệt không tới được).
+      return resolveServedMedia((await res.json()) as T, PUBLIC_API_BASE);
     },
     post: readOnly,
     put: readOnly,

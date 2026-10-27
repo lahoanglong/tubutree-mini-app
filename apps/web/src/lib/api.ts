@@ -1,3 +1,4 @@
+import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { formatVnd } from './format-vnd';
 import { DEFAULT_LEGAL_VARS, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
@@ -42,7 +43,7 @@ async function fetchDetail<T>(path: string, revalidate: number): Promise<T | nul
   }
   if (res.status === 404) return null;
   if (!res.ok) throw new ApiUnavailableError(path, res.status);
-  return (await res.json()) as T;
+  return resolveServedMedia(await res.json(), PUBLIC_API_BASE) as T;
 }
 
 /**
@@ -63,7 +64,7 @@ async function fetchList<T>(path: string, revalidate: number, select: (json: unk
     if (building) return [];
     throw new ApiUnavailableError(path, res.status);
   }
-  return select(await res.json());
+  return select(resolveServedMedia(await res.json(), PUBLIC_API_BASE));
 }
 
 export interface ProductCard {
@@ -194,7 +195,7 @@ export async function getBrands(): Promise<BrandCount[]> {
  * Ảnh do chính API phục vụ (ảnh gian hàng base64) về JSON dưới dạng đường dẫn tương đối API. Ghép với gốc API CÔNG KHAI cho
  * thẻ img và thẻ chia sẻ (không dùng API_BASE_URL: giá trị đó có thể là địa chỉ nội bộ giữa các container mà trình duyệt không tới được).
  */
-const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
+export const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
 export function publicMediaUrl<T extends string | null | undefined>(src: T): T | string {
   return typeof src === 'string' && src.startsWith('/') && !src.startsWith('//') ? `${PUBLIC_API_BASE}${src}` : src;
 }

@@ -16,6 +16,8 @@ const ALL = [
   wastePoint(),
   wastePoint({ id: 'p2', name: 'Cửa hàng Bé Hai', quotaFull: true, monthUsage: { monthKey: '2026-10', pointsUsed: 100_000, confirmations: 14 } }),
   wastePoint({ id: 'p5', name: 'Tiệm Sách Sáu', hiddenInactive: true }),
+  wastePoint({ id: 'p6', name: 'Quán Bảy', perkText: 'Hoàn tiền 5% đơn đầu' }),
+  wastePoint({ id: 'p7', name: 'Quán Tám', perkText: 'Giảm 10% hoá đơn đầu' }),
   wastePoint({ id: 'wh', kind: 'WAREHOUSE', name: 'Kho Tubu HCM', monthlyQuotaPoints: null, staff: [] }),
 ];
 const OVERVIEW = wasteOverview({
@@ -52,6 +54,13 @@ describe('WastePointsSection', () => {
     expect(p1).toContain('6 lượt');
     expect(row(c, 'wh').textContent).toContain('Kho Tubu');
     expect(row(c, 'wh').textContent).toContain('Không hạn mức');
+  });
+
+  it('điểm có ưu đãi đã duyệt chứa chữ tiền hiện cờ ngay ở danh sách; ưu đãi bình thường thì không', async () => {
+    const { c } = await mount();
+    expect(row(c, 'p6').textContent).toContain('Ưu đãi đang hiện có chữ về tiền');
+    expect(row(c, 'p7').textContent).not.toContain('chữ về tiền');
+    expect(row(c, 'p1').textContent).not.toContain('chữ về tiền');
   });
 
   it('cột nhân viên không đếm người đã gỡ', async () => {

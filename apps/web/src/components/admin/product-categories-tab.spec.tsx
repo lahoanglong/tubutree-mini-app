@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ProductCategoriesTab } from './product-categories-tab';
-import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { CategoryProductsPage } from '@/lib/product-categories';
 
 let mounted: Rendered[] = [];
@@ -104,5 +104,91 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     const text = r.container.textContent ?? '';
     expect(text.split('Máy chủ đang bận, vui lòng thử lại sau.').length - 1).toBe(1);
     expect(byText(r.container, 'button', 'Thử lại')).not.toBeNull();
+  });
+  describe('sửa sản phẩm', () => {
+    const DETAIL = {
+      id: 'p1', name: 'Nước rửa chén', brand: 'Tubu Tree', description: 'Mô tả cũ', shortDesc: null, images: [], isActive: true, isFeatured: false,
+      categoryIds: [], basePrice: 50000, salePrice: null, managedByPancake: true, partnerOwned: false, cannotShowReason: null,
+    };
+    function editSetup(detail: object = DETAIL) {
+      const m = mockFetch({
+        '/admin/catalog-products/': (init) => ({ body: init?.method === 'PATCH' ? { ...detail, ...JSON.parse(String(init.body)) } : detail }),
+        '/admin/product-categories/products': { body: PAGE },
+        '/categories': { body: [{ id: 'c1', name: 'Giặt tẩy', slug: 'a', sortOrder: 1, productCount: 3 }] },
+      });
+      vi.stubGlobal('fetch', vi.fn(m.fn));
+      const r = render(<ProductCategoriesTab />);
+      mounted.push(r);
+      return { m, container: r.container };
+    }
+
+    it('chip "Đang bán, thiếu ảnh" gửi missingImage=1', async () => {
+      const { m, container } = editSetup();
+      await flush();
+      click(byText(container, 'button', 'Đang bán, thiếu ảnh'));
+      await flush();
+      expect(m.calls.some((c) => c.url.includes('missingImage=1'))).toBe(true);
+    });
+
+    it('bấm Sửa → hiện tên, giá chỉ đọc và lý do; lưu gửi ảnh, mô tả, danh mục', async () => {
+      const { m, container } = editSetup();
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      const body = document.body;
+      expect(body.textContent).toContain('Tên và giá lấy từ Pancake');
+      expect(body.querySelector('input[aria-label="Tên"]')).toBeNull();
+      click(byText(body, 'button', 'Thêm ảnh'));
+      await flush();
+      typeInto(body.querySelector('input[aria-label="Link ảnh ảnh 1"]'), 'https://cdn.example.com/a.jpg');
+      typeInto(body.querySelector('textarea'), 'Mô tả mới');
+      click(byText(body, 'button', 'Giặt tẩy'));
+      click(byText(body, 'button', 'Lưu'));
+      await flush();
+      const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
+      expect(JSON.parse(String(patch.init?.body))).toEqual({
+        images: ['https://cdn.example.com/a.jpg'], description: 'Mô tả mới', categoryIds: ['c1'],
+      });
+      expect(body.textContent).toContain('Đã lưu.');
+    });
+
+    it('hàng của đối tác: không có ô ảnh/mô tả và không gửi chúng', async () => {
+      const { m, container } = editSetup({ ...DETAIL, partnerOwned: true, managedByPancake: false });
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      expect(document.body.querySelector('textarea')).toBeNull();
+      expect(document.body.querySelector<HTMLInputElement>('[role="dialog"] input[type="checkbox"]')!.disabled).toBe(true);
+      click(byText(document.body, 'button', 'Giặt tẩy'));
+      click(byText(document.body, 'button', 'Lưu'));
+      await flush();
+      const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
+      expect(Object.keys(JSON.parse(String(patch.init?.body))).sort()).toEqual(['categoryIds']);
+    });
+
+    it('chưa sửa gì thì nút Lưu khoá; chỉ đổi nổi bật thì chỉ gửi isFeatured; có ghi chú đồng bộ Pancake sẽ đè ảnh và mô tả', async () => {
+      const { m, container } = editSetup();
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      const save = byText(document.body, 'button', 'Lưu') as HTMLButtonElement;
+      expect(save.disabled).toBe(true);
+      expect(document.body.textContent).toContain('bị thay bằng ảnh của Pancake');
+      click(Array.from(document.body.querySelectorAll<HTMLInputElement>('[role="dialog"] input[type="checkbox"]'))[1]!);
+      await flush();
+      expect(save.disabled).toBe(false);
+      click(save);
+      await flush();
+      const patch = m.calls.find((c) => c.init?.method === 'PATCH')!;
+      expect(JSON.parse(String(patch.init?.body))).toEqual({ isFeatured: true });
+    });
+
+    it('sản phẩm đang bị Pancake giữ: nói rõ lý do chưa bật bán được', async () => {
+      const { container } = editSetup({ ...DETAIL, isActive: false, cannotShowReason: 'Đang bị Pancake giữ lại (đã xoá khỏi Pancake hoặc chưa có giá).' });
+      await flush();
+      click(container.querySelector('button[aria-label="Sửa Nước rửa chén"]'));
+      await flush();
+      expect(document.body.textContent).toContain('Chưa bật bán được: Đang bị Pancake giữ lại');
+    });
   });
 });

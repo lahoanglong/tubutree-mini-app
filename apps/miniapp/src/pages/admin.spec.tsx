@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   role: 'ADMIN' as string,
+  meId: 'me-not-listed' as string,
   listStaff: vi.fn(),
   grantStaff: vi.fn(),
   revokeStaff: vi.fn(),
@@ -56,7 +57,7 @@ vi.mock('../services/payroll-api', () => ({
 vi.mock('../services/attendance-api', () => ({ adminEditSession: mocks.adminEditSession }));
 vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 vi.mock('../store/auth', () => ({
-  useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
+  useAuthStore: (sel: (s: { user: { role: string; id: string } }) => unknown) => sel({ user: { role: mocks.role, id: mocks.meId } }),
 }));
 vi.mock('../components/image-upload', () => ({
   ImageUpload: ({ label, onChange }: { label: string; onChange: (url: string) => void }) => (
@@ -179,6 +180,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     vi.setSystemTime(new Date(NOW));
     vi.resetAllMocks();
     mocks.role = 'ADMIN';
+    mocks.meId = 'me-not-listed';
     mocks.listStaff.mockResolvedValue({ members: MEMBERS, pendingInvites: INVITES });
     mocks.grantStaff.mockResolvedValue({ granted: 'STAFF', applied: true });
     mocks.revokeStaff.mockResolvedValue({ revoked: 1, downgraded: false });
@@ -241,6 +243,15 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(screen.getByText('0987654321 · Nhân viên')).toBeInTheDocument();
       // Thành viên không có SĐT thì không thu hồi được.
       expect(screen.getAllByRole('button', { name: /^Thu hồi/ })).toHaveLength(2);
+    });
+
+    it('dòng của chính mình không có nút Thu hồi (API chặn tự thu hồi), ghi "(bạn)"', async () => {
+      mocks.meId = 'u2';
+      renderPage();
+      await screen.findByText('Lan');
+      expect(screen.getByText('(bạn)')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /^Thu hồi/ })).toHaveLength(1);
+      expect(screen.queryByRole('button', { name: 'Thu hồi · 0912345678' })).toBeNull();
     });
 
     it('danh sách trống: báo trống kèm hướng dẫn "Thêm"', async () => {

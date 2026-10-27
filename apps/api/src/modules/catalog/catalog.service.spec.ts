@@ -771,7 +771,7 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['p1'] } }] },
       take: 8,
-      select: { slug: true, name: true, thumbnail: true, basePrice: true },
+      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true },
     });
     await expect(svc.suggest('  ')).resolves.toEqual([]);
   });
@@ -1024,5 +1024,35 @@ describe('CatalogService.getBySlug — ai giao hàng (D4, R2-BUYERMINI-1)', () =
       ordersPausedAt: true,
       owner: { select: { role: true, isBlocked: true } },
     });
+  });
+});
+
+describe('CatalogService — JSON công khai không nhúng ảnh base64', () => {
+  const PNG = 'data:image/png;base64,' + 'A'.repeat(4000);
+  const row = (over: Record<string, unknown> = {}) => ({ ...card('p1'), thumbnail: PNG, images: [PNG, 'https://cdn.example.com/b.jpg'], ...over });
+
+  it('danh sách và gợi ý tìm kiếm: thẻ sản phẩm chỉ có đường dẫn ảnh', async () => {
+    const prisma = {
+      $transaction: jest.fn().mockResolvedValue([[row(), row({ id: 'p2', thumbnail: null })], 2]),
+      product: { findMany: jest.fn().mockResolvedValue([{ id: 'p1', slug: 'a', name: 'A', thumbnail: PNG, basePrice: 1 }]), count: jest.fn().mockResolvedValue(2) },
+      $queryRaw: jest.fn().mockResolvedValue([]),
+    } as unknown as PrismaService;
+    const svc = new CatalogService(prisma);
+    jest.spyOn(svc as unknown as { listWhere: () => Promise<object> }, 'listWhere').mockResolvedValue({});
+    const list = await svc.list({ page: 1, limit: 20 } as never);
+    expect(JSON.stringify(list)).not.toContain('data:image');
+    expect(JSON.stringify(list)).toContain('/public-image/product/p1/thumb');
+    jest.spyOn(svc as unknown as { textWhere: () => Promise<object> }, 'textWhere').mockResolvedValue({});
+    const hints = await svc.suggest('tinh dau');
+    expect(JSON.stringify(hints)).not.toContain('data:image');
+  });
+
+  it('trang chi tiết: images và thumbnail không chứa base64, link thường giữ nguyên', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ ...row(), isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefrontId: null, variations: [] }) },
+    } as unknown as PrismaService;
+    const r = await new CatalogService(prisma).getBySlug('a');
+    expect(JSON.stringify(r)).not.toContain('data:image');
+    expect(r.images).toEqual([expect.stringMatching(/^\/public-image\/product\/p1\/0\?v=/), 'https://cdn.example.com/b.jpg']);
   });
 });

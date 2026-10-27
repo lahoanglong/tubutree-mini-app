@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminWastePointDTO, WastePointStaffRole } from '@tubutree/shared-types';
+import { cashWordingMessage, findCashWording, type AdminWastePointDTO, type WastePointStaffRole } from '@tubutree/shared-types';
 import {
   addWastePointStaff,
   approveWastePerk,
@@ -217,6 +217,12 @@ export function WastePointDetail({
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-stone-900">Ưu đãi riêng</h3>
         <p className="text-sm text-stone-800">{point.perkText ?? 'Chưa có'}</p>
+        {point.perkText && findCashWording(point.perkText) !== null && (
+          <Notice tone="warning" role="status">
+            Ưu đãi này đã được duyệt trước khi có luật mới và có chữ thưởng hay trả bằng tiền. Khách vẫn đang thấy nó. Hãy xem lại, nếu không phù hợp thì bấm
+            &quot;Gỡ ưu đãi đang hiện&quot; (hoặc nhờ chủ điểm gửi lại bản mới để duyệt).
+          </Notice>
+        )}
         {point.perkText && (
           <div>
             <button type="button" className={BTN_XS_DANGER} disabled={clear.isPending} onClick={() => void askClear()}>Gỡ ưu đãi đang hiện</button>
@@ -228,8 +234,16 @@ export function WastePointDetail({
               <span className="block font-medium">Chờ duyệt</span>
               <span className="block">{point.perkPendingText}</span>
             </Notice>
+            <p className="text-xs text-stone-600">
+              Chỉ duyệt ưu đãi bằng giảm giá hoặc quà. Zalo không cho thưởng hay trả bằng tiền, nên không duyệt chữ như tiền mặt, chuyển khoản, hoàn tiền, thưởng tiền, &quot;tặng 10k&quot;.
+            </p>
+            {findCashWording(point.perkPendingText) !== null && (
+              <Notice tone="danger" role="alert">
+                Ưu đãi này có chữ nói về tiền. {cashWordingMessage(point.perkPendingText)} Hãy từ chối ưu đãi này.
+              </Notice>
+            )}
             <div className="flex flex-wrap gap-2">
-              <button type="button" className={BTN_PRIMARY} disabled={approve.isPending || reject.isPending} onClick={() => void askPerk('approve')}>Duyệt ưu đãi</button>
+              <button type="button" className={BTN_PRIMARY} disabled={approve.isPending || reject.isPending || findCashWording(point.perkPendingText) !== null} onClick={() => void askPerk('approve')}>Duyệt ưu đãi</button>
               <button type="button" className={BTN_SECONDARY} disabled={approve.isPending || reject.isPending} onClick={() => void askPerk('reject')}>Từ chối ưu đãi</button>
             </div>
           </div>

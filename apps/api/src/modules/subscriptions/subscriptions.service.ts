@@ -28,6 +28,7 @@ import { generateUniqueOrderCode } from '../../common/order-code';
 import { formatVnDate, startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from '../cart/partner-goods';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { publicImage } from '../../common/public-image';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -468,7 +469,7 @@ export class SubscriptionsService {
         lastOrderAt: (s.lastOrderId && lastOrderAt.get(s.lastOrderId)) || null,
         productName: v?.product.name ?? 'Sản phẩm',
         variationName: v?.name ?? '',
-        thumbnail: v?.product.thumbnail ?? null,
+        thumbnail: v ? publicImage('product', v.productId, 'thumb', v.product.thumbnail) : null,
         slug: v?.product.slug ?? null,
         unitPrice: v ? (v.salePrice ?? v.retailPrice) : 0,
         effectiveDiscountPct,

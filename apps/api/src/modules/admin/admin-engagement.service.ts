@@ -1,19 +1,35 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomBytes, randomUUID } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MISSION_GOAL_MAX, missionKindOf, type MissionKind } from '../../common/mission-kinds';
 
 export interface MissionPatch {
   title?: string;
   description?: string;
   rewardPoints?: number;
+  disabled?: boolean;
 }
 
+export interface NewMission {
+  title: string;
+  description: string;
+  kind: MissionKind;
+  goal: number;
+  rewardPoints: number;
+}
+
+const MISSION_TWIN_LOCK = 'mission.twin';
+
 /**
- * Màn admin "Nhiệm vụ & quà đổi điểm" (ENGAGE-22). Nhiệm vụ là dòng bảng missions, nhưng cách tính tiến độ gắn với `code`
- * (GameService.missionRawProgress) và `goal` quyết định chu kỳ nhận lại của nhiệm vụ lặp lại, nên admin chỉ sửa được chữ
- * hiển thị và điểm thưởng.
+ * Màn admin "Nhiệm vụ & quà đổi điểm" (ENGAGE-22). Cách tính tiến độ gắn với loại nhiệm vụ (GameService.missionRawProgress) và `goal`
+ * quyết định chu kỳ nhận lại của nhiệm vụ lặp lại, nên nhiệm vụ có sẵn chỉ sửa được chữ hiển thị, điểm thưởng và bật/tắt. Nhiệm vụ mới
+ * chỉ chọn trong các loại hệ thống đã biết chấm, mục tiêu đặt một lần lúc tạo.
  */
 @Injectable()
 export class AdminEngagementService {
+  private readonly logger = new Logger(AdminEngagementService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listMissions() {
@@ -22,16 +38,65 @@ export class AdminEngagementService {
       this.prisma.missionProgress.groupBy({ by: ['missionId'], _count: { _all: true } }),
     ]);
     const claimed = new Map(claims.map((c) => [c.missionId, c._count._all]));
-    return missions.map((m) => ({ ...m, claimedCount: claimed.get(m.id) ?? 0 }));
+    return missions.map((m) => ({
+      ...m,
+      kind: missionKindOf(m),
+      disabled: Boolean(m.disabledAt),
+      claimedCount: claimed.get(m.id) ?? 0,
+    }));
+  }
+
+  async createMission(adminId: string, input: NewMission) {
+    const max = MISSION_GOAL_MAX[input.kind];
+    if (!Number.isInteger(input.goal) || input.goal < 1 || input.goal > max) {
+      throw new BadRequestException(`Mục tiêu phải là số nguyên từ 1 đến ${max}.`);
+    }
+    const created = await this.prisma.$transaction(async (tx) => {
+      await this.assertNoActiveTwin(tx, input.kind, input.goal, null);
+      return tx.mission.create({
+        data: {
+          id: randomUUID(),
+          code: `CUSTOM_${randomBytes(4).toString('hex').toUpperCase()}`,
+          title: input.title,
+          description: input.description,
+          kind: input.kind,
+          goal: input.goal,
+          rewardPoints: input.rewardPoints,
+          isRepeatable: false,
+          startsAt: new Date(),
+        },
+      });
+    });
+    this.logger.warn(`Admin ${adminId} thêm nhiệm vụ ${created.code} (${input.kind}, mục tiêu ${input.goal}, thưởng ${input.rewardPoints} điểm).`);
+    return created;
+  }
+
+  /**
+   * Nhiệm vụ đang bật cùng loại và cùng mục tiêu (kể cả 4 nhiệm vụ seed) thì khách đã làm xong sẽ thấy hai thẻ cho một việc.
+   * Chạy trong giao dịch có khoá chung cho mọi lần tạo/bật lại: hai lần cùng lúc không cùng thấy "chưa có" rồi cùng ghi.
+   */
+  private async assertNoActiveTwin(tx: Prisma.TransactionClient, kind: MissionKind, goal: number, exceptId: string | null) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${MISSION_TWIN_LOCK}))`;
+    const active = await tx.mission.findMany({ where: { disabledAt: null }, select: { id: true, code: true, kind: true, goal: true, title: true } });
+    const same = active.find((m) => m.id !== exceptId && missionKindOf(m) === kind && m.goal === goal);
+    if (same) throw new ConflictException(`Đã có nhiệm vụ đang bật cùng loại và cùng mục tiêu: "${same.title}". Tạm dừng nhiệm vụ đó trước hoặc đổi mục tiêu.`);
   }
 
   async updateMission(id: string, patch: MissionPatch) {
     const found = await this.prisma.mission.findUnique({ where: { id } });
     if (!found) throw new NotFoundException('Không tìm thấy nhiệm vụ.');
-    const data: MissionPatch = {};
+    const data: { title?: string; description?: string; rewardPoints?: number; disabledAt?: Date | null } = {};
     if (patch.title !== undefined) data.title = patch.title;
     if (patch.description !== undefined) data.description = patch.description;
     if (patch.rewardPoints !== undefined) data.rewardPoints = patch.rewardPoints;
+    if (patch.disabled !== undefined) data.disabledAt = patch.disabled ? (found.disabledAt ?? new Date()) : null;
+    const kind = missionKindOf(found);
+    if (patch.disabled === false && found.disabledAt && kind) {
+      return this.prisma.$transaction(async (tx) => {
+        await this.assertNoActiveTwin(tx, kind, found.goal, found.id);
+        return tx.mission.update({ where: { id }, data });
+      });
+    }
     return this.prisma.mission.update({ where: { id }, data });
   }
 }

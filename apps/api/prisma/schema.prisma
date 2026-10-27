@@ -458,6 +458,8 @@ model Product {
   storefront       Storefront?           @relation("StorefrontProducts", fields: [storefrontId], references: [id])
   approvalStatus   ProductApprovalStatus @default(APPROVED)
   rejectReason     String?
+  /// Lần đầu được duyệt bán (NULL = chưa từng; sản phẩm tạo thẳng APPROVED không đặt, vẫn APPROVED). Chỉ để quyết định có phát ảnh công khai khi sản phẩm đang chờ duyệt lại.
+  approvedAt       DateTime?
   communityTags    PostProductTag[]
   contentKit       ProductContentKit?
   pancakeLinks     MerchantPancakeLink[] @relation("PancakeLinkProduct")
@@ -2038,6 +2040,7 @@ model GameProfile {
   brokenStreakDays   Int       @default(0) // §streak-repair: số ngày của chuỗi vừa bị mất, chờ hồi sinh
   brokenStreakAt     DateTime? // thời điểm mất chuỗi (cửa sổ hồi sinh 48h tính từ đây)
   lastStreakRepairAt DateTime? // lần hồi sinh gần nhất (cooldown 30 ngày)
+  lastStreakFreezeAt DateTime? // lần điểm danh gần nhất phải dùng vé giữ lửa (ngày lỡ không phải ngày điểm danh thật)
 
   @@map("game_profiles")
 }
@@ -2728,6 +2731,12 @@ model Mission {
   rewardCoupon String?
   goal         Int     @default(1)
   isRepeatable Boolean @default(false)
+  /// Cách chấm tiến độ (common/mission-kinds.ts). NULL = suy từ `code` (4 nhiệm vụ seed).
+  kind         String?
+  /// Có giá trị = nhiệm vụ đang tạm dừng: không hiện cho khách, không nhận thưởng được.
+  disabledAt   DateTime?
+  /// Chỉ tính việc khách làm từ mốc này. NULL = tính trọn đời (4 nhiệm vụ seed); nhiệm vụ quản trị thêm đặt = lúc tạo.
+  startsAt     DateTime?
 
   @@map("missions")
 }

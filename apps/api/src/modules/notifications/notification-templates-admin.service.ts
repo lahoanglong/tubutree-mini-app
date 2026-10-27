@@ -4,6 +4,7 @@ import { PHONE_LIKE_RUN } from '../../common/mask-pii';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { UpdateNotificationTemplateDto } from './dto/update-notification-template.dto';
+import { templateVariableProblem, variablesOf, type TemplateVariable } from './notification-variables';
 
 /**
  * Kênh gửi thật của một template, theo đúng điều kiện ở NotificationsService.notify(): ZNS chỉ gửi
@@ -25,6 +26,8 @@ export interface AdminNotificationTemplate {
   znsLastError: { text: string; at: Date } | null;
   /** Nhân viên Marketing sửa được nội dung mẫu này (MARKETING_TEMPLATE_CODES). */
   staffEditable: boolean;
+  /** Biến mã thật sự điền cho mẫu này; null = mẫu ngoài danh sách, không kiểm được. */
+  variables: TemplateVariable[] | null;
 }
 
 /**
@@ -114,6 +117,7 @@ export class NotificationTemplatesAdminService {
         znsFailed30d: failed.get(t.code) ?? 0,
         znsLastError: lastError.get(t.code) ?? null,
         staffEditable: MARKETING_TEMPLATE_CODES.has(t.code),
+        variables: variablesOf(t.code),
       }))
       .sort(
         (a, b) =>
@@ -144,6 +148,8 @@ export class NotificationTemplatesAdminService {
     if (dto.bodyTemplate !== undefined) {
       const body = dto.bodyTemplate.trim();
       if (!body) throw new BadRequestException('Nội dung thông báo không được để trống.');
+      const problem = templateVariableProblem(code, body);
+      if (problem) throw new BadRequestException(problem);
       data.bodyTemplate = body;
     }
 

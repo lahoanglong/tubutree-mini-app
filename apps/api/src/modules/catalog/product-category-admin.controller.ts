@@ -15,6 +15,8 @@ export class ListCategoryProductsQuery extends CursorPageQuery {
   @IsOptional() @IsString() @MaxLength(64) q?: string;
   /** `?uncategorized=1`: chỉ sản phẩm chưa có danh mục nào. */
   @IsOptional() @Transform(flag) @IsBoolean() uncategorized?: boolean;
+  /** `?missingImage=1`: sản phẩm đang bán chưa có ảnh nào. */
+  @IsOptional() @Transform(flag) @IsBoolean() missingImage?: boolean;
   @IsOptional() @IsIn(['pancake', 'all']) source?: 'pancake' | 'all';
   @IsOptional() @IsString() @MaxLength(64) categoryId?: string;
 }
@@ -37,6 +39,7 @@ export class ProductCategoryAdminController {
     return this.svc.listProducts({
       q: q.q,
       uncategorized: q.uncategorized,
+      missingImage: q.missingImage,
       source: q.source,
       categoryId: q.categoryId,
       cursor: q.cursor,

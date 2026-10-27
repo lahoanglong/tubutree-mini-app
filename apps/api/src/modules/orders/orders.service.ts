@@ -28,6 +28,7 @@ import { returnPointsTaken } from './return-ledger';
 import { markReversalEffectsDone } from './reversal-effects';
 import { foldVietnamese } from '../catalog/search-text';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
+import { publicProductThumb } from '../../common/public-image';
 
 export interface OrderListFilter {
   status?: OrderStatus;
@@ -311,7 +312,7 @@ export class OrdersService {
             isActive: true,
             retailPrice: true,
             salePrice: true,
-            product: { select: { thumbnail: true, images: true, isActive: true, approvalStatus: true } },
+            product: { select: { id: true, thumbnail: true, images: true, isActive: true, approvalStatus: true } },
           },
         })
       : [];
@@ -320,7 +321,7 @@ export class OrdersService {
       const v = byId.get(variationId);
       if (!v) return MISSING_MEDIA;
       return {
-        thumbnail: v.product.thumbnail ?? v.product.images[0] ?? null,
+        thumbnail: publicProductThumb(v.product),
         stock: v.stock,
         available: v.isActive && v.product.isActive && v.product.approvalStatus === 'APPROVED' && v.stock > 0,
         currentPrice: v.salePrice ?? v.retailPrice,
