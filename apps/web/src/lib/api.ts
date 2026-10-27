@@ -195,7 +195,7 @@ export async function getBrands(): Promise<BrandCount[]> {
  * Ảnh do chính API phục vụ (ảnh gian hàng base64) về JSON dưới dạng đường dẫn tương đối API. Ghép với gốc API CÔNG KHAI cho
  * thẻ img và thẻ chia sẻ (không dùng API_BASE_URL: giá trị đó có thể là địa chỉ nội bộ giữa các container mà trình duyệt không tới được).
  */
-const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
+export const PUBLIC_API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api').replace(/\/+$/, '');
 export function publicMediaUrl<T extends string | null | undefined>(src: T): T | string {
   return typeof src === 'string' && src.startsWith('/') && !src.startsWith('//') ? `${PUBLIC_API_BASE}${src}` : src;
 }
