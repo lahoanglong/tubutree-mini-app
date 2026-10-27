@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Clock, Leaf, MessageCircle, Megaphone, Repeat, Truck, Users } from 'lucide-react';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
-import type { LoyaltyOverview } from '@tubutree/app-core/api/loyalty';
-import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
+import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { Badge } from '@/components/ui/badge';
 import { usePdpSelection } from '@/components/pdp-selection';
+import { tierEarnNote, tierEarnOf } from '@tubutree/app-core/points-earn-tier';
+import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useCartKey } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
@@ -38,13 +39,13 @@ type PointsEarnProduct = {
 };
 
 /**
- * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập thì server tính hệ số 1; tài khoản có hạng chỉ biết được từ
- * tổng quan Điểm Xanh đã tải ở màn khác (không gọi thêm API ở trang đông khách nhất): chưa có thì nói chung thay vì đoán.
+ * Hệ số hạng của khách, hoặc null khi chưa biết. Khách chưa đăng nhập thì server tính hệ số 1; tài khoản có hạng lấy hệ số từ
+ * bảng hạng trong config công khai theo `tierId` của chính họ (không gọi thêm API, không phụ thuộc tổng quan Điểm Xanh đã tải).
  */
-function tierMultiplierOf(phase: string, overview: LoyaltyOverview | undefined): number | null {
-  if (phase === 'guest') return 1;
-  if (phase !== 'authenticated' || !overview) return null;
-  return overview.earnMultiplier ?? overview.tier?.multiplier ?? 1;
+function tierEarnFor(phase: string, tierId: string | null | undefined, loyalty: Parameters<typeof tierEarnOf>[0]) {
+  if (phase === 'guest') return { multiplier: 1, tierName: null };
+  if (phase !== 'authenticated') return null;
+  return tierEarnOf(loyalty, tierId);
 }
 
 /** Dòng "Nhận … Điểm Xanh" dưới giá, như `PointsEarnLine` của Mini App: giá phân loại đang chọn × số lượng. */
@@ -53,15 +54,16 @@ export function PdpPointsEarn({ product }: { product: PointsEarnProduct }) {
   const selection = usePdpSelection();
   const phase = useAuthPhase();
   const config = usePublicConfig();
-  const overview = useQueryClient().getQueryData<LoyaltyOverview>(loyaltyQuery(coreHttp).queryKey);
+  const { user } = useAuth();
   const selected = product.variations.find((v) => v.id === selection?.selectedId);
   const unit = selected ? variationPricing(selected, flash).price : cardPricing(product, flash).price;
-  const preview = pointsEarnPreview(unit * (selection?.quantity ?? 1), config.loyalty, tierMultiplierOf(phase, overview));
+  const tier = tierEarnFor(phase, user?.tierId, config.loyalty);
+  const preview = pointsEarnPreview(unit * (selection?.quantity ?? 1), config.loyalty, tier?.multiplier ?? null);
   if (preview === null) return null;
   return (
     <p data-testid="pdp-points-earn" className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold text-[var(--color-text-brand)]">
       <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
-      <span>{preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points, preview.valueVnd)}</span>
+      <span>{preview === 'generic' ? pointsEarnText.generic : pointsEarnText.line(preview.points, preview.valueVnd, tierEarnNote(tier))}</span>
     </p>
   );
 }

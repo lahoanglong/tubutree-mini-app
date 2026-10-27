@@ -143,8 +143,8 @@ export const vi = {
     chatWithShop: 'Chat với Tubu Tree',
     chatAbout: (name: string) => `Mình muốn hỏi về sản phẩm: ${name}`,
     // "Tối đa": giảm giá/mã/điểm dùng ở bước thanh toán làm giá trị hàng tính điểm thấp đi, số này là trước các khoản đó.
-    pointsEarn: (points: number, valueVnd: number) =>
-      `Nhận tối đa ${formatNumber(points)} Điểm Xanh (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+    pointsEarn: (points: number, valueVnd: number, tierNote?: string | null) =>
+      `Nhận tối đa ${formatNumber(points)} Điểm Xanh${tierNote ? ` · ${tierNote}` : ''} (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
     pointsEarnGeneric: 'Nhận Điểm Xanh khi đơn giao thành công',
   },
 

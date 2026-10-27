@@ -1,5 +1,6 @@
 import { SystemConfigController } from './system-config.controller';
 import type { SystemConfigService } from './system-config.service';
+import type { PrismaService } from '../../prisma/prisma.service';
 
 /** config.get(key, fallback) giả lập: trả giá trị đã cấu hình, thiếu thì trả fallback. */
 function makeConfig(values: Record<string, unknown> = {}) {
@@ -8,10 +9,30 @@ function makeConfig(values: Record<string, unknown> = {}) {
   } as unknown as SystemConfigService;
 }
 
+const TIERS = [
+  { id: 'MAM_XANH', name: 'Mầm Xanh', pointMultiplier: '1.00' },
+  { id: 'LOC_BIEC', name: 'Lộc Biếc', pointMultiplier: '1.20' },
+];
+
+const findManyTiers = jest.fn();
+
+function makeController(config: SystemConfigService, tiers: unknown[] = TIERS) {
+  findManyTiers.mockResolvedValue(tiers);
+  return new SystemConfigController(config, { membershipTier: { findMany: findManyTiers } } as unknown as PrismaService);
+}
+
 describe('SystemConfigController.publicConfig', () => {
+  it('loyalty.tierMultipliers/tierNames: hệ số điểm theo id hạng đọc từ bảng hạng (cùng nguồn /loyalty/preview)', async () => {
+    const ctrl = makeController(makeConfig());
+    const out = await ctrl.publicConfig();
+    expect(out.loyalty.tierMultipliers).toEqual({ MAM_XANH: 1, LOC_BIEC: 1.2 });
+    expect(out.loyalty.tierNames).toEqual({ MAM_XANH: 'Mầm Xanh', LOC_BIEC: 'Lộc Biếc' });
+    expect(findManyTiers).toHaveBeenCalledWith({ select: { id: true, name: true, pointMultiplier: true } });
+  });
+
   it('trả freeshipThreshold từ config', async () => {
     const config = makeConfig({ 'shipping.free_threshold': 150000 });
-    const out = await new SystemConfigController(config).publicConfig();
+    const out = await makeController(config).publicConfig();
     expect(out.freeshipThreshold).toBe(150000);
     expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('shipping.free_threshold', 199000);
   });
@@ -23,26 +44,26 @@ describe('SystemConfigController.publicConfig', () => {
     const config = makeConfig({
       'subscribe.discount_pct': 0.15,
     });
-    const out = await new SystemConfigController(config).publicConfig();
+    const out = await makeController(config).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.15);
     expect(out.affiliateMinWithdrawBank).toBe(50000);
   });
 
   // SELLER-11: CTV cần thấy số thực nhận sau thuế TNCN trước khi bấm rút; số phải là số service dùng để khấu trừ.
   it('trả mức khấu trừ thuế TNCN khi chuyển hoa hồng vào Ví (cùng khoá và mặc định với affiliate.service)', async () => {
-    expect((await new SystemConfigController(makeConfig()).publicConfig()).affiliatePitWithhold).toEqual({
+    expect((await makeController(makeConfig()).publicConfig()).affiliatePitWithhold).toEqual({
       pct: 0.1,
       threshold: 5_000_000,
     });
     const config = makeConfig({ 'affiliate.pit_withhold_pct': 0, 'affiliate.pit_withhold_threshold': 2_000_000 });
-    expect((await new SystemConfigController(config).publicConfig()).affiliatePitWithhold).toEqual({
+    expect((await makeController(config).publicConfig()).affiliatePitWithhold).toEqual({
       pct: 0,
       threshold: 2_000_000,
     });
   });
 
   it('chưa cấu hình → trả đúng mặc định hiện hành (12%, 50k)', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.subscribeDiscountPct).toBe(0.12);
   });
 
@@ -50,7 +71,7 @@ describe('SystemConfigController.publicConfig', () => {
   // khai không được đọc khoá cũ nữa — dòng DB còn seed 1,5 mà FE cũ hiển thị "×1,5" là hứa sai số tiền.
   it('affiliateWalletMultiplier luôn là 1 (Ví 1:1), không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB', async () => {
     const config = makeConfig({ 'affiliate.tubu_wallet_multiplier': 1.8 });
-    const out = await new SystemConfigController(config).publicConfig();
+    const out = await makeController(config).publicConfig();
     expect(out.affiliateWalletMultiplier).toBe(1);
     const get = (config as unknown as { get: jest.Mock }).get;
     expect(get.mock.calls.map((c) => c[0])).not.toContain('affiliate.tubu_wallet_multiplier');
@@ -59,7 +80,7 @@ describe('SystemConfigController.publicConfig', () => {
   // ENGAGE-20: miniapp hứa "Tiết kiệm đến 30%" trong khi mức mua chung thật là groupbuy.discount_pct (mặc định 15%);
   // BUYERMINI-16: màn đơn hàng ghi cứng "7 ngày" trong khi hạn đổi/trả đọc returns.window_days.
   it('trả mức giảm/quy mô nhóm mua chung và hạn đổi/trả theo config', async () => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({ 'groupbuy.discount_pct': 20, 'groupbuy.target_size': 4, 'returns.window_days': 10 }),
     ).publicConfig();
     expect(out.groupBuy).toEqual({ discountPct: 20, targetSize: 4 });
@@ -67,30 +88,30 @@ describe('SystemConfigController.publicConfig', () => {
   });
 
   it('chưa cấu hình → mặc định mua chung 15% / 3 người, đổi/trả 7 ngày (khớp giá trị service dùng)', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.groupBuy).toEqual({ discountPct: 15, targetSize: 3 });
     expect(out.returnWindowDays).toBe(7);
   });
 
   it('dùng default 199000 khi config chưa set', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.freeshipThreshold).toBe(199000);
   });
 
   it('không còn recyclingEnabled (§11.5, §13.2): cờ thu kèm rác là waste.pickup', async () => {
-    const out = await new SystemConfigController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
+    const out = await makeController(makeConfig({ 'shipping.gomdon.recycling_enabled': true })).publicConfig();
     expect(out).not.toHaveProperty('recyclingEnabled');
     expect(out).toHaveProperty('waste');
   });
 
   describe('shippingEta — ngày giao dự kiến (chỉ khi chủ shop đã cấu hình)', () => {
     it('chưa cấu hình → null (FE ẩn dòng "Giao dự kiến", không hứa ngày)', async () => {
-      const out = await new SystemConfigController(makeConfig()).publicConfig();
+      const out = await makeController(makeConfig()).publicConfig();
       expect(out.shippingEta).toBeNull();
     });
 
     it('2 và 4 → { minDays: 2, maxDays: 4 }', async () => {
-      const out = await new SystemConfigController(
+      const out = await makeController(
         makeConfig({ 'shipping.eta_min_days': 2, 'shipping.eta_max_days': 4 }),
       ).publicConfig();
       expect(out.shippingEta).toEqual({ minDays: 2, maxDays: 4 });
@@ -104,7 +125,7 @@ describe('SystemConfigController.publicConfig', () => {
       ['2', 4],
       [2, null],
     ])('giá trị sai (%p, %p) → null', async (min, max) => {
-      const out = await new SystemConfigController(
+      const out = await makeController(
         makeConfig({ 'shipping.eta_min_days': min, 'shipping.eta_max_days': max }),
       ).publicConfig();
       expect(out.shippingEta).toBeNull();
@@ -112,7 +133,7 @@ describe('SystemConfigController.publicConfig', () => {
 
     it('đọc 2 khoá với fallback null (không ném NotFound khi thiếu khoá)', async () => {
       const config = makeConfig();
-      await new SystemConfigController(config).publicConfig();
+      await makeController(config).publicConfig();
       const get = (config as unknown as { get: jest.Mock }).get;
       expect(get).toHaveBeenCalledWith('shipping.eta_min_days', null);
       expect(get).toHaveBeenCalledWith('shipping.eta_max_days', null);
@@ -122,12 +143,12 @@ describe('SystemConfigController.publicConfig', () => {
 
 describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)', () => {
   it('chưa cấu hình → hotline/email thật của Tubu Tree, chưa có Zalo OA', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.support).toEqual({ hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null });
   });
 
   it('admin sửa → trả giá trị mới; để trống hoặc sai kiểu → null để miniapp ẩn dòng', async () => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({ 'support.hotline': ' 0900 000 000 ', 'support.email': '', 'support.zalo_oa_name': 42 }),
     ).publicConfig();
     expect(out.support).toEqual({ hotline: '0900 000 000', email: null, zaloOaName: null });
@@ -136,17 +157,17 @@ describe('SystemConfigController.publicConfig — liên hệ CSKH (C-019, Q-17)'
 
 describe('SystemConfigController.publicConfig — link kênh cộng đồng', () => {
   it('chưa cấu hình → Zalo null (ẩn nút), Facebook và TikTok lấy mặc định trong mã', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.community).toMatchObject({ zaloGroupUrl: null, facebookUrl: 'https://www.facebook.com/tubutree', tiktokUrl: 'https://www.tiktok.com/@tubutree.com' });
   });
 
   it('admin đặt chuỗi rỗng thì thắng mặc định: ẩn nút', async () => {
-    const out = await new SystemConfigController(makeConfig({ 'community.facebook_url': '', 'community.tiktok_url': '' })).publicConfig();
+    const out = await makeController(makeConfig({ 'community.facebook_url': '', 'community.tiktok_url': '' })).publicConfig();
     expect(out.community).toMatchObject({ facebookUrl: null, tiktokUrl: null });
   });
 
   it('chỉ trả link https đúng tên miền; giá trị lạ lưu sót trong DB bị bỏ', async () => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({
         'community.zalo_group_url': 'https://zalo.me/g/abc',
         'community.facebook_url': 'https://evil.com/fb',
@@ -160,7 +181,7 @@ describe('SystemConfigController.publicConfig — link kênh cộng đồng', ()
 // D2-07b: khối "Quà khách mới" và các chữ có số (D5-10) đọc từ đây. Mặc định phải bằng mặc định trong mã của nơi dùng số đó.
 describe('SystemConfigController.publicConfig — số cho khách mới và Điểm Xanh', () => {
   it('chưa cấu hình → đúng mặc định hiện hành: voucher chào mừng 30.000đ cho đơn từ 199.000đ, freeship đơn đầu từ 199.000đ, tích 2% tiền hàng, 1 điểm = 1đ', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.newCustomer).toEqual({
       welcomeVoucher: { amount: 30000, minOrder: 199000 },
       firstOrderFreeShip: { enabled: true, minSubtotal: 199000 },
@@ -174,13 +195,15 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
       vndPerPointRedeem: 1,
       maxRedeemPct: 0.2,
       pointExpireMonths: 12,
+      tierMultipliers: { MAM_XANH: 1, LOC_BIEC: 1.2 },
+      tierNames: { MAM_XANH: 'Mầm Xanh', LOC_BIEC: 'Lộc Biếc' },
     });
     expect(out.homeNewCustomerLayout).toBe(true);
     expect(out.communityPublicPreview).toBe(true);
   });
 
   it('admin đổi → trả giá trị mới của đúng khoá mà cron voucher, checkout và pricing đang đọc', async () => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({
         'voucher.welcome_amount': 25000,
         'voucher.welcome_min_order': 150000,
@@ -203,7 +226,7 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
 
   // Chuỗi "false" là truthy: chỉ boolean true thật mới bật, để cờ gõ nhầm không hứa freeship hay đổi bố cục.
   it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) → coi là tắt', async (bad) => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({ 'shipping.first_order_free_enabled': bad, 'home.new_customer_layout': bad, 'community.public_preview': bad }),
     ).publicConfig();
     expect(out.newCustomer.firstOrderFreeShip.enabled).toBe(false);
@@ -215,58 +238,58 @@ describe('SystemConfigController.publicConfig — số cho khách mới và Đi�
 // D5-10: câu trả lời FAQ dự phòng ("tối đa 20% giá trị đơn", "điểm có hạn 12 tháng") đọc từ đây, cùng khoá và mặc định với getOverview.
 describe('SystemConfigController.publicConfig — tích điểm đơn sàn (B6)', () => {
   it('cờ tắt và tỉ lệ 1% khi chưa cấu hình; bật thì trả đúng tỉ lệ admin đặt', async () => {
-    const off = await new SystemConfigController(makeConfig()).publicConfig();
+    const off = await makeController(makeConfig()).publicConfig();
     expect(off.loyalty.marketplaceClaimEnabled).toBe(false);
     expect(off.loyalty.marketplaceEarnPct).toBe(1);
     expect(off.loyalty.marketplaceClaimMaxAgeDays).toBe(60);
-    const age = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 30 })).publicConfig();
+    const age = await makeController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 30 })).publicConfig();
     expect(age.loyalty.marketplaceClaimMaxAgeDays).toBe(30);
-    const ageJunk = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 'x' })).publicConfig();
+    const ageJunk = await makeController(makeConfig({ 'loyalty.marketplace_claim_max_age_days': 'x' })).publicConfig();
     expect(ageJunk.loyalty.marketplaceClaimMaxAgeDays).toBe(60);
-    const on = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_enabled': true, 'loyalty.marketplace_earn_pct': 1.5 })).publicConfig();
+    const on = await makeController(makeConfig({ 'loyalty.marketplace_claim_enabled': true, 'loyalty.marketplace_earn_pct': 1.5 })).publicConfig();
     expect(on.loyalty).toMatchObject({ marketplaceClaimEnabled: true, marketplaceEarnPct: 1.5 });
-    const high = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 25 })).publicConfig();
+    const high = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': 25 })).publicConfig();
     expect(high.loyalty.marketplaceEarnPct).toBe(20);
-    const junk = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': -3 })).publicConfig();
+    const junk = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': -3 })).publicConfig();
     expect(junk.loyalty.marketplaceEarnPct).toBe(1);
   });
 
   it.each(['true', 'false', 1, 'yes'])('cờ sai kiểu (%p) coi là tắt: không hứa tích điểm đơn sàn', async (bad) => {
-    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_claim_enabled': bad })).publicConfig();
+    const out = await makeController(makeConfig({ 'loyalty.marketplace_claim_enabled': bad })).publicConfig();
     expect(out.loyalty.marketplaceClaimEnabled).toBe(false);
   });
 
   it.each(['1', 0, -1, null])('tỉ lệ sai (%p) rơi về 1%', async (bad) => {
-    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': bad })).publicConfig();
+    const out = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': bad })).publicConfig();
     expect(out.loyalty.marketplaceEarnPct).toBe(1);
   });
 
   it('tỉ lệ quá trần (99) bị kẹp về 20%, cùng quy tắc với phía cộng điểm', async () => {
-    const out = await new SystemConfigController(makeConfig({ 'loyalty.marketplace_earn_pct': 99 })).publicConfig();
+    const out = await makeController(makeConfig({ 'loyalty.marketplace_earn_pct': 99 })).publicConfig();
     expect(out.loyalty.marketplaceEarnPct).toBe(20);
   });
 });
 
 describe('SystemConfigController.publicConfig — trần dùng điểm và hạn điểm (D5-10)', () => {
   it('admin đổi → trả đúng giá trị của loyalty.max_redeem_pct và loyalty.point_expire_months', async () => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({ 'loyalty.max_redeem_pct': 0.3, 'loyalty.point_expire_months': 6 }),
     ).publicConfig();
     expect(out.loyalty).toMatchObject({ maxRedeemPct: 0.3, pointExpireMonths: 6 });
   });
 
   it('trần 0 là hợp lệ (tắt dùng điểm ở thanh toán), không bị thay bằng mặc định', async () => {
-    const out = await new SystemConfigController(makeConfig({ 'loyalty.max_redeem_pct': 0 })).publicConfig();
+    const out = await makeController(makeConfig({ 'loyalty.max_redeem_pct': 0 })).publicConfig();
     expect(out.loyalty.maxRedeemPct).toBe(0);
   });
 
   it.each(['0.3', 1.5, -0.1, null])('trần sai (%p) → mặc định 0.2 như getOverview', async (bad) => {
-    const out = await new SystemConfigController(makeConfig({ 'loyalty.max_redeem_pct': bad })).publicConfig();
+    const out = await makeController(makeConfig({ 'loyalty.max_redeem_pct': bad })).publicConfig();
     expect(out.loyalty.maxRedeemPct).toBe(0.2);
   });
 
   it.each(['12', 0, -3, Number.NaN, null])('số tháng hạn điểm sai (%p) → 12 tháng như pointsExpiryFrom', async (bad) => {
-    const out = await new SystemConfigController(makeConfig({ 'loyalty.point_expire_months': bad })).publicConfig();
+    const out = await makeController(makeConfig({ 'loyalty.point_expire_months': bad })).publicConfig();
     expect(out.loyalty.pointExpireMonths).toBe(12);
   });
 });
@@ -274,25 +297,25 @@ describe('SystemConfigController.publicConfig — trần dùng điểm và hạn
 // D5-10: chữ trong miniapp từng viết cứng 45%, 24 giờ, "tối đa 1.000 điểm"; giờ đọc từ config công khai.
 describe('SystemConfigController.publicConfig — số trong chữ đại lý và sự kiện cộng đồng (D5-10)', () => {
   it('chưa cấu hình → đúng mặc định hiện hành: chiết khấu đại lý tối đa 45%, duyệt hồ sơ 24 giờ, thưởng sự kiện tối đa 50.000 điểm', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.dealer).toEqual({ maxDiscountPct: 0.45, reviewHours: 24 });
     expect(out.community).toMatchObject({ eventRewardMaxPoints: 50_000 });
   });
 
   it('admin đổi → trả giá trị mới của đúng khoá mà dealer.service đang kẹp chiết khấu', async () => {
-    const out = await new SystemConfigController(
+    const out = await makeController(
       makeConfig({ 'dealer.max_discount_pct': 0.4, 'dealer.review_hours': 48 }),
     ).publicConfig();
     expect(out.dealer).toEqual({ maxDiscountPct: 0.4, reviewHours: 48 });
   });
 
   it.each(['0.4', 0, -1, 1.5, null])('chiết khấu sai (%p) → null để miniapp bỏ con số', async (bad) => {
-    const out = await new SystemConfigController(makeConfig({ 'dealer.max_discount_pct': bad })).publicConfig();
+    const out = await makeController(makeConfig({ 'dealer.max_discount_pct': bad })).publicConfig();
     expect(out.dealer.maxDiscountPct).toBeNull();
   });
 
   it.each(['24', 0, -3, 1.5, null])('số giờ duyệt sai (%p) → null để miniapp bỏ cam kết giờ', async (bad) => {
-    const out = await new SystemConfigController(makeConfig({ 'dealer.review_hours': bad })).publicConfig();
+    const out = await makeController(makeConfig({ 'dealer.review_hours': bad })).publicConfig();
     expect(out.dealer.reviewHours).toBeNull();
   });
 });
@@ -312,7 +335,7 @@ describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc 
       else process.env[k] = saved[k];
     }
   });
-  const flag = async () => (await new SystemConfigController(makeConfig()).publicConfig()).aiAdvisorEnabled;
+  const flag = async () => (await makeController(makeConfig()).publicConfig()).aiAdvisorEnabled;
 
   it('chưa cấu hình provider nào → false (miniapp ẩn lối vào)', async () => {
     expect(await flag()).toBe(false);
@@ -332,12 +355,12 @@ describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc 
 
 describe('SystemConfigController.publicConfig — waste (spec 11.5)', () => {
   it('defaults -> waste all false', async () => {
-    const out = await new SystemConfigController(makeConfig()).publicConfig();
+    const out = await makeController(makeConfig()).publicConfig();
     expect(out.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
     expect(out).not.toHaveProperty('recyclingEnabled');
   });
   it('programme on -> dropoff and mailin on, pickup off by default', async () => {
-    const out = await new SystemConfigController(makeConfig({ 'waste.enabled': true })).publicConfig();
+    const out = await makeController(makeConfig({ 'waste.enabled': true })).publicConfig();
     expect(out.waste).toEqual({ enabled: true, dropoff: true, mailin: true, pickup: false });
   });
   it('a failing waste read -> waste all false, the rest of the endpoint intact', async () => {
@@ -347,7 +370,7 @@ describe('SystemConfigController.publicConfig — waste (spec 11.5)', () => {
         return fb;
       }),
     } as unknown as SystemConfigService;
-    const out = await new SystemConfigController(config).publicConfig();
+    const out = await makeController(config).publicConfig();
     expect(out.waste).toEqual({ enabled: false, dropoff: false, mailin: false, pickup: false });
     expect(out.freeshipThreshold).toBe(199000);
   });

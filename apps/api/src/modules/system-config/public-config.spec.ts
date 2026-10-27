@@ -50,3 +50,26 @@ describe('buildPublicConfig — đơn vị vận hành', () => {
     expect((await build({ 'company.bct_notice_url': 'http://online.gov.vn/x' })).company.bctNoticeUrl).toBeNull();
   });
 });
+
+describe('buildPublicConfig — hệ số hạng', () => {
+  const cfg = { get: jest.fn(async (_k: string, fallback?: unknown) => fallback) } as never;
+  const rows = [
+    { id: 't1', name: 'Mầm Xanh', pointMultiplier: '1.00' },
+    { id: 't2', name: 'Lộc Biếc', pointMultiplier: { toString: () => '1.20' } },
+    { id: 'bad', name: 'Hỏng', pointMultiplier: 'abc' },
+    { id: 'zero', name: 'Không', pointMultiplier: 0 },
+  ];
+
+  it('trả hệ số và tên theo id hạng, bỏ hệ số hỏng', async () => {
+    const r = await buildPublicConfig(cfg, async () => rows);
+    expect(r.loyalty.tierMultipliers).toEqual({ t1: 1, t2: 1.2 });
+    expect(r.loyalty.tierNames).toEqual({ t1: 'Mầm Xanh', t2: 'Lộc Biếc' });
+  });
+
+  it('không có bộ đọc hoặc đọc lỗi thì bảng rỗng, phần còn lại của config vẫn trả', async () => {
+    expect((await buildPublicConfig(cfg)).loyalty.tierMultipliers).toEqual({});
+    const r = await buildPublicConfig(cfg, async () => { throw new Error('db'); });
+    expect(r.loyalty.tierMultipliers).toEqual({});
+    expect(r.loyalty.earnPct).toBeGreaterThan(0);
+  });
+});

@@ -48,7 +48,7 @@ describe('Khoá liên hệ CSKH trong seed (Q-17)', () => {
     const config = {
       get: jest.fn(async (_key: string, fallback?: unknown) => fallback),
     } as unknown as SystemConfigService;
-    const { support } = await new SystemConfigController(config).publicConfig();
+    const { support } = await new SystemConfigController(config, { membershipTier: { findMany: async () => [] } } as never).publicConfig();
     const seeded = Object.fromEntries(supportRows().map((r) => [r.key, r.value]));
     expect(support).toEqual({
       hotline: seeded['support.hotline'],
@@ -73,7 +73,7 @@ describe('Link cộng đồng trong seed', () => {
 
   it('seed khớp mặc định của GET /config/public', async () => {
     const config = { get: jest.fn(async (_key: string, fallback?: unknown) => fallback) } as unknown as SystemConfigService;
-    const { community } = (await new SystemConfigController(config).publicConfig()) as unknown as {
+    const { community } = (await new SystemConfigController(config, { membershipTier: { findMany: async () => [] } } as never).publicConfig()) as unknown as {
       community: { zaloGroupUrl: string | null; facebookUrl: string | null; tiktokUrl: string | null };
     };
     const seeded = Object.fromEntries(communityRows().map((r) => [r.key, r.value]));

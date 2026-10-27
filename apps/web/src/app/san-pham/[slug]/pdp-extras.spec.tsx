@@ -8,6 +8,7 @@ import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 const mocks = vi.hoisted(() => ({
   phase: 'authenticated' as string,
+  user: null as { tierId?: string | null } | null,
   push: vi.fn(),
   http: { get: vi.fn(), post: vi.fn() },
   getCart: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   oa: { available: true, openChat: vi.fn() },
 }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.user }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: mocks.http }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -43,7 +45,6 @@ vi.mock('./content-kit-sheet', () => ({
 
 import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { PdpChatButton, PdpContentKitRow, PdpPointsEarn, PdpCoupons, PdpFlashMeta, PdpFreeship, PdpGroupBuyRow, PdpSubscribeRow } from './pdp-extras';
 
 const VARIATIONS = [
@@ -62,6 +63,7 @@ const writeText = vi.fn();
 
 beforeEach(() => {
   mocks.phase = 'authenticated';
+  mocks.user = null;
   mocks.push.mockReset();
   mocks.http.get.mockReset().mockResolvedValue([]);
   mocks.http.post.mockReset();
@@ -337,9 +339,8 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
     return <button type="button" data-testid="qty" onClick={() => sel.setQuantity(n)} />;
   }
   const line = () => document.querySelector('[data-testid="pdp-points-earn"]')?.textContent;
-  async function mountEarn(opts: { multiplier?: number; qty?: number } = {}) {
+  async function mountEarn(opts: { qty?: number } = {}) {
     const qc = new QueryClient();
-    if (opts.multiplier) qc.setQueryData(loyaltyQuery(mocks.http as never).queryKey, { earnMultiplier: opts.multiplier });
     const r = render(
       <QueryClientProvider client={qc}>
         <PdpSelectionProvider initialId="v2">
@@ -353,7 +354,7 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
     await flush();
   }
   beforeEach(() => {
-    mocks.config = { ...mocks.config, loyalty: { earnPct: 0.02, vndPerPointRedeem: 100 } } as typeof mocks.config;
+    mocks.config = { ...mocks.config, loyalty: { earnPct: 0.02, vndPerPointRedeem: 100, tierMultipliers: { t1: 1, t2: 1.5 }, tierNames: { t1: 'Mầm Xanh', t2: 'Lộc Biếc' } } } as typeof mocks.config;
   });
 
   it('khách vãng lai (hệ số 1): 289.000đ x 2 ra 115 Điểm Xanh, quy 11.500đ', async () => {
@@ -369,12 +370,25 @@ describe('PdpPointsEarn — nối giá, số lượng, hệ số hạng vào l�
     expect(line()).toBe('Nhận tối đa 40 Điểm Xanh (≈4.000đ) khi đơn giao thành công');
   });
 
-  it('đã đăng nhập, cache có hệ số 1.5: nhân hệ số hạng', async () => {
-    await mountEarn({ multiplier: 1.5, qty: 2 });
-    expect(line()).toBe('Nhận tối đa 173 Điểm Xanh (≈17.300đ) khi đơn giao thành công');
+  it('đã đăng nhập, hạng Lộc Biếc ×1,5 trong bảng config: nhân hệ số và nói rõ hạng, không cần cache loyalty', async () => {
+    mocks.user = { tierId: 't2' };
+    await mountEarn({ qty: 2 });
+    expect(line()).toBe('Nhận tối đa 173 Điểm Xanh · hạng Lộc Biếc ×1,5 (≈17.300đ) khi đơn giao thành công');
   });
 
-  it('đã đăng nhập nhưng chưa có tổng quan trong cache, hoặc đang khôi phục phiên: nói chung, không đoán số', async () => {
+  it('hạng Mầm Xanh (hệ số 1) hoặc chưa có hạng: số gốc, không có giải thích', async () => {
+    mocks.user = { tierId: 't1' };
+    await mountEarn({ qty: 2 });
+    expect(line()).toBe('Nhận tối đa 115 Điểm Xanh (≈11.500đ) khi đơn giao thành công');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.user = { tierId: null };
+    await mountEarn({ qty: 2 });
+    expect(line()).toBe('Nhận tối đa 115 Điểm Xanh (≈11.500đ) khi đơn giao thành công');
+  });
+
+  it('đã đăng nhập nhưng chưa biết hạng (phiên cũ, hạng lạ), hoặc đang khôi phục phiên: nói chung, không đoán số', async () => {
+    mocks.user = { tierId: 'ghost' };
     await mountEarn({ qty: 2 });
     expect(line()).toBe('Nhận Điểm Xanh khi đơn giao thành công');
     mounted.forEach((m) => m.unmount());

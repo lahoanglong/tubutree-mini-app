@@ -29,6 +29,8 @@ export interface WebUser {
   pointsConvertedBalance?: number;
   walletBalance: number;
   referralCode: string;
+  /** Hạng thành viên: null khi chưa có hạng; thiếu ở phiên cũ. */
+  tierId?: string | null;
 }
 
 interface LoginResponse {

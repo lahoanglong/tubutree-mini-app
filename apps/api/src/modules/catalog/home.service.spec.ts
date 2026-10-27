@@ -23,7 +23,7 @@ function setup() {
   // Mặc định cấu hình là bảng rỗng: mọi khoá rơi về mặc định trong mã của buildPublicConfig.
   const config = { get: jest.fn(async (_key: string, fallback?: unknown) => fallback) };
   const loyalty = { getNewCustomerOffer: jest.fn().mockResolvedValue({ isNewCustomer: true, welcomeVoucher: null }) };
-  const prisma = { wasteRequest: { count: jest.fn().mockResolvedValue(2) } };
+  const prisma = { wasteRequest: { count: jest.fn().mockResolvedValue(2) }, membershipTier: { findMany: jest.fn().mockResolvedValue([]) } };
   const svc = new HomeService(
     catalog as never, flashSale as never, orders as never, purchased as never, subs as never, notifications as never, config as never, loyalty as never,
     prisma as never,

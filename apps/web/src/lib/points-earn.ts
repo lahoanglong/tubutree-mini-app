@@ -34,6 +34,7 @@ const numberFormat = new Intl.NumberFormat('vi-VN');
 
 /** Chữ giữ y như `vi.product.pointsEarn*` của Mini App. "Tối đa": giảm giá, mã, điểm dùng ở thanh toán làm giá trị hàng tính điểm thấp đi. */
 export const pointsEarnText = {
-  line: (points: number, valueVnd: number) => `Nhận tối đa ${numberFormat.format(points)} Điểm Xanh (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
+  line: (points: number, valueVnd: number, tierNote?: string | null) =>
+    `Nhận tối đa ${numberFormat.format(points)} Điểm Xanh${tierNote ? ` · ${tierNote}` : ''} (≈${formatVnd(valueVnd)}) khi đơn giao thành công`,
   generic: 'Nhận Điểm Xanh khi đơn giao thành công',
 };

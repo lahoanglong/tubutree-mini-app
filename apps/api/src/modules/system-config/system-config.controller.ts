@@ -2,7 +2,8 @@ import { Controller, Get } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
-import { buildPublicConfig } from './public-config';
+import { PrismaService } from '../../prisma/prisma.service';
+import { buildPublicConfig, tierLoaderOf } from './public-config';
 
 /**
  * Config hiển thị an toàn cho client (public) — WHITELIST rõ ràng, KHÔNG dùng getByCategory
@@ -11,12 +12,15 @@ import { buildPublicConfig } from './public-config';
 @Public()
 @Controller('config')
 export class SystemConfigController {
-  constructor(private readonly config: SystemConfigService) {}
+  constructor(
+    private readonly config: SystemConfigService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get('public')
   @PublicCache('STATIC')
   /** Tham số nghiệp vụ FE cần để hiển thị đúng; xem buildPublicConfig. */
   publicConfig() {
-    return buildPublicConfig(this.config);
+    return buildPublicConfig(this.config, tierLoaderOf(this.prisma));
   }
 }
