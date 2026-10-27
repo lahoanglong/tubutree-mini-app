@@ -16,6 +16,7 @@ function mockSession(api: MockApi) {
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: { id: 'u1', fullName: 'Lan', role: 'CUSTOMER', onboarded: true, segments: [] } }));
   api.get('/me', () => ({ id: 'u1', fullName: 'Lan', role: 'CUSTOMER', onboarded: true, segments: [] }));
   api.get('/feed/categories', [{ id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null }]);
+  api.get('/flash-sales/active', []);
 }
 
 test.describe('Web khách: cộng đồng', () => {
