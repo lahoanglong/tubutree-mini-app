@@ -24,7 +24,7 @@ const reqRow = (o: Record<string, unknown> = {}) => ({
   id: 'r1', code: 'TR-ABCDE', method: 'DROP_OFF', status: 'OPEN', pointId: 'p1', estimatedPoints: 20_000,
   confirmedByUserId: null, closedAt: null, user: USER,
   lines: [
-    { itemId: 'i1', itemName: 'Pin cũ', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, item: { hazardous: true } },
+    { itemId: 'i1', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, item: { hazardous: true } },
     { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, item: { hazardous: false } },
   ],
   ...o,
@@ -161,7 +161,7 @@ describe('WasteDeskService.lookup', () => {
       request: {
         id: 'r1', code: 'TR-ABCDE', method: 'DROP_OFF', status: 'OPEN', pointId: 'p1', customerName: 'An***', customerPhone: '090****567', estimatedPoints: 20_000,
         lines: [
-          { itemId: 'i1', itemName: 'Pin cũ', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, hazardous: true },
+          { itemId: 'i1', itemName: 'Pin đã dùng', unitLabel: 'viên', unitsPerPoint: 10, pointsPerGroup: 5_000, declaredQty: 4, receivedQty: null, hazardous: true },
           { itemId: 'i2', itemName: 'Lon nhôm', unitLabel: 'lon', unitsPerPoint: 1, pointsPerGroup: 1_000, declaredQty: 2, receivedQty: null, hazardous: false },
         ],
       },

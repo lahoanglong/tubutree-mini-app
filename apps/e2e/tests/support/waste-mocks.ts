@@ -57,7 +57,7 @@ export const WASTE_ITEMS: WasteMeItemDTO[] = [
   {
     id: 'wi-battery',
     code: 'BATTERY',
-    name: 'Pin cũ',
+    name: 'Pin đã dùng',
     unitLabel: 'viên',
     unitsPerPoint: 10,
     pointsPerGroup: 1000,

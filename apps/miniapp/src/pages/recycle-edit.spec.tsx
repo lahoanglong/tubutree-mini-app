@@ -136,7 +136,7 @@ describe('/recycle/r/:id/edit (§4.5, §7.4)', () => {
   });
   it('dòng của món không còn nhận: phải bỏ được trước khi lưu (§15.2 PATCH)', async () => {
     const base = makeRequestDetail();
-    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ lines: [...base.lines, { ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', declaredQty: 2 }] }));
+    mocks.getWasteRequest.mockResolvedValue(makeRequestDetail({ lines: [...base.lines, { ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty: 2 }] }));
     mocks.editWasteRequest.mockResolvedValue(makeRequestDetail());
     renderPage();
     expect(await screen.findByText('Món này hiện chưa nhận')).toBeInTheDocument();

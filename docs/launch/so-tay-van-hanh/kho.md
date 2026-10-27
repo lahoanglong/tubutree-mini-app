@@ -68,7 +68,7 @@ Báo động Gomdon hiện ngay trong chi tiết đơn, bấm "Đã xử lý" sa
 - Mở yêu cầu: gõ mã vào ô "Mã yêu cầu, mã đơn hoặc mã vận đơn", bấm "Tra", rồi bấm "Mở" ở dòng kết quả.
 - Nhận kiện gửi về kho hoặc kiện thu kèm đơn: bấm "Nhận kiện", gõ "Mã TR- trên kiện", bấm "Xác nhận đã nhận kiện". Nhận theo mã TR-, không theo mã vận đơn của hãng. Kiện còn cước thu thì bấm "Từ chối tại cửa (chưa trả cước)".
 - Đếm: ở khối "Đếm hàng thực nhận", gõ số thực nhận của từng món (nhận thiếu thì chọn lý do), bấm "Xác nhận số đếm". Điểm cộng theo số thực nhận, không theo số khách khai.
-- Pin cũ: chỉ nhận khi khách mang tới điểm nhận, không nhận qua đường gửi hay thu kèm đơn. Cất riêng vào thùng kín, không để lẫn rác khác, rồi giao cho đơn vị xử lý chất thải nguy hại có hợp đồng. Không nhận pin phồng, chảy nước, pin xe điện, ắc quy.
+- Pin đã dùng: chỉ nhận khi khách mang tới điểm nhận, không nhận qua đường gửi hay thu kèm đơn. Kho TP.HCM nhận pin ngay khi món được bật (kho nhận mọi món đang nhận); điểm đối tác chỉ nhận khi admin hoặc chủ điểm đã gắn pin vào điểm đó. Cất riêng vào thùng kín, không để lẫn rác khác, rồi giao cho đơn vị xử lý chất thải nguy hại có hợp đồng. Pin phồng, chảy nước, pin xe điện, ắc quy: không đếm, ở quầy chọn lý do nhận thiếu "Hỏng" hoặc "Sai loại".
 - Kiện không khớp yêu cầu nào: bấm "Hàng không rõ chủ", điền "Mô tả kiện", bấm "Ghi kiện". Chỉ mô tả kiện, không ghi tên hay số điện thoại người gửi.
 
 **Khách mua tại quầy.** Pancake POS không tự cộng Điểm Xanh. Bấm link **"Màn thu ngân (tích điểm tại quầy)"** góc trên bên phải trang Quản trị. Quét thẻ hoặc nhập SĐT, "Tra cứu". Nhập "Tổng tiền hoá đơn" và "Mã hoá đơn POS", bấm "Tích điểm". Mỗi hoá đơn tích một lần, không tự tích cho chính mình. Màn báo "đang TẮT": nhờ admin bật.

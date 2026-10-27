@@ -235,12 +235,12 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
     expect(screen.queryByText('Chọn lý do cho món nhận thiếu để xác nhận')).toBeNull();
   });
   it('pin: có bộ đếm, nhắc cất riêng, 25 viên cộng 2.000 điểm, gửi số nhận thật không kèm lý do', async () => {
-    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
+    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    expect(within(line('Pin cũ')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
-    expect(within(line('Pin cũ')).getByText('Cất riêng vào thùng kín, không lẫn rác khác')).toBeInTheDocument();
+    expect(within(line('Pin đã dùng')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
+    expect(within(line('Pin đã dùng')).getByText('Cất riêng vào thùng kín, không lẫn rác khác')).toBeInTheDocument();
     expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 2.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xác nhận đã nhận' })).toBeEnabled();
     mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 2000, dropsAwarded: 0, quota: { limit: 500_000, used: 120_000, remaining: 380_000 }, staffDailyCapRemaining: 150_000 });

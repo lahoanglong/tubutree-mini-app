@@ -46,7 +46,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
     mockSession(api, makeUser({ id: 'u-wx' }));
     mockWasteCustomer(api, { points: [wastePoint({ id: 'wp-q1' })] });
     await page.goto('/recycle/new');
-    const card = page.locator('[data-item]').filter({ hasText: 'Pin cũ' });
+    const card = page.locator('[data-item]').filter({ hasText: 'Pin đã dùng' });
     await expect(card).toBeVisible({ timeout: 15_000 });
     const plus = card.getByRole('button', { name: 'Tăng số lượng' });
     for (let i = 0; i < 10; i++) await plus.click();

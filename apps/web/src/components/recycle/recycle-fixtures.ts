@@ -49,7 +49,7 @@ export const ITEM_MILK = makeWasteItem({
 export const ITEM_BATTERY = makeWasteItem({
   id: 'item-battery',
   code: 'BATTERY',
-  name: 'Pin cũ',
+  name: 'Pin đã dùng',
   unitLabel: 'viên',
   status: 'COMING_SOON',
   hazardous: true,

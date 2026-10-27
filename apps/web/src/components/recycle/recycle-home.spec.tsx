@@ -131,7 +131,7 @@ describe('/doi-rac trang vào (§4.1)', () => {
     expect(c.textContent).toContain('1 thùng = 1.000 điểm');
     expect(c.textContent).toContain('5 vỏ = 1.000 điểm');
     expect(c.textContent).toContain('Gấp phẳng, bỏ băng keo');
-    const battery = Array.from(c.querySelectorAll<HTMLElement>('[data-item]')).find((e) => e.textContent?.includes('Pin cũ'))!;
+    const battery = Array.from(c.querySelectorAll<HTMLElement>('[data-item]')).find((e) => e.textContent?.includes('Pin đã dùng'))!;
     expect(battery.getAttribute('data-status')).toBe('COMING_SOON');
     expect(battery.textContent).toContain('Sắp nhận');
     expect(battery.className).not.toContain('opacity-');

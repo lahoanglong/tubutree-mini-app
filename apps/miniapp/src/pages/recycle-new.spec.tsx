@@ -101,7 +101,7 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(within(carton).getByText('1 thùng = 1.000 điểm')).toBeInTheDocument();
     expect(within(carton).getByText('Tối đa 20 thùng mỗi tháng. Mỗi ngày mang tới điểm nhận tối đa 10 thùng')).toBeInTheDocument();
     expect(carton.querySelector('[data-item-media] img, [data-item-media] svg')).not.toBeNull();
-    const battery = screen.getByText('Pin cũ').closest('[data-item]') as HTMLElement;
+    const battery = screen.getByText('Pin đã dùng').closest('[data-item]') as HTMLElement;
     expect(within(battery).queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
     expect(within(battery).getByText('Sắp nhận')).toBeInTheDocument();
     expect(within(battery).getByText('Đợt này Tubu chưa nhận pin')).toBeInTheDocument();

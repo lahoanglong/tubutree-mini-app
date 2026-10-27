@@ -34,12 +34,12 @@ describe('WasteItemStep (web)', () => {
   });
   it('món sắp nhận mờ đi, có nhãn và không có bộ đếm; món ẩn không hiện', () => {
     const { c } = mount({ items: [ITEM_CARTON, ITEM_BATTERY, { ...ITEM_MILK, status: 'HIDDEN' }] });
-    const battery = card(c, 'Pin cũ');
+    const battery = card(c, 'Pin đã dùng');
     expect(battery.textContent).toContain('Sắp nhận');
     expect(battery.textContent).toContain('Đợt này Tubu chưa nhận pin');
     expect(battery.className).not.toContain('opacity-');
     expect(battery.getAttribute('aria-disabled')).toBe('true');
-    expect(card(c, 'Pin cũ').querySelector('span.text-stone-500')?.textContent).toBe('Pin cũ');
+    expect(card(c, 'Pin đã dùng').querySelector('span.text-stone-500')?.textContent).toBe('Pin đã dùng');
     expect(card(c, 'Thùng carton').hasAttribute('aria-disabled')).toBe(false);
     expect(btn(battery, 'Tăng số lượng')).toBeNull();
     expect(c.textContent).not.toContain('Vỏ hộp sữa');

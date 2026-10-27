@@ -210,7 +210,7 @@ describe('/doi-rac/yeu-cau/[id]/sua (§4.5, §7.4)', () => {
   it('dòng của món không còn nhận: phải bỏ được trước khi lưu (§15.2 PATCH)', async () => {
     const base = makeRequestDetail();
     state.request = makeRequestDetail({
-      lines: [...base.lines, { ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', declaredQty: 2 }],
+      lines: [...base.lines, { ...base.lines[0]!, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', declaredQty: 2 }],
     });
     const c = await mount();
     expect(c.textContent).toContain('Món này hiện chưa nhận');

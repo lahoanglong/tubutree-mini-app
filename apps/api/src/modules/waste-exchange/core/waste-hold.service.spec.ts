@@ -5,7 +5,7 @@ const NOW = new Date('2026-10-17T03:00:00.000Z');
 const CFG = { laneDropoff: true, laneMailin: true, lanePickup: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7 };
 const carton = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, gramsPerUnit: 300, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', hazardous: false, warehouseOnly: false };
 const milk = { ...carton, id: 'milk', code: 'MILK_CARTON', name: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, dailyCapQty: null, monthlyCapQty: null, warehouseOnly: true };
-const battery = { ...carton, id: 'pin', code: 'PIN', name: 'Pin cũ', unitLabel: 'viên', status: 'COMING_SOON', hazardous: true };
+const battery = { ...carton, id: 'pin', code: 'PIN', name: 'Pin đã dùng', unitLabel: 'viên', status: 'COMING_SOON', hazardous: true };
 function setup(o: { items?: unknown[]; storedLines?: unknown[]; flags?: unknown; partner?: unknown; links?: string[]; usageRow?: unknown; usage?: Partial<WasteCapUsage>; available?: boolean } = {}) {
   const tx = {
     wasteItem: { findMany: jest.fn().mockResolvedValue(o.items ?? [carton]) },
@@ -58,7 +58,7 @@ describe('WasteHoldService, warehouse-only items', () => {
 describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới điểm)', () => {
   const pin = { ...battery, status: 'ACTIVE', unitsPerPoint: 10, pointsPerGroup: 1_000, dailyCapQty: 20, monthlyCapQty: 50 };
   const pinLines = (declaredQty: number) => [{ itemId: 'pin', declaredQty }];
-  const SHIP_REFUSED = 'Pin cũ không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được';
+  const SHIP_REFUSED = 'Pin đã dùng không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được';
 
   it('DROP_OFF tới điểm có nhận pin: 25 viên = 2 nhóm = 2.000 điểm', async () => {
     const { svc, tx } = setup({ items: [pin], links: ['pin'] });
@@ -68,7 +68,7 @@ describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới �
   });
   it('điểm không gắn pin thì vẫn từ chối (pin không tự gắn vào điểm nào)', async () => {
     const { svc, tx } = setup({ items: [pin], links: [] });
-    await expect(svc.validateAndHold(tx, input({ lines: pinLines(10) }), CFG)).rejects.toThrow('Điểm nhận này không nhận: Pin cũ');
+    await expect(svc.validateAndHold(tx, input({ lines: pinLines(10) }), CFG)).rejects.toThrow('Điểm nhận này không nhận: Pin đã dùng');
   });
   it.each([
     ['MAIL_IN', { method: 'MAIL_IN' as const, pointId: null }],

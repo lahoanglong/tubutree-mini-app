@@ -9,6 +9,8 @@ import {
 import { WASTE_CONFIG_KEYS } from '../../src/modules/waste-exchange/waste-config.keys';
 
 const MIGRATION = 'prisma/migrations/20261020000000_waste_exchange/migration.sql';
+// Trạng thái BATTERY mà migration 20261027000000 đặt khi migrate deploy; đổi ở đây nếu chủ chọn khác.
+const BATTERY_STATUS_AFTER_MIGRATE = 'ACTIVE';
 // Spec 11.4 (lines 306-312) with $3 and $4 cast to int; M3.1a incrementPointUsage uses this exact text.
 const QUOTA_SQL = `INSERT INTO waste_point_usage ("pointId", "monthKey", "pointsUsed", confirmations) VALUES ($1, $2, $3::int, 1) ON CONFLICT ("pointId", "monthKey") DO UPDATE SET "pointsUsed" = waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed", confirmations = waste_point_usage.confirmations + 1 WHERE waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed" <= $4::int RETURNING "pointsUsed"`;
 
@@ -216,7 +218,7 @@ describe('waste DB constraints (real Postgres)', () => {
     expect(usage).toMatchObject({ pointsUsed: 10_000, confirmations: 2 });
   });
 
-  it('re-applying the hand-written section is a no-op (IF NOT EXISTS and duplicate_object guards)', async () => {
+  it('re-applying the hand-written section is a no-op, except the hazardous CHECK that migration 20261027000000 dropped and cannot be re-added', async () => {
     const sql = readApiSql(MIGRATION);
     const a = sql.indexOf('-- BEGIN WASTE HAND-WRITTEN CONSTRAINTS');
     const b = sql.indexOf('-- END WASTE HAND-WRITTEN CONSTRAINTS');
@@ -224,6 +226,50 @@ describe('waste DB constraints (real Postgres)', () => {
     expect(statements).toHaveLength(21);
     // Migration 20261027000000 đã gỡ ràng buộc nguy hại và món nguy hại ACTIVE hợp lệ, nên bỏ câu thêm lại nó khỏi lần chạy lại.
     for (let pass = 0; pass < 2; pass++) for (const s of statements.filter((x) => !x.includes('waste_items_hazardous_not_active_chk'))) await prisma.$executeRawUnsafe(s);
+  });
+});
+
+describe('seeded reference data after migrate deploy', () => {
+  let moduleRef: TestingModule;
+  let prisma: PrismaService;
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({ imports: [PrismaModule] }).compile();
+    await moduleRef.init();
+    prisma = moduleRef.get(PrismaService);
+  });
+  afterAll(async () => {
+    await moduleRef?.close();
+  });
+
+  const exec = (sql: string, ...params: unknown[]) => prisma.$executeRawUnsafe(sql, ...params);
+  const violates = (p: Promise<unknown>, constraint: string) =>
+    expect(p).rejects.toThrow(new RegExp(`violates check constraint "${constraint}"`));
+
+  it('the five items and five gifts exist after migrate deploy (prod never runs seed.ts)', async () => {
+    const itemIds = ['wi-carton', 'wi-bubble-wrap', 'wi-milk-carton', 'wi-tubu-bottle', 'wi-battery'];
+    const items = await prisma.wasteItem.findMany({ where: { id: { in: itemIds } }, orderBy: { id: 'asc' } });
+    expect(items.map((i) => i.id)).toEqual([...itemIds].sort());
+    for (const i of items) {
+      expect([typeof i.code, typeof i.unitsPerPoint, typeof i.pointsPerGroup, typeof i.dropsPerUnit, typeof i.hazardous]).toEqual(['string', 'number', 'number', 'number', 'boolean']);
+    }
+    const giftKinds: Record<string, string> = {
+      'reward-freeship': 'VOUCHER', 'reward-discount-50k': 'VOUCHER', 'reward-percent-15pct': 'VOUCHER', 'reward-discount-100k': 'VOUCHER', 'gift-tree': 'TREE',
+    };
+    const gifts = await prisma.wasteGift.findMany({ where: { id: { in: Object.keys(giftKinds) } } });
+    expect(Object.fromEntries(gifts.map((g) => [g.id, g.kind]))).toEqual(giftKinds);
+    for (const g of gifts.filter((x) => x.kind === 'VOUCHER')) {
+      expect([typeof g.voucherType, typeof g.voucherValue, typeof g.voucherValidDays, typeof g.pointsCost]).toEqual(['string', 'number', 'number', 'number']);
+    }
+  });
+  it('pin sau migrate deploy: 10 viên = 1.000 điểm, trần 20/ngày và 50/tháng, không chỉ kho nhận', async () => {
+    const pin = await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' } });
+    expect(pin).toMatchObject({ hazardous: true, warehouseOnly: false, unitsPerPoint: 10, pointsPerGroup: 1000, dailyCapQty: 20, monthlyCapQty: 50, status: BATTERY_STATUS_AFTER_MIGRATE });
+  });
+  it('the seeded vouchers are protected by the CHECKs (fields and cost range)', async () => {
+    await violates(exec(`UPDATE "waste_gifts" SET "voucherType" = NULL WHERE "id" = 'reward-freeship'`), 'waste_gifts_voucher_fields_chk');
+    await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 2000001 WHERE "id" = 'reward-percent-15pct'`), 'waste_gifts_points_cost_chk');
+    await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 0 WHERE "id" = 'reward-discount-50k'`), 'waste_gifts_points_cost_chk');
   });
   it('re-applying the seed data section changes nothing (ON CONFLICT DO NOTHING)', async () => {
     const sql = readApiSql(MIGRATION);

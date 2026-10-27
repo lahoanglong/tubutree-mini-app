@@ -288,11 +288,11 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     expect(c.textContent).not.toContain('Chọn lý do cho món nhận thiếu để xác nhận');
   });
   it('pin: có bộ đếm, nhắc cất riêng, 25 viên cộng 2.000 điểm, gửi số nhận thật không kèm lý do', async () => {
-    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
+    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin đã dùng', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
     const c = await mount();
     await lookUp(c);
-    expect(lineOf(c, 'Pin cũ').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
-    expect(lineOf(c, 'Pin cũ').textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
+    expect(lineOf(c, 'Pin đã dùng').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(lineOf(c, 'Pin đã dùng').textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 2.000 điểm');
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     click(button(c, 'Xác nhận đã nhận'));
