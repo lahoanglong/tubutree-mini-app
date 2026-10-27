@@ -38,7 +38,7 @@ export function MissionsCard({
           // đạt mà chưa nhận thì hiện nút "Nhận thưởng".
           const canClaim = isDone && !m.claimed;
           const claiming = claimPending && claimVariables === m.code;
-          const target = !isDone && onGo ? missionTarget(m.code) : null;
+          const target = !isDone && onGo ? missionTarget(m.code, m.kind) : null;
 
           return (
             <div key={m.code} className={`py-3 ${idx > 0 ? 'border-t border-stone-200' : ''}`}>

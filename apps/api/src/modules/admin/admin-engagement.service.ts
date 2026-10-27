@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MISSION_GOAL_MAX, missionKindOf, type MissionKind } from '../../common/mission-kinds';
@@ -48,6 +48,10 @@ export class AdminEngagementService {
     if (!Number.isInteger(input.goal) || input.goal < 1 || input.goal > max) {
       throw new BadRequestException(`Mục tiêu phải là số nguyên từ 1 đến ${max}.`);
     }
+    // Nhiệm vụ đang bật cùng loại và cùng mục tiêu (kể cả 4 nhiệm vụ seed) thì khách đã làm xong sẽ thấy hai thẻ cho một việc.
+    const active = await this.prisma.mission.findMany({ where: { disabledAt: null }, select: { code: true, kind: true, goal: true, title: true } });
+    const same = active.find((m) => missionKindOf(m) === input.kind && m.goal === input.goal);
+    if (same) throw new ConflictException(`Đã có nhiệm vụ đang bật cùng loại và cùng mục tiêu: "${same.title}". Tạm dừng nhiệm vụ đó trước hoặc đổi mục tiêu.`);
     const created = await this.prisma.mission.create({
       data: {
         id: randomUUID(),
@@ -58,6 +62,7 @@ export class AdminEngagementService {
         goal: input.goal,
         rewardPoints: input.rewardPoints,
         isRepeatable: false,
+        startsAt: new Date(),
       },
     });
     this.logger.warn(`Admin ${adminId} thêm nhiệm vụ ${created.code} (${input.kind}, mục tiêu ${input.goal}, thưởng ${input.rewardPoints} điểm).`);

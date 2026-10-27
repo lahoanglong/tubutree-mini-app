@@ -45,7 +45,7 @@ export function MissionsCard({
           // nhận thì hiện nút "Nhận thưởng" (mirror pattern claim của Season Pass).
           const canClaim = isDone && !m.claimed;
           const claiming = claimPending && claimVariables === m.code;
-          const target = !isDone && onGo ? missionTarget(m.code) : null;
+          const target = !isDone && onGo ? missionTarget(m.code, m.kind) : null;
 
           return (
             <div

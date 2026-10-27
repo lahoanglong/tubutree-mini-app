@@ -1336,10 +1336,10 @@ describe('GameService.getMissions', () => {
     const svc = new GameService(prisma, makeConfig(), analytics);
     const res = await svc.getMissions('u1');
     expect(res).toEqual([
-      { code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: undefined, rewardPoints: 30, progress: 3, goal: 7, completed: false, claimed: false },
-      { code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', description: undefined, rewardPoints: 20, progress: 1, goal: 1, completed: true, claimed: false },
-      { code: 'REVIEW_3', title: 'Nhà phê bình', description: undefined, rewardPoints: 15, progress: 2, goal: 3, completed: false, claimed: false },
-      { code: 'INVITE_3', title: 'Lan tỏa sống xanh', description: undefined, rewardPoints: 50, progress: 0, goal: 3, completed: false, claimed: false },
+      { code: 'CHECKIN_7', kind: 'CHECKIN_STREAK', title: 'Chăm chỉ 7 ngày', description: undefined, rewardPoints: 30, progress: 3, goal: 7, completed: false, claimed: false },
+      { code: 'FIRST_ORDER', kind: 'ORDER_COUNT', title: 'Đơn hàng đầu tiên', description: undefined, rewardPoints: 20, progress: 1, goal: 1, completed: true, claimed: false },
+      { code: 'REVIEW_3', kind: 'REVIEW_COUNT', title: 'Nhà phê bình', description: undefined, rewardPoints: 15, progress: 2, goal: 3, completed: false, claimed: false },
+      { code: 'INVITE_3', kind: 'INVITE_COUNT', title: 'Lan tỏa sống xanh', description: undefined, rewardPoints: 50, progress: 0, goal: 3, completed: false, claimed: false },
     ]);
   });
 
@@ -1792,6 +1792,7 @@ describe('GameService.claimMission', () => {
       const done = new Promise<void>((r) => (settle = r));
       let iAmHolder = false;
       const tx = {
+        mission: { findUnique: async () => ({ disabledAt: null }) },
         missionProgress: {
           create: async () => {
             for (;;) {
@@ -2560,5 +2561,84 @@ describe('GameService.getProfile — số hiện trước khi bấm', () => {
     expect(r.dewSeeds).toBe(15);
     expect(r.streak7Seeds).toBe(20);
     expect(r.quizWrongSeeds).toBe(2);
+  });
+});
+
+describe('Nhiệm vụ quản trị thêm: chỉ tính việc từ lúc tạo (startsAt)', () => {
+  const NOW = '2026-10-26T05:00:00.000Z';
+  const custom = (over: Record<string, unknown>) => ({
+    id: 'mc', code: 'CUSTOM_1', kind: 'ORDER_COUNT', title: 'Mua 1 đơn', description: '', goal: 1, rewardPoints: 10_000, isRepeatable: false,
+    disabledAt: null, startsAt: new Date(NOW), ...over,
+  });
+  const svc = (prisma: PrismaService) => new GameService(prisma, makeConfig(), analytics, undefined, undefined, undefined, loyaltyWithExpiry().loyalty);
+  beforeEach(() => freezeNow(NOW));
+  afterEach(() => jest.useRealTimers());
+
+  it('khách cũ đã có đơn giao trước khi nhiệm vụ ra đời: tiến độ 0, không nhận được thưởng', async () => {
+    const create = jest.fn();
+    const prisma = makePrisma({
+      order: settledOrders(1), // đơn giao 30 ngày trước
+      mission: { findMany: jest.fn().mockResolvedValue([custom({})]), findUnique: jest.fn().mockResolvedValue(custom({})) },
+      missionProgress: { findMany: jest.fn().mockResolvedValue([]), create },
+    });
+    const [m] = await svc(prisma).getMissions('u1');
+    expect(m).toMatchObject({ progress: 0, completed: false, kind: 'ORDER_COUNT' });
+    await expect(svc(prisma).claimMission('u1', 'CUSTOM_1')).rejects.toThrow('Chưa đủ điều kiện');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('đơn giao sau mốc bắt đầu và đã qua hạn đổi/trả thì tính', async () => {
+    const startsAt = new Date(Date.now() - 20 * DAY_MS);
+    const prisma = makePrisma({
+      order: { findMany: jest.fn().mockResolvedValue([deliveredOrder('o1', 30), deliveredOrder('o2', 10)]) },
+      mission: { findMany: jest.fn().mockResolvedValue([custom({ startsAt })]) },
+    });
+    const [m] = await svc(prisma).getMissions('u1');
+    expect(m).toMatchObject({ progress: 1, completed: true });
+  });
+
+  it('điểm danh: chuỗi 7 ngày có từ trước không tính, chỉ tính số ngày kể từ lúc tạo (hôm tạo là ngày 1)', async () => {
+    const prisma = makePrisma({
+      gameProfile: { findUnique: jest.fn().mockResolvedValue({ streakDays: 7 }) },
+      mission: { findMany: jest.fn().mockResolvedValue([custom({ id: 'mk', code: 'CUSTOM_2', kind: 'CHECKIN_STREAK', goal: 7 })]) },
+    });
+    expect((await svc(prisma).getMissions('u1'))[0]).toMatchObject({ progress: 1, completed: false });
+    jest.setSystemTime(new Date('2026-10-28T05:00:00.000Z'));
+    expect((await svc(prisma).getMissions('u1'))[0]).toMatchObject({ progress: 3 });
+  });
+
+  it('đánh giá và lượt mời cũng chỉ đếm từ mốc bắt đầu', async () => {
+    const reviewFind = jest.fn().mockResolvedValue([]);
+    const ptsCount = jest.fn().mockResolvedValue(0);
+    const prisma = makePrisma({
+      review: { findMany: reviewFind },
+      pointsTransaction: { count: ptsCount },
+      mission: { findMany: jest.fn().mockResolvedValue([custom({ kind: 'INVITE_COUNT', goal: 1 })]) },
+    });
+    await svc(prisma).getMissions('u1');
+    expect(reviewFind.mock.calls[0][0].where.createdAt).toEqual({ gte: new Date(NOW) });
+    expect(ptsCount.mock.calls[0][0].where.createdAt).toEqual({ gte: new Date(NOW) });
+  });
+
+  it('nhiệm vụ cũ (startsAt rỗng) vẫn tính trọn đời, không lọc ngày', async () => {
+    const reviewFind = jest.fn().mockResolvedValue([]);
+    const prisma = makePrisma({
+      review: { findMany: reviewFind },
+      order: settledOrders(1),
+      mission: { findMany: jest.fn().mockResolvedValue([custom({ code: 'FIRST_ORDER', kind: null, startsAt: null })]) },
+    });
+    expect((await svc(prisma).getMissions('u1'))[0]).toMatchObject({ progress: 1, completed: true });
+    expect(reviewFind.mock.calls[0][0].where.createdAt).toBeUndefined();
+  });
+
+  it('bị tạm dừng ngay giữa lúc nhận (đọc lại trong giao dịch) → không cộng điểm', async () => {
+    const pts = jest.fn();
+    const prisma = makePrisma({
+      order: settledOrders(1),
+      mission: { findUnique: jest.fn().mockResolvedValueOnce(custom({ startsAt: new Date(Date.now() - 60 * DAY_MS) })).mockResolvedValue({ disabledAt: new Date() }) },
+      pointsTransaction: { create: pts },
+    });
+    await expect(svc(prisma).claimMission('u1', 'CUSTOM_1')).rejects.toThrow('tạm dừng');
+    expect(pts).not.toHaveBeenCalled();
   });
 });

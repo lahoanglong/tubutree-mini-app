@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { EngagementTab } from './engagement-tab';
-import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 const mount = (ui: Parameters<typeof render>[0]) => {
@@ -113,6 +113,9 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     const submit = byText(form, 'button', 'Thêm nhiệm vụ') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
     typeInto(form.querySelector('input[name="title"]'), ' Mời bạn ');
+    expect(submit.disabled).toBe(true); // chưa nhập điểm thưởng: không có số mặc định
+    expect((form.querySelector('input[name="rewardPoints"]') as HTMLInputElement).value).toBe('');
+    typeInto(form.querySelector('input[name="rewardPoints"]'), '1');
     expect(submit.disabled).toBe(false);
     typeInto(form.querySelector('input[name="goal"]'), '101');
     expect(submit.disabled).toBe(true);
@@ -123,6 +126,11 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     typeInto(form.querySelector('input[name="rewardPoints"]'), '30000');
     expect(submit.disabled).toBe(false);
     click(submit);
+    await flush();
+    expect(api.posts()).toHaveLength(0);
+    expect(confirmDialog()?.textContent).toContain('Chỉ tính việc khách làm từ lúc tạo');
+    expect(confirmDialog()?.textContent).toContain('tối đa 30.000 Điểm Xanh');
+    answerConfirm(true);
     await flush();
     const [call] = api.posts();
     expect(call!.url).toContain('/admin/engagement/missions');

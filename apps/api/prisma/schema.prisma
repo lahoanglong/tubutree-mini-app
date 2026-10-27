@@ -2732,6 +2732,8 @@ model Mission {
   kind         String?
   /// Có giá trị = nhiệm vụ đang tạm dừng: không hiện cho khách, không nhận thưởng được.
   disabledAt   DateTime?
+  /// Chỉ tính việc khách làm từ mốc này. NULL = tính trọn đời (4 nhiệm vụ seed); nhiệm vụ quản trị thêm đặt = lúc tạo.
+  startsAt     DateTime?
 
   @@map("missions")
 }

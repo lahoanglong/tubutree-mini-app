@@ -10,6 +10,7 @@ import {
   type AdminMission,
   type MissionKind,
 } from '@/lib/admin-client';
+import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 
 const REWARD_POINTS_MAX = 500_000;
@@ -41,8 +42,9 @@ export function EngagementTab() {
 
 function NewMission() {
   const qc = useQueryClient();
+  const { confirm, dialog } = useConfirm();
   const [open, setOpen] = useState(false);
-  const blank = { title: '', description: '', kind: 'ORDER_COUNT' as MissionKind, goal: '1', rewardPoints: '10000' };
+  const blank = { title: '', description: '', kind: 'ORDER_COUNT' as MissionKind, goal: '1', rewardPoints: '' };
   const [f, setF] = useState(blank);
   const [err, setErr] = useState<string | null>(null);
   const opt = MISSION_KIND_OPTIONS.find((o) => o.kind === f.kind)!;
@@ -72,12 +74,18 @@ function NewMission() {
     <form
       aria-label="Thêm nhiệm vụ"
       className="space-y-2 rounded-card border border-stone-200 bg-stone-50 p-3"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         setErr(null);
-        create.mutate();
+        const ok = await confirm({
+          title: 'Thêm nhiệm vụ mới',
+          message: `Chỉ tính việc khách làm từ lúc tạo, việc đã làm trước đó không được tính. Mỗi khách nhận tối đa ${points.toLocaleString('vi-VN')} Điểm Xanh một lần cho nhiệm vụ này. Thêm nhiệm vụ "${f.title.trim()}"?`,
+          confirmLabel: 'Thêm nhiệm vụ',
+        });
+        if (ok) create.mutate();
       }}
     >
+      {dialog}
       <h3 className="text-sm font-semibold text-stone-900">Nhiệm vụ mới</h3>
       <label className="block text-xs text-stone-600">
         <span className="mb-1 block">Khách cần làm gì</span>
@@ -100,7 +108,7 @@ function NewMission() {
           <input name="goal" inputMode="numeric" value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })} className={INPUT_CLASS} />
         </label>
         <label className="text-xs text-stone-600">
-          <span className="mb-1 block">Điểm thưởng</span>
+          <span className="mb-1 block">Điểm thưởng mỗi khách (phải nhập)</span>
           <input name="rewardPoints" inputMode="numeric" value={f.rewardPoints} onChange={(e) => setF({ ...f, rewardPoints: e.target.value })} className={INPUT_CLASS} />
         </label>
       </div>
@@ -112,6 +120,7 @@ function NewMission() {
         <span className="mb-1 block">Mô tả</span>
         <textarea name="description" rows={2} maxLength={300} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} className={INPUT_CLASS} />
       </label>
+      <p className="text-xs text-stone-600">Chỉ tính việc khách làm từ lúc tạo nhiệm vụ.</p>
       {!goalOk && <p className="text-xs text-warning-fg">Mục tiêu là số nguyên từ 1 đến {opt.goalMax}.</p>}
       {!pointsOk && <p className="text-xs text-warning-fg">Điểm thưởng từ 0 đến {REWARD_POINTS_MAX.toLocaleString('vi-VN')}, số nguyên.</p>}
       {err && <p role="alert" className="text-xs text-danger-fg">{err}</p>}
@@ -172,7 +181,7 @@ function MissionRow({ item }: { item: AdminMission }) {
           <input name="title" maxLength={80} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} className={INPUT_CLASS} />
         </label>
         <label className="text-xs text-stone-600">
-          <span className="mb-1 block">Điểm thưởng</span>
+          <span className="mb-1 block">Điểm thưởng mỗi khách (phải nhập)</span>
           <input
             name="rewardPoints"
             inputMode="numeric"

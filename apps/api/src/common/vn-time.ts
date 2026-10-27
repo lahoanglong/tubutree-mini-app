@@ -50,3 +50,8 @@ export function formatVnDateTime(d: Date): string {
   const p2 = (n: number) => String(n).padStart(2, '0');
   return `${p2(vn.getUTCHours())}:${p2(vn.getUTCMinutes())} ${p2(vn.getUTCDate())}/${p2(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`;
 }
+
+/** Số ngày lịch VN từ `from` tới `to` (cùng ngày = 0). */
+export function vnDaysBetween(from: Date, to: Date): number {
+  return Math.max(0, Math.round((Date.parse(vnDateKey(to)) - Date.parse(vnDateKey(from))) / 86_400_000));
+}

@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
@@ -43,7 +43,8 @@ describe('AdminEngagementController — nhiệm vụ & quà đổi điểm (ENGA
 });
 
 describe('AdminEngagementService', () => {
-  const make = (prisma: Record<string, unknown>) => new AdminEngagementService(prisma as never);
+  const make = (prisma: Record<string, unknown>) =>
+    new AdminEngagementService({ ...prisma, mission: { findMany: jest.fn().mockResolvedValue([]), ...(prisma.mission as object) } } as never);
 
   it('danh sách nhiệm vụ kèm số lượt đã nhận thưởng', async () => {
     const prisma = {
@@ -102,7 +103,8 @@ describe('CreateMissionDto — nhiệm vụ mới', () => {
 });
 
 describe('AdminEngagementService — thêm và tạm dừng nhiệm vụ', () => {
-  const make = (prisma: Record<string, unknown>) => new AdminEngagementService(prisma as never);
+  const make = (prisma: Record<string, unknown>) =>
+    new AdminEngagementService({ ...prisma, mission: { findMany: jest.fn().mockResolvedValue([]), ...(prisma.mission as object) } } as never);
   const input = { title: 'Mời bạn', description: 'Mời 2 bạn', kind: 'INVITE_COUNT', goal: 2, rewardPoints: 30_000 } as const;
 
   it('tạo nhiệm vụ: mã do hệ thống sinh, không lặp lại, mục tiêu và điểm đúng như nhập', async () => {
@@ -143,5 +145,36 @@ describe('AdminEngagementService — thêm và tạm dừng nhiệm vụ', () =>
     };
     const rows = await make(prisma).listMissions();
     expect(rows.map((r) => [r.kind, r.disabled])).toEqual([['ORDER_COUNT', false], ['REVIEW_COUNT', true]]);
+  });
+});
+
+describe('AdminEngagementService — chặn nhiệm vụ trùng và mốc bắt đầu', () => {
+  const make = (active: unknown[], create = jest.fn().mockImplementation(({ data }) => Promise.resolve(data))) => ({
+    svc: new AdminEngagementService({ mission: { findMany: jest.fn().mockResolvedValue(active), create } } as never),
+    create,
+  });
+  const input = { title: 'Mua 1 đơn', description: '', kind: 'ORDER_COUNT', goal: 1, rewardPoints: 10_000 } as const;
+
+  it('trùng (loại, mục tiêu) với nhiệm vụ seed đang bật (FIRST_ORDER) → 409, không ghi', async () => {
+    const { svc, create } = make([{ code: 'FIRST_ORDER', kind: null, goal: 1, title: 'Đơn hàng đầu tiên' }]);
+    await expect(svc.createMission('a', input)).rejects.toBeInstanceOf(ConflictException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('cùng loại nhưng khác mục tiêu, hoặc nhiệm vụ trùng đang tạm dừng (không nằm trong danh sách đang bật) → tạo được', async () => {
+    const { svc, create } = make([{ code: 'FIRST_ORDER', kind: null, goal: 1, title: 'x' }]);
+    await svc.createMission('a', { ...input, goal: 2 });
+    expect(create).toHaveBeenCalledTimes(1);
+    const none = make([]);
+    await none.svc.createMission('a', input);
+    expect(none.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('nhiệm vụ mới có startsAt = lúc tạo', async () => {
+    const { svc, create } = make([]);
+    const before = Date.now();
+    await svc.createMission('a', input);
+    const at = create.mock.calls[0][0].data.startsAt as Date;
+    expect(at.getTime()).toBeGreaterThanOrEqual(before);
   });
 });

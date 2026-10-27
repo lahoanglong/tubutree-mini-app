@@ -144,16 +144,16 @@ export async function hasReferralEntry(db: Db, reasons: string[]): Promise<boole
 }
 
 /** Số bạn giới thiệu thành công còn hiệu lực, gộp hai sổ: thưởng (kể cả kiểu cũ qua cashback) trừ lần đã thu hồi. */
-export async function countReferralSuccesses(db: Db, referrerId: string): Promise<number> {
+export async function countReferralSuccesses(db: Db, referrerId: string, since: Date | null = null): Promise<number> {
   const count = async (prefix: string) => {
-    const where = { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: prefix } };
+    const where = { userId: referrerId, refType: 'REFERRAL', reason: { startsWith: prefix }, ...(since ? { createdAt: { gte: since } } : {}) };
     const [coin, points] = await Promise.all([db.coinTransaction.count({ where }), db.pointsTransaction.count({ where })]);
     return coin + points;
   };
   const [legacy = 0, granted = 0, revoked = 0] = await Promise.all(
     [LEGACY_REFERRAL_CASHBACK_PREFIX, REFERRAL_ORDER2_PREFIX, REFERRAL_ORDER2_REVOKE_PREFIX].map(count),
   );
-  return legacy + granted - revoked;
+  return since ? Math.max(0, legacy + granted - revoked) : legacy + granted - revoked;
 }
 
 export interface MilestoneState {
