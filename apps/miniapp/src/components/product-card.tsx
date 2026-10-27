@@ -41,8 +41,7 @@ export default function ProductCard({ product }: { product: ProductTileProduct }
       onPress={() => {
         haptic('light');
         // Mở đúng phân loại đang giảm giờ vàng (SP nhiều phân loại: flash chỉ gắn vào một).
-        if (pricing.flashVariationId) navigate(`/product/${product.slug}`, { state: { variationId: pricing.flashVariationId } });
-        else navigate(`/product/${product.slug}`);
+        navigate(`/product/${product.slug}`, pricing.flashVariationId ? { state: { variationId: pricing.flashVariationId } } : undefined);
       }}
     />
   );

@@ -154,7 +154,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     renderPage();
     const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
     fireEvent.click(within(grid).getByText('Nước rửa chén Sachi'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc-sachi');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc-sachi', undefined);
   });
 
   it('khối chương trình đại lý dẫn tới /dealer; đại lý đã duyệt chỉ đổi chữ nút', async () => {
