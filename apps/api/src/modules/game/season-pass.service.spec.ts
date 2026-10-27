@@ -184,6 +184,7 @@ describe('SeasonPassService.claim', () => {
         upsert: jest.fn().mockResolvedValue({ totalSeeds: 510 }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
+      $executeRaw: jest.fn().mockResolvedValue(1),
     });
     const { svc } = svcWith(p, makeConfig({ 'seasonpass.tiers': TIERS, 'game.tank_capacity': 500 }));
     const r = await svc.claim('u1', 0, 'free');
@@ -193,10 +194,9 @@ describe('SeasonPassService.claim', () => {
     expect(upsertArg.update).toEqual({ totalSeeds: { increment: 20 } });
     expect(upsertArg.create.ecoImpact).toEqual(expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }));
     // Vượt cap → clamp guarded (totalSeeds > cap), không set tuyệt đối không điều kiện.
-    expect((p.gameProfile.updateMany as jest.Mock).mock.calls[0][0]).toMatchObject({
-      where: { userId: 'u1', totalSeeds: { gt: 500 } },
-      data: { totalSeeds: 500 },
-    });
+    // Chỉ cắt phần vừa cộng, giữ phần đã vượt sẵn từ nước theo đơn.
+    const [, cap, added, uid, capAgain] = (p.$executeRaw as jest.Mock).mock.calls[0];
+    expect([cap, added, uid, capAgain]).toEqual([500, 20, 'u1', 500]);
     // Guard double-claim atomic: updateMany với filter "chưa có tier" (NOT has), rồi push.
     const guardArg = (p.userSeasonPass.updateMany as jest.Mock).mock.calls[0][0];
     expect(guardArg.where).toEqual({ userId: 'u1', seasonId: 's1', NOT: { claimedFree: { has: 0 } } });

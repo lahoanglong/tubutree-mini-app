@@ -179,6 +179,7 @@ export class GameGardenService {
     let treesPlanted = 0;
     let harvestCount = 0;
     let couponCodes: string[] = [];
+    let couponTerms: { code: string; value: number; minOrder: number; expiresAt: string }[] = [];
     let certificateCode: string | undefined;
     let couponCapped: 'DAY' | 'MONTH' | 'OFF' | undefined;
     let rewardBlocked: 'GUEST' | undefined;
@@ -227,6 +228,7 @@ export class GameGardenService {
           let planted = plot.treesPlanted;
           let harvests = 0;
           const coupons: string[] = [];
+          const terms: { code: string; value: number; minOrder: number; expiresAt: string }[] = [];
           let blocked: 'GUEST' | undefined;
           let certificate: string | undefined;
           let capped: 'DAY' | 'MONTH' | 'OFF' | undefined;
@@ -245,7 +247,9 @@ export class GameGardenService {
             } else if (couponsToday >= dailyCap) {
               capped = 'DAY';
             } else {
-              coupons.push(await this.grantCoupon(userId, harvestAmount, harvestMinOrder, db));
+              const granted = await this.grantCoupon(userId, harvestAmount, harvestMinOrder, db);
+              coupons.push(granted.code);
+              terms.push({ code: granted.code, value: harvestAmount, minOrder: granted.minOrder, expiresAt: granted.expiresAt.toISOString() });
               couponsToday += 1;
               couponsMonth += 1;
             }
@@ -263,6 +267,7 @@ export class GameGardenService {
             treesPlanted: planted,
             harvestCount: harvests,
             couponCodes: coupons,
+            couponTerms: terms,
             blocked,
             certificateCode: certificate,
             capped,
@@ -275,6 +280,7 @@ export class GameGardenService {
       treesPlanted = result.treesPlanted;
       harvestCount = result.harvestCount;
       couponCodes = result.couponCodes;
+      couponTerms = result.couponTerms;
       rewardBlocked = result.blocked;
       certificateCode = result.certificateCode;
       couponCapped = result.capped;
@@ -304,10 +310,11 @@ export class GameGardenService {
     const reward: {
       coupon?: string;
       coupons?: string[];
+      couponTerms?: { code: string; value: number; minOrder: number; expiresAt: string }[];
       certificate?: string;
       species?: { name: string; emoji: string; rarity: string; ecoFact: string | null };
     } = {
-      ...(couponCodes.length > 0 ? { coupon: couponCodes[0], coupons: couponCodes } : {}),
+      ...(couponCodes.length > 0 ? { coupon: couponCodes[0], coupons: couponCodes, couponTerms } : {}),
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
     };
@@ -360,16 +367,17 @@ export class GameGardenService {
    * không có ràng buộc này, coupon AMOUNT dùng được trên BẤT KỲ đơn nào
    * (CouponsService.validateAndCompute chỉ trừ min(value, subtotal), không xét sản phẩm).
    */
-  private async grantCoupon(userId: string, amount: number, minOrder: number, db: Db = this.prisma): Promise<string> {
+  private async grantCoupon(userId: string, amount: number, minOrder: number, db: Db = this.prisma): Promise<{ code: string; minOrder: number; expiresAt: Date }> {
     const code = `${GARDEN_COUPON_PREFIX}${amount}-${userId.slice(-5)}-${Math.floor(Math.random() * 9000 + 1000)}`.toUpperCase();
     const end = new Date();
     end.setDate(end.getDate() + 30);
+    const effectiveMinOrder = Math.max(amount, minOrder);
     await db.coupon.create({
       data: {
         code,
         type: 'AMOUNT',
         value: amount,
-        minOrder: Math.max(amount, minOrder),
+        minOrder: effectiveMinOrder,
         startAt: new Date(),
         endAt: end,
         perUserLimit: 1,
@@ -377,7 +385,7 @@ export class GameGardenService {
         scopeMeta: { userId } as object,
       },
     });
-    return code;
+    return { code, minOrder: effectiveMinOrder, expiresAt: end };
   }
 
   private async plantTree(userId: string, treeType: string, db: Db = this.prisma): Promise<string> {

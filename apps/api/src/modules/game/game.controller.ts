@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
@@ -103,7 +104,10 @@ export class GameController {
 
   @Public()
   @Get('season')
-  activeSeason() { return this.season.getActiveSeason(); }
+  // Không có mùa thì trả JSON `null` thật: Nest bỏ thân khi handler trả null, và client đọc thân rỗng bằng res.json() sẽ ném lỗi.
+  async activeSeason(@Res() res: Response) {
+    res.json(await this.season.getActiveSeason());
+  }
 
   @Public()
   @Get('season/leaderboard')

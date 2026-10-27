@@ -2052,6 +2052,8 @@ model GameWaterEvent {
   delta     Int
   reason    String
   refId     String?
+  /// Đơn giao khi khách chưa có hồ sơ game: delta 0 và chờ tới lần mở game đầu tiên (cộng nếu còn trong tuần VN của đơn).
+  pending   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@unique([reason, refId])

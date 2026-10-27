@@ -29,10 +29,11 @@ function setup(opts: {
     findUnique: jest.fn().mockResolvedValue(opts.recipient ?? { totalSeeds: 50 }),
     upsert: jest.fn().mockResolvedValue({}),
   };
-  const prisma = { user, waterGift, gameProfile } as unknown as PrismaService;
+  const executeRaw = jest.fn().mockResolvedValue(1);
+  const prisma = { user, waterGift, gameProfile, $executeRaw: executeRaw } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify } as unknown as NotificationsService;
-  return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify };
+  return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify, executeRaw };
 }
 
 describe('GameGiftService.giftWater', () => {
@@ -85,20 +86,16 @@ describe('GameGiftService.giftWater', () => {
   });
 
   it('cộng tank người nhận có cap tank_capacity (increment vượt cap → clamp qua updateMany guard)', async () => {
-    const { svc, gameProfile } = setup({ recipient: { totalSeeds: 495 } });
+    const { svc, gameProfile, executeRaw } = setup({ recipient: { totalSeeds: 495 } });
     // Mô phỏng increment atomic thật trong DB: 495 + 10 = 505 (vượt cap 500).
     (gameProfile.upsert as jest.Mock).mockResolvedValue({ totalSeeds: 505 });
     await svc.giftWater('u1', 'friend1');
     expect(gameProfile.upsert.mock.calls[0][0].update.totalSeeds).toEqual({ increment: 10 });
     // Clamp guarded (totalSeeds > cap) thay vì set tuyệt đối không điều kiện — không đè mất phần
     // cộng của thao tác khác diễn ra giữa lúc đọc `upserted` và lúc clamp.
-    const clampCall = (gameProfile.updateMany as jest.Mock).mock.calls.find(
-      (c) => c[0].where.userId === 'friend1',
-    );
-    expect(clampCall![0]).toMatchObject({
-      where: { userId: 'friend1', totalSeeds: { gt: 500 } },
-      data: { totalSeeds: 500 },
-    });
+    // Giữ phần đã vượt sẵn từ nước theo đơn: đích = max(cap, tổng trước lượt này) nên chỉ cắt phần vừa cộng.
+    const [, cap, added, userId, capAgain] = executeRaw.mock.calls[0];
+    expect([cap, added, userId, capAgain]).toEqual([500, 10, 'friend1', 500]);
   });
 });
 

@@ -45,3 +45,19 @@ export async function ensureGameProfile(
     throw e;
   }
 }
+
+/**
+ * Cắt phần tràn của lượt cộng nước vừa rồi về sức chứa bình, nhưng không đụng phần đã vượt sẵn: nước thưởng đơn hàng
+ * được vượt sức chứa (xem GameOrderWaterService), nên "đưa totalSeeds về cap" sẽ xoá nó ở lần điểm danh kế tiếp.
+ * `added` là số vừa increment; tổng trước lượt đó là totalSeeds - added, nên đích = max(cap, tổng trước).
+ */
+export async function clampTankKeepingOverflow(
+  db: Pick<PrismaService, '$executeRaw'>,
+  userId: string,
+  cap: number,
+  added: number,
+): Promise<void> {
+  await db.$executeRaw`
+    UPDATE "game_profiles" SET "totalSeeds" = GREATEST(${cap}::int, "totalSeeds" - ${added}::int)
+     WHERE "userId" = ${userId} AND "totalSeeds" > ${cap}::int`;
+}

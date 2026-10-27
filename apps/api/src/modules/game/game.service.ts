@@ -89,7 +89,10 @@ export class GameService {
   }
 
   async getProfile(userId: string) {
-    const profile = await this.ensureProfile(userId);
+    let profile = await this.ensureProfile(userId);
+    // Lần mở game đầu: cộng nước của các đơn đã giao trước khi khách có hồ sơ (chỉ đơn trong tuần VN này).
+    const claimedNow = (await this.orderWater?.claimPending(userId)) ?? 0;
+    if (claimedNow > 0) profile = await this.ensureProfile(userId);
     const wiltDays = await this.config.get<number>('game.wilt_days', 3);
     const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', 150);
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
@@ -119,7 +122,7 @@ export class GameService {
       configInt(this.config, 'game.quiz_wrong_seeds', QUIZ_WRONG_SEEDS_DEFAULT),
       configInt(this.config, 'game.first_checkin_bonus', FIRST_CHECKIN_BONUS_DEFAULT),
       treeTargetLadder(this.config),
-      this.orderWater?.summary(userId) ?? Promise.resolve(null),
+      this.orderWater?.summary(userId, claimedNow) ?? Promise.resolve(null),
     ]);
     const eco = this.eco(profile.ecoImpact, ladder);
     const streakRepairable =
@@ -337,6 +340,7 @@ export class GameService {
     let harvestCount = 0;
     let harvestedDrops = 0;
     const couponCodes: string[] = [];
+    const couponTerms: { code: string; value: number; minOrder: number; expiresAt: string }[] = [];
     let certificateCode: string | undefined;
     let couponCapped: 'DAY' | 'MONTH' | 'OFF' | undefined;
     let rewardBlocked: 'GUEST' | undefined;
@@ -425,7 +429,9 @@ export class GameService {
             } else if (couponsToday >= dailyCap) {
               couponCapped = 'DAY';
             } else {
-              couponCodes.push(await this.grantCoupon(userId, harvestAmount, tx, harvestMinOrder, HARVEST_COUPON_PREFIX));
+              const granted = await this.grantCouponWithTerms(userId, harvestAmount, tx, harvestMinOrder, HARVEST_COUPON_PREFIX);
+              couponCodes.push(granted.code);
+              couponTerms.push({ code: granted.code, value: harvestAmount, minOrder: granted.minOrder, expiresAt: granted.expiresAt.toISOString() });
               couponsToday += 1;
               couponsMonth += 1;
             }
@@ -477,13 +483,15 @@ export class GameService {
     const reward: {
       coupon?: string;
       coupons?: string[];
+      /** Mệnh giá, đơn tối thiểu và hạn của từng mã, để hộp thu hoạch nói rõ mã dùng thế nào. */
+      couponTerms?: { code: string; value: number; minOrder: number; expiresAt: string }[];
       certificate?: string;
       species?: { name: string; emoji: string; rarity: string; ecoFact: string | null };
       points?: number;
       sprout?: boolean;
     } = {
       ...(sproutHarvested ? { sprout: true } : {}),
-      ...(couponCodes.length > 0 ? { coupon: couponCodes[0], coupons: couponCodes } : {}),
+      ...(couponCodes.length > 0 ? { coupon: couponCodes[0], coupons: couponCodes, couponTerms } : {}),
       ...(certificateCode ? { certificate: certificateCode } : {}),
       ...(species ? { species } : {}),
       ...(sproutPoints > 0 ? { points: sproutPoints } : {}),
@@ -861,6 +869,8 @@ export class GameService {
 
   async getLeaderboard() {
     const top = await this.prisma.gameProfile.findMany({
+      // Hồ sơ chưa từng điểm danh (do đơn hàng hay Đổi rác tạo) không phải người chơi: không được lấp bảng.
+      where: { longestStreak: { gt: 0 } },
       orderBy: [{ longestStreak: 'desc' }, { totalSeeds: 'desc' }],
       take: 10,
       include: { user: { select: { fullName: true } } },

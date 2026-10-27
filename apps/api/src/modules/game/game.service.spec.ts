@@ -1969,6 +1969,12 @@ describe('GameService.getLeaderboard — che tên (đặc tả maskName, C-040)'
     const r = await new GameService(prisma, makeConfig(), analytics).getLeaderboard();
     expect(r).toEqual([{ rank: 1, nickname: expected, streak: 7, treesPlanted: 3 }]);
   });
+
+  it('chỉ lấy người đã có chuỗi: hồ sơ chưa từng điểm danh không lấp bảng', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await new GameService(makePrisma({ gameProfile: { findMany } }), makeConfig(), analytics).getLeaderboard();
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { longestStreak: { gt: 0 } } }));
+  });
 });
 
 describe('GameService.waterTree — nhịp người mới (thang cây, cây mầm, trần tháng)', () => {

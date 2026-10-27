@@ -5,22 +5,24 @@ import { startOfVnWeek, startOfNextVnWeek } from '../../common/vn-time';
 
 type Cfg = Record<string, unknown>;
 
-function make(opts: { cfg?: Cfg; order?: Record<string, unknown> | null; user?: Record<string, unknown>; used?: number; total?: number; existing?: boolean } = {}) {
+function make(opts: { cfg?: Cfg; order?: Record<string, unknown> | null; user?: Record<string, unknown>; used?: number; total?: number; existing?: boolean; noProfile?: boolean; checkoutGroup?: string | null; pending?: { id: string; createdAt: Date }[] } = {}) {
   const cfg: Cfg = { 'game.order_seeds': 100, 'game.order_seeds_weekly_cap': 300, 'game.tank_capacity': 500, ...(opts.cfg ?? {}) };
   const tx = {
-    $queryRaw: jest.fn().mockResolvedValue([{ totalSeeds: opts.total ?? 0 }]),
+    $queryRaw: jest.fn().mockImplementation(async () => (opts.noProfile ? [] : [{ userId: 'u1', totalSeeds: opts.total ?? 0 }])),
     gameWaterEvent: {
       findUnique: jest.fn().mockResolvedValue(opts.existing ? { id: 'e' } : null),
       aggregate: jest.fn().mockResolvedValue({ _sum: { delta: opts.used ?? 0 } }),
       create: jest.fn().mockResolvedValue({}),
+      update: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue(opts.pending ?? []),
     },
     gameProfile: { update: jest.fn().mockResolvedValue({}) },
   };
   const prisma = {
-    order: { findUnique: jest.fn().mockResolvedValue(opts.order === undefined ? { id: 'o1', userId: 'u1', status: 'DELIVERED', placedForCustomer: false } : opts.order) },
+    order: { findUnique: jest.fn().mockResolvedValue(opts.order === undefined ? { id: 'o1', userId: 'u1', status: 'DELIVERED', placedForCustomer: false, checkoutGroup: opts.checkoutGroup ?? null } : opts.order) },
     user: { findUnique: jest.fn().mockResolvedValue(opts.user ?? { zaloId: 'z123', phone: null }) },
     gameProfile: { findUnique: jest.fn().mockResolvedValue({ userId: 'u1' }) },
-    gameWaterEvent: tx.gameWaterEvent,
+    gameWaterEvent: { ...tx.gameWaterEvent, count: jest.fn().mockResolvedValue((opts.pending ?? []).length) },
     $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
   };
   const config = { get: jest.fn(async (k: string, d: unknown) => (k in cfg ? cfg[k] : d)) };
@@ -64,11 +66,40 @@ describe('GameOrderWaterService.grantForOrder', () => {
     expect(startOfVnWeek(now).toISOString()).toBe('2026-10-25T17:00:00.000Z');
   });
 
-  it('bình gần đầy: chỉ cộng phần còn chỗ, không bao giờ âm', async () => {
+  it('nước theo đơn vượt được sức chứa bình: bình 450/500 vẫn nhận đủ 100', async () => {
     const a = make({ total: 450 });
-    await expect(a.svc.grantForOrder('o1')).resolves.toEqual({ granted: 50 });
+    await expect(a.svc.grantForOrder('o1')).resolves.toEqual({ granted: 100 });
     const b = make({ total: 800 });
-    await expect(b.svc.grantForOrder('o1')).resolves.toEqual({ granted: 0 });
+    await expect(b.svc.grantForOrder('o1')).resolves.toEqual({ granted: 100 });
+  });
+
+  it('khách chưa có hồ sơ game: không tạo hồ sơ, ghi dòng chờ delta 0', async () => {
+    const { svc, tx } = make({ noProfile: true });
+    await expect(svc.grantForOrder('o1')).resolves.toEqual({ granted: 0, pending: true });
+    expect(tx.gameWaterEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ delta: 0, pending: true, refId: 'o1' }) });
+    expect(tx.gameProfile.update).not.toHaveBeenCalled();
+  });
+
+  it('nhiều kiện cùng một lần thanh toán dùng chung khoá theo checkoutGroup', async () => {
+    const { svc, tx } = make({ checkoutGroup: 'TUBU1' });
+    await svc.grantForOrder('o1');
+    expect(tx.gameWaterEvent.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { reason_refId: { reason: 'ORDER_DELIVERED', refId: 'grp:TUBU1' } } }));
+    expect(tx.gameWaterEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ refId: 'grp:TUBU1' }) });
+  });
+
+  it('cấu hình âm hoặc chuỗi lạ coi là tắt, không rơi về mặc định', async () => {
+    for (const cfg of [{ 'game.order_seeds': -5 }, { 'game.order_seeds_weekly_cap': 'abc' }]) {
+      const { svc } = make({ cfg });
+      await expect(svc.grantForOrder('o1')).resolves.toEqual({ granted: 0, skipped: 'DISABLED' });
+    }
+  });
+
+  it('khoá users trước game_profiles', async () => {
+    const { svc, tx } = make();
+    await svc.grantForOrder('o1');
+    const sql = tx.$queryRaw.mock.calls.map((c) => (c[0] as string[]).join(''));
+    expect(sql[0]).toContain('"users"');
+    expect(sql[1]).toContain('"game_profiles"');
   });
 
   it('công tắc 0 (số giọt hoặc trần tuần) tắt hẳn, không đụng DB', async () => {
@@ -98,6 +129,27 @@ describe('GameOrderWaterService.grantForOrder', () => {
 describe('GameOrderWaterService.summary', () => {
   it('trả số giọt mỗi đơn, trần tuần và phần đã nhận trong tuần', async () => {
     const { svc } = make({ used: 200 });
-    await expect(svc.summary('u1')).resolves.toEqual({ perOrder: 100, weeklyCap: 300, weeklyGranted: 200 });
+    await expect(svc.summary('u1')).resolves.toEqual({ perOrder: 100, weeklyCap: 300, weeklyGranted: 200, claimedNow: 0 });
+  });
+});
+
+describe('GameOrderWaterService.claimPending', () => {
+  const now = new Date('2026-10-28T03:00:00Z'); // thứ Tư giờ VN
+  const thisWeek = new Date('2026-10-27T03:00:00Z');
+  const lastWeek = new Date('2026-10-20T03:00:00Z');
+
+  it('cộng đơn chờ của tuần này theo trần tuần, đơn tuần trước chỉ đóng', async () => {
+    const { svc, tx } = make({ used: 200, pending: [{ id: 'a', createdAt: lastWeek }, { id: 'b', createdAt: thisWeek }, { id: 'c', createdAt: thisWeek }] });
+    await expect(svc.claimPending('u1', now)).resolves.toBe(100);
+    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'a' }, data: { pending: false, delta: 0 } });
+    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'b' }, data: { pending: false, delta: 100 } });
+    expect(tx.gameWaterEvent.update).toHaveBeenCalledWith({ where: { id: 'c' }, data: { pending: false, delta: 0 } });
+    expect(tx.gameProfile.update).toHaveBeenCalledWith({ where: { userId: 'u1' }, data: { totalSeeds: { increment: 100 } } });
+  });
+
+  it('không có đơn chờ: không mở giao dịch', async () => {
+    const { svc, prisma } = make();
+    await expect(svc.claimPending('u1', now)).resolves.toBe(0);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

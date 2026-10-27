@@ -71,4 +71,14 @@ describe('Mùa Vườn Xanh (admin)', () => {
     await expect(svc.update('nope', { name: 'x' })).rejects.toBeInstanceOf(NotFoundException);
     await expect(svc.remove('nope')).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('chỉ xoá được mùa sắp tới; mùa đang chạy hoặc đã hết hạn bị chặn', async () => {
+    const now = Date.now();
+    const mk = (id: string, from: number, to: number) => ({ id, name: id, theme: null, region: null, featuredSpeciesIds: [], startAt: new Date(now + from * 86_400_000), endAt: new Date(now + to * 86_400_000) });
+    const { prisma, svc } = make([mk('past', -20, -10), mk('live', -1, 5), mk('next', 10, 20)]);
+    await expect(svc.remove('past')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.remove('live')).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.season.delete).not.toHaveBeenCalled();
+    await expect(svc.remove('next')).resolves.toEqual({ deleted: true });
+  });
 });

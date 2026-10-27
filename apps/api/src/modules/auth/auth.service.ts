@@ -648,12 +648,28 @@ export class AuthService {
            WHERE "userId" = ${tid} AND "pointId" = ${row.pointId}`;
       }
 
-      // 7) Game: chỉ chuyển nguyên cụm khi target chưa có GameProfile (chưa từng chơi). Cả hai
+      // 7) Game: chỉ chuyển nguyên cụm khi target chưa chơi (không có GameProfile, hoặc chỉ có hồ sơ rỗng). Cả hai
       //    cùng chơi thì giữ game của target, cụm của khách ở lại — ghép hai khu vườn (ô đất,
       //    cấp cây, chuỗi tưới) cần quyết định riêng.
       // Sổ nước thưởng đơn hàng đi theo đơn (đơn đã chuyển sang target ở trên), nên chuyển luôn dù hồ sơ game có chuyển hay không.
       await tx.gameWaterEvent.updateMany({ where: { userId: gid }, data: { userId: tid } });
-      const targetPlays = (await tx.gameProfile.count({ where: { userId: tid } })) > 0;
+      // Hồ sơ game rỗng của target (do nước theo đơn hay Đổi rác tạo, chưa điểm danh/tưới/thu hoạch/mở lô) không phải "đã chơi":
+      // thay bằng hồ sơ khách và cộng số giọt nước của nó vào, để khách không mất vườn chơi thử.
+      const targetProfile = await tx.gameProfile.findUnique({ where: { userId: tid } });
+      let targetPlays = targetProfile !== null;
+      if (targetProfile && !targetProfile.lastCheckInAt && !targetProfile.lastWateredAt) {
+        const treesPlanted = Number((targetProfile.ecoImpact as { treesPlanted?: unknown } | null)?.treesPlanted ?? 0);
+        const [trees, plots, guestProfile] = await Promise.all([
+          tx.plantedTree.count({ where: { userId: tid } }),
+          tx.gardenPlot.count({ where: { userId: tid } }),
+          tx.gameProfile.findUnique({ where: { userId: gid }, select: { userId: true } }),
+        ]);
+        if (treesPlanted === 0 && trees === 0 && plots === 0 && guestProfile) {
+          await tx.gameProfile.delete({ where: { userId: tid } });
+          await tx.gameProfile.update({ where: { userId: gid }, data: { totalSeeds: { increment: targetProfile.totalSeeds } } });
+          targetPlays = false;
+        }
+      }
       if (!targetPlays) {
         await tx.gameProfile.updateMany({ where: { userId: gid }, data: { userId: tid } });
         await tx.plantedTree.updateMany({ where: { userId: gid }, data: { userId: tid } });

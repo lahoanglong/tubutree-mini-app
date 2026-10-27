@@ -82,6 +82,8 @@ export class AdminGameSeasonService {
   async remove(id: string) {
     const found = await this.prisma.season.findUnique({ where: { id } });
     if (!found) throw new NotFoundException('Không tìm thấy mùa.');
+    // Mùa đang chạy hay đã kết thúc còn dữ liệu người chơi (xếp hạng, chặng mùa): chỉ mùa sắp tới mới xoá được.
+    if (this.status(found) !== 'UPCOMING') throw new BadRequestException('Chỉ xoá được mùa sắp tới. Mùa đang chạy hoặc đã kết thúc được giữ lại.');
     await this.prisma.season.delete({ where: { id } });
     return { deleted: true as const };
   }

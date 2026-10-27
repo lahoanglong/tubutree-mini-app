@@ -30,6 +30,7 @@ function prisma(profile: Record<string, unknown> | null, over: Record<string, un
       update: jest.fn().mockResolvedValue({}),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    $executeRaw: jest.fn().mockResolvedValue(1),
   };
   return { ...base, ...over } as unknown as PrismaService;
 }
@@ -304,12 +305,6 @@ function fakeDb(initial: Record<string, unknown>) {
         return { count: 0 };
       }
       for (const k of ['streakDays', 'streakFreezes'] as const) if (k in where && where[k] !== state[k]) return { count: 0 };
-      const gt = (where.totalSeeds as { gt?: number } | undefined)?.gt;
-      if (gt !== undefined) {
-        if ((state.totalSeeds as number) <= gt) return { count: 0 };
-        state.totalSeeds = data.totalSeeds;
-        return { count: 1 };
-      }
       for (const [k, v] of Object.entries(data)) {
         if (v && typeof v === 'object' && 'increment' in (v as object)) state[k] = (state[k] as number) + (v as { increment: number }).increment;
         else state[k] = v;
@@ -317,7 +312,13 @@ function fakeDb(initial: Record<string, unknown>) {
       return { count: 1 };
     }),
   };
-  return { prisma: { gameProfile } as unknown as PrismaService, state };
+  // clampTankKeepingOverflow: đích = max(cap, tổng trước lượt cộng); values = [cap, added, userId, cap].
+  const executeRaw = jest.fn(async (_sql: unknown, cap: number, added: number) => {
+    const total = state.totalSeeds as number;
+    if (total > cap) state.totalSeeds = Math.max(cap, total - added);
+    return 1;
+  });
+  return { prisma: { gameProfile, $executeRaw: executeRaw } as unknown as PrismaService, state };
 }
 
 describe('GameEconomyService.checkIn — nhịp người mới', () => {
@@ -434,12 +435,6 @@ describe('GameEconomyService.collectDew — số nước thật', () => {
     const { prisma: p, state } = fakeDb(prof({ totalSeeds: 495, lastDewAt: null }));
     // fakeDb.updateMany xử lý lastDewAt như điểm danh: thêm điều kiện riêng cho dew
     (p.gameProfile.updateMany as jest.Mock).mockImplementation(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
-      const gt = (where.totalSeeds as { gt?: number } | undefined)?.gt;
-      if (gt !== undefined) {
-        if ((state.totalSeeds as number) <= gt) return { count: 0 };
-        state.totalSeeds = data.totalSeeds;
-        return { count: 1 };
-      }
       state.totalSeeds = (state.totalSeeds as number) + (data.totalSeeds as { increment: number }).increment;
       return { count: 1 };
     });
