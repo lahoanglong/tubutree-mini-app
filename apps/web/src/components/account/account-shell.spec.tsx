@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ phase: 'authenticated', path: '/tai-khoan/vi-tubu' }));
-vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+const mocks = vi.hoisted(() => ({ phase: 'authenticated', restoring: false, path: '/tai-khoan/vi-tubu' }));
+vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => mocks.restoring }));
 vi.mock('@/lib/shell-pathname', () => ({ useShellPathname: () => mocks.path }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => p !== '/kho-qua/cua-toi' }));
 
@@ -58,8 +58,9 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     mocks.phase = 'authenticated';
   });
 
-  it('đang khôi phục phiên: đã dựng khung hai cột kèm menu khung xương để nội dung không dịch khi phiên về', () => {
+  it('đang khôi phục một phiên có sẵn: dựng sẵn khung hai cột kèm menu khung xương để nội dung không dịch khi phiên về', () => {
     mocks.phase = 'loading';
+    mocks.restoring = true;
     const c = mount(
       <AccountShell>
         <main>đang tải</main>
@@ -68,6 +69,20 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     expect(c.firstElementChild?.className).toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
     expect(c.querySelector('[data-testid="account-shell-nav-skeleton"]')).not.toBeNull();
     expect(c.querySelector('nav')).toBeNull();
+    mocks.phase = 'authenticated';
+    mocks.restoring = false;
+  });
+
+  it('khách vãng lai ở phase loading (SSR, lần render đầu) không có cờ phiên: không dựng khung, không nhảy ngang', () => {
+    mocks.phase = 'loading';
+    mocks.restoring = false;
+    const c = mount(
+      <AccountShell>
+        <main>đang tải</main>
+      </AccountShell>,
+    );
+    expect(c.firstElementChild?.className).not.toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
+    expect(c.querySelector('[data-testid="account-shell-nav-skeleton"]')).toBeNull();
     mocks.phase = 'authenticated';
   });
 });
