@@ -15,6 +15,8 @@ function seededTemplates(): SeedTemplate[] {
 
 const usedIn = (body: string) => [...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]!))];
 
+const KNOWN_OUTSIDE_TABLE: string[] = [];
+
 describe('Biến của mẫu thông báo', () => {
   const seeded = seededTemplates();
 
@@ -73,13 +75,44 @@ describe('Biến của mẫu thông báo', () => {
 
 
 /**
- * Đối chiếu với chỗ gọi: mọi biến mà mã điền cho một mẫu (object literal ở `notify(user, 'MÃ', { ... })` hoặc `template: 'MÃ', data: () => ({ ... })`)
- * phải có trong bảng, nếu không admin không thêm được biến đó vào câu dù mã đã điền. Khoá nội bộ chỉ dùng để điều hướng không tính.
+ * Đối chiếu với chỗ gọi: mọi biến mà mã điền cho một mẫu phải có trong bảng, nếu không admin không thêm được biến đó vào câu dù mã đã điền.
+ * Dò ba dạng: `notify(user, MÃ, { ... })` / `notifySafe(n, user, MÃ, { ... })`, và object `{ template|templateCode: MÃ, data: ... }`.
+ * MÃ có thể là chuỗi, nhánh `a ? 'X' : 'Y'`, hằng thành viên như `CTV_NOTIFICATION.NEW` hay hằng cùng tên ở file khác. Dữ liệu có thể là
+ * object literal hoặc biến cục bộ `const data = { ... }` (kèm `data.khoá = ...`). Chỗ KHÔNG giải mã được tĩnh phải có trong
+ * DYNAMIC_SITES kèm lý do (và nếu khai `codes` thì khoá của object literal ở đó vẫn được kiểm: `each` = phải có ở từng mã, mặc định = có ở ít nhất một mã); chỗ chưa liệt kê làm spec đỏ.
  */
 describe('Bảng biến khớp các chỗ gọi notify()', () => {
   const INTERNAL_KEYS = new Set(['post_id', 'route', 'product_slug']);
   const SRC = join(__dirname, '../..');
-  const codes = Object.keys(TEMPLATE_VARIABLES);
+  // Tên hàm → vị trí của mã mẫu trong danh sách tham số (dữ liệu ngay sau đó). notifyOwner / notifyMerchantOwner là hàm bọc chuyển tiếp xuống notify().
+  const NOTIFY_CALLS: Record<string, number> = { notify: 1, notifySafe: 2, notifyOwner: 1, notifyMerchantOwner: 4 };
+
+  /** Hàm bọc cố định mã mẫu: tên hàm → mã và vị trí tham số dữ liệu. */
+  const FIXED_CODE_CALLS: Record<string, { code: string; dataAt: number }> = {
+    notifyBonusAdjustedAfterCommit: { code: 'DEALER_BONUS_ADJUSTED', dataAt: 2 },
+  };
+
+  /** Chỗ gọi không giải mã được tĩnh: `tệp|đoạn mã của mã mẫu` (hoặc `|data: đoạn mã dữ liệu`) → lý do, và `codes` nếu biết mã nào đi qua. */
+  const DYNAMIC_SITES: Record<string, { reason: string; codes?: string[]; each?: boolean }> = {
+    'modules/dealer/dealer.service.ts|code': { reason: 'Hàm gửi báo đại lý nhận mã mẫu làm tham số (DEALER_REWARD_CLAIM_*); chỗ gọi truyền chuỗi cùng object literal.', codes: ['DEALER_REWARD_CLAIM_NEW', 'DEALER_REWARD_CLAIM_APPROVED', 'DEALER_REWARD_CLAIM_REJECTED', 'DEALER_REWARD_CLAIM_PAID'] },
+    'modules/dealer/dealer.service.ts|\'DEALER_BONUS_ADJUSTED\'|data:data': { reason: 'Gửi sau commit; dữ liệu là tham số của notifyBonusAdjustedAfterCommit, được dò ở chỗ gọi hàm đó (FIXED_CODE_CALLS).' },
+    'modules/external-points/external-claim-status.ts|code': { reason: 'notifySafe chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifySafe được dò (NOTIFY_CALLS).' },
+    'modules/feed/community-feed.service.ts|template': { reason: 'Hàm gửi báo tác giả nhận mã (thích/bình luận) và hàm tạo dữ liệu bất đồng bộ làm tham số; chỗ gọi truyền chuỗi và thunk.', codes: ['COMMUNITY_POST_LIKED', 'COMMUNITY_POST_COMMENTED'] },
+    'modules/integrations/gomdon/gomdon-alert.service.ts|template': { reason: 'Tham số template của alert() (mặc định OPS_GOMDON_ALERT hoặc OPS_PANCAKE_ALERT), dữ liệu { order_code, message } ngay tại chỗ.', codes: ['OPS_GOMDON_ALERT', 'OPS_PANCAKE_ALERT'] },
+    'modules/merchant/merchant-fulfilment.service.ts|template': { reason: 'Hàm bọc notifyOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifyOwner được dò (NOTIFY_CALLS).' },
+    'modules/ops/cron-run.service.ts|template': { reason: 'Bộ chuyển tiếp cho notifyAdmins; chỗ gọi notifyAdmins được dò theo dạng { template, data }.' },
+    'modules/orders/merchant-order-notify.ts|template': { reason: 'Hàm bọc notifyMerchantOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi hàm đó được dò (NOTIFY_CALLS).' },
+    'modules/orders/order-status.service.ts|opts.notifyEvent ?? `ORDER_${targetStatus}`': { reason: 'Mã theo trạng thái đơn (ORDER_<trạng thái>) hoặc mã người gọi chỉ định; dữ liệu là biến cục bộ notifyData cùng khoá cho mọi mã.', codes: ['ORDER_CONFIRMED', 'ORDER_PACKED', 'ORDER_SHIPPING', 'ORDER_DELIVERED', 'ORDER_CANCELLED', 'ORDER_RETURNED'] },
+    'modules/orders/order-status.service.ts|`ORDER_${order.status}`': { reason: 'Mã theo trạng thái đơn đã đóng (huỷ hoặc trả); dữ liệu là object literal tại chỗ.', codes: ['ORDER_CANCELLED', 'ORDER_RETURNED'] },
+    'modules/storefront/storefront-admin.service.ts|template': { reason: 'Hàm bọc notifyOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifyOwner được dò (NOTIFY_CALLS).' },
+    'modules/wallet/referral-notify.ts|templateCode': { reason: 'Mã và dữ liệu do referralNoticeMessage trả về; các object { templateCode, data } trong hàm đó được dò theo dạng { templateCode, data }.' },
+    'common/notify-admins.ts|notice.template': { reason: 'Hàm chuyển tiếp mẫu và dữ liệu của người gọi; chỗ gọi notifyAdmins được dò theo dạng { template, data }.' },
+    'modules/vouchers/vouchers.service.ts|opts.templateCode': {
+      reason: 'Hàm dùng chung cho mọi loại mã giảm giá; mã mẫu do người gọi truyền (templateCode) và dữ liệu là object literal ngay tại chỗ.',
+      codes: ['WELCOME_VOUCHER', 'BIRTHDAY_VOUCHER', 'WINBACK_VOUCHER', 'MILESTONE_VOUCHER', 'SECOND_ORDER_VOUCHER'],
+      each: true,
+    },
+  };
 
   function sourceFiles(dir: string, out: string[] = []): string[] {
     for (const f of readdirSync(dir)) {
@@ -90,34 +123,30 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     return out;
   }
 
-  const literalOf = (n: ts.Node | undefined): ts.ObjectLiteralExpression | null => {
-    if (!n) return null;
-    if (ts.isObjectLiteralExpression(n)) return n;
-    if (ts.isParenthesizedExpression(n)) return literalOf(n.expression);
-    if ((ts.isArrowFunction(n) || ts.isFunctionExpression(n)) && !ts.isBlock(n.body)) return literalOf(n.body);
-    return null;
+  const files = sourceFiles(SRC).map((file) => {
+    const text = readFileSync(file, 'utf-8');
+    return { file, rel: file.slice(SRC.length + 1), text, sf: ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true) };
+  });
+
+  const unwrap = (n: ts.Node | undefined): ts.Node | undefined => {
+    let cur = n;
+    while (cur && (ts.isParenthesizedExpression(cur) || ts.isAsExpression(cur) || ts.isSatisfiesExpression(cur) || ts.isNonNullExpression(cur))) cur = cur.expression;
+    return cur;
   };
 
-  it('không có biến nào mã điền mà bảng thiếu', () => {
-    const filled: { code: string; key: string; site: string }[] = [];
-    const quoted = new RegExp(`['"](${codes.join('|')})['"]`);
-    for (const file of sourceFiles(SRC)) {
-      const text = readFileSync(file, 'utf-8');
-      if (!quoted.test(text)) continue;
-      const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+  /** Hằng chuỗi: `const A = 'X'` → A, `const M = { K: 'X' }` → M.K. Trùng tên khác giá trị thì bỏ (không giải mã được). */
+  const CONSTS = (() => {
+    const map = new Map<string, string | null>();
+    const set = (k: string, v: string) => map.set(k, map.has(k) && map.get(k) !== v ? null : v);
+    for (const { sf } of files) {
       const visit = (n: ts.Node): void => {
-        if (ts.isStringLiteral(n) && TEMPLATE_VARIABLES[n.text]) {
-          let obj: ts.ObjectLiteralExpression | null = null;
-          const parent = n.parent;
-          if (ts.isCallExpression(parent)) obj = literalOf(parent.arguments[parent.arguments.indexOf(n as ts.Expression) + 1]);
-          else if (ts.isPropertyAssignment(parent) && ts.isObjectLiteralExpression(parent.parent)) {
-            const data = parent.parent.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && /^(data|vars|variables|params)$/.test(p.name.getText(sf)));
-            obj = literalOf(data?.initializer);
-          }
-          if (obj) {
-            for (const prop of obj.properties) {
-              if (ts.isSpreadAssignment(prop) || !prop.name) continue;
-              filled.push({ code: n.text, key: prop.name.getText(sf).replace(/['"]/g, ''), site: `${file.slice(SRC.length)}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}` });
+        if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer) {
+          const init = unwrap(n.initializer);
+          if (init && ts.isStringLiteral(init)) set(n.name.text, init.text);
+          else if (init && ts.isObjectLiteralExpression(init)) {
+            for (const p of init.properties) {
+              const v = ts.isPropertyAssignment(p) ? unwrap(p.initializer) : undefined;
+              if (v && ts.isStringLiteral(v) && p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name))) set(`${n.name.text}.${p.name.text}`, v.text);
             }
           }
         }
@@ -125,9 +154,150 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
       };
       visit(sf);
     }
-    expect(filled.length).toBeGreaterThan(50);
-    const missing = filled.filter((f) => !INTERNAL_KEYS.has(f.key) && !f.key.endsWith('_id') && !TEMPLATE_VARIABLES[f.code]!.includes(f.key));
+    return map;
+  })();
+
+  /** Khai báo `const name = ...` gần nhất, tìm từ hàm bao quanh ra ngoài. */
+  const localInit = (id: ts.Identifier): ts.Expression | null => {
+    let scope: ts.Node | undefined = id.parent;
+    while (scope) {
+      if (ts.isFunctionLike(scope) || ts.isSourceFile(scope)) {
+        let found: ts.Expression | null = null;
+        const visit = (c: ts.Node): void => {
+          if (found) return;
+          if (ts.isVariableDeclaration(c) && ts.isIdentifier(c.name) && c.name.text === id.text && c.initializer) found = c.initializer;
+          else if (c !== scope && ts.isFunctionLike(c)) return;
+          else ts.forEachChild(c, visit);
+        };
+        ts.forEachChild(scope, visit);
+        if (found) return found;
+      }
+      scope = scope.parent;
+    }
+    return null;
+  };
+
+  /** Các mã mẫu mà biểu thức có thể mang; null nếu không giải mã được tĩnh. */
+  const codesOf = (e: ts.Node | undefined): string[] | null => {
+    const n = unwrap(e);
+    if (!n) return null;
+    if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) return [n.text];
+    if (ts.isConditionalExpression(n)) {
+      const a = codesOf(n.whenTrue);
+      const b = codesOf(n.whenFalse);
+      return a && b ? [...a, ...b] : null;
+    }
+    if (ts.isPropertyAccessExpression(n) || ts.isIdentifier(n)) {
+      // Chỉ tên hằng viết hoa (CTV_NOTIFICATION.NEW, OPS_PAYMENT_TEMPLATE): tên thường như `code` trùng khắp nơi, đi theo khai báo cục bộ.
+      const v = /^[A-Z][A-Z0-9_]*(\.\w+)?$/.test(n.getText()) ? CONSTS.get(n.getText()) : undefined;
+      if (typeof v === 'string') return [v];
+      const init = ts.isIdentifier(n) ? localInit(n) : null;
+      return init ? codesOf(init) : null;
+    }
+    return null;
+  };
+
+  const keyName = (p: ts.ObjectLiteralElementLike, sf: ts.SourceFile) => (p.name ? p.name.getText(sf).replace(/['"]/g, '') : null);
+
+  /** Khoá của object literal, hoặc của biến cục bộ `const x = {...}` kèm các `x.khoá = ...` trong cùng hàm; null nếu không giải mã được. */
+  const keysOf = (e: ts.Node | undefined, sf: ts.SourceFile): string[] | null => {
+    const n = unwrap(e);
+    if (!n) return null;
+    if (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) {
+      if (!ts.isBlock(n.body)) return keysOf(unwrap(n.body) as ts.Node, sf);
+      const ret = n.body.statements.find((st): st is ts.ReturnStatement => ts.isReturnStatement(st));
+      return ret?.expression ? keysOf(ret.expression, sf) : null;
+    }
+    if (ts.isObjectLiteralExpression(n)) return n.properties.flatMap((p) => (ts.isSpreadAssignment(p) ? [] : [keyName(p, sf)!])).filter(Boolean);
+    if (!ts.isIdentifier(n)) return null;
+    const init = localInit(n);
+    const base = init ? keysOf(init, sf) : null;
+    if (!base) return null;
+    // Khoá gán thêm sau đó: `x.khoá = ...` / `x['khoá'] = ...` trong cùng hàm với chỗ dùng.
+    let scope: ts.Node = n;
+    while (scope.parent && !ts.isFunctionLike(scope)) scope = scope.parent;
+    const extra: string[] = [];
+    const visit = (c: ts.Node): void => {
+      if (ts.isBinaryExpression(c) && c.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+        const l = c.left;
+        if (ts.isPropertyAccessExpression(l) && ts.isIdentifier(l.expression) && l.expression.text === n.text) extra.push(l.name.text);
+        if (ts.isElementAccessExpression(l) && ts.isIdentifier(l.expression) && l.expression.text === n.text && ts.isStringLiteral(l.argumentExpression)) extra.push(l.argumentExpression.text);
+      }
+      ts.forEachChild(c, visit);
+    };
+    visit(scope);
+    return [...base, ...extra];
+  };
+
+  interface Found { code: string; key: string; site: string; group: string[] }
+  const scan = () => {
+    const filled: Found[] = [];
+    const undecodable: { site: string; id: string; reason: string }[] = [];
+    const dynamicHit = new Set<string>();
+    for (const { rel, sf } of files) {
+      const where = (n: ts.Node) => `${rel}:${sf.getLineAndCharacterOfPosition(n.getStart()).line + 1}`;
+      const record = (codeExpr: ts.Node | undefined, dataExpr: ts.Node | undefined, at: ts.Node) => {
+        const cs = codesOf(codeExpr);
+        const ks = keysOf(dataExpr, sf);
+        if (cs && ks) {
+          for (const code of cs) for (const key of ks) filled.push({ code, key, site: where(at), group: cs });
+          return;
+        }
+        const codeId = `${rel}|${codeExpr?.getText(sf)}`;
+        const id = cs ? `${codeId}|data:${dataExpr?.getText(sf)}` : codeId;
+        const dyn = DYNAMIC_SITES[id];
+        if (!dyn) return void undecodable.push({ site: where(at), id, reason: cs ? 'dữ liệu không giải mã được tĩnh' : 'mã mẫu không giải mã được tĩnh' });
+        dynamicHit.add(id);
+        const declared = dyn.codes ?? [];
+        for (const c of declared) for (const key of ks ?? []) filled.push({ code: c, key, site: where(at), group: dyn.each ? [c] : declared });
+      };
+      const visit = (n: ts.Node): void => {
+        if (ts.isCallExpression(n)) {
+          const c = n.expression;
+          const name = ts.isPropertyAccessExpression(c) ? c.name.text : ts.isIdentifier(c) ? c.text : null;
+          const at = name ? NOTIFY_CALLS[name] : undefined;
+          const fixed = name ? FIXED_CODE_CALLS[name] : undefined;
+          if (at !== undefined && n.arguments.length > at + 1) record(n.arguments[at], n.arguments[at + 1], n);
+          else if (fixed && n.arguments.length > fixed.dataAt) {
+            const keys = keysOf(n.arguments[fixed.dataAt], sf);
+            if (keys) for (const key of keys) filled.push({ code: fixed.code, key, site: where(n), group: [fixed.code] });
+          }
+        } else if (ts.isObjectLiteralExpression(n)) {
+          const tpl = n.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && /^(template|templateCode)$/.test(p.name.getText(sf)));
+          const data = n.properties.find((p): p is ts.PropertyAssignment => ts.isPropertyAssignment(p) && /^(data|vars|variables|params)$/.test(p.name.getText(sf)));
+          if (tpl && data && codesOf(tpl.initializer)) record(tpl.initializer, data.initializer, n);
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+    return { filled, undecodable, dynamicHit };
+  };
+
+  const result = scan();
+
+  it('không có biến nào mã điền mà bảng thiếu', () => {
+    expect(result.filled.length).toBeGreaterThan(80);
+    // Chỗ chọn mã bằng `a ? 'X' : 'Y'` điền chung một object: biến chỉ cần có ở một trong các mã (nhánh kia không dùng).
+    const missing = result.filled.filter((f) => TEMPLATE_VARIABLES[f.code] && !INTERNAL_KEYS.has(f.key) && !f.key.endsWith('_id') && !f.group.some((c) => TEMPLATE_VARIABLES[c]?.includes(f.key)));
     expect(missing).toEqual([]);
+  });
+
+  it('mã mẫu điền ở chỗ gọi đều có trong bảng (hoặc là mẫu tự thêm ngoài bảng)', () => {
+    const unknown = [...new Set(result.filled.filter((f) => !TEMPLATE_VARIABLES[f.code]).map((f) => `${f.code} @ ${f.site}`))];
+    // Mẫu ngoài bảng (không có trong seed) không kiểm được; liệt kê để một mã gõ sai không âm thầm lọt.
+    expect(unknown).toEqual(KNOWN_OUTSIDE_TABLE);
+  });
+
+  it('mọi chỗ không giải mã được tĩnh đều đã khai trong DYNAMIC_SITES kèm lý do', () => {
+    const missing = result.undecodable.filter((u) => !DYNAMIC_SITES[u.id]);
+    expect(missing.map((u) => `${u.site} ${u.id} (${u.reason})`)).toEqual([]);
+  });
+
+  it('DYNAMIC_SITES không còn mục thừa (chỗ gọi đã đổi hay đã giải mã được)', () => {
+    const seen = new Set([...result.undecodable.map((u) => u.id), ...result.dynamicHit]);
+    expect(Object.keys(DYNAMIC_SITES).filter((k) => !seen.has(k))).toEqual([]);
+    for (const [k, v] of Object.entries(DYNAMIC_SITES)) expect({ k, reason: v.reason.length > 10 }).toEqual({ k, reason: true });
   });
 
   it('bốn biến mã điền mà trước đây bảng thiếu', () => {
@@ -135,5 +305,16 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     expect(TEMPLATE_VARIABLES.GAME_CHECKIN_REMINDER).toContain('freezes');
     expect(TEMPLATE_VARIABLES.REFERRAL_REWARD_REVOKED).toEqual(expect.arrayContaining(['points', 'debt']));
     expect(TEMPLATE_VARIABLES.DEALER_CREDIT_PAYMENT_REPORTED).toContain('note');
+  });
+
+  it('mã giảm giá sinh nhật, kéo khách quay lại, cột mốc điền min_order_note (vouchers.service.ts) nên bảng có biến này', () => {
+    for (const code of ['BIRTHDAY_VOUCHER', 'WINBACK_VOUCHER', 'MILESTONE_VOUCHER']) expect(TEMPLATE_VARIABLES[code]).toContain('min_order_note');
+  });
+
+  it('dò đúng chỗ dùng hằng thành viên (CTV_NOTIFICATION) và nhánh a ? X : Y', () => {
+    const codesSeen = new Set(result.filled.map((f) => f.code));
+    for (const c of ['COMMISSION_NEW', 'COMMISSION_APPROVED', 'DEALER_APPLICATION_APPROVED', 'DEALER_APPLICATION_REJECTED', 'MERCHANT_PRODUCT_APPROVED', 'MERCHANT_PRODUCT_REJECTED', 'REFERRAL_REWARD_PAID', 'REFERRAL_REWARD_REVOKED', 'DEALER_BONUS_ADJUSTED', 'COMMUNITY_NEW_ANSWER', 'COMMUNITY_EXPERT_REPLIED', 'BIRTHDAY_VOUCHER']) {
+      expect(codesSeen.has(c)).toBe(true);
+    }
   });
 });
