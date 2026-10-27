@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ProgressBar } from './progress-bar';
 
 describe('ProgressBar', () => {
@@ -17,5 +17,10 @@ describe('ProgressBar', () => {
     expect(screen.getByRole('progressbar', { name: 'Bước 1 trên 4' })).toHaveAttribute('aria-valuenow', '1');
     rerender(<ProgressBar value={2} max={4} label="Tiến độ nhiệm vụ" />);
     expect(screen.getByRole('progressbar', { name: 'Tiến độ nhiệm vụ' })).toBeInTheDocument();
+  });
+  it('tên rỗng thì báo lỗi ngay khi phát triển', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(() => render(<ProgressBar value={1} max={4} ariaLabel="  " />)).toThrow(/ariaLabel/);
+    err.mockRestore();
   });
 });

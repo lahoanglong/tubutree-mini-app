@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 import { ProgressBar } from './progress-bar';
 
@@ -39,5 +39,11 @@ describe('ProgressBar', () => {
     expect(bar.getAttribute('aria-valuemax')).toBe('10');
     expect(bar.getAttribute('aria-label')).toBe('Đã bán');
     expect(fill(container).className).toContain('bg-promo-solid');
+  });
+
+  it('tên rỗng thì báo lỗi ngay khi phát triển', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(() => mount(<ProgressBar value={1} max={4} ariaLabel="" />)).toThrow(/ariaLabel/);
+    err.mockRestore();
   });
 });

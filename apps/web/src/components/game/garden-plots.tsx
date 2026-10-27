@@ -72,7 +72,7 @@ export function GardenPlots({
                 </button>
               </div>
               <div className="mt-2">
-                <ProgressBar value={ppct} max={100} ariaLabel="Tiến độ lớn của cây" />
+                <ProgressBar value={ppct} max={100} ariaLabel={`Lô ${p.slot}, ${p.treeType}: tiến độ lớn của cây`} />
               </div>
             </div>
           );

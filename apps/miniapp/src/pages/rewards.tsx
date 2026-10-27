@@ -176,7 +176,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
           {!preview && s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
           {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
         </div>
-        {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} ariaLabel="Điểm đang có so với điểm cần để đổi" />}
+        {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} ariaLabel={`${reward.name}: điểm đang có so với điểm cần để đổi`} />}
       </div>
     </Card>
   );

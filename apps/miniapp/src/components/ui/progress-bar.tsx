@@ -9,6 +9,8 @@ export type ProgressBarProps = ProgressBarBase & ({ label: string; ariaLabel?: s
 
 /** Thay 12 thanh tự vẽ (audit A4-19). */
 export function ProgressBar({ value, max, tone = 'brand', label, ariaLabel }: ProgressBarProps) {
+  // Kiểu đã bắt buộc có tên; kiểm thêm lúc chạy vì chuỗi rỗng (vd tên món chưa tải) vẫn qua được kiểu.
+  if (import.meta.env.DEV && !(label ?? ariaLabel)?.trim()) throw new Error('ProgressBar cần label hoặc ariaLabel không rỗng');
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   return (
     <div>

@@ -119,7 +119,7 @@ function CourseCard({ course, onOpen }: { course: AcademyCourseSummary; onOpen: 
           <>
             {course.description && <span style={ellipsis}>{course.description}</span>}
             <div style={{ margin: '8px 0 4px' }}>
-              <ProgressBar value={pct} max={100} ariaLabel="Tiến độ khoá học" />
+              <ProgressBar value={pct} max={100} ariaLabel={`${course.title}: tiến độ khoá học`} />
             </div>
             {course.isCompleted ? (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

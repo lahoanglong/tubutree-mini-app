@@ -9,6 +9,8 @@ export type ProgressBarProps = ProgressBarBase & ({ label: string; ariaLabel?: s
 
 /** Thanh tiến độ, cùng API với `ProgressBar` của Mini App. `max` ≤ 0 coi như 0%. */
 export function ProgressBar({ value, max, tone = 'brand', label, ariaLabel }: ProgressBarProps) {
+  // Kiểu đã bắt buộc có tên; kiểm thêm lúc chạy vì chuỗi rỗng (vd tên món chưa tải) vẫn qua được kiểu.
+  if (process.env.NODE_ENV !== 'production' && !(label ?? ariaLabel)?.trim()) throw new Error('ProgressBar cần label hoặc ariaLabel không rỗng');
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   return (
     <div>

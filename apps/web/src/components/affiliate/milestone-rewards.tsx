@@ -110,7 +110,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         <div className="text-xs text-stone-600">{milestoneStatusText(m, revenue)}</div>
         {!m.achieved && (
           <div className="mt-1.5">
-            <ProgressBar value={m.progressPct} max={100} ariaLabel="Tiến độ mốc thưởng" />
+            <ProgressBar value={m.progressPct} max={100} ariaLabel={`${m.title}: tiến độ mốc thưởng`} />
           </div>
         )}
       </div>

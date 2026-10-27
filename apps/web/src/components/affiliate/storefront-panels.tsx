@@ -112,7 +112,7 @@ export function QuestSection({ onNotice }: { onNotice: Notify }) {
             )}
           </div>
           <div className="mt-1.5">
-            <ProgressBar value={questPercent(q)} max={100} ariaLabel="Tiến độ nhiệm vụ" />
+            <ProgressBar value={questPercent(q)} max={100} ariaLabel={`${q.title}: tiến độ nhiệm vụ`} />
           </div>
         </div>
       ))}
