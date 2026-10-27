@@ -192,14 +192,14 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: ISSUES } }).fn));
     const onOpenOrder = vi.fn();
     const c = await mount(<OpsHealthTab onOpenOrder={onOpenOrder} />);
-    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    const hooks = c.querySelector('section[aria-label="Tin báo lỗi cần xử lý"]')!;
     expect(hooks.textContent).toContain('TUBU2026101411111');
     expect(hooks.textContent).toContain('order.status_updated');
     expect(hooks.textContent).toContain('15 lần thử');
     expect(hooks.textContent).toContain('Không chuyển được trạng thái');
     expect(hooks.textContent).toContain('TUBU2026101422222');
     const pancake = c.querySelector('section[aria-label="Pancake"]')!;
-    expect(pancake.textContent).toContain('Webhook lỗi chưa xử lý1');
+    expect(pancake.textContent).toContain('Tin báo lỗi chưa xử lý1');
     const attention = c.querySelector('section[aria-label="Đơn cần xử lý tay trên Pancake"]')!;
     expect(attention.textContent).toContain('TUBU2026101414013');
     expect(attention.textContent).toContain('shipper không thu tiền lần nữa');
@@ -243,7 +243,7 @@ describe('OpsHealthTab — việc cụ thể cần xử lý (R2-PLATFORM-1, R2-A
     });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const c = await mount(<OpsHealthTab />);
-    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    const hooks = c.querySelector('section[aria-label="Tin báo lỗi cần xử lý"]')!;
     click(hooks.querySelectorAll('button')[0]!);
     await flush();
     expect(api.calls.some((x) => x.url.endsWith('/admin/ops/webhook-events/pancake/evt1/retry') && x.init?.method === 'POST')).toBe(true);
@@ -278,7 +278,7 @@ describe('OpsHealthTab — webhook tồn kho Pancake không chạy lại', () =>
     };
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: STOCK } }).fn));
     const c = await mount(<OpsHealthTab />);
-    const hooks = c.querySelector('section[aria-label="Webhook lỗi cần xử lý"]')!;
+    const hooks = c.querySelector('section[aria-label="Tin báo lỗi cần xử lý"]')!;
     const labels = [...hooks.querySelectorAll('button')].map((b) => b.textContent);
     expect(labels).toContain('Đã xử lý');
     expect(labels).not.toContain('Chạy lại');
@@ -427,7 +427,7 @@ describe('OpsHealthTab — kênh webhook báo động (R6-ADMIN-4)', () => {
   const card = async (w: unknown) => {
     vi.stubGlobal('fetch', vi.fn(mockFetch({ '/admin/ops/health': { body: { ...HEALTH, alertChannels: { email: EMAIL, webhook: w } } } }).fn));
     const c = await mount(<OpsHealthTab />);
-    return c.querySelector('section[aria-label="Báo động qua webhook"]') as HTMLElement | null;
+    return c.querySelector('section[aria-label="Báo động tự động"]') as HTMLElement | null;
   };
 
   it('hook bị từ chối vĩnh viễn (410): thẻ hiện lỗi, gợi ý kiểm tra OPS_ALERT_WEBHOOK_URL và chi tiết kỹ thuật', async () => {
@@ -457,7 +457,7 @@ describe('OpsHealthTab — kênh webhook báo động (R6-ADMIN-4)', () => {
   it('chưa bật: nói rõ biến cần đặt; API cũ chưa có webhook thì không hiện thẻ', async () => {
     const off = await card(webhook({ state: 'DISABLED' }));
     expect(off?.textContent).toContain('Chưa bật');
-    expect(off?.textContent).toContain('OPS_ALERT_WEBHOOK_URL');
+    expect(off?.textContent).toContain('Chưa nối kênh nhận báo động');
     expect(await card(undefined)).toBeNull();
   });
 });

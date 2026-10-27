@@ -75,7 +75,7 @@ Pancake là **kho**. Tubu là **cửa hàng online và sổ tiền, điểm, hoa
 
 ## 6. Khi hệ thống lỗi
 
-- Mở **Quản trị › Cấu hình & tích hợp › Sức khoẻ hệ thống**, bấm "Làm mới". Đỏ quá 15 phút, hoặc "Webhook lỗi chưa xử lý" (tin Pancake báo về bị lỗi) lớn hơn 0 và không tự về 0 sau 10 phút: gọi kỹ thuật. Người phụ trách kỹ thuật: ____________
+- Mở **Quản trị › Cài đặt › Sức khoẻ hệ thống**, bấm "Làm mới". Đỏ quá 15 phút, hoặc "Tin báo lỗi chưa xử lý" (tin Pancake báo về bị lỗi) lớn hơn 0 và không tự về 0 sau 10 phút: gọi kỹ thuật. Người phụ trách kỹ thuật: ____________
 - Số tiền sai, tiền trừ hai lần, ví âm: ngừng thao tác, chụp màn hình, gọi kỹ thuật và chủ shop.
 - Pancake không vào được: người phụ trách Pancake: ____________
 

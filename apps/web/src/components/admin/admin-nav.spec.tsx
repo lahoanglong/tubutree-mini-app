@@ -2,13 +2,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { AdminNav, type NavGroup } from './admin-nav';
-import { click, render, type Rendered } from '@/test-utils/dom';
+import { click, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
   vi.restoreAllMocks();
+  window.localStorage.removeItem('tubu_admin_nav_open');
   delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
@@ -121,5 +122,78 @@ describe('AdminNav — cuộn tới mục đang chọn (D7-21)', () => {
     const list = r.container.querySelector('nav > div')!;
     act(() => r.root.render(<AdminNav groups={GROUPS} active="config" onSelect={() => {}} />));
     expect(scrolls.get(list)).toBe(900 - (400 - 36) / 2);
+  });
+});
+
+describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
+  const heads = (c: HTMLElement) => [...c.querySelectorAll<HTMLButtonElement>('nav button[aria-expanded]')];
+  const items = (c: HTMLElement) => [...c.querySelectorAll('nav button:not([aria-expanded])')].map((b) => b.textContent);
+
+  it('chưa chọn gì: chỉ nhóm đầu mở, nhóm khác gập nhưng vẫn hiện mục đang xem', () => {
+    const c = mount('config');
+    expect(heads(c).map((h) => h.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
+    expect(items(c)).toEqual(['Đơn hàng', 'Cấu hình']);
+  });
+
+  it('bấm tên nhóm thì mở ra, bấm lại thì gập, và nhớ trong trình duyệt', () => {
+    const c = mount('orders');
+    click(heads(c)[1]!);
+    expect(items(c)).toEqual(['Đơn hàng', 'Đánh giá', 'Cấu hình']);
+    expect(JSON.parse(window.localStorage.getItem('tubu_admin_nav_open')!)).toEqual(['Đơn hàng', 'Hệ thống']);
+    click(heads(c)[0]!);
+    expect(items(c)).toEqual(['Đơn hàng', 'Đánh giá', 'Cấu hình']);
+    expect(JSON.parse(window.localStorage.getItem('tubu_admin_nav_open')!)).toEqual(['Hệ thống']);
+  });
+
+  it('đọc lại trạng thái đã lưu khi mở trang lần sau; dữ liệu hỏng thì dùng mặc định', () => {
+    window.localStorage.setItem('tubu_admin_nav_open', JSON.stringify(['Hệ thống']));
+    expect(items(mount('orders'))).toEqual(['Đơn hàng', 'Đánh giá', 'Cấu hình']);
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    window.localStorage.setItem('tubu_admin_nav_open', '{hỏng');
+    expect(heads(mount('orders')).map((h) => h.getAttribute('aria-expanded'))).toEqual(['true', 'false']);
+  });
+
+  it('lưu trữ bị chặn thì menu vẫn chạy', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const c = mount('orders');
+    click(heads(c)[1]!);
+    expect(items(c)).toEqual(['Đơn hàng', 'Đánh giá', 'Cấu hình']);
+  });
+
+  it('ô tìm bỏ dấu, tìm xuyên các nhóm kể cả nhóm đang gập; Enter mở mục đầu tiên', () => {
+    const onSelect = vi.fn();
+    const r = render(<AdminNav groups={GROUPS} active="orders" onSelect={onSelect} />);
+    mounted.push(r);
+    const box = r.container.querySelector<HTMLInputElement>('input[aria-label="Tìm mục quản trị"]')!;
+    typeInto(box, 'danh gia');
+    expect(items(r.container)).toEqual(['Đánh giá']);
+    act(() => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(onSelect).toHaveBeenCalledWith('reviews');
+    typeInto(box, 'khong co');
+    expect(r.container.textContent).toContain('Không có mục nào khớp');
+  });
+
+  it('nhóm gập vẫn hiện số việc chờ của mục có huy hiệu ở tên nhóm', () => {
+    const r = render(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} badge={(k) => (k === 'config' ? <span data-badge>3</span> : null)} />);
+    mounted.push(r);
+    const head = heads(r.container)[1]!;
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(head.querySelector('[data-badge]')?.textContent).toBe('3');
+  });
+
+  it('điện thoại, ngăn kéo đóng: nút "Đổi mục" vẫn hiện huy hiệu của mọi mục', () => {
+    const r = render(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} badge={(k) => (k === 'config' ? <span data-badge>3</span> : null)} />);
+    mounted.push(r);
+    const openBtn = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    expect(openBtn.querySelector('[data-badge]')?.textContent).toBe('3');
+    expect(openBtn.textContent).toContain('Đổi mục');
   });
 });

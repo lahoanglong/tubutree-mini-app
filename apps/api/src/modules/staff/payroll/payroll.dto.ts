@@ -6,7 +6,8 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 export class UpdateBankDto {
   @OptionalNotNull()
   @IsString()
-  @MaxLength(20)
+  // Rỗng được: nhân viên chỉ khai ảnh QR nhận tiền thì ô mã ngân hàng để trống (cả hai app gửi chuỗi rỗng).
+  @Matches(/^(\d{6})?$/, { message: 'Mã số ngân hàng gồm đúng 6 chữ số (ví dụ 970407); chưa biết mã thì để trống và tải ảnh QR.' })
   bankBin?: string;
 
   @OptionalNotNull()

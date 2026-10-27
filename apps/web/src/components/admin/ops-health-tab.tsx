@@ -86,6 +86,61 @@ function Row({ label, value, warn }: { label: string; value: ReactNode; warn?: b
  * Sức khoẻ vận hành (PLATFORM-5): Pancake, Gomdon, hàng đợi, đơn kẹt — cùng ngưỡng mà cron báo động dùng — kèm các nút
  * vận hành trước đây chỉ gọi được bằng API tay (đồng bộ danh mục Pancake, tính lại số đã bán).
  */
+/**
+ * Tên thường cho việc nền, khoá theo đúng tên API ghi vào cron_runs: tên đặt trong `@Cron({ name })` nếu có, không thì `Lớp.hàm`.
+ * Việc chưa có tên ở đây hiện đúng tên kỹ thuật để người cài đặt đối chiếu; cron-job-labels.spec.ts đối chiếu bảng này với mã API.
+ */
+export const CRON_JOB_LABELS: Record<string, string> = {
+  'AffiliateService.approveDueCommissions': 'Duyệt hoa hồng cộng tác viên khi hết thời gian giữ',
+  'AnalyticsAggregationService.runNightly': 'Tính số liệu giữ chân khách mỗi đêm',
+  'CashbackService.settleConfirmed': 'Chuyển hoàn tiền sàn ngoài đã xác nhận vào Ví khi hết thời gian giữ',
+  'CashbackService.reconcile': 'Kéo giao dịch hoàn tiền sàn ngoài về đối chiếu (bắt tin báo bị rớt)',
+  'CatalogService.recomputeSoldCron': 'Tính lại số đã bán của sản phẩm',
+  'coupons.cleanup-personal-expired': 'Dọn mã giảm giá cá nhân đã hết hạn lâu và chưa dùng',
+  'data-retention.cleanup': 'Dọn nhật ký và dữ liệu cũ quá thời hạn lưu',
+  'DealerBackorderService.reconcile': 'Lấp hàng cho đơn đại lý đặt chờ khi có tồn kho',
+  'DealerCron.payoutQuarterly': 'Trả thưởng đại lý cho quý vừa kết thúc (ngày 10 đầu quý)',
+  'DealerCron.topUpQuarterly': 'Trả bù thưởng quý cho đại lý',
+  'ExternalClaimCron.everyThirtyMinutes': 'Ghép mã tích điểm đơn ngoài app (kể cả đơn gửi qua chat) và cộng điểm đến hạn',
+  'ExternalClaimCron.pollFallback': 'Kéo dự phòng đơn ngoài app từ Pancake',
+  'FlashSaleService.notifyStartedFlashSales': 'Báo khách đã nhắc khi giờ vàng bắt đầu',
+  'FlashSaleService.notifyWishlistOfStartedSales': 'Báo khách đã thả tim sản phẩm khi sản phẩm vào giờ vàng',
+  'GameReminderService.sendDailyReminders': 'Nhắc khách điểm danh và tưới cây mỗi ngày',
+  'GroupBuyCron.sweep': 'Đánh dấu nhóm mua chung hết hạn là không thành',
+  'GomdonReconcileService.reconcile': 'Đối chiếu Gomdon: chạy lại tin báo, tạo và huỷ vận đơn bị kẹt',
+  'pancake.events-reconcile': 'Cứu tin báo từ Pancake bị kẹt',
+  'PancakePushReconcileService.reconcile': 'Đẩy lại đơn chưa sang được Pancake',
+  'PancakeSyncService.scheduledSync': 'Đồng bộ danh mục Pancake (15 phút một lần)',
+  'PancakeSyncService.nightlyFullSync': 'Quét toàn bộ danh mục Pancake mỗi đêm',
+  'payments.zalopay-reconcile': 'Đối chiếu thanh toán ZaloPay',
+  'ZaloOaTokenCron.refresh': 'Làm mới khoá kết nối Zalo OA khi sắp hết hạn',
+  'LifecycleService.sendReorderReminders': 'Nhắc khách mua lại',
+  'RemarketingService.sendCartAbandonReminders': 'Nhắc khách có giỏ hàng bỏ quên',
+  'RemarketingService.sendVoucherExpiryReminders': 'Nhắc khách mã giảm giá sắp hết hạn',
+  'ReviewInviteService.sendReviewInvites': 'Mời khách đánh giá (10 giờ và 19 giờ)',
+  'LoyaltyExpiryService.expirePoints': 'Thu hồi điểm đã hết hạn',
+  'LoyaltyExpiryService.remindExpiringPoints': 'Nhắc khách điểm sắp hết hạn',
+  'LoyaltyCron.recalcTiers': 'Tính lại hạng thành viên',
+  'merchant.sla-reminder': 'Nhắc đối tác các đơn tự giao quá hạn (có báo khách)',
+  'ops.health-alert': 'Kiểm tra sức khoẻ hệ thống và báo động',
+  'orders.delivered-effects-resync': 'Chạy lại việc sau giao (cộng điểm, khoá hoa hồng, thưởng giới thiệu) cho đơn bị sót',
+  'orders.pending-payment-expiry': 'Huỷ đơn quá hạn thanh toán',
+  'orders.reversal-effects-resync': 'Chạy lại phần đảo sau huỷ hoặc trả đơn (đảo điểm, thu hồi hoa hồng, lệnh huỷ Pancake) cho đơn bị sót',
+  'AttendanceJob.sweep': 'Đóng ca chấm công đã quá giờ hết ca',
+  'PayrollJob.nightly': 'Tính lại lương tháng hiện tại lúc 0 giờ 30 mỗi đêm (cả tháng trước trong 3 ngày đầu tháng)',
+  'StorefrontReminderService.remindTrendingProducts': 'Nhắc cộng tác viên thêm sản phẩm nổi bật vào gian hàng (9 giờ thứ Hai)',
+  'SubscriptionsService.processDue': 'Tạo đơn kỳ cho gói định kỳ đến hạn',
+  'BridgeHealthCron.everyMinute': 'Kiểm tra cầu nối chat Zalo, báo khi mất kết nối, gửi lại tin chưa chuyển',
+  'VouchersService.welcomeVouchers': 'Tặng mã chào mừng cho khách mới chưa có đơn',
+  'VouchersService.birthdayVouchers': 'Tặng mã sinh nhật',
+  'VouchersService.winbackVouchers': 'Tặng mã cho khách hơn 60 ngày chưa đặt đơn',
+  'VouchersService.milestoneVouchers': 'Tặng mã tri ân khi chi tiêu trong tháng đạt mốc',
+  'VouchersService.secondOrderVouchers': 'Tặng mã khuyến khích đơn thứ hai',
+  'wallet.referral-notice-reconcile': 'Gửi bù tin báo thưởng giới thiệu bị sót',
+  'waste.expiry': 'Đóng yêu cầu đổi rác quá hạn giữ chỗ hoặc lỡ hẹn thu gom',
+  'waste.pickup-sweep': 'Quét bù yêu cầu thu gom rác còn mở khi đơn đã giao, huỷ hoặc trả',
+};
+
 export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (code: string) => void; isAdmin?: boolean }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
@@ -112,7 +167,7 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
   };
   const askDismiss = async (e: OpsWebhookEvent) => {
     const ok = await confirm({
-      title: 'Đánh dấu webhook đã xử lý?',
+      title: 'Đánh dấu tin báo đã xử lý?',
       message: isStaleStockEvent(e)
         ? 'Chỉ bấm sau khi đã chạy Đồng bộ danh mục Pancake để tồn kho lấy số mới. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.'
         : `Chỉ bấm khi đã sửa tay đơn ${e.orderRef ?? 'liên quan'} cho đúng trạng thái. Sự kiện sẽ không còn tính vào báo động và không được chạy lại tự động.`,
@@ -360,11 +415,11 @@ function WebhookChannelCard({ webhook }: { webhook: OpsWebhookChannel }) {
   const failing = newer(webhook.lastErrorAt, webhook.lastOkAt);
   return (
     <Card
-      title="Báo động qua webhook"
+      title="Báo động tự động"
       after={
         <div className="mt-1 space-y-1">
           {webhook.state === 'DISABLED' && (
-            <p className="text-xs text-stone-500">Đặt OPS_ALERT_WEBHOOK_URL (Slack hoặc Zalo) để nhận báo động qua webhook.</p>
+            <p className="text-xs text-stone-500">Chưa nối kênh nhận báo động (Slack hoặc Zalo). Nhờ người cài đặt hệ thống nối giúp để nhận báo khi hệ thống gặp sự cố.</p>
           )}
           {failing && (
             <div className="space-y-0.5">
@@ -456,10 +511,10 @@ function HealthBody({
         >
           <Row label="Cấu hình" value={h.pancake.configured ? 'Đã cấu hình' : 'Chưa cấu hình'} warn={!h.pancake.configured} />
           <Row label="Đẩy đơn thành công gần nhất" value={ago(h.pancake.lastPushOkAt)} />
-          <Row label="Nhận webhook gần nhất" value={ago(h.pancake.lastWebhookAt)} />
-          <Row label="Xử lý webhook gần nhất" value={ago(h.pancake.lastWebhookProcessedAt)} />
-          <Row label="Webhook lỗi chưa xử lý" value={h.pancake.webhookFailedOpen} warn={h.pancake.webhookFailedOpen > 0} />
-          <Row label="Webhook kẹt chưa xử lý" value={h.pancake.webhookStuck} warn={h.pancake.webhookStuck > 0} />
+          <Row label="Nhận tin báo gần nhất" value={ago(h.pancake.lastWebhookAt)} />
+          <Row label="Xử lý tin báo gần nhất" value={ago(h.pancake.lastWebhookProcessedAt)} />
+          <Row label="Tin báo lỗi chưa xử lý" value={h.pancake.webhookFailedOpen} warn={h.pancake.webhookFailedOpen > 0} />
+          <Row label="Tin báo kẹt chưa xử lý" value={h.pancake.webhookStuck} warn={h.pancake.webhookStuck > 0} />
           <Row label="Đơn chưa lên Pancake" value={h.pancake.unsynced} />
           <Row label={`Đơn kẹt quá ${t.unsyncedMinutes} phút`} value={h.pancake.stuck} warn={h.pancake.stuck >= t.stuckOrders} />
           <Row label="Đơn cần xử lý theo Pancake" value={h.pancake.attention} warn={h.pancake.attention > 0} />
@@ -491,8 +546,8 @@ function HealthBody({
             }
             warn={h.gomdon.credentialsRejected || gomdonLoginError}
           />
-          <Row label="Nhận webhook gần nhất" value={ago(h.gomdon.lastWebhookAt)} />
-          <Row label="Webhook lỗi chưa xử lý" value={h.gomdon.webhookFailedOpen} warn={h.gomdon.webhookFailedOpen > 0} />
+          <Row label="Nhận tin báo gần nhất" value={ago(h.gomdon.lastWebhookAt)} />
+          <Row label="Tin báo lỗi chưa xử lý" value={h.gomdon.webhookFailedOpen} warn={h.gomdon.webhookFailedOpen > 0} />
           <Row label={`Đơn thu gom chờ vận đơn quá ${t.gomdonBacklogMinutes} phút`} value={h.gomdon.backlog} warn={h.gomdon.backlog > 0} />
           <Row label="Báo động chưa đóng" value={h.gomdon.openAlerts} warn={h.gomdon.openAlerts > 0} />
           <Row label="Đơn cần xử lý thu gom" value={h.gomdon.attention} warn={h.gomdon.attention > 0} />
@@ -537,7 +592,7 @@ function HealthBody({
 
       {h.cronJobs && h.cronJobs.length > 0 && (
         <section aria-label="Tác vụ nền" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
-          <h3 className="font-display text-sm font-semibold text-stone-900">Tác vụ nền (cron)</h3>
+          <h3 className="font-display text-sm font-semibold text-stone-900">Việc tự chạy nền</h3>
           <ScrollRegion label="Bảng tác vụ nền" className="mt-2">
             <table className="w-full text-left text-sm">
               <thead className="bg-stone-50 text-xs text-stone-500">
@@ -555,7 +610,16 @@ function HealthBody({
                   .sort((a, b) => b.consecutiveFailures - a.consecutiveFailures || a.job.localeCompare(b.job))
                   .map((j) => (
                     <tr key={j.job} className="border-t border-stone-100 align-top">
-                      <td className="px-3 py-2 font-medium text-stone-900">{j.job}</td>
+                      <td className="px-3 py-2 font-medium text-stone-900">
+                        {CRON_JOB_LABELS[j.job] ? (
+                          <>
+                            {CRON_JOB_LABELS[j.job]}
+                            <span className="block break-all font-mono text-[11px] font-normal text-stone-500">{j.job}</span>
+                          </>
+                        ) : (
+                          <span className="break-all">{j.job}</span>
+                        )}
+                      </td>
                       <td className={`px-3 py-2 ${j.lastOutcome === 'ERRORS' || j.lastOutcome === 'THREW' ? 'text-danger-fg' : 'text-stone-600'}`}>{cronOutcomeLabel(j)}</td>
                       <td className="px-3 py-2 text-xs text-stone-500">
                         {j.lastOutcome === 'SKIPPED' ? (
@@ -588,7 +652,7 @@ function HealthBody({
       )}
 
       {events.length > 0 && (
-        <ListSection title="Webhook lỗi cần xử lý">
+        <ListSection title="Tin báo lỗi cần xử lý">
           {events.map((e) => (
             <li key={`${e.source}-${e.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <span className="min-w-0">
