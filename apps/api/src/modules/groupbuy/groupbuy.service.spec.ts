@@ -641,12 +641,35 @@ describe('D11-05: mã mua chung giảm đúng % trên biến thể khách mua, k
   });
 });
 
+describe('B-139: giá gốc của nhóm theo phân loại đại diện, không theo cột sản phẩm', () => {
+  it('cột Product ghi 180.000đ nhưng phân loại đại diện còn hàng giá 159.000đ → giá gốc 159.000đ, giá nhóm 135.150đ', async () => {
+    const prisma = makePrisma();
+    (prisma.product.findUnique as jest.Mock).mockResolvedValue({
+      id: 'prod1', isActive: true, approvalStatus: 'APPROVED', basePrice: 180000, salePrice: null, name: 'X', slug: 'x', thumbnail: null,
+    });
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([
+      { id: 'v1', sku: 'A', retailPrice: 180000, salePrice: null, stock: 5 },
+      { id: 'v2', sku: 'B', retailPrice: 159000, salePrice: null, stock: 5 },
+      { id: 'v3', sku: 'C', retailPrice: 99000, salePrice: null, stock: 0 },
+    ]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 3 })).create('u1', 'prod1');
+    expect((prisma.groupBuy.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ basePrice: 159000, unitPrice: 135150 });
+  });
+
+  it('phân loại đại diện có salePrice → giá gốc là salePrice', async () => {
+    const prisma = makePrisma();
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue([{ id: 'v1', sku: 'A', retailPrice: 120000, salePrice: 100000, stock: 3 }]);
+    await new GroupBuyService(prisma, makeConfig({ 'groupbuy.discount_pct': 15, 'groupbuy.target_size': 3 })).create('u1', 'prod1');
+    expect((prisma.groupBuy.create as jest.Mock).mock.calls[0][0].data).toMatchObject({ basePrice: 100000, unitPrice: 85000 });
+  });
+});
+
 describe('Q18: đơn tối thiểu của mã mua chung theo giá nhóm của biến thể rẻ nhất đang bán', () => {
   // Pancake trả biến thể đắt trước nên product.basePrice = 430.000đ, biến thể rẻ 120.000đ nằm sau.
   const variations = [
-    { retailPrice: 430000, salePrice: null },
-    { retailPrice: 120000, salePrice: null },
-    { retailPrice: 0, salePrice: null },
+    { id: 'v1', sku: 'A', retailPrice: 430000, salePrice: null, stock: 5 },
+    { id: 'v2', sku: 'B', retailPrice: 120000, salePrice: null, stock: 5 },
+    { id: 'v0', sku: 'Z', retailPrice: 0, salePrice: null, stock: 0 },
   ];
 
   function prismaDearFirst() {
@@ -724,5 +747,47 @@ describe('Q18: đơn tối thiểu của mã mua chung theo giá nhóm của bi�
     const svc = new GroupBuyService(prisma, makeConfig());
     expect((await svc.listOpen())[0]).toMatchObject({ minOrder: 102000 });
     expect(await svc.getGroup('gb1')).toMatchObject({ minOrder: 102000 });
+  });
+});
+
+describe('B-72: view nhóm trả variationId của phân loại mà giá nhóm dựa trên', () => {
+  const rows = [
+    { id: 'vBig', sku: 'B', productId: 'prod1', retailPrice: 430000, salePrice: null, stock: 3 },
+    { id: 'vSmall', sku: 'A', productId: 'prod1', retailPrice: 120000, salePrice: null, stock: 3 },
+    { id: 'vOut', sku: 'C', productId: 'prod1', retailPrice: 100000, salePrice: null, stock: 0 },
+  ];
+
+  async function viewOf(basePrice: number, variations = rows) {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([
+      { ...group({ id: 'g1', basePrice, unitPrice: Math.round(basePrice * 0.85) }), product: { name: 'X', slug: 'x', thumbnail: null }, _count: { members: 1 } },
+    ]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue(variations);
+    const out = (await new GroupBuyService(prisma, makeConfig()).listOpen('u1')) as unknown as { variationId?: string }[];
+    return out[0]!;
+  }
+
+  it('giá gốc đã lưu khớp phân loại đại diện (rẻ nhất còn hàng): trả phân loại đó, không phải phân loại hết hàng rẻ hơn', async () => {
+    expect((await viewOf(120000)).variationId).toBe('vSmall');
+  });
+
+  it('giá lưu khớp một phân loại khác (đại diện đã đổi): ưu tiên phân loại có giá đúng bằng giá lưu', async () => {
+    expect((await viewOf(430000)).variationId).toBe('vBig');
+  });
+
+  it('nhiều phân loại cùng khớp giá lưu: chọn theo thứ tự giá, sku, id, không theo thứ tự DB trả về', async () => {
+    const twins = [
+      { id: 'vZ', sku: 'Z', productId: 'prod1', retailPrice: 430000, salePrice: null, stock: 3 },
+      { id: 'vY', sku: 'Y', productId: 'prod1', retailPrice: 430000, salePrice: null, stock: 3 },
+      rows[1]!,
+    ];
+    expect((await viewOf(430000, twins)).variationId).toBe('vY');
+    expect((await viewOf(430000, [...twins].reverse())).variationId).toBe('vY');
+  });
+
+  it('không phân loại nào khớp giá lưu: dùng phân loại đại diện hiện tại; không có phân loại: không trả trường', async () => {
+    expect((await viewOf(999999)).variationId).toBe('vSmall');
+    expect((await viewOf(120000, [])).variationId).toBeUndefined();
   });
 });

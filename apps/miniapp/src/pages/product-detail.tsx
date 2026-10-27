@@ -41,6 +41,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
+import { serverNow } from '../utils/server-clock';
 import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -105,11 +106,11 @@ export default function ProductDetailPage() {
   const chatOn = config.chat?.enabled === true;
   const chatReady = chatOn && status === 'authenticated';
 
-  // Thẻ và dải "Giờ vàng" truyền variationId qua state; hợp lệ khi phân loại đó còn hàng và còn Giờ vàng. Mọi lối vào khác
+  // Thẻ và dải "Giờ vàng" truyền variationId qua state; hợp lệ khi phân loại đó còn hàng và còn Giờ vàng; `pinnedVariationId` (món gian hàng CTV ghim phân loại) chỉ cần còn hàng. Mọi lối vào khác
   // (lưới, gợi ý tìm, bài cộng đồng, deep link) mở phân loại mà thẻ đã ghi giá (`defaultVariationFor`). Chỉ khách bấm chọn mới
   // là `selectedId`. Trang hiện ngay với phân loại đại diện; khi danh sách Giờ vàng về thì chốt lại một lần, không đổi lại khi đợt hết giờ lúc khách đang xem.
   const location = useLocation();
-  const navState = location.state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
+  const navState = location.state as { variationId?: string; pinnedVariationId?: string; listSource?: string; reviewOrderId?: string } | null;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -159,7 +160,6 @@ export default function ProductDetailPage() {
   const flashQ = useQuery({
     queryKey: ['flash-sales', 'active'],
     queryFn: fetchActiveFlashSales,
-    refetchInterval: 60_000,
   });
 
   // Mặc định: phân loại còn hàng có giá đang bán thấp nhất, cùng phân loại mà thẻ sản phẩm lấy giá.
@@ -167,8 +167,10 @@ export default function ProductDetailPage() {
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
   if (product.data && !flashQ.isPending && autoPick.current?.slug !== slug) {
     const flashNow = flashQ.data ?? [];
-    const entry = variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash);
-    autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow))?.id ?? null };
+    const entry =
+      variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash) ??
+      variations.find((v) => v.id === navState?.pinnedVariationId && v.stock > 0);
+    autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow, serverNow()))?.id ?? null };
   }
   const auto = autoPick.current;
   const autoId = auto && auto.slug === slug ? auto.id : null;
@@ -288,7 +290,7 @@ export default function ProductDetailPage() {
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
   const flashList = flashQ.data ?? [];
-  const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList);
+  const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
   const price = priceView.price;
   const originalPrice = priceView.compareAt;
   const flashPct = priceView.salePct;
@@ -313,6 +315,8 @@ export default function ProductDetailPage() {
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock && !addMutation.isPending) {
+      // Bấm mua là đã chọn: danh sách Giờ vàng về muộn không được đổi phân loại dưới tay khách sau khi bấm.
+      setSelectedId(selected.id);
       addMutation.mutate({ variation: selected, qty: quantity });
     }
   };
@@ -323,6 +327,7 @@ export default function ProductDetailPage() {
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock && !buyNowMutation.isPending) {
+      setSelectedId(selected.id);
       buyNowMutation.mutate({ variation: selected, qty: quantity });
     }
   };

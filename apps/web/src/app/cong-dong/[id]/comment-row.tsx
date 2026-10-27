@@ -38,7 +38,7 @@ export function CommentRow({
         </div>
       )}
       <div className="flex items-center gap-2">
-        <Avatar src={comment.avatar} size={28} />
+        <Avatar name={comment.author} size={28} />
         <AuthorLine name={comment.author} badge={comment.badge} level={comment.authorLevel} meta={timeAgo(comment.createdAt)} />
         {comment.isOwner ? (
           <button type="button" aria-label="Ẩn nội dung" disabled={removing} onClick={onRemove} className={`${ICON_BTN} disabled:opacity-50`}>

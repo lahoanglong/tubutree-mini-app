@@ -23,6 +23,8 @@ export interface ProductCard {
   salePrice: number | null;
   /** Phân loại đại diện của thẻ (đã lấy giá); cùng id mà trang chi tiết mở sẵn. */
   repVariationId?: string;
+  /** Món gian hàng CTV ghim phân loại: thẻ ghi giá phân loại này và trang chi tiết mở đúng nó. */
+  pinnedVariationId?: string;
   isFeatured: boolean;
   ratingAvg?: number;
   reviewCount?: number;
@@ -229,8 +231,9 @@ export interface PublicConfig {
   /**
    * Chi tiêu cho 1 Điểm Xanh được tích, số đồng được giảm khi dùng 1 điểm, trần % giá trị đơn trả được bằng điểm thường (0 = tắt)
    * và số tháng điểm thường có hạn. Thiếu khi API cũ; hai trường sau thiếu khi API chưa phát hành bản có chúng.
+   * `tierMultipliers`/`tierNames`: hệ số điểm và tên theo id hạng (cùng nguồn /loyalty/preview) để PDP tính số điểm theo hạng của khách.
    */
-  loyalty?: { earnPct?: number; marketplaceEarnPct?: number; marketplaceClaimEnabled?: boolean; marketplaceClaimMaxAgeDays?: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number };
+  loyalty?: { earnPct?: number; marketplaceEarnPct?: number; marketplaceClaimEnabled?: boolean; marketplaceClaimMaxAgeDays?: number; vndPerPoint: number; vndPerPointRedeem: number; maxRedeemPct?: number; pointExpireMonths?: number; tierMultipliers?: Record<string, number>; tierNames?: Record<string, string> };
   /** Cờ bố cục Trang chủ cho khách mới (home.new_customer_layout). Thiếu khi API cũ → bố cục cũ. */
   homeNewCustomerLayout?: boolean;
   /** AI tư vấn đang bật VÀ có provider dùng được (công tắc tắt khẩn cấp ở API). Thiếu khi API cũ → coi như tắt, ẩn lối vào. */
@@ -523,7 +526,6 @@ export interface ReviewItem {
   videoUrl: string | null;
   createdAt: string;
   author: string;
-  avatar: string | null;
   verifiedPurchase?: boolean;
 }
 export interface ReviewSummary {
@@ -581,7 +583,7 @@ export interface MyReview {
 export const fetchMyReview = (id: string) => api.get<MyReview>(`/reviews/${id}`).then((r) => r.data);
 
 /**
- * POST /products/:slug/reviews trả nguyên dòng Review (không có author/avatar như mục của danh sách công khai) kèm
+ * POST /products/:slug/reviews trả nguyên dòng Review (không có author như mục của danh sách công khai) kèm
  * `updated`. Hai trường dưới là optional để chịu được API cũ chưa trả.
  * - `updated`: true khi đơn đó đã có đánh giá và lần gọi này SỬA nó (không cộng Điểm Xanh), false khi tạo mới.
  * - `pointsEarned`: cột của dòng Review. 5/10/15 khi được thưởng; 0 khi khách đã nhận thưởng cho đánh giá đầu tiên của

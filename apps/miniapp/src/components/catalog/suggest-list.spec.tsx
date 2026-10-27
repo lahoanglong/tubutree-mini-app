@@ -132,7 +132,7 @@ describe('SuggestList: giá sản phẩm khớp thẻ', () => {
     renderList({
       draft: 'hạt',
       products: [HAT_DIEU],
-      flashSales: [{ itemId: 'f1', variationId: 'v1', productSlug: 'hat-dieu', productName: 'x', thumbnail: null, flashPrice: 119000, retailPrice: 180000, salePrice: 159000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' }],
+      flashSales: [{ itemId: 'f1', variationId: 'v1', productSlug: 'hat-dieu', productName: 'x', thumbnail: null, flashPrice: 119000, retailPrice: 180000, salePrice: 159000, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' }],
     });
     expect(screen.getByText('119.000đ')).toBeInTheDocument();
     expect(screen.queryByText('159.000đ')).toBeNull();

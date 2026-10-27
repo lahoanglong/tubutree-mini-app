@@ -361,6 +361,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.allowUnmocked('GET /home', 'GET /home/me');
       // Mọi khách đăng nhập hỏi số yêu cầu đổi rác đang mở khi chương trình tạm dừng (mặc định của publicConfig); mặc định không còn yêu cầu nào.
       api.fallback('GET', '/waste/me/open-count', { count: 0 });
+      // Mini App gắn một nhịp tải lại danh sách Giờ vàng ở gốc app (useFlashSalesPoller): mọi trang đều gọi; mặc định không có suất nào.
+      api.fallback('GET', '/flash-sales/active', []);
       if (testInfo.project.name.startsWith('Web ')) shellDefaults(api);
       // Đăng ký TRƯỚC → ưu tiên THẤP NHẤT (Playwright chạy route đăng ký sau trước).
       await page.route(

@@ -33,7 +33,7 @@ export default function ProductCard({ product, wishlist }: { product: ProductCar
           </Badge>
         ) : undefined
       }
-      onPress={() => router.push(productHref(product.slug, pricing.flashVariationId))}
+      onPress={() => router.push(productHref(product.slug, pricing.flashVariationId, product.pinnedVariationId))}
     />
   );
 }

@@ -145,6 +145,36 @@ describe('AddToCart — tồn kho thật thay cho bản ISR', () => {
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
   });
 
+  it('B-141: bản ISR báo phân loại rẻ nhất hết, tồn thật báo có lại: chọn lại phân loại rẻ nhất, giá khớp thẻ', async () => {
+    mocks.getProductStock.mockResolvedValue({ v1: 6, v2: 9 });
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 150.000đ');
+  });
+
+  it('B-141: khách đã tự chọn thì tồn kho về không đổi lại', async () => {
+    mocks.getProductStock.mockImplementation(() => new Promise((r) => setTimeout(() => r({ v1: 6, v2: 9 }), 0)));
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    click(byText(container, 'button', '500ml'));
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
+  it('B-145: bấm Thêm vào giỏ là đã chọn, tồn kho về muộn không đổi phân loại sau đó', async () => {
+    mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
+    let release: (v: Record<string, number>) => void = () => undefined;
+    mocks.getProductStock.mockImplementation(() => new Promise((r) => { release = r; }));
+    const { container } = mount([{ ...VARIATIONS[0]!, stock: 0 }, VARIATIONS[1]!]);
+    await flush();
+    click(addButton(container));
+    await flush();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+    release({ v1: 6, v2: 9 });
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
   it('khách đã tự chọn phân loại thì không bị đổi ngầm', async () => {
     mocks.getProductStock.mockImplementation(() => new Promise((r) => setTimeout(() => r({ v1: 0, v2: 9 }), 0)));
     const { container } = mount();
@@ -196,7 +226,7 @@ describe('AddToCart — gian hàng chưa nhận đơn (R3-MERCHANT-3)', () => {
 describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', () => {
   const FLASH_V2 = {
     itemId: 'f2', variationId: 'v2', productSlug: 'dau-goi', flashPrice: 200000, retailPrice: 300000,
-    salePrice: null, soldCount: 1, quota: 10, endAt: '2026-10-14T16:00:00.000Z',
+    salePrice: null, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z',
   };
 
   const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
@@ -213,7 +243,7 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(chip.textContent).toContain('Giờ vàng');
     expect((byText(container, 'button', /250ml/) as HTMLButtonElement).textContent).not.toContain('Giờ vàng');
     expect(container.querySelector('[data-testid="flash-price-note"]')!.textContent).toBe(
-      'Giá Giờ vàng 200.000đ, giá gốc 300.000đ · đến 23:00 14/10/2026',
+      'Giá Giờ vàng 200.000đ, giá gốc 300.000đ · đến 23:00 14/10/2099',
     );
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 200.000đ');
   });
@@ -258,6 +288,14 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     const { container } = mount();
     await flush();
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+  });
+
+  it('B-140: ?pv= (món gian hàng CTV ghim) mở đúng phân loại ghim dù không có Giờ vàng', async () => {
+    openedFrom('?pv=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
   });
 
   it('?v= còn Giờ vàng thắng suất khác rẻ hơn ở phân loại khác', async () => {

@@ -1,12 +1,13 @@
 import { useId } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { BookMarked, CheckCircle2, Globe, Hash, HelpCircle, Leaf, Lightbulb, MessageCircle, PenLine, Sprout, TreeDeciduous } from 'lucide-react';
+import { BookMarked, CheckCircle2, Globe, Hash, HelpCircle, Leaf, Lightbulb, MessageCircle, PenLine, TreeDeciduous } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { apiMediaUrl } from '../../services/api';
 import type { FeedItem } from '../../services/feed-api';
 import { timeAgo } from '../../utils/time-ago';
 import { vi } from '../../i18n/vi';
 import { Chip } from '../ui/chip';
+import { InitialsAvatar } from '../ui/initials-avatar';
 import { Icon } from '../ui/icon';
 import { rowKeyboardProps } from '../ui/row-keyboard';
 import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET, stretchedLinkHit44 } from '../ui/stretched-link';
@@ -59,23 +60,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
       style={{ position: 'relative', isolation: 'isolate', padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {post.avatar ? (
-          <img src={post.avatar} alt="" width={32} height={32} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-        ) : (
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              background: 'var(--color-action-secondary-bg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Icon icon={Sprout} size="sm" tone="brand" />
-          </div>
-        )}
+        <InitialsAvatar name={post.author} size={32} />
         <AuthorLine
           name={post.author}
           badge={post.badge}

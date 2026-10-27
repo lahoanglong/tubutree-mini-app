@@ -1,4 +1,4 @@
-import { cardPriceWithFlash, cardPrices, representativeVariation } from './variation-order';
+import { cardPriceWithFlash, cardPrices, pinnedCardPrices, representativeVariation } from './variation-order';
 
 const v = (id: string, retailPrice: number, salePrice: number | null, stock: number, sku = id) => ({ id, sku, retailPrice, salePrice, stock });
 
@@ -35,6 +35,21 @@ describe('cardPrices (dữ liệu kiểu Pancake: Product.salePrice rỗng)', ()
 
   it('không có phân loại đang bán: giữ giá cột của sản phẩm', () => {
     expect(cardPrices({ basePrice: 100_000, salePrice: 90_000 }, [])).toEqual({ basePrice: 100_000, salePrice: 90_000 });
+  });
+});
+
+describe('pinnedCardPrices (món gian hàng CTV ghim phân loại, B-140)', () => {
+  const product = { basePrice: 180_000, salePrice: null };
+  const variations = [v('v1', 180_000, 159_000, 4), v('v2', 300_000, 270_000, 4), v('v3', 120_000, null, 0)];
+
+  it('ghim phân loại còn hàng: thẻ ghi giá phân loại đó, kèm id ghim', () => {
+    expect(pinnedCardPrices(product, variations, 'v2')).toEqual({ basePrice: 300_000, salePrice: 270_000, repVariationId: 'v2', pinnedVariationId: 'v2' });
+  });
+  it('không ghim, ghim phân loại hết hàng hoặc không còn bán: về phân loại đại diện như thẻ thường', () => {
+    const rep = { basePrice: 180_000, salePrice: 159_000, repVariationId: 'v1' };
+    expect(pinnedCardPrices(product, variations, null)).toEqual(rep);
+    expect(pinnedCardPrices(product, variations, 'v3')).toEqual(rep);
+    expect(pinnedCardPrices(product, variations, 'gone')).toEqual(rep);
   });
 });
 

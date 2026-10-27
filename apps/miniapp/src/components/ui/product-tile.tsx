@@ -17,6 +17,8 @@ export interface ProductTileProduct {
   thumbnail?: string | null;
   basePrice: number;
   salePrice?: number | null;
+  repVariationId?: string;
+  pinnedVariationId?: string;
   inStock: boolean;
   reviewCount?: number;
   ratingAvg?: number;

@@ -1253,3 +1253,23 @@ describe('ReviewsService.canReview', () => {
     await expect(new ReviewsService(prisma, analytics, loyalty).canReview('u1', 'khong-co')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('ReviewsService.listByProduct: không trả ảnh đại diện của người đánh giá (B-136)', () => {
+  it('mục đánh giá chỉ có tên rút gọn, truy vấn không chọn avatarUrl', async () => {
+    const AVATAR = 'https://zalo.example/avatar-bi-mat.jpg';
+    const prisma = makePrisma({
+      review: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'r1', rating: 5, comment: 'tốt', images: [], videoUrl: null, createdAt: new Date('2026-10-01'), user: { fullName: 'Lại Văn Nam', avatarUrl: AVATAR } },
+        ]),
+        groupBy: jest.fn().mockResolvedValue([{ rating: 5, _count: { _all: 1 } }]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    });
+    const out = await new ReviewsService(prisma, analytics, loyalty).listByProduct('tinh-dau');
+    expect(out.items[0]).toMatchObject({ author: 'Nam L.' });
+    expect(out.items[0]).not.toHaveProperty('avatar');
+    expect(JSON.stringify(out)).not.toContain(AVATAR);
+    expect(JSON.stringify((prisma.review.findMany as jest.Mock).mock.calls)).not.toContain('avatarUrl');
+  });
+});

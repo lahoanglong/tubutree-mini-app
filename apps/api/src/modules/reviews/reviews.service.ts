@@ -344,7 +344,7 @@ export class ReviewsService {
       this.prisma.review.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: { user: { select: { fullName: true, avatarUrl: true } } },
+        include: { user: { select: { fullName: true } } },
         take: LIST_LIMIT,
       }),
       this.prisma.review.groupBy({ by: ['rating'], where, _count: { _all: true } }),
@@ -372,7 +372,6 @@ export class ReviewsService {
         videoUrl: r.videoUrl,
         createdAt: r.createdAt,
         author: publicDisplayName(r.user.fullName, 'Khách Tubu'),
-        avatar: r.user.avatarUrl,
         // Mọi review đều ràng buộc đơn DELIVERED (§6.13) → luôn là khách đã mua.
         verifiedPurchase: true,
       })),

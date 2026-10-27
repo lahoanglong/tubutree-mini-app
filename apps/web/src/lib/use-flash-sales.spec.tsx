@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import type { FlashItem } from './flash-price';
@@ -79,5 +80,48 @@ describe('useActiveFlashSales — các thẻ sản phẩm dùng chung một lầ
     mounted.push(r);
     await flush();
     expect(r.container.textContent).toBe('none');
+  });
+
+  describe('làm mới theo mốc kết thúc', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('đợt kết thúc sau 20 giây: tải lại đúng lúc đó và thẻ bỏ giá Giờ vàng khi API không còn suất', async () => {
+      api.impl = async () => [{ ...ITEM, endAt: new Date(Date.now() + 20_000).toISOString() }];
+      const r = render(<Probe id="a" />);
+      mounted.push(r);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(api.calls).toBe(1);
+      expect(r.container.textContent).toBe('79000');
+      api.impl = async () => [];
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(19_000);
+      });
+      expect(api.calls).toBe(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      expect(api.calls).toBe(2);
+      expect(r.container.textContent).toBe('none');
+    });
+
+    it('đợt đã quá hạn mà API vẫn trả: không dồn request, tối thiểu 5 giây', async () => {
+      api.impl = async () => [{ ...ITEM, endAt: new Date(Date.now() - 1000).toISOString() }];
+      mounted.push(render(<Probe id="a" />));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(api.calls).toBe(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000);
+      });
+      expect(api.calls).toBe(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_500);
+      });
+      expect(api.calls).toBe(2);
+    });
   });
 });

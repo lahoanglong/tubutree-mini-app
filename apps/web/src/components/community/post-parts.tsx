@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { BookMarked, Globe, HelpCircle, Leaf, Lightbulb, PenLine, Sprout, TreeDeciduous, type LucideIcon } from 'lucide-react';
+import { BookMarked, Globe, HelpCircle, Leaf, Lightbulb, PenLine, TreeDeciduous, type LucideIcon } from 'lucide-react';
 import type { FeedPostKind } from '@tubutree/app-core/api/feed';
+import { avatarInitial, avatarTone } from '@tubutree/app-core/initials-avatar';
 import { publicMediaUrl } from '@/lib/api';
 import { RankBadge } from './rank';
 
@@ -43,15 +44,26 @@ export function safeMediaUrl(src: string | null | undefined): string | null {
   return null;
 }
 
-export function Avatar({ src, size = 32 }: { src?: string | null; size?: number }) {
-  const url = safeMediaUrl(src);
-  const box = { width: size, height: size };
-  return url ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" style={box} className="shrink-0 rounded-full object-cover" />
-  ) : (
-    <span style={box} className="flex shrink-0 items-center justify-center rounded-full bg-forest-50 text-forest-600">
-      <Sprout className="h-4 w-4" aria-hidden="true" />
+/** Vòng tròn chữ cái đầu của tên đang hiển thị, thay ảnh Zalo của người khác (cùng hình với `InitialsAvatar` của Mini App). */
+export function Avatar({ name, size = 32 }: { name: string; size?: number }) {
+  const tone = avatarTone(name);
+  return (
+    <span
+      data-testid="initials-avatar"
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        background: tone.background,
+        color: tone.color,
+        fontSize: Math.round(size * 0.44),
+        fontFamily: 'var(--font-ui)',
+        lineHeight: 1,
+        userSelect: 'none',
+      }}
+      className="flex shrink-0 items-center justify-center rounded-full font-bold"
+    >
+      {avatarInitial(name)}
     </span>
   );
 }

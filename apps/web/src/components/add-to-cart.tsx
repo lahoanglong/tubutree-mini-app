@@ -92,29 +92,33 @@ export default function AddToCart({
   }, [maxQty, setQty]);
 
   // Phân loại mở sẵn chốt một lần khi danh sách Giờ vàng về (để giá không đổi hai lần). `?v=<variationId>` (thẻ, dải Giờ vàng) thắng
-  // khi phân loại đó còn hàng và còn Giờ vàng; không thì cùng luật với thẻ (`defaultVariationFor`), nên gợi ý tìm, bài cộng đồng,
+  // khi phân loại đó còn hàng và còn Giờ vàng (`?pv=` của món gian hàng CTV ghim phân loại chỉ cần còn hàng); không thì cùng luật với thẻ (`defaultVariationFor`), nên gợi ý tìm, bài cộng đồng,
   // Đã xem gần đây, liên kết trực tiếp đều mở đúng phân loại có giá đã hiện. Khách đã tự chọn thì không tự đổi.
   const flashLoaded = useFlashSalesLoaded();
   const autoPicked = useRef(false);
+  const autoTarget = () => {
+    const search = new URLSearchParams(window.location.search);
+    const wanted = search.get('v');
+    const pinned = search.get('pv');
+    const entry = wanted ? variations.find((v) => v.id === wanted && v.stock > 0 && variationPricing(v, flash).isFlash) : undefined;
+    const pinnedEntry = pinned ? variations.find((v) => v.id === pinned && v.stock > 0) : undefined;
+    return entry ?? pinnedEntry ?? defaultVariationFor({ slug }, variations, flash);
+  };
   useEffect(() => {
     if (!flashLoaded || autoPicked.current) return;
     autoPicked.current = true;
     if (userPicked.current) return;
-    const wanted = new URLSearchParams(window.location.search).get('v');
-    const entry = wanted ? variations.find((v) => v.id === wanted && v.stock > 0 && variationPricing(v, flash).isFlash) : undefined;
-    const target = entry ?? defaultVariationFor({ slug }, variations, flash);
+    const target = autoTarget();
     if (target && target.id !== selectedId) setSelectedId(target.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chốt một lần khi Giờ vàng vừa về
   }, [flashLoaded]);
 
-  // Phân loại mặc định (theo bản ISR) hết hàng thật rồi mà còn phân loại khác → chọn giúp, trừ khi khách đã tự chọn.
+  // Tồn kho thật vừa về (bản ISR tối đa 5 phút tuổi): khách chưa tự chọn thì chọn lại theo luật mặc định trên tồn kho thật, để phân loại
+  // rẻ nhất vừa có hàng lại không bị bỏ qua và hết hàng thật rồi thì chuyển sang phân loại còn hàng. Chờ Giờ vàng về trước (nó chốt cùng luật).
   useEffect(() => {
-    if (userPicked.current || !stockQ.data) return;
-    const current = variations.find((v) => v.id === selectedId);
-    if (current && current.stock <= 0) {
-      const alt = variations.find((v) => v.stock > 0);
-      if (alt) setSelectedId(alt.id);
-    }
+    if (userPicked.current || !stockQ.data || !flashLoaded) return;
+    const target = autoTarget();
+    if (target && target.id !== selectedId) setSelectedId(target.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi tồn kho thật vừa về
   }, [stockQ.data]);
 
@@ -180,6 +184,8 @@ export default function AddToCart({
       return;
     }
     if (!selected || !available) return;
+    // Bấm mua là đã chọn: Giờ vàng hay tồn kho về muộn không được đổi phân loại dưới tay khách.
+    userPicked.current = true;
     await add(selected.id, Math.min(qty, maxQty), buyNow);
   };
   const onAdd = () => submit(false);

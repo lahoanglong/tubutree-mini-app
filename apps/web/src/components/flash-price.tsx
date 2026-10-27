@@ -6,7 +6,7 @@ import { usePdpSelection } from './pdp-selection';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { formatVnd } from '@/lib/api';
 
-type PricedProduct = { slug: string; basePrice: number; salePrice?: number | null };
+type PricedProduct = { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string };
 
 /** Nhãn "-34%" trên ảnh thẻ sản phẩm; giá Giờ vàng thì ghi rõ "Giờ vàng". Không có giảm giá thì không vẽ gì. */
 export function CardSaleBadge({ product, className }: { product: PricedProduct; className: string }) {

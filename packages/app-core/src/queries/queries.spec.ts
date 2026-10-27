@@ -154,3 +154,33 @@ describe('queries — danh sách đơn và trang Duyệt (infinite)', () => {
     expect(calls[0]!.path).toBe('/waste/requests/by-order/o1');
   });
 });
+
+describe('makeFlashRefetchInterval (B-132)', () => {
+  const NOW = Date.parse('2026-10-27T10:00:00Z');
+  const poll = flash.makeFlashRefetchInterval(() => NOW);
+  const at = (ms: number) => ({ endAt: new Date(NOW + ms).toISOString() });
+
+  it('không có suất hoặc chưa có dữ liệu: không thêm request', () => {
+    expect(poll({ state: { data: [] } })).toBe(false);
+    expect(poll({ state: { data: undefined } })).toBe(false);
+  });
+
+  it('mốc kết thúc còn xa hơn một phút: nhịp 60 giây', () => {
+    expect(poll({ state: { data: [at(3_600_000)] } })).toBe(60_000);
+  });
+
+  it('mốc kết thúc gần nhất trong vòng một phút: tải lại đúng lúc đó (từ 5 giây trở lên), lấy suất sớm nhất', () => {
+    expect(poll({ state: { data: [at(3_600_000), at(12_500)] } })).toBe(12_500);
+  });
+
+  it('đã quá mốc hoặc sát mốc: tối thiểu 5 giây (phản hồi được cache tới 10 giây), không dồn request', () => {
+    expect(poll({ state: { data: [at(-5_000)] } })).toBe(5_000);
+    expect(poll({ state: { data: [at(300)] } })).toBe(5_000);
+    expect(poll({ state: { data: [at(5_000)] } })).toBe(5_000);
+    expect(poll({ state: { data: [at(7_000)] } })).toBe(7_000);
+  });
+
+  it('suất không có endAt hợp lệ: nhịp 60 giây', () => {
+    expect(poll({ state: { data: [{}, { endAt: 'abc' }] } })).toBe(60_000);
+  });
+});

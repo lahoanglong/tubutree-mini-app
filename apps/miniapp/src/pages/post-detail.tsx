@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Input, Page, useParams, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useInfiniteQuery, useMutation } from '@tanstack/react-query';
-import { CheckCircle2, Clock, Flag, MessageCircle, Pin, Sprout } from 'lucide-react';
+import { CheckCircle2, Clock, Flag, MessageCircle, Pin } from 'lucide-react';
 import { getPost, getComments, reportContent, type FeedComment } from '../services/feed-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -13,6 +13,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
 import { Icon } from '../components/ui/icon';
+import { InitialsAvatar } from '../components/ui/initials-avatar';
 import { IconButton } from '../components/ui/icon-button';
 import { PageHeader } from '../components/ui/page-header';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
@@ -154,23 +155,7 @@ export default function PostDetailPage() {
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-            {p.avatar ? (
-              <img src={p.avatar} alt="" width={40} height={40} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-            ) : (
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: '50%',
-                  background: 'var(--color-action-secondary-bg)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon icon={Sprout} size="md" tone="brand" />
-              </div>
-            )}
+            <InitialsAvatar name={p.author} size={40} />
             <AuthorLine
               size="lg"
               name={p.author}
@@ -397,23 +382,7 @@ function CommentRow({ comment, onReport }: { comment: FeedComment; onReport: () 
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-          {comment.avatar ? (
-            <img src={comment.avatar} alt="" width={28} height={28} style={{ borderRadius: '50%', objectFit: 'cover' }} />
-          ) : (
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                background: 'var(--color-action-secondary-bg)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon icon={Sprout} size="sm" tone="brand" />
-            </div>
-          )}
+          <InitialsAvatar name={comment.author} size={28} />
           <AuthorLine name={comment.author} badge={comment.badge} level={comment.authorLevel} meta={timeAgo(comment.createdAt)} />
         </div>
         {!comment.isOwner && <IconButton icon={Flag} size="sm" label={vi.community.report} onPress={onReport} />}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { mount } from './harness';
 import { ProductImage } from './product-image';
 import { ProductThumb } from './product-thumb';
@@ -23,5 +23,38 @@ describe('ảnh thay thế thống nhất (B-23)', () => {
     });
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
+  });
+
+  describe('B-133: ảnh đã lỗi trước khi hydrate', () => {
+    const proto = HTMLImageElement.prototype;
+    const setLoadState = (complete: boolean, naturalWidth: number) => {
+      Object.defineProperty(proto, 'complete', { configurable: true, get: () => complete });
+      Object.defineProperty(proto, 'naturalWidth', { configurable: true, get: () => naturalWidth });
+    };
+    const originals = {
+      complete: Object.getOwnPropertyDescriptor(proto, 'complete'),
+      naturalWidth: Object.getOwnPropertyDescriptor(proto, 'naturalWidth'),
+    };
+    afterEach(() => {
+      for (const key of ['complete', 'naturalWidth'] as const) {
+        const original = originals[key];
+        if (original) Object.defineProperty(proto, key, original);
+        else delete (proto as unknown as Record<string, unknown>)[key];
+      }
+    });
+
+    it('lúc mount ảnh đã xong mà không có điểm ảnh: rơi về hình lá không cần sự kiện lỗi', () => {
+      setLoadState(true, 0);
+      const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/hong.jpg" brand="Tubu" /></div>);
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('[data-testid="product-image-fallback"]')).not.toBeNull();
+    });
+
+    it('ảnh đã tải xong bình thường, hoặc còn đang tải: giữ ảnh', () => {
+      setLoadState(true, 400);
+      expect(mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/ok.jpg" brand="Tubu" /></div>).container.querySelector('img')).not.toBeNull();
+      setLoadState(false, 0);
+      expect(mount(<div style={{ position: 'relative' }}><ProductImage src="https://img.test/cho.jpg" brand="Tubu" /></div>).container.querySelector('img')).not.toBeNull();
+    });
   });
 });

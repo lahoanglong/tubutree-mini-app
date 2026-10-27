@@ -70,7 +70,6 @@ export function FlashSale() {
       queryKey: ['flash-sales', 'active'],
       queryFn: fetchActiveFlashSales,
       staleTime: 30_000,
-      refetchInterval: 60_000,
     }),
   );
 

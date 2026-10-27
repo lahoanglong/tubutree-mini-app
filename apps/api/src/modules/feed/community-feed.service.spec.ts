@@ -150,14 +150,14 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('CommunityFeedService.getFeed (cộng đồng)', () => {
-  it('hiện tên rút gọn + avatar + badge + chip SP + đã-thả-tim', async () => {
+  it('hiện tên rút gọn + badge + chip SP + đã-thả-tim, không trả ảnh đại diện của tác giả (B-136)', async () => {
     const prisma = makePrisma();
     (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row()]);
     (prisma.feedReaction.groupBy as jest.Mock).mockResolvedValue([{ postId: 'p1', _count: { _all: 3 } }]);
     (prisma.feedComment.groupBy as jest.Mock).mockResolvedValue([{ postId: 'p1', _count: { _all: 2 } }]);
     const r = await makeSvc(prisma).getFeed('u1', { category: 'khoe-vuon' });
     expect(r.posts[0]).toMatchObject({
-      id: 'p1', author: 'Long L.', avatar: 'https://a/1.png', badge: null,
+      id: 'p1', author: 'Long L.', badge: null,
       likeCount: 3, commentCount: 2, liked: true, isOwner: false,
       category: { slug: 'khoe-vuon', name: 'Khoe vườn', icon: '🌿' },
       productTags: [{ slug: 'cay-a', name: 'Cây A', thumbnail: 't', salePrice: null, basePrice: 100 }],
@@ -198,7 +198,7 @@ describe('CommunityFeedService.getFeed (cộng đồng)', () => {
       row({ user: { fullName: null, avatarUrl: null, role: 'STAFF' } }),
     ]);
     const r = await makeSvc(prisma).getFeed('u1');
-    expect(r.posts[0]).toMatchObject({ author: 'Bạn Tubu', avatar: null, badge: 'EXPERT' });
+    expect(r.posts[0]).toMatchObject({ author: 'Bạn Tubu', badge: 'EXPERT' });
   });
 
   it('userId trùng chủ bài → isOwner true', async () => {
@@ -1972,7 +1972,7 @@ describe('CommunityFeedService.getComments — lọc bình luận đã gỡ', ()
 });
 
 describe('CommunityFeedService.getLeaderboard', () => {
-  it('lấy top theo reputation desc, where reputation>0, map author/avatar/reputation/level/levelName', async () => {
+  it('lấy top theo reputation desc, where reputation>0, map author/reputation/level/levelName, không có avatar', async () => {
     const prisma = makePrisma();
     (prisma.communityProfile.findMany as jest.Mock).mockResolvedValue([
       { reputation: 520, level: 4, user: { fullName: 'Long', avatarUrl: 'https://a/1.png' } },
@@ -1983,11 +1983,11 @@ describe('CommunityFeedService.getLeaderboard', () => {
       orderBy: { reputation: 'desc' },
       take: 20,
       where: { reputation: { gt: 0 } },
-      include: { user: { select: { fullName: true, avatarUrl: true } } },
+      include: { user: { select: { fullName: true } } },
     });
     expect(r).toEqual([
-      { author: 'Long', avatar: 'https://a/1.png', reputation: 520, level: 4, levelName: 'Cổ thụ' },
-      { author: 'Bạn Tubu', avatar: null, reputation: 3, level: 1, levelName: 'Mầm' },
+      { author: 'Long', reputation: 520, level: 4, levelName: 'Cổ thụ' },
+      { author: 'Bạn Tubu', reputation: 3, level: 1, levelName: 'Mầm' },
     ]);
   });
 
@@ -3403,5 +3403,42 @@ describe('B-109: tên công khai ở bài viết, bình luận và hàng chờ k
     await makeSvc(prisma, undefined, notify).addComment('commenter', 'CUSTOMER', 'p1', 'đẹp quá');
     const call = notify.notify.mock.calls.find((c) => c[1] === 'COMMUNITY_POST_COMMENTED');
     expect(call?.[2].author).toBe(SHORT);
+  });
+});
+
+describe('B-136: dữ liệu công khai của Cộng đồng không chứa ảnh đại diện của người khác', () => {
+  const AVATAR = 'https://zalo.example/avatar-bi-mat.jpg';
+  const withAvatar = { fullName: 'Lã Hoàng Long', avatarUrl: AVATAR, role: 'CUSTOMER', communityProfile: { level: 1 } };
+
+  it('danh sách bài, chi tiết bài: không có trường avatar và truy vấn không chọn avatarUrl', async () => {
+    const prisma = makePrisma();
+    (prisma.feedPost.findMany as jest.Mock).mockResolvedValue([row({ user: withAvatar })]);
+    (prisma.feedPost.findUnique as jest.Mock).mockResolvedValue({ ...row({ user: withAvatar }), reactions: [] });
+    const svc = makeSvc(prisma);
+    const feed = await svc.getFeed('u1');
+    const post = await svc.getPost('u1', 'p1');
+    expect(JSON.stringify([feed, post])).not.toContain(AVATAR);
+    expect(feed.posts[0]).not.toHaveProperty('avatar');
+    expect(post).not.toHaveProperty('avatar');
+    expect(JSON.stringify((prisma.feedPost.findMany as jest.Mock).mock.calls)).not.toContain('avatarUrl');
+    expect(JSON.stringify((prisma.feedPost.findUnique as jest.Mock).mock.calls)).not.toContain('avatarUrl');
+  });
+
+  it('bình luận: không có avatar và truy vấn không chọn avatarUrl', async () => {
+    const prisma = makePrisma();
+    (prisma.feedComment.findMany as jest.Mock).mockResolvedValue([
+      { id: 'c1', userId: 'other', body: 'Hay quá', isAccepted: false, createdAt: new Date('2026-07-03'), user: withAvatar },
+    ]);
+    const out = await makeSvc(prisma).getComments('p1', 'u1');
+    expect(JSON.stringify(out)).not.toContain(AVATAR);
+    expect(out.items[0]).not.toHaveProperty('avatar');
+    expect(JSON.stringify((prisma.feedComment.findMany as jest.Mock).mock.calls)).not.toContain('avatarUrl');
+  });
+
+  it('bảng xếp hạng: không có avatar', async () => {
+    const prisma = makePrisma();
+    (prisma.communityProfile.findMany as jest.Mock).mockResolvedValue([{ reputation: 5, level: 1, user: { fullName: 'Long', avatarUrl: AVATAR } }]);
+    const out = await makeSvc(prisma).getLeaderboard();
+    expect(JSON.stringify(out)).not.toContain(AVATAR);
   });
 });

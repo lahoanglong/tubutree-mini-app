@@ -68,7 +68,7 @@ describe('CommunityFeedService.publicPreview', () => {
       ['author', 'badge', 'category', 'commentCount', 'createdAt', 'id', 'image', 'isPinned', 'kind', 'likeCount', 'snippet', 'title'].sort(),
     );
     expect(out.posts[0]).toMatchObject({
-      id: 'p1', kind: 'TIP', author: 'Lan', badge: null, likeCount: 4, commentCount: 2, image: 'https://cdn.example/a.jpg',
+      id: 'p1', kind: 'TIP', author: 'Lan N.', badge: null, likeCount: 4, commentCount: 2, image: 'https://cdn.example/a.jpg',
       category: { slug: 'meo-vat', name: 'Mẹo vặt', icon: '💡' },
     });
     expect(JSON.stringify(out)).not.toMatch(/u-secret|avatar|garden|Nguyễn/);
@@ -94,8 +94,18 @@ describe('CommunityFeedService.publicPreview', () => {
 
 describe('publicAuthorName', () => {
   it('chỉ lấy tên gọi (từ cuối), không lộ họ tên đầy đủ', () => {
-    expect(publicAuthorName('Nguyễn Thị Lan')).toBe('Lan');
+    expect(publicAuthorName('Nguyễn Thị Lan')).toBe('Lan N.');
+    expect(publicAuthorName('Lại Nam')).toBe('Nam L.');
     expect(publicAuthorName('  Minh  ')).toBe('Minh');
+  });
+  it('số toàn khổ, số kiểu chữ đậm: dùng tên chung', () => {
+    expect(publicAuthorName('０９０１２３４５６７')).toBe('Bạn Tubu');
+    expect(publicAuthorName('Lan 𝟎𝟗𝟎𝟏')).toBe('Bạn Tubu');
+  });
+  it('bỏ emoji, ngoặc; tên nối bằng U+200B không lộ họ tên đầy đủ', () => {
+    expect(publicAuthorName('Hoa 🌸')).toBe('Hoa');
+    expect(publicAuthorName('Lại\u200BVăn\u200BNam')).toBe('Nam L.');
+    expect(publicAuthorName('🌸')).toBe('Bạn Tubu');
   });
   it('thiếu tên, tên chứa số/email (người dùng gõ SĐT hay email làm tên): dùng tên chung', () => {
     expect(publicAuthorName(null)).toBe('Bạn Tubu');

@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isRealUser, REAL_USER_REQUIRED_MSG } from '../../common/real-user';
 import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods';
+import { cardPrices, representativeVariation, sortVariationsByPrice } from '../catalog/variation-order';
 import { isPublicProduct, PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { formatVnDate } from '../../common/vn-time';
 import { publicImage } from '../../common/public-image';
@@ -101,7 +102,13 @@ export class GroupBuyService {
       this.config.get<number>('groupbuy.target_size', 3),
       this.config.get<number>('groupbuy.window_hours', 48),
     ]);
-    const basePrice = product.salePrice ?? product.basePrice;
+    const variations = await this.prisma.variation.findMany({
+      where: { productId, isActive: true },
+      select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true },
+    });
+    // Giá gốc theo phân loại đại diện như thẻ sản phẩm: cột Product chỉ là giá của phân loại đầu Pancake trả về.
+    const card = cardPrices(product, variations);
+    const basePrice = card.salePrice ?? card.basePrice;
     const unitPrice = Math.round((basePrice * (100 - pct)) / 100);
     const expiresAt = new Date(Date.now() + windowHours * 3600 * 1000);
 
@@ -141,7 +148,7 @@ export class GroupBuyService {
       { name: product.name, slug: product.slug, thumbnail: product.thumbnail },
       1,
       true,
-      minOrders.get(created.id) ?? created.unitPrice,
+      minOrders.get(created.id) ?? { minOrder: created.unitPrice },
       userId,
     );
   }
@@ -310,7 +317,7 @@ export class GroupBuyService {
       ? (group as { members: unknown[] }).members.length > 0
       : false;
     const minOrders = await this.minOrders([group as unknown as GroupRow]);
-    return this.toView(group as unknown as GroupRow, group.product, group._count.members, joined, minOrders.get(group.id) ?? group.unitPrice, userId);
+    return this.toView(group as unknown as GroupRow, group.product, group._count.members, joined, minOrders.get(group.id) ?? { minOrder: group.unitPrice }, userId);
   }
 
   /** `userId` (khi đã đăng nhập) để đánh dấu nhóm mình đã tham gia / tự mở; khách thì joined=false. */
@@ -332,7 +339,7 @@ export class GroupBuyService {
     }
     const openMinOrders = await this.minOrders(groups as unknown as GroupRow[]);
     const open = groups.map((g) =>
-      this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), openMinOrders.get(g.id) ?? g.unitPrice, userId),
+      this.toView(g as unknown as GroupRow, g.product, g._count.members, mine.has(g.id), openMinOrders.get(g.id) ?? { minOrder: g.unitPrice }, userId),
     );
     if (!userId) return open;
     // Nhóm của mình đã đủ người, mã giảm còn hạn: khách phải tìm lại được mã và mua tiếp ngay từ đây.
@@ -347,7 +354,7 @@ export class GroupBuyService {
     const doneMinOrders = await this.minOrders(done as unknown as GroupRow[]);
     return [
       ...open,
-      ...done.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, true, doneMinOrders.get(g.id) ?? g.unitPrice, userId)),
+      ...done.map((g) => this.toView(g as unknown as GroupRow, g.product, g._count.members, true, doneMinOrders.get(g.id) ?? { minOrder: g.unitPrice }, userId)),
     ];
   }
 
@@ -391,20 +398,30 @@ export class GroupBuyService {
     }
   }
 
-  /** Đơn tối thiểu hiển thị phải cùng số với mã đã cấp (groupMinOrder). Một truy vấn cho cả danh sách; lỗi tra thì dùng giá nhóm. */
-  private async minOrders(groups: GroupRow[]): Promise<Map<string, number>> {
-    const out = new Map<string, number>();
+  /**
+   * Đơn tối thiểu hiển thị phải cùng số với mã đã cấp (groupMinOrder), và phân loại mà giá nhóm dựa trên (`variationId`: phân loại đại
+   * diện của thẻ, ưu tiên phân loại có giá đang bán đúng bằng giá gốc đã lưu) để client chỉ xét Giờ vàng của phân loại đó. Một truy vấn
+   * cho cả danh sách; lỗi tra thì dùng giá nhóm, không có `variationId`.
+   */
+  private async minOrders(groups: GroupRow[]): Promise<Map<string, { minOrder: number; variationId?: string }>> {
+    const out = new Map<string, { minOrder: number; variationId?: string }>();
     if (groups.length === 0) return out;
     const rows = await this.prisma.variation
       .findMany({
         where: { productId: { in: [...new Set(groups.map((g) => g.productId))] }, isActive: true },
-        select: { productId: true, retailPrice: true, salePrice: true },
+        select: { id: true, sku: true, productId: true, retailPrice: true, salePrice: true, stock: true },
       })
       .catch((e: unknown) => {
         this.logger.warn(`Không tra được biến thể để tính đơn tối thiểu: ${(e as Error).message}`);
         return [];
       });
-    for (const g of groups) out.set(g.id, groupMinOrder(g, rows.filter((v) => v.productId === g.productId)));
+    for (const g of groups) {
+      const mine = rows.filter((v) => v.productId === g.productId);
+      const rep = representativeVariation(mine);
+      const matching = sortVariationsByPrice(mine).find((v) => (v.salePrice ?? v.retailPrice) === g.basePrice);
+      const variationId = (rep && (rep.salePrice ?? rep.retailPrice) === g.basePrice ? rep : (matching ?? rep))?.id;
+      out.set(g.id, { minOrder: groupMinOrder(g, mine), ...(variationId ? { variationId } : {}) });
+    }
     return out;
   }
 
@@ -413,7 +430,7 @@ export class GroupBuyService {
     product: { name: string; slug: string; thumbnail: string | null },
     memberCount: number,
     joined: boolean,
-    minOrder: number,
+    extra: { minOrder: number; variationId?: string },
     viewerId?: string,
   ) {
     return {
@@ -422,7 +439,8 @@ export class GroupBuyService {
       targetSize: g.targetSize,
       currentSize: memberCount,
       unitPrice: g.unitPrice,
-      minOrder,
+      minOrder: extra.minOrder,
+      ...(extra.variationId ? { variationId: extra.variationId } : {}),
       basePrice: g.basePrice,
       discountPct: g.basePrice > 0 ? Math.round(((g.basePrice - g.unitPrice) / g.basePrice) * 100) : 0,
       status: g.status,

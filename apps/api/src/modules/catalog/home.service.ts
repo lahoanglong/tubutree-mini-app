@@ -5,7 +5,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
 import { PurchasedItemsService } from '../orders/purchased-items.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
-import { buildPublicConfig, type PublicConfigDTO } from '../system-config/public-config';
+import { buildPublicConfig, tierLoaderOf, type PublicConfigDTO } from '../system-config/public-config';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
@@ -110,7 +110,7 @@ export class HomeService {
       this.block('categories', () => this.catalog.categories()),
       this.block('brands', () => this.catalog.brands()),
       // Khối "Quà khách mới" cần số công khai: gộp vào đây để mở Trang chủ không tốn thêm request /config/public.
-      this.block('publicConfig', () => buildPublicConfig(this.config)),
+      this.block('publicConfig', () => buildPublicConfig(this.config, tierLoaderOf(this.prisma))),
     ]);
     return { bestSellers, featured, newest, categories, brands, publicConfig };
   }

@@ -18,6 +18,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/shop-api', () => ({
   fetchOrders: mocks.fetchOrders,
   fetchPurchasedItems: mocks.fetchPurchasedItems,
+  fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
   repurchaseOrder: mocks.repurchaseOrder,
   addToCart: vi.fn(),
   getPublicConfig: mocks.getPublicConfig,

@@ -18,7 +18,6 @@ const POST: FeedItem = {
   meta: null,
   createdAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString(),
   author: 'Lan Anh',
-  avatar: null,
   badge: null,
   authorLevel: 1,
   category: { id: 'c1', slug: 'bep', name: 'Nhà bếp', icon: null },
@@ -134,6 +133,21 @@ describe('PostCard — giao diện điện thoại như Mini App', () => {
   it('khối trắng tràn ngang không viền không bo không bóng dưới md', () => {
     const cls = mount().querySelector('[data-testid="post-card"]')!.className;
     for (const c of ['max-md:-mx-4', 'max-md:rounded-none', 'max-md:border-0', 'max-md:shadow-none']) expect(cls).toContain(c);
+  });
+});
+
+describe('B-136: ảnh đại diện của tác giả là vòng tròn chữ cái đầu', () => {
+  it('thẻ bài không có thẻ img cho avatar, chữ cái đầu theo tên đang hiển thị', () => {
+    const r = render(<PostCard post={{ ...POST, author: 'Lại N.' }} />);
+    const badge = r.container.querySelector('[data-testid="initials-avatar"]');
+    expect(badge?.textContent).toBe('L');
+    expect(r.container.querySelector('img')).toBeNull();
+    r.unmount();
+  });
+  it('tên chung "Bạn Tubu" dùng chữ T', () => {
+    const r = render(<PostCard post={{ ...POST, author: 'Bạn Tubu' }} />);
+    expect(r.container.querySelector('[data-testid="initials-avatar"]')?.textContent).toBe('T');
+    r.unmount();
   });
 });
 

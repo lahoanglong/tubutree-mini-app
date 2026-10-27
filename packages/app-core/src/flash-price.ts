@@ -1,3 +1,5 @@
+import { serverNow } from './server-clock';
+
 /**
  * Giá thẻ sản phẩm có Giờ vàng, MỘT quy tắc cho Mini App và web. Giá khách trả = min(giá Giờ vàng, giá đang bán). Giá gạch là
  * giá đang bán trước Giờ vàng khi Giờ vàng thắng (khớp dải Giờ vàng ở Trang chủ), còn lại là giá niêm yết: một sản phẩm không
@@ -10,6 +12,15 @@ export interface FlashPriceItem {
   /** Giá niêm yết và giá đang bán của chính phân loại có Giờ vàng; thiếu thì thẻ dùng giá của sản phẩm. */
   retailPrice?: number;
   salePrice?: number | null;
+  /** Hạn của đợt (ISO). Có thì thẻ bỏ suất đã quá hạn dù danh sách ở trình duyệt chưa kịp tải lại. */
+  endAt?: string;
+}
+
+/** Suất còn chạy theo giờ máy chủ; không có hạn hoặc hạn không đọc được thì coi như còn chạy (máy chủ vẫn tính lại giá lúc thêm giỏ). */
+export function isFlashRunning(f: { endAt?: string }, now: number): boolean {
+  if (!f.endAt) return true;
+  const end = Date.parse(f.endAt);
+  return Number.isNaN(end) || end > now;
 }
 
 export interface CardPricing {
@@ -59,9 +70,12 @@ export function pickDefaultVariation<T extends { id: string; sku?: string; retai
  * không nhãn Giờ vàng, không `flashVariationId`.
  */
 export function cardPricing(
-  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string },
-  flash: readonly FlashPriceItem[],
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string },
+  allFlash: readonly FlashPriceItem[],
+  now: number = serverNow(),
 ): CardPricing {
+  // Món gian hàng CTV ghim một phân loại: thẻ chỉ xét Giờ vàng của chính phân loại đó, để giá thẻ và phân loại mở ra luôn là một.
+  const flash = allFlash.filter((f) => isFlashRunning(f, now) && (!product.pinnedVariationId || f.variationId === product.pinnedVariationId));
   const cardStanding = product.salePrice ?? product.basePrice;
   const standingOf = (f: FlashPriceItem) => (f.retailPrice != null ? (f.salePrice ?? f.retailPrice) : cardStanding);
   const isRep = (f: FlashPriceItem) =>
@@ -92,14 +106,18 @@ export function defaultVariationFor<T extends { id: string; sku?: string; retail
   product: { slug: string },
   variations: readonly T[],
   flash: readonly FlashPriceItem[],
+  now: number = serverNow(),
 ): T | undefined {
   const rep = pickDefaultVariation(variations);
   if (!rep) return undefined;
+  // Suất rẻ nhất của phân loại đã hết hàng (danh sách Giờ vàng ở trình duyệt còn cũ) thì xét suất kế tiếp, không rơi thẳng về đại diện.
+  const inStock = new Set(variations.filter((v) => v.stock > 0).map((v) => v.id));
   const { flashVariationId } = cardPricing(
     { slug: product.slug, basePrice: rep.retailPrice, salePrice: rep.salePrice, repVariationId: rep.id },
-    flash,
+    flash.filter((f) => inStock.has(f.variationId)),
+    now,
   );
-  return (flashVariationId ? variations.find((v) => v.id === flashVariationId && v.stock > 0) : undefined) ?? rep;
+  return (flashVariationId ? variations.find((v) => v.id === flashVariationId) : undefined) ?? rep;
 }
 
 export interface VariationPricingResult {

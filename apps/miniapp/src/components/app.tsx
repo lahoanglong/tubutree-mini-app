@@ -16,6 +16,7 @@ import { useStorefrontContext } from '../store/storefront-context';
 import { recordReferralTouch, reportLaunchLinkClick } from '../services/affiliate-api';
 import { createQueryClient } from '../services/query-client';
 import { useScreenTracker } from '../hooks/use-screen-tracker';
+import { useFlashSalesPoller } from '../hooks/use-flash-sales-poller';
 import { useSessionRecovery } from '../hooks/use-auth-phase';
 import { NavigationTypeProvider } from '../hooks/use-navigation-type';
 import { LivePathnameProvider } from '../hooks/use-live-pathname';
@@ -113,6 +114,12 @@ function ScreenTracker() {
   return null;
 }
 
+/** Gắn nhịp tải lại Giờ vàng (chủ duy nhất) bên trong QueryClientProvider. */
+function FlashSalesPoller() {
+  useFlashSalesPoller();
+  return null;
+}
+
 export default function MyApp() {
   const restore = useAuthStore((s) => s.restore);
   const authed = useAuthStore((s) => s.status === 'authenticated');
@@ -180,6 +187,7 @@ export default function MyApp() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        <FlashSalesPoller />
         <App>
           <SnackbarProvider>
             <ZMPRouter>

@@ -49,7 +49,6 @@ const POST = (id: string, author: string): FeedItem => ({
   meta: null,
   createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
   author,
-  avatar: null,
   badge: null,
   authorLevel: 1,
   category: null,

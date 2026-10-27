@@ -41,7 +41,7 @@ const pct = (price: number, original: number) => (original > 0 && price < origin
  * để cùng một sản phẩm không hiện hai giá gạch hay hai phần trăm giảm khác nhau giữa hai nền tảng.
  */
 export function cardPricing(
-  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string },
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string; pinnedVariationId?: string },
   flash: readonly FlashItem[],
 ): CardPricing {
   const r = sharedCardPricing(product, flash);

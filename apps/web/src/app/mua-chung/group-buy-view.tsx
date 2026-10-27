@@ -6,8 +6,10 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Share2 } from 'lucide-react';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
+import { groupMemberStatus, groupMissing, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { EmptyState } from '@/components/empty-state';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
@@ -88,7 +90,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
     setNote(null);
     const result = await platformBridge.share({
       title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-      text: `Còn thiếu ${Math.max(0, g.targetSize - g.currentSize)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
+      text: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
       path: withReferral(`/mua-chung/${encodeURIComponent(g.id)}`, user?.referralCode),
     });
     if (result === 'copied') setNote({ text: 'Đã sao chép liên kết nhóm.', error: false });
@@ -189,15 +191,9 @@ function GroupCard({
   const member = authed && g.joined;
   const productHref = `/san-pham/${encodeURIComponent(g.product.slug)}`;
   const closedLabel = g.status === 'SUCCESS' ? 'Nhóm đã đủ người' : 'Nhóm đã hết hạn';
-  const label = !isOpen
-    ? closedLabel
-    : !authed
-      ? 'Đăng nhập để tham gia'
-      : g.joined
-        ? g.isOwner
-          ? 'Nhóm của bạn'
-          : 'Đã tham gia'
-        : `Tham gia mua chung (−${g.discountPct}%)`;
+  const label = !isOpen ? closedLabel : !authed ? 'Đăng nhập để tham gia' : `Tham gia mua chung (−${g.discountPct}%)`;
+  const prices = groupPriceLabels(g, formatVnd, useActiveFlashSales());
+  const inOpenGroup = member && isOpen;
 
   return (
     <article className={`${ui.card} flex flex-col p-3 max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
@@ -215,12 +211,12 @@ function GroupCard({
             {g.product.name}
           </Link>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-sm font-semibold text-forest-700 max-md:text-[length:var(--type-body-sm-size)]">{formatVnd(g.unitPrice)}</span>
-            <span className="text-xs text-stone-600 line-through max-md:text-[length:var(--type-caption-size)]">{formatVnd(g.basePrice)}</span>
+            <span className="text-sm font-semibold text-forest-700 max-md:text-[length:var(--type-body-sm-size)]">{prices.group}</span>
             <Badge tone="promo" size="sm">
               −{g.discountPct}%
             </Badge>
           </div>
+          <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">{prices.solo}</p>
           <p className="text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)]">
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </p>
@@ -230,7 +226,7 @@ function GroupCard({
         <ProgressBar value={g.currentSize} max={g.targetSize} ariaLabel={`${g.product.name}: tiến độ nhóm mua chung`} />
       </div>
       {g.status !== 'SUCCESS' && (
-        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{`Đủ nhóm: nhận mã giảm ${g.discountPct}%, dùng cho đơn từ ${formatVnd(g.minOrder ?? g.unitPrice)}`}</p>
+        <p className="mt-1.5 text-xs text-stone-700 max-md:text-[length:var(--type-caption-size)]">{groupRewardLine(g, formatVnd)}</p>
       )}
       {g.status === 'SUCCESS' && member ? (
         <>
@@ -243,15 +239,17 @@ function GroupCard({
             {`Mua ngay với mã giảm ${g.discountPct}%`}
           </Link>
         </>
+      ) : inOpenGroup ? (
+        <>
+          <p className="mt-2 text-xs font-semibold text-stone-700 max-md:text-[length:var(--type-caption-size)]">{groupMemberStatus(g)}</p>
+          <button type="button" onClick={onShare} className={`${ui.btnPrimary} mt-2 w-full gap-1.5`}>
+            <Share2 className="h-4 w-4" aria-hidden="true" />
+            Mời bạn bè
+          </button>
+        </>
       ) : (
         <button type="button" disabled={!isOpen || member || joining} onClick={onJoin} className={`${ui.btnPrimary} mt-3 w-full`}>
           {label}
-        </button>
-      )}
-      {member && isOpen && (
-        <button type="button" onClick={onShare} className={`${ui.btnSecondary} mt-2 w-full gap-1.5`}>
-          <Share2 className="h-4 w-4" aria-hidden="true" />
-          Mời bạn bè
         </button>
       )}
     </article>

@@ -11,7 +11,7 @@ import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods'
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
 import { decodeServedImage } from '../../common/served-image';
-import { cardPrices } from '../catalog/variation-order';
+import { cardPrices, pinnedCardPrices } from '../catalog/variation-order';
 import { publicDisplayName } from '../../common/mask-name';
 import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
@@ -156,7 +156,7 @@ export class StorefrontService {
         ...c,
         items: c.items.map((i) => {
           const { variations, ...product } = i.product;
-          return { ...i, product: { ...product, ...cardPrices(product, variations) }, hiddenReason: buyerHiddenReason(i) };
+          return { ...i, product: { ...product, ...pinnedCardPrices(product, variations, i.variationId) }, hiddenReason: buyerHiddenReason(i) };
         }),
       })),
     };
@@ -354,7 +354,7 @@ export class StorefrontService {
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
               id: i.product.id, name: i.product.name, slug: i.product.slug, thumbnail: i.product.thumbnail,
-              brand: i.product.brand, ...cardPrices(i.product, i.product.variations ?? []),
+              brand: i.product.brand, ...pinnedCardPrices(i.product, i.product.variations ?? [], i.variationId),
               ratingAvg: i.product.ratingAvg, reviewCount: i.product.reviewCount,
               sold: i.product.soldExternal + i.product.soldApp,
               inStock: (i.product.variations ?? []).some((v) => v.stock > 0),

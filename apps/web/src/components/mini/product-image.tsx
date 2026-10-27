@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/product-image.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { brandAccent } from './brand-accent';
 
 /**
@@ -65,11 +65,18 @@ export function ProductImage({
   size?: number;
 }) {
   const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
   useEffect(() => setFailed(false), [src]);
+  // Ảnh HTML dựng sẵn có thể đã lỗi trước khi React hydrate; sự kiện lỗi đó không phát lại nên `onError` không chạy.
+  useEffect(() => {
+    const img = ref.current;
+    if (img && img.complete && img.naturalWidth === 0) setFailed(true);
+  }, [src]);
   if (!src || failed) return <ProductImageFallback brand={brand} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
+      ref={ref}
       src={src}
       alt={alt}
       width={size}

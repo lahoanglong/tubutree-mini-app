@@ -33,7 +33,26 @@ function displayText(v: unknown): string | null {
  *
  * Dùng chung cho GET /config/public và khối `publicConfig` của GET /home (Trang chủ gộp request), nên hai nơi luôn cùng số.
  */
-export async function buildPublicConfig(config: SystemConfigService) {
+export type TierRow = { id: string; name: string; pointMultiplier: unknown };
+export type TierLoader = () => Promise<TierRow[]>;
+
+/** Bảng hạng đọc từ cùng nguồn với /loyalty/preview (membershipTier); hệ số hỏng (không phải số > 0) bị bỏ để UI rơi về hệ số 1. */
+export const tierLoaderOf = (prisma: { membershipTier: { findMany: (args: { select: { id: true; name: true; pointMultiplier: true } }) => Promise<TierRow[]> } }): TierLoader => () =>
+  prisma.membershipTier.findMany({ select: { id: true, name: true, pointMultiplier: true } });
+
+function tierTables(rows: TierRow[]) {
+  const tierMultipliers: Record<string, number> = {};
+  const tierNames: Record<string, string> = {};
+  for (const t of rows) {
+    const m = Number(t.pointMultiplier);
+    if (!Number.isFinite(m) || m <= 0) continue;
+    tierMultipliers[t.id] = m;
+    tierNames[t.id] = t.name;
+  }
+  return { tierMultipliers, tierNames };
+}
+
+export async function buildPublicConfig(config: SystemConfigService, loadTiers: TierLoader = async () => []) {
   const [
     freeshipThreshold,
     subscribeDiscountPct,
@@ -70,6 +89,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     chatEnabled,
     chatHours,
     company,
+    tierRows,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -108,6 +128,7 @@ export async function buildPublicConfig(config: SystemConfigService) {
     config.get<unknown>(CHAT_ENABLED_KEY, false),
     config.get<unknown>(CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS),
     readCompanyIdentity(config),
+    loadTiers().catch(() => [] as TierRow[]),
   ]);
   return {
     freeshipThreshold,
@@ -144,6 +165,8 @@ export async function buildPublicConfig(config: SystemConfigService) {
       vndPerPointRedeem,
       maxRedeemPct: typeof maxRedeemPct === 'number' && maxRedeemPct >= 0 && maxRedeemPct <= 1 ? maxRedeemPct : LOYALTY_MAX_REDEEM_PCT_DEFAULT,
       pointExpireMonths: normalizePointExpireMonths(pointExpireMonths),
+      // Hệ số điểm theo hạng (id hạng → hệ số) và tên hạng, để trang sản phẩm tính số điểm của khách mà không gọi thêm API.
+      ...tierTables(tierRows),
     },
     homeNewCustomerLayout: homeNewCustomerLayout === true,
     // Chỉ boolean: true khi AI bật VÀ có provider dùng được. Miniapp ẩn mọi lối vào AI khi không phải true (kể cả API cũ không trả).

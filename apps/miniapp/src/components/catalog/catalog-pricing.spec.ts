@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { flashDisplay, tilePricing } from './catalog-pricing';
 
-const FLASH = { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'NRC', thumbnail: null, flashPrice: 50000, retailPrice: 100000, soldCount: 1, quota: 10, endAt: '2026-10-01T00:00:00.000Z' };
+const FLASH = { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'NRC', thumbnail: null, flashPrice: 50000, retailPrice: 100000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' };
 
 describe('tilePricing — quy tắc flash > sale > base (giống ProductCard cũ)', () => {
   it('không sale, không flash → giá gốc, 0%', () => {

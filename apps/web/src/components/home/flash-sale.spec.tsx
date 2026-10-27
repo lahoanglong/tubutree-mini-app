@@ -83,6 +83,13 @@ describe('FlashSale', () => {
     expect(c.querySelector('a[href="/san-pham/nuoc-rua-chen?v=v1"]')).not.toBeNull();
   });
 
+  it('B-146: nhãn -% nền cam đặc như Mini App, không phải nền cam nhạt', async () => {
+    activeResult = async () => [active()];
+    const c = await mount(<FlashSale />);
+    const badge = c.querySelector('span[style*="--color-flash-solid-bg"]');
+    expect(badge?.textContent).toBe('-20%');
+  });
+
   it('sản phẩm nhiều phân loại: tên phân loại ở dòng riêng một dòng, giống Mini App', async () => {
     activeResult = async () => [active({ variationName: '500g' })];
     const c = await mount(<FlashSale />);
