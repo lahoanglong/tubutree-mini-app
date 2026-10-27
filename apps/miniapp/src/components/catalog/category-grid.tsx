@@ -7,7 +7,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Heading, Text } from '../ui/text';
 
 /** Một hàng cuộn ngang thay cho lưới ô to: 7 danh mục xếp lưới 2 cột đẩy món đầu xuống giữa màn thứ hai. Cao 44px = vùng chạm tối thiểu. */
-const ROW: CSSProperties = { gap: 8, padding: '4px 16px 8px', margin: '0 -16px' };
+const ROW: CSSProperties = { gap: 8, padding: '4px 16px 8px', margin: '0 -16px', maxWidth: 'none' };
 const ITEM_HEIGHT = 44;
 
 export interface CategoryGridProps {

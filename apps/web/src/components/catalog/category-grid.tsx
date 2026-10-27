@@ -39,7 +39,7 @@ export function CategoryGrid({
         </div>
       ) : (
         <ScrollRow
-          label={title}
+          label={`${title} (vuốt ngang)`}
           className="gap-2 max-md:-mx-4 max-md:max-w-none max-md:px-4 max-md:pb-2 max-md:pt-1 md:flex-wrap md:overflow-visible"
         >
           {entries.map((e) => (
