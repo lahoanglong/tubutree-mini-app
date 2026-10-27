@@ -31,9 +31,16 @@ describe('ảnh thay thế thống nhất (B-23)', () => {
       Object.defineProperty(proto, 'complete', { configurable: true, get: () => complete });
       Object.defineProperty(proto, 'naturalWidth', { configurable: true, get: () => naturalWidth });
     };
+    const originals = {
+      complete: Object.getOwnPropertyDescriptor(proto, 'complete'),
+      naturalWidth: Object.getOwnPropertyDescriptor(proto, 'naturalWidth'),
+    };
     afterEach(() => {
-      delete (proto as unknown as Record<string, unknown>).complete;
-      delete (proto as unknown as Record<string, unknown>).naturalWidth;
+      for (const key of ['complete', 'naturalWidth'] as const) {
+        const original = originals[key];
+        if (original) Object.defineProperty(proto, key, original);
+        else delete (proto as unknown as Record<string, unknown>)[key];
+      }
     });
 
     it('lúc mount ảnh đã xong mà không có điểm ảnh: rơi về hình lá không cần sự kiện lỗi', () => {
