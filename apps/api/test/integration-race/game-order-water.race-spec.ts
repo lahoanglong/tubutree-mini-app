@@ -239,6 +239,46 @@ describe('GameOrderWaterService (real Postgres)', () => {
       expect(await seedsOf(u.id)).toBe(300);
     });
 
+    it('mua, tiêu hết, trả đơn, lặp 3 vòng trong một tuần: tổng nhận không quá trần 300, thẻ hiện đúng', async () => {
+      const u = await player();
+      let received = 0;
+      for (let round = 0; round < 3; round++) {
+        const orders = await Promise.all([delivered(u.id), delivered(u.id), delivered(u.id)]);
+        for (const o of orders) received += (await water.grantForOrder(o.id)).granted;
+        await prisma.gameProfile.update({ where: { userId: u.id }, data: { totalSeeds: 0 } });
+        for (const o of orders) {
+          await close(o.id, 'RETURNED');
+          await water.reverseForOrder(o.id);
+        }
+      }
+      expect(received).toBe(300);
+      expect((await water.summary(u.id)).weeklyGranted).toBe(300);
+      expect(await seedsOf(u.id)).toBe(0);
+    });
+
+    it('còn 30 giọt: thu hồi 30, trần chỉ mở lại 30', async () => {
+      const u = await player();
+      const o = await delivered(u.id);
+      await water.grantForOrder(o.id);
+      await prisma.gameProfile.update({ where: { userId: u.id }, data: { totalSeeds: 30 } });
+      await close(o.id, 'RETURNED');
+      await expect(water.reverseForOrder(o.id)).resolves.toEqual({ reversed: 30 });
+      expect((await water.summary(u.id)).weeklyGranted).toBe(70);
+      const events = await eventsOf(u.id);
+      expect(events.find((e) => e.reason === 'ORDER_REVERSED')?.delta).toBe(-30);
+    });
+
+    it('đã tiêu hết: dòng đảo delta 0 vẫn được ghi, gọi lại không đổi gì', async () => {
+      const u = await player();
+      const o = await delivered(u.id);
+      await water.grantForOrder(o.id);
+      await prisma.gameProfile.update({ where: { userId: u.id }, data: { totalSeeds: 0 } });
+      await close(o.id, 'CANCELLED');
+      await expect(water.reverseForOrder(o.id)).resolves.toEqual({ reversed: 0 });
+      await expect(water.reverseForOrder(o.id)).resolves.toMatchObject({ skipped: 'ALREADY_REVERSED' });
+      expect((await water.summary(u.id)).weeklyGranted).toBe(100);
+    });
+
     it('đơn còn chờ (khách chưa mở game): huỷ đơn chờ, mở game sau đó không cộng', async () => {
       const u = await realUser();
       const o = await delivered(u.id);
@@ -316,16 +356,20 @@ describe('GameOrderWaterService (real Postgres)', () => {
     expect(await seedsOf(target.id)).toBe(520);
   });
 
-  it('gộp tài khoản: đích đã mua vé giữ chuỗi bằng giọt là đã chơi, không bị thay hồ sơ (không mất vé)', async () => {
+  it.each([
+    ['chỉ có vé giữ chuỗi', { streakFreezes: 2 }],
+    ['đã hứng sương và có vé', { streakFreezes: 1, lastDewAt: new Date() }],
+  ])('gộp tài khoản: đích %s mà chưa chơi vẫn nhận vườn guest, vé của đích cộng sang guest', async (_n, extra) => {
     const target = await realUser();
-    await prisma.gameProfile.create({ data: { userId: target.id, totalSeeds: 5, streakFreezes: 2 } });
+    await prisma.gameProfile.create({ data: { userId: target.id, totalSeeds: 5, ...extra } });
     const guest = await createUser(prisma, { zaloId: `guest_dev_${randCode(8)}`, fullName: 'Khach' });
     await prisma.refreshToken.create({ data: { userId: guest.id, tokenHash: `it-${randCode(16)}`, expiresAt: new Date(Date.now() + 86_400_000) } });
-    await prisma.gameProfile.create({ data: { userId: guest.id, totalSeeds: 420, streakDays: 6, lastCheckInAt: new Date() } });
+    await prisma.gameProfile.create({ data: { userId: guest.id, totalSeeds: 420, streakDays: 6, lastCheckInAt: new Date(), streakFreezes: 1 } });
     zaloIdForNextCall = target.zaloId!;
     await auth.ensurePhoneForCurrentUser(guest.id, 'code', 'access');
     const t = await prisma.gameProfile.findUniqueOrThrow({ where: { userId: target.id } });
-    expect(t).toMatchObject({ totalSeeds: 5, streakFreezes: 2 });
+    expect(t).toMatchObject({ totalSeeds: 425, streakDays: 6, streakFreezes: 1 + extra.streakFreezes });
+    expect(await prisma.gameProfile.findUnique({ where: { userId: guest.id } })).toBeNull();
   });
 
   it('gọi lại và 10 lần song song cho cùng một đơn: chỉ cộng đúng 100 một lần, một dòng sổ', async () => {

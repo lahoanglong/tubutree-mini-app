@@ -14,6 +14,12 @@ const isDbInt = (v: unknown): v is number => typeof v === 'number' && Number.isS
 export const SPIN_POINTS_PRIZE_MAX = 100_000;
 
 /**
+ * Trần một giải SEEDS (giọt nước) của vòng quay. Giải này cộng đủ và được vượt sức chứa bình (khách đã trả Điểm Xanh), nên
+ * bể không còn chặn gõ nhầm: một giải tới INT4_MAX sẽ cho khách hàng tỉ giọt trong một lượt.
+ */
+export const SPIN_SEEDS_PRIZE_MAX = 1_000;
+
+/**
  * Lý do một giải của `game.spin_prizes` không dùng được, hoặc null nếu hợp lệ. Dùng chung cho luật ghi cấu hình
  * (SystemConfigService) và cho GameService.spin khi đọc, vì cấu hình đã lưu từ trước luật ghi vẫn có thể hỏng.
  *
@@ -38,6 +44,9 @@ export function spinPrizeProblem(prize: unknown): string | null {
   if (!isFiniteNumber(p.weight) || p.weight < 0) return 'weight phải là số hữu hạn ≥ 0';
   if (p.rewardType === 'POINTS' && !(isDbInt(p.value) && p.value >= 1 && p.value <= SPIN_POINTS_PRIZE_MAX)) {
     return `giải POINTS cần value là Điểm Xanh nguyên từ 1 tới ${SPIN_POINTS_PRIZE_MAX} (số âm sẽ trừ điểm của khách; trần chặn gõ nhầm đơn vị)`;
+  }
+  if (p.rewardType === 'SEEDS' && !(isDbInt(p.value) && p.value <= SPIN_SEEDS_PRIZE_MAX)) {
+    return `giải SEEDS cần value là số giọt nguyên từ 0 tới ${SPIN_SEEDS_PRIZE_MAX} (giải này vượt được sức chứa bình, trần chặn gõ nhầm)`;
   }
   if (!isDbInt(p.value)) return `value phải là số nguyên từ 0 tới ${INT4_MAX} (cột Int của DB)`;
   return null;

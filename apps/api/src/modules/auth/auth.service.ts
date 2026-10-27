@@ -657,8 +657,7 @@ export class AuthService {
       // thay bằng hồ sơ khách và cộng số giọt nước của nó vào, để khách không mất vườn chơi thử.
       const targetProfile = await tx.gameProfile.findUnique({ where: { userId: tid } });
       let targetPlays = targetProfile !== null;
-      // Vé giữ chuỗi mua bằng giọt hay đã hứng sương cũng là đã chơi: thay hồ sơ sẽ làm mất vé khách đã trả bằng nước.
-      if (targetProfile && !targetProfile.lastCheckInAt && !targetProfile.lastWateredAt && !targetProfile.lastDewAt && targetProfile.streakFreezes === 0) {
+      if (targetProfile && !targetProfile.lastCheckInAt && !targetProfile.lastWateredAt) {
         const treesPlanted = Number((targetProfile.ecoImpact as { treesPlanted?: unknown } | null)?.treesPlanted ?? 0);
         const [trees, plots, guestProfile] = await Promise.all([
           tx.plantedTree.count({ where: { userId: tid } }),
@@ -667,7 +666,11 @@ export class AuthService {
         ]);
         if (treesPlanted === 0 && trees === 0 && plots === 0 && guestProfile) {
           await tx.gameProfile.delete({ where: { userId: tid } });
-          await tx.gameProfile.update({ where: { userId: gid }, data: { totalSeeds: { increment: targetProfile.totalSeeds } } });
+          // Vé giữ chuỗi khách đã mua bằng giọt của hồ sơ đích đi theo sang hồ sơ khách, không mất.
+          await tx.gameProfile.update({
+            where: { userId: gid },
+            data: { totalSeeds: { increment: targetProfile.totalSeeds }, streakFreezes: { increment: targetProfile.streakFreezes } },
+          });
           targetPlays = false;
         }
       }

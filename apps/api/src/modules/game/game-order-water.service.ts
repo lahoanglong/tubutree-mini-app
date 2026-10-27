@@ -126,8 +126,9 @@ export class GameOrderWaterService {
 
   /**
    * Đảo nước của đơn đã giao rồi bị trả/huỷ, giống đảo Điểm Xanh và idempotent (unique reason+refId của dòng ORDER_REVERSED).
-   * Đã cộng: ghi dòng âm bằng đúng phần đã cộng và trừ khỏi hồ sơ tối đa bằng số dư hiện có (không xuống dưới 0; nước đã tiêu
-   * thì không đòi lại). Dòng âm mang createdAt của dòng cộng nên trần tuần được trả lại đúng tuần đó và khách mua lại vẫn nhận.
+   * Đã cộng: trừ khỏi hồ sơ tối đa bằng số dư hiện có (không xuống dưới 0; nước đã tiêu thì không đòi lại) và ghi dòng âm đúng
+   * bằng phần thu hồi được. Dòng âm mang createdAt của dòng cộng nên chỉ phần thu hồi được mới mở lại trần của tuần đó; phần
+   * đã tiêu vẫn tính vào trần.
    * Còn chờ (khách chưa mở game): huỷ đơn chờ, không cộng. Nhiều kiện cùng `checkoutGroup` là một lần cộng nên chỉ đảo khi
    * MỌI kiện của nhóm đã trả hoặc huỷ; còn kiện khác đang đi hoặc đã giao thì giữ nguyên.
    */
@@ -161,10 +162,12 @@ export class GameOrderWaterService {
           return { reversed: 0, skipped: 'NOTHING_GRANTED' as const };
         }
         if (granted.delta <= 0) return { reversed: 0, skipped: 'NOTHING_GRANTED' as const };
-        await tx.gameWaterEvent.create({
-          data: { userId: order.userId, delta: -granted.delta, reason: ORDER_WATER_REVERSED_REASON, refId, createdAt: granted.createdAt },
-        });
+        // Chỉ phần thực sự thu hồi được tính là trả lại: nước khách đã tiêu vẫn nằm trong trần tuần, nếu không mua rồi tiêu rồi
+        // trả đơn sẽ mở lại trần để nhận nước vô hạn. take = 0 vẫn ghi dòng (delta 0) để lần gọi sau thấy ALREADY_REVERSED.
         const take = Math.min(granted.delta, Math.max(0, profile[0]?.totalSeeds ?? 0));
+        await tx.gameWaterEvent.create({
+          data: { userId: order.userId, delta: -take, reason: ORDER_WATER_REVERSED_REASON, refId, createdAt: granted.createdAt },
+        });
         if (take > 0) await tx.gameProfile.update({ where: { userId: order.userId }, data: { totalSeeds: { decrement: take } } });
         return { reversed: take };
       });
