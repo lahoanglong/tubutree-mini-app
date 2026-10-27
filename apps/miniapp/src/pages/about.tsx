@@ -318,10 +318,6 @@ export default function AboutPage() {
         )}
       </div>
 
-      <Text variant="caption" tone="tertiary" as="p" style={{ textAlign: 'center', marginTop: 12 }}>
-        Tubu Tree Mini App · phiên bản 1.0.0
-      </Text>
-
       <div style={{ padding: 16 }}>
         <Button fullWidth variant="secondary" onPress={() => void logout()}>
           Đăng xuất

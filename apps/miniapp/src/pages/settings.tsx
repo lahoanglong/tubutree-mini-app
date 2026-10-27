@@ -170,9 +170,6 @@ export default function SettingsPage() {
         <Button fullWidth variant="secondary" onPress={() => void logout()}>
           Đăng xuất
         </Button>
-        <Text variant="caption" tone="tertiary" as="div" style={{ textAlign: 'center', marginTop: 12 }}>
-          Tubu Tree · phiên bản 1.0.0
-        </Text>
       </div>
     </Page>
   );
