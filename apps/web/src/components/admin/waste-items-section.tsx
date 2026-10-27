@@ -136,7 +136,7 @@ export function WasteItemsSection() {
     confirm({
       title: 'Bật món nguy hại',
       message:
-        'Chỉ bật khi đã có hợp đồng xử lý chất thải nguy hại và bản Mini App mới đã lên. Kho nhận ngay mọi món đang nhận; đại lý chỉ nhận khi điểm có món này.',
+        'Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép xử lý chất thải nguy hại, văn bản trả lời của Sở NN&MT, và bản Mini App mới đã lên. Kho nhận ngay mọi món đang nhận; đại lý chỉ nhận khi điểm có món này.',
       confirmLabel: 'Bật nhận',
       tone: 'danger',
     });
@@ -156,7 +156,8 @@ export function WasteItemsSection() {
         });
         if (!ok) return;
       }
-      if (body.status === 'ACTIVE' && (editing.hazardous || full.hazardous) && !(await confirmEnableHazardous())) return;
+      const enabling = (body.status === 'ACTIVE' && (editing.hazardous || full.hazardous)) || (body.hazardous === true && editing.status === 'ACTIVE');
+      if (enabling && !(await confirmEnableHazardous())) return;
       patch.mutate({ id: editing.id, body }, { onSuccess: () => setPanel(null) });
       return;
     }

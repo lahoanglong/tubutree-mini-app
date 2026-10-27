@@ -266,6 +266,26 @@ describe('seeded reference data after migrate deploy', () => {
     const pin = await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' } });
     expect(pin).toMatchObject({ hazardous: true, warehouseOnly: false, unitsPerPoint: 10, pointsPerGroup: 1000, dailyCapQty: 20, monthlyCapQty: 50, status: BATTERY_STATUS_AFTER_MIGRATE });
   });
+  it('chạy migration pin không ghi đè hướng dẫn admin đã soạn, chỉ điền khi còn trống', async () => {
+    const original = await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' }, select: { prepInstructions: true } });
+    const run = async () => {
+      for (const st of splitSqlStatements(readApiSql('prisma/migrations/20261027000000_waste_battery_ready/migration.sql'))) await exec(st);
+    };
+    const prep = async () => (await prisma.wasteItem.findUniqueOrThrow({ where: { id: 'wi-battery' }, select: { prepInstructions: true } })).prepInstructions;
+    try {
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: 'Chữ admin soạn' } });
+      await run();
+      expect(await prep()).toBe('Chữ admin soạn');
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: '' } });
+      await run();
+      expect(await prep()).toMatch(/^Dán băng keo hai đầu cực/);
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: null } });
+      await run();
+      expect(await prep()).toMatch(/^Dán băng keo hai đầu cực/);
+    } finally {
+      await prisma.wasteItem.update({ where: { id: 'wi-battery' }, data: { prepInstructions: original.prepInstructions } });
+    }
+  });
   it('the seeded vouchers are protected by the CHECKs (fields and cost range)', async () => {
     await violates(exec(`UPDATE "waste_gifts" SET "voucherType" = NULL WHERE "id" = 'reward-freeship'`), 'waste_gifts_voucher_fields_chk');
     await violates(exec(`UPDATE "waste_gifts" SET "pointsCost" = 2000001 WHERE "id" = 'reward-percent-15pct'`), 'waste_gifts_points_cost_chk');

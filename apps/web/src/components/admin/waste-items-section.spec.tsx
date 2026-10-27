@@ -145,7 +145,7 @@ describe('WasteItemsSection', () => {
     selectValue(c.querySelector('select[aria-label="Trạng thái Pin đã dùng"]'), 'ACTIVE');
     await flush();
     const text = confirmDialog()!.textContent!;
-    expect(text).toContain('Chỉ bật khi đã có hợp đồng xử lý chất thải nguy hại và bản Mini App mới đã lên.');
+    expect(text).toContain('Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép xử lý chất thải nguy hại, văn bản trả lời của Sở NN&MT, và bản Mini App mới đã lên.');
     expect(text).toContain('Kho nhận ngay mọi món đang nhận; đại lý chỉ nhận khi điểm có món này.');
     answerConfirm(false);
     await flush();
@@ -165,10 +165,25 @@ describe('WasteItemsSection', () => {
     selectValue(c.querySelector('[name="status"]'), 'ACTIVE');
     click(saveBtn(c));
     await flush();
-    expect(confirmDialog()!.textContent).toContain('Chỉ bật khi đã có hợp đồng xử lý chất thải nguy hại');
+    expect(confirmDialog()!.textContent).toContain('Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép');
     answerConfirm(true);
     await flush();
     expect(body(callsTo(api, '/admin/waste/items/i5', 'PATCH')[0]!)).toEqual({ status: 'ACTIVE' });
+  });
+
+  it('bật cờ nguy hại cho món ĐANG Đang nhận: sau hộp đánh dấu còn hộp điều kiện bật; không đổi trạng thái vẫn hỏi', async () => {
+    const { c, api } = await mount();
+    click(Array.from(row(c, 'i2').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
+    click(field(c, 'hazardous'));
+    click(saveBtn(c));
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Không bỏ được cờ này sau khi lưu');
+    answerConfirm(true);
+    await flush();
+    expect(confirmDialog()!.textContent).toContain('Chỉ bật khi đã có đủ: hợp đồng với đơn vị có giấy phép');
+    answerConfirm(false);
+    await flush();
+    expect(callsTo(api, '/admin/waste/items/i2', 'PATCH')).toHaveLength(0);
   });
 
   it('thêm món: ô trần để trống gửi null; xem trước thẻ khách cập nhật theo ô nhập', async () => {

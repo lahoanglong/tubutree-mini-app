@@ -113,7 +113,7 @@ describe('waste reference data in the migration and in seed.ts', () => {
       .split('\n').filter((l) => !l.trim().startsWith('--')).join(' ').replace(/\s+/g, ' ').trim();
     const battery = WASTE_SEED_ITEMS.find((i) => i.code === 'BATTERY')!;
     expect(sql).toContain('ALTER TABLE "waste_items" DROP CONSTRAINT IF EXISTS "waste_items_hazardous_not_active_chk";');
-    expect(sql).toContain(`SET "unitsPerPoint" = ${battery.unitsPerPoint}, "pointsPerGroup" = ${battery.pointsPerGroup}, "dailyCapQty" = ${battery.dailyCapQty}, "monthlyCapQty" = ${battery.monthlyCapQty}, "prepInstructions" = '${battery.prepInstructions}'`);
+    expect(sql).toContain(`SET "unitsPerPoint" = ${battery.unitsPerPoint}, "pointsPerGroup" = ${battery.pointsPerGroup}, "dailyCapQty" = ${battery.dailyCapQty}, "monthlyCapQty" = ${battery.monthlyCapQty}, "prepInstructions" = CASE WHEN COALESCE("prepInstructions", '') = '' THEN '${battery.prepInstructions}' ELSE "prepInstructions" END`);
     expect(sql).toContain(`WHERE "code" = 'BATTERY' AND "hazardous" = true;`);
     expect(sql.match(/UPDATE/g)).toHaveLength(1);
     expect(sql).not.toMatch(/"status"/);

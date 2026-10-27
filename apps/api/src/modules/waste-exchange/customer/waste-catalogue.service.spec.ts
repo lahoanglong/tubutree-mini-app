@@ -93,7 +93,7 @@ describe('WasteCatalogueService.listItems', () => {
       createdAt: new Date('2026-10-01T00:00:00Z'), updatedAt: new Date('2026-10-02T00:00:00Z'),
     }]);
     const out = await svc.listItems();
-    expect(prisma.wasteItem.findMany).toHaveBeenCalledWith({ where: { status: { in: ['ACTIVE', 'COMING_SOON'] } }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
+    expect(prisma.wasteItem.findMany).toHaveBeenCalledWith({ where: { OR: [{ status: 'ACTIVE' }, { status: 'COMING_SOON', hazardous: false }] }, orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] });
     expect(Object.keys(out[0]!).sort()).toEqual(['code', 'dailyCapQty', 'dropsPerUnit', 'gramsPerUnit', 'hazardous', 'id', 'imageUrl', 'monthlyCapQty', 'name', 'pointsPerGroup', 'prepInstructions', 'sortOrder', 'status', 'unitLabel', 'unitsPerPoint', 'warehouseOnly']);
     expect(out[0]!.warehouseOnly).toBe(true);
   });

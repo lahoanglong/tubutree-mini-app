@@ -50,6 +50,11 @@ describe('WasteMeService.me (spec 15.1 read exception, 15.2 row)', () => {
     expect(me.items[0]).toMatchObject({ id: 'carton', monthRemainingQty: 48, dayRemainingQty: 15 });
     expect(hold.capUsage).toHaveBeenCalledWith(expect.anything(), 'u1', '2026-10-17', '2026-10');
   });
+  it('danh sách món của khách giấu món nguy hại chưa ACTIVE (pin Sắp nhận), món thường Sắp nhận vẫn hiện', async () => {
+    const { svc, prisma } = setup(base);
+    await svc.me('u1');
+    expect(prisma.wasteItem.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: [{ status: 'ACTIVE' }, { status: 'COMING_SOON', hazardous: false }] } }));
+  });
   it.each<[string, unknown, string]>([
     ['guest customer', { ...base, role: 'CUSTOMER', phone: null, zaloId: 'guest_d1', wasteFlags: null }, 'GUEST'],
     ['customer without phone', { ...base, role: 'CUSTOMER', phone: null, wasteFlags: null }, 'NEED_PHONE'],
