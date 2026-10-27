@@ -19,6 +19,8 @@ export interface GroupBuy {
   couponCode?: string;
   /** Đơn tối thiểu của mã = giá nhóm của biến thể rẻ nhất đang bán (API bản cũ không trả → dùng unitPrice). */
   minOrder?: number;
+  /** Phân loại mà giá nhóm dựa trên (đại diện của thẻ); client chỉ xét Giờ vàng của phân loại này. API bản cũ không trả. */
+  variationId?: string;
 }
 
 export const listGroupBuys = (http: HttpClient) => http.get<GroupBuy[]>('/group-buy');

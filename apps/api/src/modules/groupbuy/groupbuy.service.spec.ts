@@ -749,3 +749,35 @@ describe('Q18: đơn tối thiểu của mã mua chung theo giá nhóm của bi�
     expect(await svc.getGroup('gb1')).toMatchObject({ minOrder: 102000 });
   });
 });
+
+describe('B-72: view nhóm trả variationId của phân loại mà giá nhóm dựa trên', () => {
+  const rows = [
+    { id: 'vBig', sku: 'B', productId: 'prod1', retailPrice: 430000, salePrice: null, stock: 3 },
+    { id: 'vSmall', sku: 'A', productId: 'prod1', retailPrice: 120000, salePrice: null, stock: 3 },
+    { id: 'vOut', sku: 'C', productId: 'prod1', retailPrice: 100000, salePrice: null, stock: 0 },
+  ];
+
+  async function viewOf(basePrice: number, variations = rows) {
+    const prisma = makePrisma();
+    (prisma.groupBuy.findMany as jest.Mock).mockResolvedValue([
+      { ...group({ id: 'g1', basePrice, unitPrice: Math.round(basePrice * 0.85) }), product: { name: 'X', slug: 'x', thumbnail: null }, _count: { members: 1 } },
+    ]);
+    (prisma.groupBuyMember.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.variation.findMany as jest.Mock).mockResolvedValue(variations);
+    const out = (await new GroupBuyService(prisma, makeConfig()).listOpen('u1')) as unknown as { variationId?: string }[];
+    return out[0]!;
+  }
+
+  it('giá gốc đã lưu khớp phân loại đại diện (rẻ nhất còn hàng): trả phân loại đó, không phải phân loại hết hàng rẻ hơn', async () => {
+    expect((await viewOf(120000)).variationId).toBe('vSmall');
+  });
+
+  it('giá lưu khớp một phân loại khác (đại diện đã đổi): ưu tiên phân loại có giá đúng bằng giá lưu', async () => {
+    expect((await viewOf(430000)).variationId).toBe('vBig');
+  });
+
+  it('không phân loại nào khớp giá lưu: dùng phân loại đại diện hiện tại; không có phân loại: không trả trường', async () => {
+    expect((await viewOf(999999)).variationId).toBe('vSmall');
+    expect((await viewOf(120000, [])).variationId).toBeUndefined();
+  });
+});

@@ -220,12 +220,25 @@ describe('/mua-chung — tham gia', () => {
     expect(c.querySelector('.line-through')).toBeNull();
   });
 
-  it('B-72: đang có Giờ vàng của sản phẩm thì "Mua một mình" theo giá Giờ vàng hiện nay, không theo giá lưu lúc tạo nhóm', async () => {
-    mocks.list = [GROUP('a', { unitPrice: 102_000, basePrice: 120_000 })];
-    mocks.flash = [{ itemId: 'f', variationId: 'v', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }];
+  it('B-72: Giờ vàng của phân loại giá nhóm dựa trên, còn đắt hơn giá nhóm: "Mua một mình" theo giá Giờ vàng hiện nay, không theo giá lưu', async () => {
+    mocks.list = [GROUP('a', { unitPrice: 85_000, basePrice: 120_000, variationId: 'v1' })];
+    mocks.flash = [{ itemId: 'f', variationId: 'v1', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }];
     const c = await mount();
     expect(c.textContent).toContain(`Mua một mình ${formatVnd(90_000)}`);
     expect(c.textContent).not.toContain(`Mua một mình ${formatVnd(120_000)}`);
+  });
+
+  it('B-72: Giờ vàng rẻ hơn cả giá nhóm: không còn nhãn "Mua một mình", ghi "Giờ vàng đang rẻ hơn"; suất của phân loại khác không tính', async () => {
+    mocks.list = [GROUP('a', { unitPrice: 102_000, basePrice: 120_000, variationId: 'v1' })];
+    mocks.flash = [{ itemId: 'f', variationId: 'v1', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }];
+    const c = await mount();
+    expect(c.textContent).toContain(`Giờ vàng đang rẻ hơn: ${formatVnd(90_000)}`);
+    expect(c.textContent).not.toContain('Mua một mình');
+    mocks.flash = [{ ...({ itemId: 'f', variationId: 'v1', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }), variationId: 'v-khac' }];
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    const c2 = await mount();
+    expect(c2.textContent).toContain(`Mua một mình ${formatVnd(120_000)}`);
   });
 
   it('đang gửi tham gia: bấm lại không gửi thêm', async () => {

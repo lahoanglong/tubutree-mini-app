@@ -132,12 +132,24 @@ describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(mocks.joinGroupBuy).not.toHaveBeenCalled();
   });
 
-  it('B-72: đang có Giờ vàng của sản phẩm thì "Mua một mình" theo giá Giờ vàng hiện nay, không theo giá lưu lúc tạo nhóm', async () => {
-    mocks.fetchActiveFlashSales.mockResolvedValue([{ itemId: 'f', variationId: 'v', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }]);
-    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 102_000, basePrice: 120_000 })]);
+  it('B-72: Giờ vàng của phân loại giá nhóm dựa trên, còn đắt hơn giá nhóm: "Mua một mình" theo giá Giờ vàng hiện nay, không theo giá lưu', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([{ itemId: 'f', variationId: 'v1', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }]);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 85_000, basePrice: 120_000, variationId: 'v1' })]);
     renderPage();
     expect(await screen.findByText(`Mua một mình ${formatVnd(90_000)}`)).toBeInTheDocument();
     expect(screen.queryByText(`Mua một mình ${formatVnd(120_000)}`)).toBeNull();
+  });
+
+  it('B-72: Giờ vàng rẻ hơn cả giá nhóm: không còn nhãn "Mua một mình", ghi "Giờ vàng đang rẻ hơn"; suất của phân loại khác không tính', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([{ itemId: 'f', variationId: 'v1', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }]);
+    mocks.listGroupBuys.mockResolvedValue([GROUP('a', { unitPrice: 102_000, basePrice: 120_000, variationId: 'v1' })]);
+    const first = renderPage();
+    expect(await screen.findByText(`Giờ vàng đang rẻ hơn: ${formatVnd(90_000)}`)).toBeInTheDocument();
+    expect(screen.queryByText(/Mua một mình/)).toBeNull();
+    first.unmount();
+    mocks.fetchActiveFlashSales.mockResolvedValue([{ ...({ itemId: 'f', variationId: 'v1', productSlug: 'sp-a', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, endAt: new Date(Date.now() + 3_600_000).toISOString() }), variationId: 'v-khac' }]);
+    renderPage();
+    expect(await screen.findByText(`Mua một mình ${formatVnd(120_000)}`)).toBeInTheDocument();
   });
 
   it('B-72: ghi giá nhóm và giá mua một mình, không gạch giá', async () => {
