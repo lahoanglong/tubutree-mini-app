@@ -28,6 +28,14 @@ export class PublicImageService {
     return rows[0]?.image ?? null;
   }
 
+  /** Phần tử thứ `index` (từ 0) của storyImages của nhãn đã công bố, tham số hoá, không kéo cả mảng. */
+  private async storyImage(id: string, index: number): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<{ image: string | null }[]>(
+      Prisma.sql`SELECT "storyImages"[${index + 1}::int] AS image FROM "brands" WHERE "id" = ${id} AND "isPublished" = true LIMIT 1`,
+    );
+    return rows[0]?.image ?? null;
+  }
+
   async get(kind: string, id: string, slotRaw: string, version: unknown): Promise<{ mime: string; data: Buffer; versionOk: boolean }> {
     const notFound = () => new NotFoundException('Không tìm thấy ảnh.');
     if (!isPublicImageKind(kind)) throw notFound();
@@ -56,8 +64,7 @@ export class PublicImageService {
         if (!/^(0|[1-9]\d?)$/.test(slotRaw)) throw notFound();
         const n = Number(slotRaw);
         slot = n;
-        const b = await this.prisma.brand.findFirst({ where: { id, isPublished: true }, select: { storyImages: true } });
-        image = b?.storyImages[n];
+        image = await this.storyImage(id, n);
       }
     } else {
       if (slotRaw !== 'cover') throw notFound();
