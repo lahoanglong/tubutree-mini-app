@@ -32,7 +32,7 @@ describe('ErrorState', () => {
 
   it('không có onRetry thì không có nút; message tuỳ biến', () => {
     const { container } = mount(<ErrorState message="Không tải được đơn" />);
-    expect(container.querySelector('p')?.textContent).toBe('Không tải được đơn');
+    expect(container.querySelector('[data-testid="error-message"]')?.textContent).toBe('Không tải được đơn');
     expect(container.querySelector('button')).toBeNull();
   });
 

@@ -15,12 +15,15 @@ export function ErrorState({
   message = 'Đã có lỗi xảy ra — Vui lòng thử lại',
   onRetry,
   retryLabel = 'Thử lại',
+  title = 'Chưa tải được trang này',
   variant = 'page',
   showSupport,
 }: {
   message?: string;
   onRetry?: () => void;
   retryLabel?: string;
+  /** Dòng tiêu đề đậm trên chữ báo lỗi (Mini App: "Chưa tải được trang này"). */
+  title?: string;
   variant?: 'page' | 'inline';
   showSupport?: boolean;
 }) {
@@ -30,14 +33,15 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className={`flex flex-col items-center gap-2.5 text-center md:rounded-card md:border md:border-stone-200 md:bg-stone-0 ${inline ? 'p-4' : 'px-8 pb-10 pt-12'}`}
+      className={`flex flex-col items-center gap-2.5 text-center md:rounded-card md:border md:border-stone-200 md:bg-stone-0 ${inline ? 'p-4' : 'px-8 pb-10 pt-[max(40px,20vh)] md:pt-12'}`}
     >
       <span aria-hidden="true" className={`flex items-center justify-center rounded-full bg-warning-bg text-warning-fg ${inline ? 'h-11 w-11' : 'h-14 w-14'}`}>
         <TriangleAlert className={inline ? 'h-[22px] w-[22px]' : 'h-7 w-7'} strokeWidth={1.75} />
       </span>
-      <p className="text-base text-stone-900">{message}</p>
+      <p className="font-display text-lg font-semibold text-stone-900">{title}</p>
+      <p data-testid="error-message" className="max-w-xs text-sm text-stone-700">{message}</p>
       {onRetry && (
-        <button type="button" onClick={onRetry} className={ui.btnPrimary}>
+        <button type="button" onClick={onRetry} className={`${ui.btnPrimary} max-md:border-transparent max-md:bg-forest-50 max-md:text-forest-700 max-md:shadow-none`}>
           {retryLabel}
         </button>
       )}
