@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
+import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, type ProductSuggestion } from '../services/shop-api';
 import { getErrorMessage } from '../services/api';
 import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } from '../services/discovery-events';
 import { CartButton } from '../components/cart-button';
@@ -106,6 +106,7 @@ export default function BrowsePage() {
   // Chế độ gõ chỉ thay nội dung bằng gợi ý khi có gì để gợi ý (đang gõ chữ, hoặc ô trống nhưng có lịch sử tìm);
   // khách mới bấm vào ô trống vẫn thấy nguyên Danh mục/danh sách thay vì một trang trắng.
   const showSuggest = editing && (draft.trim() !== '' || recent.length > 0);
+  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: showSuggest });
 
   const { anchorRef } = useScrollRestoration(urlKey, !showSuggest && list.length > 0);
 
@@ -187,6 +188,7 @@ export default function BrowsePage() {
           recent={recent}
           categories={categories.entries}
           products={suggest.products}
+          flashSales={flashQ.data}
           loading={suggest.isFetching}
           onPickKeyword={commit}
           onPickCategory={pickCategory}

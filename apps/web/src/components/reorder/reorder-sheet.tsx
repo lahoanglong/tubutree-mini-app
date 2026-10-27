@@ -14,6 +14,7 @@ import {
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
 import { useReorder } from './use-reorder';
+import { ProductThumb } from '@/components/mini';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -142,10 +143,7 @@ function ReorderLineRow({ line, value, onChange }: { line: ReorderLine; value: L
           className="h-5 w-5 accent-forest-600"
         />
       </label>
-      <div className="h-14 w-14 flex-none overflow-hidden rounded-control bg-stone-100">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {line.thumbnail && <img src={line.thumbnail} alt="" width={56} height={56} loading="lazy" className="h-full w-full object-cover" />}
-      </div>
+      <ProductThumb src={line.thumbnail} alt="" size={56} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="truncate text-sm font-semibold text-stone-900">{line.productName}</p>
         {line.variationName && <p className="text-xs text-stone-600">{line.variationName}</p>}

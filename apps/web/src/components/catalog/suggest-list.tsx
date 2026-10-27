@@ -4,6 +4,8 @@ import type { ProductSuggestion } from '@tubutree/app-core/api/catalog';
 import { browseText } from '@/lib/browse-text';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { formatVnd } from '@/lib/format-vnd';
+import { cardPricing } from '@/lib/flash-price';
+import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { SUGGEST_MIN_CHARS } from '@/lib/use-suggest';
 import { foldVietnamese, includesFolded } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
@@ -38,6 +40,7 @@ export function SuggestList({
   onPickProduct: (product: ProductSuggestion, index: number) => void;
   onClearRecent: () => void;
 }) {
+  const flash = useActiveFlashSales();
   const term = draft.trim();
   const recentShown = term ? recent.filter((r) => includesFolded(r, term)).slice(0, SUGGEST_LIMITS.recent) : recent;
   const categoriesShown = term ? categories.filter((c) => includesFolded(c.label, term)).slice(0, SUGGEST_LIMITS.categories) : [];
@@ -84,7 +87,7 @@ export function SuggestList({
       {productsShown.length > 0 && (
         <Group title={browseText.suggest.products}>
           {productsShown.map((p, i) => (
-            <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={formatVnd(p.basePrice)} onPress={() => onPickProduct(p, i)}>
+            <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={formatVnd(cardPricing(p, flash).price)} onPress={() => onPickProduct(p, i)}>
               {p.name}
             </SuggestRow>
           ))}

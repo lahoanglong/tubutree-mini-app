@@ -2,7 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { WishlistService } from './wishlist.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 
-const variation = (stock: number) => ({ stock });
+const variation = (stock: number) => ({ id: 'v1', sku: 'SKU', retailPrice: 100000, salePrice: null, stock });
 const product = (id: string, opts: { stock?: number } = {}) => ({
   id,
   slug: `${id}-slug`,
@@ -70,6 +70,27 @@ describe('WishlistService.list', () => {
     const svc = new WishlistService(prisma);
     const result = await svc.list('user1');
     expect(result[0]).toMatchObject({ ratingAvg: 4.5, reviewCount: 12, sold: 10 });
+  });
+
+  it('giá thẻ lấy từ phân loại mặc định (Pancake chỉ ghi giá bán vào phân loại)', async () => {
+    const prisma = {
+      wishlist: { findMany: jest.fn().mockResolvedValue([{ productId: 'p1' }]) },
+      product: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            ...product('p1'),
+            basePrice: 300000,
+            salePrice: null,
+            variations: [
+              { id: 'v2', sku: 'B', retailPrice: 300000, salePrice: null, stock: 4 },
+              { id: 'v1', sku: 'A', retailPrice: 180000, salePrice: 159000, stock: 4 },
+            ],
+          },
+        ]),
+      },
+    } as unknown as PrismaService;
+    const result = await new WishlistService(prisma).list('user1');
+    expect(result[0]).toMatchObject({ basePrice: 180000, salePrice: 159000 });
   });
 });
 

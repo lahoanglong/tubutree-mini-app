@@ -169,7 +169,7 @@ describe('ProductCard — kiểu Mini App ở điện thoại', () => {
   });
 
   it('ảnh thiếu: nền pha màu nhãn, lá nhỏ và tên nhãn, ẩn khỏi trình đọc màn hình', () => {
-    const ph = html(PRODUCT).querySelector('[data-testid="card-placeholder"]')!;
+    const ph = html(PRODUCT).querySelector('[data-testid="product-image-fallback"]')!;
     expect(ph.getAttribute('aria-hidden')).toBe('true');
     expect(ph.querySelector('svg')).not.toBeNull();
     expect(ph.textContent).toBe('Fuwa3e');

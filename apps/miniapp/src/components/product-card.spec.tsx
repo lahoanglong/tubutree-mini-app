@@ -55,13 +55,14 @@ describe('ProductCard (danh sách yêu thích, C-076 di cư DS v2: giữ nguyên
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { variationId: 'v1' } });
   });
 
-  it('giá giờ vàng KHÔNG rẻ hơn giá đang bán: giữ giá đang bán nhưng vẫn mở đúng phân loại của đợt giờ vàng', async () => {
+  it('giá giờ vàng KHÔNG rẻ hơn giá đang bán: giữ giá đang bán, không nhãn Giờ vàng, mở phân loại mặc định', async () => {
     mocks.fetchActive.mockResolvedValue([{ ...FLASH, flashPrice: 130_000 }]);
     await renderCard();
     expect(await screen.findByText('-20%')).toBeInTheDocument();
     expect(screen.getByText('120.000đ')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { variationId: 'v1' } });
+    expect(screen.queryByText(/Giờ vàng/)).toBeNull();
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', undefined);
   });
 
   it('hết hàng: có nhãn hết hàng, không có badge % lộ ra dưới lớp phủ', async () => {

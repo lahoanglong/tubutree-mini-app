@@ -20,6 +20,16 @@ afterEach(() => {
 });
 
 describe('QrCode', () => {
+  it('chú thích ảnh mặc định là "QR", truyền alt thì dùng alt', async () => {
+    toDataURL.mockResolvedValue('data:image/png;base64,AAA');
+    const first = mount(<QrCode value="A" />);
+    await flush();
+    expect(first.container.querySelector('img')!.getAttribute('alt')).toBe('QR');
+    const second = mount(<QrCode value="B" alt="Mã QR mở Tubu Tree trên Zalo" />);
+    await flush();
+    expect(second.container.querySelector('img')!.getAttribute('alt')).toBe('Mã QR mở Tubu Tree trên Zalo');
+  });
+
   it('sinh ảnh đúng kích thước từ giá trị, trong lúc chờ có khung giữ chỗ', async () => {
     toDataURL.mockResolvedValue('data:image/png;base64,AAA');
     const { container } = mount(<QrCode value="TUBU-123" size={200} />);

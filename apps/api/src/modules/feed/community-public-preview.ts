@@ -1,3 +1,4 @@
+import { publicDisplayName } from '../../common/mask-name';
 import { authorBadge } from './author-badge';
 
 /** Cờ SystemConfig bật xem trước công khai; chỉ boolean true thật mới bật, mặc định bật. */
@@ -30,11 +31,7 @@ export function publicAuthorName(fullName: string | null | undefined): string {
  * Tên có số hoặc "@" dùng tên chung như {@link publicAuthorName}.
  */
 export function leaderboardAuthorName(fullName: string | null | undefined): string {
-  const name = fullName?.trim() ?? '';
-  if (!name || /[\d@]/.test(name)) return ANONYMOUS_AUTHOR;
-  const parts = name.split(/\s+/);
-  if (parts.length === 1) return parts[0]!;
-  return `${parts.at(-1)} ${Array.from(parts[0]!)[0]!.toLocaleUpperCase('vi')}.`;
+  return publicDisplayName(fullName, ANONYMOUS_AUTHOR);
 }
 
 function redactContact(text: string): string {

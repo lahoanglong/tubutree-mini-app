@@ -75,6 +75,7 @@ test.describe('Mini App: đăng ký gian hàng', () => {
     mockSession(api, makeUser({ id: 'c-1', role: 'CUSTOMER', fullName: 'Khách', referralCode: 'KH1' }));
     api.get('/me/wishlist/ids', []);
     api.post('/affiliate/touch', { ok: true });
+    api.get('/flash-sales/active', []);
     api.get('/storefront/public/:slug', {
       id: 'sf9', slug: 'mebimla', type: 'CTV', approved: true, isSample: true, title: 'Mẹ bỉm lười', headerNote: 'Đồ mình đã dùng thật',
       avatarUrl: null, coverUrl: null, themeColor: null, referralCode: 'SAMPLE-MEBIMLA',

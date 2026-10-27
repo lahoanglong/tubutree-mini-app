@@ -12,6 +12,7 @@ import { rememberReturnTo, safeReturnPath } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { miniAppLink } from '@/lib/zalo-mini-app';
+import { QrCode } from '@/components/ui/qr-code';
 
 function LoginInner() {
   const router = useRouter();
@@ -59,37 +60,32 @@ function LoginInner() {
         Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.
       </p>
 
-      <button type="button" onClick={onLogin} disabled={busy || unavailable} className={`${ui.btnPrimary} mt-8 w-full`}>
-        {busy ? 'Đang chuyển tới Zalo…' : 'Đăng nhập với Zalo'}
-      </button>
-
-      <p className="mt-3 text-xs text-stone-600">
-        Bằng việc đăng nhập, bạn đồng ý với{' '}
-        <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
-          Điều khoản
-        </Link>{' '}
-        và{' '}
-        <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
-          Chính sách bảo mật
-        </Link>
-        .
-      </p>
-
-      {unavailable && (
-        <p role="alert" className={`mt-4 ${ui.error}`}>
-          Đăng nhập bằng Zalo trên web đang tạm ngưng. Bạn vui lòng thử lại sau, hoặc liên hệ hotline {formatPhoneDisplay(support.hotline)}{' '}
-          để được hỗ trợ đặt hàng. Bạn cũng có thể mua ngay trong Zalo Mini App Tubu Tree.
-        </p>
-      )}
-
-      {error && (
-        <p role="alert" className={`mt-4 ${ui.error}`}>
-          {error}
-        </p>
-      )}
-
-      {miniAppUrl && (
+      {unavailable ? (
         <>
+          <p role="status" className="mt-6 text-sm font-medium text-stone-800">
+            Đăng nhập Zalo trên web đang tạm ngưng. Bạn vẫn mua sắm được trong Zalo.
+          </p>
+          <a href={miniAppUrl} className={`${ui.btnPrimary} mt-4 w-full`}>
+            Mở Tubu Tree trên Zalo
+          </a>
+          <div className="mt-5 hidden flex-col items-center gap-2 md:flex" data-testid="login-qr">
+            <QrCode value={miniAppUrl} size={160} alt="Mã QR mở Tubu Tree trên Zalo" />
+            <p className="text-xs text-stone-600">Hoặc quét mã này bằng Zalo trên điện thoại.</p>
+          </div>
+          <p className="mt-4 text-xs text-stone-600">Cần hỗ trợ đặt hàng? Gọi hotline {formatPhoneDisplay(support.hotline)}.</p>
+        </>
+      ) : (
+        <>
+          <button type="button" onClick={onLogin} disabled={busy} className={`${ui.btnPrimary} mt-8 w-full`}>
+            {busy ? 'Đang chuyển tới Zalo…' : 'Đăng nhập với Zalo'}
+          </button>
+
+          {error && (
+            <p role="alert" className={`mt-4 ${ui.error}`}>
+              {error}
+            </p>
+          )}
+
           <a href={miniAppUrl} className={`${ui.btnSecondary} mt-3 w-full`}>
             Mở trên Zalo
           </a>
@@ -97,8 +93,22 @@ function LoginInner() {
         </>
       )}
 
+      {!unavailable && (
+        <p className="mt-3 text-xs text-stone-600">
+          Bằng việc đăng nhập, bạn đồng ý với{' '}
+          <Link href="/chinh-sach/dieu-khoan" className="font-medium text-forest-700 underline underline-offset-2">
+            Điều khoản
+          </Link>{' '}
+          và{' '}
+          <Link href="/chinh-sach/bao-mat" className="font-medium text-forest-700 underline underline-offset-2">
+            Chính sách bảo mật
+          </Link>
+          .
+        </p>
+      )}
+
       <Link href="/" className={`${ui.backLink} mt-4 text-stone-600 hover:text-stone-900`}>
-        Quay lại trang chủ
+        {unavailable ? 'Tiếp tục xem sản phẩm' : 'Quay lại trang chủ'}
       </Link>
     </main>
   );

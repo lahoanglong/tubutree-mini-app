@@ -6,7 +6,7 @@ import { usePublicConfig } from '../hooks/use-public-config';
 import { aiChat, type AiChatTurn, type AiProduct } from '../services/ai-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
-import { Sparkles, Sprout } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { AdvisorPaused } from '../components/advisor-paused';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -14,6 +14,7 @@ import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
 import { PageHeader } from '../components/ui/page-header';
 import { Heading, Text } from '../components/ui/text';
+import { ProductThumb } from '../components/ui/product-thumb';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -170,29 +171,7 @@ export default function AiAdvisorPage() {
                 {m.products.map((p) => (
                   <Card key={p.id} variant="outline" padding={0}>
                     <ListRow
-                      icon={
-                        p.thumbnail ? (
-                          <img
-                            src={p.thumbnail}
-                            alt={p.name}
-                            style={{ width: 44, height: 44, borderRadius: 'var(--radius-control)', objectFit: 'cover', flexShrink: 0 }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 'var(--radius-control)',
-                              background: 'var(--color-action-secondary-bg)',
-                              display: 'grid',
-                              placeItems: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon icon={Sprout} size="md" tone="brand" />
-                          </div>
-                        )
-                      }
+                      icon={<ProductThumb src={p.thumbnail} alt={p.name} size={44} />}
                       title={
                         <span style={{ display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {p.name}

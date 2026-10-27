@@ -4,14 +4,14 @@ import { miniAppLink, miniAppPathLink } from './zalo-mini-app';
 afterEach(() => vi.unstubAllEnvs());
 
 describe('miniAppLink', () => {
-  it('chưa cấu hình id Mini App: không có link (nút ẩn)', () => {
+  it('chưa cấu hình id Mini App: dùng id chính thức, nút luôn có', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
-    expect(miniAppLink()).toBeNull();
+    expect(miniAppLink()).toBe('https://zalo.me/s/2070857098114207963/');
   });
 
-  it('id Mini App không phải số (cấu hình hỏng): không dựng link sai', () => {
+  it('id Mini App không phải số (cấu hình hỏng): dùng id chính thức, không dựng link sai', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', 'abc/../x');
-    expect(miniAppLink()).toBeNull();
+    expect(miniAppLink()).toBe('https://zalo.me/s/2070857098114207963/');
   });
 
   it('có id Mini App: mở trang chủ Mini App', () => {
@@ -36,11 +36,12 @@ describe('miniAppLink', () => {
 });
 
 describe('miniAppLink: không rơi về App ID của Zalo App', () => {
-  it('chỉ có NEXT_PUBLIC_ZALO_APP_ID, thiếu id Mini App: không dựng link', () => {
+  it('chỉ có NEXT_PUBLIC_ZALO_APP_ID, thiếu id Mini App: dùng id Mini App chính thức, không dùng App ID', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_APP_ID', '565779011239360460');
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
-    expect(miniAppLink()).toBeNull();
-    expect(miniAppPathLink('/points/scan')).toBeNull();
+    expect(miniAppLink()).toBe('https://zalo.me/s/2070857098114207963/');
+    expect(miniAppLink()).not.toContain('565779011239360460');
+    expect(miniAppPathLink('/points/scan')).toBe('https://zalo.me/s/2070857098114207963/points/scan');
   });
 
   it('có cả hai: link dùng id Mini App, không chứa App ID', () => {
@@ -52,10 +53,10 @@ describe('miniAppLink: không rơi về App ID của Zalo App', () => {
 });
 
 describe('miniAppPathLink', () => {
-  it('mở thẳng đường dẫn Mini App đã biết; chưa cấu hình id Mini App thì null', () => {
+  it('mở thẳng đường dẫn Mini App đã biết; chưa cấu hình id Mini App thì dùng id chính thức', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '123');
     expect(miniAppPathLink('/points/scan')).toBe('https://zalo.me/s/123/points/scan');
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
-    expect(miniAppPathLink('/points/scan')).toBeNull();
+    expect(miniAppPathLink('/points/scan')).toBe('https://zalo.me/s/2070857098114207963/points/scan');
   });
 });

@@ -1,5 +1,5 @@
 import { cardPricing } from '@tubutree/app-core/flash-price';
-import type { FlashSaleActiveItem, ProductCard } from '../../services/shop-api';
+import type { FlashSaleActiveItem } from '../../services/shop-api';
 
 export interface TilePricing {
   price: number;
@@ -13,19 +13,10 @@ export interface TilePricing {
 
 /** Quy tắc giá thẻ dùng chung với web (`cardPricing` ở app-core): Giờ vàng chỉ thắng khi rẻ hơn giá đang bán và gạch giá đang bán. */
 export function tilePricing(
-  product: Pick<ProductCard, 'slug' | 'basePrice' | 'salePrice'>,
+  product: { slug: string; basePrice: number; salePrice?: number | null },
   flashSales: FlashSaleActiveItem[],
 ): TilePricing {
   return cardPricing(product, flashSales);
 }
 
-/**
- * Giá của dải giờ vàng ở trang chủ. Giá khách thực trả = min(giá flash, giá đang bán), như giỏ hàng và trang sản phẩm. Giá niêm yết
- * hạ sau khi tạo đợt thì flash không còn rẻ hơn: không hiện % âm hay giá gạch thấp hơn giá bán.
- */
-export function flashDisplay(item: { flashPrice: number; retailPrice: number; salePrice?: number | null }) {
-  const was = item.salePrice ?? item.retailPrice;
-  const price = Math.min(item.flashPrice, was);
-  const pct = was > 0 ? Math.round((1 - price / was) * 100) : 0;
-  return { price, was, pct };
-}
+export { flashDisplay } from '@tubutree/app-core/flash-price';

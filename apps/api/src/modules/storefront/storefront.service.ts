@@ -11,6 +11,8 @@ import { isPartnerOwnedProduct, partnerGoodsError } from '../cart/partner-goods'
 import { MIN_COMBO_PRODUCTS } from './combo.service';
 import { isPartnerStore } from '../merchant/partner-store';
 import { decodeServedImage } from '../../common/served-image';
+import { cardPrices } from '../catalog/variation-order';
+import { publicDisplayName } from '../../common/mask-name';
 import { assertStorefrontImagesAllowed, isStorefrontImageKind, matchesStorefrontImageVersion, publicStorefrontImage } from './storefront-images';
 import { isStorefrontApprovalRequired, isStorefrontSubdomainEnabled, withSubdomainFlag } from './storefront-config';
 import { isStorefrontApproved, ownerStorefrontState, publicStorefrontWhere } from './storefront-visibility';
@@ -75,6 +77,7 @@ export class StorefrontService {
     if (existing) return existing;
     if (!canCreate) throw new BadRequestException('Chỉ CTV mới tạo được gian hàng.');
     try {
+      const ownerName = publicDisplayName(user.fullName, '');
       return await this.prisma.storefront.create({
         data: {
           type: 'CTV',
@@ -84,7 +87,7 @@ export class StorefrontService {
           // Chuẩn hoá tại nguồn; phía đọc cũng so khớp insensitive để cứu dữ liệu cũ.
           slug: user.referralCode.toLowerCase(),
           ownerUserId: userId,
-          title: `Cửa hàng của ${user.fullName ?? 'bạn'}`,
+          title: ownerName ? `Cửa hàng của ${ownerName}` : 'Cửa hàng CTV Tubu Tree',
         },
       });
     } catch (err) {
@@ -123,6 +126,7 @@ export class StorefrontService {
                     isActive: true,
                     affiliateBlocked: true,
                     approvalStatus: true,
+                    variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
                   },
                 },
               },
@@ -150,7 +154,10 @@ export class StorefrontService {
       publicHiddenReason: ownerState.reason,
       collections: sf.collections.map((c) => ({
         ...c,
-        items: c.items.map((i) => ({ ...i, hiddenReason: buyerHiddenReason(i) })),
+        items: c.items.map((i) => {
+          const { variations, ...product } = i.product;
+          return { ...i, product: { ...product, ...cardPrices(product, variations) }, hiddenReason: buyerHiddenReason(i) };
+        }),
       })),
     };
   }
@@ -245,13 +252,13 @@ export class StorefrontService {
         basePrice: true, salePrice: true, ratingAvg: true, reviewCount: true, storefrontId: true,
         // CHỈ tính maxAffiliateRate trên variation đang bán (isActive) — variation ngừng bán
         // không được tính vào, tránh hiện %HH cao hơn thực tế CTV có thể đạt được.
-        variations: { where: { isActive: true }, select: { affiliateRate: true } },
+        variations: { where: { isActive: true }, select: { affiliateRate: true, id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
       },
     });
     const defaultPct = await loadDefaultRate(this.config);
     return products.map((p) => {
       const { variations, storefrontId, ...rest } = p;
-      return { ...rest, maxAffiliateRate: maxResolvedRate(variations, { storefrontId }, defaultPct) };
+      return { ...rest, ...cardPrices(rest, variations), maxAffiliateRate: maxResolvedRate(variations, { storefrontId }, defaultPct) };
     });
   }
 
@@ -284,7 +291,7 @@ export class StorefrontService {
                     affiliateBlocked: true, soldExternal: true, soldApp: true, approvalStatus: true, storefrontId: true,
                     // Chỉ để tính inStock (audit A4-06: lưới gian hàng chưa từng biết SP hết hàng
                     // hay chưa, ProductTile giờ cần cờ này để hiện overlay "tạm hết hàng").
-                    variations: { where: { isActive: true }, select: { stock: true } },
+                    variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
                   },
                 },
               },
@@ -347,7 +354,7 @@ export class StorefrontService {
             id: i.id, note: i.note, variationId: i.variationId,
             product: {
               id: i.product.id, name: i.product.name, slug: i.product.slug, thumbnail: i.product.thumbnail,
-              brand: i.product.brand, basePrice: i.product.basePrice, salePrice: i.product.salePrice,
+              brand: i.product.brand, ...cardPrices(i.product, i.product.variations ?? []),
               ratingAvg: i.product.ratingAvg, reviewCount: i.product.reviewCount,
               sold: i.product.soldExternal + i.product.soldApp,
               inStock: (i.product.variations ?? []).some((v) => v.stock > 0),

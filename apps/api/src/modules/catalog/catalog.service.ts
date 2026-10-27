@@ -1,7 +1,8 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
-import { VARIATION_ORDER_BY, sortVariationsByPrice } from './variation-order';
+import { VARIATION_ORDER_BY, cardPriceWithFlash, cardPrices, sortVariationsByPrice, type FlashOffer } from './variation-order';
+import { activeFlashWhere, isStillDiscounted } from '../flash-sale/flash-active';
 import { PrismaService } from '../../prisma/prisma.service';
 import { paginated, skipTake } from '../../common/pagination';
 import { ProductQuery } from './dto/product-query.dto';
@@ -71,12 +72,24 @@ export function textMatchSql(raw: string): Prisma.Sql {
 }
 
 /** Khoảng giá cho filter Prisma; min > max thì đổi chỗ (client không gửi vậy, nhưng không 400). */
-function priceRange(min?: number, max?: number): { gte?: number; lte?: number } | undefined {
+type PriceBounds = { gte?: number; lte?: number };
+
+function priceRange(min?: number, max?: number): PriceBounds | undefined {
   if (min == null && max == null) return undefined;
   let lo = min;
   let hi = max;
   if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
   return { ...(lo != null ? { gte: lo } : {}), ...(hi != null ? { lte: hi } : {}) };
+}
+
+const inPriceRange = (value: number, r: PriceBounds) => (r.gte == null || value >= r.gte) && (r.lte == null || value <= r.lte);
+
+type CardVariation = { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number };
+const CARD_VARIATION_SELECT = { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } satisfies Prisma.VariationSelect;
+
+/** Giá khách thấy trên thẻ: giá đang bán của phân loại đại diện, hoặc giá Giờ vàng thắng (xem `cardPriceWithFlash`). */
+function standingOf(p: { id: string; basePrice: number; salePrice: number | null; variations: CardVariation[] }, offers: ReadonlyMap<string, FlashOffer[]>): number {
+  return cardPriceWithFlash(p, p.variations, offers.get(p.id));
 }
 
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
@@ -141,8 +154,10 @@ export class CatalogService {
   async list(query: ProductQuery) {
     const { page, limit, sort } = query;
     const where = await this.listWhere(query);
-    if (sort === 'best_seller') return this.listBestSellers(where, page, limit);
-    if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc');
+    const price = priceRange(query.minPrice, query.maxPrice);
+    if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
+    if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
+    if (price) return this.listRanked<{ id: string }>(where, page, limit, { id: true }, null, price, [this.orderBy(sort), { id: 'asc' }]);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
         where,
@@ -163,45 +178,61 @@ export class CatalogService {
    * cắt trang, rồi lấy thẻ đầy đủ đúng các id của trang (giữ thứ tự). total = số SP khớp.
    * Đủ nhanh với catalog hiện tại (vài trăm SP). Vượt ~5k SP → chuyển sang cột soldTotal có index.
    */
-  private listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number) {
+  private listBestSellers(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
     return this.listRanked<{ id: string; soldApp: number; soldExternal: number }>(
       where,
       page,
       limit,
       { id: true, soldApp: true, soldExternal: true },
       (x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal),
+      price,
     );
   }
 
   /**
-   * "Giá tăng/giảm" theo giá ĐANG BÁN (salePrice ?? basePrice), cùng giá với bộ lọc giá và thẻ SP: sắp theo
-   * basePrice thì SP đang giảm giá đứng sai chỗ so với giá khách nhìn thấy (U1-B01). Cũng là biểu thức nên xếp hạng ở TS.
+   * "Giá tăng/giảm" theo giá khách thấy trên thẻ: giá đang bán của phân loại đại diện hoặc giá Giờ vàng đang thắng
+   * (`cardPriceWithFlash`), không phải cột của Product (Pancake chỉ ghi giá bán vào phân loại).
    */
-  private listByStandingPrice(where: Prisma.ProductWhereInput, page: number, limit: number, dir: 'asc' | 'desc') {
-    type Row = { id: string; basePrice: number; salePrice: number | null };
-    const standing = (p: Row) => p.salePrice ?? p.basePrice;
+  private listByStandingPrice(where: Prisma.ProductWhereInput, page: number, limit: number, dir: 'asc' | 'desc', price?: PriceBounds) {
+    type Row = { id: string; basePrice: number; salePrice: number | null; variations: CardVariation[] };
     return this.listRanked<Row>(
       where,
       page,
       limit,
-      { id: true, basePrice: true, salePrice: true },
-      (x, y) => (dir === 'asc' ? standing(x) - standing(y) : standing(y) - standing(x)),
+      { id: true },
+      (x, y, offers) => (dir === 'asc' ? standingOf(x, offers) - standingOf(y, offers) : standingOf(y, offers) - standingOf(x, offers)),
+      price,
     );
   }
 
+  /**
+   * Nạp mọi SP khớp kèm giá phân loại, lọc khoảng giá và xếp thứ tự ở TS (giá thẻ là biểu thức nên Prisma không lọc/sắp được),
+   * cắt trang rồi lấy thẻ đầy đủ đúng các id của trang. `total` là số SP còn lại sau khi lọc giá. `compare` rỗng thì giữ thứ tự `orderBy` của DB.
+   */
   private async listRanked<T extends { id: string }>(
     where: Prisma.ProductWhereInput,
     page: number,
     limit: number,
     select: Prisma.ProductSelect,
-    compare: (x: T, y: T) => number,
+    compare: ((x: T & { basePrice: number; salePrice: number | null; variations: CardVariation[] }, y: T & { basePrice: number; salePrice: number | null; variations: CardVariation[] }, offers: ReadonlyMap<string, FlashOffer[]>) => number) | null,
+    price?: PriceBounds,
+    orderBy?: Prisma.ProductOrderByWithRelationInput[],
   ) {
-    const ranked = (await this.prisma.product.findMany({ where, select })) as unknown as T[];
-    ranked.sort((x, y) => {
-      const diff = compare(x, y);
-      if (diff !== 0) return diff;
-      return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
-    });
+    type Priced = T & { basePrice: number; salePrice: number | null; variations: CardVariation[] };
+    let ranked = (await this.prisma.product.findMany({
+      where,
+      ...(orderBy ? { orderBy } : {}),
+      select: { ...select, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } },
+    })) as unknown as Priced[];
+    const offers = await this.activeFlashOffers();
+    if (price) ranked = ranked.filter((r) => inPriceRange(standingOf(r, offers), price));
+    if (compare) {
+      ranked.sort((x, y) => {
+        const diff = compare(x, y, offers);
+        if (diff !== 0) return diff;
+        return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+      });
+    }
     const { skip, take } = skipTake(page, limit);
     const pageIds = ranked.slice(skip, skip + take).map((r) => r.id);
     if (pageIds.length === 0) return paginated([], page, limit, ranked.length);
@@ -217,6 +248,28 @@ export class CatalogService {
     return paginated(items, page, limit, ranked.length);
   }
 
+  /** Suất Giờ vàng đang chạy gom theo sản phẩm: một truy vấn, cùng điều kiện và cùng luật "còn rẻ hơn" với dải Giờ vàng. */
+  private async activeFlashOffers(): Promise<Map<string, FlashOffer[]>> {
+    const rows = await this.prisma.flashSaleItem.findMany({
+      where: activeFlashWhere(new Date()),
+      select: {
+        flashPrice: true,
+        soldCount: true,
+        quota: true,
+        variationId: true,
+        variation: { select: { productId: true, retailPrice: true, salePrice: true } },
+      },
+    });
+    const byProduct = new Map<string, FlashOffer[]>();
+    for (const r of rows) {
+      if (r.soldCount >= r.quota || !isStillDiscounted(r)) continue;
+      const list = byProduct.get(r.variation.productId) ?? [];
+      list.push({ variationId: r.variationId, flashPrice: r.flashPrice, retailPrice: r.variation.retailPrice, salePrice: r.variation.salePrice });
+      byProduct.set(r.variation.productId, list);
+    }
+    return byProduct;
+  }
+
   /**
    * Bộ lọc công khai của catalog — MỘT nơi duy nhất (list + best_seller dùng chung).
    * P0 A2-03 = A5-06 = A6-04 (docs/audit-2026-09): SP đối tác được tạo với isActive:true ngay cả
@@ -225,7 +278,7 @@ export class CatalogService {
    * Điều kiện cần `OR` (giá, từ khoá) đi vào `AND` để không đè nhau.
    */
   private async listWhere(query: ProductQuery): Promise<Prisma.ProductWhereInput> {
-    const { brand, category, segment, minPrice, maxPrice, inStock, minRating, slugs } = query;
+    const { brand, category, segment, inStock, minRating, slugs } = query;
     const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE };
     const and: Prisma.ProductWhereInput[] = [];
     // Có tham số `slugs` mà rỗng thì không trả gì (không rơi về cả catalog).
@@ -244,9 +297,6 @@ export class CatalogService {
     if (segment) where.forSegment = { has: segment };
     const text = await this.textWhere(query.q);
     if (text) and.push(text);
-    // Giá ĐANG BÁN = salePrice ?? basePrice — đúng giá `ProductTile` hiển thị (standing price).
-    const price = priceRange(minPrice, maxPrice);
-    if (price) and.push({ OR: [{ salePrice: price }, { salePrice: null, basePrice: price }] });
     // Cùng quy tắc với `inStock` của thẻ (toCard): có phân loại đang bán còn tồn.
     if (inStock) where.variations = { some: { isActive: true, stock: { gt: 0 } } };
     // ratingAvg mặc định 0 → SP chưa có đánh giá không lọt "Từ 4★" (đúng ý bộ lọc).
@@ -519,9 +569,16 @@ export class CatalogService {
     const rows = await this.prisma.product.findMany({
       where: { ...PUBLIC_PRODUCT_WHERE, AND: [text] },
       take: 8,
-      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true },
+      select: {
+        id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true,
+        variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+      },
     });
-    return rows.map(({ id, ...r }) => ({ ...r, thumbnail: publicImage('product', id, 'thumb', r.thumbnail) }));
+    return rows.map(({ id, variations, ...r }) => ({
+      ...r,
+      ...cardPrices(r, variations),
+      thumbnail: publicImage('product', id, 'thumb', r.thumbnail),
+    }));
   }
 
   private orderBy(sort?: string): Prisma.ProductOrderByWithRelationInput {
@@ -549,7 +606,7 @@ export class CatalogService {
     reviewCount: number;
     soldExternal: number;
     soldApp: number;
-    variations: { stock: number }[];
+    variations: { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number }[];
   }) {
     return {
       id: p.id,
@@ -557,8 +614,7 @@ export class CatalogService {
       brand: p.brand,
       name: p.name,
       thumbnail: publicProductThumb(p),
-      basePrice: p.basePrice,
-      salePrice: p.salePrice,
+      ...cardPrices(p, p.variations),
       isFeatured: p.isFeatured,
       ratingAvg: p.ratingAvg,
       reviewCount: p.reviewCount,

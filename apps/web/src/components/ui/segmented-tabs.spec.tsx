@@ -30,6 +30,15 @@ const ITEMS = [
   { key: 'b', label: 'Đang giao' },
 ];
 
+describe('SegmentedTabs: mép mờ khi cuộn ngang', () => {
+  it('scroll: có lớp mờ mép như Mini App; không scroll thì không', () => {
+    const on = mount(<SegmentedTabs items={ITEMS} value="a" onChange={() => {}} scroll />);
+    expect(on.container.querySelector('[role="tablist"]')!.className).toContain('tubu-scroll-fade');
+    const off = mount(<SegmentedTabs items={ITEMS} value="a" onChange={() => {}} />);
+    expect(off.container.querySelector('[role="tablist"]')!.className).not.toContain('tubu-scroll-fade');
+  });
+});
+
 describe('SegmentedTabs', () => {
   it('role tablist/tab, tab đang chọn aria-selected, có số đếm, vùng chạm 44px', () => {
     const { container } = mount(<SegmentedTabs items={ITEMS} value="b" onChange={() => {}} />);

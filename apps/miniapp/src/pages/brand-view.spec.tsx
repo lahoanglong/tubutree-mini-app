@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   unfollowBrand: vi.fn(),
   getDealerMe: vi.fn(),
   copyText: vi.fn(),
+  fetchFlash: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -28,6 +29,10 @@ vi.mock('../services/brand-api', () => ({
   getBrandFollowState: mocks.getBrandFollowState,
   followBrand: mocks.followBrand,
   unfollowBrand: mocks.unfollowBrand,
+}));
+vi.mock('../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchActiveFlashSales: mocks.fetchFlash,
 }));
 vi.mock('../services/dealer-api', () => ({ getDealerMe: mocks.getDealerMe }));
 vi.mock('../store/auth', () => ({
@@ -71,6 +76,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     mocks.unfollowBrand.mockResolvedValue({ following: false, followerCount: 12 });
     mocks.getDealerMe.mockResolvedValue({ isDealer: false });
     mocks.copyText.mockResolvedValue(true);
+    mocks.fetchFlash.mockResolvedValue([]);
   });
 
   it('hiện tên nhãn, tagline, số theo dõi và các khối nội dung', async () => {
@@ -134,11 +140,56 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     );
   });
 
+  it('Giờ vàng: thẻ sản phẩm hiện giá Giờ vàng như Trang chủ và web (B-24)', async () => {
+    mocks.fetchFlash.mockResolvedValue([{ itemId: 'i1', variationId: 'v1', productSlug: 'nrc-sachi', productName: 'Nước rửa chén Sachi', thumbnail: null, flashPrice: 60000, retailPrice: 100000, salePrice: 80000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z' }]);
+    renderPage();
+    const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
+    await waitFor(() => expect(within(grid).getByText('60.000đ')).toBeInTheDocument());
+    expect(within(grid).getByText('80.000đ')).toBeInTheDocument();
+    expect(within(grid).getByText(/Giờ vàng/)).toBeInTheDocument();
+    expect(within(grid).queryByText('100.000đ')).toBeNull();
+  });
+
+  describe('hàng Pancake: giá bán nằm ở phân loại, API trả giá của phân loại mặc định (B-24)', () => {
+    const hatDieu = { id: 'pr2', name: 'Hạt điều rang', slug: 'hat-dieu', thumbnail: null, basePrice: 180000, salePrice: 159000, ratingAvg: 4.5, reviewCount: 3, inStock: true };
+    const item = (over: Record<string, unknown>) => ({ itemId: 'i2', variationId: 'v1', productSlug: 'hat-dieu', productName: 'Hạt điều rang', thumbnail: null, flashPrice: 119000, retailPrice: 180000, salePrice: 159000, soldCount: 1, quota: 10, endAt: '2099-01-01T00:00:00.000Z', ...over });
+    const open = async () => {
+      mocks.getPublicBrand.mockResolvedValue({ ...BRAND, products: [hatDieu] });
+      renderPage();
+      return (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
+    };
+
+    it('đang bán 159.000đ, Giờ vàng 119.000đ: thẻ gạch 159.000đ, -25%, như trang chi tiết', async () => {
+      mocks.fetchFlash.mockResolvedValue([item({})]);
+      const grid = await open();
+      await waitFor(() => expect(within(grid).getByText('119.000đ')).toBeInTheDocument());
+      expect(within(grid).getByText('159.000đ')).toBeInTheDocument();
+      expect(within(grid).getByText('Giờ vàng -25%')).toBeInTheDocument();
+      expect(within(grid).queryByText('180.000đ')).toBeNull();
+    });
+
+    it('hết Giờ vàng: thẻ ghi 159.000đ gạch 180.000đ, không còn ghi 180.000đ làm giá', async () => {
+      const grid = await open();
+      await waitFor(() => expect(within(grid).getByText('159.000đ')).toBeInTheDocument());
+      expect(within(grid).getByText('180.000đ')).toHaveStyle({ textDecoration: 'line-through' });
+    });
+
+    it('Giờ vàng ở phân loại thứ hai (niêm yết 300.000đ, Giờ vàng 150.000đ): thẻ như dải Giờ vàng, -50%', async () => {
+      mocks.fetchFlash.mockResolvedValue([item({ variationId: 'v2', flashPrice: 150000, retailPrice: 300000, salePrice: null })]);
+      const grid = await open();
+      await waitFor(() => expect(within(grid).getByText('150.000đ')).toBeInTheDocument());
+      expect(within(grid).getByText('300.000đ')).toBeInTheDocument();
+      expect(within(grid).getByText('Giờ vàng -50%')).toBeInTheDocument();
+      fireEvent.click(within(grid).getByText('Hạt điều rang'));
+      expect(mocks.navigate).toHaveBeenCalledWith('/product/hat-dieu', { state: { variationId: 'v2' } });
+    });
+  });
+
   it('bấm sản phẩm mở trang chi tiết', async () => {
     renderPage();
     const grid = (await screen.findByRole('heading', { level: 2, name: 'Sản phẩm' })).parentElement!;
     fireEvent.click(within(grid).getByText('Nước rửa chén Sachi'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc-sachi');
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc-sachi', undefined);
   });
 
   it('khối chương trình đại lý dẫn tới /dealer; đại lý đã duyệt chỉ đổi chữ nút', async () => {

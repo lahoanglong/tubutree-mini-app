@@ -41,6 +41,7 @@ import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { useCountdown } from '../hooks/use-countdown';
+import { cardPricing, defaultVariationFor, pickDefaultVariation, variationPricing } from '@tubutree/app-core/flash-price';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
@@ -62,6 +63,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { ScrollRow } from '../components/ui/scroll-row';
 import { useScrollHints } from '../components/ui/use-scroll-hints';
 import { cartKey, useCartKey } from '../services/cart-key';
+import { LeafGlyph } from '../components/ui/product-image';
 
 const LOW_STOCK_THRESHOLD = 5;
 const DESC_COLLAPSED_LINES = 4;
@@ -103,12 +105,13 @@ export default function ProductDetailPage() {
   const chatOn = config.chat?.enabled === true;
   const chatReady = chatOn && status === 'authenticated';
 
-  // Thẻ "Ưu đãi giờ vàng" truyền variationId qua state để PDP mở đúng phân loại đang giảm;
-  // không có state (vào từ lưới sản phẩm/deep link) thì giữ hành vi cũ là tự chọn phân loại
-  // đầu tiên còn hàng.
+  // Thẻ và dải "Giờ vàng" truyền variationId qua state; hợp lệ khi phân loại đó còn hàng và còn Giờ vàng. Mọi lối vào khác
+  // (lưới, gợi ý tìm, bài cộng đồng, deep link) mở phân loại mà thẻ đã ghi giá (`defaultVariationFor`). Chỉ khách bấm chọn mới
+  // là `selectedId`. Trang hiện ngay với phân loại đại diện; khi danh sách Giờ vàng về thì chốt lại một lần, không đổi lại khi đợt hết giờ lúc khách đang xem.
   const location = useLocation();
   const navState = location.state as { variationId?: string; listSource?: string; reviewOrderId?: string } | null;
-  const [selectedId, setSelectedId] = useState<string | null>(navState?.variationId ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [badgeBounce, setBadgeBounce] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
@@ -159,15 +162,19 @@ export default function ProductDetailPage() {
     refetchInterval: 60_000,
   });
 
-  // Mặc định chọn phân loại đầu tiên CÒN HÀNG (không phải đầu danh sách).
+  // Mặc định: phân loại còn hàng có giá đang bán thấp nhất, cùng phân loại mà thẻ sản phẩm lấy giá.
   const variations = product.data?.variations ?? [];
   // Memo theo (selectedId + danh sách variation) — tránh tạo ref mới mỗi render gây effect chạy dư.
+  if (product.data && !flashQ.isPending && autoPick.current?.slug !== slug) {
+    const flashNow = flashQ.data ?? [];
+    const entry = variations.find((v) => v.id === navState?.variationId && v.stock > 0 && variationPricing(v, flashNow).isFlash);
+    autoPick.current = { slug: slug ?? '', id: (entry ?? defaultVariationFor({ slug: product.data.slug }, variations, flashNow))?.id ?? null };
+  }
+  const auto = autoPick.current;
+  const autoId = auto && auto.slug === slug ? auto.id : null;
   const selected = useMemo(
-    () =>
-      variations.find((v) => v.id === selectedId) ??
-      variations.find((v) => v.stock > 0) ??
-      variations[0],
-    [selectedId, variations],
+    () => variations.find((v) => v.id === selectedId) ?? variations.find((v) => v.id === autoId) ?? pickDefaultVariation(variations),
+    [selectedId, autoId, variations],
   );
 
   // Flash sale đang chạy cho ĐÚNG phân loại đang chọn (BE re-resolve giá thật lúc thêm giỏ/checkout).
@@ -200,17 +207,17 @@ export default function ProductDetailPage() {
     const viewKey = `${product.data.id}:${selected.id}`;
     if (trackedViewKey.current === viewKey) return;
     trackedViewKey.current = viewKey;
-    const baseSelectedPrice = selected.salePrice ?? selected.retailPrice ?? product.data.basePrice;
-    const viewPrice = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
+    const view = variationPricing(selected, flashQ.data ?? []);
+    const viewPrice = view.price;
     void trackEvent('product_viewed', 'miniapp', {
       productId: product.data.id,
       variationId: selected.id,
       price: viewPrice,
-      isFlash: Boolean(flashItem),
+      isFlash: view.isFlash,
       inStock: selected.stock > 0,
       listSource: navState?.listSource ?? 'browse',
     });
-  }, [product.isSuccess, product.data, selected, flashItem, flashQ.isPending]);
+  }, [product.isSuccess, product.data, selected, flashQ.data, flashQ.isPending]);
 
   const addMutation = useMutation({
     mutationFn: (input: { variation: VariationDetail; qty: number }) =>
@@ -280,13 +287,11 @@ export default function ProductDetailPage() {
 
   const p = product.data;
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
-  // Flash không bao giờ tính cao hơn giá đang niêm yết — khớp BE (min(flashPrice, giá chuẩn)).
-  const baseSelectedPrice = selected?.salePrice ?? selected?.retailPrice ?? p.basePrice;
-  const price = flashItem ? Math.min(flashItem.flashPrice, baseSelectedPrice) : baseSelectedPrice;
-  // Giờ vàng gạch giá đang bán trước giờ vàng (khớp dải trang chủ và thẻ SP); flash không rẻ hơn thì như không có flash.
-  const originalPrice = flashItem && price < baseSelectedPrice ? baseSelectedPrice : selected ? selected.retailPrice : p.basePrice;
-  // % badge tính từ giá THỰC hiển thị (price/originalPrice) — không dùng flashItem.retailPrice (snapshot cũ).
-  const flashPct = originalPrice > 0 ? Math.round((1 - price / originalPrice) * 100) : 0;
+  const flashList = flashQ.data ?? [];
+  const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList);
+  const price = priceView.price;
+  const originalPrice = priceView.compareAt;
+  const flashPct = priceView.salePct;
   const inStock = (selected?.stock ?? 0) > 0;
   const lowStock = inStock && (selected?.stock ?? 0) <= LOW_STOCK_THRESHOLD;
   const cartCount = cart.data?.itemCount ?? 0;
@@ -409,7 +414,7 @@ export default function ProductDetailPage() {
         <PointsBoostStrip placement="product" />
 
         {/* Giờ vàng cho phân loại đang chọn — badge % + đếm ngược êm + đã bán bao nhiêu%. */}
-        {flashItem && (
+        {flashItem && priceView.isFlash && (
           <Box flex alignItems="center" style={{ gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <Badge tone="promo" size="sm" style={{ background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' }}>
               -{flashPct}%
@@ -958,6 +963,20 @@ const BUY_NOW_LINE: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
+/** Một ảnh của carousel: tải lỗi thì rơi về hình lá chung, giữ nguyên ô vuông và vị trí cuộn. */
+export function GallerySlide({ src, alt, eager }: { src: string; alt: string; eager: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const frame = { width: '100%', aspectRatio: '1 / 1', flex: '0 0 100%', scrollSnapAlign: 'center', display: 'block' } as const;
+  if (failed) {
+    return (
+      <div data-testid="gallery-fallback" style={{ ...frame, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-subtle)' }}>
+        <LeafGlyph size={72} />
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} loading={eager ? 'eager' : 'lazy'} onError={() => setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
+}
+
 /** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
 function Gallery({ images, alt }: { images: string[]; alt: string }) {
   const [index, setIndex] = useState(0);
@@ -975,10 +994,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
           justifyContent: 'center',
         }}
       >
-        <svg width="72" height="72" viewBox="0 0 48 48" fill="none" aria-hidden>
-          <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--forest-200)" />
-          <path d="M17 34c4-10 12-18 19-22" stroke="var(--color-text-brand)" strokeWidth="1.6" strokeLinecap="round" fill="none" />
-        </svg>
+        <LeafGlyph size={72} />
       </Box>
     );
   }
@@ -1006,20 +1022,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
         }}
       >
         {images.map((src, i) => (
-          <img
-            key={src}
-            src={src}
-            alt={`${alt} — ảnh ${i + 1}`}
-            loading={i === 0 ? 'eager' : 'lazy'}
-            style={{
-              width: '100%',
-              aspectRatio: '1 / 1',
-              objectFit: 'cover',
-              flex: '0 0 100%',
-              scrollSnapAlign: 'center',
-              display: 'block',
-            }}
-          />
+          <GallerySlide key={src} src={src} alt={`${alt} — ảnh ${i + 1}`} eager={i === 0} />
         ))}
       </div>
       {images.length > 1 && (

@@ -222,7 +222,7 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
     expect(container.textContent).not.toContain('delivering');
   });
 
-  it('mã lạ → "Đang cập nhật"; trạng thái rỗng → "—"; chuỗi tiếng Việt giữ nguyên', async () => {
+  it('mã lạ → "Đang cập nhật"; trạng thái rỗng mà có mã vận đơn → "Đã gán mã vận đơn" (B-26); chuỗi tiếng Việt giữ nguyên', async () => {
     mocks.fetchOrder.mockResolvedValue(
       withShipping([
         { at: '2026-10-02T03:00:00.000Z', status: 'Đã lấy hàng', carrier: 'GHN', code: 'GHN001' },
@@ -234,7 +234,8 @@ describe('OrderDetailPage — lịch sử vận chuyển bằng tiếng Việt (
     await screen.findByText('Mã vận đơn:', { exact: false });
     expect(screen.getByText('Đã lấy hàng')).toBeInTheDocument();
     expect(screen.getByText('Đang cập nhật')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('Đã gán mã vận đơn GHN001')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('—');
     expect(container.textContent).not.toContain('xyz_weird_code');
   });
 

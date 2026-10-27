@@ -4,7 +4,7 @@ import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { VARIATION_ORDER_BY } from '../catalog/variation-order';
 import { paginated, skipTake } from '../../common/pagination';
-import { maskFullName } from '../../common/mask-name';
+import { maskFullName, publicDisplayName } from '../../common/mask-name';
 import { maskPhoneOrNull } from '../../common/mask-pii';
 import { OrderStatusService, toHttpBadRequest } from '../orders/order-status.service';
 import {
@@ -342,6 +342,7 @@ export class MerchantService {
       return store;
     }
 
+    const ownerName = publicDisplayName(user.fullName, '');
     const baseSlug = user.referralCode ? user.referralCode.toLowerCase() : `shop-${userId.slice(-6)}`;
     let subdomain = baseSlug;
     let counter = 1;
@@ -376,7 +377,7 @@ export class MerchantService {
               slug: baseSlug,
               subdomain,
               ownerUserId: userId,
-              title: `Gian hàng của ${user.fullName ?? 'Đối tác'}`,
+              title: ownerName ? `Gian hàng của ${ownerName}` : 'Gian hàng đối tác Tubu Tree',
               themeColor: '#16a34a',
               isPublished: false,
               publishedAt: null,

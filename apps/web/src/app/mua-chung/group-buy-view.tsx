@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Share2, Sprout } from 'lucide-react';
+import { Share2 } from 'lucide-react';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { EmptyState } from '@/components/empty-state';
@@ -22,6 +22,7 @@ import { platformBridge } from '@/lib/platform-bridge';
 import { loginHref } from '@/lib/return-to';
 import { withReferral } from '@/lib/share-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { ProductThumb } from '@/components/mini';
 import { loadErrorText } from '@/lib/error-text';
 
 type Note = { text: string; error: boolean } | null;
@@ -204,17 +205,10 @@ function GroupCard({
       <div className="flex gap-3">
         <Link
           href={productHref}
-          aria-label={g.product.thumbnail ? undefined : g.product.name}
+          aria-label={g.product.name}
           className="inline-flex shrink-0 self-start"
         >
-          {g.product.thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={g.product.thumbnail} alt={g.product.name} width={56} height={56} className="h-14 w-14 rounded-control object-cover" />
-          ) : (
-            <span className="flex h-14 w-14 items-center justify-center rounded-control bg-forest-50 text-forest-600">
-              <Sprout className="h-6 w-6" aria-hidden="true" />
-            </span>
-          )}
+          <ProductThumb src={g.product.thumbnail} alt={g.product.name} size={56} />
         </Link>
         <div className="min-w-0 flex-1">
           <Link href={productHref} className="block truncate text-sm font-semibold text-stone-900 hover:underline max-md:text-[length:var(--type-body-sm-size)]">

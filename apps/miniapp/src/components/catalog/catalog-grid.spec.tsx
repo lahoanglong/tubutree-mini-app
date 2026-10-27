@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -76,7 +76,7 @@ describe('CatalogGrid', () => {
 
   it('đang giờ vàng → giá flash, badge giờ vàng, mở đúng phân loại', async () => {
     mocks.fetchActiveFlashSales.mockResolvedValue([
-      { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'x', thumbnail: null, flashPrice: 75000, retailPrice: 150000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
+      { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'x', thumbnail: null, flashPrice: 75000, retailPrice: 150000, salePrice: 120000, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
     ]);
     renderGrid(undefined, [SALE]);
     const badge = await screen.findByText(/Giờ vàng -38%/);
@@ -87,6 +87,19 @@ describe('CatalogGrid', () => {
     expect(screen.queryByText('150.000đ')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { listSource: 'search', variationId: 'v9' } });
+  });
+
+  it('Giờ vàng ở phân loại khác đắt hơn giá thẻ (130.000đ so với 120.000đ): thẻ giữ giá thẻ, không nhãn, mở phân loại mặc định', async () => {
+    mocks.fetchActiveFlashSales.mockResolvedValue([
+      { itemId: 'f1', variationId: 'v9', productSlug: 'nrc', productName: 'x', thumbnail: null, flashPrice: 130000, retailPrice: 300000, salePrice: null, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' },
+    ]);
+    renderGrid(undefined, [SALE]);
+    await waitFor(() => expect(mocks.fetchActiveFlashSales).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByText('120.000đ')).toBeInTheDocument();
+    expect(screen.queryByText(/Giờ vàng/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Nước rửa chén' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/product/nrc', { state: { listSource: 'search' } });
   });
 
   it('skeleton: đúng số thẻ, ẩn với trình đọc màn hình, thân thẻ 133px như thẻ thật', () => {

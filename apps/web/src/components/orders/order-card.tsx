@@ -2,7 +2,6 @@
 
 import { useId } from 'react';
 import Link from 'next/link';
-import { Package } from 'lucide-react';
 import type { OrderView } from '@tubutree/app-core/api/orders';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { bankPaymentHref, buyerOrderStatusLabel, isReorderable, orderDetailHref } from '@/lib/order-view';
@@ -11,6 +10,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { canPayNow, orderUnitCount, showsPaymentDeadline } from './order-rules';
+import { ProductThumb } from '@/components/mini';
 
 const STATUS_TONE: Record<string, BadgeTone> = {
   PENDING_PAYMENT: 'warning',
@@ -52,13 +52,8 @@ export function OrderCard({ order: o, onReorder }: OrderCardProps) {
         <Badge tone={STATUS_TONE[o.status] ?? 'neutral'}>{buyerOrderStatusLabel(o)}</Badge>
       </div>
       <div id={summaryId} className="flex items-center gap-3">
-        <div className={`flex h-14 w-14 flex-none items-center justify-center overflow-hidden rounded-control bg-stone-100 ${mini.thumb}`}>
-          {first?.thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={first.thumbnail} alt="" loading="lazy" className="h-full w-full object-cover" />
-          ) : (
-            <Package className="h-5 w-5 text-stone-500" aria-hidden="true" />
-          )}
+        <div className="flex-none">
+          <ProductThumb src={first?.thumbnail} alt="" size={56} />
         </div>
         <div className="min-w-0 flex-1">
           {first && (

@@ -19,7 +19,7 @@ const card = (id: string) => ({
   reviewCount: 0,
   soldExternal: 0,
   soldApp: 0,
-  variations: [{ stock: 5 }],
+  variations: [{ id: `${id}-v`, sku: `${id}-sku`, retailPrice: 1000, salePrice: null, stock: 5 }],
 });
 
 describe('CatalogService.boughtTogether (§6.12 thường mua kèm)', () => {
@@ -589,23 +589,6 @@ describe('CatalogService.list — bộ lọc dự án 4b', () => {
   }
   const argsOf = (findMany: jest.Mock) => findMany.mock.calls[0][0];
 
-  it('khoảng giá lọc theo GIÁ ĐANG BÁN (salePrice nếu có, không thì basePrice) — đúng giá thẻ SP hiển thị', async () => {
-    const { svc, findMany } = setup();
-    await svc.list({ page: 1, limit: 20, minPrice: 100000, maxPrice: 200000 });
-    const range = { gte: 100000, lte: 200000 };
-    expect(argsOf(findMany).where.AND).toEqual([{ OR: [{ salePrice: range }, { salePrice: null, basePrice: range }] }]);
-  });
-
-  it('chỉ minPrice → chỉ gte; min > max → tự đổi chỗ', async () => {
-    const a = setup();
-    await a.svc.list({ page: 1, limit: 20, minPrice: 500000 });
-    expect(argsOf(a.findMany).where.AND).toEqual([{ OR: [{ salePrice: { gte: 500000 } }, { salePrice: null, basePrice: { gte: 500000 } }] }]);
-    const b = setup();
-    await b.svc.list({ page: 1, limit: 20, minPrice: 300000, maxPrice: 100000 });
-    const range = { gte: 100000, lte: 300000 };
-    expect(argsOf(b.findMany).where.AND).toEqual([{ OR: [{ salePrice: range }, { salePrice: null, basePrice: range }] }]);
-  });
-
   it('inStock → còn ít nhất 1 phân loại ĐANG BÁN có tồn > 0 (cùng quy tắc với inStock của thẻ)', async () => {
     const { svc, findMany } = setup();
     await svc.list({ page: 1, limit: 20, inStock: true });
@@ -754,16 +737,6 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({ isActive: true, approvalStatus: 'APPROVED' });
   });
 
-  it('q kết hợp khoảng giá → cả hai nằm trong AND', async () => {
-    const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
-    const { svc, findMany } = setup(queryRaw);
-    await svc.list({ page: 1, limit: 20, q: 'nuoc', maxPrice: 100000 });
-    expect(findMany.mock.calls[0][0].where.AND).toEqual([
-      { id: { in: ['p1'] } },
-      { OR: [{ salePrice: { lte: 100000 } }, { salePrice: null, basePrice: { lte: 100000 } }] },
-    ]);
-  });
-
   it('suggest dùng cùng cách khớp; giữ shape {slug,name,thumbnail,basePrice}, tối đa 8; q rỗng → []', async () => {
     const queryRaw = jest.fn().mockResolvedValue([{ id: 'p1' }]);
     const { svc, findMany } = setup(queryRaw);
@@ -771,7 +744,10 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { isActive: true, approvalStatus: 'APPROVED', AND: [{ id: { in: ['p1'] } }] },
       take: 8,
-      select: { id: true, slug: true, name: true, thumbnail: true, basePrice: true },
+      select: {
+        id: true, slug: true, name: true, thumbnail: true, basePrice: true, salePrice: true,
+        variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+      },
     });
     await expect(svc.suggest('  ')).resolves.toEqual([]);
   });
@@ -786,6 +762,9 @@ describe('CatalogService — tìm không dấu (dự án 4b)', () => {
   });
 });
 
+/** Không có đợt Giờ vàng nào đang chạy (hoặc các suất đã cho). */
+const noFlash = (rows: unknown[] = []) => ({ findMany: jest.fn().mockResolvedValue(rows) });
+
 describe('CatalogService.list — best_seller (dự án 4b)', () => {
   const RANKED = [
     { id: 'c', soldApp: 0, soldExternal: 15 },
@@ -796,7 +775,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
   function setup(pageRows: ReturnType<typeof card>[]) {
     const findMany = jest.fn().mockResolvedValueOnce(RANKED).mockResolvedValueOnce(pageRows);
     const $transaction = jest.fn();
-    const prisma = { product: { findMany, count: jest.fn() }, $transaction } as unknown as PrismaService;
+    const prisma = { product: { findMany, count: jest.fn() }, flashSaleItem: noFlash(), $transaction } as unknown as PrismaService;
     return { svc: new CatalogService(prisma), findMany, $transaction };
   }
 
@@ -807,7 +786,10 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
     expect(r.meta).toEqual({ page: 1, limit: 2, total: 4 });
     expect(findMany.mock.calls[0][0]).toEqual({
       where: { isActive: true, approvalStatus: 'APPROVED' },
-      select: { id: true, soldApp: true, soldExternal: true },
+      select: {
+        id: true, soldApp: true, soldExternal: true, basePrice: true, salePrice: true,
+        variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+      },
     });
     expect(findMany.mock.calls[1][0]).toEqual({
       where: { AND: [{ isActive: true, approvalStatus: 'APPROVED' }, { id: { in: ['b', 'a'] } }] },
@@ -846,7 +828,7 @@ describe('CatalogService.list — best_seller (dự án 4b)', () => {
       { id: 'a', soldApp: 1, soldExternal: 0 },
     ];
     const findMany = jest.fn().mockResolvedValueOnce(tied).mockResolvedValueOnce([card('k'), card('m')]);
-    const prisma = { product: { findMany }, $transaction: jest.fn() } as unknown as PrismaService;
+    const prisma = { product: { findMany }, flashSaleItem: noFlash(), $transaction: jest.fn() } as unknown as PrismaService;
     const r = await new CatalogService(prisma).list({ page: 1, limit: 2, sort: 'best_seller' });
     expect(findMany.mock.calls[1][0].where.AND[1]).toEqual({ id: { in: ['k', 'm'] } });
     expect(r.data.map((c) => c.id)).toEqual(['k', 'm']);
@@ -887,10 +869,10 @@ describe('CatalogService.list — sắp theo giá đang bán (U1-B01)', () => {
         return 0;
       });
       if (args.take !== undefined) rows = rows.slice(args.skip ?? 0, (args.skip ?? 0) + args.take);
-      return rows.map((r) => ({ ...card(r.id), basePrice: r.basePrice, salePrice: r.salePrice }));
+      return rows.map((r) => ({ ...card(r.id), basePrice: r.basePrice, salePrice: r.salePrice, variations: [{ id: `${r.id}-v`, sku: r.id, retailPrice: r.basePrice, salePrice: r.salePrice, stock: 5 }] }));
     });
     const count = jest.fn().mockResolvedValue(ROWS.length);
-    const prisma = { product: { findMany, count }, $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)) } as unknown as PrismaService;
+    const prisma = { product: { findMany, count }, flashSaleItem: noFlash(), $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)) } as unknown as PrismaService;
     return { svc: new CatalogService(prisma), findMany };
   }
 
@@ -1054,5 +1036,156 @@ describe('CatalogService — JSON công khai không nhúng ảnh base64', () => 
     const r = await new CatalogService(prisma).getBySlug('a');
     expect(JSON.stringify(r)).not.toContain('data:image');
     expect(r.images).toEqual([expect.stringMatching(/^\/public-image\/product\/p1\/0\?v=/), 'https://cdn.example.com/b.jpg']);
+  });
+});
+
+describe('CatalogService — giá thẻ lấy từ phân loại đại diện (dữ liệu kiểu Pancake)', () => {
+  const pancake = {
+    ...card('hat-dieu'),
+    basePrice: 300_000,
+    salePrice: null,
+    variations: [
+      { id: 'v2', sku: 'HD-2', retailPrice: 300_000, salePrice: null, stock: 5 },
+      { id: 'v1', sku: 'HD-1', retailPrice: 180_000, salePrice: 159_000, stock: 5 },
+    ],
+  };
+
+  it('related(): thẻ ghi giá của phân loại mặc định trang chi tiết, không phải cột Product', async () => {
+    const prisma = {
+      product: { findUnique: jest.fn().mockResolvedValue({ id: 'p0', brand: 'b' }), findMany: jest.fn().mockResolvedValue([pancake]) },
+    } as unknown as PrismaService;
+    const [c] = await new CatalogService(prisma).related('x');
+    expect(c).toMatchObject({ basePrice: 180_000, salePrice: 159_000 });
+  });
+
+  it('suggest(): gợi ý tìm kiếm cũng ghi giá của phân loại mặc định và không lộ danh sách phân loại', async () => {
+    const prisma = {
+      product: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'p1', slug: 'hat-dieu', name: 'Hạt điều', thumbnail: null, basePrice: 300_000, salePrice: null, variations: pancake.variations }]),
+      },
+    } as unknown as PrismaService;
+    const [c] = await new CatalogService(prisma).suggest('hat dieu');
+    expect(c).toMatchObject({ slug: 'hat-dieu', basePrice: 180_000, salePrice: 159_000 });
+    expect(c).not.toHaveProperty('variations');
+  });
+});
+
+describe('CatalogService.list: giá thẻ lấy từ phân loại đại diện khi sắp và lọc (dữ liệu kiểu Pancake)', () => {
+  type V = { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number };
+  const v = (id: string, retailPrice: number, salePrice: number | null = null, stock = 5): V => ({ id, sku: id, retailPrice, salePrice, stock });
+  // Cột Product.basePrice là giá phân loại đầu danh sách của Pancake (1kg), thẻ hiện phân loại rẻ nhất còn hàng.
+  const TABLE = [
+    { id: 'big', basePrice: 300_000, salePrice: null, variations: [v('big-1kg', 300_000), v('big-500g', 150_000)] }, // thẻ 150k
+    { id: 'm1', basePrice: 290_000, salePrice: null, variations: [v('m1-a', 290_000)] },
+    { id: 'm2', basePrice: 280_000, salePrice: null, variations: [v('m2-a', 280_000)] },
+    { id: 'low', basePrice: 100_000, salePrice: null, variations: [v('low-a', 100_000)] },
+    { id: 'sale', basePrice: 400_000, salePrice: null, variations: [v('sale-a', 400_000, 120_000)] }, // thẻ 120k
+    { id: 'out', basePrice: 500_000, salePrice: null, variations: [v('out-a', 100_000, null, 0), v('out-b', 500_000)] }, // 100k hết hàng, thẻ 500k
+  ];
+
+  function setup(flashRows: unknown[] = []) {
+    const findMany = jest.fn(async (args: { where?: { AND?: { id?: { in: string[] } }[] }; orderBy?: unknown }) => {
+      const ids = args.where?.AND?.find((c) => c.id)?.id?.in;
+      const rows = (ids ? TABLE.filter((r) => ids.includes(r.id)) : [...TABLE]).map((r) => ({ ...card(r.id), ...r }));
+      return rows;
+    });
+    const prisma = {
+      product: { findMany, count: jest.fn().mockResolvedValue(TABLE.length) },
+      flashSaleItem: noFlash(flashRows),
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
+    } as unknown as PrismaService;
+    return new CatalogService(prisma);
+  }
+  const ids = (r: { data: { id: string }[] }) => r.data.map((c) => c.id);
+
+  it('giá tăng dần: món thẻ 150k đứng trước các món 280k và 290k', async () => {
+    expect(ids(await setup().list({ page: 1, limit: 10, sort: 'price_asc' }))).toEqual(['low', 'sale', 'big', 'm2', 'm1', 'out']);
+  });
+
+  it('giá giảm dần: ngược lại, món còn hàng ở mức rẻ nhất tính theo giá đó', async () => {
+    expect(ids(await setup().list({ page: 1, limit: 10, sort: 'price_desc' }))).toEqual(['out', 'm1', 'm2', 'big', 'sale', 'low']);
+  });
+
+  it('lọc "dưới 200k": món thẻ 150k và 120k vào, món cột 300k không bị loại oan', async () => {
+    const r = await setup().list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 200_000 });
+    expect(ids(r)).toEqual(['low', 'sale', 'big']);
+    expect(r.meta.total).toBe(3);
+  });
+
+  it('lọc "200k đến 500k": món thẻ 150k không lọt vào dù cột 300k', async () => {
+    const r = await setup().list({ page: 1, limit: 10, sort: 'price_asc', minPrice: 200_000, maxPrice: 500_000 });
+    expect(ids(r)).toEqual(['m2', 'm1', 'out']);
+    expect(r.meta.total).toBe(3);
+  });
+
+  it('lọc giá không kèm sắp giá tăng/giảm vẫn lọc theo giá thẻ, giữ thứ tự DB, tổng và trang đúng sau lọc', async () => {
+    const svc = setup();
+    const p1 = await svc.list({ page: 1, limit: 2, sort: 'newest', minPrice: 100_000, maxPrice: 300_000 });
+    const p2 = await svc.list({ page: 2, limit: 2, sort: 'newest', minPrice: 100_000, maxPrice: 300_000 });
+    expect(ids(p1)).toEqual(['big', 'm1']);
+    expect(ids(p2)).toEqual(['m2', 'low']);
+    expect(p2.meta).toEqual({ page: 2, limit: 2, total: 5 });
+  });
+
+  it('min > max tự đổi chỗ; trang vượt quá cho data rỗng, total vẫn đúng', async () => {
+    const svc = setup();
+    expect(ids(await svc.list({ page: 1, limit: 10, sort: 'price_asc', minPrice: 200_000, maxPrice: 100_000 }))).toEqual(['low', 'sale', 'big']);
+    expect(await svc.list({ page: 9, limit: 10, sort: 'price_asc', maxPrice: 200_000 })).toEqual({ data: [], meta: { page: 9, limit: 10, total: 3 } });
+  });
+
+  describe('Giờ vàng đang chạy tính vào giá thẻ', () => {
+    const offer = (variationId: string, productId: string, flashPrice: number, retailPrice: number, over: { salePrice?: number | null; soldCount?: number; quota?: number } = {}) => ({
+      flashPrice,
+      soldCount: over.soldCount ?? 0,
+      quota: over.quota ?? 10,
+      variationId,
+      variation: { productId, retailPrice, salePrice: over.salePrice ?? null },
+    });
+
+    it('thẻ 119k Giờ vàng (cột 290k): lọc "dưới 120k" có món này và "giá tăng dần" xếp theo 119k', async () => {
+      const svc = setup([offer('m1-a', 'm1', 119_000, 290_000)]);
+      const r = await svc.list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 120_000 });
+      expect(ids(r)).toEqual(['low', 'm1', 'sale']);
+      expect(r.meta.total).toBe(3);
+    });
+
+    it('sản phẩm hai suất, mọi thứ tự trả về: suất 250k đắt hơn thẻ không che suất 120k của phân loại đại diện', async () => {
+      const dear = offer('big-1kg', 'big', 250_000, 300_000);
+      const cheap = offer('big-500g', 'big', 120_000, 150_000);
+      for (const rows of [[dear, cheap], [cheap, dear]]) {
+        const r = await setup(rows).list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 125_000 });
+        expect(ids(r)).toEqual(['low', 'big', 'sale']);
+      }
+    });
+
+    it('Giờ vàng hết suất, không còn rẻ hơn giá đang bán hoặc đắt hơn thẻ thì không đổi giá thẻ', async () => {
+      const svc = setup([
+        offer('m1-a', 'm1', 100_000, 290_000, { soldCount: 10, quota: 10 }),
+        offer('m2-a', 'm2', 280_000, 280_000),
+        offer('big-1kg', 'big', 200_000, 300_000),
+      ]);
+      const r = await svc.list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 200_000 });
+      expect(ids(r)).toEqual(['low', 'sale', 'big']);
+    });
+
+    it('truy vấn suất đang chạy chỉ lấy phân loại còn hàng', async () => {
+      const findMany = jest.fn().mockResolvedValue([]);
+      const prisma = { product: { findMany: jest.fn().mockResolvedValue([]) }, flashSaleItem: { findMany } } as unknown as PrismaService;
+      await new CatalogService(prisma).list({ page: 1, limit: 10, sort: 'price_asc' });
+      expect(findMany.mock.calls[0][0].where.variation).toMatchObject({ stock: { gt: 0 } });
+    });
+
+    it('giá giảm dần và lọc khoảng giá cùng dùng giá Giờ vàng', async () => {
+      const flashRows = [offer('m2-a', 'm2', 99_000, 280_000)];
+      const svc = setup(flashRows);
+      expect(ids(await svc.list({ page: 1, limit: 10, sort: 'price_desc' }))).toEqual(['out', 'm1', 'big', 'sale', 'low', 'm2']);
+      expect(ids(await svc.list({ page: 1, limit: 10, sort: 'newest', minPrice: 90_000, maxPrice: 100_000 }))).toEqual(['m2', 'low']);
+    });
+  });
+
+  it('thẻ trả về cùng giá với giá dùng để sắp và lọc', async () => {
+    const r = await setup().list({ page: 1, limit: 10, sort: 'price_asc', maxPrice: 200_000 });
+    const big = r.data.find((c) => c.id === 'big')!;
+    expect(big.salePrice ?? big.basePrice).toBe(150_000);
   });
 });

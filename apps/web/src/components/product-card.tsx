@@ -1,9 +1,9 @@
-import Link from 'next/link';
 import { type ProductCard as P, formatSold } from '@/lib/api';
 import { CardSaleBadge, ProductPriceRow } from '@/components/flash-price';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
 import { brandAccent } from '@/components/mini/brand-accent';
-import { ThumbPlaceholder } from '@/components/thumb-placeholder';
+import { ProductImage } from '@/components/mini/product-image';
+import { ProductLink } from '@/components/product-link';
 
 /** Số thẻ đầu trên màn hình đầu (hai hàng trên mobile, một hàng từ md): ảnh của chúng là ứng viên LCP nên tải ngay. */
 export const PRIORITY_CARDS = 4;
@@ -23,25 +23,17 @@ export default function ProductCard({ product, priority = false }: { product: P;
 
   return (
     <div className="group relative flex flex-col overflow-hidden rounded-card bg-stone-0 shadow-[var(--elevation-1)] md:border md:border-stone-200 md:shadow-card md:transition-all md:duration-300 md:hover:-translate-y-1 md:hover:border-forest-600/40 md:hover:shadow-raised">
-      <Link href={`/san-pham/${product.slug}`} className="flex flex-1 flex-col">
+      <ProductLink product={product} className="flex flex-1 flex-col">
         {/* Thumbnail Container */}
         <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-stone-100">
-          {product.thumbnail ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={product.thumbnail}
-              alt={product.name}
-              className="h-full w-full object-cover transition-transform duration-500 ease-out md:group-hover:scale-105"
-              // Kích thước nội tại cho trình duyệt giữ chỗ trước khi ảnh về; CSS (h-full w-full trong khung vuông) vẫn quyết định hiển thị.
-              width={400}
-              height={400}
-              loading={priority ? 'eager' : 'lazy'}
-              fetchPriority={priority ? 'high' : undefined}
-              decoding="async"
-            />
-          ) : (
-            <ThumbPlaceholder brand={product.brand} />
-          )}
+          <ProductImage
+            src={product.thumbnail}
+            brand={product.brand}
+            alt={product.name}
+            size={400}
+            priority={priority}
+            className="h-full w-full object-cover transition-transform duration-500 ease-out md:group-hover:scale-105"
+          />
 
           {soldOut && (
             <div className="absolute inset-0 flex items-center justify-center bg-stone-900/45">
@@ -101,7 +93,7 @@ export default function ProductCard({ product, priority = false }: { product: P;
             )}
           </div>
         </div>
-      </Link>
+      </ProductLink>
       <WishlistHeart productId={product.id} floating />
     </div>
   );

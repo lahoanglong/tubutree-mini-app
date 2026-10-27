@@ -9,6 +9,7 @@ import { isUploadedImage, isUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../..
 import { decodeServedImage } from '../../common/served-image';
 import { returnedProductsByOrder, REVIEWABLE_ORDER, reviewRewardLockKey } from './review-eligibility';
 import { reviewReturnReason, takeBackReviewReward } from './review-reward-reversal';
+import { publicDisplayName } from '../../common/mask-name';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -370,7 +371,7 @@ export class ReviewsService {
         images: r.images.map((img, i) => reviewImageRef(r.id, i, img)),
         videoUrl: r.videoUrl,
         createdAt: r.createdAt,
-        author: r.user.fullName ?? 'Khách Tubu',
+        author: publicDisplayName(r.user.fullName, 'Khách Tubu'),
         avatar: r.user.avatarUrl,
         // Mọi review đều ràng buộc đơn DELIVERED (§6.13) → luôn là khách đã mua.
         verifiedPurchase: true,

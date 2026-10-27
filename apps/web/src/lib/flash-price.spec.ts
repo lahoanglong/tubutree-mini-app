@@ -27,8 +27,13 @@ describe('cardPricing (giá thẻ sản phẩm: Giờ vàng thắng khi rẻ hơ
   });
 
   it('Giờ vàng chỉ thắng khi rẻ hơn giá đang bán (giá niêm yết đã hạ xuống thấp hơn thì không gắn nhãn)', () => {
-    const r = cardPricing({ ...product, salePrice: 70000 }, [flash()]);
+    const r = cardPricing({ ...product, salePrice: 70000 }, [flash({ salePrice: 70000 })]);
     expect(r).toMatchObject({ price: 70000, isFlash: false });
+  });
+
+  it('Giờ vàng ở phân loại thứ hai (niêm yết 300.000đ, Giờ vàng 150.000đ): thẻ dùng giá của phân loại đó, như dải Giờ vàng', () => {
+    const r = cardPricing({ slug: 'nuoc-rua-chen', basePrice: 180000, salePrice: null }, [flash({ variationId: 'v2', flashPrice: 150000, retailPrice: 300000, salePrice: null })]);
+    expect(r).toMatchObject({ price: 150000, isFlash: true, compareAt: 300000, originalPrice: 300000, salePct: 50, flashVariationId: 'v2' });
   });
 
   it('đợt của sản phẩm khác không ảnh hưởng', () => {
@@ -36,7 +41,7 @@ describe('cardPricing (giá thẻ sản phẩm: Giờ vàng thắng khi rẻ hơ
   });
 
   it('Giờ vàng thắng trên sản phẩm đang giảm giá: gạch giá đang bán và % tính trên giá đó, cùng quy tắc Mini App', () => {
-    const r = cardPricing({ ...product, salePrice: 100000 }, [flash()]);
+    const r = cardPricing({ ...product, salePrice: 100000 }, [flash({ salePrice: 100000 })]);
     expect(r).toMatchObject({ price: 79000, isFlash: true, compareAt: 100000, originalPrice: 100000, salePct: 21, hasSale: true });
   });
 });

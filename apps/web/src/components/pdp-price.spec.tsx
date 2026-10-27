@@ -45,17 +45,11 @@ afterEach(() => {
 describe('PdpPrice theo phân loại đang chọn', () => {
   it('đổi phân loại thì giá lớn, giá gạch và nhãn giảm đổi theo, khớp nút Thêm vào giỏ', async () => {
     const { container } = mount(
-      <PdpSelectionProvider initialId="v1">
+      <PdpSelectionProvider initialId="v2">
         <PdpPrice product={PRODUCT} />
         <AddToCart slug="serum" variations={VARIATIONS} />
       </PdpSelectionProvider>,
     );
-    await flush();
-    expect(priceText(container)).toBe('460.000đ');
-    expect(byText(container, 'button', /Thêm vào giỏ/)!.textContent).toContain('460.000đ');
-    expect(container.querySelector('.line-through')).toBeNull();
-
-    click(byText(container, 'button', /^30ml/));
     await flush();
     expect(priceText(container)).toBe('289.000đ');
     expect(byText(container, 'button', /Thêm vào giỏ/)!.textContent).toContain('289.000đ');
@@ -63,6 +57,12 @@ describe('PdpPrice theo phân loại đang chọn', () => {
     expect(container.querySelector('[data-testid="pdp-sale-badge"]')!.textContent).toBe('-10%');
     // Mini App không hiện huy hiệu % ở dòng giá của trang sản phẩm; chỉ máy tính giữ.
     expect(container.querySelector('[data-testid="pdp-sale-badge"]')!.className).toContain('max-md:hidden');
+
+    click(byText(container, 'button', /^50ml/));
+    await flush();
+    expect(priceText(container)).toBe('460.000đ');
+    expect(byText(container, 'button', /Thêm vào giỏ/)!.textContent).toContain('460.000đ');
+    expect(container.querySelector('.line-through')).toBeNull();
   });
 
   it('chưa chọn phân loại nào thì ghi "Từ" giá thấp nhất', async () => {

@@ -25,7 +25,7 @@ import { Text, Heading } from '../components/ui/text';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { ProductTile } from '../components/ui/product-tile';
+import ProductCard from '../components/product-card';
 
 /** Nhãn tin cậy chỉ cho gian hàng admin đã duyệt: tick và "CTV tuyển chọn" là lời cam kết của Tubu Tree, không phải của chủ shop tự gắn. */
 function trustBadgeLabel(sf: { type: 'CTV' | 'BRAND' | 'MERCHANT'; approved?: boolean }): string | null {
@@ -143,12 +143,7 @@ export default function StorefrontViewPage() {
             <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {col.items.map((it) => (
                 <div key={it.id}>
-                  <ProductTile
-                    product={it.product}
-                    variant="grid"
-                    priceOverride={null}
-                    onPress={() => navigate(`/product/${it.product.slug}`)}
-                  />
+                  <ProductCard product={it.product} />
                   {it.note && (
                     <Box flex alignItems="center" style={{ gap: 4, marginTop: 4, background: 'var(--color-status-success-bg)', padding: '4px 8px', borderRadius: 10 }}>
                       <MessageSquare size={12} color="var(--color-status-success-fg)" />

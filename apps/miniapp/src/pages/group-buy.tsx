@@ -1,6 +1,6 @@
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Share2, Sprout } from 'lucide-react';
+import { Share2 } from 'lucide-react';
 import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
 import { getErrorMessage } from '../services/api';
 import { formatVnd } from '../utils/format';
@@ -10,12 +10,12 @@ import { LineItemSkeleton } from '../components/ui/skeleton';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
 import { withReferral } from '../utils/share-link';
+import { ProductThumb } from '../components/ui/product-thumb';
 
 function timeLeft(iso: string): string {
   const diff = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -173,29 +173,10 @@ function GroupCard({
           type="button"
           onClick={onOpen}
           className="tubu-press"
-          aria-label={g.product.thumbnail ? undefined : g.product.name}
+          aria-label={g.product.name}
           style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', flex: '0 0 auto', alignSelf: 'flex-start' }}
         >
-          {g.product.thumbnail ? (
-            <img
-              src={g.product.thumbnail}
-              alt={g.product.name}
-              style={{ width: 56, height: 56, borderRadius: 'var(--radius-control)', objectFit: 'cover', display: 'block' }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 'var(--radius-control)',
-                background: 'var(--color-action-secondary-bg)',
-                display: 'grid',
-                placeItems: 'center',
-              }}
-            >
-              <Icon icon={Sprout} size="lg" tone="brand" />
-            </div>
-          )}
+          <ProductThumb src={g.product.thumbnail} alt={g.product.name} size={56} />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Text

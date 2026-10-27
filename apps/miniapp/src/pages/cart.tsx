@@ -43,6 +43,7 @@ import { PriceTag } from '../components/ui/price-tag';
 import { Heading } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
 import { cartKey, useCartKey } from '../services/cart-key';
+import { ProductThumb } from '../components/ui/product-thumb';
 
 const UNDO_WINDOW_MS = 3500;
 
@@ -457,18 +458,7 @@ function CartLineRow({
           justifyContent: 'center',
         }}
       >
-        {line.thumbnail ? (
-          <img
-            src={line.thumbnail}
-            alt={line.productName}
-            loading="lazy"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        ) : (
-          <svg width="28" height="28" viewBox="0 0 48 48" fill="none" aria-hidden>
-            <path d="M14 36c-1.5-14 8-26 24-27 1 16-7 27-20 28-2 .2-3.4-.4-4-1z" fill="var(--forest-200)" />
-          </svg>
-        )}
+        <ProductThumb src={line.thumbnail} alt={line.productName} size={64} />
       </Box>
 
       <Box style={{ flex: 1, minWidth: 0 }}>

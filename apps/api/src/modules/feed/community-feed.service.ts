@@ -8,6 +8,7 @@ import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { authorBadge } from './author-badge';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { startOfVnDay } from '../../common/vn-time';
+import { publicDisplayName } from '../../common/mask-name';
 import { formatPoints } from '../../common/format-points';
 import { decodeServedImage } from '../../common/served-image';
 import { COMMUNITY_MODERATORS } from '../../common/staff-permissions';
@@ -15,6 +16,7 @@ import { EVENT_REWARD_MAX_POINTS, EVENT_REWARD_MIN_POINTS } from './community-li
 import { loadFeedImages, matchesFeedImageVersion, MAX_FEED_IMAGES, type FeedPostImages } from './feed-images';
 import { leaderboardAuthorName, PUBLIC_PREVIEW_DEFAULT, PUBLIC_PREVIEW_KEY, PUBLIC_PREVIEW_KINDS, PUBLIC_PREVIEW_POSTS, toPublicPreviewItem } from './community-public-preview';
 import { containsBannedContent, DEFAULT_BANNED_KEYWORDS, parseBannedKeywords } from './content-filter';
+import { cardPrices } from '../catalog/variation-order';
 import { DEFAULT_UNANSWERED_ALERT_HOURS, listUnansweredQuestions, UNANSWERED_ALERT_HOURS_KEY, unansweredCutoff } from './community-unanswered';
 
 const DEFAULT_REP_THRESHOLDS = [0, 50, 200, 500];
@@ -107,7 +109,14 @@ const FEED_INCLUDE = {
   // Chip trên bài cũ mở trang sản phẩm: hàng đã ngừng bán thì ẩn chip (trang đó 404).
   productTags: {
     where: { product: PUBLIC_PRODUCT_WHERE },
-    include: { product: { select: { slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true } } },
+    include: {
+      product: {
+        select: {
+          slug: true, name: true, thumbnail: true, salePrice: true, basePrice: true,
+          variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
+        },
+      },
+    },
   },
   tags: { include: { tag: { select: { slug: true, name: true } } } },
 } as const;
@@ -513,7 +522,8 @@ export class CommunityFeedService {
       imageCount: postImages?.count ?? 0,
       meta: p.meta,
       createdAt: p.createdAt,
-      author: p.user.fullName ?? 'Bạn Tubu',
+      // Người khác chỉ thấy tên rút gọn; chính chủ thấy tên đầy đủ của mình.
+      author: p.userId === userId ? (p.user.fullName ?? 'Bạn Tubu') : publicDisplayName(p.user.fullName),
       avatar: p.user.avatarUrl ?? null,
       badge: authorBadge(p.user.role),
       authorLevel: p.user.communityProfile?.level ?? 1,
@@ -523,7 +533,7 @@ export class CommunityFeedService {
       productTags: (p.productTags ?? []).map((t) => ({
         slug: t.product.slug, name: t.product.name,
         thumbnail: opts.list && t.product.thumbnail?.startsWith('data:') ? null : t.product.thumbnail,
-        salePrice: t.product.salePrice, basePrice: t.product.basePrice,
+        ...cardPrices(t.product, t.product.variations ?? []),
       })),
       tags: (p.tags ?? []).map((t) => ({ slug: t.tag.slug, name: t.tag.name })),
       likeCount: counts.likes.get(p.id) ?? 0,
@@ -873,7 +883,7 @@ export class CommunityFeedService {
           const answerer = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
           const template = role === 'STAFF' || role === 'ADMIN' ? 'COMMUNITY_EXPERT_REPLIED' : 'COMMUNITY_NEW_ANSWER';
           const data = {
-            author: answerer?.fullName ?? 'Thành viên',
+            author: publicDisplayName(answerer?.fullName, 'Thành viên'),
             title: post.title ?? 'câu hỏi của bạn',
             post_id: post.id,
           };
@@ -898,7 +908,7 @@ export class CommunityFeedService {
     } else {
       await this.notifyAuthorOfActivity(post, userId, 'COMMUNITY_POST_COMMENTED', async () => {
         const commenter = await this.prisma.user.findUnique({ where: { id: userId }, select: { fullName: true } });
-        return { author: commenter?.fullName ?? 'Thành viên', title: previewTitle(post.title, post.body), post_id: post.id };
+        return { author: publicDisplayName(commenter?.fullName, 'Thành viên'), title: previewTitle(post.title, post.body), post_id: post.id };
       });
     }
     return { id: comment.id };
@@ -936,7 +946,7 @@ export class CommunityFeedService {
     const items = comments.map((c) => ({
       id: c.id,
       body: c.body,
-      author: c.user.fullName ?? 'Bạn Tubu',
+      author: viewerId && c.userId === viewerId ? (c.user.fullName ?? 'Bạn Tubu') : publicDisplayName(c.user.fullName),
       avatar: c.user.avatarUrl ?? null,
       badge: authorBadge(c.user.role),
       authorLevel: c.user.communityProfile?.level ?? 1,

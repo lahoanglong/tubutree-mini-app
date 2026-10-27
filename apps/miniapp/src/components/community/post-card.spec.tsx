@@ -2,15 +2,21 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FeedItem } from '../../services/feed-api';
 import { describeNested, findNestedInteractive } from '../ui/nested-interactive';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), fetchFlash: vi.fn() }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
+}));
+
+vi.mock('../../services/shop-api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  fetchActiveFlashSales: mocks.fetchFlash,
 }));
 
 import PostCard, { KIND_LABEL } from './post-card';
@@ -50,11 +56,19 @@ const plain = (s: string) => s.replace(/[\p{Extended_Pictographic}\s]/gu, '');
 const byPlain = (text: string) => (content: string) => plain(content) === plain(text);
 
 const renderCard = (post: FeedItem = POST, onClick = vi.fn()) => {
-  const view = render(<PostCard post={post} onClick={onClick} />);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <PostCard post={post} onClick={onClick} />
+    </QueryClientProvider>,
+  );
   return { ...view, onClick };
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.fetchFlash.mockResolvedValue([]);
+});
 
 describe('PostCard — ảnh bìa (ENGAGE-7)', () => {
   const withImages = (imageCount: number): FeedItem => ({ ...POST, images: ['https://res.cloudinary.com/demo/a.jpg'], imageCount });
@@ -132,6 +146,15 @@ describe('PostCard — hành vi giữ nguyên khi chuyển DS v2', () => {
     fireEvent.click(screen.getByText('Nước rửa chén sinh học'));
     expect(mocks.navigate).toHaveBeenCalledWith('/product/nuoc-rua-chen');
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('đang Giờ vàng: giá thẻ sản phẩm gắn kèm là giá khách trả, như thẻ sản phẩm', async () => {
+    mocks.fetchFlash.mockResolvedValue([
+      { itemId: 'f1', variationId: 'v1', productSlug: 'nuoc-rua-chen', productName: 'x', thumbnail: null, flashPrice: 60_000, retailPrice: 89_000, salePrice: 79_000, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' },
+    ]);
+    renderCard(withTags);
+    expect(await screen.findByText('60.000đ')).toBeInTheDocument();
+    expect(screen.queryByText('79.000đ')).toBeNull();
   });
 
   it('bấm hashtag mở /feed?tag=…&tagName=… mà KHÔNG kích hoạt onClick của thẻ', () => {

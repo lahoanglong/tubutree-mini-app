@@ -44,6 +44,7 @@ import { haptic } from '../../utils/haptic';
 import { createOrderKeyRing } from '../../utils/idempotency';
 import { parseTypedVnPhone } from '../../utils/vn-phone';
 import { vi } from '../../i18n/vi';
+import { ProductThumb } from '../ui/product-thumb';
 
 interface OrderLine {
   variationId: string;
@@ -628,11 +629,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
               {results.map((p) => (
                 <ListRow
                   key={p.slug}
-                  icon={
-                    p.thumbnail ? (
-                      <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 'var(--radius-media)', objectFit: 'cover', flex: '0 0 auto' }} />
-                    ) : undefined
-                  }
+                  icon={<ProductThumb src={p.thumbnail} alt="" size={32} />}
                   title={p.name}
                   subtitle={
                     <Text variant="caption" tone="brand" style={{ fontWeight: 600 }}>

@@ -10,6 +10,7 @@ import { isSellableVariation, SELLABLE_VARIATION_WHERE } from '../cart/sellable'
 import { assertStaffDailyBudget, loadStaffCouponCaps, type CouponActor } from '../admin/coupon-input-rules';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
+import { ACTIVE_FLASH_ORDER_BY, activeFlashWhere, isStillDiscounted } from './flash-active';
 
 export const FLASH_SOLD_OUT_MSG = 'Hết suất ưu đãi.';
 export const FLASH_OVER_LIMIT_MSG = 'Vượt giới hạn mua ưu đãi.';
@@ -55,14 +56,6 @@ export interface EffectivePrice {
   perUserLeft?: number;
   /** Người mua là người tạo đợt (không phải ADMIN): allowance = 0 và giá thường, giữ dòng này để giỏ nói lý do thay vì lặng lẽ bỏ giá. */
   ownSale?: boolean;
-}
-
-/**
- * Giá niêm yết có thể bị hạ sau khi tạo đợt (đồng bộ Pancake, sửa tay) làm giá flash không còn rẻ hơn. Giỏ hàng vẫn tính
- * min(flash, giá đang bán) nên khách không trả cao hơn, nhưng quảng bá món đó là "giờ vàng" kèm % âm là sai (BUYERMINI-12).
- */
-function isStillDiscounted(it: { flashPrice: number; variation: { salePrice: number | null; retailPrice: number } }): boolean {
-  return it.flashPrice < (it.variation.salePrice ?? it.variation.retailPrice);
 }
 
 /**
@@ -170,20 +163,22 @@ export class FlashSaleService {
   /** Danh sách item flash đang active còn quota — cho FE trang chủ. */
   async listActive(now: Date = new Date()) {
     const items = await this.prisma.flashSaleItem.findMany({
-      where: {
-        variation: SELLABLE_VARIATION_WHERE,
-        flashSale: { isActive: true, startAt: { lte: now }, endAt: { gt: now } },
-      },
+      where: activeFlashWhere(now),
       include: {
         flashSale: { select: { endAt: true } },
-        variation: { include: { product: { select: { slug: true, name: true, thumbnail: true } } } },
+        variation: {
+          include: { product: { select: { slug: true, name: true, thumbnail: true, _count: { select: { variations: { where: { isActive: true } } } } } } },
+        },
       },
+      orderBy: ACTIVE_FLASH_ORDER_BY,
     });
     return items
       .filter((it) => it.soldCount < it.quota && isStillDiscounted(it))
       .map((it) => ({
         itemId: it.id,
         variationId: it.variationId,
+        // Chỉ có khi sản phẩm bán nhiều phân loại: dải Giờ vàng ghi rõ suất giảm là của phân loại nào.
+        variationName: (it.variation.product._count?.variations ?? 1) > 1 ? it.variation.name : null,
         productSlug: it.variation.product.slug,
         productName: it.variation.product.name,
         thumbnail: publicImage('product', it.variation.productId, 'thumb', it.variation.product.thumbnail),

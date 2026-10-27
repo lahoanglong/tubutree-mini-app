@@ -1,5 +1,4 @@
 import { useId } from 'react';
-import { Package } from 'lucide-react';
 import { vi } from '../../i18n/vi';
 import type { OrderView } from '../../services/shop-api';
 import { formatDate, formatDateTime } from '../../utils/format';
@@ -7,10 +6,10 @@ import { canPayOrderNow, showsPaymentDeadline } from '../../utils/refund-rules';
 import { STATUS_TONE, buyerStatusLabel, isReorderable, orderUnitCount } from '../../utils/order-status';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Icon } from '../ui/icon';
 import { PriceTag } from '../ui/price-tag';
 import { STRETCHED_LINK_CLASS, STRETCHED_LINK_RESET, stretchedLinkHit44 } from '../ui/stretched-link';
 import { Text } from '../ui/text';
+import { ProductThumb } from '../ui/product-thumb';
 
 export interface OrderCardProps {
   order: OrderView;
@@ -66,18 +65,7 @@ export function OrderCard({ order: o, onOpen, onReorder, onPay }: OrderCardProps
         <Badge tone={STATUS_TONE[o.status] ?? 'neutral'}>{buyerStatusLabel(o)}</Badge>
       </div>
       <div id={summaryId} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <div
-          style={{
-            width: 56, height: 56, flex: '0 0 auto', overflow: 'hidden', display: 'grid', placeItems: 'center',
-            borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)',
-          }}
-        >
-          {first?.thumbnail ? (
-            <img src={first.thumbnail} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-          ) : (
-            <Icon icon={Package} tone="muted" />
-          )}
-        </div>
+        <ProductThumb src={first?.thumbnail} alt="" size={56} />
         <div style={{ flex: 1, minWidth: 0 }}>
           {first && (
             <Text variant="body-sm" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

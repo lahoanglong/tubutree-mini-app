@@ -77,19 +77,22 @@ describe('GameSeasonService.getSeasonLeaderboard', () => {
   });
 });
 
-// C-040: đặc tả che tên bản chép tay `maskName` (cùng công thức ở game, game-gift, game-season).
-// Khác bản `maskFullName` ở merchant: chỉ tách theo dấu cách ' ' (tab/nbsp không tách) và tên
-// toàn khoảng trắng ra "***" thay vì tên mặc định.
+// C-040: đặc tả che tên `maskName` (cùng bảng ca ở game, game-gift, game-season).
 const MASK_NAME_CASES: [string, string | null, string][] = [
   ['null -> mặc định', null, 'Bạn Tubu'],
   ['rỗng -> mặc định', '', 'Bạn Tubu'],
-  ['chỉ khoảng trắng -> "***"', '   ', '***'],
+  ['chỉ khoảng trắng -> mặc định', '   ', 'Bạn Tubu'],
   ['một từ', 'Long', 'Long***'],
   ['nhiều từ -> từ cuối', 'Lã Hoàng Long', 'Long***'],
   ['thừa khoảng trắng đầu/cuối', '  Nguyễn An  ', 'An***'],
   ['hai dấu cách liền nhau', 'Lã  Long', 'Long***'],
-  ['tab giữa tên -> không tách', 'Lã\tLong', 'Lã\tLong***'],
-  ['nbsp giữa tên -> không tách', 'Lã\u00a0Long', 'Lã\u00a0Long***'],
+  ['tab giữa tên -> tách như dấu cách', 'Lã\tLong', 'Long***'],
+  ['nbsp giữa tên -> tách như dấu cách', 'Lã\u00a0Long', 'Long***'],
+  ['khoảng trắng rộng 0 -> tách, không lộ họ tên', 'Nguyễn\u200bThị\u200bLan', 'Lan***'],
+  ['toàn emoji -> mặc định', '🌸🌸', 'Bạn Tubu'],
+  ['chỉ có phần trong ngoặc -> mặc định', '(Mẹ Bin)', 'Bạn Tubu'],
+  ['số điện thoại -> mặc định, không in số', '0912345678', 'Bạn Tubu'],
+  ['email -> mặc định, không in địa chỉ', 'an@mail.com', 'Bạn Tubu'],
 ];
 
 describe('GameSeasonService — che tên BXH (đặc tả maskName, C-040)', () => {

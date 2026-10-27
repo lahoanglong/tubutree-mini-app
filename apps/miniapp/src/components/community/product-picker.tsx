@@ -5,12 +5,14 @@ import { X } from 'lucide-react';
 import { Text } from '../ui/text';
 import { IconButton } from '../ui/icon-button';
 import { ListRow } from '../ui/list-row';
-import { suggestProducts, type ProductSuggestion } from '../../services/shop-api';
+import { fetchActiveFlashSales, suggestProducts, type ProductSuggestion } from '../../services/shop-api';
+import { tilePricing } from '../catalog/catalog-pricing';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
+import { ProductThumb } from '../ui/product-thumb';
 
 /** Chọn sản phẩm để gắn vào bài đăng cộng đồng — tìm + chip đã chọn (cap `max`). */
 export function ProductPicker({
@@ -36,6 +38,8 @@ export function ProductPicker({
     enabled: canSuggest,
   });
 
+  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: canSuggest });
+  const flashSales = flashQ.data ?? [];
   const results = (suggestQ.data ?? []).filter((p) => !value.some((v) => v.slug === p.slug));
 
   const add = (p: ProductSuggestion) => {
@@ -78,9 +82,7 @@ export function ProductPicker({
                 background: 'var(--color-bg-surface)',
               }}
             >
-              {p.thumbnail && (
-                <img src={p.thumbnail} alt="" width={24} height={24} style={{ borderRadius: 4, objectFit: 'cover' }} />
-              )}
+              <ProductThumb src={p.thumbnail} alt="" size={24} />
               <Text variant="caption" style={{ maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.name}
               </Text>
@@ -118,13 +120,9 @@ export function ProductPicker({
           {results.map((p) => (
             <ListRow
               key={p.slug}
-              icon={
-                p.thumbnail ? (
-                  <img src={p.thumbnail} alt="" width={32} height={32} style={{ borderRadius: 6, objectFit: 'cover', flex: '0 0 auto' }} />
-                ) : undefined
-              }
+              icon={<ProductThumb src={p.thumbnail} alt="" size={32} />}
               title={p.name}
-              subtitle={<Text variant="price-sm" tone="brand">{formatVnd(p.basePrice)}</Text>}
+              subtitle={<Text variant="price-sm" tone="brand">{formatVnd(tilePricing(p, flashSales).price)}</Text>}
               onPress={() => add(p)}
               style={{ padding: '6px 0' }}
             />

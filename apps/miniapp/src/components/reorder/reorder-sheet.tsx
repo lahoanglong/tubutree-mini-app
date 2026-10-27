@@ -15,6 +15,7 @@ import {
   initialSelection, selectedLines, selectionTotals, targetLines,
   type LineSelection, type ReorderLine, type ReorderSource, type ReorderTarget,
 } from './reorder-types';
+import { ProductThumb } from '../ui/product-thumb';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -129,16 +130,7 @@ function ReorderLineRow({
       <Checkbox checked={checked} disabled={!line.available} onChange={() => onChange({ checked: !checked, quantity: qty })}>
         <span style={SR_ONLY}>{vi.reorder.selectLine(line.productName)}</span>
       </Checkbox>
-      <div
-        style={{
-          width: 56, height: 56, flex: '0 0 auto', overflow: 'hidden',
-          borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)',
-        }}
-      >
-        {line.thumbnail && (
-          <img src={line.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        )}
-      </div>
+      <ProductThumb src={line.thumbnail} alt="" size={56} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <Text variant="body-sm" as="div" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {line.productName}

@@ -88,6 +88,7 @@ describe('Buy-flow 4b — tìm kiếm & bộ lọc catalog (real Postgres)', () 
         name: 'Mặc định',
         attributes: {},
         retailPrice: over.basePrice ?? 100_000,
+        salePrice: over.salePrice ?? null,
         stock: over.stock ?? 5,
         isActive: over.variationActive ?? true,
       },

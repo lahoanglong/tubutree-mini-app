@@ -1,5 +1,7 @@
 import { cardPricing as sharedCardPricing, variationPricing as sharedVariationPricing } from '@tubutree/app-core/flash-price';
 
+export { defaultVariationFor, pickDefaultVariation } from '@tubutree/app-core/flash-price';
+
 /**
  * Giá Giờ vàng (flash sale) cho web shop, cùng quy tắc với giỏ hàng và đơn: giá Giờ vàng chỉ thắng khi RẺ HƠN giá đang bán
  * (salePrice ?? giá gốc), nên khách không thấy giá nhảy giữa trang chủ/chi tiết và giỏ. Dữ liệu đợt đang chạy lấy ở trình duyệt
@@ -39,7 +41,7 @@ const pct = (price: number, original: number) => (original > 0 && price < origin
  * để cùng một sản phẩm không hiện hai giá gạch hay hai phần trăm giảm khác nhau giữa hai nền tảng.
  */
 export function cardPricing(
-  product: { slug: string; basePrice: number; salePrice?: number | null },
+  product: { slug: string; basePrice: number; salePrice?: number | null; repVariationId?: string },
   flash: readonly FlashItem[],
 ): CardPricing {
   const r = sharedCardPricing(product, flash);

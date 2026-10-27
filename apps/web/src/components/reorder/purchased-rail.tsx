@@ -20,7 +20,7 @@ import { ReorderSheet } from './reorder-sheet';
 import { itemReorderTarget, type ReorderTarget } from './reorder-types';
 import { usePurchasedItems } from './use-purchased-items';
 import { ScrollRail } from '@/components/scroll-rail';
-import { ThumbPlaceholder } from '@/components/thumb-placeholder';
+import { ProductImage } from '@/components/mini/product-image';
 
 /** Dùng CHUNG query key ['purchased-items', 10] với Trang chủ khi quyết định thứ tự khối. */
 /** Hai nút hàng Mua lại chia đều chỗ; đệm ngang hẹp để nhãn "Định kỳ -17%" không bị cắt dấu ba chấm ở 320px. */
@@ -36,9 +36,8 @@ function RebuyTile({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
   return (
     <li className="flex w-[148px] flex-none flex-col overflow-hidden rounded-card border border-stone-200 bg-stone-0 shadow-card sm:w-44">
       <Link href={`/san-pham/${encodeURIComponent(item.slug)}`} className="block">
-        <div className="aspect-square w-full bg-stone-100">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {item.thumbnail ? <img src={item.thumbnail} alt={name} width={176} height={176} loading="lazy" className="h-full w-full object-cover" /> : <ThumbPlaceholder brand={item.brand} />}
+        <div className="relative aspect-square w-full bg-stone-100">
+          <ProductImage src={item.thumbnail} brand={item.brand} alt={name} size={176} className="h-full w-full object-cover" />
         </div>
         <div className="p-2">
           {item.brand && <p className="truncate text-xs text-stone-600">{item.brand}</p>}

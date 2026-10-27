@@ -2,13 +2,15 @@ import type { CSSProperties, ReactNode } from 'react';
 import { History, Search } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { SUGGEST_MIN_CHARS } from '../../hooks/use-suggest';
-import type { ProductSuggestion } from '../../services/shop-api';
+import type { FlashSaleActiveItem, ProductSuggestion } from '../../services/shop-api';
+import { tilePricing } from './catalog-pricing';
 import { vi } from '../../i18n/vi';
 import { foldVietnamese, includesFolded } from '../../utils/vn-fold';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { PriceTag } from '../ui/price-tag';
 import { Text } from '../ui/text';
+import { ProductThumb } from '../ui/product-thumb';
 
 export const SUGGEST_LIMITS = { recent: 3, categories: 4 } as const;
 
@@ -17,6 +19,8 @@ export interface SuggestListProps {
   recent: string[];
   categories: CategoryEntry[];
   products: ProductSuggestion[];
+  /** Đợt Giờ vàng đang chạy, để giá gợi ý khớp thẻ sản phẩm. */
+  flashSales?: FlashSaleActiveItem[];
   loading: boolean;
   onPickKeyword: (term: string) => void;
   onPickCategory: (entry: CategoryEntry) => void;
@@ -34,7 +38,7 @@ const ELLIPSIS: CSSProperties = { display: 'block', overflow: 'hidden', textOver
  * nên chỉ được render dạng text của React (không bao giờ HTML).
  * Không có gì để hiện (chưa gõ + chưa có lịch sử) → không vẽ khung rỗng.
  */
-export function SuggestList({ draft, recent, categories, products, loading, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
+export function SuggestList({ draft, recent, categories, products, flashSales = [], loading, onPickKeyword, onPickCategory, onPickProduct, onClearRecent }: SuggestListProps) {
   const term = draft.trim();
   const recentShown = term ? recent.filter((r) => includesFolded(r, term)).slice(0, SUGGEST_LIMITS.recent) : recent;
   const categoriesShown = term ? categories.filter((c) => includesFolded(c.label, term)).slice(0, SUGGEST_LIMITS.categories) : [];
@@ -82,7 +86,7 @@ export function SuggestList({ draft, recent, categories, products, loading, onPi
       {productsShown.length > 0 && (
         <Group title={vi.browse.suggest.products}>
           {productsShown.map((p, i) => (
-            <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={<PriceTag value={p.basePrice} size="sm" />} onPress={() => onPickProduct(p, i)}>
+            <SuggestRow key={p.slug} icon={<Thumb src={p.thumbnail} />} subtitle={<PriceTag value={tilePricing(p, flashSales).price} size="sm" />} onPress={() => onPickProduct(p, i)}>
               {p.name}
             </SuggestRow>
           ))}
@@ -146,8 +150,8 @@ function Group({ title, action, children }: { title: string; action?: ReactNode;
 /** Khung 40×40 giữ chỗ cố định → ảnh tải xong không làm dòng nhảy. Ảnh chỉ để trang trí (alt=""). */
 function Thumb({ src }: { src: string | null }) {
   return (
-    <span aria-hidden="true" style={{ display: 'block', width: 40, height: 40, flex: '0 0 auto', borderRadius: 'var(--radius-media)', overflow: 'hidden', background: 'var(--color-bg-subtle)' }}>
-      {src && <img src={src} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+    <span aria-hidden="true" style={{ display: 'block', flex: '0 0 auto' }}>
+      <ProductThumb src={src} alt="" size={40} />
     </span>
   );
 }

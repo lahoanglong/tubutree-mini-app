@@ -8,7 +8,7 @@ import { coreHttp } from '@/lib/core-http';
 import { useRecentlyViewed } from '@/lib/use-recently-viewed';
 import { ProductPriceRow } from '@/components/flash-price';
 import { ScrollRail } from '@/components/scroll-rail';
-import { ThumbPlaceholder } from '@/components/thumb-placeholder';
+import { ProductImage } from '@/components/mini/product-image';
 
 /**
  * "Đã xem gần đây": thẻ gọn, tên và ảnh đọc từ localStorage nên hiện ngay. GIÁ không lưu (giá đổi theo Giờ vàng/khuyến mãi):
@@ -35,14 +35,8 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed }: { titl
                 aria-label={it.name}
                 className="block overflow-hidden rounded-card bg-stone-0 shadow-card transition hover:shadow-raised"
               >
-                <div className="aspect-square w-full bg-stone-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {it.thumbnail ? <img src={it.thumbnail} alt="" width={128} height={128} loading="lazy" className="h-full w-full object-cover" /> : (
-                    // Mini App để ô nền trống khi thiếu ảnh; hình lá chỉ có từ md.
-                    <div className="hidden h-full w-full md:block">
-                      <ThumbPlaceholder iconSize={28} />
-                    </div>
-                  )}
+                <div className="relative aspect-square w-full bg-stone-100">
+                  <ProductImage src={it.thumbnail} brand="" size={128} className="h-full w-full object-cover" />
                 </div>
                 <div className="p-2">
                   <p className="line-clamp-2 min-h-[2rem] text-xs text-stone-900">{it.name}</p>

@@ -15,3 +15,50 @@ export function sortVariationsByPrice<T extends { id: string; sku: string; retai
     (a, b) => effectivePrice(a) - effectivePrice(b) || (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
 }
+
+type PricedVariation = { id: string; sku: string; retailPrice: number; salePrice: number | null; stock: number };
+
+/**
+ * Phân loại đại diện của sản phẩm: đúng phân loại trang chi tiết mở sẵn (giá đang bán thấp nhất trong các phân loại còn hàng,
+ * hết hàng cả thì phân loại đầu). Cùng quy tắc với `pickDefaultVariation` ở app-core; Pancake chỉ ghi giá bán vào phân loại
+ * chứ không vào `Product.salePrice`, nên thẻ sản phẩm phải lấy giá từ đây.
+ */
+export function representativeVariation<T extends PricedVariation>(variations: readonly T[]): T | null {
+  const sorted = sortVariationsByPrice([...variations]);
+  return sorted.find((v) => v.stock > 0) ?? sorted[0] ?? null;
+}
+
+/**
+ * Giá niêm yết và giá đang bán của thẻ sản phẩm, kèm `repVariationId` (phân loại đại diện) để thẻ và trang chi tiết chọn cùng một
+ * phân loại khi nhiều phân loại cùng giá. Không có phân loại nào thì giữ giá cột của sản phẩm và không có `repVariationId`.
+ */
+export function cardPrices(
+  product: { basePrice: number; salePrice: number | null },
+  variations: readonly PricedVariation[] | null | undefined,
+): { basePrice: number; salePrice: number | null; repVariationId?: string } {
+  const rep = representativeVariation(variations ?? []);
+  return rep
+    ? { basePrice: rep.retailPrice, salePrice: rep.salePrice, repVariationId: rep.id }
+    : { basePrice: product.basePrice, salePrice: product.salePrice };
+}
+
+/** Suất Giờ vàng đang chạy của một phân loại, cùng dạng với `FlashPriceItem` ở app-core. */
+export type FlashOffer = { variationId: string; flashPrice: number; retailPrice: number; salePrice: number | null };
+
+/**
+ * Giá khách thấy trên thẻ gồm Giờ vàng, cùng luật với `cardPricing` ở app-core: một suất chỉ thắng khi rẻ hơn giá đang bán của
+ * chính phân loại có suất lẫn giá đang bán của thẻ; nhiều suất thì lấy `flashPrice` thấp nhất (hoà thì cùng giá nên số không đổi).
+ */
+export function cardPriceWithFlash(
+  product: { basePrice: number; salePrice: number | null },
+  variations: readonly PricedVariation[] | null | undefined,
+  offers: readonly FlashOffer[] | undefined,
+): number {
+  const card = cardPrices(product, variations);
+  const standing = card.salePrice ?? card.basePrice;
+  let best = standing;
+  for (const o of offers ?? []) {
+    if (o.flashPrice < (o.salePrice ?? o.retailPrice) && o.flashPrice < best) best = o.flashPrice;
+  }
+  return best;
+}

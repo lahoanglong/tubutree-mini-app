@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSnackbar } from 'zmp-ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Sprout } from 'lucide-react';
 import {
   getSubscriptions,
   setSubscriptionStatus,
@@ -21,11 +20,11 @@ import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { EmptyState, ErrorState } from './ui/empty-state';
-import { Icon } from './ui/icon';
 import { LineItemSkeleton } from './ui/skeleton';
 import { Text } from './ui/text';
 import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { addressText } from './subscription-options';
+import { ProductThumb } from './ui/product-thumb';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
@@ -179,18 +178,7 @@ function SubscriptionCard({
   return (
     <Card padding={12}>
       <div style={{ display: 'flex', gap: 12 }}>
-        <div
-          style={{
-            width: 56, height: 56, flex: '0 0 auto', overflow: 'hidden', display: 'grid', placeItems: 'center',
-            borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)',
-          }}
-        >
-          {s.thumbnail ? (
-            <img src={s.thumbnail} alt={s.productName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          ) : (
-            <Icon icon={Sprout} tone="brand" />
-          )}
-        </div>
+        <ProductThumb src={s.thumbnail} alt={s.productName} size={56} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
             {s.productName}

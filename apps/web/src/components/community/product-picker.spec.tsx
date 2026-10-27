@@ -7,8 +7,9 @@ import { smallTouchTargets } from '@/test-utils/a11y';
 // Chép ý product-picker.spec.tsx (Mini App): gợi ý có tên và giá, bỏ sản phẩm đã chọn, chọn thì xoá ô tìm, trần 5 sản phẩm,
 // gỡ chip, không có kết quả, chỉ gợi ý từ 2 ký tự (chữ có dấu gấp về 1 ký tự vẫn chưa đủ).
 
-const mocks = vi.hoisted(() => ({ get: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), flash: [] as unknown[] }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
+vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash }));
 vi.mock('./use-debounced', () => ({ useDebounced: <T,>(v: T) => v }));
 
 import { ProductPicker } from './product-picker';
@@ -32,6 +33,7 @@ const search = async (c: HTMLElement, text: string) => {
 
 beforeEach(() => {
   mocks.get.mockReset().mockResolvedValue([A, B]);
+  mocks.flash = [];
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -39,6 +41,14 @@ afterEach(() => {
 });
 
 describe('ProductPicker', () => {
+  it('đang Giờ vàng: gợi ý ghi giá khách trả, khớp thẻ sản phẩm', async () => {
+    mocks.flash = [{ itemId: 'f1', variationId: 'v1', productSlug: 'xit-phong', flashPrice: 90_000, retailPrice: 120_000, salePrice: null, soldCount: 0, quota: 5, endAt: '2026-10-01T00:00:00.000Z' }];
+    const { c } = mountPicker();
+    await search(c, 'xịt');
+    expect(c.textContent).toContain('90.000đ');
+    expect(c.textContent).not.toContain('120.000đ');
+  });
+
   it('gõ từ khoá gọi /search/suggest, hiện tên và giá, bỏ sản phẩm đã chọn', async () => {
     const { c } = mountPicker({ value: [A] });
     await search(c, 'rửa');

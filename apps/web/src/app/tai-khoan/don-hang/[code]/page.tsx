@@ -31,7 +31,7 @@ import { BankTransferPanel, type BankPanelState } from '../../../thanh-toan/bank
 import { formatDateTime } from '@/lib/format-date';
 import { formatCount } from '@/lib/checkout-points';
 import { SupportContact } from '@/components/support-contact';
-import { journeyEvents, shippingEventLabel } from '@/lib/shipping-events';
+import { journeyEvents, journeyEventLabel, shippingEventLabel } from '@/lib/shipping-events';
 import { OrderActions } from './order-actions';
 import { OrderRefunds } from './order-refunds';
 import { returnedByLine, showsPaymentDeadline, showsRefundPanel } from '@/lib/refund-rules';
@@ -41,6 +41,7 @@ import { CopyShippingCode } from './copy-shipping-code';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { ProductThumb } from '@/components/mini';
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -257,13 +258,8 @@ export default function OrderDetailPage() {
         <ul className="mt-2 divide-y divide-stone-200">
           {o.items.map((it, i) => (
             <li key={`${it.productName}-${it.variationName}-${i}`} className="flex gap-3 py-3 max-md:py-1.5">
-              <div className="flex h-14 w-14 flex-none max-md:hidden items-center justify-center overflow-hidden rounded-control bg-forest-50">
-                {it.thumbnail ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.thumbnail} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <Leaf className="h-5 w-5 text-forest-600" aria-hidden="true" />
-                )}
+              <div className="flex-none max-md:hidden">
+                <ProductThumb src={it.thumbnail} alt="" size={56} />
               </div>
               <div className="min-w-0 flex-1">
                 {/* Điện thoại: một dòng gọn "tên · phân loại ×SL" như Mini App, không ảnh. */}
@@ -406,7 +402,7 @@ function DeliverySection({ order: o }: { order: OrderDetailDTO }) {
                 </div>
                 <div className={`min-w-0 ${i < journey.length - 1 ? 'pb-3' : ''}`}>
                   <p className={i === 0 ? 'font-semibold text-stone-900' : 'text-stone-700'}>
-                    {shippingEventLabel(ev.status) ?? (ev.code ? `Đã gán mã vận đơn ${ev.code}` : '—')}
+                    {journeyEventLabel(ev)}
                   </p>
                   {ev.at && <p className="text-xs text-stone-600">{formatDateTime(ev.at)}</p>}
                 </div>

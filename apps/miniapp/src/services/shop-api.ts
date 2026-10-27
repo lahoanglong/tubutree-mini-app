@@ -20,6 +20,8 @@ export interface ProductCard {
   thumbnail: string | null;
   basePrice: number;
   salePrice: number | null;
+  /** Phân loại đại diện của thẻ (đã lấy giá); cùng id mà trang chi tiết mở sẵn. */
+  repVariationId?: string;
   isFeatured: boolean;
   ratingAvg?: number;
   reviewCount?: number;
@@ -326,7 +328,7 @@ export const fetchForYou = async () =>
 export const fetchBoughtTogether = (slug: string) =>
   api.get<ProductCard[]>(`/products/${slug}/bought-together`).then((r) => r.data);
 
-export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; }
+export interface ProductSuggestion { slug: string; name: string; thumbnail: string | null; basePrice: number; salePrice?: number | null }
 export const suggestProducts = (q: string) =>
   api.get<ProductSuggestion[]>('/search/suggest', { params: { q } }).then((r) => r.data);
 
@@ -407,6 +409,7 @@ export interface FlashSaleActiveItem {
   variationId: string;
   productSlug: string;
   productName: string;
+  variationName?: string | null;
   thumbnail: string | null;
   flashPrice: number;
   retailPrice: number;

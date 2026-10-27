@@ -199,7 +199,11 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     salePrice: null, soldCount: 1, quota: 10, endAt: '2026-10-14T16:00:00.000Z',
   };
 
+  const openedFrom = (search: string) => window.history.replaceState(null, '', `/san-pham/dau-goi${search}`);
+  afterEach(() => openedFrom(''));
+
   it('phân loại có đợt Giờ vàng: nhãn trên nút chọn, giá Giờ vàng ở nút thêm vào giỏ, ghi giá gốc và hạn', async () => {
+    openedFrom('?v=v2');
     mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
     mocks.auth = { status: 'authenticated', initialized: true, user: { id: 'u1' } };
     const { container } = mount();
@@ -214,11 +218,66 @@ describe('AddToCart — giá Giờ vàng khớp giỏ và đơn (R4-BUYER-4)', (
     expect(addButton(container).textContent).toBe('Thêm vào giỏ · 200.000đ');
   });
 
-  it('khách chưa tự chọn: mở đúng phân loại đang giảm giá thay vì phân loại đầu tiên', async () => {
+  it('vào từ thẻ hay dải Giờ vàng (?v=): mở đúng phân loại đang giảm giá thay vì phân loại mặc định', async () => {
+    openedFrom('?v=v2');
     mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
     const { container } = mount();
     await flush();
     expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
+  it('vào từ nơi khác: giữ phân loại mặc định dù sản phẩm có Giờ vàng ở phân loại khác', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+  });
+
+  it('vào không kèm ?v= (gợi ý tìm, bài cộng đồng, Đã xem gần đây) mà Giờ vàng ở phân loại khác rẻ hơn giá thẻ: mở phân loại đó, giá bằng giá thẻ', async () => {
+    mocks.getActiveFlashSales.mockResolvedValue([{ ...FLASH_V2, flashPrice: 100000 }]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 100.000đ');
+  });
+
+  it.each([
+    ['500ml trước', [{ ...FLASH_V2, flashPrice: 250000, itemId: 'a' }, { ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }]],
+    ['250ml trước', [{ ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }, { ...FLASH_V2, flashPrice: 250000, itemId: 'a' }]],
+  ])('hai suất, suất 500ml 250.000đ đắt hơn thẻ: mở 250ml theo suất 120.000đ, %s', async (_n, items) => {
+    mocks.getActiveFlashSales.mockResolvedValue(items);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+    expect(addButton(container).textContent).toBe('Thêm vào giỏ · 120.000đ');
+  });
+
+  it('?v= của suất Giờ vàng đã hết: về phân loại mặc định', async () => {
+    openedFrom('?v=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+  });
+
+  it('?v= còn Giờ vàng thắng suất khác rẻ hơn ở phân loại khác', async () => {
+    openedFrom('?v=v2');
+    mocks.getActiveFlashSales.mockResolvedValue([FLASH_V2, { ...FLASH_V2, variationId: 'v1', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, itemId: 'b' }]);
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('500ml');
+  });
+
+  it('?v= trỏ tới phân loại hết hàng hoặc không có: giữ phân loại mặc định', async () => {
+    openedFrom('?v=v2');
+    mocks.getProductStock.mockResolvedValue({ v1: 5, v2: 0 });
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
+    openedFrom('?v=khong-co');
+    const other = mount();
+    await flush();
+    expect(other.container.querySelector('button[aria-pressed="true"]')!.textContent).toContain('250ml');
   });
 
   it('khách đã tự chọn phân loại thì đợt Giờ vàng về sau không đổi ngầm lựa chọn', async () => {

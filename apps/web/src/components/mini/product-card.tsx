@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Zap } from 'lucide-react';
 import type { ProductCard as ProductCardType } from '@/lib/api';
 import { cardPricing } from '@/lib/flash-price';
+import { productHref } from '@/lib/product-href';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from './badge';
 import { ProductTile } from './product-tile';
@@ -32,7 +33,7 @@ export default function ProductCard({ product, wishlist }: { product: ProductCar
           </Badge>
         ) : undefined
       }
-      onPress={() => router.push(`/san-pham/${product.slug}`)}
+      onPress={() => router.push(productHref(product.slug, pricing.flashVariationId))}
     />
   );
 }

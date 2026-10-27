@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { journeyEvents, shippingEventLabel } from './shipping-events';
+import { journeyEvents, journeyEventLabel, shippingEventLabel } from './shipping-events';
 
 describe('shippingEventLabel — mã hãng → câu tiếng Việt', () => {
   it('rỗng → null', () => {
@@ -34,5 +34,18 @@ describe('journeyEvents', () => {
     expect(journeyEvents(null)).toEqual([]);
     expect(journeyEvents(undefined)).toEqual([]);
     expect(journeyEvents({} as never)).toEqual([]);
+  });
+});
+
+describe('journeyEventLabel — mốc chỉ có mã vận đơn không còn hiện "—" (B-26)', () => {
+  it('có trạng thái: nhãn tiếng Việt', () => {
+    expect(journeyEventLabel({ status: 'delivering', code: 'GHN1' })).toBe('Đang giao hàng');
+  });
+  it('chỉ có mã vận đơn: "Đã gán mã vận đơn <mã>"', () => {
+    expect(journeyEventLabel({ status: null, code: 'UATGHN0000019' })).toBe('Đã gán mã vận đơn UATGHN0000019');
+    expect(journeyEventLabel({ status: '  ', code: 'UATGHN0000019' })).toBe('Đã gán mã vận đơn UATGHN0000019');
+  });
+  it('không có gì: "Đang cập nhật"', () => {
+    expect(journeyEventLabel({})).toBe('Đang cập nhật');
   });
 });

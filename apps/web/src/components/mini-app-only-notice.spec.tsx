@@ -24,12 +24,11 @@ describe('MiniAppOnlyNotice', () => {
     expect(renderToStaticMarkup(<MiniAppOnlyNotice miniappPath="/points/scan" />)).toContain('href="https://zalo.me/s/123/points/scan"');
   });
 
-  it('chưa cấu hình id Mini App: chỉ còn dòng giải thích, không có nút', () => {
+  it('chưa cấu hình id Mini App: vẫn có nút, dùng id chính thức', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
     const html = renderToStaticMarkup(<MiniAppOnlyNotice path="/doi-rac/quay" />);
     expect(html).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
-    expect(html).not.toContain('Mở trên Zalo');
-    expect(html).not.toContain('<a ');
+    expect(html).toContain('href="https://zalo.me/s/2070857098114207963/recycle/desk"');
   });
 
   it('chỉ có App ID của Zalo App, thiếu id Mini App: không dựng link tới App ID', () => {
@@ -37,7 +36,7 @@ describe('MiniAppOnlyNotice', () => {
     vi.stubEnv('NEXT_PUBLIC_ZALO_MINIAPP_ID', '');
     const html = renderToStaticMarkup(<MiniAppOnlyNotice path="/doi-rac/quay" />);
     expect(html).not.toContain('565779011239360460');
-    expect(html).not.toContain('<a ');
+    expect(html).toContain('zalo.me/s/2070857098114207963/');
   });
 
   it('mặc định đệm rộng (py-16); compact đệm nhỏ cho chỗ nằm trong thẻ', () => {

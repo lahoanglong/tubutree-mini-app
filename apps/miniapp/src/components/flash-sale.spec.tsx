@@ -125,6 +125,14 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2: giữ nguyên hà
     expect(screen.getByText('Đã bán 20%')).toBeInTheDocument();
   });
 
+  it('sản phẩm nhiều phân loại: tên phân loại ở dòng riêng; một phân loại thì không có dòng đó', async () => {
+    mocks.fetchActive.mockResolvedValue([{ ...ITEM, variationName: '500g' }, { ...ITEM, itemId: 'i2', productName: 'Xà phòng', variationName: null }]);
+    renderFlash();
+    expect(await screen.findByText('500g')).toBeInTheDocument();
+    expect(screen.getByText('Nước rửa chén')).toBeInTheDocument();
+    expect(screen.queryByText('Mặc định')).toBeNull();
+  });
+
   it('tiêu đề và đồng hồ dùng icon nét, không emoji (D7-6)', async () => {
     mocks.fetchActive.mockResolvedValue([ITEM]);
     renderFlash();

@@ -26,6 +26,7 @@ import { ProgressBar } from './ui/progress-bar';
 import { ScrollRow } from './ui/scroll-row';
 import { linkKeyboardProps, rowKeyboardProps } from './ui/row-keyboard';
 import { Heading, Text } from './ui/text';
+import { ProductImage } from './ui/product-image';
 
 const PROMO_TITLE_STYLE: CSSProperties = { color: 'var(--color-promo-fg)', display: 'flex', alignItems: 'center', gap: 6 };
 
@@ -53,6 +54,8 @@ const NAME_CLAMP_STYLE: CSSProperties = {
   overflow: 'hidden',
   minHeight: 40,
 };
+
+const VARIATION_LINE_STYLE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
 const CARD_ROW_STYLE: CSSProperties = { gap: 12, padding: '0 16px' };
 
@@ -132,14 +135,7 @@ export function FlashSale() {
               style={CARD_STYLE}
             >
               <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
-                {item.thumbnail && (
-                  <img
-                    src={item.thumbnail}
-                    alt={item.productName}
-                    loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                )}
+                <ProductImage src={item.thumbnail} brand="" />
                 {pct > 0 && (
                   <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
                     -{pct}%
@@ -150,6 +146,11 @@ export function FlashSale() {
                 <Text variant="caption" style={NAME_CLAMP_STYLE}>
                   {item.productName}
                 </Text>
+                {item.variationName && (
+                  <Text variant="caption" tone="secondary" style={VARIATION_LINE_STYLE}>
+                    {item.variationName}
+                  </Text>
+                )}
                 <div style={{ marginTop: 2 }}>
                   <PriceTag value={price} flash={{ price }} size="sm" />
                 </div>
@@ -191,14 +192,7 @@ function UpcomingFlashCard({
   return (
     <div className="tubu-press" role="link" {...linkKeyboardProps()} onClick={onOpen} style={CARD_STYLE}>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'var(--stone-100)' }}>
-        {item.thumbnail && (
-          <img
-            src={item.thumbnail}
-            alt={item.productName}
-            loading="lazy"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        )}
+        <ProductImage src={item.thumbnail} brand="" />
         {pct > 0 && (
           <Badge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
             -{pct}%
