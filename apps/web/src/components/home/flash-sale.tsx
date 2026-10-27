@@ -15,6 +15,7 @@ import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { Badge } from '@/components/ui/badge';
+import { Badge as MiniBadge } from '@/components/mini/badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
@@ -25,15 +26,18 @@ const CARD = 'flex w-36 flex-none flex-col overflow-hidden rounded-card border b
 const RAIL = 'flex gap-3 overflow-x-auto px-1 pb-3 pt-1';
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
 
+/** Nền cam đặc như nhãn Giờ vàng của Mini App và của thẻ sản phẩm. */
+const DISCOUNT_BADGE_STYLE = { background: 'var(--color-flash-solid-bg)', color: 'var(--color-flash-solid-fg)' };
+
 function Thumb({ src, name, pct }: { src: string | null; name: string; pct: number }) {
   return (
     <div className="relative aspect-square w-full bg-stone-100">
       <ProductImage src={src} brand="" alt={name} size={176} className="h-full w-full object-cover" />
       {pct > 0 && (
         <span className="absolute left-1.5 top-1.5">
-          <Badge tone="promo" size="sm">
+          <MiniBadge tone="promo" size="sm" style={DISCOUNT_BADGE_STYLE}>
             -{pct}%
-          </Badge>
+          </MiniBadge>
         </span>
       )}
     </div>

@@ -46,6 +46,7 @@ export function toTileProduct(p: PurchasedItem): ProductTileProduct {
     thumbnail: p.thumbnail,
     basePrice: p.price,
     salePrice: p.salePrice,
+    repVariationId: p.variationId,
     inStock: p.inStock,
   };
 }

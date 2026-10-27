@@ -20,7 +20,7 @@ vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string })
 vi.mock('../../services/buy-flow-events', () => ({ trackReorderClicked: vi.fn(), trackReorderCompleted: vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { PurchasedRail } from './purchased-rail';
+import { PurchasedRail, toTileProduct } from './purchased-rail';
 
 const ITEM = {
   variationId: 'v1', productId: 'p1', slug: 'nuoc-rua-chen', productName: 'Nước rửa chén', variationName: 'Chanh', brand: 'Tubu',
@@ -210,5 +210,15 @@ describe('PurchasedRail', () => {
       await screen.findByRole('region', { name: 'Mua lại' });
       expect(screen.queryByText(/Đã mua \d+ lần/)).toBeNull();
     });
+  });
+});
+
+describe('toTileProduct', () => {
+  it('B-146: thẻ Mua lại mang phân loại đã mua làm phân loại đại diện của thẻ', () => {
+    const tile = toTileProduct({
+      variationId: 'v-500', productId: 'p1', slug: 'gao', productName: 'Gạo', variationName: '500g', brand: 'Tubu', thumbnail: null,
+      price: 150_000, salePrice: null, stock: 3, inStock: true, timesBought: 1, lastPurchasedAt: '2026-10-01T00:00:00.000Z',
+    });
+    expect(tile.repVariationId).toBe('v-500');
   });
 });

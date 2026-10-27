@@ -220,6 +220,13 @@ describe('defaultVariationFor (phân loại mặc định của trang chi tiết
     expect(defaultVariationFor({ slug: 'gao' }, [v500, out1kg], [f('v-1kg', 120_000, 300_000)])?.id).toBe('v-500');
   });
 
+  it('B-146: suất rẻ nhất đã hết hàng thì xét suất kế tiếp còn hàng, không rơi thẳng về đại diện', () => {
+    const out1kg = { ...v1kg, stock: 0 };
+    const v2kg = { id: 'v-2kg', sku: 'C', retailPrice: 600_000, salePrice: null, stock: 3 };
+    const items = [f('v-1kg', 100_000, 300_000), f('v-2kg', 120_000, 600_000)];
+    expect(defaultVariationFor({ slug: 'gao' }, [v500, out1kg, v2kg], items)?.id).toBe('v-2kg');
+  });
+
   it('Giờ vàng đã hết (danh sách rỗng): đại diện; không có phân loại: undefined', () => {
     expect(defaultVariationFor({ slug: 'gao' }, [v500, v1kg], [])?.id).toBe('v-500');
     expect(defaultVariationFor({ slug: 'gao' }, [], [])).toBeUndefined();

@@ -97,11 +97,13 @@ export function defaultVariationFor<T extends { id: string; sku?: string; retail
 ): T | undefined {
   const rep = pickDefaultVariation(variations);
   if (!rep) return undefined;
+  // Suất rẻ nhất của phân loại đã hết hàng (danh sách Giờ vàng ở trình duyệt còn cũ) thì xét suất kế tiếp, không rơi thẳng về đại diện.
+  const inStock = new Set(variations.filter((v) => v.stock > 0).map((v) => v.id));
   const { flashVariationId } = cardPricing(
     { slug: product.slug, basePrice: rep.retailPrice, salePrice: rep.salePrice, repVariationId: rep.id },
-    flash,
+    flash.filter((f) => inStock.has(f.variationId)),
   );
-  return (flashVariationId ? variations.find((v) => v.id === flashVariationId && v.stock > 0) : undefined) ?? rep;
+  return (flashVariationId ? variations.find((v) => v.id === flashVariationId) : undefined) ?? rep;
 }
 
 export interface VariationPricingResult {
