@@ -280,6 +280,18 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     await waitFor(() => expect(screen.getAllByRole('radio').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true));
     expect(screen.getAllByText('Bạn đang có 3 yêu cầu chưa xong').length).toBeGreaterThan(0);
   });
+  it('ITEM_DROPOFF_ONLY: thẻ Gửi về kho và Thu kèm đơn khoá kèm lý do, thẻ Mang tới điểm nhận vẫn chọn được', async () => {
+    mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'PICKUP' || b.method === 'MAIL_IN' ? { blocks: [{ code: 'ITEM_DROPOFF_ONLY', itemId: 'item-carton' }] } : {}));
+    atStep2();
+    renderPage();
+    const pickup = await screen.findByRole('radio', { name: /Thu kèm đơn/ });
+    const mail = await screen.findByRole('radio', { name: /Gửi về kho/ });
+    expect(await within(pickup).findByText(/không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được/)).toBeInTheDocument();
+    expect(within(mail).getByText(/không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được/)).toBeInTheDocument();
+    expect(pickup.getAttribute('aria-disabled')).toBe('true');
+    expect(mail.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('radio', { name: /Mang tới điểm nhận/ }).getAttribute('aria-disabled')).not.toBe('true');
+  });
   it('MONTH_CAP_FOR_MIN: thẻ Thu kèm đơn nói gói thu kèm đơn, thẻ Gửi về kho nói gói gửi kho', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'PICKUP' || b.method === 'MAIL_IN' ? { blocks: [{ code: 'MONTH_CAP_FOR_MIN', pointsRemaining: 5_000 }] } : {}));
     atStep2();

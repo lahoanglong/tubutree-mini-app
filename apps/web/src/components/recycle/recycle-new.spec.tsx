@@ -352,6 +352,19 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     expect(Array.from(c.querySelectorAll('[role="radio"]')).every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(c.textContent).toContain('Bạn đang có 3 yêu cầu chưa xong');
   });
+  it('ITEM_DROPOFF_ONLY: thẻ Gửi về kho và Thu kèm đơn khoá kèm lý do, thẻ Mang tới điểm nhận vẫn chọn được', async () => {
+    state.preview = (b) => {
+      const m = (b as WastePreviewRequest).method;
+      return preview(m === 'PICKUP' || m === 'MAIL_IN' ? { blocks: [{ code: 'ITEM_DROPOFF_ONLY', itemId: 'item-carton' }] } : {});
+    };
+    atStep2();
+    const c = await mount();
+    for (const m of ['PICKUP', 'MAIL_IN'] as const) {
+      expect(method(c, m).textContent).toContain('không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được');
+      expect(method(c, m).getAttribute('aria-disabled')).toBe('true');
+    }
+    expect(method(c, 'DROP_OFF').getAttribute('aria-disabled')).not.toBe('true');
+  });
   it('MONTH_CAP_FOR_MIN: thẻ Thu kèm đơn nói gói thu kèm đơn, thẻ Gửi về kho nói gói gửi kho', async () => {
     state.preview = (b) => {
       const m = (b as WastePreviewRequest).method;

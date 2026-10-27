@@ -109,18 +109,14 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
     expect(c.textContent).toContain('Đã cộng 17.000 điểm cho khách.');
   });
 
-  it('dòng món nguy hại: khoá ở 0 / Sai loại, gửi WRONG_TYPE, dòng thường vẫn theo số khai', async () => {
+  it('dòng pin (nguy hại): đếm như món thường, nhắc cất riêng, gửi số nhận thật', async () => {
     const base = wasteRequestDetail();
     const detail = wasteRequestDetail({ lines: [base.lines[0]!, { ...base.lines[1]!, hazardous: true }] });
     const { c, api } = await mount({ detail });
-    expect(input(c, 'received-i1')!.value).toBe('10');
-    expect(input(c, 'received-i1')!.disabled).toBe(false);
-    expect(input(c, 'received-i3')!.value).toBe('0');
-    expect(input(c, 'received-i3')!.disabled).toBe(true);
-    expect(select(c, 'shortfall-i3')!.value).toBe('WRONG_TYPE');
-    expect(select(c, 'shortfall-i3')!.disabled).toBe(true);
-    expect(c.textContent).toContain('Không nhận món này');
-    expect(c.textContent).toContain('Điểm sẽ cộng: 10.000');
+    expect(input(c, 'received-i3')!.value).toBe('50');
+    expect(input(c, 'received-i3')!.disabled).toBe(false);
+    expect(select(c, 'shortfall-i3')).toBeNull();
+    expect(c.textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
     expect(btn(c, 'Xác nhận số đếm')!.disabled).toBe(false);
 
     click(btn(c, 'Xác nhận số đếm'));
@@ -129,34 +125,7 @@ describe('WasteRequestDetail: màn đếm và từ chối', () => {
     expect(bodyOf(post(api, '/admin/waste/requests/r1/confirm')[0])).toEqual({
       lines: [
         { itemId: 'i1', declaredQty: 10, receivedQty: 10 },
-        { itemId: 'i3', declaredQty: 50, receivedQty: 0, shortfallReason: 'WRONG_TYPE' },
-      ],
-    });
-  });
-
-  it('món thành nguy hại sau khi màn đếm đã mở: dòng về 0 / Sai loại và gửi WRONG_TYPE', async () => {
-    const base = wasteRequestDetail();
-    let live = base;
-    const { c, api } = await mount({ detailRoute: () => ({ body: live }) });
-    expect(input(c, 'received-i3')!.value).toBe('50');
-    expect(input(c, 'received-i3')!.disabled).toBe(false);
-
-    live = wasteRequestDetail({ lines: [base.lines[0]!, { ...base.lines[1]!, hazardous: true }] });
-    window.dispatchEvent(new Event('visibilitychange'));
-    await flush();
-
-    expect(input(c, 'received-i3')!.disabled).toBe(true);
-    expect(input(c, 'received-i3')!.value).toBe('0');
-    expect(select(c, 'shortfall-i3')!.value).toBe('WRONG_TYPE');
-    expect(c.textContent).toContain('Điểm sẽ cộng: 10.000');
-
-    click(btn(c, 'Xác nhận số đếm'));
-    answerConfirm(true);
-    await flush();
-    expect(bodyOf(post(api, '/admin/waste/requests/r1/confirm')[0])).toEqual({
-      lines: [
-        { itemId: 'i1', declaredQty: 10, receivedQty: 10 },
-        { itemId: 'i3', declaredQty: 50, receivedQty: 0, shortfallReason: 'WRONG_TYPE' },
+        { itemId: 'i3', declaredQty: 50, receivedQty: 50 },
       ],
     });
   });

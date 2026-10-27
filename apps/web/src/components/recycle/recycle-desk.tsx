@@ -63,14 +63,13 @@ type Notice = { text: string; ok: boolean };
 const errText = (e: unknown) =>
   errorStatus(e) === 403 ? NO_PERMISSION : e instanceof Error && e.message ? e.message : 'Đã có lỗi xảy ra — Vui lòng thử lại';
 
-/** Ước tính phía máy khách: máy chủ vẫn áp trần và hạn mức khi xác nhận. Món nguy hại không bao giờ được cộng. */
+/** Ước tính phía máy khách: máy chủ vẫn áp trần và hạn mức khi xác nhận. */
 export function deskPreviewPoints(
-  lines: readonly { unitsPerPoint: number; pointsPerGroup: number; hazardous: boolean }[],
+  lines: readonly { unitsPerPoint: number; pointsPerGroup: number }[],
   received: Readonly<Record<string, number>>,
   ids: readonly string[],
 ): number {
   return lines.reduce((sum, l, i) => {
-    if (l.hazardous) return sum;
     const qty = received[ids[i] as string] ?? 0;
     return sum + Math.floor(qty / l.unitsPerPoint) * l.pointsPerGroup;
   }, 0);
@@ -78,7 +77,7 @@ export function deskPreviewPoints(
 
 const isReadOnly = (r: WasteDeskRequestDTO) => r.status === 'COMPLETED' || r.status === 'REJECTED';
 
-const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => !l.hazardous && (received[l.itemId] ?? 0) < l.declaredQty;
+const isShort = (l: DeskLine, received: Readonly<Record<string, number>>) => (received[l.itemId] ?? 0) < l.declaredQty;
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -221,7 +220,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setDone(null);
       setReceived(
         res.type === 'REQUEST' && !isReadOnly(res.request)
-          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty]))
+          ? Object.fromEntries(res.request.lines.map((l) => [l.itemId, l.declaredQty]))
           : {},
       );
       setReasons({});
@@ -243,7 +242,6 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   const confirm = useMutation({
     mutationFn: (req: WasteDeskRequestDTO) => {
       const lines: WasteConfirmLineInput[] = req.lines.map((l) => {
-        if (l.hazardous) return { itemId: l.itemId, declaredQty: l.declaredQty, receivedQty: 0, shortfallReason: 'WRONG_TYPE' };
         const reason = reasons[l.itemId];
         return {
           itemId: l.itemId,
@@ -396,9 +394,7 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                   ) : (
                     <>
                       <p className="text-sm text-stone-600">{`Khách khai ${l.declaredQty} ${l.unitLabel}`}</p>
-                      {l.hazardous ? (
-                        <p className="text-sm text-danger-fg">Không nhận món này</p>
-                      ) : (
+                      {l.hazardous && <p className="text-sm text-danger-fg">Cất riêng vào thùng kín, không lẫn rác khác</p>}
                         <>
                           <div className="flex items-center gap-3">
                             <QuantitySelector
@@ -434,7 +430,6 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
                             </div>
                           )}
                         </>
-                      )}
                     </>
                   )}
                 </div>

@@ -232,6 +232,8 @@ export function blockMessage(block: WastePreviewBlockDTO, ctx: BlockContext): st
       return `${name}: món này hiện chưa nhận, hãy bỏ khỏi danh sách`;
     case 'POINT_MISSING_ITEMS':
       return `Điểm này không nhận: ${name}`;
+    case 'ITEM_DROPOFF_ONLY':
+      return `${name}: không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được`;
     case 'LANE_DISABLED':
       return 'Cách giao này đang tạm dừng';
     case 'SHIP_LOCKED':

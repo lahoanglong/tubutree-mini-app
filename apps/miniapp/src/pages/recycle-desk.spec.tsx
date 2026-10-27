@@ -214,7 +214,7 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
     minus('Thùng carton', 5);
     minus('Vỏ hộp sữa', 4);
     expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 0 điểm')).toBeInTheDocument();
-    expect(deskPreviewPoints([{ unitsPerPoint: 5, pointsPerGroup: 1000, hazardous: true }], { a: 5 }, ['a'])).toBe(0);
+    expect(deskPreviewPoints([{ unitsPerPoint: 10, pointsPerGroup: 1000 }], { a: 25 }, ['a'])).toBe(2000);
   });
   it('dòng thiếu phải có lý do (7 lý do §4.10) thì nút xác nhận mới mở', async () => {
     renderPage();
@@ -234,17 +234,18 @@ describe('/recycle/desk — tra mã và đếm (§4.10)', () => {
     expect(confirm).toBeEnabled();
     expect(screen.queryByText('Chọn lý do cho món nhận thiếu để xác nhận')).toBeNull();
   });
-  it('món nguy hại: bộ đếm khoá ở 0, lý do Sai loại tự đặt', async () => {
-    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 2 }] });
+  it('pin: có bộ đếm, nhắc cất riêng, 25 viên cộng 2.000 điểm, gửi số nhận thật không kèm lý do', async () => {
+    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
     renderPage();
     await lookUp();
     await screen.findByText('Ng*** A');
-    expect(within(line('Pin cũ')).queryByRole('button', { name: 'Tăng số lượng' })).toBeNull();
-    expect(within(line('Pin cũ')).getByText('Không nhận món này')).toBeInTheDocument();
+    expect(within(line('Pin cũ')).getByRole('button', { name: 'Tăng số lượng' })).toBeInTheDocument();
+    expect(within(line('Pin cũ')).getByText('Cất riêng vào thùng kín, không lẫn rác khác')).toBeInTheDocument();
+    expect(screen.getByText('Điểm Tubu sẽ cộng cho khách: 2.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Xác nhận đã nhận' })).toBeEnabled();
-    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 0, dropsAwarded: 0, quota: { limit: 500_000, used: 120_000, remaining: 380_000 }, staffDailyCapRemaining: 150_000 });
+    mocks.deskConfirm.mockResolvedValue({ requestId: 'req-1', code: 'TR-8K2M9', status: 'COMPLETED', pointsAwarded: 2000, dropsAwarded: 0, quota: { limit: 500_000, used: 120_000, remaining: 380_000 }, staffDailyCapRemaining: 150_000 });
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã nhận' }));
-    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-battery', declaredQty: 2, receivedQty: 0, shortfallReason: 'WRONG_TYPE' }] }));
+    await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledWith('req-1', { lines: [{ itemId: 'item-battery', declaredQty: 25, receivedQty: 25 }] }));
   });
   it('yêu cầu đã xác nhận hoặc đã từ chối (tra lại trong 24 giờ) → thẻ chỉ xem, không bộ đếm, không nút', async () => {
     lookupReq({ status: 'COMPLETED', lines: [{ ...LINE0, receivedQty: 5 }] });

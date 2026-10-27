@@ -173,13 +173,10 @@ const parseQty = (raw: string, max: number): number | null => {
 function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const refresh = useRefresh(r.id);
   const { confirm, dialog } = useConfirm();
-  // The server takes a hazardous item only as 0 with WRONG_TYPE (waste-confirm-lines), so those lines start there and stay locked.
-  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.hazardous ? '0' : String(l.declaredQty)])));
+  const [received, setReceived] = useState<Record<string, string>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, String(l.declaredQty)])));
   // Last valid count per line, so the points line never shows NaN while a field is mid-edit.
-  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.hazardous ? 0 : l.declaredQty])));
-  const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>(() =>
-    Object.fromEntries(r.lines.filter((l) => l.hazardous).map((l) => [l.itemId, 'WRONG_TYPE' as const])),
-  );
+  const [lastValid, setLastValid] = useState<Record<string, number>>(() => Object.fromEntries(r.lines.map((l) => [l.itemId, l.declaredQty])));
+  const [reasons, setReasons] = useState<Record<string, WasteShortfallReason | ''>>({});
   const [weight, setWeight] = useState('');
   const [result, setResult] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -199,14 +196,13 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
     },
   });
 
-  // Hazardous comes from the live request: a refetch can flip it after the state initialisers ran.
-  const parsed = r.lines.map((l) => ({ line: l, qty: l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty) }));
+  const parsed = r.lines.map((l) => ({ line: l, qty: parseQty(received[l.itemId] ?? '', l.declaredQty) }));
   const anyInvalid = parsed.some((p) => p.qty === null);
   const shortLines = parsed.filter((p) => p.qty !== null && p.qty < p.line.declaredQty);
-  const missingReason = shortLines.some((p) => !p.line.hazardous && !reasons[p.line.itemId]);
+  const missingReason = shortLines.some((p) => !reasons[p.line.itemId]);
   const weightTrim = weight.trim();
   const weightValid = weightTrim === '' || (/^\d+$/.test(weightTrim) && Number(weightTrim) >= 1 && Number(weightTrim) <= 100000);
-  const total = wastePointsForLines(r.lines.map((l) => ({ receivedQty: l.hazardous ? 0 : (lastValid[l.itemId] ?? l.declaredQty), unitsPerPoint: l.unitsPerPoint, pointsPerGroup: l.pointsPerGroup })));
+  const total = wastePointsForLines(r.lines.map((l) => ({ receivedQty: lastValid[l.itemId] ?? l.declaredQty, unitsPerPoint: l.unitsPerPoint, pointsPerGroup: l.pointsPerGroup })));
   const ready = !anyInvalid && !missingReason && weightValid && result === null;
 
   const setQty = (itemId: string, declaredQty: number, raw: string) => {
@@ -226,7 +222,6 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
     setErr(null);
     onFlash(null);
     const lines: WasteConfirmLineInput[] = parsed.map(({ line, qty }) => {
-      if (line.hazardous) return { itemId: line.itemId, declaredQty: line.declaredQty, receivedQty: 0, shortfallReason: 'WRONG_TYPE' };
       const reason = reasons[line.itemId];
       return qty! < line.declaredQty && reason
         ? { itemId: line.itemId, declaredQty: line.declaredQty, receivedQty: qty!, shortfallReason: reason }
@@ -252,8 +247,8 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
           </thead>
           <tbody>
             {r.lines.map((l) => {
-              const qty = l.hazardous ? 0 : parseQty(received[l.itemId] ?? '', l.declaredQty);
-              const reasonValue = l.hazardous ? 'WRONG_TYPE' : (reasons[l.itemId] ?? '');
+              const qty = parseQty(received[l.itemId] ?? '', l.declaredQty);
+              const reasonValue = reasons[l.itemId] ?? '';
               const isShort = qty !== null && qty < l.declaredQty;
               return (
                 <tr key={l.itemId} className="border-b border-stone-100">
@@ -266,8 +261,7 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                       inputMode="numeric"
                       aria-label={`Thực nhận ${l.itemName}`}
                       className={`${FIELD_CLASS} w-24`}
-                      value={l.hazardous ? '0' : (received[l.itemId] ?? '')}
-                      disabled={l.hazardous}
+                      value={received[l.itemId] ?? ''}
                       onChange={(e) => setQty(l.itemId, l.declaredQty, e.target.value)}
                     />
                   </td>
@@ -279,14 +273,13 @@ function CountingBlock({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash:
                           aria-label={`Lý do thiếu ${l.itemName}`}
                           className={FIELD_CLASS}
                           value={reasonValue}
-                          disabled={l.hazardous}
                           onChange={(e) => setReasons((prev) => ({ ...prev, [l.itemId]: e.target.value as WasteShortfallReason | '' }))}
                         >
                           <option value="">Chọn lý do</option>
                           {SHORTFALL_KEYS.map((k) => <option key={k} value={k}>{WASTE_SHORTFALL_REASON_LABELS[k]}</option>)}
                         </select>
                       )}
-                      {l.hazardous && <span className="text-xs text-danger-fg">Không nhận món này</span>}
+                      {l.hazardous && <span className="text-xs text-danger-fg">Cất riêng vào thùng kín, không lẫn rác khác</span>}
                       {qty === null && <span className="text-xs text-danger-fg">{`Số thực nhận từ 0 tới ${formatCount(l.declaredQty)}`}</span>}
                     </div>
                   </td>

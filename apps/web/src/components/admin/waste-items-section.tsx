@@ -141,7 +141,7 @@ export function WasteItemsSection() {
       if (body.hazardous === true) {
         const ok = await confirm({
           title: 'Đánh dấu món nguy hại',
-          message: 'Không bỏ được cờ này sau khi lưu, và món sẽ không bao giờ được đặt Đang nhận.',
+          message: 'Không bỏ được cờ này sau khi lưu. Món này chỉ nhận khi khách mang tới điểm nhận, không gửi bưu điện hay thu kèm đơn.',
           confirmLabel: 'Đánh dấu nguy hại',
           tone: 'danger',
         });
@@ -153,7 +153,7 @@ export function WasteItemsSection() {
     if (full.hazardous) {
       const ok = await confirm({
         title: 'Đánh dấu món nguy hại',
-        message: 'Không bỏ được cờ này sau khi lưu, và món sẽ không bao giờ được đặt Đang nhận.',
+        message: 'Không bỏ được cờ này sau khi lưu. Món này chỉ nhận khi khách mang tới điểm nhận, không gửi bưu điện hay thu kèm đơn.',
         confirmLabel: 'Đánh dấu nguy hại',
         tone: 'danger',
       });
@@ -170,7 +170,6 @@ export function WasteItemsSection() {
   const f = panel?.form;
   const previewUnit = f?.unitLabel.trim() || 'đơn vị';
   const previewCap = f ? capLine(intOrNull(blankOrInt(f.dailyCapQty, 1) ? f.dailyCapQty : ''), intOrNull(blankOrInt(f.monthlyCapQty, 1) ? f.monthlyCapQty : ''), previewUnit) : '';
-  const hazardLocked = !!f?.hazardous;
 
   return (
     <section className="space-y-4" aria-label="Hàng nhận">
@@ -232,7 +231,7 @@ export function WasteItemsSection() {
                     onChange={(e) => patch.mutate({ id: i.id, body: { status: e.target.value as WasteItemStatus } })}
                   >
                     {STATUSES.map((s) => (
-                      <option key={s} value={s} disabled={s === 'ACTIVE' && i.hazardous}>{WASTE_ITEM_STATUS_LABELS[s]}</option>
+                      <option key={s} value={s}>{WASTE_ITEM_STATUS_LABELS[s]}</option>
                     ))}
                   </select>
                 </td>
@@ -250,7 +249,7 @@ export function WasteItemsSection() {
         <div className="grid gap-4 rounded-control border border-stone-200 bg-stone-0 p-3 lg:grid-cols-[1fr_280px]">
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-stone-900">{editing ? `Sửa món ${editing.name}` : 'Thêm món'}</h3>
-            {editing?.hazardous && <Notice tone="warning">Đã đánh dấu nguy hại: không bỏ được và không đặt Đang nhận được.</Notice>}
+            {editing?.hazardous && <Notice tone="warning">Đã đánh dấu nguy hại: không bỏ được cờ, món chỉ nhận khi khách mang tới điểm nhận.</Notice>}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Mã món"><input name="code" className={INPUT_CLASS} value={f.code} onChange={(e) => setForm({ code: e.target.value })} /></Field>
               <Field label="Tên món"><input name="name" className={INPUT_CLASS} value={f.name} onChange={(e) => setForm({ name: e.target.value })} /></Field>
@@ -263,7 +262,7 @@ export function WasteItemsSection() {
               <Field label="Trạng thái">
                 <select name="status" className={`${FIELD_CLASS} w-full`} value={f.status} onChange={(e) => setForm({ status: e.target.value as WasteItemStatus })}>
                   {STATUSES.map((s) => (
-                    <option key={s} value={s} disabled={s === 'ACTIVE' && hazardLocked}>{WASTE_ITEM_STATUS_LABELS[s]}</option>
+                    <option key={s} value={s}>{WASTE_ITEM_STATUS_LABELS[s]}</option>
                   ))}
                 </select>
               </Field>
@@ -281,9 +280,9 @@ export function WasteItemsSection() {
                 name="hazardous"
                 checked={f.hazardous}
                 disabled={!!editing?.hazardous}
-                onChange={(e) => setForm({ hazardous: e.target.checked, status: e.target.checked && f.status === 'ACTIVE' ? 'HIDDEN' : f.status })}
+                onChange={(e) => setForm({ hazardous: e.target.checked })}
               />
-              Món nguy hại (không bỏ được cờ sau khi lưu)
+              Món cần xử lý riêng, như pin (chỉ nhận tại điểm nhận, không bỏ được cờ sau khi lưu)
             </label>
             {Object.values(errors).length > 0 && (
               <ul className="space-y-0.5 text-xs text-danger-fg">

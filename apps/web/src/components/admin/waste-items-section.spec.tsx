@@ -123,15 +123,15 @@ describe('WasteItemsSection', () => {
     expect(sel.disabled).toBe(false);
   });
 
-  it('món nguy hại: không bỏ được cờ, không chọn được Đang nhận (14.1)', async () => {
+  it('món nguy hại: không bỏ được cờ, vẫn đặt được Đang nhận', async () => {
     const { c, api } = await mount();
     const opt = row(c, 'i5').querySelector<HTMLOptionElement>('option[value="ACTIVE"]')!;
-    expect(opt.disabled).toBe(true);
+    expect(opt.disabled).toBe(false);
     click(Array.from(row(c, 'i5').querySelectorAll('button')).find((b) => b.textContent === 'Sửa')!);
     const hz = field(c, 'hazardous')!;
     expect(hz.checked).toBe(true);
     expect(hz.disabled).toBe(true);
-    expect(c.textContent).toContain('Đã đánh dấu nguy hại: không bỏ được và không đặt Đang nhận được.');
+    expect(c.textContent).toContain('Đã đánh dấu nguy hại: không bỏ được cờ, món chỉ nhận khi khách mang tới điểm nhận.');
     typeInto(field(c, 'prepInstructions'), 'Chưa nhận pin. Gom riêng, không bỏ chung với rác khác.');
     click(saveBtn(c));
     await flush();
@@ -163,7 +163,7 @@ describe('WasteItemsSection', () => {
     const { c, api } = await mount();
     fillNew(c);
     click(field(c, 'hazardous'));
-    expect(c.querySelector<HTMLOptionElement>('[name="status"] option[value="ACTIVE"]')!.disabled).toBe(true);
+    expect(c.querySelector<HTMLOptionElement>('[name="status"] option[value="ACTIVE"]')!.disabled).toBe(false);
     click(saveBtn(c));
     await flush();
     expect(confirmDialog()!.textContent).toContain('Không bỏ được cờ này sau khi lưu');
@@ -206,10 +206,10 @@ describe('WasteItemsSection', () => {
   });
 
   it('lỗi API hiện nguyên văn', async () => {
-    const { c } = await mount({ status: 400, body: { message: 'Món nguy hại không được đặt Đang nhận' } });
+    const { c } = await mount({ status: 400, body: { message: 'Không gỡ được cờ nguy hại của món.' } });
     selectValue(c.querySelector('select[aria-label="Trạng thái Vỏ hộp sữa"]'), 'HIDDEN');
     await flush();
-    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Món nguy hại không được đặt Đang nhận');
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain('Không gỡ được cờ nguy hại của món.');
   });
 
   it('không có trường CO2e và không có chữ cấm', async () => {

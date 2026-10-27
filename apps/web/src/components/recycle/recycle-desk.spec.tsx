@@ -268,7 +268,7 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     minus(c, 'Thùng carton', 5);
     minus(c, 'Vỏ hộp sữa', 4);
     expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 0 điểm');
-    expect(deskPreviewPoints([{ unitsPerPoint: 5, pointsPerGroup: 1000, hazardous: true }], { a: 5 }, ['a'])).toBe(0);
+    expect(deskPreviewPoints([{ unitsPerPoint: 10, pointsPerGroup: 1000 }], { a: 25 }, ['a'])).toBe(2000);
   });
   it('dòng thiếu phải có lý do (7 lý do) thì nút xác nhận mới mở', async () => {
     const c = await mount();
@@ -287,17 +287,18 @@ describe('/doi-rac/quay: tra mã và đếm (§4.10)', () => {
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     expect(c.textContent).not.toContain('Chọn lý do cho món nhận thiếu để xác nhận');
   });
-  it('món nguy hại: không có bộ đếm, gửi receivedQty 0 và lý do Sai loại', async () => {
-    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 2 }] });
+  it('pin: có bộ đếm, nhắc cất riêng, 25 viên cộng 2.000 điểm, gửi số nhận thật không kèm lý do', async () => {
+    lookupReq({ lines: [{ ...LINE0, itemId: 'item-battery', itemName: 'Pin cũ', unitLabel: 'viên', hazardous: true, declaredQty: 25, unitsPerPoint: 10, pointsPerGroup: 1000 }] });
     const c = await mount();
     await lookUp(c);
-    expect(lineOf(c, 'Pin cũ').querySelector('[aria-label="Tăng số lượng"]')).toBeNull();
-    expect(lineOf(c, 'Pin cũ').textContent).toContain('Không nhận món này');
+    expect(lineOf(c, 'Pin cũ').querySelector('[aria-label="Tăng số lượng"]')).not.toBeNull();
+    expect(lineOf(c, 'Pin cũ').textContent).toContain('Cất riêng vào thùng kín, không lẫn rác khác');
+    expect(c.textContent).toContain('Điểm Tubu sẽ cộng cho khách: 2.000 điểm');
     expect(button(c, 'Xác nhận đã nhận')!.disabled).toBe(false);
     click(button(c, 'Xác nhận đã nhận'));
     await flush(10);
     expect(calls('/waste/desk/requests/req-1/confirm')[0]!.body).toEqual({
-      lines: [{ itemId: 'item-battery', declaredQty: 2, receivedQty: 0, shortfallReason: 'WRONG_TYPE' }],
+      lines: [{ itemId: 'item-battery', declaredQty: 25, receivedQty: 25 }],
     });
   });
   it.each([
