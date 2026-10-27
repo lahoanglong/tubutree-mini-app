@@ -49,6 +49,26 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.locator('#checkout-waste-pickup')).toHaveCount(0);
   });
 
+  test('Dòng đồng ý Điều khoản ở 375px: link giữa câu có vùng chạm 44px mà câu không phình cao quá hai dòng', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/checkout');
+    const consent = page.getByTestId('order-consent');
+    await expect(consent).toBeVisible({ timeout: 15_000 });
+    const m = await consent.evaluate((el) => {
+      const lh = parseFloat(getComputedStyle(el).lineHeight);
+      return { height: el.getBoundingClientRect().height - parseFloat(getComputedStyle(el).paddingTop), lineHeight: Number.isFinite(lh) ? lh : 20 };
+    });
+    expect(m.height).toBeLessThanOrEqual(m.lineHeight * 2 + 1);
+    const link = consent.getByRole('button', { name: 'Điều khoản' });
+    const box = (await link.boundingBox())!;
+    const hit = await link.evaluate((el, b) => {
+      const x = b.x + b.width / 2;
+      const at = (y: number) => document.elementFromPoint(x, y)?.closest('button') === el;
+      return { above: at(b.y + b.height / 2 - 20), below: at(b.y + b.height / 2 + 20) };
+    }, box);
+    expect(hit).toEqual({ above: true, below: true });
+  });
+
   // R5-BUYER-5: giỏ rỗng mà vẫn POST /checkout/quote thì máy chủ trả 400 và log đầy lỗi.
   test('Giỏ rỗng: báo giỏ trống và không gọi báo giá (POST /checkout/quote)', async ({ page, api }) => {
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200_000, itemCount: 0, unavailableItems: [] });

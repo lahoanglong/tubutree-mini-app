@@ -168,11 +168,6 @@ body.with-back-btn .page.page-bleed {
   transform: translate(-50%, -50%);
 }
 
-/* ── Link nằm giữa câu (Điều khoản, Chính sách): đệm dọc của phần tử inline làm hộp chạm cao 44px mà không đổi chiều cao dòng ── */
-.tubu-inline-link {
-  padding-block: 13px;
-}
-
 /* ── Gợi ý cuộn ngang (ScrollRow / SegmentedTabs scroll): mờ mép phía còn nội dung bằng mask nên không
    cần biết màu nền. Thuộc tính data-fade-* do use-scroll-hints.ts bật theo vị trí cuộn. ── */
 .tubu-scroll-fade[data-fade-end] {
