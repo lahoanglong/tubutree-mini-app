@@ -42,6 +42,17 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Cho khách 20k',
     'Tặng thẻ quà tặng 100k',
     'Chuyển thưởng vào ngân hàng của bạn',
+    'Tặng 5 chục nghìn',
+    'Tặng 5 đô',
+    'Biếu 1 trăm',
+    'Tặng mệnh giá 50k',
+    'Tặng phong bao 50k',
+    'Quà 50k',
+    'Tặng 🎁 10k',
+    'Trả 10k cho mỗi kg giấy',
+    'Tặng thẻ cào 10k',
+    'Nhận tiền 50k mỗi tháng',
+    'Hoàn 5% khi mua đơn đầu',
   ])('chặn: %s', (text) => {
     expect(findCashWording(text)).not.toBeNull();
   });
@@ -76,6 +87,21 @@ describe('Chữ thưởng/trả bằng tiền mặt (ưu đãi riêng của cử
     'Tặng 2 củ cải trắng',
     'Tặng 1 chục trứng gà',
     'Hoàn 5% giá trị đơn bằng điểm Xanh',
+    'Tặng 1 gói trà thượng hạng',
+    'Mua 2 ly trà 25k tặng 1 ly',
+    'Đồng giá trà 20k',
+    'Mua 1 chục trứng tặng 1 chục',
+    'Mua 2 củ tặng 1 củ',
+    'Tặng 5 cành cho khách nữ',
+    'Tặng 1.000 túi vải',
+    'Tặng 1000 cây xanh',
+    'Tặng 1.500 túi',
+    'Ưu đãi có thể cao hơn vào cuối tuần',
+    'Nhân tiện ghé quán',
+    'Khách trả tiền khi nhận hàng',
+    'Hoàn 100% nếu hàng lỗi',
+    'Tặng voucher 50k cho lần mua sau',
+    'Tặng 50k voucher',
   ])('cho qua: %s', (text) => {
     expect(findCashWording(text)).toBeNull();
   });
