@@ -80,6 +80,8 @@ const MAX_TITLE = 160;
 const MAX_BODY = 5000;
 const MAX_PRODUCT_TAGS = 5;
 const MAX_TAGS = 5;
+/** Cửa sổ chống bình luận trùng do gửi đúp. */
+const COMMENT_DEDUPE_MS = 10_000;
 const MAX_COMMENT = 500;
 
 export interface CreatePostInput {
@@ -864,6 +866,14 @@ export class CommunityFeedService {
     // vô hình đó để rút Điểm Xanh thưởng (bình luận, câu trả lời hay nhất) mà không ai kiểm
     // duyệt được. Điểm Xanh tiêu thẳng được ở thanh toán nên đây là mất hàng thật.
     if (!post || post.status !== 'PUBLISHED') throw new NotFoundException('Bài viết không tồn tại.');
+    // Bấm gửi hai lần / mạng chập chờn gửi lại: cùng người, cùng bài, cùng nội dung trong 10 giây thì trả bình luận đã có,
+    // không tạo thêm (và không thưởng, không báo, không cộng uy tín lần nữa).
+    const duplicate = await this.prisma.feedComment.findFirst({
+      where: { userId, postId, body: text, isRemoved: false, createdAt: { gte: new Date(Date.now() - COMMENT_DEDUPE_MS) } },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (duplicate) return { id: duplicate.id };
     const comment = await this.prisma.feedComment.create({ data: { userId, postId, body: text } });
     // Task 9: addComment luôn TẠO mới (không có nhánh xoá/toggle-off) — phát ngay sau khi ghi thành công.
     await this.analytics.recordBestEffort({
