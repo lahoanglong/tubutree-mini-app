@@ -154,17 +154,19 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
 
   test('điện thoại hẹp 320px: đầu trang quản trị và cổng đối tác không tràn ngang, nút đủ 44px', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
-    await openAdmin(page);
-    await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible();
-    for (const target of [page.getByRole('button', { name: 'Đăng xuất' }), page.getByRole('link', { name: 'Về cửa hàng' })]) {
-      const box = (await target.boundingBox())!;
-      expect(box.width).toBeGreaterThanOrEqual(43.5);
-      expect(box.height).toBeGreaterThanOrEqual(43.5);
+    // ADMIN vào được cả cổng đối tác (app/merchant/page.tsx), nên cùng một phiên đo được nút Đăng xuất ở cả hai cổng.
+    for (const url of ['/admin', '/merchant']) {
+      await openAdmin(page);
+      if (url === '/merchant') await page.goto(url);
+      const header = page.locator('header');
+      await expect(header.getByRole('button', { name: 'Đăng xuất' })).toBeVisible();
+      for (const target of [header.getByRole('button', { name: 'Đăng xuất' }), header.getByRole('link', { name: 'Về cửa hàng' })]) {
+        const box = (await target.boundingBox())!;
+        expect(box.width, `${url}: rộng`).toBeGreaterThanOrEqual(43.5);
+        expect(box.height, `${url}: cao`).toBeGreaterThanOrEqual(43.5);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${url}: tràn ngang`).toBeLessThanOrEqual(1);
     }
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
-    await page.goto('/merchant');
-    await expect(page.locator('header')).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   });
 
   test('tab Đổi rác mở được; công tắc Đổi rác tạo được dòng khi khoá chưa có trong DB', async ({ page }) => {

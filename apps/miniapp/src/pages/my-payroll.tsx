@@ -267,10 +267,10 @@ function MyPayrollHub() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Field label="Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)">
-            <Input value={bin} onChange={(e) => setBin(e.target.value)} />
+            <Input inputMode="numeric" value={bin} onChange={(e) => setBin(e.target.value)} />
           </Field>
           <Field label="Số tài khoản">
-            <Input value={accNo} onChange={(e) => setAccNo(e.target.value)} />
+            <Input inputMode="numeric" value={accNo} onChange={(e) => setAccNo(e.target.value)} />
           </Field>
           <Field label="Tên chủ tài khoản">
             <Input value={accName} onChange={(e) => setAccName(e.target.value)} />
