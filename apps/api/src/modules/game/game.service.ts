@@ -55,6 +55,9 @@ interface EcoImpact {
   sproutRewarded?: boolean;
 }
 
+/** Thêm vào mô tả thẻ nhiệm vụ điểm danh có mốc khi khách đã dùng vé giữ lửa hay hồi sinh chuỗi sau mốc. */
+const MISSION_STREAK_RESET_NOTE = 'Dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó.';
+
 /** Thêm vào mô tả thẻ nhiệm vụ khi đơn đã giao nhưng chưa tính vì còn trong hạn đổi/trả. */
 const MISSION_WAITING_NOTE =
   'Đơn đã giao đang trong thời gian đổi/trả hoặc đang chờ duyệt yêu cầu trả, thưởng mở khi hết hạn đổi/trả và yêu cầu trả (nếu có) đã được xử lý.';
@@ -738,6 +741,7 @@ export class GameService {
     );
     return {
       streakDays: this.streakSince(profile, since, now),
+      streakReset: this.streakBridgedSince(profile, since),
       ordersCount: ordersFrom(settled),
       pendingOrdersCount: ordersFrom(pending),
       reviewedProductsCount: settledProducts.size,
@@ -750,6 +754,10 @@ export class GameService {
    * Chuỗi điểm danh tính từ mốc. `streakDays` là giá trị đã lưu, chỉ đặt lại ở lần điểm danh kế tiếp, nên chuỗi đã đứt vẫn
    * giữ số cũ: đứt (lần cuối trước hôm qua theo ngày VN) hoặc lần cuối trước ngày của mốc thì tiến độ 0; còn lại là số ngày liền
    * từ mốc tới lần điểm danh cuối (cả hai đầu), tối đa chuỗi đang có.
+   *
+   * Cách đếm này cố ý bảo thủ (không bao giờ đếm dư, nên có thể đếm thiếu cho khách thật sự điểm danh đủ ngày): thẻ nhiệm vụ nói rõ
+   * điều này cho khách (MISSION_STREAK_RESET_NOTE) và hộp tạo nhiệm vụ của quản trị cũng báo. Đếm đúng hơn cần lưu khoảng ngày được
+   * vé hay hồi sinh che; chưa làm.
    *
    * Hồi sinh chuỗi cộng cả những ngày không điểm danh vào `streakDays`, và vé giữ lửa che một ngày lỡ: nếu một trong hai xảy ra từ
    * ngày của mốc thì chỉ đếm từ ngày đó (hồi sinh) hoặc từ ngày điểm danh dùng vé (vé) trở đi, ít nhất 1 ngày vì lần điểm danh cuối
@@ -771,6 +779,13 @@ export class GameService {
       if (bridged && bridged.getTime() >= sinceDay && bridged.getTime() > from.getTime()) from = bridged;
     }
     return Math.min(streak, vnDaysBetween(from, last) + 1);
+  }
+
+  /** Khách đã dùng vé giữ lửa hoặc hồi sinh chuỗi từ ngày của mốc trở đi. */
+  private streakBridgedSince(profile: { lastStreakRepairAt?: Date | null; lastStreakFreezeAt?: Date | null } | null, since: Date | null): boolean {
+    if (!since) return false;
+    const sinceDay = startOfVnDay(since).getTime();
+    return [profile?.lastStreakRepairAt, profile?.lastStreakFreezeAt].some((d) => !!d && d.getTime() >= sinceDay);
   }
 
   /** returns.window_days (cùng khoá và mặc định 7 với OrderReturnsService.request); sai kiểu → 7. */
@@ -840,12 +855,13 @@ export class GameService {
       const progress = done ? targetGoal : Math.min(targetGoal, raw);
       const completed = done || raw >= targetGoal;
       const waiting = !done && raw < targetGoal && this.missionWaitsForReturnWindow(m, targetGoal, metrics);
+      const streakNote = !done && !!m.startsAt && missionKindOf(m) === 'CHECKIN_STREAK' && metrics.streakReset;
 
       return {
         code: m.code,
         kind: missionKindOf(m),
         title: m.title,
-        description: waiting ? [m.description, MISSION_WAITING_NOTE].filter(Boolean).join(' ') : m.description,
+        description: waiting || streakNote ? [m.description, waiting ? MISSION_WAITING_NOTE : '', streakNote ? MISSION_STREAK_RESET_NOTE : ''].filter(Boolean).join(' ') : m.description,
         rewardPoints: m.rewardPoints,
         progress,
         goal: targetGoal,

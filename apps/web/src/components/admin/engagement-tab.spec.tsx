@@ -104,6 +104,23 @@ describe('EngagementTab (Nhiệm vụ & quà đổi điểm)', () => {
     ]);
   });
 
+  it('thêm nhiệm vụ điểm danh: hộp xác nhận nói rõ vé giữ lửa và hồi sinh chuỗi làm nhiệm vụ đếm lại', async () => {
+    stub({ body: { id: 'm-new' } });
+    const { container } = mount(<EngagementTab />);
+    await flush();
+    click(byText(container, 'button', 'Thêm nhiệm vụ'));
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Thêm nhiệm vụ"]')!;
+    expect(form.textContent).not.toContain('hồi sinh chuỗi');
+    typeInto(form.querySelector('select[name="kind"]'), 'CHECKIN_STREAK');
+    expect(form.textContent).toContain('hồi sinh chuỗi');
+    typeInto(form.querySelector('input[name="title"]'), 'Điểm danh 3 ngày');
+    typeInto(form.querySelector('input[name="goal"]'), '3');
+    typeInto(form.querySelector('input[name="rewardPoints"]'), '100');
+    click(byText(form, 'button', 'Thêm nhiệm vụ'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('vé giữ lửa hay hồi sinh chuỗi');
+  });
+
   it('thêm nhiệm vụ: khoá nút khi mục tiêu vượt trần của loại hoặc điểm vượt trần; gửi đúng dữ liệu', async () => {
     const api = stub({ body: { id: 'm-new' } });
     const { container } = mount(<EngagementTab />);

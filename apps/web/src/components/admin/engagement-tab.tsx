@@ -14,6 +14,7 @@ import { useConfirm } from './confirm-dialog';
 import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
 
 const REWARD_POINTS_MAX = 500_000;
+const CHECKIN_NOTE = 'Nhiệm vụ điểm danh: nếu khách dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó (khách thấy dòng này trên thẻ nhiệm vụ).';
 
 /** Nhiệm vụ Vườn Xanh. Thêm nhiệm vụ mới trong các loại hệ thống biết chấm; nhiệm vụ có sẵn sửa chữ, điểm thưởng và tạm dừng được (mục tiêu giữ nguyên vì đổi sẽ lệch lượt đã nhận). */
 export function EngagementTab() {
@@ -79,7 +80,7 @@ function NewMission() {
         setErr(null);
         const ok = await confirm({
           title: 'Thêm nhiệm vụ mới',
-          message: `Chỉ tính việc khách làm từ lúc tạo, việc đã làm trước đó không được tính. Mỗi khách nhận tối đa ${new Intl.NumberFormat("vi-VN").format(points)} Điểm Xanh một lần cho nhiệm vụ này. Thêm nhiệm vụ "${f.title.trim()}"?`,
+          message: `Chỉ tính việc khách làm từ lúc tạo, việc đã làm trước đó không được tính. Mỗi khách nhận tối đa ${new Intl.NumberFormat("vi-VN").format(points)} Điểm Xanh một lần cho nhiệm vụ này. ${f.kind === 'CHECKIN_STREAK' ? CHECKIN_NOTE + ' ' : ''}Thêm nhiệm vụ "${f.title.trim()}"?`,
           confirmLabel: 'Thêm nhiệm vụ',
         });
         if (ok) create.mutate();
@@ -121,6 +122,7 @@ function NewMission() {
         <textarea name="description" rows={2} maxLength={300} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} className={INPUT_CLASS} />
       </label>
       <p className="text-xs text-stone-600">Chỉ tính việc khách làm từ lúc tạo nhiệm vụ.</p>
+      {f.kind === 'CHECKIN_STREAK' && <p className="text-xs text-stone-600">{CHECKIN_NOTE}</p>}
       {!goalOk && <p className="text-xs text-warning-fg">Mục tiêu là số nguyên từ 1 đến {opt.goalMax}.</p>}
       {!pointsOk && <p className="text-xs text-warning-fg">Điểm thưởng từ 0 đến {REWARD_POINTS_MAX.toLocaleString('vi-VN')}, số nguyên.</p>}
       {err && <p role="alert" className="text-xs text-danger-fg">{err}</p>}

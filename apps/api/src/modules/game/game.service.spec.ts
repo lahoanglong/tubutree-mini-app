@@ -2653,6 +2653,20 @@ describe('Nhiệm vụ quản trị thêm: chỉ tính việc từ lúc tạo (s
     expect((await svc(next).getMissions('u1'))[0]).toMatchObject({ progress: 2, completed: false });
   });
 
+  it('thẻ điểm danh có mốc nói nhiệm vụ đếm lại từ ngày dùng vé/hồi sinh; không hiện khi chưa dùng hoặc dùng trước mốc', async () => {
+    jest.setSystemTime(new Date('2026-10-29T05:00:00.000Z'));
+    const day29 = new Date('2026-10-29T03:00:00.000Z');
+    const note = 'Dùng vé giữ lửa hay hồi sinh chuỗi thì nhiệm vụ đếm lại từ ngày đó.';
+    const repaired = await svc(withCheckin(11, day29, 3, { lastStreakRepairAt: day29 })).getMissions('u1');
+    expect(repaired[0]!.description).toContain(note);
+    const froze = await svc(withCheckin(7, day29, 3, { lastStreakFreezeAt: day29 })).getMissions('u1');
+    expect(froze[0]!.description).toContain(note);
+    const plain = await svc(withCheckin(3, day29, 3)).getMissions('u1');
+    expect(plain[0]!.description).not.toContain(note);
+    const before = await svc(withCheckin(4, day29, 3, { lastStreakRepairAt: new Date('2026-10-10T03:00:00.000Z') })).getMissions('u1');
+    expect(before[0]!.description).not.toContain(note);
+  });
+
   it('đánh giá viết SAU mốc cho đơn giao TRƯỚC mốc vẫn tính; đánh giá viết trước mốc thì không', async () => {
     const startsAt = new Date(Date.now() - 20 * DAY_MS);
     const mk = (reviews: { productId: string; orderId: string; createdAt: Date }[]) =>
