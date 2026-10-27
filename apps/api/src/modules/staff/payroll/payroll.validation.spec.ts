@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { AdjustDto } from './payroll.dto';
+import { AdjustDto, UpdateBankDto } from './payroll.dto';
 import { PayrollService } from './payroll.service';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { SystemConfigService } from '../../system-config/system-config.service';
@@ -93,5 +93,21 @@ describe('PayrollService — chỉ áp cho nhân viên', () => {
     prisma.$transaction.mockResolvedValue(null);
     const svc = new PayrollService(prisma as unknown as PrismaService, config);
     await expect(svc.adjust('u_old', new Date('2026-02-10T00:00:00Z'), 1, 'x', 'a1')).resolves.toMatchObject({ adjusted: true });
+  });
+});
+
+describe('UpdateBankDto.bankBin — mã ngân hàng đúng 6 chữ số', () => {
+  const errs = async (bankBin: unknown) => (await validate(plainToInstance(UpdateBankDto, { bankBin }))).map((e) => e.property);
+
+  it.each(['970407', '970436', ''])('%p → hợp lệ (rỗng = chỉ khai ảnh QR)', async (v) => {
+    expect(await errs(v)).toEqual([]);
+  });
+
+  it.each(['97040', '9704070', 'abcdef', '97040a', '970 407', 'Vietcombank'])('%p → lỗi ở bankBin', async (v) => {
+    expect(await errs(v)).toContain('bankBin');
+  });
+
+  it('không gửi bankBin thì bỏ qua (cập nhật phần khác)', async () => {
+    expect((await validate(plainToInstance(UpdateBankDto, { bankAccountName: 'Lan' }))).map((e) => e.property)).toEqual([]);
   });
 });

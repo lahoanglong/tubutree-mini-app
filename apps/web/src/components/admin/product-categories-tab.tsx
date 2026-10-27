@@ -12,7 +12,7 @@ import {
 } from '@/lib/product-categories';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
 
 const LIST_KEY = ['admin-category-products'] as const;
 const errText = (e: unknown, fallback: string) => (e instanceof Error && e.message ? e.message : fallback);
@@ -82,6 +82,7 @@ export function ProductCategoriesTab() {
           ? `Gán danh mục "${chosen.name}" cho ${picked.length} sản phẩm đã chọn? Danh mục khác của các sản phẩm này giữ nguyên.`
           : `Gỡ danh mục "${chosen.name}" khỏi ${picked.length} sản phẩm đã chọn?`,
       confirmLabel: mode === 'ADD' ? 'Gán' : 'Gỡ',
+      tone: mode === 'ADD' ? 'default' : 'danger',
     });
     if (ok) mut.mutate({ mode });
   };
@@ -135,7 +136,7 @@ export function ProductCategoriesTab() {
         <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('ADD')} className={BTN_XS_PRIMARY}>
           Gán danh mục
         </button>
-        <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('REMOVE')} className={BTN_XS_SECONDARY}>
+        <button type="button" disabled={!chosen || picked.length === 0 || mut.isPending} onClick={() => void run('REMOVE')} className={BTN_XS_DANGER}>
           Gỡ danh mục
         </button>
       </div>

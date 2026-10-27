@@ -100,7 +100,10 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
 
     await openAdmin(page);
     const nav = page.getByRole('navigation', { name: 'Mục quản trị' });
-    const labels = await nav.locator('button').allInnerTexts();
+    // Mặc định menu chỉ mở nhóm đầu: mở hết các nhóm trước khi đếm và bấm từng mục.
+    const collapsed = nav.locator('button[aria-expanded="false"]');
+    while ((await collapsed.count()) > 0) await collapsed.first().click();
+    const labels = await nav.locator('button:not([aria-expanded])').allInnerTexts();
     const expectedLabels = navLabelsFromSource();
     expect(expectedLabels.length).toBeGreaterThan(30);
     expect(labels.map((l) => l.trim()).sort()).toEqual([...expectedLabels].sort());
@@ -111,7 +114,7 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       pageErrors.length = 0;
       consoleErrors.length = 0;
       apiErrors.length = 0;
-      await nav.locator('button', { hasText: label }).first().click();
+      await nav.locator('button:not([aria-expanded])', { hasText: label }).first().click();
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(250);
       const boundary = await page.locator('[data-tab-error]').count();
@@ -123,6 +126,47 @@ test.describe('Admin: mở mọi mục menu với API thật', () => {
       }
     }
     expect(failures, failures.join('\n')).toEqual([]);
+  });
+
+  test('điện thoại 375px: đầu trang gọn, mọi mục mở được mà trang không cuộn ngang', async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await openAdmin(page);
+    await expect(page.locator('header')).toBeVisible();
+    // Đầu trang + tiêu đề + nút thu ngân + nút "Đổi mục" phải nằm gọn trong khoảng 220px đầu (trước đây ~490px).
+    const mainTop = await page.getByRole('button', { name: /Đổi mục|Chọn mục/ }).evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(mainTop).toBeLessThan(220);
+    const labels = navLabelsFromSource();
+    const wide: string[] = [];
+    for (const label of labels) {
+      await page.getByRole('button', { name: /Đổi mục/ }).click();
+      const drawer = page.getByRole('dialog', { name: 'Mục quản trị' });
+      await drawer.getByRole('searchbox', { name: 'Tìm mục quản trị' }).fill(label);
+      // Nút đầu nhóm (aria-expanded) có thể trùng tên mục ("Đổi rác" và "Đổi rác và game"), nên chỉ lấy nút mục.
+      await drawer.locator('button:not([aria-expanded])').filter({ hasText: new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`) }).first().click();
+      await page.waitForLoadState('networkidle').catch(() => {});
+      await page.waitForTimeout(200);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      if (over > 1) wide.push(`${label}: tràn ${over}px`);
+    }
+    expect(wide, wide.join('\n')).toEqual([]);
+  });
+
+  test('điện thoại hẹp 320px: đầu trang quản trị và cổng đối tác không tràn ngang, nút đủ 44px', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    // ADMIN vào được cả cổng đối tác (app/merchant/page.tsx), nên cùng một phiên đo được nút Đăng xuất ở cả hai cổng.
+    for (const url of ['/admin', '/merchant']) {
+      await openAdmin(page);
+      if (url === '/merchant') await page.goto(url);
+      const header = page.locator('header');
+      await expect(header.getByRole('button', { name: 'Đăng xuất' })).toBeVisible();
+      for (const target of [header.getByRole('button', { name: 'Đăng xuất' }), header.getByRole('link', { name: 'Về cửa hàng' })]) {
+        const box = (await target.boundingBox())!;
+        expect(box.width, `${url}: rộng`).toBeGreaterThanOrEqual(43.5);
+        expect(box.height, `${url}: cao`).toBeGreaterThanOrEqual(43.5);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${url}: tràn ngang`).toBeLessThanOrEqual(1);
+    }
   });
 
   test('tab Đổi rác mở được; công tắc Đổi rác tạo được dòng khi khoá chưa có trong DB', async ({ page }) => {

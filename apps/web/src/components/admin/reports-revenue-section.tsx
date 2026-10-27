@@ -40,7 +40,7 @@ function RevenueBody({ report }: { report: RevenueReport }) {
   const pivot = pivotRevenue(report);
   const tiles: { label: string; value: string }[] = [
     { label: 'Doanh thu (đã thu)', value: formatVnd(t.revenue) },
-    { label: 'Giá trị đặt (GMV)', value: formatVnd(t.gmv) },
+    { label: 'Tổng giá trị đơn đặt', value: formatVnd(t.gmv) },
     { label: 'Đơn đặt', value: String(t.orders) },
     { label: 'Đơn huỷ / trả', value: String(t.cancelled) },
     { label: 'Đã hoàn một phần', value: formatVnd(t.partialRefund) },

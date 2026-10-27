@@ -57,7 +57,7 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
   {
     key: 'waste.enabled',
     label: 'Đổi rác lấy quà',
-    description: 'Khách tạo yêu cầu đổi rác, điểm nhận rác của đại lý hoạt động. Từng cách giao (mang tới điểm, gửi kho, thu kèm đơn) bật riêng ở Khách hàng, Đổi rác, Cấu hình chung.',
+    description: 'Khách tạo yêu cầu đổi rác, điểm nhận rác của đại lý hoạt động. Từng cách giao (mang tới điểm, gửi kho, thu kèm đơn) bật riêng ở Đổi rác và game, Đổi rác, Cấu hình chung.',
     fallback: false,
     onWarning: 'Mini App và web hiện chương trình cho khách.',
   },

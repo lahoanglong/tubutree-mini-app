@@ -250,7 +250,7 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
       id,
       title,
       'waste.enabled đang bật nhưng chưa có kho (WAREHOUSE) nào đang hoạt động',
-      'Thêm một kho đang hoạt động ở Quản trị, Khách hàng, Đổi rác, Điểm nhận; nếu chưa kịp thì tắt waste.enabled ở Quản trị, Cấu hình, để khách không gửi được rác khi chưa có nơi nhận.',
+      'Thêm một kho đang hoạt động ở Quản trị, Đổi rác và game, Đổi rác, Điểm nhận; nếu chưa kịp thì tắt waste.enabled ở Quản trị, Cấu hình, để khách không gửi được rác khi chưa có nơi nhận.',
     );
   }
 
@@ -262,7 +262,7 @@ function wastePointCheck(s: DbSnapshot, env: Env): CheckResult {
       id,
       title,
       'waste.enabled đang bật, đường Gửi về kho đang bật nhưng kho đang hoạt động chưa có số điện thoại (nhà vận chuyển cần số này để giao kiện)',
-      'Vào Quản trị, Khách hàng, Đổi rác, Điểm nhận, mở kho và điền ô Số điện thoại bằng số thật của kho; hoặc tắt waste.lane_mailin_enabled ở Quản trị, Cấu hình.',
+      'Vào Quản trị, Đổi rác và game, Đổi rác, Điểm nhận, mở kho và điền ô Số điện thoại bằng số thật của kho; hoặc tắt waste.lane_mailin_enabled ở Quản trị, Cấu hình.',
     );
   }
 

@@ -280,7 +280,7 @@ GOMDON_WEBHOOK_SECRET=<secret>
 
 ## 7c) Số điện thoại kho cho cách Gửi về kho
 
-Khi đăng ký kho HCMC ở Quản trị › Khách hàng › Đổi rác › Điểm nhận, gõ số điện thoại thật của kho vào ô "Số điện thoại". Khách ghi số này lên kiện gửi về kho (số người nhận). Số này khác số người gửi của Gomdon ở thẻ "Thu kèm rác qua Gomdon (kỹ thuật)". `go-live:check` báo FAIL ở `db.waste_point` khi `waste.enabled` bật, cách Gửi về kho đang bật mà kho đang hoạt động chưa có số điện thoại.
+Khi đăng ký kho HCMC ở Quản trị › Đổi rác và game › Đổi rác › Điểm nhận, gõ số điện thoại thật của kho vào ô "Số điện thoại". Khách ghi số này lên kiện gửi về kho (số người nhận). Số này khác số người gửi của Gomdon ở thẻ "Thu kèm rác qua Gomdon (kỹ thuật)". `go-live:check` báo FAIL ở `db.waste_point` khi `waste.enabled` bật, cách Gửi về kho đang bật mà kho đang hoạt động chưa có số điện thoại.
 
 ## 8) Báo động vận hành (kênh ngoài app)
 
