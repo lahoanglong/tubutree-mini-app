@@ -401,12 +401,55 @@ describe('BrandService brand-owner tự quản', () => {
     const prisma = makePrisma();
     prisma.brand.findFirst.mockResolvedValue({ id: 'b1', ownerUserId: 'u1' });
     prisma.brand.update.mockResolvedValue({});
-    await new BrandService(prisma, brandConfig).updateOwnedBrand('u1', { logoUrl: 'L', story: 'S', name: 'HACK', isVerified: true, isPublished: true } as any);
+    await new BrandService(prisma, brandConfig).updateOwnedBrand('u1', { logoUrl: 'https://cdn.x/L.png', story: 'S', name: 'HACK', isVerified: true, isPublished: true } as any);
     const data = prisma.brand.update.mock.calls[0][0].data;
-    expect(data).toEqual({ logoUrl: 'L', story: 'S' });
+    expect(data).toEqual({ logoUrl: 'https://cdn.x/L.png', story: 'S' });
     expect(data.name).toBeUndefined();
     expect(data.isVerified).toBeUndefined();
     expect(data.isPublished).toBeUndefined();
+  });
+
+  describe('logo và ảnh bìa chỉ kiểm khi đổi', () => {
+    const OLD_HTTP = 'http://old.example/logo.png';
+    const OLD_SVG = 'data:image/svg+xml;base64,PHN2Zz4=';
+
+    it.each([
+      ['admin', async (svc: BrandService, dto: object) => svc.updateBrand('b1', dto)],
+      ['chủ nhãn', async (svc: BrandService, dto: object) => svc.updateOwnedBrand('u1', dto)],
+    ])('%s: giữ nguyên logo cũ http và bìa SVG, sửa lời giới thiệu vẫn lưu được', async (_who, run) => {
+      const prisma = makePrisma();
+      const row = { id: 'b1', ownerUserId: 'u1', logoUrl: OLD_HTTP, coverUrl: OLD_SVG };
+      prisma.brand.findUniqueOrThrow.mockResolvedValue(row);
+      prisma.brand.findFirst.mockResolvedValue(row);
+      prisma.brand.update.mockResolvedValue({});
+      await run(new BrandService(prisma, brandConfig), { logoUrl: OLD_HTTP, coverUrl: OLD_SVG, tagline: 'Mới' });
+      expect(prisma.brand.update.mock.calls[0][0].data).toMatchObject({ tagline: 'Mới' });
+    });
+
+    it.each([
+      ['admin', async (svc: BrandService, dto: object) => svc.updateBrand('b1', dto)],
+      ['chủ nhãn', async (svc: BrandService, dto: object) => svc.updateOwnedBrand('u1', dto)],
+    ])('%s: đổi sang http, SVG hay javascript: thì bị từ chối, không ghi gì', async (_who, run) => {
+      const prisma = makePrisma();
+      const row = { id: 'b1', ownerUserId: 'u1', logoUrl: null, coverUrl: null };
+      prisma.brand.findUniqueOrThrow.mockResolvedValue(row);
+      prisma.brand.findFirst.mockResolvedValue(row);
+      const svc = new BrandService(prisma, brandConfig);
+      for (const bad of ['http://x/a.png', OLD_SVG, 'javascript:alert(1)']) {
+        await expect(run(svc, { logoUrl: bad })).rejects.toBeInstanceOf(BadRequestException);
+        await expect(run(svc, { coverUrl: bad })).rejects.toBeInstanceOf(BadRequestException);
+      }
+      expect(prisma.brand.update).not.toHaveBeenCalled();
+    });
+
+    it('tạo nhãn mới: ảnh sai bị từ chối, https và ảnh tải lên được nhận', async () => {
+      const prisma = makePrisma();
+      prisma.brand.create.mockImplementation(({ data }: any) => Promise.resolve(data));
+      const svc = new BrandService(prisma, brandConfig);
+      await expect(svc.createBrand({ name: 'Nhãn', logoUrl: 'http://x/a.png' })).rejects.toBeInstanceOf(BadRequestException);
+      await svc.createBrand({ name: 'Nhãn', logoUrl: 'https://cdn.x/a.png', coverUrl: 'data:image/png;base64,iVBORw0KGgo=' });
+      expect(prisma.brand.create).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('createOwnedPromotion: gắn brandId của nhãn sở hữu', async () => {

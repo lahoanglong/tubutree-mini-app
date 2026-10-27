@@ -1,6 +1,5 @@
 import { Allow, ArrayMaxSize, ArrayNotEmpty, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
-import { IsImageRef } from '../../../common/uploaded-image';
 
 // Ảnh có thể là URL Cloudinary HOẶC data URL base64 (fallback khi chưa cấu hình Cloudinary), nên
 // trần phải rộng — đủ cho ảnh nén ~1MB nhưng chặn payload vô hạn. Mirror IMAGE_MAX của
@@ -22,8 +21,8 @@ export class BrandSalesQueryDto {
 export class CreateBrandDto {
   @IsString() name!: string;
   @IsOptional() @IsString() slug?: string;
-  @IsOptional() @IsString() @IsImageRef() @MaxLength(IMAGE_MAX) logoUrl?: string;
-  @IsOptional() @IsString() @IsImageRef() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @IsOptional() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @IsOptional() @IsString() @MaxLength(200) tagline?: string;
   @IsOptional() @IsString() story?: string;
   @IsOptional() @IsString() @MaxLength(200) origin?: string;
@@ -34,8 +33,8 @@ export class CreateBrandDto {
 export class UpdateBrandDto {
   @OptionalNotNull() @IsString() name?: string;
   @OptionalNotNull() @IsString() slug?: string;
-  @OptionalNotNull() @IsString() @IsImageRef() @MaxLength(IMAGE_MAX) logoUrl?: string;
-  @OptionalNotNull() @IsString() @IsImageRef() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
   @OptionalNotNull() @IsString() story?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
@@ -51,8 +50,8 @@ export class VerifyBrandDto {
 
 /** Brand-owner CHỈ sửa thông tin nhãn (không name/slug/verified/publish/cert). */
 export class UpdateOwnedBrandDto {
-  @OptionalNotNull() @IsString() @IsImageRef() @MaxLength(IMAGE_MAX) logoUrl?: string;
-  @OptionalNotNull() @IsString() @IsImageRef() @MaxLength(IMAGE_MAX) coverUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) logoUrl?: string;
+  @OptionalNotNull() @IsString() @MaxLength(IMAGE_MAX) coverUrl?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) tagline?: string;
   @OptionalNotNull() @IsString() story?: string;
   @OptionalNotNull() @IsString() @MaxLength(200) origin?: string;
