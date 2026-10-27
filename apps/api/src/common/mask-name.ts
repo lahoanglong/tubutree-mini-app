@@ -25,8 +25,8 @@ function looksLikeContact(name: string): boolean {
 
 const BRACKETED = /[([{][^)\]}]*[)\]}]/gu;
 // Ký tự thuộc nhóm chữ (Lo) hay dấu kết hợp (Mn) nhưng hiển thị trắng: phụ âm đệm Hangul, ô braille trống, nối ký tự (U+034F), nguyên âm ngầm Khmer, chọn dạng Mông Cổ; coi như khoảng trắng.
-const BLANK_LETTERS = '\u115F\u1160\u3164\uFFA0\u2800\u034F\u17B4\u17B5\u180B-\u180D';
-const NON_LETTERS = new RegExp(`[^\\p{L}\\p{M}]+|[${BLANK_LETTERS}]+`, 'u');
+const BLANKS = ['\u115F', '\u1160', '\u3164', '\uFFA0', '\u2800', '\u034F', '\u17B4', '\u17B5', '\u180B', '\u180C', '\u180D'];
+const NON_LETTERS = new RegExp(`[^\\p{L}\\p{M}]+|(?:${BLANKS.join('|')})+`, 'u');
 
 /**
  * Các từ chữ của tên để chọn từ hiển thị: bỏ phần trong ngoặc, emoji và dấu câu; tách ở mọi đoạn ký tự không phải chữ hay dấu kết hợp (khoảng trắng, chấm, gạch, gạch dưới, ・, ký tự rộng 0 hay U+00AD), để tên dính liền bằng dấu phân cách vẫn che được.
